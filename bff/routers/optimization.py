@@ -1241,7 +1241,8 @@ def _persist_rich_run_outputs(
     graph_source_dir: Optional[Path] = None,
     charging_summary: Optional[Dict[str, Any]] = None,
     charging_flow_payload: Optional[Dict[str, Any]] = None,
-) -> None:
+    finalize_reporting: bool = False,
+) -> Optional[Dict[str, Any]]:
     run_dir.mkdir(parents=True, exist_ok=True)
 
     unit_map = {
@@ -1254,6 +1255,10 @@ def _persist_rich_run_outputs(
         "pv_curtail_penalty_yen_per_kwh": "JPY/kWh",
         "demand_charge": "JPY",
         "vehicle_cost": "JPY",
+        "vehicle_usage_cost": "JPY",
+        "vehicle_usage_cost_jpy": "JPY",
+        "vehicle_usage_cost_jpy_per_used_bus": "JPY/vehicle-day",
+        "used_vehicle_day_count": "vehicle-day",
         "driver_cost": "JPY",
         "fuel_cost": "JPY",
         "fuel_cost_final": "JPY",
@@ -2006,6 +2011,36 @@ def _persist_rich_run_outputs(
         json.dumps(kpi_summary, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
+    reporting_finalizer_result: Optional[Dict[str, Any]] = None
+    if finalize_reporting:
+        reporting_finalizer_result = _run_reporting_finalizer(run_dir)
+        graph_artifacts = dict(optimization_result.get("graph_artifacts") or {})
+        graph_artifacts["reporting_finalizer"] = reporting_finalizer_result
+        optimization_result["graph_artifacts"] = graph_artifacts
+        if reporting_finalizer_result.get("status") != "completed":
+            warning = (
+                "Reporting artifact finalization failed after optimization outputs were written: "
+                f"{reporting_finalizer_result.get('error') or 'unknown error'}"
+            )
+            optimization_result["warnings"] = list(
+                dict.fromkeys([*list(optimization_result.get("warnings") or []), warning])
+            )
+            optimization_audit["warnings"] = list(
+                dict.fromkeys([*list(optimization_audit.get("warnings") or []), warning])
+            )
+        (run_dir / "optimization_result.json").write_text(
+            json.dumps(optimization_result, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        (run_dir / "optimization_audit.json").write_text(
+            json.dumps(optimization_audit, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        (raw_dir / "optimization_result.json").write_text(
+            json.dumps(optimization_result, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        (raw_dir / "optimization_audit.json").write_text(
+            json.dumps(optimization_audit, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
     exp_report = dict(optimization_result.get("experiment_report") or {})
     md_path = exp_report.get("md_path")
     if isinstance(md_path, str) and md_path.strip():
@@ -2084,11 +2119,34 @@ def _persist_rich_run_outputs(
             "vehicle_operation_diagram_count": int(
                 graph_artifacts.get("vehicle_operation_diagram_count") or 0
             ),
+            "reporting_finalizer": reporting_finalizer_result
+            or graph_artifacts.get("reporting_finalizer")
+            or {},
         },
     }
     (run_dir / "run_manifest.json").write_text(
         json.dumps(run_manifest, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+    return reporting_finalizer_result
+
+
+def _run_reporting_finalizer(run_dir: Path) -> Dict[str, Any]:
+    try:
+        from src.reporting import rebuild_reporting_artifacts_in_place
+
+        result = rebuild_reporting_artifacts_in_place(run_dir)
+        return {
+            "status": "completed",
+            "updated_files": list(result.updated_files),
+            "validation_status": dict(result.validation_status),
+            "warnings": list(result.warnings),
+        }
+    except Exception as exc:
+        return {
+            "status": "failed",
+            "error": str(exc),
+            "traceback": traceback.format_exc(),
+        }
 
 
 def _canonical_vehicle_timeline_rows(
@@ -2844,6 +2902,13 @@ def _research_rows_from_depot_power(
             out_time = f"{minute // 60:02d}:{minute % 60:02d}"
             row = rows_by_depot_time.get((depot_id, out_time), {})
             out_date = base_date.isoformat()
+            energy_price = float(
+                row.get(
+                    "energy_price_yen_per_kwh",
+                    row.get("grid_energy_price_yen_per_kwh", 0.0),
+                )
+                or 0.0
+            )
             base = {
                 "date": out_date,
                 "time": out_time,
@@ -2887,6 +2952,14 @@ def _research_rows_from_depot_power(
                     "bus_charge_from_grid_slot_kwh": float(row.get("bus_charge_from_grid_slot_kwh", row.get("grid_to_bus_slot_kwh", 0.0)) or 0.0),
                     "bus_charge_from_bess_slot_kwh": float(row.get("bus_charge_from_bess_slot_kwh", row.get("bess_to_bus_slot_kwh", 0.0)) or 0.0),
                     "bess_soc_kwh": float(row.get("bess_soc_kwh", 0.0) or 0.0),
+                    "energy_price_yen_per_kwh": energy_price,
+                    "grid_purchase_cost_jpy": float(row.get("grid_purchase_cost_jpy", 0.0) or 0.0),
+                    "contract_limit_kw": float(row.get("contract_limit_kw", 0.0) or 0.0),
+                    "contract_over_limit_kwh": float(row.get("contract_over_limit_kwh", 0.0) or 0.0),
+                    "contract_over_limit_slot_kwh": float(row.get("contract_over_limit_slot_kwh", 0.0) or 0.0),
+                    "contract_over_limit_kw": float(row.get("contract_over_limit_kw", 0.0) or 0.0),
+                    "contract_limit_exceeded": bool(row.get("contract_limit_exceeded", False)),
+                    "demand_charge_window_flag": bool(row.get("demand_charge_window_flag", False)),
                 }
             )
             total_charge_kw = float(row.get("total_charge_kw", 0.0) or 0.0)
@@ -4100,9 +4173,6 @@ def _persist_canonical_graph_exports(
         json.dumps(graph_manifest, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    from src.reporting import rebuild_reporting_artifacts_in_place
-
-    reporting_result = rebuild_reporting_artifacts_in_place(Path(output_dir))
     manifest_relpath = None
     manifest_relpath = "graph/route_band_diagrams/manifest.json"
     return {
@@ -4143,9 +4213,8 @@ def _persist_canonical_graph_exports(
         "data_flow_validation_path": accounting_paths.get("data_flow_validation_csv", "graph/data_flow_validation.csv"),
         "accounting_summary": getattr(accounting_artifacts, "summary", {}),
         "reporting_finalizer": {
-            "updated_files": reporting_result.updated_files,
-            "validation_status": reporting_result.validation_status,
-            "warnings": reporting_result.warnings,
+            "status": "deferred",
+            "reason": "requires top-level rich run outputs before canonical reporting rebuild",
         },
         "refuel_events_path": "graph/refuel_events.csv",
         "planning_days": planning_days,
@@ -4987,7 +5056,7 @@ def _run_optimization(
                 "optimization_audit.json": optimization_audit,
             },
         )
-        _persist_rich_run_outputs(
+        reporting_finalizer_result = _persist_rich_run_outputs(
             run_dir=Path(output_dir),
             scenario=scenario,
             optimization_result=optimization_result,
@@ -4998,7 +5067,18 @@ def _run_optimization(
             graph_source_dir=Path(output_dir) / "graph",
             charging_summary=charging_summary_payload,
             charging_flow_payload=charging_flow_payload,
+            finalize_reporting=True,
         )
+        if reporting_finalizer_result is not None:
+            store.set_field(scenario_id, "optimization_result", optimization_result)
+            store.set_field(scenario_id, "optimization_audit", optimization_audit)
+            _persist_json_outputs(
+                output_dir,
+                {
+                    "optimization_result.json": optimization_result,
+                    "optimization_audit.json": optimization_audit,
+                },
+            )
         store.update_scenario(scenario_id, status="optimized")
         job_store.update_job(
             job_id,
@@ -5017,6 +5097,10 @@ def _run_optimization(
                     "solver_status": optimization_result.get("solver_status"),
                     "feed_context": feed_context,
                     "run_dir": output_dir,
+                    "reporting_finalizer_status": dict(
+                        (optimization_result.get("graph_artifacts") or {}).get("reporting_finalizer")
+                        or {}
+                    ).get("status"),
                 },
             ),
         )

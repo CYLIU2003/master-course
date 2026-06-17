@@ -135,6 +135,9 @@ def _build_depot_energy_flow_rows(
     ms: ModelSets,
     dp: DerivedParams,
     milp: MILPResult,
+    *,
+    base_date: Optional[date] = None,
+    planning_start_time: str = "00:00",
 ) -> List[Dict[str, Any]]:
     flows = _depots_from_slots(data, ms, dp, milp)
     slot_hours = _slot_hours(data)
@@ -154,6 +157,15 @@ def _build_depot_energy_flow_rows(
     )
     rows: List[Dict[str, Any]] = []
     for depot_id in depot_ids:
+        site = getattr(dp, "site_lut", {}).get(depot_id)
+        contract_limit_kw = float(
+            getattr(
+                site,
+                "contract_demand_limit_kw",
+                getattr(site, "grid_import_limit_kw", 0.0),
+            )
+            or 0.0
+        )
         for slot_idx in range(max(int(data.num_periods), 0)):
             pv_generation_kwh = float(get_pv_gen(dp, depot_id, slot_idx) or 0.0) * float(slot_hours)
             grid_to_bus_kwh = float(flows["grid_to_bus_kwh"].get(depot_id, {}).get(slot_idx, 0.0) or 0.0)
@@ -173,36 +185,62 @@ def _build_depot_energy_flow_rows(
             bus_charge_balance_error_kwh = bus_charge_total_kwh - grid_to_bus_kwh - pv_to_bus_kwh - bess_to_bus_kwh
             grid_kw_reported = float(flows["grid_import_kw"].get(depot_id, {}).get(slot_idx, 0.0) or 0.0)
             grid_kw_from_flow = grid_import_for_contract_kwh / float(slot_hours)
-            rows.append(
-                {
-                    "depot_id": depot_id,
-                    "time_idx": int(slot_idx),
-                    "pv_generation_kwh": pv_generation_kwh,
-                    "grid_to_bus_kwh": grid_to_bus_kwh,
-                    "pv_to_bus_kwh": pv_to_bus_kwh,
-                    "bess_to_bus_kwh": bess_to_bus_kwh,
-                    "pv_to_bess_kwh": pv_to_bess_kwh,
-                    "grid_to_bess_kwh": grid_to_bess_kwh,
-                    "pv_curtail_kwh": pv_curtail_kwh,
-                    "bess_soc_kwh": bess_soc_kwh,
-                    "contract_over_limit_kwh": contract_over_limit_kwh,
-                    "bus_charge_total_kwh": bus_charge_total_kwh,
-                    "pv_used_total_kwh": pv_used_total_kwh,
-                    "grid_import_for_contract_kwh": grid_import_for_contract_kwh,
-                    "pv_balance_error_kwh": pv_balance_error_kwh,
-                    "bus_charge_balance_error_kwh": bus_charge_balance_error_kwh,
-                    "grid_total_kwh": grid_import_for_contract_kwh,
-                    "grid_kw": grid_kw_from_flow,
-                    "grid_import_kw": grid_kw_reported,
-                    "grid_import_kw_reported": grid_kw_reported,
-                    "grid_import_kw_from_flow": grid_kw_from_flow,
-                    "grid_import_balance_error_kw": grid_kw_reported - grid_kw_from_flow,
-                    "pv_generation_kw": pv_generation_kwh / float(slot_hours),
-                    "pv_used_kw": pv_used_total_kwh / float(slot_hours),
-                    "bus_charge_from_grid_kwh": grid_to_bus_kwh,
-                    "bus_charge_from_bess_kwh": bess_to_bus_kwh,
-                }
-            )
+            energy_price = float(get_grid_price(dp, depot_id, slot_idx, default=0.0) or 0.0)
+            contract_over_limit_kw = contract_over_limit_kwh / float(slot_hours)
+            row = {
+                "depot_id": depot_id,
+                "time_idx": int(slot_idx),
+                "slot_index": int(slot_idx),
+                "energy_price_yen_per_kwh": energy_price,
+                "tou_energy_price_jpy_per_kwh": energy_price,
+                "grid_purchase_cost_jpy": grid_import_for_contract_kwh * energy_price,
+                "contract_limit_kw": contract_limit_kw,
+                "demand_rate_jpy_per_kw": float(getattr(data, "demand_charge_rate_per_kw", 0.0) or 0.0)
+                if bool(getattr(data, "enable_demand_charge", False))
+                else 0.0,
+                "contract_over_limit_kw": contract_over_limit_kw,
+                "contract_limit_exceeded": bool(contract_over_limit_kw > 1.0e-9),
+                "contract_overage_cost_jpy": 0.0,
+                "source_provenance_exact": bool(getattr(milp, "source_provenance_exact", False)),
+                "pv_generation_kwh": pv_generation_kwh,
+                "grid_to_bus_kwh": grid_to_bus_kwh,
+                "pv_to_bus_kwh": pv_to_bus_kwh,
+                "bess_to_bus_kwh": bess_to_bus_kwh,
+                "pv_to_bess_kwh": pv_to_bess_kwh,
+                "grid_to_bess_kwh": grid_to_bess_kwh,
+                "pv_curtail_kwh": pv_curtail_kwh,
+                "bess_soc_kwh": bess_soc_kwh,
+                "contract_over_limit_kwh": contract_over_limit_kwh,
+                "bus_charge_total_kwh": bus_charge_total_kwh,
+                "pv_used_total_kwh": pv_used_total_kwh,
+                "grid_import_for_contract_kwh": grid_import_for_contract_kwh,
+                "pv_balance_error_kwh": pv_balance_error_kwh,
+                "bus_charge_balance_error_kwh": bus_charge_balance_error_kwh,
+                "grid_total_kwh": grid_import_for_contract_kwh,
+                "grid_kw": grid_kw_from_flow,
+                "grid_import_kw": grid_kw_reported,
+                "grid_import_kw_reported": grid_kw_reported,
+                "grid_import_kw_from_flow": grid_kw_from_flow,
+                "grid_import_balance_error_kw": grid_kw_reported - grid_kw_from_flow,
+                "pv_generation_kw": pv_generation_kwh / float(slot_hours),
+                "pv_used_kw": pv_used_total_kwh / float(slot_hours),
+                "bus_charge_from_grid_kwh": grid_to_bus_kwh,
+                "bus_charge_from_bess_kwh": bess_to_bus_kwh,
+            }
+            if base_date is not None:
+                row["date"] = base_date.isoformat()
+                row["time"] = _slot_to_hhmm(
+                    int(slot_idx),
+                    data.delta_t_min,
+                    planning_start_time=planning_start_time,
+                )
+                row["timestamp"] = _slot_to_iso(
+                    base_date,
+                    int(slot_idx),
+                    data.delta_t_min,
+                    planning_start_time=planning_start_time,
+                )
+            rows.append(row)
     return rows
 
 
@@ -212,6 +250,8 @@ def _build_vehicle_charge_energy_source_rows(
     dp: DerivedParams,
     milp: MILPResult,
     scenario_id: str,
+    base_date: Optional[date] = None,
+    planning_start_time: str = "00:00",
 ) -> List[Dict[str, Any]]:
     flows = _depots_from_slots(data, ms, dp, milp)
     slot_hours = _slot_hours(data)
@@ -230,6 +270,16 @@ def _build_vehicle_charge_energy_source_rows(
                 if charge_kw <= 0.0:
                     continue
                 charge_kwh = charge_kw * float(slot_hours)
+                timestamp = (
+                    _slot_to_iso(
+                        base_date,
+                        int(slot_idx),
+                        data.delta_t_min,
+                        planning_start_time=planning_start_time,
+                    )
+                    if base_date is not None
+                    else ""
+                )
                 charge_rows.append(
                     {
                         "scenario_id": scenario_id,
@@ -237,7 +287,17 @@ def _build_vehicle_charge_energy_source_rows(
                         "depot_id": depot_id,
                         "charger_id": charger_id,
                         "time_idx": int(slot_idx),
+                        "date": timestamp[:10] if timestamp else "",
+                        "time": _slot_to_hhmm(
+                            int(slot_idx),
+                            data.delta_t_min,
+                            planning_start_time=planning_start_time,
+                        )
+                        if base_date is not None
+                        else "",
+                        "timestamp": timestamp,
                         "charge_kwh": charge_kwh,
+                        "total_charge_kwh": charge_kwh,
                     }
                 )
 
@@ -287,7 +347,11 @@ def _build_vehicle_charge_energy_source_rows(
                     "depot_id": depot_id,
                     "charger_id": str(row.get("charger_id") or ""),
                     "time_idx": slot_idx,
+                    "date": str(row.get("date") or ""),
+                    "time": str(row.get("time") or ""),
+                    "timestamp": str(row.get("timestamp") or ""),
                     "charge_kwh": charge_kwh,
+                    "total_charge_kwh": charge_kwh,
                     "grid_to_vehicle_kwh": grid_to_vehicle_kwh,
                     "pv_to_vehicle_kwh": pv_to_vehicle_kwh,
                     "bess_to_vehicle_kwh": bess_to_vehicle_kwh,
@@ -330,12 +394,19 @@ def _build_vehicle_soc_timeseries_rows(
             )
         for slot_idx, soc_kwh in enumerate(series):
             soc_value = float(soc_kwh or 0.0)
+            timestamp = _slot_to_iso(
+                base_date,
+                int(slot_idx),
+                data.delta_t_min,
+                planning_start_time=planning_start_time,
+            )
             rows.append(
                 {
                     "scenario_id": scenario_id,
                     "vehicle_id": vehicle_id,
-                    "timestamp": _slot_to_iso(
-                        base_date,
+                    "timestamp": timestamp,
+                    "date": timestamp[:10],
+                    "time": _slot_to_hhmm(
                         int(slot_idx),
                         data.delta_t_min,
                         planning_start_time=planning_start_time,
@@ -359,6 +430,71 @@ def _make_run_dir(output_root: str | Path) -> Path:
     """output/<date>/run_yyyymmdd_hhmm/ ディレクトリを作成して返す"""
 
     return allocate_run_dir(output_root)
+
+
+def _visualization_output_root(output_root: str | Path, run_dir: Path) -> Path:
+    root = Path(output_root)
+    try:
+        relative_parent = run_dir.parent.resolve().relative_to(root.resolve())
+    except ValueError:
+        relative_parent = Path(run_dir.parent.name)
+    return root / "visualization_data" / relative_parent
+
+
+def _count_files(path: Path) -> int:
+    if not path.exists():
+        return 0
+    return sum(1 for item in path.rglob("*") if item.is_file())
+
+
+def _generate_post_export_visualizations(run_dir: Path, output_root: str | Path) -> Dict[str, Any]:
+    visualization_root = _visualization_output_root(output_root, run_dir)
+    result: Dict[str, Any] = {
+        "status": "OK",
+        "input_root": str(run_dir.parent),
+        "output_root": str(visualization_root),
+        "run_ids": [run_dir.name],
+        "generators": [],
+        "errors": [],
+    }
+
+    try:
+        from scripts import plot_rebuilt_reporting_timeseries as timeseries_plots
+
+        run = timeseries_plots.load_run(run_dir)
+        timeseries_plots.plot_run(run, visualization_root / run_dir.name)
+        result["generators"].append("plot_rebuilt_reporting_timeseries")
+    except Exception as exc:  # pragma: no cover - visualization must not break optimization export
+        result["status"] = "WARNING"
+        result["errors"].append(
+            {
+                "generator": "plot_rebuilt_reporting_timeseries",
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+        )
+
+    try:
+        from scripts import plot_june6_power_fuel_checks as power_fuel_plots
+
+        run = power_fuel_plots.load_run(run_dir.parent, run_dir.name)
+        power_fuel_plots.process_run(run, visualization_root)
+        result["generators"].append("plot_june6_power_fuel_checks")
+    except Exception as exc:  # pragma: no cover - visualization must not break optimization export
+        result["status"] = "WARNING"
+        result["errors"].append(
+            {
+                "generator": "plot_june6_power_fuel_checks",
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+        )
+
+    result["generated_file_count"] = _count_files(visualization_root / run_dir.name)
+    result["comparison_generated"] = False
+    (run_dir / "post_export_visualization_log.json").write_text(
+        json.dumps(result, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return result
 
 
 def export_all(
@@ -399,10 +535,12 @@ def export_all(
     except ImportError:
         pass  # openpyxl 未インストール時はスキップ
     reporting_result = rebuild_reporting_artifacts_in_place(run_dir)
+    visualization_result = _generate_post_export_visualizations(run_dir, output_root)
 
     run_manifest = {
         "generated_at": datetime.now().isoformat(),
         "run_dir": str(run_dir),
+        "post_export_visualizations": visualization_result,
         "files": sorted(
             [
                 path.relative_to(run_dir).as_posix()
@@ -527,7 +665,15 @@ def export_graph_exports_phase1(
         base_date,
         planning_start_time=planning_start_time,
     )
-    vehicle_charge_source_rows = _build_vehicle_charge_energy_source_rows(data, ms, dp, milp, scenario_id)
+    vehicle_charge_source_rows = _build_vehicle_charge_energy_source_rows(
+        data,
+        ms,
+        dp,
+        milp,
+        scenario_id,
+        base_date=base_date,
+        planning_start_time=planning_start_time,
+    )
     vehicle_soc_timeseries_rows, vehicle_soc_warnings = _build_vehicle_soc_timeseries_rows(
         data,
         ms,
@@ -537,7 +683,14 @@ def export_graph_exports_phase1(
         base_date,
         planning_start_time=planning_start_time,
     )
-    energy_flow_rows = _build_depot_energy_flow_rows(data, ms, dp, milp)
+    energy_flow_rows = _build_depot_energy_flow_rows(
+        data,
+        ms,
+        dp,
+        milp,
+        base_date=base_date,
+        planning_start_time=planning_start_time,
+    )
     accounting_artifacts = build_accounting_artifacts(
         problem=data,
         scenario_id=scenario_id,
@@ -550,11 +703,16 @@ def export_graph_exports_phase1(
         vehicle_charging_source_rows=vehicle_charge_source_rows,
         energy_flow_rows=energy_flow_rows,
         metadata={
+            "scenario_id": scenario_id,
+            "run_id": str(run_dir.name),
+            "service_date": base_date.isoformat(),
+            "weather_date": base_date.isoformat(),
             "created_by_stage": "result_exporter.export_graph_exports_phase1",
             "operator_id": str(getattr(data, "operator_id", "") or "UNKNOWN_OPERATOR"),
             "slot_minutes": int(getattr(data, "timestep_min", 30) or 30),
             "num_periods": int(getattr(data, "num_periods", 0) or 0),
             "planning_horizon_hours": float(getattr(data, "planning_horizon_hours", 0.0) or 0.0),
+            "planning_start_time": planning_start_time,
         },
     )
     accounting_paths = export_accounting_outputs(graph_dir, accounting_artifacts)
@@ -4272,7 +4430,19 @@ def export_depot_energy_flows(
     dp: DerivedParams,
     milp: MILPResult,
 ) -> None:
-    rows = _build_depot_energy_flow_rows(data, ms, dp, milp)
+    graph_export_context = (
+        dict(getattr(data, "graph_export_context", {}) or {})
+        if isinstance(getattr(data, "graph_export_context", None), dict)
+        else None
+    )
+    rows = _build_depot_energy_flow_rows(
+        data,
+        ms,
+        dp,
+        milp,
+        base_date=_extract_base_date(run_dir),
+        planning_start_time=_planning_start_time_text(graph_export_context),
+    )
     if not rows:
         empty_payload = {"depot_energy_flows": [], "depot_energy_flow_summary": []}
         _write_csv(run_dir / "depot_energy_flows.csv", [])

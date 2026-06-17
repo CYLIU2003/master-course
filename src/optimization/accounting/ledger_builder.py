@@ -45,6 +45,47 @@ def _slot_bounds(slot_date: date, slot_index: int, *, slot_minutes: int) -> tupl
     return start.isoformat(), end.isoformat()
 
 
+def _planning_start_minutes(value: Any) -> int:
+    text = str(value or "00:00").strip()
+    if not text:
+        return 0
+    try:
+        hour_text, minute_text = text.split(":", 1)
+        hour = int(hour_text) % 24
+        minute = int(minute_text[:2]) % 60
+    except (ValueError, TypeError):
+        return 0
+    return hour * 60 + minute
+
+
+def _slot_bounds_from_planning_index(
+    slot_date: date,
+    slot_index: int,
+    *,
+    slot_minutes: int,
+    planning_start_time: Any,
+) -> tuple[str, str]:
+    start = datetime.combine(slot_date, datetime.min.time()) + timedelta(
+        minutes=_planning_start_minutes(planning_start_time) + slot_index * slot_minutes
+    )
+    end = start + timedelta(minutes=slot_minutes)
+    return start.isoformat(), end.isoformat()
+
+
+def _row_planning_slot_index(row: Mapping[str, Any]) -> tuple[int | None, bool]:
+    for key in ("time_idx", "slot_index"):
+        if key not in row:
+            continue
+        raw = row.get(key)
+        if raw in (None, ""):
+            continue
+        try:
+            return int(float(raw)), True
+        except (TypeError, ValueError):
+            continue
+    return None, False
+
+
 def _split_duration(start: datetime, end: datetime, *, slot_minutes: int) -> Iterable[tuple[date, int, float]]:
     if end <= start:
         return []
@@ -414,13 +455,23 @@ def _build_energy_flow_ledger(
     rows: List[EnergyFlowLedgerRow] = []
     cumulative_grid_kwh_by_depot: Dict[str, float] = defaultdict(float)
     cumulative_cost_by_depot: Dict[str, float] = defaultdict(float)
+    planning_start_time = metadata.get("planning_start_time", "00:00")
     for row in energy_flow_rows:
         depot_id = str(row.get("depot_id") or metadata.get("depot_id") or "")
         time_text = str(row.get("time") or "")
         date_text = str(row.get("date") or service_date.isoformat())
         row_date = _parse_date(date_text, service_date)
-        slot_index = _slot_minutes_from_time_text(time_text) // slot_minutes
-        slot_start, slot_end = _slot_bounds(row_date, slot_index, slot_minutes=slot_minutes)
+        row_slot_index, uses_planning_index = _row_planning_slot_index(row)
+        slot_index = row_slot_index if row_slot_index is not None else _slot_minutes_from_time_text(time_text) // slot_minutes
+        if uses_planning_index:
+            slot_start, slot_end = _slot_bounds_from_planning_index(
+                row_date,
+                slot_index,
+                slot_minutes=slot_minutes,
+                planning_start_time=planning_start_time,
+            )
+        else:
+            slot_start, slot_end = _slot_bounds(row_date, slot_index, slot_minutes=slot_minutes)
         slot_hours = slot_minutes / 60.0
         pv_generation_kwh = float(
             row.get(

@@ -97,6 +97,7 @@ _RESULT_METRIC_LABELS = {
     "served_trips": "担当便数",
     "unserved_trips": "未担当便数",
     "vehicle_count_used": "使用車両数",
+    "used_vehicle_day_count": "使用車両日数",
     "solve_time_seconds": "計算時間[s]",
     "energy_cost": "推進費合計(EV電力+ICE燃料)",
     "electricity_cost": "EV電力コスト",
@@ -107,6 +108,9 @@ _RESULT_METRIC_LABELS = {
     "fuel_cost_refueled": "実給油燃料コスト",
     "fuel_cost_provisional_leftover": "暫定燃料コスト残",
     "vehicle_cost": "車両コスト",
+    "vehicle_usage_cost": "バス使用固定費",
+    "vehicle_usage_cost_jpy": "バス使用固定費",
+    "vehicle_usage_cost_jpy_per_used_bus": "バス使用固定費単価[円/台・日]",
     "driver_cost": "乗務員コスト",
     "penalty_unserved": "未担当ペナルティ",
     "fuel_cost": "燃料コスト",
@@ -128,6 +132,9 @@ _PRIMARY_COST_BREAKDOWN_KEYS = (
     "fuel_cost_provisional_leftover",
     "energy_cost",
     "vehicle_cost",
+    "vehicle_usage_cost",
+    "vehicle_usage_cost_jpy_per_used_bus",
+    "used_vehicle_day_count",
     "driver_cost",
     "penalty_unserved",
     "demand_charge",
@@ -147,6 +154,7 @@ _RESULT_COMPARE_KEYS = (
     "solve_time_seconds",
     "electricity_cost",
     "vehicle_cost",
+    "vehicle_usage_cost",
     "driver_cost",
     "penalty_unserved",
     "electricity_cost_final",
@@ -204,7 +212,11 @@ def _ordered_cost_breakdown_items(costs: Any) -> list[dict[str, Any]]:
     seen: set[str] = set()
     ordered_keys = [*list(_PRIMARY_COST_BREAKDOWN_KEYS), *[str(key) for key in costs.keys()]]
     total_keys = {"total_cost", "total_cost_with_assets"}
-    non_share_keys = {"return_leg_bonus"}
+    non_share_keys = {
+        "return_leg_bonus",
+        "vehicle_usage_cost_jpy_per_used_bus",
+        "used_vehicle_day_count",
+    }
     for order, key in enumerate(ordered_keys):
         if key in seen:
             continue
@@ -1813,6 +1825,7 @@ class App:
         self.grid_flat_price_var = tk.StringVar(value="30")
         self.diesel_price_var = tk.StringVar(value="145")
         self.demand_charge_var = tk.StringVar(value="1500")
+        self.vehicle_usage_cost_var = tk.StringVar(value="0")
         self.depot_power_limit_var = tk.StringVar(value="500")
         self.pv_marginal_charge_cost_var = tk.StringVar(value="0")
         self.pv_curtail_penalty_var = tk.StringVar(value="0")
@@ -1958,6 +1971,38 @@ class App:
                 "営業所の系統受電契約電力上限 [kW]。\n"
                 "この値を超えると制約違反になる。例: 500"
             ),
+        )
+        vehicle_usage_row = ttk.Frame(energy_grp)
+        vehicle_usage_row.pack(fill=tk.X, pady=1)
+        vehicle_usage_row.columnconfigure(1, weight=1)
+        vehicle_usage_label = ttk.Label(
+            vehicle_usage_row,
+            text="バス使用固定費 [円/台・日]",
+            width=22,
+            anchor="w",
+        )
+        vehicle_usage_label.grid(row=0, column=0, sticky="w")
+        _Tooltip(
+            vehicle_usage_label,
+            "営業便を担当した車両日数に掛ける固定費です。\n"
+            "疑似的な人件費・車両使用費を `使用車両日数 × 単価` として目的関数へ加算します。\n"
+            "例: 30000 = 1台が1営業日使われるごとに 30,000 円。",
+        )
+        ttk.Entry(vehicle_usage_row, textvariable=self.vehicle_usage_cost_var).grid(
+            row=0,
+            column=1,
+            sticky="ew",
+            padx=(2, 4),
+        )
+        vehicle_usage_check = ttk.Checkbutton(
+            vehicle_usage_row,
+            text="有効",
+            variable=self.cost_component_vars["vehicle_usage_cost"],
+        )
+        vehicle_usage_check.grid(row=0, column=2, sticky="w")
+        _Tooltip(
+            vehicle_usage_check,
+            "OFF にすると金額を保存していても、最適化目的関数と cost breakdown のバス使用固定費を 0 として扱います。",
         )
         self._param_row2(
             energy_grp,
@@ -6000,6 +6045,15 @@ class App:
             self.diesel_price_var.set(str(sim.get("dieselPricePerL") or 145))
             self.grid_co2_var.set(str(sim.get("gridCo2KgPerKwh") or 0))
             self.co2_price_var.set(str(sim.get("co2PricePerKg") or 0))
+            self.vehicle_usage_cost_var.set(
+                str(
+                    self._first_present_value(
+                        sim.get("vehicleUsageCostJpyPerUsedBus"),
+                        sim.get("vehicleUsageCostJpyPerBus"),
+                        default=0.0,
+                    )
+                )
+            )
             self.co2_price_source_var.set(str(sim.get("co2PriceSource") or "manual"))
             self.co2_reference_date_var.set(str(sim.get("co2ReferenceDate") or ""))
             self.ice_co2_kg_per_l_var.set(str(sim.get("iceCo2KgPerL") or 2.64))
@@ -6217,6 +6271,10 @@ class App:
             "gridFlatPricePerKwh": self._parse_float(self.grid_flat_price_var.get(), 0.0),
             "gridSellPricePerKwh": self._parse_float(self.grid_sell_price_var.get(), 0.0),
             "demandChargeCostPerKw": self._parse_float(self.demand_charge_var.get(), 0.0),
+            "vehicleUsageCostJpyPerUsedBus": self._parse_float(
+                self.vehicle_usage_cost_var.get(),
+                0.0,
+            ),
             "pvMarginalChargeCostYenPerKwh": self._parse_float(
                 self.pv_marginal_charge_cost_var.get(),
                 0.0,
@@ -7557,6 +7615,10 @@ class App:
                 "grid_flat_price_per_kwh": self._parse_float(self.grid_flat_price_var.get(), 0.0),
                 "grid_sell_price_per_kwh": self._parse_float(self.grid_sell_price_var.get(), 0.0),
                 "demand_charge_cost_per_kw": self._parse_float(self.demand_charge_var.get(), 0.0),
+                "vehicle_usage_cost_jpy_per_used_bus": self._parse_float(
+                    self.vehicle_usage_cost_var.get(),
+                    0.0,
+                ),
                 "pv_marginal_charge_cost_yen_per_kwh": self._parse_float(
                     self.pv_marginal_charge_cost_var.get(),
                     0.0,

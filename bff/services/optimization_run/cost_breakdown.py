@@ -57,6 +57,14 @@ def canonical_cost_breakdown_json(*, problem, engine_result, scenario_id: str) -
             "contract_overage_cost_jpy": float(breakdown.get("contract_overage_cost", 0.0) or 0.0),
             "diesel_cost": float(breakdown.get("fuel_cost", 0.0) or 0.0),
             "vehicle_fixed_cost": float(breakdown.get("vehicle_cost", 0.0) or 0.0),
+            "vehicle_usage_cost_jpy": float(
+                breakdown.get("vehicle_usage_cost", breakdown.get("vehicle_usage_cost_jpy", 0.0))
+                or 0.0
+            ),
+            "vehicle_usage_cost_jpy_per_used_bus": float(
+                breakdown.get("vehicle_usage_cost_jpy_per_used_bus", 0.0) or 0.0
+            ),
+            "used_vehicle_day_count": int(breakdown.get("used_vehicle_day_count", 0) or 0),
             "driver_cost": float(breakdown.get("driver_cost", 0.0) or 0.0),
             "co2_cost": float(breakdown.get("co2_cost", 0.0) or 0.0),
             "battery_degradation_cost": float(breakdown.get("degradation_cost", 0.0) or 0.0),
@@ -205,6 +213,18 @@ def cost_breakdown(
             (sim_payload or {}).get("total_vehicle_fixed_cost", obj_breakdown.get("vehicle_cost", 0.0))
             or 0.0
         ),
+        "vehicle_usage_cost": float(
+            obj_breakdown.get("vehicle_usage_cost", obj_breakdown.get("vehicle_usage_cost_jpy", 0.0))
+            or 0.0
+        ),
+        "vehicle_usage_cost_jpy": float(
+            obj_breakdown.get("vehicle_usage_cost", obj_breakdown.get("vehicle_usage_cost_jpy", 0.0))
+            or 0.0
+        ),
+        "vehicle_usage_cost_jpy_per_used_bus": float(
+            obj_breakdown.get("vehicle_usage_cost_jpy_per_used_bus", 0.0) or 0.0
+        ),
+        "used_vehicle_day_count": int(obj_breakdown.get("used_vehicle_day_count", 0) or 0),
         "driver_cost": float(
             (sim_payload or {}).get("total_driver_cost", obj_breakdown.get("driver_cost", 0.0))
             or 0.0

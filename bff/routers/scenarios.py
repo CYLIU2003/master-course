@@ -710,6 +710,7 @@ class UpdateQuickSetupBody(BaseModel):
     gridFlatPricePerKwh: Optional[float] = None
     gridSellPricePerKwh: Optional[float] = None
     demandChargeCostPerKw: Optional[float] = None
+    vehicleUsageCostJpyPerUsedBus: Optional[float] = None
     dieselPricePerL: Optional[float] = None
     gridCo2KgPerKwh: Optional[float] = None
     co2PricePerKg: Optional[float] = None
@@ -1674,6 +1675,17 @@ def _builder_defaults(
         "gridFlatPricePerKwh": overlay_cost.get("grid_flat_price_per_kwh"),
         "gridSellPricePerKwh": overlay_cost.get("grid_sell_price_per_kwh"),
         "demandChargeCostPerKw": overlay_cost.get("demand_charge_cost_per_kw"),
+        "vehicleUsageCostJpyPerUsedBus": next(
+            (
+                value
+                for value in (
+                    overlay_cost.get("vehicle_usage_cost_jpy_per_used_bus"),
+                    simulation_config.get("vehicle_usage_cost_jpy_per_used_bus"),
+                )
+                if value is not None
+            ),
+            0.0,
+        ),
         "dieselPricePerL": overlay_cost.get("diesel_price_per_l"),
         "gridCo2KgPerKwh": overlay_cost.get("grid_co2_kg_per_kwh"),
         "co2PricePerKg": overlay_cost.get("co2_price_per_kg"),
@@ -2192,6 +2204,9 @@ def _build_quick_setup_payload(
             "gridFlatPricePerKwh": builder_defaults.get("gridFlatPricePerKwh"),
             "gridSellPricePerKwh": builder_defaults.get("gridSellPricePerKwh"),
             "demandChargeCostPerKw": builder_defaults.get("demandChargeCostPerKw"),
+            "vehicleUsageCostJpyPerUsedBus": builder_defaults.get(
+                "vehicleUsageCostJpyPerUsedBus"
+            ),
             "dieselPricePerL": builder_defaults.get("dieselPricePerL"),
             "gridCo2KgPerKwh": builder_defaults.get("gridCo2KgPerKwh"),
             "co2PricePerKg": builder_defaults.get("co2PricePerKg"),
@@ -2652,6 +2667,11 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             overlay_cost["grid_sell_price_per_kwh"] = float(body.gridSellPricePerKwh)
         if body.demandChargeCostPerKw is not None:
             overlay_cost["demand_charge_cost_per_kw"] = float(body.demandChargeCostPerKw)
+        if body.vehicleUsageCostJpyPerUsedBus is not None:
+            overlay_cost["vehicle_usage_cost_jpy_per_used_bus"] = max(
+                float(body.vehicleUsageCostJpyPerUsedBus),
+                0.0,
+            )
         if body.dieselPricePerL is not None:
             overlay_cost["diesel_price_per_l"] = float(body.dieselPricePerL)
         if body.gridCo2KgPerKwh is not None:
@@ -2805,6 +2825,11 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             )
         if body.deadheadSpeedKmh is not None:
             simulation_config["deadhead_speed_kmh"] = float(body.deadheadSpeedKmh)
+        if body.vehicleUsageCostJpyPerUsedBus is not None:
+            simulation_config["vehicle_usage_cost_jpy_per_used_bus"] = max(
+                float(body.vehicleUsageCostJpyPerUsedBus),
+                0.0,
+            )
         if body.objectivePreset is not None:
             simulation_config["objective_preset"] = str(body.objectivePreset)
         if body.pvProfileId is not None:

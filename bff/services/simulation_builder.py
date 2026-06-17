@@ -564,6 +564,11 @@ def apply_builder_configuration(
         overlay.cost_coefficients.demand_charge_cost_per_kw = (
             body.simulation_settings.demand_charge_cost_per_kw
         )
+    if body.simulation_settings.vehicle_usage_cost_jpy_per_used_bus is not None:
+        overlay.cost_coefficients.vehicle_usage_cost_jpy_per_used_bus = max(
+            float(body.simulation_settings.vehicle_usage_cost_jpy_per_used_bus),
+            0.0,
+        )
     if body.simulation_settings.diesel_price_per_l is not None:
         overlay.cost_coefficients.diesel_price_per_l = (
             body.simulation_settings.diesel_price_per_l
@@ -770,6 +775,9 @@ def apply_builder_configuration(
         "max_start_fragments_per_vehicle": overlay.solver_config.max_start_fragments_per_vehicle,
         "max_end_fragments_per_vehicle": overlay.solver_config.max_end_fragments_per_vehicle,
         "deadhead_speed_kmh": body.simulation_settings.deadhead_speed_kmh,
+        "vehicle_usage_cost_jpy_per_used_bus": (
+            overlay.cost_coefficients.vehicle_usage_cost_jpy_per_used_bus
+        ),
         "pv_marginal_charge_cost_yen_per_kwh": (
             overlay.cost_coefficients.pv_marginal_charge_cost_yen_per_kwh
         ),

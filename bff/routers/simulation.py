@@ -120,6 +120,7 @@ class PrepareSimulationSettingsBody(BaseModel):
     grid_flat_price_per_kwh: Optional[float] = None
     grid_sell_price_per_kwh: Optional[float] = None
     demand_charge_cost_per_kw: Optional[float] = None
+    vehicle_usage_cost_jpy_per_used_bus: Optional[float] = None
     diesel_price_per_l: Optional[float] = None
     ice_co2_kg_per_l: Optional[float] = None
     grid_co2_kg_per_kwh: Optional[float] = None

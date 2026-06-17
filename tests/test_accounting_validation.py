@@ -50,6 +50,52 @@ def test_accounting_data_flow_validation_reports_ok() -> None:
     assert statuses["operator_id_empty_count"] == "OK"
 
 
+def test_energy_flow_time_idx_uses_planning_start_time() -> None:
+    artifacts = build_accounting_artifacts(
+        problem=object(),
+        scenario_id="s",
+        run_id="r",
+        service_date=date(2026, 1, 1),
+        weather_date=date(2026, 1, 1),
+        operator_id="op-1",
+        trip_assignment_rows=[],
+        vehicle_soc_timeseries_rows=[],
+        vehicle_charging_source_rows=[],
+        energy_flow_rows=[
+            {
+                "time_idx": 0,
+                "depot_id": "dep-1",
+                "grid_to_bus_kwh": 10.0,
+                "grid_total_kwh": 10.0,
+                "energy_price_yen_per_kwh": 18.0,
+            },
+            {
+                "time_idx": 20,
+                "depot_id": "dep-1",
+                "grid_to_bus_kwh": 1.0,
+                "grid_total_kwh": 1.0,
+                "energy_price_yen_per_kwh": 18.0,
+            },
+        ],
+        metadata={
+            "slot_minutes": 60,
+            "operator_id": "op-1",
+            "planning_start_time": "05:00",
+        },
+    )
+
+    row = artifacts.energy_flow_ledger[0]
+    next_day_row = artifacts.energy_flow_ledger[1]
+    assert row.slot_index == 0
+    assert row.slot_start == "2026-01-01T05:00:00"
+    assert row.slot_end == "2026-01-01T06:00:00"
+    assert row.timestamp == row.slot_start
+    assert row.grid_purchase_cost_jpy == pytest.approx(180.0)
+    assert next_day_row.slot_index == 20
+    assert next_day_row.slot_start == "2026-01-02T01:00:00"
+    assert next_day_row.slot_end == "2026-01-02T02:00:00"
+
+
 def test_vehicle_charging_source_allocation_uses_site_ratios_when_not_solver_native() -> None:
     problem = CanonicalOptimizationProblem(
         scenario=OptimizationScenario(scenario_id="s", timestep_min=60, horizon_start="00:00"),

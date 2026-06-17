@@ -498,6 +498,69 @@ def test_rich_run_outputs_restore_charging_schedule_and_vehicle_timelines_json(t
     assert kpi_summary_json["fuel_cost_provisional_leftover_jpy"] == 2.0
 
 
+def test_rich_run_outputs_finalize_reporting_after_top_level_files_exist(tmp_path: Path) -> None:
+    problem, result, scenario = _problem_and_result()
+    artifacts = optimization._persist_canonical_graph_exports(
+        scenario=scenario,
+        problem=problem,
+        engine_result=result,
+        scenario_id="scenario-1",
+        output_dir=str(tmp_path),
+    )
+    canonical_solver_result = ResultSerializer.serialize_result(result)
+    charging_payload = optimization._canonical_charging_output_payload(problem, result)
+
+    reporting_result = optimization._persist_rich_run_outputs(
+        run_dir=tmp_path,
+        scenario=scenario,
+        optimization_result={
+            "scenario_id": "scenario-1",
+            "mode": "mode_alns_only",
+            "solver_status": "feasible",
+            "objective_mode": "total_cost",
+            "objective_value": 123.0,
+            "solve_time_seconds": 1.5,
+            "summary": {
+                "trip_count_served": 1,
+                "trip_count_unserved": 0,
+                "vehicle_count_used": 1,
+                "trip_count_by_type": {"BEV": 1},
+            },
+            "cost_breakdown": {
+                "total_cost": 123.0,
+                "energy_cost": 10.0,
+                "electricity_cost": 6.0,
+                "demand_charge": 0.0,
+                "fuel_cost": 4.0,
+                "co2_cost": 0.0,
+                "total_co2_kg": 0.0,
+                "grid_to_bus_kwh": 1.0,
+                "grid_to_bess_kwh": 0.0,
+            },
+            "graph_artifacts": artifacts,
+        },
+        optimization_audit={"warnings": []},
+        result_payload={
+            "assignment": {"veh-1": ["t1"]},
+            "unserved_tasks": [],
+            "obj_breakdown": {"objective_value": 123.0, "energy_cost": 10.0},
+        },
+        sim_payload=None,
+        canonical_solver_result=canonical_solver_result,
+        graph_source_dir=tmp_path / "graph",
+        charging_summary=charging_payload["summary"],
+        charging_flow_payload=charging_payload,
+        finalize_reporting=True,
+    )
+
+    assert reporting_result is not None
+    assert reporting_result["status"] == "completed"
+    assert (tmp_path / "cost_breakdown_detail.csv").exists()
+    assert (tmp_path / "rebuild_reporting_log.json").exists()
+    persisted = json.loads((tmp_path / "optimization_result.json").read_text(encoding="utf-8"))
+    assert persisted["graph_artifacts"]["reporting_finalizer"]["status"] == "completed"
+
+
 def test_charging_summary_reports_electricity_cost_not_propulsion_aggregate() -> None:
     problem, result, _scenario = _problem_and_result()
     result = replace(
@@ -616,11 +679,17 @@ def test_canonical_graph_exports_research_timeseries_files(tmp_path: Path) -> No
         pv_rows = list(csv.DictReader(handle))
     with (graph_dir / "energy_flow_ledger.csv").open("r", encoding="utf-8", newline="") as handle:
         ledger_rows = list(csv.DictReader(handle))
+    with (graph_dir / "cost_timeseries.csv").open("r", encoding="utf-8", newline="") as handle:
+        cost_rows = list(csv.DictReader(handle))
     kpi_summary = json.loads((graph_dir / "kpi_summary.json").read_text(encoding="utf-8"))
     pv_timeseries_total = sum(float(row["pv_generation_slot_kwh"]) for row in pv_rows)
     ledger_total = sum(float(row["pv_generation_kwh"]) for row in ledger_rows)
+    ledger_grid_cost = sum(float(row["grid_purchase_cost_jpy"]) for row in ledger_rows)
+    cost_timeseries_grid_cost = sum(float(row["grid_purchase_cost_jpy"]) for row in cost_rows)
     assert pv_timeseries_total == 3.0
     assert ledger_total == pv_timeseries_total
+    assert cost_timeseries_grid_cost > 0.0
+    assert abs(ledger_grid_cost - cost_timeseries_grid_cost) < 1.0e-9
     assert kpi_summary["pv_generation_kwh"] == pv_timeseries_total
 
     with (graph_dir / "data_flow_validation.csv").open("r", encoding="utf-8", newline="") as handle:
