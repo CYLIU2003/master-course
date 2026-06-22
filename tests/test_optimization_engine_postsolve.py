@@ -5,6 +5,7 @@ from src.optimization.common.builder import ProblemBuilder
 from src.optimization.common.problem import (
     AssignmentPlan,
     CanonicalOptimizationProblem,
+    ChargingSlot,
     DepotEnergyAsset,
     EnergyPriceSlot,
     OptimizationConfig,
@@ -13,7 +14,7 @@ from src.optimization.common.problem import (
     OptimizationScenario,
     ProblemDepot,
 )
-from src.optimization.engine import OptimizationEngine, _repair_bess_terminal_soc
+from src.optimization.engine import OptimizationEngine, _derive_depot_energy_source_split, _repair_bess_terminal_soc
 
 
 class _FakeMILPOptimizer:
@@ -61,6 +62,54 @@ def test_postsolve_bess_terminal_soc_repair_shifts_late_discharge_to_grid() -> N
     assert repaired.bess_soc_kwh_by_depot_slot["dep-1"][1] == 30.0
     assert repaired.metadata["bess_terminal_soc_violation_kwh"] == 0.0
     assert repaired.metadata["bess_terminal_soc_repair_shifted_to_grid_kwh"] == 20.0
+    assert repaired.metadata["bess_terminal_soc_target_kwh_by_depot"] == {"dep-1": 50.0}
+    assert repaired.metadata["bess_terminal_soc_deviation_kwh_by_depot"] == {"dep-1": 20.0}
+
+
+def test_postsolve_source_split_prefers_direct_pv_before_bess_discharge() -> None:
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(scenario_id="s-pv-first", timestep_min=60),
+        dispatch_context=None,
+        trips=(),
+        vehicles=(),
+        depots=(ProblemDepot(depot_id="dep-1", name="Depot", import_limit_kw=9999.0),),
+        price_slots=(EnergyPriceSlot(slot_index=0, grid_buy_yen_per_kwh=20.0),),
+        depot_energy_assets={
+            "dep-1": DepotEnergyAsset(
+                depot_id="dep-1",
+                pv_enabled=True,
+                pv_generation_kwh_by_slot=(10.0,),
+                bess_enabled=True,
+                bess_energy_kwh=100.0,
+                bess_power_kw=100.0,
+                bess_initial_soc_kwh=60.0,
+                bess_soc_min_kwh=0.0,
+                bess_soc_max_kwh=100.0,
+                bess_discharge_efficiency=1.0,
+                bess_terminal_soc_target_kwh=50.0,
+            )
+        },
+    )
+    plan = AssignmentPlan(
+        charging_slots=(
+            ChargingSlot(
+                vehicle_id="veh-1",
+                slot_index=0,
+                charger_id="grid:dep-1",
+                charge_kw=15.0,
+                charging_depot_id="dep-1",
+            ),
+        )
+    )
+
+    split = _derive_depot_energy_source_split(problem, plan)
+
+    assert split.pv_to_bus_kwh_by_depot_slot["dep-1"][0] == 10.0
+    assert split.bess_to_bus_kwh_by_depot_slot["dep-1"][0] == 5.0
+    assert split.grid_to_bus_kwh_by_depot_slot.get("dep-1", {}).get(0, 0.0) == 0.0
+    assert split.bess_soc_kwh_by_depot_slot["dep-1"][0] == 55.0
+    assert split.metadata["bess_terminal_soc_target_kwh_by_depot"] == {"dep-1": 50.0}
+    assert split.metadata["bess_terminal_soc_deviation_kwh_by_depot"] == {"dep-1": 5.0}
 
 
 def test_optimization_engine_rebuilds_impossible_fragment_sequence() -> None:

@@ -306,6 +306,17 @@ class ProblemBuilder:
             )
         if home_depot_charge_post_window_min is None:
             home_depot_charge_post_window_min = float(timestep_min)
+        allow_soc_violation_slack = self._safe_bool(
+            self._first_present(
+                simulation_cfg.get("allow_soc_violation_slack"),
+                solver_cfg.get("allow_soc_violation_slack"),
+                charging_cfg.get("allow_soc_violation_slack"),
+                simulation_cfg.get("use_soft_soc_constraint"),
+                solver_cfg.get("use_soft_soc_constraint"),
+                charging_cfg.get("use_soft_soc_constraint"),
+            ),
+            default=False,
+        )
         horizon_start_min = hhmm_to_min(operation_start_time)
         enable_contract_overage_penalty = simulation_cfg.get("enable_contract_overage_penalty")
         if enable_contract_overage_penalty is None:
@@ -459,6 +470,7 @@ class ProblemBuilder:
             final_soc_target_percent=final_soc_target_percent,
             final_soc_target_tolerance_percent=final_soc_target_tolerance_percent,
             charge_upper_buffer_ratio=charge_upper_buffer_ratio,
+            allow_soc_violation_slack=allow_soc_violation_slack,
             initial_ice_fuel_percent=initial_ice_fuel_percent,
             min_ice_fuel_percent=min_ice_fuel_percent,
             max_ice_fuel_percent=max_ice_fuel_percent,
@@ -532,6 +544,7 @@ class ProblemBuilder:
         final_soc_target_percent: Optional[float] = None,
         final_soc_target_tolerance_percent: Optional[float] = None,
         charge_upper_buffer_ratio: Optional[float] = None,
+        allow_soc_violation_slack: bool = False,
         initial_ice_fuel_percent: Optional[float] = None,
         min_ice_fuel_percent: Optional[float] = None,
         max_ice_fuel_percent: Optional[float] = None,
@@ -954,6 +967,8 @@ class ProblemBuilder:
                 "overnight_charge_target_mode": str(overnight_charge_target_mode or "minimum_required").strip().lower(),
                 "home_depot_charge_pre_window_min": float(home_depot_charge_pre_window_min or 0.0),
                 "home_depot_charge_post_window_min": float(home_depot_charge_post_window_min or 0.0),
+                "allow_soc_violation_slack": bool(allow_soc_violation_slack),
+                "use_soft_soc_constraint": bool(allow_soc_violation_slack),
                 "enable_contract_overage_penalty": bool(enable_contract_overage_penalty)
                 and bool(normalized_cost_component_flags.get("contract_overage_penalty", True)),
                 "contract_overage_penalty_yen_per_kwh": (
@@ -1172,6 +1187,15 @@ class ProblemBuilder:
                     return bess_energy_kwh * ratio
                 return 0.0
 
+            def _optional_soc_kwh_from_config(kwh_key: str, *ratio_keys: str) -> Optional[float]:
+                explicit_kwh = self._safe_float(raw.get(kwh_key)) if raw.get(kwh_key) not in (None, "") else None
+                ratio = _ratio_from_raw(*ratio_keys)
+                if explicit_kwh is not None:
+                    return max(float(explicit_kwh), 0.0)
+                if ratio is not None:
+                    return bess_energy_kwh * ratio
+                return None
+
             bess_soc_min_kwh = _soc_kwh_from_config(
                 "bess_soc_min_kwh",
                 "bess_soc_min_ratio",
@@ -1209,6 +1233,33 @@ class ProblemBuilder:
             )
             if bess_soc_max_kwh > 0.0:
                 bess_terminal_soc_min_kwh = min(bess_terminal_soc_min_kwh, bess_soc_max_kwh)
+            bess_terminal_soc_target_kwh = _optional_soc_kwh_from_config(
+                "bess_terminal_soc_target_kwh",
+                "bess_terminal_soc_target_ratio",
+                "bessTerminalSocTargetRatio",
+                "bess_terminal_soc_target_percent",
+                "bessTerminalSocTargetPercent",
+            )
+            if bess_terminal_soc_target_kwh is None and raw.get("bessTerminalSocTargetKwh") not in (None, ""):
+                bess_terminal_soc_target_kwh = max(
+                    float(self._safe_float(raw.get("bessTerminalSocTargetKwh")) or 0.0),
+                    0.0,
+                )
+            if bess_terminal_soc_target_kwh is None:
+                bess_terminal_soc_target_kwh = bess_initial_soc_kwh if bess_enabled else 0.0
+            if bess_soc_max_kwh > 0.0:
+                bess_terminal_soc_target_kwh = min(bess_terminal_soc_target_kwh, bess_soc_max_kwh)
+            bess_terminal_soc_target_kwh = max(bess_terminal_soc_target_kwh, bess_soc_min_kwh)
+            bess_terminal_soc_deviation_penalty_yen_per_kwh = self._safe_float(
+                self._first_present(
+                    raw.get("bess_terminal_soc_deviation_penalty_yen_per_kwh"),
+                    raw.get("bessTerminalSocDeviationPenaltyYenPerKwh"),
+                    raw.get("bess_terminal_soc_target_penalty_yen_per_kwh"),
+                    raw.get("bessTerminalSocTargetPenaltyYenPerKwh"),
+                )
+            )
+            if bess_terminal_soc_deviation_penalty_yen_per_kwh is None:
+                bess_terminal_soc_deviation_penalty_yen_per_kwh = 20.0
 
             asset = DepotEnergyAsset(
                 depot_id=depot.depot_id,
@@ -1251,6 +1302,11 @@ class ProblemBuilder:
                 ),
                 bess_priority_mode=str(raw.get("bess_priority_mode") or "cost_driven"),
                 bess_terminal_soc_min_kwh=bess_terminal_soc_min_kwh,
+                bess_terminal_soc_target_kwh=bess_terminal_soc_target_kwh,
+                bess_terminal_soc_deviation_penalty_yen_per_kwh=max(
+                    float(bess_terminal_soc_deviation_penalty_yen_per_kwh or 0.0),
+                    0.0,
+                ),
                 provisional_energy_cost_yen_per_kwh=float(raw.get("provisional_energy_cost_yen_per_kwh") or 0.0),
             )
             assets[depot.depot_id] = asset
@@ -3592,6 +3648,18 @@ class ProblemBuilder:
             return None if value is None else float(value)
         except (TypeError, ValueError):
             return None
+
+    def _safe_bool(self, value: Any, *, default: bool = False) -> bool:
+        if value is None:
+            return bool(default)
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"1", "true", "yes", "on"}:
+                return True
+            if normalized in {"0", "false", "no", "off"}:
+                return False
+            return bool(default)
+        return bool(value)
 
     def _first_present(self, *values: Any) -> Any:
         for value in values:

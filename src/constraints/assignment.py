@@ -151,6 +151,13 @@ def add_assignment_constraints(
             for r in R
             if r in ms.vehicle_task_feasible.get(k, set())
         )
+        if y is not None:
+            operating_time_expr += gp.quicksum(
+                dp.deadhead_time_slot.get(r1, {}).get(r2, 0) * y[k, r1, r2]
+                for r1 in R
+                for r2 in R
+                if (k, r1, r2) in y
+            )
         model.addConstr(
             operating_time_expr <= max_slots,
             name=f"max_operating_time[{k}]",
@@ -164,6 +171,13 @@ def add_assignment_constraints(
             for r in R
             if r in ms.vehicle_task_feasible.get(k, set())
         )
+        if y is not None:
+            dist_expr += gp.quicksum(
+                dp.deadhead_distance_km.get(r1, {}).get(r2, 0.0) * y[k, r1, r2]
+                for r1 in R
+                for r2 in R
+                if (k, r1, r2) in y
+            )
         model.addConstr(
             dist_expr <= veh.max_distance,
             name=f"max_distance[{k}]",

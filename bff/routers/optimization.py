@@ -312,6 +312,12 @@ def _register_optimization_future(
                 ),
             )
         except KeyError:
+            import logging
+            logging.getLogger("bff.optimization").error(
+                "Failed to update job %s status to failed (job may have been cleaned up). "
+                "Worker error: %s",
+                job_id, exc,
+            )
             return
 
     future.add_done_callback(_handle_completion)
@@ -794,6 +800,12 @@ def _canonical_energy_flow_context_from_snapshot(problem, plan, preserved_contex
         "bess_soc_kwh_by_depot_slot": raw_bess_soc,
         "contract_over_limit_kwh_by_depot_slot": raw_contract_over_limit,
         "pv_generation_kwh_by_depot_slot": pv_generation_kwh_by_depot_slot,
+        "bess_terminal_soc_target_kwh_by_depot": dict(
+            preserved_context.get("bess_terminal_soc_target_kwh_by_depot") or {}
+        ),
+        "bess_terminal_soc_deviation_kwh_by_depot": dict(
+            preserved_context.get("bess_terminal_soc_deviation_kwh_by_depot") or {}
+        ),
         "depot_limit_kw": depot_limit_kw,
         "price_by_slot": price_by_slot,
         "demand_flag_by_slot": demand_flag_by_slot,
@@ -936,6 +948,12 @@ def _canonical_energy_flow_context(problem, plan) -> Dict[str, Any]:
         "bess_soc_kwh_by_depot_slot": raw_bess_soc,
         "contract_over_limit_kwh_by_depot_slot": raw_contract_over_limit,
         "pv_generation_kwh_by_depot_slot": pv_generation_kwh_by_depot_slot,
+        "bess_terminal_soc_target_kwh_by_depot": dict(
+            metadata.get("bess_terminal_soc_target_kwh_by_depot") or {}
+        ),
+        "bess_terminal_soc_deviation_kwh_by_depot": dict(
+            metadata.get("bess_terminal_soc_deviation_kwh_by_depot") or {}
+        ),
         "depot_limit_kw": depot_limit_kw,
         "price_by_slot": price_by_slot,
         "demand_flag_by_slot": demand_flag_by_slot,
@@ -1080,12 +1098,19 @@ def _canonical_charging_output_payload(problem, engine_result) -> Dict[str, Any]
         asset = dict(getattr(problem, "depot_energy_assets", {}) or {}).get(depot_id)
         bess_initial_soc = float(getattr(asset, "bess_initial_soc_kwh", 0.0) or 0.0) if asset is not None else 0.0
         bess_terminal_min = float(getattr(asset, "bess_terminal_soc_min_kwh", 0.0) or 0.0) if asset is not None else 0.0
+        bess_terminal_target = float(
+            (flow_ctx.get("bess_terminal_soc_target_kwh_by_depot", {}) or {}).get(depot_id)
+            or getattr(asset, "bess_terminal_soc_target_kwh", 0.0)
+            or bess_initial_soc
+            or 0.0
+        ) if asset is not None else 0.0
         depot_bess_soc_map = dict(flow_ctx["bess_soc_kwh_by_depot_slot"].get(depot_id, {}) or {})
         bess_final_soc = (
             float(depot_bess_soc_map[max(depot_bess_soc_map.keys())])
             if depot_bess_soc_map
             else bess_initial_soc
         )
+        bess_terminal_deviation = abs(bess_final_soc - bess_terminal_target) if asset is not None else 0.0
         pv_generation_total = sum(
             float(value or 0.0)
             for value in dict(flow_ctx["pv_generation_kwh_by_depot_slot"].get(depot_id, {}) or {}).values()
@@ -1115,7 +1140,10 @@ def _canonical_charging_output_payload(problem, engine_result) -> Dict[str, Any]
                 "total_bess_charge_kwh": pv_to_bess_total + grid_to_bess_total,
                 "bess_initial_soc_kwh": bess_initial_soc,
                 "bess_final_soc_kwh": bess_final_soc,
+                "bess_terminal_soc_delta_kwh": bess_final_soc - bess_initial_soc,
                 "bess_terminal_soc_min_kwh": bess_terminal_min,
+                "bess_terminal_soc_target_kwh": bess_terminal_target,
+                "bess_terminal_soc_deviation_kwh": bess_terminal_deviation,
                 "bess_terminal_soc_violation_kwh": max(bess_terminal_min - bess_final_soc, 0.0),
                 "peak_grid_import_kw": peak_grid_kw,
                 "peak_total_charge_kw": peak_total_charge_kw,
@@ -1188,6 +1216,10 @@ def _canonical_charging_output_payload(problem, engine_result) -> Dict[str, Any]
                 "bus_charge_from_grid_kwh": sum(float(row["bus_charge_from_grid_kwh"]) for row in per_depot),
                 "bus_charge_from_bess_kwh": sum(float(row["bus_charge_from_bess_kwh"]) for row in per_depot),
                 "total_bess_charge_kwh": sum(float(row["total_bess_charge_kwh"]) for row in per_depot),
+                "bess_initial_soc_kwh": sum(float(row["bess_initial_soc_kwh"]) for row in per_depot),
+                "bess_final_soc_kwh": sum(float(row["bess_final_soc_kwh"]) for row in per_depot),
+                "bess_terminal_soc_delta_kwh": sum(float(row["bess_terminal_soc_delta_kwh"]) for row in per_depot),
+                "bess_terminal_soc_target_kwh": sum(float(row["bess_terminal_soc_target_kwh"]) for row in per_depot),
                 "peak_grid_import_kw_any_depot": overall_peak_grid_kw,
                 "peak_grid_import_kw_all_depots": overall_by_slot_grid_peak,
                 "peak_total_charge_kw_any_depot": overall_peak_total_charge_kw,
@@ -1207,6 +1239,16 @@ def _canonical_charging_output_payload(problem, engine_result) -> Dict[str, Any]
                     solver_metadata.get(
                         "bess_terminal_soc_violation_kwh",
                         plan_metadata.get("bess_terminal_soc_violation_kwh", 0.0),
+                    )
+                    or 0.0
+                ),
+                "bess_terminal_soc_deviation_kwh": float(
+                    solver_metadata.get(
+                        "bess_terminal_soc_deviation_kwh",
+                        plan_metadata.get(
+                            "bess_terminal_soc_deviation_kwh",
+                            sum(float(row.get("bess_terminal_soc_deviation_kwh", 0.0) or 0.0) for row in per_depot),
+                        ),
                     )
                     or 0.0
                 ),
@@ -1799,6 +1841,9 @@ def _persist_rich_run_outputs(
                 "pv_generation_kwh",
                 "pv_balance_residual_kwh",
                 "bess_soc_kwh",
+                "bess_terminal_soc_target_kwh",
+                "bess_terminal_soc_deviation_kwh",
+                "bess_terminal_soc_delta_kwh",
                 "grid_import_total_kwh",
                 "grid_import_for_contract_kwh",
                 "grid_import_kw",
@@ -3180,6 +3225,10 @@ def _research_extended_timeseries_exports(
         bess_min = max(float(getattr(asset, "bess_soc_min_kwh", 0.0) or 0.0), 0.0) if asset is not None else 0.0
         bess_max = max(float(getattr(asset, "bess_soc_max_kwh", 0.0) or 0.0), 0.0) if asset is not None else bess_capacity
         bess_terminal_min = max(float(getattr(asset, "bess_terminal_soc_min_kwh", 0.0) or 0.0), 0.0) if asset is not None else 0.0
+        bess_initial_soc = max(float(getattr(asset, "bess_initial_soc_kwh", 0.0) or 0.0), 0.0) if asset is not None else 0.0
+        bess_terminal_target = max(float(getattr(asset, "bess_terminal_soc_target_kwh", 0.0) or 0.0), 0.0) if asset is not None else 0.0
+        if bess_terminal_target <= 0.0:
+            bess_terminal_target = bess_initial_soc
         bess_cycle_unit = max(float(getattr(asset, "bess_cycle_cost_yen_per_kwh", 0.0) or 0.0), 0.0) if asset is not None else 0.0
         for minute in range(0, 24 * 60, timestep_min):
             time_hhmm = f"{minute // 60:02d}:{minute % 60:02d}"
@@ -3265,6 +3314,9 @@ def _research_extended_timeseries_exports(
                     "bess_soc_min_kwh": bess_min,
                     "bess_soc_max_kwh": bess_max,
                     "bess_terminal_soc_min_kwh": bess_terminal_min,
+                    "bess_terminal_soc_target_kwh": bess_terminal_target,
+                    "bess_terminal_soc_deviation_kwh": abs(bess_soc - bess_terminal_target) if minute >= 24 * 60 - timestep_min else 0.0,
+                    "bess_terminal_soc_delta_kwh": bess_soc - bess_initial_soc if minute >= 24 * 60 - timestep_min else 0.0,
                     "bess_terminal_soc_violation_kwh": max(bess_terminal_min - bess_soc, 0.0) if minute >= 24 * 60 - timestep_min else 0.0,
                     "bess_cycle_cost_jpy": bess_to_bus_kwh * bess_cycle_unit,
                     "source_provenance_exact": depot_source_exact,
@@ -4728,6 +4780,36 @@ def _run_optimization(
             vehicle_type = str(vehicle_type_by_id.get(vehicle_id) or "UNKNOWN")
             vehicle_count_by_type[vehicle_type] = vehicle_count_by_type.get(vehicle_type, 0) + 1
             trip_count_by_type[vehicle_type] = trip_count_by_type.get(vehicle_type, 0) + len(task_ids)
+        available_vehicle_count_by_type: Dict[str, int] = {}
+        unused_available_vehicle_ids_by_type: Dict[str, List[str]] = {}
+        used_vehicle_ids = {
+            str(vehicle_id)
+            for vehicle_id, task_ids in (result_payload.get("assignment") or {}).items()
+            if task_ids
+        }
+        for vehicle in problem.vehicles:
+            if not bool(getattr(vehicle, "available", True)):
+                continue
+            vehicle_id = str(getattr(vehicle, "vehicle_id", "") or "")
+            vehicle_type = str(getattr(vehicle, "vehicle_type", "UNKNOWN") or "UNKNOWN").upper()
+            available_vehicle_count_by_type[vehicle_type] = available_vehicle_count_by_type.get(vehicle_type, 0) + 1
+            if vehicle_id and vehicle_id not in used_vehicle_ids:
+                unused_available_vehicle_ids_by_type.setdefault(vehicle_type, []).append(vehicle_id)
+        for vehicle_ids in unused_available_vehicle_ids_by_type.values():
+            vehicle_ids.sort()
+        electric_types = {"BEV", "PHEV", "FCEV"}
+        ev_available_count = sum(
+            count for vehicle_type, count in available_vehicle_count_by_type.items() if vehicle_type.upper() in electric_types
+        )
+        ev_used_count = sum(
+            count for vehicle_type, count in vehicle_count_by_type.items() if vehicle_type.upper() in electric_types
+        )
+        ice_available_count = sum(
+            count for vehicle_type, count in available_vehicle_count_by_type.items() if vehicle_type.upper() not in electric_types
+        )
+        ice_used_count = sum(
+            count for vehicle_type, count in vehicle_count_by_type.items() if vehicle_type.upper() not in electric_types
+        )
         objective_mode = str(
             (
                 ((scenario.get("scenario_overlay") or {}).get("solver_config") or {}).get("objective_mode")
@@ -4914,6 +4996,15 @@ def _run_optimization(
                     if task_ids
                 ),
                 "vehicle_count_by_type": vehicle_count_by_type,
+                "available_vehicle_count_by_type": available_vehicle_count_by_type,
+                "used_vehicle_count_by_type": vehicle_count_by_type,
+                "unused_available_vehicle_ids_by_type": unused_available_vehicle_ids_by_type,
+                "ev_available_count": ev_available_count,
+                "ev_used_count": ev_used_count,
+                "ev_unused_count": max(ev_available_count - ev_used_count, 0),
+                "ice_available_count": ice_available_count,
+                "ice_used_count": ice_used_count,
+                "ice_unused_count": max(ice_available_count - ice_used_count, 0),
                 "trip_count_by_type": trip_count_by_type,
                 "trip_count_served": trip_count_served,
                 "trip_count_unserved": trip_count_unserved,

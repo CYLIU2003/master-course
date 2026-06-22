@@ -114,6 +114,13 @@ def add_energy_balance_constraints(
                 name=f"grid_import_ub[{site_id},{t}]",
             )
 
+            # 同時輸出入禁止: p_grid > 0 と p_grid_export > 0 の排他制約
+            if p_grid_exp is not None and (site_id, t) in p_grid_exp:
+                model.addSOS(
+                    gp.GRB.SOS_TYPE1,
+                    [p_grid[site_id, t], p_grid_exp[site_id, t]],
+                )
+
 
 def add_demand_charge_constraints(
     model: Any,

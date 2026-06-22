@@ -40,6 +40,14 @@ class RunMeta:
     trip_count_served: Optional[int] = None
     trip_count_unserved: Optional[int] = None
     vehicle_count_used: Optional[int] = None
+    weather_class: str = ""
+    weather_operation_mode: str = ""
+    ev_used_count: Optional[int] = None
+    ice_used_count: Optional[int] = None
+    pv_utilization_rate: Optional[float] = None
+    bess_discharge_kwh: Optional[float] = None
+    bess_terminal_soc_delta_kwh: Optional[float] = None
+    bess_terminal_soc_deviation_kwh: Optional[float] = None
     mode: str = ""
     objective_mode: str = ""
     prepared_input_id: str = ""
@@ -139,6 +147,40 @@ def normalize_mode_label(value: Any) -> str:
     if raw.startswith("mode_") and raw.endswith("_only"):
         return raw[len("mode_") : -len("_only")]
     return raw
+
+
+def normalize_weather_class(
+    value: Any = "",
+    *,
+    weather_label: Any = "",
+    sun_score: Any = None,
+    rain_risk: Any = None,
+    operation_mode: Any = "",
+) -> str:
+    text = pick_text(value).lower()
+    if text in {"sunny", "rainy", "cloudy"}:
+        return text
+    label = pick_text(weather_label)
+    if "雨" in label:
+        return "rainy"
+    if "晴" in label:
+        return "sunny"
+    sun = safe_float(sun_score)
+    rain = safe_float(rain_risk)
+    if sun is not None or rain is not None:
+        sun_value = sun if sun is not None else 0.0
+        rain_value = rain if rain is not None else 0.0
+        if sun_value >= 0.70 and rain_value <= 0.20:
+            return "sunny"
+        if sun_value < 0.25 or rain_value >= 0.60:
+            return "rainy"
+        return "cloudy"
+    mode = pick_text(operation_mode).lower()
+    if mode == "aggressive":
+        return "sunny"
+    if mode == "conservative":
+        return "rainy"
+    return text
 
 
 def read_json(path: Path) -> Optional[dict]:
@@ -394,6 +436,32 @@ def collect_run_meta(
         parsed.get("mode"),
         )
     )
+    weather_policy = optimization_result.get("weather_policy") if isinstance(optimization_result.get("weather_policy"), Mapping) else {}
+    weather_forecast = weather_policy.get("forecast") if isinstance(weather_policy.get("forecast"), Mapping) else {}
+    weather_audit = weather_policy.get("audit") if isinstance(weather_policy.get("audit"), Mapping) else {}
+    weather_curve = weather_policy.get("representative_curve") if isinstance(weather_policy.get("representative_curve"), Mapping) else {}
+    weather_operation_profile = weather_policy.get("operation_profile") if isinstance(weather_policy.get("operation_profile"), Mapping) else {}
+    weather_operation_mode = pick_text(
+        overlay_map.get("weather_operation_mode"),
+        run_manifest.get("weather_operation_mode"),
+        weather_operation_profile.get("operation_mode"),
+        weather_forecast.get("operation_mode"),
+    )
+    weather_class = normalize_weather_class(
+        pick_text(
+            overlay_map.get("weather_class"),
+            run_manifest.get("weather_typical_class"),
+            weather_audit.get("typical_weather_class"),
+            weather_curve.get("typical_weather_class"),
+        ),
+        weather_label=weather_forecast.get("weather_label"),
+        sun_score=weather_forecast.get("sun_score"),
+        rain_risk=weather_forecast.get("rain_risk"),
+        operation_mode=weather_operation_mode,
+    )
+    optimization_cost_breakdown = optimization_result.get("cost_breakdown") if isinstance(optimization_result.get("cost_breakdown"), Mapping) else {}
+    charging_summary = optimization_result.get("charging_summary") if isinstance(optimization_result.get("charging_summary"), Mapping) else {}
+    charging_totals = charging_summary.get("totals") if isinstance(charging_summary.get("totals"), Mapping) else {}
     return RunMeta(
         date=pick_text(parsed.get("date")),
         scenario_id=pick_text(
@@ -455,6 +523,26 @@ def collect_run_meta(
             safe_int(overlay_map.get("vehicle_count_used"))
             if safe_int(overlay_map.get("vehicle_count_used")) is not None
             else safe_int(summary_block.get("vehicle_count_used"))
+        ),
+        weather_class=weather_class,
+        weather_operation_mode=weather_operation_mode,
+        ev_used_count=safe_int(summary_block.get("ev_used_count")),
+        ice_used_count=safe_int(summary_block.get("ice_used_count")),
+        pv_utilization_rate=safe_float(
+            charging_totals.get("pv_utilization_rate")
+            if charging_totals.get("pv_utilization_rate") is not None
+            else optimization_cost_breakdown.get("pv_utilization_rate")
+        ),
+        bess_discharge_kwh=safe_float(
+            charging_totals.get("bess_to_bus_kwh")
+            if charging_totals.get("bess_to_bus_kwh") is not None
+            else optimization_cost_breakdown.get("bess_to_bus_kwh")
+        ),
+        bess_terminal_soc_delta_kwh=safe_float(charging_totals.get("bess_terminal_soc_delta_kwh")),
+        bess_terminal_soc_deviation_kwh=safe_float(
+            charging_totals.get("bess_terminal_soc_deviation_kwh")
+            if charging_totals.get("bess_terminal_soc_deviation_kwh") is not None
+            else solver_metadata.get("bess_terminal_soc_deviation_kwh")
         ),
         mode=mode,
         objective_mode=pick_text(

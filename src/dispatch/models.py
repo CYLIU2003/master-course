@@ -41,6 +41,7 @@ class Trip:
     arrival_time: str  # "HH:MM"
     distance_km: float
     allowed_vehicle_types: Tuple[str, ...]  # e.g. ("BEV", "ICE")
+    operator_id: str = ""                   # 事業者ID (上流データから伝播、現状dispatchでのフィルタ未実装)
     origin_stop_id: str = ""
     destination_stop_id: str = ""
     route_family_code: str = ""
@@ -214,9 +215,14 @@ class DispatchContext:
     deadhead_rules: Dict[Tuple[str, str], DeadheadRule]  # keyed by (from, to)
     vehicle_profiles: Dict[str, VehicleProfile]  # keyed by vehicle_type
     default_turnaround_min: int = 10  # fallback when no rule
-    # Swap permissions: whether vehicles may serve trips from other routes/depots
-    allow_intra_depot_swap: bool = False   # permit vehicle swap across routes in same depot
-    allow_inter_depot_swap: bool = False   # permit vehicle swap across different depots
+    # Swap permissions: whether vehicles may serve trips from other routes/depots.
+    # NOTE: These flags control scoring PREFERENCE only, not hard feasibility.
+    # When False, cross-route/depot connections remain FEASIBLE but receive no
+    # scoring bonus, making them less likely to be selected by the greedy dispatcher.
+    # Hard depot/route constraints would require depot-aware task filtering in
+    # the graph builder and feasibility engine (not yet implemented).
+    allow_intra_depot_swap: bool = False   # scoring bonus for cross-route same-depot connections
+    allow_inter_depot_swap: bool = False   # scoring bonus for cross-depot connections
     fixed_route_band_mode: bool = False
     location_aliases: Dict[str, Tuple[str, ...]] = field(default_factory=dict)
     horizon_start_min: int = 0

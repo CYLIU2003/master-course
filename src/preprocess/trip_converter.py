@@ -13,6 +13,7 @@ from typing import Dict, List, Optional, Tuple
 
 from src.data_schema import (
     Charger,
+    DEFAULT_BATTERY_CAPACITY_KWH,
     ElectricityPrice,
     PVProfile,
     ProblemData,
@@ -155,7 +156,7 @@ def convert_vehicle_types_to_vehicles(
         )
 
         if vt.powertrain in ("BEV", "PHEV"):
-            cap = vt.battery_capacity_kwh or 200.0
+            cap = vt.battery_capacity_kwh or DEFAULT_BATTERY_CAPACITY_KWH
             usable = vt.usable_battery_ratio or 0.9
             v.battery_capacity = cap
             v.soc_init = vi.initial_soc_kwh if vi.initial_soc_kwh is not None else cap * usable * 0.9

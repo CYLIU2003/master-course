@@ -201,6 +201,10 @@ class ALNSOptimizer:
                     )
                 else:
                     no_improve += 1
+                # NOTE: Credit assignment is symmetric — both destroy and repair
+                # operators receive the same reward for the pair's outcome.
+                # This dilutes selection pressure compared to per-operator credit
+                # assignment but converges in practice over many iterations.
                 selector.update(destroy_name, reward)
                 selector.update(repair_name, reward)
                 operator_stats[destroy_name] = replace(
@@ -295,7 +299,7 @@ class ALNSOptimizer:
                     true_solver_family="alns",
                     solver_display_name="ALNS",
                 ),
-                "candidate_generation_mode": "destroy_repair_local_search",
+                "candidate_generation_mode": "destroy_repair",
                 "evaluation_mode": problem.scenario.objective_mode,
                 "warm_start_applied": bool(problem.baseline_plan is not None or initial_state is not None),
                 "warm_start_source": (

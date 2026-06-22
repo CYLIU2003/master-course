@@ -179,6 +179,8 @@ def test_final_soc_ui_normalizes_ratio_inputs_to_percent() -> None:
 def test_sync_prepared_state_from_response_keeps_soc_fields_unchanged() -> None:
     app = App.__new__(App)
     app.prepared_var = DummyVar("")
+    app.workflow_status_var = DummyVar("")
+    app.workflow_hint_var = DummyVar("")
     app.prepared_input_id = ""
     app.prepared_ready = False
     app.prepared_trip_count = 0
@@ -205,6 +207,64 @@ def test_sync_prepared_state_from_response_keeps_soc_fields_unchanged() -> None:
     assert app.final_soc_floor_percent_var.get() == "20"
     assert app.final_soc_target_percent_var.get() == "80"
     assert app.final_soc_target_tolerance_percent_var.get() == "0"
+
+
+def test_workflow_status_reflects_prepared_ready_and_stale() -> None:
+    app = App.__new__(App)
+    app.workflow_status_var = DummyVar("")
+    app.workflow_hint_var = DummyVar("")
+    app.prepared_input_id = "prepared-123"
+    app.prepared_ready = True
+    app.prepared_trip_count = 1234
+    app.prepared_profile_name = "hybrid_seeded"
+    app.prepared_dirty_reason = ""
+
+    App._update_workflow_status(app)
+
+    assert app.workflow_status_var.get() == "準備済み: 1,234便 / hybrid_seeded"
+    assert "すぐジョブ投入" in app.workflow_hint_var.get()
+
+    app.prepared_ready = False
+    app.prepared_dirty_reason = "料金を変更"
+
+    App._update_workflow_status(app)
+
+    assert app.workflow_status_var.get() == "再Prepare必要: 料金を変更"
+    assert "先にPrepare" in app.workflow_hint_var.get()
+
+
+def test_build_optimization_run_payload_centralizes_fast_and_manual_execution() -> None:
+    app = App.__new__(App)
+    app.solver_mode_var = DummyVar("mode_alns_only")
+    app.mip_gap_var = DummyVar("0.02")
+    app.alns_iter_var = DummyVar("750")
+    app.no_improvement_limit_var = DummyVar("120")
+    app.destroy_fraction_var = DummyVar("0.3")
+    app.day_type_var = DummyVar("WEEKDAY")
+    app.rebuild_dispatch_before_opt_var = DummyVar(False)
+    app.prepared_input_id = "prepared-old"
+    app._selected_depot_ids = lambda: ["dep-1"]
+    app._timestep_min_value = lambda: 30
+    app._effective_optimization_time_limit_seconds = lambda: 180
+    app._weather_proxy_optimization_payload = lambda: {"enableWeatherOperationPolicy": False}
+
+    payload = App._build_optimization_run_payload(app, "prepared-new")
+
+    assert payload == {
+        "mode": "mode_alns_only",
+        "prepared_input_id": "prepared-new",
+        "time_step_min": 30,
+        "timestep_min": 30,
+        "time_limit_seconds": 180,
+        "mip_gap": 0.02,
+        "alns_iterations": 750,
+        "no_improvement_limit": 120,
+        "destroy_fraction": 0.3,
+        "service_id": "WEEKDAY",
+        "depot_id": "dep-1",
+        "rebuild_dispatch": False,
+        "enableWeatherOperationPolicy": False,
+    }
 
 
 def test_prepare_weather_proxy_validation_does_not_overwrite_soc_fields() -> None:

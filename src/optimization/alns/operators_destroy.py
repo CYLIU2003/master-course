@@ -162,10 +162,14 @@ def worst_trip_removal(
 def vehicle_path_removal(plan: AssignmentPlan, rng: random.Random, fraction: float) -> AssignmentPlan:
     if not plan.duties:
         return plan
-    selected = rng.choice(plan.duties)
-    remaining = tuple(duty for duty in plan.duties if duty.duty_id != selected.duty_id)
+    remove_count = max(1, int(len(plan.duties) * fraction))
+    selected_duties = rng.sample(list(plan.duties), min(remove_count, len(plan.duties)))
+    selected_ids = {d.duty_id for d in selected_duties}
+    remaining = tuple(duty for duty in plan.duties if duty.duty_id not in selected_ids)
     served = tuple(trip_id for duty in remaining for trip_id in duty.trip_ids)
-    unserved = set(plan.unserved_trip_ids).union(selected.trip_ids)
+    unserved = set(plan.unserved_trip_ids)
+    for d in selected_duties:
+        unserved.update(d.trip_ids)
     return AssignmentPlan(
         duties=remaining,
         charging_slots=plan.charging_slots,

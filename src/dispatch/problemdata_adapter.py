@@ -170,6 +170,7 @@ def _build_dispatch_context_from_problem_data(
                 route_family_code=str(getattr(task, "route_family_code", None) or ""),
                 direction=str(getattr(task, "direction", None) or ""),
                 route_variant_type=str(getattr(task, "route_variant_type", None) or ""),
+                operator_id=str(getattr(task, "operator_id", None) or ""),
             )
         )
 

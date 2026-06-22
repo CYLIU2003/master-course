@@ -178,6 +178,10 @@ def main():
         print("Waiting for backend server to be ready...")
         wait_for_server()
         print("Backend server is ready.")
+
+        # Prefer in-process calls for heavy UI actions. Unsupported endpoints
+        # still fall back to HTTP through the Tk client.
+        os.environ.setdefault("MC_DIRECT_CALL", "1")
         
         # Import and start Tkinter UI
         # We put imports here to prevent them slowing down the server startup

@@ -34,6 +34,7 @@ class WeatherOperationProfile:
     operation_mode: str
     final_soc_floor_percent: float
     final_soc_target_percent: float
+    final_soc_target_tolerance_percent: float
     initial_soc_mode: str
     initial_soc_min_percent: float
     initial_soc_max_percent: float
@@ -49,6 +50,7 @@ OPERATION_PROFILES = {
         operation_mode="aggressive",
         final_soc_floor_percent=20.0,
         final_soc_target_percent=35.0,
+        final_soc_target_tolerance_percent=0.0,
         initial_soc_mode="random_uniform",
         initial_soc_min_percent=55.0,
         initial_soc_max_percent=95.0,
@@ -62,6 +64,7 @@ OPERATION_PROFILES = {
         operation_mode="normal",
         final_soc_floor_percent=30.0,
         final_soc_target_percent=45.0,
+        final_soc_target_tolerance_percent=5.0,
         initial_soc_mode="random_uniform",
         initial_soc_min_percent=60.0,
         initial_soc_max_percent=90.0,
@@ -75,6 +78,7 @@ OPERATION_PROFILES = {
         operation_mode="conservative",
         final_soc_floor_percent=45.0,
         final_soc_target_percent=60.0,
+        final_soc_target_tolerance_percent=10.0,
         initial_soc_mode="random_uniform",
         initial_soc_min_percent=65.0,
         initial_soc_max_percent=90.0,
@@ -424,6 +428,7 @@ def apply_weather_policy_to_problem(
             "weather_initial_soc_policy": initial_soc_policy,
             "final_soc_floor_percent": float(profile.final_soc_floor_percent),
             "final_soc_target_percent": float(profile.final_soc_target_percent),
+            "final_soc_target_tolerance_percent": float(profile.final_soc_target_tolerance_percent),
             "midday_charge_priority": float(profile.midday_charge_priority),
             "bev_duty_bias": float(profile.bev_duty_bias),
             "ice_backup_bias": float(profile.ice_backup_bias),

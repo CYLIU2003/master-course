@@ -52,7 +52,13 @@ def add_pv_grid_constraints(
 
             # 逆潮流上限 (設定があれば)
             if p_grid_exp is not None and site is not None:
-                export_lim = 9999.0  # site_transformer_limit 等で設定可能
+                export_lim = (
+                    site.site_transformer_limit_kw
+                    if getattr(site, "site_transformer_limit_kw", None)
+                    else site.contract_demand_limit_kw
+                    if getattr(site, "contract_demand_limit_kw", None)
+                    else 9999.0
+                )
                 model.addConstr(
                     p_grid_exp[site_id, t] <= export_lim,
                     name=f"grid_export_ub[{site_id},{t}]",

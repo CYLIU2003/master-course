@@ -323,6 +323,7 @@ def load_dispatch_context_from_csv(
                     arrival_time=arr,
                     distance_km=float(distance),
                     allowed_vehicle_types=allowed,
+                    operator_id=str(row.get("operatorId", row.get("operator_id", ""))).strip(),
                 )
             )
 

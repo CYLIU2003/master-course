@@ -188,6 +188,8 @@ class DepotEnergyAsset:
     grid_to_bess_allowed_slot_indices: Tuple[int, ...] = ()
     bess_priority_mode: str = "cost_driven"
     bess_terminal_soc_min_kwh: float = 0.0
+    bess_terminal_soc_target_kwh: float = 0.0
+    bess_terminal_soc_deviation_penalty_yen_per_kwh: float = 20.0
     provisional_energy_cost_yen_per_kwh: float = 0.0
 
 

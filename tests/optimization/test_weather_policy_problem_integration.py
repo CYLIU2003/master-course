@@ -176,6 +176,7 @@ def test_apply_weather_policy_to_problem_is_non_destructive_and_reproducible():
     assert updated_a.metadata["weather_proxy"]["analog_date"] == "2024-08-22"
     assert updated_a.metadata["final_soc_floor_percent"] == 20.0
     assert updated_a.metadata["final_soc_target_percent"] == 35.0
+    assert updated_a.metadata["final_soc_target_tolerance_percent"] == 0.0
     assert updated_a.vehicles[0].initial_soc == updated_b.vehicles[0].initial_soc
     assert 0.55 <= updated_a.vehicles[0].initial_soc <= 0.95
     assert updated_a.vehicles[1].initial_soc is None
@@ -195,6 +196,26 @@ def test_typical_solcast_curve_replaces_problem_pv_by_clock_not_position():
     assert updated.depot_energy_assets["DEPOT"].pv_generation_kwh_by_slot[0] == 50.0
     assert updated.pv_slots[0].pv_available_kw == 50.0
     assert updated.pv_slots[1].pv_available_kw == 60.0
+
+
+def test_conservative_weather_policy_relaxes_terminal_target_not_safety_floor():
+    forecast = _forecast()
+    forecast = WeatherProxyForecast(
+        **{
+            **forecast.__dict__,
+            "operation_mode": "conservative",
+            "sun_score": 0.05,
+            "rain_risk": 0.85,
+            "weather_label": "雨",
+        }
+    )
+    profile = build_operation_profile(forecast)
+    updated = apply_weather_policy_to_problem(_problem(), forecast, profile, random_seed=42)
+
+    assert updated.metadata["final_soc_floor_percent"] == 45.0
+    assert updated.metadata["final_soc_target_percent"] == 60.0
+    assert updated.metadata["final_soc_target_tolerance_percent"] == 10.0
+    assert updated.metadata["weather_operation_profile"]["final_soc_target_tolerance_percent"] == 10.0
 
 
 def test_weather_strategy_term_changes_objective_not_accounting_cost():

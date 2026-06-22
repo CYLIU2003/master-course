@@ -75,6 +75,8 @@ def test_problem_builder_maps_grid_to_bess_controls_into_assets() -> None:
     assert asset.grid_to_bess_price_threshold_yen_per_kwh == 15.0
     assert tuple(asset.grid_to_bess_allowed_slot_indices) == (0,)
     assert asset.bess_terminal_soc_min_kwh == 20.0
+    assert asset.bess_terminal_soc_target_kwh == 60.0
+    assert asset.bess_terminal_soc_deviation_penalty_yen_per_kwh == 20.0
 
 
 def test_problem_builder_prefers_overlay_depot_energy_asset_dict() -> None:
@@ -89,6 +91,8 @@ def test_problem_builder_prefers_overlay_depot_energy_asset_dict() -> None:
             "bess_soc_min_kwh": 15.0,
             "bess_soc_max_kwh": 95.0,
             "bess_terminal_soc_min_kwh": 65.0,
+            "bess_terminal_soc_target_kwh": 80.0,
+            "bess_terminal_soc_deviation_penalty_yen_per_kwh": 12.5,
         }
     }
 
@@ -99,6 +103,8 @@ def test_problem_builder_prefers_overlay_depot_energy_asset_dict() -> None:
     assert asset.bess_soc_min_kwh == 15.0
     assert asset.bess_soc_max_kwh == 95.0
     assert asset.bess_terminal_soc_min_kwh == 65.0
+    assert asset.bess_terminal_soc_target_kwh == 80.0
+    assert asset.bess_terminal_soc_deviation_penalty_yen_per_kwh == 12.5
 
 
 def test_problem_builder_defaults_bess_soc_max_to_configured_capacity() -> None:
@@ -126,6 +132,7 @@ def test_problem_builder_normalizes_bess_ratio_controls_into_kwh() -> None:
     asset_cfg["bess_soc_min_ratio"] = 0.2
     asset_cfg["bess_soc_max_ratio"] = 0.9
     asset_cfg["bess_terminal_soc_min_ratio"] = 0.2
+    asset_cfg["bess_terminal_soc_target_ratio"] = 0.7
     asset_cfg["allow_pv_to_bess"] = False
     asset_cfg["allow_bess_to_bus"] = False
 
@@ -136,6 +143,7 @@ def test_problem_builder_normalizes_bess_ratio_controls_into_kwh() -> None:
     assert asset.bess_soc_min_kwh == 20.0
     assert asset.bess_soc_max_kwh == 90.0
     assert asset.bess_terminal_soc_min_kwh == 20.0
+    assert asset.bess_terminal_soc_target_kwh == 70.0
     assert asset.allow_pv_to_bess is False
     assert asset.allow_bess_to_bus is False
 

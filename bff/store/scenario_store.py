@@ -1409,6 +1409,13 @@ def _save(doc: Dict[str, Any]) -> None:
                 winerror = getattr(exc, "winerror", None)
                 if winerror not in {5, 32} and not isinstance(exc, PermissionError):
                     raise
+                import logging as _logging
+                _logging.getLogger("bff.store").warning(
+                    "Non-atomic save fallback for scenario %s (winerror=%s). "
+                    "If process is interrupted during this save, "
+                    "the scenario may be left in an inconsistent state.",
+                    scenario_id, winerror,
+                )
                 if active_dir.exists():
                     _sync_tree_non_atomic(staging_dir, active_dir)
                     _remove_tree_with_retries(staging_dir, ignore_errors=True)
@@ -1420,7 +1427,9 @@ def _save(doc: Dict[str, Any]) -> None:
                         shutil.copy2(active_json, old_json)
                 except Exception:
                     pass
-                active_json.write_text(staging_json.read_text(encoding="utf-8"), encoding="utf-8")
+                staging_json_content = staging_json.read_text(encoding="utf-8")
+                if staging_json_content.strip():
+                    active_json.write_text(staging_json_content, encoding="utf-8")
                 _unlink_with_retries(staging_json, missing_ok=True)
 
             if old_dir.exists():
@@ -2228,6 +2237,10 @@ def get_field(scenario_id: str, field: str) -> Any:
     directly from the SQLite/Parquet artifact store instead of calling _load()
     which would also load every other artifact.
     """
+    if _incomplete_marker_path(scenario_id).exists() and not _complete_marker_path(scenario_id).exists():
+        raise RuntimeError(
+            f"Scenario '{scenario_id}' artifacts are incomplete. The previous save may have been interrupted."
+        )
     meta = scenario_meta_store.load_meta(_STORE_DIR, scenario_id)
     refs = _refs_for_scenario(scenario_id, meta)
     artifact_db_path = _artifact_store_path(refs)

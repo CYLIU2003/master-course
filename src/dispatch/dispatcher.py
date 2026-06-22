@@ -70,7 +70,10 @@ def _connection_score(
     """
     score = 0
 
-    deadhead_min = context.get_deadhead_min(last_trip.destination, next_trip.origin)
+    deadhead_min = context.get_deadhead_min(
+        last_trip.destination_stop_id or last_trip.destination,
+        next_trip.origin_stop_id or next_trip.origin,
+    )
 
     # ── Soft penalty: prefer shorter deadhead ────────────────────────────────
     score -= deadhead_min  # -1 per minute of deadhead
@@ -225,7 +228,8 @@ class DispatchGenerator:
             if best_idx is not None:
                 last_trip, legs = open_duties[best_idx]
                 deadhead_min = context.get_deadhead_min(
-                    last_trip.destination, trip.origin
+                    last_trip.destination_stop_id or last_trip.destination,
+                    trip.origin_stop_id or trip.origin,
                 )
                 legs.append(DutyLeg(trip=trip, deadhead_from_prev_min=deadhead_min))
                 # Update last_trip in the open duty slot.

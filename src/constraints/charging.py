@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from ..data_schema import ProblemData
+from ..data_schema import ProblemData, DEFAULT_BATTERY_CAPACITY_KWH
 from ..gurobi_runtime import ensure_gurobi
 from ..model_sets import ModelSets
 from ..parameter_builder import DerivedParams
@@ -123,6 +123,7 @@ def add_soc_constraints(
     soc    = vars["soc"]
     y      = vars.get("y_follow")
     slack_soc = vars.get("slack_soc")
+    p_dis  = vars.get("p_discharge")
 
     K_BEV = ms.K_BEV
     C     = ms.C
@@ -132,7 +133,7 @@ def add_soc_constraints(
 
     for k in K_BEV:
         veh = dp.vehicle_lut[k]
-        cap = veh.battery_capacity if veh.battery_capacity is not None else 200.0
+        cap = veh.battery_capacity if veh.battery_capacity is not None else DEFAULT_BATTERY_CAPACITY_KWH
         soc_min = veh.soc_min if veh.soc_min is not None else 0.0
         soc_max = veh.soc_max if veh.soc_max is not None else cap
         soc_init = veh.soc_init if veh.soc_init is not None else cap * 0.8
@@ -186,8 +187,19 @@ def add_soc_constraints(
             deadhead_energy = gp.quicksum(
                 coeff * y_var for coeff, y_var in deadhead_terms_by_slot.get(t, [])
             )
+
+            discharge_energy = 0.0
+            if data.enable_v2g and p_dis is not None:
+                from ..data_schema import ProblemData as _PD
+                disc_eff = getattr(veh, "discharge_efficiency", 0.95) or 0.95
+                discharge_energy = gp.quicksum(
+                    (1.0 / disc_eff) * p_dis[k, c, t] * delta_h
+                    for c in ms.vehicle_charger_feasible.get(k, set())
+                    if (k, c, t) in p_dis
+                )
+
             model.addConstr(
-                soc[k, t + 1] == soc[k, t] - drive_energy - deadhead_energy + charge_energy,
+                soc[k, t + 1] == soc[k, t] - drive_energy - deadhead_energy + charge_energy - discharge_energy,
                 name=f"soc_balance[{k},{t}]",
             )
 

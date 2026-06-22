@@ -43,6 +43,16 @@ _DRIVER_REGULAR_HOURS_PER_DAY = 8.0
 _DRIVER_OVERTIME_FACTOR = 1.25
 
 
+def _bess_terminal_soc_target_kwh(asset: DepotEnergyAsset, *, terminal_soc_floor: float) -> float:
+    target = max(float(getattr(asset, "bess_terminal_soc_target_kwh", 0.0) or 0.0), 0.0)
+    if target <= 0.0:
+        target = max(float(getattr(asset, "bess_initial_soc_kwh", 0.0) or 0.0), 0.0)
+    return min(
+        max(target, terminal_soc_floor),
+        max(float(getattr(asset, "bess_soc_max_kwh", 0.0) or 0.0), terminal_soc_floor),
+    )
+
+
 @dataclass(frozen=True)
 class MILPSolverOutcome:
     solver_status: str
@@ -524,10 +534,12 @@ class GurobiMILPAdapter:
         w_off_depot_var: Dict[str, Any] = {}
         bess_charge_mode_var: Dict[Tuple[str, int], Any] = {}
         bess_discharge_mode_var: Dict[Tuple[str, int], Any] = {}
+        bess_terminal_soc_deviation_var: Dict[str, Any] = {}
         end_soc_excess_dev_var: Dict[str, Any] = {}
         opportunistic_topup_deficit_var: Dict[Tuple[str, int], Any] = {}
         charge_session_start_var: Dict[Tuple[str, int], Any] = {}
         soc_upper_excess_var: Dict[Tuple[str, int], Any] = {}
+        soc_bound_violation_var: Dict[Tuple[str, int, str], Any] = {}
         slot_concurrency_excess_var: Dict[Tuple[str, int], Any] = {}
         charge_ports_by_depot: Dict[str, float] = {}
         w_on_var = None
@@ -646,12 +658,14 @@ class GurobiMILPAdapter:
                             )
 
         if bev_ids and slot_indices:
+            soc_violation_slack_enabled = self._metadata_truthy(
+                problem.metadata.get("allow_soc_violation_slack")
+                if problem.metadata.get("allow_soc_violation_slack") is not None
+                else problem.metadata.get("use_soft_soc_constraint")
+            )
             initial_soc_ratio_override = self._percent_to_ratio(problem.metadata.get("initial_soc_percent"))
             final_soc_floor_ratio_override = self._percent_to_ratio(problem.metadata.get("final_soc_floor_percent"))
             final_soc_target_ratio_override = self._percent_to_ratio(problem.metadata.get("final_soc_target_percent"))
-            final_soc_target_tolerance_ratio_override = self._percent_to_ratio(
-                problem.metadata.get("final_soc_target_tolerance_percent")
-            )
             for vehicle in problem.vehicles:
                 if vehicle.vehicle_id not in bev_ids:
                     continue
@@ -679,18 +693,17 @@ class GurobiMILPAdapter:
                     charge_session_start_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(vtype=GRB.BINARY)
                     c_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(lb=0.0, ub=charge_max_kw, vtype=GRB.CONTINUOUS)
                     d_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(lb=0.0, ub=discharge_max_kw, vtype=GRB.CONTINUOUS)
-                    # Soft SOC bounds: allow violations with penalty
-                    s_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(lb=0.0, ub=cap * 1.2, vtype=GRB.CONTINUOUS)
-                    # Penalty variables for SOC bound violations
-                    soc_deficit_key = (vehicle.vehicle_id, slot_idx, "lower")
-                    soc_excess_key = (vehicle.vehicle_id, slot_idx, "upper")
-                    soc_lower_deficit = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS, name=f"soc_deficit_{vehicle.vehicle_id}_{slot_idx}")
-                    soc_upper_excess = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS, name=f"soc_excess_{vehicle.vehicle_id}_{slot_idx}")
-                    soc_upper_excess_var[soc_excess_key] = soc_upper_excess  # Store for objective
-                    soc_upper_excess_var[soc_deficit_key] = soc_lower_deficit  # Store for objective (reuse dict)
-                    # Add soft constraints
-                    model.addConstr(s_var[(vehicle.vehicle_id, slot_idx)] + soc_lower_deficit >= soc_min)
-                    model.addConstr(s_var[(vehicle.vehicle_id, slot_idx)] - soc_upper_excess <= cap)
+                    if soc_violation_slack_enabled:
+                        # Diagnostic mode only: production research runs must not buy SOC violations with cost.
+                        s_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(lb=0.0, ub=cap * 1.2, vtype=GRB.CONTINUOUS)
+                        soc_lower_deficit = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS, name=f"soc_deficit_{vehicle.vehicle_id}_{slot_idx}")
+                        soc_upper_excess = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS, name=f"soc_excess_{vehicle.vehicle_id}_{slot_idx}")
+                        soc_bound_violation_var[(vehicle.vehicle_id, slot_idx, "lower")] = soc_lower_deficit
+                        soc_bound_violation_var[(vehicle.vehicle_id, slot_idx, "upper")] = soc_upper_excess
+                        model.addConstr(s_var[(vehicle.vehicle_id, slot_idx)] + soc_lower_deficit >= soc_min)
+                        model.addConstr(s_var[(vehicle.vehicle_id, slot_idx)] - soc_upper_excess <= cap)
+                    else:
+                        s_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(lb=soc_min, ub=cap, vtype=GRB.CONTINUOUS)
 
                 if initial_soc_ratio_override is not None:
                     initial_kwh = initial_soc_ratio_override * cap
@@ -1244,12 +1257,23 @@ class GurobiMILPAdapter:
                             - (bess2bus_var[cur_key] / eta_dis)
                         )
                     last_key = (depot_id, slot_indices[-1])
-                    model.addConstr(
+                    final_soc_expr = (
                         bess_soc_var[last_key]
                         + eta_ch * (pv2bess_var[last_key] + g2bess_var[last_key])
                         - (bess2bus_var[last_key] / eta_dis)
-                        >= terminal_soc_floor
                     )
+                    model.addConstr(
+                        final_soc_expr >= terminal_soc_floor
+                    )
+                    terminal_soc_target = _bess_terminal_soc_target_kwh(
+                        asset,
+                        terminal_soc_floor=terminal_soc_floor,
+                    )
+                    if terminal_soc_target > 0.0:
+                        dev_var = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
+                        bess_terminal_soc_deviation_var[depot_id] = dev_var
+                        model.addConstr(dev_var >= final_soc_expr - terminal_soc_target)
+                        model.addConstr(dev_var >= terminal_soc_target - final_soc_expr)
 
             if w_on_depot_var:
                 w_on_var = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
@@ -1379,6 +1403,14 @@ class GurobiMILPAdapter:
             if contract_overage_penalty > 0.0 and component_flags.get("contract_overage_penalty", True):
                 for var in contract_over_limit_var.values():
                     objective += contract_overage_penalty * var
+            for depot_id, var in bess_terminal_soc_deviation_var.items():
+                asset = effective_depot_energy_assets.get(depot_id)
+                penalty = max(
+                    float(getattr(asset, "bess_terminal_soc_deviation_penalty_yen_per_kwh", 0.0) or 0.0),
+                    0.0,
+                )
+                if penalty > 0.0:
+                    objective += energy_weight * penalty * var
         else:
             # Backward-compatible fallback for plans without charging-source variables.
             if component_flags.get("electricity_cost", True):
@@ -1617,16 +1649,14 @@ class GurobiMILPAdapter:
             for var in opportunistic_topup_deficit_var.values():
                 objective += opportunistic_topup_deficit_penalty_per_kwh * var
         
-        # SOC bound violation penalty (moderate penalty for better solvability)
+        # SOC bound violation penalty is available only in explicit diagnostic slack mode.
         soc_violation_penalty_per_kwh = self._safe_nonnegative_float(
             problem.metadata.get("soc_violation_penalty_per_kwh"),
-            default=1000.0,  # Moderate penalty to balance feasibility and solution quality
+            default=1000.0,
         )
         if soc_violation_penalty_per_kwh > 0.0 and component_flags.get("soc_violation_penalty", True):
-            for key, var in soc_upper_excess_var.items():
-                # Check if this is a violation variable (tuples with 3 elements)
-                if isinstance(key, tuple) and len(key) == 3:
-                    objective += soc_violation_penalty_per_kwh * var
+            for var in soc_bound_violation_var.values():
+                objective += soc_violation_penalty_per_kwh * var
 
         if (
             service_coverage_mode == "penalized"
@@ -2043,6 +2073,22 @@ class GurobiMILPAdapter:
         for (vehicle_id, slot_idx), var in s_var.items():
             vehicle_soc_kwh_by_vehicle_slot.setdefault(vehicle_id, {})[slot_idx] = max(_var_val(var), 0.0)
 
+        bess_terminal_soc_deviation_kwh_by_depot = {
+            str(depot_id): max(_var_val(var), 0.0)
+            for depot_id, var in bess_terminal_soc_deviation_var.items()
+        }
+        bess_terminal_soc_target_kwh_by_depot = {
+            str(depot_id): _bess_terminal_soc_target_kwh(
+                asset,
+                terminal_soc_floor=max(
+                    float(getattr(asset, "bess_terminal_soc_min_kwh", 0.0) or 0.0),
+                    float(getattr(asset, "bess_soc_min_kwh", 0.0) or 0.0),
+                ),
+            )
+            for depot_id, asset in effective_depot_energy_assets.items()
+            if bool(getattr(asset, "bess_enabled", False))
+        }
+
         opportunistic_topup_deficit_kwh_by_vehicle_day: Dict[Tuple[str, int], float] = {}
         for (vehicle_id, day_idx), var in opportunistic_topup_deficit_var.items():
             opportunistic_topup_deficit_kwh_by_vehicle_day[(vehicle_id, day_idx)] = max(_var_val(var), 0.0)
@@ -2186,6 +2232,9 @@ class GurobiMILPAdapter:
                 "grid_to_bus_priority_penalty_yen_per_kwh": grid_to_bus_priority_penalty,
                 "grid_to_bess_priority_penalty_yen_per_kwh": grid_to_bess_priority_penalty,
                 "pv_curtail_penalty_yen_per_kwh": curtail_penalty,
+                "bess_terminal_soc_target_kwh_by_depot": bess_terminal_soc_target_kwh_by_depot,
+                "bess_terminal_soc_deviation_kwh_by_depot": bess_terminal_soc_deviation_kwh_by_depot,
+                "bess_terminal_soc_deviation_kwh": round(sum(bess_terminal_soc_deviation_kwh_by_depot.values()), 6),
                 "vehicle_usage_cost_jpy_per_used_bus": vehicle_usage_unit_cost,
                 "pv_curtail_penalty_auto_defaulted": pv_curtail_penalty_auto_defaulted,
                 "charge_session_start_penalty_yen": charge_session_start_penalty,
@@ -2193,6 +2242,8 @@ class GurobiMILPAdapter:
                 "early_charge_penalty_yen_per_kwh": early_charge_penalty_per_kwh,
                 "charge_to_upper_buffer_penalty_yen_per_kwh": charge_upper_buffer_penalty_per_kwh,
                 "opportunistic_topup_deficit_penalty_yen_per_kwh": opportunistic_topup_deficit_penalty_per_kwh,
+                "soc_violation_slack_enabled": bool(soc_bound_violation_var),
+                "soc_violation_penalty_per_kwh": soc_violation_penalty_per_kwh,
                 "opportunistic_topup_unfilled_kwh": round(opportunistic_topup_unfilled_kwh, 6),
                 "opportunistic_topup_unfilled_vehicle_day_ids": opportunistic_topup_unfilled_vehicle_day_ids,
                 "opportunistic_topup_unfilled_vehicle_ids": opportunistic_topup_unfilled_vehicle_ids,
@@ -2240,6 +2291,12 @@ class GurobiMILPAdapter:
         baseline_unserved_trip_count = int(len(baseline_plan.unserved_trip_ids))
         partial_baseline_fallback = baseline_unserved_trip_count > 0
         baseline_meta = dict(baseline_plan.metadata or {})
+        arc_pruning_summary: Dict[str, Any] = {}
+        if callable(getattr(problem.dispatch_context, "trips_by_id", None)):
+            arc_pruning_summary = MILPModelBuilder().arc_pruning_summary(
+                problem,
+                problem.trip_by_id(),
+            )
         baseline_meta.update(
             {
                 "source": source,
@@ -2251,10 +2308,7 @@ class GurobiMILPAdapter:
                 "strict_coverage_enforced": service_coverage_mode == "strict",
                 "partial_baseline_fallback": bool(partial_baseline_fallback),
                 "baseline_unserved_trip_count": baseline_unserved_trip_count,
-                "arc_pruning_summary": MILPModelBuilder().arc_pruning_summary(
-                    problem,
-                    problem.trip_by_id(),
-                ),
+                "arc_pruning_summary": arc_pruning_summary,
             }
         )
         return (
@@ -2994,6 +3048,11 @@ class GurobiMILPAdapter:
         except (TypeError, ValueError):
             return default
         return parsed if parsed >= 0.0 else default
+
+    def _metadata_truthy(self, value: Any) -> bool:
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "on"}
+        return bool(value)
 
     def _soft_charge_concurrency_limit(self, port_limit: float, ratio: float) -> int:
         ports = max(int(round(float(port_limit or 0.0))), 1)

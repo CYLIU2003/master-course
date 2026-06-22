@@ -65,6 +65,14 @@ def _to_dataframe(items: Iterable[RunMeta]) -> pd.DataFrame:
                 "trip_count_served": m.trip_count_served,
                 "trip_count_unserved": m.trip_count_unserved,
                 "vehicle_count_used": m.vehicle_count_used,
+                "weather_class": m.weather_class,
+                "weather_operation_mode": m.weather_operation_mode,
+                "ev_used_count": m.ev_used_count,
+                "ice_used_count": m.ice_used_count,
+                "pv_utilization_rate": m.pv_utilization_rate,
+                "bess_discharge_kwh": m.bess_discharge_kwh,
+                "bess_terminal_soc_delta_kwh": m.bess_terminal_soc_delta_kwh,
+                "bess_terminal_soc_deviation_kwh": m.bess_terminal_soc_deviation_kwh,
                 "mode": m.mode,
                 "exactness": m.exactness_label,
                 "termination_reason": m.termination_reason,
@@ -93,13 +101,13 @@ def _build_markdown_report(df: pd.DataFrame, title: str) -> str:
     lines = [
         f"# {title}",
         "",
-        "| Run | Mode | ステータス | exact/fallback | 総コスト [円] | 総CO2 [kg-CO2] | 目的関数値 [モデル単位] | 求解時間 [秒] | served | unserved | 使用車両 |",
-        "|---|---|---:|---|---:|---:|---:|---:|---:|---:|---:|",
+        "| Run | 天候 | Mode | ステータス | exact/fallback | 総コスト [円] | 総CO2 [kg-CO2] | 目的関数値 [モデル単位] | 求解時間 [秒] | served | unserved | 使用車両 | EV使用 | BESS終端SOC差分[kWh] |",
+        "|---|---|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for _, r in df.iterrows():
         lines.append(
             "| "
-            + f"{r['run_id']} | {r.get('mode') or '-'} | {r['status']} | {r.get('exactness') or '-'} | {fmt_num(safe_float(r.get('total_cost')))} | {fmt_num(safe_float(r.get('total_co2_kg')), 3)} | {fmt_num(safe_float(r.get('objective_value')))} | {fmt_num(safe_float(r.get('solve_time_sec')))} | {r.get('trip_count_served', 'NA')} | {r.get('trip_count_unserved', 'NA')} | {r.get('vehicle_count_used', 'NA')} |"
+            + f"{r['run_id']} | {r.get('weather_class') or '-'} | {r.get('mode') or '-'} | {r['status']} | {r.get('exactness') or '-'} | {fmt_num(safe_float(r.get('total_cost')))} | {fmt_num(safe_float(r.get('total_co2_kg')), 3)} | {fmt_num(safe_float(r.get('objective_value')))} | {fmt_num(safe_float(r.get('solve_time_sec')))} | {r.get('trip_count_served', 'NA')} | {r.get('trip_count_unserved', 'NA')} | {r.get('vehicle_count_used', 'NA')} | {r.get('ev_used_count', 'NA')} | {fmt_num(safe_float(r.get('bess_terminal_soc_delta_kwh')), 3)} |"
         )
     return "\n".join(lines) + "\n"
 
@@ -116,7 +124,10 @@ def _plot_metric_bar(df: pd.DataFrame, metric: str, y_label: str, title: str):
         fig.tight_layout()
         return fig
 
-    x = work["run_id"].astype(str)
+    if "weather_class" in work.columns:
+        x = (work["weather_class"].fillna("").astype(str).replace("", "unknown") + "\n" + work["run_id"].astype(str))
+    else:
+        x = work["run_id"].astype(str)
     y = work[metric].astype(float)
     bars = ax.bar(x, y, color="#4f81bd", edgecolor="#2f4f6f")
 
@@ -145,8 +156,14 @@ class MultiRunVisualizerApp:
 
         self.cost_canvas = None
         self.co2_canvas = None
+        self.vehicle_canvas = None
+        self.pv_canvas = None
+        self.bess_canvas = None
         self.cost_fig = None
         self.co2_fig = None
+        self.vehicle_fig = None
+        self.pv_fig = None
+        self.bess_fig = None
 
         self._build_ui()
 
@@ -213,9 +230,15 @@ class MultiRunVisualizerApp:
         self.tab_text = ttk.Frame(self.nb)
         self.tab_cost = ttk.Frame(self.nb)
         self.tab_co2 = ttk.Frame(self.nb)
+        self.tab_vehicle = ttk.Frame(self.nb)
+        self.tab_pv = ttk.Frame(self.nb)
+        self.tab_bess = ttk.Frame(self.nb)
         self.nb.add(self.tab_text, text="比較表")
         self.nb.add(self.tab_cost, text="総コスト")
         self.nb.add(self.tab_co2, text="総CO2")
+        self.nb.add(self.tab_vehicle, text="使用車両")
+        self.nb.add(self.tab_pv, text="PV利用率")
+        self.nb.add(self.tab_bess, text="BESS終端SOC")
 
         self.summary_tree = ttk.Treeview(
             self.tab_text,
@@ -223,6 +246,7 @@ class MultiRunVisualizerApp:
                 "run_id",
                 "mode",
                 "status",
+                "weather",
                 "exactness",
                 "total_cost",
                 "total_co2",
@@ -231,12 +255,15 @@ class MultiRunVisualizerApp:
                 "served",
                 "unserved",
                 "vehicles",
+                "ev_used",
+                "bess_delta",
             ),
             show="headings",
         )
         self.summary_tree.heading("run_id", text="Run ID")
         self.summary_tree.heading("mode", text="Mode")
         self.summary_tree.heading("status", text="ステータス")
+        self.summary_tree.heading("weather", text="天候")
         self.summary_tree.heading("exactness", text="exact/fallback")
         self.summary_tree.heading("total_cost", text="総コスト [円]")
         self.summary_tree.heading("total_co2", text="総CO2 [kg-CO2]")
@@ -245,9 +272,12 @@ class MultiRunVisualizerApp:
         self.summary_tree.heading("served", text="served")
         self.summary_tree.heading("unserved", text="unserved")
         self.summary_tree.heading("vehicles", text="使用車両")
+        self.summary_tree.heading("ev_used", text="EV使用")
+        self.summary_tree.heading("bess_delta", text="BESS ΔSOC")
         self.summary_tree.column("run_id", width=180, anchor="w")
         self.summary_tree.column("mode", width=90, anchor="center")
         self.summary_tree.column("status", width=110, anchor="center")
+        self.summary_tree.column("weather", width=90, anchor="center")
         self.summary_tree.column("exactness", width=120, anchor="center")
         self.summary_tree.column("total_cost", width=180, anchor="e")
         self.summary_tree.column("total_co2", width=150, anchor="e")
@@ -256,6 +286,8 @@ class MultiRunVisualizerApp:
         self.summary_tree.column("served", width=90, anchor="e")
         self.summary_tree.column("unserved", width=90, anchor="e")
         self.summary_tree.column("vehicles", width=90, anchor="e")
+        self.summary_tree.column("ev_used", width=90, anchor="e")
+        self.summary_tree.column("bess_delta", width=110, anchor="e")
         self.summary_tree.pack(fill="both", expand=True)
 
         self.status_var = tk.StringVar(value="準備完了")
@@ -323,6 +355,7 @@ class MultiRunVisualizerApp:
             total_co2 = fmt_num(m.total_co2_kg, 3)
             txt = (
                 f"{m.run_id} | {m.mode or '-'} | {m.status} | {m.exactness_label} | "
+                f"weather={m.weather_class or '-'} | "
                 f"served={m.trip_count_served if m.trip_count_served is not None else 'NA'} | "
                 f"unserved={m.trip_count_unserved if m.trip_count_unserved is not None else 'NA'} | "
                 f"総コスト[円]={total_cost} | {m.date}/{m.scenario_id}/{m.depot}/{m.service}"
@@ -351,6 +384,8 @@ class MultiRunVisualizerApp:
             "run_id",
             "mode",
             "status",
+            "weather_class",
+            "weather_operation_mode",
             "exactness",
             "total_cost",
             "total_co2_kg",
@@ -359,6 +394,14 @@ class MultiRunVisualizerApp:
             "trip_count_served",
             "trip_count_unserved",
             "vehicle_count_used",
+            "weather_class",
+            "weather_operation_mode",
+            "ev_used_count",
+            "ice_used_count",
+            "pv_utilization_rate",
+            "bess_discharge_kwh",
+            "bess_terminal_soc_delta_kwh",
+            "bess_terminal_soc_deviation_kwh",
             "termination_reason",
             "plan_source",
             "prepared_input_id",
@@ -387,6 +430,7 @@ class MultiRunVisualizerApp:
                     str(r["run_id"]),
                     str(r.get("mode") or "-"),
                     str(r["status"]),
+                    str(r.get("weather_class") or "-"),
                     str(r.get("exactness") or "-"),
                     fmt_num(safe_float(r.get("total_cost"))),
                     fmt_num(safe_float(r.get("total_co2_kg")), 3),
@@ -395,6 +439,8 @@ class MultiRunVisualizerApp:
                     str(r.get("trip_count_served", "NA")),
                     str(r.get("trip_count_unserved", "NA")),
                     str(r.get("vehicle_count_used", "NA")),
+                    str(r.get("ev_used_count", "NA")),
+                    fmt_num(safe_float(r.get("bess_terminal_soc_delta_kwh")), 3),
                 ),
             )
 
@@ -418,12 +464,24 @@ class MultiRunVisualizerApp:
             plt.close(self.cost_fig)
         if self.co2_fig is not None:
             plt.close(self.co2_fig)
+        if self.vehicle_fig is not None:
+            plt.close(self.vehicle_fig)
+        if self.pv_fig is not None:
+            plt.close(self.pv_fig)
+        if self.bess_fig is not None:
+            plt.close(self.bess_fig)
 
         self.cost_fig = _plot_metric_bar(df, "total_cost", "総コスト [円]", "run別 総コスト")
         self.co2_fig = _plot_metric_bar(df, "total_co2_kg", "総CO2 [kg-CO2]", "run別 総CO2")
+        self.vehicle_fig = _plot_metric_bar(df, "ev_used_count", "EV使用台数 [台]", "雨/晴別 EV使用台数")
+        self.pv_fig = _plot_metric_bar(df, "pv_utilization_rate", "PV利用率 [-]", "雨/晴別 PV利用率")
+        self.bess_fig = _plot_metric_bar(df, "bess_terminal_soc_delta_kwh", "終端SOC - 初期SOC [kWh]", "雨/晴別 BESS終端SOC差分")
 
         self._clear_canvas(self.tab_cost, self.cost_canvas)
         self._clear_canvas(self.tab_co2, self.co2_canvas)
+        self._clear_canvas(self.tab_vehicle, self.vehicle_canvas)
+        self._clear_canvas(self.tab_pv, self.pv_canvas)
+        self._clear_canvas(self.tab_bess, self.bess_canvas)
 
         self.cost_canvas = FigureCanvasTkAgg(self.cost_fig, master=self.tab_cost)
         self.cost_canvas.draw()
@@ -432,6 +490,18 @@ class MultiRunVisualizerApp:
         self.co2_canvas = FigureCanvasTkAgg(self.co2_fig, master=self.tab_co2)
         self.co2_canvas.draw()
         self.co2_canvas.get_tk_widget().pack(fill="both", expand=True)
+
+        self.vehicle_canvas = FigureCanvasTkAgg(self.vehicle_fig, master=self.tab_vehicle)
+        self.vehicle_canvas.draw()
+        self.vehicle_canvas.get_tk_widget().pack(fill="both", expand=True)
+
+        self.pv_canvas = FigureCanvasTkAgg(self.pv_fig, master=self.tab_pv)
+        self.pv_canvas.draw()
+        self.pv_canvas.get_tk_widget().pack(fill="both", expand=True)
+
+        self.bess_canvas = FigureCanvasTkAgg(self.bess_fig, master=self.tab_bess)
+        self.bess_canvas.draw()
+        self.bess_canvas.get_tk_widget().pack(fill="both", expand=True)
 
         self.status_var.set("比較図を描画しました")
 
@@ -475,6 +545,12 @@ class MultiRunVisualizerApp:
             "trip_count_served",
             "trip_count_unserved",
             "vehicle_count_used",
+            "ev_used_count",
+            "ice_used_count",
+            "pv_utilization_rate",
+            "bess_discharge_kwh",
+            "bess_terminal_soc_delta_kwh",
+            "bess_terminal_soc_deviation_kwh",
             "termination_reason",
             "plan_source",
             "prepared_input_id",
@@ -512,6 +588,18 @@ class MultiRunVisualizerApp:
             self.co2_fig.savefig(out_root / "total_co2_comparison.png", dpi=300, bbox_inches="tight")
             if self.export_svg_var.get():
                 self.co2_fig.savefig(out_root / "total_co2_comparison.svg", bbox_inches="tight")
+        if self.vehicle_fig is not None:
+            self.vehicle_fig.savefig(out_root / "ev_used_count_comparison.png", dpi=300, bbox_inches="tight")
+            if self.export_svg_var.get():
+                self.vehicle_fig.savefig(out_root / "ev_used_count_comparison.svg", bbox_inches="tight")
+        if self.pv_fig is not None:
+            self.pv_fig.savefig(out_root / "pv_utilization_comparison.png", dpi=300, bbox_inches="tight")
+            if self.export_svg_var.get():
+                self.pv_fig.savefig(out_root / "pv_utilization_comparison.svg", bbox_inches="tight")
+        if self.bess_fig is not None:
+            self.bess_fig.savefig(out_root / "bess_terminal_soc_delta_comparison.png", dpi=300, bbox_inches="tight")
+            if self.export_svg_var.get():
+                self.bess_fig.savefig(out_root / "bess_terminal_soc_delta_comparison.svg", bbox_inches="tight")
 
         # Per-run operation figures (reuse single-run plot logic)
         per_run_count = 0

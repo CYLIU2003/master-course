@@ -173,3 +173,28 @@ def test_canonical_problem_builder_preserves_explicit_zero_upper_buffer_ratio() 
     )
 
     assert problem.metadata.get("charge_upper_buffer_ratio") == 0.0
+
+
+def test_canonical_problem_builder_defaults_soc_violation_slack_off() -> None:
+    problem = ProblemBuilder().build_from_scenario(
+        _scenario(),
+        depot_id="dep1",
+        service_id="WEEKDAY",
+    )
+
+    assert problem.metadata.get("allow_soc_violation_slack") is False
+    assert problem.metadata.get("use_soft_soc_constraint") is False
+
+
+def test_canonical_problem_builder_allows_explicit_soc_violation_diagnostic_mode() -> None:
+    scenario = _scenario()
+    scenario["simulation_config"]["use_soft_soc_constraint"] = "true"
+
+    problem = ProblemBuilder().build_from_scenario(
+        scenario,
+        depot_id="dep1",
+        service_id="WEEKDAY",
+    )
+
+    assert problem.metadata.get("allow_soc_violation_slack") is True
+    assert problem.metadata.get("use_soft_soc_constraint") is True

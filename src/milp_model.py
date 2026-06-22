@@ -31,7 +31,7 @@ from .gurobi_runtime import (
     ensure_gurobi as _ensure_gurobi,
 )
 
-from .data_schema import ProblemData
+from .data_schema import ProblemData, DEFAULT_BATTERY_CAPACITY_KWH
 from .model_sets import ModelSets
 from .parameter_builder import DerivedParams
 from .constraints.assignment import add_assignment_constraints
@@ -178,7 +178,7 @@ def pre_solve_check(
         if veh is None:
             continue
 
-        cap = veh.battery_capacity if veh.battery_capacity is not None else 200.0
+        cap = veh.battery_capacity if veh.battery_capacity is not None else DEFAULT_BATTERY_CAPACITY_KWH
         soc_min   = veh.soc_min   if veh.soc_min   is not None else 0.0
         soc_max   = veh.soc_max   if veh.soc_max   is not None else cap
         soc_init  = veh.soc_init  if veh.soc_init  is not None else cap * 0.8
@@ -247,7 +247,7 @@ def pre_solve_check(
             veh = dp.vehicle_lut.get(k)
             if veh is None:
                 continue
-            cap      = veh.battery_capacity if veh.battery_capacity is not None else 200.0
+            cap      = veh.battery_capacity if veh.battery_capacity is not None else DEFAULT_BATTERY_CAPACITY_KWH
             soc_i    = veh.soc_init if veh.soc_init is not None else cap * 0.8
             soc_e    = getattr(veh, "soc_target_end", None)
             total_soc_init += soc_i

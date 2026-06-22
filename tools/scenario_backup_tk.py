@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 import csv
 import json
@@ -97,6 +98,14 @@ _RESULT_METRIC_LABELS = {
     "served_trips": "担当便数",
     "unserved_trips": "未担当便数",
     "vehicle_count_used": "使用車両数",
+    "ev_used_count": "EV使用台数",
+    "ev_unused_count": "EV未使用台数",
+    "ice_used_count": "ICE使用台数",
+    "weather_class": "天候区分",
+    "weather_operation_mode": "天候運用モード",
+    "pv_utilization_rate": "PV利用率",
+    "bess_terminal_soc_delta_kwh": "BESS終端SOC差分[kWh]",
+    "bess_terminal_soc_deviation_kwh": "BESS終端SOC目標偏差[kWh]",
     "used_vehicle_day_count": "使用車両日数",
     "solve_time_seconds": "計算時間[s]",
     "energy_cost": "推進費合計(EV電力+ICE燃料)",
@@ -151,6 +160,14 @@ _RESULT_COMPARE_KEYS = (
     "served_trips",
     "unserved_trips",
     "vehicle_count_used",
+    "ev_used_count",
+    "ev_unused_count",
+    "ice_used_count",
+    "weather_class",
+    "weather_operation_mode",
+    "pv_utilization_rate",
+    "bess_terminal_soc_delta_kwh",
+    "bess_terminal_soc_deviation_kwh",
     "solve_time_seconds",
     "electricity_cost",
     "vehicle_cost",
@@ -1444,11 +1461,15 @@ class App:
         self.compare_scenario_b_var = tk.StringVar(value="")
         self._busy_count: int = 0
         self._busy_var = tk.StringVar(value="")
+        self._closing = False
+        self._bg_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="tk-ui-bg")
         self._quick_setup_save_inflight: int = 0
         self._vehicle_add_inflight: int = 0
         self._quick_setup_save_buttons: list[ttk.Button] = []
         self._vehicle_add_buttons: list[ttk.Button] = []
         self._scope_filter_debounce_id: str | None = None
+        self.workflow_status_var = tk.StringVar(value="未Prepare: シナリオを選択してください")
+        self.workflow_hint_var = tk.StringVar(value="高速実行は必要に応じてPrepareを先に実行します")
         self.run_transport_var = tk.StringVar(value="直結" if self.client.direct_mode else "HTTP互換")
         self.base_url_entry: ttk.Entry | None = None
         self.base_url_label: ttk.Label | None = None
@@ -1458,6 +1479,7 @@ class App:
         self._register_prepare_dependency_watchers()
         self._register_scope_ui_watchers()
         self._bind_keyboard_shortcuts()
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _build_ui(self) -> None:
         # ── レスポンシブウィンドウサイズ ──
@@ -1543,10 +1565,9 @@ class App:
         steps = [
             ("①", "シナリオ選択・作成", "#1a5276"),
             ("②", "左パネルで営業所・路線・日付を設定", "#1a5276"),
-            ("③", "Quick Setup 保存 → ② ソルバー設定", "#1a5276"),
-            ("④", "③ Solver対応 Prepare を実行", "#117a65"),
-            ("⑤", "実行種別を選んで ④ 実行", "#117a65"),
-            ("⑥", "「Optimization結果」で結果確認", "#6e2f6e"),
+            ("③", "必要ならソルバー設定", "#1a5276"),
+            ("④", "高速実行でPrepare→最適化", "#117a65"),
+            ("⑤", "結果確認", "#6e2f6e"),
         ]
         guide_inner = ttk.Frame(guide)
         guide_inner.pack(fill=tk.X)
@@ -1558,8 +1579,8 @@ class App:
         ttk.Label(
             guide,
             text=(
-                "迷ったら ①保存 → ③Prepare → ④実行 の順です。保存は全タブの状態保存、"
-                "Prepare は最適化へ渡す入力検証と prepared_input 作成です。"
+                "迷ったら『高速実行』を押してください。未PrepareまたはstaleならPrepareを先に行い、"
+                "準備済みなら既存 prepared_input を使って最短で最適化を開始します。"
             ),
             foreground="#555",
         ).pack(anchor="w", pady=(2, 0))
@@ -1747,23 +1768,28 @@ class App:
 
         ttk.Label(
             action_bar,
-            text="① シナリオ保存  →  ② ソルバー設定  →  ③ Solver対応 Prepare  →  ④ 実行",
+            text="高速実行  →  必要時のみPrepare  →  最適化ジョブ開始  →  結果確認",
             foreground="#1a5276",
             font=("TkDefaultFont", 9, "bold"),
         ).pack(anchor="w", pady=(0, 4))
         ttk.Label(
             action_bar,
             text=(
-                "①保存: UI全体を保存します。③Prepare: 保存済み/画面上の設定を最適化入力へ変換し、"
-                "Weather proxy の日付不一致などを検証します。"
+                "通常は高速実行を使います。手動で切り分けたい場合だけ、保存・Prepare・実行を個別に押してください。"
             ),
             foreground="#555",
             wraplength=760,
             justify=tk.LEFT,
         ).pack(anchor="w", pady=(0, 4))
 
+        status_card = ttk.LabelFrame(action_bar, text="実行状態", padding=6)
+        status_card.pack(fill=tk.X, pady=(0, 6))
+        ttk.Label(status_card, textvariable=self.workflow_status_var, foreground="#117a65", font=("TkDefaultFont", 10, "bold")).pack(anchor="w")
+        ttk.Label(status_card, textvariable=self.workflow_hint_var, foreground="#555").pack(anchor="w", pady=(2, 0))
+
         btn_row = ttk.Frame(action_bar)
         btn_row.pack(fill=tk.X)
+        ttk.Button(btn_row, text="高速実行", command=self.run_fast_optimization).pack(side=tk.LEFT, padx=(0, 8))
         quick_setup_save_main_btn = ttk.Button(
             btn_row, text="① シナリオ保存", command=self.save_quick_setup,
         )
@@ -2825,6 +2851,15 @@ class App:
         self.log.insert(tk.END, msg + "\n")
         self.log.see(tk.END)
 
+    def _on_close(self) -> None:
+        self._closing = True
+        self.optimization_polling = False
+        try:
+            self._bg_executor.shutdown(wait=False, cancel_futures=True)
+        except Exception:
+            pass
+        self.root.quit()
+
     def _queue_on_ui_thread(self, callback) -> bool:
         if not self._widget_exists(self.root):
             return False
@@ -2880,6 +2915,8 @@ class App:
         self._update_mutation_guard_button_states()
 
     def run_bg(self, action, done=None) -> None:
+        if getattr(self, "_closing", False):
+            return
         self._busy_count += 1
         self._update_busy_status()
 
@@ -2911,7 +2948,14 @@ class App:
 
                 self._queue_on_ui_thread(_dec)
 
-        threading.Thread(target=worker, daemon=True).start()
+        executor = getattr(self, "_bg_executor", None)
+        if executor is None:
+            threading.Thread(target=worker, daemon=True).start()
+            return
+        try:
+            executor.submit(worker)
+        except RuntimeError:
+            threading.Thread(target=worker, daemon=True).start()
 
     def _selected_scenario_id(self) -> str:
         idx = self.scenario_combo.current()
@@ -5484,6 +5528,8 @@ class App:
         self.log_line(f"dataset候補取得: {len(self.available_dataset_ids)} 件 (default={self.default_dataset_id})")
 
     def refresh_scenarios(self) -> None:
+        previous_scenario_id = self._selected_scenario_id()
+
         def action() -> dict[str, Any]:
             return self.client.list_scenarios()
 
@@ -5493,8 +5539,20 @@ class App:
             for combo in (self.scenario_combo, self.compare_a_combo, self.compare_b_combo):
                 combo["values"] = labels
             if labels:
-                self.scenario_combo.current(0)
-                self.on_scenario_changed()
+                selected_index = 0
+                if previous_scenario_id:
+                    selected_index = next(
+                        (
+                            idx
+                            for idx, item in enumerate(self.scenarios)
+                            if str(item.get("id") or "") == previous_scenario_id
+                        ),
+                        0,
+                    )
+                self.scenario_combo.current(selected_index)
+                current_id = str(self.scenarios[selected_index].get("id") or "")
+                if current_id != previous_scenario_id or not self.scope_depots:
+                    self.on_scenario_changed()
                 if not self.compare_scenario_a_var.get():
                     self.compare_a_combo.current(0)
                 if len(labels) > 1 and not self.compare_scenario_b_var.get():
@@ -5544,6 +5602,42 @@ class App:
         run_summary = dict(resp.get("summary") or {})
         costs = dict(resp.get("cost_breakdown") or {})
         simulation_summary = dict(resp.get("simulation_summary") or {})
+        weather_policy = dict(resp.get("weather_policy") or {})
+        weather_forecast = dict(weather_policy.get("forecast") or {})
+        weather_profile = dict(weather_policy.get("operation_profile") or {})
+        weather_audit = dict(weather_policy.get("audit") or {})
+        weather_curve = dict(weather_policy.get("representative_curve") or {})
+        charging_summary = dict(resp.get("charging_summary") or {})
+        charging_totals = dict(charging_summary.get("totals") or {})
+        weather_operation_mode = self._pick_text(
+            weather_profile.get("operation_mode"),
+            weather_forecast.get("operation_mode"),
+        )
+        weather_class = self._pick_text(
+            weather_audit.get("typical_weather_class"),
+            weather_curve.get("typical_weather_class"),
+        )
+        if not weather_class:
+            sun_score = self._pick_number(weather_forecast.get("sun_score"))
+            rain_risk = self._pick_number(weather_forecast.get("rain_risk"))
+            weather_label = str(weather_forecast.get("weather_label") or "")
+            if "雨" in weather_label:
+                weather_class = "rainy"
+            elif "晴" in weather_label:
+                weather_class = "sunny"
+            elif sun_score is not None or rain_risk is not None:
+                sun_value = sun_score if sun_score is not None else 0.0
+                rain_value = rain_risk if rain_risk is not None else 0.0
+                if sun_value >= 0.70 and rain_value <= 0.20:
+                    weather_class = "sunny"
+                elif sun_value < 0.25 or rain_value >= 0.60:
+                    weather_class = "rainy"
+                else:
+                    weather_class = "cloudy"
+            elif weather_operation_mode == "aggressive":
+                weather_class = "sunny"
+            elif weather_operation_mode == "conservative":
+                weather_class = "rainy"
         solution_validity = dict(
             resp.get("solution_validity")
             or (resp.get("summary") or {}).get("solution_validity")
@@ -5584,6 +5678,22 @@ class App:
             "vehicle_count_used": self._pick_number(
                 run_summary.get("vehicle_count_used"),
                 kpi.get("vehicle_count_used"),
+            ),
+            "ev_used_count": self._pick_number(run_summary.get("ev_used_count")),
+            "ev_unused_count": self._pick_number(run_summary.get("ev_unused_count")),
+            "ice_used_count": self._pick_number(run_summary.get("ice_used_count")),
+            "weather_class": weather_class,
+            "weather_operation_mode": weather_operation_mode,
+            "pv_utilization_rate": self._pick_number(
+                charging_totals.get("pv_utilization_rate"),
+                costs.get("pv_utilization_rate"),
+            ),
+            "bess_terminal_soc_delta_kwh": self._pick_number(
+                charging_totals.get("bess_terminal_soc_delta_kwh"),
+            ),
+            "bess_terminal_soc_deviation_kwh": self._pick_number(
+                charging_totals.get("bess_terminal_soc_deviation_kwh"),
+                (resp.get("solver_metadata") or {}).get("bess_terminal_soc_deviation_kwh"),
             ),
             "solve_time_seconds": self._pick_number(
                 solver_result.get("solve_time_seconds"),
@@ -5805,8 +5915,28 @@ class App:
 
         raw = ScrolledText(raw_tab)
         raw.pack(fill=tk.BOTH, expand=True)
-        raw.insert(tk.END, json.dumps(data, ensure_ascii=False, indent=2, default=str))
+        raw.insert(tk.END, "Raw JSON はこのタブを開いた時点で整形します。")
         raw.configure(state="disabled")
+
+        raw_loaded = {"value": False}
+
+        def _load_raw_json() -> None:
+            if raw_loaded["value"] or not self._widget_exists(raw):
+                return
+            raw_loaded["value"] = True
+            raw.configure(state="normal")
+            raw.delete("1.0", tk.END)
+            raw.insert(tk.END, json.dumps(data, ensure_ascii=False, indent=2, default=str))
+            raw.configure(state="disabled")
+
+        def _on_result_tab_changed(_event=None) -> None:
+            try:
+                if notebook.select() == str(raw_tab):
+                    self.root.after_idle(_load_raw_json)
+            except tk.TclError:
+                return
+
+        notebook.bind("<<NotebookTabChanged>>", _on_result_tab_changed, add="+")
 
     def _open_compare_window(self, title: str, scenario_a: str, scenario_b: str, a_data: dict[str, Any], b_data: dict[str, Any]) -> None:
         a_summary = self._extract_result_summary(a_data)
@@ -7953,6 +8083,164 @@ class App:
 
         self.run_bg(request_action, done)
 
+    def _build_optimization_run_payload(self, prepared_input_id: str | None = None) -> dict[str, Any]:
+        depots = self._selected_depot_ids()
+        payload = {
+            "mode": self.solver_mode_var.get().strip(),
+            "prepared_input_id": prepared_input_id or self.prepared_input_id,
+            "time_step_min": self._timestep_min_value(),
+            "timestep_min": self._timestep_min_value(),
+            "time_limit_seconds": self._effective_optimization_time_limit_seconds(),
+            "mip_gap": self._parse_float(self.mip_gap_var.get(), 0.01),
+            "alns_iterations": self._parse_int(self.alns_iter_var.get(), 500),
+            "no_improvement_limit": self._parse_int(self.no_improvement_limit_var.get(), 100),
+            "destroy_fraction": self._parse_float(self.destroy_fraction_var.get(), 0.25),
+            "service_id": self.day_type_var.get().strip() or None,
+            "depot_id": depots[0] if depots else None,
+            "rebuild_dispatch": bool(self.rebuild_dispatch_before_opt_var.get()),
+        }
+        payload.update(self._weather_proxy_optimization_payload())
+        return payload
+
+    def _confirm_large_milp_run(self, trip_count: int) -> bool:
+        if self.solver_mode_var.get().strip() != "mode_milp_only" or trip_count < 2000:
+            return True
+        continue_run = messagebox.askyesno(
+            "大規模MILP警告",
+            "現在のスコープは大規模です。\n"
+            f"tripCount={trip_count} / solver=mode_milp_only\n\n"
+            "exact MILP は非常に長くなる可能性があります。\n"
+            "通常は hybrid または mode_alns_only を推奨します。\n"
+            "そのまま実行しますか？",
+        )
+        if not continue_run:
+            self.log_line("大規模MILP警告により実行を中止しました")
+        return bool(continue_run)
+
+    def run_fast_optimization(self) -> None:
+        scenario_id = self._selected_scenario_id()
+        if not scenario_id:
+            messagebox.showwarning("入力不足", "先にシナリオを選択してください")
+            return
+        try:
+            prepare_payload = self._prepare_payload()
+        except ValueError:
+            return
+        if (
+            self.apply_initial_soc_percent_to_selected_bevs_var.get()
+            and not self._selected_depot_ids()
+        ):
+            messagebox.showwarning(
+                "入力不足",
+                "初期SOC比を一斉反映するには営業所を選択してください",
+            )
+            return
+        if self.prepared_ready and self.prepared_input_id:
+            if not self._confirm_large_milp_run(self.prepared_trip_count):
+                return
+            payload = self._build_optimization_run_payload(self.prepared_input_id)
+            request_action = self._wrap_execution_with_prepare_retry(
+                scenario_id=scenario_id,
+                action_label="高速最適化",
+                prepare_payload=prepare_payload,
+                payload=payload,
+                request_action=lambda: self.client.run_optimization(scenario_id, payload),
+            )
+            self._submit_execution_job(
+                window_title="高速最適化モニター",
+                action_label="高速最適化",
+                payload=payload,
+                request_action=request_action,
+            )
+            return
+
+        self._ensure_execution_window("高速最適化モニター")
+        self.optimization_progress_var.set(0.0)
+        self.optimization_status_var.set("Prepare中")
+        self.optimization_last_message = ""
+        self.optimization_last_status = ""
+        self.optimization_last_progress = -1.0
+        self.optimization_poll_count = 0
+        self.optimization_last_snapshot_json = ""
+        self._optimization_console_log("高速実行: Prepareを開始します")
+        self.log_line("高速実行: 未PrepareまたはstaleのためPrepareから開始します")
+
+        def action() -> dict[str, Any]:
+            apply_info = self._maybe_apply_main_initial_soc_to_selected_bevs(scenario_id)
+            try:
+                prep_resp = self.client.prepare_simulation(scenario_id, prepare_payload)
+            except Exception:
+                self._queue_on_ui_thread(
+                    lambda: self._finalize_main_initial_soc_bulk_apply(apply_info)
+                )
+                raise
+            prep_resp["_mainInitialSocApply"] = apply_info
+            prepared_input_id = str(prep_resp.get("preparedInputId") or "")
+            trip_count = int(prep_resp.get("tripCount") or 0)
+            if not prepared_input_id or not bool(prep_resp.get("ready")) or trip_count <= 0:
+                return {"prepare": prep_resp, "job": None, "payload": None}
+            payload = self._build_optimization_run_payload(prepared_input_id)
+            if self.solver_mode_var.get().strip() == "mode_milp_only" and trip_count >= 2000:
+                return {"prepare": prep_resp, "job": None, "payload": payload, "needsLargeMilpConfirm": True}
+            job_resp = self.client.run_optimization(scenario_id, payload)
+            return {"prepare": prep_resp, "job": job_resp, "payload": payload}
+
+        def done(result: dict[str, Any]) -> None:
+            prep_resp = dict(result.get("prepare") or {})
+            self._finalize_main_initial_soc_bulk_apply(
+                dict(prep_resp.get("_mainInitialSocApply") or {})
+            )
+            self._sync_prepared_state_from_response(prep_resp)
+            for warning in prep_resp.get("warnings") or []:
+                self.log_line(f"警告: {warning}")
+            self._log_prepared_scope_audit(
+                dict(
+                    prep_resp.get("preparedScopeAudit")
+                    or ((prep_resp.get("scopeSummary") or {}).get("prepared_scope_audit") or {})
+                ),
+                prefix="prepared_scope_audit",
+                console=True,
+            )
+            if not self.prepared_ready:
+                self.optimization_status_var.set("Prepare未完了")
+                messagebox.showwarning(
+                    "Prepare未完了",
+                    f"tripCount={self.prepared_trip_count} のため最適化を開始できません。Quick Setup を確認してください。",
+                )
+                return
+            payload = result.get("payload")
+            if result.get("needsLargeMilpConfirm"):
+                if not self._confirm_large_milp_run(self.prepared_trip_count):
+                    self.optimization_status_var.set("中止")
+                    return
+                request_action = self._wrap_execution_with_prepare_retry(
+                    scenario_id=scenario_id,
+                    action_label="高速最適化",
+                    prepare_payload=prepare_payload,
+                    payload=payload,
+                    request_action=lambda: self.client.run_optimization(scenario_id, payload),
+                )
+                self._submit_execution_job(
+                    window_title="高速最適化モニター",
+                    action_label="高速最適化",
+                    payload=payload,
+                    request_action=request_action,
+                )
+                return
+            job_resp = dict(result.get("job") or {})
+            if not job_resp:
+                return
+            self._set_job_from_resp(job_resp, "高速最適化ジョブ開始")
+            self.optimization_job_id = self.last_job_id
+            self.optimization_status_var.set("実行中")
+            self._optimization_console_log(f"ジョブ開始: {self.optimization_job_id}")
+            if isinstance(payload, dict):
+                self._optimization_console_log("payload_effective=" + self._compact_execution_payload(payload))
+            self._optimization_console_log("start_response=" + self._compact_execution_response(job_resp))
+            self._start_optimization_polling("高速最適化")
+
+        self.run_bg(action, done)
+
     def run_selected_execution(self) -> None:
         action_kind = self._execution_mode_kind()
         if action_kind == "prepared_simulation":
@@ -8027,27 +8315,11 @@ class App:
         scenario_id = self._ensure_prepared_before_execution("最適化計算")
         if not scenario_id:
             return
-        depots = self._selected_depot_ids()
-        effective_time_limit = self._effective_optimization_time_limit_seconds()
         try:
             prepare_payload = self._prepare_payload()
         except ValueError:
             return
-        payload = {
-            "mode": self.solver_mode_var.get().strip(),
-            "prepared_input_id": self.prepared_input_id,
-            "time_step_min": self._timestep_min_value(),
-            "timestep_min": self._timestep_min_value(),
-            "time_limit_seconds": effective_time_limit,
-            "mip_gap": self._parse_float(self.mip_gap_var.get(), 0.01),
-            "alns_iterations": self._parse_int(self.alns_iter_var.get(), 500),
-            "no_improvement_limit": self._parse_int(self.no_improvement_limit_var.get(), 100),
-            "destroy_fraction": self._parse_float(self.destroy_fraction_var.get(), 0.25),
-            "service_id": self.day_type_var.get().strip() or None,
-            "depot_id": depots[0] if depots else None,
-            "rebuild_dispatch": bool(self.rebuild_dispatch_before_opt_var.get()),
-        }
-        payload.update(self._weather_proxy_optimization_payload())
+        payload = self._build_optimization_run_payload(self.prepared_input_id)
         request_action = self._wrap_execution_with_prepare_retry(
             scenario_id=scenario_id,
             action_label="最適化計算",
@@ -8055,18 +8327,8 @@ class App:
             payload=payload,
             request_action=lambda: self.client.run_optimization(scenario_id, payload),
         )
-        if payload["mode"] == "mode_milp_only" and self.prepared_trip_count >= 2000:
-            continue_run = messagebox.askyesno(
-                "大規模MILP警告",
-                "現在のスコープは大規模です。\n"
-                f"tripCount={self.prepared_trip_count} / solver=mode_milp_only\n\n"
-                "exact MILP は非常に長くなる可能性があります。\n"
-                "通常は hybrid または mode_alns_only を推奨します。\n"
-                "そのまま実行しますか？",
-            )
-            if not continue_run:
-                self.log_line("大規模MILP警告により実行を中止しました")
-                return
+        if not self._confirm_large_milp_run(self.prepared_trip_count):
+            return
         if self.wait_until_finish_var.get():
             self.log_line("終了まで待機モードで実行します")
         if not self.rebuild_dispatch_before_opt_var.get():
@@ -8137,6 +8399,24 @@ class App:
         if self.prepared_dirty_reason:
             suffix += f" [stale: {self.prepared_dirty_reason}]"
         self.prepared_var.set(f"prepared_input_id: {base}{suffix}")
+        self._update_workflow_status()
+
+    def _update_workflow_status(self) -> None:
+        if not hasattr(self, "workflow_status_var"):
+            return
+        if self.prepared_ready and self.prepared_input_id:
+            profile = f" / {self.prepared_profile_name}" if self.prepared_profile_name else ""
+            self.workflow_status_var.set(
+                f"準備済み: {self.prepared_trip_count:,}便{profile}"
+            )
+            self.workflow_hint_var.set("高速実行は既存 prepared_input を使ってすぐジョブ投入します")
+            return
+        if self.prepared_dirty_reason:
+            self.workflow_status_var.set(f"再Prepare必要: {self.prepared_dirty_reason}")
+            self.workflow_hint_var.set("高速実行は先にPrepareを行い、成功後に最適化を開始します")
+            return
+        self.workflow_status_var.set("未Prepare: 高速実行またはSolver対応 Prepareを実行してください")
+        self.workflow_hint_var.set("高速実行は入力検証、prepared_input作成、最適化開始をまとめて実行します")
 
     def _mark_prepared_stale(self, reason: str, *, clear_id: bool = False, announce: bool = False) -> None:
         if self._suspend_prepare_watchers:

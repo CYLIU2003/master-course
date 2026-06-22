@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from ..data_schema import ProblemData
+from ..data_schema import ProblemData, DEFAULT_BATTERY_CAPACITY_KWH
 from ..gurobi_runtime import ensure_gurobi
 from ..model_sets import ModelSets
 from ..parameter_builder import DerivedParams
@@ -61,7 +61,7 @@ def add_soc_threshold_charging_constraints(
 
     for k in K_BEV:
         veh = dp.vehicle_lut[k]
-        cap = veh.battery_capacity or 200.0
+        cap = veh.battery_capacity or DEFAULT_BATTERY_CAPACITY_KWH
         trigger = cap * trigger_ratio
         resume = cap * resume_ratio
 
@@ -124,7 +124,7 @@ def add_soc_threshold_to_alns_repair(
         if veh is None or veh.vehicle_type != "BEV":
             continue
 
-        cap = veh.battery_capacity or 200.0
+        cap = veh.battery_capacity or DEFAULT_BATTERY_CAPACITY_KWH
         trigger = cap * trigger_ratio
         soc_current = veh.soc_init if veh.soc_init is not None else cap * 0.8
 
