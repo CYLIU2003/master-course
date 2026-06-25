@@ -176,14 +176,7 @@ def prepare_weather_policy_for_scenario(
         {
             "enable_weather_operation_policy": True,
             "weather_proxy_forecast_path": path_raw,
-            "final_soc_floor_percent": float(profile.final_soc_floor_percent),
-            "final_soc_target_percent": float(profile.final_soc_target_percent),
             "weather_operation_mode": profile.operation_mode,
-            "bev_duty_bias": float(profile.bev_duty_bias),
-            "ice_backup_bias": float(profile.ice_backup_bias),
-            "midday_charge_priority": float(profile.midday_charge_priority),
-            "grid_risk_penalty_multiplier": float(profile.grid_risk_penalty_multiplier),
-            "weather_strategy_bias_base_jpy_per_trip": 300.0,
         }
     )
     updated["simulation_config"] = sim_cfg
@@ -215,15 +208,10 @@ def weather_policy_payload_from_problem_metadata(
             for key in (
                 "weather_proxy",
                 "weather_operation_profile",
-                "final_soc_floor_percent",
-                "final_soc_target_percent",
             )
             if key in metadata
         ],
         "pv_marginal_charge_cost_policy": metadata.get("pv_marginal_charge_cost_policy"),
-        "weather_strategy_bias_base_jpy_per_trip": metadata.get(
-            "weather_strategy_bias_base_jpy_per_trip"
-        ),
         "weather_pv_forecast_applied": bool(metadata.get("weather_pv_forecast_applied")),
         "weather_pv_forecast_skip_reason": metadata.get("weather_pv_forecast_skip_reason"),
         "typical_weather_class": pv_curve.get("typical_weather_class"),

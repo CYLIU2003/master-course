@@ -15,7 +15,6 @@ from .historical_analog import NoAnalogCandidateError, select_historical_analog
 from .operation_policy import (
     OPERATION_PROFILES,
     WeatherOperationProfile,
-    apply_initial_soc_policy,
     apply_weather_policy_to_problem,
     build_operation_profile,
 )
@@ -32,7 +31,6 @@ __all__ = [
     "WeatherOperationProfile",
     "OPERATION_PROFILES",
     "NoAnalogCandidateError",
-    "apply_initial_soc_policy",
     "apply_weather_policy_to_problem",
     "build_operation_profile",
     "build_solcast_pv_proxy_forecast",

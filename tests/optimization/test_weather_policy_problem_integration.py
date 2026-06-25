@@ -6,6 +6,7 @@ from bff.routers.optimization import (
     _canonical_vehicle_timeline_rows,
     _persist_rich_run_outputs,
     _prepare_weather_policy_for_scenario,
+    _weather_policy_payload_from_problem_metadata,
 )
 from bff.services.optimization_run.vehicle_timeline import vehicle_ids_with_timeline_activity
 from src.dispatch.models import DutyLeg, Trip, VehicleDuty
@@ -26,6 +27,7 @@ from src.optimization.common.problem import (
 from src.preprocess.weather.daily_weather_schema import (
     FORECAST_TYPE_SOLCAST_TYPICAL_PV_PROXY_V1,
     WeatherProxyForecast,
+    weather_proxy_forecast_to_dict,
 )
 from src.preprocess.weather.operation_policy import (
     apply_weather_policy_to_problem,
@@ -174,11 +176,12 @@ def test_apply_weather_policy_to_problem_is_non_destructive_and_reproducible():
     assert problem.metadata == {"service_date": "2025-08-21"}
     assert problem.vehicles[0].initial_soc is None
     assert updated_a.metadata["weather_proxy"]["analog_date"] == "2024-08-22"
-    assert updated_a.metadata["final_soc_floor_percent"] == 20.0
-    assert updated_a.metadata["final_soc_target_percent"] == 35.0
-    assert updated_a.metadata["final_soc_target_tolerance_percent"] == 0.0
+    assert "final_soc_floor_percent" not in updated_a.metadata
+    assert "final_soc_target_percent" not in updated_a.metadata
+    assert "final_soc_target_tolerance_percent" not in updated_a.metadata
+    assert updated_a.metadata["weather_initial_soc_policy"]["initial_soc_randomized"] is False
     assert updated_a.vehicles[0].initial_soc == updated_b.vehicles[0].initial_soc
-    assert 0.55 <= updated_a.vehicles[0].initial_soc <= 0.95
+    assert updated_a.vehicles[0].initial_soc is None
     assert updated_a.vehicles[1].initial_soc is None
 
 
@@ -198,7 +201,7 @@ def test_typical_solcast_curve_replaces_problem_pv_by_clock_not_position():
     assert updated.pv_slots[1].pv_available_kw == 60.0
 
 
-def test_conservative_weather_policy_relaxes_terminal_target_not_safety_floor():
+def test_conservative_weather_policy_does_not_override_soc_policy():
     forecast = _forecast()
     forecast = WeatherProxyForecast(
         **{
@@ -212,13 +215,77 @@ def test_conservative_weather_policy_relaxes_terminal_target_not_safety_floor():
     profile = build_operation_profile(forecast)
     updated = apply_weather_policy_to_problem(_problem(), forecast, profile, random_seed=42)
 
-    assert updated.metadata["final_soc_floor_percent"] == 45.0
-    assert updated.metadata["final_soc_target_percent"] == 60.0
-    assert updated.metadata["final_soc_target_tolerance_percent"] == 10.0
-    assert updated.metadata["weather_operation_profile"]["final_soc_target_tolerance_percent"] == 10.0
+    assert updated.metadata["weather_operation_profile"]["operation_mode"] == "conservative"
+    assert updated.metadata["weather_operation_profile"]["final_soc_floor_percent"] is None
+    assert updated.metadata["weather_operation_profile"]["final_soc_target_percent"] is None
+    assert updated.metadata["weather_operation_profile"]["final_soc_target_tolerance_percent"] is None
+    assert "final_soc_floor_percent" not in updated.metadata
+    assert "final_soc_target_percent" not in updated.metadata
+    assert "final_soc_target_tolerance_percent" not in updated.metadata
 
 
-def test_weather_strategy_term_changes_objective_not_accounting_cost():
+def test_prepare_weather_policy_does_not_inject_soc_or_strategy_bias(tmp_path: Path):
+    forecast = _forecast()
+    forecast = WeatherProxyForecast(
+        **{
+            **forecast.__dict__,
+            "operation_mode": "conservative",
+            "sun_score": 0.05,
+            "rain_risk": 0.85,
+            "weather_label": "雨",
+        }
+    )
+    forecast_path = tmp_path / "weather_proxy_forecast.json"
+    forecast_path.write_text(
+        json.dumps(weather_proxy_forecast_to_dict(forecast), ensure_ascii=False),
+        encoding="utf-8",
+    )
+    scenario = {"simulation_config": {"service_date": "2025-08-21"}}
+
+    updated, loaded_forecast, profile = _prepare_weather_policy_for_scenario(
+        scenario,
+        enable_weather_operation_policy=True,
+        weather_proxy_forecast_path=str(forecast_path),
+    )
+
+    sim_cfg = updated["simulation_config"]
+    assert loaded_forecast is not None
+    assert profile is not None
+    assert loaded_forecast.operation_mode == "conservative"
+    assert sim_cfg["enable_weather_operation_policy"] is True
+    assert sim_cfg["weather_operation_mode"] == "conservative"
+    assert "final_soc_floor_percent" not in sim_cfg
+    assert "final_soc_target_percent" not in sim_cfg
+    assert "final_soc_target_tolerance_percent" not in sim_cfg
+    assert "bev_duty_bias" not in sim_cfg
+    assert "ice_backup_bias" not in sim_cfg
+    assert "weather_strategy_bias_base_jpy_per_trip" not in sim_cfg
+
+
+def test_weather_policy_audit_does_not_report_soc_override():
+    forecast = _forecast()
+    forecast = WeatherProxyForecast(
+        **{
+            **forecast.__dict__,
+            "operation_mode": "conservative",
+            "sun_score": 0.05,
+            "rain_risk": 0.85,
+            "weather_label": "雨",
+        }
+    )
+    profile = build_operation_profile(forecast)
+    updated = apply_weather_policy_to_problem(_problem(), forecast, profile, random_seed=42)
+
+    payload = _weather_policy_payload_from_problem_metadata(dict(updated.metadata))
+    assert payload is not None
+    audit = payload["audit"]
+    assert "final_soc_floor_percent" not in audit
+    assert "final_soc_target_percent" not in audit
+    assert "final_soc_target_tolerance_percent" not in audit
+    assert "final_soc_target_tolerance_percent" not in audit["optimizer_metadata_keys"]
+
+
+def test_weather_policy_does_not_add_vehicle_type_objective_bias():
     forecast = _forecast()
     profile = build_operation_profile(forecast)
     trip = Trip(
@@ -275,9 +342,9 @@ def test_weather_strategy_term_changes_objective_not_accounting_cost():
 
     breakdown = CostEvaluator().evaluate(problem, plan)
 
-    assert breakdown.weather_strategy_objective_term_jpy_equivalent == -45.0
+    assert breakdown.weather_strategy_objective_term_jpy_equivalent == 0.0
     assert breakdown.total_cost == 0.0
-    assert breakdown.objective_value == -45.0
+    assert breakdown.objective_value == 0.0
 
 
 def test_vehicle_timeline_activity_includes_charge_and_refuel_only_vehicles():
@@ -346,8 +413,6 @@ def test_persist_rich_outputs_writes_weather_artifacts_and_manifest(tmp_path: Pa
             "optimizer_metadata_keys": [
                 "weather_proxy",
                 "weather_operation_profile",
-                "final_soc_floor_percent",
-                "final_soc_target_percent",
             ],
         },
     }

@@ -3587,20 +3587,6 @@ class App:
         mark_stale: bool = True,
     ) -> Any:
         profile = build_operation_profile(forecast)
-        if update_soc_fields:
-            previous_suspend = getattr(self, "_suspend_prepare_watchers", False)
-            if not mark_stale:
-                self._suspend_prepare_watchers = True
-            try:
-                floor_text = str(profile.final_soc_floor_percent)
-                target_text = str(profile.final_soc_target_percent)
-                if self.final_soc_floor_percent_var.get() != floor_text:
-                    self.final_soc_floor_percent_var.set(floor_text)
-                if self.final_soc_target_percent_var.get() != target_text:
-                    self.final_soc_target_percent_var.set(target_text)
-            finally:
-                if not mark_stale:
-                    self._suspend_prepare_watchers = previous_suspend
         if forecast.forecast_type == FORECAST_TYPE_SOLCAST_PV_PROXY_V1:
             proxy_label = "Solcast実日PV予報proxy(検証用)"
             date_label = f"issue={forecast.metadata.get('forecast_issue_date') or forecast.analog_date}"
@@ -3617,7 +3603,7 @@ class App:
             f"{proxy_label}: "
             f"mode={forecast.operation_mode} {date_label} "
             f"sun={forecast.sun_score:.2f} rain={forecast.rain_risk:.2f} "
-            f"帰庫後SOC下限/目標={profile.final_soc_floor_percent:g}/{profile.final_soc_target_percent:g}%"
+            "SOC方針=変更なし"
         )
         if hasattr(self, "weather_proxy_summary_var"):
             self.weather_proxy_summary_var.set(summary)

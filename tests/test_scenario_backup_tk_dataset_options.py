@@ -293,7 +293,7 @@ def test_prepare_weather_proxy_validation_does_not_overwrite_soc_fields() -> Non
     assert app.final_soc_target_tolerance_percent_var.get() == "0"
 
 
-def test_weather_proxy_forecast_application_updates_visible_soc_policy() -> None:
+def test_weather_proxy_forecast_application_does_not_update_visible_soc_policy() -> None:
     app = App.__new__(App)
     app.final_soc_floor_percent_var = DummyVar("0.2")
     app.final_soc_target_percent_var = DummyVar("0.8")
@@ -308,9 +308,10 @@ def test_weather_proxy_forecast_application_updates_visible_soc_policy() -> None
     )
 
     assert profile.operation_mode == "aggressive"
-    assert app.final_soc_floor_percent_var.get() == "20.0"
-    assert app.final_soc_target_percent_var.get() == "35.0"
+    assert app.final_soc_floor_percent_var.get() == "0.2"
+    assert app.final_soc_target_percent_var.get() == "0.8"
     assert "analog=2024-08-22" in app.weather_proxy_summary_var.get()
+    assert "SOC方針=変更なし" in app.weather_proxy_summary_var.get()
 
 
 def test_weather_proxy_optimization_payload_disables_stale_path_when_unchecked() -> None:
