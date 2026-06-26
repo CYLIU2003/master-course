@@ -45,3 +45,31 @@ def test_solved_feasible_with_zero_unserved_is_validated_no_cancellation() -> No
     assert payload["validated_no_cancellation"] is True
     assert payload["validated_feasible"] is True
     assert payload["blocking_reasons"] == []
+
+
+def test_gurobi_unavailable_baseline_is_classified_as_fallback() -> None:
+    payload = _solution_validity_payload(
+        solver_status="gurobi_unavailable_baseline",
+        feasible=True,
+        trip_count_unserved=0,
+        infeasibility_reasons=[],
+    )
+
+    assert payload["validated_no_cancellation"] is False
+    assert payload["validated_feasible"] is False
+    assert payload["result_class"] == "baseline_fallback"
+    assert "baseline_fallback" in payload["blocking_reasons"]
+
+
+def test_postsolve_repair_detected_via_solver_metadata() -> None:
+    payload = _solution_validity_payload(
+        solver_status="OPTIMAL",
+        feasible=True,
+        trip_count_unserved=0,
+        infeasibility_reasons=[],
+        solver_metadata={"postsolve_soc_repair_applied": True},
+    )
+
+    assert payload["validated_no_cancellation"] is False
+    assert payload["result_class"] == "postsolve_repaired"
+    assert "postsolve_repaired" in payload["blocking_reasons"]

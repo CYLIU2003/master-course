@@ -25,6 +25,7 @@ from src.optimization.common.problem import (
     RefuelSlot,
 )
 from src.preprocess.weather.daily_weather_schema import (
+    FORECAST_TYPE_SOLCAST_PV_PROXY_V1,
     FORECAST_TYPE_SOLCAST_TYPICAL_PV_PROXY_V1,
     WeatherProxyForecast,
     weather_proxy_forecast_to_dict,
@@ -199,6 +200,51 @@ def test_typical_solcast_curve_replaces_problem_pv_by_clock_not_position():
     assert updated.depot_energy_assets["DEPOT"].pv_generation_kwh_by_slot[0] == 50.0
     assert updated.pv_slots[0].pv_available_kw == 50.0
     assert updated.pv_slots[1].pv_available_kw == 60.0
+
+
+def test_solcast_pv_proxy_applies_pv_curve_to_problem():
+    factors = [0.0] * 24
+    factors[5] = 0.55
+    factors[6] = 0.40
+    forecast = WeatherProxyForecast(
+        version=FORECAST_TYPE_SOLCAST_PV_PROXY_V1,
+        forecast_type=FORECAST_TYPE_SOLCAST_PV_PROXY_V1,
+        service_date="2025-09-01",
+        station_id="44132",
+        station_name="東京",
+        analog_date="2025-08-31",
+        analog_selection_score=0.0,
+        analog_selection_method="solcast_pv_capacity_factor_proxy_v1",
+        weather_label="PV発電見込み中",
+        tmax_c=None,
+        tmin_c=None,
+        mean_temp_c=None,
+        sunshine_hours=4.0,
+        precipitation_mm=None,
+        sun_score=0.5,
+        rain_risk=0.5,
+        heat_load_score=0.0,
+        midday_recovery_expectation="medium",
+        operation_mode="normal",
+        no_future_leakage=True,
+        metadata={
+            "forecast_issue_date": "2025-08-31",
+            "slot_minutes": 60,
+            "capacity_factor_by_slot": factors,
+            "source_dates": ["2025-08-30"],
+            "source_profile_count": 1,
+        },
+    )
+    profile = build_operation_profile(forecast)
+    problem = _pv_problem()
+
+    updated = apply_weather_policy_to_problem(problem, forecast, profile, random_seed=42)
+
+    assert updated.metadata["weather_pv_forecast_applied"] is True
+    assert updated.depot_energy_assets["DEPOT"].capacity_factor_by_slot[0] == 0.55
+    assert updated.depot_energy_assets["DEPOT"].pv_generation_kwh_by_slot[0] == 55.0
+    assert updated.pv_slots[0].pv_available_kw == 55.0
+    assert updated.pv_slots[1].pv_available_kw == 40.0
 
 
 def test_conservative_weather_policy_does_not_override_soc_policy():

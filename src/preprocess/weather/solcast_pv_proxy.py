@@ -126,6 +126,7 @@ def _build_metadata(
         "source_csv": raw.get("source_csv"),
         "slot_minutes": slot_minutes,
         "slot_count": len(capacity_factors),
+        "capacity_factor_by_slot": [round(v, 6) for v in capacity_factors],
         "capacity_factor_sum_hours": round(cf_hours, 6),
         "capacity_factor_avg_all_day": round(sum(capacity_factors) / len(capacity_factors), 6),
         "capacity_factor_peak": round(max(capacity_factors), 6),

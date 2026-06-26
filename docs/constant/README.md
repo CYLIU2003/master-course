@@ -18,6 +18,15 @@
 
 ## 正本候補
 
+> [!WARNING]
+> 以下の「正本候補」は研究計画・構想段階の文書が中心です。
+> 2026-06 時点の実コード実行経路と完全に一致するとは限りません。
+> 現在の実装正確性を確認したい場合は、
+> `README.md`、`docs/accounting_output_contract.md`、schema ファイル、およびテストコードを優先参照してください。
+> `agent.md` はプロジェクトスケルトン構想時の指示書であり、Gurobi-only 前提など
+> 現コードと異なる前提が含まれます。`masters_thesis_simulation_spec_v2.md` は
+> PV/BESS を将来拡張と扱っており、現実装の PV/BESS 有効とは表現が異なります。
+
 ### `masters_thesis_simulation_spec_v2.md`
 
 修論用シミュレーション・最適化仕様の基準線として扱う候補です。

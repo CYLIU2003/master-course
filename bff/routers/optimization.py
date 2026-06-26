@@ -4279,18 +4279,31 @@ def _solution_validity_payload(
     feasible: Any,
     trip_count_unserved: Any,
     infeasibility_reasons: List[Any],
+    solver_metadata: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     status = str(solver_status or "").strip()
     status_upper = status.upper()
     reasons = [str(item) for item in list(infeasibility_reasons or []) if str(item).strip()]
     blocking_reasons: List[str] = []
-    if status_upper in {"BASELINE_FALLBACK", "PARTIAL_BASELINE_FALLBACK"}:
+    meta = dict(solver_metadata or {})
+
+    is_fallback_status = (
+        "FALLBACK" in status_upper
+        or "BASELINE" in status_upper
+        or "UNAVAILABLE" in status_upper
+        or "GUARDRAIL" in status_upper
+    )
+    if is_fallback_status:
         blocking_reasons.append("baseline_fallback")
     if status_upper == "PARTIAL_BASELINE_FALLBACK":
         blocking_reasons.append("partial_baseline_fallback")
     if status_upper == "TRUTHFUL_BASELINE_GUARDRAIL":
         blocking_reasons.append("truthful_baseline_guardrail")
     if status_upper == "POSTSOLVE_REPAIRED":
+        blocking_reasons.append("postsolve_repaired")
+    if meta.get("postsolve_soc_repair_applied"):
+        blocking_reasons.append("postsolve_repaired")
+    if meta.get("postsolve_charging_recomputed"):
         blocking_reasons.append("postsolve_repaired")
     if not bool(feasible):
         blocking_reasons.append("postsolve_infeasible")
@@ -4303,29 +4316,40 @@ def _solution_validity_payload(
     if unserved > 0:
         blocking_reasons.append("unserved_trips_present")
     blocking_reasons = sorted(set(blocking_reasons))
-    validated_feasible = not blocking_reasons and status_upper in {"SOLVED_FEASIBLE", "OPTIMAL", "FEASIBLE"}
-    validated_no_cancellation = bool(validated_feasible and unserved == 0)
-    if not blocking_reasons:
-        status_reason = "validated_feasible_no_cancellation" if validated_no_cancellation else "validated_feasible"
-        result_class = "exact_or_validated"
+    supports_exact = bool(meta.get("supports_exact_milp", False))
+    fallback_applied = bool(meta.get("fallback_applied", False) or meta.get("fallback_reason"))
+    result_class: str
+    status_reason: str
+    if not blocking_reasons and status_upper in {"SOLVED_FEASIBLE", "OPTIMAL", "FEASIBLE"}:
+        if supports_exact and not fallback_applied:
+            status_reason = "validated_feasible_no_cancellation" if unserved == 0 else "validated_feasible"
+            result_class = "exact_or_validated"
+        else:
+            status_reason = "validated_feasible_non_exact"
+            result_class = "validated_non_exact"
     elif "partial_baseline_fallback" in blocking_reasons:
         status_reason = "partial_baseline_fallback"
         result_class = "baseline_fallback"
     elif "truthful_baseline_guardrail" in blocking_reasons:
         status_reason = "truthful_baseline_guardrail"
-        result_class = "truthful_baseline_guardrail"
+        result_class = "baseline_fallback"
     elif "postsolve_repaired" in blocking_reasons:
         status_reason = "postsolve_repaired"
         result_class = "postsolve_repaired"
-    elif "baseline_fallback" in blocking_reasons or "postsolve_infeasible" in blocking_reasons:
+    elif "baseline_fallback" in blocking_reasons:
         status_reason = "baseline_fallback_or_postsolve_infeasible"
-        result_class = "baseline_fallback" if "baseline_fallback" in blocking_reasons else "postsolve_infeasible"
+        result_class = "baseline_fallback"
+    elif "postsolve_infeasible" in blocking_reasons:
+        status_reason = "postsolve_infeasible"
+        result_class = "postsolve_infeasible"
     elif "unserved_trips_present" in blocking_reasons:
         status_reason = "unserved_trips_present"
         result_class = "postsolve_infeasible"
     else:
         status_reason = "infeasibility_reasons_present"
         result_class = "postsolve_infeasible"
+    validated_feasible = not blocking_reasons and status_upper in {"SOLVED_FEASIBLE", "OPTIMAL", "FEASIBLE"}
+    validated_no_cancellation = bool(validated_feasible and unserved == 0)
     return {
         "validated_no_cancellation": validated_no_cancellation,
         "validated_feasible": bool(validated_feasible),
@@ -4904,6 +4928,7 @@ def _run_optimization(
             feasible=canonical_feasible,
             trip_count_unserved=trip_count_unserved,
             infeasibility_reasons=result_infeasibility_reasons,
+            solver_metadata=solver_metadata,
         )
         if isinstance(_full_new_result, dict):
             _full_new_result["solution_validity"] = solution_validity
@@ -5170,12 +5195,15 @@ def _run_optimization(
                     "optimization_audit.json": optimization_audit,
                 },
             )
-        store.update_scenario(scenario_id, status="optimized")
+        is_fallback = bool(solution_validity.get("result_class") in {"baseline_fallback", "postsolve_infeasible", "postsolve_repaired"})
+        final_status = "optimized" if not is_fallback else "optimized_provisional"
+        store.update_scenario(scenario_id, status=final_status)
+        job_message = "Optimization complete." if not is_fallback else f"Optimization complete ({solution_validity.get('status_reason', 'provisional')})."
         job_store.update_job(
             job_id,
             status="completed",
             progress=100,
-            message="Optimization complete.",
+            message=job_message,
             result_key="optimization_result",
             metadata=_job_metadata(
                 scenario_id=scenario_id,

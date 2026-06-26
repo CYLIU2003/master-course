@@ -11,6 +11,7 @@ from src.optimization.common.problem import (
     PVSlot,
 )
 from .daily_weather_schema import (
+    FORECAST_TYPE_SOLCAST_PV_PROXY_V1,
     FORECAST_TYPE_SOLCAST_TYPICAL_PV_PROXY_V1,
     WeatherProxyForecast,
     weather_proxy_forecast_to_dict,
@@ -216,12 +217,15 @@ def _align_representative_capacity_factors(
     )
 
 
-def _apply_typical_pv_curve_to_problem(
+def _apply_pv_proxy_curve_to_problem(
     problem: CanonicalOptimizationProblem,
     forecast: WeatherProxyForecast,
     metadata: Dict[str, Any],
 ) -> CanonicalOptimizationProblem:
-    if forecast.forecast_type != FORECAST_TYPE_SOLCAST_TYPICAL_PV_PROXY_V1:
+    if forecast.forecast_type not in {
+        FORECAST_TYPE_SOLCAST_PV_PROXY_V1,
+        FORECAST_TYPE_SOLCAST_TYPICAL_PV_PROXY_V1,
+    }:
         return problem
     forecast_meta = dict(forecast.metadata or {})
     raw_cf = forecast_meta.get("capacity_factor_by_slot")
@@ -261,7 +265,9 @@ def _apply_typical_pv_curve_to_problem(
             pv_generation_kwh_by_slot=generation,
             capacity_factor_by_slot=aligned_cf,
             pv_case_id=(
-                f"solcast_typical_{forecast_meta.get('typical_weather_class') or 'unknown'}"
+                f"solcast_pv_proxy_{forecast_meta.get('typical_weather_class', forecast_meta.get('weather_label', 'unknown'))}"
+                if forecast.forecast_type == FORECAST_TYPE_SOLCAST_TYPICAL_PV_PROXY_V1
+                else f"solcast_pv_proxy_{forecast.service_date}"
             ),
         )
 
@@ -339,5 +345,5 @@ def apply_weather_policy_to_problem(
             "pv_marginal_charge_cost_policy": PV_MARGINAL_COST_POLICY,
         }
     )
-    pv_adjusted_problem = _apply_typical_pv_curve_to_problem(problem, forecast, metadata)
+    pv_adjusted_problem = _apply_pv_proxy_curve_to_problem(problem, forecast, metadata)
     return replace(pv_adjusted_problem, vehicles=updated_vehicles, metadata=metadata)

@@ -550,7 +550,7 @@ $$
 
 | モード | アルゴリズム | 用途 |
 |--------|-------------|------|
-| `mode_milp_only` | Gurobi MILP（厳密解） | 小〜中規模の厳密最適解 |
+| `mode_milp_only` | Gurobi MILP（`supports_exact_milp=true` / fallback なし / gap 確認済みのときのみ exact。それ以外は非厳密） | 小〜中規模の最適化試行 |
 | `mode_alns_only` | ALNS（適応型大規模近傍探索） | 大規模の近似解・高速探索 |
 | `mode_ga` | **GA prototype** | 独立した genetic search の試作実装 |
 | `mode_abc` | **ABC prototype** | 独立した bee colony search の試作実装 |
@@ -608,10 +608,9 @@ ALNS・GA・ABC は共通評価器 `src/optimization/common/evaluator.py` で O1
 | 欠便ペナルティ | ✅ 実装済み | 常時有効 |
 | CO₂ 費用 | ✅ 実装済み | `co2_price_per_kg > 0` で有効 |
 | 電池劣化費 | ✅ 実装済み | `weights.degradation > 0` で有効 |
-| 天気戦略 bias | ✅ 実装済み | `weather_strategy_objective_term_jpy_equivalent`。目的関数専用で実コストledgerには入れない |
 | PV 余剰売電 | ❌ 未実装 | 将来拡張 |
 
-MILP（`solver_adapter.py`）と ALNS/GA/ABC 評価器（`evaluator.py`）は同一条件で同一費目を計算します。EV電力費とICE燃料費は目的重みも出力KPIも分離し、`energy_cost` は旧互換の推進費合計としてのみ扱います。天気戦略 bias は BEV/ICE の割当を強制する hard constraint ではなく、`objective_value` の探索スコアだけに入る監査可能な soft term です。
+MILP（`solver_adapter.py`）と ALNS/GA/ABC 評価器（`evaluator.py`）は同一条件で同一費目を計算します。EV電力費とICE燃料費は目的重みも出力KPIも分離し、`energy_cost` は旧互換の推進費合計としてのみ扱います。weather policy は SOC 下限・帰庫後 SOC 目標・初期SOC・EV/ICE soft bias を上書きせず、PV 発電見込み（`solcast_typical_pv_proxy_v1` の代表曲線）だけを最適化入力へ渡します。EV/ICE 選択は PV・買電・燃料費・需要料金・SOC制約・車両制約から最適化が判断します。
 
 ### 3.3.1 Canonical Ledger と出力KPI
 
@@ -959,7 +958,7 @@ python catalog_update_app.py refresh gtfs-pipeline `
 - `営業所別充電器管理` の `営業所面積 [m²]` が営業所別PVの規模入力で、`simulationSettings.depotEnergyAssets` / `simulation_config.depot_energy_assets` には `depot_area_m2` と Solcast由来の容量係数・発電列が保存される
 - `depot_area_m2 <= 0` または未設定の営業所はPV無効。`pv_capacity_kw` は `depot_area_m2 * 0.35 * 0.20` から再計算される
 - `solcast_pv_proxy_v1` / `actual_date_profile` は運行日当日の実PV形状を使う検証用。通常の予報シミュレーションでは `PV/予報` タブで「代表カーブ生成」→ `solcast_typical_sunny/cloudy/rainy/auto` →「代表PVから予報JSON生成」→ weather policy 有効化の順に使う
-- `solcast_typical_pv_proxy_v1` は代表24h capacity factor曲線を時刻対応で切り出し、営業所面積由来のPV容量で再スケールする。天気クラスは BEV/ICE を禁止・強制せず、SOC policy と objective 専用の小さい strategy bias にだけ使う
+- `solcast_typical_pv_proxy_v1` は代表24h capacity factor曲線を時刻対応で切り出し、営業所面積由来のPV容量で再スケールする。天気クラスは SOC / 初期SOC / EV-ICE bias を変更せず、PV 発電見込みの差だけを最適化へ渡す
 
 > [!WARNING]
 > **`Prepare` 後に `tripCount=0`** → 「選択 route × dayType × service_date」に該当 trip なし。
