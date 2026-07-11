@@ -101,6 +101,9 @@ def build_accounting_summary(
     if not bool((metadata.get("cost_component_flags") or {}).get("vehicle_usage_cost", True)):
         vehicle_usage_cost_jpy = 0.0
     total_cost_jpy = electricity_cost_jpy + demand_cost_jpy + fuel_cost_jpy + co2_cost_jpy + battery_degradation_cost_jpy + contract_overage_cost_jpy + vehicle_usage_cost_jpy
+    solver_objective_matches_accounting_total = bool(
+        metadata.get("solver_objective_matches_accounting_total", True)
+    )
     objective_is_actual_cost = bool(metadata.get("objective_is_actual_cost", False))
     objective_value = total_cost_jpy if objective_is_actual_cost else float(metadata.get("objective_value", total_cost_jpy) or total_cost_jpy)
     solver_status = str(metadata.get("solver_status", "") or "")
@@ -213,6 +216,8 @@ def build_accounting_summary(
         "final_min_soc_ratio": final_min_soc_ratio,
         "final_mean_soc_ratio": final_mean_soc_ratio,
         "objective_is_actual_cost": objective_is_actual_cost,
+        "solver_objective_matches_accounting_total": solver_objective_matches_accounting_total,
+        "objective_semantics": str(metadata.get("objective_semantics", "single_solver_objective") or "single_solver_objective"),
         "supports_exact_milp": bool(metadata.get("supports_exact_milp", False)),
         "fallback_applied": bool(metadata.get("fallback_applied", False)),
         "is_optimization_result": is_optimization_result,
@@ -230,6 +235,7 @@ def build_accounting_summary(
             "objective_value": "solver objective including penalties and bonuses",
             "reported_total_cost_jpy": "UI/reporting value; see included terms",
             "objective_is_actual_cost": objective_is_actual_cost,
+            "solver_objective_matches_accounting_total": solver_objective_matches_accounting_total,
         },
 "mip_gap_requested_ratio": metadata.get("mip_gap_requested_ratio"),
         "mip_gap_requested_percent": metadata.get("mip_gap_requested_percent"),

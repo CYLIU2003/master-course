@@ -90,6 +90,31 @@ def test_gurobi_unavailable_penalized_mode_can_return_partial_baseline(monkeypat
     assert plan.unserved_trip_ids == ("t2",)
 
 
+def test_research_run_never_substitutes_a_baseline_when_gurobi_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(solver_adapter_module, "is_gurobi_available", lambda: False)
+    problem = _problem(
+        service_coverage_mode="strict",
+        baseline_plan=AssignmentPlan(
+            served_trip_ids=("t1", "t2"),
+            unserved_trip_ids=(),
+            metadata={"source": "dispatch_baseline"},
+        ),
+    )
+
+    outcome, plan = GurobiMILPAdapter().solve(
+        problem,
+        OptimizationConfig(phase="phase4_integrated", research_run=True),
+    )
+
+    assert outcome.solver_status == "NO_VALID_INCUMBENT"
+    assert outcome.supports_exact_milp is False
+    assert plan.served_trip_ids == ()
+    assert plan.unserved_trip_ids == ("t1", "t2")
+    assert plan.metadata["research_run"] is True
+
+
 def test_phase1_rejects_fixed_assignment_without_duties() -> None:
     problem = _problem(
         service_coverage_mode="strict",

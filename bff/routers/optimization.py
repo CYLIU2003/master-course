@@ -154,6 +154,7 @@ def _apply_timestep_min_to_scenario(scenario: Dict[str, Any], timestep_min: Opti
 
 class RunOptimizationBody(BaseModel):
     mode: str = "thesis_mode"
+    research_run: bool = False
     time_step_min: Optional[int] = None
     timestep_min: Optional[int] = None
     time_limit_seconds: int = 300
@@ -179,6 +180,7 @@ class DelayEventBody(BaseModel):
 
 class ReoptimizeBody(BaseModel):
     mode: str = "hybrid"
+    research_run: bool = False
     current_time: str
     time_step_min: Optional[int] = None
     timestep_min: Optional[int] = None
@@ -4162,6 +4164,15 @@ def _persist_canonical_graph_exports(
                 "available_vehicle_count": available_vehicle_count,
                 "objective_value": float(engine_result.objective_value or 0.0),
                 "objective_is_actual_cost": bool(kpi_summary.get("objective_is_actual_cost", False)),
+                "solver_objective_matches_accounting_total": bool(
+                    (engine_result.solver_metadata or {}).get(
+                        "solver_objective_matches_accounting_total", True
+                    )
+                ),
+                "objective_semantics": str(
+                    (engine_result.solver_metadata or {}).get("objective_semantics")
+                    or "single_solver_objective"
+                ),
                 "supports_exact_milp": bool((engine_result.solver_metadata or {}).get("supports_exact_milp", False)),
                 "fallback_applied": bool((engine_result.solver_metadata or {}).get("fallback_applied", False)),
                 "charging_source_provenance_exact": bool(
@@ -4511,6 +4522,10 @@ def _solution_validity_payload(
         blocking_reasons.append("repaired_heuristic")
     if meta.get("postsolve_modified_solution"):
         blocking_reasons.append("repaired_heuristic")
+    if bool(meta.get("research_run", False)) and not bool(
+        meta.get("research_run_accepted", False)
+    ):
+        blocking_reasons.append("research_acceptance_failed")
     if not bool(feasible):
         blocking_reasons.append("postsolve_infeasible")
     if reasons:
@@ -4545,6 +4560,9 @@ def _solution_validity_payload(
     elif "assignment_only_result" in blocking_reasons:
         status_reason = "assignment_only_no_charging_soc_validation"
         result_class = "assignment_only_result"
+    elif "research_acceptance_failed" in blocking_reasons:
+        status_reason = "research_acceptance_failed"
+        result_class = "research_invalid"
     elif "repaired_heuristic" in blocking_reasons or "postsolve_repaired" in blocking_reasons:
         status_reason = "repaired_heuristic"
         result_class = "repaired_heuristic"
@@ -4562,6 +4580,12 @@ def _solution_validity_payload(
         result_class = "postsolve_infeasible"
     validated_feasible = not blocking_reasons and status_upper in {"SOLVED_FEASIBLE", "OPTIMAL", "FEASIBLE"}
     validated_no_cancellation = bool(validated_feasible and unserved == 0)
+    research_assignment_eligible = bool(
+        str(meta.get("phase") or "") == "phase2_assignment_only"
+        and bool(meta.get("research_run", False))
+        and bool(meta.get("research_run_accepted", False))
+        and bool(meta.get("research_feasibility_eligible", False))
+    )
     return {
         "validated_no_cancellation": validated_no_cancellation,
         "validated_feasible": bool(validated_feasible),
@@ -4571,9 +4595,25 @@ def _solution_validity_payload(
         "research_kpi_eligible": bool(
             validated_feasible
             and result_class == "exact_or_validated"
-            and bool(meta.get("research_kpi_eligible", True))
+            and bool(meta.get("research_run", False))
+            and bool(meta.get("research_run_accepted", False))
+            and bool(meta.get("research_cost_kpi_eligible", False))
+        ),
+        "research_feasibility_eligible": bool(
+            validated_feasible
+            and bool(meta.get("research_run", False))
+            and bool(meta.get("research_run_accepted", False))
+            and bool(meta.get("research_feasibility_eligible", False))
+        ),
+        # Phase 2 validates vehicle-trip assignment only.  Keep it distinct
+        # from full operational/SOC feasibility so callers cannot infer that
+        # charging feasibility was evaluated.
+        "research_assignment_eligible": research_assignment_eligible,
+        "research_cost_kpi_eligible": bool(
+            meta.get("research_cost_kpi_eligible", False)
         ),
         "validation_metrics": dict(meta.get("validation_metrics") or {}),
+        "research_acceptance_checks": dict(meta.get("research_acceptance_checks") or {}),
     }
 
 
@@ -4614,6 +4654,17 @@ def _solver_settings_payload(
         "supports_exact_milp": bool(metadata.get("supports_exact_milp", False)),
         "fallback_applied": bool(metadata.get("fallback_applied", False)),
         "fallback_reason": str(metadata.get("fallback_reason") or ""),
+        "research_run": bool(metadata.get("research_run", False)),
+        "research_run_accepted": bool(metadata.get("research_run_accepted", False)),
+        "research_acceptance_checks": dict(metadata.get("research_acceptance_checks") or {}),
+        "research_feasibility_eligible": bool(metadata.get("research_feasibility_eligible", False)),
+        "research_assignment_eligible": bool(
+            str(metadata.get("phase") or "") == "phase2_assignment_only"
+            and bool(metadata.get("research_run", False))
+            and bool(metadata.get("research_run_accepted", False))
+            and bool(metadata.get("research_feasibility_eligible", False))
+        ),
+        "research_cost_kpi_eligible": bool(metadata.get("research_cost_kpi_eligible", False)),
         "source_provenance_exact": bool(metadata.get("source_provenance_exact", False)),
         "derived_source_split": bool(metadata.get("derived_source_split", False)),
         "synthetic_pv_fallback_allowed": bool(metadata.get("synthetic_pv_fallback_allowed", False)),
@@ -4644,6 +4695,7 @@ def _run_optimization(
     timestep_min: Optional[int] = None,
     enable_weather_operation_policy: Optional[bool] = None,
     weather_proxy_forecast_path: Optional[str] = None,
+    research_run: bool = False,
 ) -> None:
     try:
         solver_mode = _normalize_solver_mode(mode)
@@ -4780,6 +4832,7 @@ def _run_optimization(
                 warm_start=True,
                 thesis_mode=solver_mode in {"thesis_mode", "mode_milp_only"} or phase_token == "phase3_two_stage",
                 debug_mode=solver_mode == "debug_mode" or phase_token == "diagnostic",
+                research_run=bool(research_run),
                 allow_postsolve_repair=solver_mode == "debug_mode",
                 phase=phase_token,
                 diagnostic_mode=is_diagnostic_mode,
@@ -5426,6 +5479,17 @@ def _run_optimization(
             {
                 "optimization_result.json": optimization_result,
                 "optimization_audit.json": optimization_audit,
+                "assignment_validation_diagnostics.json": {
+                    "research_run": bool(
+                        (optimization_result.get("solver_metadata") or {}).get("research_run", False)
+                    ),
+                    "diagnostics": list(
+                        (optimization_result.get("solver_metadata") or {}).get(
+                            "assignment_validation_diagnostics", []
+                        )
+                        or []
+                    ),
+                },
             },
         )
         reporting_finalizer_result = _persist_rich_run_outputs(
@@ -5551,8 +5615,11 @@ def _run_reoptimization(
                 extra={"current_time": body.current_time},
             ),
         )
+        solver_mode = _normalize_solver_mode(mode)
+        phase_token = _phase_from_solver_mode(solver_mode)
+        is_diagnostic_mode = solver_mode in {"debug_mode", "diagnostic"}
         config = OptimizationConfig(
-            mode=_parse_optimization_mode(mode),
+            mode=_parse_optimization_mode(solver_mode),
             time_limit_sec=body.time_limit_seconds,
             mip_gap=body.mip_gap,
             random_seed=body.random_seed,
@@ -5560,6 +5627,15 @@ def _run_reoptimization(
             no_improvement_limit=body.no_improvement_limit,
             destroy_fraction=body.destroy_fraction,
             rolling_current_min=hhmm_to_min(body.current_time),
+            thesis_mode=(
+                solver_mode in {"thesis_mode", "mode_milp_only"}
+                or phase_token == "phase3_two_stage"
+            ),
+            debug_mode=is_diagnostic_mode,
+            diagnostic_mode=solver_mode == "diagnostic",
+            research_run=bool(body.research_run),
+            allow_postsolve_repair=solver_mode == "debug_mode",
+            phase=phase_token,
         )
         problem = ProblemBuilder().build_from_scenario(
             scenario,
@@ -5784,6 +5860,7 @@ def run_optimization(
             timestep_min,
             request.enableWeatherOperationPolicy,
             request.weatherProxyForecastPath,
+            request.research_run,
         ),
         job_id=job.job_id,
         scenario_id=scenario_id,

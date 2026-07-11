@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from src.dispatch.models import DispatchContext, DutyLeg, Trip, VehicleDuty
 from src.optimization.common.feasibility import FeasibilityChecker
 from src.optimization.common.problem import (
     AssignmentPlan,
@@ -10,6 +11,7 @@ from src.optimization.common.problem import (
     EnergyPriceSlot,
     OptimizationScenario,
     ProblemDepot,
+    ProblemTrip,
     ProblemVehicle,
 )
 
@@ -56,3 +58,60 @@ def test_feasible_requires_energy_contract_and_charger_metrics_clean() -> None:
     assert report.metrics["charger_concurrency_violation_count"] == 1
     assert report.metrics["bess_soc_violation_count"] > 0
     assert report.metrics["bess_terminal_soc_deviation_kwh"] > 0.0
+
+
+def test_assignment_diagnostics_report_the_exact_rejected_trip_connection() -> None:
+    previous = Trip(
+        trip_id="t1",
+        route_id="r",
+        origin="A",
+        destination="B",
+        departure_time="08:00",
+        arrival_time="08:30",
+        distance_km=5.0,
+        allowed_vehicle_types=("BEV",),
+    )
+    following = Trip(
+        trip_id="t2",
+        route_id="r",
+        origin="C",
+        destination="D",
+        departure_time="08:40",
+        arrival_time="09:10",
+        distance_km=5.0,
+        allowed_vehicle_types=("BEV",),
+    )
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(scenario_id="s-diagnostics", timestep_min=60),
+        dispatch_context=DispatchContext(
+            service_date="2026-07-11",
+            trips=[previous, following],
+            turnaround_rules={},
+            deadhead_rules={},
+            vehicle_profiles={},
+        ),
+        trips=(
+            ProblemTrip("t1", "r", "A", "B", 480, 510, 5.0, ("BEV",)),
+            ProblemTrip("t2", "r", "C", "D", 520, 550, 5.0, ("BEV",)),
+        ),
+        vehicles=(ProblemVehicle(vehicle_id="bev-1", vehicle_type="BEV", home_depot_id="A"),),
+    )
+    plan = AssignmentPlan(
+        duties=(
+            VehicleDuty(
+                duty_id="duty-1",
+                vehicle_type="BEV",
+                legs=(DutyLeg(trip=previous), DutyLeg(trip=following)),
+            ),
+        ),
+        served_trip_ids=("t1", "t2"),
+        metadata={"duty_vehicle_map": {"duty-1": "bev-1"}},
+    )
+
+    report = FeasibilityChecker().evaluate(problem, plan)
+
+    connection = next(item for item in report.diagnostics if item["kind"] == "trip_connection")
+    assert connection["vehicle_id"] == "bev-1"
+    assert connection["previous_trip_id"] == "t1"
+    assert connection["next_trip_id"] == "t2"
+    assert connection["rejection_reason_code"] == "missing_deadhead"

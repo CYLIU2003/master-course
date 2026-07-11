@@ -153,6 +153,26 @@ class GurobiMILPAdapter:
         elif bool(getattr(config, "thesis_mode", False)) or phase == "phase3_two_stage":
             return self._solve_thesis_two_stage(problem, config)
         if not is_gurobi_available():
+            if bool(getattr(config, "research_run", False)):
+                return (
+                    MILPSolverOutcome(
+                        solver_status="NO_VALID_INCUMBENT",
+                        used_backend="none",
+                        supports_exact_milp=False,
+                        fallback_reason="gurobi_unavailable",
+                    ),
+                    AssignmentPlan(
+                        duties=(),
+                        served_trip_ids=(),
+                        unserved_trip_ids=tuple(sorted(trip.trip_id for trip in problem.trips)),
+                        metadata={
+                            "source": "milp_gurobi",
+                            "status": "NO_VALID_INCUMBENT",
+                            "research_run": True,
+                            "research_kpi_eligible": False,
+                        },
+                    ),
+                )
             baseline = problem.baseline_plan or AssignmentPlan()
             service_coverage_mode = normalize_service_coverage_mode(
                 getattr(problem.scenario, "service_coverage_mode", None)
@@ -246,6 +266,9 @@ class GurobiMILPAdapter:
             getattr(problem.scenario, "service_coverage_mode", None)
             or problem.metadata.get("service_coverage_mode", "strict")
         )
+        allow_partial_service = service_coverage_mode == "penalized" or bool(
+            getattr(config, "debug_mode", False)
+        )
         allow_same_day_depot_cycles = bool(
             getattr(problem.scenario, "allow_same_day_depot_cycles", True)
         )
@@ -296,10 +319,17 @@ class GurobiMILPAdapter:
                 if not return_exists:
                     model.addConstr(var == 0)
 
-        unserved: Dict[str, Any] = {
-            trip.trip_id: model.addVar(vtype=GRB.BINARY)
-            for trip in problem.trips
-        }
+        # Strict research runs represent coverage directly as assignment
+        # equality.  Do not create fixed-zero ``unserved`` variables: they
+        # obscure the mathematical contract and bloat the integrated model.
+        unserved: Dict[str, Any] = (
+            {
+                trip.trip_id: model.addVar(vtype=GRB.BINARY)
+                for trip in problem.trips
+            }
+            if allow_partial_service
+            else {}
+        )
 
         used_vehicle: Dict[str, Any] = {
             vehicle.vehicle_id: model.addVar(vtype=GRB.BINARY)
@@ -326,16 +356,14 @@ class GurobiMILPAdapter:
             upper_buffer_ratio = 0.9
         buffer_topup_enabled = upper_buffer_ratio > 0.0
 
-        # Each trip must be assigned exactly once or marked as unserved.
+        # Strict coverage is a hard equality; diagnostics may relax it with an
+        # explicit unserved decision variable.
         for trip in problem.trips:
             assign_terms = [y[(vehicle_id, trip.trip_id)] for vehicle_id in assignment_vehicle_ids_by_trip.get(trip.trip_id, [])]
-            model.addConstr(gp.quicksum(assign_terms) + unserved[trip.trip_id] == 1)
-
-        allow_partial_service = service_coverage_mode == "penalized" or bool(getattr(config, "debug_mode", False))
-        hard_no_unserved_constraints: List[Any] = []
-        if not allow_partial_service:
-            for trip in problem.trips:
-                hard_no_unserved_constraints.append(model.addConstr(unserved[trip.trip_id] == 0))
+            if allow_partial_service:
+                model.addConstr(gp.quicksum(assign_terms) + unserved[trip.trip_id] == 1)
+            else:
+                model.addConstr(gp.quicksum(assign_terms) == 1)
 
         # Vehicle-use linkage.
         for (vehicle_id, trip_id), var in y.items():
@@ -1832,8 +1860,8 @@ class GurobiMILPAdapter:
                     continue
                 var.Start = float(refuel_l)
 
-        coverage_objective = gp.quicksum(unserved[trip.trip_id] for trip in problem.trips)
         if allow_partial_service:
+            coverage_objective = gp.quicksum(unserved[trip.trip_id] for trip in problem.trips)
             model.ModelSense = GRB.MINIMIZE
             model.setObjectiveN(coverage_objective, index=0, priority=2, name="coverage")
             model.setObjectiveN(objective, index=1, priority=1, name="secondary_cost")
@@ -1934,7 +1962,7 @@ class GurobiMILPAdapter:
         solver_status = status_map.get(model.Status, f"status_{model.Status}")
         runtime_sec = float(getattr(model, "Runtime", 0.0) or 0.0)
         has_feasible_incumbent = bool(model.SolCount > 0)
-        incumbent_unserved_count = None
+        incumbent_unserved_count = 0 if has_feasible_incumbent and not allow_partial_service else None
         if has_feasible_incumbent:
             try:
                 incumbent_unserved_count = int(
@@ -1989,6 +2017,7 @@ class GurobiMILPAdapter:
         if (
             model.SolCount > 0
             and relaxed_partial_service
+            and not bool(getattr(config, "research_run", False))
             and unserved_penalty_weight > 0.0
             and problem.baseline_plan is not None
             and len(problem.baseline_plan.served_trip_ids) > 0
@@ -2006,7 +2035,7 @@ class GurobiMILPAdapter:
                     return baseline_fallback
 
         if model.SolCount <= 0:
-            if model.Status == GRB.TIME_LIMIT:
+            if model.Status == GRB.TIME_LIMIT and not bool(getattr(config, "research_run", False)):
                 baseline_fallback = self._baseline_fallback(
                     problem,
                     fallback_status="time_limit_baseline",
@@ -2016,6 +2045,14 @@ class GurobiMILPAdapter:
                 )
                 if baseline_fallback is not None:
                     return baseline_fallback
+            reported_status = solver_status
+            if bool(getattr(config, "research_run", False)):
+                if model.Status == GRB.TIME_LIMIT:
+                    reported_status = "TIME_LIMIT_WITHOUT_VALID_SOLUTION"
+                elif solver_status in {"infeasible", "inf_or_unbd"}:
+                    reported_status = "INFEASIBLE"
+                else:
+                    reported_status = "NO_VALID_INCUMBENT"
             empty = AssignmentPlan(
                 duties=(),
                 charging_slots=(),
@@ -2023,11 +2060,12 @@ class GurobiMILPAdapter:
                 unserved_trip_ids=tuple(sorted(trip.trip_id for trip in problem.trips)),
                 metadata={
                     "source": "milp_gurobi",
-                    "status": solver_status,
+                    "status": reported_status,
                     "auto_relaxed_allow_partial_service": bool(relaxed_partial_service),
                     "service_coverage_mode": service_coverage_mode,
                     "allow_partial_service": bool(allow_partial_service),
                     "debug_mode": bool(getattr(config, "debug_mode", False)),
+                    "research_run": bool(getattr(config, "research_run", False)),
                     "result_class": "debug_result" if bool(getattr(config, "debug_mode", False)) else "optimization_result",
                     "research_kpi_eligible": not bool(getattr(config, "debug_mode", False)),
                     "strict_coverage_enforced": service_coverage_mode == "strict",
@@ -2041,7 +2079,7 @@ class GurobiMILPAdapter:
             )
             return (
                 MILPSolverOutcome(
-                    solver_status=solver_status,
+                    solver_status=reported_status,
                     used_backend=self.backend_name,
                     supports_exact_milp=True,
                     **common_outcome_kwargs,
@@ -2409,6 +2447,7 @@ class GurobiMILPAdapter:
             stage1_status="phase1_fixed_assignment",
             stage1_gap=None,
             stage1_bound=None,
+            stage1_objective_value=None,
             stage1_runtime_sec=0.0,
             slots_per_day=slots_per_day,
         )
@@ -2560,6 +2599,11 @@ class GurobiMILPAdapter:
             meta["soc_constraints_evaluated"] = False
             meta["supports_assignment_milp"] = True
             meta["research_kpi_eligible"] = False
+        elif phase == "phase1_charging_only":
+            meta["optimization_structure"] = "charging_only"
+            meta["charging_dispatch_evaluated"] = True
+            meta["soc_constraints_evaluated"] = True
+            meta["research_kpi_eligible"] = False
         elif phase == "diagnostic":
             meta["research_kpi_eligible"] = False
         else:
@@ -2602,7 +2646,9 @@ class GurobiMILPAdapter:
                 "reason": reason,
                 "phase": normalize_phase(getattr(config, "phase", "")) if str(getattr(config, "phase", "") or "").strip() else "",
                 "result_class": "postsolve_infeasible",
+                "research_run": bool(getattr(config, "research_run", False)),
                 "research_kpi_eligible": False,
+                "fallback_applied": False,
                 "phase_contract_error": reason,
             },
         )
@@ -2624,6 +2670,13 @@ class GurobiMILPAdapter:
         *,
         phase_label: str,
     ) -> Tuple[MILPSolverOutcome, AssignmentPlan]:
+        if bool(getattr(config, "research_run", False)):
+            return self._empty_unserved_outcome(
+                problem,
+                config,
+                reason=f"gurobi_unavailable_{phase_label}",
+                status="NO_VALID_INCUMBENT",
+            )
         baseline = fixed_assignment or problem.baseline_plan or AssignmentPlan()
         baseline_metadata = dict(baseline.metadata or {})
         baseline_metadata.update(
@@ -2653,9 +2706,10 @@ class GurobiMILPAdapter:
         diagnostic_mode: bool = False,
     ) -> Tuple[MILPSolverOutcome, AssignmentPlan]:
         if not is_gurobi_available():
+            status = "NO_VALID_INCUMBENT" if bool(getattr(config, "research_run", False)) else "gurobi_unavailable"
             return (
                 MILPSolverOutcome(
-                    solver_status="gurobi_unavailable",
+                    solver_status=status,
                     used_backend="none",
                     supports_exact_milp=False,
                     fallback_reason="gurobi_unavailable",
@@ -2666,7 +2720,7 @@ class GurobiMILPAdapter:
                     unserved_trip_ids=tuple(sorted(trip.trip_id for trip in problem.trips)),
                     metadata={
                         "source": "milp_gurobi_two_stage",
-                        "status": "gurobi_unavailable",
+                        "status": status,
                         "thesis_mode": True,
                         "research_kpi_eligible": False,
                     },
@@ -2893,6 +2947,11 @@ class GurobiMILPAdapter:
         stage1_status = self._status_name(GRB, stage1.Status)
         stage1_gap = self._model_gap(stage1)
         stage1_bound = self._model_bound(stage1)
+        stage1_objective_value = (
+            float(getattr(stage1, "ObjVal", 0.0) or 0.0)
+            if stage1.SolCount > 0
+            else None
+        )
         if stage1.SolCount <= 0:
             empty = AssignmentPlan(
                 duties=(),
@@ -2975,6 +3034,7 @@ class GurobiMILPAdapter:
             stage1_status=stage1_status,
             stage1_gap=stage1_gap,
             stage1_bound=stage1_bound,
+            stage1_objective_value=stage1_objective_value,
             stage1_runtime_sec=float(getattr(stage1, "Runtime", 0.0) or 0.0),
             slots_per_day=slots_per_day,
         )
@@ -3014,6 +3074,7 @@ class GurobiMILPAdapter:
         stage1_status: str,
         stage1_gap: Optional[float],
         stage1_bound: Optional[float],
+        stage1_objective_value: Optional[float],
         stage1_runtime_sec: float,
         slots_per_day: int,
     ) -> Tuple[MILPSolverOutcome, AssignmentPlan]:
@@ -3035,7 +3096,11 @@ class GurobiMILPAdapter:
                 "stage2_solver_status": "not_required",
                 "stage2_reason": "no_ev_charging_dispatch_required",
                 "stage1_mip_gap": stage1_gap,
+                "stage1_objective_value": stage1_objective_value,
                 "stage2_mip_gap": None,
+                "stage2_objective_value": None,
+                "solver_objective_matches_accounting_total": False,
+                "objective_semantics": "fixed_assignment_energy_dispatch_not_global_total_cost",
                 "source_provenance_exact": True,
                 "vehicle_source_provenance_exact": True,
                 "derived_source_split": False,
@@ -3364,7 +3429,11 @@ class GurobiMILPAdapter:
                 **dict(stage1_plan.metadata or {}),
                 "stage2_solver_status": stage2_status,
                 "stage1_mip_gap": stage1_gap,
+                "stage1_objective_value": stage1_objective_value,
                 "stage2_mip_gap": stage2_gap,
+                "stage2_objective_value": None,
+                "solver_objective_matches_accounting_total": False,
+                "objective_semantics": "two_stage_lexicographic_not_global_total_cost",
                 "stage1_best_bound": stage1_bound,
                 "stage2_best_bound": stage2_bound,
                 "research_kpi_eligible": False,
@@ -3492,16 +3561,25 @@ class GurobiMILPAdapter:
             "stage2_mip_gap": stage2_gap,
             "stage1_best_bound": stage1_bound,
             "stage2_best_bound": stage2_bound,
-            "objective_value": float(getattr(stage2, "ObjVal", 0.0) or 0.0),
+            "stage1_objective_value": stage1_objective_value,
+            "stage2_objective_value": float(getattr(stage2, "ObjVal", 0.0) or 0.0),
+            "solver_objective_matches_accounting_total": False,
+            "objective_semantics": (
+                "two_stage_lexicographic_not_global_total_cost"
+                if stage1_status != "phase1_fixed_assignment"
+                else "fixed_assignment_energy_dispatch_not_global_total_cost"
+            ),
             "source_provenance_exact": True,
             "vehicle_source_provenance_exact": True,
             "vehicle_source_allocation_policy": "stage2_vehicle_source_variables_tied_to_fixed_stage1_schedule",
             "derived_source_split": False,
             "research_kpi_eligible": True,
             "postsolve_repair_allowed": False,
-            "supports_integrated_exact_milp": False,
-            "supports_two_stage_milp": True,
-            "two_stage_note": "Stage 1 optimizes vehicle scheduling; Stage 2 optimizes charging/PV/BESS dispatch with Stage 1 EV operation fixed.",
+                "supports_integrated_exact_milp": False,
+                "supports_two_stage_milp": True,
+                "charging_dispatch_evaluated": True,
+                "soc_constraints_evaluated": True,
+                "two_stage_note": "Stage 1 optimizes vehicle scheduling; Stage 2 optimizes charging/PV/BESS dispatch with Stage 1 EV operation fixed.",
             "bess_soc_start_kwh_by_depot_slot": bess_soc_start,
             "bess_soc_end_kwh_by_depot_slot": bess_soc_end or bess_soc,
             "canonical_source_flow_context": {

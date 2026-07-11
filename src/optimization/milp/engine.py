@@ -73,10 +73,17 @@ class MILPOptimizer:
         )
         service_coverage_mode = str(getattr(problem.scenario, "service_coverage_mode", "strict") or "strict")
         allow_partial_service = service_coverage_mode == "penalized"
-        is_baseline_fallback = outcome.solver_status in {
-            "BASELINE_FALLBACK",
-            "PARTIAL_BASELINE_FALLBACK",
-        }
+        # A phase helper can return a baseline while retaining a neutral solver
+        # status such as ``gurobi_unavailable``.  Its plan metadata is the
+        # authoritative provenance in that case.  Do not use fallback_reason
+        # alone: research-mode no-incumbent failures carry a reason but never
+        # substitute a baseline plan.
+        is_baseline_fallback = bool(
+            "fallback" in str(outcome.solver_status or "").lower()
+            or "baseline" in str(outcome.solver_status or "").lower()
+            or str(plan_metadata.get("result_class") or "") == "baseline_fallback"
+            or bool(plan_metadata.get("fallback_applied", False))
+        )
         final_solver_status = "debug_result" if bool(getattr(config, "debug_mode", False)) else outcome.solver_status
         return OptimizationEngineResult(
             mode=OptimizationMode.MILP,
@@ -97,6 +104,19 @@ class MILPOptimizer:
                 "stage2_solver_status": (plan.metadata or {}).get("stage2_solver_status"),
                 "stage1_mip_gap": (plan.metadata or {}).get("stage1_mip_gap"),
                 "stage2_mip_gap": (plan.metadata or {}).get("stage2_mip_gap"),
+                "stage1_objective_value": (plan.metadata or {}).get("stage1_objective_value"),
+                "stage2_objective_value": (plan.metadata or {}).get("stage2_objective_value"),
+                "solver_objective_matches_accounting_total": bool(
+                    (plan.metadata or {}).get(
+                        "solver_objective_matches_accounting_total",
+                        problem.metadata.get("solver_objective_matches_accounting_total", True),
+                    )
+                ),
+                "objective_semantics": str(
+                    (plan.metadata or {}).get("objective_semantics")
+                    or problem.metadata.get("objective_semantics")
+                    or "single_solver_objective"
+                ),
                 "phase": phase,
                 "true_solver_family": "milp",
                 "independent_implementation": True,
@@ -106,6 +126,7 @@ class MILPOptimizer:
                 "service_coverage_mode": service_coverage_mode,
                 "thesis_mode": bool(getattr(config, "thesis_mode", False)),
                 "debug_mode": bool(getattr(config, "debug_mode", False)) or result_class == "debug_result",
+                "research_run": bool(getattr(config, "research_run", False)),
                 "diagnostic_mode": diagnostic_mode,
                 "result_class": result_class,
                 "research_kpi_eligible": research_kpi_eligible,
@@ -113,6 +134,10 @@ class MILPOptimizer:
                 "soc_constraints_evaluated": plan_metadata.get("soc_constraints_evaluated"),
                 "supports_assignment_milp": bool(plan_metadata.get("supports_assignment_milp", False)),
                 "binding_constraint_report": binding_constraint_report,
+                "assignment_validation_diagnostics": [
+                    dict(item)
+                    for item in tuple(getattr(report, "diagnostics", ()) or ())
+                ],
                 "allow_partial_service": allow_partial_service,
                 "strict_coverage_enforced": service_coverage_mode == "strict",
                 "same_day_depot_cycles_enabled": allow_same_day_depot_cycles,
@@ -191,7 +216,7 @@ class MILPOptimizer:
                 "presolve_reduction_summary": dict(outcome.presolve_reduction_summary or {}),
                 "iis_generated": outcome.iis_generated,
                 "fallback_reason": outcome.fallback_reason,
-                "fallback_applied": bool(outcome.fallback_reason or is_baseline_fallback),
+                "fallback_applied": bool(is_baseline_fallback),
                 "objective_mode": problem.scenario.objective_mode,
                 "objective_weights": {
                     "electricity_cost": float(problem.objective_weights.energy),
@@ -228,7 +253,7 @@ class MILPOptimizer:
                     "avg_exact_repair_sec": 0.0,
                     "feasible_candidate_ratio": 1.0 if outcome.has_feasible_incumbent else 0.0,
                     "rejected_candidate_ratio": 0.0 if outcome.has_feasible_incumbent else 1.0,
-                    "fallback_count": 1 if outcome.fallback_reason or is_baseline_fallback else 0,
+                    "fallback_count": 1 if is_baseline_fallback else 0,
                 },
             },
         )

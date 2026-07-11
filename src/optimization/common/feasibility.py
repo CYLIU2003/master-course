@@ -44,6 +44,7 @@ class FeasibilityReport:
     duplicate_trip_ids: tuple[str, ...] = ()
     validation: Dict[str, ValidationResult] = field(default_factory=dict)
     metrics: Dict[str, Any] = field(default_factory=dict)
+    diagnostics: tuple[Dict[str, Any], ...] = ()
 
 
 class FeasibilityChecker:
@@ -118,6 +119,11 @@ class FeasibilityChecker:
             soc_errors=soc_errors,
         )
         errors.extend(self._metric_errors(metrics))
+        diagnostics = self._build_assignment_diagnostics(
+            problem,
+            plan,
+            uncovered_trip_ids=uncovered,
+        )
 
         # Unserved trips are only soft when partial service is explicitly allowed.
         feasible = not errors and self._metrics_are_clean(metrics)
@@ -130,7 +136,134 @@ class FeasibilityChecker:
             duplicate_trip_ids=tuple(sorted(set(duplicates))),
             validation=validation,
             metrics=metrics,
+            diagnostics=diagnostics,
         )
+
+    def _build_assignment_diagnostics(
+        self,
+        problem: CanonicalOptimizationProblem,
+        plan: AssignmentPlan,
+        *,
+        uncovered_trip_ids: List[str],
+    ) -> tuple[Dict[str, Any], ...]:
+        """Return machine-readable reasons a solver candidate fails dispatch checks.
+
+        This uses the same ``FeasibilityEngine.can_connect`` call as graph/arc
+        generation and duty validation.  It is intentionally a report only: a
+        research run must reject an invalid incumbent instead of repairing it.
+        """
+        diagnostics: List[Dict[str, Any]] = []
+        duty_vehicle_map = plan.duty_vehicle_map()
+        vehicle_by_id = {str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles}
+
+        for trip_id in sorted(set(uncovered_trip_ids)):
+            diagnostics.append(
+                {
+                    "kind": "uncovered_trip",
+                    "trip_id": str(trip_id),
+                    "vehicle_id": None,
+                    "previous_trip_id": None,
+                    "next_trip_id": None,
+                    "rejection_reason": "trip_not_present_in_exported_vehicle_duties",
+                }
+            )
+
+        for duty in plan.duties:
+            vehicle_id = str(duty_vehicle_map.get(duty.duty_id) or duty.duty_id)
+            vehicle = vehicle_by_id.get(vehicle_id)
+            home_depot_id = str(getattr(vehicle, "home_depot_id", "") or "")
+            for previous_leg, next_leg in zip(duty.legs, duty.legs[1:]):
+                result = self._connection_engine.can_connect(
+                    previous_leg.trip,
+                    next_leg.trip,
+                    problem.dispatch_context,
+                    duty.vehicle_type,
+                )
+                if result.feasible:
+                    continue
+                diagnostics.append(
+                    {
+                        "kind": "trip_connection",
+                        "vehicle_id": vehicle_id,
+                        "home_depot_id": home_depot_id,
+                        "duty_id": str(duty.duty_id),
+                        "previous_trip_id": str(previous_leg.trip.trip_id),
+                        "next_trip_id": str(next_leg.trip.trip_id),
+                        "deadhead_time_min": int(result.deadhead_time_min or 0),
+                        "turnaround_time_min": int(result.turnaround_time_min or 0),
+                        "slack_min": result.slack_min,
+                        "rejection_reason_code": str(result.reason_code),
+                        "rejection_reason": str(result.reason),
+                    }
+                )
+
+            if duty.legs and vehicle is not None:
+                startup = evaluate_startup_feasibility(
+                    duty.legs[0].trip,
+                    problem.dispatch_context,
+                    home_depot_id,
+                )
+                if not startup.feasible:
+                    diagnostics.append(
+                        {
+                            "kind": "startup",
+                            "vehicle_id": vehicle_id,
+                            "home_depot_id": home_depot_id,
+                            "duty_id": str(duty.duty_id),
+                            "previous_trip_id": None,
+                            "next_trip_id": str(duty.legs[0].trip.trip_id),
+                            "deadhead_time_min": int(startup.deadhead_time_min or 0),
+                            "turnaround_time_min": int(startup.turnaround_time_min or 0),
+                            "slack_min": startup.slack_min,
+                            "rejection_reason_code": str(startup.reason_code),
+                            "rejection_reason": str(startup.reason),
+                        }
+                    )
+
+        fixed_route_band_mode = bool((problem.metadata or {}).get("fixed_route_band_mode", False))
+        allow_same_day_depot_cycles = bool(
+            getattr(problem.scenario, "allow_same_day_depot_cycles", True)
+        )
+        for vehicle_id, duties in plan.duties_by_vehicle().items():
+            ordered = sorted(
+                (duty for duty in duties if duty.legs),
+                key=lambda duty: (
+                    int(duty.legs[0].trip.departure_min),
+                    int(duty.legs[-1].trip.arrival_min),
+                    str(duty.duty_id),
+                ),
+            )
+            vehicle = vehicle_by_id.get(str(vehicle_id))
+            home_depot_id = str(getattr(vehicle, "home_depot_id", "") or "")
+            for previous_duty, next_duty in zip(ordered, ordered[1:]):
+                transition = fragment_transition_diagnostic(
+                    previous_duty,
+                    next_duty,
+                    home_depot_id=home_depot_id,
+                    dispatch_context=problem.dispatch_context,
+                    fixed_route_band_mode=fixed_route_band_mode,
+                    allow_same_day_depot_cycles=allow_same_day_depot_cycles,
+                )
+                if transition.feasible:
+                    continue
+                diagnostics.append(
+                    {
+                        "kind": "fragment_transition",
+                        "vehicle_id": str(vehicle_id),
+                        "home_depot_id": home_depot_id,
+                        "duty_id": str(next_duty.duty_id),
+                        "previous_duty_id": str(previous_duty.duty_id),
+                        "previous_trip_id": str(previous_duty.legs[-1].trip.trip_id),
+                        "next_trip_id": str(next_duty.legs[0].trip.trip_id),
+                        "rejection_reason_code": str(transition.reason_code),
+                        "rejection_reason": (
+                            "Fragment transition rejected by the shared "
+                            f"depot/direct-connectivity rule: {transition.reason_code}"
+                        ),
+                    }
+                )
+
+        return tuple(diagnostics)
 
     def _build_validation_metrics(
         self,

@@ -320,6 +320,7 @@ class OptimizationConfig:
     worst_trip_scoring: str = "marginal_cost"
     thesis_mode: bool = False
     debug_mode: bool = False
+    research_run: bool = False
     allow_postsolve_repair: bool = True
     phase: str = ""
     diagnostic_mode: bool = False

@@ -13,6 +13,9 @@ from src.optimization.common.problem import (
     OptimizationConfig,
     OptimizationEngineResult,
     OptimizationMode,
+    PHASE_ALIASES,
+    VALID_PHASES,
+    normalize_phase,
 )
 from src.optimization.common.benchmarking import solver_benchmark_eligibility
 from src.optimization.common.strict_precheck import (
@@ -593,6 +596,7 @@ class OptimizationEngine:
         problem: CanonicalOptimizationProblem,
         config: OptimizationConfig,
     ) -> OptimizationEngineResult:
+        problem, config = self._apply_phase_contract(problem, config)
         precheck = evaluate_strict_coverage_precheck(problem)
         if precheck.infeasible and not bool(getattr(config, "debug_mode", False)):
             result = self._strict_precheck_infeasible_result(problem, config, precheck)
@@ -610,6 +614,104 @@ class OptimizationEngine:
             result = self._hybrid.solve(problem, config)
         return self._finalize_result(problem, result, config)
 
+    @staticmethod
+    def _apply_phase_contract(
+        problem: CanonicalOptimizationProblem,
+        config: OptimizationConfig,
+    ) -> tuple[CanonicalOptimizationProblem, OptimizationConfig]:
+        """Make public phase safety rules hold for every engine caller.
+
+        BFF routing is only one entry point: rolling re-optimization and scripts
+        call this engine directly.  Explicit phase tokens therefore own their
+        no-repair/debug semantics here instead of relying on a caller to set
+        compatible flags.
+        """
+        raw_phase = str(getattr(config, "phase", "") or "").strip().lower()
+        research_run = bool(getattr(config, "research_run", False))
+        phase = ""
+        phase_contract_error = ""
+        if raw_phase:
+            if raw_phase not in VALID_PHASES and raw_phase not in PHASE_ALIASES:
+                if not research_run:
+                    return problem, config
+                phase_contract_error = f"unrecognized_research_phase:{raw_phase}"
+            else:
+                phase = normalize_phase(raw_phase)
+        elif not research_run:
+            return problem, config
+
+        is_diagnostic = phase == "diagnostic"
+        is_two_stage = phase == "phase3_two_stage"
+        config = replace(
+            config,
+            phase=phase,
+            thesis_mode=bool(getattr(config, "thesis_mode", False) or is_two_stage),
+            debug_mode=bool(getattr(config, "debug_mode", False) or is_diagnostic),
+            diagnostic_mode=bool(getattr(config, "diagnostic_mode", False) or is_diagnostic),
+            # A research candidate must be the solver decision trace itself.
+            allow_postsolve_repair=False if research_run or phase else bool(
+                getattr(config, "allow_postsolve_repair", True)
+            ),
+        )
+        metadata = dict(problem.metadata or {})
+        metadata.update(
+            {
+                "phase": phase or str(metadata.get("phase") or ""),
+                "thesis_mode": bool(getattr(config, "thesis_mode", False)),
+                "debug_mode": bool(getattr(config, "debug_mode", False)),
+                "research_run": research_run,
+                "postsolve_repair_allowed": bool(getattr(config, "allow_postsolve_repair", True)),
+            }
+        )
+        if phase_contract_error:
+            metadata["research_phase_contract_error"] = phase_contract_error
+        if research_run:
+            # This is a policy reward, not an operating cost.  It must never
+            # influence an experimental run that is described as cost-based.
+            # The integrated MILP reads this weight directly, so clearing it
+            # here protects direct engine callers as well as the BFF path.
+            problem = replace(
+                problem,
+                objective_weights=replace(
+                    problem.objective_weights,
+                    return_leg_bonus=0.0,
+                ),
+            )
+            metadata.update(
+                {
+                    "research_objective_contract": "accounting_cost_terms_only",
+                    "return_leg_bonus_disabled_for_research": True,
+                    # A research run may not inherit a user-selected
+                    # penalized-coverage relaxation.  Coverage is a physical
+                    # feasibility condition, not a term to trade for cost.
+                    "service_coverage_mode": "strict",
+                    "research_forced_strict_coverage": True,
+                    # The present integrated MILP still has internal charging
+                    # priorities/penalties whose equality to the accounting
+                    # ledger has not been proven.  A research run must be
+                    # conservative: it can establish feasibility conditions,
+                    # but cannot publish a global-cost-optimality claim until
+                    # that objective contract is implemented and audited.
+                    "solver_objective_matches_accounting_total": False,
+                    "objective_semantics": "research_feasibility_not_yet_verified_global_accounting_cost",
+                }
+            )
+            problem = replace(
+                problem,
+                scenario=replace(problem.scenario, service_coverage_mode="strict"),
+            )
+        if is_two_stage:
+            # A two-stage decomposition has two solver objectives.  Its
+            # accounting total is a KPI, not a globally minimized scalar cost.
+            metadata.update(
+                {
+                    "objective_actual_cost_mode": True,
+                    "solver_objective_matches_accounting_total": False,
+                    "objective_semantics": "two_stage_lexicographic_not_global_total_cost",
+                }
+            )
+        return replace(problem, metadata=metadata), config
+
     def _strict_precheck_infeasible_result(
         self,
         problem: CanonicalOptimizationProblem,
@@ -618,11 +720,18 @@ class OptimizationEngine:
     ) -> OptimizationEngineResult:
         mode = config.mode
         display_name, maturity, true_family = self._solver_identity(mode)
-        plan = problem.baseline_plan or AssignmentPlan(
-            served_trip_ids=(),
-            unserved_trip_ids=tuple(sorted(problem.eligible_trip_ids())),
-            metadata={"source": "strict_coverage_precheck"},
-        )
+        if bool(getattr(config, "research_run", False)):
+            plan = AssignmentPlan(
+                served_trip_ids=(),
+                unserved_trip_ids=tuple(sorted(problem.eligible_trip_ids())),
+                metadata={"source": "strict_coverage_precheck", "research_run": True},
+            )
+        else:
+            plan = problem.baseline_plan or AssignmentPlan(
+                served_trip_ids=(),
+                unserved_trip_ids=tuple(sorted(problem.eligible_trip_ids())),
+                metadata={"source": "strict_coverage_precheck"},
+            )
         profile = {
             "total_wall_clock_sec": 0.0,
             "first_feasible_sec": None,
@@ -650,6 +759,7 @@ class OptimizationEngine:
                 solver_display_name=display_name,
             ),
             "candidate_generation_mode": "strict_coverage_precheck",
+            "research_run": bool(getattr(config, "research_run", False)),
             "evaluation_mode": problem.scenario.objective_mode,
             "objective_mode": problem.scenario.objective_mode,
             "service_coverage_mode": problem.scenario.service_coverage_mode,
@@ -797,6 +907,9 @@ class OptimizationEngine:
         )
         solver_metadata["postsolve_feasible"] = bool(report.feasible)
         solver_metadata["validation_metrics"] = dict(getattr(report, "metrics", {}) or {})
+        solver_metadata["assignment_validation_diagnostics"] = [
+            dict(item) for item in tuple(getattr(report, "diagnostics", ()) or ())
+        ]
         solver_metadata["postsolve_objective_value"] = float(
             costs.get("objective_value", result.objective_value)
         )
@@ -872,6 +985,118 @@ class OptimizationEngine:
             solver_metadata["termination_reason"] = "postsolve_repaired_heuristic"
         elif postsolve_modified_solution:
             solver_metadata["research_kpi_eligible"] = False
+
+        if bool(getattr(config, "research_run", False)):
+            phase = str(solver_metadata.get("phase") or getattr(config, "phase", "") or "")
+            assignment_only = phase == "phase2_assignment_only"
+            charging_only = phase == "phase1_charging_only"
+            two_stage = phase == "phase3_two_stage" or bool(
+                solver_metadata.get("supports_two_stage_milp", False)
+            )
+            acceptance_checks = {
+                "recognized_research_phase": phase in {
+                    "phase1_charging_only",
+                    "phase2_assignment_only",
+                    "phase3_two_stage",
+                    "phase4_integrated",
+                },
+                "no_fallback": not bool(solver_metadata.get("fallback_applied", False)),
+                "no_postsolve_modification": not bool(postsolve_modified_solution),
+                "all_trips_served": len(plan.unserved_trip_ids) == 0,
+                "postsolve_feasible": bool(report.feasible),
+                "not_diagnostic_or_debug": not bool(
+                    getattr(config, "debug_mode", False)
+                    or getattr(config, "diagnostic_mode", False)
+                    or phase == "diagnostic"
+                ),
+            }
+            if assignment_only:
+                acceptance_checks["assignment_milp_evaluated"] = bool(
+                    solver_metadata.get("supports_assignment_milp", False)
+                )
+            elif charging_only:
+                acceptance_checks["charging_dispatch_evaluated"] = bool(
+                    solver_metadata.get("charging_dispatch_evaluated", False)
+                )
+                acceptance_checks["soc_constraints_evaluated"] = bool(
+                    solver_metadata.get("soc_constraints_evaluated", False)
+                )
+                acceptance_checks["exact_milp_backend"] = bool(
+                    solver_metadata.get("supports_exact_milp", False)
+                )
+                acceptance_checks["source_provenance_exact"] = bool(
+                    solver_metadata.get("source_provenance_exact", False)
+                )
+            elif two_stage:
+                # Phase 3 is the thesis' feasibility/constraint experiment:
+                # the two exact stages produce a validated decision trace, but
+                # do not minimize a single global accounting-cost scalar.
+                acceptance_checks["two_stage_milp_evaluated"] = bool(
+                    solver_metadata.get("supports_two_stage_milp", False)
+                )
+                acceptance_checks["exact_milp_backend"] = bool(
+                    solver_metadata.get("supports_exact_milp", False)
+                )
+                acceptance_checks["source_provenance_exact"] = bool(
+                    solver_metadata.get("source_provenance_exact", False)
+                )
+            else:
+                # Integrated Phase 4 is an exact formulation of the current
+                # discrete feasibility model.  Its accounting-cost equivalence
+                # is intentionally a separate, not-yet-verified contract.
+                acceptance_checks["integrated_milp_evaluated"] = bool(
+                    solver_metadata.get("supports_integrated_exact_milp", False)
+                )
+                acceptance_checks["exact_milp_backend"] = bool(
+                    solver_metadata.get("supports_exact_milp", False)
+                )
+                acceptance_checks["source_provenance_exact"] = bool(
+                    solver_metadata.get("source_provenance_exact", False)
+                )
+            failed_checks = tuple(
+                name for name, passed in acceptance_checks.items() if not bool(passed)
+            )
+            accepted = not failed_checks
+            solver_metadata["research_run"] = True
+            solver_metadata["research_acceptance_checks"] = acceptance_checks
+            solver_metadata["research_run_accepted"] = accepted
+            solver_metadata["research_feasibility_eligible"] = accepted
+            solver_metadata["research_cost_kpi_eligible"] = bool(
+                accepted
+                and phase == "phase4_integrated"
+                and not assignment_only
+                and not charging_only
+                and not two_stage
+                and bool(
+                    solver_metadata.get("solver_objective_matches_accounting_total", False)
+                )
+                and bool(costs.get("objective_is_actual_cost", False))
+            )
+            # Backward-compatible field: it has always been consumed by the
+            # BFF as the permission to publish aggregate research KPIs.
+            solver_metadata["research_kpi_eligible"] = bool(
+                solver_metadata["research_cost_kpi_eligible"]
+            )
+            if not accepted:
+                warnings.append(
+                    "Research-run acceptance failed: " + ", ".join(failed_checks)
+                )
+                status = str(final_solver_status or "").strip().lower()
+                if status in {"infeasible", "solved_infeasible", "inf_or_unbd"}:
+                    final_solver_status = "INFEASIBLE"
+                elif status in {"time_limit", "suboptimal"} and not bool(
+                    solver_metadata.get("has_feasible_incumbent", False)
+                ):
+                    final_solver_status = "TIME_LIMIT_WITHOUT_VALID_SOLUTION"
+                else:
+                    final_solver_status = "NO_VALID_INCUMBENT"
+                solver_metadata["result_class"] = "research_invalid"
+                solver_metadata["termination_reason"] = "research_acceptance_failed"
+            elif not bool(solver_metadata["research_cost_kpi_eligible"]):
+                warnings.append(
+                    "Research run accepted for feasibility/constraint analysis; "
+                    "it is not a global total-cost optimization result."
+                )
         warnings = tuple(dict.fromkeys(str(item) for item in warnings if str(item).strip()))
 
         return replace(

@@ -100,6 +100,7 @@ def test_milp_optimizer_avoids_full_model_build_for_metadata(monkeypatch) -> Non
 
     assert result.solver_status == "optimal"
     assert result.solver_metadata["model_stats"]["variables"]["assignment"] == 1
+    assert result.solver_metadata["solver_objective_matches_accounting_total"] is True
 
 
 def test_milp_optimizer_propagates_phase_metadata(monkeypatch) -> None:
@@ -183,6 +184,7 @@ def test_milp_optimizer_propagates_phase_metadata(monkeypatch) -> None:
                 reserve_soc=30.0,
             ),
         ),
+        metadata={"solver_objective_matches_accounting_total": False},
     )
 
     result = optimizer.solve(
@@ -195,3 +197,4 @@ def test_milp_optimizer_propagates_phase_metadata(monkeypatch) -> None:
     assert result.solver_metadata["research_kpi_eligible"] is False
     assert result.solver_metadata["charging_dispatch_evaluated"] is False
     assert result.solver_metadata["soc_constraints_evaluated"] is False
+    assert result.solver_metadata["solver_objective_matches_accounting_total"] is False

@@ -387,7 +387,12 @@ def update_summary(run_dir: Path, cost: dict[str, float]) -> dict[str, Any]:
     summary = load_json(path)
     objective_value = objective_value_from_breakdown(run_dir, as_float(summary.get("objective_value_jpy", summary.get("objective_value"))))
     total_cost = cost["total_cost"]
-    objective_is_actual_cost = abs(objective_value - total_cost) <= 1.0e-6
+    solver_objective_matches_accounting_total = bool(
+        summary.get("solver_objective_matches_accounting_total", True)
+    )
+    objective_is_actual_cost = solver_objective_matches_accounting_total and abs(
+        objective_value - total_cost
+    ) <= 1.0e-6
 
     summary["objective_value"] = objective_value
     summary["objective_value_jpy"] = objective_value
@@ -400,12 +405,14 @@ def update_summary(run_dir: Path, cost: dict[str, float]) -> dict[str, Any]:
     summary["fuel_cost_jpy"] = cost["fuel_cost"]
     summary["co2_cost_jpy"] = cost["co2_cost"]
     summary["objective_is_actual_cost"] = objective_is_actual_cost
+    summary["solver_objective_matches_accounting_total"] = solver_objective_matches_accounting_total
     summary["cost_definition"] = {
         "total_cost_jpy": "gross operating cost based on canonical reporting ledgers",
         "reported_total_cost_jpy": "same as gross_operating_cost_jpy",
         "gross_operating_cost_jpy": "actual operating cost terms from reporting ledgers",
         "objective_value_jpy": "solver objective value; equals reported_total_cost_jpy only when objective_is_actual_cost=true",
         "objective_is_actual_cost": objective_is_actual_cost,
+        "solver_objective_matches_accounting_total": solver_objective_matches_accounting_total,
     }
     write_json(path, summary)
     return summary
@@ -420,7 +427,12 @@ def update_kpi_summary(
     path = run_dir / "graph" / "kpi_summary.json"
     kpi = load_json(path)
     objective_value = objective_value_from_breakdown(run_dir, as_float(kpi.get("objective_value_jpy", kpi.get("objective_value"))))
-    objective_is_actual_cost = abs(objective_value - cost["total_cost"]) <= 1.0e-6
+    solver_objective_matches_accounting_total = bool(
+        kpi.get("solver_objective_matches_accounting_total", True)
+    )
+    objective_is_actual_cost = solver_objective_matches_accounting_total and abs(
+        objective_value - cost["total_cost"]
+    ) <= 1.0e-6
 
     energy_keys = [
         "pv_generation_kwh",
@@ -467,6 +479,7 @@ def update_kpi_summary(
     kpi["objective_value"] = objective_value
     kpi["objective_value_jpy"] = objective_value
     kpi["objective_is_actual_cost"] = objective_is_actual_cost
+    kpi["solver_objective_matches_accounting_total"] = solver_objective_matches_accounting_total
 
     kpi["fuel_consumption_l"] = totals["fuel_consumption_l"]
     kpi["ice_fuel_consumed_l"] = totals["fuel_consumption_l"]

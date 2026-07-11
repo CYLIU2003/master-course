@@ -5,6 +5,30 @@
 
 ---
 
+## 2026-07-11 Research-Run Integrity Gate and Assignment Diagnostics
+
+- 問題: solver が出した candidate と、postsolve repair / baseline fallback 後に公開する運行・充電・SOC が異なり得た。このため、`MILP が解いた可行集合` と `研究結果として集計した可行集合` が一致せず、最適性・成立条件のどちらも主張できない危険があった。
+- 対応: 公開 BFF と `OptimizationEngine` の双方に `research_run` を追加した。研究 run は coverage を strict に強制し、postsolve repair、opportunistic top-up、baseline substitution、partial-service relaxation を使わない。diagnostic/debug 指定は実行記録には残るが研究用受入を必ず不合格にする。Gurobi 不可、実行可能 incumbent なし、時間切れで有効解なし、又は最終検証不合格は、それぞれ `NO_VALID_INCUMBENT`、`INFEASIBLE`、`TIME_LIMIT_WITHOUT_VALID_SOLUTION` として返し、KPI を研究結果に用いない。
+- 受入条件: 共通で `fallback なし`、`postsolve による解変更なし`、`全便担当`、`FeasibilityChecker が可行`、debug/diagnostic でないことを確認する。Phase 1 は充電/SOC MILP、Phase 2 は assignment MILP、Phase 3 は二段階 MILP、Phase 4 は統合 MILP と exact source provenance を追加で要求し、成立条件実験として `research_run_accepted=true` にできる。総費用 KPI の解放候補は明示的に Phase 4 だけとし、会計総コストと solver objective の同値性はまだ監査未完了のため、現時点ではどの phase も `research_cost_kpi_eligible=true`（従来名 `research_kpi_eligible`）にならない。
+- 目的関数: 研究 run では非会計的な `return_leg_bonus` をゼロに固定する。weather policy の運用バイアスに加え、統合 MILP には既定で充電優先・早充電・セッション開始等の会計外内部ペナルティがある。このため、会計上の再計算値と solver objective が同じに見えても `objective_is_actual_cost=false` とし、総コスト KPI を不受理にする。Phase 3 の二段階法は成立条件比較の有効な実験だが、大域的総コスト最小化とは主張しない。`research_run=false` の通常 thesis run も、研究 KPI としては出力しない。将来の経済性実験は、全会計項の objective 実装、内部ペナルティの削除又は会計化、時刻単位/需要料金の一致を検証してから解放する。
+- 診断: `ConnectionGraphBuilder`、MILP arc enumeration、`DutyValidator` は通常便接続について同じ `FeasibilityEngine.can_connect` を使用している。最終 validator は `assignment_validation_diagnostics.json` に、未担当便、車両、前後便、deadhead/turnaround/slack、rejection reason を出力する。車両の複数 fragment 間については、同じ `fragment_transition_diagnostic` の depot/direct-connectivity 制約を追加で検証する。
+- 出力区分: Phase 2 の受理済み結果は `research_assignment_eligible=true` として出力し、`research_feasibility_eligible` / `research_kpi_eligible` とは区別する。これにより、車両割当が validator を通った事実を使いつつ、充電/SOCまで可行であるか、又は経済性が成立するかを誤って主張しない。
+- 限界: 現行の統合 Phase 4 は 30/60 分スロットを主に前提とし、一部 SOC はイベント終端表現である。15 分または event-based SOC を導入し、validator と同一の連続時間エネルギー遷移を実装・検証するまでは、Phase 4 を主研究の確証結果として使わない。天候比較は、天候/PV profile 以外（fleet、ダイヤ、充電器、契約電力、価格、初期SOC、目的関数、seed、time limit）を同一の run manifest で固定する。
+- 検証: research fallback 禁止、二段階 objective claim gate、return-leg bonus 無効化、接続 rejection diagnostics の回帰テストを追加する。
+
+---
+
+## 2026-07-11 Phase Contract and Objective-Claim Closure
+
+- 問題: `phase3_two_stage` の「postsolve repair 禁止」は BFF の通常最適化経路でしか設定されず、`OptimizationEngine` 直呼びと rolling re-optimization では既定 `allow_postsolve_repair=True` に戻り得た。この状態では、MILP が決めた運行・充電・SOC を最終化で変更し、研究用の Phase 3 結果を後処理解として出力する危険があった。
+- 対応: `OptimizationEngine` が明示 phase token を正規化し、Phase 1/2/3/4/diagnostic の postsolve repair を一律禁止する phase contract を適用する。Phase 3 は同時に thesis two-stage として固定し、diagnostic だけを debug semantics にする。rolling re-optimization も同じ solver-mode→phase/config mapping を渡す。
+- 問題: strict Phase 4 integrated MILP は `unserved` バイナリを生成してから `== 0` に固定していた。数理的には coverage を守るが、研究契約の「strict は未担当 decision variable を持たない」と一致しないうえ、不要な変数を増やしていた。
+- 対応: strict run は直接 `sum(assignments) == 1` を追加し、`unserved` は penalized/debug の診断 run に限って生成する。
+- 目的関数の表現: Phase 3 は Stage 1 の車両運用目的と Stage 2 の充電・PV・BESS目的を順に解く二段階法であり、全会計費目を単一の大域目的で最小化するモデルではない。したがって `solver_objective_matches_accounting_total=false` と stage別の raw objective を出力し、会計上 `objective_value == total_cost` でも `objective_is_actual_cost=true` / 「総コスト最適」とは表示・主張しない。総コストは比較用 KPI として扱う。
+- 検証: focused phase/coverage/postsolve/validity suite を実行し、追加した direct Phase 3 no-repair と二段階 objective-claim guard の回帰テストを含める。
+
+---
+
 ## 2026-07-09 Phase 1/2/Diagnostic Public Contract
 
 - Phase 1/2/3/4/diagnostic tokens were re-exposed through the BFF public mode API after adding minimal safety contracts. Aliases `phase1`, `phase2`, `phase3`, `phase4`, and `diagnostic_mode` normalize to their canonical phase tokens.

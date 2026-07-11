@@ -481,6 +481,12 @@ class CostEvaluator:
             (problem.metadata or {}).get("objective_actual_cost_mode", False)
             or (problem.metadata or {}).get("thesis_mode", False)
         )
+        solver_objective_matches_accounting_total = bool(
+            (plan.metadata or {}).get(
+                "solver_objective_matches_accounting_total",
+                (problem.metadata or {}).get("solver_objective_matches_accounting_total", True),
+            )
+        )
         # Return-leg bonus and weather strategy bias are policy rewards/biases, not
         # accounting costs. Thesis mode removes them from the primary objective.
         return_leg_bonus = 0.0 if objective_actual_cost_mode else self._compute_return_leg_bonus(
@@ -504,7 +510,14 @@ class CostEvaluator:
         )
         objective_cost_term = accounting_total_cost if objective_actual_cost_mode else accounting_total_cost - return_leg_bonus + weather_strategy_term
         total_cost_with_assets = accounting_total_cost + pv_asset_cost + bess_asset_cost
-        objective_is_actual_cost = objective_actual_cost_mode or abs(objective_cost_term - accounting_total_cost) <= 1.0e-6
+        # Equality between a reported accounting KPI and its recomputation does
+        # not prove that the solver minimized that KPI.  In particular, Phase 3
+        # has distinct Stage 1 and Stage 2 objectives.  Keep that distinction
+        # explicit so downstream reporting cannot call it total-cost optimal.
+        objective_is_actual_cost = solver_objective_matches_accounting_total and (
+            objective_actual_cost_mode
+            or abs(objective_cost_term - accounting_total_cost) <= 1.0e-6
+        )
         if service_coverage_mode == "strict" and plan.unserved_trip_ids:
             return CostBreakdown(
                 energy_cost=energy_cost,

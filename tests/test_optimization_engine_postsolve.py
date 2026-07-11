@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from src.dispatch.models import DeadheadRule, DispatchContext, DutyLeg, Trip, VehicleDuty, VehicleProfile
 from src.optimization.common.builder import ProblemBuilder
+from src.optimization.common.evaluator import CostEvaluator
 from src.optimization.common.problem import (
     AssignmentPlan,
     CanonicalOptimizationProblem,
@@ -12,6 +13,7 @@ from src.optimization.common.problem import (
     OptimizationEngineResult,
     OptimizationMode,
     OptimizationScenario,
+    OptimizationObjectiveWeights,
     ProblemDepot,
 )
 from src.optimization.engine import OptimizationEngine, _derive_depot_energy_source_split, _repair_bess_terminal_soc
@@ -64,6 +66,181 @@ def test_postsolve_bess_terminal_soc_repair_shifts_late_discharge_to_grid() -> N
     assert repaired.metadata["bess_terminal_soc_repair_shifted_to_grid_kwh"] == 20.0
     assert repaired.metadata["bess_terminal_soc_target_kwh_by_depot"] == {}
     assert repaired.metadata["bess_terminal_soc_deviation_kwh_by_depot"] == {}
+
+
+def test_explicit_phase3_contract_preserves_solver_plan_without_postsolve_repair() -> None:
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(scenario_id="s-phase3-no-repair", timestep_min=60),
+        dispatch_context=None,
+        trips=(),
+        vehicles=(),
+        depots=(ProblemDepot(depot_id="dep-1", name="Depot", import_limit_kw=9999.0),),
+        price_slots=(
+            EnergyPriceSlot(slot_index=0, grid_buy_yen_per_kwh=10.0),
+            EnergyPriceSlot(slot_index=1, grid_buy_yen_per_kwh=20.0),
+        ),
+        depot_energy_assets={
+            "dep-1": DepotEnergyAsset(
+                depot_id="dep-1",
+                bess_enabled=True,
+                bess_energy_kwh=100.0,
+                bess_power_kw=100.0,
+                bess_initial_soc_kwh=50.0,
+                bess_soc_min_kwh=0.0,
+                bess_soc_max_kwh=100.0,
+                bess_discharge_efficiency=1.0,
+                bess_terminal_soc_min_kwh=30.0,
+            )
+        },
+    )
+    plan = AssignmentPlan(
+        bess_to_bus_kwh_by_depot_slot={"dep-1": {0: 10.0, 1: 30.0}},
+    )
+    fake_result = OptimizationEngineResult(
+        mode=OptimizationMode.MILP,
+        solver_status="optimal",
+        objective_value=0.0,
+        plan=plan,
+        feasible=True,
+        cost_breakdown={"objective_value": 0.0, "total_cost": 0.0},
+        solver_metadata={},
+    )
+    engine = OptimizationEngine()
+    engine._milp = _FakeMILPOptimizer(fake_result)
+
+    result = engine.solve(
+        problem,
+        OptimizationConfig(mode=OptimizationMode.MILP, phase="phase3_two_stage"),
+    )
+
+    assert result.plan.bess_to_bus_kwh_by_depot_slot == {"dep-1": {0: 10.0, 1: 30.0}}
+    assert result.solver_metadata["postsolve_repair_allowed"] is False
+    assert result.solver_metadata["postsolve_soc_repair_applied"] is False
+
+
+def test_two_stage_accounting_total_is_not_labelled_as_solver_cost_optimal() -> None:
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(scenario_id="s-two-stage-objective", timestep_min=60),
+        dispatch_context=None,
+        trips=(),
+        vehicles=(),
+        metadata={
+            "thesis_mode": True,
+            "objective_actual_cost_mode": True,
+            "solver_objective_matches_accounting_total": False,
+        },
+    )
+    breakdown = CostEvaluator().evaluate(
+        problem,
+        AssignmentPlan(
+            metadata={"solver_objective_matches_accounting_total": False}
+        ),
+    )
+
+    assert breakdown.objective_value == breakdown.total_cost
+    assert breakdown.objective_is_actual_cost is False
+
+
+def test_research_phase3_accepts_feasibility_but_not_a_global_cost_claim() -> None:
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(scenario_id="s-research-gate", timestep_min=60),
+        dispatch_context=None,
+        trips=(),
+        vehicles=(),
+    )
+    fake_result = OptimizationEngineResult(
+        mode=OptimizationMode.MILP,
+        solver_status="optimal",
+        objective_value=0.0,
+        plan=AssignmentPlan(
+            metadata={
+                "source_provenance_exact": True,
+                "vehicle_source_provenance_exact": True,
+            }
+        ),
+        feasible=True,
+        cost_breakdown={"objective_value": 0.0, "total_cost": 0.0},
+        solver_metadata={"supports_exact_milp": True, "supports_two_stage_milp": True},
+    )
+    engine = OptimizationEngine()
+    engine._milp = _FakeMILPOptimizer(fake_result)
+
+    result = engine.solve(
+        problem,
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            phase="phase3_two_stage",
+            research_run=True,
+        ),
+    )
+
+    assert result.solver_status == "optimal"
+    assert result.solver_metadata["research_run"] is True
+    assert result.solver_metadata["research_run_accepted"] is True
+    assert result.solver_metadata["research_feasibility_eligible"] is True
+    assert result.solver_metadata["research_cost_kpi_eligible"] is False
+    assert "objective_is_actual_cost" not in result.solver_metadata["research_acceptance_checks"]
+
+
+def test_research_contract_disables_the_non_accounting_return_leg_bonus() -> None:
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(scenario_id="s-research-objective", timestep_min=60),
+        dispatch_context=None,
+        trips=(),
+        vehicles=(),
+        objective_weights=OptimizationObjectiveWeights(return_leg_bonus=3.0),
+    )
+
+    contracted_problem, contracted_config = OptimizationEngine._apply_phase_contract(
+        problem,
+        OptimizationConfig(mode=OptimizationMode.MILP, research_run=True),
+    )
+
+    assert contracted_config.allow_postsolve_repair is False
+    assert contracted_problem.objective_weights.return_leg_bonus == 0.0
+    assert contracted_problem.metadata["return_leg_bonus_disabled_for_research"] is True
+
+
+def test_research_contract_forces_strict_coverage() -> None:
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="s-research-strict",
+            timestep_min=60,
+            service_coverage_mode="penalized",
+        ),
+        dispatch_context=None,
+        trips=(),
+        vehicles=(),
+    )
+
+    contracted_problem, _ = OptimizationEngine._apply_phase_contract(
+        problem,
+        OptimizationConfig(mode=OptimizationMode.MILP, research_run=True),
+    )
+
+    assert contracted_problem.scenario.service_coverage_mode == "strict"
+    assert contracted_problem.metadata["research_forced_strict_coverage"] is True
+
+
+def test_research_contract_rejects_an_unrecognized_phase_without_reenabling_repair() -> None:
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(scenario_id="s-research-unknown-phase", timestep_min=60),
+        dispatch_context=None,
+        trips=(),
+        vehicles=(),
+    )
+
+    _, contracted_config = OptimizationEngine._apply_phase_contract(
+        problem,
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            phase="unknown_phase",
+            research_run=True,
+            allow_postsolve_repair=True,
+        ),
+    )
+
+    assert contracted_config.allow_postsolve_repair is False
 
 
 def test_postsolve_bess_soc_repair_respects_configured_max_buffer() -> None:

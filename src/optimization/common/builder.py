@@ -891,6 +891,7 @@ class ProblemBuilder:
                 "config_mode": config.mode.value,
                 "thesis_mode": bool(getattr(config, "thesis_mode", False)),
                 "debug_mode": bool(getattr(config, "debug_mode", False)),
+                "research_run": bool(getattr(config, "research_run", False)),
                 "objective_actual_cost_mode": bool(getattr(config, "thesis_mode", False)),
                 "postsolve_repair_allowed": bool(getattr(config, "allow_postsolve_repair", True)),
                 "trip_count": len(trip_nodes),
