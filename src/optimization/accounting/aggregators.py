@@ -107,6 +107,28 @@ def build_accounting_summary(
     objective_is_actual_cost = bool(metadata.get("objective_is_actual_cost", False))
     objective_value = total_cost_jpy if objective_is_actual_cost else float(metadata.get("objective_value", total_cost_jpy) or total_cost_jpy)
     solver_status = str(metadata.get("solver_status", "") or "")
+    solver_objective_value = objective_value
+    phase = str(metadata.get("phase", "") or "").strip().lower()
+    validated_status = solver_status.upper() in {
+        "OPTIMAL",
+        "FEASIBLE",
+        "SOLVED_FEASIBLE",
+    } and phase != "phase2_assignment_only"
+    research_gate = (
+        not bool(metadata.get("research_run", False))
+        or bool(metadata.get("research_run_accepted", False))
+    )
+    full_operational_validation = bool(
+        metadata.get("full_operational_validation", phase != "phase2_assignment_only")
+    )
+    validated_operating_cost_jpy = (
+        total_cost_jpy
+        if validated_status
+        and research_gate
+        and full_operational_validation
+        and bool(metadata.get("validated_feasible", True))
+        else None
+    )
     fallback_statuses = {"BASELINE_FALLBACK", "PARTIAL_BASELINE_FALLBACK"}
     is_optimization_result = bool(solver_status.upper() not in fallback_statuses and not bool(metadata.get("fallback_applied", False)))
     total_co2_kg = _sum(vehicle_energy_rows, "ice_co2_kg")
@@ -126,10 +148,13 @@ def build_accounting_summary(
         "num_periods": int(metadata.get("num_periods", len(energy_rows)) or len(energy_rows)),
         "planning_horizon_hours": float(metadata.get("planning_horizon_hours", (int(metadata.get("slot_minutes", 0) or 0) * max(len(energy_rows), 1) / 60.0 if energy_rows else 0.0)) or 0.0),
         "total_cost_jpy": total_cost_jpy,
+        "accounting_total_cost_jpy": total_cost_jpy,
         "gross_operating_cost_jpy": total_cost_jpy,
         "reported_total_cost_jpy": total_cost_jpy,
         "objective_value": objective_value,
         "objective_value_jpy": objective_value,
+        "solver_objective_value": solver_objective_value,
+        "validated_operating_cost_jpy": validated_operating_cost_jpy,
         "energy_cost_jpy": electricity_cost_jpy,
         "demand_cost_jpy": demand_cost_jpy,
         "fuel_cost_jpy": fuel_cost_jpy,
@@ -232,6 +257,9 @@ def build_accounting_summary(
         "solver_status": solver_status,
         "cost_definition": {
             "gross_operating_cost_jpy": "real cost terms only",
+            "accounting_total_cost_jpy": "sum of canonical accounting ledger terms",
+            "solver_objective_value": "solver-reported objective; may include terms outside accounting",
+            "validated_operating_cost_jpy": "accounting total only when solver status and independent validation are feasible; otherwise null",
             "objective_value": "solver objective including penalties and bonuses",
             "reported_total_cost_jpy": "UI/reporting value; see included terms",
             "objective_is_actual_cost": objective_is_actual_cost,

@@ -917,6 +917,7 @@ def test_solver_settings_payload_reports_gap_ratio_and_percent() -> None:
         solver_metadata={
             "effective_limits": {"time_limit_sec": 300, "mip_gap": 0.01},
             "final_gap": 0.0025,
+            "has_feasible_incumbent": True,
             "supports_exact_milp": True,
         },
     )

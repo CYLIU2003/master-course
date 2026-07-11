@@ -198,3 +198,114 @@ def test_milp_optimizer_propagates_phase_metadata(monkeypatch) -> None:
     assert result.solver_metadata["charging_dispatch_evaluated"] is False
     assert result.solver_metadata["soc_constraints_evaluated"] is False
     assert result.solver_metadata["solver_objective_matches_accounting_total"] is False
+
+
+def test_research_phase3_does_not_publish_stage1_candidate_when_stage2_is_infeasible(monkeypatch) -> None:
+    optimizer = MILPOptimizer()
+
+    class _FakeBuilder:
+        def enumerate_assignment_pairs(self, problem):
+            return [("veh-1", "t1")]
+
+        def enumerate_arc_pairs(self, problem, trip_by_id):
+            return []
+
+        def arc_pruning_summary(self, problem, trip_by_id):
+            return {}
+
+    class _FakeAdapter:
+        def solve(self, problem, config):
+            return (
+                MILPSolverOutcome(
+                    solver_status="infeasible",
+                    used_backend="fake_two_stage",
+                    supports_exact_milp=True,
+                    has_feasible_incumbent=False,
+                ),
+                AssignmentPlan(
+                    served_trip_ids=("t1",),
+                    metadata={
+                        "phase": "phase3_two_stage",
+                        "stage1_feasible": True,
+                        "stage2_feasible": False,
+                        "stage1_has_feasible_incumbent": True,
+                        "stage2_has_feasible_incumbent": False,
+                        "supports_two_stage_milp": False,
+                        "supports_integrated_exact_milp": False,
+                    },
+                ),
+            )
+
+    monkeypatch.setattr(optimizer, "_builder", _FakeBuilder())
+    monkeypatch.setattr(optimizer, "_adapter", _FakeAdapter())
+    monkeypatch.setattr(
+        optimizer,
+        "_feasibility",
+        SimpleNamespace(
+            evaluate=lambda problem, plan: SimpleNamespace(
+                feasible=not bool(plan.unserved_trip_ids),
+                warnings=(),
+                errors=("stage2 candidate was not published",) if plan.unserved_trip_ids else (),
+                metrics={},
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        optimizer,
+        "_evaluator",
+        SimpleNamespace(
+            evaluate=lambda problem, plan: _Breakdown(),
+            build_plan_ledgers=lambda problem, plan, breakdown: ((), ()),
+        ),
+    )
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(scenario_id="s-stage2-infeasible", timestep_min=60),
+        dispatch_context=SimpleNamespace(),
+        trips=(
+            ProblemTrip(
+                trip_id="t1",
+                route_id="r1",
+                origin="A",
+                destination="B",
+                departure_min=480,
+                arrival_min=510,
+                distance_km=10.0,
+                allowed_vehicle_types=("BEV",),
+            ),
+        ),
+        vehicles=(
+            ProblemVehicle(
+                vehicle_id="veh-1",
+                vehicle_type="BEV",
+                home_depot_id="dep-1",
+            ),
+        ),
+    )
+
+    result = optimizer.solve(
+        problem,
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            phase="phase3_two_stage",
+            research_run=True,
+        ),
+    )
+
+    assert result.plan.served_trip_ids == ()
+    assert result.plan.unserved_trip_ids == ("t1",)
+    assert result.plan.metadata["research_candidate_only"] is True
+    assert result.plan.metadata["assignment_candidate_available"] is True
+    assert result.solver_metadata["stage1_feasible"] is True
+    assert result.solver_metadata["stage2_feasible"] is False
+
+    ordinary_result = optimizer.solve(
+        problem,
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            phase="phase3_two_stage",
+            research_run=False,
+        ),
+    )
+    assert ordinary_result.plan.served_trip_ids == ()
+    assert ordinary_result.plan.unserved_trip_ids == ("t1",)
+    assert ordinary_result.plan.metadata["stage2_candidate_only"] is True

@@ -6,7 +6,11 @@ import re
 from typing import Any, Dict, List, Mapping, Optional, Set, Tuple
 
 from src.dispatch.models import VehicleDuty
-from .time_axis import normalize_timestep_min
+from .time_axis import (
+    chronological_duty_key,
+    normalize_horizon_start_min,
+    normalize_timestep_min,
+)
 
 
 class OptimizationMode(str, Enum):
@@ -323,6 +327,10 @@ class OptimizationConfig:
     research_run: bool = False
     allow_postsolve_repair: bool = True
     phase: str = ""
+    requested_phase_token: str = ""
+    requested_phase: str = ""
+    resolved_phase: str = ""
+    executed_phase: str = ""
     diagnostic_mode: bool = False
     fixed_assignment: Optional["AssignmentPlan"] = None
 
@@ -421,14 +429,16 @@ class AssignmentPlan:
         grouped: Dict[str, List[VehicleDuty]] = {}
         for duty in self.duties:
             grouped.setdefault(self.vehicle_id_for_duty(duty.duty_id), []).append(duty)
+        horizon_start_min = normalize_horizon_start_min(
+            self.metadata.get("horizon_start_min")
+            or self.metadata.get("horizon_start")
+        )
         return {
             vehicle_id: tuple(
                 sorted(
                     duties,
-                    key=lambda duty: (
-                        duty.legs[0].trip.departure_min if duty.legs else 10**9,
-                        duty.legs[-1].trip.arrival_min if duty.legs else 10**9,
-                        duty.duty_id,
+                    key=lambda duty: chronological_duty_key(
+                        duty, horizon_start_min=horizon_start_min
                     ),
                 )
             )

@@ -160,7 +160,14 @@ def test_research_phase3_accepts_feasibility_but_not_a_global_cost_claim() -> No
         ),
         feasible=True,
         cost_breakdown={"objective_value": 0.0, "total_cost": 0.0},
-        solver_metadata={"supports_exact_milp": True, "supports_two_stage_milp": True},
+            solver_metadata={
+                "supports_exact_milp": True,
+                "supports_two_stage_milp": True,
+                "requested_phase_token": "phase3_two_stage",
+                "requested_phase": "phase3_two_stage",
+                "resolved_phase": "phase3_two_stage",
+                "executed_phase": "phase3_two_stage",
+            },
     )
     engine = OptimizationEngine()
     engine._milp = _FakeMILPOptimizer(fake_result)

@@ -1884,7 +1884,16 @@ def build_problem_data_from_scenario(
 
     connections, dispatch_report = build_travel_connections_via_dispatch(
         data=data,
-        service_date=str(meta.get("updatedAt") or "2026-01-01")[:10],
+        service_date=str(
+            simulation_cfg.get("service_date")
+            or simulation_cfg.get("serviceDate")
+            or scenario.get("service_date")
+            or scenario.get("serviceDate")
+            or meta.get("service_date")
+            or meta.get("serviceDate")
+            or meta.get("updatedAt")
+            or ""
+        )[:10],
         default_turnaround_min=default_turnaround_min,
         turnaround_rules=_build_turnaround_rules(scenario),
         deadhead_rules=deadhead_rules,

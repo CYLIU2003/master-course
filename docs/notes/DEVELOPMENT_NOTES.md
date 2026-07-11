@@ -5,6 +5,23 @@
 
 ---
 
+## 2026-07-11 Strict Phase 3 Recovery: candidate isolation, chronology, and provenance
+
+- 既存 `output/2026-07-11/run_20260711_2046` / `run_20260711_2107` を再監査した。solver status は `infeasible` なのに summary/assignment は 264便 served として保存され、Stage 1 assignment candidate が Stage 2 charging/SOC failure 後も最終出力へ流れていた。これは「MILP が解いた問題」と「公開した運行表」が一致しない P1 の研究妥当性欠陥である。
+- 対応: Phase 3 の Stage 2 に feasible incumbent が無い場合、research run は Stage 1 candidate を `assignment_candidate_*` metadata / `assignment_candidate.json` に診断用として隔離し、最終 plan の duties・charging・SOC・served IDs は空、全便は unserved とする。`supports_two_stage_milp` は Stage 2 成功時だけ true、Stage 1/Stage 2 status・objective・bound・gap・incumbent を別々に保存する。fallback / postsolve repair で infeasible を feasible に変えない。
+- 対応: `requested_phase` / `resolved_phase` / `executed_phase` を BFF・engine・solver settings・run manifest へ伝播し、research acceptance は3値の完全一致を要求する。Phase 3 の `supports_integrated_exact_milp` は false とし、二段階法を統合MILPとして表示しない。
+- 追加監査: raw の `requested_phase_token`（例: `mode_milp_only`）を canonical phase と分離して保存し、gate は `normalize(raw) == requested == resolved == adapter-executed` を検証する。Stage 2 が失敗した Phase 3 は research/non-research を問わず最終 plan を空にし、Stage 1 は診断 candidate としてのみ保持する。
+- 対応: `AssignmentPlan.duties_by_vehicle()` と validator の共通 chronological key を導入した。trip ID の辞書順ではなく departure→arrival→ID で fragment を並べ、canonical `trip_assignment.csv` に車両内 sequence を付ける。これは時刻順を正規化するだけであり、timetable_rows や solver の duty legs を書き換えない。重複・接続不可は独立 validator が不合格にする。
+- 追加監査: horizon start（例 `05:00`）を基準に 23:30→00:10→00:30 を同一 service-day の絶対分へ写像し、重複判定・fragment 判定・出力 sequence が日跨ぎで逆転しないようにした。元の HH:MM は変更しない。
+- 対応: service date は `simulation_config.service_date` を最優先し、research canonical builder は欠損時に実行日を代入せずエラーにする。scenario meta の `operatorId`（本対象では `tokyu`）を dispatch Trip へ明示伝播し、空/`UNKNOWN_OPERATOR`、複数 operator は research acceptance を不合格にする。`service_id` を operator の代用にはしない。
+- 対応: `solver_objective_value`、`accounting_total_cost_jpy`、`validated_operating_cost_jpy` を分離した。solver status または独立検証が infeasible の場合、validated operating cost は `null` とする。incumbent が無い場合、MIP gap は ratio/percent とも `null`（0ではない）。
+- 追加監査: Phase 2 assignment-only は充電/SOC未検証のため `validated_operating_cost_jpy` を出さない。research では受入 gate と full operational validation の両方を満たした場合だけ値を設定する。invalid/missing research service date は canonical export 時に実行日へフォールバックせずエラーにする。
+- 再現スクリプト: `scripts/run_research_phase3_minimal.py` は prepared scope `b23fd26c-1233-4c73-bb9e-bdb8b1584760 / prepared-789ce8197d83c758-0b337aa1f091e729` をメモリ上で materialize し、鶴巻・渋21/22/23・264便・BEV35/ICE25・2025-08-10・grid-only（PV/BESS/weather policy off）を hard-check してから Phase 3 を実行する。受入 gate を通らない場合、最終 schedule は書き出さず candidate だけを診断保存する。
+- 実行検証: 入力構築は `264 trips / BEV35 + ICE25 / service_date=2025-08-10 / operator=tokyu / PV=off / BESS=off` を確認した。`--time-limit-sec 1` の smoke run は Gurobi license が無いため `NO_VALID_INCUMBENT` となり、`trip_count_served=0`、`validated_operating_cost_jpy=null`、MIP gap null、final schedule 未出力を確認した。これは solver 成功結果ではなく、厳密 gate が誤って成功扱いしないことの検証である。
+- 検証: focused suite `39 passed`、builder/dispatch/accounting/weather suite `47 passed`、全 pytest は `613 passed, 6 skipped` と integration test 1件（localhost:8000 未起動）を除き pass。Gurobi license が利用可能な環境で `python scripts/run_research_phase3_minimal.py --time-limit-sec 1500 --output-dir output/research_phase3_minimal` を実行し、`research_run_accepted=true` かつ全 acceptance checks true になるまで、264便の研究成立結果は主張しない。
+
+---
+
 ## 2026-07-11 Research-Run Integrity Gate and Assignment Diagnostics
 
 - 問題: solver が出した candidate と、postsolve repair / baseline fallback 後に公開する運行・充電・SOC が異なり得た。このため、`MILP が解いた可行集合` と `研究結果として集計した可行集合` が一致せず、最適性・成立条件のどちらも主張できない危険があった。

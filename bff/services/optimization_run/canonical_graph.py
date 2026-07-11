@@ -10,8 +10,15 @@ def canonical_output_base_date(problem, graph_context: Optional[Dict[str, Any]])
     if service_date:
         try:
             return datetime.fromisoformat(service_date[:10]).date()
-        except ValueError:
-            pass
+        except ValueError as exc:
+            if bool((problem.metadata or {}).get("research_run", False)):
+                raise ValueError(
+                    f"research service_date is not a valid ISO date: {service_date!r}"
+                ) from exc
+    if bool((problem.metadata or {}).get("research_run", False)):
+        raise ValueError(
+            "research service_date is missing; refusing to substitute the execution date"
+        )
     return datetime.now().date()
 
 

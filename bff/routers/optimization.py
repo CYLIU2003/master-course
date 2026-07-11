@@ -1452,6 +1452,9 @@ def _persist_rich_run_outputs(
         "return_leg_bonus": "JPY",
         "weather_strategy_objective_term_jpy_equivalent": "JPY-equivalent",
         "total_cost": "JPY",
+        "accounting_total_cost_jpy": "JPY",
+        "solver_objective_value": "JPY",
+        "validated_operating_cost_jpy": "JPY",
         "co2_cost": "JPY",
         "total_co2_kg": "kg-CO2",
         "grid_to_bus_kwh": "kWh",
@@ -1503,6 +1506,17 @@ def _persist_rich_run_outputs(
                 ),
             )
             or 0.0
+        ),
+        "accounting_total_cost_jpy": accounting_summary.get(
+            "accounting_total_cost_jpy",
+            accounting_summary.get("total_cost_jpy"),
+        ),
+        "solver_objective_value": accounting_summary.get(
+            "solver_objective_value",
+            accounting_summary.get("objective_value_jpy", optimization_result.get("objective_value")),
+        ),
+        "validated_operating_cost_jpy": accounting_summary.get(
+            "validated_operating_cost_jpy"
         ),
         "objective_is_actual_cost": bool((optimization_result.get("cost_breakdown") or {}).get("objective_is_actual_cost", False)),
         "supports_exact_milp": bool((optimization_result.get("solver_metadata") or {}).get("supports_exact_milp", False)),
@@ -2126,7 +2140,16 @@ def _persist_rich_run_outputs(
         kpi_summary.update(
             {
                 "total_cost_jpy": float(accounting_summary.get("total_cost_jpy", kpi_summary["total_cost_jpy"]) or 0.0),
+                "accounting_total_cost_jpy": accounting_summary.get(
+                    "accounting_total_cost_jpy", accounting_summary.get("total_cost_jpy")
+                ),
                 "objective_value_jpy": float(accounting_summary.get("objective_value_jpy", kpi_summary["objective_value_jpy"]) or 0.0),
+                "solver_objective_value": accounting_summary.get(
+                    "solver_objective_value", accounting_summary.get("objective_value_jpy")
+                ),
+                "validated_operating_cost_jpy": accounting_summary.get(
+                    "validated_operating_cost_jpy"
+                ),
                 "energy_cost_jpy": float(accounting_summary.get("energy_cost_jpy", kpi_summary["electricity_cost_jpy"]) or 0.0),
                 "demand_cost_jpy": float(
                     accounting_summary.get(
@@ -2258,6 +2281,17 @@ def _persist_rich_run_outputs(
 
     run_manifest = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "scenario_id": optimization_result.get("scenario_id"),
+        "service_date": (
+            (optimization_result.get("graph_artifacts") or {}).get("accounting_summary") or {}
+        ).get("service_date")
+        or ((scenario.get("simulation_config") or {}).get("service_date") or ""),
+        "git_sha": (optimization_result.get("solver_metadata") or {}).get("git_sha") or _git_sha(),
+        "research_run": bool((optimization_result.get("solver_metadata") or {}).get("research_run", False)),
+        "research_run_accepted": bool((optimization_result.get("solver_metadata") or {}).get("research_run_accepted", False)),
+        "requested_phase": (optimization_result.get("solver_metadata") or {}).get("requested_phase"),
+        "resolved_phase": (optimization_result.get("solver_metadata") or {}).get("resolved_phase"),
+        "executed_phase": (optimization_result.get("solver_metadata") or {}).get("executed_phase"),
         "files": sorted(
             [p.relative_to(run_dir).as_posix() for p in run_dir.rglob("*") if p.is_file()]
         ),
@@ -2689,52 +2723,60 @@ def _canonical_trip_assignment_rows(
     problem_trip_by_id = problem.trip_by_id()
     vehicle_by_id = {str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles}
     rows: List[Dict[str, Any]] = []
-    for duty in engine_result.plan.duties:
-        vehicle_id = str(engine_result.plan.vehicle_id_for_duty(duty.duty_id))
-        vehicle = vehicle_by_id.get(vehicle_id)
-        duty_legs = list(duty.legs)
-        for index, leg in enumerate(duty_legs):
-            dispatch_trip = leg.trip
-            trip_id = str(dispatch_trip.trip_id or "")
-            problem_trip = problem_trip_by_id.get(trip_id)
-            if problem_trip is None:
-                continue
-            next_deadhead_min = 0
-            if index + 1 < len(duty_legs):
-                next_deadhead_min = max(int(getattr(duty_legs[index + 1], "deadhead_from_prev_min", 0) or 0), 0)
-            route_family_code = str(getattr(dispatch_trip, "route_family_code", "") or "")
-            departure_dt = _canonical_datetime_from_min(base_date, int(getattr(dispatch_trip, "departure_min", 0) or 0))
-            arrival_dt = _canonical_datetime_from_min(base_date, int(getattr(dispatch_trip, "arrival_min", 0) or 0))
-            rows.append(
-                {
-                    "scenario_id": scenario_id,
-                    "trip_id": trip_id,
-                    "route_id": str(getattr(dispatch_trip, "route_id", problem_trip.route_id) or problem_trip.route_id),
-                    "route_family_code": route_family_code,
-                    "route_series_code": route_family_code or str(getattr(dispatch_trip, "route_id", problem_trip.route_id) or problem_trip.route_id),
-                    "band_id": route_family_code or str(getattr(dispatch_trip, "route_id", problem_trip.route_id) or problem_trip.route_id),
-                    "direction": str(getattr(dispatch_trip, "direction", "") or ""),
-                    "route_variant_type": str(getattr(dispatch_trip, "route_variant_type", "unknown") or "unknown"),
-                    "scheduled_departure": departure_dt.isoformat(),
-                    "scheduled_arrival": arrival_dt.isoformat(),
-                    "actual_departure": departure_dt.isoformat(),
-                    "actual_arrival": arrival_dt.isoformat(),
-                    "assigned_vehicle_id": vehicle_id,
-                    "assigned_vehicle_type": str(getattr(vehicle, "vehicle_type", "") or ""),
-                    "assigned_depot_id": str(getattr(vehicle, "home_depot_id", "") or ""),
-                    "assigned_vehicle_band_id": str((primary_band_by_vehicle.get(vehicle_id) or {}).get("band_id") or ""),
-                    "served_flag": True,
-                    "unserved_reason": "",
-                    "energy_used_kwh": float(getattr(problem_trip, "energy_kwh", 0.0) or 0.0),
-                    "distance_km": float(getattr(problem_trip, "distance_km", 0.0) or 0.0),
-                    "delay_departure_min": 0.0,
-                    "delay_arrival_min": 0.0,
-                    "deadhead_before_km": _canonical_deadhead_distance_km(problem, int(getattr(leg, "deadhead_from_prev_min", 0) or 0)),
-                    "deadhead_after_km": _canonical_deadhead_distance_km(problem, next_deadhead_min),
-                    "swap_type": "none",
-                }
-            )
-    rows.sort(key=lambda row: str(row.get("trip_id", "")))
+    sequence_by_vehicle: Dict[str, int] = defaultdict(int)
+    for vehicle_id, duties in sorted(engine_result.plan.duties_by_vehicle().items()):
+        for duty in duties:
+            vehicle_id = str(vehicle_id)
+            # ``duties_by_vehicle`` is the canonical chronological order.  Do
+            # not sort by trip_id: lexical IDs can reverse the actual service
+            # order and make downstream timeline validation meaningless.
+            vehicle = vehicle_by_id.get(vehicle_id)
+            duty_legs = list(duty.legs)
+            for index, leg in enumerate(duty_legs):
+                sequence_by_vehicle[vehicle_id] += 1
+                sequence = sequence_by_vehicle[vehicle_id]
+                dispatch_trip = leg.trip
+                trip_id = str(dispatch_trip.trip_id or "")
+                problem_trip = problem_trip_by_id.get(trip_id)
+                if problem_trip is None:
+                    continue
+                next_deadhead_min = 0
+                if index + 1 < len(duty_legs):
+                    next_deadhead_min = max(int(getattr(duty_legs[index + 1], "deadhead_from_prev_min", 0) or 0), 0)
+                route_family_code = str(getattr(dispatch_trip, "route_family_code", "") or "")
+                departure_dt = _canonical_datetime_from_min(base_date, int(getattr(dispatch_trip, "departure_min", 0) or 0))
+                arrival_dt = _canonical_datetime_from_min(base_date, int(getattr(dispatch_trip, "arrival_min", 0) or 0))
+                rows.append(
+                    {
+                        "scenario_id": scenario_id,
+                        "trip_id": trip_id,
+                        "route_id": str(getattr(dispatch_trip, "route_id", problem_trip.route_id) or problem_trip.route_id),
+                        "route_family_code": route_family_code,
+                        "route_series_code": route_family_code or str(getattr(dispatch_trip, "route_id", problem_trip.route_id) or problem_trip.route_id),
+                        "band_id": route_family_code or str(getattr(dispatch_trip, "route_id", problem_trip.route_id) or problem_trip.route_id),
+                        "direction": str(getattr(dispatch_trip, "direction", "") or ""),
+                        "route_variant_type": str(getattr(dispatch_trip, "route_variant_type", "unknown") or "unknown"),
+                        "scheduled_departure": departure_dt.isoformat(),
+                        "scheduled_arrival": arrival_dt.isoformat(),
+                        "actual_departure": departure_dt.isoformat(),
+                        "actual_arrival": arrival_dt.isoformat(),
+                        "assigned_vehicle_id": vehicle_id,
+                        "vehicle_sequence": sequence,
+                        "assigned_vehicle_type": str(getattr(vehicle, "vehicle_type", "") or ""),
+                        "assigned_depot_id": str(getattr(vehicle, "home_depot_id", "") or ""),
+                        "assigned_vehicle_band_id": str((primary_band_by_vehicle.get(vehicle_id) or {}).get("band_id") or ""),
+                        "served_flag": True,
+                        "unserved_reason": "",
+                        "energy_used_kwh": float(getattr(problem_trip, "energy_kwh", 0.0) or 0.0),
+                        "distance_km": float(getattr(problem_trip, "distance_km", 0.0) or 0.0),
+                        "delay_departure_min": 0.0,
+                        "delay_arrival_min": 0.0,
+                        "deadhead_before_km": _canonical_deadhead_distance_km(problem, int(getattr(leg, "deadhead_from_prev_min", 0) or 0)),
+                        "deadhead_after_km": _canonical_deadhead_distance_km(problem, next_deadhead_min),
+                        "swap_type": "none",
+                    }
+                )
+    rows.sort(key=lambda row: (str(row.get("assigned_vehicle_id") or ""), int(row.get("vehicle_sequence", 0) or 0), str(row.get("scheduled_departure") or ""), str(row.get("trip_id") or "")))
     return rows
 
 
@@ -3910,7 +3952,20 @@ def _canonical_kpi_summary_json(
             else engine_result.objective_value
             or 0.0
         ),
+        "accounting_total_cost_jpy": float(
+            breakdown.get("total_cost")
+            if breakdown.get("total_cost") is not None
+            else 0.0
+        ),
         "objective_value_jpy": float(engine_result.objective_value or 0.0),
+        "solver_objective_value": float(engine_result.objective_value or 0.0),
+        "validated_operating_cost_jpy": (
+            float(breakdown.get("total_cost") or 0.0)
+            if bool(engine_result.feasible)
+            and str(engine_result.solver_status or "").upper()
+            in {"OPTIMAL", "FEASIBLE", "SOLVED_FEASIBLE", "PHASE2_ASSIGNMENT_FEASIBLE"}
+            else None
+        ),
         "objective_is_actual_cost": bool(breakdown.get("objective_is_actual_cost", False)),
         "supports_exact_milp": bool((engine_result.solver_metadata or {}).get("supports_exact_milp", False)),
         "electricity_cost_jpy": float(
@@ -4029,7 +4084,21 @@ def _persist_canonical_graph_exports(
     tasks = [SimpleNamespace(task_id=str(trip.get("trip_id") or "")) for trip in trips]
     graph_context = _build_graph_export_context(scenario, trips, tasks)
     base_date = _canonical_output_base_date(problem, graph_context)
-    operator_id = str(scenario.get("operator_id") or scenario.get("operatorId") or scenario.get("service_id") or "").strip() or "UNKNOWN_OPERATOR"
+    operator_id = str(
+        scenario.get("operator_id")
+        or scenario.get("operatorId")
+        or (problem.metadata or {}).get("operator_id")
+        or ""
+    ).strip()
+    if not operator_id:
+        observed_operator_ids = sorted(
+            {
+                str(getattr(trip, "operator_id", "") or "").strip()
+                for trip in tuple(getattr(getattr(problem, "dispatch_context", None), "trips", ()) or ())
+                if str(getattr(trip, "operator_id", "") or "").strip()
+            }
+        )
+        operator_id = observed_operator_ids[0] if len(observed_operator_ids) == 1 else "UNKNOWN_OPERATOR"
     timeline_rows = _canonical_vehicle_timeline_rows(
         problem=problem,
         engine_result=engine_result,
@@ -4215,6 +4284,18 @@ def _persist_canonical_graph_exports(
                     kpi_summary.get("contract_overage_policy", "report_only") or "report_only"
                 ),
                 "solver_status": str(engine_result.solver_status or ""),
+                "phase": (engine_result.solver_metadata or {}).get("phase"),
+                "research_run": bool((engine_result.solver_metadata or {}).get("research_run", False)),
+                "research_run_accepted": bool((engine_result.solver_metadata or {}).get("research_run_accepted", False)),
+                "full_operational_validation": bool(
+                    str((engine_result.solver_metadata or {}).get("phase") or "")
+                    != "phase2_assignment_only"
+                    and bool(engine_result.feasible)
+                ),
+                "validated_feasible": bool(engine_result.feasible),
+                "requested_phase": (engine_result.solver_metadata or {}).get("requested_phase"),
+                "resolved_phase": (engine_result.solver_metadata or {}).get("resolved_phase"),
+                "executed_phase": (engine_result.solver_metadata or {}).get("executed_phase"),
                 "mip_gap_requested_ratio": float((engine_result.solver_metadata or {}).get("requested_mip_gap", (engine_result.solver_metadata or {}).get("mip_gap", 0.0)) or 0.0),
                 "mip_gap_requested_percent": float((engine_result.solver_metadata or {}).get("requested_mip_gap", (engine_result.solver_metadata or {}).get("mip_gap", 0.0)) or 0.0) * 100.0,
                 "mip_gap_achieved_ratio": (engine_result.solver_metadata or {}).get("achieved_mip_gap", (engine_result.solver_metadata or {}).get("final_gap")),
@@ -4302,6 +4383,20 @@ def _persist_canonical_graph_exports(
         json.dumps({"rows": deadhead_ratio_rows}, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+    accounting_summary = dict(getattr(accounting_artifacts, "summary", {}) or {})
+    if accounting_summary:
+        # Keep the three cost meanings explicit in every canonical graph
+        # export.  Infeasible results retain diagnostic ledger totals, but the
+        # validated operating cost is deliberately null.
+        cost_breakdown["accounting_total_cost_jpy"] = accounting_summary.get(
+            "accounting_total_cost_jpy", accounting_summary.get("total_cost_jpy")
+        )
+        cost_breakdown["solver_objective_value"] = accounting_summary.get(
+            "solver_objective_value", accounting_summary.get("objective_value_jpy")
+        )
+        cost_breakdown["validated_operating_cost_jpy"] = accounting_summary.get(
+            "validated_operating_cost_jpy"
+        )
     (graph_dir / "cost_breakdown.json").write_text(
         json.dumps(cost_breakdown, ensure_ascii=False, indent=2),
         encoding="utf-8",
@@ -4638,7 +4733,12 @@ def _solver_settings_payload(
     metadata = dict(solver_metadata or {})
     effective_limits = dict(metadata.get("effective_limits") or {})
     requested_gap = _float_or_none(mip_gap_requested)
-    achieved_gap = _float_or_none(metadata.get("final_gap"))
+    has_feasible_incumbent = bool(metadata.get("has_feasible_incumbent", False))
+    achieved_gap = (
+        _float_or_none(metadata.get("achieved_mip_gap", metadata.get("final_gap")))
+        if has_feasible_incumbent
+        else None
+    )
     effective_time_limit = _int_or_none(
         effective_limits.get("time_limit_sec", metadata.get("time_limit_sec", time_limit_seconds_requested))
     )
@@ -4650,6 +4750,7 @@ def _solver_settings_payload(
         "mip_gap_achieved_ratio": achieved_gap,
         "mip_gap_achieved_percent": None if achieved_gap is None else achieved_gap * 100.0,
         "gurobi_mip_gap_is_ratio": True,
+        "has_feasible_incumbent": has_feasible_incumbent,
         "solver_termination_reason": metadata.get("termination_reason"),
         "supports_exact_milp": bool(metadata.get("supports_exact_milp", False)),
         "fallback_applied": bool(metadata.get("fallback_applied", False)),
@@ -4673,6 +4774,17 @@ def _solver_settings_payload(
         "arc_pruning_summary": dict(metadata.get("arc_pruning_summary") or {}),
         "requested_mip_gap": requested_gap,
         "achieved_mip_gap": achieved_gap,
+        "requested_phase": str(metadata.get("requested_phase") or ""),
+        "requested_phase_token": str(metadata.get("requested_phase_token") or ""),
+        "resolved_phase": str(metadata.get("resolved_phase") or ""),
+        "executed_phase": str(metadata.get("executed_phase") or ""),
+        "stage1_solver_status": metadata.get("stage1_solver_status"),
+        "stage2_solver_status": metadata.get("stage2_solver_status"),
+        "stage1_feasible": metadata.get("stage1_feasible"),
+        "stage2_feasible": metadata.get("stage2_feasible"),
+        "supports_two_stage_milp": metadata.get("supports_two_stage_milp"),
+        "supports_integrated_exact_milp": metadata.get("supports_integrated_exact_milp"),
+        "assignment_candidate_available": bool(metadata.get("assignment_candidate_available", False)),
     }
 
 
@@ -4820,6 +4932,7 @@ def _run_optimization(
                 ),
             )
             phase_token = _phase_from_solver_mode(solver_mode)
+            requested_phase = phase_token or solver_mode
             is_diagnostic_mode = solver_mode == "diagnostic" or solver_mode == "debug_mode"
             opt_config = OptimizationConfig(
                 mode=opt_mode,
@@ -4835,6 +4948,10 @@ def _run_optimization(
                 research_run=bool(research_run),
                 allow_postsolve_repair=solver_mode == "debug_mode",
                 phase=phase_token,
+                requested_phase_token=solver_mode,
+                requested_phase=requested_phase,
+                resolved_phase=phase_token,
+                executed_phase=phase_token,
                 diagnostic_mode=is_diagnostic_mode,
             )
             problem = ProblemBuilder().build_from_scenario(
@@ -5617,6 +5734,7 @@ def _run_reoptimization(
         )
         solver_mode = _normalize_solver_mode(mode)
         phase_token = _phase_from_solver_mode(solver_mode)
+        requested_phase = phase_token or solver_mode
         is_diagnostic_mode = solver_mode in {"debug_mode", "diagnostic"}
         config = OptimizationConfig(
             mode=_parse_optimization_mode(solver_mode),
@@ -5636,6 +5754,10 @@ def _run_reoptimization(
             research_run=bool(body.research_run),
             allow_postsolve_repair=solver_mode == "debug_mode",
             phase=phase_token,
+            requested_phase_token=solver_mode,
+            requested_phase=requested_phase,
+            resolved_phase=phase_token,
+            executed_phase=phase_token,
         )
         problem = ProblemBuilder().build_from_scenario(
             scenario,

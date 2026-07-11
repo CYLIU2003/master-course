@@ -23,6 +23,7 @@ from src.optimization.common.strict_precheck import (
     evaluate_strict_coverage_precheck,
 )
 from src.optimization.common.vehicle_assignment import assign_duty_fragments_to_vehicles
+from src.optimization.common.time_axis import service_minute
 from src.optimization.ga.engine import GAOptimizer
 from src.optimization.hybrid.hybrid_engine import HybridOptimizer
 from src.optimization.milp.engine import MILPOptimizer
@@ -640,11 +641,16 @@ class OptimizationEngine:
         elif not research_run:
             return problem, config
 
+        if not phase and bool(getattr(config, "thesis_mode", False)):
+            phase = "phase3_two_stage"
+
         is_diagnostic = phase == "diagnostic"
         is_two_stage = phase == "phase3_two_stage"
         config = replace(
             config,
             phase=phase,
+            resolved_phase=phase,
+            executed_phase=phase,
             thesis_mode=bool(getattr(config, "thesis_mode", False) or is_two_stage),
             debug_mode=bool(getattr(config, "debug_mode", False) or is_diagnostic),
             diagnostic_mode=bool(getattr(config, "diagnostic_mode", False) or is_diagnostic),
@@ -657,6 +663,14 @@ class OptimizationEngine:
         metadata.update(
             {
                 "phase": phase or str(metadata.get("phase") or ""),
+                "requested_phase_token": str(
+                    getattr(config, "requested_phase_token", "")
+                    or raw_phase
+                    or ""
+                ),
+                "requested_phase": str(getattr(config, "requested_phase", "") or phase or ""),
+                "resolved_phase": phase,
+                "executed_phase": phase,
                 "thesis_mode": bool(getattr(config, "thesis_mode", False)),
                 "debug_mode": bool(getattr(config, "debug_mode", False)),
                 "research_run": research_run,
@@ -852,6 +866,19 @@ class OptimizationEngine:
         solver_metadata = dict(result.solver_metadata or {})
         final_solver_status = result.solver_status
         plan_metadata = dict(plan.metadata or {})
+        for key in ("requested_phase_token", "requested_phase", "resolved_phase", "executed_phase"):
+            if key not in solver_metadata or not str(solver_metadata.get(key) or "").strip():
+                if key == "executed_phase":
+                    # Executed phase must come from the solver adapter branch;
+                    # copying the requested config would hide routing bugs.
+                    solver_metadata[key] = str(plan_metadata.get(key) or "")
+                else:
+                    solver_metadata[key] = str(
+                        plan_metadata.get(key)
+                        or getattr(config, key, "")
+                        or problem.metadata.get(key, "")
+                        or ""
+                    )
         for key in (
             "phase",
             "diagnostic_mode",
@@ -910,6 +937,26 @@ class OptimizationEngine:
         solver_metadata["assignment_validation_diagnostics"] = [
             dict(item) for item in tuple(getattr(report, "diagnostics", ()) or ())
         ]
+        dispatch_trips = tuple(
+            getattr(getattr(problem, "dispatch_context", None), "trips", ()) or ()
+        )
+        unknown_operator_count = sum(
+            1
+            for trip in dispatch_trips
+            if str(getattr(trip, "operator_id", "") or "").strip().upper()
+            in {"", "UNKNOWN_OPERATOR", "UNKNOWN"}
+        )
+        distinct_operator_ids = tuple(
+            sorted(
+                {
+                    str(getattr(trip, "operator_id", "") or "").strip()
+                    for trip in dispatch_trips
+                    if str(getattr(trip, "operator_id", "") or "").strip()
+                }
+            )
+        )
+        solver_metadata["operator_id_unknown_count"] = int(unknown_operator_count)
+        solver_metadata["operator_ids_observed"] = distinct_operator_ids
         solver_metadata["postsolve_objective_value"] = float(
             costs.get("objective_value", result.objective_value)
         )
@@ -1008,6 +1055,23 @@ class OptimizationEngine:
                     getattr(config, "debug_mode", False)
                     or getattr(config, "diagnostic_mode", False)
                     or phase == "diagnostic"
+                ),
+                "phase_routing_exact": bool(
+                    str(solver_metadata.get("requested_phase_token") or "").strip()
+                    and normalize_phase(
+                        solver_metadata.get("requested_phase_token"),
+                        default=phase,
+                    ) == phase
+                    and str(solver_metadata.get("requested_phase") or "") == phase
+                    and str(solver_metadata.get("resolved_phase") or "") == phase
+                    and str(solver_metadata.get("executed_phase") or "") == phase
+                ),
+                "operator_id_resolved": bool(
+                    not dispatch_trips
+                    or (
+                        unknown_operator_count == 0
+                        and len(distinct_operator_ids) == 1
+                    )
                 ),
             }
             if assignment_only:
@@ -1383,7 +1447,11 @@ class OptimizationEngine:
                     kept_map[str(duty.duty_id)] = str(vehicle_id)
                     previous_kept = duty
                     continue
-                if self._duties_overlap_in_time(previous_kept, duty):
+                if self._duties_overlap_in_time(
+                    previous_kept,
+                    duty,
+                    horizon_start_min=horizon_start_min,
+                ):
                     duties_to_reassign.append(duty)
                     continue
                 if fragment_transition_is_feasible(
@@ -1436,13 +1504,31 @@ class OptimizationEngine:
     def _duties_overlap_in_time(
         duty_a,
         duty_b,
+        *,
+        horizon_start_min: int = 0,
     ) -> bool:
         if not duty_a.legs or not duty_b.legs:
             return False
-        duty_a_start = int(duty_a.legs[0].trip.departure_min)
-        duty_a_end = int(duty_a.legs[-1].trip.arrival_min)
-        duty_b_start = int(duty_b.legs[0].trip.departure_min)
-        duty_b_end = int(duty_b.legs[-1].trip.arrival_min)
+        duty_a_start = service_minute(
+            duty_a.legs[0].trip.departure_min,
+            horizon_start_min=horizon_start_min,
+        )
+        duty_a_end = service_minute(
+            duty_a.legs[-1].trip.arrival_min,
+            horizon_start_min=horizon_start_min,
+        )
+        duty_b_start = service_minute(
+            duty_b.legs[0].trip.departure_min,
+            horizon_start_min=horizon_start_min,
+        )
+        duty_b_end = service_minute(
+            duty_b.legs[-1].trip.arrival_min,
+            horizon_start_min=horizon_start_min,
+        )
+        if duty_a_end < duty_a_start:
+            duty_a_end += 24 * 60
+        if duty_b_end < duty_b_start:
+            duty_b_end += 24 * 60
         return duty_a_start < duty_b_end and duty_b_start < duty_a_end
 
     def _merge_directly_connectable_fragments(

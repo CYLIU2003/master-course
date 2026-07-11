@@ -18,6 +18,7 @@ from .problem import (
     day_index_for_minute,
     normalize_service_coverage_mode,
 )
+from .time_axis import chronological_duty_key, service_minute
 from .soc_helpers import (
     deadhead_energy_kwh,
     effective_final_soc_target_kwh,
@@ -227,10 +228,8 @@ class FeasibilityChecker:
         for vehicle_id, duties in plan.duties_by_vehicle().items():
             ordered = sorted(
                 (duty for duty in duties if duty.legs),
-                key=lambda duty: (
-                    int(duty.legs[0].trip.departure_min),
-                    int(duty.legs[-1].trip.arrival_min),
-                    str(duty.duty_id),
+                key=lambda duty: chronological_duty_key(
+                    duty, horizon_start_min=self._horizon_start_min(problem)
                 ),
             )
             vehicle = vehicle_by_id.get(str(vehicle_id))
@@ -279,7 +278,7 @@ class FeasibilityChecker:
         metrics: Dict[str, Any] = {
             "unassigned_trip_count": int(len(set(uncovered_trip_ids))),
             "duplicate_trip_count": int(len(set(duplicate_trip_ids))),
-            "vehicle_time_overlap_count": self._count_vehicle_time_overlaps(plan),
+            "vehicle_time_overlap_count": self._count_vehicle_time_overlaps(problem, plan),
             "infeasible_transition_count": self._count_infeasible_transitions(problem, plan),
             "ev_soc_lower_violation_count": int(ev_soc_bounds["lower"]),
             "ev_soc_upper_violation_count": int(ev_soc_bounds["upper"]),
@@ -333,13 +332,27 @@ class FeasibilityChecker:
         tolerance = float(metrics.get("bess_terminal_soc_tolerance_kwh", 0.0) or 0.0)
         return deviation <= tolerance + 1.0e-9
 
-    def _count_vehicle_time_overlaps(self, plan: AssignmentPlan) -> int:
+    def _count_vehicle_time_overlaps(
+        self,
+        problem: CanonicalOptimizationProblem,
+        plan: AssignmentPlan,
+    ) -> int:
         overlap_count = 0
         for _vehicle_id, duties in plan.duties_by_vehicle().items():
             intervals: List[tuple[int, int]] = []
             for duty in duties:
                 for leg in duty.legs:
-                    intervals.append((int(leg.trip.departure_min), int(leg.trip.arrival_min)))
+                    start_min = service_minute(
+                        leg.trip.departure_min,
+                        horizon_start_min=self._horizon_start_min(problem),
+                    )
+                    end_min = service_minute(
+                        leg.trip.arrival_min,
+                        horizon_start_min=self._horizon_start_min(problem),
+                    )
+                    if end_min < start_min:
+                        end_min += 24 * 60
+                    intervals.append((start_min, end_min))
             intervals.sort()
             previous_end = None
             for start_min, end_min in intervals:
@@ -815,10 +828,8 @@ class FeasibilityChecker:
                     )
             ordered = sorted(
                 duties,
-                key=lambda duty: (
-                    duty.legs[0].trip.departure_min if duty.legs else 10**9,
-                    duty.legs[-1].trip.arrival_min if duty.legs else 10**9,
-                    duty.duty_id,
+                key=lambda duty: chronological_duty_key(
+                    duty, horizon_start_min=self._horizon_start_min(problem)
                 ),
             )
             vehicle = next(
@@ -832,7 +843,11 @@ class FeasibilityChecker:
             home_depot_id = str(getattr(vehicle, "home_depot_id", "") or "").strip()
             for index, prev_duty in enumerate(ordered):
                 for next_duty in ordered[index + 1 :]:
-                    if not self._duties_overlap_in_time(prev_duty, next_duty):
+                    if not self._duties_overlap_in_time(
+                        prev_duty,
+                        next_duty,
+                        horizon_start_min=self._horizon_start_min(problem),
+                    ):
                         break
                     errors.append(
                         f"[FRAGMENT] vehicle={vehicle_id} has overlapping fragments {prev_duty.duty_id} and {next_duty.duty_id}"
@@ -897,10 +912,8 @@ class FeasibilityChecker:
         for vehicle_id, duties in duties_by_vehicle.items():
             ordered = sorted(
                 duties,
-                key=lambda duty: (
-                    duty.legs[0].trip.departure_min if duty.legs else 10**9,
-                    duty.legs[-1].trip.arrival_min if duty.legs else 10**9,
-                    duty.duty_id,
+                key=lambda duty: chronological_duty_key(
+                    duty, horizon_start_min=self._horizon_start_min(problem)
                 ),
             )
             for prev_duty, next_duty in zip(ordered, ordered[1:]):
@@ -942,13 +955,27 @@ class FeasibilityChecker:
         self,
         duty_a: VehicleDuty,
         duty_b: VehicleDuty,
+        *,
+        horizon_start_min: int = 0,
     ) -> bool:
         for leg_a in duty_a.legs:
-            start_a = int(leg_a.trip.departure_min)
-            end_a = int(leg_a.trip.arrival_min)
+            start_a = service_minute(
+                leg_a.trip.departure_min, horizon_start_min=horizon_start_min
+            )
+            end_a = service_minute(
+                leg_a.trip.arrival_min, horizon_start_min=horizon_start_min
+            )
+            if end_a < start_a:
+                end_a += 24 * 60
             for leg_b in duty_b.legs:
-                start_b = int(leg_b.trip.departure_min)
-                end_b = int(leg_b.trip.arrival_min)
+                start_b = service_minute(
+                    leg_b.trip.departure_min, horizon_start_min=horizon_start_min
+                )
+                end_b = service_minute(
+                    leg_b.trip.arrival_min, horizon_start_min=horizon_start_min
+                )
+                if end_b < start_b:
+                    end_b += 24 * 60
                 if start_a < end_b and start_b < end_a:
                     return True
         return False

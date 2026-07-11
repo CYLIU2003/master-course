@@ -36,6 +36,59 @@ class MILPOptimizer:
         plan = replace(plan, vehicle_cost_ledger=vehicle_ledger, daily_cost_ledger=daily_ledger)
         plan_metadata = dict(plan.metadata or {})
         phase = str(plan_metadata.get("phase") or getattr(config, "phase", "") or "").strip()
+        if phase:
+            plan_metadata["executed_phase"] = phase
+            plan_metadata["executed_phase_source"] = "milp_adapter_branch"
+            plan = replace(plan, metadata=plan_metadata)
+        stage2_failed = bool(
+            phase == "phase3_two_stage"
+            and plan_metadata.get("stage1_feasible") is True
+            and plan_metadata.get("stage2_feasible") is False
+        )
+        if stage2_failed:
+            # Stage 1 is a useful diagnostic candidate, but it is not a
+            # dispatch result when Stage 2 cannot produce charging/SOC.  This
+            # isolation applies to ordinary Phase 3 calls as well as research
+            # runs; otherwise an infeasible charging stage would leak a
+            # seemingly valid assignment into public output.
+            plan_metadata["research_candidate_only"] = bool(
+                getattr(config, "research_run", False)
+            )
+            plan_metadata["stage2_candidate_only"] = True
+            plan_metadata["assignment_candidate_available"] = True
+            plan_metadata["assignment_candidate_trip_ids"] = tuple(plan.served_trip_ids)
+            plan_metadata["assignment_candidate_trip_count"] = len(plan.served_trip_ids)
+            plan = replace(
+                plan,
+                duties=(),
+                charging_slots=(),
+                served_trip_ids=(),
+                unserved_trip_ids=tuple(sorted(trip.trip_id for trip in problem.trips)),
+                grid_to_bus_kwh_by_depot_slot={},
+                pv_to_bus_kwh_by_depot_slot={},
+                bess_to_bus_kwh_by_depot_slot={},
+                pv_to_bess_kwh_by_depot_slot={},
+                grid_to_bess_kwh_by_depot_slot={},
+                pv_curtail_kwh_by_depot_slot={},
+                vehicle_soc_kwh_by_vehicle_slot={},
+                vehicle_cost_ledger=(),
+                daily_cost_ledger=(),
+                metadata=plan_metadata,
+            )
+            # Re-evaluate the published (empty) plan.  The Stage 1 report is
+            # retained only as diagnostic metadata; it must not leak into the
+            # direct MILP result's ``feasible`` flag or ledgers.
+            report = self._feasibility.evaluate(problem, plan)
+            breakdown = self._evaluator.evaluate(problem, plan)
+            vehicle_ledger, daily_ledger = self._evaluator.build_plan_ledgers(
+                problem, plan, breakdown
+            )
+            plan = replace(
+                plan,
+                vehicle_cost_ledger=vehicle_ledger,
+                daily_cost_ledger=daily_ledger,
+            )
+        plan_metadata = dict(plan.metadata or {})
         diagnostic_mode = bool(plan_metadata.get("diagnostic_mode", getattr(config, "diagnostic_mode", False)))
         result_class = str(
             plan_metadata.get("result_class")
@@ -98,7 +151,12 @@ class MILPOptimizer:
                 "backend": outcome.used_backend,
                 "supports_exact_milp": outcome.supports_exact_milp,
                 "supports_two_stage_milp": bool((plan.metadata or {}).get("supports_two_stage_milp", False)),
-                "supports_integrated_exact_milp": bool((plan.metadata or {}).get("supports_integrated_exact_milp", outcome.supports_exact_milp)),
+                "supports_integrated_exact_milp": bool(
+                    (plan.metadata or {}).get(
+                        "supports_integrated_exact_milp",
+                        outcome.supports_exact_milp if phase != "phase3_two_stage" else False,
+                    )
+                ),
                 "optimization_structure": str((plan.metadata or {}).get("optimization_structure") or ("two_stage" if getattr(config, "thesis_mode", False) else "integrated")),
                 "stage1_solver_status": (plan.metadata or {}).get("stage1_solver_status"),
                 "stage2_solver_status": (plan.metadata or {}).get("stage2_solver_status"),
@@ -106,6 +164,20 @@ class MILPOptimizer:
                 "stage2_mip_gap": (plan.metadata or {}).get("stage2_mip_gap"),
                 "stage1_objective_value": (plan.metadata or {}).get("stage1_objective_value"),
                 "stage2_objective_value": (plan.metadata or {}).get("stage2_objective_value"),
+                "stage1_has_feasible_incumbent": (plan.metadata or {}).get("stage1_has_feasible_incumbent"),
+                "stage1_objective": (plan.metadata or {}).get("stage1_objective"),
+                "stage1_best_bound": (plan.metadata or {}).get("stage1_best_bound"),
+                "stage1_mip_gap_ratio": (plan.metadata or {}).get("stage1_mip_gap_ratio"),
+                "stage1_runtime_seconds": (plan.metadata or {}).get("stage1_runtime_seconds"),
+                "stage2_has_feasible_incumbent": (plan.metadata or {}).get("stage2_has_feasible_incumbent"),
+                "stage2_objective": (plan.metadata or {}).get("stage2_objective"),
+                "stage2_best_bound": (plan.metadata or {}).get("stage2_best_bound"),
+                "stage2_mip_gap_ratio": (plan.metadata or {}).get("stage2_mip_gap_ratio"),
+                "stage2_runtime_seconds": (plan.metadata or {}).get("stage2_runtime_seconds"),
+                "stage1_feasible": (plan.metadata or {}).get("stage1_feasible"),
+                "stage2_feasible": (plan.metadata or {}).get("stage2_feasible"),
+                "assignment_candidate_available": bool((plan.metadata or {}).get("assignment_candidate_available", False)),
+                "research_candidate_only": bool((plan.metadata or {}).get("research_candidate_only", False)),
                 "solver_objective_matches_accounting_total": bool(
                     (plan.metadata or {}).get(
                         "solver_objective_matches_accounting_total",
@@ -118,6 +190,26 @@ class MILPOptimizer:
                     or "single_solver_objective"
                 ),
                 "phase": phase,
+                "requested_phase_token": str(
+                    (plan.metadata or {}).get("requested_phase_token")
+                    or getattr(config, "requested_phase_token", "")
+                    or ""
+                ),
+                "requested_phase": str(
+                    (plan.metadata or {}).get("requested_phase")
+                    or getattr(config, "requested_phase", "")
+                    or phase
+                ),
+                "resolved_phase": str(
+                    (plan.metadata or {}).get("resolved_phase")
+                    or getattr(config, "resolved_phase", "")
+                    or phase
+                ),
+                "executed_phase": str(
+                    (plan.metadata or {}).get("executed_phase")
+                    or getattr(config, "executed_phase", "")
+                    or phase
+                ),
                 "true_solver_family": "milp",
                 "independent_implementation": True,
                 "delegates_to": "none",
@@ -206,9 +298,12 @@ class MILPOptimizer:
                     else None
                 ),
                 "best_bound": outcome.best_bound,
-                "final_gap": outcome.final_gap,
+                # A gap is meaningful only when the returned solver outcome
+                # has an incumbent.  Infeasible/no-incumbent runs must not
+                # expose a stale or stage-1 gap as an achieved gap.
+                "final_gap": outcome.final_gap if outcome.has_feasible_incumbent else None,
                 "requested_mip_gap": float(config.mip_gap),
-                "achieved_mip_gap": outcome.final_gap,
+                "achieved_mip_gap": outcome.final_gap if outcome.has_feasible_incumbent else None,
                 "nodes_explored": outcome.nodes_explored,
                 "runtime_sec": outcome.runtime_sec,
                 "first_feasible_sec": outcome.first_feasible_sec,

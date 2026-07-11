@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import Counter, deque
 from dataclasses import dataclass
+from datetime import date
 import math
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
@@ -85,6 +86,7 @@ class ProblemBuilder:
             scenario,
             depot_id=depot_id,
             service_id=service_id,
+            research_run=bool(getattr(config, "research_run", False)),
         )
         scenario_vehicles = self._filter_scenario_vehicles_for_scope(
             scenario,
@@ -1705,6 +1707,7 @@ class ProblemBuilder:
         *,
         depot_id: Optional[str],
         service_id: str,
+        research_run: bool = False,
     ) -> DispatchContext:
         vehicles = [
             vehicle
@@ -1766,6 +1769,13 @@ class ProblemBuilder:
         source_rows = list(scenario.get("timetable_rows") or [])
         if not source_rows:
             source_rows = list(scenario.get("trips") or [])
+        scenario_operator_id = str(
+            scenario.get("operator_id")
+            or scenario.get("operatorId")
+            or (scenario.get("meta") or {}).get("operator_id")
+            or (scenario.get("meta") or {}).get("operatorId")
+            or ""
+        ).strip()
         for row in source_rows:
             row_service_id = row.get("service_id")
             if row_service_id is not None and row_service_id != service_id:
@@ -1817,6 +1827,12 @@ class ProblemBuilder:
                     arrival_time=str(row.get("arrival") or "00:00"),
                     distance_km=self._estimate_trip_distance_km(row, route_like),
                     allowed_vehicle_types=allowed,
+                    operator_id=str(
+                        row.get("operator_id")
+                        or row.get("operatorId")
+                        or scenario_operator_id
+                        or ""
+                    ).strip(),
                     origin_stop_id=str(row.get("origin_stop_id") or ""),
                     destination_stop_id=str(row.get("destination_stop_id") or ""),
                     route_family_code=str(
@@ -1865,7 +1881,32 @@ class ProblemBuilder:
             for key, metric in deadhead_metrics.items()
         }
 
-        service_date = str((scenario.get("meta") or {}).get("updatedAt") or "2026-01-01")[:10]
+        service_date = str(
+            simulation_cfg.get("service_date")
+            or simulation_cfg.get("serviceDate")
+            or scenario.get("service_date")
+            or scenario.get("serviceDate")
+            or (scenario.get("meta") or {}).get("service_date")
+            or (scenario.get("meta") or {}).get("serviceDate")
+            or (scenario.get("meta") or {}).get("updatedAt")
+            or ""
+        )[:10]
+        if not service_date and research_run:
+            raise ValueError(
+                "service_date is required for canonical optimization output; "
+                "do not substitute the run date."
+            )
+        if research_run:
+            try:
+                date.fromisoformat(service_date)
+            except ValueError as exc:
+                raise ValueError(
+                    f"research service_date must be ISO date YYYY-MM-DD, got {service_date!r}"
+                ) from exc
+        if not service_date:
+            # Legacy/non-research callers historically allowed a synthetic
+            # metadata date.  Research runs take the strict branch above.
+            service_date = "2026-01-01"
         turnaround_value = simulation_cfg.get("default_turnaround_min", 10)
         default_turnaround_min = 10 if turnaround_value is None else max(0, int(turnaround_value))
         return DispatchContext(

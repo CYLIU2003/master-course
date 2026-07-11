@@ -1,0 +1,127 @@
+from __future__ import annotations
+
+from datetime import date
+from types import SimpleNamespace
+
+import pytest
+
+from bff.routers.optimization import _solver_settings_payload
+from src.dispatch.models import DutyLeg, Trip, VehicleDuty
+from src.optimization.accounting.aggregators import build_accounting_summary
+from src.optimization.common.problem import AssignmentPlan
+from bff.services.optimization_run.canonical_graph import canonical_output_base_date
+
+
+def _trip(trip_id: str, departure: str, arrival: str) -> Trip:
+    return Trip(
+        trip_id=trip_id,
+        route_id="r1",
+        origin="A",
+        destination="B",
+        departure_time=departure,
+        arrival_time=arrival,
+        distance_km=1.0,
+        allowed_vehicle_types=("BEV",),
+    )
+
+
+def test_assignment_plan_uses_chronological_duty_order_not_trip_id() -> None:
+    late = VehicleDuty("duty-10", "BEV", (DutyLeg(_trip("trip-1", "10:00", "10:30")),))
+    early = VehicleDuty("duty-2", "BEV", (DutyLeg(_trip("trip-9", "08:00", "08:30")),))
+    plan = AssignmentPlan(
+        duties=(late, early),
+        metadata={"duty_vehicle_map": {"duty-10": "veh-1", "duty-2": "veh-1"}},
+    )
+
+    assert plan.vehicle_paths() == {"veh-1": ("trip-9", "trip-1")}
+
+
+def test_assignment_plan_orders_after_midnight_relative_to_horizon_start() -> None:
+    late = VehicleDuty("duty-late", "BEV", (DutyLeg(_trip("trip-late", "23:30", "23:50")),))
+    after_midnight = VehicleDuty(
+        "duty-midnight",
+        "BEV",
+        (DutyLeg(_trip("trip-midnight", "00:10", "00:25")),),
+    )
+    early_after_midnight = VehicleDuty(
+        "duty-early",
+        "BEV",
+        (DutyLeg(_trip("trip-early", "00:30", "00:45")),),
+    )
+    plan = AssignmentPlan(
+        duties=(early_after_midnight, late, after_midnight),
+        metadata={
+            "horizon_start": "05:00",
+            "duty_vehicle_map": {
+                "duty-late": "veh-1",
+                "duty-midnight": "veh-1",
+                "duty-early": "veh-1",
+            },
+        },
+    )
+
+    assert plan.vehicle_paths() == {
+        "veh-1": ("trip-late", "trip-midnight", "trip-early")
+    }
+
+
+def test_solver_gap_is_null_without_incumbent_and_phase_is_explicit() -> None:
+    payload = _solver_settings_payload(
+        time_limit_seconds_requested=300,
+        mip_gap_requested=0.1,
+        solver_metadata={
+            "final_gap": 0.0,
+            "has_feasible_incumbent": False,
+            "requested_phase": "phase3_two_stage",
+            "resolved_phase": "phase3_two_stage",
+            "executed_phase": "phase3_two_stage",
+        },
+    )
+
+    assert payload["mip_gap_achieved_ratio"] is None
+    assert payload["mip_gap_achieved_percent"] is None
+    assert payload["requested_phase"] == "phase3_two_stage"
+    assert payload["resolved_phase"] == "phase3_two_stage"
+    assert payload["executed_phase"] == "phase3_two_stage"
+
+
+def test_infeasible_accounting_has_distinct_cost_fields_and_null_validated_cost() -> None:
+    summary = build_accounting_summary(
+        vehicle_rows=(),
+        energy_rows=(),
+        metadata={
+            "scenario_id": "s1",
+            "run_id": "r1",
+            "service_date": date(2025, 8, 10).isoformat(),
+            "solver_status": "INFEASIBLE",
+            "objective_value": 1234.0,
+            "validated_feasible": False,
+        },
+    )
+
+    assert summary["solver_objective_value"] == 1234.0
+    assert summary["accounting_total_cost_jpy"] == 0.0
+    assert summary["validated_operating_cost_jpy"] is None
+
+
+def test_research_output_date_never_falls_back_to_execution_date() -> None:
+    with pytest.raises(ValueError, match="research service_date"):
+        canonical_output_base_date(
+            SimpleNamespace(metadata={"research_run": True, "service_date": "not-a-date"}),
+            None,
+        )
+
+
+def test_phase2_accounting_cost_is_not_validated_operating_cost() -> None:
+    summary = build_accounting_summary(
+        vehicle_rows=(),
+        energy_rows=(),
+        metadata={
+            "solver_status": "PHASE2_ASSIGNMENT_FEASIBLE",
+            "phase": "phase2_assignment_only",
+            "validated_feasible": True,
+            "objective_value": 100.0,
+        },
+    )
+
+    assert summary["validated_operating_cost_jpy"] is None
