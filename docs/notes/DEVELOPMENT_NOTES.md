@@ -5,6 +5,32 @@
 
 ---
 
+## 2026-07-09 Phase 1/2/Diagnostic Public Contract
+
+- Phase 1/2/3/4/diagnostic tokens were re-exposed through the BFF public mode API after adding minimal safety contracts. Aliases `phase1`, `phase2`, `phase3`, `phase4`, and `diagnostic_mode` normalize to their canonical phase tokens.
+- Phase 1 now rejects fixed assignments that only contain `served_trip_ids` without concrete `AssignmentPlan.duties`. This prevents charging-only Stage 2 from treating an empty vehicle path as a valid “no charging required” result.
+- Phase 2 is explicitly tagged as `assignment_only_result`: it may be useful for assignment research, but charging dispatch and SOC feasibility are not evaluated, so full research KPI eligibility is false.
+- diagnostic now routes to the existing integrated debug MILP path with unserved/SOC/contract softening hooks enabled where available. The exported `binding_constraint_report` is based on diagnostic slacks plus postsolve validation metrics and is not an IIS proof.
+- Phase/result metadata is propagated from `AssignmentPlan.metadata` into `solver_metadata`, so BFF result classification uses the actual phase contract instead of losing it during finalization.
+
+---
+
+## 2026-07-07 Thesis Phase Routing Guardrail Correction
+
+- 研究方針として、最適化を「最適スケジュール生成器」ではなく、EVバス運用成立条件を調べる実験装置として整理する方針を確認した。Phase 1=固定割当で充電のみ、Phase 2=車両割当のみ、Phase 3=2段階MILP、Phase 4=統合MILP、diagnostic=制約ボトルネック診断という構成を canonical `src/optimization/` 側に寄せる設計にした。
+- 直近の試作で `phase1_charging_only` / `phase2_assignment_only` / `diagnostic` を公開 `supported_modes` に出してしまったが、実装が未完成で既存 `normalize_solver_mode()` 契約と `OptimizationConfig()` 既定経路を壊したため、公開面からは取り下げた。
+- `normalize_solver_mode()` は既存の `thesis_mode`, `debug_mode`, `mode_milp_only`, `mode_alns_only`, `mode_ga_only`, `mode_abc_only`, `mode_hybrid` をそのまま返す契約へ戻した。明示 phase token は内部実験フックとして残し、BFF capabilities ではまだ supported として表示しない。
+- `OptimizationConfig.phase` は空文字を既定値に変更し、明示 phase が指定されない通常 `OptimizationConfig()` では既存 integrated MILP fallback 経路を保つようにした。これにより Gurobi 不可時の `gurobi_unavailable_strict_infeasible` / `gurobi_unavailable_baseline` の既存契約を回復した。
+- `debug_mode` は未完成の `diagnostic` phase へ自動変換しない方針に戻した。公開済み debug mode は従来どおり integrated MILP の `unserved` 診断用途として扱い、研究KPI不可とする。
+- Phase 1/2/diagnostic の本格実装は未完了。特に Phase 1 は `fixed_assignment` に `duties` が無い場合に Stage 2 の `vehicle_paths()` が空になり得るため、研究利用前に `AssignmentPlan.duties` 生成または canonical fixed-assignment contract を明確化する必要がある。diagnostic は SOC/契約電力/充電器 slack の読出しと binding constraint report が未実装。
+- 未完成 phase token (`phase1`, `phase1_charging_only`, `phase2`, `phase2_assignment_only`, `phase3`, `phase3_two_stage`, `phase4`, `phase4_integrated`, `diagnostic`, `diagnostic_mode`) は BFF の公開 `mode` API では `ValueError` とし、内部実験では `OptimizationConfig.phase` を直接指定する方針にした。これにより「capabilities には出していないが直接 mode 指定なら実行できる」状態を防ぐ。
+- 検証: `python -m py_compile src/optimization/common/problem.py src/optimization/milp/solver_adapter.py bff/services/optimization_run/execute.py bff/routers/optimization.py` → pass。
+- 検証: `pytest tests/test_milp_strict_coverage.py tests/test_solver_path_routing.py tests/test_milp_engine_lightweight_stats.py -q` → `13 passed`。
+- 検証: `pytest tests/test_solver_path_routing.py tests/test_solver_identity_metadata.py tests/test_solution_validity.py tests/test_solver_maturity_gating.py -q` → `18 passed`。
+- 検証: `pytest tests` → `592 passed, 6 skipped`。skip はローカル Gurobi runtime/license が利用不可なための Gurobi 必須テスト。
+
+---
+
 ## 2026-05-12 BESS終端SOC・PV会計保存則・CO2内訳の契約強化
 
 - 問題として、営業所BESS設定は `simulation_config.depot_energy_assets` 寄りで、`scenario_overlay.depot_energy_assets` が主経路として十分に強くなかった。BFF保存時に camelCase / snake_case の両方を正規化し、SOC `%` 入力は容量 [kWh] へ変換して、後方互換の `simulation_config` と優先経路の `scenario_overlay` の両方へ保存する契約にした。

@@ -219,7 +219,7 @@ def test_vehicle_slot_ledger_does_not_duplicate_trip_distance() -> None:
     problem = CanonicalOptimizationProblem(
         scenario=OptimizationScenario(
             scenario_id="scenario-1",
-            timestep_min=5,
+            timestep_min=30,
             objective_mode="total_cost",
         ),
         dispatch_context=None,

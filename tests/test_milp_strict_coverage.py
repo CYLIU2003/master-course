@@ -88,3 +88,23 @@ def test_gurobi_unavailable_penalized_mode_can_return_partial_baseline(monkeypat
     assert outcome.has_feasible_incumbent is True
     assert outcome.solver_status == "gurobi_unavailable_baseline"
     assert plan.unserved_trip_ids == ("t2",)
+
+
+def test_phase1_rejects_fixed_assignment_without_duties() -> None:
+    problem = _problem(
+        service_coverage_mode="strict",
+        baseline_plan=AssignmentPlan(
+            served_trip_ids=("t1", "t2"),
+            unserved_trip_ids=(),
+            metadata={"source": "dispatch_baseline_without_duties"},
+        ),
+    )
+
+    outcome, plan = GurobiMILPAdapter().solve(
+        problem,
+        OptimizationConfig(phase="phase1_charging_only"),
+    )
+
+    assert outcome.solver_status == "phase1_fixed_assignment_duties_missing"
+    assert plan.metadata["phase_contract_error"] == "phase1_fixed_assignment_duties_missing"
+    assert plan.metadata["research_kpi_eligible"] is False

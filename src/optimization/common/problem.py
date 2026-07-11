@@ -17,6 +17,41 @@ class OptimizationMode(str, Enum):
     HYBRID = "hybrid"
 
 
+VALID_PHASES: Set[str] = {
+    "phase1_charging_only",
+    "phase2_assignment_only",
+    "phase3_two_stage",
+    "phase4_integrated",
+    "diagnostic",
+}
+
+PHASE_ALIASES: Dict[str, str] = {
+    "phase1": "phase1_charging_only",
+    "phase2": "phase2_assignment_only",
+    "phase3": "phase3_two_stage",
+    "phase4": "phase4_integrated",
+    "diagnostic_mode": "diagnostic",
+    "thesis_mode": "phase3_two_stage",
+    "debug_mode": "diagnostic",
+    "mode_milp_only": "phase3_two_stage",
+    "integrated": "phase4_integrated",
+}
+
+
+def normalize_phase(value: Any, *, default: str = "phase3_two_stage") -> str:
+    normalized_default = str(default or "phase3_two_stage").strip().lower() or "phase3_two_stage"
+    if normalized_default not in VALID_PHASES:
+        normalized_default = "phase3_two_stage"
+    raw = str(value or "").strip().lower()
+    if not raw:
+        return normalized_default
+    if raw in VALID_PHASES:
+        return raw
+    if raw in PHASE_ALIASES:
+        return PHASE_ALIASES[raw]
+    return normalized_default
+
+
 VALID_SERVICE_COVERAGE_MODES: Set[str] = {"strict", "penalized"}
 
 
@@ -283,6 +318,12 @@ class OptimizationConfig:
     use_data_driven_peak_removal: bool = True
     peak_hour_windows_min: Tuple[Tuple[int, int], ...] = ((7 * 60, 9 * 60),)
     worst_trip_scoring: str = "marginal_cost"
+    thesis_mode: bool = False
+    debug_mode: bool = False
+    allow_postsolve_repair: bool = True
+    phase: str = ""
+    diagnostic_mode: bool = False
+    fixed_assignment: Optional["AssignmentPlan"] = None
 
 
 @dataclass(frozen=True)

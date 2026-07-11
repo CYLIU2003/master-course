@@ -58,6 +58,8 @@ def test_builder_metadata_includes_fragment_and_band_settings() -> None:
         max_ice_fuel_percent=90.0,
         default_ice_tank_capacity_l=320.0,
         deadhead_speed_kmh=18.0,
+        home_depot_charge_pre_window_min=60.0,
+        home_depot_charge_post_window_min=60.0,
     )
 
     assert problem.metadata.get("fixed_route_band_mode") is True

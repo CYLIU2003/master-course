@@ -273,12 +273,14 @@ def test_run_optimization_records_canonical_graph_artifacts_for_milp_mode() -> N
     assert "trips" not in stored_fields
     assert "timetable_rows" not in stored_fields
     assert stored_fields["optimization_result"]["solver_mode"] == "mode_milp_only"
-    assert stored_fields["optimization_result"]["graph_artifacts"] == {
+    expected_graph_artifacts = {
         "enabled": True,
         "diagram_count": 1,
         "manifest_path": "graph/route_band_diagrams/manifest.json",
         "vehicle_timeline_path": "graph/vehicle_timeline.csv",
     }
+    for key, value in expected_graph_artifacts.items():
+        assert stored_fields["optimization_result"]["graph_artifacts"][key] == value
 
 
 def test_run_optimization_endpoint_submits_current_prepared_input_job() -> None:

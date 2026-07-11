@@ -100,3 +100,98 @@ def test_milp_optimizer_avoids_full_model_build_for_metadata(monkeypatch) -> Non
 
     assert result.solver_status == "optimal"
     assert result.solver_metadata["model_stats"]["variables"]["assignment"] == 1
+
+
+def test_milp_optimizer_propagates_phase_metadata(monkeypatch) -> None:
+    optimizer = MILPOptimizer()
+
+    class _FakeBuilder:
+        def enumerate_assignment_pairs(self, problem):
+            return []
+
+        def enumerate_arc_pairs(self, problem, trip_by_id):
+            return []
+
+        def arc_pruning_summary(self, problem, trip_by_id):
+            return {}
+
+    class _FakeAdapter:
+        def solve(self, problem, config):
+            return (
+                MILPSolverOutcome(
+                    solver_status="phase2_assignment_feasible",
+                    used_backend="fake",
+                    supports_exact_milp=False,
+                ),
+                AssignmentPlan(
+                    served_trip_ids=("t1",),
+                    metadata={
+                        "phase": "phase2_assignment_only",
+                        "result_class": "assignment_only_result",
+                        "research_kpi_eligible": False,
+                        "charging_dispatch_evaluated": False,
+                        "soc_constraints_evaluated": False,
+                        "supports_assignment_milp": True,
+                    },
+                ),
+            )
+
+    monkeypatch.setattr(optimizer, "_builder", _FakeBuilder())
+    monkeypatch.setattr(optimizer, "_adapter", _FakeAdapter())
+    monkeypatch.setattr(
+        optimizer,
+        "_feasibility",
+        SimpleNamespace(
+            evaluate=lambda problem, plan: SimpleNamespace(
+                feasible=True,
+                warnings=(),
+                errors=(),
+                metrics={},
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        optimizer,
+        "_evaluator",
+        SimpleNamespace(
+            evaluate=lambda problem, plan: _Breakdown(),
+            build_plan_ledgers=lambda problem, plan, breakdown: ((), ()),
+        ),
+    )
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(scenario_id="s1", timestep_min=60),
+        dispatch_context=SimpleNamespace(),
+        trips=(
+            ProblemTrip(
+                trip_id="t1",
+                route_id="r1",
+                origin="A",
+                destination="B",
+                departure_min=480,
+                arrival_min=510,
+                distance_km=10.0,
+                allowed_vehicle_types=("BEV",),
+                energy_kwh=12.0,
+            ),
+        ),
+        vehicles=(
+            ProblemVehicle(
+                vehicle_id="veh-1",
+                vehicle_type="BEV",
+                home_depot_id="dep-1",
+                battery_capacity_kwh=300.0,
+                reserve_soc=30.0,
+            ),
+        ),
+    )
+
+    result = optimizer.solve(
+        problem,
+        OptimizationConfig(mode=OptimizationMode.MILP, phase="phase2_assignment_only"),
+    )
+
+    assert result.solver_metadata["phase"] == "phase2_assignment_only"
+    assert result.solver_metadata["result_class"] == "assignment_only_result"
+    assert result.solver_metadata["research_kpi_eligible"] is False
+    assert result.solver_metadata["charging_dispatch_evaluated"] is False
+    assert result.solver_metadata["soc_constraints_evaluated"] is False

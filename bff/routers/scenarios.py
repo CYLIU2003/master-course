@@ -188,10 +188,12 @@ def normalize_depot_energy_asset_config(raw: Dict[str, Any], depot_id: str = "")
         _first_present_from_mapping(row, "bess_terminal_soc_min_kwh", "bessTerminalSocMinKwh"),
         "bess_terminal_soc_min_kwh",
     )
+    terminal_target_keys = ("bess_terminal_soc_target_kwh", "bessTerminalSocTargetKwh")
     terminal_target = _coerce_non_negative_float(
-        _first_present_from_mapping(row, "bess_terminal_soc_target_kwh", "bessTerminalSocTargetKwh"),
+        _first_present_from_mapping(row, *terminal_target_keys),
         "bess_terminal_soc_target_kwh",
     )
+    terminal_target_explicit = terminal_target > 0.0
     if capacity > 0.0:
         ratio_value = _ratio_to_kwh(row, capacity, "bess_initial_soc_ratio", "bessInitialSocRatio")
         if ratio_value is not None:
@@ -208,6 +210,7 @@ def normalize_depot_energy_asset_config(raw: Dict[str, Any], depot_id: str = "")
         ratio_value = _ratio_to_kwh(row, capacity, "bess_terminal_soc_target_ratio", "bessTerminalSocTargetRatio")
         if ratio_value is not None:
             terminal_target = ratio_value
+            terminal_target_explicit = terminal_target > 0.0
         percent_value = _percent_to_kwh(row, capacity, "bess_initial_soc_percent", "bessInitialSocPercent")
         if percent_value is not None:
             initial_soc = percent_value
@@ -223,6 +226,7 @@ def normalize_depot_energy_asset_config(raw: Dict[str, Any], depot_id: str = "")
         percent_value = _percent_to_kwh(row, capacity, "bess_terminal_soc_target_percent", "bessTerminalSocTargetPercent")
         if percent_value is not None:
             terminal_target = percent_value
+            terminal_target_explicit = terminal_target > 0.0
 
     enabled = bool(_first_present_from_mapping(row, "bess_enabled", "bessEnabled") or False)
     if enabled:
@@ -240,8 +244,8 @@ def normalize_depot_energy_asset_config(raw: Dict[str, Any], depot_id: str = "")
             soc_max = capacity * 0.9
         if terminal_min <= 0.0:
             terminal_min = soc_min
-        if terminal_target <= 0.0:
-            terminal_target = initial_soc
+        if not terminal_target_explicit:
+            terminal_target = 0.0
         if not (0.0 <= soc_min <= initial_soc <= soc_max <= capacity):
             raise HTTPException(
                 status_code=400,
@@ -252,10 +256,10 @@ def normalize_depot_energy_asset_config(raw: Dict[str, Any], depot_id: str = "")
                 status_code=400,
                 detail={"code": "INVALID_DEPOT_ENERGY_ASSET", "message": "bess_terminal_soc_min_kwh must be between 0 and bess_soc_max_kwh"},
             )
-        if not (0.0 <= terminal_target <= soc_max):
+        if terminal_target_explicit and not (terminal_min <= terminal_target <= soc_max):
             raise HTTPException(
                 status_code=400,
-                detail={"code": "INVALID_DEPOT_ENERGY_ASSET", "message": "bess_terminal_soc_target_kwh must be between 0 and bess_soc_max_kwh"},
+                detail={"code": "INVALID_DEPOT_ENERGY_ASSET", "message": "bess_terminal_soc_target_kwh must be between bess_terminal_soc_min_kwh and bess_soc_max_kwh"},
             )
 
     price_mode = str(

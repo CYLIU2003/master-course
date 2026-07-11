@@ -75,7 +75,7 @@ def test_problem_builder_maps_grid_to_bess_controls_into_assets() -> None:
     assert asset.grid_to_bess_price_threshold_yen_per_kwh == 15.0
     assert tuple(asset.grid_to_bess_allowed_slot_indices) == (0,)
     assert asset.bess_terminal_soc_min_kwh == 20.0
-    assert asset.bess_terminal_soc_target_kwh == 60.0
+    assert asset.bess_terminal_soc_target_kwh == 0.0
     assert asset.bess_terminal_soc_deviation_penalty_yen_per_kwh == 20.0
 
 

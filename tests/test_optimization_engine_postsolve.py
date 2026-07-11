@@ -62,8 +62,45 @@ def test_postsolve_bess_terminal_soc_repair_shifts_late_discharge_to_grid() -> N
     assert repaired.bess_soc_kwh_by_depot_slot["dep-1"][1] == 30.0
     assert repaired.metadata["bess_terminal_soc_violation_kwh"] == 0.0
     assert repaired.metadata["bess_terminal_soc_repair_shifted_to_grid_kwh"] == 20.0
-    assert repaired.metadata["bess_terminal_soc_target_kwh_by_depot"] == {"dep-1": 50.0}
-    assert repaired.metadata["bess_terminal_soc_deviation_kwh_by_depot"] == {"dep-1": 20.0}
+    assert repaired.metadata["bess_terminal_soc_target_kwh_by_depot"] == {}
+    assert repaired.metadata["bess_terminal_soc_deviation_kwh_by_depot"] == {}
+
+
+def test_postsolve_bess_soc_repair_respects_configured_max_buffer() -> None:
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(scenario_id="s-bess-max", timestep_min=60),
+        dispatch_context=None,
+        trips=(),
+        vehicles=(),
+        depots=(ProblemDepot(depot_id="dep-1", name="Depot", import_limit_kw=9999.0),),
+        price_slots=(EnergyPriceSlot(slot_index=0, grid_buy_yen_per_kwh=10.0),),
+        depot_energy_assets={
+            "dep-1": DepotEnergyAsset(
+                depot_id="dep-1",
+                bess_enabled=True,
+                bess_energy_kwh=500.0,
+                bess_power_kw=500.0,
+                bess_initial_soc_kwh=390.0,
+                bess_soc_min_kwh=100.0,
+                bess_soc_max_kwh=400.0,
+                bess_charge_efficiency=1.0,
+                bess_discharge_efficiency=1.0,
+                pv_generation_kwh_by_slot=(50.0,),
+            )
+        },
+    )
+    plan = AssignmentPlan(
+        pv_to_bess_kwh_by_depot_slot={"dep-1": {0: 50.0}},
+        pv_curtail_kwh_by_depot_slot={"dep-1": {0: 0.0}},
+    )
+
+    repaired = _repair_bess_terminal_soc(problem, plan)
+
+    assert repaired.pv_to_bess_kwh_by_depot_slot["dep-1"][0] == 10.0
+    assert repaired.pv_curtail_kwh_by_depot_slot["dep-1"][0] == 40.0
+    assert repaired.bess_soc_kwh_by_depot_slot["dep-1"][0] == 400.0
+    assert repaired.metadata["bess_soc_end_kwh_by_depot_slot"]["dep-1"][0] == 400.0
+    assert repaired.metadata["bess_soc_boundary_adjusted_kwh"] == 40.0
 
 
 def test_postsolve_source_split_prefers_direct_pv_before_bess_discharge() -> None:
@@ -418,7 +455,7 @@ def test_optimization_engine_uses_truthful_baseline_guardrail_when_milp_candidat
         OptimizationConfig(mode=OptimizationMode.MILP, time_limit_sec=5, mip_gap=0.0),
     )
 
-    assert result.solver_status == "truthful_baseline_guardrail"
+    assert result.solver_status == "baseline_fallback"
     assert result.plan.unserved_trip_ids == ()
     assert tuple(sorted(result.plan.served_trip_ids)) == ("t_a", "t_b")
     assert result.solver_metadata.get("truthful_baseline_guardrail_applied") is True

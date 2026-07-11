@@ -8,6 +8,7 @@ from typing import Any
 gp = None
 GRB = None
 _GUROBI_AVAILABLE = False
+_GUROBI_RUNTIME_AVAILABLE: bool | None = None
 _GUROBI_DLL_HANDLES: list[Any] = []
 
 try:
@@ -149,8 +150,19 @@ def ensure_gurobi():
 
 
 def is_gurobi_available() -> bool:
-    try:
-        ensure_gurobi()
+    global _GUROBI_RUNTIME_AVAILABLE  # noqa: PLW0603
+    if _GUROBI_RUNTIME_AVAILABLE is True:
         return True
+    try:
+        gurobi, _ = ensure_gurobi()
+        env = gurobi.Env(empty=True)
+        try:
+            env.setParam("OutputFlag", 0)
+            env.start()
+        finally:
+            env.dispose()
+        _GUROBI_RUNTIME_AVAILABLE = True
+        return _GUROBI_RUNTIME_AVAILABLE
     except Exception:
-        return False
+        _GUROBI_RUNTIME_AVAILABLE = False
+        return _GUROBI_RUNTIME_AVAILABLE

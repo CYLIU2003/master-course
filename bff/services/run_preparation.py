@@ -29,6 +29,8 @@ def _normalize_solver_mode(mode: Any) -> str:
     alias_map = {
         "milp": "mode_milp_only",
         "exact": "mode_milp_only",
+        "thesis": "thesis_mode",
+        "debug": "debug_mode",
         "alns": "mode_alns_only",
         "heuristic": "mode_alns_only",
         "hybrid": "mode_alns_milp",
@@ -40,7 +42,7 @@ def _normalize_solver_mode(mode: Any) -> str:
 
 def solver_prepare_profile(mode: Any) -> dict[str, Any]:
     solver_mode_effective = _normalize_solver_mode(mode)
-    if solver_mode_effective == "mode_milp_only":
+    if solver_mode_effective in {"mode_milp_only", "thesis_mode", "debug_mode"}:
         return {
             "solver_mode_effective": solver_mode_effective,
             "profile": "milp_exact",

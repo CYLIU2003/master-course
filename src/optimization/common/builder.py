@@ -889,6 +889,10 @@ class ProblemBuilder:
             metadata={
                 "service_date": context.service_date,
                 "config_mode": config.mode.value,
+                "thesis_mode": bool(getattr(config, "thesis_mode", False)),
+                "debug_mode": bool(getattr(config, "debug_mode", False)),
+                "objective_actual_cost_mode": bool(getattr(config, "thesis_mode", False)),
+                "postsolve_repair_allowed": bool(getattr(config, "allow_postsolve_repair", True)),
                 "trip_count": len(trip_nodes),
                 "route_count": len(route_nodes),
                 "charger_count": len(chargers),
@@ -1229,10 +1233,11 @@ class ProblemBuilder:
                     0.0,
                 )
             if bess_terminal_soc_target_kwh is None:
-                bess_terminal_soc_target_kwh = bess_initial_soc_kwh if bess_enabled else 0.0
-            if bess_soc_max_kwh > 0.0:
-                bess_terminal_soc_target_kwh = min(bess_terminal_soc_target_kwh, bess_soc_max_kwh)
-            bess_terminal_soc_target_kwh = max(bess_terminal_soc_target_kwh, bess_soc_min_kwh)
+                bess_terminal_soc_target_kwh = 0.0
+            if bess_terminal_soc_target_kwh > 0.0:
+                if bess_soc_max_kwh > 0.0:
+                    bess_terminal_soc_target_kwh = min(bess_terminal_soc_target_kwh, bess_soc_max_kwh)
+                bess_terminal_soc_target_kwh = max(bess_terminal_soc_target_kwh, bess_soc_min_kwh)
             bess_terminal_soc_deviation_penalty_yen_per_kwh = self._safe_float(
                 self._first_present(
                     raw.get("bess_terminal_soc_deviation_penalty_yen_per_kwh"),

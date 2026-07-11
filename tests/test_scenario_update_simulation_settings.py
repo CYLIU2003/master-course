@@ -158,3 +158,26 @@ def test_normalize_depot_energy_asset_accepts_bess_buffer_ratios() -> None:
     assert asset["bess_soc_min_percent"] == 20.0
     assert asset["bess_soc_max_percent"] == 90.0
     assert asset["bess_terminal_soc_target_percent"] == 70.0
+
+
+def test_normalize_depot_energy_asset_does_not_invent_terminal_target() -> None:
+    assets = scenarios._normalize_depot_energy_assets_payload(
+        [
+            {
+                "depot_id": "tsurumaki",
+                "bess_enabled": True,
+                "bess_energy_kwh": 500.0,
+                "bess_initial_soc_ratio": 0.6,
+                "bess_soc_min_ratio": 0.2,
+                "bess_soc_max_ratio": 0.8,
+                "bess_terminal_soc_min_ratio": 0.2,
+            }
+        ]
+    )
+
+    asset = assets[0]
+    assert asset["bess_initial_soc_kwh"] == 300.0
+    assert asset["bess_soc_min_kwh"] == 100.0
+    assert asset["bess_soc_max_kwh"] == 400.0
+    assert asset["bess_terminal_soc_target_kwh"] == 0.0
+    assert asset["bess_terminal_soc_target_ratio"] == 0.0

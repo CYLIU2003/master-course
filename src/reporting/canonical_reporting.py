@@ -387,6 +387,7 @@ def update_summary(run_dir: Path, cost: dict[str, float]) -> dict[str, Any]:
     summary = load_json(path)
     objective_value = objective_value_from_breakdown(run_dir, as_float(summary.get("objective_value_jpy", summary.get("objective_value"))))
     total_cost = cost["total_cost"]
+    objective_is_actual_cost = abs(objective_value - total_cost) <= 1.0e-6
 
     summary["objective_value"] = objective_value
     summary["objective_value_jpy"] = objective_value
@@ -398,13 +399,13 @@ def update_summary(run_dir: Path, cost: dict[str, float]) -> dict[str, Any]:
     summary["demand_charge_cost_jpy"] = cost["demand_charge"]
     summary["fuel_cost_jpy"] = cost["fuel_cost"]
     summary["co2_cost_jpy"] = cost["co2_cost"]
-    summary["objective_is_actual_cost"] = False
+    summary["objective_is_actual_cost"] = objective_is_actual_cost
     summary["cost_definition"] = {
         "total_cost_jpy": "gross operating cost based on canonical reporting ledgers",
         "reported_total_cost_jpy": "same as gross_operating_cost_jpy",
         "gross_operating_cost_jpy": "actual operating cost terms from reporting ledgers",
-        "objective_value_jpy": "solver/fallback objective value; may include rewards and penalties",
-        "objective_is_actual_cost": False,
+        "objective_value_jpy": "solver objective value; equals reported_total_cost_jpy only when objective_is_actual_cost=true",
+        "objective_is_actual_cost": objective_is_actual_cost,
     }
     write_json(path, summary)
     return summary
@@ -419,6 +420,7 @@ def update_kpi_summary(
     path = run_dir / "graph" / "kpi_summary.json"
     kpi = load_json(path)
     objective_value = objective_value_from_breakdown(run_dir, as_float(kpi.get("objective_value_jpy", kpi.get("objective_value"))))
+    objective_is_actual_cost = abs(objective_value - cost["total_cost"]) <= 1.0e-6
 
     energy_keys = [
         "pv_generation_kwh",
@@ -464,7 +466,7 @@ def update_kpi_summary(
     kpi["reported_total_cost_jpy"] = cost["total_cost"]
     kpi["objective_value"] = objective_value
     kpi["objective_value_jpy"] = objective_value
-    kpi["objective_is_actual_cost"] = False
+    kpi["objective_is_actual_cost"] = objective_is_actual_cost
 
     kpi["fuel_consumption_l"] = totals["fuel_consumption_l"]
     kpi["ice_fuel_consumed_l"] = totals["fuel_consumption_l"]
@@ -510,7 +512,7 @@ def update_kpi_summary(
             "total_cost_jpy": cost["total_cost"],
             "objective_value": objective_value,
             "objective_value_jpy": objective_value,
-            "objective_is_actual_cost": False,
+            "objective_is_actual_cost": objective_is_actual_cost,
         }
     )
 
@@ -546,7 +548,7 @@ def update_kpi_summary(
         "reported_total_cost_jpy": "same as gross_operating_cost_jpy",
         "gross_operating_cost_jpy": "actual operating cost terms from reporting ledgers",
         "objective_value_jpy": "solver/fallback objective value; may include rewards and penalties",
-        "objective_is_actual_cost": False,
+        "objective_is_actual_cost": objective_is_actual_cost,
     }
 
     write_json(path, kpi)
@@ -712,8 +714,8 @@ def update_data_flow_validation(
             source_files="summary.json;objective_breakdown.csv",
         ),
         validation_row(
-            "summary_total_cost_separated_from_objective_value",
-            False,
+            "summary_objective_actual_cost_flag_matches_values",
+            abs(objective_value_from_breakdown(run_dir, 0.0) - cost_breakdown_total) <= 1.0e-6,
             bool(summary.get("objective_is_actual_cost")),
             source_files="summary.json",
         ),

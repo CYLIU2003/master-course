@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List
+from typing import Any, Dict, List, Mapping
 
-from src.dispatch.feasibility import evaluate_startup_feasibility
+from src.dispatch.feasibility import FeasibilityEngine, evaluate_startup_feasibility
 from src.dispatch.models import ValidationResult, VehicleDuty
 from src.dispatch.route_band import (
     duty_route_band_ids,
@@ -43,11 +43,13 @@ class FeasibilityReport:
     uncovered_trip_ids: tuple[str, ...] = ()
     duplicate_trip_ids: tuple[str, ...] = ()
     validation: Dict[str, ValidationResult] = field(default_factory=dict)
+    metrics: Dict[str, Any] = field(default_factory=dict)
 
 
 class FeasibilityChecker:
     def __init__(self) -> None:
         self._validator = DutyValidator()
+        self._connection_engine = FeasibilityEngine()
 
     def evaluate(
         self,
@@ -108,9 +110,17 @@ class FeasibilityChecker:
 
         soc_errors = self._evaluate_soc(problem, plan)
         errors.extend(soc_errors)
+        metrics = self._build_validation_metrics(
+            problem,
+            plan,
+            uncovered_trip_ids=uncovered,
+            duplicate_trip_ids=duplicates,
+            soc_errors=soc_errors,
+        )
+        errors.extend(self._metric_errors(metrics))
 
         # Unserved trips are only soft when partial service is explicitly allowed.
-        feasible = not errors
+        feasible = not errors and self._metrics_are_clean(metrics)
         return FeasibilityReport(
             feasible=feasible,
             warnings=tuple(warnings),
@@ -119,7 +129,251 @@ class FeasibilityChecker:
             uncovered_trip_ids=tuple(uncovered),
             duplicate_trip_ids=tuple(sorted(set(duplicates))),
             validation=validation,
+            metrics=metrics,
         )
+
+    def _build_validation_metrics(
+        self,
+        problem: CanonicalOptimizationProblem,
+        plan: AssignmentPlan,
+        *,
+        uncovered_trip_ids: List[str],
+        duplicate_trip_ids: List[str],
+        soc_errors: List[str],
+    ) -> Dict[str, Any]:
+        ev_soc_bounds = self._count_vehicle_soc_bound_violations(problem, plan)
+        bess_metrics = self._evaluate_bess_metrics(problem, plan)
+        metrics: Dict[str, Any] = {
+            "unassigned_trip_count": int(len(set(uncovered_trip_ids))),
+            "duplicate_trip_count": int(len(set(duplicate_trip_ids))),
+            "vehicle_time_overlap_count": self._count_vehicle_time_overlaps(plan),
+            "infeasible_transition_count": self._count_infeasible_transitions(problem, plan),
+            "ev_soc_lower_violation_count": int(ev_soc_bounds["lower"]),
+            "ev_soc_upper_violation_count": int(ev_soc_bounds["upper"]),
+            "ev_soc_violation_count": int(len(soc_errors) + ev_soc_bounds["lower"] + ev_soc_bounds["upper"]),
+            "bess_soc_lower_violation_count": int(bess_metrics["lower"]),
+            "bess_soc_upper_violation_count": int(bess_metrics["upper"]),
+            "bess_soc_violation_count": int(bess_metrics["lower"] + bess_metrics["upper"]),
+            "bess_terminal_soc_deviation_kwh": float(bess_metrics["terminal_deviation_kwh"]),
+            "bess_terminal_soc_tolerance_kwh": float(bess_metrics["terminal_tolerance_kwh"]),
+            "contract_power_violation_count": self._count_contract_power_violations(problem, plan),
+            "charger_concurrency_violation_count": self._count_charger_concurrency_violations(problem, plan),
+        }
+        metrics["all_required_validation_checks_passed"] = self._metrics_are_clean(metrics)
+        return metrics
+
+    def _metric_errors(self, metrics: Mapping[str, Any]) -> List[str]:
+        checks = {
+            "unassigned_trip_count": "unassigned trips remain",
+            "vehicle_time_overlap_count": "vehicle time overlaps remain",
+            "infeasible_transition_count": "infeasible vehicle transitions remain",
+            "ev_soc_violation_count": "EV SOC bound/readiness violations remain",
+            "bess_soc_violation_count": "BESS SOC bound violations remain",
+            "contract_power_violation_count": "contract power violations remain",
+            "charger_concurrency_violation_count": "charger concurrency violations remain",
+        }
+        errors: List[str] = []
+        for key, label in checks.items():
+            if int(metrics.get(key, 0) or 0) > 0:
+                errors.append(f"[VALIDATION] {label}: {int(metrics.get(key, 0) or 0)}")
+        deviation = float(metrics.get("bess_terminal_soc_deviation_kwh", 0.0) or 0.0)
+        tolerance = float(metrics.get("bess_terminal_soc_tolerance_kwh", 0.0) or 0.0)
+        if deviation > tolerance + 1.0e-9:
+            errors.append(
+                f"[VALIDATION] BESS terminal SOC deviation {deviation:.6f} kWh exceeds tolerance {tolerance:.6f} kWh"
+            )
+        return errors
+
+    def _metrics_are_clean(self, metrics: Mapping[str, Any]) -> bool:
+        required_zero_keys = (
+            "unassigned_trip_count",
+            "vehicle_time_overlap_count",
+            "infeasible_transition_count",
+            "ev_soc_violation_count",
+            "bess_soc_violation_count",
+            "contract_power_violation_count",
+            "charger_concurrency_violation_count",
+        )
+        if any(int(metrics.get(key, 0) or 0) != 0 for key in required_zero_keys):
+            return False
+        deviation = float(metrics.get("bess_terminal_soc_deviation_kwh", 0.0) or 0.0)
+        tolerance = float(metrics.get("bess_terminal_soc_tolerance_kwh", 0.0) or 0.0)
+        return deviation <= tolerance + 1.0e-9
+
+    def _count_vehicle_time_overlaps(self, plan: AssignmentPlan) -> int:
+        overlap_count = 0
+        for _vehicle_id, duties in plan.duties_by_vehicle().items():
+            intervals: List[tuple[int, int]] = []
+            for duty in duties:
+                for leg in duty.legs:
+                    intervals.append((int(leg.trip.departure_min), int(leg.trip.arrival_min)))
+            intervals.sort()
+            previous_end = None
+            for start_min, end_min in intervals:
+                if previous_end is not None and start_min < previous_end:
+                    overlap_count += 1
+                previous_end = max(previous_end or end_min, end_min)
+        return overlap_count
+
+    def _count_infeasible_transitions(
+        self,
+        problem: CanonicalOptimizationProblem,
+        plan: AssignmentPlan,
+    ) -> int:
+        count = 0
+        for duty in plan.duties:
+            for idx in range(len(duty.legs) - 1):
+                result = self._connection_engine.can_connect(
+                    duty.legs[idx].trip,
+                    duty.legs[idx + 1].trip,
+                    problem.dispatch_context,
+                    duty.vehicle_type,
+                )
+                if not result.feasible:
+                    count += 1
+        return count
+
+    def _count_vehicle_soc_bound_violations(
+        self,
+        problem: CanonicalOptimizationProblem,
+        plan: AssignmentPlan,
+    ) -> Dict[str, int]:
+        lower = 0
+        upper = 0
+        vehicle_by_id = {str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles}
+        type_by_id = {str(vtype.vehicle_type_id): vtype for vtype in problem.vehicle_types}
+        for vehicle_id, slot_map in (plan.vehicle_soc_kwh_by_vehicle_slot or {}).items():
+            vehicle = vehicle_by_id.get(str(vehicle_id))
+            vtype = type_by_id.get(str(getattr(vehicle, "vehicle_type", "") or "")) if vehicle is not None else None
+            capacity = float(
+                (getattr(vehicle, "battery_capacity_kwh", None) if vehicle is not None else None)
+                or (getattr(vtype, "battery_capacity_kwh", None) if vtype is not None else None)
+                or 0.0
+            )
+            if capacity <= 0.0:
+                continue
+            reserve = getattr(vehicle, "reserve_soc", None) if vehicle is not None else None
+            if reserve is None and vtype is not None:
+                reserve = getattr(vtype, "reserve_soc", None)
+            soc_min = 0.15 * capacity if reserve is None else (float(reserve) * capacity if float(reserve) <= 1.0 else float(reserve))
+            for value in dict(slot_map or {}).values():
+                soc = float(value or 0.0)
+                if soc + 1.0e-6 < soc_min:
+                    lower += 1
+                if soc > capacity + 1.0e-6:
+                    upper += 1
+        return {"lower": lower, "upper": upper}
+
+    def _evaluate_bess_metrics(
+        self,
+        problem: CanonicalOptimizationProblem,
+        plan: AssignmentPlan,
+    ) -> Dict[str, float | int]:
+        lower = 0
+        upper = 0
+        terminal_deviation = 0.0
+        tolerance = float((problem.metadata or {}).get("bess_terminal_soc_tolerance_kwh", 1.0e-6) or 1.0e-6)
+        assets = dict(getattr(problem, "depot_energy_assets", {}) or {})
+        timestep_slots = sorted({int(slot.slot_index) for slot in list(getattr(problem, "price_slots", ()) or ())})
+        for depot_id, asset in assets.items():
+            if not bool(getattr(asset, "bess_enabled", False)):
+                continue
+            max_soc = max(float(getattr(asset, "bess_soc_max_kwh", 0.0) or 0.0), 0.0)
+            capacity = max(float(getattr(asset, "bess_energy_kwh", 0.0) or 0.0), 0.0)
+            if max_soc <= 0.0:
+                max_soc = capacity
+            if max_soc <= 0.0:
+                continue
+            min_soc = min(max(float(getattr(asset, "bess_soc_min_kwh", 0.0) or 0.0), 0.0), max_soc)
+            soc = min(max(float(getattr(asset, "bess_initial_soc_kwh", 0.0) or 0.0), min_soc), max_soc)
+            charge_eff = max(float(getattr(asset, "bess_charge_efficiency", 0.95) or 0.95), 1.0e-9)
+            discharge_eff = max(float(getattr(asset, "bess_discharge_efficiency", 0.95) or 0.95), 1.0e-9)
+            depot_key = str(depot_id)
+            slot_indices = set(timestep_slots)
+            for mapping in (
+                plan.pv_to_bess_kwh_by_depot_slot,
+                plan.grid_to_bess_kwh_by_depot_slot,
+                plan.bess_to_bus_kwh_by_depot_slot,
+            ):
+                slot_indices.update(int(slot_idx) for slot_idx in dict(mapping or {}).get(depot_key, {}).keys())
+            for slot_idx in sorted(slot_indices):
+                if soc + 1.0e-6 < min_soc:
+                    lower += 1
+                if soc > max_soc + 1.0e-6:
+                    upper += 1
+                charge_in = float(dict(plan.pv_to_bess_kwh_by_depot_slot or {}).get(depot_key, {}).get(slot_idx, 0.0) or 0.0)
+                charge_in += float(dict(plan.grid_to_bess_kwh_by_depot_slot or {}).get(depot_key, {}).get(slot_idx, 0.0) or 0.0)
+                discharge = float(dict(plan.bess_to_bus_kwh_by_depot_slot or {}).get(depot_key, {}).get(slot_idx, 0.0) or 0.0)
+                soc = soc + charge_eff * max(charge_in, 0.0) - max(discharge, 0.0) / discharge_eff
+                if soc + 1.0e-6 < min_soc:
+                    lower += 1
+                if soc > max_soc + 1.0e-6:
+                    upper += 1
+            terminal_min = min(max(float(getattr(asset, "bess_terminal_soc_min_kwh", 0.0) or 0.0), min_soc), max_soc)
+            terminal_target = float(getattr(asset, "bess_terminal_soc_target_kwh", 0.0) or 0.0)
+            if terminal_target > 0.0:
+                terminal_deviation = max(terminal_deviation, abs(soc - min(max(terminal_target, terminal_min), max_soc)))
+            else:
+                terminal_deviation = max(terminal_deviation, max(terminal_min - soc, 0.0))
+        return {
+            "lower": lower,
+            "upper": upper,
+            "terminal_deviation_kwh": terminal_deviation,
+            "terminal_tolerance_kwh": tolerance,
+        }
+
+    def _count_contract_power_violations(
+        self,
+        problem: CanonicalOptimizationProblem,
+        plan: AssignmentPlan,
+    ) -> int:
+        timestep_h = max(float(getattr(problem.scenario, "timestep_min", 0) or 0.0), 1.0) / 60.0
+        depot_limit_by_id = {
+            str(getattr(depot, "depot_id", "") or ""): float(getattr(depot, "import_limit_kw", 0.0) or 0.0)
+            for depot in list(getattr(problem, "depots", ()) or ())
+            if str(getattr(depot, "depot_id", "") or "")
+        }
+        depot_ids = set(depot_limit_by_id)
+        depot_ids.update(str(key) for key in dict(plan.grid_to_bus_kwh_by_depot_slot or {}).keys())
+        depot_ids.update(str(key) for key in dict(plan.grid_to_bess_kwh_by_depot_slot or {}).keys())
+        violations = 0
+        for depot_id in depot_ids:
+            limit_kw = max(float(depot_limit_by_id.get(depot_id, 0.0) or 0.0), 0.0)
+            if limit_kw <= 0.0:
+                continue
+            slot_indices = set(dict(plan.grid_to_bus_kwh_by_depot_slot or {}).get(depot_id, {}).keys())
+            slot_indices.update(dict(plan.grid_to_bess_kwh_by_depot_slot or {}).get(depot_id, {}).keys())
+            for slot_idx in slot_indices:
+                grid_kwh = float(dict(plan.grid_to_bus_kwh_by_depot_slot or {}).get(depot_id, {}).get(slot_idx, 0.0) or 0.0)
+                grid_kwh += float(dict(plan.grid_to_bess_kwh_by_depot_slot or {}).get(depot_id, {}).get(slot_idx, 0.0) or 0.0)
+                if grid_kwh > limit_kw * timestep_h + 1.0e-6:
+                    violations += 1
+        return violations
+
+    def _count_charger_concurrency_violations(
+        self,
+        problem: CanonicalOptimizationProblem,
+        plan: AssignmentPlan,
+    ) -> int:
+        if not problem.chargers:
+            return 0
+        ports_by_depot: Dict[str, int] = {}
+        for charger in problem.chargers:
+            depot_id = str(getattr(charger, "depot_id", "") or "depot_default")
+            ports_by_depot[depot_id] = ports_by_depot.get(depot_id, 0) + max(int(getattr(charger, "simultaneous_ports", 1) or 1), 1)
+        vehicle_home = {str(vehicle.vehicle_id): str(vehicle.home_depot_id or "depot_default") for vehicle in problem.vehicles}
+        active: Dict[tuple[str, int], set[str]] = {}
+        for slot in plan.charging_slots:
+            if max(float(getattr(slot, "charge_kw", 0.0) or 0.0), 0.0) <= 1.0e-9:
+                continue
+            vehicle_id = str(getattr(slot, "vehicle_id", "") or "")
+            depot_id = str(getattr(slot, "charging_depot_id", "") or vehicle_home.get(vehicle_id) or "depot_default")
+            active.setdefault((depot_id, int(getattr(slot, "slot_index", 0) or 0)), set()).add(vehicle_id)
+        violations = 0
+        for (depot_id, _slot_idx), vehicle_ids in active.items():
+            if len(vehicle_ids) > ports_by_depot.get(depot_id, 0):
+                violations += 1
+        return violations
 
     def _evaluate_soc(
         self,

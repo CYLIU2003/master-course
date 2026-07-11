@@ -9,7 +9,7 @@ from src.optimization.accounting.ledger_builder import build_accounting_artifact
 def test_vehicle_energy_ledger_balances_ev_sources_and_soc() -> None:
     problem = SimpleNamespace(
         scenario=SimpleNamespace(timestep_min=30),
-        vehicles=(SimpleNamespace(vehicle_id="bev-1", vehicle_type="BEV", battery_capacity_kwh=100.0, charge_efficiency=0.9),),
+        vehicles=(SimpleNamespace(vehicle_id="bev-1", vehicle_type="BEV", battery_capacity_kwh=100.0, initial_soc=45.5, charge_efficiency=0.9),),
         vehicle_types=(),
         price_slots=(SimpleNamespace(slot_index=0, grid_buy_yen_per_kwh=20.0),),
     )

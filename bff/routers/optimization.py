@@ -61,6 +61,7 @@ from bff.services.optimization_run.cost_breakdown import (
 from bff.services.optimization_run.execute import (
     normalize_solver_mode as _normalize_solver_mode,
     parse_optimization_mode as _parse_optimization_mode,
+    phase_from_solver_mode as _phase_from_solver_mode,
 )
 from bff.services.optimization_run.rich_outputs import (
     persist_json_outputs as _persist_json_outputs,
@@ -152,7 +153,7 @@ def _apply_timestep_min_to_scenario(scenario: Dict[str, Any], timestep_min: Opti
 
 
 class RunOptimizationBody(BaseModel):
-    mode: str = "mode_milp_only"
+    mode: str = "thesis_mode"
     time_step_min: Optional[int] = None
     timestep_min: Optional[int] = None
     time_limit_seconds: int = 300
@@ -202,15 +203,24 @@ def _optimization_capabilities() -> Dict[str, Any]:
         "async_job": True,
         "job_persistence": dict(job_store.JOB_PERSISTENCE_INFO),
         "supported_modes": [
+            "thesis_mode",
+            "debug_mode",
             "mode_milp_only",
             "mode_alns_only",
             "mode_ga_only",
             "mode_abc_only",
             "mode_hybrid",
+            "phase1_charging_only",
+            "phase2_assignment_only",
+            "phase3_two_stage",
+            "phase4_integrated",
+            "diagnostic",
         ],
         "mode_aliases": {
             "milp": "mode_milp_only",
             "exact": "mode_milp_only",
+            "thesis": "thesis_mode",
+            "debug": "debug_mode",
             "alns": "mode_alns_only",
             "heuristic": "mode_alns_only",
             "ga": "mode_ga_only",
@@ -218,21 +228,29 @@ def _optimization_capabilities() -> Dict[str, Any]:
             "abc": "mode_abc_only",
             "colony": "mode_abc_only",
             "hybrid": "mode_hybrid",
+            "phase1": "phase1_charging_only",
+            "phase2": "phase2_assignment_only",
+            "phase3": "phase3_two_stage",
+            "phase4": "phase4_integrated",
+            "diagnostic_mode": "diagnostic",
         },
         "deprecated_modes": {
             "mode_alns_milp": "mode_hybrid (auto-routed)",
-            "thesis_mode": "BLOCKED - no longer supported",
             "mode_a_journey_charge": "BLOCKED - no longer supported",
             "mode_b_optimistic": "BLOCKED - no longer supported",
         },
-        "default_mode": "mode_milp_only",
+        "default_mode": "thesis_mode",
         "authoritative_engine": "canonical (src/optimization/)",
         "supports_reoptimization": True,
         "max_concurrent_jobs": 1,
         "execution_model": f"{_executor_mode()}_pool",
         "notes": [
             "All supported modes use the canonical optimization engine (src/optimization/).",
-            "Legacy thesis modes have been deprecated for consistency and maintainability.",
+            "thesis_mode runs the canonical two-stage MILP without unserved decision variables or postsolve repair.",
+            "debug_mode keeps diagnostic unserved variables and is not eligible for research KPI claims.",
+            "Phase 1 requires a concrete fixed assignment with duties before charging/PV/BESS optimization.",
+            "Phase 2 returns assignment-only MILP results; charging/SOC feasibility is explicitly not evaluated.",
+            "diagnostic is diagnostic-only and is never eligible for research KPI claims.",
             "mode_alns_milp is auto-routed to mode_hybrid (ALNS+MILP hybrid).",
             "Optimization runs against canonical CanonicalOptimizationProblem built from scenario.",
             "Dispatch artifacts can be rebuilt before solve when requested.",
@@ -672,6 +690,98 @@ def _merge_depot_slot_flow_maps(
     return merged
 
 
+def _bess_soc_bounds_for_asset(asset: Any) -> tuple[float, float, float] | None:
+    capacity = max(float(getattr(asset, "bess_energy_kwh", 0.0) or 0.0), 0.0)
+    configured_max = max(float(getattr(asset, "bess_soc_max_kwh", 0.0) or 0.0), 0.0)
+    if configured_max > 0.0:
+        max_soc = min(configured_max, capacity) if capacity > 0.0 else configured_max
+    else:
+        max_soc = capacity
+    if max_soc <= 1.0e-9:
+        return None
+    min_soc = min(max(float(getattr(asset, "bess_soc_min_kwh", 0.0) or 0.0), 0.0), max_soc)
+    initial_soc = min(max(float(getattr(asset, "bess_initial_soc_kwh", 0.0) or 0.0), min_soc), max_soc)
+    return min_soc, max_soc, initial_soc
+
+
+def _complete_bess_soc_flow_context(problem: Any, flow_ctx: Dict[str, Any]) -> Dict[str, Any]:
+    assets = dict(getattr(problem, "depot_energy_assets", {}) or {})
+    if not assets:
+        return flow_ctx
+
+    completed = dict(flow_ctx)
+    bess_soc = _normalize_depot_slot_mapping(completed.get("bess_soc_kwh_by_depot_slot", {}))
+    bess_soc_start = _normalize_depot_slot_mapping(completed.get("bess_soc_start_kwh_by_depot_slot", {}))
+    bess_soc_end = _normalize_depot_slot_mapping(completed.get("bess_soc_end_kwh_by_depot_slot", {}))
+    slot_count = len(list(getattr(problem, "price_slots", ()) or ()))
+
+    flow_keys = (
+        "grid_to_bus_kwh_by_depot_slot",
+        "pv_to_bus_kwh_by_depot_slot",
+        "bess_to_bus_kwh_by_depot_slot",
+        "pv_to_bess_kwh_by_depot_slot",
+        "grid_to_bess_kwh_by_depot_slot",
+        "pv_curtail_kwh_by_depot_slot",
+        "contract_over_limit_kwh_by_depot_slot",
+    )
+    for asset in assets.values():
+        slot_count = max(slot_count, len(tuple(getattr(asset, "pv_generation_kwh_by_slot", ()) or ())))
+    for key in flow_keys:
+        for slot_map in dict(completed.get(key) or {}).values():
+            slot_count = max(slot_count, max((int(slot_idx) + 1 for slot_idx in dict(slot_map or {}).keys()), default=slot_count))
+    for mapping in (bess_soc, bess_soc_start, bess_soc_end):
+        for slot_map in mapping.values():
+            slot_count = max(slot_count, max((int(slot_idx) + 1 for slot_idx in dict(slot_map or {}).keys()), default=slot_count))
+
+    for depot_id, asset in assets.items():
+        depot_key = str(depot_id or "")
+        if not depot_key or not bool(getattr(asset, "bess_enabled", False)):
+            continue
+        bounds = _bess_soc_bounds_for_asset(asset)
+        if bounds is None:
+            continue
+        min_soc, max_soc, initial_soc = bounds
+        charge_eff = min(max(float(getattr(asset, "bess_charge_efficiency", 0.95) or 0.95), 1.0e-9), 1.0)
+        discharge_eff = min(max(float(getattr(asset, "bess_discharge_efficiency", 0.95) or 0.95), 1.0e-9), 1.0)
+        slot_indices = set(range(slot_count))
+        for key in flow_keys:
+            slot_indices.update(int(slot_idx) for slot_idx in dict((completed.get(key) or {}).get(depot_key, {}) or {}).keys())
+        slot_indices.update(int(slot_idx) for slot_idx in dict(bess_soc.get(depot_key, {}) or {}).keys())
+        slot_indices.update(int(slot_idx) for slot_idx in dict(bess_soc_start.get(depot_key, {}) or {}).keys())
+        slot_indices.update(int(slot_idx) for slot_idx in dict(bess_soc_end.get(depot_key, {}) or {}).keys())
+        if not slot_indices:
+            continue
+
+        soc = initial_soc
+        start_map = bess_soc_start.setdefault(depot_key, {})
+        end_map = bess_soc_end.setdefault(depot_key, {})
+        soc_map = bess_soc.setdefault(depot_key, {})
+        for slot_idx in sorted(slot_indices):
+            explicit_start = start_map.get(slot_idx)
+            start = min(max(float(explicit_start if explicit_start is not None else soc), min_soc), max_soc)
+            explicit_end = end_map.get(slot_idx)
+            if explicit_end is None:
+                explicit_end = soc_map.get(slot_idx)
+            if explicit_end is None:
+                pv_to_bess = max(float(((completed.get("pv_to_bess_kwh_by_depot_slot") or {}).get(depot_key, {}) or {}).get(slot_idx, 0.0) or 0.0), 0.0)
+                grid_to_bess = max(float(((completed.get("grid_to_bess_kwh_by_depot_slot") or {}).get(depot_key, {}) or {}).get(slot_idx, 0.0) or 0.0), 0.0)
+                bess_to_bus = max(float(((completed.get("bess_to_bus_kwh_by_depot_slot") or {}).get(depot_key, {}) or {}).get(slot_idx, 0.0) or 0.0), 0.0)
+                end = start + ((pv_to_bess + grid_to_bess) * charge_eff) - (bess_to_bus / discharge_eff)
+            else:
+                end = float(explicit_end or 0.0)
+            end = min(max(end, min_soc), max_soc)
+            start_map[slot_idx] = start
+            end_map[slot_idx] = end
+            soc_map[slot_idx] = end
+            soc = end
+
+    completed["bess_soc_kwh_by_depot_slot"] = bess_soc
+    completed["bess_soc_start_kwh_by_depot_slot"] = bess_soc_start
+    completed["bess_soc_end_kwh_by_depot_slot"] = bess_soc_end or bess_soc
+    completed["bess_soc_kwh_semantics"] = "slot_end"
+    return completed
+
+
 def _canonical_energy_flow_context_from_snapshot(problem, plan, preserved_context) -> Dict[str, Any]:
     timestep_min = max(int(getattr(problem.scenario, "timestep_min", 0) or 0), 1)
     timestep_h = timestep_min / 60.0
@@ -696,6 +806,12 @@ def _canonical_energy_flow_context_from_snapshot(problem, plan, preserved_contex
     )
     raw_bess_soc = _normalize_depot_slot_mapping(
         preserved_context.get("bess_soc_kwh_by_depot_slot", {})
+    )
+    raw_bess_soc_start = _normalize_depot_slot_mapping(
+        preserved_context.get("bess_soc_start_kwh_by_depot_slot", {})
+    )
+    raw_bess_soc_end = _normalize_depot_slot_mapping(
+        preserved_context.get("bess_soc_end_kwh_by_depot_slot", {})
     )
     raw_contract_over_limit = _normalize_depot_slot_mapping(
         preserved_context.get("contract_over_limit_kwh_by_depot_slot", {})
@@ -749,6 +865,8 @@ def _canonical_energy_flow_context_from_snapshot(problem, plan, preserved_contex
         raw_grid_to_bess,
         raw_pv_curtail,
         raw_bess_soc,
+        raw_bess_soc_start,
+        raw_bess_soc_end,
         raw_contract_over_limit,
     ):
         depot_ids.update(mapping.keys())
@@ -787,7 +905,7 @@ def _canonical_energy_flow_context_from_snapshot(problem, plan, preserved_contex
             else "Preserved per-source depot/slot energy-flow maps are present in the assignment plan."
         )
 
-    return {
+    flow_ctx = {
         "timestep_min": timestep_min,
         "timestep_h": timestep_h,
         "depot_ids": sorted(item for item in depot_ids if item),
@@ -798,6 +916,8 @@ def _canonical_energy_flow_context_from_snapshot(problem, plan, preserved_contex
         "grid_to_bess_kwh_by_depot_slot": raw_grid_to_bess,
         "pv_curtail_kwh_by_depot_slot": raw_pv_curtail,
         "bess_soc_kwh_by_depot_slot": raw_bess_soc,
+        "bess_soc_start_kwh_by_depot_slot": raw_bess_soc_start,
+        "bess_soc_end_kwh_by_depot_slot": raw_bess_soc_end or raw_bess_soc,
         "contract_over_limit_kwh_by_depot_slot": raw_contract_over_limit,
         "pv_generation_kwh_by_depot_slot": pv_generation_kwh_by_depot_slot,
         "bess_terminal_soc_target_kwh_by_depot": dict(
@@ -814,6 +934,7 @@ def _canonical_energy_flow_context_from_snapshot(problem, plan, preserved_contex
         "derived_from_charging_slots": derived_from_charging_slots,
         "derived_depots": sorted(derived_depots),
     }
+    return _complete_bess_soc_flow_context(problem, flow_ctx)
 
 
 def _canonical_energy_flow_context(problem, plan) -> Dict[str, Any]:
@@ -832,6 +953,8 @@ def _canonical_energy_flow_context(problem, plan) -> Dict[str, Any]:
     raw_grid_to_bess = _normalize_depot_slot_mapping(getattr(plan, "grid_to_bess_kwh_by_depot_slot", {}))
     raw_pv_curtail = _normalize_depot_slot_mapping(getattr(plan, "pv_curtail_kwh_by_depot_slot", {}))
     raw_bess_soc = _normalize_depot_slot_mapping(getattr(plan, "bess_soc_kwh_by_depot_slot", {}))
+    raw_bess_soc_start = _normalize_depot_slot_mapping(metadata.get("bess_soc_start_kwh_by_depot_slot", {}))
+    raw_bess_soc_end = _normalize_depot_slot_mapping(metadata.get("bess_soc_end_kwh_by_depot_slot", {}))
     raw_contract_over_limit = _normalize_depot_slot_mapping(getattr(plan, "contract_over_limit_kwh_by_depot_slot", {}))
 
     derived_grid_to_bus: Dict[str, Dict[int, float]] = {}
@@ -883,6 +1006,8 @@ def _canonical_energy_flow_context(problem, plan) -> Dict[str, Any]:
         raw_grid_to_bess,
         raw_pv_curtail,
         raw_bess_soc,
+        raw_bess_soc_start,
+        raw_bess_soc_end,
         raw_contract_over_limit,
     ):
         depot_ids.update(mapping.keys())
@@ -935,7 +1060,7 @@ def _canonical_energy_flow_context(problem, plan) -> Dict[str, Any]:
     else:
         provenance_note = "No charging energy flow was recorded for this plan."
 
-    return {
+    flow_ctx = {
         "timestep_min": timestep_min,
         "timestep_h": timestep_h,
         "depot_ids": sorted(item for item in depot_ids if item),
@@ -946,6 +1071,8 @@ def _canonical_energy_flow_context(problem, plan) -> Dict[str, Any]:
         "grid_to_bess_kwh_by_depot_slot": raw_grid_to_bess,
         "pv_curtail_kwh_by_depot_slot": raw_pv_curtail,
         "bess_soc_kwh_by_depot_slot": raw_bess_soc,
+        "bess_soc_start_kwh_by_depot_slot": raw_bess_soc_start,
+        "bess_soc_end_kwh_by_depot_slot": raw_bess_soc_end or raw_bess_soc,
         "contract_over_limit_kwh_by_depot_slot": raw_contract_over_limit,
         "pv_generation_kwh_by_depot_slot": pv_generation_kwh_by_depot_slot,
         "bess_terminal_soc_target_kwh_by_depot": dict(
@@ -962,6 +1089,7 @@ def _canonical_energy_flow_context(problem, plan) -> Dict[str, Any]:
         "derived_from_charging_slots": derived_from_charging_slots,
         "derived_depots": sorted(derived_depots),
     }
+    return _complete_bess_soc_flow_context(problem, flow_ctx)
 
 
 def _canonical_charging_output_payload(problem, engine_result) -> Dict[str, Any]:
@@ -1000,6 +1128,8 @@ def _canonical_charging_output_payload(problem, engine_result) -> Dict[str, Any]
             "grid_to_bess_kwh_by_depot_slot",
             "pv_curtail_kwh_by_depot_slot",
             "bess_soc_kwh_by_depot_slot",
+            "bess_soc_start_kwh_by_depot_slot",
+            "bess_soc_end_kwh_by_depot_slot",
             "contract_over_limit_kwh_by_depot_slot",
             "pv_generation_kwh_by_depot_slot",
         ):
@@ -1025,6 +1155,10 @@ def _canonical_charging_output_payload(problem, engine_result) -> Dict[str, Any]
             grid_to_bess = float((flow_ctx["grid_to_bess_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
             raw_pv_curtail = float((flow_ctx["pv_curtail_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
             bess_soc = float((flow_ctx["bess_soc_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
+            bess_soc_start = float((flow_ctx["bess_soc_start_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
+            bess_soc_end = float((flow_ctx["bess_soc_end_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, bess_soc) or 0.0)
+            if bess_soc <= 0.0 and bess_soc_end > 0.0:
+                bess_soc = bess_soc_end
             contract_over_limit_kwh = float((flow_ctx["contract_over_limit_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
             pv_generation_kwh = float((flow_ctx["pv_generation_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
             if pv_generation_kwh > 0.0:
@@ -1075,6 +1209,8 @@ def _canonical_charging_output_payload(problem, engine_result) -> Dict[str, Any]
                     "pv_generation_kwh": pv_generation_kwh,
                     "pv_balance_residual_kwh": pv_balance_residual_kwh,
                     "bess_soc_kwh": bess_soc,
+                    "bess_soc_start_kwh": bess_soc_start,
+                    "bess_soc_end_kwh": bess_soc_end,
                     "grid_import_total_kwh": grid_import_total_kwh,
                     "grid_import_for_contract_kwh": grid_import_for_contract_kwh,
                     "grid_import_kw": grid_import_kw,
@@ -1098,19 +1234,21 @@ def _canonical_charging_output_payload(problem, engine_result) -> Dict[str, Any]
         asset = dict(getattr(problem, "depot_energy_assets", {}) or {}).get(depot_id)
         bess_initial_soc = float(getattr(asset, "bess_initial_soc_kwh", 0.0) or 0.0) if asset is not None else 0.0
         bess_terminal_min = float(getattr(asset, "bess_terminal_soc_min_kwh", 0.0) or 0.0) if asset is not None else 0.0
-        bess_terminal_target = float(
-            (flow_ctx.get("bess_terminal_soc_target_kwh_by_depot", {}) or {}).get(depot_id)
-            or getattr(asset, "bess_terminal_soc_target_kwh", 0.0)
-            or bess_initial_soc
-            or 0.0
-        ) if asset is not None else 0.0
+        raw_terminal_target = (flow_ctx.get("bess_terminal_soc_target_kwh_by_depot", {}) or {}).get(depot_id)
+        if raw_terminal_target is None and asset is not None:
+            asset_target = float(getattr(asset, "bess_terminal_soc_target_kwh", 0.0) or 0.0)
+            raw_terminal_target = asset_target if asset_target > 0.0 else None
+        bess_terminal_target = float(raw_terminal_target or 0.0) if asset is not None else 0.0
         depot_bess_soc_map = dict(flow_ctx["bess_soc_kwh_by_depot_slot"].get(depot_id, {}) or {})
+        depot_bess_soc_end_map = dict(flow_ctx["bess_soc_end_kwh_by_depot_slot"].get(depot_id, {}) or {})
         bess_final_soc = (
-            float(depot_bess_soc_map[max(depot_bess_soc_map.keys())])
+            float(depot_bess_soc_end_map[max(depot_bess_soc_end_map.keys())])
+            if depot_bess_soc_end_map
+            else float(depot_bess_soc_map[max(depot_bess_soc_map.keys())])
             if depot_bess_soc_map
             else bess_initial_soc
         )
-        bess_terminal_deviation = abs(bess_final_soc - bess_terminal_target) if asset is not None else 0.0
+        bess_terminal_deviation = abs(bess_final_soc - bess_terminal_target) if asset is not None and bess_terminal_target > 0.0 else 0.0
         pv_generation_total = sum(
             float(value or 0.0)
             for value in dict(flow_ctx["pv_generation_kwh_by_depot_slot"].get(depot_id, {}) or {}).values()
@@ -1841,6 +1979,8 @@ def _persist_rich_run_outputs(
                 "pv_generation_kwh",
                 "pv_balance_residual_kwh",
                 "bess_soc_kwh",
+                "bess_soc_start_kwh",
+                "bess_soc_end_kwh",
                 "bess_terminal_soc_target_kwh",
                 "bess_terminal_soc_deviation_kwh",
                 "bess_terminal_soc_delta_kwh",
@@ -2735,6 +2875,10 @@ def _canonical_depot_power_rows_5min(
                     "bess_to_bus_kwh_by_depot_slot",
                     "pv_to_bess_kwh_by_depot_slot",
                     "grid_to_bess_kwh_by_depot_slot",
+                    "pv_curtail_kwh_by_depot_slot",
+                    "bess_soc_kwh_by_depot_slot",
+                    "bess_soc_start_kwh_by_depot_slot",
+                    "bess_soc_end_kwh_by_depot_slot",
                     "contract_over_limit_kwh_by_depot_slot",
                 )
                 for slot_map in dict(flow_ctx.get(key) or {}).values()
@@ -2763,6 +2907,8 @@ def _canonical_depot_power_rows_5min(
             pv_generation = float((flow_ctx["pv_generation_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
             pv_curtail = compute_pv_curtail_kwh(pv_generation, pv_to_bus, pv_to_bess) if pv_generation > 0.0 else max(raw_pv_curtail, 0.0)
             bess_soc_kwh = float((flow_ctx["bess_soc_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
+            bess_soc_start_kwh = float((flow_ctx["bess_soc_start_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, bess_soc_kwh) or 0.0)
+            bess_soc_end_kwh = float((flow_ctx["bess_soc_end_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, bess_soc_kwh) or 0.0)
             contract_over_limit_kwh = float((flow_ctx["contract_over_limit_kwh_by_depot_slot"].get(depot_id, {}) or {}).get(slot_idx, 0.0) or 0.0)
             contract_limit_kw = float((flow_ctx["depot_limit_kw"].get(depot_id, 0.0)) or 0.0)
             grid_import_for_contract_kwh = grid_to_bus + grid_to_bess
@@ -2793,6 +2939,8 @@ def _canonical_depot_power_rows_5min(
                 "bus_charge_from_grid_kwh": grid_to_bus,
                 "bus_charge_from_bess_kwh": bess_to_bus,
                 "bess_soc_kwh": bess_soc_kwh,
+                "bess_soc_start_kwh": bess_soc_start_kwh,
+                "bess_soc_end_kwh": bess_soc_end_kwh,
                 "contract_limit_kw": contract_limit_kw,
                 "contract_over_limit_kwh": contract_over_limit_kwh,
                 "contract_over_limit_kw": contract_over_limit_kwh / timestep_h if timestep_h > 0.0 else 0.0,
@@ -2819,6 +2967,9 @@ def _canonical_depot_power_rows_5min(
             bus_charge_from_grid_hourly_source_kwh = float(values.get("bus_charge_from_grid_kwh", 0.0) or 0.0)
             bus_charge_from_bess_hourly_source_kwh = float(values.get("bus_charge_from_bess_kwh", 0.0) or 0.0)
             contract_over_limit_hourly_source_kwh = float(values.get("contract_over_limit_kwh", 0.0) or 0.0)
+            bess_soc_kwh = float(values.get("bess_soc_kwh", 0.0) or 0.0)
+            bess_soc_start_kwh = float(values.get("bess_soc_start_kwh", bess_soc_kwh) or 0.0)
+            bess_soc_end_kwh = float(values.get("bess_soc_end_kwh", bess_soc_kwh) or 0.0)
             grid_to_bus_slot_kwh = grid_to_bus_hourly_source_kwh * slot_scale
             pv_to_bus_slot_kwh = pv_to_bus_hourly_source_kwh * slot_scale
             bess_to_bus_slot_kwh = bess_to_bus_hourly_source_kwh * slot_scale
@@ -2882,7 +3033,9 @@ def _canonical_depot_power_rows_5min(
                     "grid_import_total_kwh": grid_import_kwh,
                     "grid_to_bess_slot_kwh": grid_to_bess_slot_kwh,
                     "grid_to_bess_hourly_source_kwh": grid_to_bess_hourly_source_kwh,
-                    "bess_soc_kwh": float(values.get("bess_soc_kwh", 0.0) or 0.0),
+                    "bess_soc_kwh": bess_soc_end_kwh,
+                    "bess_soc_start_kwh": bess_soc_start_kwh,
+                    "bess_soc_end_kwh": bess_soc_end_kwh,
                     "pv_generation_kw": pv_generation_kw,
                     "pv_generation_kwh": pv_generation_kwh,
                     "pv_generation_slot_kwh": pv_generation_kw * output_slot_h,
@@ -2938,14 +3091,30 @@ def _research_rows_from_depot_power(
         depot_id = str(row.get("depot_id") or "")
         if depot_id:
             rows_by_depot_time[(depot_id, out_time)] = row
+    initial_bess_soc_by_depot: Dict[str, float] = {}
+    for row in depot_power_rows:
+        depot_id = str(row.get("depot_id") or "")
+        if depot_id and depot_id not in initial_bess_soc_by_depot:
+            initial_bess_soc_by_depot[depot_id] = float(
+                row.get("bess_soc_start_kwh", row.get("bess_soc_end_kwh", row.get("bess_soc_kwh", 0.0))) or 0.0
+            )
     grid_rows: List[Dict[str, Any]] = []
     pv_rows: List[Dict[str, Any]] = []
     flow_rows: List[Dict[str, Any]] = []
     charge_rows: List[Dict[str, Any]] = []
     for depot_id in depot_ids:
+        bess_soc_carry = float(initial_bess_soc_by_depot.get(depot_id, 0.0) or 0.0)
         for minute in range(0, 24 * 60, slot_minutes):
             out_time = f"{minute // 60:02d}:{minute % 60:02d}"
             row = rows_by_depot_time.get((depot_id, out_time), {})
+            if row:
+                bess_soc_start_kwh = float(row.get("bess_soc_start_kwh", row.get("bess_soc_kwh", bess_soc_carry)) or 0.0)
+                bess_soc_end_kwh = float(row.get("bess_soc_end_kwh", row.get("bess_soc_kwh", bess_soc_start_kwh)) or 0.0)
+            else:
+                bess_soc_start_kwh = bess_soc_carry
+                bess_soc_end_kwh = bess_soc_carry
+            bess_soc_kwh = bess_soc_end_kwh
+            bess_soc_carry = bess_soc_end_kwh
             out_date = base_date.isoformat()
             energy_price = float(
                 row.get(
@@ -2996,7 +3165,9 @@ def _research_rows_from_depot_power(
                     "grid_import_for_contract_slot_kwh": float(row.get("grid_import_for_contract_slot_kwh", row.get("grid_import_slot_kwh", 0.0)) or 0.0),
                     "bus_charge_from_grid_slot_kwh": float(row.get("bus_charge_from_grid_slot_kwh", row.get("grid_to_bus_slot_kwh", 0.0)) or 0.0),
                     "bus_charge_from_bess_slot_kwh": float(row.get("bus_charge_from_bess_slot_kwh", row.get("bess_to_bus_slot_kwh", 0.0)) or 0.0),
-                    "bess_soc_kwh": float(row.get("bess_soc_kwh", 0.0) or 0.0),
+                    "bess_soc_kwh": bess_soc_kwh,
+                    "bess_soc_start_kwh": bess_soc_start_kwh,
+                    "bess_soc_end_kwh": bess_soc_end_kwh,
                     "energy_price_yen_per_kwh": energy_price,
                     "grid_purchase_cost_jpy": float(row.get("grid_purchase_cost_jpy", 0.0) or 0.0),
                     "contract_limit_kw": float(row.get("contract_limit_kw", 0.0) or 0.0),
@@ -3222,14 +3393,19 @@ def _research_extended_timeseries_exports(
     for depot_id in depot_ids:
         asset = assets.get(depot_id)
         bess_capacity = max(float(getattr(asset, "bess_energy_kwh", 0.0) or 0.0), 0.0) if asset is not None else 0.0
-        bess_min = max(float(getattr(asset, "bess_soc_min_kwh", 0.0) or 0.0), 0.0) if asset is not None else 0.0
-        bess_max = max(float(getattr(asset, "bess_soc_max_kwh", 0.0) or 0.0), 0.0) if asset is not None else bess_capacity
-        bess_terminal_min = max(float(getattr(asset, "bess_terminal_soc_min_kwh", 0.0) or 0.0), 0.0) if asset is not None else 0.0
-        bess_initial_soc = max(float(getattr(asset, "bess_initial_soc_kwh", 0.0) or 0.0), 0.0) if asset is not None else 0.0
-        bess_terminal_target = max(float(getattr(asset, "bess_terminal_soc_target_kwh", 0.0) or 0.0), 0.0) if asset is not None else 0.0
-        if bess_terminal_target <= 0.0:
-            bess_terminal_target = bess_initial_soc
+        bess_bounds = _bess_soc_bounds_for_asset(asset) if asset is not None else None
+        if bess_bounds is not None:
+            bess_min, bess_max, bess_initial_soc = bess_bounds
+        else:
+            bess_min = 0.0
+            bess_max = bess_capacity
+            bess_initial_soc = max(float(getattr(asset, "bess_initial_soc_kwh", 0.0) or 0.0), 0.0) if asset is not None else 0.0
+        bess_terminal_min = min(max(float(getattr(asset, "bess_terminal_soc_min_kwh", 0.0) or 0.0), bess_min), bess_max) if asset is not None else 0.0
+        raw_terminal_target = max(float(getattr(asset, "bess_terminal_soc_target_kwh", 0.0) or 0.0), 0.0) if asset is not None else 0.0
+        has_terminal_target = raw_terminal_target > 0.0
+        bess_terminal_target = min(max(raw_terminal_target, bess_min), bess_max) if has_terminal_target else 0.0
         bess_cycle_unit = max(float(getattr(asset, "bess_cycle_cost_yen_per_kwh", 0.0) or 0.0), 0.0) if asset is not None else 0.0
+        carried_bess_soc = bess_initial_soc
         for minute in range(0, 24 * 60, timestep_min):
             time_hhmm = f"{minute // 60:02d}:{minute % 60:02d}"
             base = {"date": base_date.isoformat(), "time": time_hhmm, "depot_id": depot_id}
@@ -3296,7 +3472,17 @@ def _research_extended_timeseries_exports(
                     "source_provenance_exact": depot_source_exact,
                 }
             )
-            bess_soc = float(row.get("bess_soc_kwh", 0.0) or 0.0)
+            if row:
+                bess_soc_start = float(row.get("bess_soc_start_kwh", row.get("bess_soc_kwh", carried_bess_soc)) or 0.0)
+                bess_soc_end = float(row.get("bess_soc_end_kwh", row.get("bess_soc_kwh", bess_soc_start)) or 0.0)
+            else:
+                bess_soc_start = carried_bess_soc
+                bess_soc_end = carried_bess_soc
+            if bess_bounds is not None:
+                bess_soc_start = min(max(bess_soc_start, bess_min), bess_max)
+                bess_soc_end = min(max(bess_soc_end, bess_min), bess_max)
+            bess_soc = bess_soc_end
+            carried_bess_soc = bess_soc_end
             bess_charge_kwh = pv_to_bess_kwh + grid_to_bess_kwh
             bess_rows.append(
                 {
@@ -3310,12 +3496,14 @@ def _research_extended_timeseries_exports(
                     "grid_to_bess_kwh": grid_to_bess_kwh,
                     "bess_to_bus_kwh": bess_to_bus_kwh,
                     "bess_soc_kwh": bess_soc,
+                    "bess_soc_start_kwh": bess_soc_start,
+                    "bess_soc_end_kwh": bess_soc_end,
                     "bess_soc_percent": (bess_soc / bess_capacity * 100.0) if bess_capacity > 0.0 else 0.0,
                     "bess_soc_min_kwh": bess_min,
                     "bess_soc_max_kwh": bess_max,
                     "bess_terminal_soc_min_kwh": bess_terminal_min,
                     "bess_terminal_soc_target_kwh": bess_terminal_target,
-                    "bess_terminal_soc_deviation_kwh": abs(bess_soc - bess_terminal_target) if minute >= 24 * 60 - timestep_min else 0.0,
+                    "bess_terminal_soc_deviation_kwh": abs(bess_soc - bess_terminal_target) if has_terminal_target and minute >= 24 * 60 - timestep_min else 0.0,
                     "bess_terminal_soc_delta_kwh": bess_soc - bess_initial_soc if minute >= 24 * 60 - timestep_min else 0.0,
                     "bess_terminal_soc_violation_kwh": max(bess_terminal_min - bess_soc, 0.0) if minute >= 24 * 60 - timestep_min else 0.0,
                     "bess_cycle_cost_jpy": bess_to_bus_kwh * bess_cycle_unit,
@@ -4016,10 +4204,19 @@ def _persist_canonical_graph_exports(
                     kpi_summary.get("contract_overage_policy", "report_only") or "report_only"
                 ),
                 "solver_status": str(engine_result.solver_status or ""),
-                "mip_gap_requested_ratio": float((engine_result.solver_metadata or {}).get("mip_gap", 0.0) or 0.0),
-                "mip_gap_requested_percent": float((engine_result.solver_metadata or {}).get("mip_gap", 0.0) or 0.0) * 100.0,
-                "mip_gap_achieved_ratio": float((engine_result.solver_metadata or {}).get("mip_gap", 0.0) or 0.0),
-                "mip_gap_achieved_percent": float((engine_result.solver_metadata or {}).get("mip_gap", 0.0) or 0.0) * 100.0,
+                "mip_gap_requested_ratio": float((engine_result.solver_metadata or {}).get("requested_mip_gap", (engine_result.solver_metadata or {}).get("mip_gap", 0.0)) or 0.0),
+                "mip_gap_requested_percent": float((engine_result.solver_metadata or {}).get("requested_mip_gap", (engine_result.solver_metadata or {}).get("mip_gap", 0.0)) or 0.0) * 100.0,
+                "mip_gap_achieved_ratio": (engine_result.solver_metadata or {}).get("achieved_mip_gap", (engine_result.solver_metadata or {}).get("final_gap")),
+"mip_gap_achieved_percent": (
+                    None
+                    if (engine_result.solver_metadata or {}).get("achieved_mip_gap", (engine_result.solver_metadata or {}).get("final_gap")) is None
+                    else float((engine_result.solver_metadata or {}).get("achieved_mip_gap", (engine_result.solver_metadata or {}).get("final_gap")) or 0.0) * 100.0
+                ),
+                "stage1_mip_gap": (engine_result.solver_metadata or {}).get("stage1_mip_gap"),
+                "stage2_mip_gap": (engine_result.solver_metadata or {}).get("stage2_mip_gap"),
+                "supports_two_stage_milp": (engine_result.solver_metadata or {}).get("supports_two_stage_milp"),
+                "supports_integrated_exact_milp": (engine_result.solver_metadata or {}).get("supports_integrated_exact_milp"),
+                "optimization_structure": (engine_result.solver_metadata or {}).get("optimization_structure"),
             },
         )
         kpi_summary = dict(accounting_artifacts.summary)
@@ -4167,6 +4364,7 @@ def _persist_canonical_graph_exports(
         "time_resolution_minutes": int(getattr(problem.scenario, "timestep_min", 30) or 30),
         "timezone": "Asia/Tokyo",
         "source": "canonical_assignment_plan",
+        "bess_soc_kwh_semantics": "slot_end",
         "files": [
             "vehicle_timeline.csv",
             "soc_events.csv",
@@ -4295,6 +4493,12 @@ def _solution_validity_payload(
     )
     if is_fallback_status:
         blocking_reasons.append("baseline_fallback")
+    if status_upper in {"REPAIRED_HEURISTIC", "POSTSOLVE_REPAIRED"}:
+        blocking_reasons.append("repaired_heuristic")
+    if status_upper == "DEBUG_RESULT" or meta.get("debug_mode") or meta.get("result_class") == "debug_result":
+        blocking_reasons.append("debug_result")
+    if meta.get("result_class") == "assignment_only_result" or meta.get("phase") == "phase2_assignment_only":
+        blocking_reasons.append("assignment_only_result")
     if status_upper == "PARTIAL_BASELINE_FALLBACK":
         blocking_reasons.append("partial_baseline_fallback")
     if status_upper == "TRUTHFUL_BASELINE_GUARDRAIL":
@@ -4302,9 +4506,11 @@ def _solution_validity_payload(
     if status_upper == "POSTSOLVE_REPAIRED":
         blocking_reasons.append("postsolve_repaired")
     if meta.get("postsolve_soc_repair_applied"):
-        blocking_reasons.append("postsolve_repaired")
+        blocking_reasons.append("repaired_heuristic")
     if meta.get("postsolve_charging_recomputed"):
-        blocking_reasons.append("postsolve_repaired")
+        blocking_reasons.append("repaired_heuristic")
+    if meta.get("postsolve_modified_solution"):
+        blocking_reasons.append("repaired_heuristic")
     if not bool(feasible):
         blocking_reasons.append("postsolve_infeasible")
     if reasons:
@@ -4333,9 +4539,15 @@ def _solution_validity_payload(
     elif "truthful_baseline_guardrail" in blocking_reasons:
         status_reason = "truthful_baseline_guardrail"
         result_class = "baseline_fallback"
-    elif "postsolve_repaired" in blocking_reasons:
-        status_reason = "postsolve_repaired"
-        result_class = "postsolve_repaired"
+    elif "debug_result" in blocking_reasons:
+        status_reason = "debug_result_not_research_kpi"
+        result_class = "debug_result"
+    elif "assignment_only_result" in blocking_reasons:
+        status_reason = "assignment_only_no_charging_soc_validation"
+        result_class = "assignment_only_result"
+    elif "repaired_heuristic" in blocking_reasons or "postsolve_repaired" in blocking_reasons:
+        status_reason = "repaired_heuristic"
+        result_class = "repaired_heuristic"
     elif "baseline_fallback" in blocking_reasons:
         status_reason = "baseline_fallback_or_postsolve_infeasible"
         result_class = "baseline_fallback"
@@ -4356,6 +4568,12 @@ def _solution_validity_payload(
         "status_reason": status_reason,
         "result_class": result_class,
         "blocking_reasons": blocking_reasons,
+        "research_kpi_eligible": bool(
+            validated_feasible
+            and result_class == "exact_or_validated"
+            and bool(meta.get("research_kpi_eligible", True))
+        ),
+        "validation_metrics": dict(meta.get("validation_metrics") or {}),
     }
 
 
@@ -4402,6 +4620,8 @@ def _solver_settings_payload(
         "synthetic_pv_fallback_applied": bool(metadata.get("synthetic_pv_fallback_applied", False)),
         "successor_pruning_enabled": bool(metadata.get("successor_pruning_enabled", False)),
         "arc_pruning_summary": dict(metadata.get("arc_pruning_summary") or {}),
+        "requested_mip_gap": requested_gap,
+        "achieved_mip_gap": achieved_gap,
     }
 
 
@@ -4519,7 +4739,12 @@ def _run_optimization(
         charging_flow_payload: Optional[Dict[str, Any]] = None
         charging_payload_warning: Optional[str] = None
 
-        if solver_mode in {"mode_milp_only", "mode_alns_only", "mode_ga_only", "mode_abc_only", "mode_hybrid"}:
+        if solver_mode in {
+            "thesis_mode", "debug_mode", "mode_milp_only", "mode_alns_only",
+            "mode_ga_only", "mode_abc_only", "mode_hybrid",
+            "phase1_charging_only", "phase2_assignment_only", "phase3_two_stage",
+            "phase4_integrated", "diagnostic",
+        }:
             # CANONICAL PATH: Uses src/optimization/ engine stack
             opt_mode = _parse_optimization_mode(solver_mode)
             engine_label = str(opt_mode.value or "optimization").upper()
@@ -4542,6 +4767,8 @@ def _run_optimization(
                     },
                 ),
             )
+            phase_token = _phase_from_solver_mode(solver_mode)
+            is_diagnostic_mode = solver_mode == "diagnostic" or solver_mode == "debug_mode"
             opt_config = OptimizationConfig(
                 mode=opt_mode,
                 time_limit_sec=time_limit_seconds,
@@ -4551,6 +4778,11 @@ def _run_optimization(
                 no_improvement_limit=no_improvement_limit,
                 destroy_fraction=destroy_fraction,
                 warm_start=True,
+                thesis_mode=solver_mode in {"thesis_mode", "mode_milp_only"} or phase_token == "phase3_two_stage",
+                debug_mode=solver_mode == "debug_mode" or phase_token == "diagnostic",
+                allow_postsolve_repair=solver_mode == "debug_mode",
+                phase=phase_token,
+                diagnostic_mode=is_diagnostic_mode,
             )
             problem = ProblemBuilder().build_from_scenario(
                 scenario,
@@ -4646,11 +4878,14 @@ def _run_optimization(
             _cb.setdefault("battery_degradation_cost", _cb.get("degradation_cost", 0.0))
             _cb.setdefault("emission_cost", _cb.get("co2_cost", 0.0))
             _cb.update(normalize_pv_energy_breakdown(_cb))
+            achieved_mip_gap = smeta.get("achieved_mip_gap", smeta.get("final_gap"))
             result_payload = {
                 "status": engine_result.solver_status,
                 "objective_value": engine_result.objective_value,
                 "solve_time_seconds": float(smeta.get("solve_time_sec", 0.0) or solve_elapsed),
-                "mip_gap": float(smeta.get("mip_gap") or 0.0),
+                "mip_gap": None if achieved_mip_gap is None else float(achieved_mip_gap),
+                "requested_mip_gap": float(smeta.get("requested_mip_gap", smeta.get("mip_gap", mip_gap)) or 0.0),
+                "achieved_mip_gap": None if achieved_mip_gap is None else float(achieved_mip_gap),
                 "assignment": {
                     k: list(v)
                     for k, v in engine_result.plan.vehicle_paths().items()
@@ -4941,6 +5176,25 @@ def _run_optimization(
             mip_gap_requested=mip_gap,
             solver_metadata=solver_metadata,
         )
+        result_cost_breakdown = _cost_breakdown(result_payload, sim_payload)
+        accounting_summary_for_result = dict((graph_artifacts or {}).get("accounting_summary") or {})
+        objective_value_for_result = result_payload.get("objective_value")
+        if (
+            bool(result_cost_breakdown.get("objective_is_actual_cost", False))
+            and accounting_summary_for_result.get("reported_total_cost_jpy") is not None
+        ):
+            objective_value_for_result = float(accounting_summary_for_result.get("reported_total_cost_jpy") or 0.0)
+            result_payload["objective_value"] = objective_value_for_result
+            result_cost_breakdown["total_cost"] = objective_value_for_result
+            result_cost_breakdown["objective_value"] = objective_value_for_result
+            if isinstance(result_payload.get("obj_breakdown"), dict):
+                result_payload["obj_breakdown"]["total_cost"] = objective_value_for_result
+                result_payload["obj_breakdown"]["objective_value"] = objective_value_for_result
+            if isinstance(_full_new_result, dict):
+                _full_new_result["objective_value"] = objective_value_for_result
+                if isinstance(_full_new_result.get("cost_breakdown"), dict):
+                    _full_new_result["cost_breakdown"]["total_cost"] = objective_value_for_result
+                    _full_new_result["cost_breakdown"]["objective_value"] = objective_value_for_result
 
         optimization_result: Dict[str, Any] = {
             "scenario_id": scenario_id,
@@ -4954,7 +5208,7 @@ def _run_optimization(
             "mode": mode,
             "solver_mode": solver_mode,
             "objective_mode": objective_mode,
-            "objective_value": result_payload.get("objective_value"),
+            "objective_value": objective_value_for_result,
             "solve_time_seconds": result_payload.get("solve_time_seconds", 0.0),
             "mip_gap": result_payload.get("mip_gap"),
             "solver_metadata": solver_metadata,
@@ -4964,10 +5218,12 @@ def _run_optimization(
             "strict_coverage_precheck": strict_coverage_precheck,
             "prepared_scope_audit": prepared_scope_audit,
             "solution_validity": solution_validity,
+            "result_class": solution_validity.get("result_class"),
+            "research_kpi_eligible": bool(solution_validity.get("research_kpi_eligible", False)),
             "electricity_cost_basis": str(
                 (sim_payload or {}).get("electricity_cost_basis") or "provisional_drive"
             ),
-            "cost_breakdown": _cost_breakdown(result_payload, sim_payload),
+            "cost_breakdown": result_cost_breakdown,
             "dispatch_report": scenario.get("graph") or store.get_field(scenario_id, "graph") or {},
             "build_report": build_report.to_dict(),
             "summary": {
@@ -5195,7 +5451,7 @@ def _run_optimization(
                     "optimization_audit.json": optimization_audit,
                 },
             )
-        is_fallback = bool(solution_validity.get("result_class") in {"baseline_fallback", "postsolve_infeasible", "postsolve_repaired"})
+        is_fallback = bool(solution_validity.get("result_class") in {"baseline_fallback", "postsolve_infeasible", "postsolve_repaired", "repaired_heuristic", "debug_result"})
         final_status = "optimized" if not is_fallback else "optimized_provisional"
         store.update_scenario(scenario_id, status=final_status)
         job_message = "Optimization complete." if not is_fallback else f"Optimization complete ({solution_validity.get('status_reason', 'provisional')})."

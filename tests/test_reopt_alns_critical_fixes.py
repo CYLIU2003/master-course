@@ -290,7 +290,7 @@ def test_feasibility_checker_treats_small_builder_required_soc_as_percent() -> N
     assert not any(msg.startswith("[SOC]") for msg in report.errors)
 
 
-def test_feasibility_checker_keeps_unserved_trips_as_warning_only() -> None:
+def test_feasibility_checker_keeps_unserved_warning_but_fails_required_validation() -> None:
     trip_1_dispatch = Trip(
         trip_id="t1",
         route_id="r1",
@@ -389,8 +389,8 @@ def test_feasibility_checker_keeps_unserved_trips_as_warning_only() -> None:
 
     report = FeasibilityChecker().evaluate(problem, plan)
 
-    assert report.feasible is True
-    assert report.errors == ()
+    assert report.feasible is False
+    assert any("unassigned trips remain" in msg for msg in report.errors)
     assert report.uncovered_trip_ids == ("t2",)
     assert any(msg.startswith("Uncovered trips:") for msg in report.warnings)
 

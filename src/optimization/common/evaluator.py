@@ -477,11 +477,16 @@ class CostEvaluator:
             "utilization": float(weights.utilization),
         }
 
-        # 復路ボーナス: 同一路線の折り返し接続に対する報酬（負コスト）
-        return_leg_bonus = self._compute_return_leg_bonus(
+        objective_actual_cost_mode = bool(
+            (problem.metadata or {}).get("objective_actual_cost_mode", False)
+            or (problem.metadata or {}).get("thesis_mode", False)
+        )
+        # Return-leg bonus and weather strategy bias are policy rewards/biases, not
+        # accounting costs. Thesis mode removes them from the primary objective.
+        return_leg_bonus = 0.0 if objective_actual_cost_mode else self._compute_return_leg_bonus(
             problem, plan, weights.return_leg_bonus
         )
-        weather_strategy_term = weather_strategy_objective_term(problem, plan)
+        weather_strategy_term = 0.0 if objective_actual_cost_mode else weather_strategy_objective_term(problem, plan)
 
         accounting_total_cost = (
             electricity_cost
@@ -497,9 +502,9 @@ class CostEvaluator:
             + deviation_cost
             + co2_cost
         )
-        objective_cost_term = accounting_total_cost - return_leg_bonus + weather_strategy_term
+        objective_cost_term = accounting_total_cost if objective_actual_cost_mode else accounting_total_cost - return_leg_bonus + weather_strategy_term
         total_cost_with_assets = accounting_total_cost + pv_asset_cost + bess_asset_cost
-        objective_is_actual_cost = abs(objective_cost_term - accounting_total_cost) <= 1.0e-6
+        objective_is_actual_cost = objective_actual_cost_mode or abs(objective_cost_term - accounting_total_cost) <= 1.0e-6
         if service_coverage_mode == "strict" and plan.unserved_trip_ids:
             return CostBreakdown(
                 energy_cost=energy_cost,
@@ -568,7 +573,7 @@ class CostEvaluator:
                 objective_is_actual_cost=objective_is_actual_cost,
             )
         objective_value = objective_value_for_mode(
-            objective_mode=problem.scenario.objective_mode,
+            objective_mode="total_cost" if objective_actual_cost_mode else problem.scenario.objective_mode,
             total_cost=objective_cost_term,
             total_co2_kg=total_co2_kg,
             unserved_penalty=unserved_penalty,

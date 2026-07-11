@@ -1172,8 +1172,8 @@ def _attach_nested_kpi_summary(summary: Dict[str, Any]) -> None:
         "co2_cost_jpy": float(summary.get("co2_cost_jpy", 0.0) or 0.0),
         "battery_degradation_cost_jpy": float(summary.get("battery_degradation_cost_jpy", 0.0) or 0.0),
         "gross_operating_cost_jpy": float(summary.get("gross_operating_cost_jpy", 0.0) or 0.0),
-        "objective_value": float(summary.get("objective_value", summary.get("objective_value_jpy", 0.0)) or 0.0),
-        "objective_is_actual_cost": False,
+"objective_value": float(summary.get("objective_value", summary.get("objective_value_jpy", 0.0)) or 0.0),
+        "objective_is_actual_cost": bool(summary.get("objective_is_actual_cost", False)),
         "objective_value_definition": summary.get("objective_value_definition", "solver objective including penalties and bonuses"),
         "gross_operating_cost_definition": summary.get("gross_operating_cost_definition", "real operating cost terms only"),
     }

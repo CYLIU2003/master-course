@@ -71,5 +71,37 @@ def test_postsolve_repair_detected_via_solver_metadata() -> None:
     )
 
     assert payload["validated_no_cancellation"] is False
-    assert payload["result_class"] == "postsolve_repaired"
-    assert "postsolve_repaired" in payload["blocking_reasons"]
+    assert payload["result_class"] == "repaired_heuristic"
+    assert "repaired_heuristic" in payload["blocking_reasons"]
+    assert payload["research_kpi_eligible"] is False
+
+
+def test_debug_result_is_not_research_kpi_eligible() -> None:
+    payload = _solution_validity_payload(
+        solver_status="debug_result",
+        feasible=True,
+        trip_count_unserved=0,
+        infeasibility_reasons=[],
+        solver_metadata={"debug_mode": True, "result_class": "debug_result"},
+    )
+
+    assert payload["validated_no_cancellation"] is False
+    assert payload["validated_feasible"] is False
+    assert payload["result_class"] == "debug_result"
+    assert payload["research_kpi_eligible"] is False
+    assert "debug_result" in payload["blocking_reasons"]
+
+
+def test_phase2_assignment_only_is_not_full_research_kpi() -> None:
+    payload = _solution_validity_payload(
+        solver_status="phase2_assignment_feasible",
+        feasible=True,
+        trip_count_unserved=0,
+        infeasibility_reasons=[],
+        solver_metadata={"phase": "phase2_assignment_only", "result_class": "assignment_only_result"},
+    )
+
+    assert payload["validated_no_cancellation"] is False
+    assert payload["result_class"] == "assignment_only_result"
+    assert payload["research_kpi_eligible"] is False
+    assert "assignment_only_result" in payload["blocking_reasons"]

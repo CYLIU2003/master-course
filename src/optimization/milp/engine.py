@@ -34,6 +34,27 @@ class MILPOptimizer:
         breakdown = self._evaluator.evaluate(problem, plan)
         vehicle_ledger, daily_ledger = self._evaluator.build_plan_ledgers(problem, plan, breakdown)
         plan = replace(plan, vehicle_cost_ledger=vehicle_ledger, daily_cost_ledger=daily_ledger)
+        plan_metadata = dict(plan.metadata or {})
+        phase = str(plan_metadata.get("phase") or getattr(config, "phase", "") or "").strip()
+        diagnostic_mode = bool(plan_metadata.get("diagnostic_mode", getattr(config, "diagnostic_mode", False)))
+        result_class = str(
+            plan_metadata.get("result_class")
+            or ("debug_result" if bool(getattr(config, "debug_mode", False)) else "optimization_result")
+        )
+        research_kpi_eligible = bool(
+            plan_metadata.get(
+                "research_kpi_eligible",
+                not bool(getattr(config, "debug_mode", False)) and result_class == "optimization_result",
+            )
+        )
+        if phase == "diagnostic" or diagnostic_mode:
+            result_class = "debug_result"
+            research_kpi_eligible = False
+        binding_constraint_report = (
+            self._binding_constraint_report(report, plan)
+            if phase == "diagnostic" or diagnostic_mode
+            else dict(plan_metadata.get("binding_constraint_report") or {})
+        )
         costs = breakdown.to_dict()
         vehicle_fragment_counts = plan.vehicle_fragment_counts()
         vehicles_with_multiple_fragments = plan.vehicles_with_multiple_fragments()
@@ -56,9 +77,10 @@ class MILPOptimizer:
             "BASELINE_FALLBACK",
             "PARTIAL_BASELINE_FALLBACK",
         }
+        final_solver_status = "debug_result" if bool(getattr(config, "debug_mode", False)) else outcome.solver_status
         return OptimizationEngineResult(
             mode=OptimizationMode.MILP,
-            solver_status=outcome.solver_status,
+            solver_status=final_solver_status,
             objective_value=costs["objective_value"],
             plan=plan,
             feasible=report.feasible,
@@ -68,12 +90,29 @@ class MILPOptimizer:
             solver_metadata={
                 "backend": outcome.used_backend,
                 "supports_exact_milp": outcome.supports_exact_milp,
+                "supports_two_stage_milp": bool((plan.metadata or {}).get("supports_two_stage_milp", False)),
+                "supports_integrated_exact_milp": bool((plan.metadata or {}).get("supports_integrated_exact_milp", outcome.supports_exact_milp)),
+                "optimization_structure": str((plan.metadata or {}).get("optimization_structure") or ("two_stage" if getattr(config, "thesis_mode", False) else "integrated")),
+                "stage1_solver_status": (plan.metadata or {}).get("stage1_solver_status"),
+                "stage2_solver_status": (plan.metadata or {}).get("stage2_solver_status"),
+                "stage1_mip_gap": (plan.metadata or {}).get("stage1_mip_gap"),
+                "stage2_mip_gap": (plan.metadata or {}).get("stage2_mip_gap"),
+                "phase": phase,
                 "true_solver_family": "milp",
                 "independent_implementation": True,
                 "delegates_to": "none",
                 "solver_display_name": "MILP",
                 "solver_maturity": "core",
                 "service_coverage_mode": service_coverage_mode,
+                "thesis_mode": bool(getattr(config, "thesis_mode", False)),
+                "debug_mode": bool(getattr(config, "debug_mode", False)) or result_class == "debug_result",
+                "diagnostic_mode": diagnostic_mode,
+                "result_class": result_class,
+                "research_kpi_eligible": research_kpi_eligible,
+                "charging_dispatch_evaluated": plan_metadata.get("charging_dispatch_evaluated"),
+                "soc_constraints_evaluated": plan_metadata.get("soc_constraints_evaluated"),
+                "supports_assignment_milp": bool(plan_metadata.get("supports_assignment_milp", False)),
+                "binding_constraint_report": binding_constraint_report,
                 "allow_partial_service": allow_partial_service,
                 "strict_coverage_enforced": service_coverage_mode == "strict",
                 "same_day_depot_cycles_enabled": allow_same_day_depot_cycles,
@@ -143,6 +182,8 @@ class MILPOptimizer:
                 ),
                 "best_bound": outcome.best_bound,
                 "final_gap": outcome.final_gap,
+                "requested_mip_gap": float(config.mip_gap),
+                "achieved_mip_gap": outcome.final_gap,
                 "nodes_explored": outcome.nodes_explored,
                 "runtime_sec": outcome.runtime_sec,
                 "first_feasible_sec": outcome.first_feasible_sec,
@@ -169,6 +210,7 @@ class MILPOptimizer:
                 "effective_limits": {
                     "time_limit_sec": int(config.time_limit_sec),
                     "mip_gap": float(config.mip_gap),
+                    "requested_mip_gap": float(config.mip_gap),
                 },
                 "model_stats": model_stats,
                 "time_limit_sec": config.time_limit_sec,
@@ -195,6 +237,12 @@ class MILPOptimizer:
         status = str(solver_status or "").strip().lower()
         if status == "optimal":
             return "optimal"
+        if status == "feasible":
+            return "stopped_with_feasible"
+        if status == "debug_result":
+            return "debug_result"
+        if status == "repaired_heuristic":
+            return "postsolve_repaired_heuristic"
         if status in {"time_limit", "time_limit_baseline"}:
             return "time_limit"
         if status in {"baseline_fallback", "partial_baseline_fallback"}:
@@ -205,7 +253,54 @@ class MILPOptimizer:
             return "stopped_with_feasible"
         if status == "auto_relaxed_baseline":
             return "baseline_after_relax"
+        if status == "phase2_assignment_feasible":
+            return "assignment_only_feasible"
         return "unknown"
+
+    def _binding_constraint_report(self, report: Any, plan: Any) -> Dict[str, Any]:
+        metrics = dict(getattr(report, "metrics", {}) or {})
+        metadata = dict(getattr(plan, "metadata", {}) or {})
+        slack_summary = dict(metadata.get("diagnostic_slack_summary") or {})
+
+        def _int_metric(key: str, default: int = 0) -> int:
+            try:
+                return int(metrics.get(key, default) or 0)
+            except (TypeError, ValueError):
+                return default
+
+        def _float_value(raw: Any) -> float:
+            try:
+                return float(raw or 0.0)
+            except (TypeError, ValueError):
+                return 0.0
+
+        families = {
+            "coverage": max(_int_metric("unassigned_trip_count"), int(slack_summary.get("unserved_trip_count", 0) or 0)),
+            "duplicate_assignment": _int_metric("duplicate_trip_count"),
+            "vehicle_time_overlap": _int_metric("vehicle_time_overlap_count"),
+            "dispatch_transition": _int_metric("infeasible_transition_count"),
+            "ev_soc": max(
+                _int_metric("ev_soc_violation_count"),
+                1 if _float_value(slack_summary.get("soc_lower_deficit_kwh")) > 1.0e-9 else 0,
+                1 if _float_value(slack_summary.get("soc_upper_excess_kwh")) > 1.0e-9 else 0,
+            ),
+            "bess_soc": _int_metric("bess_soc_violation_count"),
+            "contract_power": max(
+                _int_metric("contract_power_violation_count"),
+                1 if _float_value(slack_summary.get("contract_over_limit_kwh")) > 1.0e-9 else 0,
+            ),
+            "charger_concurrency": _int_metric("charger_concurrency_violation_count"),
+        }
+        binding_families = tuple(sorted(name for name, count in families.items() if int(count or 0) > 0))
+        return {
+            "source": "postsolve_validation_metrics_and_diagnostic_slacks",
+            "binding_families": binding_families,
+            "family_counts": families,
+            "validation_metrics": metrics,
+            "diagnostic_slack_summary": slack_summary,
+            "research_kpi_eligible": False,
+            "limitations": tuple(metadata.get("diagnostic_limitations") or ()),
+        }
 
     def _lightweight_model_stats(
         self,
@@ -214,7 +309,12 @@ class MILPOptimizer:
         trip_by_id = problem.trip_by_id()
         assignment_pairs = self._builder.enumerate_assignment_pairs(problem)
         arc_pairs = self._builder.enumerate_arc_pairs(problem, trip_by_id)
-        arc_pruning_summary = self._builder.arc_pruning_summary(problem, trip_by_id)
+        arc_pruning_summary_fn = getattr(self._builder, "arc_pruning_summary", None)
+        arc_pruning_summary = (
+            arc_pruning_summary_fn(problem, trip_by_id)
+            if callable(arc_pruning_summary_fn)
+            else {}
+        )
         price_slot_count = len(problem.price_slots)
         bev_vehicle_count = sum(
             1

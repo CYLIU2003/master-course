@@ -12,6 +12,7 @@ def _problem() -> SimpleNamespace:
         vehicle_type="BEV",
         home_depot_id="dep-1",
         battery_capacity_kwh=100.0,
+        initial_soc=60.0,
         energy_consumption_kwh_per_km=1.0,
         fuel_consumption_l_per_km=0.0,
     )
@@ -54,7 +55,7 @@ def test_build_accounting_artifacts_minimum_case() -> None:
         ],
         vehicle_soc_timeseries_rows=[
             {"date": "2025-08-05", "time": "08:00", "vehicle_id": "veh-1", "soc_kwh": 50.0, "state": "service"},
-            {"date": "2025-08-05", "time": "08:30", "vehicle_id": "veh-1", "soc_kwh": 60.0, "state": "charging"},
+            {"date": "2025-08-05", "time": "08:30", "vehicle_id": "veh-1", "soc_kwh": 69.0, "state": "charging"},
         ],
         vehicle_charging_source_rows=[
             {

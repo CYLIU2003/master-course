@@ -101,7 +101,8 @@ def build_accounting_summary(
     if not bool((metadata.get("cost_component_flags") or {}).get("vehicle_usage_cost", True)):
         vehicle_usage_cost_jpy = 0.0
     total_cost_jpy = electricity_cost_jpy + demand_cost_jpy + fuel_cost_jpy + co2_cost_jpy + battery_degradation_cost_jpy + contract_overage_cost_jpy + vehicle_usage_cost_jpy
-    objective_value = float(metadata.get("objective_value", total_cost_jpy) or total_cost_jpy)
+    objective_is_actual_cost = bool(metadata.get("objective_is_actual_cost", False))
+    objective_value = total_cost_jpy if objective_is_actual_cost else float(metadata.get("objective_value", total_cost_jpy) or total_cost_jpy)
     solver_status = str(metadata.get("solver_status", "") or "")
     fallback_statuses = {"BASELINE_FALLBACK", "PARTIAL_BASELINE_FALLBACK"}
     is_optimization_result = bool(solver_status.upper() not in fallback_statuses and not bool(metadata.get("fallback_applied", False)))
@@ -211,7 +212,7 @@ def build_accounting_summary(
         "mean_soc_ratio": mean_soc_ratio,
         "final_min_soc_ratio": final_min_soc_ratio,
         "final_mean_soc_ratio": final_mean_soc_ratio,
-        "objective_is_actual_cost": bool(metadata.get("objective_is_actual_cost", False)),
+        "objective_is_actual_cost": objective_is_actual_cost,
         "supports_exact_milp": bool(metadata.get("supports_exact_milp", False)),
         "fallback_applied": bool(metadata.get("fallback_applied", False)),
         "is_optimization_result": is_optimization_result,
@@ -228,12 +229,17 @@ def build_accounting_summary(
             "gross_operating_cost_jpy": "real cost terms only",
             "objective_value": "solver objective including penalties and bonuses",
             "reported_total_cost_jpy": "UI/reporting value; see included terms",
-            "objective_is_actual_cost": False,
+            "objective_is_actual_cost": objective_is_actual_cost,
         },
-        "mip_gap_requested_ratio": metadata.get("mip_gap_requested_ratio"),
+"mip_gap_requested_ratio": metadata.get("mip_gap_requested_ratio"),
         "mip_gap_requested_percent": metadata.get("mip_gap_requested_percent"),
         "mip_gap_achieved_ratio": metadata.get("mip_gap_achieved_ratio"),
         "mip_gap_achieved_percent": metadata.get("mip_gap_achieved_percent"),
+        "stage1_mip_gap": metadata.get("stage1_mip_gap"),
+        "stage2_mip_gap": metadata.get("stage2_mip_gap"),
+        "supports_two_stage_milp": metadata.get("supports_two_stage_milp"),
+        "supports_integrated_exact_milp": metadata.get("supports_integrated_exact_milp"),
+        "optimization_structure": metadata.get("optimization_structure"),
     }
     return summary
 

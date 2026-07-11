@@ -23,6 +23,8 @@ class TestSolverPathRouting:
     def test_canonical_modes_pass_through(self):
         """Canonical modes should pass through unchanged."""
         canonical_modes = [
+            "thesis_mode",
+            "debug_mode",
             "mode_milp_only",
             "mode_alns_only",
             "mode_ga_only",
@@ -38,6 +40,8 @@ class TestSolverPathRouting:
         test_cases = [
             ("milp", "mode_milp_only"),
             ("exact", "mode_milp_only"),
+            ("thesis", "thesis_mode"),
+            ("debug", "debug_mode"),
             ("alns", "mode_alns_only"),
             ("heuristic", "mode_alns_only"),
             ("ga", "mode_ga_only"),
@@ -62,10 +66,9 @@ class TestSolverPathRouting:
             assert "deprecated" in str(w[0].message).lower()
             assert "mode_hybrid" in str(w[0].message)
     
-    def test_legacy_thesis_modes_are_blocked(self):
-        """Legacy thesis modes should raise ValueError with clear message."""
+    def test_legacy_noncanonical_modes_are_blocked(self):
+        """Legacy noncanonical modes should raise ValueError with clear message."""
         blocked_modes = [
-            "thesis_mode",
             "mode_a_journey_charge",
             "mode_a",
             "mode_b_optimistic",
@@ -105,6 +108,23 @@ class TestSolverPathRouting:
         # Should either pass through or default depending on implementation
         assert result in {unknown, "mode_milp_only"}
 
+    def test_phase_tokens_are_public_modes(self):
+        """Completed phase tokens should normalize to canonical phase modes."""
+        expected = {
+            "phase1": "phase1_charging_only",
+            "phase1_charging_only": "phase1_charging_only",
+            "phase2": "phase2_assignment_only",
+            "phase2_assignment_only": "phase2_assignment_only",
+            "phase3": "phase3_two_stage",
+            "phase3_two_stage": "phase3_two_stage",
+            "phase4": "phase4_integrated",
+            "phase4_integrated": "phase4_integrated",
+            "diagnostic": "diagnostic",
+            "diagnostic_mode": "diagnostic",
+        }
+        for mode, normalized in expected.items():
+            assert _normalize_solver_mode(mode) == normalized
+
 
 class TestOptimizationCapabilities:
     """Test that optimization capabilities endpoint reports correct modes."""
@@ -120,16 +140,23 @@ class TestOptimizationCapabilities:
         
         # All canonical modes should be listed
         expected_modes = {
+            "thesis_mode",
+            "debug_mode",
             "mode_milp_only",
             "mode_alns_only",
             "mode_ga_only",
             "mode_abc_only",
             "mode_hybrid",
+            "phase1_charging_only",
+            "phase2_assignment_only",
+            "phase3_two_stage",
+            "phase4_integrated",
+            "diagnostic",
         }
         assert set(supported) == expected_modes
         
         # Legacy modes should NOT be in supported list
-        legacy_modes = {"thesis_mode", "mode_a_journey_charge", "mode_alns_milp"}
+        legacy_modes = {"mode_a_journey_charge", "mode_alns_milp"}
         assert not legacy_modes.intersection(set(supported))
     
     def test_capabilities_documents_deprecated_modes(self):
@@ -145,9 +172,7 @@ class TestOptimizationCapabilities:
         assert "mode_alns_milp" in deprecated
         assert "mode_hybrid" in deprecated["mode_alns_milp"].lower()
         
-        # Blocked modes should be documented
-        assert "thesis_mode" in deprecated
-        assert "blocked" in deprecated["thesis_mode"].lower() or "no longer supported" in deprecated["thesis_mode"].lower()
+        assert "thesis_mode" not in deprecated
     
     def test_capabilities_specifies_authoritative_engine(self):
         """Capabilities should clarify the authoritative engine."""

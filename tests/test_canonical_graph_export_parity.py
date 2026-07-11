@@ -270,6 +270,32 @@ def test_normalize_postsolve_plan_keeps_feasible_exact_milp_source_trace() -> No
     assert normalized_plan.metadata["canonical_source_flow_context"]["source_provenance_exact"] is True
 
 
+def test_normalize_postsolve_plan_noops_when_repair_disabled() -> None:
+    problem, result, _scenario = _problem_and_result()
+    engine = OptimizationEngine()
+
+    with (
+        mock.patch.object(engine, "_reassign_vehicle_fragments") as reassign,
+        mock.patch("src.optimization.engine.apply_opportunistic_topup") as topup,
+    ):
+        normalized_plan, assignment_rebuilt, charging_recomputed, soc_repaired, topup_applied = engine._normalize_postsolve_plan(
+            problem,
+            result.plan,
+            mode=OptimizationMode.MILP,
+            solver_metadata={"supports_exact_milp": True},
+            allow_postsolve_repair=False,
+        )
+
+    reassign.assert_not_called()
+    topup.assert_not_called()
+    assert normalized_plan.duties == result.plan.duties
+    assert assignment_rebuilt is False
+    assert charging_recomputed is False
+    assert soc_repaired is False
+    assert topup_applied is False
+    assert normalized_plan.metadata["postsolve_repair_allowed"] is False
+
+
 def test_vehicle_charging_source_timeseries_uses_vehicle_provenance_flag() -> None:
     problem, result, _scenario = _problem_and_result()
     plan = replace(
@@ -420,6 +446,102 @@ def test_canonical_graph_exports_write_legacy_graph_files_even_when_diagrams_dis
     assert grid_rows[0]["time"] == "00:00"
     assert grid_rows[-1]["time"] == "23:30"
     assert len(grid_rows) == 48
+
+
+def test_bess_soc_start_end_stay_within_configured_bounds_across_artifacts(tmp_path: Path) -> None:
+    problem, result, scenario = _problem_and_result()
+    asset = replace(
+        problem.depot_energy_assets["dep1"],
+        pv_generation_kwh_by_slot=(10.0, 0.0),
+        bess_enabled=True,
+        bess_energy_kwh=500.0,
+        bess_power_kw=100.0,
+        bess_initial_soc_kwh=390.0,
+        bess_soc_min_kwh=100.0,
+        bess_soc_max_kwh=400.0,
+        bess_charge_efficiency=1.0,
+        bess_discharge_efficiency=1.0,
+        bess_terminal_soc_target_kwh=0.0,
+    )
+    problem = replace(
+        problem,
+        scenario=replace(problem.scenario, timestep_min=60, horizon_start="00:00"),
+        price_slots=(
+            EnergyPriceSlot(slot_index=0, grid_buy_yen_per_kwh=20.0),
+            EnergyPriceSlot(slot_index=1, grid_buy_yen_per_kwh=20.0),
+        ),
+        depot_energy_assets={"dep1": asset},
+    )
+    plan = replace(
+        result.plan,
+        charging_slots=(),
+        grid_to_bus_kwh_by_depot_slot={},
+        pv_to_bus_kwh_by_depot_slot={},
+        bess_to_bus_kwh_by_depot_slot={},
+        pv_to_bess_kwh_by_depot_slot={"dep1": {0: 10.0}},
+        grid_to_bess_kwh_by_depot_slot={},
+        pv_curtail_kwh_by_depot_slot={},
+        bess_soc_kwh_by_depot_slot={},
+        metadata=dict(result.plan.metadata or {}),
+    )
+    result = replace(result, plan=plan)
+
+    def assert_bess_bounds(rows: list[dict[str, str]]) -> None:
+        assert rows
+        for row in rows:
+            for key in ("bess_soc_start_kwh", "bess_soc_end_kwh"):
+                assert key in row
+                value = float(row.get(key) or 0.0)
+                assert 100.0 <= value <= 400.0
+
+    charging_payload = optimization._canonical_charging_output_payload(problem, result)
+    assert_bess_bounds(charging_payload["rows"])
+    assert charging_payload["rows"][0]["bess_soc_start_kwh"] == 390.0
+    assert charging_payload["rows"][0]["bess_soc_end_kwh"] == 400.0
+
+    artifacts = optimization._persist_canonical_graph_exports(
+        scenario=scenario,
+        problem=problem,
+        engine_result=result,
+        scenario_id="scenario-1",
+        output_dir=str(tmp_path),
+    )
+    graph_dir = tmp_path / "graph"
+    manifest = json.loads((graph_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["bess_soc_kwh_semantics"] == "slot_end"
+    for filename in (
+        "depot_power_timeseries.csv",
+        "energy_flow_timeseries.csv",
+        "bess_timeseries.csv",
+        "energy_flow_ledger.csv",
+    ):
+        assert_bess_bounds(list(csv.DictReader((graph_dir / filename).open(encoding="utf-8"))))
+
+    canonical_solver_result = ResultSerializer.serialize_result(result)
+    run_dir = tmp_path / "run"
+    optimization._persist_rich_run_outputs(
+        run_dir=run_dir,
+        scenario=scenario,
+        optimization_result={
+            "scenario_id": "scenario-1",
+            "mode": "mode_alns_only",
+            "solver_status": "feasible",
+            "objective_mode": "total_cost",
+            "objective_value": 123.0,
+            "solve_time_seconds": 1.5,
+            "summary": {"trip_count_served": 1, "trip_count_unserved": 0, "vehicle_count_used": 1},
+            "cost_breakdown": {"total_cost": 123.0, "energy_cost": 10.0, "grid_to_bus_kwh": 0.0},
+            "graph_artifacts": artifacts,
+        },
+        optimization_audit={},
+        result_payload={"assignment": {"veh-1": ["t1"]}, "unserved_tasks": [], "obj_breakdown": {"energy_cost": 10.0}},
+        sim_payload=None,
+        canonical_solver_result=canonical_solver_result,
+        graph_source_dir=graph_dir,
+        charging_summary=charging_payload["summary"],
+        charging_flow_payload=charging_payload,
+    )
+    assert_bess_bounds(list(csv.DictReader((run_dir / "depot_energy_flows.csv").open(encoding="utf-8"))))
 
 
 def test_rich_run_outputs_restore_charging_schedule_and_vehicle_timelines_json(tmp_path: Path) -> None:
