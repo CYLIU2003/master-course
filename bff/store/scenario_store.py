@@ -2187,6 +2187,33 @@ def update_scenario(
     return _mutate_shallow_doc(scenario_id, _apply)
 
 
+def replace_scenario_experiment_configuration(
+    scenario_id: str,
+    *,
+    simulation_config: Dict[str, Any],
+    scenario_overlay: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Atomically replace experiment settings and invalidate derived results.
+
+    Simulation settings and the scenario overlay both contribute to the
+    optimization problem.  They must therefore be updated together; retaining
+    an older dispatch or optimization artifact would make its provenance
+    invalid.
+    """
+
+    def _apply(doc: Dict[str, Any]) -> Dict[str, Any]:
+        doc["simulation_config"] = dict(simulation_config)
+        doc["scenario_overlay"] = (
+            dict(scenario_overlay) if isinstance(scenario_overlay, dict) else None
+        )
+        _invalidate_dispatch_artifacts(doc)
+        doc["meta"]["updatedAt"] = _now_iso()
+        _save(doc)
+        return _meta_payload(doc)
+
+    return _mutate_full_doc(scenario_id, _apply, skip_graph_arcs=True)
+
+
 def delete_scenario(scenario_id: str) -> None:
     p = _path(scenario_id)
     if not p.exists():

@@ -100,6 +100,32 @@ def test_update_vehicle_preserves_explicit_none_for_initial_soc(monkeypatch) -> 
     assert doc["vehicles"][0]["modelName"] == "Vehicle-1-updated"
 
 
+def test_replace_experiment_configuration_invalidates_stale_results(monkeypatch) -> None:
+    scenario_id = "scenario-1"
+    doc = copy.deepcopy(_base_doc())
+    doc["simulation_config"] = {"service_date": "2025-08-05"}
+    doc["scenario_overlay"] = {"scenario_id": scenario_id}
+    doc["trips"] = [{"id": "trip-1"}]
+    doc["optimization_result"] = {"solver_status": "optimal"}
+    saved_payloads: list[dict[str, object]] = []
+
+    monkeypatch.setattr(scenario_store, "_load", lambda sid, **kwargs: doc)
+    monkeypatch.setattr(scenario_store, "_save", lambda payload: saved_payloads.append(payload))
+
+    scenario_store.replace_scenario_experiment_configuration(
+        scenario_id,
+        simulation_config={"service_date": "2025-08-10"},
+        scenario_overlay={"scenario_id": scenario_id, "pv_profile_id": "rain"},
+    )
+
+    assert doc["simulation_config"] == {"service_date": "2025-08-10"}
+    assert doc["scenario_overlay"] == {"scenario_id": scenario_id, "pv_profile_id": "rain"}
+    assert doc["meta"]["status"] == "draft"
+    assert doc["trips"] is None
+    assert doc["optimization_result"] is None
+    assert saved_payloads == [doc]
+
+
 @pytest.mark.parametrize(
     "operation",
     [

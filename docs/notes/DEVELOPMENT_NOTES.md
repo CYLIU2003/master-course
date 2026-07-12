@@ -5,6 +5,18 @@
 
 ---
 
+## 2026-07-12 Weather-case comparability alignment (2025-08-05 vs 2025-08-10)
+
+- 問題: 晴天 `771d115b-75b0-49f7-a7f0-25f259a2cd21`（2025-08-05）と雨天 `b23fd26c-1233-4c73-bb9e-bdb8b1584760`（2025-08-10）は、いずれも Phase 3 / time limit 1500 s で実行されたが、前者は Stage 1 が 750.315 s の time-limit、後者は 40.074 s で optimal となった。実行上の 1500 s は二段階モデルの各 Stage に最大 750 s を割り当てる上限であり、必ず 1500 s 実行する設定ではない。
+- 原因監査: 雨天ケースだけ `simulation_config.cost_component_flags.vehicle_usage_cost=false` だった。一方、晴天ケースは同項が true で、使用車両 20,000 JPY/vehicle-day を Stage 1 目的へ入れていた。加えて雨天ケースの BESS終端目標は 0 kWh / 0 %、晴天ケースは 300 kWh / 50 % だった。これらは天候以外の交絡条件である。
+- 対応: `bff.services.weather_comparison` を追加し、基準ケースの運用・コスト・SOC・solver control を target へ同期しつつ、target の `service_date`、PV profile/slot series、forecast path・station・reference date・issue date を保存する。比較前に timestep、開始/終了時刻、horizon、planning days、PV kWh/容量係数系列の1日slot数を hard-check し、不一致なら resample せずエラーにする。`scripts/align_weather_comparison_scenarios.py` は dry-run 監査と `--apply` の両方を提供する。
+- 適用: 雨天シナリオへ `--apply` を実行した。`vehicle_usage_cost=true`、BESS終端 target=300 kWh / 0.5 / 50 %（simulation config / overlay 両方）を確認した。雨天の 2025-08-10、`tsurumaki_2025-08-10_60min`、雨天PV系列、forecast `44132_2025-08-10` は保持した。監査結果は `output/weather_comparison_alignment_audit.json` に保存する。
+- 研究妥当性: `replace_scenario_experiment_configuration()` は simulation config と overlay を原子的に置換し、target の trips / duties / optimization result を無効化して status を `draft` に戻す。したがって旧設定で作られた active result を新設定の雨天結果として解釈できない。履歴 run `output/2026-07-12/run_20260712_2040` は変更せず、比較対象から除外する。
+- 限界: 両旧 run は Stage 2 charging dispatch が infeasible であり、有効な晴天/雨天比較結果ではない。また weather proxy audit は `missing_capacity_factor_by_slot` により forecast curve 未適用だった。新しい比較では、同一 prepared scope を再構築し、Stage 2 の infeasibility を別途診断して受入条件を満たすまで、PV/コスト差を研究結果として主張しない。
+- 検証: `python -m pytest tests/test_weather_comparison_alignment.py tests/test_scenario_store_atomic_mutations.py tests/optimization/test_weather_policy_problem_integration.py tests/test_problem_builder_depot_energy_asset_controls.py -q` → `44 passed`。`python -m py_compile bff/services/weather_comparison.py bff/store/scenario_store.py scripts/align_weather_comparison_scenarios.py`、`python scripts/align_weather_comparison_scenarios.py` を実行し、control mismatch が 0 件であることを確認する。独立レビューで指摘された time-axis/PV-slot とweather provenanceのP1/P2をこのhard-checkと回帰テストで解消した。
+
+---
+
 ## 2026-07-11 Strict Phase 3 Recovery: candidate isolation, chronology, and provenance
 
 - 既存 `output/2026-07-11/run_20260711_2046` / `run_20260711_2107` を再監査した。solver status は `infeasible` なのに summary/assignment は 264便 served として保存され、Stage 1 assignment candidate が Stage 2 charging/SOC failure 後も最終出力へ流れていた。これは「MILP が解いた問題」と「公開した運行表」が一致しない P1 の研究妥当性欠陥である。
