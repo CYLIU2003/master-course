@@ -7,7 +7,10 @@ from src.optimization.common.problem import OptimizationScenario
 from src.optimization.common.time_axis import normalize_timestep_min
 
 
-def test_normalize_timestep_accepts_only_30_or_60() -> None:
+def test_normalize_timestep_accepts_15_30_or_60() -> None:
+    assert normalize_timestep_min(15) == 15
+    assert normalize_timestep_min("15min") == 15
+    assert normalize_timestep_min("PT15M") == 15
     assert normalize_timestep_min(30) == 30
     assert normalize_timestep_min("30min") == 30
     assert normalize_timestep_min("PT30M") == 30
@@ -18,8 +21,6 @@ def test_normalize_timestep_accepts_only_30_or_60() -> None:
 
     with pytest.raises(ValueError):
         normalize_timestep_min(5)
-    with pytest.raises(ValueError):
-        normalize_timestep_min(15)
 
 
 def test_problemdata_and_scenario_timestep_are_synchronized() -> None:

@@ -5,6 +5,56 @@
 
 ---
 
+## 2026-07-13 00:xx JST — Phase 3 Stage 2 feasibility recovery (environment-blocked)
+
+### 対象
+
+Phase 3 Stage 2 可行性復旧。対象は鶴巻、渋21/22/23、264便、2025-08-10、BEV35/ICE25である。晴雨/PV/BESS比較には進んでいない。
+
+### 実行環境・基線
+
+- branch: `fix/phase3-stage2-feasibility-20260712`（`core_new` の祖先 `e39f9b1` と既存の厳密化コミットを含む）。開始HEAD: `70ca8ebdfece0b3b559d53dc33e7d773c68d61f9`。既存のユーザー変更 `README.md` は未変更のまま dirty である。
+- Python `3.14.0`、Gurobi `13.0.1`。WLS license `2785206` が expired のため、`ENVIRONMENT_BLOCKED_GUROBI_LICENSE` と判定した。この環境でsolverの可行/不可行、IIS、264便の成立可否は主張しない。
+- 修正前の `scripts/run_research_phase3_minimal.py --time-step-min 15` 相当の入力構築は、`normalize_timestep_min` が15分を拒否して停止した。したがって旧Stage 2の0.05秒 infeasible を今回の統制条件で再現・比較してはいない。
+- 基線 `pytest -q`: `621 passed, 6 skipped, 1 failed`。失敗は `test_multiday_phase1.py::test_multiday_scenario` が `localhost:8000` の外部BFFへ接続できないためであり、最適化コアの失敗ではない。
+
+### 原因（確認済みのモデル構築上の欠陥）
+
+- 15分刻みは共通time-axis/data schemaが30/60分しか許可せず、Phase 3モデルを構築できなかった。
+- Stage 2の始発前充電窓は直前2スロットに固定されていた。15分刻みの05:51発では、車両が営業所に存在する05:00–05:45の完全な3スロットを使えない。
+- `allow_overnight_depot_moves=forbid` が夜間の車両移動ではなく、営業所に停車している車両の充電まで禁止していた。
+- Stage 2の最終slotはSOC変数をslot-startとして扱う一方、同slotの充電・走行を終端SOC制約に反映していなかった。また、最終slot出発便、horizon外へ跨る便の残余消費、horizon外帰庫deadheadを見落とし得た。今回、終端式・全出発SOC制約・horizon外負荷を明示した。これらはIIS推測ではなく、実装経路から直接確認した事実である。
+- 複日ケースでは、Stage 1が日末の帰庫を常に強制しないのに全BEVへ夜間デポ充電slotを付与していた。Stage 1 candidateの車両・日別最終便について、帰庫deadheadが存在し、帰庫完了した後の完全slotだけを夜間充電可能とした。出発SOC不足診断にも便間deadheadを加えた。
+- 05:00境界を跨ぐ04:50到着便に帰庫時間を足すと、wall-clock値が05:00を超えるため、旧式は同日slotとして誤認していた。trip到着・最終便比較・帰庫後slotをservice-day絶対分（horizon start基準）へ正規化し、horizon外の帰庫消費を終端式へ入れるよう修正した。初期SOCがreserve未満の場合もreserveへ自動で引き上げず、SOC下限制約により不可行として検出する。
+- Stage 1 dutyの列挙はraw時刻順のため、日跨ぎfragmentの「最初のduty」を初期在庫位置とみなしてはならない。Stage 1 candidateのvehicle pathからservice-day時刻で最初のtripを事前に一意に選び、そのtripだけへhorizon開始時の初期デポ充電窓を与える。
+
+### 変更内容
+
+- `src/optimization/common/time_axis.py`、`src/data_schema.py`: 15/30/60分を正式に許可した。
+- `scripts/run_research_phase3_minimal.py`: `--time-step-min 15`、initial SOC policy enum、uniform 80%、PV/BESS/weather off、terminal `SOC >= minimum`、96 slot hard-check、`CONTROLLED_MODEL_VALIDATION_CASE`、SOC input hash、build-only、license-blocked manifestを追加した。inherited terminal floor/target/toleranceはすべて解除し、車両別の実効terminal minimumも入力成果物へ保存する。uniform 80%は実在庫SOC結果と混同しない。
+- `src/optimization/common/initial_soc_policy.py`: `actual_vehicle_inventory` / `uniform_scenario_value` / `per_vehicle_scenario_override` と、solverへ渡る車両別SOC hashを追加した。
+- `src/optimization/milp/solver_adapter.py`: 始発前の全完全slot、夜間移動と充電の分離、帰庫確認後の夜間slot、slot-start SOC遷移と最終slot/horizon外 energy balance、名前付きSOC/出発/充電器/系統制約、Stage 2失敗時のcandidate-only CSV・IIS出力を追加した。IISは有効なGurobi環境でのみ生成される。
+
+### 初期SOC方針・時間刻み
+
+- controlled case: `uniform_scenario_value`, 80%、`15 min`、96 slots、grid-only、terminal `SOC >= minimum SOC`。これは翌日連続運用を保証しない単日物理可行性検証である。
+- `output/research_phase3_grid_only_15min_soc80/controlled_model_validation_input.json` と `summary.json` に input hash・車両別SOC・設定を保存した。通常runはライセンス失効を検出し `solver_invoked=false` で停止する。
+
+### テスト結果
+
+- `python -m pytest tests/test_phase3_controlled_validation.py tests/test_time_axis_timestep.py tests/test_soc_midtrip_feasibility.py tests/test_feasibility_soc_consistency.py tests/test_milp_engine_lightweight_stats.py tests/test_solution_validity.py tests/test_feasibility_metrics.py -q` → `42 passed`。
+- `python -m py_compile src/optimization/milp/solver_adapter.py src/optimization/common/initial_soc_policy.py scripts/run_research_phase3_minimal.py src/optimization/common/time_axis.py src/data_schema.py` → pass。
+- `python scripts/run_research_phase3_minimal.py --build-only --time-step-min 15 --initial-soc-policy uniform_scenario_value --initial-soc-percent 80 --output-dir output/research_phase3_grid_only_15min_soc80` → target input構築・96 slots・vehicle別SOC/terminal lower bound保存を確認。
+- 独立コードレビュー: 15分slot、terminal SOC、service-day境界の帰庫、複数duty初期充電窓、initial SOCのsilent clampをP1として指摘・修正後、P0/P1なしと再確認された。実Gurobi solve/IISのみライセンス失効で未検証。
+- `python scripts/run_research_phase3_minimal.py --time-limit-sec 1500 --time-step-min 15 --initial-soc-policy uniform_scenario_value --initial-soc-percent 80 --output-dir output/research_phase3_grid_only_15min_soc80` → `ENVIRONMENT_BLOCKED_GUROBI_LICENSE`。solver未実行であり、Stage 1/Stage 2 status、担当便、IIS、費用は未判定/nullである。
+
+### 研究契約・未解決事項
+
+- research acceptance: 未判定（solver未実行）。`research_run_accepted`、`research_feasibility_eligible`、`research_cost_kpi_eligible` をtrueとして報告していない。
+- 有効なGurobiライセンスで同一コマンドを実行し、Stage 2が失敗した場合に `diagnostics/stage2_infeasible.ilp`、IIS制約CSV、車両別不足量、出発前SOC不足を取得する。その実測結果を用いてのみ、Stage 1 energy envelope / feasibility cut の要否と原因車両・便・時刻を確定する。
+
+---
+
 ## 2026-07-12 Weather-case comparability alignment (2025-08-05 vs 2025-08-10)
 
 - 問題: 晴天 `771d115b-75b0-49f7-a7f0-25f259a2cd21`（2025-08-05）と雨天 `b23fd26c-1233-4c73-bb9e-bdb8b1584760`（2025-08-10）は、いずれも Phase 3 / time limit 1500 s で実行されたが、前者は Stage 1 が 750.315 s の time-limit、後者は 40.074 s で optimal となった。実行上の 1500 s は二段階モデルの各 Stage に最大 750 s を割り当てる上限であり、必ず 1500 s 実行する設定ではない。

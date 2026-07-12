@@ -30,12 +30,19 @@ from bff.services.run_preparation import (
     materialize_scenario_from_prepared_input,
 )
 from bff.store import scenario_store as store
+from src.gurobi_runtime import is_gurobi_available
 from src.optimization import (
     OptimizationConfig,
     OptimizationEngine,
     OptimizationMode,
     ProblemBuilder,
     ResultSerializer,
+)
+from src.optimization.common.initial_soc_policy import (
+    InitialSocPolicy,
+    apply_initial_soc_policy_to_scenario,
+    initial_soc_input_metadata,
+    normalize_initial_soc_policy,
 )
 
 
@@ -98,6 +105,44 @@ def _disable_depot_assets(scenario: dict[str, Any]) -> None:
     overlay["cost_coefficients"] = coefficients
 
 
+def _configure_controlled_model_validation_case(
+    scenario: dict[str, Any],
+    *,
+    time_step_min: int,
+    initial_soc_policy: InitialSocPolicy,
+    initial_soc_percent: float | None,
+) -> dict[str, Any]:
+    """Build the disclosed grid-only validation input without changing the store."""
+    if int(time_step_min) != 15:
+        raise ValueError("The controlled Phase 3 validation case requires time_step_min=15")
+    configured = apply_initial_soc_policy_to_scenario(
+        scenario,
+        policy=initial_soc_policy,
+        uniform_percent=initial_soc_percent,
+    )
+    simulation_config = configured.setdefault("simulation_config", {})
+    simulation_config.update(
+        {
+            "time_step_min": 15,
+            "timestep_min": 15,
+            "planning_days": 1,
+            "start_time": "05:00",
+            "end_time": "05:00",
+            "planning_horizon_hours": 24.0,
+            # This is a single-day physical-feasibility validation, not an
+            # overnight continuity claim.  Preserve the normal target for a
+            # subsequent sensitivity run rather than silently weakening it.
+            "final_soc_floor_percent": None,
+            "final_soc_target_percent": None,
+            "final_soc_target_tolerance_percent": None,
+            "experiment_case_tag": "CONTROLLED_MODEL_VALIDATION_CASE",
+            "terminal_soc_policy": "minimum_soc",
+        }
+    )
+    _disable_depot_assets(configured)
+    return configured
+
+
 def _validate_target_input(problem: Any, scenario: dict[str, Any]) -> None:
     if len(problem.trips) != 264:
         raise ValueError(f"target scope must contain 264 trips, got {len(problem.trips)}")
@@ -142,6 +187,19 @@ def _validate_target_input(problem: Any, scenario: dict[str, Any]) -> None:
     for depot_id, asset in problem.depot_energy_assets.items():
         if bool(asset.pv_enabled) or bool(asset.bess_enabled):
             raise ValueError(f"PV/BESS must be disabled for grid-only run at {depot_id}")
+    if int(problem.scenario.timestep_min) != 15:
+        raise ValueError(f"controlled run must use 15-minute slots, got {problem.scenario.timestep_min}")
+    if len(problem.price_slots) != 96:
+        raise ValueError(f"controlled one-day run must contain 96 slots, got {len(problem.price_slots)}")
+    simulation_config = dict(scenario.get("simulation_config") or {})
+    if simulation_config.get("experiment_case_tag") != "CONTROLLED_MODEL_VALIDATION_CASE":
+        raise ValueError("missing CONTROLLED_MODEL_VALIDATION_CASE tag")
+    if simulation_config.get("terminal_soc_policy") != "minimum_soc":
+        raise ValueError("controlled run must disclose terminal_soc_policy=minimum_soc")
+    if (problem.metadata or {}).get("final_soc_floor_percent") is not None:
+        raise ValueError("controlled run must not inherit a configured final SOC floor")
+    if (problem.metadata or {}).get("final_soc_target_percent") is not None:
+        raise ValueError("controlled run must not inherit a configured final SOC target")
 
 
 def _write_schedule(output_dir: Path, result: Any) -> None:
@@ -181,7 +239,13 @@ def run(args: argparse.Namespace) -> int:
             prepared_payload,
         )
     )
-    _disable_depot_assets(scenario)
+    initial_soc_policy = normalize_initial_soc_policy(args.initial_soc_policy)
+    scenario = _configure_controlled_model_validation_case(
+        scenario,
+        time_step_min=args.time_step_min,
+        initial_soc_policy=initial_soc_policy,
+        initial_soc_percent=args.initial_soc_percent,
+    )
     config = OptimizationConfig(
         mode=OptimizationMode.MILP,
         time_limit_sec=int(args.time_limit_sec),
@@ -203,7 +267,71 @@ def run(args: argparse.Namespace) -> int:
         config=config,
         planning_days=1,
     )
+    soc_metadata = initial_soc_input_metadata(problem, policy=initial_soc_policy)
+    if initial_soc_policy is InitialSocPolicy.UNIFORM_SCENARIO_VALUE:
+        expected_ratio = float(args.initial_soc_percent) / 100.0
+        invalid = [
+            row["vehicle_id"]
+            for row in soc_metadata["initial_soc_by_vehicle"]
+            if abs(float(row["initial_soc_percent"] or 0.0) - expected_ratio) > 1.0e-9
+        ]
+        if invalid:
+            raise ValueError("uniform initial SOC was not propagated to the model: " + ", ".join(invalid))
+    if isinstance(problem.metadata, dict):
+        problem.metadata.update(
+            {
+                **soc_metadata,
+                "phase3_diagnostics_dir": str(Path(args.output_dir) / "diagnostics"),
+                "experiment_case_tag": "CONTROLLED_MODEL_VALIDATION_CASE",
+                "terminal_soc_policy": "minimum_soc",
+                "vehicle_soc_semantics": "slot_start",
+            }
+        )
     _validate_target_input(problem, scenario)
+
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    input_audit = {
+        "experiment_case_tag": "CONTROLLED_MODEL_VALIDATION_CASE",
+        "research_run": True,
+        "phase": "phase3_two_stage",
+        "time_step_min": problem.scenario.timestep_min,
+        "slot_count": len(problem.price_slots),
+        "pv_enabled": False,
+        "bess_enabled": False,
+        "weather_operation_policy_enabled": False,
+        "postsolve_repair_enabled": False,
+        "fallback_enabled": False,
+        "partial_service_enabled": False,
+        "terminal_soc_policy": "minimum_soc",
+        **soc_metadata,
+    }
+    (output_dir / "controlled_model_validation_input.json").write_text(
+        json.dumps(input_audit, ensure_ascii=False, indent=2, default=str),
+        encoding="utf-8",
+    )
+    if args.build_only:
+        print(json.dumps(input_audit, ensure_ascii=False, indent=2, default=str))
+        return 0
+    if not is_gurobi_available():
+        blocked = {
+            **input_audit,
+            "environment_status": "ENVIRONMENT_BLOCKED_GUROBI_LICENSE",
+            "solver_invoked": False,
+            "solver_objective_value": None,
+            "accounting_total_cost_jpy": None,
+            "validated_operating_cost_jpy": None,
+        }
+        (output_dir / "summary.json").write_text(
+            json.dumps(blocked, ensure_ascii=False, indent=2, default=str),
+            encoding="utf-8",
+        )
+        (output_dir / "research_run_manifest.json").write_text(
+            json.dumps(blocked, ensure_ascii=False, indent=2, default=str),
+            encoding="utf-8",
+        )
+        print(json.dumps(blocked, ensure_ascii=False, indent=2, default=str))
+        return 3
 
     started = time.perf_counter()
     result = OptimizationEngine().solve(problem, config)
@@ -212,7 +340,11 @@ def run(args: argparse.Namespace) -> int:
     acceptance = dict(solver_metadata.get("research_acceptance_checks") or {})
     accepted = bool(solver_metadata.get("research_run_accepted", False))
     solver_status = str(result.solver_status or "")
-    accounting_total = float((result.cost_breakdown or {}).get("total_cost", 0.0) or 0.0)
+    accounting_total = (
+        float((result.cost_breakdown or {}).get("total_cost"))
+        if bool(result.feasible) and (result.cost_breakdown or {}).get("total_cost") is not None
+        else None
+    )
     validated_cost = accounting_total if accepted and bool(result.feasible) else None
     git_sha, git_dirty = _git_state()
     summary = {
@@ -258,7 +390,7 @@ def run(args: argparse.Namespace) -> int:
         "assignment_candidate_available": solver_metadata.get("assignment_candidate_available", False),
         "validation_metrics": dict(solver_metadata.get("validation_metrics") or {}),
         "research_acceptance_checks": acceptance,
-        "solver_objective_value": float(result.objective_value or 0.0),
+        "solver_objective_value": float(result.objective_value) if bool(result.feasible) else None,
         "accounting_total_cost_jpy": accounting_total,
         "validated_operating_cost_jpy": validated_cost,
         "mip_gap_requested_ratio": float(args.mip_gap),
@@ -269,12 +401,13 @@ def run(args: argparse.Namespace) -> int:
         "pv_enabled": False,
         "bess_enabled": False,
         "weather_operation_policy_enabled": False,
+        "experiment_case_tag": "CONTROLLED_MODEL_VALIDATION_CASE",
+        "terminal_soc_policy": "minimum_soc",
+        **soc_metadata,
         "warnings": list(result.warnings or ()),
         "infeasibility_reasons": list(result.infeasibility_reasons or ()),
     }
 
-    output_dir = Path(args.output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "solver_result.json").write_text(
         json.dumps(ResultSerializer.serialize_result(result), ensure_ascii=False, indent=2, default=str),
         encoding="utf-8",
@@ -328,6 +461,14 @@ def main() -> int:
     parser.add_argument("--time-limit-sec", type=int, default=1500)
     parser.add_argument("--mip-gap", type=float, default=0.1)
     parser.add_argument("--random-seed", type=int, default=42)
+    parser.add_argument("--time-step-min", type=int, default=15)
+    parser.add_argument(
+        "--initial-soc-policy",
+        default=InitialSocPolicy.UNIFORM_SCENARIO_VALUE.value,
+        choices=[policy.value for policy in InitialSocPolicy],
+    )
+    parser.add_argument("--initial-soc-percent", type=float, default=80.0)
+    parser.add_argument("--build-only", action="store_true")
     return run(parser.parse_args())
 
 
