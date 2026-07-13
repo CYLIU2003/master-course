@@ -5,6 +5,59 @@
 
 ---
 
+## 2026-07-14 01:34 JST — Phase 3 Stage 1/2 energy and service-day consistency hardening
+
+### 対象
+
+Phase 3 Stage 2可行性復旧の継続。対象は鶴巻営業所、渋21/22/23、264便、service date `2025-08-10`、BEV35/ICE25、grid-only、15分刻み、全BEV初期SOC 80%の `CONTROLLED_MODEL_VALIDATION_CASE` である。PV/BESS/晴雨比較には進んでいない。
+
+### 修正前の現象・確認した原因
+
+- Stage 1の始発可否は位置・時間だけを見ており、初期SOC、始発前に完了できる充電slot、始発回送エネルギー、当該便エネルギー、SOC下限から決まる明白な必要条件を見ていなかった。そのため、Stage 2で必ずSOC不足になる始発組合せを候補にできた。
+- Stage 2は始発回送と便間回送のエネルギーをSOCへ載せる一方、回送中slotを車両占有として扱っていなかった。また、便間に確認できる営業所滞在全体ではなく、便前後の固定長窓に依存していた。
+- 05:00開始のservice-dayにおける04時台便を、slot indexは翌日側へ写す一方、運行重複・走行エネルギー分配はwall-clockの04時台のまま比較していた。この不一致により、04時台便の走行エネルギーが96-slot SOC式から欠落し得た。
+- 回送エネルギーを次便の出発slotで減算するslot-start表現に対し、2便目以降の出発時SOC必要量が当該回送分を含まなかった。これは出発直前の実SOC不足を許し得る。
+- 不可行診断の最大充電量がhorizon外slotを数え、候補の充電余力を過大表示し得た。stage metadata、experiment hash、非有限objectiveのnull契約も不足していた。
+- 上記は現行コードパスから確認したモデル構築上の欠陥である。Gurobi licenseが失効しているため、今回IISを取得した、または旧0.05秒 infeasibleの唯一原因を確定した、とは主張しない。
+
+### 変更内容・数理的効果
+
+- `src/optimization/milp/solver_adapter.py`
+  - `StartupEnergyPrecheck` を追加し、Stage 1のstart arcについて `initial SOC + 完全始発前slotでの楽観最大充電 >= 始発回送 + 便エネルギー + SOC下限` を満たさない組合せを0に固定する。これは十分条件ではなく、Stage 2で必ず不可行な組合せだけを除く必要条件である。
+  - 始発回送・便間回送の時間slotを充電禁止にし、回送エネルギーをSOC loadと出発時必要SOCの双方で同じslot-start意味に整合させた。走行エネルギーそのものを減らす緩和、SOC clamp、postsolve修正は追加していない。
+  - `arrival + turnaround + deadhead <= next departure` は変更せず、接続済み便間でのみ営業所滞在区間を復元した。別地点間のdeadhead=0を営業所滞在の根拠にはしない。
+  - Stage 1 candidateを車両内時系列で診断保存し、始発/便間/帰庫回送、horizon内充電slot、出発時不足を分離した。Stage 1 status/objective/bound/gap/runtime/candidate hashと、Stage 2制約prefix別件数を成果物へ追加した。
+  - SOC式を `_vehicle_soc_transition_kwh` に一本化し、`SOC[k+1] = SOC[k] + 0.95 * charge[kW] * 0.25[h] - drive[kWh]` を手計算テスト可能にした。
+- `src/optimization/common/soc_helpers.py`: service-day開始前の時刻を翌日絶対分へ正規化してから、半開区間の運行重複と走行エネルギー分配を行う。04:20–04:50便の全slot配分和が1になる。
+- `scripts/run_research_phase3_minimal.py`: trip/fleet/route/date/96-slot/research phase/PV/BESS/weather/postsolveのhard-check、入力・車両・充電器・SOC方針・時間刻み・資産・天候・solver control・git SHAを含むexperiment hash、stage別ratio/percent/null metadataを追加した。非有限objective/costは0へ変換せずnullにする。git dirty runは研究受入不可とする。
+- `tests/test_phase3_controlled_validation.py`: uniform/actual inventory SOC、始発必要条件、回送、service-day境界、営業所滞在、運行中充電禁止、SOC手計算、gap変換、非有限objective、experiment hash差分の回帰テストを追加した。
+
+### 初期SOC方針・時間刻み
+
+- `initial_soc_policy=uniform_scenario_value`, `initial_soc_percent=80`。全35 BEVでmodel inputは `251.2 kWh / 314.0 kWh = 80%`、minimumは `31.4 kWh` である。
+- `time_step_min=15`、1日96slot、SOC変数は `slot_start`。terminal policyは単日物理検証用の `SOC >= minimum SOC` であり、翌日同一運用の継続可能性は保証しない。
+
+### 追加テスト・結果
+
+- `python -m pytest tests/test_phase3_controlled_validation.py -q` → `23 passed`。
+- Phase 3/SOC/postsolve/solution validity focused suite → `94 passed`。
+- 全体 `python -m pytest -q` → `641 passed, 6 skipped, 1 failed`。失敗は既知の `test_multiday_phase1.py::test_multiday_scenario` が未起動の `localhost:8000` BFFへ接続できない外部結合要因であり、最適化コアのassertion failureではない。
+- build-only → `264 trips / BEV35 / ICE25 / 2025-08-10 / 96 slots / PV off / BESS off / weather off / uniform SOC 80%` をCanonical Problemと入力監査JSONで確認した。
+
+### 最適化結果・研究契約
+
+- 環境: branch `fix/phase3-stage2-feasibility-20260712`、開始HEAD `435a223a4e3735980764eeeb09835173e3966f89`、Python `3.14.0`、Gurobi `13.0.1`。Gurobi licenseは失効している。
+- 通常runは `ENVIRONMENT_BLOCKED_GUROBI_LICENSE`, `solver_invoked=false` で停止した。Stage 1/2 status=`not_run_gurobi_unavailable`、incumbent=false、objective/bound/gap/runtime=null、solver/accounting/validated cost=nullである。
+- `research_run_accepted=false`, `research_feasibility_eligible=false`, `research_cost_kpi_eligible=false`。Stage 1/2の可行性、担当便数、使用BEV/ICE、最低SOC、総充電量、IIS原因は未判定である。
+
+### 自己レビューと未解決事項
+
+- MIT-style reviewでP1として、04時台energy欠落、2便目以降の回送前SOC不足、非有限objectiveのJSON誤表現を上げ、修正と回帰テストを追加した。P0/P1の既知残件はない。
+- 有効なGurobi licenseで同一commit・clean worktreeから1500秒runを行う必要がある。Stage 2が不可行なら、生成されるIIS、車両別energy shortage、departure SOC不足の実測値に基づいてのみ、path energy envelopeまたはlogic-based feasibility cutを追加する。
+- ユーザー所有の `README.md` 変更は本作業で変更・stageしていない。これがdirtyのままでは厳密な研究受入gateはfalseになるため、solver実行時は別途cleanなworktreeが必要である。
+
+---
+
 ## 2026-07-13 00:xx JST — Phase 3 Stage 2 feasibility recovery (environment-blocked)
 
 ### 対象
