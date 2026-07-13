@@ -14,6 +14,7 @@ import csv
 from copy import deepcopy
 import hashlib
 import json
+import math
 from pathlib import Path
 import subprocess
 import sys
@@ -69,6 +70,133 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _canonical_payload_hash(payload: Any) -> str:
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _finite_float_or_none(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if math.isfinite(parsed) else None
+
+
+def _mip_gap_percent(gap_ratio: Any) -> float | None:
+    finite_gap = _finite_float_or_none(gap_ratio)
+    if finite_gap is None:
+        return None
+    return finite_gap * 100.0
+
+
+def _build_experiment_identity(
+    problem: Any,
+    scenario: dict[str, Any],
+    *,
+    initial_soc_policy: InitialSocPolicy,
+    initial_soc_input_hash: str,
+    time_limit_sec: int,
+    mip_gap: float,
+    random_seed: int,
+    git_sha: str,
+) -> dict[str, Any]:
+    """Hash every controlled input that changes the experiment's meaning."""
+    trip_inputs = [
+        {
+            "trip_id": str(trip.trip_id),
+            "route_id": str(trip.route_id),
+            "route_family_code": str(trip.route_family_code),
+            "direction": str(trip.direction),
+            "departure_min": int(trip.departure_min),
+            "arrival_min": int(trip.arrival_min),
+            "distance_km": float(trip.distance_km),
+            "energy_kwh": float(trip.energy_kwh),
+            "fuel_l": float(trip.fuel_l),
+            "allowed_vehicle_types": list(trip.allowed_vehicle_types),
+        }
+        for trip in sorted(problem.trips, key=lambda item: str(item.trip_id))
+    ]
+    vehicle_inputs = [
+        {
+            "vehicle_id": str(vehicle.vehicle_id),
+            "vehicle_type": str(vehicle.vehicle_type),
+            "home_depot_id": str(vehicle.home_depot_id),
+            "available": bool(vehicle.available),
+            "initial_soc": vehicle.initial_soc,
+            "battery_capacity_kwh": vehicle.battery_capacity_kwh,
+            "reserve_soc": vehicle.reserve_soc,
+            "energy_consumption_kwh_per_km": vehicle.energy_consumption_kwh_per_km,
+            "fuel_consumption_l_per_km": vehicle.fuel_consumption_l_per_km,
+        }
+        for vehicle in sorted(problem.vehicles, key=lambda item: str(item.vehicle_id))
+    ]
+    charger_inputs = [
+        {
+            "charger_id": str(charger.charger_id),
+            "depot_id": str(charger.depot_id),
+            "power_kw": float(charger.power_kw),
+            "simultaneous_ports": int(charger.simultaneous_ports),
+            "bidirectional": bool(charger.bidirectional),
+        }
+        for charger in sorted(problem.chargers, key=lambda item: str(item.charger_id))
+    ]
+    energy_assets = [
+        {
+            "depot_id": str(depot_id),
+            "pv_enabled": bool(asset.pv_enabled),
+            "pv_case_id": str(asset.pv_case_id),
+            "pv_capacity_kw": float(asset.pv_capacity_kw),
+            "pv_generation_hash": _canonical_payload_hash(
+                list(asset.pv_generation_kwh_by_slot)
+            ),
+            "bess_enabled": bool(asset.bess_enabled),
+            "bess_energy_kwh": float(asset.bess_energy_kwh),
+            "bess_power_kw": float(asset.bess_power_kw),
+            "bess_initial_soc_kwh": float(asset.bess_initial_soc_kwh),
+        }
+        for depot_id, asset in sorted(problem.depot_energy_assets.items())
+    ]
+    simulation_config = dict(scenario.get("simulation_config") or {})
+    fingerprint_payload = {
+        "service_date": str(problem.metadata.get("service_date") or ""),
+        "route_ids": sorted({str(trip.route_id) for trip in problem.trips}),
+        "trip_input_hash": _canonical_payload_hash(trip_inputs),
+        "vehicle_input_hash": _canonical_payload_hash(vehicle_inputs),
+        "initial_soc_policy": initial_soc_policy.value,
+        "initial_soc_input_hash": str(initial_soc_input_hash),
+        "charger_configuration_hash": _canonical_payload_hash(charger_inputs),
+        "time_step_min": int(problem.scenario.timestep_min),
+        "pv_configuration": energy_assets,
+        "bess_configuration": energy_assets,
+        "weather_configuration": {
+            "enabled": bool(
+                simulation_config.get("enable_weather_operation_policy", False)
+            ),
+            "mode": simulation_config.get("weather_mode"),
+            "forecast_path": simulation_config.get("weather_proxy_forecast_path"),
+        },
+        "phase": "phase3_two_stage",
+        "research_run": True,
+        "time_limit_sec": int(time_limit_sec),
+        "mip_gap_ratio": float(mip_gap),
+        "random_seed": int(random_seed),
+        "git_sha": str(git_sha),
+    }
+    return {
+        **fingerprint_payload,
+        "experiment_hash": _canonical_payload_hash(fingerprint_payload),
+    }
 
 
 def _disable_depot_assets(scenario: dict[str, Any]) -> None:
@@ -143,7 +271,11 @@ def _configure_controlled_model_validation_case(
     return configured
 
 
-def _validate_target_input(problem: Any, scenario: dict[str, Any]) -> None:
+def _validate_target_input(
+    problem: Any,
+    scenario: dict[str, Any],
+    config: OptimizationConfig,
+) -> None:
     if len(problem.trips) != 264:
         raise ValueError(f"target scope must contain 264 trips, got {len(problem.trips)}")
     counts = {
@@ -192,6 +324,8 @@ def _validate_target_input(problem: Any, scenario: dict[str, Any]) -> None:
     if len(problem.price_slots) != 96:
         raise ValueError(f"controlled one-day run must contain 96 slots, got {len(problem.price_slots)}")
     simulation_config = dict(scenario.get("simulation_config") or {})
+    if bool(simulation_config.get("enable_weather_operation_policy", False)):
+        raise ValueError("weather operation policy must be disabled")
     if simulation_config.get("experiment_case_tag") != "CONTROLLED_MODEL_VALIDATION_CASE":
         raise ValueError("missing CONTROLLED_MODEL_VALIDATION_CASE tag")
     if simulation_config.get("terminal_soc_policy") != "minimum_soc":
@@ -200,6 +334,12 @@ def _validate_target_input(problem: Any, scenario: dict[str, Any]) -> None:
         raise ValueError("controlled run must not inherit a configured final SOC floor")
     if (problem.metadata or {}).get("final_soc_target_percent") is not None:
         raise ValueError("controlled run must not inherit a configured final SOC target")
+    if not bool(config.research_run):
+        raise ValueError("controlled run must set research_run=true")
+    if str(config.phase) != "phase3_two_stage":
+        raise ValueError(f"controlled run must execute phase3_two_stage, got {config.phase!r}")
+    if bool(config.allow_postsolve_repair):
+        raise ValueError("controlled run must disable postsolve repair")
 
 
 def _write_schedule(output_dir: Path, result: Any) -> None:
@@ -287,16 +427,49 @@ def run(args: argparse.Namespace) -> int:
                 "vehicle_soc_semantics": "slot_start",
             }
         )
-    _validate_target_input(problem, scenario)
+    _validate_target_input(problem, scenario, config)
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    git_sha, git_dirty = _git_state()
+    experiment_identity = _build_experiment_identity(
+        problem,
+        scenario,
+        initial_soc_policy=initial_soc_policy,
+        initial_soc_input_hash=str(soc_metadata["initial_soc_input_hash"]),
+        time_limit_sec=int(args.time_limit_sec),
+        mip_gap=float(args.mip_gap),
+        random_seed=int(args.random_seed),
+        git_sha=git_sha,
+    )
     input_audit = {
         "experiment_case_tag": "CONTROLLED_MODEL_VALIDATION_CASE",
         "research_run": True,
         "phase": "phase3_two_stage",
+        "requested_phase": "phase3_two_stage",
+        "resolved_phase": "phase3_two_stage",
+        "executed_phase": "phase3_two_stage",
         "time_step_min": problem.scenario.timestep_min,
         "slot_count": len(problem.price_slots),
+        "target_trip_count": len(problem.trips),
+        "route_family_codes": sorted(
+            {
+                str(getattr(trip, "route_family_code", "") or "")
+                for trip in problem.trips
+            }
+        ),
+        "fleet_count": {
+            "BEV": sum(
+                1
+                for vehicle in problem.vehicles
+                if str(vehicle.vehicle_type).upper() == "BEV"
+            ),
+            "ICE": sum(
+                1
+                for vehicle in problem.vehicles
+                if str(vehicle.vehicle_type).upper() == "ICE"
+            ),
+        },
         "pv_enabled": False,
         "bess_enabled": False,
         "weather_operation_policy_enabled": False,
@@ -304,6 +477,9 @@ def run(args: argparse.Namespace) -> int:
         "fallback_enabled": False,
         "partial_service_enabled": False,
         "terminal_soc_policy": "minimum_soc",
+        "git_sha": git_sha,
+        "git_dirty": git_dirty,
+        **experiment_identity,
         **soc_metadata,
     }
     (output_dir / "controlled_model_validation_input.json").write_text(
@@ -318,6 +494,24 @@ def run(args: argparse.Namespace) -> int:
             **input_audit,
             "environment_status": "ENVIRONMENT_BLOCKED_GUROBI_LICENSE",
             "solver_invoked": False,
+            "research_run_accepted": False,
+            "research_feasibility_eligible": False,
+            "research_cost_kpi_eligible": False,
+            "objective_available": False,
+            "stage1_solver_status": "not_run_gurobi_unavailable",
+            "stage1_has_feasible_incumbent": False,
+            "stage1_objective": None,
+            "stage1_best_bound": None,
+            "stage1_mip_gap_ratio": None,
+            "stage1_mip_gap_percent": None,
+            "stage1_runtime_seconds": None,
+            "stage2_solver_status": "not_run_gurobi_unavailable",
+            "stage2_has_feasible_incumbent": False,
+            "stage2_objective": None,
+            "stage2_best_bound": None,
+            "stage2_mip_gap_ratio": None,
+            "stage2_mip_gap_percent": None,
+            "stage2_runtime_seconds": None,
             "solver_objective_value": None,
             "accounting_total_cost_jpy": None,
             "validated_operating_cost_jpy": None,
@@ -338,15 +532,29 @@ def run(args: argparse.Namespace) -> int:
     elapsed = time.perf_counter() - started
     solver_metadata = dict(result.solver_metadata or {})
     acceptance = dict(solver_metadata.get("research_acceptance_checks") or {})
-    accepted = bool(solver_metadata.get("research_run_accepted", False))
+    acceptance["git_clean"] = not git_dirty
+    accepted = bool(
+        solver_metadata.get("research_run_accepted", False)
+        and acceptance["git_clean"]
+    )
     solver_status = str(result.solver_status or "")
+    solver_objective = (
+        _finite_float_or_none(result.objective_value)
+        if bool(result.feasible)
+        else None
+    )
     accounting_total = (
-        float((result.cost_breakdown or {}).get("total_cost"))
-        if bool(result.feasible) and (result.cost_breakdown or {}).get("total_cost") is not None
+        _finite_float_or_none((result.cost_breakdown or {}).get("total_cost"))
+        if bool(result.feasible)
         else None
     )
     validated_cost = accounting_total if accepted and bool(result.feasible) else None
-    git_sha, git_dirty = _git_state()
+    stage1_gap = _finite_float_or_none(
+        solver_metadata.get("stage1_mip_gap_ratio")
+    )
+    stage2_gap = _finite_float_or_none(
+        solver_metadata.get("stage2_mip_gap_ratio")
+    )
     summary = {
         "scenario_id": args.scenario_id,
         "prepared_input_id": args.prepared_input_id,
@@ -358,10 +566,19 @@ def run(args: argparse.Namespace) -> int:
             "resolved": solver_metadata.get("resolved_phase"),
             "executed": solver_metadata.get("executed_phase"),
         },
+        "requested_phase": solver_metadata.get("requested_phase"),
+        "resolved_phase": solver_metadata.get("resolved_phase"),
+        "executed_phase": solver_metadata.get("executed_phase"),
         "solver_status": solver_status,
         "feasible": bool(result.feasible),
         "research_run": True,
         "research_run_accepted": accepted,
+        "research_feasibility_eligible": bool(
+            accepted and solver_metadata.get("research_feasibility_eligible", False)
+        ),
+        "research_cost_kpi_eligible": bool(
+            accepted and solver_metadata.get("research_cost_kpi_eligible", False)
+        ),
         "trip_count_total": len(problem.trips),
         "trip_count_served": len(result.plan.served_trip_ids),
         "trip_count_unserved": len(result.plan.unserved_trip_ids),
@@ -384,20 +601,52 @@ def run(args: argparse.Namespace) -> int:
         },
         "stage1_solver_status": solver_metadata.get("stage1_solver_status"),
         "stage2_solver_status": solver_metadata.get("stage2_solver_status"),
+        "stage1_has_feasible_incumbent": solver_metadata.get(
+            "stage1_has_feasible_incumbent"
+        ),
+        "stage2_has_feasible_incumbent": solver_metadata.get(
+            "stage2_has_feasible_incumbent"
+        ),
+        "stage1_objective": _finite_float_or_none(
+            solver_metadata.get("stage1_objective")
+        ),
+        "stage2_objective": _finite_float_or_none(
+            solver_metadata.get("stage2_objective")
+        ),
+        "stage1_best_bound": _finite_float_or_none(
+            solver_metadata.get("stage1_best_bound")
+        ),
+        "stage2_best_bound": _finite_float_or_none(
+            solver_metadata.get("stage2_best_bound")
+        ),
+        "stage1_mip_gap_ratio": stage1_gap,
+        "stage2_mip_gap_ratio": stage2_gap,
+        "stage1_mip_gap_percent": _mip_gap_percent(stage1_gap),
+        "stage2_mip_gap_percent": _mip_gap_percent(stage2_gap),
+        "stage1_runtime_seconds": _finite_float_or_none(
+            solver_metadata.get("stage1_runtime_seconds")
+        ),
+        "stage2_runtime_seconds": _finite_float_or_none(
+            solver_metadata.get("stage2_runtime_seconds")
+        ),
         "stage1_feasible": solver_metadata.get("stage1_feasible"),
         "stage2_feasible": solver_metadata.get("stage2_feasible"),
         "supports_two_stage_milp": solver_metadata.get("supports_two_stage_milp"),
         "assignment_candidate_available": solver_metadata.get("assignment_candidate_available", False),
         "validation_metrics": dict(solver_metadata.get("validation_metrics") or {}),
         "research_acceptance_checks": acceptance,
-        "solver_objective_value": float(result.objective_value) if bool(result.feasible) else None,
+        "objective_available": solver_objective is not None,
+        "solver_objective_value": solver_objective,
         "accounting_total_cost_jpy": accounting_total,
         "validated_operating_cost_jpy": validated_cost,
         "mip_gap_requested_ratio": float(args.mip_gap),
-        "mip_gap_achieved_ratio": solver_metadata.get("achieved_mip_gap"),
+        "mip_gap_achieved_ratio": _finite_float_or_none(
+            solver_metadata.get("achieved_mip_gap")
+        ),
         "elapsed_seconds": elapsed,
         "git_sha": git_sha,
         "git_dirty": git_dirty,
+        **experiment_identity,
         "pv_enabled": False,
         "bess_enabled": False,
         "weather_operation_policy_enabled": False,

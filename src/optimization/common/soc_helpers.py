@@ -59,13 +59,15 @@ def trip_active_in_slot(
     timestep_min = max(problem.scenario.timestep_min, 1)
     slot_start = slot_absolute_min(problem, slot_idx)
     slot_end = slot_start + timestep_min
+    start = horizon_start_min(problem)
     dep = int(departure_min)
     arr = int(arrival_min)
+    if dep < start:
+        dep += DAY_MINUTES
+    if arr < start:
+        arr += DAY_MINUTES
     if arr < dep:
-        arr += 24 * 60
-    if dep < slot_start - 24 * 60:
-        dep += 24 * 60
-        arr += 24 * 60
+        arr += DAY_MINUTES
     return dep < slot_end and arr > slot_start
 
 
@@ -79,13 +81,15 @@ def trip_slot_energy_fraction(
     slot_start = slot_absolute_min(problem, slot_idx)
     slot_end = slot_start + timestep_min
 
+    start = horizon_start_min(problem)
     dep = int(departure_min)
     arr = int(arrival_min)
+    if dep < start:
+        dep += DAY_MINUTES
+    if arr < start:
+        arr += DAY_MINUTES
     if arr < dep:
-        arr += 24 * 60
-    if dep < slot_start - 24 * 60:
-        dep += 24 * 60
-        arr += 24 * 60
+        arr += DAY_MINUTES
 
     if dep >= slot_end or arr <= slot_start:
         return 0.0

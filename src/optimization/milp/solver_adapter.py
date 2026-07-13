@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import time
 from dataclasses import dataclass, field, replace
@@ -64,6 +65,22 @@ def _bess_terminal_soc_target_kwh(asset: DepotEnergyAsset, *, terminal_soc_floor
     )
 
 
+def _vehicle_soc_transition_kwh(
+    slot_start_soc_kwh: Any,
+    *,
+    charge_power_kw: Any,
+    timestep_h: float,
+    charge_efficiency: float,
+    drive_energy_kwh: float,
+) -> Any:
+    """Apply the slot-start SOC balance used by the Phase 3 MILP."""
+    return (
+        slot_start_soc_kwh
+        + charge_efficiency * charge_power_kw * timestep_h
+        - drive_energy_kwh
+    )
+
+
 @dataclass(frozen=True)
 class MILPSolverOutcome:
     solver_status: str
@@ -81,6 +98,22 @@ class MILPSolverOutcome:
     presolve_reduction_summary: Dict[str, Any] = field(default_factory=dict)
     iis_generated: bool = False
     fallback_reason: str = ""
+
+
+@dataclass(frozen=True)
+class StartupEnergyPrecheck:
+    """Optimistic necessary condition for assigning a vehicle's first trip."""
+
+    path_feasible: bool
+    energy_feasible: bool
+    initial_soc_kwh: float
+    minimum_soc_kwh: float
+    startup_deadhead_min: int
+    startup_deadhead_energy_kwh: float
+    required_departure_soc_kwh: float
+    complete_precharge_slot_count: int
+    maximum_precharge_energy_kwh: float
+    energy_margin_kwh: float
 
 
 class SolverAdapter(Protocol):
@@ -2766,19 +2799,32 @@ class GurobiMILPAdapter:
         assignment_trip_ids_by_vehicle: Dict[str, List[str]] = {}
         assignment_vehicle_ids_by_trip: Dict[str, List[str]] = {}
         startup_feasible_by_assignment: Dict[Tuple[str, str], bool] = {}
+        startup_energy_feasible_by_assignment: Dict[Tuple[str, str], bool] = {}
         startup_infeasible_trip_ids: Set[str] = set()
         startup_infeasible_vehicle_ids: Set[str] = set()
+        startup_energy_infeasible_trip_ids: Set[str] = set()
+        startup_energy_infeasible_vehicle_ids: Set[str] = set()
         for vehicle_id, trip_id in assignment_pairs:
             assignment_trip_ids_by_vehicle.setdefault(vehicle_id, []).append(trip_id)
             assignment_vehicle_ids_by_trip.setdefault(trip_id, []).append(vehicle_id)
-            startup_feasible_by_assignment[(vehicle_id, trip_id)] = self._vehicle_can_start_trip(
+            startup_precheck = self._startup_energy_precheck(
                 problem,
                 vehicle_by_id.get(str(vehicle_id)),
                 trip_by_id.get(str(trip_id)),
+                dispatch_trip_by_id=dispatch_trip_by_id,
+            )
+            startup_feasible_by_assignment[(vehicle_id, trip_id)] = bool(
+                startup_precheck.path_feasible
+            )
+            startup_energy_feasible_by_assignment[(vehicle_id, trip_id)] = bool(
+                startup_precheck.energy_feasible
             )
             if not startup_feasible_by_assignment[(vehicle_id, trip_id)]:
                 startup_infeasible_trip_ids.add(str(trip_id))
                 startup_infeasible_vehicle_ids.add(str(vehicle_id))
+            if not startup_energy_feasible_by_assignment[(vehicle_id, trip_id)]:
+                startup_energy_infeasible_trip_ids.add(str(trip_id))
+                startup_energy_infeasible_vehicle_ids.add(str(vehicle_id))
 
         planning_days = max(int(problem.metadata.get("planning_days") or problem.scenario.planning_days or 1), 1)
         slots_per_day = max(1, (24 * 60) // max(problem.scenario.timestep_min, 1))
@@ -2866,7 +2912,9 @@ class GurobiMILPAdapter:
             stage1.addConstr(var <= y[(vehicle_id, from_trip_id)])
             stage1.addConstr(var <= y[(vehicle_id, to_trip_id)])
         for key, var in start_arc.items():
-            if not startup_feasible_by_assignment.get(key, True):
+            if not startup_feasible_by_assignment.get(
+                key, True
+            ) or not startup_energy_feasible_by_assignment.get(key, True):
                 stage1.addConstr(var == 0)
 
         max_start_fragments_per_vehicle = self._safe_positive_int(
@@ -3003,6 +3051,15 @@ class GurobiMILPAdapter:
                     "startup_infeasible_assignment_count": len(startup_infeasible_trip_ids),
                     "startup_infeasible_trip_ids": tuple(sorted(startup_infeasible_trip_ids)),
                     "startup_infeasible_vehicle_ids": tuple(sorted(startup_infeasible_vehicle_ids)),
+                    "startup_energy_infeasible_trip_count": len(
+                        startup_energy_infeasible_trip_ids
+                    ),
+                    "startup_energy_infeasible_trip_ids": tuple(
+                        sorted(startup_energy_infeasible_trip_ids)
+                    ),
+                    "startup_energy_infeasible_vehicle_ids": tuple(
+                        sorted(startup_energy_infeasible_vehicle_ids)
+                    ),
                     "arc_pruning_summary": arc_pruning_summary,
                 },
             )
@@ -3046,6 +3103,15 @@ class GurobiMILPAdapter:
                 "startup_infeasible_assignment_count": len(startup_infeasible_trip_ids),
                 "startup_infeasible_trip_ids": tuple(sorted(startup_infeasible_trip_ids)),
                 "startup_infeasible_vehicle_ids": tuple(sorted(startup_infeasible_vehicle_ids)),
+                "startup_energy_infeasible_trip_count": len(
+                    startup_energy_infeasible_trip_ids
+                ),
+                "startup_energy_infeasible_trip_ids": tuple(
+                    sorted(startup_energy_infeasible_trip_ids)
+                ),
+                "startup_energy_infeasible_vehicle_ids": tuple(
+                    sorted(startup_energy_infeasible_vehicle_ids)
+                ),
                 "arc_pruning_summary": arc_pruning_summary,
             },
         )
@@ -3178,6 +3244,7 @@ class GurobiMILPAdapter:
         stage2.Params.Seed = int(config.random_seed)
 
         trip_by_id = problem.trip_by_id()
+        dispatch_trip_by_id = problem.dispatch_context.trips_by_id()
         c_var: Dict[Tuple[str, int], Any] = {}
         charge_on_var: Dict[Tuple[str, int], Any] = {}
         s_var: Dict[Tuple[str, int], Any] = {}
@@ -3203,16 +3270,28 @@ class GurobiMILPAdapter:
         trip_load_by_vehicle_slot: Dict[Tuple[str, int], float] = {}
         terminal_out_of_horizon_load_by_vehicle: Dict[str, float] = {}
         active_slot_by_vehicle: Dict[str, Set[int]] = {vehicle_id: set() for vehicle_id in assigned_bev_ids}
+        deadhead_active_slot_by_vehicle: Dict[str, Set[int]] = {
+            vehicle_id: set() for vehicle_id in assigned_bev_ids
+        }
+        deadhead_energy_before_trip: Dict[Tuple[str, str], float] = {}
         allowed_charge_slots_by_vehicle: Dict[str, Set[int]] = {vehicle_id: set() for vehicle_id in assigned_bev_ids}
         final_trip_by_vehicle_day: Dict[Tuple[str, int], ProblemTrip] = {}
         first_trip_id_by_vehicle: Dict[str, str] = {}
+        startup_precheck_by_vehicle: Dict[str, StartupEnergyPrecheck] = {}
         for vehicle_id, trip_ids in assigned_paths.items():
             candidate_trips = [trip_by_id[trip_id] for trip_id in trip_ids if trip_id in trip_by_id]
             if candidate_trips:
-                first_trip_id_by_vehicle[vehicle_id] = min(
+                first_trip = min(
                     candidate_trips,
                     key=lambda trip: self._trip_service_sort_key(problem, trip),
-                ).trip_id
+                )
+                first_trip_id_by_vehicle[vehicle_id] = first_trip.trip_id
+                startup_precheck_by_vehicle[vehicle_id] = self._startup_energy_precheck(
+                    problem,
+                    vehicle_by_id.get(vehicle_id),
+                    first_trip,
+                    dispatch_trip_by_id=dispatch_trip_by_id,
+                )
         pre_window_min = self._safe_nonnegative_float(
             problem.metadata.get("home_depot_charge_pre_window_min"),
             default=float(max(problem.scenario.timestep_min, 1)) * 2.0,
@@ -3269,13 +3348,55 @@ class GurobiMILPAdapter:
                         * (1.0 - allocated_fraction)
                     )
                 if previous_trip_id is not None:
+                    previous_trip = trip_by_id.get(previous_trip_id)
                     deadhead_slot = self._slot_index(problem, trip.departure_min)
-                    trip_load_by_vehicle_slot[(vehicle_id, deadhead_slot)] = trip_load_by_vehicle_slot.get((vehicle_id, deadhead_slot), 0.0) + self._deadhead_energy_kwh(
+                    deadhead_energy_kwh = self._deadhead_energy_kwh(
                         problem,
                         vehicle,
                         previous_trip_id,
                         trip.trip_id,
                     )
+                    trip_load_by_vehicle_slot[(vehicle_id, deadhead_slot)] = (
+                        trip_load_by_vehicle_slot.get((vehicle_id, deadhead_slot), 0.0)
+                        + deadhead_energy_kwh
+                    )
+                    deadhead_energy_before_trip[(vehicle_id, trip.trip_id)] = (
+                        deadhead_energy_kwh
+                    )
+                    if previous_trip is not None:
+                        deadhead_min = self._connection_deadhead_min(
+                            problem, previous_trip, trip
+                        )
+                        residence_interval = self._home_depot_residence_interval(
+                            problem,
+                            vehicle,
+                            previous_trip,
+                            trip,
+                            deadhead_min=deadhead_min,
+                        )
+                        if residence_interval is not None:
+                            allowed_charge_slots_by_vehicle[vehicle_id].update(
+                                self._slot_indices_for_interval(
+                                    problem,
+                                    residence_interval[0],
+                                    residence_interval[1],
+                                )
+                            )
+                        if deadhead_min > 0:
+                            deadhead_interval = self._connection_deadhead_interval(
+                                problem,
+                                vehicle,
+                                previous_trip,
+                                trip,
+                                deadhead_min=deadhead_min,
+                            )
+                            deadhead_active_slot_by_vehicle[vehicle_id].update(
+                                self._slot_indices_for_interval(
+                                    problem,
+                                    deadhead_interval[0],
+                                    deadhead_interval[1],
+                                )
+                            )
                 elif str(trip.trip_id) == first_trip_id_by_vehicle.get(vehicle_id):
                     # Only the first Stage-1 trip for a vehicle may use the
                     # initial at-home assumption.  A later duty fragment has
@@ -3283,8 +3404,35 @@ class GurobiMILPAdapter:
                     # leg as another depot start would create fictitious
                     # charging availability.
                     first_window_start = self._horizon_start_min(problem)
+                    startup_precheck = startup_precheck_by_vehicle[vehicle_id]
+                    first_departure_min = self._service_minute(
+                        problem, int(trip.departure_min)
+                    )
+                    leave_depot_min = first_departure_min - int(
+                        startup_precheck.startup_deadhead_min
+                    )
                     allowed_charge_slots_by_vehicle[vehicle_id].update(
-                        self._slot_indices_for_interval(problem, first_window_start, max(int(trip.departure_min), first_window_start + 1))
+                        self._slot_indices_for_interval(
+                            problem,
+                            first_window_start,
+                            max(leave_depot_min, first_window_start + 1),
+                        )
+                    )
+                    if startup_precheck.startup_deadhead_min > 0:
+                        deadhead_active_slot_by_vehicle[vehicle_id].update(
+                            self._slot_indices_for_interval(
+                                problem,
+                                leave_depot_min,
+                                first_departure_min,
+                            )
+                        )
+                    departure_slot = self._slot_index(problem, trip.departure_min)
+                    trip_load_by_vehicle_slot[(vehicle_id, departure_slot)] = (
+                        trip_load_by_vehicle_slot.get((vehicle_id, departure_slot), 0.0)
+                        + startup_precheck.startup_deadhead_energy_kwh
+                    )
+                    deadhead_energy_before_trip[(vehicle_id, trip.trip_id)] = (
+                        startup_precheck.startup_deadhead_energy_kwh
                     )
                 if str(trip.origin) == home_depot_id or str(trip.destination) == home_depot_id:
                     allowed_charge_slots_by_vehicle[vehicle_id].update(
@@ -3378,6 +3526,11 @@ class GurobiMILPAdapter:
                         charge_on_var[(vehicle_id, slot_idx)] == 0,
                         name=f"charge_availability__{vehicle_id}__slot_{slot_idx}__trip_active",
                     )
+                if slot_idx in deadhead_active_slot_by_vehicle.get(vehicle_id, set()):
+                    stage2.addConstr(
+                        charge_on_var[(vehicle_id, slot_idx)] == 0,
+                        name=f"charge_availability__{vehicle_id}__slot_{slot_idx}__deadhead_active",
+                    )
                 if slot_idx not in allowed_charge_slots_by_vehicle.get(vehicle_id, set()):
                     stage2.addConstr(
                         charge_on_var[(vehicle_id, slot_idx)] == 0,
@@ -3393,11 +3546,31 @@ class GurobiMILPAdapter:
             )
             final_floor = max(soc_min, final_soc_floor_kwh(problem, vehicle, cap_kwh=cap))
             last_slot_idx = slot_indices[-1]
-            terminal_soc_expr = (
-                s_var[(vehicle_id, last_slot_idx)]
-                + 0.95 * c_var[(vehicle_id, last_slot_idx)] * timestep_h
-                - max(float(trip_load_by_vehicle_slot.get((vehicle_id, last_slot_idx), 0.0) or 0.0), 0.0)
-                - max(float(terminal_out_of_horizon_load_by_vehicle.get(vehicle_id, 0.0) or 0.0), 0.0)
+            terminal_soc_expr = _vehicle_soc_transition_kwh(
+                s_var[(vehicle_id, last_slot_idx)],
+                charge_power_kw=c_var[(vehicle_id, last_slot_idx)],
+                timestep_h=timestep_h,
+                charge_efficiency=0.95,
+                drive_energy_kwh=(
+                    max(
+                        float(
+                            trip_load_by_vehicle_slot.get(
+                                (vehicle_id, last_slot_idx), 0.0
+                            )
+                            or 0.0
+                        ),
+                        0.0,
+                    )
+                    + max(
+                        float(
+                            terminal_out_of_horizon_load_by_vehicle.get(
+                                vehicle_id, 0.0
+                            )
+                            or 0.0
+                        ),
+                        0.0,
+                    )
+                ),
             )
             stage2.addConstr(
                 terminal_soc_expr >= final_floor,
@@ -3419,7 +3592,13 @@ class GurobiMILPAdapter:
                 load_kwh = max(float(trip_load_by_vehicle_slot.get((vehicle_id, slot_idx), 0.0) or 0.0), 0.0)
                 stage2.addConstr(
                     s_var[(vehicle_id, next_slot)]
-                    == s_var[(vehicle_id, slot_idx)] + 0.95 * c_var[(vehicle_id, slot_idx)] * timestep_h - load_kwh,
+                    == _vehicle_soc_transition_kwh(
+                        s_var[(vehicle_id, slot_idx)],
+                        charge_power_kw=c_var[(vehicle_id, slot_idx)],
+                        timestep_h=timestep_h,
+                        charge_efficiency=0.95,
+                        drive_energy_kwh=load_kwh,
+                    ),
                     name=f"soc_transition__{vehicle_id}__slot_{slot_idx}",
                 )
             for trip_id in assigned_paths.get(vehicle_id, ()):
@@ -3435,6 +3614,20 @@ class GurobiMILPAdapter:
                     trip,
                     cap_kwh=cap,
                     final_soc_floor_kwh=final_floor,
+                )
+                # Deadhead energy is posted to the departure slot because the
+                # 15-minute state is defined at slot start.  Therefore the
+                # departure readiness constraint must also cover that energy;
+                # otherwise a bus could leave the depot/previous terminus
+                # below the true trip-energy-plus-reserve requirement.
+                required += max(
+                    float(
+                        deadhead_energy_before_trip.get(
+                            (vehicle_id, trip.trip_id), 0.0
+                        )
+                        or 0.0
+                    ),
+                    0.0,
                 )
                 stage2.addConstr(
                     s_var[(vehicle_id, departure_slot)] >= required,
@@ -3606,6 +3799,11 @@ class GurobiMILPAdapter:
                 vehicle_by_id=vehicle_by_id,
                 slot_indices=slot_indices,
                 timestep_h=timestep_h,
+                stage1_status=stage1_status,
+                stage1_gap=stage1_gap,
+                stage1_bound=stage1_bound,
+                stage1_objective=stage1_objective_value,
+                stage1_runtime_seconds=stage1_runtime_sec,
             )
             metadata = {
                 **dict(stage1_plan.metadata or {}),
@@ -3857,6 +4055,11 @@ class GurobiMILPAdapter:
         vehicle_by_id: Mapping[str, Any],
         slot_indices: Sequence[int],
         timestep_h: float,
+        stage1_status: str,
+        stage1_gap: Optional[float],
+        stage1_bound: Optional[float],
+        stage1_objective: Optional[float],
+        stage1_runtime_seconds: float,
     ) -> Dict[str, Any]:
         """Persist candidate-only evidence when fixed-assignment Stage 2 fails.
 
@@ -3870,69 +4073,103 @@ class GurobiMILPAdapter:
         output_dir = Path(raw_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         trip_by_id = problem.trip_by_id()
+        dispatch_trip_by_id = problem.dispatch_context.trips_by_id()
         route_name_by_id = {str(route.route_id): str(route.route_name or "") for route in problem.routes}
         assignment_rows: List[Dict[str, Any]] = []
         duty_rows: List[Dict[str, Any]] = []
         sequence_by_vehicle: Dict[str, int] = {}
         fragment_index_by_vehicle: Dict[str, int] = {}
-        for duty in stage1_plan.duties:
-            vehicle_id = str(stage1_plan.vehicle_id_for_duty(duty.duty_id))
+        first_trip_id_by_vehicle = {
+            vehicle_id: trip_ids[0]
+            for vehicle_id, trip_ids in assigned_paths.items()
+            if trip_ids
+        }
+        for vehicle_id, duties in sorted(stage1_plan.duties_by_vehicle().items()):
             vehicle = vehicle_by_id.get(vehicle_id)
             if vehicle is None:
                 continue
-            fragment_index_by_vehicle[vehicle_id] = fragment_index_by_vehicle.get(vehicle_id, 0) + 1
-            previous_trip_id: Optional[str] = None
-            for leg in duty.legs:
-                trip = trip_by_id.get(str(leg.trip.trip_id))
-                if trip is None:
-                    continue
-                sequence_by_vehicle[vehicle_id] = sequence_by_vehicle.get(vehicle_id, 0) + 1
-                deadhead_before = (
-                    self._deadhead_energy_kwh(problem, vehicle, previous_trip_id, trip.trip_id)
-                    if previous_trip_id is not None
-                    else 0.0
+            startup_precheck = self._startup_energy_precheck(
+                problem,
+                vehicle,
+                trip_by_id.get(first_trip_id_by_vehicle.get(vehicle_id, "")),
+                dispatch_trip_by_id=dispatch_trip_by_id,
+            )
+            for duty in duties:
+                fragment_index_by_vehicle[vehicle_id] = (
+                    fragment_index_by_vehicle.get(vehicle_id, 0) + 1
                 )
-                assignment_rows.append(
+                previous_trip_id: Optional[str] = None
+                for leg in duty.legs:
+                    trip = trip_by_id.get(str(leg.trip.trip_id))
+                    if trip is None:
+                        continue
+                    sequence_by_vehicle[vehicle_id] = (
+                        sequence_by_vehicle.get(vehicle_id, 0) + 1
+                    )
+                    is_vehicle_first_trip = (
+                        str(trip.trip_id) == first_trip_id_by_vehicle.get(vehicle_id)
+                    )
+                    deadhead_before = (
+                        self._deadhead_energy_kwh(
+                            problem, vehicle, previous_trip_id, trip.trip_id
+                        )
+                        if previous_trip_id is not None
+                        else (
+                            startup_precheck.startup_deadhead_energy_kwh
+                            if is_vehicle_first_trip
+                            else 0.0
+                        )
+                    )
+                    assignment_rows.append(
+                        {
+                            "vehicle_id": vehicle_id,
+                            "vehicle_type": str(vehicle.vehicle_type),
+                            "duty_id": str(duty.duty_id),
+                            "fragment_index": fragment_index_by_vehicle[vehicle_id],
+                            "sequence": sequence_by_vehicle[vehicle_id],
+                            "trip_id": str(trip.trip_id),
+                            "route_id": str(trip.route_id),
+                            "route_name": route_name_by_id.get(str(trip.route_id), ""),
+                            "departure_min": int(trip.departure_min),
+                            "arrival_min": int(trip.arrival_min),
+                            "origin": str(trip.origin),
+                            "destination": str(trip.destination),
+                            "trip_energy_kwh": self._trip_energy_kwh(
+                                problem, vehicle, trip.trip_id
+                            ),
+                            "trip_energy_balance_residual_kwh": self._trip_energy_kwh(
+                                problem, vehicle, trip.trip_id
+                            )
+                            * (
+                                sum(
+                                    self._trip_slot_energy_fraction(
+                                        problem,
+                                        trip.departure_min,
+                                        trip.arrival_min,
+                                        slot_idx,
+                                    )
+                                    for slot_idx in slot_indices
+                                )
+                                - 1.0
+                            ),
+                            "deadhead_energy_before_kwh": deadhead_before,
+                            "startup_deadhead_min": (
+                                startup_precheck.startup_deadhead_min
+                                if is_vehicle_first_trip
+                                else 0
+                            ),
+                        }
+                    )
+                    previous_trip_id = trip.trip_id
+                duty_rows.append(
                     {
                         "vehicle_id": vehicle_id,
                         "vehicle_type": str(vehicle.vehicle_type),
                         "duty_id": str(duty.duty_id),
                         "fragment_index": fragment_index_by_vehicle[vehicle_id],
-                        "sequence": sequence_by_vehicle[vehicle_id],
-                        "trip_id": str(trip.trip_id),
-                        "route_id": str(trip.route_id),
-                        "route_name": route_name_by_id.get(str(trip.route_id), ""),
-                        "departure_min": int(trip.departure_min),
-                        "arrival_min": int(trip.arrival_min),
-                        "origin": str(trip.origin),
-                        "destination": str(trip.destination),
-                        "trip_energy_kwh": self._trip_energy_kwh(problem, vehicle, trip.trip_id),
-                        "trip_energy_balance_residual_kwh": self._trip_energy_kwh(problem, vehicle, trip.trip_id)
-                        * (
-                            sum(
-                                self._trip_slot_energy_fraction(
-                                    problem,
-                                    trip.departure_min,
-                                    trip.arrival_min,
-                                    slot_idx,
-                                )
-                                for slot_idx in slot_indices
-                            )
-                            - 1.0
-                        ),
-                        "deadhead_energy_before_kwh": deadhead_before,
+                        "trip_count": len(duty.legs),
                     }
                 )
-                previous_trip_id = trip.trip_id
-            duty_rows.append(
-                {
-                    "vehicle_id": vehicle_id,
-                    "vehicle_type": str(vehicle.vehicle_type),
-                    "duty_id": str(duty.duty_id),
-                    "fragment_index": fragment_index_by_vehicle[vehicle_id],
-                    "trip_count": len(duty.legs),
-                }
-            )
 
         path_rows: List[Dict[str, Any]] = []
         departure_rows: List[Dict[str, Any]] = []
@@ -3943,6 +4180,12 @@ class GurobiMILPAdapter:
             ordered = [trip_by_id[trip_id] for trip_id in trip_ids if trip_id in trip_by_id]
             if not ordered:
                 continue
+            startup_precheck = self._startup_energy_precheck(
+                problem,
+                vehicle,
+                ordered[0],
+                dispatch_trip_by_id=dispatch_trip_by_id,
+            )
             cap = max(float(vehicle.battery_capacity_kwh or 0.0), 1.0)
             reserve = vehicle.reserve_soc
             minimum = 0.15 * cap if reserve is None else float(reserve) * cap if float(reserve) <= 1.0 else float(reserve)
@@ -3957,17 +4200,27 @@ class GurobiMILPAdapter:
                     max(float(charger.power_kw or 0.0) for charger in problem.chargers),
                 )
             trip_energy = sum(self._trip_energy_kwh(problem, vehicle, trip.trip_id) for trip in ordered)
-            deadhead_energy = sum(
+            connection_deadhead_energy = sum(
                 self._deadhead_energy_kwh(problem, vehicle, ordered[index - 1].trip_id, trip.trip_id)
                 for index, trip in enumerate(ordered)
                 if index > 0
             )
+            deadhead_energy = (
+                startup_precheck.startup_deadhead_energy_kwh
+                + connection_deadhead_energy
+            )
             return_energy = return_deadhead_energy_kwh(problem, vehicle, ordered[-1])
             terminal_requirement = max(
+                minimum,
                 final_soc_floor_kwh(problem, vehicle, cap_kwh=cap),
                 float(effective_final_soc_target_kwh(problem, vehicle, cap_kwh=cap) or 0.0),
             )
-            chargeable_slots = sorted(allowed_charge_slots_by_vehicle.get(vehicle_id, set()))
+            valid_slot_indices = set(slot_indices)
+            chargeable_slots = sorted(
+                slot_idx
+                for slot_idx in allowed_charge_slots_by_vehicle.get(vehicle_id, set())
+                if slot_idx in valid_slot_indices
+            )
             max_charge = len(chargeable_slots) * charge_max_kw * timestep_h * 0.95
             required = trip_energy + deadhead_energy + return_energy + terminal_requirement - minimum
             shortage = max(required - ((initial_kwh - minimum) + max_charge), 0.0)
@@ -3977,8 +4230,12 @@ class GurobiMILPAdapter:
                 "initial_soc_kwh": initial_kwh,
                 "minimum_soc_kwh": minimum,
                 "terminal_soc_requirement_kwh": terminal_requirement,
+                "final_soc_requirement_kwh": terminal_requirement,
                 "assigned_trip_count": len(ordered),
                 "assigned_trip_energy_kwh": trip_energy,
+                "startup_deadhead_min": startup_precheck.startup_deadhead_min,
+                "startup_deadhead_energy_kwh": startup_precheck.startup_deadhead_energy_kwh,
+                "connection_deadhead_energy_kwh": connection_deadhead_energy,
                 "deadhead_energy_kwh": deadhead_energy,
                 "return_energy_kwh": return_energy,
                 "total_required_energy_kwh": trip_energy + deadhead_energy + return_energy,
@@ -3996,13 +4253,16 @@ class GurobiMILPAdapter:
             consumed_before = 0.0
             previous_trip: Optional[ProblemTrip] = None
             for trip in ordered:
-                if previous_trip is not None:
-                    consumed_before += self._deadhead_energy_kwh(
+                deadhead_before_departure = (
+                    startup_precheck.startup_deadhead_energy_kwh
+                    if previous_trip is None
+                    else self._deadhead_energy_kwh(
                         problem,
                         vehicle,
                         previous_trip.trip_id,
                         trip.trip_id,
                     )
+                )
                 departure_slot = self._slot_index(problem, trip.departure_min)
                 pre_slots = [slot for slot in chargeable_slots if slot < departure_slot]
                 maximum_precharge = len(pre_slots) * charge_max_kw * timestep_h * 0.95
@@ -4012,7 +4272,7 @@ class GurobiMILPAdapter:
                     trip,
                     cap_kwh=cap,
                     final_soc_floor_kwh=minimum,
-                )
+                ) + deadhead_before_departure
                 departure_rows.append(
                     {
                         "vehicle_id": vehicle_id,
@@ -4021,11 +4281,17 @@ class GurobiMILPAdapter:
                         "soc_available_before_departure_kwh": initial_kwh - consumed_before,
                         "required_departure_soc_kwh": required_departure,
                         "shortage_kwh": max(required_departure - (initial_kwh - consumed_before + maximum_precharge), 0.0),
+                        "deadhead_energy_before_departure_kwh": deadhead_before_departure,
+                        "startup_deadhead_energy_kwh": deadhead_before_departure
+                        if previous_trip is None
+                        else 0.0,
                         "latest_chargeable_slot_before_departure": pre_slots[-1] if pre_slots else None,
                         "maximum_predeparture_charge_kwh": maximum_precharge,
                     }
                 )
-                consumed_before += self._trip_energy_kwh(problem, vehicle, trip.trip_id)
+                consumed_before += deadhead_before_departure + self._trip_energy_kwh(
+                    problem, vehicle, trip.trip_id
+                )
                 previous_trip = trip
 
         self._write_diagnostic_csv(output_dir / "stage1_candidate_assignment.csv", assignment_rows)
@@ -4037,6 +4303,27 @@ class GurobiMILPAdapter:
 
         iis_constraint_names: List[str] = []
         iis_written = False
+        all_constraint_names = [
+            str(constraint.ConstrName) for constraint in stage2.getConstrs()
+        ]
+        diagnostic_prefixes = (
+            "soc_initial__",
+            "soc_transition__",
+            "soc_lower__",
+            "soc_upper__",
+            "departure_soc__",
+            "terminal_soc__",
+            "charge_availability__",
+            "charger_ports__",
+            "charger_power__",
+            "grid_limit__",
+        )
+        constraint_count_by_prefix = {
+            prefix.removesuffix("__"): sum(
+                name.startswith(prefix) for name in all_constraint_names
+            )
+            for prefix in diagnostic_prefixes
+        }
         if stage2.Status == GRB.INFEASIBLE:
             stage2.computeIIS()
             stage2.write(str(output_dir / "stage2_infeasible.ilp"))
@@ -4055,6 +4342,8 @@ class GurobiMILPAdapter:
             "iis_generated": iis_written,
             "iis_constraint_count": len(iis_constraint_names),
             "iis_constraint_names": iis_constraint_names,
+            "constraint_count": len(all_constraint_names),
+            "constraint_count_by_prefix": constraint_count_by_prefix,
             "vehicle_soc_semantics": "slot_start",
             "terminal_soc_policy": str((problem.metadata or {}).get("terminal_soc_policy") or "configured"),
         }
@@ -4064,9 +4353,29 @@ class GurobiMILPAdapter:
         (output_dir / "stage1_solver_telemetry.json").write_text(
             json.dumps(
                 {
+                    "stage1_solver_status": stage1_status,
+                    "stage1_has_feasible_incumbent": True,
+                    "stage1_objective": stage1_objective,
+                    "stage1_best_bound": stage1_bound,
+                    "stage1_mip_gap_ratio": stage1_gap,
+                    "stage1_mip_gap_percent": (
+                        stage1_gap * 100.0 if stage1_gap is not None else None
+                    ),
+                    "stage1_runtime_seconds": stage1_runtime_seconds,
                     "candidate_trip_count": len(stage1_plan.served_trip_ids),
                     "candidate_vehicle_count": len(assigned_paths),
                     "candidate_only": True,
+                    "candidate_hash": hashlib.sha256(
+                        json.dumps(
+                            {
+                                vehicle_id: list(trip_ids)
+                                for vehicle_id, trip_ids in sorted(assigned_paths.items())
+                            },
+                            ensure_ascii=False,
+                            sort_keys=True,
+                            separators=(",", ":"),
+                        ).encode("utf-8")
+                    ).hexdigest(),
                 },
                 ensure_ascii=False,
                 indent=2,
@@ -4292,10 +4601,8 @@ class GurobiMILPAdapter:
     ) -> Tuple[int, ...]:
         slots: Set[int] = set()
         horizon_start_min = self._horizon_start_min(problem)
-        dep = int(trip.departure_min)
-        arr = int(trip.arrival_min)
-        if arr <= dep:
-            arr += 24 * 60
+        dep = self._service_minute(problem, int(trip.departure_min))
+        arr = self._trip_service_arrival_min(problem, trip)
 
         if str(trip.origin) == home_depot_id:
             pre_min = max(int(round(pre_window_min)), 0)
@@ -4468,8 +4775,12 @@ class GurobiMILPAdapter:
             start_trip_ids = sorted(
                 set(start_trip_ids),
                 key=lambda trip_id: (
-                    trip_by_id[trip_id].departure_min,
-                    trip_by_id[trip_id].arrival_min,
+                    self._service_minute(
+                        problem, trip_by_id[trip_id].departure_min
+                    ),
+                    self._trip_service_arrival_min(
+                        problem, trip_by_id[trip_id]
+                    ),
                     trip_id,
                 ),
             )
@@ -4489,8 +4800,12 @@ class GurobiMILPAdapter:
             orphan_trip_ids = sorted(
                 assigned_trip_ids - visited,
                 key=lambda trip_id: (
-                    trip_by_id[trip_id].departure_min,
-                    trip_by_id[trip_id].arrival_min,
+                    self._service_minute(
+                        problem, trip_by_id[trip_id].departure_min
+                    ),
+                    self._trip_service_arrival_min(
+                        problem, trip_by_id[trip_id]
+                    ),
                     trip_id,
                 ),
             )
@@ -4599,6 +4914,159 @@ class GurobiMILPAdapter:
         )
         return bool(startup_result.feasible)
 
+    def _startup_energy_precheck(
+        self,
+        problem: CanonicalOptimizationProblem,
+        vehicle: Any,
+        trip: ProblemTrip | None,
+        *,
+        dispatch_trip_by_id: Optional[Mapping[str, Any]] = None,
+    ) -> StartupEnergyPrecheck:
+        """Check an optimistic but physically necessary startup-SOC condition."""
+        if vehicle is None or trip is None:
+            return StartupEnergyPrecheck(
+                path_feasible=False,
+                energy_feasible=False,
+                initial_soc_kwh=0.0,
+                minimum_soc_kwh=0.0,
+                startup_deadhead_min=0,
+                startup_deadhead_energy_kwh=0.0,
+                required_departure_soc_kwh=0.0,
+                complete_precharge_slot_count=0,
+                maximum_precharge_energy_kwh=0.0,
+                energy_margin_kwh=float("-inf"),
+            )
+
+        home_depot_id = str(getattr(vehicle, "home_depot_id", "") or "").strip()
+        if dispatch_trip_by_id is None:
+            dispatch_trips_by_id = getattr(
+                problem.dispatch_context, "trips_by_id", None
+            )
+            dispatch_trip_by_id = (
+                dispatch_trips_by_id() if callable(dispatch_trips_by_id) else {}
+            )
+        dispatch_trip = dispatch_trip_by_id.get(trip.trip_id)
+        startup_result = evaluate_startup_feasibility(
+            dispatch_trip if dispatch_trip is not None else trip,
+            problem.dispatch_context,
+            home_depot_id,
+            earliest_available_min=self._startup_earliest_available_min(
+                problem, trip
+            ),
+        )
+        path_feasible = bool(startup_result.feasible)
+        startup_deadhead_min = max(int(startup_result.deadhead_time_min or 0), 0)
+        is_electric = str(getattr(vehicle, "vehicle_type", "") or "").upper() in {
+            "BEV",
+            "PHEV",
+            "FCEV",
+        }
+        if not is_electric:
+            return StartupEnergyPrecheck(
+                path_feasible=path_feasible,
+                energy_feasible=path_feasible,
+                initial_soc_kwh=0.0,
+                minimum_soc_kwh=0.0,
+                startup_deadhead_min=startup_deadhead_min,
+                startup_deadhead_energy_kwh=0.0,
+                required_departure_soc_kwh=0.0,
+                complete_precharge_slot_count=0,
+                maximum_precharge_energy_kwh=0.0,
+                energy_margin_kwh=0.0 if path_feasible else float("-inf"),
+            )
+
+        capacity_kwh = max(float(vehicle.battery_capacity_kwh or 300.0), 1.0)
+        reserve = vehicle.reserve_soc
+        minimum_soc_kwh = (
+            0.15 * capacity_kwh
+            if reserve is None
+            else (
+                float(reserve) * capacity_kwh
+                if float(reserve) <= 1.0
+                else float(reserve)
+            )
+        )
+        minimum_soc_kwh = min(max(minimum_soc_kwh, 0.0), capacity_kwh)
+        initial = vehicle.initial_soc
+        initial_soc_kwh = (
+            0.8 * capacity_kwh
+            if initial is None
+            else (
+                float(initial) * capacity_kwh
+                if float(initial) <= 1.0
+                else float(initial)
+            )
+        )
+        initial_soc_kwh = min(max(initial_soc_kwh, 0.0), capacity_kwh)
+        startup_deadhead_energy_kwh = self._deadhead_distance_km(
+            problem, startup_deadhead_min
+        ) * self._vehicle_energy_rate_kwh_per_km(problem, vehicle, trip)
+
+        departure_min = self._service_minute(problem, int(trip.departure_min))
+        leave_depot_min = departure_min - startup_deadhead_min
+        timestep_min = max(int(problem.scenario.timestep_min), 1)
+        complete_precharge_slot_count = max(
+            (leave_depot_min - self._horizon_start_min(problem)) // timestep_min,
+            0,
+        )
+        theoretical_precharge_kwh = (
+            complete_precharge_slot_count
+            * self._charge_power_max_kw(problem, vehicle.vehicle_type)
+            * (timestep_min / 60.0)
+            * 0.95
+        )
+        maximum_precharge_energy_kwh = min(
+            max(theoretical_precharge_kwh, 0.0),
+            max(capacity_kwh - initial_soc_kwh, 0.0),
+        )
+        final_floor_kwh = max(
+            minimum_soc_kwh,
+            final_soc_floor_kwh(problem, vehicle, cap_kwh=capacity_kwh),
+        )
+        required_departure_soc_kwh = (
+            self._required_departure_soc_kwh(
+                problem,
+                vehicle,
+                trip,
+                cap_kwh=capacity_kwh,
+                final_soc_floor_kwh=final_floor_kwh,
+            )
+            + startup_deadhead_energy_kwh
+        )
+        energy_margin_kwh = (
+            initial_soc_kwh
+            + maximum_precharge_energy_kwh
+            - required_departure_soc_kwh
+        )
+        energy_feasible = bool(
+            path_feasible
+            and initial_soc_kwh >= minimum_soc_kwh - 1.0e-9
+            and energy_margin_kwh >= -1.0e-9
+        )
+        return StartupEnergyPrecheck(
+            path_feasible=path_feasible,
+            energy_feasible=energy_feasible,
+            initial_soc_kwh=initial_soc_kwh,
+            minimum_soc_kwh=minimum_soc_kwh,
+            startup_deadhead_min=startup_deadhead_min,
+            startup_deadhead_energy_kwh=startup_deadhead_energy_kwh,
+            required_departure_soc_kwh=required_departure_soc_kwh,
+            complete_precharge_slot_count=complete_precharge_slot_count,
+            maximum_precharge_energy_kwh=maximum_precharge_energy_kwh,
+            energy_margin_kwh=energy_margin_kwh,
+        )
+
+    def _startup_earliest_available_min(
+        self,
+        problem: CanonicalOptimizationProblem,
+        trip: ProblemTrip,
+    ) -> int:
+        """Express the service-day horizon start on a trip's wall-clock axis."""
+        horizon_start = self._horizon_start_min(problem)
+        if int(trip.departure_min) < horizon_start:
+            return horizon_start - 24 * 60
+        return horizon_start
+
     def _binary_value(self, var: Any) -> bool:
         try:
             return float(var.X) > 0.5
@@ -4647,12 +5115,9 @@ class GurobiMILPAdapter:
         timestep_min = max(problem.scenario.timestep_min, 1)
         slot_start = self._slot_absolute_min(problem, slot_idx)
         slot_end = slot_start + timestep_min
-        dep = departure_min
-        arr = arrival_min
+        dep = self._service_minute(problem, departure_min)
+        arr = self._service_minute(problem, arrival_min)
         if arr < dep:
-            arr += 24 * 60
-        if dep < slot_start - 24 * 60:
-            dep += 24 * 60
             arr += 24 * 60
         return dep < slot_end and arr > slot_start
 
@@ -4677,12 +5142,9 @@ class GurobiMILPAdapter:
         slot_start = self._slot_absolute_min(problem, slot_idx)
         slot_end = slot_start + timestep_min
         
-        dep = departure_min
-        arr = arrival_min
+        dep = self._service_minute(problem, departure_min)
+        arr = self._service_minute(problem, arrival_min)
         if arr < dep:
-            arr += 24 * 60
-        if dep < slot_start - 24 * 60:
-            dep += 24 * 60
             arr += 24 * 60
         
         # No overlap with this slot
@@ -4777,6 +5239,116 @@ class GurobiMILPAdapter:
             self._trip_service_arrival_min(problem, trip),
             self._service_minute(problem, int(trip.departure_min)),
         )
+
+    def _locations_equivalent(
+        self,
+        problem: CanonicalOptimizationProblem,
+        left: str,
+        right: str,
+    ) -> bool:
+        checker = getattr(problem.dispatch_context, "locations_equivalent", None)
+        if callable(checker):
+            return bool(checker(str(left), str(right)))
+        return str(left) == str(right)
+
+    def _connection_deadhead_min(
+        self,
+        problem: CanonicalOptimizationProblem,
+        previous_trip: ProblemTrip,
+        next_trip: ProblemTrip,
+    ) -> int:
+        if self._locations_equivalent(
+            problem, previous_trip.destination, next_trip.origin
+        ):
+            return 0
+        lookup = getattr(problem.dispatch_context, "get_deadhead_min", None)
+        if not callable(lookup):
+            return 0
+        return max(
+            int(lookup(previous_trip.destination, next_trip.origin) or 0),
+            0,
+        )
+
+    def _turnaround_min(
+        self,
+        problem: CanonicalOptimizationProblem,
+        location: str,
+    ) -> int:
+        lookup = getattr(problem.dispatch_context, "get_turnaround_min", None)
+        if not callable(lookup):
+            return 0
+        return max(int(lookup(location) or 0), 0)
+
+    def _home_depot_residence_interval(
+        self,
+        problem: CanonicalOptimizationProblem,
+        vehicle: Any,
+        previous_trip: ProblemTrip,
+        next_trip: ProblemTrip,
+        *,
+        deadhead_min: int,
+    ) -> Optional[Tuple[int, int]]:
+        """Return a confirmed at-home interval between connected trips."""
+        home_depot_id = str(getattr(vehicle, "home_depot_id", "") or "")
+        previous_at_home = self._locations_equivalent(
+            problem, previous_trip.destination, home_depot_id
+        )
+        next_at_home = self._locations_equivalent(
+            problem, next_trip.origin, home_depot_id
+        )
+        if not previous_at_home and not next_at_home:
+            return None
+        if previous_at_home != next_at_home and int(deadhead_min) <= 0:
+            # A zero lookup between distinct known locations is not evidence
+            # that the vehicle reached the depot; do not invent residence.
+            return None
+
+        previous_arrival = self._trip_service_arrival_min(problem, previous_trip)
+        next_departure = self._service_minute(
+            problem, int(next_trip.departure_min)
+        )
+        if previous_at_home:
+            residence_start = previous_arrival
+        else:
+            residence_start = (
+                previous_arrival
+                + self._turnaround_min(problem, previous_trip.destination)
+                + max(int(deadhead_min), 0)
+            )
+        residence_end = (
+            next_departure
+            if next_at_home
+            else next_departure - max(int(deadhead_min), 0)
+        )
+        if residence_end <= residence_start:
+            return None
+        return residence_start, residence_end
+
+    def _connection_deadhead_interval(
+        self,
+        problem: CanonicalOptimizationProblem,
+        vehicle: Any,
+        previous_trip: ProblemTrip,
+        next_trip: ProblemTrip,
+        *,
+        deadhead_min: int,
+    ) -> Tuple[int, int]:
+        """Place deadhead travel consistently with the depot-residence policy."""
+        duration = max(int(deadhead_min), 0)
+        next_departure = self._service_minute(
+            problem, int(next_trip.departure_min)
+        )
+        home_depot_id = str(getattr(vehicle, "home_depot_id", "") or "")
+        next_at_home = self._locations_equivalent(
+            problem, next_trip.origin, home_depot_id
+        )
+        if next_at_home:
+            start = (
+                self._trip_service_arrival_min(problem, previous_trip)
+                + self._turnaround_min(problem, previous_trip.destination)
+            )
+            return start, start + duration
+        return next_departure - duration, next_departure
 
     def _trip_active_slot_count(
         self,
