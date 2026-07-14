@@ -3007,6 +3007,26 @@ class GurobiMILPAdapter:
                 used_vehicle=used_vehicle,
             )
         )
+        # The all-day energy envelope above deliberately ignores time order.
+        # Add a second, still optimistic relaxation that carries SOC across
+        # slots.  It lets a vehicle charge at full power in every non-trip
+        # slot regardless of its physical location, charger-port contention,
+        # grid capacity, PV, BESS, and deadhead.  Those omissions make it a
+        # necessary condition for Stage 2 rather than a duplicate of Stage 2,
+        # while preventing Stage 1 from assigning an early sequence that
+        # depletes a low-SOC BEV before its first possible recharge.
+        stage1_time_indexed_soc_relaxation_constraint_count = (
+            self._add_stage1_time_indexed_soc_relaxation(
+                stage1,
+                grb=GRB,
+                problem=problem,
+                trip_by_id=trip_by_id,
+                vehicles=problem.vehicles,
+                assignment_trip_ids_by_vehicle=assignment_trip_ids_by_vehicle,
+                y=y,
+                used_vehicle=used_vehicle,
+            )
+        )
 
         component_flags = normalize_cost_component_flags(problem.metadata.get("cost_component_flags"))
         objective1 = gp.LinExpr()
@@ -3133,6 +3153,12 @@ class GurobiMILPAdapter:
                     "stage1_energy_envelope_semantics": (
                         "optimistic_vehicle_local_necessary_condition"
                     ),
+                    "stage1_time_indexed_soc_relaxation_constraint_count": (
+                        stage1_time_indexed_soc_relaxation_constraint_count
+                    ),
+                    "stage1_time_indexed_soc_relaxation_semantics": (
+                        "optimistic_time_indexed_vehicle_local_soc_necessary_condition"
+                    ),
                     "stage1_warm_start_applied": stage1_warm_start_applied,
                     "stage1_warm_start_source": stage1_warm_start_source,
                     "stage1_warm_start_rejection_reason": (
@@ -3200,6 +3226,12 @@ class GurobiMILPAdapter:
                 ),
                 "stage1_energy_envelope_semantics": (
                     "optimistic_vehicle_local_necessary_condition"
+                ),
+                "stage1_time_indexed_soc_relaxation_constraint_count": (
+                    stage1_time_indexed_soc_relaxation_constraint_count
+                ),
+                "stage1_time_indexed_soc_relaxation_semantics": (
+                    "optimistic_time_indexed_vehicle_local_soc_necessary_condition"
                 ),
                 "stage1_warm_start_applied": stage1_warm_start_applied,
                 "stage1_warm_start_source": stage1_warm_start_source,
@@ -5221,6 +5253,201 @@ class GurobiMILPAdapter:
                 name=f"stage1_energy_envelope__{vehicle_id}",
             )
             constraint_count += 1
+        return constraint_count
+
+    def _add_stage1_time_indexed_soc_relaxation(
+        self,
+        model: Any,
+        *,
+        grb: Any,
+        problem: CanonicalOptimizationProblem,
+        trip_by_id: Mapping[str, ProblemTrip],
+        vehicles: Tuple[Any, ...],
+        assignment_trip_ids_by_vehicle: Mapping[str, List[str]],
+        y: Mapping[Tuple[str, str], Any],
+        used_vehicle: Mapping[str, Any],
+    ) -> int:
+        """Add an optimistic time-indexed SOC necessary condition to Stage 1.
+
+        The relaxation preserves two Stage-2 facts: trip energy is consumed
+        in the same slots, and an active trip blocks charging for that slot.
+        It deliberately relaxes every other charging restriction: an idle
+        vehicle may charge at its maximum rate at any location, with no
+        charger-port, depot, grid, PV, BESS, or deadhead restriction.  It
+        also omits all deadhead consumption.  Therefore any Stage-2-feasible
+        assignment remains feasible here; this cannot become a hidden
+        dispatch or charging policy.
+
+        Its role is limited to filtering a Stage-1 assignment whose early
+        trip sequence inevitably breaches the vehicle SOC floor before an
+        idle slot exists.  This closes the gap left by the all-day energy
+        envelope, which is intentionally insensitive to time order.
+        """
+        slot_indices = tuple(sorted({slot.slot_index for slot in problem.price_slots}))
+        if not slot_indices:
+            return 0
+
+        electric_vehicle_types = {"BEV", "PHEV", "FCEV"}
+        timestep_h = max(int(problem.scenario.timestep_min), 1) / 60.0
+        charge_efficiency = 0.95
+        constraint_count = 0
+
+        for vehicle in vehicles:
+            vehicle_id = str(getattr(vehicle, "vehicle_id", "") or "")
+            vehicle_type = str(getattr(vehicle, "vehicle_type", "") or "").upper()
+            trip_ids = tuple(assignment_trip_ids_by_vehicle.get(vehicle_id, ()))
+            if (
+                not vehicle_id
+                or vehicle_type not in electric_vehicle_types
+                or not trip_ids
+                or vehicle_id not in used_vehicle
+            ):
+                continue
+
+            capacity_kwh = max(float(vehicle.battery_capacity_kwh or 300.0), 1.0)
+            reserve_soc = vehicle.reserve_soc
+            minimum_soc_kwh = (
+                0.15 * capacity_kwh
+                if reserve_soc is None
+                else (
+                    float(reserve_soc) * capacity_kwh
+                    if float(reserve_soc) <= 1.0
+                    else float(reserve_soc)
+                )
+            )
+            minimum_soc_kwh = min(max(minimum_soc_kwh, 0.0), capacity_kwh)
+            initial_soc = vehicle.initial_soc
+            initial_soc_kwh = (
+                0.8 * capacity_kwh
+                if initial_soc is None
+                else (
+                    float(initial_soc) * capacity_kwh
+                    if float(initial_soc) <= 1.0
+                    else float(initial_soc)
+                )
+            )
+            initial_soc_kwh = min(max(initial_soc_kwh, 0.0), capacity_kwh)
+
+            charge_max_kw = self._charge_power_max_kw(
+                problem, str(vehicle.vehicle_type)
+            )
+            if problem.chargers:
+                max_charger_kw = max(
+                    float(charger.power_kw or 0.0) for charger in problem.chargers
+                )
+                if max_charger_kw > 0.0:
+                    charge_max_kw = min(charge_max_kw, max_charger_kw)
+            delivered_charge_cap_kwh = max(
+                charge_max_kw * timestep_h * charge_efficiency,
+                0.0,
+            )
+
+            relaxed_soc = {
+                slot_idx: model.addVar(
+                    lb=0.0,
+                    ub=capacity_kwh,
+                    vtype=grb.CONTINUOUS,
+                    name=f"stage1_soc_relax_soc__{vehicle_id}__slot_{slot_idx}",
+                )
+                for slot_idx in slot_indices
+            }
+            relaxed_charge_kwh = {
+                slot_idx: model.addVar(
+                    lb=0.0,
+                    ub=delivered_charge_cap_kwh,
+                    vtype=grb.CONTINUOUS,
+                    name=f"stage1_soc_relax_charge__{vehicle_id}__slot_{slot_idx}",
+                )
+                for slot_idx in slot_indices
+            }
+            model.addConstr(
+                relaxed_soc[slot_indices[0]] == initial_soc_kwh,
+                name=f"stage1_soc_relax_initial__{vehicle_id}",
+            )
+            constraint_count += 1
+
+            for position, slot_idx in enumerate(slot_indices):
+                model.addConstr(
+                    relaxed_soc[slot_idx]
+                    >= minimum_soc_kwh * used_vehicle[vehicle_id],
+                    name=f"stage1_soc_relax_lower__{vehicle_id}__slot_{slot_idx}",
+                )
+                constraint_count += 1
+                model.addConstr(
+                    relaxed_charge_kwh[slot_idx]
+                    <= delivered_charge_cap_kwh * used_vehicle[vehicle_id],
+                    name=f"stage1_soc_relax_charge_used__{vehicle_id}__slot_{slot_idx}",
+                )
+                constraint_count += 1
+
+                trip_load = 0.0
+                for trip_id in trip_ids:
+                    assignment_key = (vehicle_id, trip_id)
+                    trip = trip_by_id.get(trip_id)
+                    if trip is None or assignment_key not in y:
+                        continue
+                    energy_fraction = self._trip_slot_energy_fraction(
+                        problem,
+                        trip.departure_min,
+                        trip.arrival_min,
+                        slot_idx,
+                    )
+                    if energy_fraction > 0.0:
+                        trip_load += (
+                            self._trip_energy_kwh(problem, vehicle, trip_id)
+                            * energy_fraction
+                            * y[assignment_key]
+                        )
+                    if self._trip_active_in_slot(
+                        problem,
+                        trip.departure_min,
+                        trip.arrival_min,
+                        slot_idx,
+                    ):
+                        model.addConstr(
+                            relaxed_charge_kwh[slot_idx]
+                            <= delivered_charge_cap_kwh * (1.0 - y[assignment_key]),
+                            name=(
+                                "stage1_soc_relax_charge_active__"
+                                f"{vehicle_id}__{trip_id}__slot_{slot_idx}"
+                            ),
+                        )
+                        constraint_count += 1
+
+                if position >= len(slot_indices) - 1:
+                    terminal_soc = model.addVar(
+                        lb=0.0,
+                        ub=capacity_kwh,
+                        vtype=grb.CONTINUOUS,
+                        name=f"stage1_soc_relax_terminal__{vehicle_id}",
+                    )
+                    model.addConstr(
+                        terminal_soc
+                        == relaxed_soc[slot_idx]
+                        + relaxed_charge_kwh[slot_idx]
+                        - trip_load,
+                        name=f"stage1_soc_relax_terminal_transition__{vehicle_id}",
+                    )
+                    constraint_count += 1
+                    model.addConstr(
+                        terminal_soc >= minimum_soc_kwh * used_vehicle[vehicle_id],
+                        name=f"stage1_soc_relax_terminal_lower__{vehicle_id}",
+                    )
+                    constraint_count += 1
+                    continue
+                next_slot_idx = slot_indices[position + 1]
+                model.addConstr(
+                    relaxed_soc[next_slot_idx]
+                    == relaxed_soc[slot_idx]
+                    + relaxed_charge_kwh[slot_idx]
+                    - trip_load,
+                    name=(
+                        "stage1_soc_relax_transition__"
+                        f"{vehicle_id}__slot_{slot_idx}"
+                    ),
+                )
+                constraint_count += 1
+
         return constraint_count
 
     def _repaired_baseline_plan_for_warm_start(

@@ -5,6 +5,33 @@
 
 ---
 
+## 2026-07-14 16:50 JST — Phase 3 early-SOC relaxation from frontend-weather Stage 2 IIS
+
+### 実測した現象（研究結果には不採用）
+
+- clean commit `e1f4fb3`、Gurobi `13.0.1`、`time_limit_sec=1500`（Stage 1/2に各750秒）で、実フロントエンド経路の晴天入力 `771d115b-75b0-49f7-a7f0-25f259a2cd21` / `2025-08-05` を実行した。フロントエンドの60分・24slot、実在庫35台別SOC、90kW×5 + 50kW×5、PV 614.709375kWh、BESS 600kWh、TOU、需要料金、軽油・CO2価格を保持した。
+- Stage 1は750.238秒で264便を覆うcandidateを得たが、Stage 2は0.156秒で`infeasible`となった。`research_run_accepted=false`であり、最終成果物は候補を公開せず0便担当・264便未担当に隔離した。したがって、当該runの0円費用・PV使用量・candidate運行表は研究結果ではない。
+- IISは`builder-bev-tsurumaki-001`について、初期SOC 78.114kWh、最小SOC 62.8kWh、slot 0--2の運行中充電禁止、slot 3のSOC下限で構成された。始発単体は既存のstartup precheckを通るが、最初の空きslotより前に連続する便の合計走行量でSOC下限を割る。これは実行成果物の`stage2_infeasible.ilp`と`stage2_iis_constraints.csv`から確認した事実である。
+
+### 修正内容・数理的意味
+
+- `src/optimization/milp/solver_adapter.py` に、Stage 1の`stage1_soc_relax_*`を追加した。BEVごとにslot-start SOCを持たせ、Stage 2と同じ便エネルギーのslot配分と「運行中slotは充電不可」だけをhard constraintにする。
+- ただしこれはStage 2の再実装ではない。idle slotでは所在地に関係なく最大充電を許し、charger port、営業所滞在、回送、系統/PV/BESS制約、deadhead消費をすべて緩和する。このためStage 2で可行な解を排除しない**楽観的な必要条件**であり、低SOC車両の早朝連続便のように、それでもSOC下限を守れない割当だけをStage 1で除外する。
+- `stage1_time_indexed_soc_relaxation_constraint_count` と `stage1_time_indexed_soc_relaxation_semantics=optimistic_time_indexed_vehicle_local_soc_necessary_condition` をsolver metadataおよび両research runnerのsummaryへ追加した。既存のall-day energy envelope、連続1 duty方針、fallback/postsolve repair禁止は維持する。
+
+### 晴雨比較の入力監査
+
+- 雨天 `b23fd26c-1233-4c73-bb9e-bdb8b1584760` / `2025-08-10` をbuild-onlyで再確認した。車両、trip、初期SOC、充電器、TOU、需要料金、軽油・CO2、BESS・終端SOC、cost flags、objective weights、seed、time limit、fragment policyは晴天と同一である。実効的な差はPV時系列（晴天614.709375kWh、雨天101.1143kWh）である。
+- weather labelは晴天`aggressive`、雨天`conservative`だが、現行`WeatherOperationProfile`のそれらの制御値は全て`None`または0であり、`apply_weather_policy_to_problem()`はモデル上PV曲線とmetadataを更新するだけである。このため本比較でこのlabelを「別の運用方針を最適化した」と解釈してはならない。比較成果物にはこの限界を明記する。
+
+### 回帰確認・次の検証
+
+- `GRB_LICENSE_FILE=C:\Users\RTDS_admin\gurobi.lic python -m pytest -q tests/test_phase3_controlled_validation.py tests/test_optimization_engine_postsolve.py` → `44 passed`。新規Gurobi regressionは、最初のidle slot前にSOCを下回る2便連鎖をStage 1で不可行にし、一方でoff-depot充電を楽観的に許してStage 2の営業所制約を持ち込まないことを確認する。
+- MIT-style self reviewでは、correctness（slot-start遷移・terminal slot）、research validity（必要条件の緩和方向）、performance（vehicle×slotの連続変数のみ）、metadata/export、testabilityを確認した。terminal slot後のSOC下限を追加してP1を解消し、既知P0/P1は残していない。外部`claude` CLIはこの環境に存在しないため、Claude Codeによる独立レビューは実行できない。
+- 次はclean commitから同じ晴天実フロント入力を1500秒で再実行し、Stage 2まで受理された場合に限り、同じ入力契約で雨天も実行する。不採用runは比較・コスト考察に使用しない。
+
+---
+
 ## 2026-07-14 15:29 JST — Phase 3 Stage 1 energy-envelope correction from an actual Stage 2 IIS
 
 ### 実測した現象（研究結果には不採用）

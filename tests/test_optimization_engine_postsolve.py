@@ -160,6 +160,10 @@ def test_research_phase3_accepts_feasibility_but_not_a_global_cost_claim() -> No
                 "stage1_energy_envelope_semantics": (
                     "optimistic_vehicle_local_necessary_condition"
                 ),
+                "stage1_time_indexed_soc_relaxation_constraint_count": 123,
+                "stage1_time_indexed_soc_relaxation_semantics": (
+                    "optimistic_time_indexed_vehicle_local_soc_necessary_condition"
+                ),
             }
         ),
         feasible=True,
@@ -194,6 +198,12 @@ def test_research_phase3_accepts_feasibility_but_not_a_global_cost_claim() -> No
     assert result.solver_metadata["stage1_energy_envelope_constraint_count"] == 35
     assert result.solver_metadata["stage1_energy_envelope_semantics"] == (
         "optimistic_vehicle_local_necessary_condition"
+    )
+    assert result.solver_metadata[
+        "stage1_time_indexed_soc_relaxation_constraint_count"
+    ] == 123
+    assert result.solver_metadata["stage1_time_indexed_soc_relaxation_semantics"] == (
+        "optimistic_time_indexed_vehicle_local_soc_necessary_condition"
     )
     assert "objective_is_actual_cost" not in result.solver_metadata["research_acceptance_checks"]
 

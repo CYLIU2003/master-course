@@ -722,6 +722,12 @@ def run(args: argparse.Namespace) -> int:
         "stage1_energy_envelope_semantics": solver_metadata.get(
             "stage1_energy_envelope_semantics"
         ),
+        "stage1_time_indexed_soc_relaxation_constraint_count": solver_metadata.get(
+            "stage1_time_indexed_soc_relaxation_constraint_count"
+        ),
+        "stage1_time_indexed_soc_relaxation_semantics": solver_metadata.get(
+            "stage1_time_indexed_soc_relaxation_semantics"
+        ),
         "stage1_feasible": solver_metadata.get("stage1_feasible"),
         "stage2_feasible": solver_metadata.get("stage2_feasible"),
         "supports_two_stage_milp": solver_metadata.get("supports_two_stage_milp"),

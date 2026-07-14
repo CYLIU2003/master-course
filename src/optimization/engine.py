@@ -889,6 +889,8 @@ class OptimizationEngine:
             "fragment_temporal_occupancy_constraint_count",
             "stage1_energy_envelope_constraint_count",
             "stage1_energy_envelope_semantics",
+            "stage1_time_indexed_soc_relaxation_constraint_count",
+            "stage1_time_indexed_soc_relaxation_semantics",
         ):
             if key in plan_metadata:
                 solver_metadata[key] = plan_metadata[key]

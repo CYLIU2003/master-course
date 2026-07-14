@@ -545,6 +545,159 @@ def test_stage1_energy_envelope_does_not_charge_every_fragment_a_startup_deadhea
     assert model.Status == gp.GRB.OPTIMAL
 
 
+@pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
+def test_stage1_time_indexed_soc_relaxation_blocks_early_soc_shortage() -> None:
+    """Stage 1 must reject a low-SOC chain before its first idle slot."""
+    import gurobipy as gp
+
+    adapter = GurobiMILPAdapter()
+    vehicle = ProblemVehicle(
+        vehicle_id="bev",
+        vehicle_type="BEV",
+        home_depot_id="depot",
+        initial_soc=0.5,
+        battery_capacity_kwh=100.0,
+        reserve_soc=0.2,
+        energy_consumption_kwh_per_km=1.0,
+    )
+    trips = (
+        ProblemTrip(
+            trip_id="first",
+            route_id="r",
+            origin="remote-a",
+            destination="remote-b",
+            departure_min=5 * 60,
+            arrival_min=6 * 60,
+            distance_km=20.0,
+            allowed_vehicle_types=("BEV",),
+        ),
+        ProblemTrip(
+            trip_id="second",
+            route_id="r",
+            origin="remote-b",
+            destination="remote-c",
+            departure_min=6 * 60,
+            arrival_min=7 * 60,
+            distance_km=20.0,
+            allowed_vehicle_types=("BEV",),
+        ),
+    )
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="time-indexed-soc-relaxation",
+            timestep_min=60,
+            horizon_start="05:00",
+            horizon_end="09:00",
+        ),
+        dispatch_context=_DispatchContext(),
+        trips=trips,
+        vehicles=(vehicle,),
+        chargers=(
+            ChargerDefinition(charger_id="charger", depot_id="depot", power_kw=100.0),
+        ),
+        price_slots=tuple(EnergyPriceSlot(slot_index=index) for index in range(4)),
+    )
+    model = gp.Model("stage1_time_indexed_soc_relaxation")
+    model.Params.OutputFlag = 0
+    y = {
+        ("bev", trip.trip_id): model.addVar(vtype=gp.GRB.BINARY, lb=1.0, ub=1.0)
+        for trip in trips
+    }
+    used_vehicle = {"bev": model.addVar(vtype=gp.GRB.BINARY, lb=1.0, ub=1.0)}
+
+    constraint_count = adapter._add_stage1_time_indexed_soc_relaxation(
+        model,
+        grb=gp.GRB,
+        problem=problem,
+        trip_by_id=problem.trip_by_id(),
+        vehicles=problem.vehicles,
+        assignment_trip_ids_by_vehicle={"bev": ["first", "second"]},
+        y=y,
+        used_vehicle=used_vehicle,
+    )
+    model.optimize()
+
+    assert constraint_count > 0
+    assert model.getConstrByName("stage1_soc_relax_initial__bev") is not None
+    assert model.getConstrByName("stage1_soc_relax_lower__bev__slot_2") is not None
+    assert model.Status == gp.GRB.INFEASIBLE
+
+
+@pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
+def test_stage1_time_indexed_soc_relaxation_keeps_off_depot_charge_optimistic() -> None:
+    """The Stage-1 relaxation must not impose the Stage-2 depot restriction."""
+    import gurobipy as gp
+
+    adapter = GurobiMILPAdapter()
+    vehicle = ProblemVehicle(
+        vehicle_id="bev",
+        vehicle_type="BEV",
+        home_depot_id="depot",
+        initial_soc=0.5,
+        battery_capacity_kwh=100.0,
+        reserve_soc=0.2,
+        energy_consumption_kwh_per_km=1.0,
+    )
+    trips = (
+        ProblemTrip(
+            trip_id="first",
+            route_id="r",
+            origin="remote-a",
+            destination="remote-b",
+            departure_min=5 * 60,
+            arrival_min=6 * 60,
+            distance_km=20.0,
+            allowed_vehicle_types=("BEV",),
+        ),
+        ProblemTrip(
+            trip_id="second",
+            route_id="r",
+            origin="remote-b",
+            destination="remote-c",
+            departure_min=7 * 60,
+            arrival_min=8 * 60,
+            distance_km=20.0,
+            allowed_vehicle_types=("BEV",),
+        ),
+    )
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="time-indexed-soc-relaxation-optimistic-charge",
+            timestep_min=60,
+            horizon_start="05:00",
+            horizon_end="09:00",
+        ),
+        dispatch_context=_DispatchContext(),
+        trips=trips,
+        vehicles=(vehicle,),
+        chargers=(
+            ChargerDefinition(charger_id="charger", depot_id="depot", power_kw=100.0),
+        ),
+        price_slots=tuple(EnergyPriceSlot(slot_index=index) for index in range(4)),
+    )
+    model = gp.Model("stage1_time_indexed_soc_relaxation_optimistic_charge")
+    model.Params.OutputFlag = 0
+    y = {
+        ("bev", trip.trip_id): model.addVar(vtype=gp.GRB.BINARY, lb=1.0, ub=1.0)
+        for trip in trips
+    }
+    used_vehicle = {"bev": model.addVar(vtype=gp.GRB.BINARY, lb=1.0, ub=1.0)}
+
+    adapter._add_stage1_time_indexed_soc_relaxation(
+        model,
+        grb=gp.GRB,
+        problem=problem,
+        trip_by_id=problem.trip_by_id(),
+        vehicles=problem.vehicles,
+        assignment_trip_ids_by_vehicle={"bev": ["first", "second"]},
+        y=y,
+        used_vehicle=used_vehicle,
+    )
+    model.optimize()
+
+    assert model.Status == gp.GRB.OPTIMAL
+
+
 def test_home_depot_windows_use_service_day_minutes_after_midnight() -> None:
     adapter = GurobiMILPAdapter()
     problem = _Problem()

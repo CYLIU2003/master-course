@@ -561,6 +561,12 @@ def run(args: argparse.Namespace) -> int:
         "stage1_energy_envelope_semantics": metadata.get(
             "stage1_energy_envelope_semantics"
         ),
+        "stage1_time_indexed_soc_relaxation_constraint_count": metadata.get(
+            "stage1_time_indexed_soc_relaxation_constraint_count"
+        ),
+        "stage1_time_indexed_soc_relaxation_semantics": metadata.get(
+            "stage1_time_indexed_soc_relaxation_semantics"
+        ),
         "research_run_accepted": bool(metadata.get("research_run_accepted", False)),
         "research_feasibility_eligible": bool(
             metadata.get("research_feasibility_eligible", False)
