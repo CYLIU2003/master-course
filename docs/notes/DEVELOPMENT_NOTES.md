@@ -5,6 +5,28 @@
 
 ---
 
+## 2026-07-14 15:29 JST — Phase 3 Stage 1 energy-envelope correction from an actual Stage 2 IIS
+
+### 実測した現象（研究結果には不採用）
+
+- clean commit `24c3952`、Gurobi `13.0.1`（academic license、期限2027-02-27）で、frontendと同じprepared-scope/BFF経路の晴天入力（`2025-08-05`、60分、実在庫35台別SOC、PV/BESS有効）を実行した。
+- Stage 1は750.252秒で264便をすべて覆うcandidateを持ったが、固定割当のStage 2は0.169秒で`infeasible`となった。最終成果物は0便担当・264便未担当、`research_run_accepted=false`であり、Stage 1 candidateや0円費用を研究結果として公開していない。
+- IISはBEV `89d3f73a-7cd0-421c-8e62-45a073264f6c` の`SOC initial/transition`、slot 1–15の運行・回送中充電禁止、及び21:29便の`departure_soc`で構成された。当該勤務列は始発前に有効な完全充電slotが1つしかなく、その後連続運行のため、終盤の出発SOCを物理的に満たせない。これはIISと候補scheduleから確認した事実である。
+
+### 修正内容・数理的意味
+
+- `src/optimization/milp/solver_adapter.py` にStage 1の`stage1_energy_envelope__<vehicle>` hard constraintを追加した。BEVごとに、便・便間回送・始発回送・帰庫回送・終端SOC要求の合計を、初期SOCとStage 2が認める可能な充電窓の**楽観的上限**以下に制限する。
+- 充電窓は始発前、確認済み営業所滞在、営業所発着便の窓、帰庫後/翌日境界の窓を数える。一方で充電器port・系統電力競合・battery headroom・窓の重複は緩和して上限側に数えるため、この制約はStage 2の代替ではなく「それでも不足する勤務列だけを除く必要条件」である。SOC下限、便数、車両数、充電器能力、消費電力量は緩和していない。
+- Stage 2 failure diagnosticsも、`allowed_charge_slots`から運行・回送と重なるslotを除外して出発前最大SOCを時系列で計算するよう修正した。従来の診断は、回送で一部重なるslotを始発前充電として数え、実際には不可行な候補を`shortage=0`と過大表示し得た。
+- 追加metadata: `stage1_energy_envelope_constraint_count`、`stage1_energy_envelope_semantics=optimistic_vehicle_local_necessary_condition`。IIS、candidate-only隔離、fallback禁止、postsolve repair禁止の契約は維持した。
+
+### 回帰確認と次の検証
+
+- `GRB_LICENSE_FILE=C:\Users\RTDS_admin\gurobi.lic python -m pytest -q tests/test_phase3_controlled_validation.py tests/test_milp_fragment_pairwise_reset_cut.py tests/test_milp_engine_lightweight_stats.py` → `33 passed`。新規Gurobi regressionは、初期50kWh・終端20kWh・充電機会なしで合計80kWhを走るBEV勤務列をStage 1のhard constraintが不可行にすることを確認する。
+- 次はdirtyでないcommitから、指示済みの`CONTROLLED_MODEL_VALIDATION_CASE`（2025-08-10、264便、BEV35/ICE25、15分、全BEV SOC80%、PV/BESS/weather off、grid-only）を1500秒で再実行する。この統制runが可行であることを確認した後にのみ、実在庫SOC・PV/BESSありの晴天/雨天比較へ進む。
+
+---
+
 ## 2026-07-14 01:34 JST — Phase 3 Stage 1/2 energy and service-day consistency hardening
 
 ### 対象

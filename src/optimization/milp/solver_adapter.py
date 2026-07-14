@@ -2780,6 +2780,9 @@ class GurobiMILPAdapter:
         assignment_vehicle_ids_by_trip: Dict[str, List[str]] = {}
         startup_feasible_by_assignment: Dict[Tuple[str, str], bool] = {}
         startup_energy_feasible_by_assignment: Dict[Tuple[str, str], bool] = {}
+        startup_energy_precheck_by_assignment: Dict[
+            Tuple[str, str], StartupEnergyPrecheck
+        ] = {}
         startup_infeasible_trip_ids: Set[str] = set()
         startup_infeasible_vehicle_ids: Set[str] = set()
         startup_energy_infeasible_trip_ids: Set[str] = set()
@@ -2792,6 +2795,9 @@ class GurobiMILPAdapter:
                 vehicle_by_id.get(str(vehicle_id)),
                 trip_by_id.get(str(trip_id)),
                 dispatch_trip_by_id=dispatch_trip_by_id,
+            )
+            startup_energy_precheck_by_assignment[(vehicle_id, trip_id)] = (
+                startup_precheck
             )
             startup_feasible_by_assignment[(vehicle_id, trip_id)] = bool(
                 startup_precheck.path_feasible
@@ -2977,6 +2983,31 @@ class GurobiMILPAdapter:
                 if len(terms) > 1:
                     stage1.addConstr(gp.quicksum(terms) <= 1)
 
+        # Stage 1 deliberately does not contain the full time-indexed SOC
+        # model.  It must nevertheless reject duties whose total energy need
+        # cannot be met even under an optimistic, vehicle-local charging
+        # envelope.  Without this necessary condition, Stage 1 can prefer a
+        # lower-cost BEV chain that Stage 2 proves infeasible immediately.
+        # The envelope only counts potential charge opportunities and ignores
+        # charger/grid competition, so it never substitutes for Stage 2.
+        stage1_energy_envelope_constraint_count = (
+            self._add_stage1_energy_envelope_constraints(
+                stage1,
+                problem=problem,
+                trip_by_id=trip_by_id,
+                vehicles=problem.vehicles,
+                assignment_trip_ids_by_vehicle=assignment_trip_ids_by_vehicle,
+                startup_energy_precheck_by_assignment=(
+                    startup_energy_precheck_by_assignment
+                ),
+                y=y,
+                x=x,
+                start_arc=start_arc,
+                end_arc=end_arc,
+                used_vehicle=used_vehicle,
+            )
+        )
+
         component_flags = normalize_cost_component_flags(problem.metadata.get("cost_component_flags"))
         objective1 = gp.LinExpr()
         diesel_price = (
@@ -3096,6 +3127,12 @@ class GurobiMILPAdapter:
                     "fragment_temporal_occupancy_constraint_count": (
                         fragment_temporal_occupancy_constraint_count
                     ),
+                    "stage1_energy_envelope_constraint_count": (
+                        stage1_energy_envelope_constraint_count
+                    ),
+                    "stage1_energy_envelope_semantics": (
+                        "optimistic_vehicle_local_necessary_condition"
+                    ),
                     "stage1_warm_start_applied": stage1_warm_start_applied,
                     "stage1_warm_start_source": stage1_warm_start_source,
                     "stage1_warm_start_rejection_reason": (
@@ -3157,6 +3194,12 @@ class GurobiMILPAdapter:
                 "arc_pruning_summary": arc_pruning_summary,
                 "fragment_temporal_occupancy_constraint_count": (
                     fragment_temporal_occupancy_constraint_count
+                ),
+                "stage1_energy_envelope_constraint_count": (
+                    stage1_energy_envelope_constraint_count
+                ),
+                "stage1_energy_envelope_semantics": (
+                    "optimistic_vehicle_local_necessary_condition"
                 ),
                 "stage1_warm_start_applied": stage1_warm_start_applied,
                 "stage1_warm_start_source": stage1_warm_start_source,
@@ -3901,6 +3944,11 @@ class GurobiMILPAdapter:
                 GRB=GRB,
                 assigned_paths=assigned_paths,
                 allowed_charge_slots_by_vehicle=allowed_charge_slots_by_vehicle,
+                blocked_charge_slots_by_vehicle={
+                    vehicle_id: set(active_slot_by_vehicle.get(vehicle_id, set()))
+                    | set(deadhead_active_slot_by_vehicle.get(vehicle_id, set()))
+                    for vehicle_id in assigned_bev_ids
+                },
                 trip_load_by_vehicle_slot=trip_load_by_vehicle_slot,
                 vehicle_by_id=vehicle_by_id,
                 slot_indices=slot_indices,
@@ -4173,6 +4221,7 @@ class GurobiMILPAdapter:
         GRB: Any,
         assigned_paths: Mapping[str, Tuple[str, ...]],
         allowed_charge_slots_by_vehicle: Mapping[str, Set[int]],
+        blocked_charge_slots_by_vehicle: Mapping[str, Set[int]],
         trip_load_by_vehicle_slot: Mapping[Tuple[str, int], float],
         vehicle_by_id: Mapping[str, Any],
         slot_indices: Sequence[int],
@@ -4342,6 +4391,8 @@ class GurobiMILPAdapter:
                 slot_idx
                 for slot_idx in allowed_charge_slots_by_vehicle.get(vehicle_id, set())
                 if slot_idx in valid_slot_indices
+                and slot_idx
+                not in blocked_charge_slots_by_vehicle.get(vehicle_id, set())
             )
             max_charge = len(chargeable_slots) * charge_max_kw * timestep_h * 0.95
             required = trip_energy + deadhead_energy + return_energy + terminal_requirement - minimum
@@ -4363,6 +4414,14 @@ class GurobiMILPAdapter:
                 "total_required_energy_kwh": trip_energy + deadhead_energy + return_energy,
                 "usable_initial_energy_kwh": initial_kwh - minimum,
                 "chargeable_slot_count": len(chargeable_slots),
+                "blocked_charge_slot_count": len(
+                    set(allowed_charge_slots_by_vehicle.get(vehicle_id, set()))
+                    .intersection(valid_slot_indices)
+                    .intersection(blocked_charge_slots_by_vehicle.get(vehicle_id, set()))
+                ),
+                "chargeable_slot_policy": (
+                    "home_depot_window_excluding_trip_and_deadhead_overlap"
+                ),
                 "max_chargeable_energy_kwh": max_charge,
                 "required_energy_kwh": required,
                 "energy_shortage_kwh": shortage,
@@ -4372,7 +4431,29 @@ class GurobiMILPAdapter:
                 "last_arrival_min": int(ordered[-1].arrival_min),
             }
             path_rows.append(row)
-            consumed_before = 0.0
+            charge_energy_per_slot = charge_max_kw * timestep_h * 0.95
+            maximum_soc_before_slot: Dict[int, float] = {}
+            cumulative_charge_before_slot: Dict[int, float] = {}
+            maximum_soc = initial_kwh
+            cumulative_charge = 0.0
+            for slot_idx in sorted(valid_slot_indices):
+                maximum_soc_before_slot[slot_idx] = maximum_soc
+                cumulative_charge_before_slot[slot_idx] = cumulative_charge
+                if slot_idx in chargeable_slots:
+                    charge_added = min(
+                        charge_energy_per_slot,
+                        max(cap - maximum_soc, 0.0),
+                    )
+                    maximum_soc += charge_added
+                    cumulative_charge += charge_added
+                maximum_soc -= max(
+                    float(
+                        trip_load_by_vehicle_slot.get((vehicle_id, slot_idx), 0.0)
+                        or 0.0
+                    ),
+                    0.0,
+                )
+
             previous_trip: Optional[ProblemTrip] = None
             for trip in ordered:
                 deadhead_before_departure = (
@@ -4387,7 +4468,12 @@ class GurobiMILPAdapter:
                 )
                 departure_slot = self._slot_index(problem, trip.departure_min)
                 pre_slots = [slot for slot in chargeable_slots if slot < departure_slot]
-                maximum_precharge = len(pre_slots) * charge_max_kw * timestep_h * 0.95
+                maximum_precharge = cumulative_charge_before_slot.get(
+                    departure_slot
+                )
+                maximum_soc_before_departure = maximum_soc_before_slot.get(
+                    departure_slot
+                )
                 required_departure = self._required_departure_soc_kwh(
                     problem,
                     vehicle,
@@ -4400,9 +4486,19 @@ class GurobiMILPAdapter:
                         "vehicle_id": vehicle_id,
                         "trip_id": str(trip.trip_id),
                         "departure_min": int(trip.departure_min),
-                        "soc_available_before_departure_kwh": initial_kwh - consumed_before,
+                        "soc_available_before_departure_kwh": (
+                            maximum_soc_before_departure
+                        ),
                         "required_departure_soc_kwh": required_departure,
-                        "shortage_kwh": max(required_departure - (initial_kwh - consumed_before + maximum_precharge), 0.0),
+                        "shortage_kwh": (
+                            max(
+                                required_departure
+                                - maximum_soc_before_departure,
+                                0.0,
+                            )
+                            if maximum_soc_before_departure is not None
+                            else None
+                        ),
                         "deadhead_energy_before_departure_kwh": deadhead_before_departure,
                         "startup_deadhead_energy_kwh": deadhead_before_departure
                         if previous_trip is None
@@ -4410,9 +4506,6 @@ class GurobiMILPAdapter:
                         "latest_chargeable_slot_before_departure": pre_slots[-1] if pre_slots else None,
                         "maximum_predeparture_charge_kwh": maximum_precharge,
                     }
-                )
-                consumed_before += deadhead_before_departure + self._trip_energy_kwh(
-                    problem, vehicle, trip.trip_id
                 )
                 previous_trip = trip
 
@@ -4848,6 +4941,284 @@ class GurobiMILPAdapter:
                     model.addConstr(active == previous_active + starts - ends)
                 previous_active = active
                 constraint_count += 1
+        return constraint_count
+
+    def _add_stage1_energy_envelope_constraints(
+        self,
+        model: Any,
+        *,
+        problem: CanonicalOptimizationProblem,
+        trip_by_id: Mapping[str, ProblemTrip],
+        vehicles: Tuple[Any, ...],
+        assignment_trip_ids_by_vehicle: Mapping[str, List[str]],
+        startup_energy_precheck_by_assignment: Mapping[
+            Tuple[str, str], StartupEnergyPrecheck
+        ],
+        y: Mapping[Tuple[str, str], Any],
+        x: Mapping[Tuple[str, str, str], Any],
+        start_arc: Mapping[Tuple[str, str], Any],
+        end_arc: Mapping[Tuple[str, str], Any],
+        used_vehicle: Mapping[str, Any],
+    ) -> int:
+        """Eliminate Stage-1 duties impossible under any local charge schedule.
+
+        This is intentionally an optimistic *necessary* condition, not a
+        replacement for the Stage-2 SOC model.  It ignores charger-port and
+        grid competition, allows overlapping candidate windows to be counted
+        more than once, and therefore can only rule out a duty when it cannot
+        be energy-feasible even under assumptions favorable to that duty.
+
+        Every potential charging term corresponds to a window considered by
+        Stage 2: initial predeparture availability, confirmed home-depot
+        residence between connected trips, explicit home-depot trip windows,
+        and the return-to-depot window at a duty end.  This keeps the two
+        stages aligned without inventing a postsolve repair path.
+        """
+        slot_indices = tuple(sorted({slot.slot_index for slot in problem.price_slots}))
+        valid_slots = set(slot_indices)
+        if not valid_slots:
+            return 0
+
+        timestep_h = max(int(problem.scenario.timestep_min), 1) / 60.0
+        charge_efficiency = 0.95
+        pre_window_min = self._safe_nonnegative_float(
+            problem.metadata.get("home_depot_charge_pre_window_min"),
+            default=float(max(problem.scenario.timestep_min, 1)) * 2.0,
+        )
+        post_window_min = self._safe_nonnegative_float(
+            problem.metadata.get("home_depot_charge_post_window_min"),
+            default=float(max(problem.scenario.timestep_min, 1)) * 2.0,
+        )
+        operation_start_min = self._operation_start_min(problem)
+        operation_end_min = self._operation_end_min(problem)
+        planning_days = max(
+            int(
+                problem.metadata.get("planning_days")
+                or problem.scenario.planning_days
+                or 1
+            ),
+            1,
+        )
+
+        arc_keys_by_vehicle: Dict[str, List[Tuple[str, str]]] = {}
+        for vehicle_id, from_trip_id, to_trip_id in x:
+            arc_keys_by_vehicle.setdefault(str(vehicle_id), []).append(
+                (str(from_trip_id), str(to_trip_id))
+            )
+
+        home_window_slot_count_cache: Dict[Tuple[str, str], int] = {}
+        residence_slot_count_cache: Dict[Tuple[str, str, str], int] = {}
+        return_slot_count_cache: Dict[Tuple[str, str], int] = {}
+
+        def _valid_slot_count(slots: Sequence[int]) -> int:
+            return sum(int(slot_idx) in valid_slots for slot_idx in slots)
+
+        constraint_count = 0
+        electric_vehicle_types = {"BEV", "PHEV", "FCEV"}
+        for vehicle in vehicles:
+            vehicle_id = str(getattr(vehicle, "vehicle_id", "") or "")
+            if not vehicle_id or str(getattr(vehicle, "vehicle_type", "") or "").upper() not in electric_vehicle_types:
+                continue
+            trip_ids = tuple(assignment_trip_ids_by_vehicle.get(vehicle_id, ()))
+            if not trip_ids or vehicle_id not in used_vehicle:
+                continue
+
+            capacity_kwh = max(float(vehicle.battery_capacity_kwh or 300.0), 1.0)
+            reserve_soc = vehicle.reserve_soc
+            minimum_soc_kwh = (
+                0.15 * capacity_kwh
+                if reserve_soc is None
+                else (
+                    float(reserve_soc) * capacity_kwh
+                    if float(reserve_soc) <= 1.0
+                    else float(reserve_soc)
+                )
+            )
+            minimum_soc_kwh = min(max(minimum_soc_kwh, 0.0), capacity_kwh)
+            initial_soc = vehicle.initial_soc
+            initial_soc_kwh = (
+                0.8 * capacity_kwh
+                if initial_soc is None
+                else (
+                    float(initial_soc) * capacity_kwh
+                    if float(initial_soc) <= 1.0
+                    else float(initial_soc)
+                )
+            )
+            initial_soc_kwh = min(max(initial_soc_kwh, 0.0), capacity_kwh)
+            terminal_requirement_kwh = max(
+                minimum_soc_kwh,
+                final_soc_floor_kwh(problem, vehicle, cap_kwh=capacity_kwh),
+                float(
+                    effective_final_soc_target_kwh(
+                        problem,
+                        vehicle,
+                        cap_kwh=capacity_kwh,
+                    )
+                    or 0.0
+                ),
+            )
+            charge_energy_per_slot_kwh = (
+                self._charge_power_max_kw(problem, vehicle.vehicle_type)
+                * timestep_h
+                * charge_efficiency
+            )
+            home_depot_id = str(getattr(vehicle, "home_depot_id", "") or "")
+
+            consumed_energy = terminal_requirement_kwh * used_vehicle[vehicle_id]
+            available_energy = initial_soc_kwh * used_vehicle[vehicle_id]
+
+            for trip_id in trip_ids:
+                trip = trip_by_id.get(trip_id)
+                assignment_key = (vehicle_id, trip_id)
+                if trip is None or assignment_key not in y:
+                    continue
+                consumed_energy += self._trip_energy_kwh(problem, vehicle, trip_id) * y[
+                    assignment_key
+                ]
+
+                home_window_key = (home_depot_id, trip_id)
+                home_window_slot_count = home_window_slot_count_cache.get(
+                    home_window_key
+                )
+                if home_window_slot_count is None:
+                    home_window_slot_count = _valid_slot_count(
+                        self._collect_home_depot_window_slots(
+                            problem,
+                            trip,
+                            home_depot_id=home_depot_id,
+                            pre_window_min=pre_window_min,
+                            post_window_min=post_window_min,
+                        )
+                    )
+                    home_window_slot_count_cache[home_window_key] = (
+                        home_window_slot_count
+                    )
+                available_energy += (
+                    charge_energy_per_slot_kwh
+                    * home_window_slot_count
+                    * y[assignment_key]
+                )
+
+                start_key = (vehicle_id, trip_id)
+                start_var = start_arc.get(start_key)
+                if start_var is not None:
+                    startup_precheck = startup_energy_precheck_by_assignment.get(
+                        start_key
+                    )
+                    if startup_precheck is not None:
+                        consumed_energy += (
+                            startup_precheck.startup_deadhead_energy_kwh * start_var
+                        )
+                        available_energy += (
+                            startup_precheck.maximum_precharge_energy_kwh * start_var
+                        )
+
+                end_var = end_arc.get(start_key)
+                if end_var is None:
+                    continue
+                return_exists, return_deadhead_min = return_deadhead_min_to_home(
+                    problem,
+                    vehicle,
+                    trip,
+                )
+                if not return_exists:
+                    continue
+                consumed_energy += return_deadhead_energy_kwh(
+                    problem,
+                    vehicle,
+                    trip,
+                ) * end_var
+
+                return_slot_key = (home_depot_id, trip_id)
+                return_slot_count = return_slot_count_cache.get(return_slot_key)
+                if return_slot_count is None:
+                    post_return_slots = set(
+                        self._collect_post_return_target_slots(
+                            problem,
+                            trip=trip,
+                            day_idx=self._trip_day_index(
+                                problem,
+                                trip.departure_min,
+                            ),
+                            return_deadhead_min=int(return_deadhead_min),
+                        )
+                    )
+                    day_idx = self._trip_day_index(problem, trip.departure_min)
+                    if day_idx < planning_days - 1:
+                        home_arrival_min = (
+                            self._trip_service_arrival_min(problem, trip)
+                            + int(return_deadhead_min)
+                        )
+                        post_return_slots.update(
+                            self._collect_overnight_home_depot_slots(
+                                problem,
+                                day_idx=day_idx,
+                                operation_start_min=operation_start_min,
+                                operation_end_min=operation_end_min,
+                                earliest_home_arrival_min=home_arrival_min,
+                            )
+                        )
+                    return_slot_count = _valid_slot_count(
+                        tuple(post_return_slots)
+                    )
+                    return_slot_count_cache[return_slot_key] = return_slot_count
+                available_energy += (
+                    charge_energy_per_slot_kwh * return_slot_count * end_var
+                )
+
+            for from_trip_id, to_trip_id in arc_keys_by_vehicle.get(vehicle_id, ()):
+                arc_key = (vehicle_id, from_trip_id, to_trip_id)
+                arc_var = x.get(arc_key)
+                previous_trip = trip_by_id.get(from_trip_id)
+                next_trip = trip_by_id.get(to_trip_id)
+                if arc_var is None or previous_trip is None or next_trip is None:
+                    continue
+                consumed_energy += self._deadhead_energy_kwh(
+                    problem,
+                    vehicle,
+                    from_trip_id,
+                    to_trip_id,
+                ) * arc_var
+
+                residence_key = (home_depot_id, from_trip_id, to_trip_id)
+                residence_slot_count = residence_slot_count_cache.get(residence_key)
+                if residence_slot_count is None:
+                    deadhead_min = self._connection_deadhead_min(
+                        problem,
+                        previous_trip,
+                        next_trip,
+                    )
+                    residence_interval = self._home_depot_residence_interval(
+                        problem,
+                        vehicle,
+                        previous_trip,
+                        next_trip,
+                        deadhead_min=deadhead_min,
+                    )
+                    residence_slot_count = (
+                        _valid_slot_count(
+                            self._slot_indices_for_interval(
+                                problem,
+                                residence_interval[0],
+                                residence_interval[1],
+                            )
+                        )
+                        if residence_interval is not None
+                        else 0
+                    )
+                    residence_slot_count_cache[residence_key] = (
+                        residence_slot_count
+                    )
+                available_energy += (
+                    charge_energy_per_slot_kwh * residence_slot_count * arc_var
+                )
+
+            model.addConstr(
+                consumed_energy <= available_energy,
+                name=f"stage1_energy_envelope__{vehicle_id}",
+            )
+            constraint_count += 1
         return constraint_count
 
     def _repaired_baseline_plan_for_warm_start(
