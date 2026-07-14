@@ -35,6 +35,9 @@ from src.optimization.common.initial_soc_policy import (
     initial_soc_input_metadata,
     normalize_initial_soc_policy,
 )
+from src.optimization.common.research_phase3_policy import (
+    enforce_research_phase3_single_continuous_duty,
+)
 from src.preprocess.weather.operation_policy import apply_weather_policy_to_problem
 
 
@@ -281,6 +284,25 @@ def _validate_frontend_case(
         raise ValueError(
             "Frontend weather comparison must retain its 60-minute, 24-slot setting"
         )
+    fragment_limits = {
+        "max_start_fragments_per_vehicle": int(
+            problem.metadata.get("max_start_fragments_per_vehicle", 0) or 0
+        ),
+        "max_end_fragments_per_vehicle": int(
+            problem.metadata.get("max_end_fragments_per_vehicle", 0) or 0
+        ),
+        "daily_fragment_limit": int(
+            problem.metadata.get("daily_fragment_limit", 0) or 0
+        ),
+    }
+    if bool(problem.scenario.allow_same_day_depot_cycles) or any(
+        value != 1 for value in fragment_limits.values()
+    ):
+        raise ValueError(
+            "Phase 3 research comparison requires one continuous duty per "
+            f"vehicle, got {fragment_limits} and "
+            f"allow_same_day_depot_cycles={problem.scenario.allow_same_day_depot_cycles!r}"
+        )
     if not any(asset.pv_enabled for asset in problem.depot_energy_assets.values()):
         raise ValueError("Frontend weather comparison requires an enabled PV asset")
     if not any(asset.bess_enabled for asset in problem.depot_energy_assets.values()):
@@ -312,6 +334,7 @@ def run(args: argparse.Namespace) -> int:
         enable_weather_operation_policy=None,
         weather_proxy_forecast_path=None,
     )
+    fragment_policy = enforce_research_phase3_single_continuous_duty(scenario)
     initial_soc_policy = _resolve_initial_soc_policy(scenario)
     config = OptimizationConfig(
         mode=OptimizationMode.MILP,
@@ -383,6 +406,7 @@ def run(args: argparse.Namespace) -> int:
             "timestep_min": int(problem.scenario.timestep_min),
             "depot_energy_assets": depot_energy_assets,
             "weather_configuration": weather_configuration,
+            "research_fragment_policy": fragment_policy,
             "phase": "phase3_two_stage",
             "research_run": True,
             "time_limit_sec": int(args.time_limit_sec),
@@ -451,6 +475,7 @@ def run(args: argparse.Namespace) -> int:
         "initial_soc_input_hash": initial_soc_metadata["initial_soc_input_hash"],
         "initial_soc_by_vehicle": initial_soc_metadata["initial_soc_by_vehicle"],
         "terminal_soc_policy": terminal_soc_policy,
+        "research_fragment_policy": fragment_policy,
         "charger_configuration": charger_configuration,
         "charger_configuration_hash": _canonical_hash(charger_configuration),
         "depot_energy_assets": depot_energy_assets,
@@ -530,6 +555,12 @@ def run(args: argparse.Namespace) -> int:
         ),
         "stage1_runtime_seconds": _finite(metadata.get("stage1_runtime_seconds")),
         "stage2_runtime_seconds": _finite(metadata.get("stage2_runtime_seconds")),
+        "stage1_energy_envelope_constraint_count": metadata.get(
+            "stage1_energy_envelope_constraint_count"
+        ),
+        "stage1_energy_envelope_semantics": metadata.get(
+            "stage1_energy_envelope_semantics"
+        ),
         "research_run_accepted": bool(metadata.get("research_run_accepted", False)),
         "research_feasibility_eligible": bool(
             metadata.get("research_feasibility_eligible", False)

@@ -17,6 +17,10 @@ from src.optimization.common.problem import (
     ProblemTrip,
     ProblemVehicle,
 )
+from src.optimization.common.research_phase3_policy import (
+    RESEARCH_PHASE3_FRAGMENT_POLICY,
+    enforce_research_phase3_single_continuous_duty,
+)
 from src.gurobi_runtime import is_gurobi_available
 from src.optimization.milp.solver_adapter import (
     GurobiMILPAdapter,
@@ -109,6 +113,39 @@ def test_controlled_case_clears_all_inherited_terminal_soc_requirements() -> Non
     assert simulation_config["final_soc_floor_percent"] is None
     assert simulation_config["final_soc_target_percent"] is None
     assert simulation_config["final_soc_target_tolerance_percent"] is None
+
+
+def test_phase3_research_policy_restricts_the_ephemeral_model_to_one_duty() -> None:
+    scenario = {
+        "simulation_config": {
+            "allow_same_day_depot_cycles": True,
+            "max_depot_cycles_per_vehicle_per_day": 3,
+            "max_start_fragments_per_vehicle": 100,
+            "max_end_fragments_per_vehicle": 100,
+        },
+        "scenario_overlay": {
+            "solver_config": {
+                "max_start_fragments_per_vehicle": 100,
+                "max_end_fragments_per_vehicle": 100,
+            }
+        },
+    }
+
+    audit = enforce_research_phase3_single_continuous_duty(scenario)
+
+    assert audit["policy"] == RESEARCH_PHASE3_FRAGMENT_POLICY
+    assert audit["persisted_to_scenario_store"] is False
+    assert audit["requested_simulation_config"]["max_start_fragments_per_vehicle"] == 100
+    assert audit["effective"] == {
+        "allow_same_day_depot_cycles": False,
+        "max_depot_cycles_per_vehicle_per_day": 1,
+        "max_start_fragments_per_vehicle": 1,
+        "max_end_fragments_per_vehicle": 1,
+        "daily_fragment_limit": 1,
+    }
+    assert scenario["simulation_config"]["research_phase3_fragment_policy"] == RESEARCH_PHASE3_FRAGMENT_POLICY
+    assert scenario["simulation_config"]["max_start_fragments_per_vehicle"] == 1
+    assert scenario["scenario_overlay"]["solver_config"]["max_end_fragments_per_vehicle"] == 1
 
 
 @dataclass
@@ -413,6 +450,99 @@ def test_stage1_energy_envelope_blocks_unreplenished_bev_duty() -> None:
     assert constraint_count == 1
     assert model.getConstrByName("stage1_energy_envelope__bev") is not None
     assert model.Status == gp.GRB.INFEASIBLE
+
+
+@pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
+def test_stage1_energy_envelope_does_not_charge_every_fragment_a_startup_deadhead() -> None:
+    """A necessary envelope must not overrestrict legacy multi-fragment callers."""
+    import gurobipy as gp
+
+    adapter = GurobiMILPAdapter()
+    vehicle = ProblemVehicle(
+        vehicle_id="bev",
+        vehicle_type="BEV",
+        home_depot_id="depot",
+        initial_soc=0.5,
+        battery_capacity_kwh=100.0,
+        reserve_soc=0.2,
+        energy_consumption_kwh_per_km=1.0,
+    )
+    trips = tuple(
+        ProblemTrip(
+            trip_id=trip_id,
+            route_id="r",
+            origin="remote",
+            destination="remote",
+            departure_min=(index + 5) * 60,
+            arrival_min=(index + 5) * 60 + 30,
+            distance_km=10.0,
+            allowed_vehicle_types=("BEV",),
+        )
+        for index, trip_id in enumerate(("first", "second"))
+    )
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="multi-fragment-envelope",
+            timestep_min=60,
+            horizon_start="05:00",
+            horizon_end="09:00",
+        ),
+        dispatch_context=_DispatchContext(),
+        trips=trips,
+        vehicles=(vehicle,),
+        chargers=(
+            ChargerDefinition(charger_id="charger", depot_id="depot", power_kw=100.0),
+        ),
+        price_slots=tuple(EnergyPriceSlot(slot_index=index) for index in range(4)),
+    )
+    model = gp.Model("stage1_multi_fragment_energy_envelope")
+    model.Params.OutputFlag = 0
+    y = {
+        ("bev", trip.trip_id): model.addVar(vtype=gp.GRB.BINARY, lb=1.0, ub=1.0)
+        for trip in trips
+    }
+    start_arc = {
+        ("bev", trip.trip_id): model.addVar(vtype=gp.GRB.BINARY, lb=1.0, ub=1.0)
+        for trip in trips
+    }
+    end_arc = {
+        ("bev", trip.trip_id): model.addVar(vtype=gp.GRB.BINARY, lb=0.0, ub=0.0)
+        for trip in trips
+    }
+    used_vehicle = {"bev": model.addVar(vtype=gp.GRB.BINARY, lb=1.0, ub=1.0)}
+    startup = StartupEnergyPrecheck(
+        path_feasible=True,
+        energy_feasible=True,
+        initial_soc_kwh=50.0,
+        minimum_soc_kwh=20.0,
+        startup_deadhead_min=30,
+        startup_deadhead_energy_kwh=50.0,
+        required_departure_soc_kwh=20.0,
+        complete_precharge_slot_count=0,
+        maximum_precharge_energy_kwh=0.0,
+        energy_margin_kwh=0.0,
+    )
+
+    constraint_count = adapter._add_stage1_energy_envelope_constraints(
+        model,
+        problem=problem,
+        trip_by_id=problem.trip_by_id(),
+        vehicles=problem.vehicles,
+        assignment_trip_ids_by_vehicle={"bev": ["first", "second"]},
+        startup_energy_precheck_by_assignment={
+            ("bev", "first"): startup,
+            ("bev", "second"): startup,
+        },
+        y=y,
+        x={},
+        start_arc=start_arc,
+        end_arc=end_arc,
+        used_vehicle=used_vehicle,
+    )
+    model.optimize()
+
+    assert constraint_count == 1
+    assert model.Status == gp.GRB.OPTIMAL
 
 
 def test_home_depot_windows_use_service_day_minutes_after_midnight() -> None:

@@ -886,6 +886,9 @@ class OptimizationEngine:
             "soc_constraints_evaluated",
             "supports_assignment_milp",
             "binding_constraint_report",
+            "fragment_temporal_occupancy_constraint_count",
+            "stage1_energy_envelope_constraint_count",
+            "stage1_energy_envelope_semantics",
         ):
             if key in plan_metadata:
                 solver_metadata[key] = plan_metadata[key]
@@ -1095,6 +1098,18 @@ class OptimizationEngine:
                 # Phase 3 is the thesis' feasibility/constraint experiment:
                 # the two exact stages produce a validated decision trace, but
                 # do not minimize a single global accounting-cost scalar.
+                # Its Stage 2 SOC model does not yet model an implicit reset
+                # between disconnected fragments, so such a result must never
+                # pass the research acceptance gate.
+                single_continuous_vehicle_duty = bool(
+                    plan.max_fragments_observed() <= 1
+                )
+                acceptance_checks["single_continuous_vehicle_duty"] = (
+                    single_continuous_vehicle_duty
+                )
+                solver_metadata["single_continuous_vehicle_duty"] = (
+                    single_continuous_vehicle_duty
+                )
                 acceptance_checks["two_stage_milp_evaluated"] = bool(
                     solver_metadata.get("supports_two_stage_milp", False)
                 )

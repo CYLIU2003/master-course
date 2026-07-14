@@ -156,6 +156,10 @@ def test_research_phase3_accepts_feasibility_but_not_a_global_cost_claim() -> No
             metadata={
                 "source_provenance_exact": True,
                 "vehicle_source_provenance_exact": True,
+                "stage1_energy_envelope_constraint_count": 35,
+                "stage1_energy_envelope_semantics": (
+                    "optimistic_vehicle_local_necessary_condition"
+                ),
             }
         ),
         feasible=True,
@@ -186,7 +190,67 @@ def test_research_phase3_accepts_feasibility_but_not_a_global_cost_claim() -> No
     assert result.solver_metadata["research_run_accepted"] is True
     assert result.solver_metadata["research_feasibility_eligible"] is True
     assert result.solver_metadata["research_cost_kpi_eligible"] is False
+    assert result.solver_metadata["single_continuous_vehicle_duty"] is True
+    assert result.solver_metadata["stage1_energy_envelope_constraint_count"] == 35
+    assert result.solver_metadata["stage1_energy_envelope_semantics"] == (
+        "optimistic_vehicle_local_necessary_condition"
+    )
     assert "objective_is_actual_cost" not in result.solver_metadata["research_acceptance_checks"]
+
+
+def test_research_phase3_rejects_disconnected_vehicle_fragments() -> None:
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="s-research-fragment-gate",
+            timestep_min=60,
+        ),
+        dispatch_context=None,
+        trips=(),
+        vehicles=(),
+    )
+    fake_result = OptimizationEngineResult(
+        mode=OptimizationMode.MILP,
+        solver_status="optimal",
+        objective_value=0.0,
+        plan=AssignmentPlan(
+            duties=(
+                VehicleDuty(duty_id="duty-1", vehicle_type="BEV", legs=()),
+                VehicleDuty(duty_id="duty-2", vehicle_type="BEV", legs=()),
+            ),
+            metadata={
+                "duty_vehicle_map": {"duty-1": "bev-1", "duty-2": "bev-1"},
+                "source_provenance_exact": True,
+                "vehicle_source_provenance_exact": True,
+            },
+        ),
+        feasible=True,
+        cost_breakdown={"objective_value": 0.0, "total_cost": 0.0},
+        solver_metadata={
+            "supports_exact_milp": True,
+            "supports_two_stage_milp": True,
+            "requested_phase_token": "phase3_two_stage",
+            "requested_phase": "phase3_two_stage",
+            "resolved_phase": "phase3_two_stage",
+            "executed_phase": "phase3_two_stage",
+        },
+    )
+    engine = OptimizationEngine()
+    engine._milp = _FakeMILPOptimizer(fake_result)
+
+    result = engine.solve(
+        problem,
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            phase="phase3_two_stage",
+            research_run=True,
+        ),
+    )
+
+    assert result.feasible is False
+    assert result.solver_status == "NO_VALID_INCUMBENT"
+    assert result.solver_metadata["research_run_accepted"] is False
+    assert result.solver_metadata["research_feasibility_eligible"] is False
+    assert result.solver_metadata["single_continuous_vehicle_duty"] is False
 
 
 def test_research_contract_disables_the_non_accounting_return_leg_bonus() -> None:

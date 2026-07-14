@@ -4972,7 +4972,12 @@ class GurobiMILPAdapter:
         Stage 2: initial predeparture availability, confirmed home-depot
         residence between connected trips, explicit home-depot trip windows,
         and the return-to-depot window at a duty end.  This keeps the two
-        stages aligned without inventing a postsolve repair path.
+        stages aligned without inventing a postsolve repair path.  Startup
+        deadhead is deliberately not deducted here: Stage 2 posts it only for
+        the chronologically first fragment, while a Stage-1 start arc alone
+        cannot identify that fragment when legacy callers allow multiple
+        fragments.  Omitting it keeps this constraint a safe relaxation;
+        Stage 2 remains the exact SOC feasibility check.
         """
         slot_indices = tuple(sorted({slot.slot_index for slot in problem.price_slots}))
         valid_slots = set(slot_indices)
@@ -5107,9 +5112,6 @@ class GurobiMILPAdapter:
                         start_key
                     )
                     if startup_precheck is not None:
-                        consumed_energy += (
-                            startup_precheck.startup_deadhead_energy_kwh * start_var
-                        )
                         available_energy += (
                             startup_precheck.maximum_precharge_energy_kwh * start_var
                         )

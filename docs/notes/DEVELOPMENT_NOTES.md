@@ -15,14 +15,17 @@
 
 ### 修正内容・数理的意味
 
-- `src/optimization/milp/solver_adapter.py` にStage 1の`stage1_energy_envelope__<vehicle>` hard constraintを追加した。BEVごとに、便・便間回送・始発回送・帰庫回送・終端SOC要求の合計を、初期SOCとStage 2が認める可能な充電窓の**楽観的上限**以下に制限する。
-- 充電窓は始発前、確認済み営業所滞在、営業所発着便の窓、帰庫後/翌日境界の窓を数える。一方で充電器port・系統電力競合・battery headroom・窓の重複は緩和して上限側に数えるため、この制約はStage 2の代替ではなく「それでも不足する勤務列だけを除く必要条件」である。SOC下限、便数、車両数、充電器能力、消費電力量は緩和していない。
+- `src/optimization/milp/solver_adapter.py` にStage 1の`stage1_energy_envelope__<vehicle>` hard constraintを追加した。BEVごとに、便・便間回送・帰庫回送・終端SOC要求の合計を、初期SOCとStage 2が認める可能な充電窓の**楽観的上限**以下に制限する。始発回送は既存の`StartupEnergyPrecheck`で別途除外する。energy envelope自身では、legacyの複数fragment callerを過剰に除外しないため始発回送を控除しない。
+- 充電窓は始発前、確認済み営業所滞在、営業所発着便の窓、帰庫後/翌日境界の窓を数える。一方で充電器port・系統電力競合・battery headroom・窓の重複、及び上記の始発回送は緩和して上限側に数えるため、この制約はStage 2の代替ではなく「それでも不足する勤務列だけを除く必要条件」である。Stage 2のSOC下限、便数、車両数、充電器能力、消費電力量は緩和していない。
 - Stage 2 failure diagnosticsも、`allowed_charge_slots`から運行・回送と重なるslotを除外して出発前最大SOCを時系列で計算するよう修正した。従来の診断は、回送で一部重なるslotを始発前充電として数え、実際には不可行な候補を`shortage=0`と過大表示し得た。
 - 追加metadata: `stage1_energy_envelope_constraint_count`、`stage1_energy_envelope_semantics=optimistic_vehicle_local_necessary_condition`。IIS、candidate-only隔離、fallback禁止、postsolve repair禁止の契約は維持した。
+- 追加監査で、両シナリオのフロント設定が`max_start_fragments_per_vehicle=max_end_fragments_per_vehicle=100`、same-day depot cycle上限3であることを確認した。Stage 2は断片間の暗黙帰庫・再出庫のSOCをまだモデル化していないため、この設定のままPhase 3を研究結果として受理してはいけない。`research_phase3_policy.py`を追加し、研究用runnerだけが永続ストアを変更せずに「車両ごとに連続1 duty」（start/end/daily=1、same-day cycle禁止）を明示的に適用し、元設定・上書き理由・実効値を成果物に残す。さらにengineのresearch acceptance gateは複数断片のPhase 3結果を不受理にする。
+- energy envelopeはlegacyの複数fragment callerでも必要条件であり続けるよう、start arcごとのstartup deadhead控除を削除した。Stage 2がstartup deadheadを時系列上の最初のfragmentだけに計上するためである。これはStage 1を楽観側に緩めるだけで、SOCの最終判定をStage 2から外さない。
 
 ### 回帰確認と次の検証
 
 - `GRB_LICENSE_FILE=C:\Users\RTDS_admin\gurobi.lic python -m pytest -q tests/test_phase3_controlled_validation.py tests/test_milp_fragment_pairwise_reset_cut.py tests/test_milp_engine_lightweight_stats.py` → `33 passed`。新規Gurobi regressionは、初期50kWh・終端20kWh・充電機会なしで合計80kWhを走るBEV勤務列をStage 1のhard constraintが不可行にすることを確認する。
+- 本追補では、focused regression（Phase 3・engine postsolve・fragment cut・MILP lightweight）`48 passed`、全回帰（`test_multiday_phase1.py`はlocalhost BFF依存のため除外）`668 passed, 8 skipped`を確認した。晴天の実フロント入力をbuild-onlyで通し、実在庫SOC hash `4e135b…`、90kW×5+50kW×5 charger、PV 614.709375kWh、BESS 600kWh、TOU/需要料金設定を保持したうえで、research artifactにのみfragment policyの元値・理由・実効値が記録されることを確認した。
 - 次はdirtyでないcommitから、指示済みの`CONTROLLED_MODEL_VALIDATION_CASE`（2025-08-10、264便、BEV35/ICE25、15分、全BEV SOC80%、PV/BESS/weather off、grid-only）を1500秒で再実行する。この統制runが可行であることを確認した後にのみ、実在庫SOC・PV/BESSありの晴天/雨天比較へ進む。
 
 ---

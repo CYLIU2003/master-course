@@ -45,6 +45,9 @@ from src.optimization.common.initial_soc_policy import (
     initial_soc_input_metadata,
     normalize_initial_soc_policy,
 )
+from src.optimization.common.research_phase3_policy import (
+    enforce_research_phase3_single_continuous_duty,
+)
 
 
 DEFAULT_SCENARIO_ID = "b23fd26c-1233-4c73-bb9e-bdb8b1584760"
@@ -214,6 +217,21 @@ def _build_experiment_identity(
             "mode": simulation_config.get("weather_mode"),
             "forecast_path": simulation_config.get("weather_proxy_forecast_path"),
         },
+        "research_fragment_policy_effective": {
+            "policy": simulation_config.get("research_phase3_fragment_policy"),
+            "allow_same_day_depot_cycles": simulation_config.get(
+                "allow_same_day_depot_cycles"
+            ),
+            "max_depot_cycles_per_vehicle_per_day": simulation_config.get(
+                "max_depot_cycles_per_vehicle_per_day"
+            ),
+            "max_start_fragments_per_vehicle": simulation_config.get(
+                "max_start_fragments_per_vehicle"
+            ),
+            "max_end_fragments_per_vehicle": simulation_config.get(
+                "max_end_fragments_per_vehicle"
+            ),
+        },
         "phase": "phase3_two_stage",
         "research_run": True,
         "time_limit_sec": int(time_limit_sec),
@@ -358,6 +376,25 @@ def _validate_target_input(
         raise ValueError(f"controlled run must use 15-minute slots, got {problem.scenario.timestep_min}")
     if len(problem.price_slots) != 96:
         raise ValueError(f"controlled one-day run must contain 96 slots, got {len(problem.price_slots)}")
+    fragment_limits = {
+        "max_start_fragments_per_vehicle": int(
+            problem.metadata.get("max_start_fragments_per_vehicle", 0) or 0
+        ),
+        "max_end_fragments_per_vehicle": int(
+            problem.metadata.get("max_end_fragments_per_vehicle", 0) or 0
+        ),
+        "daily_fragment_limit": int(
+            problem.metadata.get("daily_fragment_limit", 0) or 0
+        ),
+    }
+    if bool(problem.scenario.allow_same_day_depot_cycles) or any(
+        value != 1 for value in fragment_limits.values()
+    ):
+        raise ValueError(
+            "controlled Phase 3 research run requires one continuous duty per "
+            f"vehicle, got {fragment_limits} and "
+            f"allow_same_day_depot_cycles={problem.scenario.allow_same_day_depot_cycles!r}"
+        )
     simulation_config = dict(scenario.get("simulation_config") or {})
     if bool(simulation_config.get("enable_weather_operation_policy", False)):
         raise ValueError("weather operation policy must be disabled")
@@ -426,6 +463,7 @@ def run(args: argparse.Namespace) -> int:
         initial_soc_policy=initial_soc_policy,
         initial_soc_percent=args.initial_soc_percent,
     )
+    fragment_policy = enforce_research_phase3_single_continuous_duty(scenario)
     config = OptimizationConfig(
         mode=OptimizationMode.MILP,
         time_limit_sec=int(args.time_limit_sec),
@@ -525,6 +563,7 @@ def run(args: argparse.Namespace) -> int:
         "fallback_enabled": False,
         "partial_service_enabled": False,
         "terminal_soc_policy": "minimum_soc",
+        "research_fragment_policy": fragment_policy,
         "git_sha": git_sha,
         "git_dirty": git_dirty,
         **experiment_identity,
@@ -676,6 +715,12 @@ def run(args: argparse.Namespace) -> int:
         ),
         "stage2_runtime_seconds": _finite_float_or_none(
             solver_metadata.get("stage2_runtime_seconds")
+        ),
+        "stage1_energy_envelope_constraint_count": solver_metadata.get(
+            "stage1_energy_envelope_constraint_count"
+        ),
+        "stage1_energy_envelope_semantics": solver_metadata.get(
+            "stage1_energy_envelope_semantics"
         ),
         "stage1_feasible": solver_metadata.get("stage1_feasible"),
         "stage2_feasible": solver_metadata.get("stage2_feasible"),
