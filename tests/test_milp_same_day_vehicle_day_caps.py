@@ -57,7 +57,7 @@ def _problem(*, daily_fragment_limit: int, vehicle_count: int):
         scenario_id="milp-day-cap",
         vehicle_counts={"ICE": vehicle_count},
         canonical_depot_id="DEPOT",
-        timestep_min=10,
+        timestep_min=15,
         allow_same_day_depot_cycles=True,
         max_depot_cycles_per_vehicle_per_day=daily_fragment_limit,
         max_fragments_per_vehicle_per_day=daily_fragment_limit,

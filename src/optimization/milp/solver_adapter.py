@@ -501,6 +501,16 @@ class GurobiMILPAdapter:
             allow_same_day_depot_cycles=allow_same_day_depot_cycles,
             fixed_route_band_mode=fixed_route_band_mode,
         )
+        self._add_fragment_temporal_occupancy_constraints(
+            model,
+            grb=GRB,
+            trip_by_id=trip_by_id,
+            vehicles=problem.vehicles,
+            assignment_trip_ids_by_vehicle=assignment_trip_ids_by_vehicle,
+            start_arc=start_arc,
+            end_arc=end_arc,
+            problem=problem,
+        )
 
         # Fixed route-band mode is enforced on connection arcs, not across the
         # whole vehicle-day. A vehicle may switch bands only by starting a new
@@ -2973,6 +2983,18 @@ class GurobiMILPAdapter:
             allow_same_day_depot_cycles=allow_same_day_depot_cycles,
             fixed_route_band_mode=bool(problem.metadata.get("fixed_route_band_mode", False)),
         )
+        fragment_temporal_occupancy_constraint_count = (
+            self._add_fragment_temporal_occupancy_constraints(
+                stage1,
+                grb=GRB,
+                trip_by_id=trip_by_id,
+                vehicles=problem.vehicles,
+                assignment_trip_ids_by_vehicle=assignment_trip_ids_by_vehicle,
+                start_arc=start_arc,
+                end_arc=end_arc,
+                problem=problem,
+            )
+        )
 
         overlap_cliques = self._build_trip_overlap_cliques(problem)
         for vehicle in problem.vehicles:
@@ -3061,6 +3083,9 @@ class GurobiMILPAdapter:
                         sorted(startup_energy_infeasible_vehicle_ids)
                     ),
                     "arc_pruning_summary": arc_pruning_summary,
+                    "fragment_temporal_occupancy_constraint_count": (
+                        fragment_temporal_occupancy_constraint_count
+                    ),
                 },
             )
             return (
@@ -3113,6 +3138,9 @@ class GurobiMILPAdapter:
                     sorted(startup_energy_infeasible_vehicle_ids)
                 ),
                 "arc_pruning_summary": arc_pruning_summary,
+                "fragment_temporal_occupancy_constraint_count": (
+                    fragment_temporal_occupancy_constraint_count
+                ),
             },
         )
 
@@ -4518,7 +4546,11 @@ class GurobiMILPAdapter:
                         trip_day_index_by_trip_id.get(start_trip_id, 0)
                     ):
                         continue
-                    if int(end_trip.arrival_min) > int(start_trip.departure_min):
+                    end_arrival_min = self._trip_service_arrival_min(problem, end_trip)
+                    start_departure_min = self._service_minute(
+                        problem, start_trip.departure_min
+                    )
+                    if end_arrival_min > start_departure_min:
                         continue
                     end_key = (vehicle_id, end_trip_id)
                     start_key = (vehicle_id, start_trip_id)
@@ -4545,6 +4577,72 @@ class GurobiMILPAdapter:
                     model.addConstr(end_arc[end_key] + start_arc[start_key] <= 1)
                     cut_count += 1
         return cut_count
+
+    def _add_fragment_temporal_occupancy_constraints(
+        self,
+        model: Any,
+        *,
+        grb: Any,
+        trip_by_id: Mapping[str, ProblemTrip],
+        vehicles: Tuple[Any, ...],
+        assignment_trip_ids_by_vehicle: Mapping[str, List[str]],
+        start_arc: Mapping[Tuple[str, str], Any],
+        end_arc: Mapping[Tuple[str, str], Any],
+        problem: CanonicalOptimizationProblem,
+    ) -> int:
+        """Prevent disconnected fragments for one vehicle from overlapping.
+
+        Trip-overlap cliques only protect the occupied interval of each trip.
+        Without this cumulative fragment state, a path can connect a morning
+        trip directly to a late trip while a second path for the same vehicle
+        operates inside that waiting interval.  Such nested paths cannot be
+        driven by one physical vehicle even though no two trip intervals
+        overlap directly.
+        """
+        constraint_count = 0
+        for vehicle in vehicles:
+            vehicle_id = str(getattr(vehicle, "vehicle_id", "") or "")
+            trip_ids = tuple(assignment_trip_ids_by_vehicle.get(vehicle_id, ()))
+            if not trip_ids:
+                continue
+
+            starts_by_minute: Dict[int, List[Any]] = {}
+            ends_by_minute: Dict[int, List[Any]] = {}
+            event_minutes: Set[int] = set()
+            for trip_id in trip_ids:
+                trip = trip_by_id.get(trip_id)
+                if trip is None:
+                    continue
+                start_key = (vehicle_id, trip_id)
+                end_key = (vehicle_id, trip_id)
+                departure_min = self._service_minute(problem, trip.departure_min)
+                arrival_min = self._trip_service_arrival_min(problem, trip)
+                if start_key in start_arc:
+                    starts_by_minute.setdefault(departure_min, []).append(
+                        start_arc[start_key]
+                    )
+                    event_minutes.add(departure_min)
+                if end_key in end_arc:
+                    ends_by_minute.setdefault(arrival_min, []).append(end_arc[end_key])
+                    event_minutes.add(arrival_min)
+
+            previous_active = None
+            for event_index, event_minute in enumerate(sorted(event_minutes)):
+                active = model.addVar(
+                    lb=0.0,
+                    ub=1.0,
+                    vtype=grb.CONTINUOUS,
+                    name=f"fragment_active_{vehicle_id}_{event_index}",
+                )
+                starts = sum(starts_by_minute.get(event_minute, ()))
+                ends = sum(ends_by_minute.get(event_minute, ()))
+                if previous_active is None:
+                    model.addConstr(active == starts - ends)
+                else:
+                    model.addConstr(active == previous_active + starts - ends)
+                previous_active = active
+                constraint_count += 1
+        return constraint_count
 
     def _repaired_baseline_plan_for_warm_start(
         self,
