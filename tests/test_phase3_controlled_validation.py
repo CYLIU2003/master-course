@@ -28,6 +28,7 @@ from scripts.run_research_phase3_minimal import (
     _configure_controlled_model_validation_case,
     _finite_float_or_none,
     _mip_gap_percent,
+    _resolve_expected_service_date,
 )
 
 
@@ -527,6 +528,17 @@ def test_nonfinite_objective_is_null_not_zero() -> None:
     assert _finite_float_or_none(float("nan")) is None
     assert _finite_float_or_none(None) is None
     assert _finite_float_or_none(0.0) == pytest.approx(0.0)
+
+
+def test_expected_service_date_supports_both_comparison_cases() -> None:
+    assert _resolve_expected_service_date(
+        None, {"service_date": "2025-08-10"}
+    ) == "2025-08-10"
+    assert _resolve_expected_service_date(
+        "2025-08-05", {"service_date": "2025-08-10"}
+    ) == "2025-08-05"
+    with pytest.raises(ValueError, match="expected service date is missing"):
+        _resolve_expected_service_date(None, {})
 
 
 def _experiment_identity_for(

@@ -93,6 +93,18 @@ def _finite_float_or_none(value: Any) -> float | None:
     return parsed if math.isfinite(parsed) else None
 
 
+def _resolve_expected_service_date(
+    explicit_date: Any,
+    prepared_payload: dict[str, Any],
+) -> str:
+    expected = str(explicit_date or prepared_payload.get("service_date") or "")[:10]
+    if not expected:
+        raise ValueError(
+            "expected service date is missing; pass --expected-service-date"
+        )
+    return expected
+
+
 def _mip_gap_percent(gap_ratio: Any) -> float | None:
     finite_gap = _finite_float_or_none(gap_ratio)
     if finite_gap is None:
@@ -275,6 +287,8 @@ def _validate_target_input(
     problem: Any,
     scenario: dict[str, Any],
     config: OptimizationConfig,
+    *,
+    expected_service_date: str,
 ) -> None:
     if len(problem.trips) != 264:
         raise ValueError(f"target scope must contain 264 trips, got {len(problem.trips)}")
@@ -302,8 +316,11 @@ def _validate_target_input(
             f"target available fleet must equal BEV35+ICE25, got {available_counts}"
         )
     service_date = str(problem.metadata.get("service_date") or "")[:10]
-    if service_date != "2025-08-10":
-        raise ValueError(f"target service_date must be 2025-08-10, got {service_date!r}")
+    if service_date != expected_service_date:
+        raise ValueError(
+            "target service_date must be "
+            f"{expected_service_date}, got {service_date!r}"
+        )
     operator_ids = {
         str(getattr(trip, "operator_id", "") or "").strip()
         for trip in tuple(problem.dispatch_context.trips or ())
@@ -373,6 +390,9 @@ def run(args: argparse.Namespace) -> int:
         prepared_input_id=args.prepared_input_id,
         scenarios_dir=prepared_root,
     )
+    expected_service_date = _resolve_expected_service_date(
+        getattr(args, "expected_service_date", None), prepared_payload
+    )
     scenario = deepcopy(
         materialize_scenario_from_prepared_input(
             store.get_scenario_document_shallow(args.scenario_id),
@@ -427,7 +447,12 @@ def run(args: argparse.Namespace) -> int:
                 "vehicle_soc_semantics": "slot_start",
             }
         )
-    _validate_target_input(problem, scenario, config)
+    _validate_target_input(
+        problem,
+        scenario,
+        config,
+        expected_service_date=expected_service_date,
+    )
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -452,6 +477,7 @@ def run(args: argparse.Namespace) -> int:
         "time_step_min": problem.scenario.timestep_min,
         "slot_count": len(problem.price_slots),
         "target_trip_count": len(problem.trips),
+        "expected_service_date": expected_service_date,
         "route_family_codes": sorted(
             {
                 str(getattr(trip, "route_family_code", "") or "")
@@ -706,6 +732,10 @@ def main() -> int:
     parser.add_argument("--prepared-input-id", default=DEFAULT_PREPARED_INPUT_ID)
     parser.add_argument("--depot-id", default="tsurumaki")
     parser.add_argument("--service-id", default="WEEKDAY")
+    parser.add_argument(
+        "--expected-service-date",
+        help="Hard-check date; defaults to the prepared input service_date.",
+    )
     parser.add_argument("--output-dir", default="output/research_phase3_minimal")
     parser.add_argument("--time-limit-sec", type=int, default=1500)
     parser.add_argument("--mip-gap", type=float, default=0.1)
