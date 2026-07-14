@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import math
 import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -1997,18 +1998,8 @@ class GurobiMILPAdapter:
             "initial_num_bin_vars": int(pre_stats.get("num_binary_vars", 0) or 0),
             "initial_num_int_vars": int(pre_stats.get("num_integer_vars", 0) or 0),
         }
-        best_bound = None
-        if hasattr(model, "ObjBound"):
-            try:
-                best_bound = float(model.ObjBound)
-            except Exception:
-                best_bound = None
-        final_gap = None
-        if has_feasible_incumbent and hasattr(model, "MIPGap"):
-            try:
-                final_gap = float(model.MIPGap)
-            except Exception:
-                final_gap = None
+        best_bound = self._model_bound(model)
+        final_gap = self._model_gap(model) if has_feasible_incumbent else None
         nodes_explored = None
         if hasattr(model, "NodeCount"):
             try:
@@ -2625,6 +2616,11 @@ class GurobiMILPAdapter:
             meta["charging_dispatch_evaluated"] = True
             meta["soc_constraints_evaluated"] = True
             meta["research_kpi_eligible"] = False
+        elif phase == "phase3_two_stage":
+            # A two-stage feasible schedule is publishable for feasibility and
+            # constraint analysis, but not as a globally optimized cost KPI.
+            meta["research_kpi_eligible"] = False
+            meta["research_cost_kpi_eligible"] = False
         elif phase == "diagnostic":
             meta["research_kpi_eligible"] = False
         else:
@@ -3240,6 +3236,9 @@ class GurobiMILPAdapter:
     ) -> Tuple[MILPSolverOutcome, AssignmentPlan]:
         gp, GRB = ensure_gurobi()
         started = time.perf_counter()
+        component_flags = normalize_cost_component_flags(
+            problem.metadata.get("cost_component_flags")
+        )
         slot_indices = sorted({slot.slot_index for slot in problem.price_slots})
         timestep_h = max(problem.scenario.timestep_min, 1) / 60.0
         vehicle_by_id = {str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles}
@@ -3279,7 +3278,12 @@ class GurobiMILPAdapter:
                 "source_provenance_exact": True,
                 "vehicle_source_provenance_exact": True,
                 "derived_source_split": False,
-                "research_kpi_eligible": True,
+                # Phase 3 establishes a feasible dispatch under fixed Stage 1
+                # assignments. Its accounting total is not a globally
+                # minimized total-cost KPI; the engine determines final
+                # feasibility acceptance separately.
+                "research_kpi_eligible": False,
+                "research_cost_kpi_eligible": False,
                 "postsolve_repair_allowed": False,
             }
             plan = replace(stage1_plan, metadata=metadata)
@@ -4092,7 +4096,11 @@ class GurobiMILPAdapter:
             "vehicle_source_provenance_exact": True,
             "vehicle_source_allocation_policy": "stage2_vehicle_source_variables_tied_to_fixed_stage1_schedule",
             "derived_source_split": False,
-            "research_kpi_eligible": True,
+            # The Stage 1 + Stage 2 objectives are lexicographic rather than
+            # one accounting-total objective. Do not let nested plan metadata
+            # contradict the engine-level Phase 3 cost-KPI gate.
+            "research_kpi_eligible": False,
+            "research_cost_kpi_eligible": False,
             "postsolve_repair_allowed": False,
                 "supports_integrated_exact_milp": False,
                 "supports_two_stage_milp": True,
@@ -4526,7 +4534,8 @@ class GurobiMILPAdapter:
         if not bool(getattr(model, "SolCount", 0) > 0) or not hasattr(model, "MIPGap"):
             return None
         try:
-            return float(model.MIPGap)
+            value = float(model.MIPGap)
+            return value if math.isfinite(value) else None
         except Exception:
             return None
 
@@ -4534,7 +4543,8 @@ class GurobiMILPAdapter:
         if not hasattr(model, "ObjBound"):
             return None
         try:
-            return float(model.ObjBound)
+            value = float(model.ObjBound)
+            return value if math.isfinite(value) else None
         except Exception:
             return None
 
@@ -4706,8 +4716,15 @@ class GurobiMILPAdapter:
         fixed_route_band_mode: bool,
     ) -> int:
         cut_count = 0
+        # A fragment-transition diagnosis depends on the duty endpoints, the
+        # vehicle's home depot and the shared dispatch context.  The same
+        # combination occurs for each vehicle of one type, so caching it avoids
+        # repeatedly evaluating an identical hard-feasibility condition while
+        # still adding the resulting cut for every individual vehicle.
+        transition_feasible_cache: Dict[Tuple[str, str, str, str, bool, bool], bool] = {}
         for vehicle in vehicles:
             vehicle_id = str(getattr(vehicle, "vehicle_id", "") or "")
+            vehicle_type = str(getattr(vehicle, "vehicle_type", "") or "")
             home_depot_id = str(getattr(vehicle, "home_depot_id", "") or "")
             trip_ids = list(assignment_trip_ids_by_vehicle.get(vehicle_id, ()))
             for end_trip_id in trip_ids:
@@ -4734,23 +4751,34 @@ class GurobiMILPAdapter:
                     start_key = (vehicle_id, start_trip_id)
                     if end_key not in end_arc or start_key not in start_arc:
                         continue
-                    diagnostic = fragment_transition_diagnostic(
-                        VehicleDuty(
-                            duty_id=f"{vehicle_id}__end_probe",
-                            vehicle_type=str(getattr(vehicle, "vehicle_type", "")),
-                            legs=(DutyLeg(trip=end_trip),),
-                        ),
-                        VehicleDuty(
-                            duty_id=f"{vehicle_id}__start_probe",
-                            vehicle_type=str(getattr(vehicle, "vehicle_type", "")),
-                            legs=(DutyLeg(trip=start_trip),),
-                        ),
-                        home_depot_id=home_depot_id,
-                        dispatch_context=problem.dispatch_context,
-                        fixed_route_band_mode=fixed_route_band_mode,
-                        allow_same_day_depot_cycles=allow_same_day_depot_cycles,
+                    cache_key = (
+                        vehicle_type,
+                        home_depot_id,
+                        str(end_trip_id),
+                        str(start_trip_id),
+                        fixed_route_band_mode,
+                        allow_same_day_depot_cycles,
                     )
-                    if diagnostic.feasible:
+                    transition_feasible = transition_feasible_cache.get(cache_key)
+                    if transition_feasible is None:
+                        transition_feasible = fragment_transition_diagnostic(
+                            VehicleDuty(
+                                duty_id=f"{vehicle_id}__end_probe",
+                                vehicle_type=vehicle_type,
+                                legs=(DutyLeg(trip=end_trip),),
+                            ),
+                            VehicleDuty(
+                                duty_id=f"{vehicle_id}__start_probe",
+                                vehicle_type=vehicle_type,
+                                legs=(DutyLeg(trip=start_trip),),
+                            ),
+                            home_depot_id=home_depot_id,
+                            dispatch_context=problem.dispatch_context,
+                            fixed_route_band_mode=fixed_route_band_mode,
+                            allow_same_day_depot_cycles=allow_same_day_depot_cycles,
+                        ).feasible
+                        transition_feasible_cache[cache_key] = transition_feasible
+                    if transition_feasible:
                         continue
                     model.addConstr(end_arc[end_key] + start_arc[start_key] <= 1)
                     cut_count += 1

@@ -30,6 +30,7 @@ from scripts.run_research_phase3_minimal import (
     _mip_gap_percent,
     _resolve_expected_service_date,
 )
+from scripts.run_research_phase3_frontend_weather import _resolve_initial_soc_policy
 
 
 def test_uniform_initial_soc_policy_overrides_only_electric_vehicles() -> None:
@@ -521,6 +522,29 @@ def test_mip_gap_ratio_to_percent_preserves_missing_incumbent_null() -> None:
     assert _mip_gap_percent(0.1) == pytest.approx(10.0)
     assert _mip_gap_percent(0.669593) == pytest.approx(66.9593)
     assert _mip_gap_percent(None) is None
+
+
+def test_solver_adapter_drops_nonfinite_gap_and_bound() -> None:
+    class NonFiniteTelemetryModel:
+        SolCount = 1
+        MIPGap = float("inf")
+        ObjBound = float("-inf")
+
+    adapter = GurobiMILPAdapter()
+
+    assert adapter._model_gap(NonFiniteTelemetryModel()) is None
+    assert adapter._model_bound(NonFiniteTelemetryModel()) is None
+
+
+def test_frontend_weather_runner_requires_explicit_soc_input_source() -> None:
+    assert _resolve_initial_soc_policy(
+        {"simulation_config": {"use_selected_depot_vehicle_inventory": True}}
+    ) is InitialSocPolicy.ACTUAL_VEHICLE_INVENTORY
+    assert _resolve_initial_soc_policy(
+        {"simulation_config": {"initial_soc_policy": "uniform_scenario_value"}}
+    ) is InitialSocPolicy.UNIFORM_SCENARIO_VALUE
+    with pytest.raises(ValueError, match="initial_soc_policy"):
+        _resolve_initial_soc_policy({"simulation_config": {}})
 
 
 def test_nonfinite_objective_is_null_not_zero() -> None:

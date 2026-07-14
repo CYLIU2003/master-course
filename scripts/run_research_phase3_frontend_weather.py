@@ -30,6 +30,11 @@ from bff.services.run_preparation import load_prepared_input, materialize_scenar
 from bff.store import scenario_store as store
 from src.gurobi_runtime import is_gurobi_available
 from src.optimization import OptimizationConfig, OptimizationEngine, OptimizationMode, ProblemBuilder, ResultSerializer
+from src.optimization.common.initial_soc_policy import (
+    InitialSocPolicy,
+    initial_soc_input_metadata,
+    normalize_initial_soc_policy,
+)
 from src.preprocess.weather.operation_policy import apply_weather_policy_to_problem
 
 
@@ -58,6 +63,25 @@ def _finite(value: Any) -> float | None:
     except (TypeError, ValueError):
         return None
     return parsed if math.isfinite(parsed) else None
+
+
+def _mip_gap_percent(value: Any) -> float | None:
+    ratio = _finite(value)
+    return ratio * 100.0 if ratio is not None else None
+
+
+def _resolve_initial_soc_policy(scenario: dict[str, Any]) -> InitialSocPolicy:
+    """Resolve an explicit SOC-input source without guessing from a number."""
+    simulation_config = dict(scenario.get("simulation_config") or {})
+    configured_policy = str(simulation_config.get("initial_soc_policy") or "").strip()
+    if configured_policy:
+        return normalize_initial_soc_policy(configured_policy)
+    if bool(simulation_config.get("use_selected_depot_vehicle_inventory", False)):
+        return InitialSocPolicy.ACTUAL_VEHICLE_INVENTORY
+    raise ValueError(
+        "Research weather run requires an explicit initial_soc_policy or "
+        "use_selected_depot_vehicle_inventory=true"
+    )
 
 
 def _git_state() -> dict[str, Any]:
@@ -123,16 +147,110 @@ def _asset_snapshot(problem: Any) -> dict[str, Any]:
     return {
         str(depot_id): {
             "pv_enabled": bool(asset.pv_enabled),
+            "pv_case_id": str(getattr(asset, "pv_case_id", "") or ""),
             "pv_capacity_kw": float(asset.pv_capacity_kw),
             "pv_generation_kwh": round(sum(asset.pv_generation_kwh_by_slot), 6),
             "pv_generation_hash": _canonical_hash(list(asset.pv_generation_kwh_by_slot)),
             "bess_enabled": bool(asset.bess_enabled),
             "bess_energy_kwh": float(asset.bess_energy_kwh),
             "bess_power_kw": float(asset.bess_power_kw),
+            "bess_cycle_cost_yen_per_kwh": float(
+                getattr(asset, "bess_cycle_cost_yen_per_kwh", 0.0) or 0.0
+            ),
+            "bess_charge_efficiency": float(
+                getattr(asset, "bess_charge_efficiency", 0.0) or 0.0
+            ),
+            "bess_discharge_efficiency": float(
+                getattr(asset, "bess_discharge_efficiency", 0.0) or 0.0
+            ),
             "bess_initial_soc_kwh": float(asset.bess_initial_soc_kwh),
+            "bess_soc_min_kwh": float(asset.bess_soc_min_kwh),
+            "bess_soc_max_kwh": float(asset.bess_soc_max_kwh),
+            "allow_pv_to_bess": bool(asset.allow_pv_to_bess),
+            "allow_grid_to_bess": bool(asset.allow_grid_to_bess),
+            "allow_bess_to_bus": bool(asset.allow_bess_to_bus),
+            "grid_to_bess_price_mode": str(asset.grid_to_bess_price_mode),
+            "grid_to_bess_price_threshold_yen_per_kwh": float(
+                asset.grid_to_bess_price_threshold_yen_per_kwh
+            ),
+            "grid_to_bess_allowed_slot_indices": list(
+                asset.grid_to_bess_allowed_slot_indices
+            ),
+            "bess_priority_mode": str(asset.bess_priority_mode),
+            "bess_terminal_soc_min_kwh": float(asset.bess_terminal_soc_min_kwh),
             "bess_terminal_soc_target_kwh": float(asset.bess_terminal_soc_target_kwh),
+            "bess_terminal_soc_deviation_penalty_yen_per_kwh": float(
+                asset.bess_terminal_soc_deviation_penalty_yen_per_kwh
+            ),
         }
         for depot_id, asset in sorted(problem.depot_energy_assets.items())
+    }
+
+
+def _charger_snapshot(problem: Any) -> list[dict[str, Any]]:
+    return [
+        {
+            "charger_id": str(charger.charger_id),
+            "depot_id": str(charger.depot_id),
+            "power_kw": float(charger.power_kw),
+            "bidirectional": bool(charger.bidirectional),
+            "simultaneous_ports": int(charger.simultaneous_ports),
+        }
+        for charger in sorted(problem.chargers, key=lambda item: str(item.charger_id))
+    ]
+
+
+def _trip_input_hash(problem: Any) -> str:
+    return _canonical_hash(
+        [
+            {
+                "trip_id": trip.trip_id,
+                "departure_min": trip.departure_min,
+                "arrival_min": trip.arrival_min,
+                "distance_km": trip.distance_km,
+                "energy_kwh": trip.energy_kwh,
+                "fuel_l": trip.fuel_l,
+            }
+            for trip in sorted(problem.trips, key=lambda item: str(item.trip_id))
+        ]
+    )
+
+
+def _vehicle_input_hash(problem: Any) -> str:
+    return _canonical_hash(
+        [
+            {
+                "vehicle_id": vehicle.vehicle_id,
+                "vehicle_type": vehicle.vehicle_type,
+                "home_depot_id": vehicle.home_depot_id,
+                "available": vehicle.available,
+                "battery_capacity_kwh": vehicle.battery_capacity_kwh,
+                "initial_soc": vehicle.initial_soc,
+                "reserve_soc": vehicle.reserve_soc,
+                "fuel_tank_capacity_l": vehicle.fuel_tank_capacity_l,
+                "initial_fuel_l": vehicle.initial_fuel_l,
+                "fuel_reserve_l": vehicle.fuel_reserve_l,
+            }
+            for vehicle in sorted(problem.vehicles, key=lambda item: str(item.vehicle_id))
+        ]
+    )
+
+
+def _weather_configuration(scenario: dict[str, Any]) -> dict[str, Any]:
+    simulation_config = dict(scenario.get("simulation_config") or {})
+    return {
+        key: simulation_config.get(key)
+        for key in (
+            "weather_mode",
+            "weather_factor_scalar",
+            "weather_operation_mode",
+            "enable_weather_operation_policy",
+            "pv_profile_id",
+            "weather_proxy_forecast_path",
+            "weather_proxy_station_id",
+            "solcast_typical_weather_class",
+            "random_seed",
+        )
     }
 
 
@@ -194,6 +312,7 @@ def run(args: argparse.Namespace) -> int:
         enable_weather_operation_policy=None,
         weather_proxy_forecast_path=None,
     )
+    initial_soc_policy = _resolve_initial_soc_policy(scenario)
     config = OptimizationConfig(
         mode=OptimizationMode.MILP,
         time_limit_sec=int(args.time_limit_sec),
@@ -223,12 +342,55 @@ def run(args: argparse.Namespace) -> int:
             weather_profile,
             random_seed=int(args.random_seed),
         )
+    initial_soc_metadata = initial_soc_input_metadata(
+        problem,
+        policy=initial_soc_policy,
+    )
+    if len(initial_soc_metadata["initial_soc_by_vehicle"]) != 35:
+        raise ValueError(
+            "Frontend weather comparison requires exact initial SOC inputs for 35 BEVs"
+        )
     _validate_frontend_case(
         problem,
         scenario,
         expected_service_date=args.expected_service_date,
     )
     git_state = _git_state()
+    trip_input_hash = _trip_input_hash(problem)
+    vehicle_input_hash = _vehicle_input_hash(problem)
+    charger_configuration = _charger_snapshot(problem)
+    depot_energy_assets = _asset_snapshot(problem)
+    weather_configuration = _weather_configuration(scenario)
+    terminal_soc_policy = {
+        "post_return_soc_target_enabled": bool(
+            problem.metadata.get("post_return_soc_target_enabled", False)
+        ),
+        "final_soc_floor_percent": problem.metadata.get("final_soc_floor_percent"),
+        "final_soc_target_percent": problem.metadata.get("final_soc_target_percent"),
+        "final_soc_target_tolerance_percent": problem.metadata.get(
+            "final_soc_target_tolerance_percent"
+        ),
+    }
+    experiment_hash = _canonical_hash(
+        {
+            "service_date": str(problem.metadata.get("service_date") or "")[:10],
+            "route_ids": sorted({str(trip.route_id) for trip in problem.trips}),
+            "trip_input_hash": trip_input_hash,
+            "vehicle_input_hash": vehicle_input_hash,
+            "initial_soc_policy": initial_soc_metadata["initial_soc_policy"],
+            "initial_soc_input_hash": initial_soc_metadata["initial_soc_input_hash"],
+            "charger_configuration": charger_configuration,
+            "timestep_min": int(problem.scenario.timestep_min),
+            "depot_energy_assets": depot_energy_assets,
+            "weather_configuration": weather_configuration,
+            "phase": "phase3_two_stage",
+            "research_run": True,
+            "time_limit_sec": int(args.time_limit_sec),
+            "mip_gap": float(args.mip_gap),
+            "random_seed": int(args.random_seed),
+            "git_sha": git_state["git_sha"],
+        }
+    )
     input_audit = {
         "case_name": args.case_name,
         "scenario_id": args.scenario_id,
@@ -240,7 +402,9 @@ def run(args: argparse.Namespace) -> int:
         "mip_gap": float(args.mip_gap),
         "random_seed": int(args.random_seed),
         "postsolve_repair_enabled": False,
+        "vehicle_soc_semantics": "slot_start",
         "weather_operation_policy_enabled": True,
+        "weather_configuration": weather_configuration,
         "trip_count": len(problem.trips),
         "fleet": {
             "BEV": sum(1 for item in problem.vehicles if str(item.vehicle_type).upper() == "BEV"),
@@ -255,6 +419,24 @@ def run(args: argparse.Namespace) -> int:
         ),
         "diesel_price_yen_per_l": float(problem.scenario.diesel_price_yen_per_l),
         "co2_price_yen_per_kg": float(problem.scenario.co2_price_per_kg),
+        "vehicle_usage_cost_jpy_per_used_bus": float(
+            problem.metadata.get("vehicle_usage_cost_jpy_per_used_bus", 0.0)
+            or 0.0
+        ),
+        "cost_component_flags": dict(
+            problem.metadata.get("cost_component_flags") or {}
+        ),
+        "objective_weights": {
+            name: float(getattr(problem.objective_weights, name, 0.0) or 0.0)
+            for name in (
+                "energy",
+                "fuel",
+                "demand",
+                "vehicle",
+                "vehicle_usage",
+                "degradation",
+            )
+        },
         "grid_co2_kg_per_kwh": {
             str(slot.slot_index): float(slot.co2_factor) for slot in problem.price_slots
         },
@@ -264,20 +446,17 @@ def run(args: argparse.Namespace) -> int:
         "pv_curtail_penalty_yen_per_kwh": float(
             problem.metadata.get("pv_curtail_penalty_yen_per_kwh", 0.0)
         ),
-        "depot_energy_assets": _asset_snapshot(problem),
-        "trip_input_hash": _canonical_hash(
-            [
-                {
-                    "trip_id": trip.trip_id,
-                    "departure_min": trip.departure_min,
-                    "arrival_min": trip.arrival_min,
-                    "distance_km": trip.distance_km,
-                    "energy_kwh": trip.energy_kwh,
-                    "fuel_l": trip.fuel_l,
-                }
-                for trip in sorted(problem.trips, key=lambda item: str(item.trip_id))
-            ]
-        ),
+        "initial_soc_policy": initial_soc_metadata["initial_soc_policy"],
+        "initial_soc_source": initial_soc_metadata["initial_soc_source"],
+        "initial_soc_input_hash": initial_soc_metadata["initial_soc_input_hash"],
+        "initial_soc_by_vehicle": initial_soc_metadata["initial_soc_by_vehicle"],
+        "terminal_soc_policy": terminal_soc_policy,
+        "charger_configuration": charger_configuration,
+        "charger_configuration_hash": _canonical_hash(charger_configuration),
+        "depot_energy_assets": depot_energy_assets,
+        "vehicle_input_hash": vehicle_input_hash,
+        "trip_input_hash": trip_input_hash,
+        "experiment_hash": experiment_hash,
         **git_state,
     }
     _write_json(output_dir / "input_audit.json", input_audit)
@@ -333,14 +512,22 @@ def run(args: argparse.Namespace) -> int:
         "elapsed_seconds": elapsed,
         "trip_count_served": len(result.plan.served_trip_ids),
         "trip_count_unserved": len(result.plan.unserved_trip_ids),
-        "used_vehicle_count": len(result.plan.used_vehicle_ids()),
+        "used_vehicle_count": len(result.plan.vehicle_paths()),
         "max_fragments_observed": int(result.plan.max_fragments_observed()),
         "stage1_solver_status": metadata.get("stage1_solver_status"),
         "stage2_solver_status": metadata.get("stage2_solver_status"),
         "stage1_objective": _finite(metadata.get("stage1_objective")),
         "stage2_objective": _finite(metadata.get("stage2_objective")),
+        "stage1_best_bound": _finite(metadata.get("stage1_best_bound")),
+        "stage2_best_bound": _finite(metadata.get("stage2_best_bound")),
         "stage1_mip_gap_ratio": _finite(metadata.get("stage1_mip_gap_ratio")),
         "stage2_mip_gap_ratio": _finite(metadata.get("stage2_mip_gap_ratio")),
+        "stage1_mip_gap_percent": _mip_gap_percent(
+            metadata.get("stage1_mip_gap_ratio")
+        ),
+        "stage2_mip_gap_percent": _mip_gap_percent(
+            metadata.get("stage2_mip_gap_ratio")
+        ),
         "stage1_runtime_seconds": _finite(metadata.get("stage1_runtime_seconds")),
         "stage2_runtime_seconds": _finite(metadata.get("stage2_runtime_seconds")),
         "research_run_accepted": bool(metadata.get("research_run_accepted", False)),
@@ -354,6 +541,12 @@ def run(args: argparse.Namespace) -> int:
             metadata.get("solver_objective_matches_accounting_total", False)
         ),
         "objective_semantics": metadata.get("objective_semantics"),
+        "accounting_total_cost_jpy": _finite(breakdown.get("total_cost")),
+        "cost_comparison_scope": (
+            "feasible_schedule_accounting_not_global_total_cost_optimum"
+            if result.feasible
+            else "not_available_for_infeasible_result"
+        ),
         "validation_metrics": dict(metadata.get("validation_metrics") or {}),
         "flows_kwh_or_kw": flows,
         "costs_jpy": costs,
