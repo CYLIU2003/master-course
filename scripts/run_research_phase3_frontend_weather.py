@@ -190,6 +190,28 @@ def _asset_snapshot(problem: Any) -> dict[str, Any]:
     }
 
 
+def _depot_import_limit_snapshot(problem: Any) -> dict[str, float]:
+    """Return the raw frontend-configured grid import limit for every depot.
+
+    The Stage 2 MILP interprets a non-positive value as no finite contract
+    limit. Preserve that raw value separately so a weather comparison cannot
+    confuse an unbounded depot with a finite-contract experiment.
+    """
+    depot_by_id = {
+        str(depot.depot_id): depot
+        for depot in tuple(problem.depots or ())
+        if str(depot.depot_id)
+    }
+    depot_ids = set(depot_by_id)
+    depot_ids.update(str(depot_id) for depot_id in problem.depot_energy_assets)
+    return {
+        depot_id: float(
+            getattr(depot_by_id.get(depot_id), "import_limit_kw", 0.0) or 0.0
+        )
+        for depot_id in sorted(depot_ids)
+    }
+
+
 def _charger_snapshot(problem: Any) -> list[dict[str, Any]]:
     return [
         {
@@ -383,7 +405,15 @@ def run(args: argparse.Namespace) -> int:
     vehicle_input_hash = _vehicle_input_hash(problem)
     charger_configuration = _charger_snapshot(problem)
     depot_energy_assets = _asset_snapshot(problem)
+    depot_import_limit_kw_by_depot = _depot_import_limit_snapshot(problem)
     weather_configuration = _weather_configuration(scenario)
+    weather_operation_profile = dict(
+        problem.metadata.get("weather_operation_profile") or {}
+    )
+    if not weather_operation_profile:
+        raise ValueError(
+            "Frontend weather comparison requires the effective weather operation profile"
+        )
     terminal_soc_policy = {
         "post_return_soc_target_enabled": bool(
             problem.metadata.get("post_return_soc_target_enabled", False)
@@ -405,7 +435,14 @@ def run(args: argparse.Namespace) -> int:
             "charger_configuration": charger_configuration,
             "timestep_min": int(problem.scenario.timestep_min),
             "depot_energy_assets": depot_energy_assets,
+            "depot_import_limit_kw_by_depot": depot_import_limit_kw_by_depot,
+            "depot_import_limit_semantics": "nonpositive_means_no_finite_contract_limit",
+            "contract_overage_penalty_yen_per_kwh": float(
+                problem.metadata.get("contract_overage_penalty_yen_per_kwh", 0.0)
+                or 0.0
+            ),
             "weather_configuration": weather_configuration,
+            "weather_operation_profile": weather_operation_profile,
             "research_fragment_policy": fragment_policy,
             "phase": "phase3_two_stage",
             "research_run": True,
@@ -429,6 +466,7 @@ def run(args: argparse.Namespace) -> int:
         "vehicle_soc_semantics": "slot_start",
         "weather_operation_policy_enabled": True,
         "weather_configuration": weather_configuration,
+        "weather_operation_profile": weather_operation_profile,
         "trip_count": len(problem.trips),
         "fleet": {
             "BEV": sum(1 for item in problem.vehicles if str(item.vehicle_type).upper() == "BEV"),
@@ -440,6 +478,12 @@ def run(args: argparse.Namespace) -> int:
         "demand_charge_monthly_yen_per_kw": float(problem.scenario.demand_charge_on_peak_yen_per_kw),
         "demand_charge_horizon_yen_per_kw": float(
             problem.scenario.demand_charge_on_peak_horizon_yen_per_kw
+        ),
+        "depot_import_limit_kw_by_depot": depot_import_limit_kw_by_depot,
+        "depot_import_limit_semantics": "nonpositive_means_no_finite_contract_limit",
+        "contract_overage_penalty_yen_per_kwh": float(
+            problem.metadata.get("contract_overage_penalty_yen_per_kwh", 0.0)
+            or 0.0
         ),
         "diesel_price_yen_per_l": float(problem.scenario.diesel_price_yen_per_l),
         "co2_price_yen_per_kg": float(problem.scenario.co2_price_per_kg),
@@ -527,7 +571,14 @@ def run(args: argparse.Namespace) -> int:
             "demand_cost",
             "fuel_cost",
             "co2_cost",
+            "vehicle_cost",
             "vehicle_usage_cost",
+            "driver_cost",
+            "unserved_penalty",
+            "switch_cost",
+            "degradation_cost",
+            "deviation_cost",
+            "contract_overage_cost",
         )
     }
     summary = {

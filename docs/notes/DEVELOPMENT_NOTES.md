@@ -5,6 +5,36 @@
 
 ---
 
+## 2026-07-14 17:50 JST — Accepted frontend weather runs and guarded accounting comparison
+
+### 実測した受理済み結果
+
+- clean commit 95ade40、Gurobi 13.0.1、GRB_LICENSE_FILE=C:\Users\RTDS_admin\gurobi.licで、実フロントエンド由来の60分・24slot・Phase 3二段階モデルを本実行した。晴天はscenario 771d115b-75b0-49f7-a7f0-25f259a2cd21 / 2025-08-05、雨天はb23fd26c-1233-4c73-bb9e-bdb8b1584760 / 2025-08-10である。どちらもtime_limit_sec=1500、mip_gap=0.1、seed 42、postsolve repairなし、fallbackなしである。
+- 両結果ともresearch_run_accepted=true、research_feasibility_eligible=true、264/264便担当、使用32台、最大fragment数1、SOC上下限・BESS SOC/終端・充電器同時使用・契約電力・接続可否の独立validation違反0件となった。晴天/雨天のsummaryはそれぞれoutput/research_phase3_frontend_weather_60min_sunny_95ade40、output/research_phase3_frontend_weather_60min_rain_95ade40に保存した。
+- 両ケースのStage 1は約750.3秒でtime_limit、同じincumbent objective 708,727.541、best bound 560,000、gap 20.985%で終了した。Stage 2は固定割当の充電/PV/BESS dispatchをそれぞれ0.062秒・0.067秒でoptimalにした。設定した1500秒は上限であり、二段階実装はStageごとに時間を配分するため、常に1500秒を使い切る設定ではない。
+
+### 比較契約・結果
+
+- scripts/compare_research_phase3_weather.pyを追加した。summaryを直接比較する前に、1500秒・264便・BEV35/ICE25・60分24slotの研究scope、受理gate、完全担当、fragment、全validation、git clean、会計totalと現行研究scopeの正規加算項（electricity/demand/fuel/CO2/vehicle usage）の和の一致を検証する。さらにgit SHA、phase、time limit/gap/seed、SOC semantics、trip/fleet/hash、初期SOC全値、terminal SOC、charger構成、TOU、需要料金、軽油/CO2/使用車両費、cost flags、objective weights、BESSを含むasset設定、Stage 1の必要条件の意味・件数を完全一致させる。不一致なら比較結果を出さずに停止する。
+- 許容する差はcase identity、service date、weather/PV provenance、PV case・PV発電量・PV hashだけである。したがって雨天と晴天でコストが同値になるような既存の比較不備は使用していない。実測比較artifactはoutput/research_phase3_weather_comparison_95ade40/weather_comparison.jsonおよびweather_comparison_report.mdに保存した。
+- 会計上、雨天は晴天に対して総費用が+10,387.354 JPY（+1.448%）、grid importが+496.502 kWh、peak gridが+26.132 kWとなった。PV生成は614.709375 kWhから101.114300 kWhへ-513.595 kWh（-83.551%）、PV→busは-338.286 kWh、BESS→busは-158.216 kWhである。費用差の主因はgrid purchase +9,093.834 JPYとdemand charge +1,045.268 JPYであり、燃料費・使用車両費は同値である。
+- これは「同じ固定条件で得た受理済み可行スケジュールの会計・制約条件比較」である。Phase 3はStage 1の車両割当をStage 2で固定しており、しかもStage 1はtime-limit/gap 20.985%であるため、global total-cost optimum、車両割当の一意性、又は天候による最適解の優劣を主張してはならない。
+- 比較script実装中に、grid_purchase_costはelectricity_costの追跡用内訳であり、会計総額に別途足すと二重加算になることを検出した。正規合計式へ直し、reportでは会計主加算項と電力フロー由来の補助指標を別表にした。この修正は既存の費用計算を変更せず、監査式・表示の誤解だけを除去した。
+
+### weather operation profile の監査強化
+
+- 自己レビューで、weather_operation_modeをweather provenanceとしてだけ許容する比較では、将来そのmodeに実効SOC/コスト/運用biasが追加された際に交絡を見逃すP1を見つけた。scripts/run_research_phase3_frontend_weather.pyは今後、canonical problemに実際に適用されたweather_operation_profileをinput audit/summaryへ保存し、experiment hashにも含める。profileが空ならrunを停止する。
+- 比較scriptは新しいsummaryではprofileのoperation_modeラベル以外をhard equalityで照合する。片方だけ欠損なら拒否し、両方欠損する旧summaryはlegacyとして明示する。今回の95ade40 summaryはこのnew field導入前なのでlegacy表記となるが、当該commitのWeatherOperationProfileをsourceから監査した結果、晴天/雨天の有効値はoperation_mode以外すべてNone又は0で一致した。current sourceで両caseのbuild-onlyを再実行して同じprofile payloadを保存することも確認した。この追補は数理制約・目的係数を変更せず、provenanceと再現性を強化する。
+- 同じ自己レビューで、旧summaryが契約電力の料金単価だけを保存し、import upper limitを保存していないことをP1として検出した。runnerはdepot別raw import limit、nonpositive時は有限contractなしという解釈、contract overage penaltyをinput audit/summary/experiment hashへ追加した。current sourceの同一prepared input build-only auditでは、晴天・雨天とも鶴巻のimport limitは1000 kW、overage penaltyは0 JPY/kWhで一致した。旧95ade40 full summaryはこのfield導入前なのでcomparison reportではlegacyとして明示し、将来のsummaryでは片方でも欠損又は値不一致なら拒否する。
+
+### 検証・レビュー
+
+- python -m pytest -q tests/test_research_phase3_weather_comparison.py tests/test_phase3_controlled_validation.py → 34 passed, 4 skipped。新規testは、PV差だけの正常比較、TOU差の拒否、未受理結果の拒否、未分類weather setting差の拒否、有効weather profile knob差の拒否、契約電力上限差の拒否を確認する。
+- python -m pytest -q --ignore=test_multiday_phase1.py → 665 passed, 20 skipped。除外したtest_multiday_phase1.pyはlocalhost BFFを必要とする外部結合testであり、本変更の最適化core regressionではない。
+- python -m py_compile scripts/compare_research_phase3_weather.py scripts/run_research_phase3_frontend_weather.py tests/test_research_phase3_weather_comparison.py、git diff --check、晴天/雨天summaryに対する実comparison CLIを通した。MIT-style self reviewでは、比較対象の固定条件、legacy provenance、ゼロ除算を含む差分表示、会計totalの内部整合、global-optimum誤主張を確認した。外部claude CLIはこの環境に存在しないため、Claude Codeによる独立レビューは実行できない。
+
+---
+
 ## 2026-07-14 16:50 JST — Phase 3 early-SOC relaxation from frontend-weather Stage 2 IIS
 
 ### 実測した現象（研究結果には不採用）
