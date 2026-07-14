@@ -3032,6 +3032,21 @@ class GurobiMILPAdapter:
             for var in used_vehicle_day.values():
                 objective1 += vehicle_usage_unit_cost * var
         stage1.setObjective(objective1, GRB.MINIMIZE)
+        (
+            stage1_warm_start_applied,
+            stage1_warm_start_source,
+            stage1_warm_start_rejection_reason,
+        ) = self._apply_stage1_assignment_warm_start(
+            problem,
+            enabled=bool(getattr(config, "warm_start", True)),
+            y=y,
+            x=x,
+            start_arc=start_arc,
+            end_arc=end_arc,
+            used_vehicle=used_vehicle,
+            used_vehicle_day=used_vehicle_day,
+            trip_day_index_by_trip_id=trip_day_index_by_trip_id,
+        )
         stage1.optimize()
 
         stage1_status = self._status_name(GRB, stage1.Status)
@@ -3086,6 +3101,11 @@ class GurobiMILPAdapter:
                     "fragment_temporal_occupancy_constraint_count": (
                         fragment_temporal_occupancy_constraint_count
                     ),
+                    "stage1_warm_start_applied": stage1_warm_start_applied,
+                    "stage1_warm_start_source": stage1_warm_start_source,
+                    "stage1_warm_start_rejection_reason": (
+                        stage1_warm_start_rejection_reason
+                    ),
                 },
             )
             return (
@@ -3098,6 +3118,8 @@ class GurobiMILPAdapter:
                     best_bound=stage1_bound,
                     final_gap=stage1_gap,
                     runtime_sec=float(time.perf_counter() - total_started),
+                    warm_start_applied=stage1_warm_start_applied,
+                    warm_start_source=stage1_warm_start_source,
                 ),
                 empty,
             )
@@ -3141,6 +3163,11 @@ class GurobiMILPAdapter:
                 "fragment_temporal_occupancy_constraint_count": (
                     fragment_temporal_occupancy_constraint_count
                 ),
+                "stage1_warm_start_applied": stage1_warm_start_applied,
+                "stage1_warm_start_source": stage1_warm_start_source,
+                "stage1_warm_start_rejection_reason": (
+                    stage1_warm_start_rejection_reason
+                ),
             },
         )
 
@@ -3152,6 +3179,8 @@ class GurobiMILPAdapter:
                 stage1_bound=stage1_bound,
                 stage1_runtime_sec=stage1_runtime_sec_value,
                 supports_exact_milp=False,
+                warm_start_applied=stage1_warm_start_applied,
+                warm_start_source=stage1_warm_start_source,
             )
             return stage1_outcome, stage1_plan
 
@@ -3177,6 +3206,8 @@ class GurobiMILPAdapter:
         stage1_runtime_sec: float,
         supports_exact_milp: bool = False,
         fallback_reason: str = "",
+        warm_start_applied: bool = False,
+        warm_start_source: str = "",
     ) -> MILPSolverOutcome:
         """Construct a MILPSolverOutcome for Stage 1-only Phase 2 runs."""
         return MILPSolverOutcome(
@@ -3191,6 +3222,8 @@ class GurobiMILPAdapter:
             final_gap=stage1_gap,
             runtime_sec=stage1_runtime_sec,
             fallback_reason=fallback_reason,
+            warm_start_applied=warm_start_applied,
+            warm_start_source=warm_start_source,
         )
 
     def _solve_thesis_stage2_charging_dispatch(
@@ -3261,6 +3294,12 @@ class GurobiMILPAdapter:
                     best_bound=stage1_bound,
                     final_gap=stage1_gap,
                     runtime_sec=stage1_runtime_sec,
+                    warm_start_applied=bool(
+                        metadata.get("stage1_warm_start_applied", False)
+                    ),
+                    warm_start_source=str(
+                        metadata.get("stage1_warm_start_source") or ""
+                    ),
                 ),
                 plan,
             )
@@ -3876,6 +3915,12 @@ class GurobiMILPAdapter:
                     # Do not report Stage 1's gap as an achieved final gap.
                     final_gap=None,
                     runtime_sec=stage1_runtime_sec + float(time.perf_counter() - started),
+                    warm_start_applied=bool(
+                        metadata.get("stage1_warm_start_applied", False)
+                    ),
+                    warm_start_source=str(
+                        metadata.get("stage1_warm_start_source") or ""
+                    ),
                 ),
                 replace(stage1_plan, metadata=metadata),
             )
@@ -4061,6 +4106,12 @@ class GurobiMILPAdapter:
                 final_gap=final_gap,
                 nodes_explored=None,
                 runtime_sec=stage1_runtime_sec + float(time.perf_counter() - started),
+                warm_start_applied=bool(
+                    metadata.get("stage1_warm_start_applied", False)
+                ),
+                warm_start_source=str(
+                    metadata.get("stage1_warm_start_source") or ""
+                ),
                 presolve_reduction_summary={
                     "stage1_assignment_pairs": len(stage1_plan.served_trip_ids),
                     "stage2_vehicle_count": len(assigned_bev_ids),
@@ -4512,6 +4563,98 @@ class GurobiMILPAdapter:
                 metadata=baseline_meta,
             ),
         )
+
+    def _apply_stage1_assignment_warm_start(
+        self,
+        problem: CanonicalOptimizationProblem,
+        *,
+        enabled: bool,
+        y: Mapping[Tuple[str, str], Any],
+        x: Mapping[Tuple[str, str, str], Any],
+        start_arc: Mapping[Tuple[str, str], Any],
+        end_arc: Mapping[Tuple[str, str], Any],
+        used_vehicle: Mapping[str, Any],
+        used_vehicle_day: Mapping[Tuple[str, int], Any],
+        trip_day_index_by_trip_id: Mapping[str, int],
+    ) -> Tuple[bool, str, str]:
+        """Submit a complete, representable path-cover baseline as MIP start."""
+        baseline = problem.baseline_plan
+        if not enabled:
+            return False, "", "disabled_by_config"
+        if baseline is None:
+            return False, "", "baseline_missing"
+
+        source = str((baseline.metadata or {}).get("source") or "baseline_plan")
+        expected_trip_ids = set(problem.eligible_trip_ids())
+        if set(baseline.served_trip_ids) != expected_trip_ids or baseline.unserved_trip_ids:
+            return False, source, "baseline_does_not_cover_all_trips"
+
+        duty_vehicle_map = baseline.duty_vehicle_map()
+        selected_y: Set[Tuple[str, str]] = set()
+        selected_x: Set[Tuple[str, str, str]] = set()
+        selected_start: Set[Tuple[str, str]] = set()
+        selected_end: Set[Tuple[str, str]] = set()
+        selected_used_vehicle: Set[str] = set()
+        selected_used_vehicle_day: Set[Tuple[str, int]] = set()
+        assigned_vehicle_by_trip: Dict[str, str] = {}
+
+        for duty in baseline.duties:
+            trip_ids = tuple(str(trip_id) for trip_id in duty.trip_ids)
+            if not trip_ids:
+                continue
+            vehicle_id = str(duty_vehicle_map.get(str(duty.duty_id)) or "")
+            if not vehicle_id or vehicle_id not in used_vehicle:
+                return False, source, f"baseline_vehicle_missing:{vehicle_id or duty.duty_id}"
+            selected_used_vehicle.add(vehicle_id)
+            for trip_id in trip_ids:
+                key = (vehicle_id, trip_id)
+                if key not in y:
+                    return False, source, f"baseline_assignment_not_representable:{vehicle_id}:{trip_id}"
+                previous_vehicle_id = assigned_vehicle_by_trip.get(trip_id)
+                if previous_vehicle_id is not None:
+                    return False, source, (
+                        "baseline_duplicate_assignment:"
+                        f"{trip_id}:{previous_vehicle_id}:{vehicle_id}"
+                    )
+                assigned_vehicle_by_trip[trip_id] = vehicle_id
+                selected_y.add(key)
+                day_idx = int(trip_day_index_by_trip_id.get(trip_id, 0))
+                day_key = (vehicle_id, day_idx)
+                if day_key not in used_vehicle_day:
+                    return False, source, f"baseline_vehicle_day_missing:{vehicle_id}:{day_idx}"
+                selected_used_vehicle_day.add(day_key)
+
+            start_key = (vehicle_id, trip_ids[0])
+            end_key = (vehicle_id, trip_ids[-1])
+            if start_key not in start_arc or end_key not in end_arc:
+                return False, source, f"baseline_boundary_not_representable:{duty.duty_id}"
+            selected_start.add(start_key)
+            selected_end.add(end_key)
+            for from_trip_id, to_trip_id in zip(trip_ids, trip_ids[1:]):
+                arc_key = (vehicle_id, from_trip_id, to_trip_id)
+                if arc_key not in x:
+                    return False, source, (
+                        "baseline_connection_not_representable:"
+                        f"{vehicle_id}:{from_trip_id}:{to_trip_id}"
+                    )
+                selected_x.add(arc_key)
+
+        if {trip_id for _vehicle_id, trip_id in selected_y} != expected_trip_ids:
+            return False, source, "baseline_selected_trip_set_mismatch"
+
+        for key, var in y.items():
+            var.Start = 1.0 if key in selected_y else 0.0
+        for key, var in x.items():
+            var.Start = 1.0 if key in selected_x else 0.0
+        for key, var in start_arc.items():
+            var.Start = 1.0 if key in selected_start else 0.0
+        for key, var in end_arc.items():
+            var.Start = 1.0 if key in selected_end else 0.0
+        for vehicle_id, var in used_vehicle.items():
+            var.Start = 1.0 if vehicle_id in selected_used_vehicle else 0.0
+        for key, var in used_vehicle_day.items():
+            var.Start = 1.0 if key in selected_used_vehicle_day else 0.0
+        return True, source, ""
 
     def _add_fragment_pairwise_depot_reset_cuts(
         self,

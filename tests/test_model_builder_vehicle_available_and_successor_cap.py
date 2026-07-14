@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from types import SimpleNamespace
 
+from src.dispatch.models import DutyLeg, VehicleDuty
 from src.optimization.common.problem import (
+    AssignmentPlan,
     CanonicalOptimizationProblem,
     OptimizationScenario,
     ProblemTrip,
@@ -75,3 +78,46 @@ def test_explicit_successor_cap_limits_dense_graphs() -> None:
     pairs = MILPModelBuilder().enumerate_arc_pairs(problem, trip_by_id)
 
     assert len([pair for pair in pairs if pair[1] == "t0"]) == 8
+
+
+def test_successor_cap_counts_only_vehicle_compatible_successors() -> None:
+    problem = _problem(successor_cap=1)
+    trips = (
+        problem.trips[0],
+        replace(problem.trips[1], allowed_vehicle_types=("BEV",)),
+        *problem.trips[2:],
+    )
+    problem = replace(problem, trips=trips)
+    builder = MILPModelBuilder()
+
+    pairs = builder.enumerate_arc_pairs(problem, problem.trip_by_id())
+    summary = builder.arc_pruning_summary(problem, problem.trip_by_id())
+
+    assert ("veh-available", "t0", "t1") not in pairs
+    assert ("veh-available", "t0", "t2") in pairs
+    assert summary["arc_count_after_successor_pruning"] == len(pairs)
+
+
+def test_successor_cap_preserves_representable_baseline_connection() -> None:
+    problem = _problem(successor_cap=8)
+    baseline_duty = VehicleDuty(
+        duty_id="baseline-duty",
+        vehicle_type="ICE",
+        legs=(DutyLeg(trip=problem.trips[0]), DutyLeg(trip=problem.trips[-1])),
+    )
+    problem = replace(
+        problem,
+        baseline_plan=AssignmentPlan(
+            duties=(baseline_duty,),
+            served_trip_ids=("t0", "t11"),
+            metadata={"duty_vehicle_map": {"baseline-duty": "veh-available"}},
+        ),
+    )
+    builder = MILPModelBuilder()
+
+    pairs = builder.enumerate_arc_pairs(problem, problem.trip_by_id())
+    summary = builder.arc_pruning_summary(problem, problem.trip_by_id())
+
+    assert ("veh-available", "t0", "t11") in pairs
+    assert len([pair for pair in pairs if pair[0] == "veh-available" and pair[1] == "t0"]) == 9
+    assert summary["baseline_preserved_arc_count"] == 1

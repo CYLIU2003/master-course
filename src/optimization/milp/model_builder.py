@@ -76,6 +76,7 @@ class MILPModelBuilder:
             trip.trip_id: day_index_for_minute(int(getattr(trip, "departure_min", 0) or 0), horizon_start_min)
             for trip in problem.trips
         }
+        baseline_successors = self._baseline_successors_by_vehicle_trip(problem)
         for vehicle in problem.vehicles:
             if not getattr(vehicle, "available", True):
                 continue
@@ -85,9 +86,15 @@ class MILPModelBuilder:
                 candidate_successors = [
                     trip_j_id
                     for trip_j_id in problem.feasible_connections.get(trip_i.trip_id, ())
-                    if not fixed_route_band_mode
-                    or trip_day_index_by_trip_id.get(trip_i.trip_id) != trip_day_index_by_trip_id.get(trip_j_id)
-                    or route_band_by_trip_id.get(trip_i.trip_id) == route_band_by_trip_id.get(trip_j_id)
+                    if (
+                        not fixed_route_band_mode
+                        or trip_day_index_by_trip_id.get(trip_i.trip_id)
+                        != trip_day_index_by_trip_id.get(trip_j_id)
+                        or route_band_by_trip_id.get(trip_i.trip_id)
+                        == route_band_by_trip_id.get(trip_j_id)
+                    )
+                    and vehicle.vehicle_type
+                    in getattr(trip_by_id.get(trip_j_id), "allowed_vehicle_types", ())
                 ]
                 candidate_successors.sort(
                     key=lambda trip_j_id: (
@@ -101,12 +108,18 @@ class MILPModelBuilder:
                     if max_successors_per_trip is None
                     else candidate_successors[:max_successors_per_trip]
                 )
+                # Preserve validated baseline connections so the path-cover
+                # MIP start remains representable after generic arc pruning.
+                selected_successors = list(selected_successors)
+                for baseline_successor in baseline_successors.get(
+                    (str(vehicle.vehicle_id), str(trip_i.trip_id)), ()
+                ):
+                    if (
+                        baseline_successor in candidate_successors
+                        and baseline_successor not in selected_successors
+                    ):
+                        selected_successors.append(baseline_successor)
                 for trip_j_id in selected_successors:
-                    trip_j = trip_by_id.get(trip_j_id)
-                    if trip_j is None:
-                        continue
-                    if vehicle.vehicle_type not in getattr(trip_j, "allowed_vehicle_types", ()):  # type-safe edge
-                        continue
                     pairs.append((vehicle.vehicle_id, trip_i.trip_id, trip_j_id))
         return pairs
 
@@ -134,6 +147,8 @@ class MILPModelBuilder:
         selected_count = 0
         pruned_origin_count = 0
         max_candidate_successors = 0
+        baseline_preserved_arc_count = 0
+        baseline_successors = self._baseline_successors_by_vehicle_trip(problem)
         for vehicle in problem.vehicles:
             if not getattr(vehicle, "available", True):
                 continue
@@ -143,14 +158,15 @@ class MILPModelBuilder:
                 candidate_successors = [
                     trip_j_id
                     for trip_j_id in problem.feasible_connections.get(trip_i.trip_id, ())
-                    if not fixed_route_band_mode
-                    or trip_day_index_by_trip_id.get(trip_i.trip_id) != trip_day_index_by_trip_id.get(trip_j_id)
-                    or route_band_by_trip_id.get(trip_i.trip_id) == route_band_by_trip_id.get(trip_j_id)
-                ]
-                candidate_successors = [
-                    trip_j_id
-                    for trip_j_id in candidate_successors
-                    if vehicle.vehicle_type in getattr(trip_by_id.get(trip_j_id), "allowed_vehicle_types", ())
+                    if (
+                        not fixed_route_band_mode
+                        or trip_day_index_by_trip_id.get(trip_i.trip_id)
+                        != trip_day_index_by_trip_id.get(trip_j_id)
+                        or route_band_by_trip_id.get(trip_i.trip_id)
+                        == route_band_by_trip_id.get(trip_j_id)
+                    )
+                    and vehicle.vehicle_type
+                    in getattr(trip_by_id.get(trip_j_id), "allowed_vehicle_types", ())
                 ]
                 candidate_successors.sort(
                     key=lambda trip_j_id: (
@@ -164,6 +180,16 @@ class MILPModelBuilder:
                     if successor_limit is None
                     else candidate_successors[:successor_limit]
                 )
+                selected_successors = list(selected_successors)
+                for baseline_successor in baseline_successors.get(
+                    (str(vehicle.vehicle_id), str(trip_i.trip_id)), ()
+                ):
+                    if (
+                        baseline_successor in candidate_successors
+                        and baseline_successor not in selected_successors
+                    ):
+                        selected_successors.append(baseline_successor)
+                        baseline_preserved_arc_count += 1
                 candidate_count += len(candidate_successors)
                 selected_count += len(selected_successors)
                 max_candidate_successors = max(max_candidate_successors, len(candidate_successors))
@@ -177,6 +203,29 @@ class MILPModelBuilder:
             "pruned_arc_count": max(candidate_count - selected_count, 0),
             "pruned_origin_count": pruned_origin_count,
             "max_candidate_successors_per_origin": max_candidate_successors,
+            "baseline_preserved_arc_count": baseline_preserved_arc_count,
+        }
+
+    @staticmethod
+    def _baseline_successors_by_vehicle_trip(
+        problem: CanonicalOptimizationProblem,
+    ) -> Dict[Tuple[str, str], Tuple[str, ...]]:
+        baseline = problem.baseline_plan
+        if baseline is None:
+            return {}
+        duty_vehicle_map = baseline.duty_vehicle_map()
+        successors: Dict[Tuple[str, str], List[str]] = {}
+        for duty in baseline.duties:
+            vehicle_id = str(duty_vehicle_map.get(str(duty.duty_id)) or "")
+            if not vehicle_id:
+                continue
+            for from_trip_id, to_trip_id in zip(duty.trip_ids, duty.trip_ids[1:]):
+                successors.setdefault(
+                    (vehicle_id, str(from_trip_id)), []
+                ).append(str(to_trip_id))
+        return {
+            key: tuple(dict.fromkeys(values))
+            for key, values in successors.items()
         }
 
     def _successor_limit(self, value: object) -> int | None:

@@ -135,6 +135,7 @@ def test_milp_blocks_nested_fragments_inside_selected_connection_span() -> None:
             mode=OptimizationMode.MILP,
             time_limit_sec=10,
             mip_gap=0.0,
+            phase="phase3_two_stage",
         ),
     )
 

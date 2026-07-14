@@ -122,6 +122,7 @@ def _build_experiment_identity(
     mip_gap: float,
     random_seed: int,
     git_sha: str,
+    warm_start_enabled: bool,
 ) -> dict[str, Any]:
     """Hash every controlled input that changes the experiment's meaning."""
     trip_inputs = [
@@ -180,6 +181,21 @@ def _build_experiment_identity(
         for depot_id, asset in sorted(problem.depot_energy_assets.items())
     ]
     simulation_config = dict(scenario.get("simulation_config") or {})
+    baseline = problem.baseline_plan
+    baseline_duty_vehicle_map = baseline.duty_vehicle_map() if baseline is not None else {}
+    baseline_assignment = [
+        {
+            "duty_id": str(duty.duty_id),
+            "vehicle_id": str(
+                baseline_duty_vehicle_map.get(str(duty.duty_id)) or ""
+            ),
+            "trip_ids": list(duty.trip_ids),
+        }
+        for duty in sorted(
+            tuple(getattr(baseline, "duties", ()) or ()),
+            key=lambda item: str(item.duty_id),
+        )
+    ]
     fingerprint_payload = {
         "service_date": str(problem.metadata.get("service_date") or ""),
         "route_ids": sorted({str(trip.route_id) for trip in problem.trips}),
@@ -203,6 +219,8 @@ def _build_experiment_identity(
         "time_limit_sec": int(time_limit_sec),
         "mip_gap_ratio": float(mip_gap),
         "random_seed": int(random_seed),
+        "warm_start_enabled": bool(warm_start_enabled),
+        "baseline_assignment_hash": _canonical_payload_hash(baseline_assignment),
         "git_sha": str(git_sha),
     }
     return {
@@ -357,6 +375,8 @@ def _validate_target_input(
         raise ValueError(f"controlled run must execute phase3_two_stage, got {config.phase!r}")
     if bool(config.allow_postsolve_repair):
         raise ValueError("controlled run must disable postsolve repair")
+    if not bool(config.warm_start):
+        raise ValueError("controlled run must enable the validated path-cover MIP start")
 
 
 def _write_schedule(output_dir: Path, result: Any) -> None:
@@ -411,7 +431,7 @@ def run(args: argparse.Namespace) -> int:
         time_limit_sec=int(args.time_limit_sec),
         mip_gap=float(args.mip_gap),
         random_seed=int(args.random_seed),
-        warm_start=False,
+        warm_start=True,
         thesis_mode=True,
         research_run=True,
         allow_postsolve_repair=False,
@@ -466,6 +486,7 @@ def run(args: argparse.Namespace) -> int:
         mip_gap=float(args.mip_gap),
         random_seed=int(args.random_seed),
         git_sha=git_sha,
+        warm_start_enabled=bool(config.warm_start),
     )
     input_audit = {
         "experiment_case_tag": "CONTROLLED_MODEL_VALIDATION_CASE",
@@ -500,6 +521,7 @@ def run(args: argparse.Namespace) -> int:
         "bess_enabled": False,
         "weather_operation_policy_enabled": False,
         "postsolve_repair_enabled": False,
+        "warm_start_enabled": bool(config.warm_start),
         "fallback_enabled": False,
         "partial_service_enabled": False,
         "terminal_soc_policy": "minimum_soc",
@@ -659,6 +681,18 @@ def run(args: argparse.Namespace) -> int:
         "stage2_feasible": solver_metadata.get("stage2_feasible"),
         "supports_two_stage_milp": solver_metadata.get("supports_two_stage_milp"),
         "assignment_candidate_available": solver_metadata.get("assignment_candidate_available", False),
+        "warm_start_applied": bool(
+            solver_metadata.get("warm_start_applied", False)
+        ),
+        "warm_start_source": solver_metadata.get("warm_start_source"),
+        "arc_pruning_summary": dict(
+            solver_metadata.get("arc_pruning_summary") or {}
+        ),
+        "used_vehicle_count": len(problem.vehicles)
+        - len(solver_metadata.get("unused_available_vehicle_ids") or ()),
+        "max_fragments_observed": int(
+            solver_metadata.get("max_fragments_observed", 0) or 0
+        ),
         "validation_metrics": dict(solver_metadata.get("validation_metrics") or {}),
         "research_acceptance_checks": acceptance,
         "objective_available": solver_objective is not None,

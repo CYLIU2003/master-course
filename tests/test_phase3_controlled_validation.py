@@ -555,6 +555,7 @@ def _experiment_identity_for(
         mip_gap=0.1,
         random_seed=42,
         git_sha="test-sha",
+        warm_start_enabled=True,
     )
 
 
