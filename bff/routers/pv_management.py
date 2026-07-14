@@ -118,6 +118,16 @@ def _sync_scenario_overlay_depot_energy_assets(scenario: Dict[str, Any]) -> None
         normalized_item["depot_id"] = depot_id
         normalized[depot_id] = normalized_item
     overlay["depot_energy_assets"] = normalized
+    cost_coefficients = overlay.get("cost_coefficients")
+    if not isinstance(cost_coefficients, dict):
+        cost_coefficients = {}
+        overlay["cost_coefficients"] = cost_coefficients
+    # Keep the legacy summary flag consistent for the frontend.  The depot
+    # asset remains the authoritative model input because PV is depot-specific.
+    cost_coefficients["pv_enabled"] = any(
+        bool(item.get("pv_enabled", item.get("pvEnabled", False)))
+        for item in normalized.values()
+    )
 
 
 @router.get("/pv/available-dates")

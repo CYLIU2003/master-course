@@ -24,8 +24,14 @@ def canonical_cost_breakdown_json(*, problem, engine_result, scenario_id: str) -
         )
         or 0.0
     )
+    pv_curtail_cost = float(breakdown.get("pv_curtail_cost_jpy", 0.0) or 0.0)
     bess_discharge_cost = float(breakdown.get("bess_discharge_cost", 0.0) or 0.0)
-    electricity_energy_cost = grid_energy_cost + pv_self_consumption_cost + bess_discharge_cost
+    electricity_energy_cost = (
+        grid_energy_cost
+        + pv_self_consumption_cost
+        + bess_discharge_cost
+        + pv_curtail_cost
+    )
     gross_cost = float(
         breakdown.get("total_cost")
         if breakdown.get("total_cost") is not None
@@ -42,6 +48,7 @@ def canonical_cost_breakdown_json(*, problem, engine_result, scenario_id: str) -
             "pv_self_consumption_cost_jpy": pv_self_consumption_cost,
             "pv_marginal_charge_cost_yen_per_kwh": pv_marginal_charge_cost,
             "pv_curtail_penalty_yen_per_kwh": pv_curtail_penalty,
+            "pv_curtail_cost_jpy": pv_curtail_cost,
             "bess_discharge_cost_jpy": bess_discharge_cost,
             "electricity_energy_cost": float(
                 breakdown.get("electricity_cost", breakdown.get("electricity_cost_final", electricity_energy_cost))
@@ -258,6 +265,9 @@ def cost_breakdown(
         ),
         "pv_marginal_charge_cost_yen_per_kwh": float(
             obj_breakdown.get("pv_marginal_charge_cost_yen_per_kwh", 0.0) or 0.0
+        ),
+        "pv_curtail_cost_jpy": float(
+            obj_breakdown.get("pv_curtail_cost_jpy", 0.0) or 0.0
         ),
         "bess_discharge_cost": float(obj_breakdown.get("bess_discharge_cost", 0.0) or 0.0),
         "grid_import_kwh": float(obj_breakdown.get("grid_import_kwh", 0.0) or 0.0),

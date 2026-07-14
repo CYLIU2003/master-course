@@ -157,6 +157,18 @@ def test_problem_builder_propagates_pv_curtail_penalty_metadata() -> None:
     assert problem.metadata["pv_curtail_penalty_yen_per_kwh"] == 7.5
 
 
+def test_problem_builder_respects_explicit_pv_disabled_flag() -> None:
+    scenario = _scenario()
+    scenario["simulation_config"]["depot_energy_assets"][0]["pv_enabled"] = False
+
+    problem = ProblemBuilder().build_from_scenario(scenario, depot_id="dep-1", service_id="WEEKDAY")
+    asset = problem.depot_energy_assets["dep-1"]
+
+    assert asset.pv_enabled is False
+    assert asset.pv_capacity_kw == 0.0
+    assert all(value == 0.0 for value in asset.pv_generation_kwh_by_slot)
+
+
 def test_problem_builder_rejects_missing_positive_trip_distance() -> None:
     scenario = _scenario()
     row = scenario["timetable_rows"][0]

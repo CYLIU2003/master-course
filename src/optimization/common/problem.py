@@ -303,6 +303,20 @@ class OptimizationScenario:
         except (ValueError, AttributeError):
             return float(self.planning_days) * 24.0
 
+    @property
+    def demand_charge_horizon_factor(self) -> float:
+        """Convert a monthly demand-charge rate to this planning horizon."""
+
+        return (self.planning_horizon_hours / 24.0) / 30.0
+
+    @property
+    def demand_charge_on_peak_horizon_yen_per_kw(self) -> float:
+        return max(self.demand_charge_on_peak_yen_per_kw, 0.0) * self.demand_charge_horizon_factor
+
+    @property
+    def demand_charge_off_peak_horizon_yen_per_kw(self) -> float:
+        return max(self.demand_charge_off_peak_yen_per_kw, 0.0) * self.demand_charge_horizon_factor
+
 
 @dataclass(frozen=True)
 class OptimizationConfig:

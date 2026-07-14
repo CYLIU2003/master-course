@@ -92,6 +92,18 @@ class TestDemandChargeUnitContract:
         expected_factor_3 = 3.0 / 30.0
         assert abs(factor_3 - expected_factor_3) < 1e-9
 
+    def test_effective_demand_charge_properties_use_horizon_factor(self):
+        scenario = OptimizationScenario(
+            scenario_id="test",
+            planning_days=1,
+            demand_charge_on_peak_yen_per_kw=1200.0,
+            demand_charge_off_peak_yen_per_kw=900.0,
+        )
+
+        assert scenario.demand_charge_horizon_factor == pytest.approx(1.0 / 30.0)
+        assert scenario.demand_charge_on_peak_horizon_yen_per_kw == pytest.approx(40.0)
+        assert scenario.demand_charge_off_peak_horizon_yen_per_kw == pytest.approx(30.0)
+
 
 class TestDemandChargeEvaluatorConsistency:
     """Test that evaluator correctly applies monthly → horizon conversion."""

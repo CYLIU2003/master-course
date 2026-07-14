@@ -1439,31 +1439,9 @@ class GurobiMILPAdapter:
             problem.metadata.get("pv_marginal_charge_cost_yen_per_kwh"),
             default=0.0,
         )
+        # A configured zero is a valid economic assumption.  Do not replace it
+        # with a hidden penalty, because that changes the optimization problem.
         pv_curtail_penalty_auto_defaulted = False
-        has_pv_enabled_bess = any(
-            bool(getattr(asset, "bess_enabled", False))
-            and bool(getattr(asset, "pv_enabled", False))
-            and any(float(value or 0.0) > 0.0 for value in (getattr(asset, "pv_generation_kwh_by_slot", ()) or ()))
-            for asset in effective_depot_energy_assets.values()
-        )
-        if curtail_penalty <= 0.0 and has_pv_enabled_bess:
-            max_grid_price = max(
-                (max(float(value or 0.0), 0.0) for value in price_by_slot.values()),
-                default=0.0,
-            )
-            max_bess_marginal = max(
-                (
-                    max(float(getattr(asset, "bess_cycle_cost_yen_per_kwh", 0.0) or 0.0), 0.0)
-                    for asset in effective_depot_energy_assets.values()
-                    if bool(getattr(asset, "bess_enabled", False))
-                ),
-                default=0.0,
-            )
-            curtail_penalty = max(
-                1000.0,
-                pv_marginal_charge_cost + max_bess_marginal + max_grid_price + grid_to_bus_priority_penalty + 1.0,
-            )
-            pv_curtail_penalty_auto_defaulted = True
         if g2bus_var or g2bess_var or bess2bus_var:
             if component_flags.get("electricity_cost", True):
                 for (depot_id, slot_idx), var in g2bus_var.items():
@@ -1492,14 +1470,10 @@ class GurobiMILPAdapter:
                     asset = effective_depot_energy_assets.get(depot_id) or (problem.depot_energy_assets or {}).get(depot_id)
                     bess_marginal = max(float(getattr(asset, "bess_cycle_cost_yen_per_kwh", 0.0) or 0.0), 0.0)
                     objective += energy_weight * bess_marginal * var
-                for (depot_id, _slot_idx), var in pv2bus_var.items():
-                    asset = effective_depot_energy_assets.get(depot_id) or (problem.depot_energy_assets or {}).get(depot_id)
-                    bess_marginal = max(float(getattr(asset, "bess_cycle_cost_yen_per_kwh", 0.0) or 0.0), 0.0)
-                    objective += energy_weight * bess_marginal * var
-                for (depot_id, _slot_idx), var in pv2bess_var.items():
-                    asset = effective_depot_energy_assets.get(depot_id) or (problem.depot_energy_assets or {}).get(depot_id)
-                    bess_marginal = max(float(getattr(asset, "bess_cycle_cost_yen_per_kwh", 0.0) or 0.0), 0.0)
-                    objective += energy_weight * bess_marginal * var
+                for var in pv2bus_var.values():
+                    objective += energy_weight * pv_marginal_charge_cost * var
+                for var in pv2bess_var.values():
+                    objective += energy_weight * pv_marginal_charge_cost * var
             if curtail_penalty > 0.0 and component_flags.get("electricity_cost", True):
                 for var in pv_curt_var.values():
                     objective += energy_weight * curtail_penalty * var
@@ -1559,8 +1533,8 @@ class GurobiMILPAdapter:
             and w_on_var is not None
             and w_off_var is not None
         ):
-            objective += demand_weight * max(problem.scenario.demand_charge_on_peak_yen_per_kw, 0.0) * w_on_var
-            objective += demand_weight * max(problem.scenario.demand_charge_off_peak_yen_per_kw, 0.0) * w_off_var
+            objective += demand_weight * problem.scenario.demand_charge_on_peak_horizon_yen_per_kw * w_on_var
+            objective += demand_weight * problem.scenario.demand_charge_off_peak_horizon_yen_per_kw * w_off_var
 
         if component_flags.get("vehicle_fixed_cost", True):
             for vehicle in problem.vehicles:
@@ -1646,7 +1620,7 @@ class GurobiMILPAdapter:
                     return value
             return ice_co2_kg_per_l
 
-        if co2_price > 0:
+        if co2_price > 0 and component_flags.get("co2_cost", True):
             # ICE CO₂ from trip fuel consumption.
             for (vehicle_id, trip_id), var in y.items():
                 vehicle = next((v for v in problem.vehicles if v.vehicle_id == vehicle_id), None)
@@ -3009,18 +2983,43 @@ class GurobiMILPAdapter:
 
         component_flags = normalize_cost_component_flags(problem.metadata.get("cost_component_flags"))
         objective1 = gp.LinExpr()
-        diesel_price = max(problem.scenario.diesel_price_yen_per_l, 0.0)
-        if component_flags.get("fuel_cost", True):
+        diesel_price = (
+            max(problem.scenario.diesel_price_yen_per_l, 0.0)
+            if component_flags.get("fuel_cost", True)
+            else 0.0
+        )
+        co2_price = (
+            max(problem.scenario.co2_price_per_kg, 0.0)
+            if component_flags.get("co2_cost", True)
+            else 0.0
+        )
+        vehicle_type_by_id = {
+            str(item.vehicle_type_id): item for item in problem.vehicle_types
+        }
+
+        def _ice_fuel_unit_cost(vehicle: Any) -> float:
+            vehicle_type = vehicle_type_by_id.get(str(vehicle.vehicle_type))
+            co2_kg_per_l = max(problem.scenario.ice_co2_kg_per_l, 0.0)
+            if vehicle_type is not None:
+                configured = max(
+                    float(vehicle_type.co2_emission_kg_per_l or 0.0),
+                    0.0,
+                )
+                if configured > 0.0:
+                    co2_kg_per_l = configured
+            return diesel_price + co2_price * co2_kg_per_l
+
+        if diesel_price > 0.0 or co2_price > 0.0:
             for (vehicle_id, trip_id), var in y.items():
                 vehicle = vehicle_by_id.get(str(vehicle_id))
                 if vehicle is None or str(vehicle.vehicle_type).upper() in {"BEV", "PHEV", "FCEV"}:
                     continue
-                objective1 += diesel_price * self._trip_fuel_l(problem, vehicle, trip_id) * var
+                objective1 += _ice_fuel_unit_cost(vehicle) * self._trip_fuel_l(problem, vehicle, trip_id) * var
             for (vehicle_id, from_trip_id, to_trip_id), var in x.items():
                 vehicle = vehicle_by_id.get(str(vehicle_id))
                 if vehicle is None or str(vehicle.vehicle_type).upper() in {"BEV", "PHEV", "FCEV"}:
                     continue
-                objective1 += diesel_price * self._deadhead_fuel_l(problem, vehicle, from_trip_id, to_trip_id) * var
+                objective1 += _ice_fuel_unit_cost(vehicle) * self._deadhead_fuel_l(problem, vehicle, from_trip_id, to_trip_id) * var
         if component_flags.get("vehicle_fixed_cost", True):
             for vehicle in problem.vehicles:
                 objective1 += float(vehicle.fixed_use_cost_jpy or 0.0) * used_vehicle[vehicle.vehicle_id]
@@ -3833,16 +3832,52 @@ class GurobiMILPAdapter:
                 stage2.addConstr(w_off_var >= w_off_depot_var[depot_id])
 
         objective2 = gp.LinExpr()
+        electricity_cost_enabled = component_flags.get("electricity_cost", True)
+        co2_cost_enabled = component_flags.get("co2_cost", True)
+        co2_price = max(problem.scenario.co2_price_per_kg, 0.0) if co2_cost_enabled else 0.0
+        co2_by_slot = {slot.slot_index: slot.co2_factor for slot in problem.price_slots}
+        pv_marginal_charge_cost = self._safe_nonnegative_float(
+            problem.metadata.get("pv_marginal_charge_cost_yen_per_kwh"),
+            default=0.0,
+        )
+        pv_curtail_penalty = self._safe_nonnegative_float(
+            problem.metadata.get("pv_curtail_penalty_yen_per_kwh"),
+            default=0.0,
+        )
         for (depot_id, slot_idx), var in g2bus_var.items():
-            objective2 += max(float(price_by_slot.get(slot_idx, 0.0) or 0.0), 0.0) * var
+            grid_unit_cost = (
+                max(float(price_by_slot.get(slot_idx, 0.0) or 0.0), 0.0)
+                if electricity_cost_enabled
+                else 0.0
+            )
+            grid_unit_cost += co2_price * max(float(co2_by_slot.get(slot_idx, 0.0) or 0.0), 0.0)
+            objective2 += grid_unit_cost * var
         for (depot_id, slot_idx), var in g2bess_var.items():
-            objective2 += max(float(price_by_slot.get(slot_idx, 0.0) or 0.0), 0.0) * var
+            grid_unit_cost = (
+                max(float(price_by_slot.get(slot_idx, 0.0) or 0.0), 0.0)
+                if electricity_cost_enabled
+                else 0.0
+            )
+            grid_unit_cost += co2_price * max(float(co2_by_slot.get(slot_idx, 0.0) or 0.0), 0.0)
+            objective2 += grid_unit_cost * var
         for (depot_id, _slot_idx), var in bess2bus_var.items():
             asset = depot_energy_assets.get(depot_id)
-            objective2 += max(float(getattr(asset, "bess_cycle_cost_yen_per_kwh", 0.0) or 0.0), 0.0) * var
-        if w_on_var is not None and w_off_var is not None:
-            objective2 += max(problem.scenario.demand_charge_on_peak_yen_per_kw, 0.0) * w_on_var
-            objective2 += max(problem.scenario.demand_charge_off_peak_yen_per_kw, 0.0) * w_off_var
+            if electricity_cost_enabled:
+                objective2 += max(float(getattr(asset, "bess_cycle_cost_yen_per_kwh", 0.0) or 0.0), 0.0) * var
+        if electricity_cost_enabled:
+            for var in pv2bus_var.values():
+                objective2 += pv_marginal_charge_cost * var
+            for var in pv2bess_var.values():
+                objective2 += pv_marginal_charge_cost * var
+            for var in pv_curt_var.values():
+                objective2 += pv_curtail_penalty * var
+        if (
+            component_flags.get("demand_charge_cost", True)
+            and w_on_var is not None
+            and w_off_var is not None
+        ):
+            objective2 += problem.scenario.demand_charge_on_peak_horizon_yen_per_kw * w_on_var
+            objective2 += problem.scenario.demand_charge_off_peak_horizon_yen_per_kw * w_off_var
         stage2.setObjective(objective2, GRB.MINIMIZE)
         stage2.optimize()
 

@@ -28,6 +28,7 @@ from src.route_family_runtime import (
 )
 from .soc_utils import normalize_soc_ratio_like, resolve_soc_kwh
 from .time_axis import normalize_timestep_min
+from .tou_pricing import price_for_minute
 from src.preprocess.emission_factor_loader import lookup_ice_emission_factor
 from src.preprocess.tariff_loader import build_electricity_prices_from_tariff, load_tariff_csv
 from src.objective_modes import (
@@ -1142,8 +1143,17 @@ class ProblemBuilder:
                 if manual_pv_capacity_kw is not None
                 else float(estimate.capacity_kw)
             )
-            pv_enabled = effective_pv_capacity_kw > 0.0 and (
+            pv_has_usable_capacity = effective_pv_capacity_kw > 0.0 and (
                 manual_pv_capacity_kw is not None or estimate.depot_area_m2 is not None
+            )
+            explicit_pv_enabled = self._first_present(
+                raw.get("pv_enabled") if "pv_enabled" in raw else None,
+                raw.get("pvEnabled") if "pvEnabled" in raw else None,
+            )
+            pv_enabled = pv_has_usable_capacity and (
+                self._safe_bool(explicit_pv_enabled)
+                if explicit_pv_enabled is not None
+                else True
             )
             if pv_enabled:
                 pv_series = tuple(
@@ -3401,17 +3411,11 @@ class ProblemBuilder:
                 expanded: List[EnergyPriceSlot] = []
                 for slot in generated_slots:
                     minute_of_day = (start_min + slot.slot_index * timestep_min) % (24 * 60)
-                    half_hour_index = minute_of_day // 30
-                    buy_price = default_buy
-                    for band in tou_bands:
-                        try:
-                            start_hour = int(band.get("start_hour") or 0)
-                            end_hour = int(band.get("end_hour") or 48)
-                        except (TypeError, ValueError):
-                            continue
-                        if start_hour <= half_hour_index < end_hour:
-                            buy_price = float(band.get("price_per_kwh") or default_buy)
-                            break
+                    buy_price = price_for_minute(
+                        tou_bands,
+                        minute_of_day=minute_of_day,
+                        default_price=default_buy,
+                    )
                     expanded.append(
                         EnergyPriceSlot(
                             slot_index=slot.slot_index,

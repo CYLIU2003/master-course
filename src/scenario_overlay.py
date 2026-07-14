@@ -15,9 +15,15 @@ _DEFAULT_INPUT_TEMPLATE_PATH = Path(__file__).resolve().parents[1] / "constant" 
 class TimeOfUseBand(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    start_hour: int = Field(ge=0, le=47)
-    end_hour: int = Field(ge=1, le=48)
+    start_hour: int = Field(ge=0, le=23)
+    end_hour: int = Field(ge=1, le=24)
     price_per_kwh: float = Field(ge=0.0)
+
+    @model_validator(mode="after")
+    def validate_clock_hour_range(self) -> "TimeOfUseBand":
+        if self.start_hour >= self.end_hour:
+            raise ValueError("start_hour must be earlier than end_hour")
+        return self
 
 
 class FleetConfig(BaseModel):
@@ -189,12 +195,16 @@ def default_overlay_seed() -> dict[str, object]:
             + (end_dt.hour * 60)
             + end_dt.minute
         )
-        start_slot = max(0, min(int(start_minutes // 30), 48))
-        end_slot = max(start_slot + 1, min(int(end_minutes // 30), 48))
+        if start_minutes % 60 != 0 or end_minutes % 60 != 0:
+            raise ValueError(
+                "Default TOU template must use whole clock-hour boundaries"
+            )
+        start_hour = int(start_minutes // 60)
+        end_hour = int(end_minutes // 60)
         tou_pricing.append(
             TimeOfUseBand(
-                start_hour=start_slot,
-                end_hour=end_slot,
+                start_hour=start_hour,
+                end_hour=end_hour,
                 price_per_kwh=float(item.get("price_yen_per_kWh") or 0.0),
             )
         )

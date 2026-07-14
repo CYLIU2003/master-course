@@ -3717,3 +3717,19 @@ master-course/
   - 回帰確認:
     - `python -m pytest tests/test_model_builder_vehicle_available_and_successor_cap.py tests/test_milp_stage1_warm_start.py tests/test_milp_fragment_pairwise_reset_cut.py tests/test_milp_same_day_vehicle_day_caps.py tests/test_phase3_controlled_validation.py -q` -> `35 passed`
     - MILP / route-band / same-day depot / model-builder / Phase 3 controlled群 -> `80 passed`
+
+- 2026-07-14 (frontend晴天・雨天比較の料金契約修正と実入力preflight)
+  - actual BFF call pathは `run-optimization` → `_run_optimization()` → prepared scope materialize → weather policy準備 → `ProblemBuilder.build_from_scenario()` → `apply_weather_policy_to_problem()` → `OptimizationEngine.solve()` であることを再確認した。2026-07-12の旧frontend runは両ケースともsolver infeasible、objective=`Infinity`、realized cost=0であり、「晴雨コストが同じ」という有効な比較結果ではなかった。一方、直前のgrid-only比較は意図的にPV/BESS/weatherを切った再現性試験なので同一コストが正しい。
+  - frontend保存値を監査した。晴天scenario `771d115b-75b0-49f7-a7f0-25f259a2cd21`（2025-08-05）と雨天scenario `b23fd26c-1233-4c73-bb9e-bdb8b1584760`（2025-08-10）は、BEV35/ICE25、充電器10基×90kW、depot上限1000kW、初期SOC80%、BESS 600kWh/300kW、TOU、燃料、CO2、契約電力、solver 1500秒/gap10%が一致している。天候依存PV入力は晴天`614.709375 kWh`、雨天`101.1143 kWh`で異なる。alignment dry auditは `output/weather_comparison_alignment_audit.json` に保存し、control mismatchは0件だった。
+  - P1として、`start_hour/end_hour`をfrontend・master dataは0..24の実時刻として保存しているのに、common builderとlegacy ProblemData mapperが30分slot番号として比較していた。たとえば16時開始を08:00開始として誤適用していた。`src/optimization/common/tou_pricing.py`へclock-hour評価を一元化し、Pydantic/BFF schemaも`0 <= start < end <= 24`へ統一した。`default_overlay_seed()`で時刻を30分slotへ変換していた処理も実時刻のまま保持するよう修正した。不正なlegacy 0..48 bandは黙って値付けせず明示エラーにする。
+  - P1として、`ProblemBuilder`がdepot assetの明示`pv_enabled=false`を無視し、面積またはmanual capacityがあればPVを再有効化していた。asset-level flagを正本として尊重し、値が存在しないlegacy inputだけ従来のcapacity推定を使う。PV管理保存時は`scenario_overlay.cost_coefficients.pv_enabled`もasset群から同期し、frontend表示用legacy summary flagとの矛盾を今後作らない。既存2scenarioにはlegacy flag=false / asset=trueの食い違いがあるが、モデル入力の正本はasset=trueである。
+  - P1として、PV→busとPV→BESSへBESS cycle costを課し、設定済み`pv_marginal_charge_cost_yen_per_kwh`を目的関数で使っていなかった。共通評価器、integrated MILP、Phase 3 Stage 2を `grid flow = TOU`, `PV flow = PV marginal cost`, `BESS discharge = BESS cycle cost`, `PV curtail = configured penalty` に統一した。設定0のcurtail penaltyを内部で1000円以上へ自動置換するhidden penaltyも除去した。curtail costは`pv_curtail_cost_jpy`としてcost breakdownへ明示する。
+  - P1として、契約電力単価はfrontend/既存仕様では月額JPY/kW/monthで、評価器は計画期間へ日割りしていたがMILP目的関数は月額をそのまま掛けていた。`OptimizationScenario`に共通のhorizon換算propertyを追加し、integrated/Phase 3 MILPと評価器を同じ式 `(planning_horizon_hours / 24) / 30` へ統一した。現在の1日比較では1200 JPY/kW/month → 40 JPY/kW/horizonである。
+  - Phase 3 Stage 1にはICE燃料費に加えて有効なCO2費を含め、Stage 2にはgrid electricity由来CO2費を含めた。Stage 2はcost component flagsも尊重する。ただしPhase 3は依然として二段階lexicographic modelであり、`solver_objective_matches_accounting_total=false`、global simultaneous total-cost optimumとは主張しない。
+  - 修正後のactual input build preflightは両ケースとも264便、60分×24slot、PV/BESS有効となった。TOUは08:00=`18`, 16:00=`22`, 18:00=`19` JPY/kWh、契約電力horizon rate=`40` JPY/kW、diesel=`150` JPY/L、CO2 price=`1` JPY/kgで一致し、PV生成量だけが上記のとおり異なる。
+  - 自分で追加検出した既存問題として、`scripts/unzip_and_rename_solcast.py`のdocstring内Windows pathが`\U` escapeとして解釈されcompile不能だったため、raw docstringへ変更した。実行ロジックは不変。
+  - 回帰確認:
+    - focused cost/TOU/PV/demand tests → `54 passed`
+    - `python -m pytest -q --ignore=test_multiday_phase1.py` → `661 passed, 8 skipped`
+    - 除外した`test_multiday_phase1.py`はlocalhost:8000で起動済みBFFを要求する手動E2Eであり、サーバ未起動時はconnection refusedになる。コード単体失敗ではない。
+    - `python -m compileall -q src bff scripts` → pass

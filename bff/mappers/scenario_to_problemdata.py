@@ -24,6 +24,7 @@ from src.objective_modes import (
     normalize_objective_mode,
 )
 from src.optimization.common.problem import resolve_service_coverage_mode
+from src.optimization.common.tou_pricing import price_for_minute
 from src.preprocess.trip_converter import (
     build_vehicle_charger_compat,
     build_vehicle_task_compat,
@@ -430,13 +431,11 @@ def _slot_price_from_tou(
     if not tou_bands:
         return default_price
     minute_of_day = (_hhmm_to_minutes(start_time) + int(round(slot_index * delta_t_min))) % (24 * 60)
-    half_hour_index = minute_of_day // 30
-    for band in tou_bands:
-        start_hour = _safe_int(band.get("start_hour"), 0)
-        end_hour = _safe_int(band.get("end_hour"), 48)
-        if start_hour <= half_hour_index < end_hour:
-            return _safe_float(band.get("price_per_kwh"), default_price)
-    return default_price
+    return price_for_minute(
+        tou_bands,
+        minute_of_day=minute_of_day,
+        default_price=default_price,
+    )
 
 
 def _objective_weights_from_scenario(scenario: Dict[str, Any]) -> Dict[str, float]:

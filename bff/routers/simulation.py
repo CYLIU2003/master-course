@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from bff.dependencies import require_built
 from bff.errors import AppErrorCode, make_error
@@ -73,9 +73,15 @@ class RunSimulationBody(BaseModel):
 
 
 class PrepareTimeOfUseBandBody(BaseModel):
-    start_hour: int
-    end_hour: int
-    price_per_kwh: float
+    start_hour: int = Field(ge=0, le=23)
+    end_hour: int = Field(ge=1, le=24)
+    price_per_kwh: float = Field(ge=0.0)
+
+    @model_validator(mode="after")
+    def validate_clock_hour_range(self) -> "PrepareTimeOfUseBandBody":
+        if self.start_hour >= self.end_hour:
+            raise ValueError("start_hour must be earlier than end_hour")
+        return self
 
 
 class PrepareFleetTemplateBody(BaseModel):
