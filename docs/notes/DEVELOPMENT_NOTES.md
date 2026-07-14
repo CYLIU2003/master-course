@@ -3733,3 +3733,4 @@ master-course/
     - `python -m pytest -q --ignore=test_multiday_phase1.py` → `661 passed, 8 skipped`
     - 除外した`test_multiday_phase1.py`はlocalhost:8000で起動済みBFFを要求する手動E2Eであり、サーバ未起動時はconnection refusedになる。コード単体失敗ではない。
     - `python -m compileall -q src bff scripts` → pass
+  - `scripts/run_research_phase3_frontend_weather.py` を追加した。このrunnerはscenario documentを更新せず、BFFと同じprepared materialize / weather policy / canonical builder / engineを通す。実行前に264便、BEV35+ICE25、60分×24slot、PV/BESS/weather policy有効、service dateをhard checkし、`input_audit.json`、`solver_result.json`、`summary.json`、scheduleを出力する。晴天・雨天のbuild-only auditではtrip input hashは一致し、PV generation hashと総量だけが異なることを確認した。最終1500秒run結果はこのrunnerから同じartifact rootへ追記する。
