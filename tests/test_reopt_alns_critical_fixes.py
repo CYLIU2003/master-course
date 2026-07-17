@@ -1,6 +1,17 @@
 from __future__ import annotations
 
-from src.dispatch.models import DispatchContext, DutyLeg, Trip, VehicleDuty, VehicleProfile
+from dataclasses import replace
+
+import pytest
+
+from src.dispatch.models import (
+    DeadheadRule,
+    DispatchContext,
+    DutyLeg,
+    Trip,
+    VehicleDuty,
+    VehicleProfile,
+)
 from src.optimization.alns.operators_destroy import peak_hour_removal, worst_trip_removal
 from src.optimization.common.feasibility import FeasibilityChecker
 from src.optimization.common.problem import (
@@ -16,7 +27,10 @@ from src.optimization.common.problem import (
     ProblemVehicle,
     ProblemVehicleType,
 )
-from src.optimization.rolling.reoptimizer import RollingReoptimizer
+from src.optimization.rolling.reoptimizer import (
+    RollingReoptimizer,
+    assignment_plan_from_serialized_result,
+)
 
 
 class _CaptureEngine:
@@ -91,6 +105,370 @@ def test_rolling_reoptimizer_applies_actual_soc_kwh() -> None:
     assert result["ok"] is True
     assert capture.last_problem is not None
     assert capture.last_problem.vehicles[0].initial_soc == 120.0
+
+
+def test_rolling_reoptimizer_rejects_unknown_actual_soc_vehicle() -> None:
+    optimizer = RollingReoptimizer()
+
+    with pytest.raises(ValueError, match="unknown vehicles"):
+        optimizer.reoptimize(
+            _minimal_problem(),
+            config=OptimizationConfig(),
+            current_min=600,
+            actual_soc={"not-in-current-scope": 120.0},
+        )
+
+
+def test_rolling_reoptimizer_rejects_unknown_bess_depot() -> None:
+    optimizer = RollingReoptimizer()
+
+    with pytest.raises(ValueError, match="unknown depot"):
+        optimizer.reoptimize(
+            _minimal_problem(),
+            config=OptimizationConfig(),
+            current_min=600,
+            actual_bess_soc_kwh={"not-in-current-scope": 120.0},
+        )
+
+
+def test_persisted_assignment_uses_canonical_trip_and_current_vehicle() -> None:
+    dispatch_trip = Trip(
+        trip_id="t1",
+        route_id="r1",
+        origin="A",
+        destination="B",
+        departure_time="08:00",
+        arrival_time="09:00",
+        distance_km=10.0,
+        allowed_vehicle_types=("BEV",),
+        operator_id="operator-1",
+    )
+    problem = replace(
+        _minimal_problem(),
+        dispatch_context=DispatchContext(
+            service_date="2025-08-05",
+            trips=[dispatch_trip],
+            turnaround_rules={},
+            deadhead_rules={},
+            vehicle_profiles={"BEV": VehicleProfile(vehicle_type="BEV")},
+        ),
+    )
+    serialized = {
+        "duties": [
+            {
+                "duty_id": "duty-1",
+                "vehicle_type": "BEV",
+                "legs": [{"trip_id": "t1", "deadhead_from_prev_min": 0}],
+            }
+        ],
+        "served_trip_ids": ["t1"],
+        "unserved_trip_ids": [],
+        "metadata": {"duty_vehicle_map": {"duty-1": "veh-1"}},
+    }
+
+    plan = assignment_plan_from_serialized_result(problem, serialized)
+
+    assert plan.duties[0].legs[0].trip is dispatch_trip
+    assert plan.duties[0].legs[0].trip.operator_id == "operator-1"
+    assert plan.vehicle_id_for_duty("duty-1") == "veh-1"
+
+
+def test_persisted_assignment_rejects_unknown_mapped_vehicle() -> None:
+    dispatch_trip = Trip(
+        trip_id="t1",
+        route_id="r1",
+        origin="A",
+        destination="B",
+        departure_time="08:00",
+        arrival_time="09:00",
+        distance_km=10.0,
+        allowed_vehicle_types=("BEV",),
+    )
+    problem = replace(
+        _minimal_problem(),
+        dispatch_context=DispatchContext(
+            service_date="2025-08-05",
+            trips=[dispatch_trip],
+            turnaround_rules={},
+            deadhead_rules={},
+            vehicle_profiles={"BEV": VehicleProfile(vehicle_type="BEV")},
+        ),
+    )
+    serialized = {
+        "duties": [
+            {
+                "duty_id": "duty-1",
+                "vehicle_type": "BEV",
+                "trip_ids": ["t1"],
+            }
+        ],
+        "served_trip_ids": ["t1"],
+        "unserved_trip_ids": [],
+        "metadata": {"duty_vehicle_map": {"duty-1": "unknown-vehicle"}},
+    }
+
+    with pytest.raises(ValueError, match="unknown vehicle"):
+        assignment_plan_from_serialized_result(problem, serialized)
+
+
+def test_persisted_assignment_rejects_infeasible_trip_connection() -> None:
+    first_trip = Trip(
+        trip_id="t1",
+        route_id="r1",
+        origin="A",
+        destination="B",
+        departure_time="08:00",
+        arrival_time="09:00",
+        distance_km=10.0,
+        allowed_vehicle_types=("BEV",),
+    )
+    overlapping_trip = Trip(
+        trip_id="t2",
+        route_id="r1",
+        origin="B",
+        destination="C",
+        departure_time="08:30",
+        arrival_time="09:30",
+        distance_km=10.0,
+        allowed_vehicle_types=("BEV",),
+    )
+    base = _minimal_problem()
+    problem = replace(
+        base,
+        trips=(
+            base.trips[0],
+            replace(
+                base.trips[0],
+                trip_id="t2",
+                origin="B",
+                destination="C",
+                departure_min=8 * 60 + 30,
+                arrival_min=9 * 60 + 30,
+            ),
+        ),
+        dispatch_context=DispatchContext(
+            service_date="2025-08-05",
+            trips=[first_trip, overlapping_trip],
+            turnaround_rules={},
+            deadhead_rules={},
+            vehicle_profiles={"BEV": VehicleProfile(vehicle_type="BEV")},
+        ),
+    )
+    serialized = {
+        "duties": [
+            {
+                "duty_id": "duty-1",
+                "vehicle_type": "BEV",
+                "trip_ids": ["t1", "t2"],
+            }
+        ],
+        "served_trip_ids": ["t1", "t2"],
+        "unserved_trip_ids": [],
+        "metadata": {"duty_vehicle_map": {"duty-1": "veh-1"}},
+    }
+
+    with pytest.raises(ValueError, match="violates current dispatch rules"):
+        assignment_plan_from_serialized_result(problem, serialized)
+
+
+def test_rolling_soc_validation_starts_from_measured_slot_state() -> None:
+    dispatch_trip = Trip(
+        trip_id="rolling-trip",
+        route_id="r1",
+        origin="A",
+        destination="dep-1",
+        departure_time="00:30",
+        arrival_time="01:30",
+        distance_km=0.0,
+        allowed_vehicle_types=("BEV",),
+    )
+    problem_trip = ProblemTrip(
+        trip_id="rolling-trip",
+        route_id="r1",
+        origin="A",
+        destination="dep-1",
+        departure_min=30,
+        arrival_min=90,
+        distance_km=0.0,
+        allowed_vehicle_types=("BEV",),
+        energy_kwh=20.0,
+    )
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="rolling-validation",
+            horizon_start="00:00",
+            timestep_min=60,
+        ),
+        dispatch_context=DispatchContext(
+            service_date="2025-08-05",
+            trips=[dispatch_trip],
+            turnaround_rules={},
+            deadhead_rules={},
+            vehicle_profiles={"BEV": VehicleProfile(vehicle_type="BEV")},
+        ),
+        trips=(problem_trip,),
+        vehicles=(
+            ProblemVehicle(
+                vehicle_id="veh-1",
+                vehicle_type="BEV",
+                home_depot_id="dep-1",
+                initial_soc=25.0,
+                battery_capacity_kwh=100.0,
+                reserve_soc=10.0,
+            ),
+        ),
+        vehicle_types=(
+            ProblemVehicleType(
+                vehicle_type_id="BEV",
+                powertrain_type="BEV",
+                battery_capacity_kwh=100.0,
+                reserve_soc=10.0,
+            ),
+        ),
+        metadata={
+            "final_soc_target_percent": 15.0,
+            "final_soc_target_tolerance_percent": 0.0,
+        },
+    )
+    plan = AssignmentPlan(
+        duties=(
+            VehicleDuty(
+                duty_id="duty-1",
+                vehicle_type="BEV",
+                legs=(DutyLeg(trip=dispatch_trip),),
+            ),
+        ),
+        served_trip_ids=("rolling-trip",),
+        metadata={
+            "duty_vehicle_map": {"duty-1": "veh-1"},
+            "rolling_start_slot_index": 1,
+        },
+    )
+
+    errors = FeasibilityChecker()._evaluate_soc(problem, plan)
+
+    assert errors == []
+
+
+def test_rolling_soc_validation_counts_only_unfinished_deadhead() -> None:
+    base = _minimal_problem()
+    previous_trip = replace(
+        base.trips[0],
+        trip_id="previous",
+        origin="A",
+        destination="X",
+        departure_min=0,
+        arrival_min=30,
+    )
+    next_trip = replace(
+        base.trips[0],
+        trip_id="next",
+        origin="Y",
+        destination="B",
+        departure_min=90,
+        arrival_min=120,
+    )
+    problem = replace(
+        base,
+        dispatch_context=DispatchContext(
+            service_date="2025-08-05",
+            trips=[],
+            turnaround_rules={},
+            deadhead_rules={
+                ("X", "Y"): DeadheadRule(
+                    from_stop="X",
+                    to_stop="Y",
+                    travel_time_min=60,
+                )
+            },
+            vehicle_profiles={"BEV": VehicleProfile(vehicle_type="BEV")},
+        ),
+    )
+
+    fraction = FeasibilityChecker()._remaining_deadhead_fraction(
+        problem,
+        base.vehicles[0],
+        previous_trip,
+        next_trip,
+        rolling_start_abs_min=60,
+    )
+
+    assert fraction == pytest.approx(0.5)
+
+
+def test_hourly_charging_reoptimization_carries_measured_bess_state_and_fixed_assignment() -> None:
+    optimizer = RollingReoptimizer()
+    capture = _CaptureEngine()
+    optimizer._engine = capture  # type: ignore[attr-defined]
+
+    base = _minimal_problem(initial_soc=250.0)
+    dispatch_trip = Trip(
+        trip_id="t1",
+        route_id="r1",
+        origin="A",
+        destination="B",
+        departure_time="08:00",
+        arrival_time="09:00",
+        distance_km=10.0,
+        allowed_vehicle_types=("BEV",),
+    )
+    day_ahead_plan = AssignmentPlan(
+        duties=(
+            VehicleDuty(
+                duty_id="veh-1",
+                vehicle_type="BEV",
+                legs=(DutyLeg(trip=dispatch_trip),),
+            ),
+        ),
+        served_trip_ids=("t1",),
+    )
+    problem = replace(
+        base,
+        scenario=replace(base.scenario, horizon_start="00:00"),
+        depot_energy_assets={
+            "dep-1": DepotEnergyAsset(
+                depot_id="dep-1",
+                bess_enabled=True,
+                bess_energy_kwh=600.0,
+                bess_soc_min_kwh=120.0,
+                bess_soc_max_kwh=480.0,
+                bess_initial_soc_kwh=300.0,
+                bess_terminal_soc_min_kwh=120.0,
+                bess_terminal_soc_target_kwh=300.0,
+            )
+        },
+    )
+
+    result = optimizer.reoptimize_charging_hour(
+        problem,
+        day_ahead_plan,
+        OptimizationConfig(time_limit_sec=30),
+        current_min=0,
+        actual_soc={"veh-1": 240.0},
+        actual_bess_soc_kwh={"dep-1": 275.0},
+        observed_on_peak_kw_by_depot={"dep-1": 90.0},
+        observed_off_peak_kw_by_depot={"dep-1": 70.0},
+        bess_terminal_policy="minimum_only",
+    )
+
+    assert result["ok"] is True
+    assert capture.last_problem is not None
+    assert capture.last_problem.vehicles[0].initial_soc == 240.0
+    assert capture.last_problem.depot_energy_assets["dep-1"].bess_initial_soc_kwh == 275.0
+    assert capture.last_problem.depot_energy_assets["dep-1"].bess_terminal_soc_target_kwh == 0.0
+    assert result["config"] == "milp"
+
+    with pytest.raises(ValueError, match="finite and non-negative"):
+        optimizer.reoptimize_charging_hour(
+            problem,
+            day_ahead_plan,
+            OptimizationConfig(time_limit_sec=30),
+            current_min=0,
+            actual_soc={"veh-1": 240.0},
+            actual_bess_soc_kwh={"dep-1": 275.0},
+            observed_on_peak_kw_by_depot={"dep-1": float("nan")},
+            observed_off_peak_kw_by_depot={"dep-1": 70.0},
+        )
 
 
 def test_rolling_reoptimizer_preserves_problem_fields_when_locking_baseline() -> None:

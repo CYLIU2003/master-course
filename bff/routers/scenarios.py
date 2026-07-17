@@ -52,6 +52,12 @@ from src.optimization.common.cost_components import (
     legacy_cost_component_flags,
     normalize_cost_component_flags,
 )
+from src.optimization.common.bess_terminal_policy import (
+    BESS_TERMINAL_POLICY_FIXED_TARGET,
+    BESS_TERMINAL_POLICY_MINIMUM_ONLY,
+    BESS_TERMINAL_POLICY_RETURN_TO_INITIAL,
+    normalize_bess_terminal_policy,
+)
 from src.optimization.common.time_axis import normalize_timestep_min
 from src.route_family_runtime import (
     normalize_direction,
@@ -256,11 +262,58 @@ def normalize_depot_energy_asset_config(raw: Dict[str, Any], depot_id: str = "")
                 status_code=400,
                 detail={"code": "INVALID_DEPOT_ENERGY_ASSET", "message": "bess_terminal_soc_min_kwh must be between 0 and bess_soc_max_kwh"},
             )
+        try:
+            terminal_policy = normalize_bess_terminal_policy(
+                _first_present_from_mapping(
+                    row,
+                    "bess_terminal_soc_policy",
+                    "bessTerminalSocPolicy",
+                ),
+                has_explicit_target=terminal_target_explicit,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "INVALID_DEPOT_ENERGY_ASSET", "message": str(exc)},
+            ) from exc
+        if terminal_policy == BESS_TERMINAL_POLICY_MINIMUM_ONLY:
+            terminal_target = 0.0
+            terminal_target_explicit = False
+        elif terminal_policy == BESS_TERMINAL_POLICY_RETURN_TO_INITIAL:
+            terminal_target = initial_soc
+            terminal_target_explicit = terminal_target > 0.0
+        elif (
+            terminal_policy == BESS_TERMINAL_POLICY_FIXED_TARGET
+            and not terminal_target_explicit
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "INVALID_DEPOT_ENERGY_ASSET",
+                    "message": "fixed_target policy requires a positive bess_terminal_soc_target_kwh",
+                },
+            )
         if terminal_target_explicit and not (terminal_min <= terminal_target <= soc_max):
             raise HTTPException(
                 status_code=400,
                 detail={"code": "INVALID_DEPOT_ENERGY_ASSET", "message": "bess_terminal_soc_target_kwh must be between bess_terminal_soc_min_kwh and bess_soc_max_kwh"},
             )
+
+    if not enabled:
+        try:
+            terminal_policy = normalize_bess_terminal_policy(
+                _first_present_from_mapping(
+                    row,
+                    "bess_terminal_soc_policy",
+                    "bessTerminalSocPolicy",
+                ),
+                has_explicit_target=terminal_target_explicit,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "INVALID_DEPOT_ENERGY_ASSET", "message": str(exc)},
+            ) from exc
 
     price_mode = str(
         _first_present_from_mapping(row, "grid_to_bess_price_mode", "gridToBessPriceMode") or "tou"
@@ -290,6 +343,7 @@ def normalize_depot_energy_asset_config(raw: Dict[str, Any], depot_id: str = "")
     row["bess_soc_min_kwh"] = soc_min
     row["bess_soc_max_kwh"] = soc_max
     row["bess_terminal_soc_min_kwh"] = terminal_min
+    row["bess_terminal_soc_policy"] = terminal_policy
     row["bess_terminal_soc_target_kwh"] = terminal_target
     row["bess_initial_soc_ratio"] = (initial_soc / capacity) if capacity > 0.0 else 0.0
     row["bess_soc_min_ratio"] = (soc_min / capacity) if capacity > 0.0 else 0.0

@@ -21,6 +21,7 @@ from src.dispatch.models import (
 )
 from src.dispatch.route_band import trip_route_band_key
 from src.optimization.common.cost_components import normalize_cost_component_flags
+from src.optimization.common.bess_terminal_policy import normalize_bess_terminal_policy
 from src.route_family_runtime import (
     merge_deadhead_metrics,
     normalize_direction,
@@ -1251,6 +1252,13 @@ class ProblemBuilder:
                 if bess_soc_max_kwh > 0.0:
                     bess_terminal_soc_target_kwh = min(bess_terminal_soc_target_kwh, bess_soc_max_kwh)
                 bess_terminal_soc_target_kwh = max(bess_terminal_soc_target_kwh, bess_soc_min_kwh)
+            bess_terminal_soc_policy = normalize_bess_terminal_policy(
+                self._first_present(
+                    raw.get("bess_terminal_soc_policy"),
+                    raw.get("bessTerminalSocPolicy"),
+                ),
+                has_explicit_target=bess_terminal_soc_target_kwh > 0.0,
+            )
             bess_terminal_soc_deviation_penalty_yen_per_kwh = self._safe_float(
                 self._first_present(
                     raw.get("bess_terminal_soc_deviation_penalty_yen_per_kwh"),
@@ -1303,6 +1311,7 @@ class ProblemBuilder:
                 ),
                 bess_priority_mode=str(raw.get("bess_priority_mode") or "cost_driven"),
                 bess_terminal_soc_min_kwh=bess_terminal_soc_min_kwh,
+                bess_terminal_soc_policy=bess_terminal_soc_policy,
                 bess_terminal_soc_target_kwh=bess_terminal_soc_target_kwh,
                 bess_terminal_soc_deviation_penalty_yen_per_kwh=max(
                     float(bess_terminal_soc_deviation_penalty_yen_per_kwh or 0.0),

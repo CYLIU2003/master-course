@@ -18,6 +18,7 @@ from .problem import (
     day_index_for_minute,
     normalize_service_coverage_mode,
 )
+from .bess_terminal_policy import resolve_bess_terminal_soc_target_kwh
 from .time_axis import chronological_duty_key, service_minute
 from .soc_helpers import (
     deadhead_energy_kwh,
@@ -456,9 +457,19 @@ class FeasibilityChecker:
                 if soc > max_soc + 1.0e-6:
                     upper += 1
             terminal_min = min(max(float(getattr(asset, "bess_terminal_soc_min_kwh", 0.0) or 0.0), min_soc), max_soc)
-            terminal_target = float(getattr(asset, "bess_terminal_soc_target_kwh", 0.0) or 0.0)
-            if terminal_target > 0.0:
-                terminal_deviation = max(terminal_deviation, abs(soc - min(max(terminal_target, terminal_min), max_soc)))
+            terminal_target = resolve_bess_terminal_soc_target_kwh(
+                policy=getattr(asset, "bess_terminal_soc_policy", ""),
+                initial_soc_kwh=float(
+                    getattr(asset, "bess_initial_soc_kwh", 0.0) or 0.0
+                ),
+                configured_target_kwh=float(
+                    getattr(asset, "bess_terminal_soc_target_kwh", 0.0) or 0.0
+                ),
+                terminal_soc_floor_kwh=terminal_min,
+                maximum_soc_kwh=max_soc,
+            )
+            if terminal_target is not None:
+                terminal_deviation = max(terminal_deviation, abs(soc - terminal_target))
             else:
                 terminal_deviation = max(terminal_deviation, max(terminal_min - soc, 0.0))
         return {
@@ -537,6 +548,20 @@ class FeasibilityChecker:
         duty_vehicle_map = plan.duty_vehicle_map()
         target_enabled = (problem.metadata or {}).get("final_soc_target_percent") is not None
         horizon_start_min = self._horizon_start_min(problem)
+        rolling_start_slot_raw = (plan.metadata or {}).get(
+            "rolling_start_slot_index"
+        )
+        rolling_start_slot = (
+            int(rolling_start_slot_raw)
+            if rolling_start_slot_raw is not None
+            else None
+        )
+        rolling_start_abs_min = (
+            horizon_start_min
+            + rolling_start_slot * max(problem.scenario.timestep_min, 1)
+            if rolling_start_slot is not None
+            else None
+        )
 
         charge_by_vehicle: Dict[str, Dict[int, float]] = {}
         for slot in plan.charging_slots:
@@ -587,21 +612,31 @@ class FeasibilityChecker:
                 soc = soc * capacity
             soc = min(max(soc, 0.0), capacity)
 
-            active_legs: List[tuple[VehicleDuty, object, tuple[int, ...]]] = []
-            for leg in duty.legs:
+            active_legs: List[tuple[int, object, object, tuple[int, ...]]] = []
+            for duty_leg_index, leg in enumerate(duty.legs):
                 trip = trip_by_id.get(leg.trip.trip_id)
                 if trip is None:
                     continue
                 slots = trip_active_slot_indices(problem, trip.departure_min, trip.arrival_min)
+                if rolling_start_slot is not None:
+                    slots = tuple(
+                        slot_idx
+                        for slot_idx in slots
+                        if slot_idx >= rolling_start_slot
+                    )
                 if not slots:
                     continue
-                active_legs.append((leg, trip, slots))
+                active_legs.append((duty_leg_index, leg, trip, slots))
 
             if not active_legs:
                 continue
 
-            first_slot = min(slots[0] for _leg, _trip, slots in active_legs)
-            last_slot = max(slots[-1] for _leg, _trip, slots in active_legs)
+            first_slot = min(
+                slots[0] for _index, _leg, _trip, slots in active_legs
+            )
+            last_slot = max(
+                slots[-1] for _index, _leg, _trip, slots in active_legs
+            )
             vehicle_charges = charge_by_vehicle.get(vehicle_id, {})
             if vehicle_charges:
                 first_slot = min(first_slot, min(vehicle_charges.keys()))
@@ -658,7 +693,15 @@ class FeasibilityChecker:
                             f"[SOC_TARGET] duty={duty.duty_id} vehicle={vehicle_id} post-return SOC {soc:.2f} < floor {floor_kwh:.2f}"
                         )
                 charge_kwh = max(float(vehicle_charges.get(slot_idx, 0.0) or 0.0), 0.0) * dt_h * 0.95
-                if charge_kwh > 0.0 and any(trip_active_in_slot(problem, leg.trip.departure_min, leg.trip.arrival_min, slot_idx) for leg, _trip, _slots in active_legs):
+                if charge_kwh > 0.0 and any(
+                    trip_active_in_slot(
+                        problem,
+                        leg.trip.departure_min,
+                        leg.trip.arrival_min,
+                        slot_idx,
+                    )
+                    for _index, leg, _trip, _slots in active_legs
+                ):
                     errors.append(
                         f"[SOC] duty={duty.duty_id} vehicle={vehicle_id} charging occurs during active trip slot {slot_idx}"
                     )
@@ -675,10 +718,13 @@ class FeasibilityChecker:
                     )
                 soc = min(capacity, soc + charge_kwh)
 
-                for leg_index, (leg, trip, slots) in enumerate(active_legs):
+                for duty_leg_index, leg, trip, slots in active_legs:
                     if slot_idx not in slots:
                         continue
-                    if slot_idx == slots[0]:
+                    departure_slot = self._slot_index(
+                        problem, int(trip.departure_min)
+                    )
+                    if slot_idx == slots[0] and slot_idx == departure_slot:
                         required = required_departure_soc_kwh(
                             problem,
                             vehicle,
@@ -690,9 +736,32 @@ class FeasibilityChecker:
                             errors.append(
                                 f"[SOC] duty={duty.duty_id} trip={trip.trip_id} departure SOC {soc:.2f} < required {required:.2f}"
                             )
-                        if leg_index > 0:
-                            prev_trip = active_legs[leg_index - 1][1]
-                            soc -= deadhead_energy_kwh(problem, vehicle, prev_trip, trip)
+                        if duty_leg_index > 0:
+                            previous_leg = duty.legs[duty_leg_index - 1]
+                            previous_trip = trip_by_id.get(
+                                previous_leg.trip.trip_id
+                            )
+                            deadhead_kwh = 0.0
+                            if previous_trip is not None:
+                                deadhead_kwh = deadhead_energy_kwh(
+                                    problem,
+                                    vehicle,
+                                    previous_trip,
+                                    trip,
+                                )
+                                if rolling_start_abs_min is not None:
+                                    deadhead_kwh *= (
+                                        self._remaining_deadhead_fraction(
+                                            problem,
+                                            vehicle,
+                                            previous_trip,
+                                            trip,
+                                            rolling_start_abs_min=(
+                                                rolling_start_abs_min
+                                            ),
+                                        )
+                                    )
+                            soc -= deadhead_kwh
                             if soc < -1.0e-6:
                                 errors.append(
                                     f"[SOC] duty={duty.duty_id} trip={trip.trip_id} deadhead-adjusted SOC {soc:.2f} < 0"
@@ -721,6 +790,63 @@ class FeasibilityChecker:
                     )
 
         return errors
+
+    def _remaining_deadhead_fraction(
+        self,
+        problem: CanonicalOptimizationProblem,
+        vehicle: Any,
+        previous_trip: Any,
+        next_trip: Any,
+        *,
+        rolling_start_abs_min: int,
+    ) -> float:
+        """Return the inter-trip deadhead share not completed at roll time."""
+
+        context = problem.dispatch_context
+        if context is None:
+            return 1.0
+        deadhead_min = max(
+            int(
+                context.get_deadhead_min(
+                    previous_trip.destination,
+                    next_trip.origin,
+                )
+                or 0
+            ),
+            0,
+        )
+        if deadhead_min <= 0:
+            return 0.0
+
+        next_departure_min = service_minute(
+            next_trip.departure_min,
+            horizon_start_min=self._horizon_start_min(problem),
+        )
+        home_depot_id = str(getattr(vehicle, "home_depot_id", "") or "")
+        next_at_home = bool(
+            home_depot_id
+            and context.locations_equivalent(next_trip.origin, home_depot_id)
+        )
+        if next_at_home:
+            previous_arrival_min = service_minute(
+                previous_trip.arrival_min,
+                horizon_start_min=self._horizon_start_min(problem),
+            )
+            turnaround_min = max(
+                int(context.get_turnaround_min(previous_trip.destination) or 0),
+                0,
+            )
+            deadhead_start_min = previous_arrival_min + turnaround_min
+        else:
+            deadhead_start_min = next_departure_min - deadhead_min
+        deadhead_end_min = deadhead_start_min + deadhead_min
+        if deadhead_end_min <= rolling_start_abs_min:
+            return 0.0
+        if deadhead_start_min < rolling_start_abs_min:
+            return (
+                deadhead_end_min - rolling_start_abs_min
+            ) / deadhead_min
+        return 1.0
 
     def _evaluate_startup_deadhead(
         self,

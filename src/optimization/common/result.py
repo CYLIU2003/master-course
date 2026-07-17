@@ -104,6 +104,9 @@ class ResultSerializer:
             "bess_soc_kwh_by_depot_slot": ResultSerializer._serialize_depot_slot_mapping(
                 plan.bess_soc_kwh_by_depot_slot
             ),
+            "vehicle_soc_kwh_by_vehicle_slot": ResultSerializer._serialize_depot_slot_mapping(
+                plan.vehicle_soc_kwh_by_vehicle_slot
+            ),
             "contract_over_limit_kwh_by_depot_slot": ResultSerializer._serialize_depot_slot_mapping(
                 plan.contract_over_limit_kwh_by_depot_slot
             ),

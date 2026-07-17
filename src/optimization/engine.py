@@ -5,6 +5,9 @@ from dataclasses import replace
 from src.optimization.abc.engine import ABCOptimizer
 from src.optimization.alns.engine import ALNSOptimizer
 from src.optimization.common.charging_topup import apply_opportunistic_topup
+from src.optimization.common.bess_terminal_policy import (
+    resolve_bess_terminal_soc_target_kwh,
+)
 from src.optimization.common.evaluator import CostEvaluator
 from src.optimization.common.feasibility import FeasibilityChecker
 from src.optimization.common.problem import (
@@ -242,10 +245,15 @@ def _bess_soc_max_kwh(asset) -> float:
 
 
 def _bess_terminal_soc_target(asset, *, min_soc: float, max_soc: float) -> float | None:
-    target = float(getattr(asset, "bess_terminal_soc_target_kwh", 0.0) or 0.0)
-    if target <= 0.0:
-        return None
-    return min(max(target, min_soc), max_soc)
+    return resolve_bess_terminal_soc_target_kwh(
+        policy=getattr(asset, "bess_terminal_soc_policy", ""),
+        initial_soc_kwh=float(getattr(asset, "bess_initial_soc_kwh", 0.0) or 0.0),
+        configured_target_kwh=float(
+            getattr(asset, "bess_terminal_soc_target_kwh", 0.0) or 0.0
+        ),
+        terminal_soc_floor_kwh=min_soc,
+        maximum_soc_kwh=max_soc,
+    )
 
 
 def _repair_bess_terminal_soc(
@@ -721,7 +729,10 @@ class OptimizationEngine:
                 {
                     "objective_actual_cost_mode": True,
                     "solver_objective_matches_accounting_total": False,
-                    "objective_semantics": "two_stage_lexicographic_not_global_total_cost",
+                    "objective_semantics": (
+                        "two_stage_assignment_energy_proxy_then_fixed_charging_"
+                        "not_global_total_cost"
+                    ),
                 }
             )
         return replace(problem, metadata=metadata), config
@@ -891,6 +902,9 @@ class OptimizationEngine:
             "stage1_energy_envelope_semantics",
             "stage1_time_indexed_soc_relaxation_constraint_count",
             "stage1_time_indexed_soc_relaxation_semantics",
+            "stage1_energy_cost_proxy_configuration",
+            "stage1_energy_cost_proxy_weather_input",
+            "stage1_energy_cost_proxy_result",
         ):
             if key in plan_metadata:
                 solver_metadata[key] = plan_metadata[key]

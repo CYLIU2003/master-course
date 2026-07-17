@@ -76,6 +76,7 @@ def test_problem_builder_maps_grid_to_bess_controls_into_assets() -> None:
     assert tuple(asset.grid_to_bess_allowed_slot_indices) == (0,)
     assert asset.bess_terminal_soc_min_kwh == 20.0
     assert asset.bess_terminal_soc_target_kwh == 0.0
+    assert asset.bess_terminal_soc_policy == "minimum_only"
     assert asset.bess_terminal_soc_deviation_penalty_yen_per_kwh == 20.0
 
 
@@ -104,6 +105,7 @@ def test_problem_builder_prefers_overlay_depot_energy_asset_dict() -> None:
     assert asset.bess_soc_max_kwh == 95.0
     assert asset.bess_terminal_soc_min_kwh == 65.0
     assert asset.bess_terminal_soc_target_kwh == 80.0
+    assert asset.bess_terminal_soc_policy == "fixed_target"
     assert asset.bess_terminal_soc_deviation_penalty_yen_per_kwh == 12.5
 
 
@@ -144,6 +146,7 @@ def test_problem_builder_normalizes_bess_ratio_controls_into_kwh() -> None:
     assert asset.bess_soc_max_kwh == 90.0
     assert asset.bess_terminal_soc_min_kwh == 20.0
     assert asset.bess_terminal_soc_target_kwh == 70.0
+    assert asset.bess_terminal_soc_policy == "fixed_target"
     assert asset.allow_pv_to_bess is False
     assert asset.allow_bess_to_bus is False
 

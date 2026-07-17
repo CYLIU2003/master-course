@@ -87,6 +87,110 @@ def _resolve_initial_soc_policy(scenario: dict[str, Any]) -> InitialSocPolicy:
     )
 
 
+def _vehicle_is_available(vehicle: dict[str, Any]) -> bool:
+    raw = vehicle.get("available")
+    if raw is None:
+        raw = vehicle.get("enabled", True)
+    return bool(raw)
+
+
+def _initial_soc_sort_value(vehicle: dict[str, Any]) -> float:
+    try:
+        value = float(vehicle.get("initialSoc"))
+    except (TypeError, ValueError):
+        return -1.0
+    return value if math.isfinite(value) else -1.0
+
+
+def _apply_bev_availability_sensitivity(
+    scenario: dict[str, Any],
+    available_bev_count: int | None,
+) -> dict[str, Any]:
+    """Apply an in-memory BEV-readiness cap without changing persisted input.
+
+    The highest-initial-SOC vehicles remain available. This deterministic policy
+    represents an optimistic operational-readiness case and avoids adding an
+    arbitrary BEV-use constraint to the optimization model.
+    """
+    vehicles = list(scenario.get("vehicles") or ())
+    bev_vehicles = [
+        vehicle
+        for vehicle in vehicles
+        if str(vehicle.get("type") or vehicle.get("vehicleType") or "").upper()
+        == "BEV"
+    ]
+    initially_available = [
+        vehicle for vehicle in bev_vehicles if _vehicle_is_available(vehicle)
+    ]
+    audit = {
+        "enabled": available_bev_count is not None,
+        "requested_available_bev_count": available_bev_count,
+        "initial_available_bev_count": len(initially_available),
+        "effective_available_bev_count": len(initially_available),
+        "selection_policy": "highest_initial_soc_then_vehicle_id",
+        "selected_available_bev_ids": sorted(
+            str(vehicle.get("id") or "") for vehicle in initially_available
+        ),
+        "forced_unavailable_bev_ids": [],
+        "persisted_scenario_modified": False,
+    }
+    if available_bev_count is None:
+        return audit
+    requested = int(available_bev_count)
+    if requested < 0 or requested > len(initially_available):
+        raise ValueError(
+            "available_bev_count must be between 0 and the persisted available "
+            f"BEV count ({len(initially_available)}), got {requested}"
+        )
+
+    ranked = sorted(
+        initially_available,
+        key=lambda vehicle: (
+            -_initial_soc_sort_value(vehicle),
+            str(vehicle.get("id") or ""),
+        ),
+    )
+    selected_ids = {
+        str(vehicle.get("id") or "") for vehicle in ranked[:requested]
+    }
+    forced_unavailable_ids: list[str] = []
+    for vehicle in initially_available:
+        vehicle_id = str(vehicle.get("id") or "")
+        is_selected = vehicle_id in selected_ids
+        vehicle["available"] = is_selected
+        vehicle["enabled"] = is_selected
+        if not is_selected:
+            forced_unavailable_ids.append(vehicle_id)
+
+    audit.update(
+        {
+            "effective_available_bev_count": requested,
+            "selected_available_bev_ids": sorted(selected_ids),
+            "forced_unavailable_bev_ids": sorted(forced_unavailable_ids),
+        }
+    )
+    return audit
+
+
+def _assignment_mix(problem: Any, result: Any) -> dict[str, dict[str, int]]:
+    vehicle_type_by_id = {
+        str(vehicle.vehicle_id): str(vehicle.vehicle_type).upper()
+        for vehicle in problem.vehicles
+    }
+    used_by_type: dict[str, int] = {}
+    trips_by_type: dict[str, int] = {}
+    for vehicle_id, duties in result.plan.duties_by_vehicle().items():
+        vehicle_type = vehicle_type_by_id.get(str(vehicle_id), "UNKNOWN")
+        used_by_type[vehicle_type] = used_by_type.get(vehicle_type, 0) + 1
+        trips_by_type[vehicle_type] = trips_by_type.get(vehicle_type, 0) + sum(
+            len(duty.legs) for duty in duties
+        )
+    return {
+        "used_vehicle_count_by_type": dict(sorted(used_by_type.items())),
+        "served_trip_count_by_vehicle_type": dict(sorted(trips_by_type.items())),
+    }
+
+
 def _git_state() -> dict[str, Any]:
     sha = subprocess.check_output(
         ["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, text=True
@@ -181,6 +285,9 @@ def _asset_snapshot(problem: Any) -> dict[str, Any]:
             ),
             "bess_priority_mode": str(asset.bess_priority_mode),
             "bess_terminal_soc_min_kwh": float(asset.bess_terminal_soc_min_kwh),
+            "bess_terminal_soc_policy": str(
+                getattr(asset, "bess_terminal_soc_policy", "") or ""
+            ),
             "bess_terminal_soc_target_kwh": float(asset.bess_terminal_soc_target_kwh),
             "bess_terminal_soc_deviation_penalty_yen_per_kwh": float(
                 asset.bess_terminal_soc_deviation_penalty_yen_per_kwh
@@ -351,6 +458,10 @@ def run(args: argparse.Namespace) -> int:
             prepared_payload,
         )
     )
+    bev_availability_sensitivity = _apply_bev_availability_sensitivity(
+        scenario,
+        args.available_bev_count,
+    )
     scenario, weather_forecast, weather_profile = _prepare_weather_policy_for_scenario(
         scenario,
         enable_weather_operation_policy=None,
@@ -361,6 +472,8 @@ def run(args: argparse.Namespace) -> int:
     config = OptimizationConfig(
         mode=OptimizationMode.MILP,
         time_limit_sec=int(args.time_limit_sec),
+        stage1_time_limit_sec=args.stage1_time_limit_sec,
+        stage2_time_limit_sec=args.stage2_time_limit_sec,
         mip_gap=float(args.mip_gap),
         random_seed=int(args.random_seed),
         warm_start=True,
@@ -444,9 +557,12 @@ def run(args: argparse.Namespace) -> int:
             "weather_configuration": weather_configuration,
             "weather_operation_profile": weather_operation_profile,
             "research_fragment_policy": fragment_policy,
+            "bev_availability_sensitivity": bev_availability_sensitivity,
             "phase": "phase3_two_stage",
             "research_run": True,
             "time_limit_sec": int(args.time_limit_sec),
+            "stage1_time_limit_sec": args.stage1_time_limit_sec,
+            "stage2_time_limit_sec": args.stage2_time_limit_sec,
             "mip_gap": float(args.mip_gap),
             "random_seed": int(args.random_seed),
             "git_sha": git_state["git_sha"],
@@ -460,6 +576,8 @@ def run(args: argparse.Namespace) -> int:
         "service_date": str(problem.metadata.get("service_date") or "")[:10],
         "phase": "phase3_two_stage",
         "time_limit_sec": int(args.time_limit_sec),
+        "stage1_time_limit_sec": args.stage1_time_limit_sec,
+        "stage2_time_limit_sec": args.stage2_time_limit_sec,
         "mip_gap": float(args.mip_gap),
         "random_seed": int(args.random_seed),
         "postsolve_repair_enabled": False,
@@ -472,6 +590,16 @@ def run(args: argparse.Namespace) -> int:
             "BEV": sum(1 for item in problem.vehicles if str(item.vehicle_type).upper() == "BEV"),
             "ICE": sum(1 for item in problem.vehicles if str(item.vehicle_type).upper() == "ICE"),
         },
+        "fleet_available": {
+            vehicle_type: sum(
+                1
+                for item in problem.vehicles
+                if str(item.vehicle_type).upper() == vehicle_type
+                and bool(item.available)
+            )
+            for vehicle_type in ("BEV", "ICE")
+        },
+        "bev_availability_sensitivity": bev_availability_sensitivity,
         "timestep_min": int(problem.scenario.timestep_min),
         "price_slot_count": len(problem.price_slots),
         "clock_hour_grid_price_yen_per_kwh": _clock_hour_prices(problem),
@@ -581,6 +709,7 @@ def run(args: argparse.Namespace) -> int:
             "contract_overage_cost",
         )
     }
+    assignment_mix = _assignment_mix(problem, result)
     summary = {
         **input_audit,
         "solver_status": str(result.solver_status or ""),
@@ -589,6 +718,7 @@ def run(args: argparse.Namespace) -> int:
         "trip_count_served": len(result.plan.served_trip_ids),
         "trip_count_unserved": len(result.plan.unserved_trip_ids),
         "used_vehicle_count": len(result.plan.vehicle_paths()),
+        **assignment_mix,
         "max_fragments_observed": int(result.plan.max_fragments_observed()),
         "stage1_solver_status": metadata.get("stage1_solver_status"),
         "stage2_solver_status": metadata.get("stage2_solver_status"),
@@ -606,6 +736,12 @@ def run(args: argparse.Namespace) -> int:
         ),
         "stage1_runtime_seconds": _finite(metadata.get("stage1_runtime_seconds")),
         "stage2_runtime_seconds": _finite(metadata.get("stage2_runtime_seconds")),
+        "stage1_time_limit_sec_effective": metadata.get(
+            "stage1_time_limit_sec_effective"
+        ),
+        "stage2_time_limit_sec_effective": metadata.get(
+            "stage2_time_limit_sec_effective"
+        ),
         "stage1_energy_envelope_constraint_count": metadata.get(
             "stage1_energy_envelope_constraint_count"
         ),
@@ -617,6 +753,15 @@ def run(args: argparse.Namespace) -> int:
         ),
         "stage1_time_indexed_soc_relaxation_semantics": metadata.get(
             "stage1_time_indexed_soc_relaxation_semantics"
+        ),
+        "stage1_energy_cost_proxy_configuration": dict(
+            metadata.get("stage1_energy_cost_proxy_configuration") or {}
+        ),
+        "stage1_energy_cost_proxy_weather_input": dict(
+            metadata.get("stage1_energy_cost_proxy_weather_input") or {}
+        ),
+        "stage1_energy_cost_proxy_result": dict(
+            metadata.get("stage1_energy_cost_proxy_result") or {}
         ),
         "research_run_accepted": bool(metadata.get("research_run_accepted", False)),
         "research_feasibility_eligible": bool(
@@ -660,8 +805,30 @@ def main() -> int:
     parser.add_argument("--depot-id", default="tsurumaki")
     parser.add_argument("--service-id", default="WEEKDAY")
     parser.add_argument("--time-limit-sec", type=int, default=1500)
+    parser.add_argument(
+        "--stage1-time-limit-sec",
+        type=int,
+        default=None,
+        help="Optional assignment-stage limit; default preserves the historical half split.",
+    )
+    parser.add_argument(
+        "--stage2-time-limit-sec",
+        type=int,
+        default=None,
+        help="Optional fixed-assignment charging-stage limit.",
+    )
     parser.add_argument("--mip-gap", type=float, default=0.1)
     parser.add_argument("--random-seed", type=int, default=42)
+    parser.add_argument(
+        "--available-bev-count",
+        type=int,
+        default=None,
+        help=(
+            "Optional in-memory BEV readiness sensitivity. Keeps the N BEVs "
+            "with highest persisted initial SOC available; never modifies the "
+            "persisted scenario."
+        ),
+    )
     parser.add_argument("--build-only", action="store_true")
     return run(parser.parse_args())
 

@@ -5,6 +5,175 @@
 
 ---
 
+## 2026-07-16 — BESS terminal policy and day-ahead/hourly charging re-optimization
+
+### 追補: 終端方針UI・状態連鎖・研究受理手順
+
+- 定置型BESSの終端方針を`minimum_only` / `return_to_initial` / `fixed_target`としてdomain modelへ追加した。SOC上下限と終端下限は全方針でhard constraintである。目標なしの場合に終端SOCを初期SOCへ戻す意味は持たせない。正のlegacy目標は`fixed_target`へ移行して既存実験の意味を保存する。
+- `ProblemBuilder`、Gurobi Stage 2、独立feasibility、rolling override、BFF scenario normalization、研究出力・監査が共通resolverを使う。`minimum_only`では目標偏差を計算せず、終端下限不足だけを違反とする。Phase 3 Stage 2の目標hard制約は維持し、偏差penaltyだけだった統合MILPにも目標±許容幅のhard制約を追加した。従って旧統合Phase 4成果物は数学的に同条件ではないが、旧300kWh固定Phase 3成果物を自動的に運用範囲のみケースへ読み替えることもしない。
+- Tkフロントでは営業所設備・充電インフラ画面に3方針と任意目標%を追加し、詳細設備画面では設備容量・PV、SOC・終端方針、電力経路・費用、データ確認へ分割した。設定入口を上部ハブへ集約し、画面規則は`DESIGN.md`へ保存した。
+- `build_next_execution_state()`は、solver resultの`vehicle_soc=slot start`と`bess_soc=slot end`の違いを保持し、実行済み受電から需要ピークを更新する。欠損SOCをscenario初期値で補完しない。毎時CLIは`--end-time`による連鎖と`--pv-forecast-updates-json`による時刻別予測更新に対応した。
+- 1500秒晴雨再計算、24時間連鎖、PV予測誤差、終端3方針、2日連続評価、seed感度は手動計算待ちであり、完了扱いにしない。scenario/prepared ID、コマンド、成果物、受理gateは`phase3_manual_validation_runbook_20260716.md`を正本とする。
+
+### Literature-based interpretation
+
+- 定置型蓄電池の`initial SOC = terminal SOC`は物理法則ではなく、評価期間外のエネルギー持ち出しを防ぐ境界条件である。上條ほか（2024）とQin et al.（2016）は代表日を同条件で反復するため同値条件を採用する。中野ほか（2024）は終端を初期値±充電器1枠相当に制限し、中野ほか（2025）は2日先まで計画して1日だけ実行し、終端SOCを翌日の初期SOCへ引き継ぐ。
+- 本研究の晴雨比較では、初期・終端とも300 kWhに固定することで、天候間でBESS在庫の持ち出し量を揃える。この条件を「理想」又は設備上の必須条件とは表現しない。`minimum_only`は運用範囲だけを守る感度条件であり、複数日又は終端エネルギー価値を入れない単日費用とは直接比較しない。
+- 参考: 上條ほか「電気自動車バスのマクロな充電需要推定に関する検討」（2024）、中野ほか「都市の太陽光地域余剰電力活用と運行の低炭素化を目的とした電気バス充電計画法の検討」（2024）、中野ほか「電気バスの低炭素運用に向けたモデル予測型逐次充電計画の導入評価」（2025）、九蘭和樹 修士論文（2025）、Qin et al., *Transportation Research Part A*, 94 (2016)。
+
+### Terms made explicit
+
+- `external_charge_input_lower_bound_kwh`は、選択したBEV便・始発/便間/帰庫回送・実効終端SOCに必要なエネルギーから初期EV SOCを差し引き、充電効率0.95で割った正部分である。時間帯、所在地、充電器競合、契約電力、需要料金を含まないため、Stage 1割当探索用の楽観的必要条件であり、実現充電量ではない。
+- `pv_energy_credit_kwh`は、その最低入力に対する営業所別・日量集約のPV控除である。PVと車両滞在時間の一致を表さず、実際の`PV→bus`はStage 2で決める。
+- `bess_initial_dischargeable_energy_credit_kwh = max(initial_bess_soc_kwh - terminal_bess_requirement_kwh, 0) × discharge_efficiency`とした。現行晴雨比較は初期/終端300 kWh、効率0.95なので0 kWhであり、「初期BESS余剰」という曖昧な語だけで説明しない。
+
+### Two-level optimization and runtime evidence
+
+- 運用階層を、(1) 前日/日初にPhase 3で日次の車両割当を決定、(2) 毎正時に割当を固定したまま当日残り時間の充電・PV・BESS・系統運用を再最適化、(3) 先頭60分だけ実行、に分けた。中野ほか（2025）のreceding-horizon原理を1日計画・1時間更新へ適用した本研究の実装であり、同論文と同じ時間幅とは主張しない。
+- 毎時経路はcanonical tripを再利用し、時刻表、`operator_id`、運行接続、割当を変更しない。開始時刻がslot境界であることを検査し、開始後は割当EV全車の実測SOC、実測BESS SOC、on/off-peak既発生最大需要を必須にする。過去の走行・充電・PVは目的関数へ再計上せず、現在時刻から当日末だけを解く。
+- 1500秒の日次runは晴天775.530秒、雨天776.519秒。120/30秒の日次短縮は晴天146.035秒、雨天144.979秒だが、Stage 1 gap 100%かつ両日BEV/ICE担当便54/210となり、天候別構成差を失ったため不採用。scenario/prepared input/service/depot/trip hash/vehicle hashと接続・回送の入力契約確認を追加した後の日次割当固定5:00再最適化は晴天1.964秒、雨天2.021秒（Stage 2 solve 0.064/0.062秒）でoptimalとなり、終端300 kWhでは元の電力運用と会計費用を再現した。
+- 保存済み割当の復元時は、空/重複duty、未知/重複trip、served/unserved不一致、未知vehicle、vehicle type不一致を拒否する。実測EV SOCとBESS SOCも現在scopeに存在しないIDを拒否する。これにより、別scenario又は古いprepared inputの日次解を毎時制御へ混入させない。
+- BFFの毎時結果は、次回更新でも同じ日次割当を参照できるよう、検証済み`canonical_solver_result`、scenario、prepared input、service/depot scopeを保持する。初回結果による日次解上書きで2回目が失敗する問題を回帰テストで防止した。
+- 5:00結果のEV/BESS実状態と既発生需要ピークを6:00へ渡す実シナリオ試験で、独立SOC検証が実測時点より前の走行を再控除するP1を検出した。rolling時は`rolling_start_slot_index`より前を除外し、進行中便は残りslotだけ、便間回送は現在時刻以降の未完了割合だけを検証する。修正後の6:00再計算は晴天2.032秒、雨天2.006秒、両方Stage 2 optimal・264/264便・違反0・BESS終端300 kWhとなった。
+- 最終回帰はGurobiライセンスを明示して`717 passed, 8 skipped`。compileall、`git diff --check`、design.md lint、Tk実画面確認、PPT 18枚のoverflow検査、テンプレート忠実度検査issue 0もpassした。未解決P0/P1は0件である。
+- 晴天で終端下限だけを120 kWhにした感度は709,097.774円で、300 kWh終端の713,032.185円より3,934.411円低い。ただし180 kWhのBESS在庫減少を翌日に引き継いでいないため、この差を運用費削減効果として採用しない。
+
+### Implementation and remaining validation
+
+- 実装: `src/optimization/common/problem.py`、`src/optimization/milp/solver_adapter.py`、`src/optimization/milp/engine.py`、`src/optimization/rolling/reoptimizer.py`、`src/optimization/rolling/day_ahead_hourly.py`、`bff/routers/optimization.py`、`scripts/run_research_phase3_frontend_weather.py`、`scripts/run_hourly_charging_reoptimization.py`。
+- 追加検証: Stage別時間配分、絶対時刻PV参照、残り時間slot、固定割当、BESS実測状態、終端policy、SOC serializerを回帰テスト化した。未完了なのは5:00以外の逐次状態での24回連鎖run、予測誤差感度、複数日終端価値、clean-worktreeでの正式比較である。
+- 数式、成果物path、文献と実装の対応は`docs/notes/phase3_literature_and_two_level_optimization_20260716.md`を正本とする。
+
+---
+
+## 2026-07-16 — Advisor-facing BESS, power-balance, and fuel audit deck
+
+### Verified evidence path
+
+- `scripts/audit_phase3_weather_energy_balance.py`は、`C:\master-course\output\research_phase3_sunny_final_1500s_20260716`と`research_phase3_rain_final_1500s_20260716`のimmutable resultを読み、solverを再実行せず、persisted scenario / prepared scope → `ProblemBuilder.build_from_scenario()` → weather policyのcanonical inputだけを再構築する。recorded `trip_input_hash` / `vehicle_input_hash`と一致しない場合は停止する。
+- auditは60分24slotについて、PV生成と3行先、bus charging inputと3電源、grid import、BESS slot-start/slot-end SOC、BESS効率式、営業中EV/ICE台数、ICE営業/便間回送距離と燃料を再計算する。JSON/CSVは`C:\master-course\output\phase3_weather_energy_audit_20260716`に保存した。
+
+### BESS and electrical balance results
+
+| 指標 | 晴天 | 雨天 |
+|---|---:|---:|
+| BESS初期 / 終端SOC [kWh] | 300 / 300 | 300 / 300 |
+| BESS観測範囲 [kWh] | 120–480 | 226.950–322.025 |
+| BESS入力 / bus供給 [kWh] | 378.947 / 342.000 | 100.079 / 90.321 |
+| BESS往復損失 [kWh] | 36.947 | 9.758 |
+| PV発電 [kWh] | 614.709 | 101.114 |
+| PV→bus / BESS / curtail [kWh] | 163.827 / 378.947 / 71.935 | 1.035 / 100.079 / 0.000 |
+| grid import / peak [kWh, kW] | 1,015.594 / 95.445 | 1,000.679 / 120.245 |
+| bus charging input [kWh] | 1,521.421 | 1,092.035 |
+| 最大帳尻残差 [kWh] | 3.41e-12 | 1.98e-12 |
+
+- BESS式は`SOC_end = SOC_start + 0.95*(PV→BESS + grid→BESS) - (BESS→bus)/0.95`で再照合した。grid→BESSはfrontend設定どおり両日0kWh。PV式、bus charging source式、BESS式は各slotで`1e-6 kWh`以下を満たす。
+- BESS終端SOC同値は自然に得た結果ではなく、frontend由来の`bess_terminal_soc_target_kwh=300`をハード制約として満たした結果である。出力`bess_soc_kwh_by_depot_slot[0]`は第1slot終了値であり初期値ではないため、図ではmetadataのslot-start 300kWhを明示してから各slot-endへ接続した。
+
+### Vehicle use and fuel consistency
+
+- 実入力在庫は両日ともBEV35/ICE25であり、依頼文のBEV35/ICE26とは1台不一致。現在のrunからICE26条件を主張せず、正本が26台ならscenario修正後に両日を再計算する。
+- 使用BEV/ICEと担当便は晴天16/16台・141/123便、雨天15/17台・119/145便。晴天でもEV19台が未使用で、PV限界費用0円だけでは全車使用にならない。接続可能性、SOC、充電時刻、車両使用費とStage 1 incumbentが同時に決める。
+- ICE fuel ledgerを評価器と同じ定義で再構成した。晴天は営業1,162.675km + 便間回送124.500km = 284.773L、雨天は営業1,404.047km + 便間回送134.400km = 340.364L。150円/Lを掛けた燃料費はsolver resultとの差がそれぞれ`6.55e-11円`、`1.46e-10円`で一致する。
+- `fuel_cost_final_source=provisional_distance_based`、`refueling_schedule=[]`、realized refuel cost=0円である。従って「割当運行距離と燃料費は整合」と報告できるが、燃料タンク残量、給油時間、給油設備容量を満たす実現給油計画とは報告しない。
+
+### Presentation and visual QA
+
+- `scripts/audit_phase3_weather_energy_balance.py`の監査JSONへ`scenario_parameters`を追加した。総制限1500秒、段階別最大750秒、実測solver時間、MIPGap 10%、seed 42、60分×24枠、TOU 18/22/19円/kWh、需要料金1日換算40円/kW、軽油150円/L、CO₂ 1円/kg、使用車両費20,000円/台日、充電器90kW×5+50kW×5、受電上限1000kW、PV/BESS、SOC方針、費用flags/weightsを保存済み入力から抽出する。
+- `scripts/build_phase3_energy_balance_presentation.py`は監査JSONだけを数値源とし、`刘承洋_9月発表用.pptx`の白背景、濃青タイトル、青罫線、東京都市大学マーク、Meiryo、比較図、下部要点帯を参照して18枚のPPTを生成する。成果物は`docs/presentations/phase3_weather_energy_balance_progress_20260716.pptx`。
+- 新たに、最適化システムの6修正、Stage 1/2の役割、EV外部充電量下界式、計算/設備条件、費用/環境条件を4枚で明示した。UI風の角丸カードと装飾矢印を排し、研究発表用の表・数式・角形パネルへ統一した。全定量図は晴天・雨天を同一スライドで比較し、全18枚のnotes欄に`目標xx秒`と読み上げ原稿を保存した。
+- PowerPoint COMで18/18枚を1600×900 PNGへ個別renderし、notes本文も18/18枚で非空を確認した。モデル式、パラメータ表、比較図、凡例、文字切れを目視確認した。
+- 本PPTは未コミット変更を含む二段階モデルの暫定可行解で、Stage 1 gapは晴天13.109%、雨天12.942%。大域最適、正式研究KPI、一意な車両構成という主張はしていない。正式化には変更内容を整理した版での同条件再実行、ICE在庫正本確認、燃料給油モデル化、複数seed / gap縮小が必要。
+
+---
+
+## 2026-07-16 — Weather-aware Stage 1 assignment proxy and final provisional 1500-second pair
+
+### Verified call chain and root cause
+
+- actual research pathは`scripts/run_research_phase3_frontend_weather.py` → persisted frontend scenario / prepared scope materialize → `ProblemBuilder.build_from_scenario()` → `apply_weather_policy_to_problem()` → `OptimizationEngine.solve()` → `GurobiMILPAdapter`のStage 1割当 → 固定割当Stage 2充電dispatch → 独立validation / accounting exportである。fallbackとpostsolve repairは無効のまま維持した。
+- 2026-07-14の受理済み95ade40結果は、晴雨とも使用BEV/ICE=17/15、BEV/ICE担当便=54/210だった。Stage 2ではPV・買電・ピーク・会計費用に天候差が出たが、Stage 1目的はICE燃料・ICE CO₂・使用車両費だけで、天候別PV量・BEV充電費用を含まなかった。このため割当探索から見た晴天と雨天が同一であり、同じ車両構成はsolverの異常ではなくモデル分離の帰結だった。
+
+### Mathematical change: aggregate Stage 1 charging-cost lower bound
+
+- `src/optimization/milp/solver_adapter.py`に`Stage1EnergyCostProxy`を追加した。各BEVについて、`trip + startup deadhead + inter-trip deadhead + return deadhead + effective terminal SOC − initial SOC`の正部分を充電効率0.95で割り、必要な外部充電入力を表す。営業所別に集約し、PV、usable initial BESS surplus、gridを単価順に配分する。PV限界費用はフロント設定の`pv_marginal_charge_cost_yen_per_kwh=0`、gridは最安TOUとgrid CO₂費の和を使う。
+- この項はStage 1の割当探索へ天候差を渡す**下界代理**である。PV/BESS/充電の時刻整合、充電器競合、系統上限、需要料金、battery headroomは含めず、Stage 2が引き続き厳密に決める。従って`stage1_energy_cost_proxy_result.objective_jpy`を実現電気料金又は会計総費用として報告しない。`objective_semantics=two_stage_assignment_energy_proxy_then_fixed_charging_not_global_total_cost`でglobal同時最適化との違いを明示した。
+- `stage1_energy_cost_proxy_configuration`、天候別`stage1_energy_cost_proxy_weather_input`、割当後の`stage1_energy_cost_proxy_result`をplan metadata、engine solver metadata、research summary、比較reportへ伝播した。source変数がPV 0円区間で退化しても成果物値が任意にならないよう、選択割当の正味必要量から単価順に決定論的再構成する。
+- 120秒probeでは同じ使用BEV/ICE=17/15、BEV/ICE担当便=54/210、外部充電必要量616.397kWhに対し、晴天はPV614.709kWh・grid1.687kWh・代理費用31.216円、雨天はPV101.114kWh・grid515.282kWh・代理費用9,532.725円となった。これはPV 0円と天候別PV量がStage 1目的へ入ったことの診断証拠であり、最適割当差の証拠ではない。
+
+### Self-detected infeasibility and performance correction
+
+- 初回の晴天1500秒proxy run（`output/research_phase3_sunny_energy_proxy_1500s_20260716`）はStage 1でBEV190便 / ICE74便を選んだがStage 2 infeasibleとなった。IIS車両`e0772317-52e2-4e70-bfc8-1eb486f0f75c`は、始発回送後にslot 1–18でhome depotにおらず、slot 19のSOC下限を満たせなかった。旧Stage 1 time relaxationがidle slotなら所在地を問わず充電可能としていたため、営業所外充電を発明したことが根本原因である。このrunは研究結果に不採用。
+- 第1修正はslot別の所在地対応SOC必要条件69,300本を追加し、偽充電を除いた。しかし`output/research_phase3_sunny_energy_proxy_location_1500s_20260716`ではStage 1が750秒でbound 0・gap 100%となり、性能退行が大きいため不採用とした。
+- 採用実装は、各BEV・各slot境界で、累積した便/始発/便間/帰庫energyを、初期reserve余剰と割当に裏付けられたhome-depot充電窓の累積上限以下にする必要条件である。共有充電器・系統・PV/BESS競合とwindow重複は楽観側に緩和するためStage 2の代替ではない。制約数は875本で、slot別案から98.7%削減した。最終source metadataは`optimistic_cumulative_home_depot_energy_necessary_condition`である。provisional 1500秒pairはmetadata-only改名直前に起動したためsummary内に旧labelが残るが、実行した数理制約は875本の累積版である。clean rerunでは新labelへ統一する。
+
+### Provisional 1500-second results
+
+| 指標 | 晴天 2025-08-05 | 雨天 2025-08-10 | 雨天 − 晴天 |
+|---|---:|---:|---:|
+| 使用BEV / ICE [台] | 16 / 16 | 15 / 17 | −1 / +1 |
+| BEV / ICE担当便 | 141 / 123 | 119 / 145 | −22 / +22 |
+| Stage 1 objective [JPY] | 698,606.160 | 708,180.587 | +9,574.427 |
+| Stage 1 best bound [JPY] | 607,025.881 | 616,527.390 | +9,501.509 |
+| Stage 1 gap | 13.109% | 12.942% | −0.167pp |
+| Stage 1 proxy外部入力 [kWh] | 1,521.421 | 1,092.035 | −429.386 |
+| Stage 1 proxy PV / grid [kWh] | 614.709 / 906.712 | 101.114 / 990.921 | −513.595 / +84.209 |
+| Stage 1 proxy費用 [JPY] | 16,774.166 | 18,332.040 | +1,557.874 |
+| Stage 2実現grid import [kWh] | 1,015.594 | 1,000.679 | −14.916 |
+| Stage 2実現peak [kW] | 95.445 | 120.245 | +24.801 |
+| 電力費 / 需要料金 [JPY] | 25,254.232 / 3,817.780 | 25,266.405 / 4,809.813 | +12.173 / +992.032 |
+| 燃料費 [JPY] | 42,715.982 | 51,054.642 | +8,338.660 |
+| 会計総費用 [JPY] | 713,032.185 | 722,511.345 | +9,479.160 (+1.329%) |
+
+- 出力は`C:\master-course\output\research_phase3_sunny_final_1500s_20260716`と`C:\master-course\output\research_phase3_rain_final_1500s_20260716`。両方ともGurobi 13.0.1、`GRB_LICENSE_FILE=C:\Users\RTDS_admin\gurobi.lic`、264/264便、60分24slot、BEV35/ICE25、actual inventory SOC、90kW×5 + 50kW×5、1500秒、gap要求0.1、seed 42、Stage 1=`time_limit`、Stage 2=`optimal`、fallback/postsolve repairなし、最大fragment 1、全hard validation違反0である。
+- 晴天は雨天よりBEVを1台多く使用し、BEV担当便が22便多い。これはユーザー仮説「PV発電が多く0円なら晴天でEVをより使う」と整合する。ただしStage 1 gapは約13%で、global optimum、一意な最適構成、又は差の統計的頑健性は主張しない。
+- 雨天はPVが513.595kWh少ないが、BEV担当便も22便少ないため、Stage 2実現grid importは晴天より14.916kWh少ない。一方、ピークは24.801kW高く、燃料費と需要料金の増加で会計総費用が9,479.160円高い。「PV減少なら総買電が必ず増える」という単純説明ではなく、割当変更との内生的な相互作用として説明する。
+- 両summaryは`git_dirty=true`のcommit候補worktreeで得たprovisional evidenceである。strict comparatorを実行し、`sunny.git_dirty must be false`で拒否されることを確認した。guardを弱めていない。commit後にclean worktreeから両ケースを再実行し、正式comparison artifactを生成する必要がある。
+
+### Documentation, presentation, and validation
+
+- `README_core_professor.md`はStage 1費用代理の含有/除外項、PV 0円の入力、Stage 2との責任分離、global optimum非主張へ更新した。
+- `scripts/build_phase3_progress_presentation.py`を追加し、旧受理済みbaselineと今回のimmutable summaryから13枚の教員向けPPTを生成する。成果物は`docs/presentations/phase3_weather_model_progress_20260716.pptx`。PowerPoint自身で13枚をPNGへrenderし、比較契約、数式、IIS修正、割当、会計、研究限界、結論スライドを目視確認した。
+- focused metadata/comparator regressionは`21 passed`。`GRB_LICENSE_FILE=C:\Users\RTDS_admin\gurobi.lic python -m pytest -q --ignore=test_multiday_phase1.py`は`683 passed, 8 skipped`。除外した`test_multiday_phase1.py`はlocalhost:8000のBFFを要求する手動E2Eである。compileall、PPTのPowerPoint render 13/13枚、`git diff --check`もpassした。
+- MIT-style self reviewはCorrectness / Security / Performance / Maintainability / Testabilityと研究妥当性を確認し、P0=0、P1=0、P2=2とした。P2は、(1) dirty成果物をclean commitから再実行してstrict comparisonへ昇格すること、(2) 集約下界がPV/BESS時刻整合・需要料金を含まないためPhase 4同時最適化又はablationで代理精度を検証すること、である。外部`claude` CLIはこの環境に存在せず、Claude Codeレビューは実行できなかった。
+
+---
+
+## 2026-07-15 — BEV availability sensitivity and return-deadhead SOC boundary correction
+
+### 研究上の問いと実装
+
+- 晴天・雨天の既存Phase 3で車両割当が同一だったため、天候差を恣意的な車両biasへ変換せず、「当日運用可能なBEV台数」を独立変数とする感度ケースを追加した。
+- `scripts/run_research_phase3_frontend_weather.py` に `--available-bev-count N` を追加した。永続scenarioのBEV35/ICE25在庫は変更せず、materialize後のdeep copy上で、保存済み初期SOCが高い順・同値時vehicle ID順にN台だけをavailableとする。これは整備・充電準備等を表す、決定論的かつ楽観的なreadinessケースである。選択方針、選択/非選択ID、変更前後のavailable台数、`persisted_scenario_modified=false`をinput audit・summary・experiment hashへ保存する。
+- summaryへ`fleet_available`、`used_vehicle_count_by_type`、`served_trip_count_by_vehicle_type`を追加した。使用台数比率と担当便比率を混同しないためである。旧`batch_sensitivity.py`と`src.pipeline.sensitivity_runner`はそれぞれ簡易RouteSimulator/旧model factory経路であり、Phase 3の研究結果には流用していない。
+
+### 自己検出したP1と修正
+
+- 最初のBEV10台・120秒probeは全264便をBEV8/ICE24で割り当てたが、独立validationが1台の帰庫直後SOCを`61.46 < 62.80 kWh`として拒否した。Stage 2は帰庫完了時刻をceilしたslotへ帰庫回送energyを載せ、同slot充電との合算後SOCだけを制約していた。このためslot-start semanticsに反し、帰庫直後の一時的な下限割れを同slot充電が隠せた。
+- 帰庫回送energyを「最初の帰庫後slotへ至る直前のSOC transition」で控除するよう変更した。これにより帰庫後slotの`SOC >= lower bound`が、同slot充電前の帰庫直後SOCにも適用される。帰庫がhorizon外の場合は従来どおりterminal out-of-horizon loadへ計上する。metadataへ`stage2_return_deadhead_soc_semantics=return_energy_subtracted_in_transition_ending_at_first_post_return_slot`を記録する。
+- 同じ入力を再実行し、SOC上下限・BESS・充電器・契約電力・便重複・接続違反がすべて0、Stage 2=`optimal`、全264便担当となることを確認した。fallbackとpostsolve repairは使用していない。
+
+### 120秒探索結果（正式な最適費用比較には不採用）
+
+| 利用可能BEV | 使用BEV/ICE | BEV担当便/全便 | 会計総費用 | Stage 1 gap |
+|---:|---:|---:|---:|---:|
+| 35 | 17 / 15 | 54 / 264 (20.45%) | 717,249.318 JPY | 100.00% |
+| 10 | 8 / 24 | 86 / 264 (32.58%) | 718,059.017 JPY | 15.68% |
+
+- 出力は`output/research_phase3_fleet_mix_sunny_bev35_probe_120s_return_fix`と`output/research_phase3_fleet_mix_sunny_bev10_probe_120s_return_fix`。両方とも晴天2025-08-05、同一prepared input、60分24slot、seed 42、time limit 120秒、PV/BESS/TOU/契約電力・軽油・CO₂単価同一である。
+- BEV使用台数は53.125%から25.000%へ変化し、ユーザーが求めた異なる車両構成の可行例は得られた。ただしBEV10台ケースの方がBEV担当便数が多い。これは車両台数比率が電動化便数を直接表さないことに加え、Stage 1の未収束incumbent品質がケース間で異なるためである。
+- 利用可能集合10台は35台集合の部分集合なので、厳密最適値は35台ケースが10台ケース以下になるべきである。今回の35台ケースのincumbent objective/会計費用が高い又は同等であることを最適性の知見として解釈してはならない。正式な感度分析には、nested fleet間のincumbent共有、1500秒run、gap/dual boundの併記が必要である。
+
+### 検証と自己レビュー
+
+- `GRB_LICENSE_FILE=C:\Users\RTDS_admin\gurobi.lic python -m pytest -q tests/test_phase3_controlled_validation.py tests/test_post_return_soc_target.py` → `41 passed`。
+- `GRB_LICENSE_FILE=C:\Users\RTDS_admin\gurobi.lic python -m pytest -q --ignore=test_multiday_phase1.py` → `680 passed, 8 skipped`。除外testはlocalhost BFFを要求する手動E2Eである。
+- unit regressionは、BEV availabilityの決定論的選択、永続在庫数不変、範囲外count拒否、帰庫event slotの直前transition選択を確認する。`python -m py_compile`と`git diff --check`もpassした。
+- MIT-style self reviewでは、P0=0、P1=0、P2=1（正式感度分析には複数のBEV選択seed又はnested incumbent共有が必要）、P3=0。現時点の成果物は可行性と構成差の探索結果であり、global total-cost optimumの証拠ではない。
+- 外部`claude` CLIはこの環境に存在しないため、Claude Codeによる独立レビューは実行できなかった。
+
+---
+
 ## 2026-07-14 17:50 JST — Accepted frontend weather runs and guarded accounting comparison
 
 ### 実測した受理済み結果
@@ -47,7 +216,7 @@
 
 - `src/optimization/milp/solver_adapter.py` に、Stage 1の`stage1_soc_relax_*`を追加した。BEVごとにslot-start SOCを持たせ、Stage 2と同じ便エネルギーのslot配分と「運行中slotは充電不可」だけをhard constraintにする。
 - ただしこれはStage 2の再実装ではない。idle slotでは所在地に関係なく最大充電を許し、charger port、営業所滞在、回送、系統/PV/BESS制約、deadhead消費をすべて緩和する。このためStage 2で可行な解を排除しない**楽観的な必要条件**であり、低SOC車両の早朝連続便のように、それでもSOC下限を守れない割当だけをStage 1で除外する。
-- `stage1_time_indexed_soc_relaxation_constraint_count` と `stage1_time_indexed_soc_relaxation_semantics=optimistic_time_indexed_vehicle_local_soc_necessary_condition` をsolver metadataおよび両research runnerのsummaryへ追加した。既存のall-day energy envelope、連続1 duty方針、fallback/postsolve repair禁止は維持する。
+- `stage1_time_indexed_soc_relaxation_constraint_count` と `stage1_time_indexed_soc_relaxation_semantics=optimistic_cumulative_home_depot_energy_necessary_condition` をsolver metadataおよび両research runnerのsummaryへ追加した。既存のall-day energy envelope、連続1 duty方針、fallback/postsolve repair禁止は維持する。
 
 ### 晴雨比較の入力監査
 

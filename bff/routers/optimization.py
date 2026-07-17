@@ -25,7 +25,7 @@ from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from bff.dependencies import require_built
 from bff.errors import AppErrorCode, make_error
@@ -99,7 +99,13 @@ from src.optimization.common.energy_flow_accounting import (
     normalize_pv_energy_breakdown,
 )
 from src.optimization.common.time_axis import normalize_timestep_min
-from src.optimization.rolling.reoptimizer import RollingReoptimizer
+from src.optimization.rolling.reoptimizer import (
+    RollingReoptimizer,
+    assignment_plan_from_serialized_result,
+)
+from src.optimization.common.bess_terminal_policy import (
+    resolve_bess_terminal_soc_target_kwh,
+)
 from src.preprocess.weather.operation_policy import apply_weather_policy_to_problem
 from src.run_output_layout import allocate_run_dir
 from src.pipeline.solve import solve_problem_data
@@ -158,6 +164,8 @@ class RunOptimizationBody(BaseModel):
     time_step_min: Optional[int] = None
     timestep_min: Optional[int] = None
     time_limit_seconds: int = 300
+    stage1_time_limit_seconds: Optional[int] = None
+    stage2_time_limit_seconds: Optional[int] = None
     mip_gap: float = 0.01
     random_seed: int = 42
     prepared_input_id: Optional[str] = None
@@ -193,10 +201,16 @@ class ReoptimizeBody(BaseModel):
     prepared_input_id: Optional[str] = None
     service_id: Optional[str] = None
     depot_id: Optional[str] = None
-    actual_soc: Dict[str, float] = {}
-    actual_location_node_id: Dict[str, str] = {}
-    delays: list[DelayEventBody] = []
-    updated_pv_profile: list[Dict[str, Any]] = []
+    actual_soc: Dict[str, float] = Field(default_factory=dict)
+    actual_bess_soc_kwh: Dict[str, float] = Field(default_factory=dict)
+    observed_on_peak_kw_by_depot: Dict[str, float] = Field(default_factory=dict)
+    observed_off_peak_kw_by_depot: Dict[str, float] = Field(default_factory=dict)
+    actual_location_node_id: Dict[str, str] = Field(default_factory=dict)
+    delays: list[DelayEventBody] = Field(default_factory=list)
+    updated_pv_profile: list[Dict[str, Any]] = Field(default_factory=list)
+    reoptimization_strategy: str = "generic"
+    execution_minutes: int = Field(default=60, ge=1)
+    bess_terminal_policy: str = "scenario"
 
 
 def _optimization_capabilities() -> Dict[str, Any]:
@@ -704,6 +718,29 @@ def _bess_soc_bounds_for_asset(asset: Any) -> tuple[float, float, float] | None:
     min_soc = min(max(float(getattr(asset, "bess_soc_min_kwh", 0.0) or 0.0), 0.0), max_soc)
     initial_soc = min(max(float(getattr(asset, "bess_initial_soc_kwh", 0.0) or 0.0), min_soc), max_soc)
     return min_soc, max_soc, initial_soc
+
+
+def _resolved_bess_terminal_target_kwh(asset: Any) -> float | None:
+    bounds = _bess_soc_bounds_for_asset(asset)
+    if bounds is None:
+        return None
+    min_soc, max_soc, initial_soc = bounds
+    terminal_floor = min(
+        max(
+            float(getattr(asset, "bess_terminal_soc_min_kwh", 0.0) or 0.0),
+            min_soc,
+        ),
+        max_soc,
+    )
+    return resolve_bess_terminal_soc_target_kwh(
+        policy=getattr(asset, "bess_terminal_soc_policy", ""),
+        initial_soc_kwh=initial_soc,
+        configured_target_kwh=float(
+            getattr(asset, "bess_terminal_soc_target_kwh", 0.0) or 0.0
+        ),
+        terminal_soc_floor_kwh=terminal_floor,
+        maximum_soc_kwh=max_soc,
+    )
 
 
 def _complete_bess_soc_flow_context(problem: Any, flow_ctx: Dict[str, Any]) -> Dict[str, Any]:
@@ -1238,8 +1275,7 @@ def _canonical_charging_output_payload(problem, engine_result) -> Dict[str, Any]
         bess_terminal_min = float(getattr(asset, "bess_terminal_soc_min_kwh", 0.0) or 0.0) if asset is not None else 0.0
         raw_terminal_target = (flow_ctx.get("bess_terminal_soc_target_kwh_by_depot", {}) or {}).get(depot_id)
         if raw_terminal_target is None and asset is not None:
-            asset_target = float(getattr(asset, "bess_terminal_soc_target_kwh", 0.0) or 0.0)
-            raw_terminal_target = asset_target if asset_target > 0.0 else None
+            raw_terminal_target = _resolved_bess_terminal_target_kwh(asset)
         bess_terminal_target = float(raw_terminal_target or 0.0) if asset is not None else 0.0
         depot_bess_soc_map = dict(flow_ctx["bess_soc_kwh_by_depot_slot"].get(depot_id, {}) or {})
         depot_bess_soc_end_map = dict(flow_ctx["bess_soc_end_kwh_by_depot_slot"].get(depot_id, {}) or {})
@@ -3445,9 +3481,11 @@ def _research_extended_timeseries_exports(
             bess_max = bess_capacity
             bess_initial_soc = max(float(getattr(asset, "bess_initial_soc_kwh", 0.0) or 0.0), 0.0) if asset is not None else 0.0
         bess_terminal_min = min(max(float(getattr(asset, "bess_terminal_soc_min_kwh", 0.0) or 0.0), bess_min), bess_max) if asset is not None else 0.0
-        raw_terminal_target = max(float(getattr(asset, "bess_terminal_soc_target_kwh", 0.0) or 0.0), 0.0) if asset is not None else 0.0
-        has_terminal_target = raw_terminal_target > 0.0
-        bess_terminal_target = min(max(raw_terminal_target, bess_min), bess_max) if has_terminal_target else 0.0
+        resolved_terminal_target = (
+            _resolved_bess_terminal_target_kwh(asset) if asset is not None else None
+        )
+        has_terminal_target = resolved_terminal_target is not None
+        bess_terminal_target = float(resolved_terminal_target or 0.0)
         bess_cycle_unit = max(float(getattr(asset, "bess_cycle_cost_yen_per_kwh", 0.0) or 0.0), 0.0) if asset is not None else 0.0
         carried_bess_soc = bess_initial_soc
         for minute in range(0, 24 * 60, timestep_min):
@@ -4808,6 +4846,8 @@ def _run_optimization(
     enable_weather_operation_policy: Optional[bool] = None,
     weather_proxy_forecast_path: Optional[str] = None,
     research_run: bool = False,
+    stage1_time_limit_seconds: Optional[int] = None,
+    stage2_time_limit_seconds: Optional[int] = None,
 ) -> None:
     try:
         solver_mode = _normalize_solver_mode(mode)
@@ -4937,6 +4977,8 @@ def _run_optimization(
             opt_config = OptimizationConfig(
                 mode=opt_mode,
                 time_limit_sec=time_limit_seconds,
+                stage1_time_limit_sec=stage1_time_limit_seconds,
+                stage2_time_limit_sec=stage2_time_limit_seconds,
                 mip_gap=mip_gap,
                 random_seed=random_seed,
                 alns_iterations=alns_iterations,
@@ -5686,10 +5728,63 @@ def _apply_reoptimization_inputs(
     updated["reoptimization_request"] = {
         "current_time": body.current_time,
         "actual_soc": dict(body.actual_soc),
+        "actual_bess_soc_kwh": dict(body.actual_bess_soc_kwh),
+        "observed_on_peak_kw_by_depot": dict(
+            body.observed_on_peak_kw_by_depot
+        ),
+        "observed_off_peak_kw_by_depot": dict(
+            body.observed_off_peak_kw_by_depot
+        ),
         "actual_location_node_id": dict(body.actual_location_node_id),
         "delays": [item.model_dump() for item in body.delays],
+        "reoptimization_strategy": body.reoptimization_strategy,
+        "execution_minutes": body.execution_minutes,
+        "bess_terminal_policy": body.bess_terminal_policy,
     }
     return updated
+
+
+def _validate_day_ahead_result_contract(
+    prior_result: Dict[str, Any],
+    *,
+    scenario_id: str,
+    prepared_input_id: str,
+    service_id: str,
+    depot_id: str,
+) -> None:
+    """Reject a persisted result from a different scenario input or scope."""
+
+    prior_scenario_id = str(prior_result.get("scenario_id") or "").strip()
+    if prior_scenario_id != str(scenario_id):
+        raise ValueError(
+            "Persisted day-ahead result scenario mismatch: "
+            f"expected {scenario_id!r}, got {prior_scenario_id!r}"
+        )
+    prior_prepared_input_id = str(
+        prior_result.get("prepared_input_id") or ""
+    ).strip()
+    if prior_prepared_input_id != str(prepared_input_id):
+        raise ValueError(
+            "Persisted day-ahead result prepared input mismatch: "
+            f"expected {prepared_input_id!r}, got {prior_prepared_input_id!r}"
+        )
+
+    prior_scope = prior_result.get("scope")
+    if not isinstance(prior_scope, dict):
+        raise ValueError("Persisted day-ahead result has no dispatch scope")
+    expected_scope = {
+        "serviceId": str(service_id),
+        "depotId": str(depot_id),
+    }
+    actual_scope = {
+        "serviceId": str(prior_scope.get("serviceId") or ""),
+        "depotId": str(prior_scope.get("depotId") or ""),
+    }
+    if actual_scope != expected_scope:
+        raise ValueError(
+            "Persisted day-ahead result scope mismatch: "
+            f"expected {expected_scope}, got {actual_scope}"
+        )
 
 
 def _run_reoptimization(
@@ -5708,6 +5803,9 @@ def _run_reoptimization(
             raise ValueError("No depot selected. Configure dispatch scope first.")
 
         base_scenario = store.get_scenario_document_shallow(scenario_id)
+        prior_optimization_result = store.get_field(
+            scenario_id, "optimization_result"
+        )
         prepared_payload = load_prepared_input(
             scenario_id=scenario_id,
             prepared_input_id=prepared_input_id,
@@ -5786,23 +5884,94 @@ def _run_reoptimization(
                 },
             ),
         )
-        result = RollingReoptimizer().reoptimize(
-            problem,
-            config=config,
-            current_min=hhmm_to_min(body.current_time),
-            actual_soc=body.actual_soc,
-        )
+        rolling_reoptimizer = RollingReoptimizer()
+        strategy = str(body.reoptimization_strategy or "generic").strip().lower()
+        serialized_day_ahead: Optional[Dict[str, Any]] = None
+        if strategy == "day_ahead_hourly":
+            if not isinstance(prior_optimization_result, dict):
+                raise ValueError(
+                    "day_ahead_hourly requires a persisted day-ahead optimization result"
+                )
+            _validate_day_ahead_result_contract(
+                prior_optimization_result,
+                scenario_id=scenario_id,
+                prepared_input_id=prepared_input_id,
+                service_id=service_id,
+                depot_id=depot_id,
+            )
+            serialized_day_ahead = prior_optimization_result.get(
+                "canonical_solver_result"
+            )
+            if not isinstance(serialized_day_ahead, dict):
+                raise ValueError(
+                    "Persisted optimization result has no canonical day-ahead assignment"
+                )
+            day_ahead_plan = assignment_plan_from_serialized_result(
+                problem,
+                serialized_day_ahead,
+            )
+            result = rolling_reoptimizer.reoptimize_charging_hour(
+                problem,
+                day_ahead_plan,
+                config=config,
+                current_min=hhmm_to_min(body.current_time),
+                actual_soc=body.actual_soc,
+                actual_bess_soc_kwh=body.actual_bess_soc_kwh,
+                observed_on_peak_kw_by_depot=(
+                    body.observed_on_peak_kw_by_depot
+                ),
+                observed_off_peak_kw_by_depot=(
+                    body.observed_off_peak_kw_by_depot
+                ),
+                execution_minutes=body.execution_minutes,
+                bess_terminal_policy=body.bess_terminal_policy,
+            )
+        elif strategy == "generic":
+            result = rolling_reoptimizer.reoptimize(
+                problem,
+                config=config,
+                current_min=hhmm_to_min(body.current_time),
+                actual_soc=body.actual_soc,
+                actual_bess_soc_kwh=body.actual_bess_soc_kwh,
+            )
+        else:
+            raise ValueError(
+                "reoptimization_strategy must be 'generic' or 'day_ahead_hourly'"
+            )
         payload = {
             "scenario_id": scenario_id,
+            "scope": {"serviceId": service_id, "depotId": depot_id},
+            "prepared_input_id": prepared_input_id,
             "reoptimized": True,
             "reoptimization_request": {
                 "current_time": body.current_time,
                 "actual_soc": dict(body.actual_soc),
+                "actual_bess_soc_kwh": dict(body.actual_bess_soc_kwh),
+                "observed_on_peak_kw_by_depot": dict(
+                    body.observed_on_peak_kw_by_depot
+                ),
+                "observed_off_peak_kw_by_depot": dict(
+                    body.observed_off_peak_kw_by_depot
+                ),
                 "actual_location_node_id": dict(body.actual_location_node_id),
                 "delays": [item.model_dump() for item in body.delays],
+                "reoptimization_strategy": strategy,
+                "execution_minutes": body.execution_minutes,
+                "bess_terminal_policy": body.bess_terminal_policy,
             },
             **ResultSerializer.serialize_result(result),
         }
+        if serialized_day_ahead is not None:
+            # Keep the verified day-ahead assignment available for the next
+            # hourly update; the newly optimized charging schedule must not
+            # become the source of vehicle-trip assignment truth.
+            payload["canonical_solver_result"] = serialized_day_ahead
+            payload["day_ahead_reference"] = {
+                "scenario_id": scenario_id,
+                "prepared_input_id": prepared_input_id,
+                "service_id": service_id,
+                "depot_id": depot_id,
+            }
         store.set_field(scenario_id, "optimization_result", payload)
         store.set_field(
             scenario_id,
@@ -5983,6 +6152,8 @@ def run_optimization(
             request.enableWeatherOperationPolicy,
             request.weatherProxyForecastPath,
             request.research_run,
+            request.stage1_time_limit_seconds,
+            request.stage2_time_limit_seconds,
         ),
         job_id=job.job_id,
         scenario_id=scenario_id,

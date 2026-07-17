@@ -162,8 +162,18 @@ def test_research_phase3_accepts_feasibility_but_not_a_global_cost_claim() -> No
                 ),
                 "stage1_time_indexed_soc_relaxation_constraint_count": 123,
                 "stage1_time_indexed_soc_relaxation_semantics": (
-                    "optimistic_time_indexed_vehicle_local_soc_necessary_condition"
+                    "optimistic_cumulative_home_depot_energy_necessary_condition"
                 ),
+                "stage1_energy_cost_proxy_configuration": {
+                    "enabled": True,
+                    "charge_efficiency": 0.95,
+                },
+                "stage1_energy_cost_proxy_weather_input": {
+                    "pv_available_kwh_by_depot": {"depot": 100.0}
+                },
+                "stage1_energy_cost_proxy_result": {
+                    "grid_to_bus_kwh": 10.0
+                },
             }
         ),
         feasible=True,
@@ -203,8 +213,18 @@ def test_research_phase3_accepts_feasibility_but_not_a_global_cost_claim() -> No
         "stage1_time_indexed_soc_relaxation_constraint_count"
     ] == 123
     assert result.solver_metadata["stage1_time_indexed_soc_relaxation_semantics"] == (
-        "optimistic_time_indexed_vehicle_local_soc_necessary_condition"
+        "optimistic_cumulative_home_depot_energy_necessary_condition"
     )
+    assert result.solver_metadata["stage1_energy_cost_proxy_configuration"] == {
+        "enabled": True,
+        "charge_efficiency": 0.95,
+    }
+    assert result.solver_metadata["stage1_energy_cost_proxy_weather_input"] == {
+        "pv_available_kwh_by_depot": {"depot": 100.0}
+    }
+    assert result.solver_metadata["stage1_energy_cost_proxy_result"] == {
+        "grid_to_bus_kwh": 10.0
+    }
     assert "objective_is_actual_cost" not in result.solver_metadata["research_acceptance_checks"]
 
 

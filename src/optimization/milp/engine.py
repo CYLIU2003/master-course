@@ -169,11 +169,26 @@ class MILPOptimizer:
                 "stage1_best_bound": (plan.metadata or {}).get("stage1_best_bound"),
                 "stage1_mip_gap_ratio": (plan.metadata or {}).get("stage1_mip_gap_ratio"),
                 "stage1_runtime_seconds": (plan.metadata or {}).get("stage1_runtime_seconds"),
+                "stage1_time_limit_sec_effective": (plan.metadata or {}).get(
+                    "stage1_time_limit_sec_effective"
+                ),
                 "stage2_has_feasible_incumbent": (plan.metadata or {}).get("stage2_has_feasible_incumbent"),
                 "stage2_objective": (plan.metadata or {}).get("stage2_objective"),
                 "stage2_best_bound": (plan.metadata or {}).get("stage2_best_bound"),
                 "stage2_mip_gap_ratio": (plan.metadata or {}).get("stage2_mip_gap_ratio"),
                 "stage2_runtime_seconds": (plan.metadata or {}).get("stage2_runtime_seconds"),
+                "stage2_time_limit_sec_effective": (plan.metadata or {}).get(
+                    "stage2_time_limit_sec_effective"
+                ),
+                "rolling_horizon_policy": (plan.metadata or {}).get(
+                    "rolling_horizon_policy", ""
+                ),
+                "rolling_start_slot_index": (plan.metadata or {}).get(
+                    "rolling_start_slot_index"
+                ),
+                "rolling_execution_minutes": (plan.metadata or {}).get(
+                    "rolling_execution_minutes"
+                ),
                 "stage1_feasible": (plan.metadata or {}).get("stage1_feasible"),
                 "stage2_feasible": (plan.metadata or {}).get("stage2_feasible"),
                 "assignment_candidate_available": bool((plan.metadata or {}).get("assignment_candidate_available", False)),
@@ -329,6 +344,12 @@ class MILPOptimizer:
                 "termination_reason": self._termination_reason(outcome.solver_status),
                 "effective_limits": {
                     "time_limit_sec": int(config.time_limit_sec),
+                    "stage1_time_limit_sec": (plan.metadata or {}).get(
+                        "stage1_time_limit_sec_effective"
+                    ),
+                    "stage2_time_limit_sec": (plan.metadata or {}).get(
+                        "stage2_time_limit_sec_effective"
+                    ),
                     "mip_gap": float(config.mip_gap),
                     "requested_mip_gap": float(config.mip_gap),
                 },

@@ -124,6 +124,13 @@ ACCOUNTING_COMPONENT_FIELDS = (
     "co2_cost",
     "vehicle_usage_cost",
 )
+STAGE1_ENERGY_PROXY_RESULT_FIELDS = (
+    "external_charge_input_kwh",
+    "pv_to_bus_kwh",
+    "grid_to_bus_kwh",
+    "bess_initial_to_bus_kwh",
+    "objective_jpy",
+)
 
 
 class ComparisonContractError(ValueError):
@@ -145,6 +152,9 @@ def build_weather_comparison(
     _validate_accepted_case("sunny", sunny)
     _validate_accepted_case("rain", rain)
     _validate_fixed_controls(sunny, rain)
+    energy_proxy_control_audit = _validate_stage1_energy_proxy_controls(
+        sunny, rain
+    )
     contract_control_audit = _validate_contract_power_controls(sunny, rain)
     weather_differences = _validate_weather_inputs(sunny, rain)
 
@@ -170,6 +180,7 @@ def build_weather_comparison(
             "(legacy summaries are explicitly marked)"
         ],
         "contract_power_control_audit": contract_control_audit,
+        "stage1_energy_cost_proxy_control_audit": energy_proxy_control_audit,
         "allowed_weather_input_differences": weather_differences,
         "run_status": {"sunny": _run_status(sunny), "rain": _run_status(rain)},
         "effects": {
@@ -186,6 +197,12 @@ def build_weather_comparison(
                     "stage2_objective",
                 )
             },
+            "stage1_energy_cost_proxy": _optional_metric_effects(
+                sunny,
+                rain,
+                "stage1_energy_cost_proxy_result",
+                STAGE1_ENERGY_PROXY_RESULT_FIELDS,
+            ),
         },
     }
 
@@ -199,6 +216,10 @@ def render_markdown_report(comparison: Mapping[str, Any]) -> str:
     effects = _require_mapping(result.get("effects"), "comparison effects")
     cost_effects = _require_mapping(effects.get("costs_jpy"), "cost effects")
     flow_effects = _require_mapping(effects.get("flows_kwh_or_kw"), "flow effects")
+    proxy_effects = _require_mapping(
+        effects.get("stage1_energy_cost_proxy"),
+        "Stage 1 energy-cost proxy effects",
+    )
     scope = _require_mapping(result.get("comparison_scope"), "comparison scope")
     weather_inputs = _require_mapping(
         result.get("allowed_weather_input_differences"), "weather input differences"
@@ -313,6 +334,23 @@ def render_markdown_report(comparison: Mapping[str, Any]) -> str:
             ),
         )
     )
+    if bool(proxy_effects.get("exported")):
+        proxy_metrics = _require_mapping(
+            proxy_effects.get("metrics"), "Stage 1 energy-cost proxy metrics"
+        )
+        lines.extend(
+            [
+                "",
+                "## Stage 1 集約充電費用代理（雨天 − 晴天）",
+                "",
+                "この値は割当探索へ天候別PV量を伝える下界代理です。"
+                "Stage 2の時刻別充電費用・会計総額ではありません。",
+                "",
+                "| 項目 | 晴天 | 雨天 | 差分 | 晴天比 [%] |",
+                "| --- | ---: | ---: | ---: | ---: |",
+            ]
+        )
+        lines.extend(_metric_rows(proxy_metrics, STAGE1_ENERGY_PROXY_RESULT_FIELDS))
     lines.extend(
         [
             "",
@@ -473,6 +511,41 @@ def _validate_fixed_controls(
             )
 
 
+def _validate_stage1_energy_proxy_controls(
+    sunny: Mapping[str, Any],
+    rain: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Require identical proxy policy while retaining legacy comparisons."""
+    field = "stage1_energy_cost_proxy_configuration"
+    sunny_present = field in sunny
+    rain_present = field in rain
+    if not sunny_present and not rain_present:
+        return {
+            "exported": False,
+            "legacy_summary_note": (
+                "Stage 1 energy-cost proxy metadata is absent from both "
+                "summaries; these artifacts predate the weather-aware "
+                "assignment-cost proxy."
+            ),
+        }
+    if sunny_present != rain_present:
+        raise ComparisonContractError(
+            f"{field} must be present in both summaries or neither"
+        )
+    sunny_configuration = _require_mapping(
+        sunny.get(field), f"sunny.{field}"
+    )
+    rain_configuration = _require_mapping(rain.get(field), f"rain.{field}"
+    )
+    if sunny_configuration != rain_configuration:
+        raise ComparisonContractError(
+            f"Fixed control differs at {field}: "
+            f"sunny={_short_json(sunny_configuration)}, "
+            f"rain={_short_json(rain_configuration)}"
+        )
+    return {"exported": True, "configuration": dict(sunny_configuration)}
+
+
 def _validate_contract_power_controls(
     sunny: Mapping[str, Any],
     rain: Mapping[str, Any],
@@ -548,6 +621,9 @@ def _validate_weather_inputs(
             sunny,
             rain,
         ),
+        "stage1_energy_cost_proxy_weather_input": (
+            _validate_stage1_energy_proxy_weather_input(sunny, rain)
+        ),
         "pv_assets": {
             depot_id: _allowed_differences(
                 _require_mapping(
@@ -561,6 +637,30 @@ def _validate_weather_inputs(
             )
             for depot_id in sorted(sunny_assets)
         },
+    }
+
+
+def _validate_stage1_energy_proxy_weather_input(
+    sunny: Mapping[str, Any],
+    rain: Mapping[str, Any],
+) -> dict[str, Any]:
+    field = "stage1_energy_cost_proxy_weather_input"
+    sunny_present = field in sunny
+    rain_present = field in rain
+    if not sunny_present and not rain_present:
+        return {"exported": False}
+    if sunny_present != rain_present:
+        raise ComparisonContractError(
+            f"{field} must be present in both summaries or neither"
+        )
+    return {
+        "exported": True,
+        "differences": _allowed_differences(
+            _require_mapping(sunny.get(field), f"sunny.{field}"),
+            _require_mapping(rain.get(field), f"rain.{field}"),
+            frozenset({"pv_available_kwh_by_depot"}),
+            field,
+        ),
     }
 
 
@@ -638,6 +738,26 @@ def _metric_effects(
             _finite_number(rain_values.get(field), f"rain.{container}.{field}"),
         )
         for field in fields
+    }
+
+
+def _optional_metric_effects(
+    sunny: Mapping[str, Any],
+    rain: Mapping[str, Any],
+    container: str,
+    fields: Sequence[str],
+) -> dict[str, Any]:
+    sunny_present = container in sunny
+    rain_present = container in rain
+    if not sunny_present and not rain_present:
+        return {"exported": False}
+    if sunny_present != rain_present:
+        raise ComparisonContractError(
+            f"{container} must be present in both summaries or neither"
+        )
+    return {
+        "exported": True,
+        "metrics": _metric_effects(sunny, rain, container, fields),
     }
 
 

@@ -123,8 +123,9 @@ flowchart LR
 </details>
 
 <details>
-<summary><strong>更新メモ（2026-03-28）</strong></summary>
+<summary><strong>更新メモ</strong></summary>
 
+- 2026-07-16: 営業所設備画面で定置型BESSの終端方針を`運用範囲のみ` / `初期SOCへ戻す目標` / `終端SOC目標を指定`から選択できるようにした。SOC上下限と終端下限は全方針でhard constraintのまま保持する。フロントの主要入口を営業所設備・車両・solver条件の設定ハブへ集約し、画面トークンと構成判断を`DESIGN.md`へ明文化した。日次Phase 3割当を固定した1時間再最適化は、EV/BESS SOCと既発生需要ピークを次時刻へ自動継承できる。長時間計算の手動受理手順は`docs/notes/phase3_manual_validation_runbook_20260716.md`を参照する。
 - 2026-04-17: `tools/scenario_backup_tk.py` の車両管理に `initialSoc` 編集欄を追加し、営業所単位で固定値 / ランダムの一括設定もできるようにした。`vehicles[].initialSoc` を車両ごとの開始 SOC の正本とし、未設定時のみ `initial_soc` / `initial_soc_percent` を既定値として使う。
 - 2026-04-01: Tk クライアントに直結実行の初期実装を追加し、`MC_DIRECT_CALL=1` 時は `Prepare / Prepared simulation / Run optimization / Reoptimize / Job取得` を HTTP ではなく `bff.services.direct_runtime` 経由で同一プロセス実行できるようにした（未対応エンドポイントは従来どおり HTTP）
 - 2026-04-01: `tools/scenario_backup_tk.py` の UI を再構成し、主導線（接続→シナリオ選択→Prepare→実行→結果確認）を前面化。重複していた `設定保存` ボタンと上部 `App Context` ボタンを削除し、補助機能は `ツール` メニューへ集約。実行モードを `直結 / HTTP互換` の切替UIとして明示した

@@ -59,6 +59,7 @@ def _weather_forecast() -> WeatherProxyForecast:
 def test_run_parameter_tab_labels_keep_optimization_inputs_grouped() -> None:
     assert _RUN_PARAMETER_TAB_LABELS == (
         "よく使う",
+        "営業所設備",
         "SOC/燃料",
         "料金/CO2",
         "PV/予報",
@@ -421,8 +422,12 @@ def test_depot_charger_manager_exposes_bess_buffer_fields() -> None:
     assert "BESSバッファ上限 [%]" in manager_source
     assert "dm_bess_soc_min_percent_var" in manager_source
     assert "dm_bess_soc_max_percent_var" in manager_source
+    assert "BESS終端方針" in manager_source
+    assert "BESS終端SOC目標 [%]（目標指定時のみ）" in manager_source
     assert 'row["bess_soc_min_ratio"]' in sync_source
     assert 'row["bess_soc_max_ratio"]' in sync_source
+    assert 'row["bess_terminal_soc_policy"]' in sync_source
+    assert 'row["bess_terminal_soc_target_ratio"]' in sync_source
 
 
 def test_weather_proxy_json_loader_rejects_service_date_mismatch(tmp_path: Path) -> None:

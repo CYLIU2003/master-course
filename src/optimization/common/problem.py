@@ -6,6 +6,11 @@ import re
 from typing import Any, Dict, List, Mapping, Optional, Set, Tuple
 
 from src.dispatch.models import VehicleDuty
+from .bess_terminal_policy import (
+    BESS_TERMINAL_POLICY_FIXED_TARGET,
+    BESS_TERMINAL_POLICY_RETURN_TO_INITIAL,
+    normalize_bess_terminal_policy,
+)
 from .time_axis import (
     chronological_duty_key,
     normalize_horizon_start_min,
@@ -227,6 +232,9 @@ class DepotEnergyAsset:
     grid_to_bess_allowed_slot_indices: Tuple[int, ...] = ()
     bess_priority_mode: str = "cost_driven"
     bess_terminal_soc_min_kwh: float = 0.0
+    # Empty preserves legacy constructor behavior: a positive target implies
+    # fixed_target, otherwise the model uses only the hard terminal floor.
+    bess_terminal_soc_policy: str = ""
     bess_terminal_soc_target_kwh: float = 0.0
     bess_terminal_soc_deviation_penalty_yen_per_kwh: float = 20.0
     provisional_energy_cost_yen_per_kwh: float = 0.0
@@ -322,6 +330,12 @@ class OptimizationScenario:
 class OptimizationConfig:
     mode: OptimizationMode = OptimizationMode.HYBRID
     time_limit_sec: int = 300
+    # Optional stage-specific limits.  ``None`` preserves the historical
+    # Phase 3 split (half of ``time_limit_sec`` per stage).  Explicit values
+    # make the research time budget reproducible and avoid reserving hundreds
+    # of seconds for the usually small fixed-assignment charging MILP.
+    stage1_time_limit_sec: Optional[int] = None
+    stage2_time_limit_sec: Optional[int] = None
     mip_gap: float = 0.02
     random_seed: int = 42
     alns_iterations: int = 800  # Increased from 500
@@ -329,6 +343,13 @@ class OptimizationConfig:
     destroy_fraction: float = 0.25
     partial_milp_trip_limit: int = 40
     rolling_current_min: Optional[int] = None
+    # Set only by the fixed-assignment charging re-optimizer.  The MILP then
+    # solves the remaining service day and the caller executes the first
+    # ``rolling_execution_minutes`` before supplying updated state again.
+    rolling_horizon_policy: str = ""
+    rolling_execution_minutes: Optional[int] = None
+    rolling_observed_on_peak_kw_by_depot: Mapping[str, float] = field(default_factory=dict)
+    rolling_observed_off_peak_kw_by_depot: Mapping[str, float] = field(default_factory=dict)
     target_gap_to_baseline: Optional[float] = None
     warm_start: bool = True
     acceptance: str = "simulated_annealing"
@@ -623,6 +644,39 @@ class CanonicalOptimizationProblem:
                 if not (asset.bess_soc_min_kwh <= asset.bess_initial_soc_kwh <= asset.bess_soc_max_kwh):
                     raise ValueError(
                         f"Depot {depot_id} initial BESS SOC must be within [min, max]"
+                    )
+                terminal_floor = float(asset.bess_terminal_soc_min_kwh or 0.0)
+                if not (0.0 <= terminal_floor <= asset.bess_soc_max_kwh):
+                    raise ValueError(
+                        f"Depot {depot_id} terminal BESS SOC floor must be "
+                        "within [0, max]"
+                    )
+                target = float(asset.bess_terminal_soc_target_kwh or 0.0)
+                terminal_policy = normalize_bess_terminal_policy(
+                    asset.bess_terminal_soc_policy,
+                    has_explicit_target=target > 0.0,
+                )
+                effective_terminal_floor = max(
+                    terminal_floor,
+                    float(asset.bess_soc_min_kwh or 0.0),
+                )
+                if (
+                    terminal_policy == BESS_TERMINAL_POLICY_RETURN_TO_INITIAL
+                    and float(asset.bess_initial_soc_kwh or 0.0)
+                    < effective_terminal_floor
+                ):
+                    raise ValueError(
+                        f"Depot {depot_id} cannot return to an initial BESS "
+                        "SOC below the effective terminal floor"
+                    )
+                if terminal_policy == BESS_TERMINAL_POLICY_FIXED_TARGET and not (
+                    effective_terminal_floor
+                    <= target
+                    <= float(asset.bess_soc_max_kwh or 0.0)
+                ):
+                    raise ValueError(
+                        f"Depot {depot_id} fixed terminal BESS SOC target must "
+                        "be within [effective terminal floor, max]"
                     )
 
     def trip_by_id(self) -> Dict[str, ProblemTrip]:

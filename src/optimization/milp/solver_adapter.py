@@ -15,6 +15,9 @@ from src.dispatch.route_band import fragment_transition_diagnostic
 from src.gurobi_runtime import ensure_gurobi, is_gurobi_available
 from src.objective_modes import normalize_objective_mode
 from src.optimization.common.cost_components import normalize_cost_component_flags
+from src.optimization.common.bess_terminal_policy import (
+    resolve_bess_terminal_soc_target_kwh,
+)
 from src.optimization.milp.model_builder import MILPModelBuilder
 from src.optimization.common.weather_strategy import weather_assignment_objective_bias
 from src.route_code_utils import extract_route_series_from_candidates
@@ -38,6 +41,8 @@ from src.optimization.common.soc_helpers import (
     post_return_target_slot_index,
     return_deadhead_energy_kwh,
     return_deadhead_min_to_home,
+    slot_absolute_min,
+    slot_index,
     slot_index_ceil,
 )
 
@@ -46,6 +51,63 @@ _DRIVER_PREP_TIME_MIN = 30.0
 _DRIVER_WAGE_JPY_PER_H = 2000.0
 _DRIVER_REGULAR_HOURS_PER_DAY = 8.0
 _DRIVER_OVERTIME_FACTOR = 1.25
+
+ROLLING_REMAINING_DAY_FIXED_ASSIGNMENT = "remaining_day_fixed_assignment"
+
+
+def _resolved_stage_time_limit_sec(
+    config: OptimizationConfig,
+    *,
+    stage: int,
+) -> int:
+    """Resolve a reproducible solver budget for one Phase 3 stage.
+
+    Existing experiments keep the historical 50/50 split when neither
+    stage-specific value is supplied.  Phase 1 charging-only runs have no
+    assignment MILP, so their Stage 2 receives the full request by default.
+    """
+
+    if stage not in {1, 2}:
+        raise ValueError(f"stage must be 1 or 2, got {stage!r}")
+    explicit = (
+        getattr(config, "stage1_time_limit_sec", None)
+        if stage == 1
+        else getattr(config, "stage2_time_limit_sec", None)
+    )
+    if explicit is not None:
+        return max(int(explicit), 1)
+    total = max(int(getattr(config, "time_limit_sec", 0) or 0), 1)
+    phase = str(getattr(config, "phase", "") or "").strip().lower()
+    if stage == 2 and normalize_phase(phase) == "phase1_charging_only":
+        return total
+    return max(int(max(total, 2) / 2), 1)
+
+
+def _stage2_slot_indices(
+    problem: CanonicalOptimizationProblem,
+    config: OptimizationConfig,
+    all_slot_indices: Sequence[int],
+) -> Tuple[int, ...]:
+    """Return the full day or the remaining-day rolling look-ahead slots."""
+
+    ordered = tuple(sorted({int(item) for item in all_slot_indices}))
+    policy = str(getattr(config, "rolling_horizon_policy", "") or "").strip().lower()
+    if policy != ROLLING_REMAINING_DAY_FIXED_ASSIGNMENT:
+        return ordered
+    current_min = getattr(config, "rolling_current_min", None)
+    if current_min is None:
+        raise ValueError("rolling_current_min is required for remaining-day re-optimization")
+    start_slot = slot_index(problem, int(current_min))
+    return tuple(item for item in ordered if item >= start_slot)
+
+
+def _pv_generation_kwh_at_slot(asset: DepotEnergyAsset, slot_idx: int) -> float:
+    """Read PV by absolute slot index, including a rolling subset of the day."""
+
+    values = tuple(getattr(asset, "pv_generation_kwh_by_slot", ()) or ())
+    if not bool(getattr(asset, "pv_enabled", False)) or slot_idx < 0 or slot_idx >= len(values):
+        return 0.0
+    return max(float(values[slot_idx] or 0.0), 0.0)
 
 
 def _bess_soc_max_kwh(asset: DepotEnergyAsset) -> float:
@@ -57,12 +119,14 @@ def _bess_soc_max_kwh(asset: DepotEnergyAsset) -> float:
 
 
 def _bess_terminal_soc_target_kwh(asset: DepotEnergyAsset, *, terminal_soc_floor: float) -> Optional[float]:
-    target = max(float(getattr(asset, "bess_terminal_soc_target_kwh", 0.0) or 0.0), 0.0)
-    if target <= 0.0:
-        return None
-    return min(
-        max(target, terminal_soc_floor),
-        max(_bess_soc_max_kwh(asset), terminal_soc_floor),
+    return resolve_bess_terminal_soc_target_kwh(
+        policy=getattr(asset, "bess_terminal_soc_policy", ""),
+        initial_soc_kwh=float(getattr(asset, "bess_initial_soc_kwh", 0.0) or 0.0),
+        configured_target_kwh=float(
+            getattr(asset, "bess_terminal_soc_target_kwh", 0.0) or 0.0
+        ),
+        terminal_soc_floor_kwh=terminal_soc_floor,
+        maximum_soc_kwh=_bess_soc_max_kwh(asset),
     )
 
 
@@ -80,6 +144,24 @@ def _vehicle_soc_transition_kwh(
         + charge_efficiency * charge_power_kw * timestep_h
         - drive_energy_kwh
     )
+
+
+def _transition_slot_ending_at_event(
+    slot_indices: Sequence[int],
+    event_slot: int,
+) -> Optional[int]:
+    """Return the SOC transition whose end state is ``event_slot``.
+
+    A return deadhead completed at the start of ``event_slot`` must reduce the
+    preceding transition. Posting it to ``event_slot`` would let same-slot
+    charging mask a below-reserve post-return state.
+    """
+    ordered = tuple(sorted({int(slot_idx) for slot_idx in slot_indices}))
+    try:
+        position = ordered.index(int(event_slot))
+    except ValueError:
+        return None
+    return ordered[position - 1] if position > 0 else None
 
 
 @dataclass(frozen=True)
@@ -115,6 +197,26 @@ class StartupEnergyPrecheck:
     complete_precharge_slot_count: int
     maximum_precharge_energy_kwh: float
     energy_margin_kwh: float
+
+
+@dataclass(frozen=True)
+class Stage1EnergyCostProxy:
+    """Aggregate source-energy lower bound used by Phase 3 Stage 1.
+
+    The proxy connects assignment-dependent BEV energy need to the configured
+    PV, stationary-battery, and grid marginal costs without pretending that
+    Stage 1 contains the time-indexed charging dispatch solved by Stage 2.
+    """
+
+    objective_expression: Any
+    external_charge_input_by_vehicle: Mapping[str, Any]
+    net_battery_requirement_by_vehicle: Mapping[str, Any]
+    home_depot_by_vehicle: Mapping[str, str]
+    pv_to_bus_by_depot: Mapping[str, Any]
+    grid_to_bus_by_depot: Mapping[str, Any]
+    bess_initial_to_bus_by_depot: Mapping[str, Any]
+    configuration: Mapping[str, Any]
+    weather_input: Mapping[str, Any]
 
 
 class SolverAdapter(Protocol):
@@ -1374,6 +1476,20 @@ class GurobiMILPAdapter:
                         terminal_soc_floor=terminal_soc_floor,
                     )
                     if terminal_soc_target is not None:
+                        terminal_tolerance = self._safe_nonnegative_float(
+                            problem.metadata.get(
+                                "bess_terminal_soc_tolerance_kwh"
+                            ),
+                            default=1.0e-6,
+                        )
+                        model.addConstr(
+                            final_soc_expr
+                            >= terminal_soc_target - terminal_tolerance
+                        )
+                        model.addConstr(
+                            final_soc_expr
+                            <= terminal_soc_target + terminal_tolerance
+                        )
                         dev_var = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
                         bess_terminal_soc_deviation_var[depot_id] = dev_var
                         model.addConstr(dev_var >= final_soc_expr - terminal_soc_target)
@@ -2762,7 +2878,7 @@ class GurobiMILPAdapter:
 
         gp, GRB = ensure_gurobi()
         total_started = time.perf_counter()
-        stage_time_limit = max(1, int(max(config.time_limit_sec, 2) / 2))
+        stage_time_limit = _resolved_stage_time_limit_sec(config, stage=1)
         stage1 = gp.Model("thesis_stage1_vehicle_scheduling")
         stage1.Params.OutputFlag = 0
         stage1.Params.TimeLimit = stage_time_limit
@@ -3023,13 +3139,39 @@ class GurobiMILPAdapter:
                 trip_by_id=trip_by_id,
                 vehicles=problem.vehicles,
                 assignment_trip_ids_by_vehicle=assignment_trip_ids_by_vehicle,
+                startup_energy_precheck_by_assignment=(
+                    startup_energy_precheck_by_assignment
+                ),
                 y=y,
+                x=x,
+                start_arc=start_arc,
+                end_arc=end_arc,
                 used_vehicle=used_vehicle,
             )
         )
 
-        component_flags = normalize_cost_component_flags(problem.metadata.get("cost_component_flags"))
-        objective1 = gp.LinExpr()
+        component_flags = normalize_cost_component_flags(
+            problem.metadata.get("cost_component_flags")
+        )
+        stage1_energy_cost_proxy = self._add_stage1_energy_cost_proxy(
+            stage1,
+            gp=gp,
+            grb=GRB,
+            problem=problem,
+            trip_by_id=trip_by_id,
+            vehicles=problem.vehicles,
+            assignment_trip_ids_by_vehicle=assignment_trip_ids_by_vehicle,
+            startup_energy_precheck_by_assignment=(
+                startup_energy_precheck_by_assignment
+            ),
+            y=y,
+            x=x,
+            start_arc=start_arc,
+            end_arc=end_arc,
+            used_vehicle=used_vehicle,
+            component_flags=component_flags,
+        )
+        objective1 = gp.LinExpr(stage1_energy_cost_proxy.objective_expression)
         diesel_price = (
             max(problem.scenario.diesel_price_yen_per_l, 0.0)
             if component_flags.get("fuel_cost", True)
@@ -3103,6 +3245,11 @@ class GurobiMILPAdapter:
             if stage1.SolCount > 0
             else None
         )
+        stage1_energy_cost_proxy_result = (
+            self._stage1_energy_cost_proxy_result(stage1_energy_cost_proxy)
+            if stage1.SolCount > 0
+            else {}
+        )
         if stage1.SolCount <= 0:
             empty = AssignmentPlan(
                 duties=(),
@@ -3157,8 +3304,15 @@ class GurobiMILPAdapter:
                         stage1_time_indexed_soc_relaxation_constraint_count
                     ),
                     "stage1_time_indexed_soc_relaxation_semantics": (
-                        "optimistic_time_indexed_vehicle_local_soc_necessary_condition"
+                        "optimistic_cumulative_home_depot_energy_necessary_condition"
                     ),
+                    "stage1_energy_cost_proxy_configuration": dict(
+                        stage1_energy_cost_proxy.configuration
+                    ),
+                    "stage1_energy_cost_proxy_weather_input": dict(
+                        stage1_energy_cost_proxy.weather_input
+                    ),
+                    "stage1_energy_cost_proxy_result": {},
                     "stage1_warm_start_applied": stage1_warm_start_applied,
                     "stage1_warm_start_source": stage1_warm_start_source,
                     "stage1_warm_start_rejection_reason": (
@@ -3201,6 +3355,7 @@ class GurobiMILPAdapter:
                 "thesis_mode": True,
                 "optimization_structure": "two_stage",
                 "stage1_solver_status": stage1_status,
+                "stage1_time_limit_sec_effective": stage_time_limit,
                 "unserved_variable_created": False,
                 "duty_vehicle_map": duty_vehicle_map,
                 "horizon_start": str(problem.scenario.horizon_start or "00:00"),
@@ -3231,7 +3386,16 @@ class GurobiMILPAdapter:
                     stage1_time_indexed_soc_relaxation_constraint_count
                 ),
                 "stage1_time_indexed_soc_relaxation_semantics": (
-                    "optimistic_time_indexed_vehicle_local_soc_necessary_condition"
+                    "optimistic_cumulative_home_depot_energy_necessary_condition"
+                ),
+                "stage1_energy_cost_proxy_configuration": dict(
+                    stage1_energy_cost_proxy.configuration
+                ),
+                "stage1_energy_cost_proxy_weather_input": dict(
+                    stage1_energy_cost_proxy.weather_input
+                ),
+                "stage1_energy_cost_proxy_result": (
+                    stage1_energy_cost_proxy_result
                 ),
                 "stage1_warm_start_applied": stage1_warm_start_applied,
                 "stage1_warm_start_source": stage1_warm_start_source,
@@ -3314,8 +3478,25 @@ class GurobiMILPAdapter:
         component_flags = normalize_cost_component_flags(
             problem.metadata.get("cost_component_flags")
         )
-        slot_indices = sorted({slot.slot_index for slot in problem.price_slots})
+        slot_indices = list(
+            _stage2_slot_indices(
+                problem,
+                config,
+                sorted({slot.slot_index for slot in problem.price_slots}),
+            )
+        )
         timestep_h = max(problem.scenario.timestep_min, 1) / 60.0
+        rolling_policy = str(
+            getattr(config, "rolling_horizon_policy", "") or ""
+        ).strip().lower()
+        is_remaining_day_reoptimization = (
+            rolling_policy == ROLLING_REMAINING_DAY_FIXED_ASSIGNMENT
+        )
+        rolling_start_abs_min = (
+            slot_absolute_min(problem, slot_indices[0])
+            if is_remaining_day_reoptimization and slot_indices
+            else None
+        )
         vehicle_by_id = {str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles}
         bev_vehicle_ids = {
             str(vehicle.vehicle_id)
@@ -3333,12 +3514,27 @@ class GurobiMILPAdapter:
                 "stage1_best_bound": stage1_bound,
                 "stage1_mip_gap_ratio": stage1_gap,
                 "stage1_runtime_seconds": stage1_runtime_sec,
+                "stage1_time_limit_sec_effective": (
+                    0
+                    if stage1_status == "phase1_fixed_assignment"
+                    else _resolved_stage_time_limit_sec(config, stage=1)
+                ),
                 "stage2_solver_status": "not_required",
                 "stage2_has_feasible_incumbent": True,
                 "stage2_objective": None,
                 "stage2_best_bound": stage1_bound,
                 "stage2_mip_gap_ratio": None,
                 "stage2_runtime_seconds": 0.0,
+                "stage2_time_limit_sec_effective": _resolved_stage_time_limit_sec(
+                    config, stage=2
+                ),
+                "rolling_horizon_policy": rolling_policy,
+                "rolling_start_slot_index": (
+                    slot_indices[0] if is_remaining_day_reoptimization and slot_indices else None
+                ),
+                "rolling_execution_minutes": getattr(
+                    config, "rolling_execution_minutes", None
+                ),
                 "stage1_feasible": True,
                 "stage2_feasible": True,
                 "supports_two_stage_milp": True,
@@ -3384,7 +3580,7 @@ class GurobiMILPAdapter:
 
         stage2 = gp.Model("thesis_stage2_charging_dispatch")
         stage2.Params.OutputFlag = 0
-        stage2.Params.TimeLimit = max(1, int(max(config.time_limit_sec, 2) / 2))
+        stage2.Params.TimeLimit = _resolved_stage_time_limit_sec(config, stage=2)
         stage2.Params.MIPGap = max(float(config.mip_gap), 0.0)
         stage2.Params.Seed = int(config.random_seed)
 
@@ -3486,11 +3682,27 @@ class GurobiMILPAdapter:
                     )
                     for slot_idx in slot_indices
                 )
-                if allocated_fraction < 1.0 - 1.0e-9:
+                if is_remaining_day_reoptimization and rolling_start_abs_min is not None:
+                    departure_abs = self._service_minute(
+                        problem, int(trip.departure_min)
+                    )
+                    arrival_abs = self._trip_service_arrival_min(problem, trip)
+                    duration_min = max(arrival_abs - departure_abs, 1)
+                    remaining_fraction = max(
+                        arrival_abs - max(departure_abs, rolling_start_abs_min),
+                        0,
+                    ) / duration_min
+                    unallocated_fraction = max(
+                        remaining_fraction - allocated_fraction,
+                        0.0,
+                    )
+                else:
+                    unallocated_fraction = max(1.0 - allocated_fraction, 0.0)
+                if unallocated_fraction > 1.0e-9:
                     terminal_out_of_horizon_load_by_vehicle[vehicle_id] = (
                         terminal_out_of_horizon_load_by_vehicle.get(vehicle_id, 0.0)
                         + self._trip_energy_kwh(problem, vehicle, trip.trip_id)
-                        * (1.0 - allocated_fraction)
+                        * unallocated_fraction
                     )
                 if previous_trip_id is not None:
                     previous_trip = trip_by_id.get(previous_trip_id)
@@ -3501,12 +3713,37 @@ class GurobiMILPAdapter:
                         previous_trip_id,
                         trip.trip_id,
                     )
+                    deadhead_fraction = 1.0
+                    if (
+                        is_remaining_day_reoptimization
+                        and rolling_start_abs_min is not None
+                        and previous_trip is not None
+                    ):
+                        deadhead_min = self._connection_deadhead_min(
+                            problem, previous_trip, trip
+                        )
+                        deadhead_start, deadhead_end = self._connection_deadhead_interval(
+                            problem,
+                            vehicle,
+                            previous_trip,
+                            trip,
+                            deadhead_min=deadhead_min,
+                        )
+                        if deadhead_end <= rolling_start_abs_min:
+                            deadhead_fraction = 0.0
+                        elif deadhead_start < rolling_start_abs_min < deadhead_end:
+                            deadhead_fraction = (
+                                deadhead_end - rolling_start_abs_min
+                            ) / max(deadhead_end - deadhead_start, 1)
+                    remaining_deadhead_energy_kwh = (
+                        deadhead_energy_kwh * deadhead_fraction
+                    )
                     trip_load_by_vehicle_slot[(vehicle_id, deadhead_slot)] = (
                         trip_load_by_vehicle_slot.get((vehicle_id, deadhead_slot), 0.0)
-                        + deadhead_energy_kwh
+                        + remaining_deadhead_energy_kwh
                     )
                     deadhead_energy_before_trip[(vehicle_id, trip.trip_id)] = (
-                        deadhead_energy_kwh
+                        remaining_deadhead_energy_kwh
                     )
                     if previous_trip is not None:
                         deadhead_min = self._connection_deadhead_min(
@@ -3572,12 +3809,24 @@ class GurobiMILPAdapter:
                             )
                         )
                     departure_slot = self._slot_index(problem, trip.departure_min)
+                    startup_energy_kwh = startup_precheck.startup_deadhead_energy_kwh
+                    if (
+                        is_remaining_day_reoptimization
+                        and rolling_start_abs_min is not None
+                        and first_departure_min > leave_depot_min
+                    ):
+                        if first_departure_min <= rolling_start_abs_min:
+                            startup_energy_kwh = 0.0
+                        elif leave_depot_min < rolling_start_abs_min:
+                            startup_energy_kwh *= (
+                                first_departure_min - rolling_start_abs_min
+                            ) / max(first_departure_min - leave_depot_min, 1)
                     trip_load_by_vehicle_slot[(vehicle_id, departure_slot)] = (
                         trip_load_by_vehicle_slot.get((vehicle_id, departure_slot), 0.0)
-                        + startup_precheck.startup_deadhead_energy_kwh
+                        + startup_energy_kwh
                     )
                     deadhead_energy_before_trip[(vehicle_id, trip.trip_id)] = (
-                        startup_precheck.startup_deadhead_energy_kwh
+                        startup_energy_kwh
                     )
                 if str(trip.origin) == home_depot_id or str(trip.destination) == home_depot_id:
                     allowed_charge_slots_by_vehicle[vehicle_id].update(
@@ -3598,10 +3847,35 @@ class GurobiMILPAdapter:
                             + int(return_deadhead_min),
                         )
                         return_kwh = return_deadhead_energy_kwh(problem, vehicle, trip)
-                        trip_load_by_vehicle_slot[(vehicle_id, return_slot)] = trip_load_by_vehicle_slot.get((vehicle_id, return_slot), 0.0) + max(return_kwh, 0.0)
-                        if return_slot not in slot_indices:
+                        return_transition_slot = _transition_slot_ending_at_event(
+                            slot_indices,
+                            return_slot,
+                        )
+                        return_start_min = self._trip_service_arrival_min(problem, trip)
+                        return_end_min = return_start_min + int(return_deadhead_min)
+                        if (
+                            is_remaining_day_reoptimization
+                            and rolling_start_abs_min is not None
+                        ):
+                            if return_end_min <= rolling_start_abs_min:
+                                return_kwh = 0.0
+                            elif return_start_min < rolling_start_abs_min < return_end_min:
+                                return_kwh *= (
+                                    return_end_min - rolling_start_abs_min
+                                ) / max(return_end_min - return_start_min, 1)
+                        if return_transition_slot is None and return_kwh > 1.0e-9:
                             terminal_out_of_horizon_load_by_vehicle[vehicle_id] = (
                                 terminal_out_of_horizon_load_by_vehicle.get(vehicle_id, 0.0)
+                                + max(return_kwh, 0.0)
+                            )
+                        elif return_transition_slot is not None:
+                            trip_load_by_vehicle_slot[
+                                (vehicle_id, return_transition_slot)
+                            ] = (
+                                trip_load_by_vehicle_slot.get(
+                                    (vehicle_id, return_transition_slot),
+                                    0.0,
+                                )
                                 + max(return_kwh, 0.0)
                             )
                         allowed_charge_slots_by_vehicle[vehicle_id].update(
@@ -3813,8 +4087,44 @@ class GurobiMILPAdapter:
         on_peak_slots, off_peak_slots = self._classify_peak_slots(problem)
         price_by_slot = {slot.slot_index: slot.grid_buy_yen_per_kwh for slot in problem.price_slots}
         for depot_id, asset in depot_energy_assets.items():
-            w_on_depot_var[depot_id] = stage2.addVar(lb=0.0, vtype=GRB.CONTINUOUS, name=f"w_on_{depot_id}")
-            w_off_depot_var[depot_id] = stage2.addVar(lb=0.0, vtype=GRB.CONTINUOUS, name=f"w_off_{depot_id}")
+            observed_on_peak_kw = max(
+                float(
+                    dict(
+                        getattr(
+                            config,
+                            "rolling_observed_on_peak_kw_by_depot",
+                            {},
+                        )
+                        or {}
+                    ).get(depot_id, 0.0)
+                    or 0.0
+                ),
+                0.0,
+            )
+            observed_off_peak_kw = max(
+                float(
+                    dict(
+                        getattr(
+                            config,
+                            "rolling_observed_off_peak_kw_by_depot",
+                            {},
+                        )
+                        or {}
+                    ).get(depot_id, 0.0)
+                    or 0.0
+                ),
+                0.0,
+            )
+            w_on_depot_var[depot_id] = stage2.addVar(
+                lb=observed_on_peak_kw,
+                vtype=GRB.CONTINUOUS,
+                name=f"w_on_{depot_id}",
+            )
+            w_off_depot_var[depot_id] = stage2.addVar(
+                lb=observed_off_peak_kw,
+                vtype=GRB.CONTINUOUS,
+                name=f"w_off_{depot_id}",
+            )
             contract_limit_kw = float(getattr(depot_by_id.get(depot_id), "import_limit_kw", 0.0) or 0.0)
             if contract_limit_kw <= 0.0:
                 contract_limit_kw = 1.0e6
@@ -3846,11 +4156,7 @@ class GurobiMILPAdapter:
                 stage2.addConstr(g2bus_var[key] == gp.quicksum(vehicle_grid_terms))
                 stage2.addConstr(pv2bus_var[key] == gp.quicksum(vehicle_pv_terms))
                 stage2.addConstr(bess2bus_var[key] == gp.quicksum(vehicle_bess_terms))
-                pv_gen_kwh = 0.0
-                if asset.pv_enabled and asset.pv_generation_kwh_by_slot:
-                    pos = slot_indices.index(slot_idx)
-                    if pos < len(asset.pv_generation_kwh_by_slot):
-                        pv_gen_kwh = max(float(asset.pv_generation_kwh_by_slot[pos] or 0.0), 0.0)
+                pv_gen_kwh = _pv_generation_kwh_at_slot(asset, slot_idx)
                 stage2.addConstr(pv2bus_var[key] + pv2bess_var[key] + pv_curt_var[key] == pv_gen_kwh)
                 stage2.addConstr(grid_import_var[key] == g2bus_var[key] + g2bess_var[key])
                 stage2.addConstr(
@@ -4008,15 +4314,31 @@ class GurobiMILPAdapter:
                 "stage2_best_bound": stage2_bound,
                 "stage2_mip_gap_ratio": stage2_gap,
                 "stage2_runtime_seconds": float(time.perf_counter() - started),
+                "stage1_time_limit_sec_effective": (
+                    0
+                    if stage1_status == "phase1_fixed_assignment"
+                    else _resolved_stage_time_limit_sec(config, stage=1)
+                ),
+                "stage2_time_limit_sec_effective": _resolved_stage_time_limit_sec(
+                    config, stage=2
+                ),
+                "rolling_horizon_policy": rolling_policy,
+                "rolling_start_slot_index": (
+                    slot_indices[0] if is_remaining_day_reoptimization and slot_indices else None
+                ),
+                "rolling_execution_minutes": getattr(
+                    config, "rolling_execution_minutes", None
+                ),
                 "stage1_feasible": True,
                 "stage2_feasible": False,
                 "supports_two_stage_milp": False,
                 "supports_integrated_exact_milp": False,
                 "assignment_candidate_available": True,
                 "solver_objective_matches_accounting_total": False,
-                "objective_semantics": "two_stage_lexicographic_not_global_total_cost",
-                "stage1_best_bound": stage1_bound,
-                "stage2_best_bound": stage2_bound,
+                "objective_semantics": (
+                    "two_stage_assignment_energy_proxy_then_fixed_charging_"
+                    "not_global_total_cost"
+                ),
                 "research_kpi_eligible": False,
                 "postsolve_repair_allowed": False,
                 **diagnostic_metadata,
@@ -4150,8 +4472,6 @@ class GurobiMILPAdapter:
             "stage2_solver_status": stage2_status,
             "stage1_mip_gap": stage1_gap,
             "stage2_mip_gap": stage2_gap,
-            "stage1_best_bound": stage1_bound,
-            "stage2_best_bound": stage2_bound,
             "stage1_objective_value": stage1_objective_value,
             "stage2_objective_value": float(getattr(stage2, "ObjVal", 0.0) or 0.0),
             "stage1_has_feasible_incumbent": True,
@@ -4164,17 +4484,47 @@ class GurobiMILPAdapter:
             "stage2_best_bound": stage2_bound,
             "stage2_mip_gap_ratio": stage2_gap,
             "stage2_runtime_seconds": float(time.perf_counter() - started),
+            "stage1_time_limit_sec_effective": (
+                0
+                if stage1_status == "phase1_fixed_assignment"
+                else _resolved_stage_time_limit_sec(config, stage=1)
+            ),
+            "stage2_time_limit_sec_effective": _resolved_stage_time_limit_sec(
+                config, stage=2
+            ),
+            "rolling_horizon_policy": rolling_policy,
+            "rolling_start_slot_index": (
+                slot_indices[0] if is_remaining_day_reoptimization and slot_indices else None
+            ),
+            "rolling_execution_minutes": getattr(
+                config, "rolling_execution_minutes", None
+            ),
+            "rolling_observed_on_peak_kw_by_depot": dict(
+                getattr(config, "rolling_observed_on_peak_kw_by_depot", {}) or {}
+            ),
+            "rolling_observed_off_peak_kw_by_depot": dict(
+                getattr(config, "rolling_observed_off_peak_kw_by_depot", {}) or {}
+            ),
+            "rolling_objective_accounting_semantics": (
+                "remaining_day_control_objective_not_additive_across_hourly_runs"
+                if is_remaining_day_reoptimization
+                else "single_run_objective"
+            ),
             "stage1_feasible": True,
             "stage2_feasible": True,
             "solver_objective_matches_accounting_total": False,
             "objective_semantics": (
-                "two_stage_lexicographic_not_global_total_cost"
+                "two_stage_assignment_energy_proxy_then_fixed_charging_"
+                "not_global_total_cost"
                 if stage1_status != "phase1_fixed_assignment"
                 else "fixed_assignment_energy_dispatch_not_global_total_cost"
             ),
             "source_provenance_exact": True,
             "vehicle_source_provenance_exact": True,
             "vehicle_source_allocation_policy": "stage2_vehicle_source_variables_tied_to_fixed_stage1_schedule",
+            "stage2_return_deadhead_soc_semantics": (
+                "return_energy_subtracted_in_transition_ending_at_first_post_return_slot"
+            ),
             "derived_source_split": False,
             # The Stage 1 + Stage 2 objectives are lexicographic rather than
             # one accounting-total objective. Do not let nested plan metadata
@@ -4182,11 +4532,14 @@ class GurobiMILPAdapter:
             "research_kpi_eligible": False,
             "research_cost_kpi_eligible": False,
             "postsolve_repair_allowed": False,
-                "supports_integrated_exact_milp": False,
-                "supports_two_stage_milp": True,
-                "charging_dispatch_evaluated": True,
-                "soc_constraints_evaluated": True,
-                "two_stage_note": "Stage 1 optimizes vehicle scheduling; Stage 2 optimizes charging/PV/BESS dispatch with Stage 1 EV operation fixed.",
+            "supports_integrated_exact_milp": False,
+            "supports_two_stage_milp": True,
+            "charging_dispatch_evaluated": True,
+            "soc_constraints_evaluated": True,
+            "two_stage_note": (
+                "Stage 1 optimizes vehicle scheduling; Stage 2 optimizes "
+                "charging/PV/BESS dispatch with Stage 1 EV operation fixed."
+            ),
             "bess_soc_start_kwh_by_depot_slot": bess_soc_start,
             "bess_soc_end_kwh_by_depot_slot": bess_soc_end or bess_soc,
             "canonical_source_flow_context": {
@@ -4975,6 +5328,487 @@ class GurobiMILPAdapter:
                 constraint_count += 1
         return constraint_count
 
+    def _add_stage1_energy_cost_proxy(
+        self,
+        model: Any,
+        *,
+        gp: Any,
+        grb: Any,
+        problem: CanonicalOptimizationProblem,
+        trip_by_id: Mapping[str, ProblemTrip],
+        vehicles: Tuple[Any, ...],
+        assignment_trip_ids_by_vehicle: Mapping[str, List[str]],
+        startup_energy_precheck_by_assignment: Mapping[
+            Tuple[str, str], StartupEnergyPrecheck
+        ],
+        y: Mapping[Tuple[str, str], Any],
+        x: Mapping[Tuple[str, str, str], Any],
+        start_arc: Mapping[Tuple[str, str], Any],
+        end_arc: Mapping[Tuple[str, str], Any],
+        used_vehicle: Mapping[str, Any],
+        component_flags: Mapping[str, bool],
+    ) -> Stage1EnergyCostProxy:
+        """Price an optimistic aggregate BEV source-energy requirement.
+
+        Stage 1 does not decide charging time.  For each electric vehicle this
+        proxy therefore computes only the nonnegative net replenishment needed
+        to finish at the hard terminal SOC requirement.  The resulting charger
+        input is pooled by home depot and may use all configured PV generation,
+        usable initial BESS surplus, and then grid energy at the minimum
+        time-of-use plus CO2 unit cost.
+
+        This is a lower-bound cost surrogate: it deliberately ignores source
+        timing, charger contention, grid limits, demand charges, PV/BESS timing,
+        and conversion losses inside the BESS.  Stage 2 remains authoritative
+        for charging feasibility and realized accounting cost.
+        """
+        charge_efficiency = 0.95
+        electric_vehicle_types = {"BEV", "PHEV", "FCEV"}
+        electricity_cost_enabled = bool(
+            component_flags.get("electricity_cost", True)
+        )
+        co2_cost_enabled = bool(component_flags.get("co2_cost", True))
+        co2_price = (
+            max(float(problem.scenario.co2_price_per_kg or 0.0), 0.0)
+            if co2_cost_enabled
+            else 0.0
+        )
+        grid_unit_cost_candidates = [
+            (
+                max(float(slot.grid_buy_yen_per_kwh or 0.0), 0.0)
+                if electricity_cost_enabled
+                else 0.0
+            )
+            + co2_price * max(float(slot.co2_factor or 0.0), 0.0)
+            for slot in problem.price_slots
+        ]
+        grid_unit_cost = min(grid_unit_cost_candidates, default=0.0)
+        pv_unit_cost = (
+            self._safe_nonnegative_float(
+                problem.metadata.get("pv_marginal_charge_cost_yen_per_kwh"),
+                default=0.0,
+            )
+            if electricity_cost_enabled
+            else 0.0
+        )
+
+        arc_keys_by_vehicle: Dict[str, List[Tuple[str, str]]] = {}
+        for vehicle_id, from_trip_id, to_trip_id in x:
+            arc_keys_by_vehicle.setdefault(str(vehicle_id), []).append(
+                (str(from_trip_id), str(to_trip_id))
+            )
+
+        external_charge_input_by_vehicle: Dict[str, Any] = {}
+        net_battery_requirement_by_vehicle: Dict[str, Any] = {}
+        home_depot_by_vehicle: Dict[str, str] = {}
+        external_charge_inputs_by_depot: Dict[str, List[Any]] = {}
+        vehicle_depot_ids: Set[str] = set()
+        electric_vehicle_count = 0
+        for vehicle in vehicles:
+            vehicle_id = str(getattr(vehicle, "vehicle_id", "") or "")
+            vehicle_type = str(
+                getattr(vehicle, "vehicle_type", "") or ""
+            ).upper()
+            if (
+                not vehicle_id
+                or vehicle_type not in electric_vehicle_types
+                or vehicle_id not in used_vehicle
+            ):
+                continue
+            trip_ids = tuple(assignment_trip_ids_by_vehicle.get(vehicle_id, ()))
+            if not trip_ids:
+                continue
+            electric_vehicle_count += 1
+            depot_id = str(
+                getattr(vehicle, "home_depot_id", "") or "depot_default"
+            )
+            vehicle_depot_ids.add(depot_id)
+
+            capacity_kwh = max(
+                float(getattr(vehicle, "battery_capacity_kwh", 0.0) or 300.0),
+                1.0,
+            )
+            initial_soc = getattr(vehicle, "initial_soc", None)
+            initial_soc_kwh = (
+                0.8 * capacity_kwh
+                if initial_soc is None
+                else (
+                    float(initial_soc) * capacity_kwh
+                    if float(initial_soc) <= 1.0
+                    else float(initial_soc)
+                )
+            )
+            initial_soc_kwh = min(max(initial_soc_kwh, 0.0), capacity_kwh)
+            reserve_soc = getattr(vehicle, "reserve_soc", None)
+            minimum_soc_kwh = (
+                0.15 * capacity_kwh
+                if reserve_soc is None
+                else (
+                    float(reserve_soc) * capacity_kwh
+                    if float(reserve_soc) <= 1.0
+                    else float(reserve_soc)
+                )
+            )
+            minimum_soc_kwh = min(max(minimum_soc_kwh, 0.0), capacity_kwh)
+            terminal_requirement_kwh = max(
+                minimum_soc_kwh,
+                final_soc_floor_kwh(problem, vehicle, cap_kwh=capacity_kwh),
+                float(
+                    effective_final_soc_target_kwh(
+                        problem,
+                        vehicle,
+                        cap_kwh=capacity_kwh,
+                    )
+                    or 0.0
+                ),
+            )
+
+            net_battery_requirement = (
+                terminal_requirement_kwh - initial_soc_kwh
+            ) * used_vehicle[vehicle_id]
+            positive_energy_bound_kwh = terminal_requirement_kwh
+            for trip_id in trip_ids:
+                assignment_key = (vehicle_id, trip_id)
+                trip = trip_by_id.get(trip_id)
+                if trip is None or assignment_key not in y:
+                    continue
+                trip_energy_kwh = self._trip_energy_kwh(
+                    problem, vehicle, trip_id
+                )
+                net_battery_requirement += trip_energy_kwh * y[assignment_key]
+                positive_energy_bound_kwh += trip_energy_kwh
+
+                startup_var = start_arc.get(assignment_key)
+                startup_precheck = startup_energy_precheck_by_assignment.get(
+                    assignment_key
+                )
+                if startup_var is not None and startup_precheck is not None:
+                    startup_energy_kwh = max(
+                        float(startup_precheck.startup_deadhead_energy_kwh),
+                        0.0,
+                    )
+                    net_battery_requirement += startup_energy_kwh * startup_var
+                    positive_energy_bound_kwh += startup_energy_kwh
+
+                end_var = end_arc.get(assignment_key)
+                if end_var is not None:
+                    return_energy_kwh = return_deadhead_energy_kwh(
+                        problem,
+                        vehicle,
+                        trip,
+                    )
+                    net_battery_requirement += return_energy_kwh * end_var
+                    positive_energy_bound_kwh += return_energy_kwh
+
+            for from_trip_id, to_trip_id in arc_keys_by_vehicle.get(
+                vehicle_id, ()
+            ):
+                arc_var = x.get((vehicle_id, from_trip_id, to_trip_id))
+                if arc_var is None:
+                    continue
+                deadhead_energy_kwh = self._deadhead_energy_kwh(
+                    problem,
+                    vehicle,
+                    from_trip_id,
+                    to_trip_id,
+                )
+                net_battery_requirement += deadhead_energy_kwh * arc_var
+                positive_energy_bound_kwh += deadhead_energy_kwh
+
+            battery_big_m_kwh = max(
+                positive_energy_bound_kwh,
+                capacity_kwh,
+                1.0,
+            )
+            source_big_m_kwh = battery_big_m_kwh / charge_efficiency
+            external_charge_input = model.addVar(
+                lb=0.0,
+                ub=source_big_m_kwh,
+                vtype=grb.CONTINUOUS,
+                name=f"stage1_energy_proxy_input_kwh__{vehicle_id}",
+            )
+            model.addConstr(
+                charge_efficiency * external_charge_input
+                >= net_battery_requirement,
+                name=f"stage1_energy_proxy_positive_part_lb__{vehicle_id}",
+            )
+            external_charge_input_by_vehicle[vehicle_id] = external_charge_input
+            net_battery_requirement_by_vehicle[vehicle_id] = (
+                net_battery_requirement
+            )
+            home_depot_by_vehicle[vehicle_id] = depot_id
+            external_charge_inputs_by_depot.setdefault(depot_id, []).append(
+                external_charge_input
+            )
+
+        pv_to_bus_by_depot: Dict[str, Any] = {}
+        grid_to_bus_by_depot: Dict[str, Any] = {}
+        bess_initial_to_bus_by_depot: Dict[str, Any] = {}
+        pv_available_by_depot: Dict[str, float] = {}
+        bess_initial_available_by_depot: Dict[str, float] = {}
+        bess_cycle_cost_by_depot: Dict[str, float] = {}
+        objective_expression = gp.LinExpr()
+        for depot_id in sorted(vehicle_depot_ids):
+            asset = problem.depot_energy_assets.get(depot_id)
+            pv_available_kwh = (
+                sum(
+                    max(float(value or 0.0), 0.0)
+                    for value in asset.pv_generation_kwh_by_slot
+                )
+                if asset is not None and bool(asset.pv_enabled)
+                else 0.0
+            )
+            bess_initial_available_kwh = 0.0
+            bess_cycle_cost = 0.0
+            if (
+                asset is not None
+                and bool(asset.bess_enabled)
+                and bool(getattr(asset, "allow_bess_to_bus", True))
+            ):
+                terminal_floor_kwh = max(
+                    float(asset.bess_soc_min_kwh or 0.0),
+                    0.0,
+                )
+                terminal_target_kwh = _bess_terminal_soc_target_kwh(
+                    asset,
+                    terminal_soc_floor=terminal_floor_kwh,
+                )
+                terminal_requirement_kwh = (
+                    terminal_target_kwh
+                    if terminal_target_kwh is not None
+                    else terminal_floor_kwh
+                )
+                discharge_efficiency = min(
+                    max(float(asset.bess_discharge_efficiency or 0.95), 1.0e-6),
+                    1.0,
+                )
+                bess_initial_available_kwh = max(
+                    float(asset.bess_initial_soc_kwh or 0.0)
+                    - terminal_requirement_kwh,
+                    0.0,
+                ) * discharge_efficiency
+                if electricity_cost_enabled:
+                    bess_cycle_cost = max(
+                        float(asset.bess_cycle_cost_yen_per_kwh or 0.0),
+                        0.0,
+                    )
+
+            pv_available_by_depot[depot_id] = pv_available_kwh
+            bess_initial_available_by_depot[depot_id] = (
+                bess_initial_available_kwh
+            )
+            bess_cycle_cost_by_depot[depot_id] = bess_cycle_cost
+            total_external_input = gp.quicksum(
+                external_charge_inputs_by_depot.get(depot_id, ())
+            )
+            pv_var = model.addVar(
+                lb=0.0,
+                ub=pv_available_kwh,
+                vtype=grb.CONTINUOUS,
+                name=f"stage1_energy_proxy_pv_kwh__{depot_id}",
+            )
+            grid_var = model.addVar(
+                lb=0.0,
+                vtype=grb.CONTINUOUS,
+                name=f"stage1_energy_proxy_grid_kwh__{depot_id}",
+            )
+            bess_var = model.addVar(
+                lb=0.0,
+                ub=bess_initial_available_kwh,
+                vtype=grb.CONTINUOUS,
+                name=f"stage1_energy_proxy_bess_initial_kwh__{depot_id}",
+            )
+            model.addConstr(
+                pv_var + grid_var + bess_var == total_external_input,
+                name=f"stage1_energy_proxy_source_balance__{depot_id}",
+            )
+            objective_expression += pv_unit_cost * pv_var
+            objective_expression += grid_unit_cost * grid_var
+            objective_expression += bess_cycle_cost * bess_var
+            pv_to_bus_by_depot[depot_id] = pv_var
+            grid_to_bus_by_depot[depot_id] = grid_var
+            bess_initial_to_bus_by_depot[depot_id] = bess_var
+
+        configuration = {
+            "enabled": True,
+            "semantics": (
+                "aggregate_home_depot_source_energy_lower_bound_"
+                "without_charging_time_or_demand_charge"
+            ),
+            "charge_efficiency": charge_efficiency,
+            "grid_unit_cost_yen_per_kwh": grid_unit_cost,
+            "grid_unit_cost_semantics": (
+                "minimum_time_slot_grid_buy_plus_grid_co2_cost"
+            ),
+            "pv_unit_cost_yen_per_kwh": pv_unit_cost,
+            "bess_cycle_cost_yen_per_kwh_by_depot": bess_cycle_cost_by_depot,
+            "bess_initial_available_kwh_by_depot": (
+                bess_initial_available_by_depot
+            ),
+            "term_definitions": {
+                "external_charge_input_lower_bound_kwh": (
+                    "Minimum charger-input energy implied by assigned trip, "
+                    "deadhead, initial EV SOC, and terminal EV SOC after dividing "
+                    "by charging efficiency. It is not a time-feasible charging schedule."
+                ),
+                "pv_energy_credit_upper_bound_kwh": (
+                    "Whole-day PV energy allowed to offset the Stage 1 lower bound "
+                    "without matching generation and charging times."
+                ),
+                "bess_initial_dischargeable_energy_credit_kwh": (
+                    "Delivered energy available from BESS SOC above its terminal "
+                    "requirement: max(initial SOC - terminal requirement, 0) "
+                    "times discharge efficiency."
+                ),
+            },
+            "electric_vehicle_count": electric_vehicle_count,
+            "source_aggregation": "per_home_depot",
+            "includes": (
+                "trip_intertrip_startup_return_energy_and_terminal_soc",
+            ),
+            "excludes": (
+                "charging_timing_charger_contention_grid_limit_demand_charge_"
+                "and_pv_bess_timing",
+            ),
+        }
+        weather_input = {
+            "pv_available_kwh_by_depot": pv_available_by_depot,
+        }
+        return Stage1EnergyCostProxy(
+            objective_expression=objective_expression,
+            external_charge_input_by_vehicle=external_charge_input_by_vehicle,
+            net_battery_requirement_by_vehicle=(
+                net_battery_requirement_by_vehicle
+            ),
+            home_depot_by_vehicle=home_depot_by_vehicle,
+            pv_to_bus_by_depot=pv_to_bus_by_depot,
+            grid_to_bus_by_depot=grid_to_bus_by_depot,
+            bess_initial_to_bus_by_depot=bess_initial_to_bus_by_depot,
+            configuration=configuration,
+            weather_input=weather_input,
+        )
+
+    @staticmethod
+    def _stage1_energy_cost_proxy_result(
+        proxy: Stage1EnergyCostProxy,
+    ) -> Dict[str, Any]:
+        """Extract an auditable solution snapshot after Stage 1 optimization."""
+
+        def _expression_value(expression: Any) -> float:
+            try:
+                getter = getattr(expression, "getValue", None)
+                value = float(getter() if callable(getter) else expression)
+            except Exception:
+                return 0.0
+            return value if math.isfinite(value) else 0.0
+
+        configuration = dict(proxy.configuration)
+        charge_efficiency = max(
+            float(configuration.get("charge_efficiency", 0.95) or 0.95),
+            1.0e-9,
+        )
+        external_by_vehicle = {
+            vehicle_id: max(
+                _expression_value(expression),
+                0.0,
+            )
+            / charge_efficiency
+            for vehicle_id, expression in (
+                proxy.net_battery_requirement_by_vehicle.items()
+            )
+        }
+        external_by_depot: Dict[str, float] = {}
+        for vehicle_id, external_kwh in external_by_vehicle.items():
+            depot_id = str(
+                proxy.home_depot_by_vehicle.get(vehicle_id) or "depot_default"
+            )
+            external_by_depot[depot_id] = (
+                external_by_depot.get(depot_id, 0.0) + external_kwh
+            )
+
+        grid_unit_cost = float(
+            configuration.get("grid_unit_cost_yen_per_kwh", 0.0) or 0.0
+        )
+        pv_unit_cost = float(
+            configuration.get("pv_unit_cost_yen_per_kwh", 0.0) or 0.0
+        )
+        bess_costs = dict(
+            configuration.get("bess_cycle_cost_yen_per_kwh_by_depot") or {}
+        )
+        pv_available = dict(
+            proxy.weather_input.get("pv_available_kwh_by_depot") or {}
+        )
+        bess_available = dict(
+            configuration.get("bess_initial_available_kwh_by_depot") or {}
+        )
+        pv_by_depot: Dict[str, float] = {}
+        grid_by_depot: Dict[str, float] = {}
+        bess_by_depot: Dict[str, float] = {}
+        for depot_id, required_kwh in sorted(external_by_depot.items()):
+            remaining_kwh = max(float(required_kwh), 0.0)
+            allocations = {"pv": 0.0, "grid": 0.0, "bess": 0.0}
+            sources = sorted(
+                (
+                    (
+                        pv_unit_cost,
+                        0,
+                        "pv",
+                        max(float(pv_available.get(depot_id, 0.0) or 0.0), 0.0),
+                    ),
+                    (
+                        float(bess_costs.get(depot_id, 0.0) or 0.0),
+                        1,
+                        "bess",
+                        max(float(bess_available.get(depot_id, 0.0) or 0.0), 0.0),
+                    ),
+                    (grid_unit_cost, 2, "grid", math.inf),
+                ),
+                key=lambda item: (item[0], item[1]),
+            )
+            for _unit_cost, _priority, source, capacity_kwh in sources:
+                if remaining_kwh <= 1.0e-12:
+                    break
+                allocated_kwh = min(remaining_kwh, capacity_kwh)
+                allocations[source] += allocated_kwh
+                remaining_kwh -= allocated_kwh
+            pv_by_depot[depot_id] = allocations["pv"]
+            grid_by_depot[depot_id] = allocations["grid"]
+            bess_by_depot[depot_id] = allocations["bess"]
+
+        objective_jpy = (
+            grid_unit_cost * sum(grid_by_depot.values())
+            + pv_unit_cost * sum(pv_by_depot.values())
+            + sum(
+                float(bess_costs.get(depot_id, 0.0) or 0.0) * value
+                for depot_id, value in bess_by_depot.items()
+            )
+        )
+        return {
+            "external_charge_input_kwh": sum(external_by_vehicle.values()),
+            "external_charge_input_lower_bound_kwh": sum(
+                external_by_vehicle.values()
+            ),
+            "external_charge_input_kwh_by_vehicle": external_by_vehicle,
+            "positive_charge_vehicle_count": sum(
+                value > 1.0e-7 for value in external_by_vehicle.values()
+            ),
+            "pv_to_bus_kwh": sum(pv_by_depot.values()),
+            "pv_energy_credit_kwh": sum(pv_by_depot.values()),
+            "pv_to_bus_kwh_by_depot": pv_by_depot,
+            "grid_to_bus_kwh": sum(grid_by_depot.values()),
+            "grid_to_bus_kwh_by_depot": grid_by_depot,
+            "bess_initial_to_bus_kwh": sum(bess_by_depot.values()),
+            "bess_initial_dischargeable_energy_credit_kwh": sum(
+                bess_by_depot.values()
+            ),
+            "bess_initial_to_bus_kwh_by_depot": bess_by_depot,
+            "objective_jpy": objective_jpy,
+            "allocation_semantics": (
+                "deterministic_minimum_cost_reconstruction_from_stage1_"
+                "assignment_lower_bound"
+            ),
+        }
+
     def _add_stage1_energy_envelope_constraints(
         self,
         model: Any,
@@ -5264,37 +6098,64 @@ class GurobiMILPAdapter:
         trip_by_id: Mapping[str, ProblemTrip],
         vehicles: Tuple[Any, ...],
         assignment_trip_ids_by_vehicle: Mapping[str, List[str]],
+        startup_energy_precheck_by_assignment: Mapping[
+            Tuple[str, str], StartupEnergyPrecheck
+        ],
         y: Mapping[Tuple[str, str], Any],
+        x: Mapping[Tuple[str, str, str], Any],
+        start_arc: Mapping[Tuple[str, str], Any],
+        end_arc: Mapping[Tuple[str, str], Any],
         used_vehicle: Mapping[str, Any],
     ) -> int:
-        """Add an optimistic time-indexed SOC necessary condition to Stage 1.
+        """Add cumulative, location-aware SOC necessary conditions.
 
-        The relaxation preserves two Stage-2 facts: trip energy is consumed
-        in the same slots, and an active trip blocks charging for that slot.
-        It deliberately relaxes every other charging restriction: an idle
-        vehicle may charge at its maximum rate at any location, with no
-        charger-port, depot, grid, PV, BESS, or deadhead restriction.  It
-        also omits all deadhead consumption.  Therefore any Stage-2-feasible
-        assignment remains feasible here; this cannot become a hidden
-        dispatch or charging policy.
-
-        Its role is limited to filtering a Stage-1 assignment whose early
-        trip sequence inevitably breaches the vehicle SOC floor before an
-        idle slot exists.  This closes the gap left by the all-day energy
-        envelope, which is intentionally insensitive to time order.
+        For every electric vehicle and slot boundary, cumulative trip and
+        deadhead energy may not exceed usable initial energy plus the maximum
+        charge deliverable in assignment-supported home-depot windows.  Window
+        overlap and all shared charger/grid/PV/BESS limits remain relaxed, so
+        this is a necessary Stage-2 condition rather than a charging dispatch.
         """
-        slot_indices = tuple(sorted({slot.slot_index for slot in problem.price_slots}))
+        del grb
+        slot_indices = tuple(
+            sorted({slot.slot_index for slot in problem.price_slots})
+        )
         if not slot_indices:
             return 0
 
-        electric_vehicle_types = {"BEV", "PHEV", "FCEV"}
+        valid_slots = set(slot_indices)
         timestep_h = max(int(problem.scenario.timestep_min), 1) / 60.0
         charge_efficiency = 0.95
-        constraint_count = 0
+        electric_vehicle_types = {"BEV", "PHEV", "FCEV"}
+        pre_window_min = self._safe_nonnegative_float(
+            problem.metadata.get("home_depot_charge_pre_window_min"),
+            default=float(max(problem.scenario.timestep_min, 1)) * 2.0,
+        )
+        post_window_min = self._safe_nonnegative_float(
+            problem.metadata.get("home_depot_charge_post_window_min"),
+            default=float(max(problem.scenario.timestep_min, 1)) * 2.0,
+        )
+        operation_start_min = self._operation_start_min(problem)
+        operation_end_min = self._operation_end_min(problem)
+        planning_days = max(
+            int(
+                problem.metadata.get("planning_days")
+                or problem.scenario.planning_days
+                or 1
+            ),
+            1,
+        )
+        arc_keys_by_vehicle: Dict[str, List[Tuple[str, str]]] = {}
+        for vehicle_id, from_trip_id, to_trip_id in x:
+            arc_keys_by_vehicle.setdefault(str(vehicle_id), []).append(
+                (str(from_trip_id), str(to_trip_id))
+            )
 
+        constraint_count = 0
         for vehicle in vehicles:
             vehicle_id = str(getattr(vehicle, "vehicle_id", "") or "")
-            vehicle_type = str(getattr(vehicle, "vehicle_type", "") or "").upper()
+            vehicle_type = str(
+                getattr(vehicle, "vehicle_type", "") or ""
+            ).upper()
             trip_ids = tuple(assignment_trip_ids_by_vehicle.get(vehicle_id, ()))
             if (
                 not vehicle_id
@@ -5304,7 +6165,9 @@ class GurobiMILPAdapter:
             ):
                 continue
 
-            capacity_kwh = max(float(vehicle.battery_capacity_kwh or 300.0), 1.0)
+            capacity_kwh = max(
+                float(vehicle.battery_capacity_kwh or 300.0), 1.0
+            )
             reserve_soc = vehicle.reserve_soc
             minimum_soc_kwh = (
                 0.15 * capacity_kwh
@@ -5327,13 +6190,17 @@ class GurobiMILPAdapter:
                 )
             )
             initial_soc_kwh = min(max(initial_soc_kwh, 0.0), capacity_kwh)
+            usable_initial_energy = (
+                initial_soc_kwh - minimum_soc_kwh
+            ) * used_vehicle[vehicle_id]
 
             charge_max_kw = self._charge_power_max_kw(
                 problem, str(vehicle.vehicle_type)
             )
             if problem.chargers:
                 max_charger_kw = max(
-                    float(charger.power_kw or 0.0) for charger in problem.chargers
+                    float(charger.power_kw or 0.0)
+                    for charger in problem.chargers
                 )
                 if max_charger_kw > 0.0:
                     charge_max_kw = min(charge_max_kw, max_charger_kw)
@@ -5341,51 +6208,28 @@ class GurobiMILPAdapter:
                 charge_max_kw * timestep_h * charge_efficiency,
                 0.0,
             )
-
-            relaxed_soc = {
-                slot_idx: model.addVar(
-                    lb=0.0,
-                    ub=capacity_kwh,
-                    vtype=grb.CONTINUOUS,
-                    name=f"stage1_soc_relax_soc__{vehicle_id}__slot_{slot_idx}",
-                )
-                for slot_idx in slot_indices
-            }
-            relaxed_charge_kwh = {
-                slot_idx: model.addVar(
-                    lb=0.0,
-                    ub=delivered_charge_cap_kwh,
-                    vtype=grb.CONTINUOUS,
-                    name=f"stage1_soc_relax_charge__{vehicle_id}__slot_{slot_idx}",
-                )
-                for slot_idx in slot_indices
-            }
-            model.addConstr(
-                relaxed_soc[slot_indices[0]] == initial_soc_kwh,
-                name=f"stage1_soc_relax_initial__{vehicle_id}",
+            home_depot_id = str(
+                getattr(vehicle, "home_depot_id", "") or "depot_default"
             )
-            constraint_count += 1
+            load_terms_by_slot: Dict[int, List[Any]] = {
+                slot_idx: [] for slot_idx in slot_indices
+            }
+            charge_terms_by_slot: Dict[int, List[Any]] = {
+                slot_idx: [] for slot_idx in slot_indices
+            }
+            terminal_load_terms: List[Any] = []
 
-            for position, slot_idx in enumerate(slot_indices):
-                model.addConstr(
-                    relaxed_soc[slot_idx]
-                    >= minimum_soc_kwh * used_vehicle[vehicle_id],
-                    name=f"stage1_soc_relax_lower__{vehicle_id}__slot_{slot_idx}",
+            for trip_id in trip_ids:
+                trip = trip_by_id.get(trip_id)
+                assignment_key = (vehicle_id, trip_id)
+                assignment_var = y.get(assignment_key)
+                if trip is None or assignment_var is None:
+                    continue
+                trip_energy_kwh = self._trip_energy_kwh(
+                    problem, vehicle, trip_id
                 )
-                constraint_count += 1
-                model.addConstr(
-                    relaxed_charge_kwh[slot_idx]
-                    <= delivered_charge_cap_kwh * used_vehicle[vehicle_id],
-                    name=f"stage1_soc_relax_charge_used__{vehicle_id}__slot_{slot_idx}",
-                )
-                constraint_count += 1
-
-                trip_load = 0.0
-                for trip_id in trip_ids:
-                    assignment_key = (vehicle_id, trip_id)
-                    trip = trip_by_id.get(trip_id)
-                    if trip is None or assignment_key not in y:
-                        continue
+                active_slots: Set[int] = set()
+                for slot_idx in slot_indices:
                     energy_fraction = self._trip_slot_energy_fraction(
                         problem,
                         trip.departure_min,
@@ -5393,10 +6237,8 @@ class GurobiMILPAdapter:
                         slot_idx,
                     )
                     if energy_fraction > 0.0:
-                        trip_load += (
-                            self._trip_energy_kwh(problem, vehicle, trip_id)
-                            * energy_fraction
-                            * y[assignment_key]
+                        load_terms_by_slot[slot_idx].append(
+                            trip_energy_kwh * energy_fraction * assignment_var
                         )
                     if self._trip_active_in_slot(
                         problem,
@@ -5404,49 +6246,182 @@ class GurobiMILPAdapter:
                         trip.arrival_min,
                         slot_idx,
                     ):
-                        model.addConstr(
-                            relaxed_charge_kwh[slot_idx]
-                            <= delivered_charge_cap_kwh * (1.0 - y[assignment_key]),
-                            name=(
-                                "stage1_soc_relax_charge_active__"
-                                f"{vehicle_id}__{trip_id}__slot_{slot_idx}"
-                            ),
-                        )
-                        constraint_count += 1
+                        active_slots.add(slot_idx)
 
-                if position >= len(slot_indices) - 1:
-                    terminal_soc = model.addVar(
-                        lb=0.0,
-                        ub=capacity_kwh,
-                        vtype=grb.CONTINUOUS,
-                        name=f"stage1_soc_relax_terminal__{vehicle_id}",
+                for slot_idx in self._collect_home_depot_window_slots(
+                    problem,
+                    trip,
+                    home_depot_id=home_depot_id,
+                    pre_window_min=pre_window_min,
+                    post_window_min=post_window_min,
+                ):
+                    if slot_idx in valid_slots and slot_idx not in active_slots:
+                        charge_terms_by_slot[slot_idx].append(assignment_var)
+
+                start_var = start_arc.get(assignment_key)
+                startup_precheck = startup_energy_precheck_by_assignment.get(
+                    assignment_key
+                )
+                if start_var is not None and startup_precheck is not None:
+                    complete_count = min(
+                        int(startup_precheck.complete_precharge_slot_count),
+                        len(slot_indices),
                     )
-                    model.addConstr(
-                        terminal_soc
-                        == relaxed_soc[slot_idx]
-                        + relaxed_charge_kwh[slot_idx]
-                        - trip_load,
-                        name=f"stage1_soc_relax_terminal_transition__{vehicle_id}",
+                    for slot_idx in slot_indices[:complete_count]:
+                        charge_terms_by_slot[slot_idx].append(start_var)
+                    departure_slot = self._slot_index(
+                        problem, trip.departure_min
                     )
-                    constraint_count += 1
-                    model.addConstr(
-                        terminal_soc >= minimum_soc_kwh * used_vehicle[vehicle_id],
-                        name=f"stage1_soc_relax_terminal_lower__{vehicle_id}",
+                    startup_energy_kwh = max(
+                        float(startup_precheck.startup_deadhead_energy_kwh),
+                        0.0,
                     )
-                    constraint_count += 1
+                    if departure_slot in valid_slots:
+                        load_terms_by_slot[departure_slot].append(
+                            startup_energy_kwh * start_var
+                        )
+                    elif startup_energy_kwh > 0.0:
+                        terminal_load_terms.append(startup_energy_kwh * start_var)
+
+                end_var = end_arc.get(assignment_key)
+                if end_var is None:
                     continue
-                next_slot_idx = slot_indices[position + 1]
+                return_exists, return_deadhead_min = return_deadhead_min_to_home(
+                    problem,
+                    vehicle,
+                    trip,
+                )
+                if not return_exists:
+                    continue
+                day_idx = self._trip_day_index(problem, trip.departure_min)
+                return_slot = slot_index_ceil(
+                    problem,
+                    self._trip_service_arrival_min(problem, trip)
+                    + int(return_deadhead_min),
+                )
+                return_transition_slot = _transition_slot_ending_at_event(
+                    slot_indices,
+                    return_slot,
+                )
+                return_energy_kwh = return_deadhead_energy_kwh(
+                    problem, vehicle, trip
+                )
+                if return_transition_slot is None:
+                    terminal_load_terms.append(return_energy_kwh * end_var)
+                else:
+                    load_terms_by_slot[return_transition_slot].append(
+                        return_energy_kwh * end_var
+                    )
+                for slot_idx in self._collect_post_return_target_slots(
+                    problem,
+                    trip=trip,
+                    day_idx=day_idx,
+                    return_deadhead_min=int(return_deadhead_min),
+                ):
+                    if slot_idx in valid_slots:
+                        charge_terms_by_slot[slot_idx].append(end_var)
+                if day_idx < planning_days - 1:
+                    home_arrival_min = (
+                        self._trip_service_arrival_min(problem, trip)
+                        + int(return_deadhead_min)
+                    )
+                    for slot_idx in self._collect_overnight_home_depot_slots(
+                        problem,
+                        day_idx=day_idx,
+                        operation_start_min=operation_start_min,
+                        operation_end_min=operation_end_min,
+                        earliest_home_arrival_min=home_arrival_min,
+                    ):
+                        if slot_idx in valid_slots:
+                            charge_terms_by_slot[slot_idx].append(end_var)
+
+            for from_trip_id, to_trip_id in arc_keys_by_vehicle.get(
+                vehicle_id, ()
+            ):
+                arc_var = x.get((vehicle_id, from_trip_id, to_trip_id))
+                previous_trip = trip_by_id.get(from_trip_id)
+                next_trip = trip_by_id.get(to_trip_id)
+                if arc_var is None or previous_trip is None or next_trip is None:
+                    continue
+                deadhead_min = self._connection_deadhead_min(
+                    problem, previous_trip, next_trip
+                )
+                departure_slot = self._slot_index(
+                    problem, next_trip.departure_min
+                )
+                deadhead_energy_kwh = self._deadhead_energy_kwh(
+                    problem,
+                    vehicle,
+                    from_trip_id,
+                    to_trip_id,
+                )
+                if departure_slot in valid_slots:
+                    load_terms_by_slot[departure_slot].append(
+                        deadhead_energy_kwh * arc_var
+                    )
+                elif deadhead_energy_kwh > 0.0:
+                    terminal_load_terms.append(deadhead_energy_kwh * arc_var)
+
+                residence_interval = self._home_depot_residence_interval(
+                    problem,
+                    vehicle,
+                    previous_trip,
+                    next_trip,
+                    deadhead_min=deadhead_min,
+                )
+                if residence_interval is None:
+                    continue
+                residence_slots = set(
+                    self._slot_indices_for_interval(
+                        problem,
+                        residence_interval[0],
+                        residence_interval[1],
+                    )
+                )
+                if deadhead_min > 0:
+                    deadhead_interval = self._connection_deadhead_interval(
+                        problem,
+                        vehicle,
+                        previous_trip,
+                        next_trip,
+                        deadhead_min=deadhead_min,
+                    )
+                    residence_slots.difference_update(
+                        self._slot_indices_for_interval(
+                            problem,
+                            deadhead_interval[0],
+                            deadhead_interval[1],
+                        )
+                    )
+                for slot_idx in residence_slots.intersection(valid_slots):
+                    charge_terms_by_slot[slot_idx].append(arc_var)
+
+            cumulative_load = 0.0
+            cumulative_charge_opportunities = 0.0
+            for slot_idx in slot_indices:
                 model.addConstr(
-                    relaxed_soc[next_slot_idx]
-                    == relaxed_soc[slot_idx]
-                    + relaxed_charge_kwh[slot_idx]
-                    - trip_load,
+                    cumulative_load
+                    <= usable_initial_energy
+                    + delivered_charge_cap_kwh
+                    * cumulative_charge_opportunities,
                     name=(
-                        "stage1_soc_relax_transition__"
+                        "stage1_soc_relax_cumulative__"
                         f"{vehicle_id}__slot_{slot_idx}"
                     ),
                 )
                 constraint_count += 1
+                cumulative_load += sum(load_terms_by_slot[slot_idx])
+                cumulative_charge_opportunities += sum(
+                    charge_terms_by_slot[slot_idx]
+                )
+            cumulative_load += sum(terminal_load_terms)
+            model.addConstr(
+                cumulative_load
+                <= usable_initial_energy
+                + delivered_charge_cap_kwh * cumulative_charge_opportunities,
+                name=f"stage1_soc_relax_cumulative_terminal__{vehicle_id}",
+            )
+            constraint_count += 1
 
         return constraint_count
 

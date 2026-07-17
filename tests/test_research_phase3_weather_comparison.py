@@ -152,8 +152,28 @@ def _summary(
         "stage1_energy_envelope_semantics": "optimistic_vehicle_local",
         "stage1_time_indexed_soc_relaxation_constraint_count": 200,
         "stage1_time_indexed_soc_relaxation_semantics": (
-            "optimistic_time_indexed_vehicle_local_soc_necessary_condition"
+            "optimistic_cumulative_home_depot_energy_necessary_condition"
         ),
+        "stage1_energy_cost_proxy_configuration": {
+            "enabled": True,
+            "semantics": (
+                "aggregate_home_depot_source_energy_lower_bound_"
+                "without_charging_time_or_demand_charge"
+            ),
+            "charge_efficiency": 0.95,
+            "grid_unit_cost_yen_per_kwh": 18.0,
+            "pv_unit_cost_yen_per_kwh": 0.0,
+        },
+        "stage1_energy_cost_proxy_weather_input": {
+            "pv_available_kwh_by_depot": {"tsurumaki": pv_generation_kwh}
+        },
+        "stage1_energy_cost_proxy_result": {
+            "external_charge_input_kwh": 600.0,
+            "pv_to_bus_kwh": min(pv_generation_kwh, 600.0),
+            "grid_to_bus_kwh": max(600.0 - pv_generation_kwh, 0.0),
+            "bess_initial_to_bus_kwh": 0.0,
+            "objective_jpy": max(600.0 - pv_generation_kwh, 0.0) * 18.0,
+        },
         "solver_status": "feasible",
         "feasible": True,
         "trip_count_served": 264,
@@ -240,12 +260,16 @@ def test_accepts_only_weather_pv_differences_and_reports_effects() -> None:
     assert comparison["effects"]["flows_kwh_or_kw"]["grid_import_kwh"][
         "rain_minus_sunny"
     ] == pytest.approx(496.5)
+    assert comparison["effects"]["stage1_energy_cost_proxy"]["metrics"][
+        "grid_to_bus_kwh"
+    ]["rain_minus_sunny"] == pytest.approx(498.9)
     assert comparison["allowed_weather_input_differences"]["weather_configuration"][
         "weather_operation_mode"
     ] == {"sunny": "aggressive", "rain": "conservative"}
     report = render_markdown_report(comparison)
     assert "総コストの大域最適性は主張しません" in report
     assert "会計総額へ重ねて加算してはいけません" in report
+    assert "Stage 1 集約充電費用代理" in report
 
 
 def test_rejects_a_different_fixed_tou_price() -> None:
@@ -256,6 +280,20 @@ def test_rejects_a_different_fixed_tou_price() -> None:
     with pytest.raises(
         ComparisonContractError,
         match="Fixed control differs at clock_hour_grid_price_yen_per_kwh",
+    ):
+        build_weather_comparison(sunny, rain)
+
+
+def test_rejects_a_different_stage1_energy_proxy_policy() -> None:
+    sunny, rain = _valid_pair()
+    rain = deepcopy(rain)
+    rain["stage1_energy_cost_proxy_configuration"][
+        "grid_unit_cost_yen_per_kwh"
+    ] = 19.0
+
+    with pytest.raises(
+        ComparisonContractError,
+        match="stage1_energy_cost_proxy_configuration",
     ):
         build_weather_comparison(sunny, rain)
 

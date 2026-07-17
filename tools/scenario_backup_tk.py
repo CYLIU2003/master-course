@@ -34,6 +34,12 @@ from src.optimization.common.cost_components import (
     default_cost_component_flags,
     normalize_cost_component_flags,
 )
+from src.optimization.common.bess_terminal_policy import (
+    BESS_TERMINAL_POLICY_FIXED_TARGET,
+    BESS_TERMINAL_POLICY_MINIMUM_ONLY,
+    BESS_TERMINAL_POLICY_RETURN_TO_INITIAL,
+    normalize_bess_terminal_policy,
+)
 from src.optimization.common.pv_area import (
     DEFAULT_PANEL_POWER_DENSITY_KW_M2,
     DEFAULT_PERFORMANCE_RATIO,
@@ -82,11 +88,20 @@ _WEATHER_MODE_OPTIONS = (
 )
 _RUN_PARAMETER_TAB_LABELS = (
     "よく使う",
+    "営業所設備",
     "SOC/燃料",
     "料金/CO2",
     "PV/予報",
     "目的/詳細",
 )
+_BESS_TERMINAL_POLICY_LABELS = {
+    "運用範囲のみ": BESS_TERMINAL_POLICY_MINIMUM_ONLY,
+    "初期SOCへ戻す目標": BESS_TERMINAL_POLICY_RETURN_TO_INITIAL,
+    "終端SOC目標を指定": BESS_TERMINAL_POLICY_FIXED_TARGET,
+}
+_BESS_TERMINAL_POLICY_VALUE_TO_LABEL = {
+    value: label for label, value in _BESS_TERMINAL_POLICY_LABELS.items()
+}
 _RESULT_METRIC_LABELS = {
     "status": "状態",
     "mode": "実行モード",
@@ -186,6 +201,68 @@ _RESULT_COMPARE_KEYS = (
     "battery_degradation_cost",
     "co2_cost",
 )
+
+
+def _configure_research_console_theme(root: tk.Tk) -> None:
+    """Apply the repository DESIGN.md tokens to the Tk research console."""
+
+    style = ttk.Style(root)
+    if "clam" in style.theme_names():
+        style.theme_use("clam")
+    root.configure(background="#F4F7F9")
+    root.option_add("*Font", ("Yu Gothic UI", 10))
+    root.option_add("*TCombobox*Listbox.font", ("Yu Gothic UI", 10))
+
+    style.configure("TFrame", background="#F4F7F9")
+    style.configure("TLabel", background="#F4F7F9", foreground="#18212B")
+    style.configure(
+        "TLabelframe",
+        background="#F4F7F9",
+        bordercolor="#B9C5CE",
+        relief="solid",
+    )
+    style.configure(
+        "TLabelframe.Label",
+        background="#F4F7F9",
+        foreground="#16324F",
+        font=("Yu Gothic UI", 10, "bold"),
+    )
+    style.configure("TNotebook", background="#F4F7F9", borderwidth=0)
+    style.configure(
+        "TNotebook.Tab",
+        padding=(12, 7),
+        font=("Yu Gothic UI", 9, "bold"),
+    )
+    style.map(
+        "TNotebook.Tab",
+        background=[("selected", "#FFFFFF"), ("!selected", "#E8EEF2")],
+        foreground=[("selected", "#16324F"), ("!selected", "#526273")],
+    )
+    style.configure("TButton", padding=(8, 5), font=("Yu Gothic UI", 9))
+    style.configure(
+        "Primary.TButton",
+        background="#0C7C73",
+        foreground="#FFFFFF",
+        padding=(12, 7),
+        font=("Yu Gothic UI", 9, "bold"),
+    )
+    style.map(
+        "Primary.TButton",
+        background=[("active", "#09675F"), ("disabled", "#AAB7BD")],
+        foreground=[("disabled", "#F4F7F9")],
+    )
+    style.configure(
+        "Section.TLabel",
+        foreground="#16324F",
+        font=("Yu Gothic UI", 11, "bold"),
+    )
+    style.configure("Hint.TLabel", foreground="#526273")
+    style.configure(
+        "Treeview.Heading",
+        background="#E8EEF2",
+        foreground="#16324F",
+        font=("Yu Gothic UI", 9, "bold"),
+    )
 
 
 def _group_cost_components_for_ui() -> list[tuple[str, list[Any]]]:
@@ -732,6 +809,9 @@ def _default_depot_energy_asset_row(depot_id: str) -> dict[str, Any]:
         "grid_to_bess_allowed_slot_indices": [],
         "bess_priority_mode": "pv_self_consumption",
         "bess_terminal_soc_min_kwh": 0.0,
+        "bess_terminal_soc_policy": BESS_TERMINAL_POLICY_MINIMUM_ONLY,
+        "bess_terminal_soc_target_kwh": 0.0,
+        "bess_terminal_soc_deviation_penalty_yen_per_kwh": 20.0,
         "provisional_energy_cost_yen_per_kwh": 0.0,
     }
 
@@ -1387,7 +1467,8 @@ class BFFClient:
 class App:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
-        self.root.title("予備運用コンソール")
+        _configure_research_console_theme(self.root)
+        self.root.title("EVバス運用最適化 研究コンソール")
         self._fleet_window: tk.Toplevel | None = None
         self._fleet_built = False
         self.fleet_depot_var: tk.StringVar | None = None
@@ -1492,7 +1573,41 @@ class App:
         self.root.geometry(f"{w}x{h}+{x}+{y}")
         self.root.minsize(900, 600)
 
-        # ── 上部バー：実行モード / 接続 ──
+        # ── 設定ハブ：点在していた主要編集画面への一貫した入口 ──
+        header = ttk.Frame(self.root, padding=(12, 8, 12, 4))
+        header.pack(fill=tk.X)
+        title_group = ttk.Frame(header)
+        title_group.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Label(
+            title_group,
+            text="EVバス運用最適化",
+            style="Section.TLabel",
+            font=("Yu Gothic UI", 15, "bold"),
+        ).pack(anchor="w")
+        ttk.Label(
+            title_group,
+            text="対象 → 営業所設備・車両 → 研究条件 → Prepare・計算 → 結果確認",
+            style="Hint.TLabel",
+        ).pack(anchor="w", pady=(1, 0))
+        settings_hub = ttk.Frame(header)
+        settings_hub.pack(side=tk.RIGHT)
+        ttk.Button(
+            settings_hub,
+            text="営業所設備・BESS",
+            command=self.open_vehicle_depot_manager,
+        ).pack(side=tk.LEFT, padx=(0, 4))
+        ttk.Button(
+            settings_hub,
+            text="車両・テンプレート",
+            command=self.open_fleet_window,
+        ).pack(side=tk.LEFT, padx=4)
+        ttk.Button(
+            settings_hub,
+            text="ソルバー・実験条件",
+            command=self.open_solver_settings_window,
+        ).pack(side=tk.LEFT, padx=(4, 0))
+
+        # ── 上部バー：実行モード / 接続（通常は直結のまま） ──
         top = ttk.Frame(self.root, padding=(8, 4))
         top.pack(fill=tk.X)
         ttk.Label(top, text="実行モード").pack(side=tk.LEFT)
@@ -1513,11 +1628,10 @@ class App:
         self.base_url_entry.pack(side=tk.LEFT, padx=6)
         ttk.Button(top, text="接続確認", command=self.on_connect).pack(side=tk.LEFT, padx=4)
         ttk.Button(top, text="使い方ヘルプ", command=self.open_help_window).pack(side=tk.LEFT, padx=(8, 2))
-        tool_menu_btn = ttk.Menubutton(top, text="ツール")
+        tool_menu_btn = ttk.Menubutton(top, text="その他")
         tool_menu_btn.pack(side=tk.LEFT, padx=(8, 2))
         tool_menu = tk.Menu(tool_menu_btn, tearoff=False)
-        tool_menu.add_command(label="車両・テンプレート管理", command=self.open_fleet_window)
-        tool_menu.add_command(label="営業所別充電器管理", command=self.open_vehicle_depot_manager)
+        tool_menu.add_command(label="充電器台数管理", command=self.open_vehicle_depot_manager)
         tool_menu.add_command(label="機能情報", command=self.show_capabilities)
         tool_menu_btn.configure(menu=tool_menu)
         ttk.Label(top, textvariable=self._busy_var, foreground="#c0392b", font=("TkDefaultFont", 9, "bold")).pack(side=tk.RIGHT, padx=8)
@@ -1789,7 +1903,12 @@ class App:
 
         btn_row = ttk.Frame(action_bar)
         btn_row.pack(fill=tk.X)
-        ttk.Button(btn_row, text="高速実行", command=self.run_fast_optimization).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(
+            btn_row,
+            text="高速実行",
+            command=self.run_fast_optimization,
+            style="Primary.TButton",
+        ).pack(side=tk.LEFT, padx=(0, 8))
         quick_setup_save_main_btn = ttk.Button(
             btn_row, text="① シナリオ保存", command=self.save_quick_setup,
         )
@@ -1912,12 +2031,20 @@ class App:
         self.run_parameter_notebook = ttk.Notebook(ops)
         self.run_parameter_notebook.pack(fill=tk.BOTH, expand=True, pady=(0, 4))
         quick_tab = ttk.Frame(self.run_parameter_notebook, padding=6)
+        depot_asset_tab = ttk.Frame(self.run_parameter_notebook, padding=6)
         soc_fuel_tab = ttk.Frame(self.run_parameter_notebook, padding=6)
         price_tab = ttk.Frame(self.run_parameter_notebook, padding=6)
         weather_tab = ttk.Frame(self.run_parameter_notebook, padding=6)
         objective_tab = ttk.Frame(self.run_parameter_notebook, padding=6)
         for tab, label in zip(
-            (quick_tab, soc_fuel_tab, price_tab, weather_tab, objective_tab),
+            (
+                quick_tab,
+                depot_asset_tab,
+                soc_fuel_tab,
+                price_tab,
+                weather_tab,
+                objective_tab,
+            ),
             _RUN_PARAMETER_TAB_LABELS,
         ):
             self.run_parameter_notebook.add(tab, text=label)
@@ -1929,6 +2056,53 @@ class App:
             wraplength=560,
             justify=tk.LEFT,
         ).pack(anchor="w", fill=tk.X, pady=(0, 4))
+        ttk.Label(
+            depot_asset_tab,
+            text=(
+                "PV・定置型BESS・電力経路・終端SOC方針を営業所単位で一か所にまとめます。"
+                "容量と終端方針を変更したら、ここでJSONへ反映してからシナリオ保存してください。"
+            ),
+            foreground="#555",
+            wraplength=620,
+            justify=tk.LEFT,
+        ).pack(anchor="w", fill=tk.X, pady=(0, 8))
+        asset_actions = ttk.LabelFrame(
+            depot_asset_tab,
+            text="営業所エネルギー設備",
+            padding=10,
+        )
+        asset_actions.pack(fill=tk.X, pady=(0, 8))
+        ttk.Button(
+            asset_actions,
+            text="営業所設備・BESSを編集",
+            command=self.open_depot_energy_assets_editor,
+            style="Primary.TButton",
+        ).pack(side=tk.LEFT)
+        ttk.Button(
+            asset_actions,
+            text="選択営業所へ実日PV同期",
+            command=self.sync_selected_depot_pv_assets,
+        ).pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Label(
+            asset_actions,
+            text="BESS容量、SOC運用範囲、終端方針、PV・系統からの充放電許可を編集",
+            style="Hint.TLabel",
+        ).pack(side=tk.LEFT, padx=(12, 0))
+        asset_json_group = ttk.LabelFrame(
+            depot_asset_tab,
+            text="互換用JSON（通常は直接編集不要）",
+            padding=6,
+        )
+        asset_json_group.pack(fill=tk.X)
+        self._labeled_entry(
+            asset_json_group,
+            "depot_energy_assets",
+            self.depot_energy_assets_json_var,
+            tooltip=(
+                "営業所設備エディタの保存先です。旧データとの互換確認や一括貼付けにだけ使います。"
+            ),
+        )
+
         ttk.Label(
             soc_fuel_tab,
             text=(
@@ -2256,23 +2430,6 @@ class App:
             values=self.weather_mode_options,
         )
         self.weather_mode_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        asset_row = self._labeled_entry(
-            pv_grp,
-            "営業所エネルギー資産(JSON)",
-            self.depot_energy_assets_json_var,
-            tooltip=(
-                "営業所別のPV/BESS設定をJSON配列で入力します。\n"
-                "例: [{\"depot_id\":\"dep-1\",\"bess_enabled\":true,\"bess_energy_kwh\":500}]\n"
-                "空欄の場合は既存設定を保持します。"
-            ),
-        )
-        ttk.Button(asset_row, text="行編集...", command=self.open_depot_energy_assets_editor).pack(side=tk.LEFT, padx=(6, 0))
-        ttk.Button(
-            asset_row,
-            text="選択営業所へ実日PV同期",
-            command=self.sync_selected_depot_pv_assets,
-        ).pack(side=tk.LEFT, padx=(6, 0))
-
         proxy_grp = ttk.LabelFrame(pv_grp, text="予報proxy → 最適化ポリシー", padding=4)
         proxy_grp.pack(fill=tk.X, pady=(6, 0))
         ttk.Label(
@@ -4596,8 +4753,9 @@ class App:
             return
 
         win = tk.Toplevel(self.root)
-        win.title("営業所エネルギー資産 行編集")
-        win.geometry("1320x760")
+        win.title("営業所設備・BESS")
+        win.geometry("1380x860")
+        win.minsize(1080, 720)
 
         rows: list[dict[str, Any]] = [dict(item) for item in current_rows]
         service_dates = self._selected_service_dates(announce=False) or []
@@ -4605,7 +4763,7 @@ class App:
         top_note = ttk.Label(
             win,
             text=(
-                "depot_energy_assets を行単位で編集します。保存すると JSON 欄へ反映されます。"
+                "営業所ごとにPV・BESS・電力経路を編集します。選択行の詳細は下のタブにまとめています。"
                 f" 実日PV同期の対象日: {_format_service_dates_summary(service_dates)}"
             ),
             foreground="#444",
@@ -4620,87 +4778,66 @@ class App:
             "pv_period",
             "pv_slots",
             "depot_area_m2",
-            "estimated_installable_area_m2",
-            "pv_enabled",
             "pv_capacity_kw",
             "bess_enabled",
             "bess_energy_kwh",
             "bess_power_kw",
             "bess_initial_soc_kwh",
-            "bess_soc_min_kwh",
-            "bess_soc_max_kwh",
-            "bess_charge_efficiency",
-            "bess_discharge_efficiency",
-            "bess_cycle_cost_yen_per_kwh",
-            "allow_pv_to_bess",
-            "allow_grid_to_bess",
-            "allow_bess_to_bus",
-            "grid_to_bess_price_mode",
-            "grid_to_bess_price_threshold_yen_per_kwh",
-            "bess_priority_mode",
-            "bess_terminal_soc_min_kwh",
+            "bess_soc_range_kwh",
+            "bess_terminal_soc_policy",
+            "bess_terminal_requirement_kwh",
         )
-        tree = ttk.Treeview(tree_frame, columns=cols, show="headings", height=10)
+        tree = ttk.Treeview(tree_frame, columns=cols, show="headings", height=8)
         headers = {
             "depot_id": "営業所ID",
             "pv_period": "PV対象日",
             "pv_slots": "PVスロット数",
             "depot_area_m2": "営業所面積[m²]",
-            "estimated_installable_area_m2": "PV設置可能面積[m²]",
-            "pv_enabled": "PV有効",
             "pv_capacity_kw": "推定PV容量[kW]",
             "bess_enabled": "BESS有効",
             "bess_energy_kwh": "BESS容量[kWh]",
             "bess_power_kw": "BESS出力[kW]",
             "bess_initial_soc_kwh": "初期SOC[kWh]",
-            "bess_soc_min_kwh": "最小SOC[kWh]",
-            "bess_soc_max_kwh": "最大SOC[kWh]",
-            "bess_charge_efficiency": "充電効率",
-            "bess_discharge_efficiency": "放電効率",
-            "bess_cycle_cost_yen_per_kwh": "BESS→Bus単価[円/kWh]",
-            "allow_pv_to_bess": "PV→BESS",
-            "allow_grid_to_bess": "Grid→BESS",
-            "allow_bess_to_bus": "BESS→Bus",
-            "grid_to_bess_price_mode": "Grid→BESSモード",
-            "grid_to_bess_price_threshold_yen_per_kwh": "Grid→BESS閾値[円/kWh]",
-            "bess_priority_mode": "BESS優先モード",
-            "bess_terminal_soc_min_kwh": "終端SOC下限[kWh]",
+            "bess_soc_range_kwh": "運用範囲[kWh]",
+            "bess_terminal_soc_policy": "終端方針",
+            "bess_terminal_requirement_kwh": "終端条件[kWh]",
         }
         widths = {
             "depot_id": 120,
             "pv_period": 180,
             "pv_slots": 90,
             "depot_area_m2": 110,
-            "estimated_installable_area_m2": 130,
-            "pv_enabled": 70,
             "pv_capacity_kw": 100,
             "bess_enabled": 80,
             "bess_energy_kwh": 120,
             "bess_power_kw": 120,
             "bess_initial_soc_kwh": 110,
-            "bess_soc_min_kwh": 110,
-            "bess_soc_max_kwh": 110,
-            "bess_charge_efficiency": 90,
-            "bess_discharge_efficiency": 90,
-            "bess_cycle_cost_yen_per_kwh": 150,
-            "allow_pv_to_bess": 90,
-            "allow_grid_to_bess": 90,
-            "allow_bess_to_bus": 90,
-            "grid_to_bess_price_mode": 130,
-            "grid_to_bess_price_threshold_yen_per_kwh": 170,
-            "bess_priority_mode": 150,
-            "bess_terminal_soc_min_kwh": 140,
+            "bess_soc_range_kwh": 130,
+            "bess_terminal_soc_policy": 160,
+            "bess_terminal_requirement_kwh": 150,
         }
         for col in cols:
             tree.heading(col, text=headers[col])
             tree.column(col, width=widths[col], anchor="center")
-        tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         ysb = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=tree.yview)
         ysb.pack(side=tk.RIGHT, fill=tk.Y)
-        tree.configure(yscrollcommand=ysb.set)
+        xsb = ttk.Scrollbar(tree_frame, orient=tk.HORIZONTAL, command=tree.xview)
+        xsb.pack(side=tk.BOTTOM, fill=tk.X)
+        tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        tree.configure(yscrollcommand=ysb.set, xscrollcommand=xsb.set)
 
         editor = ttk.LabelFrame(win, text="行編集", padding=10)
-        editor.pack(fill=tk.X, padx=10, pady=(8, 6))
+        editor.pack(fill=tk.BOTH, expand=True, padx=10, pady=(8, 6))
+        editor_notebook = ttk.Notebook(editor)
+        editor_notebook.pack(fill=tk.BOTH, expand=True)
+        equipment_tab = ttk.Frame(editor_notebook, padding=8)
+        terminal_tab = ttk.Frame(editor_notebook, padding=8)
+        flow_tab = ttk.Frame(editor_notebook, padding=8)
+        data_tab = ttk.Frame(editor_notebook, padding=8)
+        editor_notebook.add(equipment_tab, text="設備容量・PV")
+        editor_notebook.add(terminal_tab, text="SOC・終端方針")
+        editor_notebook.add(flow_tab, text="電力経路・費用")
+        editor_notebook.add(data_tab, text="データ確認")
 
         depot_id_var = tk.StringVar(value="")
         pv_enabled_var = tk.BooleanVar(value=False)
@@ -4728,68 +4865,184 @@ class App:
         grid_to_bess_allowed_slots_var = tk.StringVar(value="")
         bess_priority_mode_var = tk.StringVar(value="pv_self_consumption")
         bess_terminal_soc_min_kwh_var = tk.StringVar(value="0")
+        bess_terminal_soc_policy_label_var = tk.StringVar(
+            value=_BESS_TERMINAL_POLICY_VALUE_TO_LABEL[
+                BESS_TERMINAL_POLICY_MINIMUM_ONLY
+            ]
+        )
+        bess_terminal_soc_target_kwh_var = tk.StringVar(value="0")
+        bess_terminal_soc_target_percent_var = tk.StringVar(value="")
+        bess_terminal_soc_deviation_penalty_var = tk.StringVar(value="20")
         provisional_energy_cost_var = tk.StringVar(value="0")
         pv_dates_info_var = tk.StringVar(value="")
         pv_slot_count_info_var = tk.StringVar(value="0")
 
-        depots = [str(item.get("id") or "").strip() for item in self.scope_depots if str(item.get("id") or "").strip()]
+        depots = [
+            str(item.get("id") or "").strip()
+            for item in self.scope_depots
+            if str(item.get("id") or "").strip()
+        ]
+        ttk.Label(
+            equipment_tab,
+            text="営業所面積からPV容量を導出し、BESSのエネルギー容量と出力を設定します。",
+            style="Hint.TLabel",
+        ).pack(anchor="w", pady=(0, 6))
         if depots:
-            dep_row = ttk.Frame(editor)
+            dep_row = ttk.Frame(equipment_tab)
             dep_row.pack(fill=tk.X, pady=2)
-            ttk.Label(dep_row, text="営業所ID", width=34).pack(side=tk.LEFT)
-            depot_combo = ttk.Combobox(dep_row, textvariable=depot_id_var, state="readonly", values=depots)
+            ttk.Label(dep_row, text="営業所", width=30).pack(side=tk.LEFT)
+            depot_combo = ttk.Combobox(
+                dep_row,
+                textvariable=depot_id_var,
+                state="readonly",
+                values=depots,
+            )
             depot_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
         else:
-            self._labeled_entry(editor, "営業所ID", depot_id_var)
+            self._labeled_entry(equipment_tab, "営業所ID", depot_id_var)
+        equipment_flags = ttk.Frame(equipment_tab)
+        equipment_flags.pack(fill=tk.X, pady=(4, 6))
+        ttk.Checkbutton(
+            equipment_flags,
+            text="PV有効（営業所面積から自動判定）",
+            variable=pv_enabled_var,
+        ).pack(side=tk.LEFT)
+        ttk.Checkbutton(
+            equipment_flags,
+            text="BESS有効",
+            variable=bess_enabled_var,
+        ).pack(side=tk.LEFT, padx=(16, 0))
+        ttk.Button(
+            equipment_flags,
+            text="容量からBESS既定値を入れる",
+            command=lambda: _apply_bess_capacity_defaults(),
+        ).pack(side=tk.LEFT, padx=(16, 0))
+        self._labeled_entry(equipment_tab, "営業所面積 [m²]", depot_area_m2_var)
+        self._labeled_entry(
+            equipment_tab,
+            "推定PV設置可能面積 [m²]",
+            estimated_installable_area_var,
+            readonly=True,
+        )
+        self._labeled_entry(
+            equipment_tab,
+            "推定PV容量 [kW]",
+            pv_capacity_kw_var,
+            readonly=True,
+        )
+        self._labeled_entry(equipment_tab, "BESS容量 [kWh]", bess_energy_kwh_var)
+        self._labeled_entry(equipment_tab, "BESS出力上限 [kW]", bess_power_kw_var)
 
-        flag_row = ttk.Frame(editor)
-        flag_row.pack(fill=tk.X, pady=2)
-        ttk.Checkbutton(flag_row, text="PV有効(面積>0で自動)", variable=pv_enabled_var).pack(side=tk.LEFT)
-        ttk.Checkbutton(flag_row, text="BESS有効", variable=bess_enabled_var).pack(side=tk.LEFT, padx=(12, 0))
-        ttk.Checkbutton(flag_row, text="PV→BESS許可", variable=allow_pv_to_bess_var).pack(side=tk.LEFT, padx=(12, 0))
-        ttk.Checkbutton(flag_row, text="Grid→BESS許可", variable=allow_grid_to_bess_var).pack(side=tk.LEFT, padx=(12, 0))
-        ttk.Checkbutton(flag_row, text="BESS→Bus許可", variable=allow_bess_to_bus_var).pack(side=tk.LEFT, padx=(12, 0))
-        ttk.Button(flag_row, text="容量からBESS既定値補完", command=lambda: _apply_bess_capacity_defaults()).pack(side=tk.LEFT, padx=(12, 0))
-
-        self._labeled_entry(editor, "営業所面積[m²] depot_area_m2", depot_area_m2_var)
-        self._labeled_entry(editor, "推定PV設置可能面積[m²]", estimated_installable_area_var, readonly=True)
-        self._labeled_entry(editor, "推定PV容量[kW] pv_capacity_kw", pv_capacity_kw_var, readonly=True)
-        self._labeled_entry(editor, "BESS容量[kWh] bess_energy_kwh", bess_energy_kwh_var)
-        self._labeled_entry(editor, "BESS出力[kW] bess_power_kw", bess_power_kw_var)
-        self._labeled_entry(editor, "BESS初期SOC[kWh] bess_initial_soc_kwh", bess_initial_soc_kwh_var)
-        self._labeled_entry(editor, "BESS最小SOC[kWh] bess_soc_min_kwh", bess_soc_min_kwh_var)
-        self._labeled_entry(editor, "BESS最大SOC[kWh] bess_soc_max_kwh", bess_soc_max_kwh_var)
-        self._labeled_entry(editor, "BESS初期SOC[%] (保存時kWh変換)", bess_initial_soc_percent_var)
-        self._labeled_entry(editor, "BESS運用SOC下限[%] (保存時kWh変換)", bess_soc_min_percent_var)
-        self._labeled_entry(editor, "BESS運用SOC上限[%] (保存時kWh変換)", bess_soc_max_percent_var)
-        self._labeled_entry(editor, "BESS終端SOC下限[%] (保存時kWh変換)", bess_terminal_soc_min_percent_var)
-        self._labeled_entry(editor, "BESS充電効率 bess_charge_efficiency", bess_charge_efficiency_var)
-        self._labeled_entry(editor, "BESS放電効率 bess_discharge_efficiency", bess_discharge_efficiency_var)
-        self._labeled_entry(editor, "BESS→Bus単価[円/kWh] bess_cycle_cost_yen_per_kwh", bess_cycle_cost_var)
-        grid_to_bess_mode_row = ttk.Frame(editor)
+        ttk.Label(
+            terminal_tab,
+            text=(
+                "運用SOC下限・上限は常に守るハード制約です。終端方針は、終端下限に加えて"
+                "終端目標もハード制約にするかを選びます。「運用範囲のみ」には終端目標を置きません。"
+            ),
+            style="Hint.TLabel",
+            wraplength=900,
+            justify=tk.LEFT,
+        ).pack(anchor="w", pady=(0, 6))
+        policy_row = ttk.Frame(terminal_tab)
+        policy_row.pack(fill=tk.X, pady=2)
+        ttk.Label(policy_row, text="終端SOC方針", width=30).pack(side=tk.LEFT)
+        terminal_policy_combo = ttk.Combobox(
+            policy_row,
+            textvariable=bess_terminal_soc_policy_label_var,
+            state="readonly",
+            values=tuple(_BESS_TERMINAL_POLICY_LABELS),
+        )
+        terminal_policy_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self._labeled_entry(terminal_tab, "初期SOC [%]", bess_initial_soc_percent_var)
+        self._labeled_entry(terminal_tab, "運用SOC下限 [%]", bess_soc_min_percent_var)
+        self._labeled_entry(terminal_tab, "運用SOC上限 [%]", bess_soc_max_percent_var)
+        self._labeled_entry(terminal_tab, "終端SOC下限 [%]", bess_terminal_soc_min_percent_var)
+        terminal_target_percent_row = self._labeled_entry(
+            terminal_tab,
+            "指定終端SOC目標 [%]（方針=目標指定時）",
+            bess_terminal_soc_target_percent_var,
+        )
+        terminal_target_percent_entry = next(
+            child
+            for child in terminal_target_percent_row.winfo_children()
+            if isinstance(child, ttk.Entry)
+        )
+        calculated_soc = ttk.LabelFrame(
+            terminal_tab,
+            text="容量換算値（読取専用）",
+            padding=6,
+        )
+        calculated_soc.pack(fill=tk.X, pady=(8, 4))
+        self._labeled_entry(calculated_soc, "初期SOC [kWh]", bess_initial_soc_kwh_var, readonly=True)
+        self._labeled_entry(calculated_soc, "運用SOC下限 [kWh]", bess_soc_min_kwh_var, readonly=True)
+        self._labeled_entry(calculated_soc, "運用SOC上限 [kWh]", bess_soc_max_kwh_var, readonly=True)
+        self._labeled_entry(calculated_soc, "終端SOC下限 [kWh]", bess_terminal_soc_min_kwh_var, readonly=True)
+        self._labeled_entry(
+            calculated_soc,
+            "実効終端SOC目標 [kWh]",
+            bess_terminal_soc_target_kwh_var,
+            readonly=True,
+        )
+        ttk.Label(
+            flow_tab,
+            text="許可する電力経路、効率、限界費用を設定します。",
+            style="Hint.TLabel",
+        ).pack(anchor="w", pady=(0, 6))
+        flow_flags = ttk.Frame(flow_tab)
+        flow_flags.pack(fill=tk.X, pady=(0, 6))
+        ttk.Checkbutton(flow_flags, text="PV→BESS", variable=allow_pv_to_bess_var).pack(side=tk.LEFT)
+        ttk.Checkbutton(flow_flags, text="Grid→BESS", variable=allow_grid_to_bess_var).pack(side=tk.LEFT, padx=(16, 0))
+        ttk.Checkbutton(flow_flags, text="BESS→Bus", variable=allow_bess_to_bus_var).pack(side=tk.LEFT, padx=(16, 0))
+        self._labeled_entry(flow_tab, "BESS充電効率", bess_charge_efficiency_var)
+        self._labeled_entry(flow_tab, "BESS放電効率", bess_discharge_efficiency_var)
+        self._labeled_entry(flow_tab, "BESS→Bus限界費用 [円/kWh]", bess_cycle_cost_var)
+        grid_to_bess_mode_row = ttk.Frame(flow_tab)
         grid_to_bess_mode_row.pack(fill=tk.X, pady=2)
-        ttk.Label(grid_to_bess_mode_row, text="Grid→BESS価格モード", width=34).pack(side=tk.LEFT)
+        ttk.Label(grid_to_bess_mode_row, text="Grid→BESS価格モード", width=30).pack(side=tk.LEFT)
         ttk.Combobox(
             grid_to_bess_mode_row,
             textvariable=grid_to_bess_price_mode_var,
             state="readonly",
             values=("tou", "threshold", "disabled"),
         ).pack(side=tk.LEFT, fill=tk.X, expand=True)
-        self._labeled_entry(editor, "Grid→BESS閾値[円/kWh]", grid_to_bess_price_threshold_var)
-        self._labeled_entry(editor, "Grid→BESS許可スロット(カンマ区切り)", grid_to_bess_allowed_slots_var)
-        bess_priority_row = ttk.Frame(editor)
+        self._labeled_entry(flow_tab, "Grid→BESS閾値 [円/kWh]", grid_to_bess_price_threshold_var)
+        self._labeled_entry(flow_tab, "Grid→BESS許可スロット", grid_to_bess_allowed_slots_var)
+        bess_priority_row = ttk.Frame(flow_tab)
         bess_priority_row.pack(fill=tk.X, pady=2)
-        ttk.Label(bess_priority_row, text="BESS優先モード", width=34).pack(side=tk.LEFT)
+        ttk.Label(bess_priority_row, text="BESS運用モード", width=30).pack(side=tk.LEFT)
         ttk.Combobox(
             bess_priority_row,
             textvariable=bess_priority_mode_var,
             state="readonly",
             values=("pv_self_consumption", "cost_driven", "peak_shaving"),
         ).pack(side=tk.LEFT, fill=tk.X, expand=True)
-        self._labeled_entry(editor, "終端SOC下限[kWh]", bess_terminal_soc_min_kwh_var)
-        self._labeled_entry(editor, "仮コスト単価[円/kWh]", provisional_energy_cost_var)
-        self._labeled_entry(editor, "PV対象日(読取専用)", pv_dates_info_var, readonly=True)
-        self._labeled_entry(editor, "PVスロット数(読取専用)", pv_slot_count_info_var, readonly=True)
+        self._labeled_entry(flow_tab, "Stage 1仮コスト単価 [円/kWh]", provisional_energy_cost_var)
+
+        ttk.Label(
+            data_tab,
+            text=(
+                "PV時系列は運行日と計画日数に対応している必要があります。ここは入力データの確認欄です。"
+            ),
+            style="Hint.TLabel",
+            wraplength=900,
+        ).pack(anchor="w", pady=(0, 6))
+        self._labeled_entry(data_tab, "PV対象日", pv_dates_info_var, readonly=True)
+        self._labeled_entry(data_tab, "PVスロット数", pv_slot_count_info_var, readonly=True)
+        ttk.Label(
+            data_tab,
+            text=(
+                "以下は旧scenarioとの互換用監査値です。終端目標を選択した場合、目標自体は"
+                "hard制約なので、この単価で目標違反を購入することはできません。"
+            ),
+            style="Hint.TLabel",
+            wraplength=900,
+            justify=tk.LEFT,
+        ).pack(anchor="w", pady=(10, 2))
+        self._labeled_entry(
+            data_tab,
+            "互換用・終端偏差単価 [円/kWh]",
+            bess_terminal_soc_deviation_penalty_var,
+        )
 
         selected_index: list[int | None] = [None]
 
@@ -4826,6 +5079,72 @@ class App:
             percent = self._parse_float(text, 0.0)
             return max(capacity, 0.0) * max(percent, 0.0) / 100.0
 
+        def _refresh_bess_soc_preview(*_args: Any) -> None:
+            capacity = max(self._parse_float(bess_energy_kwh_var.get(), 0.0), 0.0)
+            initial_soc = _soc_kwh_from_percent(
+                bess_initial_soc_percent_var.get(),
+                capacity,
+                bess_initial_soc_kwh_var.get(),
+            )
+            minimum_soc = _soc_kwh_from_percent(
+                bess_soc_min_percent_var.get(),
+                capacity,
+                bess_soc_min_kwh_var.get(),
+            )
+            maximum_soc = _soc_kwh_from_percent(
+                bess_soc_max_percent_var.get(),
+                capacity,
+                bess_soc_max_kwh_var.get(),
+            )
+            terminal_minimum = _soc_kwh_from_percent(
+                bess_terminal_soc_min_percent_var.get(),
+                capacity,
+                bess_terminal_soc_min_kwh_var.get(),
+            )
+            policy = _BESS_TERMINAL_POLICY_LABELS.get(
+                bess_terminal_soc_policy_label_var.get(),
+                BESS_TERMINAL_POLICY_MINIMUM_ONLY,
+            )
+            if policy == BESS_TERMINAL_POLICY_RETURN_TO_INITIAL:
+                terminal_target = initial_soc
+            elif policy == BESS_TERMINAL_POLICY_FIXED_TARGET:
+                terminal_target = _soc_kwh_from_percent(
+                    bess_terminal_soc_target_percent_var.get(),
+                    capacity,
+                    bess_terminal_soc_target_kwh_var.get(),
+                )
+            else:
+                terminal_target = 0.0
+
+            terminal_target_percent_entry.configure(
+                state=(
+                    "normal"
+                    if policy == BESS_TERMINAL_POLICY_FIXED_TARGET
+                    else "disabled"
+                )
+            )
+
+            bess_initial_soc_kwh_var.set(_format_float(initial_soc))
+            bess_soc_min_kwh_var.set(_format_float(minimum_soc))
+            bess_soc_max_kwh_var.set(_format_float(maximum_soc))
+            bess_terminal_soc_min_kwh_var.set(_format_float(terminal_minimum))
+            bess_terminal_soc_target_kwh_var.set(
+                _format_float(terminal_target)
+                if policy != BESS_TERMINAL_POLICY_MINIMUM_ONLY
+                else "—"
+            )
+
+        for preview_var in (
+            bess_energy_kwh_var,
+            bess_initial_soc_percent_var,
+            bess_soc_min_percent_var,
+            bess_soc_max_percent_var,
+            bess_terminal_soc_min_percent_var,
+            bess_terminal_soc_policy_label_var,
+            bess_terminal_soc_target_percent_var,
+        ):
+            preview_var.trace_add("write", _refresh_bess_soc_preview)
+
         def _apply_bess_capacity_defaults(*_args: Any) -> None:
             capacity = max(self._parse_float(bess_energy_kwh_var.get(), 0.0), 0.0)
             if capacity <= 0.0:
@@ -4841,6 +5160,13 @@ class App:
             bess_initial_soc_percent_var.set("50")
             bess_soc_max_percent_var.set("90")
             bess_terminal_soc_min_percent_var.set("20")
+            bess_terminal_soc_policy_label_var.set(
+                _BESS_TERMINAL_POLICY_VALUE_TO_LABEL[
+                    BESS_TERMINAL_POLICY_MINIMUM_ONLY
+                ]
+            )
+            bess_terminal_soc_target_percent_var.set("")
+            bess_terminal_soc_deviation_penalty_var.set("20")
             if not str(bess_charge_efficiency_var.get() or "").strip():
                 bess_charge_efficiency_var.set("0.95")
             if not str(bess_discharge_efficiency_var.get() or "").strip():
@@ -4851,30 +5177,55 @@ class App:
         def _row_to_values(row: dict[str, Any]) -> tuple[Any, ...]:
             pv_dates = list(row.get("pv_profile_dates") or [])
             pv_slots = list(row.get("pv_generation_kwh_by_slot") or [])
+            soc_min = float(
+                _row_value(row, "bess_soc_min_kwh", "bessSocMinKwh", 0.0) or 0.0
+            )
+            soc_max = float(
+                _row_value(row, "bess_soc_max_kwh", "bessSocMaxKwh", 0.0) or 0.0
+            )
+            terminal_min = float(
+                _row_value(
+                    row,
+                    "bess_terminal_soc_min_kwh",
+                    "bessTerminalSocMinKwh",
+                    soc_min,
+                )
+                or 0.0
+            )
+            terminal_target = float(
+                _row_value(
+                    row,
+                    "bess_terminal_soc_target_kwh",
+                    "bessTerminalSocTargetKwh",
+                    0.0,
+                )
+                or 0.0
+            )
+            policy = normalize_bess_terminal_policy(
+                _row_value(
+                    row,
+                    "bess_terminal_soc_policy",
+                    "bessTerminalSocPolicy",
+                    "",
+                ),
+                has_explicit_target=terminal_target > 0.0,
+            )
+            terminal_text = f"下限≥{_format_float(terminal_min)}"
+            if policy != BESS_TERMINAL_POLICY_MINIMUM_ONLY:
+                terminal_text += f" / 目標={_format_float(terminal_target)}"
             return (
                 str(row.get("depot_id") or row.get("depotId") or ""),
                 _format_service_dates_summary(pv_dates),
                 len(pv_slots),
                 row.get("depot_area_m2", row.get("depotAreaM2")),
-                row.get("estimated_installable_area_m2", 0.0),
-                bool(row.get("pv_enabled", False)),
                 row.get("pv_capacity_kw", 0.0),
                 bool(_row_value(row, "bess_enabled", "bessEnabled", False)),
                 _row_value(row, "bess_energy_kwh", "bessEnergyKwh", 0.0),
                 _row_value(row, "bess_power_kw", "bessPowerKw", 0.0),
                 _row_value(row, "bess_initial_soc_kwh", "bessInitialSocKwh", 0.0),
-                _row_value(row, "bess_soc_min_kwh", "bessSocMinKwh", 0.0),
-                _row_value(row, "bess_soc_max_kwh", "bessSocMaxKwh", 0.0),
-                _row_value(row, "bess_charge_efficiency", "bessChargeEfficiency", 0.95),
-                _row_value(row, "bess_discharge_efficiency", "bessDischargeEfficiency", 0.95),
-                _row_value(row, "bess_cycle_cost_yen_per_kwh", "bessCycleCostYenPerKwh", 0.0),
-                bool(_row_value(row, "allow_pv_to_bess", "allowPvToBess", True)),
-                bool(_row_value(row, "allow_grid_to_bess", "allowGridToBess", False)),
-                bool(_row_value(row, "allow_bess_to_bus", "allowBessToBus", True)),
-                _row_value(row, "grid_to_bess_price_mode", "gridToBessPriceMode", "tou"),
-                _row_value(row, "grid_to_bess_price_threshold_yen_per_kwh", "gridToBessPriceThresholdYenPerKwh", 0.0),
-                _row_value(row, "bess_priority_mode", "bessPriorityMode", "pv_self_consumption"),
-                _row_value(row, "bess_terminal_soc_min_kwh", "bessTerminalSocMinKwh", 0.0),
+                f"{_format_float(soc_min)}–{_format_float(soc_max)}",
+                _BESS_TERMINAL_POLICY_VALUE_TO_LABEL[policy],
+                terminal_text,
             )
 
         def _refresh_tree() -> None:
@@ -4896,6 +5247,21 @@ class App:
             min_kwh = _row_value(row, "bess_soc_min_kwh", "bessSocMinKwh", 0.0)
             max_kwh = _row_value(row, "bess_soc_max_kwh", "bessSocMaxKwh", 0.0)
             terminal_kwh = _row_value(row, "bess_terminal_soc_min_kwh", "bessTerminalSocMinKwh", 0.0)
+            terminal_target_kwh = _row_value(
+                row,
+                "bess_terminal_soc_target_kwh",
+                "bessTerminalSocTargetKwh",
+                0.0,
+            )
+            terminal_policy = normalize_bess_terminal_policy(
+                _row_value(
+                    row,
+                    "bess_terminal_soc_policy",
+                    "bessTerminalSocPolicy",
+                    "",
+                ),
+                has_explicit_target=float(terminal_target_kwh or 0.0) > 0.0,
+            )
             bess_initial_soc_kwh_var.set(str(initial_kwh))
             bess_soc_min_kwh_var.set(str(min_kwh))
             bess_soc_max_kwh_var.set(str(max_kwh))
@@ -4925,10 +5291,40 @@ class App:
             bess_priority_mode_var.set(str(_row_value(row, "bess_priority_mode", "bessPriorityMode", "pv_self_consumption") or "pv_self_consumption"))
             bess_terminal_soc_min_kwh_var.set(str(terminal_kwh))
             bess_terminal_soc_min_percent_var.set(str(_row_value(row, "bess_terminal_soc_min_percent", "bessTerminalSocMinPercent", "")) or _soc_percent_from_kwh(terminal_kwh, capacity))
+            bess_terminal_soc_policy_label_var.set(
+                _BESS_TERMINAL_POLICY_VALUE_TO_LABEL[terminal_policy]
+            )
+            bess_terminal_soc_target_kwh_var.set(str(terminal_target_kwh))
+            bess_terminal_soc_target_percent_var.set(
+                (
+                    str(
+                        _row_value(
+                            row,
+                            "bess_terminal_soc_target_percent",
+                            "bessTerminalSocTargetPercent",
+                            "",
+                        )
+                        or _soc_percent_from_kwh(terminal_target_kwh, capacity)
+                    )
+                    if terminal_policy == BESS_TERMINAL_POLICY_FIXED_TARGET
+                    else ""
+                )
+            )
+            bess_terminal_soc_deviation_penalty_var.set(
+                str(
+                    _row_value(
+                        row,
+                        "bess_terminal_soc_deviation_penalty_yen_per_kwh",
+                        "bessTerminalSocDeviationPenaltyYenPerKwh",
+                        20.0,
+                    )
+                )
+            )
             provisional_energy_cost_var.set(str(row.get("provisional_energy_cost_yen_per_kwh", 0.0)))
             pv_dates = list(row.get("pv_profile_dates") or [])
             pv_dates_info_var.set(_format_service_dates_summary(pv_dates))
             pv_slot_count_info_var.set(str(len(row.get("pv_generation_kwh_by_slot") or [])))
+            _refresh_bess_soc_preview()
 
         def _validate_bess_row(row: dict[str, Any]) -> dict[str, Any] | None:
             enabled = bool(_row_value(row, "bess_enabled", "bessEnabled", False))
@@ -4939,6 +5335,16 @@ class App:
                 soc_initial = float(_row_value(row, "bess_initial_soc_kwh", "bessInitialSocKwh", 0.0) or 0.0)
                 soc_max = float(_row_value(row, "bess_soc_max_kwh", "bessSocMaxKwh", 0.0) or 0.0)
                 terminal_min = float(_row_value(row, "bess_terminal_soc_min_kwh", "bessTerminalSocMinKwh", 0.0) or 0.0)
+                terminal_target = float(_row_value(row, "bess_terminal_soc_target_kwh", "bessTerminalSocTargetKwh", 0.0) or 0.0)
+                terminal_penalty = float(
+                    _row_value(
+                        row,
+                        "bess_terminal_soc_deviation_penalty_yen_per_kwh",
+                        "bessTerminalSocDeviationPenaltyYenPerKwh",
+                        20.0,
+                    )
+                    or 0.0
+                )
                 charge_eff = float(_row_value(row, "bess_charge_efficiency", "bessChargeEfficiency", 0.95) or 0.95)
                 discharge_eff = float(_row_value(row, "bess_discharge_efficiency", "bessDischargeEfficiency", 0.95) or 0.95)
                 cycle_cost = float(_row_value(row, "bess_cycle_cost_yen_per_kwh", "bessCycleCostYenPerKwh", 0.0) or 0.0)
@@ -4946,7 +5352,20 @@ class App:
                 messagebox.showwarning("入力エラー", "BESS数値項目は数値で入力してください", parent=win)
                 return None
 
-            if any(value < 0.0 for value in (capacity, power, soc_min, soc_initial, soc_max, terminal_min, cycle_cost)):
+            if any(
+                value < 0.0
+                for value in (
+                    capacity,
+                    power,
+                    soc_min,
+                    soc_initial,
+                    soc_max,
+                    terminal_min,
+                    terminal_target,
+                    terminal_penalty,
+                    cycle_cost,
+                )
+            ):
                 messagebox.showwarning("入力エラー", "BESS数値項目に負値は入力できません", parent=win)
                 return None
 
@@ -4965,7 +5384,7 @@ class App:
                 if soc_initial <= 0.0 and soc_min <= 0.0:
                     soc_initial = capacity * 0.5
                 if terminal_min <= 0.0:
-                    terminal_min = soc_initial
+                    terminal_min = soc_min
                 if not (0.0 <= soc_min <= soc_initial <= soc_max <= capacity):
                     messagebox.showwarning(
                         "入力エラー",
@@ -4976,6 +5395,37 @@ class App:
                 if not (0.0 <= terminal_min <= soc_max):
                     messagebox.showwarning("入力エラー", "終端SOC下限は 0 <= 終端SOC下限 <= 最大SOC にしてください", parent=win)
                     return None
+            try:
+                terminal_policy = normalize_bess_terminal_policy(
+                    _row_value(
+                        row,
+                        "bess_terminal_soc_policy",
+                        "bessTerminalSocPolicy",
+                        "",
+                    ),
+                    has_explicit_target=terminal_target > 0.0,
+                )
+            except ValueError as exc:
+                messagebox.showwarning("入力エラー", str(exc), parent=win)
+                return None
+            if terminal_policy == BESS_TERMINAL_POLICY_MINIMUM_ONLY:
+                terminal_target = 0.0
+            elif terminal_policy == BESS_TERMINAL_POLICY_RETURN_TO_INITIAL:
+                terminal_target = soc_initial
+            elif terminal_target <= 0.0:
+                messagebox.showwarning(
+                    "入力エラー",
+                    "終端SOC目標を指定する場合は、正の目標値を入力してください",
+                    parent=win,
+                )
+                return None
+            if terminal_target > 0.0 and not (terminal_min <= terminal_target <= soc_max):
+                messagebox.showwarning(
+                    "入力エラー",
+                    "終端SOC目標は 終端SOC下限 <= 目標 <= 運用SOC上限 にしてください",
+                    parent=win,
+                )
+                return None
             if not (0.0 < charge_eff <= 1.0):
                 messagebox.showwarning("入力エラー", "BESS充電効率は 0 < 値 <= 1 にしてください", parent=win)
                 return None
@@ -5002,6 +5452,9 @@ class App:
             row["bess_initial_soc_kwh"] = soc_initial
             row["bess_soc_max_kwh"] = soc_max
             row["bess_terminal_soc_min_kwh"] = terminal_min
+            row["bess_terminal_soc_policy"] = terminal_policy
+            row["bess_terminal_soc_target_kwh"] = terminal_target
+            row["bess_terminal_soc_deviation_penalty_yen_per_kwh"] = terminal_penalty
             row["bess_charge_efficiency"] = charge_eff
             row["bess_discharge_efficiency"] = discharge_eff
             row["bess_cycle_cost_yen_per_kwh"] = cycle_cost
@@ -5070,6 +5523,27 @@ class App:
                 bess_terminal_soc_min_kwh_var.get(),
             )
             row["bess_terminal_soc_min_percent"] = self._parse_float(bess_terminal_soc_min_percent_var.get(), 0.0) if bess_terminal_soc_min_percent_var.get().strip() else None
+            row["bess_terminal_soc_policy"] = _BESS_TERMINAL_POLICY_LABELS.get(
+                bess_terminal_soc_policy_label_var.get(),
+                BESS_TERMINAL_POLICY_MINIMUM_ONLY,
+            )
+            row["bess_terminal_soc_target_kwh"] = _soc_kwh_from_percent(
+                bess_terminal_soc_target_percent_var.get(),
+                capacity,
+                bess_terminal_soc_target_kwh_var.get(),
+            )
+            row["bess_terminal_soc_target_percent"] = (
+                self._parse_float(
+                    bess_terminal_soc_target_percent_var.get(),
+                    0.0,
+                )
+                if bess_terminal_soc_target_percent_var.get().strip()
+                else None
+            )
+            row["bess_terminal_soc_deviation_penalty_yen_per_kwh"] = self._parse_float(
+                bess_terminal_soc_deviation_penalty_var.get(),
+                20.0,
+            )
             row["bess_initial_soc_ratio"] = (row["bess_initial_soc_kwh"] / capacity) if capacity > 0.0 else 0.0
             row["bess_soc_min_ratio"] = (row["bess_soc_min_kwh"] / capacity) if capacity > 0.0 else 0.0
             row["bess_soc_max_ratio"] = (row["bess_soc_max_kwh"] / capacity) if capacity > 0.0 else 0.0
@@ -5078,15 +5552,27 @@ class App:
             row = _validate_bess_row(row)
             if row is None:
                 return None
+            row["bess_initial_soc_ratio"] = (row["bess_initial_soc_kwh"] / capacity) if capacity > 0.0 else 0.0
+            row["bess_soc_min_ratio"] = (row["bess_soc_min_kwh"] / capacity) if capacity > 0.0 else 0.0
+            row["bess_soc_max_ratio"] = (row["bess_soc_max_kwh"] / capacity) if capacity > 0.0 else 0.0
+            row["bess_terminal_soc_min_ratio"] = (row["bess_terminal_soc_min_kwh"] / capacity) if capacity > 0.0 else 0.0
+            row["bess_terminal_soc_target_ratio"] = (row["bess_terminal_soc_target_kwh"] / capacity) if capacity > 0.0 else 0.0
+            row["bess_terminal_soc_target_percent"] = row["bess_terminal_soc_target_ratio"] * 100.0
             bess_power_kw_var.set(str(row["bess_power_kw"]))
             bess_initial_soc_kwh_var.set(str(row["bess_initial_soc_kwh"]))
             bess_soc_min_kwh_var.set(str(row["bess_soc_min_kwh"]))
             bess_soc_max_kwh_var.set(str(row["bess_soc_max_kwh"]))
             bess_terminal_soc_min_kwh_var.set(str(row["bess_terminal_soc_min_kwh"]))
+            bess_terminal_soc_target_kwh_var.set(str(row["bess_terminal_soc_target_kwh"]))
             bess_initial_soc_percent_var.set(_soc_percent_from_kwh(row["bess_initial_soc_kwh"], capacity))
             bess_soc_min_percent_var.set(_soc_percent_from_kwh(row["bess_soc_min_kwh"], capacity))
             bess_soc_max_percent_var.set(_soc_percent_from_kwh(row["bess_soc_max_kwh"], capacity))
             bess_terminal_soc_min_percent_var.set(_soc_percent_from_kwh(row["bess_terminal_soc_min_kwh"], capacity))
+            bess_terminal_soc_target_percent_var.set(
+                _soc_percent_from_kwh(row["bess_terminal_soc_target_kwh"], capacity)
+                if row["bess_terminal_soc_target_kwh"] > 0.0
+                else ""
+            )
             bess_charge_efficiency_var.set(str(row["bess_charge_efficiency"]))
             bess_discharge_efficiency_var.set(str(row["bess_discharge_efficiency"]))
             allow_pv_to_bess_var.set(bool(row["allow_pv_to_bess"]))
@@ -5123,6 +5609,14 @@ class App:
             grid_to_bess_allowed_slots_var.set("")
             bess_priority_mode_var.set("pv_self_consumption")
             bess_terminal_soc_min_kwh_var.set("0")
+            bess_terminal_soc_policy_label_var.set(
+                _BESS_TERMINAL_POLICY_VALUE_TO_LABEL[
+                    BESS_TERMINAL_POLICY_MINIMUM_ONLY
+                ]
+            )
+            bess_terminal_soc_target_kwh_var.set("0")
+            bess_terminal_soc_target_percent_var.set("")
+            bess_terminal_soc_deviation_penalty_var.set("20")
             provisional_energy_cost_var.set("0")
             pv_dates_info_var.set("")
             pv_slot_count_info_var.set("0")
@@ -5237,7 +5731,12 @@ class App:
             self.log_line(f"depot_energy_assets を行編集から反映しました: {len(validated_rows)}件")
             win.destroy()
 
-        ttk.Button(footer, text="JSONへ反映して閉じる", command=_apply_to_json).pack(side=tk.RIGHT)
+        ttk.Button(
+            footer,
+            text="設備設定を反映して閉じる",
+            command=_apply_to_json,
+            style="Primary.TButton",
+        ).pack(side=tk.RIGHT)
         ttk.Button(footer, text="キャンセル", command=win.destroy).pack(side=tk.RIGHT, padx=(0, 6))
 
         _refresh_tree()
@@ -9458,8 +9957,8 @@ class App:
 
         win = tk.Toplevel(self.root)
         self.depot_manager_window = win
-        win.title("営業所別充電器管理")
-        win.geometry("1060x820")
+        win.title("営業所設備・充電インフラ")
+        win.geometry("1180x900")
 
         left = ttk.Frame(win, padding=8)
         left.pack(side=tk.LEFT, fill=tk.Y)
@@ -9474,7 +9973,11 @@ class App:
         ops.pack(fill=tk.X, pady=(6, 0))
         ttk.Button(ops, text="再読込", command=lambda: self._load_depot_manager_data(depot_list)).pack(side=tk.LEFT)
 
-        charger_box = ttk.LabelFrame(right, text="営業所充電器設定", padding=8)
+        charger_box = ttk.LabelFrame(
+            right,
+            text="営業所設備（充電器・PV・BESS）",
+            padding=8,
+        )
         charger_box.pack(fill=tk.X)
         self.dm_depot_id_var = tk.StringVar(value="")
         self.dm_depot_name_var = tk.StringVar(value="")
@@ -9493,6 +9996,12 @@ class App:
         self.dm_bess_soc_min_percent_var = tk.StringVar(value="20")
         self.dm_bess_soc_max_percent_var = tk.StringVar(value="90")
         self.dm_bess_terminal_soc_min_percent_var = tk.StringVar(value="20")
+        self.dm_bess_terminal_policy_label_var = tk.StringVar(
+            value=_BESS_TERMINAL_POLICY_VALUE_TO_LABEL[
+                BESS_TERMINAL_POLICY_MINIMUM_ONLY
+            ]
+        )
+        self.dm_bess_terminal_soc_target_percent_var = tk.StringVar(value="")
 
         self._labeled_entry(charger_box, "営業所ID", self.dm_depot_id_var, readonly=True)
         self._labeled_entry(charger_box, "営業所名", self.dm_depot_name_var, readonly=True)
@@ -9514,6 +10023,55 @@ class App:
         self._labeled_entry(charger_box, "BESSバッファ下限 [%]", self.dm_bess_soc_min_percent_var)
         self._labeled_entry(charger_box, "BESSバッファ上限 [%]", self.dm_bess_soc_max_percent_var)
         self._labeled_entry(charger_box, "BESS終端SOC下限 [%]", self.dm_bess_terminal_soc_min_percent_var)
+        terminal_policy_row = ttk.Frame(charger_box)
+        terminal_policy_row.pack(fill=tk.X, pady=2)
+        ttk.Label(terminal_policy_row, text="BESS終端方針", width=36).pack(side=tk.LEFT)
+        ttk.Combobox(
+            terminal_policy_row,
+            textvariable=self.dm_bess_terminal_policy_label_var,
+            values=tuple(_BESS_TERMINAL_POLICY_LABELS),
+            state="readonly",
+            width=28,
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        manager_terminal_target_row = self._labeled_entry(
+            charger_box,
+            "BESS終端SOC目標 [%]（目標指定時のみ）",
+            self.dm_bess_terminal_soc_target_percent_var,
+        )
+        manager_terminal_target_entry = next(
+            child
+            for child in manager_terminal_target_row.winfo_children()
+            if isinstance(child, ttk.Entry)
+        )
+
+        def _refresh_manager_terminal_target_state(*_args: Any) -> None:
+            is_fixed_target = (
+                _BESS_TERMINAL_POLICY_LABELS.get(
+                    self.dm_bess_terminal_policy_label_var.get()
+                )
+                == BESS_TERMINAL_POLICY_FIXED_TARGET
+            )
+            manager_terminal_target_entry.configure(
+                state="normal" if is_fixed_target else "disabled"
+            )
+            if not is_fixed_target:
+                self.dm_bess_terminal_soc_target_percent_var.set("")
+
+        self.dm_bess_terminal_policy_label_var.trace_add(
+            "write",
+            _refresh_manager_terminal_target_state,
+        )
+        _refresh_manager_terminal_target_state()
+        ttk.Label(
+            charger_box,
+            text=(
+                "「運用範囲のみ」では終端SOC下限だけを守ります。初期SOCへ戻す条件は、"
+                "比較実験として必要な場合にだけ選択してください。"
+            ),
+            foreground="#435466",
+            wraplength=720,
+            justify=tk.LEFT,
+        ).pack(fill=tk.X, pady=(4, 2))
         self.dm_depot_area_m2_var.trace_add("write", lambda *_args: self._refresh_depot_manager_pv_preview())
 
         btn_row = ttk.Frame(charger_box)
@@ -9521,6 +10079,11 @@ class App:
         ttk.Button(btn_row, text="保存", command=self._save_depot_charger_settings).pack(side=tk.LEFT)
         ttk.Button(btn_row, text="面積推定値をPV定格へ反映", command=self._apply_depot_manager_estimated_pv_capacity).pack(side=tk.LEFT, padx=(6, 0))
         ttk.Button(btn_row, text="BESS既定値補完", command=self._apply_depot_manager_bess_defaults).pack(side=tk.LEFT, padx=(6, 0))
+        ttk.Button(
+            btn_row,
+            text="電力経路・費用の詳細設定",
+            command=self.open_depot_energy_assets_editor,
+        ).pack(side=tk.LEFT, padx=(6, 0))
 
         ttk.Label(right, text="「車両・テンプレート管理」ボタンで車両管理ウィンドウを開くと連動します。", foreground="#444").pack(anchor="w", pady=(8, 0))
 
@@ -9557,6 +10120,14 @@ class App:
             self.dm_bess_soc_max_percent_var.set("90")
         if hasattr(self, "dm_bess_terminal_soc_min_percent_var"):
             self.dm_bess_terminal_soc_min_percent_var.set("20")
+        if hasattr(self, "dm_bess_terminal_policy_label_var"):
+            self.dm_bess_terminal_policy_label_var.set(
+                _BESS_TERMINAL_POLICY_VALUE_TO_LABEL[
+                    BESS_TERMINAL_POLICY_MINIMUM_ONLY
+                ]
+            )
+        if hasattr(self, "dm_bess_terminal_soc_target_percent_var"):
+            self.dm_bess_terminal_soc_target_percent_var.set("")
 
     def _depot_manager_soc_percent_from_asset(self, row: dict[str, Any], capacity: float, kwh_key: str, percent_key: str, ratio_key: str, default: float) -> str:
         raw_percent = row.get(percent_key)
@@ -9616,6 +10187,39 @@ class App:
         self.dm_bess_soc_min_percent_var.set(self._depot_manager_soc_percent_from_asset(row, capacity, "bess_soc_min_kwh", "bess_soc_min_percent", "bess_soc_min_ratio", 20.0))
         self.dm_bess_soc_max_percent_var.set(self._depot_manager_soc_percent_from_asset(row, capacity, "bess_soc_max_kwh", "bess_soc_max_percent", "bess_soc_max_ratio", 90.0))
         self.dm_bess_terminal_soc_min_percent_var.set(self._depot_manager_soc_percent_from_asset(row, capacity, "bess_terminal_soc_min_kwh", "bess_terminal_soc_min_percent", "bess_terminal_soc_min_ratio", 20.0))
+        terminal_target_percent = self._depot_manager_soc_percent_from_asset(
+            row,
+            capacity,
+            "bess_terminal_soc_target_kwh",
+            "bess_terminal_soc_target_percent",
+            "bess_terminal_soc_target_ratio",
+            0.0,
+        )
+        terminal_target_kwh = self._parse_float(
+            str(
+                row.get(
+                    "bess_terminal_soc_target_kwh",
+                    row.get("bessTerminalSocTargetKwh", 0.0),
+                )
+                or 0.0
+            ),
+            0.0,
+        )
+        terminal_policy = normalize_bess_terminal_policy(
+            row.get(
+                "bess_terminal_soc_policy",
+                row.get("bessTerminalSocPolicy", ""),
+            ),
+            has_explicit_target=terminal_target_kwh > 0.0,
+        )
+        self.dm_bess_terminal_policy_label_var.set(
+            _BESS_TERMINAL_POLICY_VALUE_TO_LABEL[terminal_policy]
+        )
+        self.dm_bess_terminal_soc_target_percent_var.set(
+            terminal_target_percent
+            if terminal_policy == BESS_TERMINAL_POLICY_FIXED_TARGET
+            else ""
+        )
 
     def _sync_depot_manager_energy_asset_row(self, depot_id: str) -> bool:
         try:
@@ -9642,6 +10246,10 @@ class App:
         soc_min_kwh, soc_min_ratio = soc_min
         soc_max_kwh, soc_max_ratio = soc_max
         terminal_soc_min_kwh, terminal_soc_min_ratio = terminal_soc_min
+        terminal_policy = _BESS_TERMINAL_POLICY_LABELS.get(
+            self.dm_bess_terminal_policy_label_var.get(),
+            BESS_TERMINAL_POLICY_MINIMUM_ONLY,
+        )
         if bess_enabled and not (0.0 <= soc_min_ratio < soc_max_ratio <= 1.0):
             messagebox.showwarning("入力エラー", "BESSバッファは 0 <= 下限 < 上限 <= 100% を満たしてください")
             return False
@@ -9651,6 +10259,30 @@ class App:
         if bess_enabled and not (0.0 <= terminal_soc_min_ratio <= soc_max_ratio):
             messagebox.showwarning("入力エラー", "BESS終端SOC下限は 0〜バッファ上限[%] の範囲にしてください")
             return False
+        terminal_soc_target_kwh = 0.0
+        terminal_soc_target_ratio = 0.0
+        if bess_enabled and terminal_policy == BESS_TERMINAL_POLICY_RETURN_TO_INITIAL:
+            terminal_soc_target_kwh = initial_soc_kwh
+            terminal_soc_target_ratio = initial_soc_ratio
+        elif bess_enabled and terminal_policy == BESS_TERMINAL_POLICY_FIXED_TARGET:
+            terminal_target = self._depot_manager_bess_soc_kwh_from_percent(
+                self.dm_bess_terminal_soc_target_percent_var.get(),
+                bess_energy_kwh,
+                "BESS終端SOC目標[%]",
+            )
+            if terminal_target is None:
+                return False
+            terminal_soc_target_kwh, terminal_soc_target_ratio = terminal_target
+            if not (
+                terminal_soc_min_ratio
+                <= terminal_soc_target_ratio
+                <= soc_max_ratio
+            ):
+                messagebox.showwarning(
+                    "入力エラー",
+                    "BESS終端SOC目標は、終端SOC下限〜バッファ上限の範囲にしてください",
+                )
+                return False
 
         target_idx = None
         for idx, item in enumerate(rows):
@@ -9678,14 +10310,18 @@ class App:
             row["bess_soc_min_kwh"] = soc_min_kwh
             row["bess_soc_max_kwh"] = soc_max_kwh
             row["bess_terminal_soc_min_kwh"] = terminal_soc_min_kwh
+            row["bess_terminal_soc_policy"] = terminal_policy
+            row["bess_terminal_soc_target_kwh"] = terminal_soc_target_kwh
             row["bess_initial_soc_percent"] = initial_soc_ratio * 100.0
             row["bess_soc_min_percent"] = soc_min_ratio * 100.0
             row["bess_soc_max_percent"] = soc_max_ratio * 100.0
             row["bess_terminal_soc_min_percent"] = terminal_soc_min_ratio * 100.0
+            row["bess_terminal_soc_target_percent"] = terminal_soc_target_ratio * 100.0
             row["bess_initial_soc_ratio"] = initial_soc_ratio
             row["bess_soc_min_ratio"] = soc_min_ratio
             row["bess_soc_max_ratio"] = soc_max_ratio
             row["bess_terminal_soc_min_ratio"] = terminal_soc_min_ratio
+            row["bess_terminal_soc_target_ratio"] = terminal_soc_target_ratio
             row.setdefault("bess_charge_efficiency", 0.95)
             row.setdefault("bess_discharge_efficiency", 0.95)
             row.setdefault("bess_priority_mode", "pv_self_consumption")
@@ -9694,10 +10330,14 @@ class App:
             row["bess_soc_min_kwh"] = 0.0
             row["bess_soc_max_kwh"] = 0.0
             row["bess_terminal_soc_min_kwh"] = 0.0
+            row["bess_terminal_soc_policy"] = BESS_TERMINAL_POLICY_MINIMUM_ONLY
+            row["bess_terminal_soc_target_kwh"] = 0.0
             row["bess_initial_soc_ratio"] = 0.0
             row["bess_soc_min_ratio"] = 0.0
             row["bess_soc_max_ratio"] = 0.0
             row["bess_terminal_soc_min_ratio"] = 0.0
+            row["bess_terminal_soc_target_ratio"] = 0.0
+            row["bess_terminal_soc_target_percent"] = 0.0
         row = _rebuild_pv_generation_for_row(row)
         if target_idx is None:
             rows.append(row)

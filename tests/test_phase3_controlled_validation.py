@@ -12,6 +12,7 @@ from src.optimization.common.initial_soc_policy import (
 from src.optimization.common.problem import (
     CanonicalOptimizationProblem,
     ChargerDefinition,
+    DepotEnergyAsset,
     EnergyPriceSlot,
     OptimizationScenario,
     ProblemTrip,
@@ -25,6 +26,7 @@ from src.gurobi_runtime import is_gurobi_available
 from src.optimization.milp.solver_adapter import (
     GurobiMILPAdapter,
     StartupEnergyPrecheck,
+    _transition_slot_ending_at_event,
 )
 from src.optimization.milp.solver_adapter import _vehicle_soc_transition_kwh
 from src.optimization.common.soc_helpers import (
@@ -39,7 +41,10 @@ from scripts.run_research_phase3_minimal import (
     _mip_gap_percent,
     _resolve_expected_service_date,
 )
-from scripts.run_research_phase3_frontend_weather import _resolve_initial_soc_policy
+from scripts.run_research_phase3_frontend_weather import (
+    _apply_bev_availability_sensitivity,
+    _resolve_initial_soc_policy,
+)
 
 
 def test_uniform_initial_soc_policy_overrides_only_electric_vehicles() -> None:
@@ -612,20 +617,30 @@ def test_stage1_time_indexed_soc_relaxation_blocks_early_soc_shortage() -> None:
         trip_by_id=problem.trip_by_id(),
         vehicles=problem.vehicles,
         assignment_trip_ids_by_vehicle={"bev": ["first", "second"]},
+        startup_energy_precheck_by_assignment={},
         y=y,
+        x={},
+        start_arc={},
+        end_arc={},
         used_vehicle=used_vehicle,
     )
     model.optimize()
 
     assert constraint_count > 0
-    assert model.getConstrByName("stage1_soc_relax_initial__bev") is not None
-    assert model.getConstrByName("stage1_soc_relax_lower__bev__slot_2") is not None
+    assert (
+        model.getConstrByName("stage1_soc_relax_cumulative__bev__slot_2")
+        is not None
+    )
+    assert (
+        model.getConstrByName("stage1_soc_relax_cumulative_terminal__bev")
+        is not None
+    )
     assert model.Status == gp.GRB.INFEASIBLE
 
 
 @pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
-def test_stage1_time_indexed_soc_relaxation_keeps_off_depot_charge_optimistic() -> None:
-    """The Stage-1 relaxation must not impose the Stage-2 depot restriction."""
+def test_stage1_time_indexed_soc_relaxation_blocks_off_depot_charge() -> None:
+    """Stage 1 must not invent charging while a selected path is away."""
     import gurobipy as gp
 
     adapter = GurobiMILPAdapter()
@@ -690,12 +705,16 @@ def test_stage1_time_indexed_soc_relaxation_keeps_off_depot_charge_optimistic() 
         trip_by_id=problem.trip_by_id(),
         vehicles=problem.vehicles,
         assignment_trip_ids_by_vehicle={"bev": ["first", "second"]},
+        startup_energy_precheck_by_assignment={},
         y=y,
+        x={},
+        start_arc={},
+        end_arc={},
         used_vehicle=used_vehicle,
     )
     model.optimize()
 
-    assert model.Status == gp.GRB.OPTIMAL
+    assert model.Status == gp.GRB.INFEASIBLE
 
 
 def test_home_depot_windows_use_service_day_minutes_after_midnight() -> None:
@@ -939,6 +958,147 @@ def test_frontend_weather_runner_requires_explicit_soc_input_source() -> None:
     ) is InitialSocPolicy.UNIFORM_SCENARIO_VALUE
     with pytest.raises(ValueError, match="initial_soc_policy"):
         _resolve_initial_soc_policy({"simulation_config": {}})
+
+
+def test_bev_availability_sensitivity_keeps_highest_soc_without_mutating_inventory_size() -> None:
+    scenario = {
+        "vehicles": [
+            {"id": "bev-low", "type": "BEV", "enabled": True, "initialSoc": 0.3},
+            {"id": "bev-high", "type": "BEV", "enabled": True, "initialSoc": 0.8},
+            {"id": "bev-mid", "type": "BEV", "enabled": True, "initialSoc": 0.5},
+            {"id": "ice", "type": "ICE", "enabled": True},
+        ]
+    }
+
+    audit = _apply_bev_availability_sensitivity(scenario, 2)
+
+    vehicles = {vehicle["id"]: vehicle for vehicle in scenario["vehicles"]}
+    assert len(vehicles) == 4
+    assert vehicles["bev-high"]["available"] is True
+    assert vehicles["bev-mid"]["available"] is True
+    assert vehicles["bev-low"]["available"] is False
+    assert vehicles["ice"]["enabled"] is True
+    assert audit["effective_available_bev_count"] == 2
+    assert audit["selected_available_bev_ids"] == ["bev-high", "bev-mid"]
+    assert audit["persisted_scenario_modified"] is False
+
+
+def test_bev_availability_sensitivity_rejects_count_above_persisted_availability() -> None:
+    scenario = {
+        "vehicles": [
+            {"id": "bev", "type": "BEV", "enabled": True, "initialSoc": 0.8},
+            {"id": "bev-disabled", "type": "BEV", "enabled": False, "initialSoc": 0.9},
+        ]
+    }
+
+    with pytest.raises(ValueError, match=r"persisted available BEV count \(1\)"):
+        _apply_bev_availability_sensitivity(scenario, 2)
+
+
+def test_return_deadhead_is_posted_to_transition_ending_at_return_slot() -> None:
+    assert _transition_slot_ending_at_event((0, 1, 2, 3), 3) == 2
+    assert _transition_slot_ending_at_event((0, 1, 2, 3), 0) is None
+    assert _transition_slot_ending_at_event((0, 1, 2, 3), 4) is None
+
+
+@pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
+@pytest.mark.parametrize(
+    ("pv_available_kwh", "expected_grid_kwh", "expected_objective_jpy"),
+    (
+        (100.0, 0.0, 0.0),
+        (10.0, (30.0 / 0.95) - 10.0, ((30.0 / 0.95) - 10.0) * 18.0),
+    ),
+)
+def test_stage1_energy_cost_proxy_prices_zero_cost_pv_before_grid(
+    pv_available_kwh: float,
+    expected_grid_kwh: float,
+    expected_objective_jpy: float,
+) -> None:
+    """The Stage-1 assignment proxy must react to configured PV availability."""
+    import gurobipy as gp
+
+    adapter = GurobiMILPAdapter()
+    vehicle = ProblemVehicle(
+        vehicle_id="bev",
+        vehicle_type="BEV",
+        home_depot_id="depot",
+        initial_soc=0.5,
+        battery_capacity_kwh=100.0,
+        reserve_soc=0.2,
+        energy_consumption_kwh_per_km=1.0,
+    )
+    trip = ProblemTrip(
+        trip_id="trip",
+        route_id="r",
+        origin="depot",
+        destination="remote",
+        departure_min=6 * 60,
+        arrival_min=7 * 60,
+        distance_km=60.0,
+        allowed_vehicle_types=("BEV",),
+    )
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="stage1-energy-cost-proxy",
+            timestep_min=60,
+            horizon_start="05:00",
+            horizon_end="08:00",
+        ),
+        dispatch_context=_DispatchContext(),
+        trips=(trip,),
+        vehicles=(vehicle,),
+        price_slots=tuple(
+            EnergyPriceSlot(slot_index=index, grid_buy_yen_per_kwh=18.0)
+            for index in range(3)
+        ),
+        depot_energy_assets={
+            "depot": DepotEnergyAsset(
+                depot_id="depot",
+                pv_enabled=True,
+                pv_generation_kwh_by_slot=(pv_available_kwh, 0.0, 0.0),
+            )
+        },
+    )
+    model = gp.Model("stage1_energy_cost_proxy")
+    model.Params.OutputFlag = 0
+    y = {
+        ("bev", "trip"): model.addVar(
+            vtype=gp.GRB.BINARY,
+            lb=1.0,
+            ub=1.0,
+        )
+    }
+    used_vehicle = {
+        "bev": model.addVar(vtype=gp.GRB.BINARY, lb=1.0, ub=1.0)
+    }
+
+    proxy = adapter._add_stage1_energy_cost_proxy(
+        model,
+        gp=gp,
+        grb=gp.GRB,
+        problem=problem,
+        trip_by_id=problem.trip_by_id(),
+        vehicles=problem.vehicles,
+        assignment_trip_ids_by_vehicle={"bev": ["trip"]},
+        startup_energy_precheck_by_assignment={},
+        y=y,
+        x={},
+        start_arc={},
+        end_arc={},
+        used_vehicle=used_vehicle,
+        component_flags={"electricity_cost": True, "co2_cost": False},
+    )
+    model.setObjective(proxy.objective_expression, gp.GRB.MINIMIZE)
+    model.optimize()
+    result = adapter._stage1_energy_cost_proxy_result(proxy)
+
+    assert model.Status == gp.GRB.OPTIMAL
+    assert result["external_charge_input_kwh"] == pytest.approx(30.0 / 0.95)
+    assert result["pv_to_bus_kwh"] == pytest.approx(
+        min(pv_available_kwh, 30.0 / 0.95)
+    )
+    assert result["grid_to_bus_kwh"] == pytest.approx(expected_grid_kwh)
+    assert result["objective_jpy"] == pytest.approx(expected_objective_jpy)
 
 
 def test_nonfinite_objective_is_null_not_zero() -> None:

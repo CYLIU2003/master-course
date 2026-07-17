@@ -239,6 +239,7 @@ def test_result_serializer_includes_depot_energy_flow_maps() -> None:
         grid_to_bess_kwh_by_depot_slot={"dep-1": {1: 4.0}},
         pv_curtail_kwh_by_depot_slot={"dep-1": {1: 0.5}},
         bess_soc_kwh_by_depot_slot={"dep-1": {0: 20.0, 1: 18.0}},
+        vehicle_soc_kwh_by_vehicle_slot={"veh-1": {0: 220.0, 1: 205.0}},
         contract_over_limit_kwh_by_depot_slot={"dep-1": {1: 0.75}},
     )
     result = OptimizationEngineResult(
@@ -260,4 +261,5 @@ def test_result_serializer_includes_depot_energy_flow_maps() -> None:
     assert payload["grid_to_bess_kwh_by_depot_slot"]["dep-1"][1] == 4.0
     assert payload["pv_curtail_kwh_by_depot_slot"]["dep-1"][1] == 0.5
     assert payload["bess_soc_kwh_by_depot_slot"]["dep-1"][1] == 18.0
+    assert payload["vehicle_soc_kwh_by_vehicle_slot"]["veh-1"][1] == 205.0
     assert payload["contract_over_limit_kwh_by_depot_slot"]["dep-1"][1] == 0.75
