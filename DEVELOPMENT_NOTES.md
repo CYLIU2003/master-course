@@ -12,6 +12,7 @@
 - 対象回帰`85 passed`、全回帰`733 passed`。詳細、修正の意味、診断run、次の優先作業は`docs/notes/DEVELOPMENT_NOTES.md`の2026-07-18追補を正本とする。次はclean・固定inputの15分正式baseline、その後に24回の毎正時更新を完走する。
 - 正式baseline runnerは候補接続上限`0`を「削減なし」として固定できるようにし、この値をexperiment hashへ含めた。最終planの会計を再評価して全費用項目の残差`1e-6円`以下を受理条件へ追加し、clean commit、264便、違反0、fallback/repairなし、候補削減0をまとめて確認する`verify_research_phase3_baseline.py`を追加した。固定prepared SHAは`5f133b1dddabd7295a5e60e429ad008d966c690e70e19c2bcb6327d288094913`である。
 - コミット前レビューで、候補接続を削ったMILPにも`Exact core solver`・main benchmark対象と表示するP1を検出した。削減ありはappendix又は感度分析用、削減なしだけをfull-network main benchmark候補とするようmetadataを統一した。
+- `core_new` commit`1b5deeb`、固定prepared SHA、15分、候補接続678,600本・削減0で正式baselineを実行した。264/264便、Stage 2 optimal、独立検証違反0、fallback/repairなし、clean worktreeを確認した。会計総額707,747.004円を最終planから再評価し、全16費用項目の最大残差0円だった。Stage 1はtime limit、gap 12.582%のため最適解とは呼ばない。検証器は全14項目passし、成果物は`output/research_phase3_grid_only_15min_formal_20260718_full_network`に保存した。
 
 ## 2026-07-17 不可行KPI gate・MILP厳密性表示・文献基準レビュー
 

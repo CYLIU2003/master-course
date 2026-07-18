@@ -125,6 +125,7 @@ flowchart LR
 <details>
 <summary><strong>更新メモ</strong></summary>
 
+- 2026-07-18: `core_new` commit`1b5deeb`のclean worktree、固定prepared SHA、15分、候補接続削減なしでgrid-only正式baselineを実行した。264/264便、Stage 2 optimal、独立違反0、fallback/postsolve repairなし、会計再計算残差0円を確認し、正式検証14項目をすべて通過した。Stage 1はtime limit・gap 12.582%のため最適解とは扱わない。成果物は`output/research_phase3_grid_only_15min_formal_20260718_full_network`。
 - 2026-07-18: 15分grid-only正式baseline runnerで候補接続上限`0`（削減なし）を明示できるようにし、prepared input SHA、候補上限、input hash、commitを実験識別子へ固定した。最終planの費用を再評価して会計残差`1e-6円`以下を受理条件とし、264/264便、独立違反0、fallback/postsolve repairなし、候補削減0、clean commitを`scripts/verify_research_phase3_baseline.py`で一括検査する。
 - 2026-07-17: canonical結果が不可行・fallback・postsolve不成立の場合、`summary.json`、root/graph `kpi_summary.json`、充電集計、site power balance、`results.xlsx`、experiment reportの費用・物理フロー・CO₂ KPIを正常な0値として扱わず、canonicalの担当/未担当便数、`result_status`、`failure_stage`、`research_kpi_eligible=false`を優先する結果妥当性gateを追加した。生のsolver成果物とledgerは原因診断用に保持する。successor pruningで候補arcを実際に削除したMILPは`supports_exact_milp=false`とし、縮約ネットワーク上の解を元候補網の大域厳密解と呼ばない。再現可能な監査・可視化は`scripts/audit_core_new_review_20260717.py`、厳格レビューは`docs/reviews/core_new_strict_review_20260717.md`を参照する。
 - 2026-07-16: 営業所設備画面で定置型BESSの終端方針を`運用範囲のみ` / `初期SOCへ戻す目標` / `終端SOC目標を指定`から選択できるようにした。SOC上下限と終端下限は全方針でhard constraintのまま保持する。フロントの主要入口を営業所設備・車両・solver条件の設定ハブへ集約し、画面トークンと構成判断を`DESIGN.md`へ明文化した。日次Phase 3割当を固定した1時間再最適化は、EV/BESS SOCと既発生需要ピークを次時刻へ自動継承できる。長時間計算の手動受理手順は`docs/notes/phase3_manual_validation_runbook_20260716.md`を参照する。

@@ -65,6 +65,16 @@
 - コミット前レビューで、候補接続を削ったMILPにも`eligible_for_main_benchmark=true`と`Exact core solver`が残るP1表示矛盾を検出した。`supports_exact_milp=false`のMILPはmain benchmark対象外、appendix又は感度分析用とし、candidate generationも`successor_pruned_branch_and_cut`と表示する。全候補を保持した場合だけ`full_network_branch_and_cut`としてmain benchmark候補にする。
 - build-onlyで上記固定入力をmaterializeし、`milp_max_successors_per_trip=null`（無制限）、prepared SHA、trip/vehicle/charger/initial SOC hashを確認した。正式solver runはcore_newへコミット後のclean worktreeで実行し、結果は次の追補へ記録する。
 
+### 追補：正式15分baselineの受理結果
+
+- `core_new` commit`1b5deeb31fcaddeffea4b78caf59655b6df2a603`のclean worktreeから、`MC_OUTPUTS_DIR=C:\master-course\output`を明示し、固定prepared inputを使って15分grid-only baselineを実行した。成果物は`C:\master-course\output\research_phase3_grid_only_15min_formal_20260718_full_network`、experiment hashは`86dca0a3c94d9e86366ea467e04e25d28095931beff99a5d2f071e2f21c0d4de`である。
+- 候補接続は678,600本をすべて保持し、削減0本、`supports_exact_milp=true`、`git_dirty=false`となった。Stage 1は750.265秒でtime limit、有効な全便割当を取得した。目的値640,597.893円相当、best bound 560,000円相当、gap 12.582%で、要求gap 10%には届いていない。そのため、この結果を「最適解」又は「総費用の大域最小解」とは呼ばない。
+- Stage 2は0.265秒でoptimalとなり、264/264便、未担当0、重複0、時間重複0、接続違反0、EV SOC上下限違反0、BESS違反0、受電上限違反0、充電器同時使用違反0、最大fragment数1を確認した。使用車両は32台で、`vehicle_schedule.csv`は264行・重複しない264便である。
+- `fallback_applied=false`、`postsolve_assignment_rebuilt=false`、`postsolve_charging_recomputed=false`、SOC repairなし、機会充電top-upなしであり、solver解を別の計画へ差し替えていない。研究可行性gateは`research_run_accepted=true`、`research_feasibility_eligible=true`で受理された。
+- 最終planの会計総額は707,747.004円である。最終planをもう一度評価した結果、電力量料金、燃料費、需要料金、車両費、運転手費、各追加費用、総費用の全16項目で残差0円となり、許容値`1e-6円`を満たした。ただしPhase 3はStage 1とStage 2を一つの会計総費用で同時最小化していないため、`research_cost_kpi_eligible=false`であり、この金額を大域最小費用とは扱わない。
+- `scripts/verify_research_phase3_baseline.py`による確認は14項目すべてpassし、failed checkは0件だった。証拠は`formal_baseline_verification.json`、`summary.json`、`solver_result.json`、`controlled_model_validation_input.json`、`research_run_manifest.json`、`vehicle_schedule.csv`に固定した。
+- 次の感度分析は、この正式baselineと同じprepared SHA、15分刻み、初期SOC、設備、単価、seed、time limitを維持する。独立変数は、(1) successor上限8/16/32/無制限、(2) 晴天/雨天のPV時系列、(3) 毎正時のPV予測誤差0%・±10%・±20%とする。まずsuccessor感度で計算量と割当差を確認し、その後に同一候補設定で晴雨、最後に24回連鎖上で予測誤差を評価する。
+
 ---
 
 ## 2026-07-17 — Result-validity gate and strict core_new review
