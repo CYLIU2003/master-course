@@ -152,7 +152,8 @@ def _summary(
         "stage1_energy_envelope_semantics": "optimistic_vehicle_local",
         "stage1_time_indexed_soc_relaxation_constraint_count": 200,
         "stage1_time_indexed_soc_relaxation_semantics": (
-            "optimistic_cumulative_home_depot_energy_necessary_condition"
+            "location_aware_cumulative_soc_with_single_vehicle_slot_"
+            "charge_cap_necessary_condition"
         ),
         "stage1_energy_cost_proxy_configuration": {
             "enabled": True,

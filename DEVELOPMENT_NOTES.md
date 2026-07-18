@@ -4,6 +4,25 @@
 
 既存の研究実験ログは `docs/notes/DEVELOPMENT_NOTES.md` に残し、このファイルでは現在の編集判断、検証結果、残課題を短く追記します。
 
+## 2026-07-18 不足点の確認とPhase 3モデルの初回修正
+
+- 画面からの実行経路をBFF→ProblemBuilder→OptimizationEngine→Gurobi Stage 1→Stage 2まで確認し、画面実行でStage 2診断保存先が渡らない問題、Stage 2の候補接続削減情報に関する未定義変数、Stage 1が同じ車両・同じ時間枠の充電を重複して見込む問題、実行可能解を厳密性不足だけで`NO_VALID_INCUMBENT`へ書き換える問題を修正した。
+- Stage 1の充電候補は、選択された車両経路に対応する出庫前・営業所待機中・帰庫後だけに限定し、1台・1時間枠につき最大1回分とした。充電器全体の競合、受電上限、PV・BESS、実充電量はStage 2で確認する。運行接続条件、時刻表、`operator_id`、距離、Stage 2の物理制約は変更していない。
+- 最初の重複防止案は264便・15分ケースで追加制約155,575件となったため不採用とし、経路に対応する充電候補へ集約して6,755件まで削減した。30秒診断は264/264便、Stage 2 optimal、独立検証違反0、表示`feasible`。ただし候補接続削減あり・dirty worktreeのため研究受理不可であり、正式結果には使わない。
+- 対象回帰`85 passed`、全回帰`733 passed`。詳細、修正の意味、診断run、次の優先作業は`docs/notes/DEVELOPMENT_NOTES.md`の2026-07-18追補を正本とする。次はclean・固定inputの15分正式baseline、その後に24回の毎正時更新を完走する。
+- 正式baseline runnerは候補接続上限`0`を「削減なし」として固定できるようにし、この値をexperiment hashへ含めた。最終planの会計を再評価して全費用項目の残差`1e-6円`以下を受理条件へ追加し、clean commit、264便、違反0、fallback/repairなし、候補削減0をまとめて確認する`verify_research_phase3_baseline.py`を追加した。固定prepared SHAは`5f133b1dddabd7295a5e60e429ad008d966c690e70e19c2bcb6327d288094913`である。
+- コミット前レビューで、候補接続を削ったMILPにも`Exact core solver`・main benchmark対象と表示するP1を検出した。削減ありはappendix又は感度分析用、削減なしだけをfull-network main benchmark候補とするようmetadataを統一した。
+
+## 2026-07-17 不可行KPI gate・MILP厳密性表示・文献基準レビュー
+
+- actual BFF経路`POST /scenarios/{scenario_id}/run-optimization`からcanonical solver、rich output、reporting finalizerまでを追跡した。2026-07-17の2 runはcanonicalで`infeasible`かつ未担当264便だった一方、旧`summary.json`/`kpi_summary.json`が未担当0便・総費用0円・会計一致trueを表示していた。
+- canonical結果が検証済み可行でない場合、研究評価用の費用・電力フロー・CO₂・SOC集計を`null`へ無効化するgateをBFF保存前とreporting再構築後の双方へ追加した。canonicalの担当/未担当便数、`result_status`、`failure_stage`、`research_kpi_eligible=false`を同期し、生ledgerは原因診断用に変更しない。
+- `site_power_balance.csv`等で`null`が`float(value or 0)`により0へ戻る二次漏れも修正した。backfill時の`results.xlsx`は評価セルを空欄化してstatus sheetを追加し、既存`experiment_report.md`にはINVALID警告を付ける。baseline fallbackを数値KPIとして期待していた回帰テストは、新契約（生ledger保持・公開KPI無効化）へ更新した。
+- successor pruningで候補arcを削除したrunにも`supports_exact_milp=true`を返していたP1を修正した。`pruned_arc_count > 0`ならfalseとし、「縮約ネットワーク上のGurobi解」と「元候補網の大域厳密解」を区別する。
+- 文献PDFの該当ページを直接確認し、No42の15分充電/競合、No55の15–60分平均ピーク需要料金、No16のPV・負荷予測誤差5/10/15/20% Monte Carloを評価軸にした。再生成スクリプトは`scripts/audit_core_new_review_20260717.py`、成果物は`output/core_new_review_20260717`、レビュー本文は`docs/reviews/core_new_strict_review_20260717.md`。
+- 15分grid-only clean baselineは264/264便・Stage 2 optimal・違反0だがStage 1 gap 45.69%、60分晴雨PV/BESS runは264/264便だがdirtyかつgap 13.11/12.94%である。前者は物理可行性、後者は暫定的な機序確認としてのみ扱い、正式な15分晴雨費用比較とは呼ばない。
+- 検証は`python -m pytest -q --ignore=test_multiday_phase1.py`で`730 passed`。変更対象Pythonファイルの`py_compile`、`git diff --check`、不可行run複製に対するJSON/CSV/Excel gate再構築を確認した。除外testはlocalhost BFFを必要とする手動E2Eである。
+
 ## 2026-07-16 BESS終端条件の整理と「日次計画→毎時充電再最適化」
 
 - BESS終端条件を明示的な3方針へ分離した。`minimum_only`は通常SOC上下限と終端SOC下限だけをhard constraintとして守り、`return_to_initial`は終端を初期SOCへ一致、`fixed_target`は指定値へ一致させる。旧scenarioは、正の終端目標があれば`fixed_target`、なければ`minimum_only`として再現する。方針解決はcore共通関数へ集約し、builder、MILP、独立feasibility、会計・BFF出力が同じ意味を使う。Phase 3 Stage 2は従来から目標をhard制約としていたが、統合MILP側は偏差penaltyだけだったため、選択方針どおり目標±許容幅のhard制約へ修正した。この点は統合MILPの数学的意味を変えるため、旧Phase 4成果物との費用比較を無効にする一方、現行Phase 3成果物の比較条件は変えない。

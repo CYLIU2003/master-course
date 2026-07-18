@@ -162,7 +162,8 @@ def test_research_phase3_accepts_feasibility_but_not_a_global_cost_claim() -> No
                 ),
                 "stage1_time_indexed_soc_relaxation_constraint_count": 123,
                 "stage1_time_indexed_soc_relaxation_semantics": (
-                    "optimistic_cumulative_home_depot_energy_necessary_condition"
+                    "location_aware_cumulative_soc_with_single_vehicle_slot_"
+                    "charge_cap_necessary_condition"
                 ),
                 "stage1_energy_cost_proxy_configuration": {
                     "enabled": True,
@@ -213,7 +214,8 @@ def test_research_phase3_accepts_feasibility_but_not_a_global_cost_claim() -> No
         "stage1_time_indexed_soc_relaxation_constraint_count"
     ] == 123
     assert result.solver_metadata["stage1_time_indexed_soc_relaxation_semantics"] == (
-        "optimistic_cumulative_home_depot_energy_necessary_condition"
+        "location_aware_cumulative_soc_with_single_vehicle_slot_"
+        "charge_cap_necessary_condition"
     )
     assert result.solver_metadata["stage1_energy_cost_proxy_configuration"] == {
         "enabled": True,
@@ -226,6 +228,60 @@ def test_research_phase3_accepts_feasibility_but_not_a_global_cost_claim() -> No
         "grid_to_bus_kwh": 10.0
     }
     assert "objective_is_actual_cost" not in result.solver_metadata["research_acceptance_checks"]
+
+
+def test_research_rejection_preserves_a_real_feasible_incumbent_status() -> None:
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="s-research-pruned-network",
+            timestep_min=60,
+        ),
+        dispatch_context=None,
+        trips=(),
+        vehicles=(),
+    )
+    fake_result = OptimizationEngineResult(
+        mode=OptimizationMode.MILP,
+        solver_status="time_limit",
+        objective_value=0.0,
+        plan=AssignmentPlan(
+            metadata={
+                "source_provenance_exact": True,
+                "vehicle_source_provenance_exact": True,
+            }
+        ),
+        feasible=True,
+        cost_breakdown={"objective_value": 0.0, "total_cost": 0.0},
+        solver_metadata={
+            "supports_exact_milp": False,
+            "supports_two_stage_milp": True,
+            "has_feasible_incumbent": True,
+            "requested_phase_token": "phase3_two_stage",
+            "requested_phase": "phase3_two_stage",
+            "resolved_phase": "phase3_two_stage",
+            "executed_phase": "phase3_two_stage",
+        },
+    )
+    engine = OptimizationEngine()
+    engine._milp = _FakeMILPOptimizer(fake_result)
+
+    result = engine.solve(
+        problem,
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            phase="phase3_two_stage",
+            research_run=True,
+        ),
+    )
+
+    assert result.feasible is True
+    assert result.solver_status == "time_limit"
+    assert result.solver_metadata["research_run_accepted"] is False
+    assert result.solver_metadata["research_cost_kpi_eligible"] is False
+    assert result.solver_metadata["result_class"] == "feasible_research_ineligible"
+    assert result.solver_metadata["termination_reason"] == (
+        "feasible_incumbent_research_acceptance_failed"
+    )
 
 
 def test_research_phase3_rejects_disconnected_vehicle_fragments() -> None:

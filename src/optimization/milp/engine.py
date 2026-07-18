@@ -296,13 +296,28 @@ class MILPOptimizer:
                         False,
                     )
                 ),
-                **solver_benchmark_eligibility(
-                    OptimizationMode.MILP,
-                    solver_maturity="core",
-                    true_solver_family="milp",
-                    solver_display_name="MILP",
+                **(
+                    solver_benchmark_eligibility(
+                        OptimizationMode.MILP,
+                        solver_maturity="core",
+                        true_solver_family="milp",
+                        solver_display_name="MILP",
+                    )
+                    if outcome.supports_exact_milp
+                    else {
+                        "eligible_for_main_benchmark": False,
+                        "eligible_for_appendix_benchmark": True,
+                        "comparison_note": (
+                            "Successor-pruned reduced-network MILP; appendix "
+                            "or sensitivity analysis only."
+                        ),
+                    }
                 ),
-                "candidate_generation_mode": "exact_branch_and_cut",
+                "candidate_generation_mode": (
+                    "full_network_branch_and_cut"
+                    if outcome.supports_exact_milp
+                    else "successor_pruned_branch_and_cut"
+                ),
                 "evaluation_mode": problem.scenario.objective_mode,
                 "has_feasible_incumbent": outcome.has_feasible_incumbent,
                 "incumbent_count": outcome.incumbent_count,

@@ -164,6 +164,25 @@ def _transition_slot_ending_at_event(
     return ordered[position - 1] if position > 0 else None
 
 
+def _supports_full_candidate_network_exact_milp(
+    arc_pruning_summary: Mapping[str, Any],
+) -> bool:
+    """Return whether the MILP retained the complete feasible arc network.
+
+    Gurobi can solve the constructed model exactly while that model is still a
+    successor-pruned approximation of the original candidate network.  The
+    public ``supports_exact_milp`` flag describes the latter, stronger claim.
+    """
+
+    if "pruned_arc_count" not in arc_pruning_summary:
+        return False
+    try:
+        pruned_arc_count = int(arc_pruning_summary.get("pruned_arc_count") or 0)
+    except (TypeError, ValueError):
+        return False
+    return pruned_arc_count == 0
+
+
 @dataclass(frozen=True)
 class MILPSolverOutcome:
     solver_status: str
@@ -2209,7 +2228,9 @@ class GurobiMILPAdapter:
                 MILPSolverOutcome(
                     solver_status=reported_status,
                     used_backend=self.backend_name,
-                    supports_exact_milp=True,
+                    supports_exact_milp=_supports_full_candidate_network_exact_milp(
+                        arc_pruning_summary
+                    ),
                     **common_outcome_kwargs,
                 ),
                 empty,
@@ -2516,7 +2537,9 @@ class GurobiMILPAdapter:
             MILPSolverOutcome(
                 solver_status=solver_status,
                 used_backend=self.backend_name,
-                supports_exact_milp=True,
+                supports_exact_milp=_supports_full_candidate_network_exact_milp(
+                    arc_pruning_summary
+                ),
                 **common_outcome_kwargs,
             ),
             plan,
@@ -3304,7 +3327,8 @@ class GurobiMILPAdapter:
                         stage1_time_indexed_soc_relaxation_constraint_count
                     ),
                     "stage1_time_indexed_soc_relaxation_semantics": (
-                        "optimistic_cumulative_home_depot_energy_necessary_condition"
+                        "location_aware_cumulative_soc_with_single_vehicle_slot_"
+                        "charge_cap_necessary_condition"
                     ),
                     "stage1_energy_cost_proxy_configuration": dict(
                         stage1_energy_cost_proxy.configuration
@@ -3324,7 +3348,9 @@ class GurobiMILPAdapter:
                 MILPSolverOutcome(
                     solver_status=stage1_status,
                     used_backend="gurobi_two_stage",
-                    supports_exact_milp=True,
+                    supports_exact_milp=_supports_full_candidate_network_exact_milp(
+                        arc_pruning_summary
+                    ),
                     has_feasible_incumbent=False,
                     incumbent_count=0,
                     best_bound=stage1_bound,
@@ -3386,7 +3412,8 @@ class GurobiMILPAdapter:
                     stage1_time_indexed_soc_relaxation_constraint_count
                 ),
                 "stage1_time_indexed_soc_relaxation_semantics": (
-                    "optimistic_cumulative_home_depot_energy_necessary_condition"
+                    "location_aware_cumulative_soc_with_single_vehicle_slot_"
+                    "charge_cap_necessary_condition"
                 ),
                 "stage1_energy_cost_proxy_configuration": dict(
                     stage1_energy_cost_proxy.configuration
@@ -3478,6 +3505,14 @@ class GurobiMILPAdapter:
         component_flags = normalize_cost_component_flags(
             problem.metadata.get("cost_component_flags")
         )
+        raw_arc_pruning_summary = (stage1_plan.metadata or {}).get(
+            "arc_pruning_summary"
+        )
+        arc_pruning_summary = (
+            dict(raw_arc_pruning_summary)
+            if isinstance(raw_arc_pruning_summary, Mapping)
+            else {}
+        )
         slot_indices = list(
             _stage2_slot_indices(
                 problem,
@@ -3562,7 +3597,9 @@ class GurobiMILPAdapter:
                 MILPSolverOutcome(
                     solver_status="optimal" if stage1_status == "optimal" else "feasible",
                     used_backend="gurobi_two_stage",
-                    supports_exact_milp=True,
+                    supports_exact_milp=_supports_full_candidate_network_exact_milp(
+                        arc_pruning_summary
+                    ),
                     has_feasible_incumbent=True,
                     incumbent_count=1,
                     best_bound=stage1_bound,
@@ -4347,7 +4384,9 @@ class GurobiMILPAdapter:
                 MILPSolverOutcome(
                     solver_status=stage2_status,
                     used_backend="gurobi_two_stage",
-                    supports_exact_milp=True,
+                    supports_exact_milp=_supports_full_candidate_network_exact_milp(
+                        arc_pruning_summary
+                    ),
                     has_feasible_incumbent=False,
                     incumbent_count=0,
                     best_bound=stage2_bound,
@@ -4575,7 +4614,9 @@ class GurobiMILPAdapter:
             MILPSolverOutcome(
                 solver_status=solver_status,
                 used_backend="gurobi_two_stage",
-                supports_exact_milp=True,
+                supports_exact_milp=_supports_full_candidate_network_exact_milp(
+                    arc_pruning_summary
+                ),
                 has_feasible_incumbent=True,
                 incumbent_count=1,
                 best_bound=stage2_bound,
@@ -6111,11 +6152,13 @@ class GurobiMILPAdapter:
 
         For every electric vehicle and slot boundary, cumulative trip and
         deadhead energy may not exceed usable initial energy plus the maximum
-        charge deliverable in assignment-supported home-depot windows.  Window
-        overlap and all shared charger/grid/PV/BESS limits remain relaxed, so
-        this is a necessary Stage-2 condition rather than a charging dispatch.
+        charge deliverable in path-supported home-depot windows.  Charging
+        windows come only from a selected start arc, a selected connection
+        with verified home-depot residence, or a selected end/return arc.
+        Each vehicle is capped at one charge opportunity per slot.  Shared
+        charger, grid, PV, and BESS limits remain relaxed, so this is still a
+        necessary Stage-2 condition rather than a charging dispatch.
         """
-        del grb
         slot_indices = tuple(
             sorted({slot.slot_index for slot in problem.price_slots})
         )
@@ -6126,14 +6169,6 @@ class GurobiMILPAdapter:
         timestep_h = max(int(problem.scenario.timestep_min), 1) / 60.0
         charge_efficiency = 0.95
         electric_vehicle_types = {"BEV", "PHEV", "FCEV"}
-        pre_window_min = self._safe_nonnegative_float(
-            problem.metadata.get("home_depot_charge_pre_window_min"),
-            default=float(max(problem.scenario.timestep_min, 1)) * 2.0,
-        )
-        post_window_min = self._safe_nonnegative_float(
-            problem.metadata.get("home_depot_charge_post_window_min"),
-            default=float(max(problem.scenario.timestep_min, 1)) * 2.0,
-        )
         operation_start_min = self._operation_start_min(problem)
         operation_end_min = self._operation_end_min(problem)
         planning_days = max(
@@ -6208,9 +6243,6 @@ class GurobiMILPAdapter:
                 charge_max_kw * timestep_h * charge_efficiency,
                 0.0,
             )
-            home_depot_id = str(
-                getattr(vehicle, "home_depot_id", "") or "depot_default"
-            )
             load_terms_by_slot: Dict[int, List[Any]] = {
                 slot_idx: [] for slot_idx in slot_indices
             }
@@ -6228,7 +6260,6 @@ class GurobiMILPAdapter:
                 trip_energy_kwh = self._trip_energy_kwh(
                     problem, vehicle, trip_id
                 )
-                active_slots: Set[int] = set()
                 for slot_idx in slot_indices:
                     energy_fraction = self._trip_slot_energy_fraction(
                         problem,
@@ -6240,24 +6271,6 @@ class GurobiMILPAdapter:
                         load_terms_by_slot[slot_idx].append(
                             trip_energy_kwh * energy_fraction * assignment_var
                         )
-                    if self._trip_active_in_slot(
-                        problem,
-                        trip.departure_min,
-                        trip.arrival_min,
-                        slot_idx,
-                    ):
-                        active_slots.add(slot_idx)
-
-                for slot_idx in self._collect_home_depot_window_slots(
-                    problem,
-                    trip,
-                    home_depot_id=home_depot_id,
-                    pre_window_min=pre_window_min,
-                    post_window_min=post_window_min,
-                ):
-                    if slot_idx in valid_slots and slot_idx not in active_slots:
-                        charge_terms_by_slot[slot_idx].append(assignment_var)
-
                 start_var = start_arc.get(assignment_key)
                 startup_precheck = startup_energy_precheck_by_assignment.get(
                     assignment_key
@@ -6282,7 +6295,6 @@ class GurobiMILPAdapter:
                         )
                     elif startup_energy_kwh > 0.0:
                         terminal_load_terms.append(startup_energy_kwh * start_var)
-
                 end_var = end_arc.get(assignment_key)
                 if end_var is None:
                     continue
@@ -6361,7 +6373,6 @@ class GurobiMILPAdapter:
                     )
                 elif deadhead_energy_kwh > 0.0:
                     terminal_load_terms.append(deadhead_energy_kwh * arc_var)
-
                 residence_interval = self._home_depot_residence_interval(
                     problem,
                     vehicle,
@@ -6396,6 +6407,30 @@ class GurobiMILPAdapter:
                 for slot_idx in residence_slots.intersection(valid_slots):
                     charge_terms_by_slot[slot_idx].append(arc_var)
 
+            charge_availability_by_slot: Dict[int, Any] = {}
+            for slot_idx in slot_indices:
+                opportunity_terms = charge_terms_by_slot[slot_idx]
+                if not opportunity_terms:
+                    continue
+                charge_availability = model.addVar(
+                    lb=0.0,
+                    ub=1.0,
+                    vtype=grb.CONTINUOUS,
+                    name=(
+                        "stage1_charge_available__"
+                        f"{vehicle_id}__slot_{slot_idx}"
+                    ),
+                )
+                model.addConstr(
+                    charge_availability <= sum(opportunity_terms),
+                    name=(
+                        "stage1_charge_window_support__"
+                        f"{vehicle_id}__slot_{slot_idx}"
+                    ),
+                )
+                constraint_count += 1
+                charge_availability_by_slot[slot_idx] = charge_availability
+
             cumulative_load = 0.0
             cumulative_charge_opportunities = 0.0
             for slot_idx in slot_indices:
@@ -6411,8 +6446,8 @@ class GurobiMILPAdapter:
                 )
                 constraint_count += 1
                 cumulative_load += sum(load_terms_by_slot[slot_idx])
-                cumulative_charge_opportunities += sum(
-                    charge_terms_by_slot[slot_idx]
+                cumulative_charge_opportunities += (
+                    charge_availability_by_slot.get(slot_idx, 0.0)
                 )
             cumulative_load += sum(terminal_load_terms)
             model.addConstr(

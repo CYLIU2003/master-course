@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from pathlib import Path
 from unittest import mock
 
 from bff.routers import optimization
@@ -270,6 +271,9 @@ def test_run_optimization_records_canonical_graph_artifacts_for_milp_mode() -> N
     solve_problem_data.assert_not_called()
     persist_graph_exports.assert_called_once()
     assert problem_builder_cls.return_value.build_from_scenario.call_args.kwargs["config"].warm_start is True
+    assert canonical_problem.metadata["phase3_diagnostics_dir"] == str(
+        Path("outputs/test") / "diagnostics"
+    )
     assert "trips" not in stored_fields
     assert "timetable_rows" not in stored_fields
     assert stored_fields["optimization_result"]["solver_mode"] == "mode_milp_only"

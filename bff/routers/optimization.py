@@ -12,6 +12,7 @@ import subprocess
 import traceback
 import json
 import csv
+import math
 import shutil
 from collections import Counter, defaultdict
 import threading
@@ -1523,6 +1524,32 @@ def _persist_rich_run_outputs(
         )
 
     accounting_summary = dict((optimization_result.get("graph_artifacts") or {}).get("accounting_summary") or {})
+    solution_validity = dict(
+        optimization_result.get("solution_validity")
+        or (optimization_result.get("summary") or {}).get("solution_validity")
+        or {}
+    )
+    if "validated_feasible" in solution_validity:
+        evaluation_valid = bool(solution_validity.get("validated_feasible"))
+    elif isinstance(canonical_solver_result, dict) and "feasible" in canonical_solver_result:
+        evaluation_valid = bool(canonical_solver_result.get("feasible"))
+    else:
+        evaluation_valid = str(optimization_result.get("solver_status") or "").lower() in {
+            "optimal",
+            "feasible",
+            "solved_feasible",
+        }
+
+    def _evaluation_float(value: Any) -> Optional[float]:
+        if not evaluation_valid or value in (None, ""):
+            return None
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return None
+        return parsed if math.isfinite(parsed) else None
+
+    result_summary = dict(optimization_result.get("summary") or {})
     summary = {
         "scenario_id": optimization_result.get("scenario_id"),
         "mode": optimization_result.get("mode"),
@@ -1530,44 +1557,66 @@ def _persist_rich_run_outputs(
         "objective_mode": optimization_result.get("objective_mode"),
         "objective_value": optimization_result.get("objective_value"),
         "objective_value_unit": "JPY",
-        "objective_value_jpy": float(
-            accounting_summary.get("objective_value_jpy", optimization_result.get("objective_value", 0.0)) or 0.0
+        "objective_value_jpy": _evaluation_float(
+            accounting_summary.get("objective_value_jpy", optimization_result.get("objective_value"))
         ),
-        "total_cost_jpy": float(
+        "total_cost_jpy": _evaluation_float(
             accounting_summary.get(
                 "total_cost_jpy",
                 (optimization_result.get("cost_breakdown") or {}).get(
                     "total_cost",
-                    optimization_result.get("objective_value", 0.0),
+                    optimization_result.get("objective_value"),
                 ),
             )
-            or 0.0
         ),
-        "accounting_total_cost_jpy": accounting_summary.get(
-            "accounting_total_cost_jpy",
-            accounting_summary.get("total_cost_jpy"),
+        "accounting_total_cost_jpy": _evaluation_float(
+            accounting_summary.get(
+                "accounting_total_cost_jpy",
+                accounting_summary.get("total_cost_jpy"),
+            )
         ),
-        "solver_objective_value": accounting_summary.get(
-            "solver_objective_value",
-            accounting_summary.get("objective_value_jpy", optimization_result.get("objective_value")),
+        "solver_objective_value": _evaluation_float(
+            accounting_summary.get(
+                "solver_objective_value",
+                accounting_summary.get(
+                    "objective_value_jpy", optimization_result.get("objective_value")
+                ),
+            )
         ),
-        "validated_operating_cost_jpy": accounting_summary.get(
-            "validated_operating_cost_jpy"
+        "validated_operating_cost_jpy": _evaluation_float(
+            accounting_summary.get("validated_operating_cost_jpy")
         ),
-        "objective_is_actual_cost": bool((optimization_result.get("cost_breakdown") or {}).get("objective_is_actual_cost", False)),
+        "objective_is_actual_cost": bool(
+            evaluation_valid
+            and (optimization_result.get("cost_breakdown") or {}).get(
+                "objective_is_actual_cost", False
+            )
+        ),
         "supports_exact_milp": bool((optimization_result.get("solver_metadata") or {}).get("supports_exact_milp", False)),
         "solve_time_seconds": optimization_result.get("solve_time_seconds"),
         "solve_time_unit": "s",
-        "trip_count_served": accounting_summary.get("served_trip_count", (optimization_result.get("summary") or {}).get("trip_count_served")),
-        "trip_count_unserved": accounting_summary.get("unserved_trip_count", (optimization_result.get("summary") or {}).get("trip_count_unserved")),
+        "trip_count_served": (
+            accounting_summary.get("served_trip_count", result_summary.get("trip_count_served"))
+            if evaluation_valid
+            else result_summary.get("trip_count_served")
+        ),
+        "trip_count_unserved": (
+            accounting_summary.get("unserved_trip_count", result_summary.get("trip_count_unserved"))
+            if evaluation_valid
+            else result_summary.get("trip_count_unserved")
+        ),
         "vehicle_count_used": accounting_summary.get("used_vehicle_count", (optimization_result.get("summary") or {}).get("vehicle_count_used")),
         "same_day_depot_cycles_enabled": (optimization_result.get("summary") or {}).get("same_day_depot_cycles_enabled"),
         "max_depot_cycles_per_vehicle_per_day": (optimization_result.get("summary") or {}).get("max_depot_cycles_per_vehicle_per_day"),
         "vehicle_fragment_counts": (optimization_result.get("summary") or {}).get("vehicle_fragment_counts"),
         "vehicles_with_multiple_fragments": (optimization_result.get("summary") or {}).get("vehicles_with_multiple_fragments"),
         "max_fragments_observed": (optimization_result.get("summary") or {}).get("max_fragments_observed"),
-        "solution_validity": optimization_result.get("solution_validity")
-        or (optimization_result.get("summary") or {}).get("solution_validity"),
+        "solution_validity": solution_validity,
+        "result_status": optimization_result.get("result_status"),
+        "failure_stage": optimization_result.get("failure_stage"),
+        "research_kpi_eligible": bool(
+            optimization_result.get("research_kpi_eligible", False)
+        ),
     }
     (run_dir / "summary.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -2055,10 +2104,14 @@ def _persist_rich_run_outputs(
             ],
         )
     else:
-        grid_to_bus_kwh = float(cost_breakdown.get("grid_to_bus_kwh", 0.0) or 0.0)
-        bess_to_bus_kwh = float(cost_breakdown.get("bess_to_bus_kwh", 0.0) or 0.0)
-        grid_to_bess_kwh = float(cost_breakdown.get("grid_to_bess_kwh", 0.0) or 0.0)
-        grid_import_total_kwh = grid_to_bus_kwh + grid_to_bess_kwh
+        grid_to_bus_kwh = _evaluation_float(cost_breakdown.get("grid_to_bus_kwh"))
+        bess_to_bus_kwh = _evaluation_float(cost_breakdown.get("bess_to_bus_kwh"))
+        grid_to_bess_kwh = _evaluation_float(cost_breakdown.get("grid_to_bess_kwh"))
+        grid_import_total_kwh = (
+            grid_to_bus_kwh + grid_to_bess_kwh
+            if grid_to_bus_kwh is not None and grid_to_bess_kwh is not None
+            else None
+        )
         fallback_rows = [
             {"metric": "grid_to_bus_kwh", "value": grid_to_bus_kwh, "unit": "kWh"},
             {"metric": "grid_to_bess_kwh", "value": grid_to_bess_kwh, "unit": "kWh"},
@@ -2078,34 +2131,45 @@ def _persist_rich_run_outputs(
 
     if charging_summary_payload:
         totals = dict(charging_summary_payload.get("totals") or {})
+
+        def _site_result_value(key: str, *fallback_keys: str) -> Optional[float]:
+            for candidate in (key, *fallback_keys):
+                if candidate in totals:
+                    return _evaluation_float(totals.get(candidate))
+            return None
+
         site_rows = [
-            {"metric": "grid_to_bus_kwh", "value": float(totals.get("grid_to_bus_kwh", 0.0) or 0.0), "unit": "kWh"},
-            {"metric": "pv_to_bus_kwh", "value": float(totals.get("pv_to_bus_kwh", 0.0) or 0.0), "unit": "kWh"},
-            {"metric": "bess_to_bus_kwh", "value": float(totals.get("bess_to_bus_kwh", 0.0) or 0.0), "unit": "kWh"},
-            {"metric": "pv_to_bess_kwh", "value": float(totals.get("pv_to_bess_kwh", 0.0) or 0.0), "unit": "kWh"},
-            {"metric": "grid_to_bess_kwh", "value": float(totals.get("grid_to_bess_kwh", 0.0) or 0.0), "unit": "kWh"},
-            {"metric": "pv_curtail_kwh", "value": float(totals.get("pv_curtail_kwh", 0.0) or 0.0), "unit": "kWh"},
-            {"metric": "pv_generation_kwh", "value": float(totals.get("pv_generation_kwh", 0.0) or 0.0), "unit": "kWh"},
-            {"metric": "pv_utilization_rate", "value": float(totals.get("pv_utilization_rate", 0.0) or 0.0), "unit": "ratio"},
-            {"metric": "bess_terminal_soc_violation_kwh", "value": float(totals.get("bess_terminal_soc_violation_kwh", 0.0) or 0.0), "unit": "kWh"},
-            {"metric": "grid_import_total_kwh", "value": float(totals.get("grid_import_total_kwh", 0.0) or 0.0), "unit": "kWh"},
-            {"metric": "grid_import_for_contract_kwh", "value": float(totals.get("grid_import_for_contract_kwh", totals.get("grid_import_total_kwh", 0.0)) or 0.0), "unit": "kWh"},
-            {"metric": "bus_charge_from_grid_kwh", "value": float(totals.get("bus_charge_from_grid_kwh", totals.get("grid_to_bus_kwh", 0.0)) or 0.0), "unit": "kWh"},
-            {"metric": "bus_charge_from_bess_kwh", "value": float(totals.get("bus_charge_from_bess_kwh", totals.get("bess_to_bus_kwh", 0.0)) or 0.0), "unit": "kWh"},
-            {"metric": "peak_grid_import_kw_all_depots", "value": float(totals.get("peak_grid_import_kw_all_depots", 0.0) or 0.0), "unit": "kW"},
-            {"metric": "contract_over_limit_kwh", "value": float(totals.get("contract_over_limit_kwh", 0.0) or 0.0), "unit": "kWh"},
-            {"metric": "contract_overage_cost_jpy", "value": float(totals.get("contract_overage_cost_jpy", 0.0) or 0.0), "unit": "JPY"},
-            {"metric": "demand_charge_cost_jpy", "value": float(totals.get("demand_charge_cost_jpy", 0.0) or 0.0), "unit": "JPY"},
-            {"metric": "grid_purchase_cost_jpy", "value": float(totals.get("grid_purchase_cost_jpy", 0.0) or 0.0), "unit": "JPY"},
-            {"metric": "bess_discharge_cost_jpy", "value": float(totals.get("bess_discharge_cost_jpy", 0.0) or 0.0), "unit": "JPY"},
-            {"metric": "electricity_cost_jpy", "value": float(totals.get("electricity_cost_jpy", 0.0) or 0.0), "unit": "JPY"},
-            {"metric": "contract_limit_exceeded", "value": bool(totals.get("contract_limit_exceeded", False)), "unit": "flag"},
+            {"metric": "grid_to_bus_kwh", "value": _site_result_value("grid_to_bus_kwh"), "unit": "kWh"},
+            {"metric": "pv_to_bus_kwh", "value": _site_result_value("pv_to_bus_kwh"), "unit": "kWh"},
+            {"metric": "bess_to_bus_kwh", "value": _site_result_value("bess_to_bus_kwh"), "unit": "kWh"},
+            {"metric": "pv_to_bess_kwh", "value": _site_result_value("pv_to_bess_kwh"), "unit": "kWh"},
+            {"metric": "grid_to_bess_kwh", "value": _site_result_value("grid_to_bess_kwh"), "unit": "kWh"},
+            {"metric": "pv_curtail_kwh", "value": _site_result_value("pv_curtail_kwh"), "unit": "kWh"},
+            {"metric": "pv_generation_kwh", "value": _site_result_value("pv_generation_kwh"), "unit": "kWh"},
+            {"metric": "pv_utilization_rate", "value": _site_result_value("pv_utilization_rate"), "unit": "ratio"},
+            {"metric": "bess_terminal_soc_violation_kwh", "value": _site_result_value("bess_terminal_soc_violation_kwh"), "unit": "kWh"},
+            {"metric": "grid_import_total_kwh", "value": _site_result_value("grid_import_total_kwh"), "unit": "kWh"},
+            {"metric": "grid_import_for_contract_kwh", "value": _site_result_value("grid_import_for_contract_kwh", "grid_import_total_kwh"), "unit": "kWh"},
+            {"metric": "bus_charge_from_grid_kwh", "value": _site_result_value("bus_charge_from_grid_kwh", "grid_to_bus_kwh"), "unit": "kWh"},
+            {"metric": "bus_charge_from_bess_kwh", "value": _site_result_value("bus_charge_from_bess_kwh", "bess_to_bus_kwh"), "unit": "kWh"},
+            {"metric": "peak_grid_import_kw_all_depots", "value": _site_result_value("peak_grid_import_kw_all_depots"), "unit": "kW"},
+            {"metric": "contract_over_limit_kwh", "value": _site_result_value("contract_over_limit_kwh"), "unit": "kWh"},
+            {"metric": "contract_overage_cost_jpy", "value": _site_result_value("contract_overage_cost_jpy"), "unit": "JPY"},
+            {"metric": "demand_charge_cost_jpy", "value": _site_result_value("demand_charge_cost_jpy"), "unit": "JPY"},
+            {"metric": "grid_purchase_cost_jpy", "value": _site_result_value("grid_purchase_cost_jpy"), "unit": "JPY"},
+            {"metric": "bess_discharge_cost_jpy", "value": _site_result_value("bess_discharge_cost_jpy"), "unit": "JPY"},
+            {"metric": "electricity_cost_jpy", "value": _site_result_value("electricity_cost_jpy"), "unit": "JPY"},
+            {"metric": "contract_limit_exceeded", "value": bool(totals.get("contract_limit_exceeded")) if evaluation_valid else None, "unit": "flag"},
         ]
     else:
-        grid_to_bus_kwh = float(cost_breakdown.get("grid_to_bus_kwh", 0.0) or 0.0)
-        bess_to_bus_kwh = float(cost_breakdown.get("bess_to_bus_kwh", 0.0) or 0.0)
-        grid_to_bess_kwh = float(cost_breakdown.get("grid_to_bess_kwh", 0.0) or 0.0)
-        grid_import_total_kwh = grid_to_bus_kwh + grid_to_bess_kwh
+        grid_to_bus_kwh = _evaluation_float(cost_breakdown.get("grid_to_bus_kwh"))
+        bess_to_bus_kwh = _evaluation_float(cost_breakdown.get("bess_to_bus_kwh"))
+        grid_to_bess_kwh = _evaluation_float(cost_breakdown.get("grid_to_bess_kwh"))
+        grid_import_total_kwh = (
+            grid_to_bus_kwh + grid_to_bess_kwh
+            if grid_to_bus_kwh is not None and grid_to_bess_kwh is not None
+            else None
+        )
         site_rows = [
             {"metric": "grid_to_bus_kwh", "value": grid_to_bus_kwh, "unit": "kWh"},
             {"metric": "grid_to_bess_kwh", "value": grid_to_bess_kwh, "unit": "kWh"},
@@ -2251,6 +2315,18 @@ def _persist_rich_run_outputs(
                 "peak_grid_import_kw_all_depots": float(totals.get("peak_grid_import_kw_all_depots", 0.0) or 0.0),
                 "contract_limit_exceeded": bool(totals.get("contract_limit_exceeded", False)),
                 "charging_source_provenance_exact": bool(charging_summary_payload.get("source_provenance_exact", False)),
+            }
+        )
+    if not evaluation_valid:
+        _invalidate_mapping_metrics(kpi_summary)
+        kpi_summary.update(
+            {
+                "served_trip_count": int(result_summary.get("trip_count_served") or 0),
+                "unserved_trip_count": int(result_summary.get("trip_count_unserved") or 0),
+                "result_status": optimization_result.get("result_status") or "INVALID",
+                "failure_stage": optimization_result.get("failure_stage")
+                or "result_validation",
+                "research_kpi_eligible": False,
             }
         )
     (run_dir / "kpi_summary.json").write_text(
@@ -4750,6 +4826,220 @@ def _solution_validity_payload(
     }
 
 
+_INVALID_RESULT_METRIC_KEYS = {
+    "total_cost",
+    "total_cost_jpy",
+    "objective_value",
+    "objective_value_jpy",
+    "accounting_total_cost_jpy",
+    "gross_operating_cost_jpy",
+    "reported_total_cost_jpy",
+    "solver_objective_value",
+    "validated_operating_cost_jpy",
+    "energy_cost",
+    "energy_cost_jpy",
+    "electricity_cost",
+    "electricity_cost_jpy",
+    "electricity_cost_final",
+    "demand_charge",
+    "demand_charge_cost_jpy",
+    "demand_cost",
+    "demand_cost_jpy",
+    "fuel_cost",
+    "fuel_cost_jpy",
+    "fuel_cost_final",
+    "fuel_cost_final_jpy",
+    "fuel_cost_provisional",
+    "fuel_cost_provisional_jpy",
+    "fuel_cost_refueled",
+    "fuel_cost_refueled_jpy",
+    "fuel_cost_provisional_leftover",
+    "fuel_cost_provisional_leftover_jpy",
+    "co2_cost",
+    "co2_cost_jpy",
+    "battery_degradation_cost",
+    "battery_degradation_cost_jpy",
+    "degradation_cost",
+    "deviation_cost",
+    "vehicle_cost",
+    "vehicle_cost_jpy",
+    "vehicle_usage_cost",
+    "vehicle_usage_cost_jpy",
+    "driver_cost",
+    "driver_cost_jpy",
+    "penalty_unserved",
+    "unserved_penalty",
+    "switch_cost",
+    "return_leg_bonus",
+    "weather_strategy_objective_term_jpy_equivalent",
+    "contract_overage_cost",
+    "contract_overage_cost_jpy",
+    "propulsion_energy_cost_jpy",
+    "pv_self_consumption_cost_jpy",
+    "grid_to_bus_kwh",
+    "grid_to_bess_kwh",
+    "grid_import_kwh",
+    "grid_import_total_kwh",
+    "grid_import_for_contract_kwh",
+    "bus_charge_from_grid_kwh",
+    "bus_charge_from_bess_kwh",
+    "total_bus_charge_kwh",
+    "total_bess_charge_kwh",
+    "total_charge_input_kwh",
+    "grid_total_kwh",
+    "pv_to_bus_kwh",
+    "pv_to_bess_kwh",
+    "pv_curtail_kwh",
+    "pv_curtailed_kwh",
+    "pv_utilization_ratio",
+    "pv_utilization_rate",
+    "bess_to_bus_kwh",
+    "bess_charge_kwh",
+    "bess_discharge_kwh",
+    "peak_grid_kw",
+    "peak_grid_import_kw",
+    "peak_grid_import_kw_all_depots",
+    "peak_grid_import_kw_any_depot",
+    "peak_total_charge_kw",
+    "peak_total_charge_kw_all_depots",
+    "peak_total_charge_kw_any_depot",
+    "contract_over_limit_kwh",
+    "contract_over_limit_kw_peak",
+    "contract_over_limit_slot_count",
+    "contract_limit_exceeded",
+    "grid_purchase_cost_jpy",
+    "bess_discharge_cost_jpy",
+    "total_co2_kg",
+}
+
+
+def _canonical_trip_counts(
+    canonical_solver_result: Optional[Dict[str, Any]],
+    *,
+    fallback_served: int,
+    fallback_unserved: int,
+) -> tuple[int, int]:
+    canonical = dict(canonical_solver_result or {})
+
+    def _count(explicit_key: str, ids_key: str, fallback: int) -> int:
+        explicit = canonical.get(explicit_key)
+        if explicit not in (None, ""):
+            try:
+                return max(int(explicit), 0)
+            except (TypeError, ValueError):
+                pass
+        if ids_key in canonical:
+            return len(list(canonical.get(ids_key) or []))
+        return max(int(fallback), 0)
+
+    return (
+        _count("trip_count_served", "served_trip_ids", fallback_served),
+        _count("trip_count_unserved", "unserved_trip_ids", fallback_unserved),
+    )
+
+
+def _invalid_result_failure_stage(optimization_result: Dict[str, Any]) -> str:
+    settings = dict(optimization_result.get("solver_settings") or {})
+    stage2_status = str(settings.get("stage2_solver_status") or "").lower()
+    if stage2_status and stage2_status not in {"optimal", "feasible", "solved_feasible"}:
+        return "stage2_energy_dispatch"
+    stage1_status = str(settings.get("stage1_solver_status") or "").lower()
+    if stage1_status in {"infeasible", "inf_or_unbd", "unbounded", "no_valid_incumbent"}:
+        return "stage1_assignment"
+    return "postsolve_validation"
+
+
+def _invalidate_mapping_metrics(payload: Dict[str, Any]) -> None:
+    for key in _INVALID_RESULT_METRIC_KEYS:
+        if key in payload:
+            payload[key] = None
+    payload["objective_is_actual_cost"] = False
+    payload["solver_objective_matches_accounting_total"] = False
+
+
+def _apply_invalid_result_kpi_gate(
+    optimization_result: Dict[str, Any],
+    canonical_solver_result: Optional[Dict[str, Any]],
+) -> None:
+    validity = dict(optimization_result.get("solution_validity") or {})
+    if bool(validity.get("validated_feasible", False)):
+        return
+
+    solver_status = str(optimization_result.get("solver_status") or "")
+    result_status = "INFEASIBLE" if "INFEASIBLE" in solver_status.upper() else "INVALID"
+    failure_stage = _invalid_result_failure_stage(optimization_result)
+    summary = dict(optimization_result.get("summary") or {})
+    served, unserved = _canonical_trip_counts(
+        canonical_solver_result,
+        fallback_served=int(summary.get("trip_count_served") or 0),
+        fallback_unserved=int(summary.get("trip_count_unserved") or 0),
+    )
+
+    optimization_result.update(
+        {
+            "result_status": result_status,
+            "failure_stage": failure_stage,
+            "research_kpi_eligible": False,
+            "objective_value": None,
+            "kpi_eligibility_reason": str(
+                validity.get("status_reason") or "canonical_result_not_validated_feasible"
+            ),
+        }
+    )
+    summary.update(
+        {
+            "trip_count_served": served,
+            "trip_count_unserved": unserved,
+            "coverage_rank_primary": unserved,
+            "result_status": result_status,
+            "failure_stage": failure_stage,
+            "research_kpi_eligible": False,
+        }
+    )
+    optimization_result["summary"] = summary
+
+    cost_breakdown = dict(optimization_result.get("cost_breakdown") or {})
+    _invalidate_mapping_metrics(cost_breakdown)
+    cost_breakdown["evaluation_feasible"] = 0.0
+    optimization_result["cost_breakdown"] = cost_breakdown
+
+    graph_artifacts = dict(optimization_result.get("graph_artifacts") or {})
+    accounting_summary = dict(graph_artifacts.get("accounting_summary") or {})
+    _invalidate_mapping_metrics(accounting_summary)
+    accounting_summary.update(
+        {
+            "served_trip_count": served,
+            "unserved_trip_count": unserved,
+            "research_kpi_eligible": False,
+            "result_status": result_status,
+            "failure_stage": failure_stage,
+        }
+    )
+    graph_artifacts["accounting_summary"] = accounting_summary
+    optimization_result["graph_artifacts"] = graph_artifacts
+
+    charging_summary = optimization_result.get("charging_summary")
+    if isinstance(charging_summary, dict):
+        charging_summary.update(
+            {
+                "result_status": result_status,
+                "failure_stage": failure_stage,
+                "research_kpi_eligible": False,
+            }
+        )
+        totals = dict(charging_summary.get("totals") or {})
+        _invalidate_mapping_metrics(totals)
+        charging_summary["totals"] = totals
+        gated_depots = []
+        for depot in list(charging_summary.get("depots") or []):
+            if not isinstance(depot, dict):
+                continue
+            gated_depot = dict(depot)
+            _invalidate_mapping_metrics(gated_depot)
+            gated_depots.append(gated_depot)
+        charging_summary["depots"] = gated_depots
+
+
 def _solver_settings_payload(
     *,
     time_limit_seconds_requested: Any,
@@ -5012,6 +5302,13 @@ def _run_optimization(
                     weather_forecast,
                     weather_profile,
                     random_seed=random_seed,
+                )
+            if (
+                phase_token == "phase3_two_stage"
+                and isinstance(problem.metadata, dict)
+            ):
+                problem.metadata["phase3_diagnostics_dir"] = str(
+                    Path(output_dir) / "diagnostics"
                 )
             feasible_arc_count = sum(
                 len(v) for v in (problem.feasible_connections or {}).values()
@@ -5360,11 +5657,16 @@ def _run_optimization(
                 for vehicle_id in vehicle_ids
             }
         )
-        trip_count_served = sum(
+        legacy_trip_count_served = sum(
             len(task_ids)
             for task_ids in (result_payload.get("assignment") or {}).values()
         )
-        trip_count_unserved = len(result_payload.get("unserved_tasks") or [])
+        legacy_trip_count_unserved = len(result_payload.get("unserved_tasks") or [])
+        trip_count_served, trip_count_unserved = _canonical_trip_counts(
+            _full_new_result if isinstance(_full_new_result, dict) else None,
+            fallback_served=legacy_trip_count_served,
+            fallback_unserved=legacy_trip_count_unserved,
+        )
         canonical_feasible = (
             bool(_full_new_result.get("feasible"))
             if isinstance(_full_new_result, dict) and "feasible" in _full_new_result
@@ -5544,6 +5846,14 @@ def _run_optimization(
             _full_new_result["cost_breakdown"]["evaluation_feasible"] = (
                 1.0 if bool(solution_validity.get("validated_feasible")) else 0.0
             )
+        _apply_invalid_result_kpi_gate(
+            optimization_result,
+            _full_new_result if isinstance(_full_new_result, dict) else None,
+        )
+        if not bool(solution_validity.get("validated_feasible")) and isinstance(
+            optimization_result.get("charging_summary"), dict
+        ):
+            charging_summary_payload = dict(optimization_result["charging_summary"])
 
         optimization_audit = {
             "scenario_id": scenario_id,

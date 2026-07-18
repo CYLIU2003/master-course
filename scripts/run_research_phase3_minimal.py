@@ -39,6 +39,7 @@ from src.optimization import (
     ProblemBuilder,
     ResultSerializer,
 )
+from src.optimization.common.evaluator import CostEvaluator
 from src.optimization.common.initial_soc_policy import (
     InitialSocPolicy,
     apply_initial_soc_policy_to_scenario,
@@ -53,6 +54,24 @@ from src.optimization.common.research_phase3_policy import (
 DEFAULT_SCENARIO_ID = "b23fd26c-1233-4c73-bb9e-bdb8b1584760"
 DEFAULT_PREPARED_INPUT_ID = "prepared-789ce8197d83c758-0b337aa1f091e729"
 EXPECTED_ROUTE_CODES = {"渋21", "渋22", "渋23"}
+ACCOUNTING_COST_COMPONENTS = (
+    "electricity_cost",
+    "fuel_cost",
+    "demand_cost",
+    "vehicle_cost",
+    "vehicle_usage_cost",
+    "driver_cost",
+    "unserved_penalty",
+    "degradation_cost",
+    "co2_cost",
+    "grid_purchase_cost",
+    "bess_discharge_cost",
+    "contract_overage_cost",
+    "pv_asset_cost",
+    "bess_asset_cost",
+    "total_cost",
+    "total_cost_with_assets",
+)
 
 
 def _git_state() -> tuple[str, bool]:
@@ -94,6 +113,39 @@ def _finite_float_or_none(value: Any) -> float | None:
     except (TypeError, ValueError):
         return None
     return parsed if math.isfinite(parsed) else None
+
+
+def _audit_accounting_recalculation(
+    reported: dict[str, Any],
+    recalculated: dict[str, Any],
+    *,
+    tolerance_jpy: float = 1.0e-6,
+) -> dict[str, Any]:
+    """Compare final-plan accounting with an independent evaluator pass."""
+
+    residuals: dict[str, float] = {}
+    missing_components: list[str] = []
+    for component in ACCOUNTING_COST_COMPONENTS:
+        reported_value = _finite_float_or_none(reported.get(component))
+        recalculated_value = _finite_float_or_none(recalculated.get(component))
+        if reported_value is None or recalculated_value is None:
+            missing_components.append(component)
+            continue
+        residuals[component] = reported_value - recalculated_value
+    max_abs_residual = max((abs(value) for value in residuals.values()), default=0.0)
+    passed = bool(
+        not missing_components
+        and "total_cost" in residuals
+        and max_abs_residual <= float(tolerance_jpy)
+    )
+    return {
+        "passed": passed,
+        "tolerance_jpy": float(tolerance_jpy),
+        "max_abs_residual_jpy": max_abs_residual,
+        "residual_jpy_by_component": residuals,
+        "missing_components": missing_components,
+        "recalculation_method": "CostEvaluator.evaluate(final_plan)",
+    }
 
 
 def _resolve_expected_service_date(
@@ -208,6 +260,9 @@ def _build_experiment_identity(
         "initial_soc_input_hash": str(initial_soc_input_hash),
         "charger_configuration_hash": _canonical_payload_hash(charger_inputs),
         "time_step_min": int(problem.scenario.timestep_min),
+        "milp_max_successors_per_trip": problem.metadata.get(
+            "milp_max_successors_per_trip"
+        ),
         "pv_configuration": energy_assets,
         "bess_configuration": energy_assets,
         "weather_configuration": {
@@ -287,6 +342,7 @@ def _configure_controlled_model_validation_case(
     time_step_min: int,
     initial_soc_policy: InitialSocPolicy,
     initial_soc_percent: float | None,
+    milp_max_successors_per_trip: int | None = None,
 ) -> dict[str, Any]:
     """Build the disclosed grid-only validation input without changing the store."""
     if int(time_step_min) != 15:
@@ -315,6 +371,23 @@ def _configure_controlled_model_validation_case(
             "terminal_soc_policy": "minimum_soc",
         }
     )
+    if milp_max_successors_per_trip is not None and int(
+        milp_max_successors_per_trip
+    ) < 0:
+        raise ValueError("milp_max_successors_per_trip must be zero or positive")
+    effective_successor_limit = (
+        int(milp_max_successors_per_trip)
+        if milp_max_successors_per_trip is not None
+        and int(milp_max_successors_per_trip) > 0
+        else None
+    )
+    simulation_config["milp_max_successors_per_trip"] = (
+        effective_successor_limit
+    )
+    solver_config = configured.setdefault("scenario_overlay", {}).setdefault(
+        "solver_config", {}
+    )
+    solver_config["milp_max_successors_per_trip"] = effective_successor_limit
     _disable_depot_assets(configured)
     return configured
 
@@ -462,6 +535,7 @@ def run(args: argparse.Namespace) -> int:
         time_step_min=args.time_step_min,
         initial_soc_policy=initial_soc_policy,
         initial_soc_percent=args.initial_soc_percent,
+        milp_max_successors_per_trip=args.milp_max_successors_per_trip,
     )
     fragment_policy = enforce_research_phase3_single_continuous_duty(scenario)
     config = OptimizationConfig(
@@ -528,12 +602,17 @@ def run(args: argparse.Namespace) -> int:
     )
     input_audit = {
         "experiment_case_tag": "CONTROLLED_MODEL_VALIDATION_CASE",
+        "prepared_input_id": args.prepared_input_id,
+        "prepared_input_sha256": _sha256(prepared_path),
         "research_run": True,
         "phase": "phase3_two_stage",
         "requested_phase": "phase3_two_stage",
         "resolved_phase": "phase3_two_stage",
         "executed_phase": "phase3_two_stage",
         "time_step_min": problem.scenario.timestep_min,
+        "milp_max_successors_per_trip": problem.metadata.get(
+            "milp_max_successors_per_trip"
+        ),
         "slot_count": len(problem.price_slots),
         "target_trip_count": len(problem.trips),
         "expected_service_date": expected_service_date,
@@ -620,9 +699,20 @@ def run(args: argparse.Namespace) -> int:
     solver_metadata = dict(result.solver_metadata or {})
     acceptance = dict(solver_metadata.get("research_acceptance_checks") or {})
     acceptance["git_clean"] = not git_dirty
+    recalculated_cost_breakdown = CostEvaluator().evaluate(
+        problem, result.plan
+    ).to_dict()
+    accounting_recalculation = _audit_accounting_recalculation(
+        dict(result.cost_breakdown or {}),
+        recalculated_cost_breakdown,
+    )
+    acceptance["accounting_recalculation"] = bool(
+        accounting_recalculation["passed"]
+    )
     accepted = bool(
         solver_metadata.get("research_run_accepted", False)
         and acceptance["git_clean"]
+        and acceptance["accounting_recalculation"]
     )
     solver_status = str(result.solver_status or "")
     solver_objective = (
@@ -749,6 +839,7 @@ def run(args: argparse.Namespace) -> int:
         "objective_available": solver_objective is not None,
         "solver_objective_value": solver_objective,
         "accounting_total_cost_jpy": accounting_total,
+        "accounting_recalculation": accounting_recalculation,
         "validated_operating_cost_jpy": validated_cost,
         "mip_gap_requested_ratio": float(args.mip_gap),
         "mip_gap_achieved_ratio": _finite_float_or_none(
@@ -826,6 +917,15 @@ def main() -> int:
     parser.add_argument("--mip-gap", type=float, default=0.1)
     parser.add_argument("--random-seed", type=int, default=42)
     parser.add_argument("--time-step-min", type=int, default=15)
+    parser.add_argument(
+        "--milp-max-successors-per-trip",
+        type=int,
+        default=0,
+        help=(
+            "Successor candidate cap per vehicle/trip; 0 keeps the full "
+            "candidate network and is required for the formal baseline."
+        ),
+    )
     parser.add_argument(
         "--initial-soc-policy",
         default=InitialSocPolicy.UNIFORM_SCENARIO_VALUE.value,

@@ -17,11 +17,15 @@ def test_reporting_finalizer_reconciliation(tmp_path, run_id):
     unexpected = {
         domain: status
         for domain, status in statuses.items()
-        if status != "OK" and not (domain in ALLOWED_NON_OK and status == "OUT_OF_SCOPE_REMAINS")
+        if status != "OK"
+        and not (
+            domain in ALLOWED_NON_OK
+            and status in {"OUT_OF_SCOPE_REMAINS", "NG"}
+        )
     }
     assert unexpected == {}
 
     for domain in ["energy", "identity", "vehicle-charge-allocation", "fuel", "co2", "cost", "bess-metadata"]:
         assert statuses[domain] == "OK"
     assert statuses["vehicle-soc-violation"] == "OUT_OF_SCOPE_REMAINS"
-    assert statuses["solver-status"] == "OUT_OF_SCOPE_REMAINS"
+    assert statuses["solver-status"] == "NG"

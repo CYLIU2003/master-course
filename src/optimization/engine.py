@@ -1177,16 +1177,34 @@ class OptimizationEngine:
                     "Research-run acceptance failed: " + ", ".join(failed_checks)
                 )
                 status = str(final_solver_status or "").strip().lower()
+                has_feasible_incumbent = bool(
+                    solver_metadata.get("has_feasible_incumbent", False)
+                ) and bool(report.feasible)
                 if status in {"infeasible", "solved_infeasible", "inf_or_unbd"}:
                     final_solver_status = "INFEASIBLE"
-                elif status in {"time_limit", "suboptimal"} and not bool(
-                    solver_metadata.get("has_feasible_incumbent", False)
-                ):
-                    final_solver_status = "TIME_LIMIT_WITHOUT_VALID_SOLUTION"
+                    solver_metadata["result_class"] = "research_invalid"
+                    solver_metadata["termination_reason"] = (
+                        "research_acceptance_failed"
+                    )
+                elif not has_feasible_incumbent:
+                    if status in {"time_limit", "suboptimal"}:
+                        final_solver_status = "TIME_LIMIT_WITHOUT_VALID_SOLUTION"
+                    else:
+                        final_solver_status = "NO_VALID_INCUMBENT"
+                    solver_metadata["result_class"] = "research_invalid"
+                    solver_metadata["termination_reason"] = (
+                        "research_acceptance_failed"
+                    )
                 else:
-                    final_solver_status = "NO_VALID_INCUMBENT"
-                solver_metadata["result_class"] = "research_invalid"
-                solver_metadata["termination_reason"] = "research_acceptance_failed"
+                    # A failed research gate (for example, a successor-pruned
+                    # candidate network) invalidates exactness/KPI claims, not
+                    # the existence of an independently validated incumbent.
+                    solver_metadata["result_class"] = (
+                        "feasible_research_ineligible"
+                    )
+                    solver_metadata["termination_reason"] = (
+                        "feasible_incumbent_research_acceptance_failed"
+                    )
             elif not bool(solver_metadata["research_cost_kpi_eligible"]):
                 warnings.append(
                     "Research run accepted for feasibility/constraint analysis; "

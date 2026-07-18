@@ -5,6 +5,78 @@
 
 ---
 
+## 2026-07-18 — 7月月間進捗資料と7月17日run限定の可視化監査
+
+### 追補：専門外の聴衆向け説明への改訂
+
+- 月間進捗資料の冒頭を、社会背景、研究背景、研究目的、手法の順に変更した。説明の中心を数式やsolver用語ではなく、「何を入力するか」「何を決めるか」「どの条件を確認するか」へ置いた。
+- 本研究で説明する運用手順は、(1) 運行開始前に一日分の担当車両と充電の基本計画を作る、(2) 毎正時に実際のEV電池残量、営業所蓄電池残量、太陽光予測、その日ここまでの最大受電を更新する、(3) 担当車両を固定したまま当日残り時間の充電計画を作り直す、(4) 次の1時間だけ実行して繰り返す、の四段階である。「1時間の最適化」は1時間先だけを見る意味ではなく、毎時間、その日残りの計画を更新する意味で用いる。
+- `external_charge_input_lower_bound_kwh`は資料上で「走り切るために、少なくとも必要と見積もった充電量」と説明する。便の走行、始発・便間・帰庫の移動、終業時に残す車両電池量を合計し、朝の車両電池を差し引いて見積もる。ただし、充電する時刻、車両が営業所にいるか、充電器の混雑、受電上限、PV発電時刻との一致をまだ確認していないため、実際の充電量又は実行可能な充電計画とは扱わない。
+- `bess_initial_dischargeable_energy_credit_kwh`は資料上で「朝の営業所蓄電池のうち、終業時に残す目標を超える部分」と説明する。例えば朝300 kWhで終業時にも300 kWhを残す条件なら、朝の蓄電池から使える余分は0 kWhである。終業時目標を120 kWhへ下げた場合の180 kWhは、無料の省エネ効果ではなく翌日へ残す在庫を取り崩した量である。
+- `pv_energy_credit_kwh`は「一日合計では太陽光でまかなえる可能性がある量」と説明する。バスが営業所にいる時間と発電時刻の一致を見ていないため、実際の`PV→bus`又は`PV→BESS`とは呼ばない。
+- 7月17日の2 runは日次計画側の不具合確認であり、毎正時の充電見直しによる効果を評価した結果ではない。資料では、研究の目標手法と今回の保存runの結果を別の章で説明し、逐次最適化の有効性を示したとは記述しない。
+
+### 結果データの境界
+
+- 月間進捗資料の定量図は、依頼どおり`C:\master-course\output\2026-07-17\run_20260717_0003`と`run_20260717_1240`だけを読み取る。7月16日の暫定晴雨結果、別の15分baseline、IIS成果物、ほかの出力フォルダは月間資料の結果図へ混ぜない。
+- 2 runはいずれもcommit`8730505`、60分刻み、264便、60台、time limit 1,500秒、要求gap 10%である。Stage 1は264便の割当候補を持つが`time_limit`、MIP gap 48.367%、runtime約750.3秒。Stage 2は`infeasible`で、canonical最終結果は担当0便・未充足264便、`research_kpi_eligible=false`である。
+- 保存済み`summary.json`と`kpi_summary.json`は未充足0便を記録し、`summary.json`は費用0円をactual costとして扱うため、canonicalとのP0級矛盾を監査証拠として示す。PV入力は高見込み614.709kWh/日・最大81.271kW、低見込み101.114kWh/日・最大12.941kWだが、`weather_pv_forecast_applied=false`かつStage 2不可行なので、PV→bus/BESS、抑制、系統購入、費用、SOC、CO₂の天候効果は主張しない。
+- successor上限8により、候補arcは678,600本から113,712本へ削減され、564,888本、83.2%が除外された。保存metadataの`supports_exact_milp=true`をそのまま研究主張へ使わず、「縮約ネットワーク上のMILP」として記述し、8/16/32/無制限の感度分析を残課題とする。
+
+### 文献から逆算した図表と資料構成
+
+- No55の車両運用＋SOC、No51の充電イベント・ピーク需要、No16/No62の電源別時系列・費用・不確実性、中野ほかのPV配分・逐次最適化、上條ほかの時間別充電需要を図表要件として整理した。対応表は`output/monthly_progress_202607/literature_visual_catalog.csv`に保存した。
+- 7月17日runから正当に掲載できるのは、solver品質、便カバレッジ監査、PV入力時系列の3種類である。正式割当、充電、SOCのledgerは0行なので、車両ダイヤ、EV SOC、電源別需給、費用、CO₂は「0」ではなく「掲載不可」とした。IISも`stage2_diagnostics_written=false`のため、別runの根因図を流用しない。
+- `scripts/build_july_progress_evidence_20260718.py`は2 run以外のsource拡張を拒否し、9図、`run_audit_20260717.csv`、`artifact_row_counts_20260717.csv`、`audit_summary_20260717.json`を生成する。
+- `scripts/build_july_monthly_progress_20260718.mjs`は`@oai/artifact-tool`で既存18枚の東京都市大学資料から作成した`template-starter.pptx`をimportし、全slideを一対一で再利用する。ロゴ、白背景、濃青見出し、下部要点帯、ページ番号、既存image frameを保持し、7月16日の暫定結果図だけを7月17日限定監査図へ置換した。speaker notesには各slideの話すポイントと根拠pathを保存した。
+- 成果物は`docs/presentations/monthly_progress_20260718.pptx`。18/18枚をPNGへrenderして全体montageと重点slideを目視確認し、`slides_test.py`はoverflow 0、template fidelity checkerはissue 0でpassした。数値監査scriptも再実行し、2 runのみ、Stage 1候補264、canonical担当0/未充足264を確認した。
+
+### 次の実験
+
+- 最優先は、Stage 2不可行時のIIS自動保存、15分・系統のみ・設備緩和条件での264便baseline、制約の段階的復元、clean commit・固定input・違反0・KPI整合の確認である。正式baselineが受理gateを通るまで、費用・エネルギー・CO₂の比較図は解禁しない。
+
+### 残り2週間の不足整理と優先計画（2026-07-19～2026-07-31）
+
+- 自分から上げた問題として、今後の作業候補をすべて同じ優先度で並べると、不可行原因の特定、15分baseline、24回の毎正時更新、晴雨比較、予測誤差、successor感度を2週間で同時に進めることになり、どれも受理条件を満たさないまま月末を迎える危険がある。新機能の追加ではなく、研究結果を信頼できる証拠の不足を先に潰す。
+- 現在足りない証拠は、(1) Stage 2が不可行になった制約を特定できるIIS又は同等の診断記録、(2) 15分刻みで264/264便を運行できる正式baseline、(3) SOC・充電器・受電・接続・電力収支の違反0、会計値一致、fallbackなしを示す独立検証、(4) EV SOC・BESS SOC・既発生最大受電を引き継ぐ24回の毎正時連鎖、(5) PV予測誤差、晴雨、successor上限による影響の比較、の5点である。
+- 必須作業（7月19日～25日）は、不可行時の診断記録を自動保存し、系統電力のみ・設備緩和条件から開始して、充電器台数、充電出力、受電上限、BESS、PV、終端SOC条件を一つずつ戻すことである。15分刻み、全264便担当、未担当0便、独立違反0、fallback=false、postsolve repair=false、会計値一致を満たす1 runを、clean commit、input hash、設定、seed、time limit、gapとともに固定する。
+- 次点作業（7月26日～31日）は、固定した日次割当を使い、毎正時にEV SOC、BESS SOC、既発生最大受電、PV予測を引き継いで24回完走することである。実行済み区間の二重計上がなく、各時刻で可行であることを確認し、一日計画との費用、系統購入量、最大受電、PV利用、EV/BESS SOCを比較する。
+- 余力がある場合だけ、PV予測誤差0%・±10%・±20%、晴雨比較、successor上限8・16・32・無制限の順に感度分析を追加する。正式baseline又は24回連鎖が未完了なら、これらを先に実施しない。
+- 2週間の完了条件は「15分刻みの正式baseline 1本」と「毎正時更新を24回つないだ1ケース」の二つである。この二つを満たした後に限り、先行文献に対応する車両運用、EV/BESS SOC、電源別需給、費用、CO₂、solver品質の図を正式結果として追加する。
+
+### 追補：不足点の実装確認と最初のモデル修正
+
+- 実際の画面実行経路を、BFFの`_run_optimization`から`ProblemBuilder`、`OptimizationEngine`、GurobiのStage 1、固定割当を受け取るStage 2まで追跡した。ここで、研究結果を増やす前に直すべき不足として、(1) 画面からのPhase 3実行ではStage 2不可行時の診断保存先が渡されない、(2) Stage 2が候補接続の削減情報を引き継ぐ処理に未定義変数があり、終了経路で例外になり得る、(3) Stage 1が同じ車両・同じ15分枠の充電機会を複数回数え得る、(4) 実行可能解があっても厳密性の受理条件を満たさないだけで`NO_VALID_INCUMBENT`（有効な解なし）へ書き換える、の4点を確認した。
+- BFFはPhase 3実行時に`<run output>/diagnostics`をcanonical problemへ明示的に渡すようにした。今後Stage 2が不可行になった場合、既存の割当候補、車両別エネルギー事前確認、IIS、診断要約を画面実行でも同じrun配下へ保存できる。この追補の短時間runはStage 2が可行だったため、IISが新たに生成されたとは主張しない。
+- Stage 2はStage 1 planに保存された`arc_pruning_summary`を読み、候補接続を1本でも削っていれば`supports_exact_milp=false`を維持するようにした。これにより、Gurobiが作成済みモデルを解けたことと、削減前の全候補に対する厳密解であることを区別する。未定義変数による例外も回帰テストで再現して修正した。
+- Stage 1のSOC事前確認は、便を担当したという情報だけから便の前後を一律に充電可能とは数えない。選ばれた車両の流れに対応する「出庫前」「営業所へ戻って次便まで待機している時間」「帰庫後」だけを充電候補とし、同じ車両・同じ時間枠の充電は最大1回分に制限する。例えば100 kWの充電器、15分枠、効率95%なら、Stage 1が1枠で見込める車両への充電は最大23.75 kWhであり、同じ枠を複数便の窓として重複加算しない。
+- このStage 1制約は、明らかに充電が間に合わない割当をStage 2へ渡しにくくするための事前確認である。営業所全体の充電器台数、受電上限、PV・BESS、実際の充電量は引き続きStage 2が確認する。運行接続条件`arrival + turnaround + deadhead <= next departure`、時刻表、`operator_id`、距離、Stage 2のSOC・電力制約は変更していない。
+- 最初の素朴な重複防止案は、各便と各時間枠の重なりを個別に禁止したため、264便・15分ケースでStage 1の追加制約が155,575件まで増えた。この性能問題を自分で検出し、その案は採用せず、選択された車両経路が作る充電候補だけを1枠1回へまとめた。再診断では追加制約6,755件となり、同じ目的のまま約95.7%削減した。
+- 30秒制限の診断run`output/model_fix_probe2_20260718`は、264/264便担当、未担当0、Stage 1は時間制限内の実行可能解、Stage 2はoptimal、SOC・接続・充電器・受電等の独立検証違反0だった。表示も`NO_VALID_INCUMBENT`ではなく`feasible`を保持する。一方、successor上限8で564,888本の候補接続を削っており、worktreeもdirtyなので、`research_run_accepted=false`、研究KPI掲載不可のままとした。このrunはモデル動作確認であり、7月の正式結果又は晴雨比較には使わない。
+- テストは、同じ15分枠を重複して充電できない小ケース、Stage 2の削減情報引継ぎ、画面実行の診断保存先、実行可能解のstatus保持を追加した。対象回帰は`85 passed`、全回帰は`python -m pytest -q --ignore=test_multiday_phase1.py`で`733 passed`。`test_multiday_phase1.py`はlocalhost BFFを前提とする手動E2Eのため除外した。
+- 次に足りないものは、モデル機能ではなく正式な証拠である。最優先はclean commitと固定inputで15分baselineを再実行し、264/264便、全独立検証違反0、fallbackなし、会計整合、設定・hash・gapを保存すること。その後、同じ日次割当を固定した毎正時更新を24回つなぐ。PV予測誤差、晴雨、successor上限8/16/32/無制限の感度分析は、この2点が完了した後に行う。
+
+### 追補：正式15分baselineの実行契約
+
+- `scripts/run_research_phase3_minimal.py`に`--milp-max-successors-per-trip`を追加した。正式baselineの既定値は`0`で、候補接続を削らず全候補を保持する。8、16、32は後続の感度分析で明示指定する。候補上限はinput auditとexperiment hashへ含め、異なる上限のrunを同一実験として扱わない。
+- 固定入力はscenario`b23fd26c-1233-4c73-bb9e-bdb8b1584760`、prepared input`prepared-789ce8197d83c758-0b337aa1f091e729`、prepared SHA-256`5f133b1dddabd7295a5e60e429ad008d966c690e70e19c2bcb6327d288094913`、service date`2025-08-10`、264便、BEV35台・ICE25台、15分96枠、初期EV SOC一律80%、PV/BESS/天候運用なし、seed 42、要求gap 10%、time limit 1,500秒とする。
+- 最終planを`CostEvaluator`でもう一度評価し、電力量料金、燃料費、需要料金、車両費、運転手費、各種追加費用、総費用の差がすべて`1e-6円`以下かを`accounting_recalculation`へ保存する。これはStage 1とStage 2が一つの総費用を大域最小化したという意味ではなく、取得した最終planから会計値を再計算して同じ金額になることの確認である。
+- `scripts/verify_research_phase3_baseline.py`は、clean commit、prepared input hash、15分96枠、264/264便、独立検証違反0、Stage 1 incumbent、Stage 2 optimal、fallbackなし、postsolve repairなし、候補接続削減0、会計再計算一致、研究可行性受理を一括確認し、`formal_baseline_verification.json`をrun配下へ保存する。
+- コミット前レビューで、候補接続を削ったMILPにも`eligible_for_main_benchmark=true`と`Exact core solver`が残るP1表示矛盾を検出した。`supports_exact_milp=false`のMILPはmain benchmark対象外、appendix又は感度分析用とし、candidate generationも`successor_pruned_branch_and_cut`と表示する。全候補を保持した場合だけ`full_network_branch_and_cut`としてmain benchmark候補にする。
+- build-onlyで上記固定入力をmaterializeし、`milp_max_successors_per_trip=null`（無制限）、prepared SHA、trip/vehicle/charger/initial SOC hashを確認した。正式solver runはcore_newへコミット後のclean worktreeで実行し、結果は次の追補へ記録する。
+
+---
+
+## 2026-07-17 — Result-validity gate and strict core_new review
+
+- 2026-07-17 UI runsをcurrent call pathで再監査した。canonical resultは両方`infeasible`、未担当264便、objective非有限、`research_kpi_eligible=false`である一方、旧reader-facing summary/KPIは未担当0便・0円・会計一致trueだった。
+- BFF保存とcanonical reporting再構築の双方にsolution-validity gateを追加した。不可行/fallback/未検証結果は費用、PV→bus/BESS、grid import、CO₂、SOC統計を`null`にし、canonical担当数とfailure stageを出す。backfill時の`results.xlsx`と`experiment_report.md`にも無効状態を反映する。solver resultとledgerは診断証拠として保持する。
+- successor pruningが1本でも実行されたMILPについて`supports_exact_milp=false`とした。Gurobiのconstructed-model optimalityは、削減前の候補接続網に対するglobal optimalityを意味しない。
+- `scripts/audit_core_new_review_20260717.py`は、不可行KPI矛盾、15分clean baselineと60分dirty weather runのgap、Stage 2 IIS、暫定晴雨エネルギー/費用を別証拠層として再描画する。詳細は`docs/reviews/core_new_strict_review_20260717.md`。
+- 回帰検証は`python -m pytest -q --ignore=test_multiday_phase1.py`で`730 passed`。変更対象Pythonファイルの構文、差分whitespace、不可行run複製のJSON/CSV/Excel gate再構築も確認した。除外testはlocalhost BFFを前提とする手動E2Eである。
+
+---
+
 ## 2026-07-16 — BESS terminal policy and day-ahead/hourly charging re-optimization
 
 ### 追補: 終端方針UI・状態連鎖・研究受理手順

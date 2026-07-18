@@ -101,6 +101,10 @@ def test_milp_optimizer_avoids_full_model_build_for_metadata(monkeypatch) -> Non
     assert result.solver_status == "optimal"
     assert result.solver_metadata["model_stats"]["variables"]["assignment"] == 1
     assert result.solver_metadata["solver_objective_matches_accounting_total"] is True
+    assert result.solver_metadata["eligible_for_main_benchmark"] is True
+    assert result.solver_metadata["candidate_generation_mode"] == (
+        "full_network_branch_and_cut"
+    )
 
 
 def test_milp_optimizer_propagates_phase_metadata(monkeypatch) -> None:
@@ -198,6 +202,12 @@ def test_milp_optimizer_propagates_phase_metadata(monkeypatch) -> None:
     assert result.solver_metadata["charging_dispatch_evaluated"] is False
     assert result.solver_metadata["soc_constraints_evaluated"] is False
     assert result.solver_metadata["solver_objective_matches_accounting_total"] is False
+    assert result.solver_metadata["eligible_for_main_benchmark"] is False
+    assert result.solver_metadata["eligible_for_appendix_benchmark"] is True
+    assert result.solver_metadata["candidate_generation_mode"] == (
+        "successor_pruned_branch_and_cut"
+    )
+    assert "Successor-pruned" in result.solver_metadata["comparison_note"]
 
 
 def test_research_phase3_does_not_publish_stage1_candidate_when_stage2_is_infeasible(monkeypatch) -> None:

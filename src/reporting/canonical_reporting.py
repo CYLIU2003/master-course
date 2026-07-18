@@ -27,7 +27,108 @@ REPORTING_FILES = [
     "cost_breakdown_detail.csv",
     "graph/energy_flow_ledger.csv",
     "graph/data_flow_validation.csv",
+    "results.xlsx",
+    "experiment_report.md",
 ]
+
+INVALID_SUMMARY_KPI_FIELDS = {
+    "objective_value",
+    "objective_value_jpy",
+    "total_cost_jpy",
+    "accounting_total_cost_jpy",
+    "reported_total_cost_jpy",
+    "gross_operating_cost_jpy",
+    "solver_objective_value",
+    "validated_operating_cost_jpy",
+    "grid_purchase_cost_jpy",
+    "demand_charge_cost_jpy",
+    "fuel_cost_jpy",
+    "co2_cost_jpy",
+    "vehicle_cost_jpy",
+    "vehicle_usage_cost_jpy",
+    "driver_cost_jpy",
+    "unserved_penalty_jpy",
+    "switch_cost_jpy",
+    "battery_degradation_cost_jpy",
+    "contract_overage_cost_jpy",
+}
+
+INVALID_KPI_FIELDS = {
+    "total_cost_jpy",
+    "accounting_total_cost_jpy",
+    "gross_operating_cost_jpy",
+    "reported_total_cost_jpy",
+    "objective_value",
+    "objective_value_jpy",
+    "solver_objective_value",
+    "validated_operating_cost_jpy",
+    "energy_cost_jpy",
+    "demand_cost_jpy",
+    "fuel_cost_jpy",
+    "co2_cost_jpy",
+    "battery_degradation_cost_jpy",
+    "contract_overage_cost_jpy",
+    "vehicle_usage_cost_jpy",
+    "vehicle_cost_jpy",
+    "driver_cost_jpy",
+    "unserved_penalty_jpy",
+    "switch_cost_jpy",
+    "grid_purchase_cost_jpy",
+    "demand_charge_cost_jpy",
+    "pv_to_bus_cost_jpy",
+    "pv_to_bess_cost_jpy",
+    "bess_to_bus_cost_jpy",
+    "bess_total_flow_cost_jpy",
+    "pv_to_bus_kwh",
+    "pv_to_bess_kwh",
+    "pv_curtailed_kwh",
+    "pv_curtailment_kwh",
+    "pv_export_kwh",
+    "pv_utilization_ratio",
+    "bess_to_bus_kwh",
+    "bess_charge_kwh",
+    "bess_discharge_to_bus_kwh",
+    "bess_discharge_kwh",
+    "grid_to_bus_kwh",
+    "grid_to_bess_kwh",
+    "grid_total_kwh",
+    "grid_import_kwh",
+    "facility_load_kwh",
+    "peak_grid_import_kw",
+    "peak_grid_import_kw_all_depots",
+    "peak_grid_import_kw_any_depot",
+    "peak_grid_kw",
+    "peak_total_charge_kw",
+    "peak_total_charge_kw_all_depots",
+    "peak_total_charge_kw_any_depot",
+    "contract_over_limit_kwh",
+    "contract_over_limit_kw_peak",
+    "contract_over_limit_slot_count",
+    "contract_limit_exceeded",
+    "bus_charging_total_kwh",
+    "total_bus_charge_kwh",
+    "total_bess_charge_kwh",
+    "total_charge_input_kwh",
+    "bev_charge_input_kwh",
+    "bev_charge_to_battery_kwh",
+    "bev_charge_loss_kwh",
+    "bev_drive_energy_kwh",
+    "bev_drive_consumption_kwh",
+    "ice_fuel_consumed_l",
+    "ice_fuel_l",
+    "ice_refueled_l",
+    "fuel_consumption_l",
+    "refuel_l",
+    "grid_co2_kg",
+    "electricity_co2_kg",
+    "ice_co2_kg",
+    "fuel_co2_kg",
+    "total_co2_kg",
+    "min_soc_ratio",
+    "mean_soc_ratio",
+    "final_min_soc_ratio",
+    "final_mean_soc_ratio",
+}
 
 
 @dataclass(frozen=True)
@@ -568,6 +669,313 @@ def update_kpi_summary(
     return kpi
 
 
+def _load_optional_json(path: Path) -> dict[str, Any]:
+    if not path.is_file():
+        return {}
+    try:
+        return load_json(path)
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _first_nonnegative_int(*values: Any) -> int | None:
+    for value in values:
+        if value in (None, ""):
+            continue
+        try:
+            return max(int(value), 0)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _infeasible_failure_stage(
+    solver_status: str,
+    solver_settings: dict[str, Any],
+) -> str:
+    stage2_status = str(solver_settings.get("stage2_solver_status") or "").lower()
+    if stage2_status and stage2_status not in {"optimal", "feasible", "solved_feasible"}:
+        return "stage2_energy_dispatch"
+    stage1_status = str(solver_settings.get("stage1_solver_status") or "").lower()
+    if stage1_status in {"infeasible", "inf_or_unbd", "unbounded", "no_valid_incumbent"}:
+        return "stage1_assignment"
+    if "infeasible" in solver_status.lower():
+        return "postsolve_validation"
+    return "result_validation"
+
+
+def _null_fields(payload: dict[str, Any], fields: set[str]) -> None:
+    for field in fields:
+        if field in payload:
+            payload[field] = None
+
+
+def _gate_results_workbook(
+    run_dir: Path,
+    *,
+    result_status: str,
+    failure_stage: str,
+    served_trip_count: int | None,
+    unserved_trip_count: int | None,
+) -> None:
+    """Invalidate reader-facing workbook cells without deleting diagnostics."""
+
+    workbook_path = run_dir / "results.xlsx"
+    if not workbook_path.is_file():
+        return
+    try:
+        from openpyxl import load_workbook
+    except ImportError:
+        return
+
+    workbook = load_workbook(workbook_path)
+    if "summary" in workbook.sheetnames:
+        summary_sheet = workbook["summary"]
+        summary_values = {
+            "objective_value": None,
+            "trip_count_served": served_trip_count,
+            "trip_count_unserved": unserved_trip_count,
+        }
+        for row in summary_sheet.iter_rows(min_row=2):
+            key = str(row[0].value or "")
+            if key in summary_values:
+                row[1].value = summary_values[key]
+
+    if "cost_breakdown" in workbook.sheetnames:
+        cost_sheet = workbook["cost_breakdown"]
+        preserved_flags = {
+            "evaluation_feasible": 0.0,
+            "objective_is_actual_cost": False,
+            "solver_objective_matches_accounting_total": False,
+        }
+        for row in cost_sheet.iter_rows(min_row=2):
+            key = str(row[0].value or "")
+            row[1].value = preserved_flags.get(key)
+
+    if "result_status" in workbook.sheetnames:
+        del workbook["result_status"]
+    status_sheet = workbook.create_sheet("result_status", 0)
+    status_sheet.append(["key", "value"])
+    status_sheet.append(["result_status", result_status])
+    status_sheet.append(["failure_stage", failure_stage])
+    status_sheet.append(["research_kpi_eligible", False])
+    workbook.save(workbook_path)
+
+
+def _gate_experiment_report(
+    run_dir: Path,
+    *,
+    result_status: str,
+    failure_stage: str,
+    unserved_trip_count: int | None,
+) -> None:
+    report_path = run_dir / "experiment_report.md"
+    if not report_path.is_file():
+        return
+    original = report_path.read_text(encoding="utf-8")
+    marker = "<!-- solution-validity-gate -->"
+    if marker in original:
+        return
+    warning = (
+        f"{marker}\n"
+        "# INVALID RESULT — KPI使用禁止\n\n"
+        f"- result_status: `{result_status}`\n"
+        f"- failure_stage: `{failure_stage}`\n"
+        f"- unserved_trip_count: `{unserved_trip_count}`\n"
+        "- research_kpi_eligible: `false`\n"
+        "- 費用・エネルギーフロー・CO₂は評価不能であり、下記の旧数値を研究結果として使用しない。\n\n"
+        "---\n\n"
+    )
+    report_path.write_text(warning + original, encoding="utf-8")
+
+
+def apply_solution_validity_gate(
+    run_dir: Path,
+    summary: dict[str, Any],
+    kpi: dict[str, Any],
+    validation_rows: list[dict[str, Any]],
+) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
+    """Invalidate evaluation KPIs when the canonical result is not usable.
+
+    Raw solver artifacts and ledgers remain untouched for diagnosis.  Only
+    reader-facing KPI summaries are gated so an infeasible zero-row ledger
+    cannot be misread as a valid zero-cost solution.
+    """
+
+    canonical = _load_optional_json(run_dir / "canonical_solver_result.json")
+    if not canonical:
+        canonical = _load_optional_json(run_dir / "raw" / "canonical_solver_result.json")
+    solution_validity = dict(
+        summary.get("solution_validity")
+        or canonical.get("solution_validity")
+        or kpi.get("solution_validity")
+        or {}
+    )
+    solver_status = str(
+        summary.get("solver_status")
+        or canonical.get("solver_status")
+        or kpi.get("solver_status")
+        or ""
+    )
+    has_explicit_validity = "validated_feasible" in solution_validity
+    has_canonical_feasibility = "feasible" in canonical
+    status_upper = solver_status.upper()
+    status_explicitly_invalid = any(
+        token in status_upper
+        for token in (
+            "INFEASIBLE",
+            "NO_VALID_INCUMBENT",
+            "BASELINE_FALLBACK",
+            "POSTSOLVE_REPAIRED",
+            "DEBUG_RESULT",
+        )
+    )
+    if not (has_explicit_validity or has_canonical_feasibility or status_explicitly_invalid):
+        return summary, kpi, validation_rows
+
+    if has_explicit_validity:
+        validated_feasible = bool(solution_validity.get("validated_feasible"))
+    elif has_canonical_feasibility:
+        validated_feasible = bool(canonical.get("feasible"))
+    else:
+        validated_feasible = status_upper in {
+            "OPTIMAL",
+            "FEASIBLE",
+            "SOLVED_FEASIBLE",
+        }
+
+    if validated_feasible:
+        return summary, kpi, validation_rows
+
+    solver_settings = _load_optional_json(run_dir / "solver_settings.json")
+    unserved_trip_count = _first_nonnegative_int(
+        canonical.get("trip_count_unserved"),
+        len(canonical.get("unserved_trip_ids") or [])
+        if "unserved_trip_ids" in canonical
+        else None,
+        summary.get("trip_count_unserved"),
+        kpi.get("unserved_trip_count"),
+    )
+    served_trip_count = _first_nonnegative_int(
+        canonical.get("trip_count_served"),
+        len(canonical.get("served_trip_ids") or [])
+        if "served_trip_ids" in canonical
+        else None,
+        summary.get("trip_count_served"),
+        kpi.get("served_trip_count"),
+    )
+    result_status = "INFEASIBLE" if "INFEASIBLE" in solver_status.upper() else "INVALID"
+    failure_stage = _infeasible_failure_stage(solver_status, solver_settings)
+    status_reason = str(
+        solution_validity.get("status_reason") or "canonical_result_not_validated_feasible"
+    )
+
+    _null_fields(summary, INVALID_SUMMARY_KPI_FIELDS)
+    summary.update(
+        {
+            "result_status": result_status,
+            "failure_stage": failure_stage,
+            "research_kpi_eligible": False,
+            "objective_is_actual_cost": False,
+            "solver_objective_matches_accounting_total": False,
+            "kpi_eligibility_reason": status_reason,
+        }
+    )
+    if served_trip_count is not None:
+        summary["trip_count_served"] = served_trip_count
+    if unserved_trip_count is not None:
+        summary["trip_count_unserved"] = unserved_trip_count
+    summary["cost_definition"] = {
+        "availability": "unavailable because the canonical result is not validated feasible",
+        "objective_is_actual_cost": False,
+        "solver_objective_matches_accounting_total": False,
+    }
+
+    _null_fields(kpi, INVALID_KPI_FIELDS)
+    kpi.update(
+        {
+            "result_status": result_status,
+            "failure_stage": failure_stage,
+            "research_kpi_eligible": False,
+            "objective_is_actual_cost": False,
+            "solver_objective_matches_accounting_total": False,
+            "is_optimization_result": False,
+            "result_interpretation": "invalid_result_kpis_unavailable",
+            "optimization_status": result_status,
+            "physical_feasibility_status": result_status,
+            "is_physically_feasible": False,
+            "kpi_eligibility_reason": status_reason,
+        }
+    )
+    if served_trip_count is not None:
+        kpi["served_trip_count"] = served_trip_count
+    if unserved_trip_count is not None:
+        kpi["unserved_trip_count"] = unserved_trip_count
+
+    for section_name in ("cost", "fuel", "co2"):
+        section = kpi.get(section_name)
+        if isinstance(section, dict):
+            for key in list(section):
+                if key not in {
+                    "objective_value_definition",
+                    "gross_operating_cost_definition",
+                    "fuel_source_of_truth",
+                    "co2_boundary",
+                    "co2_accounting_method",
+                    "bess_co2_source_tracking",
+                }:
+                    section[key] = None
+    energy = kpi.get("energy")
+    if isinstance(energy, dict):
+        for key in list(energy):
+            if key != "pv_generation_kwh":
+                energy[key] = None
+    bess = kpi.get("bess")
+    if isinstance(bess, dict):
+        for key in list(bess):
+            if key not in {"capacity_kwh", "soc_min_kwh", "soc_max_kwh"}:
+                bess[key] = None
+    kpi["cost_definition"] = dict(summary["cost_definition"])
+
+    gate_row = validation_row(
+        "solution_validity_gate",
+        True,
+        False,
+        severity="ERROR",
+        source_files="canonical_solver_result.json;summary.json;solver_settings.json",
+    )
+    gate_row["message"] = (
+        f"{result_status}: evaluation KPIs are unavailable; failure_stage={failure_stage}; "
+        f"reason={status_reason}"
+    )
+    validation_rows = [
+        row for row in validation_rows if row.get("check_name") != "solution_validity_gate"
+    ]
+    validation_rows.append(gate_row)
+
+    write_json(run_dir / "summary.json", summary)
+    write_json(run_dir / "graph" / "kpi_summary.json", kpi)
+    if (run_dir / "kpi_summary.json").is_file():
+        write_json(run_dir / "kpi_summary.json", kpi)
+    validation_path = run_dir / "graph" / "data_flow_validation.csv"
+    fields, _ = read_csv(validation_path)
+    write_csv(validation_path, fields, validation_rows)
+    _gate_results_workbook(
+        run_dir,
+        result_status=result_status,
+        failure_stage=failure_stage,
+        served_trip_count=served_trip_count,
+        unserved_trip_count=unserved_trip_count,
+    )
+    _gate_experiment_report(
+        run_dir,
+        result_status=result_status,
+        failure_stage=failure_stage,
+        unserved_trip_count=unserved_trip_count,
+    )
+    return summary, kpi, validation_rows
+
+
 def validation_row(
     check_name: str,
     expected: Any,
@@ -928,11 +1336,27 @@ def write_strict_reconciliation(run_dir: Path, rows: list[dict[str, Any]], summa
         ),
         domain_row(
             "solver-status",
-            "OUT_OF_SCOPE_REMAINS" if summary.get("solver_status") == "BASELINE_FALLBACK" else "OK",
-            "BASELINE_FALLBACK remains because this run was not re-optimized."
-            if summary.get("solver_status") == "BASELINE_FALLBACK"
-            else "Solver status does not indicate BASELINE_FALLBACK.",
-            "WARNING" if summary.get("solver_status") == "BASELINE_FALLBACK" else "INFO",
+            "NG"
+            if summary.get("result_status") in {"INFEASIBLE", "INVALID"}
+            else (
+                "OUT_OF_SCOPE_REMAINS"
+                if summary.get("solver_status") == "BASELINE_FALLBACK"
+                else "OK"
+            ),
+            "Canonical result is not validated feasible; evaluation KPIs were gated."
+            if summary.get("result_status") in {"INFEASIBLE", "INVALID"}
+            else (
+                "BASELINE_FALLBACK remains because this run was not re-optimized."
+                if summary.get("solver_status") == "BASELINE_FALLBACK"
+                else "Solver status does not indicate BASELINE_FALLBACK."
+            ),
+            "ERROR"
+            if summary.get("result_status") in {"INFEASIBLE", "INVALID"}
+            else (
+                "WARNING"
+                if summary.get("solver_status") == "BASELINE_FALLBACK"
+                else "INFO"
+            ),
         ),
     ]
     legacy_rows = [
@@ -1089,6 +1513,12 @@ def rebuild_reporting_artifacts_in_place(run_dir: Path) -> ReportingRebuildResul
     summary = update_summary(run_dir, cost)
     kpi = update_kpi_summary(run_dir, totals, cost, bess_metadata)
     validation_rows = update_data_flow_validation(run_dir, totals, cost, summary, kpi, bess_metadata)
+    summary, kpi, validation_rows = apply_solution_validity_gate(
+        run_dir,
+        summary,
+        kpi,
+        validation_rows,
+    )
     update_validation_counts(run_dir, validation_rows, kpi)
     kpi = load_json(run_dir / "graph" / "kpi_summary.json")
     write_strict_reconciliation(run_dir, validation_rows, summary)

@@ -25,6 +25,7 @@ backend/dist/
 outputs/
 derived/
 results/
+*.pptx.inspect.ndjson
 backend/.env
 backend/.cache/
 app/scenarios/

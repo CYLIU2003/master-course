@@ -35,6 +35,7 @@ from src.optimization.common.soc_helpers import (
     trip_slot_energy_fraction,
 )
 from scripts.run_research_phase3_minimal import (
+    _audit_accounting_recalculation,
     _build_experiment_identity,
     _configure_controlled_model_validation_case,
     _finite_float_or_none,
@@ -118,6 +119,35 @@ def test_controlled_case_clears_all_inherited_terminal_soc_requirements() -> Non
     assert simulation_config["final_soc_floor_percent"] is None
     assert simulation_config["final_soc_target_percent"] is None
     assert simulation_config["final_soc_target_tolerance_percent"] is None
+
+
+def test_controlled_case_can_disable_successor_pruning_explicitly() -> None:
+    configured = _configure_controlled_model_validation_case(
+        {"simulation_config": {}, "scenario_overlay": {"solver_config": {}}},
+        time_step_min=15,
+        initial_soc_policy=InitialSocPolicy.UNIFORM_SCENARIO_VALUE,
+        initial_soc_percent=80,
+        milp_max_successors_per_trip=0,
+    )
+
+    assert configured["simulation_config"]["milp_max_successors_per_trip"] is None
+    assert (
+        configured["scenario_overlay"]["solver_config"][
+            "milp_max_successors_per_trip"
+        ]
+        is None
+    )
+
+
+def test_accounting_recalculation_rejects_a_cost_mismatch() -> None:
+    audit = _audit_accounting_recalculation(
+        {"electricity_cost": 100.0, "fuel_cost": 50.0, "total_cost": 150.0},
+        {"electricity_cost": 100.0, "fuel_cost": 49.0, "total_cost": 149.0},
+    )
+
+    assert audit["passed"] is False
+    assert audit["max_abs_residual_jpy"] == pytest.approx(1.0)
+    assert audit["residual_jpy_by_component"]["fuel_cost"] == pytest.approx(1.0)
 
 
 def test_phase3_research_policy_restricts_the_ephemeral_model_to_one_duty() -> None:
@@ -717,6 +747,129 @@ def test_stage1_time_indexed_soc_relaxation_blocks_off_depot_charge() -> None:
     assert model.Status == gp.GRB.INFEASIBLE
 
 
+@pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
+def test_stage1_time_indexed_soc_relaxation_caps_charge_and_blocks_trip_overlap() -> None:
+    """One vehicle cannot receive duplicate charge or charge while in service."""
+    import gurobipy as gp
+
+    adapter = GurobiMILPAdapter()
+    vehicle = ProblemVehicle(
+        vehicle_id="bev",
+        vehicle_type="BEV",
+        home_depot_id="depot",
+        initial_soc=1.0,
+        battery_capacity_kwh=100.0,
+        reserve_soc=0.2,
+        energy_consumption_kwh_per_km=1.0,
+    )
+    trips = (
+        ProblemTrip(
+            trip_id="first",
+            route_id="r",
+            origin="remote-a",
+            destination="depot",
+            departure_min=5 * 60,
+            arrival_min=6 * 60,
+            distance_km=10.0,
+            allowed_vehicle_types=("BEV",),
+        ),
+        ProblemTrip(
+            trip_id="second",
+            route_id="r",
+            origin="depot",
+            destination="remote-b",
+            departure_min=7 * 60,
+            arrival_min=8 * 60,
+            distance_km=170.0,
+            allowed_vehicle_types=("BEV",),
+        ),
+    )
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="time-indexed-soc-single-charge-cap",
+            timestep_min=60,
+            horizon_start="05:00",
+            horizon_end="09:00",
+        ),
+        dispatch_context=_DispatchContext(),
+        trips=trips,
+        vehicles=(vehicle,),
+        chargers=(
+            ChargerDefinition(
+                charger_id="charger",
+                depot_id="depot",
+                power_kw=100.0,
+            ),
+        ),
+        price_slots=tuple(EnergyPriceSlot(slot_index=index) for index in range(4)),
+    )
+    model = gp.Model("stage1_time_indexed_soc_single_charge_cap")
+    model.Params.OutputFlag = 0
+    y = {
+        ("bev", trip.trip_id): model.addVar(
+            vtype=gp.GRB.BINARY,
+            lb=1.0,
+            ub=1.0,
+        )
+        for trip in trips
+    }
+    x = {
+        ("bev", "first", "second"): model.addVar(
+            vtype=gp.GRB.BINARY,
+            lb=1.0,
+            ub=1.0,
+        )
+    }
+    start_arc = {
+        ("bev", "first"): model.addVar(
+            vtype=gp.GRB.BINARY,
+            lb=1.0,
+            ub=1.0,
+        )
+    }
+    end_arc = {
+        ("bev", "second"): model.addVar(
+            vtype=gp.GRB.BINARY,
+            lb=1.0,
+            ub=1.0,
+        )
+    }
+    used_vehicle = {
+        "bev": model.addVar(vtype=gp.GRB.BINARY, lb=1.0, ub=1.0)
+    }
+    startup = StartupEnergyPrecheck(
+        path_feasible=True,
+        energy_feasible=True,
+        initial_soc_kwh=100.0,
+        minimum_soc_kwh=20.0,
+        startup_deadhead_min=0,
+        startup_deadhead_energy_kwh=0.0,
+        required_departure_soc_kwh=30.0,
+        complete_precharge_slot_count=0,
+        maximum_precharge_energy_kwh=0.0,
+        energy_margin_kwh=70.0,
+    )
+
+    adapter._add_stage1_time_indexed_soc_relaxation(
+        model,
+        grb=gp.GRB,
+        problem=problem,
+        trip_by_id=problem.trip_by_id(),
+        vehicles=problem.vehicles,
+        assignment_trip_ids_by_vehicle={"bev": ["first", "second"]},
+        startup_energy_precheck_by_assignment={("bev", "first"): startup},
+        y=y,
+        x=x,
+        start_arc=start_arc,
+        end_arc=end_arc,
+        used_vehicle=used_vehicle,
+    )
+    model.optimize()
+
+    assert model.getVarByName("stage1_charge_available__bev__slot_1") is not None
+    assert model.Status == gp.GRB.INFEASIBLE
+
+
 def test_home_depot_windows_use_service_day_minutes_after_midnight() -> None:
     adapter = GurobiMILPAdapter()
     problem = _Problem()
@@ -1179,3 +1332,31 @@ def test_experiment_hash_changes_with_timestep() -> None:
     )["experiment_hash"] != _experiment_identity_for(
         problem_30, initial_soc_input_hash="same-soc"
     )["experiment_hash"]
+
+
+def test_experiment_hash_changes_with_successor_limit() -> None:
+    problem_8, _vehicle, _trip = _startup_problem(
+        trip_distance_km=1.0,
+        departure_min=6 * 60,
+        initial_soc=0.8,
+        reserve_soc=0.2,
+    )
+    problem_16, _vehicle, _trip = _startup_problem(
+        trip_distance_km=1.0,
+        departure_min=6 * 60,
+        initial_soc=0.8,
+        reserve_soc=0.2,
+    )
+    problem_8.metadata["milp_max_successors_per_trip"] = 8
+    problem_16.metadata["milp_max_successors_per_trip"] = 16
+
+    identity_8 = _experiment_identity_for(
+        problem_8, initial_soc_input_hash="same-soc"
+    )
+    identity_16 = _experiment_identity_for(
+        problem_16, initial_soc_input_hash="same-soc"
+    )
+
+    assert identity_8["milp_max_successors_per_trip"] == 8
+    assert identity_16["milp_max_successors_per_trip"] == 16
+    assert identity_8["experiment_hash"] != identity_16["experiment_hash"]
