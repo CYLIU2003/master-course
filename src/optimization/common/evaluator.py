@@ -17,9 +17,12 @@ from .problem import (
     normalize_service_coverage_mode,
 )
 from .soc_helpers import (
+    deadhead_distance_km,
     final_soc_target_enabled,
     return_deadhead_energy_kwh,
     return_deadhead_min_to_home,
+    trip_energy_kwh,
+    vehicle_energy_rate_kwh_per_km,
 )
 from .weather_strategy import weather_strategy_objective_term
 
@@ -1060,14 +1063,29 @@ class CostEvaluator:
                 trip = trip_by_id.get(leg.trip.trip_id)
                 if trip is None:
                     continue
-                events.append((vehicle_id, depot_id, int(trip.departure_min), max(float(trip.energy_kwh or 0.0), 0.0)))
+                events.append(
+                    (
+                        vehicle_id,
+                        depot_id,
+                        int(trip.departure_min),
+                        trip_energy_kwh(problem, vehicle, trip),
+                    )
+                )
                 if leg.deadhead_from_prev_min > 0:
                     events.append(
                         (
                             vehicle_id,
                             depot_id,
                             int(trip.departure_min),
-                            max(float(self._estimated_deadhead_energy_kwh(problem, leg, trip) or 0.0), 0.0),
+                            max(
+                                float(
+                                    self._estimated_deadhead_energy_kwh(
+                                        problem, vehicle, leg, trip
+                                    )
+                                    or 0.0
+                                ),
+                                0.0,
+                            ),
                         )
                     )
             if target_enabled and duty.legs and vehicle is not None:
@@ -1377,6 +1395,9 @@ class CostEvaluator:
     ) -> List[Tuple[str, str, int, float]]:
         events: List[Tuple[str, str, int, float]] = []
         vehicle_type_by_id = {vt.vehicle_type_id: vt for vt in problem.vehicle_types}
+        vehicle_by_id = {
+            str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles
+        }
         vehicle_depot = self._vehicle_to_depot(problem)
         duty_vehicle_map = plan.duty_vehicle_map()
         for duty in plan.duties:
@@ -1512,8 +1533,10 @@ class CostEvaluator:
                 trip = problem.trip_by_id().get(leg.trip.trip_id)
                 if trip is None:
                     continue
-                soc -= max(float(trip.energy_kwh or 0.0), 0.0)
-                soc -= self._estimated_deadhead_energy_kwh(problem, leg, trip)
+                soc -= trip_energy_kwh(problem, vehicle, trip)
+                soc -= self._estimated_deadhead_energy_kwh(
+                    problem, vehicle, leg, trip
+                )
             if target_enabled and vehicle is not None and duty.legs:
                 day_idx = day_index_for_minute(int(duty.legs[-1].trip.departure_min), horizon_start_min)
                 if last_duty_by_day.get(day_idx) == str(duty.duty_id):
@@ -1752,19 +1775,25 @@ class CostEvaluator:
             vehicle = vehicle_by_id.get(vehicle_id)
             for leg in duty.legs:
                 trip_info = problem.trip_by_id().get(leg.trip.trip_id)
-                trip_energy_kwh = max(getattr(trip_info, "energy_kwh", 0.0) or 0.0, 0.0)
+                trip_energy = (
+                    trip_energy_kwh(problem, vehicle, trip_info)
+                    if vehicle is not None and trip_info is not None
+                    else max(getattr(trip_info, "energy_kwh", 0.0) or 0.0, 0.0)
+                )
                 self._distribute_energy_to_trip_slots(
                     problem,
                     leg.trip.departure_min,
                     leg.trip.arrival_min,
-                    trip_energy_kwh,
+                    trip_energy,
                     slot_totals_kwh,
                 )
                 if leg.deadhead_from_prev_min > 0:
                     self._distribute_energy_to_single_slot(
                         problem,
                         leg.trip.departure_min,
-                        self._estimated_deadhead_energy_kwh(problem, leg, trip_info),
+                        self._estimated_deadhead_energy_kwh(
+                            problem, vehicle, leg, trip_info
+                        ),
                         slot_totals_kwh,
                     )
             if target_enabled and duty.legs and vehicle is not None:
@@ -1966,12 +1995,17 @@ class CostEvaluator:
     def _estimated_deadhead_energy_kwh(
         self,
         problem: CanonicalOptimizationProblem,
+        vehicle: object | None,
         leg: DutyLeg,
         trip_info: object | None,
     ) -> float:
         if leg.deadhead_from_prev_min <= 0:
             return 0.0
-        distance_km = self._deadhead_distance_km(problem, leg.deadhead_from_prev_min)
+        distance_km = deadhead_distance_km(problem, leg.deadhead_from_prev_min)
+        if vehicle is not None and trip_info is not None:
+            return distance_km * vehicle_energy_rate_kwh_per_km(
+                problem, vehicle, trip_info
+            )
         trip_distance = max(float(getattr(trip_info, "distance_km", 0.0) or 0.0), 1.0e-6)
         energy_per_km = max(float(getattr(trip_info, "energy_kwh", 0.0) or 0.0), 0.0) / trip_distance
         return distance_km * energy_per_km
@@ -2098,18 +2132,25 @@ class CostEvaluator:
                 continue
             
             vehicle_id = duty_vehicle_map.get(duty.duty_id, duty.duty_id)
+            vehicle = vehicle_by_id.get(str(vehicle_id))
             depot_id = vehicle_depot.get(vehicle_id, "depot_default")
             
             for leg in duty.legs:
                 trip = problem.trip_by_id().get(leg.trip.trip_id)
                 if trip is None:
                     continue
-                energy_kwh = max(float(trip.energy_kwh or 0.0), 0.0)
+                energy_kwh = (
+                    trip_energy_kwh(problem, vehicle, trip)
+                    if vehicle is not None
+                    else max(float(trip.energy_kwh or 0.0), 0.0)
+                )
                 if energy_kwh > 0.0:
                     events.append((vehicle_id, depot_id, int(trip.departure_min), energy_kwh))
                 # Deadhead energy
                 if leg.deadhead_from_prev_min > 0:
-                    dh_energy = self._estimated_deadhead_energy_kwh(problem, leg, trip)
+                    dh_energy = self._estimated_deadhead_energy_kwh(
+                        problem, vehicle, leg, trip
+                    )
                     if dh_energy > 0.0:
                         events.append((vehicle_id, depot_id, int(trip.departure_min), dh_energy))
         

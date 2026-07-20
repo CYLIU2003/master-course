@@ -260,3 +260,78 @@ def test_cost_evaluator_counts_bev_trip_energy_without_charging_slots() -> None:
     assert breakdown.peak_grid_kw == 0.0
     assert breakdown.total_co2_kg == 10.0
     assert breakdown.total_cost >= 800.0
+
+
+def test_cost_evaluator_uses_assigned_vehicle_energy_rate() -> None:
+    trip = Trip(
+        trip_id="trip-vehicle-rate",
+        route_id="route-1",
+        origin="A",
+        destination="B",
+        departure_time="08:00",
+        arrival_time="10:00",
+        distance_km=10.0,
+        allowed_vehicle_types=("BEV",),
+    )
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="vehicle-rate",
+            horizon_start="08:00",
+            timestep_min=60,
+        ),
+        dispatch_context=None,
+        trips=(
+            ProblemTrip(
+                trip_id=trip.trip_id,
+                route_id=trip.route_id,
+                origin=trip.origin,
+                destination=trip.destination,
+                departure_min=480,
+                arrival_min=600,
+                distance_km=10.0,
+                allowed_vehicle_types=("BEV",),
+                energy_kwh=20.0,
+            ),
+        ),
+        vehicles=(
+            ProblemVehicle(
+                vehicle_id="bev-vehicle-rate",
+                vehicle_type="BEV",
+                home_depot_id="dep-1",
+                battery_capacity_kwh=200.0,
+                energy_consumption_kwh_per_km=1.5,
+            ),
+        ),
+        vehicle_types=(
+            ProblemVehicleType(
+                vehicle_type_id="BEV",
+                powertrain_type="BEV",
+                battery_capacity_kwh=200.0,
+            ),
+        ),
+        price_slots=(
+            EnergyPriceSlot(slot_index=0, grid_buy_yen_per_kwh=10.0),
+            EnergyPriceSlot(slot_index=1, grid_buy_yen_per_kwh=20.0),
+        ),
+    )
+    plan = AssignmentPlan(
+        duties=(
+            VehicleDuty(
+                duty_id="duty-vehicle-rate",
+                vehicle_type="BEV",
+                legs=(DutyLeg(trip=trip),),
+            ),
+        ),
+        served_trip_ids=(trip.trip_id,),
+        metadata={
+            "duty_vehicle_map": {
+                "duty-vehicle-rate": "bev-vehicle-rate",
+            }
+        },
+    )
+
+    breakdown = CostEvaluator().evaluate(problem, plan)
+
+    # 10 km x 1.5 kWh/km = 15 kWh, evenly split across the two hours.
+    assert breakdown.provisional_ev_drive_cost == 225.0
+    assert breakdown.ev_unreplenished_drive_energy_kwh == 15.0

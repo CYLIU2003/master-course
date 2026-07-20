@@ -30,13 +30,16 @@
 - この24回連鎖は制御経路と状態引継ぎの検証である。元の日次割当はdirty worktree、successor上限8、20秒の診断設定であり、`exact_milp_backend=false`、`research_run_accepted=false`である。したがって上記費用を修論の正式値、最適費用、正式な晴雨差として引用しない。
 - 正式baselineを入力にした24回rollingも`output/research_phase3_grid_only_15min_terminal_fair_formal_20260720/rolling_24h/`で完走した。24/24回で可行、Stage 2 optimal、264/264便、終端SOC合格、状態handoff 23件、終端不足最大`4.547473508864641e-13 kWh`、各回wall time最大`2.4875秒`だった。
 - この正式rolling監査で、自分からP1として、chain summaryが各時点の「残り時間の見込み費用は合計不可」と明示するだけで、実際に採用した先頭60分を24回分つないだ一日会計を出していない不足を検出した。各resultの全残り時間費用を足すと同じ将来を重複計上するため、各回の実行対象15分枠だけを切り出し、96枠が欠落・重複なく一度ずつ揃った場合のみ、共通`CostEvaluator`で一度だけ日次費用を再計算する処理を追加した。欠落枠があれば費用は`null`相当として不採用にする。便割当、接続条件、SOC制約、solver目的は変更していない。
+- 実行枠会計を追加したcommit `32e26f3`から正式rollingを再実行すると、96/96枠、重複0、各時点の終端目標合格にもかかわらず、実行フロー会計だけEV未補充`7.257757 kWh`で不採用になった。追跡の結果、Gurobi Stage 2は割り当て車両の`energy_consumption_kwh_per_km × trip distance`を使う一方、`CostEvaluator`は車両を見ず`ProblemTrip.energy_kwh`の代表値を使っていた。同じ運行を異なる電費で評価するP1であり、日次runでは充電余裕が差を隠していた。
+- 共通`soc_helpers.trip_energy_kwh()`と`vehicle_energy_rate_kwh_per_km()`を会計の走行、回送、SOC推定、CO2時系列へ適用し、ソルバーと会計の電費優先順位を「車両値→車種値→便の代表値」に統一した。kW/kWh、15分換算、充電効率95%、TOU、需要料金の最大kWという意味は変更していない。車両値1.5 kWh/km、便代表値2.0 kWh/kmの意図的不一致テストを追加し、会計が10 kmを15 kWhとして扱うことを固定した。
 - Gurobi runtime修正後、`python -m pytest -q --ignore=test_multiday_phase1.py`は`755 passed`。除外testはlocalhost BFFを必要とする手動E2Eであり、単体回帰の失敗ではない。
 - rolling日次会計の回帰2件を追加後、`python -m pytest -q --ignore=test_multiday_phase1.py`は`757 passed`、`python -m py_compile scripts/run_hourly_charging_reoptimization.py tests/test_phase3_time_budget_and_rolling.py`、`git diff --check`もpassした。
+- 車両別電費の会計統一後、`python -m pytest -q --ignore=test_multiday_phase1.py`は`758 passed`。費用・SOC・rollingのfocused 26件、compileもpassした。会計の意味が変わるため、最終正式baselineはこの修正を含むclean commitから取り直す。
 - Gurobi runtimeは、`gurobipy`を先にimportすると、環境変数未指定時に期限切れの`C:\gurobi\gurobi.lic`を拾う場合があった。モジュール読込時と`ensure_gurobi()`の双方でライセンス・DLL探索先をGurobi importより先に構成し、ユーザー側の有効なacademic licenseを選べるようにした。環境変数未指定の新規processで`is_gurobi_available()=True`を確認した。ライセンス本文は読み取り・記録していない。
 
 ### 次の研究実験
 
-1. rolling日次会計を含むclean commitから正式24回runを再実行し、96枠の完全被覆、実行フローhash、終端在庫、日次会計を確定する。
+1. 車両別電費会計とrolling日次会計を含むclean commitから正式日次baselineと24回runを再実行し、96枠の完全被覆、実行フローhash、終端在庫、日次会計を確定する。
 2. 同じ日次割当と設備条件でPV完全予測、予測誤差、晴雨を比較する。
 3. successor上限8/16/32/削減なしを感度分析とし、削減ありは縮約ネットワーク結果と明記する。
 
