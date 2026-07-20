@@ -20,6 +20,7 @@ from src.optimization.common.problem import (
 from src.optimization.milp.solver_adapter import (
     ROLLING_REMAINING_DAY_FIXED_ASSIGNMENT,
     _pv_generation_kwh_at_slot,
+    _remaining_posted_transition_fraction,
     _resolved_stage_time_limit_sec,
     _stage2_slot_indices,
 )
@@ -78,6 +79,20 @@ def test_remaining_day_slots_start_at_current_service_hour() -> None:
     )
 
     assert _stage2_slot_indices(problem, config, range(24)) == tuple(range(3, 24))
+
+
+def test_rolling_keeps_whole_deadhead_event_that_finishes_after_boundary() -> None:
+    assert _remaining_posted_transition_fraction(
+        event_end_min=7 * 60 + 3,
+        rolling_start_abs_min=7 * 60,
+    ) == 1.0
+
+
+def test_rolling_drops_deadhead_event_already_finished_at_boundary() -> None:
+    assert _remaining_posted_transition_fraction(
+        event_end_min=7 * 60,
+        rolling_start_abs_min=7 * 60,
+    ) == 0.0
 
 
 def test_rolling_pv_uses_absolute_slot_not_subset_position() -> None:

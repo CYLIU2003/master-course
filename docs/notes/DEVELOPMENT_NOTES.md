@@ -23,6 +23,7 @@
 ### 実データ検証
 
 - clean detached worktree / commit `dfa039d2454516858b3b1ce65053a59dd11dc299`から、固定prepared input `prepared-789ce8197d83c758-0b337aa1f091e729`（SHA-256 `5f133b1dddabd7295a5e60e429ad008d966c690e70e19c2bcb6327d288094913`）を使い、15分96枠、PV/BESSなし、successor削減なし、BEV終端`return_to_initial`の正式baselineを実行した。成果物は`output/research_phase3_grid_only_15min_terminal_fair_formal_20260720/`に保存した。
+- 車両別電費会計まで含むclean detached worktree / commit `0015a474e66c5921d7f26cc25a57e8a0a3158bf5`から同条件を再実行し、正本を`output/research_phase3_grid_only_15min_terminal_fair_formal_v2_20260720/`へ更新した。専用verifierは完全commit SHA指定で全項目passした。実験hashは`6d8bacacfabc9678efd991db30794948d7ec1532d90f68663fe556502c107fc1`である。
 - 専用verifierは全項目passした。264/264便、未担当0、重複0、時間重複0、接続違反0、BEV/BESS SOC違反0、充電器競合0、受電上限違反0、fallbackなし、postsolve repairなし、会計再計算残差0円、BEV終端不足`4.547473508864641e-13 kWh`（丸め誤差）、EV未補充量0 kWhである。使用車両は32台、会計総費用は`725,221.055675214円`だった。
 - Stage 1は750.371秒でtime limit、valid incumbentあり、gap `13.103701%`で、要求10%へは未達である。Stage 2は0.140秒、gap `4.954843%`でsolver statusはoptimalだった。この成果物は再現可能な正式可行baselineおよび会計値として採用できるが、総費用の大域的な最適解とは呼ばない。
 - `tmp/bev_terminal_policy_probe_20260720_v2`の短時間診断は、264/264便、Stage 2 optimal、独立検証違反0、EV終端目標不足約`3.7e-13 kWh`、EV未補充量0 kWh、会計再計算残差0円だった。
@@ -32,9 +33,13 @@
 - この正式rolling監査で、自分からP1として、chain summaryが各時点の「残り時間の見込み費用は合計不可」と明示するだけで、実際に採用した先頭60分を24回分つないだ一日会計を出していない不足を検出した。各resultの全残り時間費用を足すと同じ将来を重複計上するため、各回の実行対象15分枠だけを切り出し、96枠が欠落・重複なく一度ずつ揃った場合のみ、共通`CostEvaluator`で一度だけ日次費用を再計算する処理を追加した。欠落枠があれば費用は`null`相当として不採用にする。便割当、接続条件、SOC制約、solver目的は変更していない。
 - 実行枠会計を追加したcommit `32e26f3`から正式rollingを再実行すると、96/96枠、重複0、各時点の終端目標合格にもかかわらず、実行フロー会計だけEV未補充`7.257757 kWh`で不採用になった。追跡の結果、Gurobi Stage 2は割り当て車両の`energy_consumption_kwh_per_km × trip distance`を使う一方、`CostEvaluator`は車両を見ず`ProblemTrip.energy_kwh`の代表値を使っていた。同じ運行を異なる電費で評価するP1であり、日次runでは充電余裕が差を隠していた。
 - 共通`soc_helpers.trip_energy_kwh()`と`vehicle_energy_rate_kwh_per_km()`を会計の走行、回送、SOC推定、CO2時系列へ適用し、ソルバーと会計の電費優先順位を「車両値→車種値→便の代表値」に統一した。kW/kWh、15分換算、充電効率95%、TOU、需要料金の最大kWという意味は変更していない。車両値1.5 kWh/km、便代表値2.0 kWh/kmの意図的不一致テストを追加し、会計が10 kmを15 kWhとして扱うことを固定した。
+- 車両別電費統一後も同じ`7.257757 kWh`残差が残ったため、車両別・15分枠別に日次SOC遷移とrolling handoffを比較した。最初の差は07:00→08:00で、3台から`7.5012 + 8.6856 + 1.1844 = 17.3712 kWh`の回送消費が消えていた。Stage 2は回送電力を「回送が終わる15分枠」に全量計上する離散モデルだが、rolling開始時に境界をまたぐ回送を実時間比で部分控除し、07:00以前の分を「実測SOCへ反映済み」と仮定していた。直前stepも全量を07:00以後の枠へ置くため、その部分が二度と差し引かれない状態定義の不一致だった。
+- 最小修正として、離散SOCのhandoffでは回送終了がrolling境界より後なら回送電力を全量残し、境界以前に完了済みなら0とする共通関数を追加した。始発回送、便間回送、帰庫回送へ同じ意味を適用した。実時間での部分走行を新たに近似したのではなく、既存15分モデルのイベント計上とhandoffを一致させた。`arrival + turnaround + deadhead <= next departure`、便割当、時刻表、`operator_id`は変更していない。
+- dirty worktreeの境界修正probe `tmp/rolling_boundary_fix_probe_20260720/`は24/24回可行、全Stage 2 optimal、全回264/264便、96/96枠、欠落0、重複0、EV未補充0 kWh、終端不足最大`4.547473508864641e-13 kWh`、実行日次会計eligible=trueとなった。実行フローは系統`852.714841 kWh`、最大受電`83.026314 kW`、電力量料金`15,420.456800円`、需要料金`3,321.052578円`、燃料費`64,784.881393円`、車両使用費`640,000円`、総費用`725,069.594198円`、CO2`1,543.203426 kg`、flow hash `b248c11370375b4d3bc951e4db28bad47a8ac50ee248e313ce6ebd6bde23bff4`だった。日次計画の総費用`725,221.055675円`より`151.461478円`低いが、これは24個の残り時間目的値を合計した値ではなく、実行96枠を一度だけ再評価した値である。
 - Gurobi runtime修正後、`python -m pytest -q --ignore=test_multiday_phase1.py`は`755 passed`。除外testはlocalhost BFFを必要とする手動E2Eであり、単体回帰の失敗ではない。
 - rolling日次会計の回帰2件を追加後、`python -m pytest -q --ignore=test_multiday_phase1.py`は`757 passed`、`python -m py_compile scripts/run_hourly_charging_reoptimization.py tests/test_phase3_time_budget_and_rolling.py`、`git diff --check`もpassした。
 - 車両別電費の会計統一後、`python -m pytest -q --ignore=test_multiday_phase1.py`は`758 passed`。費用・SOC・rollingのfocused 26件、compileもpassした。会計の意味が変わるため、最終正式baselineはこの修正を含むclean commitから取り直す。
+- rolling境界修正後、focused 64件と`python -m pytest -q --ignore=test_multiday_phase1.py`の`760 passed`、`python -m compileall -q src bff scripts`、`git diff --check`がpassした。境界後完了イベント=全量、境界時点までに完了済み=0の回帰を追加した。
 - Gurobi runtimeは、`gurobipy`を先にimportすると、環境変数未指定時に期限切れの`C:\gurobi\gurobi.lic`を拾う場合があった。モジュール読込時と`ensure_gurobi()`の双方でライセンス・DLL探索先をGurobi importより先に構成し、ユーザー側の有効なacademic licenseを選べるようにした。環境変数未指定の新規processで`is_gurobi_available()=True`を確認した。ライセンス本文は読み取り・記録していない。
 
 ### 次の研究実験

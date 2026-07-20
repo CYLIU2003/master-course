@@ -148,6 +148,23 @@ def _vehicle_soc_transition_kwh(
     )
 
 
+def _remaining_posted_transition_fraction(
+    *,
+    event_end_min: int,
+    rolling_start_abs_min: int,
+) -> float:
+    """Return the remaining share of a discretely posted movement event.
+
+    Stage 2 posts startup, connection, and return deadhead energy as one event
+    in the slot where the movement finishes. The SOC handed to the next hourly
+    solve is a slot-boundary state from that same discrete model. Therefore an
+    event finishing after the boundary has not been deducted at all and must
+    remain whole; prorating it would silently lose its pre-boundary share.
+    """
+
+    return 0.0 if int(event_end_min) <= int(rolling_start_abs_min) else 1.0
+
+
 def _transition_slot_ending_at_event(
     slot_indices: Sequence[int],
     event_slot: int,
@@ -3768,12 +3785,10 @@ class GurobiMILPAdapter:
                             trip,
                             deadhead_min=deadhead_min,
                         )
-                        if deadhead_end <= rolling_start_abs_min:
-                            deadhead_fraction = 0.0
-                        elif deadhead_start < rolling_start_abs_min < deadhead_end:
-                            deadhead_fraction = (
-                                deadhead_end - rolling_start_abs_min
-                            ) / max(deadhead_end - deadhead_start, 1)
+                        deadhead_fraction = _remaining_posted_transition_fraction(
+                            event_end_min=deadhead_end,
+                            rolling_start_abs_min=rolling_start_abs_min,
+                        )
                     remaining_deadhead_energy_kwh = (
                         deadhead_energy_kwh * deadhead_fraction
                     )
@@ -3854,12 +3869,10 @@ class GurobiMILPAdapter:
                         and rolling_start_abs_min is not None
                         and first_departure_min > leave_depot_min
                     ):
-                        if first_departure_min <= rolling_start_abs_min:
-                            startup_energy_kwh = 0.0
-                        elif leave_depot_min < rolling_start_abs_min:
-                            startup_energy_kwh *= (
-                                first_departure_min - rolling_start_abs_min
-                            ) / max(first_departure_min - leave_depot_min, 1)
+                        startup_energy_kwh *= _remaining_posted_transition_fraction(
+                            event_end_min=first_departure_min,
+                            rolling_start_abs_min=rolling_start_abs_min,
+                        )
                     trip_load_by_vehicle_slot[(vehicle_id, departure_slot)] = (
                         trip_load_by_vehicle_slot.get((vehicle_id, departure_slot), 0.0)
                         + startup_energy_kwh
@@ -3896,12 +3909,10 @@ class GurobiMILPAdapter:
                             is_remaining_day_reoptimization
                             and rolling_start_abs_min is not None
                         ):
-                            if return_end_min <= rolling_start_abs_min:
-                                return_kwh = 0.0
-                            elif return_start_min < rolling_start_abs_min < return_end_min:
-                                return_kwh *= (
-                                    return_end_min - rolling_start_abs_min
-                                ) / max(return_end_min - return_start_min, 1)
+                            return_kwh *= _remaining_posted_transition_fraction(
+                                event_end_min=return_end_min,
+                                rolling_start_abs_min=rolling_start_abs_min,
+                            )
                         if return_transition_slot is None and return_kwh > 1.0e-9:
                             terminal_out_of_horizon_load_by_vehicle[vehicle_id] = (
                                 terminal_out_of_horizon_load_by_vehicle.get(vehicle_id, 0.0)
