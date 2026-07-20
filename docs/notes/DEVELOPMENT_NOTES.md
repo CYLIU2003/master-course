@@ -36,6 +36,7 @@
 - 車両別電費統一後も同じ`7.257757 kWh`残差が残ったため、車両別・15分枠別に日次SOC遷移とrolling handoffを比較した。最初の差は07:00→08:00で、3台から`7.5012 + 8.6856 + 1.1844 = 17.3712 kWh`の回送消費が消えていた。Stage 2は回送電力を「回送が終わる15分枠」に全量計上する離散モデルだが、rolling開始時に境界をまたぐ回送を実時間比で部分控除し、07:00以前の分を「実測SOCへ反映済み」と仮定していた。直前stepも全量を07:00以後の枠へ置くため、その部分が二度と差し引かれない状態定義の不一致だった。
 - 最小修正として、離散SOCのhandoffでは回送終了がrolling境界より後なら回送電力を全量残し、境界以前に完了済みなら0とする共通関数を追加した。始発回送、便間回送、帰庫回送へ同じ意味を適用した。実時間での部分走行を新たに近似したのではなく、既存15分モデルのイベント計上とhandoffを一致させた。`arrival + turnaround + deadhead <= next departure`、便割当、時刻表、`operator_id`は変更していない。
 - dirty worktreeの境界修正probe `tmp/rolling_boundary_fix_probe_20260720/`は24/24回可行、全Stage 2 optimal、全回264/264便、96/96枠、欠落0、重複0、EV未補充0 kWh、終端不足最大`4.547473508864641e-13 kWh`、実行日次会計eligible=trueとなった。実行フローは系統`852.714841 kWh`、最大受電`83.026314 kW`、電力量料金`15,420.456800円`、需要料金`3,321.052578円`、燃料費`64,784.881393円`、車両使用費`640,000円`、総費用`725,069.594198円`、CO2`1,543.203426 kg`、flow hash `b248c11370375b4d3bc951e4db28bad47a8ac50ee248e313ce6ebd6bde23bff4`だった。日次計画の総費用`725,221.055675円`より`151.461478円`低いが、これは24個の残り時間目的値を合計した値ではなく、実行96枠を一度だけ再評価した値である。
+- 最終正式rollingはclean detached worktree / commit `48e3ed62d6e9413ceb811a861ba9b32dc92b1198`から、日次正本commit `0015a474e66c5921d7f26cc25a57e8a0a3158bf5`を入力に実行し、`output/research_phase3_grid_only_15min_terminal_fair_formal_v2_20260720/rolling_24h_final/`へ保存した。chain summaryは両完全SHA、rolling dirty=false、prepared/trip/vehicle hash、day-ahead result SHAを保持する。24時刻、全時刻可行、全Stage 2 optimal、全時刻264/264便、全時刻終端SOC合格、96/96枠、欠落0、重複0、実行会計eligible、終端在庫一致、EV未補充0、両SHA一致を一括assertし、failed check 0だった。数値とflow hashは上記probeと一致した。
 - Gurobi runtime修正後、`python -m pytest -q --ignore=test_multiday_phase1.py`は`755 passed`。除外testはlocalhost BFFを必要とする手動E2Eであり、単体回帰の失敗ではない。
 - rolling日次会計の回帰2件を追加後、`python -m pytest -q --ignore=test_multiday_phase1.py`は`757 passed`、`python -m py_compile scripts/run_hourly_charging_reoptimization.py tests/test_phase3_time_budget_and_rolling.py`、`git diff --check`もpassした。
 - 車両別電費の会計統一後、`python -m pytest -q --ignore=test_multiday_phase1.py`は`758 passed`。費用・SOC・rollingのfocused 26件、compileもpassした。会計の意味が変わるため、最終正式baselineはこの修正を含むclean commitから取り直す。
@@ -45,9 +46,8 @@
 
 ### 次の研究実験
 
-1. 車両別電費会計とrolling日次会計を含むclean commitから正式日次baselineと24回runを再実行し、96枠の完全被覆、実行フローhash、終端在庫、日次会計を確定する。
-2. 同じ日次割当と設備条件でPV完全予測、予測誤差、晴雨を比較する。
-3. successor上限8/16/32/削減なしを感度分析とし、削減ありは縮約ネットワーク結果と明記する。
+1. 同じ日次割当と設備条件でPV完全予測、予測誤差、晴雨を比較する。
+2. successor上限8/16/32/削減なしを感度分析とし、削減ありは縮約ネットワーク結果と明記する。
 
 運行接続条件、時刻表、`operator_id`、便距離、Stage 1からStage 2へ渡す便割当は緩和・書換えしていない。
 
