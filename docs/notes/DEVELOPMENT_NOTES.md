@@ -40,6 +40,7 @@
 - rolling日次会計の回帰2件を追加後、`python -m pytest -q --ignore=test_multiday_phase1.py`は`757 passed`、`python -m py_compile scripts/run_hourly_charging_reoptimization.py tests/test_phase3_time_budget_and_rolling.py`、`git diff --check`もpassした。
 - 車両別電費の会計統一後、`python -m pytest -q --ignore=test_multiday_phase1.py`は`758 passed`。費用・SOC・rollingのfocused 26件、compileもpassした。会計の意味が変わるため、最終正式baselineはこの修正を含むclean commitから取り直す。
 - rolling境界修正後、focused 64件と`python -m pytest -q --ignore=test_multiday_phase1.py`の`760 passed`、`python -m compileall -q src bff scripts`、`git diff --check`がpassした。境界後完了イベント=全量、境界時点までに完了済み=0の回帰を追加した。
+- rolling成果物は日次計画のcommit SHAだけを持ち、時間別runner自身のSHAを持たなかった。日次とrollingのコード版が異なる場合も追跡できるよう、`rolling_runner_git_sha`と`rolling_runner_git_dirty`をchain summaryへ追加した。正式rollingはdirty=falseを確認して採用する。
 - Gurobi runtimeは、`gurobipy`を先にimportすると、環境変数未指定時に期限切れの`C:\gurobi\gurobi.lic`を拾う場合があった。モジュール読込時と`ensure_gurobi()`の双方でライセンス・DLL探索先をGurobi importより先に構成し、ユーザー側の有効なacademic licenseを選べるようにした。環境変数未指定の新規processで`is_gurobi_available()=True`を確認した。ライセンス本文は読み取り・記録していない。
 
 ### 次の研究実験

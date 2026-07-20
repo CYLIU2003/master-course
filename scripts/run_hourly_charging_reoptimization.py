@@ -16,6 +16,7 @@ import hashlib
 import json
 import math
 from pathlib import Path
+import subprocess
 import sys
 import time
 from typing import Any
@@ -98,6 +99,26 @@ def _canonical_hash(value: Any) -> str:
         default=str,
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _git_snapshot(repo_root: Path) -> tuple[str, bool]:
+    """Return the exact rolling-runner commit and whether it has local edits."""
+
+    sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repo_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    status = subprocess.run(
+        ["git", "status", "--porcelain", "--untracked-files=normal"],
+        cwd=repo_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    return sha, bool(status.strip())
 
 
 _EXECUTED_SLOT_MAP_FIELDS = (
@@ -400,6 +421,7 @@ def run(args: argparse.Namespace) -> int:
             "The day-ahead result must have a sibling input_audit.json so its "
             "scenario, prepared input, and canonical hashes can be verified"
         )
+    rolling_git_sha, rolling_git_dirty = _git_snapshot(REPO_ROOT)
     input_audit = _load_json(input_audit_path)
     audited_bev_terminal_policy = str(
         input_audit.get("bev_terminal_soc_policy")
@@ -723,6 +745,8 @@ def run(args: argparse.Namespace) -> int:
             "all_steps_feasible": all(item["feasible"] for item in summaries),
             "objective_aggregation": "not_additive_remaining_horizon_objectives",
             "day_ahead_git_sha": input_audit.get("git_sha"),
+            "rolling_runner_git_sha": rolling_git_sha,
+            "rolling_runner_git_dirty": rolling_git_dirty,
             "prepared_input_sha256": input_audit.get("prepared_input_sha256"),
             "trip_input_hash": input_audit.get("trip_input_hash"),
             "vehicle_input_hash": input_audit.get("vehicle_input_hash"),
