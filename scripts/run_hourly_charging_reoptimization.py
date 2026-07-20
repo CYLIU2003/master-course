@@ -45,6 +45,8 @@ from src.optimization import (  # noqa: E402
 from src.optimization.common.research_phase3_policy import (  # noqa: E402
     enforce_research_phase3_single_continuous_duty,
 )
+from src.optimization.common.evaluator import CostEvaluator  # noqa: E402
+from src.optimization.common.problem import AssignmentPlan  # noqa: E402
 from src.optimization.common.bev_terminal_policy import (  # noqa: E402
     normalize_bev_terminal_soc_policy,
 )
@@ -96,6 +98,188 @@ def _canonical_hash(value: Any) -> str:
         default=str,
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+_EXECUTED_SLOT_MAP_FIELDS = (
+    "grid_to_bus_kwh_by_depot_slot",
+    "pv_to_bus_kwh_by_depot_slot",
+    "bess_to_bus_kwh_by_depot_slot",
+    "pv_to_bess_kwh_by_depot_slot",
+    "grid_to_bess_kwh_by_depot_slot",
+    "pv_curtail_kwh_by_depot_slot",
+    "bess_soc_kwh_by_depot_slot",
+    "contract_over_limit_kwh_by_depot_slot",
+)
+
+
+def _merge_executed_slot_values(
+    target: dict[str, dict[int, float]],
+    source: Any,
+    *,
+    start_slot: int,
+    stop_slot: int,
+    field_name: str,
+    tolerance: float = 1.0e-9,
+) -> None:
+    """Copy one executed window and reject contradictory duplicate values."""
+
+    for raw_owner_id, raw_slot_map in dict(source or {}).items():
+        owner_id = str(raw_owner_id)
+        owner_values = target.setdefault(owner_id, {})
+        for raw_slot, raw_value in dict(raw_slot_map or {}).items():
+            slot = int(raw_slot)
+            if slot < start_slot or slot >= stop_slot:
+                continue
+            value = float(raw_value or 0.0)
+            if not math.isfinite(value):
+                raise ValueError(
+                    f"{field_name}[{owner_id!r}][{slot}] must be finite"
+                )
+            existing = owner_values.get(slot)
+            if existing is not None and abs(existing - value) > tolerance:
+                raise ValueError(
+                    "Executed rolling windows disagree for "
+                    f"{field_name}[{owner_id!r}][{slot}]: "
+                    f"existing={existing}, new={value}"
+                )
+            owner_values[slot] = value
+
+
+def _build_executed_day_accounting(
+    problem: Any,
+    day_ahead_plan: AssignmentPlan,
+    executed_segments: list[tuple[Any, Any, int, int]],
+) -> dict[str, Any]:
+    """Recalculate one day from executed prefixes, never from look-ahead totals.
+
+    Each segment is ``(step_problem, result, start_slot, stop_slot)``. Energy
+    slots use ``[start_slot, stop_slot)``. Vehicle SOC uses boundary values and
+    therefore also retains ``stop_slot``. Duplicate coverage is rejected rather
+    than silently double-counted.
+    """
+
+    expected_slots = {int(slot.slot_index) for slot in problem.price_slots}
+    coverage_count = {slot: 0 for slot in expected_slots}
+    stitched_maps: dict[str, dict[str, dict[int, float]]] = {
+        field_name: {} for field_name in _EXECUTED_SLOT_MAP_FIELDS
+    }
+    vehicle_soc: dict[str, dict[int, float]] = {}
+    charging_slots = []
+    seen_charging_slots: set[tuple[str, int, str]] = set()
+    executed_pv_profiles = {
+        str(depot_id): list(asset.pv_generation_kwh_by_slot or ())
+        for depot_id, asset in dict(problem.depot_energy_assets or {}).items()
+    }
+
+    for step_problem, result, start_slot, stop_slot in executed_segments:
+        for slot in range(start_slot, stop_slot):
+            if slot in coverage_count:
+                coverage_count[slot] += 1
+        plan = result.plan
+        for field_name in _EXECUTED_SLOT_MAP_FIELDS:
+            _merge_executed_slot_values(
+                stitched_maps[field_name],
+                getattr(plan, field_name),
+                start_slot=start_slot,
+                stop_slot=stop_slot,
+                field_name=field_name,
+            )
+        _merge_executed_slot_values(
+            vehicle_soc,
+            plan.vehicle_soc_kwh_by_vehicle_slot,
+            start_slot=start_slot,
+            stop_slot=stop_slot + 1,
+            field_name="vehicle_soc_kwh_by_vehicle_slot",
+        )
+        for charging_slot in plan.charging_slots:
+            slot = int(charging_slot.slot_index)
+            if slot < start_slot or slot >= stop_slot:
+                continue
+            key = (
+                str(charging_slot.vehicle_id),
+                slot,
+                str(charging_slot.charger_id or ""),
+            )
+            if key not in seen_charging_slots:
+                charging_slots.append(charging_slot)
+                seen_charging_slots.add(key)
+
+        for depot_id, step_asset in dict(
+            step_problem.depot_energy_assets or {}
+        ).items():
+            profile = list(step_asset.pv_generation_kwh_by_slot or ())
+            target_profile = executed_pv_profiles.setdefault(str(depot_id), profile[:])
+            if len(target_profile) < len(profile):
+                target_profile.extend(profile[len(target_profile) :])
+            for slot in range(start_slot, min(stop_slot, len(profile))):
+                target_profile[slot] = float(profile[slot])
+
+    missing_slots = sorted(slot for slot, count in coverage_count.items() if count == 0)
+    duplicate_slots = sorted(slot for slot, count in coverage_count.items() if count > 1)
+    complete_coverage = bool(expected_slots) and not missing_slots and not duplicate_slots
+    if not complete_coverage:
+        return {
+            "eligible": False,
+            "reason": "executed_slot_coverage_incomplete",
+            "expected_slot_count": len(expected_slots),
+            "executed_slot_count": sum(count > 0 for count in coverage_count.values()),
+            "missing_slots": missing_slots,
+            "duplicate_slots": duplicate_slots,
+            "cost_breakdown": None,
+        }
+
+    stitched_assets = {
+        str(depot_id): replace(
+            asset,
+            pv_generation_kwh_by_slot=tuple(
+                executed_pv_profiles.get(str(depot_id), ())
+            ),
+        )
+        for depot_id, asset in dict(problem.depot_energy_assets or {}).items()
+    }
+    accounting_problem = replace(problem, depot_energy_assets=stitched_assets)
+    accounting_plan = replace(
+        day_ahead_plan,
+        charging_slots=tuple(charging_slots),
+        vehicle_soc_kwh_by_vehicle_slot=vehicle_soc,
+        metadata={
+            **dict(day_ahead_plan.metadata or {}),
+            "rolling_execution_accounting": True,
+            "rolling_executed_slot_count": len(expected_slots),
+        },
+        **stitched_maps,
+    )
+    breakdown = CostEvaluator().evaluate(accounting_problem, accounting_plan).to_dict()
+    terminal_balanced = all(
+        bool(
+            {
+                **dict(getattr(segment_result.plan, "metadata", {}) or {}),
+                **dict(getattr(segment_result, "solver_metadata", {}) or {}),
+            }.get("bev_terminal_soc_balance_satisfied")
+        )
+        for _, segment_result, _, _ in executed_segments
+    )
+    unreplenished_kwh = float(
+        breakdown.get("ev_unreplenished_drive_energy_kwh", 0.0) or 0.0
+    )
+    eligible = terminal_balanced and unreplenished_kwh <= 1.0e-6
+    return {
+        "eligible": eligible,
+        "reason": None if eligible else "terminal_energy_inventory_not_balanced",
+        "accounting_basis": (
+            "executed_hourly_energy_flows_plus_inventory_valuation_for_unrefueled_fuel"
+        ),
+        "objective_aggregation": "executed_prefixes_stitched_then_recalculated_once",
+        "expected_slot_count": len(expected_slots),
+        "executed_slot_count": len(expected_slots),
+        "missing_slots": [],
+        "duplicate_slots": [],
+        "terminal_energy_balanced": terminal_balanced,
+        "cost_breakdown": breakdown,
+        "executed_energy_flow_hash": _canonical_hash(
+            {field_name: stitched_maps[field_name] for field_name in _EXECUTED_SLOT_MAP_FIELDS}
+        ),
+    }
 
 
 def _apply_pv_forecast_update(
@@ -369,6 +553,7 @@ def run(args: argparse.Namespace) -> int:
     output_dir = Path(args.output_dir)
     rolling = RollingReoptimizer()
     summaries: list[dict[str, Any]] = []
+    executed_segments: list[tuple[Any, Any, int, int]] = []
     step_index = 0
     while True:
         current_label = _minute_label(current_min)
@@ -477,6 +662,13 @@ def run(args: argparse.Namespace) -> int:
             summaries.append(summary)
             break
 
+        start_slot = int(metadata.get("rolling_start_slot_index") or 0)
+        executed_slot_count = int(args.execution_minutes) // max(
+            int(step_problem.scenario.timestep_min), 1
+        )
+        stop_slot = min(start_slot + executed_slot_count, len(step_problem.price_slots))
+        executed_segments.append((step_problem, result, start_slot, stop_slot))
+
         next_min = current_min + int(args.execution_minutes)
         should_continue = end_min is not None and next_min < end_min
         if end_min is not None and not should_continue:
@@ -515,6 +707,11 @@ def run(args: argparse.Namespace) -> int:
         step_index += 1
 
     if end_min is not None:
+        executed_day_accounting = _build_executed_day_accounting(
+            problem,
+            day_ahead_plan,
+            executed_segments,
+        )
         chain_summary = {
             "scenario_id": args.scenario_id,
             "prepared_input_id": args.prepared_input_id,
@@ -525,6 +722,14 @@ def run(args: argparse.Namespace) -> int:
             "step_count": len(summaries),
             "all_steps_feasible": all(item["feasible"] for item in summaries),
             "objective_aggregation": "not_additive_remaining_horizon_objectives",
+            "day_ahead_git_sha": input_audit.get("git_sha"),
+            "prepared_input_sha256": input_audit.get("prepared_input_sha256"),
+            "trip_input_hash": input_audit.get("trip_input_hash"),
+            "vehicle_input_hash": input_audit.get("vehicle_input_hash"),
+            "day_ahead_result_sha256": hashlib.sha256(
+                day_ahead_result_path.read_bytes()
+            ).hexdigest(),
+            "executed_day_accounting": executed_day_accounting,
             "steps": summaries,
         }
         _write_json(output_dir / "rolling_chain_summary.json", chain_summary)

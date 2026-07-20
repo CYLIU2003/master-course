@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from scripts import run_hourly_charging_reoptimization as hourly_runner
@@ -244,3 +246,58 @@ def test_hourly_pv_forecast_update_rejects_non_finite_energy() -> None:
             _hourly_result_problem(),
             {"forecast_by_depot": {"dep-1": [4.0, float("nan")]}},
         )
+
+
+def test_executed_day_accounting_stitches_each_slot_once() -> None:
+    problem = _hourly_result_problem()
+    day_ahead_plan = AssignmentPlan()
+    first = SimpleNamespace(
+        feasible=True,
+        solver_metadata={"bev_terminal_soc_balance_satisfied": True},
+        plan=AssignmentPlan(
+            grid_to_bus_kwh_by_depot_slot={"dep-1": {0: 10.0, 1: 999.0}},
+            vehicle_soc_kwh_by_vehicle_slot={"ev-1": {0: 100.0, 1: 90.0}},
+        ),
+    )
+    second = SimpleNamespace(
+        feasible=True,
+        solver_metadata={"bev_terminal_soc_balance_satisfied": True},
+        plan=AssignmentPlan(
+            grid_to_bus_kwh_by_depot_slot={"dep-1": {1: 20.0}},
+            vehicle_soc_kwh_by_vehicle_slot={"ev-1": {1: 90.0, 2: 100.0}},
+        ),
+    )
+
+    accounting = hourly_runner._build_executed_day_accounting(
+        problem,
+        day_ahead_plan,
+        [(problem, first, 0, 1), (problem, second, 1, 2)],
+    )
+
+    assert accounting["eligible"] is True
+    assert accounting["missing_slots"] == []
+    assert accounting["duplicate_slots"] == []
+    assert accounting["cost_breakdown"]["grid_import_kwh"] == pytest.approx(30.0)
+
+
+def test_executed_day_accounting_rejects_missing_slot() -> None:
+    problem = _hourly_result_problem()
+    result = SimpleNamespace(
+        feasible=True,
+        solver_metadata={"bev_terminal_soc_balance_satisfied": True},
+        plan=AssignmentPlan(
+            grid_to_bus_kwh_by_depot_slot={"dep-1": {0: 10.0}},
+            vehicle_soc_kwh_by_vehicle_slot={"ev-1": {0: 100.0, 1: 90.0}},
+        ),
+    )
+
+    accounting = hourly_runner._build_executed_day_accounting(
+        problem,
+        AssignmentPlan(),
+        [(problem, result, 0, 1)],
+    )
+
+    assert accounting["eligible"] is False
+    assert accounting["reason"] == "executed_slot_coverage_incomplete"
+    assert accounting["missing_slots"] == [1]
+    assert accounting["cost_breakdown"] is None

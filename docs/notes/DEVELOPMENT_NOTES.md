@@ -22,18 +22,23 @@
 
 ### 実データ検証
 
+- clean detached worktree / commit `dfa039d2454516858b3b1ce65053a59dd11dc299`から、固定prepared input `prepared-789ce8197d83c758-0b337aa1f091e729`（SHA-256 `5f133b1dddabd7295a5e60e429ad008d966c690e70e19c2bcb6327d288094913`）を使い、15分96枠、PV/BESSなし、successor削減なし、BEV終端`return_to_initial`の正式baselineを実行した。成果物は`output/research_phase3_grid_only_15min_terminal_fair_formal_20260720/`に保存した。
+- 専用verifierは全項目passした。264/264便、未担当0、重複0、時間重複0、接続違反0、BEV/BESS SOC違反0、充電器競合0、受電上限違反0、fallbackなし、postsolve repairなし、会計再計算残差0円、BEV終端不足`4.547473508864641e-13 kWh`（丸め誤差）、EV未補充量0 kWhである。使用車両は32台、会計総費用は`725,221.055675214円`だった。
+- Stage 1は750.371秒でtime limit、valid incumbentあり、gap `13.103701%`で、要求10%へは未達である。Stage 2は0.140秒、gap `4.954843%`でsolver statusはoptimalだった。この成果物は再現可能な正式可行baselineおよび会計値として採用できるが、総費用の大域的な最適解とは呼ばない。
 - `tmp/bev_terminal_policy_probe_20260720_v2`の短時間診断は、264/264便、Stage 2 optimal、独立検証違反0、EV終端目標不足約`3.7e-13 kWh`、EV未補充量0 kWh、会計再計算残差0円だった。
 - 同じ日次割当を`tmp/hourly_terminal_policy_full_chain_20260720`で5:00から翌5:00まで1時間ずつ24回連鎖した。24/24回で可行、Stage 2 optimal、264/264便、未担当0便、終端目標合格だった。終端目標不足の最大値は`3.97903932025656e-13 kWh`、各回wall timeの最大は`2.3440217秒`、最終開始slotは92だった。
 - この24回連鎖は制御経路と状態引継ぎの検証である。元の日次割当はdirty worktree、successor上限8、20秒の診断設定であり、`exact_milp_backend=false`、`research_run_accepted=false`である。したがって上記費用を修論の正式値、最適費用、正式な晴雨差として引用しない。
+- 正式baselineを入力にした24回rollingも`output/research_phase3_grid_only_15min_terminal_fair_formal_20260720/rolling_24h/`で完走した。24/24回で可行、Stage 2 optimal、264/264便、終端SOC合格、状態handoff 23件、終端不足最大`4.547473508864641e-13 kWh`、各回wall time最大`2.4875秒`だった。
+- この正式rolling監査で、自分からP1として、chain summaryが各時点の「残り時間の見込み費用は合計不可」と明示するだけで、実際に採用した先頭60分を24回分つないだ一日会計を出していない不足を検出した。各resultの全残り時間費用を足すと同じ将来を重複計上するため、各回の実行対象15分枠だけを切り出し、96枠が欠落・重複なく一度ずつ揃った場合のみ、共通`CostEvaluator`で一度だけ日次費用を再計算する処理を追加した。欠落枠があれば費用は`null`相当として不採用にする。便割当、接続条件、SOC制約、solver目的は変更していない。
 - Gurobi runtime修正後、`python -m pytest -q --ignore=test_multiday_phase1.py`は`755 passed`。除外testはlocalhost BFFを必要とする手動E2Eであり、単体回帰の失敗ではない。
+- rolling日次会計の回帰2件を追加後、`python -m pytest -q --ignore=test_multiday_phase1.py`は`757 passed`、`python -m py_compile scripts/run_hourly_charging_reoptimization.py tests/test_phase3_time_budget_and_rolling.py`、`git diff --check`もpassした。
 - Gurobi runtimeは、`gurobipy`を先にimportすると、環境変数未指定時に期限切れの`C:\gurobi\gurobi.lic`を拾う場合があった。モジュール読込時と`ensure_gurobi()`の双方でライセンス・DLL探索先をGurobi importより先に構成し、ユーザー側の有効なacademic licenseを選べるようにした。環境変数未指定の新規processで`is_gurobi_available()=True`を確認した。ライセンス本文は読み取り・記録していない。
 
 ### 次の研究実験
 
-1. clean commit、固定prepared SHA、15分、successor削減なしで`return_to_initial`正式baselineを再実行する。
-2. 正式日次解を入力に24回rollingを再実行し、実行済み60分の物理フローだけから一日費用を再集計する。各時点の残り時間目的値は合計しない。
-3. 同じ日次割当と設備条件でPV完全予測、予測誤差、晴雨を比較する。
-4. successor上限8/16/32/削減なしを感度分析とし、削減ありは縮約ネットワーク結果と明記する。
+1. rolling日次会計を含むclean commitから正式24回runを再実行し、96枠の完全被覆、実行フローhash、終端在庫、日次会計を確定する。
+2. 同じ日次割当と設備条件でPV完全予測、予測誤差、晴雨を比較する。
+3. successor上限8/16/32/削減なしを感度分析とし、削減ありは縮約ネットワーク結果と明記する。
 
 運行接続条件、時刻表、`operator_id`、便距離、Stage 1からStage 2へ渡す便割当は緩和・書換えしていない。
 
