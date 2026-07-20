@@ -83,6 +83,7 @@ def test_initial_soc_metadata_hashes_the_solver_inputs() -> None:
                 reserve_soc=0.2,
             ),
         ),
+        metadata={"bev_terminal_soc_policy": "return_to_initial"},
     )
 
     metadata = initial_soc_input_metadata(
@@ -94,10 +95,12 @@ def test_initial_soc_metadata_hashes_the_solver_inputs() -> None:
     assert metadata["initial_soc_by_vehicle"][0]["initial_soc_kwh"] == pytest.approx(240.0)
     assert metadata["initial_soc_by_vehicle"][0]["minimum_soc_kwh"] == pytest.approx(60.0)
     assert metadata["initial_soc_by_vehicle"][0]["terminal_soc_minimum_kwh"] == pytest.approx(60.0)
+    assert metadata["initial_soc_by_vehicle"][0]["terminal_soc_policy"] == "return_to_initial"
+    assert metadata["initial_soc_by_vehicle"][0]["terminal_soc_target_kwh"] == pytest.approx(240.0)
     assert len(metadata["initial_soc_input_hash"]) == 64
 
 
-def test_controlled_case_clears_all_inherited_terminal_soc_requirements() -> None:
+def test_controlled_case_replaces_inherited_target_with_return_to_initial() -> None:
     scenario = {
         "simulation_config": {
             "final_soc_floor_percent": 80,
@@ -115,7 +118,12 @@ def test_controlled_case_clears_all_inherited_terminal_soc_requirements() -> Non
     )
 
     simulation_config = configured["simulation_config"]
-    assert simulation_config["terminal_soc_policy"] == "minimum_soc"
+    assert simulation_config["terminal_soc_policy"] == "return_to_initial"
+    assert simulation_config["bev_terminal_soc_policy"] == "return_to_initial"
+    assert (
+        simulation_config["experiment_case_tag"]
+        == "CONTROLLED_OPERATIONAL_BASELINE_CASE"
+    )
     assert simulation_config["final_soc_floor_percent"] is None
     assert simulation_config["final_soc_target_percent"] is None
     assert simulation_config["final_soc_target_tolerance_percent"] is None
@@ -137,6 +145,20 @@ def test_controlled_case_can_disable_successor_pruning_explicitly() -> None:
         ]
         is None
     )
+
+
+def test_minimum_only_controlled_case_is_labeled_feasibility_only() -> None:
+    configured = _configure_controlled_model_validation_case(
+        {"simulation_config": {}},
+        time_step_min=15,
+        initial_soc_policy=InitialSocPolicy.UNIFORM_SCENARIO_VALUE,
+        initial_soc_percent=80,
+        bev_terminal_soc_policy="minimum_only",
+    )
+
+    simulation_config = configured["simulation_config"]
+    assert simulation_config["bev_terminal_soc_policy"] == "minimum_only"
+    assert simulation_config["experiment_case_tag"] == "CONTROLLED_MODEL_VALIDATION_CASE"
 
 
 def test_accounting_recalculation_rejects_a_cost_mismatch() -> None:

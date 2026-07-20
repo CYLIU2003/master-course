@@ -2333,6 +2333,13 @@ def _persist_rich_run_outputs(
         json.dumps(kpi_summary, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
+    exp_report = dict(optimization_result.get("experiment_report") or {})
+    md_path = exp_report.get("md_path")
+    if isinstance(md_path, str) and md_path.strip():
+        src_md = Path(md_path)
+        if src_md.exists():
+            shutil.copy2(src_md, run_dir / "experiment_report.md")
+
     reporting_finalizer_result: Optional[Dict[str, Any]] = None
     if finalize_reporting:
         reporting_finalizer_result = _run_reporting_finalizer(run_dir)
@@ -2362,13 +2369,6 @@ def _persist_rich_run_outputs(
         (raw_dir / "optimization_audit.json").write_text(
             json.dumps(optimization_audit, ensure_ascii=False, indent=2), encoding="utf-8"
         )
-
-    exp_report = dict(optimization_result.get("experiment_report") or {})
-    md_path = exp_report.get("md_path")
-    if isinstance(md_path, str) and md_path.strip():
-        src_md = Path(md_path)
-        if src_md.exists():
-            shutil.copy2(src_md, run_dir / "experiment_report.md")
 
     try:
         from openpyxl import Workbook
@@ -4078,6 +4078,14 @@ def _canonical_kpi_summary_json(
             if bool(engine_result.feasible)
             and str(engine_result.solver_status or "").upper()
             in {"OPTIMAL", "FEASIBLE", "SOLVED_FEASIBLE", "PHASE2_ASSIGNMENT_FEASIBLE"}
+            and (
+                not bool((engine_result.solver_metadata or {}).get("research_run", False))
+                or bool(
+                    (engine_result.solver_metadata or {}).get(
+                        "research_accounting_cost_eligible", False
+                    )
+                )
+            )
             else None
         ),
         "objective_is_actual_cost": bool(breakdown.get("objective_is_actual_cost", False)),
@@ -4102,7 +4110,48 @@ def _canonical_kpi_summary_json(
             or 0.0
         ),
         "propulsion_energy_cost_jpy": float(breakdown.get("energy_cost", 0.0) or 0.0),
-        "electricity_cost_basis": "canonical_plan",
+        "electricity_cost_basis": str(
+            breakdown.get("energy_cost_basis")
+            or "realized_supply_plus_inventory_valuation"
+        ),
+        "energy_cash_purchase_cost_jpy": float(
+            breakdown.get("energy_cash_purchase_cost_jpy", 0.0) or 0.0
+        ),
+        "energy_inventory_valuation_cost_jpy": float(
+            breakdown.get("energy_inventory_valuation_cost_jpy", 0.0) or 0.0
+        ),
+        "ev_unreplenished_drive_energy_kwh": float(
+            breakdown.get("ev_unreplenished_drive_energy_kwh", 0.0) or 0.0
+        ),
+        "ev_energy_inventory_balanced": bool(
+            breakdown.get("ev_energy_inventory_balanced", False)
+        ),
+        "bev_terminal_soc_policy": str(
+            (engine_result.solver_metadata or {}).get("bev_terminal_soc_policy")
+            or getattr(problem, "metadata", {}).get("bev_terminal_soc_policy")
+            or "minimum_only"
+        ),
+        "bev_terminal_soc_total_drawdown_kwh": float(
+            (engine_result.solver_metadata or {}).get(
+                "bev_terminal_soc_total_drawdown_kwh", 0.0
+            )
+            or 0.0
+        ),
+        "bev_terminal_soc_balance_satisfied": bool(
+            (engine_result.solver_metadata or {}).get(
+                "bev_terminal_soc_balance_satisfied", False
+            )
+        ),
+        "research_accounting_cost_eligible": bool(
+            (engine_result.solver_metadata or {}).get(
+                "research_accounting_cost_eligible", False
+            )
+        ),
+        "research_cost_optimality_eligible": bool(
+            (engine_result.solver_metadata or {}).get(
+                "research_cost_optimality_eligible", False
+            )
+        ),
         "electricity_cost_provisional_jpy": float(breakdown.get("provisional_ev_drive_cost", 0.0) or 0.0),
         "electricity_cost_charged_jpy": float(
             breakdown.get(
@@ -4349,7 +4398,7 @@ def _persist_canonical_graph_exports(
                 "objective_is_actual_cost": bool(kpi_summary.get("objective_is_actual_cost", False)),
                 "solver_objective_matches_accounting_total": bool(
                     (engine_result.solver_metadata or {}).get(
-                        "solver_objective_matches_accounting_total", True
+                        "solver_objective_matches_accounting_total", False
                     )
                 ),
                 "objective_semantics": str(

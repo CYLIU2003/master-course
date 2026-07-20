@@ -17,6 +17,7 @@ from .problem import (
     normalize_service_coverage_mode,
 )
 from .soc_helpers import (
+    final_soc_target_enabled,
     return_deadhead_energy_kwh,
     return_deadhead_min_to_home,
 )
@@ -71,6 +72,13 @@ class CostBreakdown:
     operating_cost_provisional_total: float = 0.0
     operating_cost_realized_total: float = 0.0
     operating_cost_leftover_total: float = 0.0
+    energy_cash_purchase_cost_jpy: float = 0.0
+    energy_inventory_valuation_cost_jpy: float = 0.0
+    electricity_inventory_valuation_cost_jpy: float = 0.0
+    fuel_inventory_valuation_cost_jpy: float = 0.0
+    ev_unreplenished_drive_energy_kwh: float = 0.0
+    ev_energy_inventory_balanced: bool = False
+    energy_cost_basis: str = "realized_supply_plus_inventory_valuation"
     grid_purchase_cost: float = 0.0
     bess_discharge_cost: float = 0.0
     pv_to_bus_cost_jpy: float = 0.0
@@ -152,6 +160,13 @@ class CostBreakdown:
             "operating_cost_provisional_total": self.operating_cost_provisional_total,
             "operating_cost_realized_total": self.operating_cost_realized_total,
             "operating_cost_leftover_total": self.operating_cost_leftover_total,
+            "energy_cash_purchase_cost_jpy": self.energy_cash_purchase_cost_jpy,
+            "energy_inventory_valuation_cost_jpy": self.energy_inventory_valuation_cost_jpy,
+            "electricity_inventory_valuation_cost_jpy": self.electricity_inventory_valuation_cost_jpy,
+            "fuel_inventory_valuation_cost_jpy": self.fuel_inventory_valuation_cost_jpy,
+            "ev_unreplenished_drive_energy_kwh": self.ev_unreplenished_drive_energy_kwh,
+            "ev_energy_inventory_balanced": self.ev_energy_inventory_balanced,
+            "energy_cost_basis": self.energy_cost_basis,
             "grid_purchase_cost": self.grid_purchase_cost,
             "bess_discharge_cost": self.bess_discharge_cost,
             "pv_to_bus_cost_jpy": self.pv_to_bus_cost_jpy,
@@ -369,6 +384,9 @@ class CostEvaluator:
         provisional_ev_drive_cost = float(energy_cost_components.get("ev_provisional_drive_cost", 0.0))
         realized_ev_charge_cost = float(energy_cost_components.get("ev_realized_charge_cost", 0.0))
         leftover_ev_provisional_cost = float(energy_cost_components.get("ev_leftover_provisional_cost", 0.0))
+        ev_unreplenished_drive_energy_kwh = float(
+            energy_cost_components.get("ev_leftover_energy_kwh", 0.0)
+        )
         provisional_ice_drive_cost = float(fuel_cost_components.get("fuel_cost_provisional", 0.0))
         realized_ice_refuel_cost = float(fuel_cost_components.get("realized_refuel_cost", 0.0))
         leftover_ice_provisional_cost = float(fuel_cost_components.get("fuel_cost_provisional_leftover", 0.0))
@@ -417,6 +435,7 @@ class CostEvaluator:
             provisional_ev_drive_cost = 0.0
             realized_ev_charge_cost = 0.0
             leftover_ev_provisional_cost = 0.0
+            ev_unreplenished_drive_energy_kwh = 0.0
             grid_purchase_cost = 0.0
             bess_discharge_cost = 0.0
             contract_overage_cost = 0.0
@@ -464,6 +483,12 @@ class CostEvaluator:
         operating_cost_provisional_total = provisional_ev_drive_cost + provisional_ice_drive_cost
         operating_cost_realized_total = realized_ev_charge_cost + realized_ice_refuel_cost
         operating_cost_leftover_total = leftover_ev_provisional_cost + leftover_ice_provisional_cost
+        ev_energy_inventory_balanced = ev_unreplenished_drive_energy_kwh <= 1.0e-6
+        energy_cost_basis = (
+            "realized_supply_only"
+            if operating_cost_leftover_total <= 1.0e-6
+            else "realized_supply_plus_inventory_valuation"
+        )
 
         if not component_flags.get("electricity_cost", True) and not component_flags.get("fuel_cost", True):
             demand_cost = 0.0
@@ -569,6 +594,13 @@ class CostEvaluator:
                 operating_cost_provisional_total=operating_cost_provisional_total,
                 operating_cost_realized_total=operating_cost_realized_total,
                 operating_cost_leftover_total=operating_cost_leftover_total,
+                energy_cash_purchase_cost_jpy=operating_cost_realized_total,
+                energy_inventory_valuation_cost_jpy=operating_cost_leftover_total,
+                electricity_inventory_valuation_cost_jpy=leftover_ev_provisional_cost,
+                fuel_inventory_valuation_cost_jpy=leftover_ice_provisional_cost,
+                ev_unreplenished_drive_energy_kwh=ev_unreplenished_drive_energy_kwh,
+                ev_energy_inventory_balanced=ev_energy_inventory_balanced,
+                energy_cost_basis=energy_cost_basis,
                 grid_purchase_cost=grid_purchase_cost,
                 bess_discharge_cost=bess_discharge_cost,
                 pv_to_bus_cost_jpy=pv_to_bus_cost_jpy,
@@ -647,6 +679,13 @@ class CostEvaluator:
             operating_cost_provisional_total=operating_cost_provisional_total,
             operating_cost_realized_total=operating_cost_realized_total,
             operating_cost_leftover_total=operating_cost_leftover_total,
+            energy_cash_purchase_cost_jpy=operating_cost_realized_total,
+            energy_inventory_valuation_cost_jpy=operating_cost_leftover_total,
+            electricity_inventory_valuation_cost_jpy=leftover_ev_provisional_cost,
+            fuel_inventory_valuation_cost_jpy=leftover_ice_provisional_cost,
+            ev_unreplenished_drive_energy_kwh=ev_unreplenished_drive_energy_kwh,
+            ev_energy_inventory_balanced=ev_energy_inventory_balanced,
+            energy_cost_basis=energy_cost_basis,
             grid_purchase_cost=grid_purchase_cost,
             bess_discharge_cost=bess_discharge_cost,
             pv_to_bus_cost_jpy=pv_to_bus_cost_jpy,
@@ -789,6 +828,9 @@ class CostEvaluator:
                 "ev_provisional_drive_cost": fallback_cost,
                 "ev_realized_charge_cost": 0.0,
                 "ev_leftover_provisional_cost": fallback_cost,
+                "ev_leftover_energy_kwh": sum(
+                    kwh for queue in debts.values() for kwh, _price in queue
+                ),
                 "grid_purchase_cost": 0.0,
                 "bess_discharge_cost": 0.0,
                 "pv_to_bus_cost_jpy": 0.0,
@@ -886,6 +928,9 @@ class CostEvaluator:
                 }
 
         provisional_leftover = sum(kwh * price for queue in debts.values() for kwh, price in queue)
+        provisional_leftover_kwh = sum(
+            kwh for queue in debts.values() for kwh, _price in queue
+        )
         leftover_by_vehicle = {
             vehicle_id: sum(kwh * price for kwh, price in queue)
             for vehicle_id, queue in debts.items()
@@ -942,6 +987,7 @@ class CostEvaluator:
             "ev_provisional_drive_cost": provisional_total,
             "ev_realized_charge_cost": grid_purchase_cost + bess_total_flow_cost_jpy,
             "ev_leftover_provisional_cost": provisional_leftover,
+            "ev_leftover_energy_kwh": provisional_leftover_kwh,
             "grid_purchase_cost": grid_purchase_cost,
             "bess_discharge_cost": bess_discharge_cost,
             "pv_to_bus_cost_jpy": pv_to_bus_cost_jpy,
@@ -987,7 +1033,7 @@ class CostEvaluator:
                 horizon_start_min = int(hh) * 60 + int(mm)
             except ValueError:
                 horizon_start_min = 0
-        target_enabled = (problem.metadata or {}).get("final_soc_target_percent") is not None
+        target_enabled = final_soc_target_enabled(problem)
         last_duty_by_vehicle_day: Dict[tuple[str, int], str] = {}
         if target_enabled:
             for duty in plan.duties:
@@ -1432,7 +1478,7 @@ class CostEvaluator:
         soc = float(start_soc)
         duty_vehicle_map = plan.duty_vehicle_map()
         vehicle = next((item for item in problem.vehicles if str(item.vehicle_id) == str(vehicle_id)), None)
-        target_enabled = (problem.metadata or {}).get("final_soc_target_percent") is not None
+        target_enabled = final_soc_target_enabled(problem)
         horizon_start_min = 0
         if problem.scenario.horizon_start:
             try:
@@ -1680,7 +1726,7 @@ class CostEvaluator:
                 horizon_start_min = int(hh) * 60 + int(mm)
             except ValueError:
                 horizon_start_min = 0
-        target_enabled = (problem.metadata or {}).get("final_soc_target_percent") is not None
+        target_enabled = final_soc_target_enabled(problem)
         last_duty_by_vehicle_day: Dict[tuple[str, int], str] = {}
         if target_enabled:
             for duty in plan.duties:

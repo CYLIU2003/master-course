@@ -35,6 +35,15 @@ from src.optimization.common.initial_soc_policy import (
     initial_soc_input_metadata,
     normalize_initial_soc_policy,
 )
+from src.optimization.common.input_fingerprints import (
+    INPUT_FINGERPRINT_SCHEMA,
+    canonical_trip_input_hash,
+    canonical_vehicle_input_hash,
+)
+from src.optimization.common.bev_terminal_policy import (
+    BevTerminalSocPolicy,
+    normalize_bev_terminal_soc_policy,
+)
 from src.optimization.common.research_phase3_policy import (
     enforce_research_phase3_single_continuous_duty,
 )
@@ -333,39 +342,11 @@ def _charger_snapshot(problem: Any) -> list[dict[str, Any]]:
 
 
 def _trip_input_hash(problem: Any) -> str:
-    return _canonical_hash(
-        [
-            {
-                "trip_id": trip.trip_id,
-                "departure_min": trip.departure_min,
-                "arrival_min": trip.arrival_min,
-                "distance_km": trip.distance_km,
-                "energy_kwh": trip.energy_kwh,
-                "fuel_l": trip.fuel_l,
-            }
-            for trip in sorted(problem.trips, key=lambda item: str(item.trip_id))
-        ]
-    )
+    return canonical_trip_input_hash(problem)
 
 
 def _vehicle_input_hash(problem: Any) -> str:
-    return _canonical_hash(
-        [
-            {
-                "vehicle_id": vehicle.vehicle_id,
-                "vehicle_type": vehicle.vehicle_type,
-                "home_depot_id": vehicle.home_depot_id,
-                "available": vehicle.available,
-                "battery_capacity_kwh": vehicle.battery_capacity_kwh,
-                "initial_soc": vehicle.initial_soc,
-                "reserve_soc": vehicle.reserve_soc,
-                "fuel_tank_capacity_l": vehicle.fuel_tank_capacity_l,
-                "initial_fuel_l": vehicle.initial_fuel_l,
-                "fuel_reserve_l": vehicle.fuel_reserve_l,
-            }
-            for vehicle in sorted(problem.vehicles, key=lambda item: str(item.vehicle_id))
-        ]
-    )
+    return canonical_vehicle_input_hash(problem)
 
 
 def _weather_configuration(scenario: dict[str, Any]) -> dict[str, Any]:
@@ -467,6 +448,12 @@ def run(args: argparse.Namespace) -> int:
         enable_weather_operation_policy=None,
         weather_proxy_forecast_path=None,
     )
+    bev_terminal_soc_policy = normalize_bev_terminal_soc_policy(
+        getattr(args, "bev_terminal_soc_policy", "return_to_initial")
+    )
+    simulation_config = dict(scenario.get("simulation_config") or {})
+    simulation_config["bev_terminal_soc_policy"] = bev_terminal_soc_policy.value
+    scenario["simulation_config"] = simulation_config
     fragment_policy = enforce_research_phase3_single_continuous_duty(scenario)
     initial_soc_policy = _resolve_initial_soc_policy(scenario)
     config = OptimizationConfig(
@@ -528,6 +515,9 @@ def run(args: argparse.Namespace) -> int:
             "Frontend weather comparison requires the effective weather operation profile"
         )
     terminal_soc_policy = {
+        "bev_terminal_soc_policy": str(
+            problem.metadata.get("bev_terminal_soc_policy") or ""
+        ),
         "post_return_soc_target_enabled": bool(
             problem.metadata.get("post_return_soc_target_enabled", False)
         ),
@@ -545,6 +535,7 @@ def run(args: argparse.Namespace) -> int:
             "vehicle_input_hash": vehicle_input_hash,
             "initial_soc_policy": initial_soc_metadata["initial_soc_policy"],
             "initial_soc_input_hash": initial_soc_metadata["initial_soc_input_hash"],
+            "bev_terminal_soc_policy": bev_terminal_soc_policy.value,
             "charger_configuration": charger_configuration,
             "timestep_min": int(problem.scenario.timestep_min),
             "depot_energy_assets": depot_energy_assets,
@@ -569,6 +560,9 @@ def run(args: argparse.Namespace) -> int:
         }
     )
     input_audit = {
+        "effective_scenario_artifact": "effective_scenario.json",
+        "effective_scenario_sha256": _canonical_hash(scenario),
+        "input_fingerprint_schema": INPUT_FINGERPRINT_SCHEMA,
         "case_name": args.case_name,
         "scenario_id": args.scenario_id,
         "prepared_input_id": args.prepared_input_id,
@@ -656,6 +650,7 @@ def run(args: argparse.Namespace) -> int:
         "experiment_hash": experiment_hash,
         **git_state,
     }
+    _write_json(output_dir / "effective_scenario.json", scenario)
     _write_json(output_dir / "input_audit.json", input_audit)
     if args.build_only:
         print(json.dumps(input_audit, ensure_ascii=False, indent=2), flush=True)
@@ -770,11 +765,41 @@ def run(args: argparse.Namespace) -> int:
         "research_cost_kpi_eligible": bool(
             metadata.get("research_cost_kpi_eligible", False)
         ),
+        "research_accounting_cost_eligible": bool(
+            metadata.get("research_accounting_cost_eligible", False)
+        ),
+        "research_cost_optimality_eligible": bool(
+            metadata.get("research_cost_optimality_eligible", False)
+        ),
         "solver_objective_matches_accounting_total": bool(
             metadata.get("solver_objective_matches_accounting_total", False)
         ),
         "objective_semantics": metadata.get("objective_semantics"),
         "accounting_total_cost_jpy": _finite(breakdown.get("total_cost")),
+        "validated_operating_cost_jpy": (
+            _finite(breakdown.get("total_cost"))
+            if bool(metadata.get("research_accounting_cost_eligible", False))
+            else None
+        ),
+        "energy_cost_basis": breakdown.get("energy_cost_basis"),
+        "energy_cash_purchase_cost_jpy": _finite(
+            breakdown.get("energy_cash_purchase_cost_jpy")
+        ),
+        "energy_inventory_valuation_cost_jpy": _finite(
+            breakdown.get("energy_inventory_valuation_cost_jpy")
+        ),
+        "ev_unreplenished_drive_energy_kwh": _finite(
+            breakdown.get("ev_unreplenished_drive_energy_kwh")
+        ),
+        "bev_terminal_soc_total_drawdown_kwh": _finite(
+            metadata.get("bev_terminal_soc_total_drawdown_kwh")
+        ),
+        "bev_terminal_soc_total_target_shortfall_kwh": _finite(
+            metadata.get("bev_terminal_soc_total_target_shortfall_kwh")
+        ),
+        "bev_terminal_soc_balance_satisfied": bool(
+            metadata.get("bev_terminal_soc_balance_satisfied", False)
+        ),
         "cost_comparison_scope": (
             "feasible_schedule_accounting_not_global_total_cost_optimum"
             if result.feasible
@@ -819,6 +844,18 @@ def main() -> int:
     )
     parser.add_argument("--mip-gap", type=float, default=0.1)
     parser.add_argument("--random-seed", type=int, default=42)
+    parser.add_argument(
+        "--bev-terminal-soc-policy",
+        choices=(
+            BevTerminalSocPolicy.RETURN_TO_INITIAL.value,
+            BevTerminalSocPolicy.MINIMUM_ONLY.value,
+        ),
+        default=BevTerminalSocPolicy.RETURN_TO_INITIAL.value,
+        help=(
+            "End-of-day BEV energy rule. return_to_initial is required for "
+            "fair cost comparison; minimum_only is diagnostic only."
+        ),
+    )
     parser.add_argument(
         "--available-bev-count",
         type=int,

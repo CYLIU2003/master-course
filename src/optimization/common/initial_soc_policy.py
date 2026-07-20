@@ -8,6 +8,7 @@ import json
 from typing import Any, Mapping
 
 from .problem import CanonicalOptimizationProblem, ProblemVehicle
+from .soc_helpers import effective_final_soc_target_kwh
 
 
 class InitialSocPolicy(StrEnum):
@@ -69,6 +70,11 @@ def initial_soc_input_metadata(
         capacity = max(float(vehicle.battery_capacity_kwh or 0.0), 0.0)
         initial_kwh = _vehicle_initial_soc_kwh(vehicle, capacity)
         minimum_kwh = _vehicle_minimum_soc_kwh(vehicle, capacity)
+        terminal_target_kwh = effective_final_soc_target_kwh(
+            problem,
+            vehicle,
+            cap_kwh=capacity,
+        )
         rows.append(
             {
                 "vehicle_id": str(vehicle.vehicle_id),
@@ -81,6 +87,11 @@ def initial_soc_input_metadata(
                 # lower bound.  Record it separately to prevent a semantic
                 # mix-up between initial and terminal SOC policies.
                 "terminal_soc_minimum_kwh": minimum_kwh,
+                "terminal_soc_policy": str(
+                    (problem.metadata or {}).get("bev_terminal_soc_policy")
+                    or "minimum_only"
+                ),
+                "terminal_soc_target_kwh": terminal_target_kwh,
             }
         )
     encoded = json.dumps(rows, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")

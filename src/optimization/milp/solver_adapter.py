@@ -38,12 +38,14 @@ from src.optimization.common.problem import (
 from src.optimization.common.soc_helpers import (
     effective_final_soc_target_kwh,
     final_soc_floor_kwh,
+    final_soc_target_enabled,
     post_return_target_slot_index,
     return_deadhead_energy_kwh,
     return_deadhead_min_to_home,
     slot_absolute_min,
     slot_index,
     slot_index_ceil,
+    vehicle_initial_soc_kwh,
 )
 
 
@@ -459,7 +461,7 @@ class GurobiMILPAdapter:
             (vehicle_id, trip_id): model.addVar(vtype=GRB.BINARY)
             for vehicle_id, trip_id in assignment_pairs
         }
-        final_target_enabled = (problem.metadata or {}).get("final_soc_target_percent") is not None
+        final_target_enabled = final_soc_target_enabled(problem)
         if final_target_enabled:
             for (vehicle_id, trip_id), var in end_arc.items():
                 vehicle = vehicle_by_id.get(str(vehicle_id))
@@ -4474,6 +4476,74 @@ class GurobiMILPAdapter:
             bess_soc.setdefault(depot_id, {})[slot_idx] = end_soc
         for (vehicle_id, slot_idx), var in s_var.items():
             vehicle_soc.setdefault(vehicle_id, {})[slot_idx] = max(_var_val(var), 0.0)
+        vehicle_initial_soc_kwh_by_vehicle: Dict[str, float] = {}
+        vehicle_terminal_soc_kwh_by_vehicle: Dict[str, float] = {}
+        vehicle_terminal_soc_target_kwh_by_vehicle: Dict[str, float] = {}
+        vehicle_terminal_soc_drawdown_kwh_by_vehicle: Dict[str, float] = {}
+        vehicle_terminal_soc_target_shortfall_kwh_by_vehicle: Dict[str, float] = {}
+        if slot_indices:
+            terminal_slot = slot_indices[-1]
+            for vehicle_id in sorted(assigned_bev_ids):
+                vehicle = vehicle_by_id.get(vehicle_id)
+                if vehicle is None:
+                    continue
+                capacity_kwh = max(
+                    float(getattr(vehicle, "battery_capacity_kwh", 0.0) or 0.0),
+                    0.0,
+                )
+                initial_kwh = vehicle_initial_soc_kwh(
+                    problem,
+                    vehicle,
+                    cap_kwh=capacity_kwh,
+                )
+                terminal_kwh = _vehicle_soc_transition_kwh(
+                    _var_val(s_var.get((vehicle_id, terminal_slot))),
+                    charge_power_kw=_var_val(c_var.get((vehicle_id, terminal_slot))),
+                    timestep_h=timestep_h,
+                    charge_efficiency=0.95,
+                    drive_energy_kwh=(
+                        max(
+                            float(
+                                trip_load_by_vehicle_slot.get(
+                                    (vehicle_id, terminal_slot), 0.0
+                                )
+                                or 0.0
+                            ),
+                            0.0,
+                        )
+                        + max(
+                            float(
+                                terminal_out_of_horizon_load_by_vehicle.get(
+                                    vehicle_id, 0.0
+                                )
+                                or 0.0
+                            ),
+                            0.0,
+                        )
+                    ),
+                )
+                target_kwh = effective_final_soc_target_kwh(
+                    problem,
+                    vehicle,
+                    cap_kwh=capacity_kwh,
+                )
+                vehicle_initial_soc_kwh_by_vehicle[vehicle_id] = max(
+                    float(initial_kwh), 0.0
+                )
+                vehicle_terminal_soc_kwh_by_vehicle[vehicle_id] = max(
+                    float(terminal_kwh), 0.0
+                )
+                if target_kwh is not None:
+                    vehicle_terminal_soc_target_kwh_by_vehicle[vehicle_id] = float(
+                        target_kwh
+                    )
+                    vehicle_terminal_soc_target_shortfall_kwh_by_vehicle[
+                        vehicle_id
+                    ] = max(float(target_kwh) - float(terminal_kwh), 0.0)
+                vehicle_terminal_soc_drawdown_kwh_by_vehicle[vehicle_id] = max(
+                    float(initial_kwh) - float(terminal_kwh),
+                    0.0,
+                )
         for (vehicle_id, slot_idx), var in c_var.items():
             charge_kw = max(_var_val(var), 0.0)
             if charge_kw <= 1.0e-6:
@@ -4578,6 +4648,27 @@ class GurobiMILPAdapter:
             "two_stage_note": (
                 "Stage 1 optimizes vehicle scheduling; Stage 2 optimizes "
                 "charging/PV/BESS dispatch with Stage 1 EV operation fixed."
+            ),
+            "bev_terminal_soc_policy": str(
+                (problem.metadata or {}).get("bev_terminal_soc_policy")
+                or "minimum_only"
+            ),
+            "vehicle_initial_soc_kwh_by_vehicle": vehicle_initial_soc_kwh_by_vehicle,
+            "vehicle_terminal_soc_kwh_by_vehicle": vehicle_terminal_soc_kwh_by_vehicle,
+            "vehicle_terminal_soc_target_kwh_by_vehicle": vehicle_terminal_soc_target_kwh_by_vehicle,
+            "vehicle_terminal_soc_drawdown_kwh_by_vehicle": vehicle_terminal_soc_drawdown_kwh_by_vehicle,
+            "vehicle_terminal_soc_target_shortfall_kwh_by_vehicle": vehicle_terminal_soc_target_shortfall_kwh_by_vehicle,
+            "bev_terminal_soc_total_drawdown_kwh": float(
+                sum(vehicle_terminal_soc_drawdown_kwh_by_vehicle.values())
+            ),
+            "bev_terminal_soc_total_target_shortfall_kwh": float(
+                sum(vehicle_terminal_soc_target_shortfall_kwh_by_vehicle.values())
+            ),
+            "bev_terminal_soc_balance_satisfied": bool(
+                vehicle_terminal_soc_target_shortfall_kwh_by_vehicle
+                and max(
+                    vehicle_terminal_soc_target_shortfall_kwh_by_vehicle.values()
+                ) <= 1.0e-6
             ),
             "bess_soc_start_kwh_by_depot_slot": bess_soc_start,
             "bess_soc_end_kwh_by_depot_slot": bess_soc_end or bess_soc,

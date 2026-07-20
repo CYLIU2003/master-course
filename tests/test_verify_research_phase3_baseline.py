@@ -59,6 +59,14 @@ def _write_valid_run(run_dir: Path) -> None:
             },
             "research_run_accepted": True,
             "research_feasibility_eligible": True,
+            "bev_terminal_soc_policy": "return_to_initial",
+            "bev_terminal_soc_balance_satisfied": True,
+            "bev_terminal_soc_total_drawdown_kwh": 0.0,
+            "bev_terminal_soc_total_target_shortfall_kwh": 0.0,
+            "ev_unreplenished_drive_energy_kwh": 0.0,
+            "research_accounting_cost_eligible": True,
+            "research_cost_kpi_eligible": True,
+            "validated_operating_cost_jpy": 100.0,
         },
     )
     _write_json(

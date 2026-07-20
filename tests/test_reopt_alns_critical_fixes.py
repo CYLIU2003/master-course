@@ -425,6 +425,10 @@ def test_hourly_charging_reoptimization_carries_measured_bess_state_and_fixed_as
     problem = replace(
         base,
         scenario=replace(base.scenario, horizon_start="00:00"),
+        metadata={
+            **dict(base.metadata or {}),
+            "bev_terminal_soc_policy": "return_to_initial",
+        },
         depot_energy_assets={
             "dep-1": DepotEnergyAsset(
                 depot_id="dep-1",
@@ -434,7 +438,8 @@ def test_hourly_charging_reoptimization_carries_measured_bess_state_and_fixed_as
                 bess_soc_max_kwh=480.0,
                 bess_initial_soc_kwh=300.0,
                 bess_terminal_soc_min_kwh=120.0,
-                bess_terminal_soc_target_kwh=300.0,
+                bess_terminal_soc_policy="return_to_initial",
+                bess_terminal_soc_target_kwh=0.0,
             )
         },
     )
@@ -448,15 +453,37 @@ def test_hourly_charging_reoptimization_carries_measured_bess_state_and_fixed_as
         actual_bess_soc_kwh={"dep-1": 275.0},
         observed_on_peak_kw_by_depot={"dep-1": 90.0},
         observed_off_peak_kw_by_depot={"dep-1": 70.0},
-        bess_terminal_policy="minimum_only",
+        bess_terminal_policy="scenario",
     )
 
     assert result["ok"] is True
     assert capture.last_problem is not None
     assert capture.last_problem.vehicles[0].initial_soc == 240.0
+    assert capture.last_problem.metadata[
+        "bev_terminal_soc_target_kwh_by_vehicle"
+    ] == {"veh-1": 250.0}
     assert capture.last_problem.depot_energy_assets["dep-1"].bess_initial_soc_kwh == 275.0
-    assert capture.last_problem.depot_energy_assets["dep-1"].bess_terminal_soc_target_kwh == 0.0
+    assert capture.last_problem.depot_energy_assets["dep-1"].bess_terminal_soc_policy == "fixed_target"
+    assert capture.last_problem.depot_energy_assets["dep-1"].bess_terminal_soc_target_kwh == 300.0
+    assert capture.last_problem.metadata["bess_terminal_soc_target_kwh_by_depot"] == {
+        "dep-1": 300.0
+    }
     assert result["config"] == "milp"
+
+    optimizer.reoptimize_charging_hour(
+        problem,
+        day_ahead_plan,
+        OptimizationConfig(time_limit_sec=30),
+        current_min=0,
+        actual_soc={"veh-1": 240.0},
+        actual_bess_soc_kwh={"dep-1": 275.0},
+        observed_on_peak_kw_by_depot={"dep-1": 90.0},
+        observed_off_peak_kw_by_depot={"dep-1": 70.0},
+        bess_terminal_policy="minimum_only",
+    )
+    assert capture.last_problem is not None
+    assert capture.last_problem.depot_energy_assets["dep-1"].bess_terminal_soc_policy == "minimum_only"
+    assert capture.last_problem.depot_energy_assets["dep-1"].bess_terminal_soc_target_kwh == 0.0
 
     with pytest.raises(ValueError, match="finite and non-negative"):
         optimizer.reoptimize_charging_hour(

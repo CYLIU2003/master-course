@@ -13,6 +13,29 @@ def _distinct_count(rows: Sequence[Mapping[str, Any]], key: str) -> int:
     return len({str(row.get(key) or "") for row in rows if str(row.get(key) or "").strip()})
 
 
+def _is_served_assignment(row: Mapping[str, Any]) -> bool:
+    served = str(row.get("served_flag", True)).strip().lower()
+    return served not in {"false", "0", "no"} and bool(
+        str(row.get("assigned_vehicle_id") or row.get("vehicle_id") or "").strip()
+    )
+
+
+def _assignment_vehicle_id(row: Mapping[str, Any]) -> str:
+    return str(row.get("assigned_vehicle_id") or row.get("vehicle_id") or "").strip()
+
+
+def _assignment_vehicle_type(row: Mapping[str, Any]) -> str:
+    return str(row.get("assigned_vehicle_type") or row.get("vehicle_type") or "").strip().upper()
+
+
+def _assignment_service_date(row: Mapping[str, Any], fallback: str) -> str:
+    for key in ("actual_departure", "scheduled_departure", "service_date", "slot_start"):
+        value = str(row.get(key) or "").strip()
+        if value:
+            return value[:10]
+    return fallback[:10]
+
+
 def build_accounting_summary(
     *,
     vehicle_rows: Sequence[Mapping[str, Any]],
@@ -71,19 +94,38 @@ def build_accounting_summary(
     bus_charging_total_kwh = grid_to_bus_kwh + pv_to_bus_kwh + bess_to_bus_kwh
     pv_utilization_ratio = (pv_to_bus_kwh + pv_to_bess_kwh) / pv_generation_kwh if pv_generation_kwh > 0 else 0.0
 
-    soc_start_values = [float(row.get("soc_start_ratio", 0.0) or 0.0) for row in vehicle_rows]
-    soc_end_values = [float(row.get("soc_end_ratio", 0.0) or 0.0) for row in vehicle_rows]
+    bev_vehicle_rows = [
+        row
+        for row in vehicle_rows
+        if str(row.get("vehicle_type") or "").strip().upper() == "BEV"
+    ]
+    soc_start_values = [float(row.get("soc_start_ratio", 0.0) or 0.0) for row in bev_vehicle_rows]
+    soc_end_values = [float(row.get("soc_end_ratio", 0.0) or 0.0) for row in bev_vehicle_rows]
     min_soc_ratio = min(soc_end_values + soc_start_values) if (soc_start_values or soc_end_values) else 0.0
     mean_soc_ratio = mean(soc_end_values) if soc_end_values else 0.0
     final_min_soc_ratio = min(soc_end_values) if soc_end_values else 0.0
     final_mean_soc_ratio = mean(soc_end_values) if soc_end_values else 0.0
 
-    used_vehicle_count = _distinct_count(vehicle_rows, "vehicle_id")
-    used_vehicle_day_count = len({
-        (str(row.get("vehicle_id") or ""), str(row.get("slot_start") or "")[:10])
-        for row in vehicle_rows
-        if str(row.get("vehicle_id") or "").strip() and str(row.get("trip_id") or "").strip()
-    })
+    served_assignments = [row for row in trip_assignment_rows if _is_served_assignment(row)]
+    if trip_assignment_rows:
+        used_vehicle_ids = {_assignment_vehicle_id(row) for row in served_assignments}
+        used_vehicle_count = len(used_vehicle_ids)
+        used_vehicle_day_count = len(
+            {
+                (
+                    _assignment_vehicle_id(row),
+                    _assignment_service_date(row, str(metadata.get("service_date") or "")),
+                )
+                for row in served_assignments
+            }
+        )
+    else:
+        used_vehicle_count = _distinct_count(vehicle_rows, "vehicle_id")
+        used_vehicle_day_count = len({
+            (str(row.get("vehicle_id") or ""), str(row.get("slot_start") or "")[:10])
+            for row in vehicle_rows
+            if str(row.get("vehicle_id") or "").strip() and str(row.get("trip_id") or "").strip()
+        })
     available_vehicle_count = int(metadata.get("available_vehicle_count", used_vehicle_count) or used_vehicle_count)
     operator_id = str(metadata.get("operator_id") or "UNKNOWN_OPERATOR")
     scenario_id = str(metadata.get("scenario_id") or "")
@@ -91,10 +133,26 @@ def build_accounting_summary(
     service_date = str(metadata.get("service_date") or "")
     weather_date = str(metadata.get("weather_date") or service_date)
 
-    served_trip_count = _distinct_count(trip_assignment_rows, "trip_id") if trip_assignment_rows else _distinct_count(vehicle_rows, "trip_id")
-    unserved_trip_count = int(metadata.get("unserved_trip_count", 0) or 0)
-    bev_trip_count = len({str(row.get("trip_id") or "") for row in vehicle_rows if str(row.get("vehicle_type") or "").upper() == "BEV" and str(row.get("trip_id") or "")})
-    ice_trip_count = len({str(row.get("trip_id") or "") for row in vehicle_rows if str(row.get("vehicle_type") or "").upper() == "ICE" and str(row.get("trip_id") or "")})
+    served_trip_count = _distinct_count(served_assignments, "trip_id") if trip_assignment_rows else _distinct_count(vehicle_rows, "trip_id")
+    unserved_trip_count = (
+        _distinct_count(
+            [row for row in trip_assignment_rows if not _is_served_assignment(row)],
+            "trip_id",
+        )
+        if trip_assignment_rows
+        else int(metadata.get("unserved_trip_count", 0) or 0)
+    )
+    trip_count_source = served_assignments if trip_assignment_rows else vehicle_rows
+    bev_trip_count = len({
+        str(row.get("trip_id") or "")
+        for row in trip_count_source
+        if _assignment_vehicle_type(row) == "BEV" and str(row.get("trip_id") or "")
+    })
+    ice_trip_count = len({
+        str(row.get("trip_id") or "")
+        for row in trip_count_source
+        if _assignment_vehicle_type(row) == "ICE" and str(row.get("trip_id") or "")
+    })
 
     vehicle_usage_unit_cost = float(metadata.get("vehicle_usage_cost_jpy_per_used_bus", 0.0) or 0.0)
     vehicle_usage_cost_jpy = used_vehicle_day_count * vehicle_usage_unit_cost
@@ -102,7 +160,7 @@ def build_accounting_summary(
         vehicle_usage_cost_jpy = 0.0
     total_cost_jpy = electricity_cost_jpy + demand_cost_jpy + fuel_cost_jpy + co2_cost_jpy + battery_degradation_cost_jpy + contract_overage_cost_jpy + vehicle_usage_cost_jpy
     solver_objective_matches_accounting_total = bool(
-        metadata.get("solver_objective_matches_accounting_total", True)
+        metadata.get("solver_objective_matches_accounting_total", False)
     )
     objective_is_actual_cost = bool(metadata.get("objective_is_actual_cost", False))
     objective_value = total_cost_jpy if objective_is_actual_cost else float(metadata.get("objective_value", total_cost_jpy) or total_cost_jpy)

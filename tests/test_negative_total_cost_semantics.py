@@ -72,6 +72,45 @@ def test_experiment_report_payload_exposes_return_leg_bonus_and_demand_charge() 
     assert payload["demand_charge_jpy"] == 4321.0
 
 
+def test_experiment_report_uses_accounting_total_and_percent_gap() -> None:
+    payload = _optimization_result_payload(
+        {
+            "solver_status": "feasible",
+            "objective_value": 721_657.93,
+            "mip_gap": 0.410807,
+            "solver_settings": {"mip_gap_achieved_percent": 41.0807},
+            "summary": {"trip_count_served": 264},
+            "cost_breakdown": {"total_cost": 721_657.93},
+            "graph_artifacts": {
+                "accounting_summary": {
+                    "accounting_total_cost_jpy": 716_926.89,
+                    "grid_purchase_cost_jpy": 21_476.40,
+                    "bess_total_flow_cost_jpy": 123.45,
+                    "energy_cost_jpy": 21_599.85,
+                    "fuel_cost_jpy": 48_406.31,
+                    "demand_charge_cost_jpy": 5_619.53,
+                    "vehicle_usage_cost_jpy": 640_000.0,
+                    "total_co2_kg": 1_424.66,
+                    "bev_trip_count": 127,
+                    "ice_trip_count": 137,
+                    "served_trip_count": 264,
+                    "unserved_trip_count": 0,
+                }
+            },
+        }
+    )
+
+    assert payload["status"] == "FEASIBLE"
+    assert payload["objective_value"] == 721_657.93
+    assert payload["total_cost_jpy"] == 716_926.89
+    assert payload["electricity_cost_jpy"] == 21_599.85
+    assert payload["demand_charge_jpy"] == 5_619.53
+    assert payload["mip_gap_pct"] == 41.0807
+    assert payload["bev_trips"] == 127
+    assert payload["ice_trips"] == 137
+    assert payload["trip_count_unserved"] == 0
+
+
 def test_logger_scenario_payload_uses_vehicle_and_depot_asset_fallbacks() -> None:
     payload = _logger_scenario_payload(
         scenario_doc={
@@ -98,3 +137,42 @@ def test_logger_scenario_payload_uses_vehicle_and_depot_asset_fallbacks() -> Non
     fleet_counts = {item["vehicle_type"]: item["count"] for item in payload["fleet"]}
     assert fleet_counts == {"BEV": 2, "ICE": 1}
     assert payload["pv"]["capacity_kw"] == 20.0
+
+
+def test_logger_scenario_payload_converts_gap_and_hashes_effective_date() -> None:
+    payload = _logger_scenario_payload(
+        scenario_doc={
+            "dispatch_scope": {"depotId": "dep1"},
+            "simulation_config": {
+                "service_date": "2025-08-10",
+                "vehicle_usage_cost_jpy_per_used_bus": 20_000,
+                "depot_energy_assets": [{"depot_id": "dep1", "pv_capacity_kw": 10.0}],
+            },
+            "scenario_overlay": {"solver_config": {"mip_gap": 0.1}},
+        },
+        objective="total_cost",
+        method="二段階MILP",
+        mode="milp",
+    )
+
+    assert payload["solver"]["mip_gap_pct"] == 10.0
+    assert payload["costs"]["vehicle_fixed_cost"] == 20_000
+    assert payload["service_date"] == "2025-08-10"
+
+
+def test_logger_scenario_payload_preserves_explicit_zero_vehicle_usage_cost() -> None:
+    payload = _logger_scenario_payload(
+        scenario_doc={
+            "simulation_config": {"vehicle_usage_cost_jpy_per_used_bus": 0.0},
+            "scenario_overlay": {
+                "solver_config": {
+                    "objective_weights": {"vehicle_fixed_cost": 99_999.0}
+                }
+            },
+        },
+        objective="total_cost",
+        method="MILP",
+        mode="milp",
+    )
+
+    assert payload["costs"]["vehicle_fixed_cost"] == 0.0

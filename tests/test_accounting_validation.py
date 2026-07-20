@@ -11,6 +11,7 @@ from src.optimization.common.problem import (
     AssignmentPlan,
     CanonicalOptimizationProblem,
     ChargingSlot,
+    DepotEnergyAsset,
     EnergyPriceSlot,
     OptimizationScenario,
     ProblemVehicle,
@@ -48,6 +49,59 @@ def test_accounting_data_flow_validation_reports_ok() -> None:
     assert statuses["pv_generation_balance"] == "OK"
     assert statuses["grid_import_balance"] == "OK"
     assert statuses["operator_id_empty_count"] == "OK"
+
+
+def test_bess_soc_transition_validation_applies_round_trip_efficiency() -> None:
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(scenario_id="s", timestep_min=60),
+        dispatch_context=None,
+        trips=(),
+        vehicles=(),
+        depot_energy_assets={
+            "dep-1": DepotEnergyAsset(
+                depot_id="dep-1",
+                bess_enabled=True,
+                bess_energy_kwh=200.0,
+                bess_charge_efficiency=0.95,
+                bess_discharge_efficiency=0.95,
+            )
+        },
+    )
+    artifacts = build_accounting_artifacts(
+        problem=problem,
+        scenario_id="s",
+        run_id="r",
+        service_date=date(2026, 1, 1),
+        weather_date=date(2026, 1, 1),
+        operator_id="op-1",
+        trip_assignment_rows=[],
+        vehicle_soc_timeseries_rows=[],
+        vehicle_charging_source_rows=[],
+        energy_flow_rows=[
+            {
+                "date": "2026-01-01",
+                "time": "00:00",
+                "depot_id": "dep-1",
+                "pv_generation_slot_kwh": 10.0,
+                "pv_to_bess_slot_kwh": 10.0,
+                "bess_soc_start_kwh": 100.0,
+                "bess_soc_end_kwh": 109.5,
+            },
+            {
+                "date": "2026-01-01",
+                "time": "01:00",
+                "depot_id": "dep-1",
+                "bess_to_bus_slot_kwh": 9.5,
+                "bess_soc_start_kwh": 109.5,
+                "bess_soc_end_kwh": 99.5,
+            },
+        ],
+        metadata={"slot_minutes": 60, "operator_id": "op-1"},
+    )
+
+    checks = {row["check_name"]: row for row in artifacts.data_flow_validation}
+    assert checks["bess_soc_transition_balance"]["status"] == "OK"
+    assert checks["bess_soc_transition_balance"]["actual_value"] == pytest.approx(0.0)
 
 
 def test_energy_flow_time_idx_uses_planning_start_time() -> None:

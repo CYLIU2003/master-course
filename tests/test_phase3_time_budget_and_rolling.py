@@ -108,6 +108,28 @@ def test_hourly_cli_contract_rejects_different_trip_input() -> None:
         )
 
 
+def test_hourly_cli_contract_rejects_changed_bev_terminal_policy() -> None:
+    problem = _problem()
+    problem.metadata["bev_terminal_soc_policy"] = "return_to_initial"
+    audit = {
+        "scenario_id": "rolling",
+        "prepared_input_id": "prep-1",
+        "service_date": "2025-08-05",
+        "trip_input_hash": hourly_runner._trip_input_hash(problem),
+        "vehicle_input_hash": hourly_runner._vehicle_input_hash(problem),
+        "bev_terminal_soc_policy": "minimum_only",
+    }
+
+    with pytest.raises(ValueError, match="bev_terminal_soc_policy"):
+        hourly_runner._validate_day_ahead_input_contract(
+            problem,
+            audit,
+            scenario_id="rolling",
+            prepared_input_id="prep-1",
+            service_date="2025-08-05",
+        )
+
+
 def _hourly_result_problem() -> CanonicalOptimizationProblem:
     return CanonicalOptimizationProblem(
         scenario=OptimizationScenario(

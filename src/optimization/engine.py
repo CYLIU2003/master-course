@@ -945,6 +945,38 @@ class OptimizationEngine:
         solver_metadata["bess_terminal_soc_deviation_kwh_by_depot"] = dict(
             plan.metadata.get("bess_terminal_soc_deviation_kwh_by_depot", {}) or {}
         )
+        solver_metadata["bev_terminal_soc_policy"] = str(
+            plan.metadata.get("bev_terminal_soc_policy")
+            or problem.metadata.get("bev_terminal_soc_policy")
+            or "minimum_only"
+        )
+        solver_metadata["bev_terminal_soc_target_source"] = str(
+            problem.metadata.get("bev_terminal_soc_target_source") or ""
+        )
+        solver_metadata["bess_terminal_soc_target_source"] = str(
+            problem.metadata.get("bess_terminal_soc_target_source") or ""
+        )
+        for key in (
+            "vehicle_initial_soc_kwh_by_vehicle",
+            "vehicle_terminal_soc_kwh_by_vehicle",
+            "vehicle_terminal_soc_target_kwh_by_vehicle",
+            "vehicle_terminal_soc_drawdown_kwh_by_vehicle",
+            "vehicle_terminal_soc_target_shortfall_kwh_by_vehicle",
+        ):
+            solver_metadata[key] = dict(plan.metadata.get(key, {}) or {})
+        solver_metadata["bev_terminal_soc_total_drawdown_kwh"] = float(
+            plan.metadata.get("bev_terminal_soc_total_drawdown_kwh", 0.0) or 0.0
+        )
+        solver_metadata["bev_terminal_soc_total_target_shortfall_kwh"] = float(
+            plan.metadata.get(
+                "bev_terminal_soc_total_target_shortfall_kwh",
+                0.0,
+            )
+            or 0.0
+        )
+        solver_metadata["bev_terminal_soc_balance_satisfied"] = bool(
+            plan.metadata.get("bev_terminal_soc_balance_satisfied", False)
+        )
         solver_metadata["source_provenance_exact"] = bool(
             dict(plan.metadata or {}).get("source_provenance_exact", False)
         )
@@ -1156,7 +1188,7 @@ class OptimizationEngine:
             solver_metadata["research_acceptance_checks"] = acceptance_checks
             solver_metadata["research_run_accepted"] = accepted
             solver_metadata["research_feasibility_eligible"] = accepted
-            solver_metadata["research_cost_kpi_eligible"] = bool(
+            research_cost_optimality_eligible = bool(
                 accepted
                 and phase == "phase4_integrated"
                 and not assignment_only
@@ -1166,6 +1198,48 @@ class OptimizationEngine:
                     solver_metadata.get("solver_objective_matches_accounting_total", False)
                 )
                 and bool(costs.get("objective_is_actual_cost", False))
+            )
+            terminal_policy = str(
+                solver_metadata.get("bev_terminal_soc_policy")
+                or (problem.metadata or {}).get("bev_terminal_soc_policy")
+                or "minimum_only"
+            ).strip().lower()
+            cost_acceptance_checks = {
+                "research_run_accepted": accepted,
+                "full_operational_validation": not assignment_only,
+                "source_provenance_exact": bool(
+                    solver_metadata.get("source_provenance_exact", False)
+                ),
+                "bev_terminal_policy_return_to_initial": (
+                    terminal_policy == "return_to_initial"
+                ),
+                "bev_terminal_soc_balance_satisfied": bool(
+                    solver_metadata.get("bev_terminal_soc_balance_satisfied", False)
+                ),
+                "ev_energy_inventory_balanced": bool(
+                    costs.get("ev_energy_inventory_balanced", False)
+                ),
+            }
+            research_accounting_cost_eligible = bool(
+                all(cost_acceptance_checks.values())
+                and not assignment_only
+                and not charging_only
+            )
+            solver_metadata["research_cost_acceptance_checks"] = (
+                cost_acceptance_checks
+            )
+            solver_metadata["research_accounting_cost_eligible"] = (
+                research_accounting_cost_eligible
+            )
+            solver_metadata["research_cost_optimality_eligible"] = (
+                research_cost_optimality_eligible
+            )
+            # A validated accounting cost for a feasible two-stage schedule is
+            # publishable even though the schedule is not a global
+            # total-cost optimum. Keep those two claims separate.
+            solver_metadata["research_cost_kpi_eligible"] = bool(
+                research_accounting_cost_eligible
+                or research_cost_optimality_eligible
             )
             # Backward-compatible field: it has always been consumed by the
             # BFF as the permission to publish aggregate research KPIs.
@@ -1208,7 +1282,13 @@ class OptimizationEngine:
             elif not bool(solver_metadata["research_cost_kpi_eligible"]):
                 warnings.append(
                     "Research run accepted for feasibility/constraint analysis; "
-                    "it is not a global total-cost optimization result."
+                    "its cost KPI is not comparable because terminal energy "
+                    "inventory or realized-flow accounting is incomplete."
+                )
+            elif not bool(research_cost_optimality_eligible):
+                warnings.append(
+                    "Research accounting cost is valid for this feasible "
+                    "schedule; global total-cost optimality is not established."
                 )
         warnings = tuple(dict.fromkeys(str(item) for item in warnings if str(item).strip()))
 

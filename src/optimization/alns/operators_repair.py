@@ -17,6 +17,7 @@ from src.optimization.common.problem import (
 )
 from src.optimization.common.soc_helpers import (
     effective_final_soc_target_kwh,
+    final_soc_target_enabled,
     post_return_target_slot_index,
     return_deadhead_energy_kwh,
     return_deadhead_min_to_home,
@@ -484,7 +485,7 @@ def _recompute_charging_slots(problem: CanonicalOptimizationProblem, plan: Assig
     slot_port_usage: Dict[Tuple[str, int], int] = {}
     slot_power_usage: Dict[Tuple[str, int], float] = {}
     out: List[ChargingSlot] = []
-    target_enabled = (problem.metadata or {}).get("final_soc_target_percent") is not None
+    target_enabled = final_soc_target_enabled(problem)
     horizon_start_min = 0
     if problem.scenario.horizon_start:
         try:

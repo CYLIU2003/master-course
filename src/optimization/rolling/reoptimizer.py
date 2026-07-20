@@ -13,7 +13,15 @@ from src.optimization.common.problem import (
     OptimizationConfig,
     OptimizationMode,
 )
-from src.optimization.common.soc_helpers import horizon_start_min
+from src.optimization.common.soc_helpers import (
+    BEV_TERMINAL_SOC_TARGET_KWH_BY_VEHICLE_KEY,
+    effective_final_soc_target_kwh,
+    horizon_start_min,
+    is_electric_vehicle,
+)
+from src.optimization.common.bess_terminal_policy import (
+    resolve_bess_terminal_soc_target_kwh,
+)
 from src.optimization.engine import OptimizationEngine
 from src.optimization.milp.solver_adapter import (
     ROLLING_REMAINING_DAY_FIXED_ASSIGNMENT,
@@ -222,6 +230,8 @@ class RollingReoptimizer:
         actual_soc: Optional[Mapping[str, float]] = None,
         actual_bess_soc_kwh: Optional[Mapping[str, float]] = None,
     ):
+        problem = self._freeze_bev_terminal_soc_targets(problem)
+        problem = self._freeze_bess_terminal_soc_targets(problem)
         if actual_soc:
             problem = self._apply_actual_soc(problem, actual_soc)
         if actual_bess_soc_kwh:
@@ -359,6 +369,8 @@ class RollingReoptimizer:
                     f"Measured {label} demand peak must be finite and "
                     f"non-negative for depots: {invalid_depots}"
                 )
+        problem = self._freeze_bev_terminal_soc_targets(problem)
+        problem = self._freeze_bess_terminal_soc_targets(problem)
         if actual_soc:
             problem = self._apply_actual_soc(problem, actual_soc)
         if actual_bess_soc_kwh:
@@ -385,6 +397,77 @@ class RollingReoptimizer:
             ),
         )
         return self._engine.solve(problem, rolling_config)
+
+    @staticmethod
+    def _freeze_bev_terminal_soc_targets(
+        problem: CanonicalOptimizationProblem,
+    ) -> CanonicalOptimizationProblem:
+        """Keep the day-start terminal target fixed across hourly updates.
+
+        Measured SOC becomes the rolling model's current state, but it must not
+        redefine a ``return_to_initial`` target. Otherwise the required
+        end-of-day energy would fall every time the controller is rerun.
+        """
+
+        metadata = dict(problem.metadata or {})
+        existing = metadata.get(BEV_TERMINAL_SOC_TARGET_KWH_BY_VEHICLE_KEY)
+        if isinstance(existing, Mapping):
+            return problem
+        targets: dict[str, float] = {}
+        for vehicle in problem.vehicles:
+            if not is_electric_vehicle(problem, vehicle):
+                continue
+            target = effective_final_soc_target_kwh(problem, vehicle)
+            if target is not None:
+                targets[str(vehicle.vehicle_id)] = float(target)
+        if not targets:
+            return problem
+        metadata[BEV_TERMINAL_SOC_TARGET_KWH_BY_VEHICLE_KEY] = targets
+        metadata["bev_terminal_soc_target_source"] = (
+            "day_start_problem_before_rolling_state_update"
+        )
+        return replace(problem, metadata=metadata)
+
+    @staticmethod
+    def _freeze_bess_terminal_soc_targets(
+        problem: CanonicalOptimizationProblem,
+    ) -> CanonicalOptimizationProblem:
+        """Keep stationary-battery day-start targets fixed while SOC changes."""
+
+        assets = dict(problem.depot_energy_assets or {})
+        updated_assets = dict(assets)
+        frozen_targets: dict[str, float] = {}
+        for depot_id, asset in assets.items():
+            target = resolve_bess_terminal_soc_target_kwh(
+                policy=asset.bess_terminal_soc_policy,
+                initial_soc_kwh=asset.bess_initial_soc_kwh,
+                configured_target_kwh=asset.bess_terminal_soc_target_kwh,
+                terminal_soc_floor_kwh=asset.bess_terminal_soc_min_kwh,
+                maximum_soc_kwh=(
+                    asset.bess_soc_max_kwh or asset.bess_energy_kwh
+                ),
+            )
+            if target is None:
+                continue
+            depot_key = str(depot_id)
+            frozen_targets[depot_key] = float(target)
+            updated_assets[depot_key] = replace(
+                asset,
+                bess_terminal_soc_policy="fixed_target",
+                bess_terminal_soc_target_kwh=float(target),
+            )
+        if not frozen_targets:
+            return problem
+        metadata = dict(problem.metadata or {})
+        metadata["bess_terminal_soc_target_kwh_by_depot"] = frozen_targets
+        metadata["bess_terminal_soc_target_source"] = (
+            "day_start_problem_before_rolling_state_update"
+        )
+        return replace(
+            problem,
+            depot_energy_assets=updated_assets,
+            metadata=metadata,
+        )
 
     def _apply_actual_soc(
         self,

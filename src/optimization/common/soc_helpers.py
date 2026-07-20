@@ -1,11 +1,20 @@
 from __future__ import annotations
 
-from typing import Any, Sequence, Tuple
+import math
+from typing import Any, Mapping, Sequence, Tuple
 
+from .bev_terminal_policy import (
+    BevTerminalSocPolicy,
+    normalize_bev_terminal_soc_policy,
+    resolve_bev_terminal_soc_target_kwh,
+)
 from .problem import CanonicalOptimizationProblem, ProblemTrip, normalize_required_soc_departure_ratio
 
 ELECTRIC_POWERTRAINS = {"BEV", "PHEV", "FCEV"}
 DAY_MINUTES = 24 * 60
+BEV_TERMINAL_SOC_TARGET_KWH_BY_VEHICLE_KEY = (
+    "bev_terminal_soc_target_kwh_by_vehicle"
+)
 
 
 def horizon_start_min(problem: CanonicalOptimizationProblem) -> int:
@@ -234,22 +243,52 @@ def effective_final_soc_target_kwh(
     *,
     cap_kwh: float | None = None,
 ) -> float | None:
-    target_ratio = percent_like_to_ratio((problem.metadata or {}).get("final_soc_target_percent"))
-    if target_ratio is None:
-        return None
+    metadata = problem.metadata or {}
+    target_ratio = percent_like_to_ratio(metadata.get("final_soc_target_percent"))
     cap = max(float(cap_kwh if cap_kwh is not None else vehicle_capacity_kwh(problem, vehicle)), 0.0)
     if cap <= 0.0:
         return None
+    policy = normalize_bev_terminal_soc_policy(
+        metadata.get("bev_terminal_soc_policy"),
+        has_explicit_target=target_ratio is not None,
+    )
+    if policy is BevTerminalSocPolicy.MINIMUM_ONLY:
+        return None
+    frozen_targets = metadata.get(BEV_TERMINAL_SOC_TARGET_KWH_BY_VEHICLE_KEY)
+    vehicle_id = str(getattr(vehicle, "vehicle_id", "") or "")
+    if isinstance(frozen_targets, Mapping) and vehicle_id in frozen_targets:
+        frozen_target = float(frozen_targets[vehicle_id])
+        if not math.isfinite(frozen_target):
+            raise ValueError(
+                f"Frozen BEV terminal SOC target for {vehicle_id!r} must be finite"
+            )
+        floor = final_soc_floor_kwh(problem, vehicle, cap_kwh=cap)
+        return min(max(frozen_target, floor), cap)
     tolerance_ratio = percent_like_to_ratio(
-        (problem.metadata or {}).get("final_soc_target_tolerance_percent")
+        metadata.get("final_soc_target_tolerance_percent")
     )
     tolerance_ratio = 0.0 if tolerance_ratio is None else tolerance_ratio
-    target_lower = max(target_ratio - max(tolerance_ratio, 0.0), 0.0) * cap
-    return min(max(final_soc_floor_kwh(problem, vehicle, cap_kwh=cap), target_lower), cap)
+    configured_target = (
+        max(target_ratio - max(tolerance_ratio, 0.0), 0.0) * cap
+        if target_ratio is not None
+        else None
+    )
+    return resolve_bev_terminal_soc_target_kwh(
+        policy=policy,
+        initial_soc_kwh=vehicle_initial_soc_kwh(problem, vehicle, cap_kwh=cap),
+        configured_target_kwh=configured_target,
+        terminal_soc_floor_kwh=final_soc_floor_kwh(problem, vehicle, cap_kwh=cap),
+        maximum_soc_kwh=cap,
+    )
 
 
 def final_soc_target_enabled(problem: CanonicalOptimizationProblem) -> bool:
-    return effective_final_soc_target_ratio(problem) is not None
+    policy = normalize_bev_terminal_soc_policy(
+        (problem.metadata or {}).get("bev_terminal_soc_policy"),
+        has_explicit_target=(problem.metadata or {}).get("final_soc_target_percent")
+        is not None,
+    )
+    return policy is not BevTerminalSocPolicy.MINIMUM_ONLY
 
 
 def effective_final_soc_target_ratio(problem: CanonicalOptimizationProblem) -> float | None:

@@ -5,6 +5,71 @@
 
 ---
 
+## 2026-07-20 — 代表日会計の終端SOC公平化と24回rolling完走
+
+### 確認した実行経路
+
+- 日次計画は`run_research_phase3_minimal.py`または`run_research_phase3_frontend_weather.py`から`ProblemBuilder.build_from_scenario()`、`OptimizationEngine.solve()`、Gurobi Phase 3 Stage 1、固定割当Stage 2へ進む。
+- 時間別見直しは`run_hourly_charging_reoptimization.py`から保存済み日次割当を復元し、`RollingReoptimizer.reoptimize_charging_hour()`、Phase 1 charging-only Stage 2へ進む。便割当は固定し、充電、PV、BESS、系統購入だけを当日末まで再計算し、先頭60分のみ実行する。
+
+### 根本原因と修正
+
+- 日次controlled runnerが終端目標を消し、最低SOCだけを守る設定へ固定していた。この条件では初期BEV電池を当日費用なしで消費でき、代表日の費用・PV比較が不公平になる。BEV終端方針を`minimum_only`、`return_to_initial`、`fixed_target`へ共通化し、正式baselineとweather比較の既定を`return_to_initial`へ変更した。
+- 旧会計の`electricity_cost_final`は、当日の実際の系統/PV/BESS供給費と、未補充の初期在庫評価額を合算していた。数値を消さず、`energy_cash_purchase_cost_jpy`と`energy_inventory_valuation_cost_jpy`へ分け、EV未補充量もkWhで公開する。`research_accounting_cost_eligible`は公平な終端SOC、物理検証、出所追跡、会計再計算を満たす場合だけtrueとする。Phase 3は二段階なので`research_cost_optimality_eligible`は別にし、会計値が正しくても大域的な費用最適解とは表現しない。
+- 時間別見直しは実測SOCを車両の新しい初期SOCへ上書きするため、`return_to_initial`をその都度解釈すると終端目標自体が日中に下がった。BEVは車両別、BESSは営業所別に日初目標を固定し、その後で実測状態を入れる順序へ変更した。
+- 日次controlled runnerとweather runnerは同じ名前のtrip/vehicle hashに異なる項目を使っていた。`input_fingerprints.py`へ便・車両の共通指紋を集約した。また時間別runnerが画面の現在値を再構築して日次runnerの15分、SOC、weather、設備設定と食い違っていたため、日次実行時の完全な`effective_scenario.json`とhashを保存し、時間別runnerはそれを必須入力として照合する。
+- rolling時は「現在の実測SOCから終端までに減る量」と「固定した終端目標に足りない量」が一致しない。前者を`bev_terminal_soc_total_drawdown_kwh`、後者を`bev_terminal_soc_total_target_shortfall_kwh`として分離し、終端条件の合否は後者で判定する。
+
+### 実データ検証
+
+- `tmp/bev_terminal_policy_probe_20260720_v2`の短時間診断は、264/264便、Stage 2 optimal、独立検証違反0、EV終端目標不足約`3.7e-13 kWh`、EV未補充量0 kWh、会計再計算残差0円だった。
+- 同じ日次割当を`tmp/hourly_terminal_policy_full_chain_20260720`で5:00から翌5:00まで1時間ずつ24回連鎖した。24/24回で可行、Stage 2 optimal、264/264便、未担当0便、終端目標合格だった。終端目標不足の最大値は`3.97903932025656e-13 kWh`、各回wall timeの最大は`2.3440217秒`、最終開始slotは92だった。
+- この24回連鎖は制御経路と状態引継ぎの検証である。元の日次割当はdirty worktree、successor上限8、20秒の診断設定であり、`exact_milp_backend=false`、`research_run_accepted=false`である。したがって上記費用を修論の正式値、最適費用、正式な晴雨差として引用しない。
+- Gurobi runtime修正後、`python -m pytest -q --ignore=test_multiday_phase1.py`は`755 passed`。除外testはlocalhost BFFを必要とする手動E2Eであり、単体回帰の失敗ではない。
+- Gurobi runtimeは、`gurobipy`を先にimportすると、環境変数未指定時に期限切れの`C:\gurobi\gurobi.lic`を拾う場合があった。モジュール読込時と`ensure_gurobi()`の双方でライセンス・DLL探索先をGurobi importより先に構成し、ユーザー側の有効なacademic licenseを選べるようにした。環境変数未指定の新規processで`is_gurobi_available()=True`を確認した。ライセンス本文は読み取り・記録していない。
+
+### 次の研究実験
+
+1. clean commit、固定prepared SHA、15分、successor削減なしで`return_to_initial`正式baselineを再実行する。
+2. 正式日次解を入力に24回rollingを再実行し、実行済み60分の物理フローだけから一日費用を再集計する。各時点の残り時間目的値は合計しない。
+3. 同じ日次割当と設備条件でPV完全予測、予測誤差、晴雨を比較する。
+4. successor上限8/16/32/削減なしを感度分析とし、削減ありは縮約ネットワーク結果と明記する。
+
+運行接続条件、時刻表、`operator_id`、便距離、Stage 1からStage 2へ渡す便割当は緩和・書換えしていない。
+
+---
+
+## 2026-07-19 — 最新run監査とP0帳票・検証修正
+
+### 監査対象と到達状況
+
+- 主対象は`output/2026-07-19/run_20260719_1617`、比較対象は`run_20260719_1526`とした。主対象は264/264便、未担当0、fallbackなし、Stage 1はtime limit、Stage 2はoptimal、使用車両32台である。運行・充電の可行候補を作れる段階には到達した。
+- 一方で主対象は60分刻み、`research_run=false`、`research_run_accepted=false`、successor上限8で678,600候補から113,712候補へ83.2%削減、Stage 1 gap 41.0807%である。`weather_pv_forecast_applied=false`、毎時見直しの状態は未設定、`no_reoptimization_performed=true`であり、このrunを15分正式baseline、晴雨比較、毎時逐次最適化の成果とは扱わない。
+
+### 自分から起票して修正した問題
+
+1. 実験レポートはGurobiのratio値0.410807をpercentとして表示し、実際の41.0807%を0.4108%と100分の1に見せていた。要求gapも0.1を0.100%と表示していたため、ratioからpercentへ明示変換した。
+2. `experiment_report.md`は二段階法の目的値721,657.93円を「総コスト」と表示していた。さらにsummary、root KPI、graph KPIで76,926.89円、830,717.20円が混在していた。目的値と会計総費用を分離し、最終台帳の電気、需要、燃料、CO2、車両使用費を一度だけ加算した値を会計総費用とした。
+3. 1時間枠の`vehicle_slot_ledger`は同一車両・同一枠の複数便を1件へ集約するため、便種別の集計元に使うと6便欠落した。また分割された運用IDを車両日として数え、32台を38車両日とした。`trip_assignment.csv`の担当済み便を便数・ユニーク車両・車両日の正本へ変更した。
+4. SOC統計にICE車のSOC=0が入り、違反0なのに最小SOC 0%と表示されていた。SOC集計はBEV行だけを対象にした。
+5. BESS検証は効率を無視し、`開始SOC + 充電量 − 放電量`で比較していた。最新runでは充電100.079kWh、放電90.3213kWhの差9.7577kWhをERRORとしていたが、充電・放電効率95%を考慮すると内部増分と減分はいずれも約95.075kWhで整合する。検証式を効率対応へ変更した。
+6. reporting finalizerが`bess_soc_kwh`を開始SOCと終了SOCの両方へ書き、明示的な遷移を失わせていた。新形式では`bess_soc_start_kwh`と`bess_soc_end_kwh`を保持する。古い単一SOC形式は表示互換のため両欄へ保持するが、開始と終了を区別できず遷移を検証できないため、合格扱いにせず`SKIPPED`と明示する。
+7. `solver_objective_matches_accounting_total`の既定値がtrueで、目的値と会計値が異なってもtrueが残った。既定値をfalseとし、明示された意味と金額一致の両方を満たす場合だけtrueにした。
+8. 実験hashが運行日と実効PV入力を含まず、8月5日と8月10日のrunが同じhashになっていた。hash入力へ運行日、天候条件、営業所エネルギー設備を追加した。
+9. 追加監査で、帳票再構築時の電気代が系統購入費だけを使い、PV・BESSの台帳費用があるケースでは会計総費用から漏れる潜在不具合を確認した。電気代を「系統購入費＋PV・BESSフロー費」とし、旧帳票欄へも同じ内訳を同期して二重加算を防いだ。実験レポートの需要料金・未充足便数も会計台帳を優先する。
+
+### 修正後の実測確認
+
+- 元成果物を変更せず、主対象runを一時ディレクトリへ複製してreporting finalizerを再実行した。
+- 再集計後は、会計総費用716,926.890454円、目的値721,657.933219円、`solver_objective_matches_accounting_total=false`、BEV127便、ICE137便、合計264便、使用車両32台、車両日32、車両使用費640,000円となった。
+- 実験レポートはMIP gap目標10.000%、実績41.0807%、会計総費用716,926.89円、CO2 1,424.6551kgと表示した。BESS SOC遷移はOK、data-flow validationはerror 0 / warning 0 / status OKとなった。
+- `tests/test_vehicle_usage_cost.py`、`tests/test_accounting_validation.py`、`tests/test_negative_total_cost_semantics.py`、reporting finalizer、不可行gate、research contract関連を含む回帰59件がpassした。さらに`python -m pytest -q --ignore=test_multiday_phase1.py`相当の全体回帰で`731 passed, 15 skipped`を確認した。
+
+### 研究上の意味と残課題
+
+- 今回変更したのは帳票、会計集計、独立検証であり、便接続条件、時刻表、車両割当、Stage 1/Stage 2の目的・制約、PV/BESSの物理フローは変更していない。したがって保存済みsolver解の意味は変えず、誤った読み方だけを修正した。
+- 7月19日runは出力整合を直しても正式研究runにはならない。次は固定入力・15分・受理gate通過済みbaselineを基準に、天候PVを実際に適用した晴雨比較、候補接続上限感度、その後に24回の毎時見直しを実行する。
+
 ## 2026-07-18 — 7月月間進捗資料と7月17日run限定の可視化監査
 
 ### 追補：専門外の聴衆向け説明への改訂
@@ -4082,3 +4147,12 @@ master-course/
   - frontend sunny build-only preflight → 264便、BEV35/ICE25、60分×24slot、TOU 08:00=18/16:00=22/18:00=19 JPY/kWh、demand=40 JPY/kW/horizon、PV/BESS有効を確認。
   - frontend weather runnerを拡張し、exact initial-SOC policy/source/hashと35台別SOC、terminal SOC raw policy、charger inventory/hash、vehicle/trip hash、weather provenance、PV/BESS asset snapshot、experiment hashを`input_audit.json`へ記録する。policy未指定かつselected vehicle inventoryも無効な場合は、SOCを数値から推測せずrunを拒否する。
   - strict preflightでは晴天・雨天のfleet/SOC hash/vehicle hash/charger hash/cost flags/TOU/BESS configurationはすべて一致した。差分はservice date、PV profile/energy/hash、forecast由来のweather operation mode（晴天=`aggressive`、雨天=`conservative`）だけである。現在の3 profileはSOC、assignment bias、grid risk penaltyをいずれも`None`としており、mode自体はprovenanceのみで数理係数を変更しない。従って現在の比較でPV energy以外に隠れた運用係数の差はない。
+## 2026-07-19 先行文献照合: モデル不足点と研究主張の再整理
+
+- `先行文献/`内のPDF 23本を抽出し、時間刻み、充電器競合、PV/BESS、時間別CO2、一日計画の逐次更新、PV・走行電力の不確かさ、設備感度、費用内訳、車両SOC可視化の観点から現行モデルを照合した。詳細は`docs/reviews/literature_model_gap_review_20260719.md`を正本とする。
+- verified call path上のPhase 3は、Stage 1で日次車両割当を決定し、その割当を固定したStage 2で充電・PV・BESS・系統運用を決める。Stage 2からStage 1へのfeedback/cutはなく、現行の正式runはglobal simultaneous total-cost optimizationではない。研究概要の「一体で最適化」は現状と不一致であり、「二階層計画」へ変更するか、小規模統合MILPとの比較とfeedback機構が必要である。
+- `output/research_phase3_grid_only_15min_formal_20260718_full_network/solver_result.json`を再集計した。使用32台は全てBEV、各車初期SOCは251.2 kWh、fleet初期8,038.4 kWh、終端4,369.766 kWh、在庫消費3,668.634 kWh、当日充電32.319 kWh、充電車両3台、最低終端31.4 kWh=10%だった。minimum-only終端条件は一日可行性の確認には使えるが、定常日比較の費用・PV効果を大きく歪めるため研究用費用比較には使わない。
+- 同runの`electricity_cost=66,438.102円`の内訳は、`realized_ev_charge_cost=581.734円`、`leftover_ev_provisional_cost=65,856.368円`である。会計内部の合計一致は確認済みだが、`objective_is_actual_cost=false`かつ`research_cost_kpi_eligible=false`であるため、実現運用費や最適費用とは呼ばない。Stage 1探索用の暫定走行費と最終KPIを分離し、終端SOC回復を含む実現フローから再集計する必要がある。
+- 研究の最小構成は、(1) 264便の可行性、(2) 公平な開始・終了SOC下でのPV/BESS効果、(3) PV予測誤差下での固定日次計画と毎時見直しの比較とする。正式比較は15分、clean commit、固定hash、実適用PV、違反0、fallbackなし、実現フロー会計を受理条件とする。
+- 必須実験は、24回rolling完走、完全予測oracle、PV誤差、走行電力±10%、3 seed、successor 8/16/32/削減なし、60/30/15分、小規模統合oracleとの差である。V2G、配電線潮流、複数営業所、メタヒューリスティクス拡大は修士論文の成立条件に含めない。
+- この追補は文献照合と証拠整理のみで、dispatch可行性条件、時刻表、`operator_id`、SOC/電力制約、費用計算コード、既存成果物を変更していない。

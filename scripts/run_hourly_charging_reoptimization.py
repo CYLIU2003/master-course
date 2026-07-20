@@ -45,6 +45,12 @@ from src.optimization import (  # noqa: E402
 from src.optimization.common.research_phase3_policy import (  # noqa: E402
     enforce_research_phase3_single_continuous_duty,
 )
+from src.optimization.common.bev_terminal_policy import (  # noqa: E402
+    normalize_bev_terminal_soc_policy,
+)
+from src.optimization.common.input_fingerprints import (  # noqa: E402
+    INPUT_FINGERPRINT_SCHEMA,
+)
 from src.optimization.rolling.reoptimizer import (  # noqa: E402
     RollingReoptimizer,
     assignment_plan_from_serialized_result,
@@ -79,6 +85,17 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
 def _minute_label(minute: int) -> str:
     minute_of_day = int(minute) % (24 * 60)
     return f"{minute_of_day // 60:02d}:{minute_of_day % 60:02d}"
+
+
+def _canonical_hash(value: Any) -> str:
+    encoded = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _apply_pv_forecast_update(
@@ -153,11 +170,26 @@ def _validate_day_ahead_input_contract(
     """Ensure the persisted assignment was solved from the current inputs."""
 
     expected_values = {
+        "input_fingerprint_schema": INPUT_FINGERPRINT_SCHEMA,
         "scenario_id": str(scenario_id),
         "prepared_input_id": str(prepared_input_id),
         "service_date": str(service_date),
         "trip_input_hash": _trip_input_hash(problem),
         "vehicle_input_hash": _vehicle_input_hash(problem),
+        "bev_terminal_soc_policy": str(
+            problem.metadata.get("bev_terminal_soc_policy") or ""
+        ),
+    }
+    audited_terminal_policy = str(
+        input_audit.get("bev_terminal_soc_policy")
+        or dict(input_audit.get("terminal_soc_policy") or {}).get(
+            "bev_terminal_soc_policy"
+        )
+        or ""
+    )
+    input_audit = {
+        **input_audit,
+        "bev_terminal_soc_policy": audited_terminal_policy,
     }
     mismatches = {
         key: {"expected": expected, "actual": str(input_audit.get(key) or "")}
@@ -177,18 +209,67 @@ def run(args: argparse.Namespace) -> int:
             "Gurobi is unavailable; hourly research runs do not allow fallback"
         )
 
+    day_ahead_result_path = Path(args.day_ahead_result).resolve()
+    input_audit_path = day_ahead_result_path.parent / "input_audit.json"
+    if not input_audit_path.is_file():
+        raise ValueError(
+            "The day-ahead result must have a sibling input_audit.json so its "
+            "scenario, prepared input, and canonical hashes can be verified"
+        )
+    input_audit = _load_json(input_audit_path)
+    audited_bev_terminal_policy = str(
+        input_audit.get("bev_terminal_soc_policy")
+        or dict(input_audit.get("terminal_soc_policy") or {}).get(
+            "bev_terminal_soc_policy"
+        )
+        or ""
+    )
+    if not audited_bev_terminal_policy:
+        raise ValueError(
+            "Day-ahead input audit is missing bev_terminal_soc_policy"
+        )
+    audited_bev_terminal_policy = normalize_bev_terminal_soc_policy(
+        audited_bev_terminal_policy
+    ).value
+
     prepared_root = _prepared_inputs_root()
     prepared_payload = load_prepared_input(
         scenario_id=args.scenario_id,
         prepared_input_id=args.prepared_input_id,
         scenarios_dir=prepared_root,
     )
-    scenario = deepcopy(
-        materialize_scenario_from_prepared_input(
-            store.get_scenario_document_shallow(args.scenario_id),
-            prepared_payload,
-        )
+    effective_scenario_name = str(
+        input_audit.get("effective_scenario_artifact") or ""
+    ).strip()
+    effective_scenario_path = (
+        input_audit_path.parent / effective_scenario_name
+        if effective_scenario_name
+        else None
     )
+    if input_audit.get("input_fingerprint_schema") == INPUT_FINGERPRINT_SCHEMA:
+        if effective_scenario_path is None or not effective_scenario_path.is_file():
+            raise ValueError(
+                "Current day-ahead input audit requires effective_scenario.json"
+            )
+        scenario = deepcopy(_load_json(effective_scenario_path))
+        expected_scenario_hash = str(
+            input_audit.get("effective_scenario_sha256") or ""
+        )
+        actual_scenario_hash = _canonical_hash(scenario)
+        if not expected_scenario_hash or actual_scenario_hash != expected_scenario_hash:
+            raise ValueError(
+                "Day-ahead effective scenario hash does not match input_audit.json"
+            )
+    else:
+        scenario = deepcopy(
+            materialize_scenario_from_prepared_input(
+                store.get_scenario_document_shallow(args.scenario_id),
+                prepared_payload,
+            )
+        )
+    simulation_config = dict(scenario.get("simulation_config") or {})
+    simulation_config["bev_terminal_soc_policy"] = audited_bev_terminal_policy
+    scenario["simulation_config"] = simulation_config
     scenario, weather_forecast, weather_profile = (
         _prepare_weather_policy_for_scenario(
             scenario,
@@ -241,14 +322,6 @@ def run(args: argparse.Namespace) -> int:
         }
         problem = replace(problem, depot_energy_assets=assets)
 
-    day_ahead_result_path = Path(args.day_ahead_result).resolve()
-    input_audit_path = day_ahead_result_path.parent / "input_audit.json"
-    if not input_audit_path.is_file():
-        raise ValueError(
-            "The day-ahead result must have a sibling input_audit.json so its "
-            "scenario, prepared input, and canonical hashes can be verified"
-        )
-    input_audit = _load_json(input_audit_path)
     _validate_day_ahead_input_contract(
         problem,
         input_audit,
@@ -353,7 +426,29 @@ def run(args: argparse.Namespace) -> int:
             "execution_minutes": int(args.execution_minutes),
             "lookahead": "remaining_service_day",
             "vehicle_assignment_policy": "fixed_to_persisted_day_ahead_result",
+            "bev_terminal_soc_policy": audited_bev_terminal_policy,
+            "bev_terminal_soc_target_source": metadata.get(
+                "bev_terminal_soc_target_source"
+            ),
+            "bev_terminal_soc_target_kwh_by_vehicle": dict(
+                metadata.get("vehicle_terminal_soc_target_kwh_by_vehicle") or {}
+            ),
+            "bev_terminal_soc_total_drawdown_kwh": metadata.get(
+                "bev_terminal_soc_total_drawdown_kwh"
+            ),
+            "bev_terminal_soc_total_target_shortfall_kwh": metadata.get(
+                "bev_terminal_soc_total_target_shortfall_kwh"
+            ),
+            "bev_terminal_soc_balance_satisfied": metadata.get(
+                "bev_terminal_soc_balance_satisfied"
+            ),
             "bess_terminal_policy": args.bess_terminal_policy,
+            "bess_terminal_soc_target_source": metadata.get(
+                "bess_terminal_soc_target_source"
+            ),
+            "bess_terminal_soc_target_kwh_by_depot": dict(
+                metadata.get("bess_terminal_soc_target_kwh_by_depot") or {}
+            ),
             "bess_terminal_min_kwh_override": terminal_floor_override,
             "pv_forecast_update": pv_forecast_update_audit,
             "time_limit_sec": int(args.time_limit_sec),

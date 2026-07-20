@@ -107,10 +107,29 @@ def verify_run(run_dir: Path, *, expected_git_sha: str = "") -> dict[str, Any]:
             summary.get("research_run_accepted") is True
             and summary.get("research_feasibility_eligible") is True
         ),
+        "bev_terminal_return_to_initial": (
+            summary.get("bev_terminal_soc_policy") == "return_to_initial"
+        ),
+        "bev_terminal_energy_balanced": (
+            summary.get("bev_terminal_soc_balance_satisfied") is True
+            and summary.get("bev_terminal_soc_total_target_shortfall_kwh")
+            is not None
+            and float(
+                summary.get("bev_terminal_soc_total_target_shortfall_kwh")
+                or 0.0
+            ) <= 1.0e-6
+            and float(summary.get("ev_unreplenished_drive_energy_kwh") or 0.0)
+            <= 1.0e-6
+        ),
+        "research_accounting_cost_eligible": (
+            summary.get("research_accounting_cost_eligible") is True
+            and summary.get("research_cost_kpi_eligible") is True
+            and summary.get("validated_operating_cost_jpy") is not None
+        ),
     }
     failed_checks = [name for name, passed in checks.items() if not passed]
     return {
-        "schema_version": "research_phase3_baseline_verification_v1",
+        "schema_version": "research_phase3_baseline_verification_v2",
         "run_dir": str(run_dir.resolve()),
         "git_sha": recorded_git_sha,
         "prepared_input_id": summary.get("prepared_input_id"),
@@ -123,13 +142,28 @@ def verify_run(run_dir: Path, *, expected_git_sha: str = "") -> dict[str, Any]:
         "stage1_mip_gap_ratio": summary.get("stage1_mip_gap_ratio"),
         "stage2_solver_status": summary.get("stage2_solver_status"),
         "accounting_total_cost_jpy": summary.get("accounting_total_cost_jpy"),
+        "validated_operating_cost_jpy": summary.get(
+            "validated_operating_cost_jpy"
+        ),
+        "bev_terminal_soc_policy": summary.get("bev_terminal_soc_policy"),
+        "bev_terminal_soc_total_drawdown_kwh": summary.get(
+            "bev_terminal_soc_total_drawdown_kwh"
+        ),
+        "bev_terminal_soc_total_target_shortfall_kwh": summary.get(
+            "bev_terminal_soc_total_target_shortfall_kwh"
+        ),
+        "ev_unreplenished_drive_energy_kwh": summary.get(
+            "ev_unreplenished_drive_energy_kwh"
+        ),
         "accounting_recalculation": accounting,
         "validation_metrics": validation,
         "arc_pruning_summary": pruning,
         "limitation": (
             "Phase 3 proves a validated feasible two-stage schedule. Its "
             "Stage 1 and Stage 2 objectives are not a single global "
-            "accounting-cost objective."
+            "accounting-cost objective. A passing v2 artifact has a valid "
+            "accounting cost for the feasible schedule, but does not prove "
+            "global total-cost optimality."
         ),
     }
 

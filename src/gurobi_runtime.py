@@ -11,19 +11,6 @@ _GUROBI_AVAILABLE = False
 _GUROBI_RUNTIME_AVAILABLE: bool | None = None
 _GUROBI_DLL_HANDLES: list[Any] = []
 
-try:
-    import gurobipy as _gp
-    from gurobipy import GRB as _GRB
-
-    gp = _gp
-    GRB = _GRB
-    _GUROBI_AVAILABLE = True
-except Exception:
-    gp = None
-    GRB = None
-    _GUROBI_AVAILABLE = False
-
-
 def candidate_gurobi_homes() -> list[Path]:
     candidates: list[Path] = []
     raw_env_home = str(os.environ.get("GUROBI_HOME") or "").strip()
@@ -129,11 +116,31 @@ def configure_gurobi_runtime() -> None:
         os.environ["PATH"] = os.pathsep.join(path_entries)
 
 
+# License selection must happen before the first gurobipy import. Gurobi may
+# cache its default license location during import, so configuring afterward
+# can leave the process bound to an expired machine-wide license.
+configure_gurobi_runtime()
+try:
+    import gurobipy as _gp
+    from gurobipy import GRB as _GRB
+
+    gp = _gp
+    GRB = _GRB
+    _GUROBI_AVAILABLE = True
+except Exception:
+    gp = None
+    GRB = None
+    _GUROBI_AVAILABLE = False
+
+
 def ensure_gurobi():
     global _GUROBI_AVAILABLE, gp, GRB  # noqa: PLW0603
+    # Configure the license and DLL search path even when gurobipy itself was
+    # importable at module load. Import success does not prove that the default
+    # license selected by Gurobi is current.
+    configure_gurobi_runtime()
     if _GUROBI_AVAILABLE and gp is not None and GRB is not None:
         return gp, GRB
-    configure_gurobi_runtime()
     try:
         import gurobipy as _gp
         from gurobipy import GRB as _GRB

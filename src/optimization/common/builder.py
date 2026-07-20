@@ -22,6 +22,10 @@ from src.dispatch.models import (
 from src.dispatch.route_band import trip_route_band_key
 from src.optimization.common.cost_components import normalize_cost_component_flags
 from src.optimization.common.bess_terminal_policy import normalize_bess_terminal_policy
+from src.optimization.common.bev_terminal_policy import (
+    BevTerminalSocPolicy,
+    normalize_bev_terminal_soc_policy,
+)
 from src.route_family_runtime import (
     merge_deadhead_metrics,
     normalize_direction,
@@ -149,11 +153,18 @@ class ProblemBuilder:
                 charging_cfg.get("final_soc_target_tolerance_percent"),
             )
         )
+        bev_terminal_soc_policy = normalize_bev_terminal_soc_policy(
+            self._first_present(
+                simulation_cfg.get("bev_terminal_soc_policy"),
+                charging_cfg.get("bev_terminal_soc_policy"),
+            ),
+            has_explicit_target=final_soc_target_percent is not None,
+        )
         planning_days_effective = max(int(planning_days or 1), 1)
         full_day_slots = (24 * 60) // max(timestep_min, 1)
         overlay_energy_assets = ((scenario.get("scenario_overlay") or {}).get("depot_energy_assets") or {})
         force_full_day_power_horizon = (
-            final_soc_target_percent is not None
+            bev_terminal_soc_policy is not BevTerminalSocPolicy.MINIMUM_ONLY
             or bool(simulation_cfg.get("depot_energy_assets") or overlay_energy_assets)
         )
         chargers = self._build_chargers_from_scenario(scenario, depot_id)
@@ -456,6 +467,7 @@ class ProblemBuilder:
             final_soc_floor_percent=final_soc_floor_percent,
             final_soc_target_percent=final_soc_target_percent,
             final_soc_target_tolerance_percent=final_soc_target_tolerance_percent,
+            bev_terminal_soc_policy=bev_terminal_soc_policy.value,
             charge_upper_buffer_ratio=charge_upper_buffer_ratio,
             allow_soc_violation_slack=allow_soc_violation_slack,
             initial_ice_fuel_percent=initial_ice_fuel_percent,
@@ -530,6 +542,7 @@ class ProblemBuilder:
         final_soc_floor_percent: Optional[float] = None,
         final_soc_target_percent: Optional[float] = None,
         final_soc_target_tolerance_percent: Optional[float] = None,
+        bev_terminal_soc_policy: Optional[str] = None,
         charge_upper_buffer_ratio: Optional[float] = None,
         allow_soc_violation_slack: bool = False,
         initial_ice_fuel_percent: Optional[float] = None,
@@ -619,7 +632,14 @@ class ProblemBuilder:
         normalized_start_time = self._normalize_hhmm(operation_start_time) or self._min_hhmm(context) or "05:00"
         normalized_end_time = self._normalize_hhmm(operation_end_time) or self._max_hhmm(context) or "23:00"
         operation_end_clock_time = normalized_end_time
-        post_return_target_enabled = final_soc_target_percent is not None
+        normalized_bev_terminal_policy = normalize_bev_terminal_soc_policy(
+            bev_terminal_soc_policy,
+            has_explicit_target=final_soc_target_percent is not None,
+        )
+        post_return_target_enabled = (
+            normalized_bev_terminal_policy
+            is not BevTerminalSocPolicy.MINIMUM_ONLY
+        )
         if post_return_target_enabled and max(int(planning_days or 1), 1) == 1:
             normalized_end_time = normalized_start_time
         canonical_depot_id = str(canonical_depot_id or "depot_default")
@@ -847,6 +867,7 @@ class ProblemBuilder:
                 final_soc_floor_percent=final_soc_floor_percent,
                 final_soc_target_percent=final_soc_target_percent,
                 final_soc_target_tolerance_percent=final_soc_target_tolerance_percent,
+                bev_terminal_soc_policy=normalized_bev_terminal_policy.value,
                 allow_overnight_depot_moves=allow_overnight_depot_moves,
                 overnight_window_start=overnight_window_start,
                 overnight_window_end=overnight_window_end,
@@ -945,6 +966,7 @@ class ProblemBuilder:
                 "final_soc_floor_percent": final_soc_floor_percent,
                 "final_soc_target_percent": final_soc_target_percent,
                 "final_soc_target_tolerance_percent": final_soc_target_tolerance_percent,
+                "bev_terminal_soc_policy": normalized_bev_terminal_policy.value,
                 "charge_upper_buffer_ratio": charge_upper_buffer_ratio,
                 "required_soc_departure_unit": "percent_0_100",
                 "initial_ice_fuel_percent": initial_ice_fuel_percent,
@@ -2316,6 +2338,7 @@ class ProblemBuilder:
         final_soc_floor_percent: Optional[float] = None,
         final_soc_target_percent: Optional[float] = None,
         final_soc_target_tolerance_percent: Optional[float] = None,
+        bev_terminal_soc_policy: Optional[str] = None,
         allow_overnight_depot_moves: str = "forbid",
         overnight_window_start: str = "23:00",
         overnight_window_end: str = "05:00",
@@ -2337,6 +2360,7 @@ class ProblemBuilder:
                 final_soc_floor_percent=final_soc_floor_percent,
                 final_soc_target_percent=final_soc_target_percent,
                 final_soc_target_tolerance_percent=final_soc_target_tolerance_percent,
+                bev_terminal_soc_policy=bev_terminal_soc_policy,
                 allow_overnight_depot_moves=allow_overnight_depot_moves,
                 overnight_window_start=overnight_window_start,
                 overnight_window_end=overnight_window_end,
@@ -2476,6 +2500,7 @@ class ProblemBuilder:
         final_soc_floor_percent: Optional[float] = None,
         final_soc_target_percent: Optional[float] = None,
         final_soc_target_tolerance_percent: Optional[float] = None,
+        bev_terminal_soc_policy: Optional[str] = None,
         allow_overnight_depot_moves: str = "forbid",
         overnight_window_start: str = "23:00",
         overnight_window_end: str = "05:00",
@@ -2592,6 +2617,7 @@ class ProblemBuilder:
                     final_soc_floor_percent=final_soc_floor_percent,
                     final_soc_target_percent=final_soc_target_percent,
                     final_soc_target_tolerance_percent=final_soc_target_tolerance_percent,
+                    bev_terminal_soc_policy=bev_terminal_soc_policy,
                     allow_overnight_depot_moves=allow_overnight_depot_moves,
                     overnight_window_start=overnight_window_start,
                     overnight_window_end=overnight_window_end,
@@ -2610,6 +2636,7 @@ class ProblemBuilder:
                     final_soc_floor_percent=final_soc_floor_percent,
                     final_soc_target_percent=final_soc_target_percent,
                     final_soc_target_tolerance_percent=final_soc_target_tolerance_percent,
+                    bev_terminal_soc_policy=bev_terminal_soc_policy,
                     allow_overnight_depot_moves=allow_overnight_depot_moves,
                     overnight_window_start=overnight_window_start,
                     overnight_window_end=overnight_window_end,
@@ -2665,6 +2692,7 @@ class ProblemBuilder:
         final_soc_floor_percent: Optional[float] = None,
         final_soc_target_percent: Optional[float] = None,
         final_soc_target_tolerance_percent: Optional[float] = None,
+        bev_terminal_soc_policy: Optional[str] = None,
         allow_overnight_depot_moves: str = "forbid",
         overnight_window_start: str = "23:00",
         overnight_window_end: str = "05:00",
@@ -2695,6 +2723,7 @@ class ProblemBuilder:
                 final_soc_floor_percent=final_soc_floor_percent,
                 final_soc_target_percent=final_soc_target_percent,
                 final_soc_target_tolerance_percent=final_soc_target_tolerance_percent,
+                bev_terminal_soc_policy=bev_terminal_soc_policy,
                 allow_overnight_depot_moves=allow_overnight_depot_moves,
                 overnight_window_start=overnight_window_start,
                 overnight_window_end=overnight_window_end,
@@ -2726,6 +2755,7 @@ class ProblemBuilder:
         final_soc_floor_percent: Optional[float] = None,
         final_soc_target_percent: Optional[float] = None,
         final_soc_target_tolerance_percent: Optional[float] = None,
+        bev_terminal_soc_policy: Optional[str] = None,
         allow_overnight_depot_moves: str = "forbid",
         overnight_window_start: str = "23:00",
         overnight_window_end: str = "05:00",
@@ -2776,13 +2806,19 @@ class ProblemBuilder:
             energy_rate = 1.2
         deadhead_speed_kmh = 18.0
 
-        target_enabled = final_soc_target_percent is not None
+        terminal_policy = normalize_bev_terminal_soc_policy(
+            bev_terminal_soc_policy,
+            has_explicit_target=final_soc_target_percent is not None,
+        )
+        target_enabled = terminal_policy is not BevTerminalSocPolicy.MINIMUM_ONLY
         final_floor_ratio = self._normalize_percent_like_to_ratio(final_soc_floor_percent)
         target_ratio = self._normalize_percent_like_to_ratio(final_soc_target_percent)
         tolerance_ratio = self._normalize_percent_like_to_ratio(final_soc_target_tolerance_percent) or 0.0
         final_floor_kwh = max(reserve, (final_floor_ratio or 0.0) * capacity)
         target_lower_kwh = final_floor_kwh
-        if target_ratio is not None:
+        if terminal_policy is BevTerminalSocPolicy.RETURN_TO_INITIAL:
+            target_lower_kwh = max(final_floor_kwh, soc_kwh)
+        elif target_ratio is not None:
             target_lower_kwh = min(
                 capacity,
                 max(final_floor_kwh, max(target_ratio - max(tolerance_ratio, 0.0), 0.0) * capacity),

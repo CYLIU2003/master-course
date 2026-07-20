@@ -250,7 +250,7 @@ class ExperimentReport:
             f"| 軽油単価 | {cc.diesel_jpy_per_l} JPY/L |",
             f"| デマンド料金 | {cc.demand_jpy_per_kw_month} JPY/kW/月 |",
             f"| 受電上限 | {cc.grid_max_kw} kW |",
-            f"| 車両固定費 | {cc.vehicle_fixed_cost_jpy_per_day} JPY/台/日 |",
+            f"| 車両使用費 | {cc.vehicle_fixed_cost_jpy_per_day} JPY/台/日 |",
         ]
         if cc.pv_capacity_kw > 0:
             lines.append(f"| PV容量 | {cc.pv_capacity_kw} kW |")
@@ -285,11 +285,11 @@ class ExperimentReport:
         ) if val is not None else None
 
         _add("目的値", r.objective_value)
-        _add("総コスト", r.total_cost_jpy, "{:,.2f} JPY")
+        _add("会計総費用", r.total_cost_jpy, "{:,.2f} JPY")
         _add("　電気代", r.electricity_cost_jpy, "{:,.2f} JPY")
         _add("　軽油代", r.diesel_cost_jpy, "{:,.2f} JPY")
         _add("　デマンド料金", r.demand_charge_jpy, "{:,.2f} JPY")
-        _add("　車両固定費計", r.vehicle_fixed_cost_jpy, "{:,.2f} JPY")
+        _add("　車両使用費", r.vehicle_fixed_cost_jpy, "{:,.2f} JPY")
         _add("CO₂排出量", r.co2_kg, "{:,.4f} kg")
 
         if r.bev_trips is not None or r.ice_trips is not None:

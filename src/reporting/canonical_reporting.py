@@ -11,6 +11,7 @@ import csv
 import hashlib
 import json
 import math
+import re
 import shutil
 from datetime import datetime, timezone
 from dataclasses import dataclass
@@ -309,7 +310,11 @@ def update_energy_flow_bess_metadata(run_dir: Path) -> dict[str, Any]:
     energy_path = run_dir / "graph" / "energy_flow_ledger.csv"
     bess_path = run_dir / "graph" / "bess_timeseries.csv"
     energy_fields, energy_rows = read_csv(energy_path)
-    _, bess_rows = read_csv(bess_path)
+    bess_fields, bess_rows = read_csv(bess_path)
+    has_explicit_soc_transition = {
+        "bess_soc_start_kwh",
+        "bess_soc_end_kwh",
+    }.issubset(bess_fields)
 
     required_cols = [
         "bess_capacity_kwh",
@@ -324,6 +329,21 @@ def update_energy_flow_bess_metadata(run_dir: Path) -> dict[str, Any]:
             energy_fields.append(col)
 
     capacity = infer_bess_capacity(bess_rows)
+    conditions = _load_optional_json(run_dir / "simulation_conditions.json")
+    raw_assets = conditions.get("depot_energy_assets") or []
+    if isinstance(raw_assets, dict):
+        raw_assets = [raw_assets]
+    efficiency_by_depot: dict[str, dict[str, float]] = {}
+    for asset in raw_assets:
+        if not isinstance(asset, dict):
+            continue
+        depot_id = str(asset.get("depot_id") or "").strip()
+        if not depot_id:
+            continue
+        efficiency_by_depot[depot_id] = {
+            "charge": min(max(as_float(asset.get("bess_charge_efficiency"), 1.0), 1.0e-9), 1.0),
+            "discharge": min(max(as_float(asset.get("bess_discharge_efficiency"), 1.0), 1.0e-9), 1.0),
+        }
     by_timestamp = {bess_timestamp(row): row for row in bess_rows if bess_timestamp(row)}
     by_index = {str(i): row for i, row in enumerate(bess_rows)}
 
@@ -350,9 +370,14 @@ def update_energy_flow_bess_metadata(run_dir: Path) -> dict[str, Any]:
         row["bess_soc_min_kwh"] = repr(as_float(bess.get("bess_soc_min_kwh")))
         row["bess_soc_max_kwh"] = repr(as_float(bess.get("bess_soc_max_kwh")))
         row["bess_terminal_soc_min_kwh"] = repr(as_float(bess.get("bess_terminal_soc_min_kwh")))
-        if "bess_soc_kwh" in bess:
-            row["bess_soc_start_kwh"] = repr(as_float(bess.get("bess_soc_kwh")))
-            row["bess_soc_end_kwh"] = repr(as_float(bess.get("bess_soc_kwh")))
+        if "bess_soc_start_kwh" in bess or "bess_soc_kwh" in bess:
+            row["bess_soc_start_kwh"] = repr(
+                as_float(bess.get("bess_soc_start_kwh"), as_float(bess.get("bess_soc_kwh")))
+            )
+        if "bess_soc_end_kwh" in bess or "bess_soc_kwh" in bess:
+            row["bess_soc_end_kwh"] = repr(
+                as_float(bess.get("bess_soc_end_kwh"), as_float(bess.get("bess_soc_kwh")))
+            )
 
     write_csv(energy_path, energy_fields, energy_rows)
     return {
@@ -361,6 +386,13 @@ def update_energy_flow_bess_metadata(run_dir: Path) -> dict[str, Any]:
         "bess_capacity_kwh": capacity,
         "bess_soc_min_kwh": max(as_float(row.get("bess_soc_min_kwh")) for row in bess_rows) if bess_rows else 0.0,
         "bess_soc_max_kwh": max(as_float(row.get("bess_soc_max_kwh")) for row in bess_rows) if bess_rows else 0.0,
+        "bess_efficiency_by_depot": efficiency_by_depot,
+        "bess_soc_transition_verifiable": has_explicit_soc_transition,
+        "bess_soc_transition_source": (
+            "explicit_start_end_columns"
+            if has_explicit_soc_transition
+            else "legacy_single_soc_column_not_transition_verifiable"
+        ),
     }
 
 
@@ -402,7 +434,61 @@ def compute_ledger_totals(run_dir: Path) -> dict[str, float]:
     return totals
 
 
-def update_cost_breakdown(run_dir: Path, totals: dict[str, float]) -> dict[str, float]:
+def compute_assignment_summary(run_dir: Path) -> dict[str, int]:
+    path = run_dir / "graph" / "trip_assignment.csv"
+    if not path.is_file():
+        return {}
+    _, rows = read_csv(path)
+
+    def is_served(row: dict[str, str]) -> bool:
+        return (
+            str(row.get("served_flag", "true")).strip().lower()
+            not in {"false", "0", "no"}
+            and bool(str(row.get("assigned_vehicle_id") or "").strip())
+        )
+
+    served_rows = [row for row in rows if is_served(row)]
+    unserved_rows = [row for row in rows if not is_served(row)]
+
+    def vehicle_type(row: dict[str, str]) -> str:
+        return str(row.get("assigned_vehicle_type") or row.get("vehicle_type") or "").strip().upper()
+
+    def service_date(row: dict[str, str]) -> str:
+        for key in ("actual_departure", "scheduled_departure", "service_date"):
+            value = str(row.get(key) or "").strip()
+            if value:
+                return value[:10]
+        return ""
+
+    unique_trip_ids = {str(row.get("trip_id") or "").strip() for row in served_rows}
+    unique_trip_ids.discard("")
+    unserved_trip_ids = {str(row.get("trip_id") or "").strip() for row in unserved_rows}
+    unserved_trip_ids.discard("")
+    used_vehicle_ids = {str(row.get("assigned_vehicle_id") or "").strip() for row in served_rows}
+    used_vehicle_ids.discard("")
+    used_vehicle_days = {
+        (str(row.get("assigned_vehicle_id") or "").strip(), service_date(row))
+        for row in served_rows
+    }
+    return {
+        "served_trip_count": len(unique_trip_ids),
+        "unserved_trip_count": len(unserved_trip_ids),
+        "bev_trip_count": len(
+            {str(row.get("trip_id") or "") for row in served_rows if vehicle_type(row) == "BEV"}
+        ),
+        "ice_trip_count": len(
+            {str(row.get("trip_id") or "") for row in served_rows if vehicle_type(row) == "ICE"}
+        ),
+        "used_vehicle_count": len(used_vehicle_ids),
+        "used_vehicle_day_count": len(used_vehicle_days),
+    }
+
+
+def update_cost_breakdown(
+    run_dir: Path,
+    totals: dict[str, float],
+    assignment: dict[str, int],
+) -> dict[str, float]:
     path = run_dir / "cost_breakdown_detail.csv"
     fields, rows, index = key_value_rows(path)
 
@@ -411,11 +497,22 @@ def update_cost_breakdown(run_dir: Path, totals: dict[str, float]) -> dict[str, 
     carbon_price = old_co2_cost / old_total_co2 if old_total_co2 > 0 and old_co2_cost > 0 else 0.0
     co2_cost = totals["total_co2_kg"] * carbon_price
 
-    electricity_cost = totals["grid_purchase_cost_jpy"]
+    grid_purchase_cost = totals["grid_purchase_cost_jpy"]
+    bess_total_flow_cost = totals["bess_total_flow_cost_jpy"]
+    electricity_cost = grid_purchase_cost + bess_total_flow_cost
     fuel_cost = totals["fuel_cost_jpy"]
     energy_cost = electricity_cost + fuel_cost
     demand_charge = get_kv(rows, index, "demand_charge")
     vehicle_cost = get_kv(rows, index, "vehicle_cost", get_kv(rows, index, "vehicle_fixed_cost"))
+    vehicle_usage_unit_cost = get_kv(rows, index, "vehicle_usage_cost_jpy_per_used_bus")
+    existing_vehicle_usage_cost = get_kv(
+        rows, index, "vehicle_usage_cost_jpy", get_kv(rows, index, "vehicle_usage_cost")
+    )
+    vehicle_usage_cost = (
+        float(assignment["used_vehicle_day_count"]) * vehicle_usage_unit_cost
+        if assignment and vehicle_usage_unit_cost > 0.0
+        else existing_vehicle_usage_cost
+    )
     battery_degradation_cost = get_kv(
         rows,
         index,
@@ -425,7 +522,15 @@ def update_cost_breakdown(run_dir: Path, totals: dict[str, float]) -> dict[str, 
 
     set_kv(rows, index, "electricity_cost", electricity_cost, "JPY")
     set_kv(rows, index, "electricity_cost_final", electricity_cost, "")
-    set_kv(rows, index, "grid_purchase_cost", electricity_cost, "")
+    set_kv(rows, index, "grid_purchase_cost", grid_purchase_cost, "")
+    set_kv(
+        rows,
+        index,
+        "pv_self_consumption_cost_jpy",
+        totals["pv_to_bus_cost_jpy"] + totals["pv_to_bess_cost_jpy"],
+        "JPY",
+    )
+    set_kv(rows, index, "bess_discharge_cost", totals["bess_to_bus_cost_jpy"], "JPY")
     set_kv(rows, index, "energy_cost", energy_cost, "JPY")
     set_kv(rows, index, "fuel_cost", fuel_cost, "JPY")
     set_kv(rows, index, "fuel_cost_final", fuel_cost, "JPY")
@@ -433,6 +538,10 @@ def update_cost_breakdown(run_dir: Path, totals: dict[str, float]) -> dict[str, 
     set_kv(rows, index, "fuel_cost_provisional_leftover", fuel_cost, "JPY")
     set_kv(rows, index, "total_fuel_cost", fuel_cost, "")
     set_kv(rows, index, "vehicle_cost", vehicle_cost, "JPY")
+    set_kv(rows, index, "vehicle_usage_cost", vehicle_usage_cost, "JPY")
+    set_kv(rows, index, "vehicle_usage_cost_jpy", vehicle_usage_cost, "JPY")
+    if assignment:
+        set_kv(rows, index, "used_vehicle_day_count", assignment["used_vehicle_day_count"], "vehicle-day")
     set_kv(rows, index, "battery_degradation_cost", battery_degradation_cost, "JPY")
     set_kv(rows, index, "degradation_cost", battery_degradation_cost, "JPY")
     set_kv(rows, index, "total_degradation_cost", battery_degradation_cost, "JPY")
@@ -450,12 +559,11 @@ def update_cost_breakdown(run_dir: Path, totals: dict[str, float]) -> dict[str, 
         energy_cost
         + demand_charge
         + vehicle_cost
+        + vehicle_usage_cost
         + get_kv(rows, index, "driver_cost")
         + get_kv(rows, index, "deadhead_cost")
         + battery_degradation_cost
         + get_kv(rows, index, "contract_overage_cost")
-        + get_kv(rows, index, "pv_self_consumption_cost_jpy")
-        + get_kv(rows, index, "bess_discharge_cost")
         + co2_cost
     )
     total_with_assets = real_total + get_kv(rows, index, "pv_asset_cost") + get_kv(rows, index, "bess_asset_cost")
@@ -466,11 +574,14 @@ def update_cost_breakdown(run_dir: Path, totals: dict[str, float]) -> dict[str, 
     write_csv(path, fields, rows)
     return {
         "electricity_cost": electricity_cost,
+        "grid_purchase_cost": grid_purchase_cost,
+        "bess_total_flow_cost": bess_total_flow_cost,
         "demand_charge": demand_charge,
         "fuel_cost": fuel_cost,
         "energy_cost": energy_cost,
         "co2_cost": co2_cost,
         "battery_degradation_cost": battery_degradation_cost,
+        "vehicle_usage_cost": vehicle_usage_cost,
         "carbon_price_jpy_per_kg": carbon_price,
         "total_cost": real_total,
         "total_cost_with_assets": total_with_assets,
@@ -483,30 +594,44 @@ def objective_value_from_breakdown(run_dir: Path, fallback: float) -> float:
     return get_kv(rows, index, "objective_value", fallback)
 
 
-def update_summary(run_dir: Path, cost: dict[str, float]) -> dict[str, Any]:
+def update_summary(
+    run_dir: Path,
+    cost: dict[str, float],
+    assignment: dict[str, int],
+) -> dict[str, Any]:
     path = run_dir / "summary.json"
     summary = load_json(path)
     objective_value = objective_value_from_breakdown(run_dir, as_float(summary.get("objective_value_jpy", summary.get("objective_value"))))
     total_cost = cost["total_cost"]
     solver_objective_matches_accounting_total = bool(
-        summary.get("solver_objective_matches_accounting_total", True)
-    )
-    objective_is_actual_cost = solver_objective_matches_accounting_total and abs(
-        objective_value - total_cost
-    ) <= 1.0e-6
+        summary.get("solver_objective_matches_accounting_total", False)
+    ) and abs(objective_value - total_cost) <= 1.0e-6
+    objective_is_actual_cost = solver_objective_matches_accounting_total
 
     summary["objective_value"] = objective_value
     summary["objective_value_jpy"] = objective_value
     summary["objective_value_unit"] = "JPY"
     summary["total_cost_jpy"] = total_cost
+    summary["accounting_total_cost_jpy"] = total_cost
     summary["reported_total_cost_jpy"] = total_cost
     summary["gross_operating_cost_jpy"] = total_cost
-    summary["grid_purchase_cost_jpy"] = cost["electricity_cost"]
+    if summary.get("validated_operating_cost_jpy") is not None:
+        summary["validated_operating_cost_jpy"] = total_cost
+    summary["grid_purchase_cost_jpy"] = cost["grid_purchase_cost"]
+    summary["energy_cost_jpy"] = cost["electricity_cost"]
     summary["demand_charge_cost_jpy"] = cost["demand_charge"]
     summary["fuel_cost_jpy"] = cost["fuel_cost"]
     summary["co2_cost_jpy"] = cost["co2_cost"]
     summary["objective_is_actual_cost"] = objective_is_actual_cost
     summary["solver_objective_matches_accounting_total"] = solver_objective_matches_accounting_total
+    if assignment:
+        summary["trip_count_served"] = assignment["served_trip_count"]
+        summary["trip_count_unserved"] = assignment["unserved_trip_count"]
+        summary["vehicle_count_used"] = assignment["used_vehicle_count"]
+        summary["trip_count_by_type"] = {
+            "BEV": assignment["bev_trip_count"],
+            "ICE": assignment["ice_trip_count"],
+        }
     summary["cost_definition"] = {
         "total_cost_jpy": "gross operating cost based on canonical reporting ledgers",
         "reported_total_cost_jpy": "same as gross_operating_cost_jpy",
@@ -524,16 +649,15 @@ def update_kpi_summary(
     totals: dict[str, float],
     cost: dict[str, float],
     bess_metadata: dict[str, Any],
+    assignment: dict[str, int],
 ) -> dict[str, Any]:
     path = run_dir / "graph" / "kpi_summary.json"
     kpi = load_json(path)
     objective_value = objective_value_from_breakdown(run_dir, as_float(kpi.get("objective_value_jpy", kpi.get("objective_value"))))
     solver_objective_matches_accounting_total = bool(
-        kpi.get("solver_objective_matches_accounting_total", True)
-    )
-    objective_is_actual_cost = solver_objective_matches_accounting_total and abs(
-        objective_value - cost["total_cost"]
-    ) <= 1.0e-6
+        kpi.get("solver_objective_matches_accounting_total", False)
+    ) and abs(objective_value - cost["total_cost"]) <= 1.0e-6
+    objective_is_actual_cost = solver_objective_matches_accounting_total
 
     energy_keys = [
         "pv_generation_kwh",
@@ -559,7 +683,7 @@ def update_kpi_summary(
     kpi["bess_discharge_to_bus_kwh"] = totals["bess_discharge_kwh"]
 
     cost_keys = {
-        "grid_purchase_cost_jpy": cost["electricity_cost"],
+        "grid_purchase_cost_jpy": cost["grid_purchase_cost"],
         "demand_charge_cost_jpy": cost["demand_charge"],
         "fuel_cost_jpy": cost["fuel_cost"],
         "co2_cost_jpy": cost["co2_cost"],
@@ -575,12 +699,18 @@ def update_kpi_summary(
     kpi["energy_cost_jpy"] = cost["energy_cost"]
     kpi["demand_cost_jpy"] = cost["demand_charge"]
     kpi["total_cost_jpy"] = cost["total_cost"]
+    kpi["accounting_total_cost_jpy"] = cost["total_cost"]
     kpi["gross_operating_cost_jpy"] = cost["total_cost"]
     kpi["reported_total_cost_jpy"] = cost["total_cost"]
+    kpi["vehicle_usage_cost_jpy"] = cost["vehicle_usage_cost"]
+    if kpi.get("validated_operating_cost_jpy") is not None:
+        kpi["validated_operating_cost_jpy"] = cost["total_cost"]
     kpi["objective_value"] = objective_value
     kpi["objective_value_jpy"] = objective_value
     kpi["objective_is_actual_cost"] = objective_is_actual_cost
     kpi["solver_objective_matches_accounting_total"] = solver_objective_matches_accounting_total
+    if assignment:
+        kpi.update(assignment)
 
     kpi["fuel_consumption_l"] = totals["fuel_consumption_l"]
     kpi["ice_fuel_consumed_l"] = totals["fuel_consumption_l"]
@@ -653,10 +783,18 @@ def update_kpi_summary(
         {
             "bess_metadata_source": bess_metadata["bess_metadata_source"],
             "bess_metadata_join_key": bess_metadata["bess_metadata_join_key"],
+            "bess_soc_transition_verifiable": bess_metadata[
+                "bess_soc_transition_verifiable"
+            ],
+            "bess_soc_transition_source": bess_metadata["bess_soc_transition_source"],
         }
     )
     kpi["bess_metadata_source"] = bess_metadata["bess_metadata_source"]
     kpi["bess_metadata_join_key"] = bess_metadata["bess_metadata_join_key"]
+    kpi["bess_soc_transition_verifiable"] = bess_metadata[
+        "bess_soc_transition_verifiable"
+    ]
+    kpi["bess_soc_transition_source"] = bess_metadata["bess_soc_transition_source"]
     kpi["cost_definition"] = {
         "total_cost_jpy": "gross operating cost based on canonical reporting ledgers",
         "reported_total_cost_jpy": "same as gross_operating_cost_jpy",
@@ -666,6 +804,41 @@ def update_kpi_summary(
     }
 
     write_json(path, kpi)
+    root_path = run_dir / "kpi_summary.json"
+    if root_path.is_file():
+        root_kpi = load_json(root_path)
+        authoritative_keys = {
+            *energy_keys,
+            *cost_keys,
+            "grid_total_kwh",
+            "peak_grid_kw",
+            "bess_discharge_to_bus_kwh",
+            "energy_cost_jpy",
+            "demand_cost_jpy",
+            "total_cost_jpy",
+            "accounting_total_cost_jpy",
+            "gross_operating_cost_jpy",
+            "reported_total_cost_jpy",
+            "vehicle_usage_cost_jpy",
+            "validated_operating_cost_jpy",
+            "objective_value",
+            "objective_value_jpy",
+            "objective_is_actual_cost",
+            "solver_objective_matches_accounting_total",
+            "fuel_consumption_l",
+            "ice_fuel_consumed_l",
+            "total_co2_kg",
+            "grid_co2_kg",
+            "ice_co2_kg",
+            "served_trip_count",
+            "unserved_trip_count",
+            "bev_trip_count",
+            "ice_trip_count",
+            "used_vehicle_count",
+            "used_vehicle_day_count",
+        }
+        root_kpi.update({key: kpi.get(key) for key in authoritative_keys if key in kpi})
+        write_json(root_path, root_kpi)
     return kpi
 
 
@@ -787,6 +960,58 @@ def _gate_experiment_report(
         "---\n\n"
     )
     report_path.write_text(warning + original, encoding="utf-8")
+
+
+def update_experiment_report_metrics(
+    run_dir: Path,
+    *,
+    cost: dict[str, float],
+    totals: dict[str, float],
+) -> None:
+    """Synchronize reader-facing report values with finalized ledgers."""
+
+    report_path = run_dir / "experiment_report.md"
+    if not report_path.is_file():
+        return
+    report = report_path.read_text(encoding="utf-8")
+    solver_settings = _load_optional_json(run_dir / "solver_settings.json")
+
+    replacements = {
+        r"^\| (?:総コスト|会計総費用) \| .*? \|$": f"| 会計総費用 | {cost['total_cost']:,.2f} JPY |",
+        r"^\| 　電気代 \| .*? \|$": f"| 　電気代 | {cost['electricity_cost']:,.2f} JPY |",
+        r"^\| 　軽油代 \| .*? \|$": f"| 　軽油代 | {cost['fuel_cost']:,.2f} JPY |",
+        r"^\| 　デマンド料金 \| .*? \|$": f"| 　デマンド料金 | {cost['demand_charge']:,.2f} JPY |",
+        r"^\| CO₂排出量 \| .*? \|$": f"| CO₂排出量 | {totals['total_co2_kg']:,.4f} kg |",
+    }
+    for pattern, replacement in replacements.items():
+        report = re.sub(pattern, replacement, report, flags=re.MULTILINE)
+
+    requested_gap = solver_settings.get("mip_gap_requested_percent")
+    achieved_gap = solver_settings.get("mip_gap_achieved_percent")
+    if requested_gap is not None:
+        report = re.sub(
+            r"^\| MIP Gap 目標 \| .*? \|$",
+            f"| MIP Gap 目標 | {float(requested_gap):.3f} % |",
+            report,
+            flags=re.MULTILINE,
+        )
+    if achieved_gap is not None:
+        report = re.sub(
+            r"^\| MIP Gap 実績 \| .*? \|$",
+            f"| MIP Gap 実績 | {float(achieved_gap):.4f} % |",
+            report,
+            flags=re.MULTILINE,
+        )
+
+    marker = "<!-- canonical-accounting-definition -->"
+    if marker not in report:
+        note = (
+            f"{marker}\n"
+            "> 会計総費用は最終台帳の費用合計です。目的値は二段階最適化の評価値であり、"
+            "両者が一致すると明示された場合を除き、同じ値として扱いません。\n\n"
+        )
+        report = report.replace("## 結果サマリ\n\n", "## 結果サマリ\n\n" + note, 1)
+    report_path.write_text(report, encoding="utf-8")
 
 
 def apply_solution_validity_gate(
@@ -1024,6 +1249,19 @@ def update_data_flow_validation(
     vehicle_grid_to_bus = sum_column(vehicle_source_path, "grid_to_vehicle_kwh") if vehicle_source_path.exists() else 0.0
     vehicle_pv_to_bus = sum_column(vehicle_source_path, "pv_to_vehicle_kwh") if vehicle_source_path.exists() else 0.0
     vehicle_bess_to_bus = sum_column(vehicle_source_path, "bess_to_vehicle_kwh") if vehicle_source_path.exists() else 0.0
+    _, energy_rows = read_csv(run_dir / "graph" / "energy_flow_ledger.csv")
+    efficiency_by_depot = dict(bess_metadata.get("bess_efficiency_by_depot") or {})
+    bess_transition_error = 0.0
+    for row in energy_rows:
+        depot_efficiency = dict(efficiency_by_depot.get(str(row.get("depot_id") or "")) or {})
+        charge_efficiency = min(max(as_float(depot_efficiency.get("charge"), 1.0), 1.0e-9), 1.0)
+        discharge_efficiency = min(max(as_float(depot_efficiency.get("discharge"), 1.0), 1.0e-9), 1.0)
+        expected_end = (
+            as_float(row.get("bess_soc_start_kwh"))
+            + as_float(row.get("bess_charge_kwh")) * charge_efficiency
+            - as_float(row.get("bess_discharge_kwh")) / discharge_efficiency
+        )
+        bess_transition_error += abs(as_float(row.get("bess_soc_end_kwh")) - expected_end)
     required_fields = [
         "check_name",
         "status",
@@ -1037,6 +1275,30 @@ def update_data_flow_validation(
     ]
     if fields != required_fields:
         fields = required_fields
+
+    if bool(bess_metadata.get("bess_soc_transition_verifiable")):
+        bess_transition_check = validation_row(
+            "bess_soc_transition_balance",
+            0.0,
+            bess_transition_error,
+            tolerance=1.0e-6,
+            source_files="energy_flow_ledger.csv;simulation_conditions.json",
+        )
+    else:
+        bess_transition_check = {
+            "check_name": "bess_soc_transition_balance",
+            "status": "SKIPPED",
+            "expected_value": "",
+            "actual_value": "",
+            "difference": "",
+            "tolerance": 1.0e-6,
+            "severity": "INFO",
+            "message": (
+                "BESS SOC transition was not checked because the source artifact has only "
+                "bess_soc_kwh and no explicit start/end SOC columns."
+            ),
+            "source_files": "energy_flow_ledger.csv;graph/bess_timeseries.csv",
+        }
 
     checks = [
         validation_row(
@@ -1074,6 +1336,7 @@ def update_data_flow_validation(
             tolerance=1.0e-3,
             source_files="energy_flow_ledger.csv",
         ),
+        bess_transition_check,
         validation_row(
             "vehicle_grid_to_bus_allocation_matches_site_total",
             totals["grid_to_bus_kwh"],
@@ -1189,6 +1452,7 @@ def update_data_flow_validation(
             "grid_import_balance",
             "bess_charge_balance",
             "bess_discharge_balance",
+            "bess_soc_transition_balance",
             "vehicle_grid_to_bus_allocation_matches_site_total",
             "vehicle_pv_to_bus_allocation_matches_site_total",
             "vehicle_bess_to_bus_allocation_matches_site_total",
@@ -1222,13 +1486,28 @@ def update_validation_counts(run_dir: Path, rows: list[dict[str, Any]], kpi: dic
         {"data_flow_validation_status": status, "error_count": errors, "warning_count": warnings}
     )
     write_json(run_dir / "graph" / "kpi_summary.json", kpi)
+    root_path = run_dir / "kpi_summary.json"
+    if root_path.is_file():
+        root_kpi = load_json(root_path)
+        root_kpi.update(
+            {
+                "data_flow_validation_status": status,
+                "data_flow_error_count": errors,
+                "data_flow_warning_count": warnings,
+                "validation_status": status,
+            }
+        )
+        write_json(root_path, root_kpi)
 
 
 def status_for_checks(rows: list[dict[str, Any]], check_names: set[str]) -> str:
     selected = [row for row in rows if row.get("check_name") in check_names]
     if not selected:
         return "SKIPPED"
-    return "OK" if all(row.get("status") == "OK" for row in selected) else "NG"
+    evaluated = [row for row in selected if row.get("status") != "SKIPPED"]
+    if not evaluated:
+        return "SKIPPED"
+    return "OK" if all(row.get("status") == "OK" for row in evaluated) else "NG"
 
 
 def write_strict_reconciliation(run_dir: Path, rows: list[dict[str, Any]], summary: dict[str, Any]) -> None:
@@ -1258,6 +1537,7 @@ def write_strict_reconciliation(run_dir: Path, rows: list[dict[str, Any]], summa
                     "grid_import_balance",
                     "bess_charge_balance",
                     "bess_discharge_balance",
+                    "bess_soc_transition_balance",
                 },
             ),
             "Existing energy-flow checks preserved after reporting finalization.",
@@ -1509,9 +1789,11 @@ def rebuild_reporting_artifacts_in_place(run_dir: Path) -> ReportingRebuildResul
     run_dir = run_dir.resolve()
     bess_metadata = update_energy_flow_bess_metadata(run_dir)
     totals = compute_ledger_totals(run_dir)
-    cost = update_cost_breakdown(run_dir, totals)
-    summary = update_summary(run_dir, cost)
-    kpi = update_kpi_summary(run_dir, totals, cost, bess_metadata)
+    assignment = compute_assignment_summary(run_dir)
+    cost = update_cost_breakdown(run_dir, totals, assignment)
+    summary = update_summary(run_dir, cost, assignment)
+    kpi = update_kpi_summary(run_dir, totals, cost, bess_metadata, assignment)
+    update_experiment_report_metrics(run_dir, cost=cost, totals=totals)
     validation_rows = update_data_flow_validation(run_dir, totals, cost, summary, kpi, bess_metadata)
     summary, kpi, validation_rows = apply_solution_validity_gate(
         run_dir,

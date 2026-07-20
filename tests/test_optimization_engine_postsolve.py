@@ -230,6 +230,73 @@ def test_research_phase3_accepts_feasibility_but_not_a_global_cost_claim() -> No
     assert "objective_is_actual_cost" not in result.solver_metadata["research_acceptance_checks"]
 
 
+def test_research_phase3_publishes_accounting_cost_only_when_ev_energy_is_restored() -> None:
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="s-research-balanced-cost",
+            timestep_min=60,
+        ),
+        dispatch_context=None,
+        trips=(),
+        vehicles=(),
+        metadata={"bev_terminal_soc_policy": "return_to_initial"},
+    )
+    fake_result = OptimizationEngineResult(
+        mode=OptimizationMode.MILP,
+        solver_status="optimal",
+        objective_value=0.0,
+        plan=AssignmentPlan(
+            metadata={
+                "source_provenance_exact": True,
+                "vehicle_source_provenance_exact": True,
+                "bev_terminal_soc_policy": "return_to_initial",
+                "bev_terminal_soc_balance_satisfied": True,
+            }
+        ),
+        feasible=True,
+        cost_breakdown={"objective_value": 0.0, "total_cost": 0.0},
+        solver_metadata={
+            "supports_exact_milp": True,
+            "supports_two_stage_milp": True,
+            "source_provenance_exact": True,
+            "bev_terminal_soc_policy": "return_to_initial",
+            "bev_terminal_soc_balance_satisfied": True,
+            "requested_phase_token": "phase3_two_stage",
+            "requested_phase": "phase3_two_stage",
+            "resolved_phase": "phase3_two_stage",
+            "executed_phase": "phase3_two_stage",
+        },
+    )
+    engine = OptimizationEngine()
+    engine._milp = _FakeMILPOptimizer(fake_result)
+
+    result = engine.solve(
+        problem,
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            phase="phase3_two_stage",
+            research_run=True,
+        ),
+    )
+
+    assert result.solver_metadata["research_run_accepted"] is True
+    assert result.solver_metadata["research_accounting_cost_eligible"] is True
+    assert result.solver_metadata["research_cost_kpi_eligible"] is True
+    assert result.solver_metadata["research_cost_optimality_eligible"] is False
+    assert result.solver_metadata["research_cost_acceptance_checks"] == {
+        "research_run_accepted": True,
+        "full_operational_validation": True,
+        "source_provenance_exact": True,
+        "bev_terminal_policy_return_to_initial": True,
+        "bev_terminal_soc_balance_satisfied": True,
+        "ev_energy_inventory_balanced": True,
+    }
+    assert any(
+        "global total-cost optimality is not established" in warning
+        for warning in result.warnings
+    )
+
+
 def test_research_rejection_preserves_a_real_feasible_incumbent_status() -> None:
     problem = CanonicalOptimizationProblem(
         scenario=OptimizationScenario(

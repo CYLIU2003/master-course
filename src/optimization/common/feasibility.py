@@ -24,6 +24,7 @@ from .soc_helpers import (
     deadhead_energy_kwh,
     effective_final_soc_target_kwh,
     final_soc_floor_kwh,
+    final_soc_target_enabled,
     post_return_target_slot_index,
     return_deadhead_energy_kwh,
     return_deadhead_min_to_home,
@@ -546,7 +547,7 @@ class FeasibilityChecker:
         type_by_id = {vt.vehicle_type_id: vt for vt in problem.vehicle_types}
         dt_h = max(problem.scenario.timestep_min, 1) / 60.0
         duty_vehicle_map = plan.duty_vehicle_map()
-        target_enabled = (problem.metadata or {}).get("final_soc_target_percent") is not None
+        target_enabled = final_soc_target_enabled(problem)
         horizon_start_min = self._horizon_start_min(problem)
         rolling_start_slot_raw = (plan.metadata or {}).get(
             "rolling_start_slot_index"

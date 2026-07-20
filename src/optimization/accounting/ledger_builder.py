@@ -871,6 +871,7 @@ def _build_data_flow_validation(
     initial_soc_rows: Sequence[Mapping[str, Any]],
     initial_soc_precheck_rows: Sequence[Mapping[str, Any]],
     summary: Mapping[str, Any],
+    bess_efficiency_by_depot: Mapping[str, tuple[float, float]],
 ) -> List[Dict[str, Any]]:
     def _sum(rows: Sequence[Any], attr: str) -> float:
         return float(sum(float(getattr(row, attr, 0.0) or 0.0) for row in rows))
@@ -949,10 +950,14 @@ def _build_data_flow_validation(
     if any(abs(float(getattr(row, "bess_soc_end_kwh", 0.0) or 0.0) - float(getattr(row, "bess_soc_start_kwh", 0.0) or 0.0)) > 1.0e-9 for row in energy_rows):
         transition_error = 0.0
         for row in energy_rows:
+            charge_efficiency, discharge_efficiency = bess_efficiency_by_depot.get(
+                str(getattr(row, "depot_id", "") or ""),
+                (1.0, 1.0),
+            )
             expected_end = (
                 float(getattr(row, "bess_soc_start_kwh", 0.0) or 0.0)
-                + float(getattr(row, "bess_charge_kwh", 0.0) or 0.0)
-                - float(getattr(row, "bess_discharge_kwh", 0.0) or 0.0)
+                + float(getattr(row, "bess_charge_kwh", 0.0) or 0.0) * charge_efficiency
+                - float(getattr(row, "bess_discharge_kwh", 0.0) or 0.0) / discharge_efficiency
             )
             transition_error += abs(float(getattr(row, "bess_soc_end_kwh", 0.0) or 0.0) - expected_end)
         add("bess_soc_transition_balance", transition_error, 0.0, 1.0e-6, source_files="energy_flow_ledger.csv")
@@ -1209,6 +1214,13 @@ def build_accounting_artifacts(
     resolved_operator_id = str(operator_id or metadata.get("operator_id") or "").strip() or UNKNOWN_OPERATOR
     metadata["operator_id"] = resolved_operator_id
     metadata["slot_minutes"] = slot_minutes
+    bess_efficiency_by_depot = {
+        str(depot_id): (
+            min(max(float(getattr(asset, "bess_charge_efficiency", 1.0) or 1.0), 1.0e-9), 1.0),
+            min(max(float(getattr(asset, "bess_discharge_efficiency", 1.0) or 1.0), 1.0e-9), 1.0),
+        )
+        for depot_id, asset in dict(getattr(problem, "depot_energy_assets", {}) or {}).items()
+    }
     vehicle_rows = _build_vehicle_slot_ledger(
         problem=problem,
         scenario_id=scenario_id,
@@ -1266,6 +1278,7 @@ def build_accounting_artifacts(
         initial_soc_rows=initial_soc_rows,
         initial_soc_precheck_rows=initial_soc_precheck_rows,
         summary=summary,
+        bess_efficiency_by_depot=bess_efficiency_by_depot,
     )
     _apply_validation_summary(summary, validation_rows)
     _attach_nested_kpi_summary(summary)

@@ -84,6 +84,22 @@ def canonical_cost_breakdown_json(*, problem, engine_result, scenario_id: str) -
                 breakdown.get("weather_strategy_objective_term_jpy_equivalent", 0.0) or 0.0
             ),
             "fuel_cost_final_source": str(breakdown.get("fuel_cost_final_source", "provisional_distance_based") or "provisional_distance_based"),
+            "energy_cost_basis": str(
+                breakdown.get("energy_cost_basis")
+                or "realized_supply_plus_inventory_valuation"
+            ),
+            "energy_cash_purchase_cost_jpy": float(
+                breakdown.get("energy_cash_purchase_cost_jpy", 0.0) or 0.0
+            ),
+            "energy_inventory_valuation_cost_jpy": float(
+                breakdown.get("energy_inventory_valuation_cost_jpy", 0.0) or 0.0
+            ),
+            "ev_unreplenished_drive_energy_kwh": float(
+                breakdown.get("ev_unreplenished_drive_energy_kwh", 0.0) or 0.0
+            ),
+            "ev_energy_inventory_balanced": bool(
+                breakdown.get("ev_energy_inventory_balanced", False)
+            ),
             "objective_is_actual_cost": bool(breakdown.get("objective_is_actual_cost", False)),
         },
         "meta": {

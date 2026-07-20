@@ -15,7 +15,7 @@ def log_optimization_experiment(
     scenario_doc: Dict[str, Any],
     optimization_result: Dict[str, Any],
 ) -> Dict[str, Any]:
-    method = _method_label(scenario_doc, optimization_result.get("mode"))
+    method = _optimization_method_label(scenario_doc, optimization_result)
     logger = ExperimentLogger(results_dir=_results_dir(scenario_id, "optimization"))
     report = logger.log(
         scenario=_logger_scenario_payload(
@@ -122,6 +122,29 @@ def _method_label(scenario_doc: Dict[str, Any], mode: Any) -> str:
     if normalized in {"mode_alns_milp", "hybrid"}:
         return "MILP+ALNS"
     return str(mode or "MILP")
+
+
+def _optimization_method_label(
+    scenario_doc: Dict[str, Any], optimization_result: Dict[str, Any]
+) -> str:
+    metadata = dict(optimization_result.get("solver_metadata") or {})
+    phase = str(
+        metadata.get("executed_phase")
+        or metadata.get("resolved_phase")
+        or optimization_result.get("phase")
+        or ""
+    ).strip().lower()
+    if phase == "phase3_two_stage":
+        if bool(metadata.get("successor_pruning_enabled", False)):
+            return "二段階MILP（接続候補を削減）"
+        return "二段階MILP"
+    return _method_label(scenario_doc, optimization_result.get("mode"))
+
+
+def _ratio_to_percent(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    return float(value) * 100.0
 
 
 def _vehicle_type_label(item: Dict[str, Any]) -> str:
@@ -379,6 +402,15 @@ def _logger_scenario_payload(
         or (scenario_doc.get("dispatch_scope") or {}).get("depotId")
         or ""
     )
+    vehicle_usage_cost = simulation_config.get("vehicle_usage_cost_jpy_per_used_bus")
+    if vehicle_usage_cost is None:
+        vehicle_usage_cost = cost_coefficients.get("vehicle_usage_cost_jpy_per_used_bus")
+    if vehicle_usage_cost is None:
+        vehicle_usage_cost = (solver_config.get("objective_weights") or {}).get(
+            "vehicle_fixed_cost"
+        )
+    if vehicle_usage_cost is None:
+        vehicle_usage_cost = 0.0
     return {
         "depot": depot_id,
         "routes": _route_labels(scenario_doc),
@@ -395,8 +427,7 @@ def _logger_scenario_payload(
                 cost_coefficients.get("demand_charge_cost_per_kw") or 0.0
             ),
             "vehicle_fixed_cost": float(
-                (solver_config.get("objective_weights") or {}).get("vehicle_fixed_cost")
-                or 0.0
+                vehicle_usage_cost
             ),
         },
         "grid": {
@@ -408,9 +439,17 @@ def _logger_scenario_payload(
         "solver": {
             "name": _solver_name(mode),
             "time_limit_sec": int(solver_config.get("time_limit_seconds") or 0),
-            "mip_gap_pct": solver_config.get("mip_gap"),
+            "mip_gap_pct": _ratio_to_percent(solver_config.get("mip_gap")),
             "seed": _random_seed(scenario_doc),
         },
+        # These fields are included in the experiment hash even though the
+        # compact report dataclasses do not display them. Runs for different
+        # service dates or effective energy inputs must not share a hash.
+        "service_date": simulation_config.get("service_date"),
+        "weather_reference_date": simulation_config.get("weather_reference_date"),
+        "weather_profile": simulation_config.get("weather_profile"),
+        "weather_operation_mode": simulation_config.get("weather_operation_mode"),
+        "depot_energy_assets": simulation_config.get("depot_energy_assets") or [],
     }
 
 
@@ -447,9 +486,20 @@ def _optimization_result_payload(optimization_result: Dict[str, Any]) -> Dict[st
     cost_breakdown = dict(optimization_result.get("cost_breakdown") or {})
     cost_breakdown.update(normalize_pv_energy_breakdown(cost_breakdown))
     summary = dict(optimization_result.get("summary") or {})
+    accounting_summary = dict(
+        ((optimization_result.get("graph_artifacts") or {}).get("accounting_summary"))
+        or {}
+    )
     trip_count_by_type = dict(summary.get("trip_count_by_type") or {})
     simulation_summary = dict(optimization_result.get("simulation_summary") or {})
-    trip_count_unserved = int(summary.get("trip_count_unserved") or len(optimization_result.get("unserved_trip_ids") or []))
+    solver_settings = dict(optimization_result.get("solver_settings") or {})
+    solver_metadata = dict(optimization_result.get("solver_metadata") or {})
+    if accounting_summary.get("unserved_trip_count") is not None:
+        trip_count_unserved = int(accounting_summary["unserved_trip_count"])
+    elif summary.get("trip_count_unserved") is not None:
+        trip_count_unserved = int(summary["trip_count_unserved"])
+    else:
+        trip_count_unserved = len(optimization_result.get("unserved_trip_ids") or [])
     electricity_cost_final = (
         cost_breakdown.get("electricity_cost_final")
         if cost_breakdown.get("electricity_cost_final") is not None
@@ -460,41 +510,66 @@ def _optimization_result_payload(optimization_result: Dict[str, Any]) -> Dict[st
         if cost_breakdown.get("electricity_cost_provisional_leftover") is not None
         else simulation_summary.get("electricity_cost_provisional_leftover_jpy")
     )
-    return {
-        "status": optimization_result.get("solver_status", "UNKNOWN"),
-        "objective_value": optimization_result.get("objective_value"),
-        "total_cost_jpy": cost_breakdown.get("total_cost"),
-        "electricity_cost_jpy": electricity_cost_final,
-        "electricity_cost_final_jpy": electricity_cost_final,
-        "electricity_cost_provisional_leftover_jpy": electricity_cost_leftover,
-        "diesel_cost_jpy": cost_breakdown.get("fuel_cost"),
-        "demand_charge_jpy": (
+    achieved_gap_percent = solver_settings.get("mip_gap_achieved_percent")
+    if achieved_gap_percent is None:
+        achieved_gap_percent = accounting_summary.get("mip_gap_achieved_percent")
+    if achieved_gap_percent is None:
+        achieved_gap_percent = _ratio_to_percent(
+            optimization_result.get("mip_gap", solver_metadata.get("achieved_mip_gap"))
+        )
+    accounting_total_cost = accounting_summary.get(
+        "accounting_total_cost_jpy", accounting_summary.get("total_cost_jpy")
+    )
+    accounting_electricity_cost = electricity_cost_final
+    if accounting_summary.get("energy_cost_jpy") is not None:
+        accounting_electricity_cost = accounting_summary["energy_cost_jpy"]
+    elif (
+        accounting_summary.get("grid_purchase_cost_jpy") is not None
+        or accounting_summary.get("bess_total_flow_cost_jpy") is not None
+    ):
+        accounting_electricity_cost = float(
+            accounting_summary.get("grid_purchase_cost_jpy", 0.0) or 0.0
+        ) + float(accounting_summary.get("bess_total_flow_cost_jpy", 0.0) or 0.0)
+    accounting_demand_charge = accounting_summary.get("demand_charge_cost_jpy")
+    if accounting_demand_charge is None:
+        accounting_demand_charge = (
             cost_breakdown.get("demand_charge")
             if cost_breakdown.get("demand_charge") is not None
             else cost_breakdown.get("demand_cost")
-        ),
-        "vehicle_fixed_cost_jpy": cost_breakdown.get("vehicle_cost"),
+        )
+    return {
+        "status": str(optimization_result.get("solver_status", "UNKNOWN") or "UNKNOWN").upper(),
+        "objective_value": optimization_result.get("objective_value"),
+        "total_cost_jpy": accounting_total_cost if accounting_total_cost is not None else cost_breakdown.get("total_cost"),
+        "electricity_cost_jpy": accounting_electricity_cost,
+        "electricity_cost_final_jpy": accounting_electricity_cost,
+        "electricity_cost_provisional_leftover_jpy": electricity_cost_leftover,
+        "diesel_cost_jpy": accounting_summary.get("fuel_cost_jpy", cost_breakdown.get("fuel_cost")),
+        "demand_charge_jpy": accounting_demand_charge,
+        "vehicle_fixed_cost_jpy": accounting_summary.get("vehicle_usage_cost_jpy", cost_breakdown.get("vehicle_usage_cost")),
         "return_leg_bonus_jpy": cost_breakdown.get("return_leg_bonus"),
         "grid_to_bus_kwh": cost_breakdown.get("grid_to_bus_kwh"),
         "bess_to_bus_kwh": cost_breakdown.get("bess_to_bus_kwh"),
         "pv_to_bess_kwh": cost_breakdown.get("pv_to_bess_kwh"),
         "grid_to_bess_kwh": cost_breakdown.get("grid_to_bess_kwh"),
-        "co2_kg": cost_breakdown.get("total_co2_kg"),
-        "bev_trips": trip_count_by_type.get("BEV"),
-        "ice_trips": trip_count_by_type.get("ICE"),
-        "total_trips": summary.get("trip_count_served"),
+        "co2_kg": accounting_summary.get("total_co2_kg", cost_breakdown.get("total_co2_kg")),
+        "bev_trips": accounting_summary.get("bev_trip_count", trip_count_by_type.get("BEV")),
+        "ice_trips": accounting_summary.get("ice_trip_count", trip_count_by_type.get("ICE")),
+        "total_trips": accounting_summary.get("served_trip_count", summary.get("trip_count_served")),
         "trip_count_unserved": trip_count_unserved,
         "coverage_rank_primary": int(summary.get("coverage_rank_primary") or trip_count_unserved),
         "secondary_objective_value": summary.get("secondary_objective_value"),
         "total_charging_kwh": simulation_summary.get("total_grid_kwh"),
         "peak_charging_kw": simulation_summary.get("peak_demand_kw"),
         "solve_time_sec": optimization_result.get("solve_time_seconds"),
-        "mip_gap_pct": optimization_result.get("mip_gap"),
+        "mip_gap_pct": achieved_gap_percent,
         "cost_breakdown": cost_breakdown,
         "charging_schedule": (
             optimization_result.get("solver_result") or {}
         ).get("charge_schedule"),
         "trips": trip_count_by_type,
+        "objective_is_actual_cost": bool(accounting_summary.get("objective_is_actual_cost", False)),
+        "total_cost_definition": "canonical_accounting_total",
     }
 
 

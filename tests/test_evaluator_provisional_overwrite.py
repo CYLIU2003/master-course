@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from src.dispatch.models import DutyLeg, Trip, VehicleDuty
 from src.optimization.common.evaluator import CostEvaluator
 from src.optimization.common.problem import (
@@ -118,6 +120,11 @@ def test_evaluator_applies_provisional_then_overwrites_with_charge_source_cost()
     assert breakdown.provisional_ev_drive_cost == 240.0
     assert breakdown.realized_ev_charge_cost == 200.0
     assert breakdown.leftover_ev_provisional_cost == 120.0
+    assert breakdown.ev_unreplenished_drive_energy_kwh == pytest.approx(10.0)
+    assert breakdown.ev_energy_inventory_balanced is False
+    assert breakdown.energy_cash_purchase_cost_jpy == pytest.approx(200.0)
+    assert breakdown.energy_inventory_valuation_cost_jpy == pytest.approx(120.0)
+    assert breakdown.energy_cost_basis == "realized_supply_plus_inventory_valuation"
 
 
 def test_evaluator_applies_pv_marginal_cost_and_bess_cost_to_their_own_flows() -> None:
@@ -328,6 +335,8 @@ def test_evaluator_fallback_keeps_provisional_energy_without_fake_demand_charge(
     assert breakdown.grid_purchase_cost == 0.0
     assert breakdown.realized_ev_charge_cost == 0.0
     assert breakdown.leftover_ev_provisional_cost == 240.0
+    assert breakdown.ev_unreplenished_drive_energy_kwh == pytest.approx(20.0)
+    assert breakdown.ev_energy_inventory_balanced is False
     assert breakdown.grid_import_kwh == 0.0
     assert breakdown.peak_grid_kw == 0.0
     assert breakdown.pv_used_direct_kwh == 0.0

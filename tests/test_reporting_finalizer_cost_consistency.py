@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import csv
+
 import pytest
 
+from src.reporting.canonical_reporting import update_cost_breakdown
 from tests._reporting_finalizer_utils import RUN_EXPECTATIONS, finalized_run, key_values, load_json, sum_column
 
 
@@ -30,3 +33,44 @@ def test_reporting_finalizer_cost_consistency(tmp_path, run_id):
     assert cost["total_co2_kg"] == pytest.approx(
         sum_column(run_dir / "graph" / "co2_timeseries.csv", "total_co2_kg")
     )
+
+
+def test_reporting_finalizer_counts_bess_flow_cost_once(tmp_path) -> None:
+    path = tmp_path / "cost_breakdown_detail.csv"
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["key", "value", "unit"])
+        writer.writeheader()
+        writer.writerows(
+            [
+                {"key": "demand_charge", "value": 5.0, "unit": "JPY"},
+                {"key": "vehicle_cost", "value": 0.0, "unit": "JPY"},
+                {"key": "vehicle_usage_cost", "value": 0.0, "unit": "JPY"},
+                {"key": "total_co2_kg", "value": 0.0, "unit": "kg-CO2"},
+                {"key": "co2_cost", "value": 0.0, "unit": "JPY"},
+                {"key": "pv_self_consumption_cost_jpy", "value": 999.0, "unit": "JPY"},
+                {"key": "bess_discharge_cost", "value": 999.0, "unit": "JPY"},
+            ]
+        )
+
+    cost = update_cost_breakdown(
+        tmp_path,
+        {
+            "grid_purchase_cost_jpy": 100.0,
+            "bess_total_flow_cost_jpy": 30.0,
+            "pv_to_bus_cost_jpy": 10.0,
+            "pv_to_bess_cost_jpy": 5.0,
+            "bess_to_bus_cost_jpy": 15.0,
+            "fuel_cost_jpy": 20.0,
+            "grid_co2_kg": 0.0,
+            "ice_co2_kg": 0.0,
+            "total_co2_kg": 0.0,
+        },
+        {},
+    )
+
+    persisted = key_values(path)
+    assert cost["electricity_cost"] == pytest.approx(130.0)
+    assert cost["total_cost"] == pytest.approx(155.0)
+    assert persisted["grid_purchase_cost"] == pytest.approx(100.0)
+    assert persisted["pv_self_consumption_cost_jpy"] == pytest.approx(15.0)
+    assert persisted["bess_discharge_cost"] == pytest.approx(15.0)

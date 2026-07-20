@@ -46,6 +46,15 @@ from src.optimization.common.initial_soc_policy import (
     initial_soc_input_metadata,
     normalize_initial_soc_policy,
 )
+from src.optimization.common.input_fingerprints import (
+    INPUT_FINGERPRINT_SCHEMA,
+    canonical_trip_input_hash,
+    canonical_vehicle_input_hash,
+)
+from src.optimization.common.bev_terminal_policy import (
+    BevTerminalSocPolicy,
+    normalize_bev_terminal_soc_policy,
+)
 from src.optimization.common.research_phase3_policy import (
     enforce_research_phase3_single_continuous_duty,
 )
@@ -180,35 +189,6 @@ def _build_experiment_identity(
     warm_start_enabled: bool,
 ) -> dict[str, Any]:
     """Hash every controlled input that changes the experiment's meaning."""
-    trip_inputs = [
-        {
-            "trip_id": str(trip.trip_id),
-            "route_id": str(trip.route_id),
-            "route_family_code": str(trip.route_family_code),
-            "direction": str(trip.direction),
-            "departure_min": int(trip.departure_min),
-            "arrival_min": int(trip.arrival_min),
-            "distance_km": float(trip.distance_km),
-            "energy_kwh": float(trip.energy_kwh),
-            "fuel_l": float(trip.fuel_l),
-            "allowed_vehicle_types": list(trip.allowed_vehicle_types),
-        }
-        for trip in sorted(problem.trips, key=lambda item: str(item.trip_id))
-    ]
-    vehicle_inputs = [
-        {
-            "vehicle_id": str(vehicle.vehicle_id),
-            "vehicle_type": str(vehicle.vehicle_type),
-            "home_depot_id": str(vehicle.home_depot_id),
-            "available": bool(vehicle.available),
-            "initial_soc": vehicle.initial_soc,
-            "battery_capacity_kwh": vehicle.battery_capacity_kwh,
-            "reserve_soc": vehicle.reserve_soc,
-            "energy_consumption_kwh_per_km": vehicle.energy_consumption_kwh_per_km,
-            "fuel_consumption_l_per_km": vehicle.fuel_consumption_l_per_km,
-        }
-        for vehicle in sorted(problem.vehicles, key=lambda item: str(item.vehicle_id))
-    ]
     charger_inputs = [
         {
             "charger_id": str(charger.charger_id),
@@ -254,10 +234,14 @@ def _build_experiment_identity(
     fingerprint_payload = {
         "service_date": str(problem.metadata.get("service_date") or ""),
         "route_ids": sorted({str(trip.route_id) for trip in problem.trips}),
-        "trip_input_hash": _canonical_payload_hash(trip_inputs),
-        "vehicle_input_hash": _canonical_payload_hash(vehicle_inputs),
+        "input_fingerprint_schema": INPUT_FINGERPRINT_SCHEMA,
+        "trip_input_hash": canonical_trip_input_hash(problem),
+        "vehicle_input_hash": canonical_vehicle_input_hash(problem),
         "initial_soc_policy": initial_soc_policy.value,
         "initial_soc_input_hash": str(initial_soc_input_hash),
+        "bev_terminal_soc_policy": str(
+            problem.metadata.get("bev_terminal_soc_policy") or ""
+        ),
         "charger_configuration_hash": _canonical_payload_hash(charger_inputs),
         "time_step_min": int(problem.scenario.timestep_min),
         "milp_max_successors_per_trip": problem.metadata.get(
@@ -342,6 +326,9 @@ def _configure_controlled_model_validation_case(
     time_step_min: int,
     initial_soc_policy: InitialSocPolicy,
     initial_soc_percent: float | None,
+    bev_terminal_soc_policy: BevTerminalSocPolicy | str = (
+        BevTerminalSocPolicy.RETURN_TO_INITIAL
+    ),
     milp_max_successors_per_trip: int | None = None,
 ) -> dict[str, Any]:
     """Build the disclosed grid-only validation input without changing the store."""
@@ -353,6 +340,10 @@ def _configure_controlled_model_validation_case(
         uniform_percent=initial_soc_percent,
     )
     simulation_config = configured.setdefault("simulation_config", {})
+    terminal_policy = normalize_bev_terminal_soc_policy(
+        bev_terminal_soc_policy,
+        has_explicit_target=False,
+    )
     simulation_config.update(
         {
             "time_step_min": 15,
@@ -361,14 +352,18 @@ def _configure_controlled_model_validation_case(
             "start_time": "05:00",
             "end_time": "05:00",
             "planning_horizon_hours": 24.0,
-            # This is a single-day physical-feasibility validation, not an
-            # overnight continuity claim.  Preserve the normal target for a
-            # subsequent sensitivity run rather than silently weakening it.
             "final_soc_floor_percent": None,
             "final_soc_target_percent": None,
             "final_soc_target_tolerance_percent": None,
-            "experiment_case_tag": "CONTROLLED_MODEL_VALIDATION_CASE",
-            "terminal_soc_policy": "minimum_soc",
+            "bev_terminal_soc_policy": terminal_policy.value,
+            "experiment_case_tag": (
+                "CONTROLLED_OPERATIONAL_BASELINE_CASE"
+                if terminal_policy is BevTerminalSocPolicy.RETURN_TO_INITIAL
+                else "CONTROLLED_MODEL_VALIDATION_CASE"
+            ),
+            # Keep the legacy name for existing artifact readers, but give it
+            # the same unambiguous value as the BEV-specific policy.
+            "terminal_soc_policy": terminal_policy.value,
         }
     )
     if milp_max_successors_per_trip is not None and int(
@@ -471,10 +466,19 @@ def _validate_target_input(
     simulation_config = dict(scenario.get("simulation_config") or {})
     if bool(simulation_config.get("enable_weather_operation_policy", False)):
         raise ValueError("weather operation policy must be disabled")
-    if simulation_config.get("experiment_case_tag") != "CONTROLLED_MODEL_VALIDATION_CASE":
-        raise ValueError("missing CONTROLLED_MODEL_VALIDATION_CASE tag")
-    if simulation_config.get("terminal_soc_policy") != "minimum_soc":
-        raise ValueError("controlled run must disclose terminal_soc_policy=minimum_soc")
+    terminal_policy = normalize_bev_terminal_soc_policy(
+        simulation_config.get("bev_terminal_soc_policy"),
+        has_explicit_target=False,
+    )
+    expected_case_tag = (
+        "CONTROLLED_OPERATIONAL_BASELINE_CASE"
+        if terminal_policy is BevTerminalSocPolicy.RETURN_TO_INITIAL
+        else "CONTROLLED_MODEL_VALIDATION_CASE"
+    )
+    if simulation_config.get("experiment_case_tag") != expected_case_tag:
+        raise ValueError(f"missing {expected_case_tag} tag")
+    if problem.metadata.get("bev_terminal_soc_policy") != terminal_policy.value:
+        raise ValueError("BEV terminal SOC policy was not propagated to the model")
     if (problem.metadata or {}).get("final_soc_floor_percent") is not None:
         raise ValueError("controlled run must not inherit a configured final SOC floor")
     if (problem.metadata or {}).get("final_soc_target_percent") is not None:
@@ -535,6 +539,7 @@ def run(args: argparse.Namespace) -> int:
         time_step_min=args.time_step_min,
         initial_soc_policy=initial_soc_policy,
         initial_soc_percent=args.initial_soc_percent,
+        bev_terminal_soc_policy=args.bev_terminal_soc_policy,
         milp_max_successors_per_trip=args.milp_max_successors_per_trip,
     )
     fragment_policy = enforce_research_phase3_single_continuous_duty(scenario)
@@ -570,12 +575,21 @@ def run(args: argparse.Namespace) -> int:
         if invalid:
             raise ValueError("uniform initial SOC was not propagated to the model: " + ", ".join(invalid))
     if isinstance(problem.metadata, dict):
+        terminal_policy = normalize_bev_terminal_soc_policy(
+            args.bev_terminal_soc_policy,
+            has_explicit_target=False,
+        )
         problem.metadata.update(
             {
                 **soc_metadata,
                 "phase3_diagnostics_dir": str(Path(args.output_dir) / "diagnostics"),
-                "experiment_case_tag": "CONTROLLED_MODEL_VALIDATION_CASE",
-                "terminal_soc_policy": "minimum_soc",
+                "experiment_case_tag": (
+                    "CONTROLLED_OPERATIONAL_BASELINE_CASE"
+                    if terminal_policy is BevTerminalSocPolicy.RETURN_TO_INITIAL
+                    else "CONTROLLED_MODEL_VALIDATION_CASE"
+                ),
+                "terminal_soc_policy": terminal_policy.value,
+                "bev_terminal_soc_policy": terminal_policy.value,
                 "vehicle_soc_semantics": "slot_start",
             }
         )
@@ -600,8 +614,20 @@ def run(args: argparse.Namespace) -> int:
         git_sha=git_sha,
         warm_start_enabled=bool(config.warm_start),
     )
+    terminal_policy = normalize_bev_terminal_soc_policy(
+        args.bev_terminal_soc_policy,
+        has_explicit_target=False,
+    )
+    experiment_case_tag = (
+        "CONTROLLED_OPERATIONAL_BASELINE_CASE"
+        if terminal_policy is BevTerminalSocPolicy.RETURN_TO_INITIAL
+        else "CONTROLLED_MODEL_VALIDATION_CASE"
+    )
     input_audit = {
-        "experiment_case_tag": "CONTROLLED_MODEL_VALIDATION_CASE",
+        "experiment_case_tag": experiment_case_tag,
+        "scenario_id": args.scenario_id,
+        "effective_scenario_artifact": "effective_scenario.json",
+        "effective_scenario_sha256": _canonical_payload_hash(scenario),
         "prepared_input_id": args.prepared_input_id,
         "prepared_input_sha256": _sha256(prepared_path),
         "research_run": True,
@@ -641,17 +667,32 @@ def run(args: argparse.Namespace) -> int:
         "warm_start_enabled": bool(config.warm_start),
         "fallback_enabled": False,
         "partial_service_enabled": False,
-        "terminal_soc_policy": "minimum_soc",
+        "terminal_soc_policy": terminal_policy.value,
+        "bev_terminal_soc_policy": terminal_policy.value,
         "research_fragment_policy": fragment_policy,
         "git_sha": git_sha,
         "git_dirty": git_dirty,
         **experiment_identity,
         **soc_metadata,
     }
-    (output_dir / "controlled_model_validation_input.json").write_text(
-        json.dumps(input_audit, ensure_ascii=False, indent=2, default=str),
+    serialized_input_audit = json.dumps(
+        input_audit,
+        ensure_ascii=False,
+        indent=2,
+        default=str,
+    )
+    (output_dir / "effective_scenario.json").write_text(
+        json.dumps(scenario, ensure_ascii=False, indent=2, default=str),
         encoding="utf-8",
     )
+    for audit_name in (
+        "controlled_model_validation_input.json",
+        "input_audit.json",
+    ):
+        (output_dir / audit_name).write_text(
+            serialized_input_audit,
+            encoding="utf-8",
+        )
     if args.build_only:
         print(json.dumps(input_audit, ensure_ascii=False, indent=2, default=str))
         return 0
@@ -725,7 +766,15 @@ def run(args: argparse.Namespace) -> int:
         if bool(result.feasible)
         else None
     )
-    validated_cost = accounting_total if accepted and bool(result.feasible) else None
+    research_accounting_cost_eligible = bool(
+        accepted
+        and solver_metadata.get("research_accounting_cost_eligible", False)
+    )
+    validated_cost = (
+        accounting_total
+        if research_accounting_cost_eligible and bool(result.feasible)
+        else None
+    )
     stage1_gap = _finite_float_or_none(
         solver_metadata.get("stage1_mip_gap_ratio")
     )
@@ -755,6 +804,14 @@ def run(args: argparse.Namespace) -> int:
         ),
         "research_cost_kpi_eligible": bool(
             accepted and solver_metadata.get("research_cost_kpi_eligible", False)
+        ),
+        "research_accounting_cost_eligible": research_accounting_cost_eligible,
+        "research_cost_optimality_eligible": bool(
+            accepted
+            and solver_metadata.get("research_cost_optimality_eligible", False)
+        ),
+        "research_cost_acceptance_checks": dict(
+            solver_metadata.get("research_cost_acceptance_checks") or {}
         ),
         "trip_count_total": len(problem.trips),
         "trip_count_served": len(result.plan.served_trip_ids),
@@ -841,6 +898,37 @@ def run(args: argparse.Namespace) -> int:
         "accounting_total_cost_jpy": accounting_total,
         "accounting_recalculation": accounting_recalculation,
         "validated_operating_cost_jpy": validated_cost,
+        "energy_cost_basis": (result.cost_breakdown or {}).get(
+            "energy_cost_basis"
+        ),
+        "energy_cash_purchase_cost_jpy": _finite_float_or_none(
+            (result.cost_breakdown or {}).get("energy_cash_purchase_cost_jpy")
+        ),
+        "energy_inventory_valuation_cost_jpy": _finite_float_or_none(
+            (result.cost_breakdown or {}).get(
+                "energy_inventory_valuation_cost_jpy"
+            )
+        ),
+        "ev_unreplenished_drive_energy_kwh": _finite_float_or_none(
+            (result.cost_breakdown or {}).get(
+                "ev_unreplenished_drive_energy_kwh"
+            )
+        ),
+        "bev_terminal_soc_total_drawdown_kwh": _finite_float_or_none(
+            solver_metadata.get("bev_terminal_soc_total_drawdown_kwh")
+        ),
+        "bev_terminal_soc_total_target_shortfall_kwh": _finite_float_or_none(
+            solver_metadata.get("bev_terminal_soc_total_target_shortfall_kwh")
+        ),
+        "bev_terminal_soc_balance_satisfied": bool(
+            solver_metadata.get("bev_terminal_soc_balance_satisfied", False)
+        ),
+        "vehicle_initial_soc_kwh_by_vehicle": dict(
+            solver_metadata.get("vehicle_initial_soc_kwh_by_vehicle") or {}
+        ),
+        "vehicle_terminal_soc_kwh_by_vehicle": dict(
+            solver_metadata.get("vehicle_terminal_soc_kwh_by_vehicle") or {}
+        ),
         "mip_gap_requested_ratio": float(args.mip_gap),
         "mip_gap_achieved_ratio": _finite_float_or_none(
             solver_metadata.get("achieved_mip_gap")
@@ -852,8 +940,9 @@ def run(args: argparse.Namespace) -> int:
         "pv_enabled": False,
         "bess_enabled": False,
         "weather_operation_policy_enabled": False,
-        "experiment_case_tag": "CONTROLLED_MODEL_VALIDATION_CASE",
-        "terminal_soc_policy": "minimum_soc",
+        "experiment_case_tag": experiment_case_tag,
+        "terminal_soc_policy": terminal_policy.value,
+        "bev_terminal_soc_policy": terminal_policy.value,
         **soc_metadata,
         "warnings": list(result.warnings or ()),
         "infeasibility_reasons": list(result.infeasibility_reasons or ()),
@@ -932,6 +1021,18 @@ def main() -> int:
         choices=[policy.value for policy in InitialSocPolicy],
     )
     parser.add_argument("--initial-soc-percent", type=float, default=80.0)
+    parser.add_argument(
+        "--bev-terminal-soc-policy",
+        default=BevTerminalSocPolicy.RETURN_TO_INITIAL.value,
+        choices=(
+            BevTerminalSocPolicy.RETURN_TO_INITIAL.value,
+            BevTerminalSocPolicy.MINIMUM_ONLY.value,
+        ),
+        help=(
+            "return_to_initial is required for the formal operating-cost "
+            "baseline; minimum_only is a feasibility diagnostic only."
+        ),
+    )
     parser.add_argument("--build-only", action="store_true")
     return run(parser.parse_args())
 
