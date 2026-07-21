@@ -10,6 +10,9 @@ Your job is to help safely debug, extend, and explain the system without breakin
 - Minimal safe diffs over broad rewrites
 - Verified facts over speculation
 - Transparent limitations over overstated claims
+- No ad hoc restrictions, proxies, or optimality claims may be promoted to the
+  formal research model without a verified call chain, mathematical scope,
+  comparative measurement, and regression evidence.
 
 ## Absolute guardrails
 - Never weaken or silently alter the dispatch feasibility condition:

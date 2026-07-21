@@ -28,6 +28,7 @@
 | 9 | [9. 実装詳細（技術リファレンス）](#9-実装詳細技術リファレンス) | 実装変数や dispatch 判定式を追う |
 | 10 | [10. 実測監査](#10-実測監査) | KPI と再現コマンドを確認する |
 | 11 | [11. AI エージェント向けアーキテクチャ仕様](#11-ai-エージェント向けアーキテクチャ仕様) | 自動修正時の制約と責務境界を確認する |
+| UI移行 | [React + FastAPI frontend migration specification](docs/frontend/README.md) | Tkinterを維持したReact移行の要件・契約・UI/UX・受入基準を確認する |
 
 ```mermaid
 flowchart LR
