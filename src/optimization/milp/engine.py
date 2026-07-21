@@ -159,7 +159,32 @@ class MILPOptimizer:
                 ),
                 "optimization_structure": str((plan.metadata or {}).get("optimization_structure") or ("two_stage" if getattr(config, "thesis_mode", False) else "integrated")),
                 "stage1_solver_status": (plan.metadata or {}).get("stage1_solver_status"),
+                "assignment_solution_method": (plan.metadata or {}).get(
+                    "assignment_solution_method"
+                ),
+                "assignment_global_optimality": bool(
+                    (plan.metadata or {}).get("assignment_global_optimality", False)
+                ),
+                "stage1_exact_optimality_certified": bool(
+                    (plan.metadata or {}).get(
+                        "stage1_exact_optimality_certified", False
+                    )
+                ),
+                "assignment_global_optimality_scope": (plan.metadata or {}).get(
+                    "assignment_global_optimality_scope"
+                ),
+                "assignment_certified_mip_gap_ratio": (plan.metadata or {}).get(
+                    "assignment_certified_mip_gap_ratio"
+                ),
+                "full_network_global_optimality": bool(
+                    (plan.metadata or {}).get("full_network_global_optimality", False)
+                ),
                 "stage2_solver_status": (plan.metadata or {}).get("stage2_solver_status"),
+                "stage2_exact_optimality_certified": bool(
+                    (plan.metadata or {}).get(
+                        "stage2_exact_optimality_certified", False
+                    )
+                ),
                 "stage1_mip_gap": (plan.metadata or {}).get("stage1_mip_gap"),
                 "stage2_mip_gap": (plan.metadata or {}).get("stage2_mip_gap"),
                 "stage1_objective_value": (plan.metadata or {}).get("stage1_objective_value"),
@@ -167,8 +192,50 @@ class MILPOptimizer:
                 "stage1_has_feasible_incumbent": (plan.metadata or {}).get("stage1_has_feasible_incumbent"),
                 "stage1_objective": (plan.metadata or {}).get("stage1_objective"),
                 "stage1_best_bound": (plan.metadata or {}).get("stage1_best_bound"),
+                "stage1_solver_best_bound": (plan.metadata or {}).get(
+                    "stage1_solver_best_bound"
+                ),
+                "stage1_solver_mip_gap_ratio": (plan.metadata or {}).get(
+                    "stage1_solver_mip_gap_ratio"
+                ),
+                "stage1_analytical_objective_lower_bound": (
+                    plan.metadata or {}
+                ).get("stage1_analytical_objective_lower_bound"),
+                "stage1_analytical_objective_lower_bound_semantics": (
+                    plan.metadata or {}
+                ).get("stage1_analytical_objective_lower_bound_semantics"),
+                "stage1_certified_gap_stop_threshold": (plan.metadata or {}).get(
+                    "stage1_certified_gap_stop_threshold"
+                ),
+                "stage1_certified_gap_stop_triggered": (plan.metadata or {}).get(
+                    "stage1_certified_gap_stop_triggered"
+                ),
                 "stage1_mip_gap_ratio": (plan.metadata or {}).get("stage1_mip_gap_ratio"),
                 "stage1_runtime_seconds": (plan.metadata or {}).get("stage1_runtime_seconds"),
+                "stage1_pre_optimize_seconds": (plan.metadata or {}).get(
+                    "stage1_pre_optimize_seconds"
+                ),
+                "stage1_model_variable_count": (plan.metadata or {}).get(
+                    "stage1_model_variable_count"
+                ),
+                "stage1_model_constraint_count": (plan.metadata or {}).get(
+                    "stage1_model_constraint_count"
+                ),
+                "stage1_search_telemetry": dict(
+                    (plan.metadata or {}).get("stage1_search_telemetry") or {}
+                ),
+                "stage1_vehicle_count_lower_bound": (plan.metadata or {}).get(
+                    "stage1_vehicle_count_lower_bound"
+                ),
+                "stage1_vehicle_count_lower_bound_constraint_count": (
+                    plan.metadata or {}
+                ).get("stage1_vehicle_count_lower_bound_constraint_count"),
+                "stage1_vehicle_count_lower_bound_semantics": (
+                    plan.metadata or {}
+                ).get("stage1_vehicle_count_lower_bound_semantics"),
+                "stage1_redundant_arc_link_constraints_omitted": (
+                    plan.metadata or {}
+                ).get("stage1_redundant_arc_link_constraints_omitted"),
                 "stage1_time_limit_sec_effective": (plan.metadata or {}).get(
                     "stage1_time_limit_sec_effective"
                 ),
@@ -247,6 +314,9 @@ class MILPOptimizer:
                 ],
                 "allow_partial_service": allow_partial_service,
                 "strict_coverage_enforced": service_coverage_mode == "strict",
+                "strict_coverage_precheck": dict(
+                    problem.metadata.get("strict_coverage_precheck") or {}
+                ),
                 "same_day_depot_cycles_enabled": allow_same_day_depot_cycles,
                 "max_depot_cycles_per_vehicle_per_day": int(
                     problem.metadata.get(

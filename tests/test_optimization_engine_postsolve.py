@@ -297,6 +297,68 @@ def test_research_phase3_publishes_accounting_cost_only_when_ev_energy_is_restor
     )
 
 
+def test_balanced_phase1_warning_identifies_assignment_scope_not_energy_gap() -> None:
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="s-research-balanced-phase1",
+            timestep_min=60,
+        ),
+        dispatch_context=None,
+        trips=(),
+        vehicles=(),
+        metadata={"bev_terminal_soc_policy": "return_to_initial"},
+    )
+    fake_result = OptimizationEngineResult(
+        mode=OptimizationMode.MILP,
+        solver_status="optimal",
+        objective_value=0.0,
+        plan=AssignmentPlan(
+            metadata={
+                "source_provenance_exact": True,
+                "vehicle_source_provenance_exact": True,
+                "bev_terminal_soc_policy": "return_to_initial",
+                "bev_terminal_soc_balance_satisfied": True,
+            }
+        ),
+        feasible=True,
+        cost_breakdown={"objective_value": 0.0, "total_cost": 0.0},
+        solver_metadata={
+            "supports_exact_milp": True,
+            "charging_dispatch_evaluated": True,
+            "soc_constraints_evaluated": True,
+            "source_provenance_exact": True,
+            "bev_terminal_soc_policy": "return_to_initial",
+            "bev_terminal_soc_balance_satisfied": True,
+            "requested_phase_token": "phase1_charging_only",
+            "requested_phase": "phase1_charging_only",
+            "resolved_phase": "phase1_charging_only",
+            "executed_phase": "phase1_charging_only",
+        },
+    )
+    engine = OptimizationEngine()
+    engine._milp = _FakeMILPOptimizer(fake_result)
+
+    result = engine.solve(
+        problem,
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            phase="phase1_charging_only",
+            research_run=True,
+        ),
+    )
+
+    assert result.solver_metadata["research_run_accepted"] is True
+    assert result.solver_metadata["research_cost_kpi_eligible"] is False
+    assert any(
+        "accounting trace is balanced" in warning
+        and "global assignment" in warning
+        for warning in result.warnings
+    )
+    assert not any(
+        "terminal energy inventory" in warning for warning in result.warnings
+    )
+
+
 def test_research_rejection_preserves_a_real_feasible_incumbent_status() -> None:
     problem = CanonicalOptimizationProblem(
         scenario=OptimizationScenario(

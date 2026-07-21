@@ -192,6 +192,69 @@ def test_evaluator_applies_pv_marginal_cost_and_bess_cost_to_their_own_flows() -
     )
 
 
+def test_exact_zero_grid_flow_is_not_rederived_from_pv_charging() -> None:
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="scenario-exact-pv",
+            horizon_start="08:00",
+            timestep_min=60,
+            objective_mode="total_cost",
+        ),
+        dispatch_context=None,
+        trips=(),
+        vehicles=(
+            ProblemVehicle(
+                vehicle_id="bev-1",
+                vehicle_type="BEV",
+                home_depot_id="dep-1",
+                battery_capacity_kwh=200.0,
+            ),
+        ),
+        depots=(ProblemDepot(depot_id="dep-1", name="Depot", import_limit_kw=9999.0),),
+        price_slots=(
+            EnergyPriceSlot(
+                slot_index=0,
+                grid_buy_yen_per_kwh=20.0,
+                co2_factor=0.5,
+            ),
+        ),
+        objective_weights=OptimizationObjectiveWeights(),
+        depot_energy_assets={
+            "dep-1": DepotEnergyAsset(
+                depot_id="dep-1",
+                pv_enabled=True,
+                pv_generation_kwh_by_slot=(10.0,),
+            ),
+        },
+    )
+    plan = AssignmentPlan(
+        charging_slots=(
+            ChargingSlot(
+                vehicle_id="bev-1",
+                slot_index=0,
+                charger_id="pv:dep-1",
+                charge_kw=10.0,
+            ),
+        ),
+        grid_to_bus_kwh_by_depot_slot={},
+        pv_to_bus_kwh_by_depot_slot={"dep-1": {0: 10.0}},
+        bess_to_bus_kwh_by_depot_slot={},
+        metadata={
+            "source_provenance_exact": True,
+            "canonical_source_flow_context": {"source_provenance_exact": True},
+        },
+    )
+
+    breakdown = CostEvaluator().evaluate(problem, plan)
+
+    assert breakdown.grid_to_bus_kwh == 0.0
+    assert breakdown.grid_import_kwh == 0.0
+    assert breakdown.grid_purchase_cost == 0.0
+    assert breakdown.demand_cost == 0.0
+    assert breakdown.grid_electricity_co2_kg == 0.0
+    assert breakdown.pv_to_bus_kwh == 10.0
+
+
 def test_evaluator_keeps_ice_provisional_leftover_without_refuel() -> None:
     trip = Trip(
         trip_id="trip-ice-1",

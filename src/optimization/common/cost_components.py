@@ -122,6 +122,16 @@ COST_COMPONENT_DEFINITIONS: tuple[CostComponentDefinition, ...] = (
         solver_scope="milp_only",
     ),
     CostComponentDefinition(
+        key="opportunistic_topup_deficit_penalty",
+        label="Opportunistic top-up deficit penalty",
+        description=(
+            "MILP-only soft penalty for ending below the opportunistic SOC "
+            "top-up level. This is an operational preference, not a ledger cost."
+        ),
+        section="MILP penalties",
+        solver_scope="milp_only",
+    ),
+    CostComponentDefinition(
         key="grid_to_bus_priority_penalty",
         label="系統→車両優先ペナルティ",
         description="BESS 利用より系統直充電を選びすぎる場合の MILP 内部ペナルティです。",

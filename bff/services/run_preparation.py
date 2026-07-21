@@ -23,6 +23,8 @@ from src.value_normalization import normalize_for_python
 
 log = logging.getLogger("run_prep")
 
+PREPARED_INPUT_SCHEMA_VERSION = "v2_trip_stop_polyline_distance"
+
 
 def _normalize_solver_mode(mode: Any) -> str:
     normalized = str(mode or "").strip().lower()
@@ -175,7 +177,10 @@ def _scenario_hash(scenario_dict: dict) -> str:
 
 
 def _prepared_input_id(scenario_hash: str, scope_hash: str) -> str:
-    return f"prepared-{scenario_hash}-{scope_hash}"
+    schema_hash = hashlib.sha256(
+        PREPARED_INPUT_SCHEMA_VERSION.encode("utf-8")
+    ).hexdigest()[:8]
+    return f"prepared-{scenario_hash}-{scope_hash}-{schema_hash}"
 
 
 def _scope_hash(scope_payload: dict[str, Any]) -> str:
@@ -897,6 +902,146 @@ def _load_stop_sequences(built_dir: Path) -> list[dict[str, Any]]:
         return []
 
 
+def _stop_coordinate_lookup(
+    stops: list[dict[str, Any]],
+) -> dict[str, tuple[float, float]]:
+    coordinates: dict[str, tuple[float, float]] = {}
+    for stop in stops:
+        stop_id = _normalize_scope_text(
+            stop.get("id") or stop.get("stop_id") or stop.get("stopId")
+        )
+        lat = _safe_float_number(stop.get("lat") or stop.get("latitude"))
+        lon = _safe_float_number(
+            stop.get("lon") or stop.get("lng") or stop.get("longitude")
+        )
+        if stop_id and lat is not None and lon is not None:
+            coordinates[stop_id] = (float(lat), float(lon))
+    return coordinates
+
+
+def _trip_stop_sequence_lookup(
+    stop_sequences: list[dict[str, Any]],
+) -> dict[str, tuple[str, ...]]:
+    grouped: dict[str, list[tuple[int, str]]] = {}
+    for row in stop_sequences:
+        trip_id = _normalize_scope_text(row.get("trip_id") or row.get("tripId"))
+        stop_id = _normalize_scope_text(row.get("stop_id") or row.get("stopId"))
+        if not trip_id or not stop_id:
+            continue
+        try:
+            sequence = int(row.get("sequence", row.get("stop_sequence", 0)) or 0)
+        except (TypeError, ValueError):
+            sequence = 0
+        grouped.setdefault(trip_id, []).append((sequence, stop_id))
+    result: dict[str, tuple[str, ...]] = {}
+    for trip_id, entries in grouped.items():
+        ordered: list[str] = []
+        for _sequence, stop_id in sorted(entries):
+            if not ordered or ordered[-1] != stop_id:
+                ordered.append(stop_id)
+        if len(ordered) >= 2:
+            result[trip_id] = tuple(ordered)
+    return result
+
+
+def _route_stop_polyline_distance_km(
+    stop_ids: tuple[str, ...],
+    stop_coordinates: dict[str, tuple[float, float]],
+) -> tuple[float, int]:
+    distance_km = 0.0
+    segment_count = 0
+    for origin_stop_id, destination_stop_id in zip(stop_ids, stop_ids[1:]):
+        origin = stop_coordinates.get(origin_stop_id)
+        destination = stop_coordinates.get(destination_stop_id)
+        if origin is None or destination is None:
+            continue
+        distance_km += _haversine_distance_km(
+            origin[0], origin[1], destination[0], destination[1]
+        )
+        segment_count += 1
+    return distance_km, segment_count
+
+
+def _haversine_distance_km(
+    origin_lat: float,
+    origin_lon: float,
+    destination_lat: float,
+    destination_lon: float,
+) -> float:
+    radius_km = 6371.0
+    lat1 = math.radians(origin_lat)
+    lon1 = math.radians(origin_lon)
+    lat2 = math.radians(destination_lat)
+    lon2 = math.radians(destination_lon)
+    d_lat = lat2 - lat1
+    d_lon = lon2 - lon1
+    h = (
+        math.sin(d_lat / 2.0) ** 2
+        + math.cos(lat1) * math.cos(lat2) * math.sin(d_lon / 2.0) ** 2
+    )
+    return 2.0 * radius_km * math.asin(min(1.0, math.sqrt(max(h, 0.0))))
+
+
+def _enrich_trip_distances_from_stop_sequences(
+    trip_records: list[dict[str, Any]],
+    *,
+    stops: list[dict[str, Any]],
+    stop_sequences: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Fill missing trip distance from the ordered, trip-specific stop path.
+
+    Adjacent stop coordinates are accumulated, so the estimate follows the
+    observed route stop sequence instead of measuring only the endpoints.  It
+    remains a geographic polyline proxy, not an asserted road-network length.
+    """
+    stop_coordinates = _stop_coordinate_lookup(stops)
+    sequence_by_trip = _trip_stop_sequence_lookup(stop_sequences)
+    source_counts: Counter[str] = Counter()
+    samples: list[dict[str, Any]] = []
+    for trip in trip_records:
+        existing = _safe_float_number(
+            trip.get("distance_km") or trip.get("distanceKm")
+        )
+        if existing is not None and existing > 0.0:
+            source_counts["trip.distance_km"] += 1
+            continue
+        trip_id = _normalize_scope_text(trip.get("trip_id") or trip.get("tripId"))
+        stop_ids = sequence_by_trip.get(trip_id, ())
+        distance_km, segment_count = _route_stop_polyline_distance_km(
+            stop_ids,
+            stop_coordinates,
+        )
+        expected_segment_count = max(len(stop_ids) - 1, 0)
+        if (
+            distance_km <= 0.0
+            or expected_segment_count <= 0
+            or segment_count != expected_segment_count
+        ):
+            source_counts["unresolved"] += 1
+            continue
+        trip["distance_km"] = round(distance_km, 6)
+        trip["distance_source"] = "trip_stop_sequence_polyline_haversine"
+        trip["distance_stop_count"] = len(stop_ids)
+        trip["distance_segment_count"] = segment_count
+        source_counts["trip_stop_sequence_polyline_haversine"] += 1
+        if len(samples) < 20:
+            samples.append(
+                {
+                    "trip_id": trip_id,
+                    "distance_km": round(distance_km, 6),
+                    "stop_count": len(stop_ids),
+                    "segment_count": segment_count,
+                }
+            )
+    return {
+        "semantics": "adjacent_stop_haversine_polyline_not_road_network_distance",
+        "source_counts": dict(source_counts),
+        "stop_coordinate_count": len(stop_coordinates),
+        "trip_stop_sequence_count": len(sequence_by_trip),
+        "samples": samples,
+    }
+
+
 def _build_canonical_input(
     *,
     scenario: dict,
@@ -946,6 +1091,11 @@ def _build_canonical_input(
     )
     trip_records = _as_records(trips_df)
     stop_time_records = _as_records(timetables_df)
+    trip_distance_enrichment = _enrich_trip_distances_from_stop_sequences(
+        trip_records,
+        stops=stops,
+        stop_sequences=list(stop_sequences or []),
+    )
     route_index = {
         str(route.get("id") or ""): idx
         for idx, route in enumerate(routes)
@@ -987,6 +1137,7 @@ def _build_canonical_input(
 
     return {
         "prepared_input_id": prepared_input_id,
+        "prepared_input_schema_version": PREPARED_INPUT_SCHEMA_VERSION,
         "scenario_id": scenario_id,
         "dataset_id": dataset_id,
         "dataset_version": dataset_version,
@@ -1024,6 +1175,7 @@ def _build_canonical_input(
         "vehicles": vehicles,
         "chargers": chargers,
         "trips": trip_records,
+        "trip_distance_enrichment": trip_distance_enrichment,
         "stop_time_sequences": stop_time_records,
         "stop_sequences": list(stop_sequences or []),
         "stops": stops,
@@ -1203,7 +1355,7 @@ def _build_route_distance_source_map(
             register_source(
                 keys=keys,
                 distance_km=trip_distance,
-                source="trip.distance_km",
+                source=str(row.get("distance_source") or "trip.distance_km"),
                 sample_id=_normalize_scope_text(row.get("trip_id")),
             )
             continue
@@ -1258,7 +1410,9 @@ def _distance_source_for_trip(
             "join_key": matched_key,
             "join_hit": route_distance_found,
             "route_distance_found": route_distance_found,
-            "distance_source": "trip.distance_km",
+            "distance_source": str(
+                trip_row.get("distance_source") or "trip.distance_km"
+            ),
             "distance_km": float(explicit_distance),
             "miss_reason": "",
             "route_distance_km": joined_distance,

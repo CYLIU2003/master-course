@@ -70,10 +70,15 @@ def test_builder_extends_single_day_target_horizon_to_24h() -> None:
 
     assert problem.scenario.horizon_start == "05:00"
     assert problem.scenario.horizon_end == "05:00"
+    assert problem.scenario.horizon_duration_min == 24 * 60
     assert problem.scenario.planning_horizon_hours == 24.0
     assert problem.metadata["operation_end_time"] == "23:00"
     assert len(problem.price_slots) == 24
     assert len(problem.pv_slots) == 24
+    assert problem.metadata["energy_horizon_slot_count"] == 24
+    assert problem.metadata["energy_horizon_duration_min"] == 24 * 60
+    assert problem.metadata["service_window_start_min"] == 8 * 60
+    assert problem.metadata["service_window_end_min"] == 9 * 60
 
 
 def test_builder_treats_zero_target_as_configured_hard_target() -> None:

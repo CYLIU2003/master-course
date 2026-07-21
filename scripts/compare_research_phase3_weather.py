@@ -22,8 +22,8 @@ EXPECTED_PHASE = "phase3_two_stage"
 EXPECTED_COST_SCOPE = "feasible_schedule_accounting_not_global_total_cost_optimum"
 EXPECTED_TRIP_COUNT = 264
 EXPECTED_FLEET = {"BEV": 35, "ICE": 25}
-EXPECTED_TIMESTEP_MIN = 60
-EXPECTED_PRICE_SLOT_COUNT = 24
+EXPECTED_TIMESTEP_MIN = 15
+EXPECTED_PRICE_SLOT_COUNT = 96
 EXPECTED_TIME_LIMIT_SEC = 1500
 EXPECTED_MIP_GAP = 0.1
 EXPECTED_RANDOM_SEED = 42
@@ -43,6 +43,12 @@ FIXED_CONTROL_FIELDS = (
     "fleet",
     "timestep_min",
     "price_slot_count",
+    "planning_horizon_hours",
+    "energy_horizon_duration_min",
+    "milp_max_successors_per_trip",
+    "successor_pruning_enabled",
+    "research_discretization",
+    "trip_distance_audit",
     "clock_hour_grid_price_yen_per_kwh",
     "demand_charge_monthly_yen_per_kw",
     "demand_charge_horizon_yen_per_kw",
@@ -407,6 +413,18 @@ def _validate_accepted_case(case: str, summary: Mapping[str, Any]) -> None:
         case,
         "research_cost_kpi_eligible",
         summary.get("research_cost_kpi_eligible"),
+        True,
+    )
+    _expect(
+        case,
+        "research_accounting_cost_eligible",
+        summary.get("research_accounting_cost_eligible"),
+        True,
+    )
+    _expect(
+        case,
+        "research_cost_optimality_eligible",
+        summary.get("research_cost_optimality_eligible"),
         False,
     )
     _expect(

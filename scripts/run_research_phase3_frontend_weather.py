@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 from copy import deepcopy
 import csv
+from dataclasses import replace
 import hashlib
 import json
 import math
@@ -47,7 +48,23 @@ from src.optimization.common.bev_terminal_policy import (
 from src.optimization.common.research_phase3_policy import (
     enforce_research_phase3_single_continuous_duty,
 )
+from src.optimization.common.fast_cost_assignment import (
+    build_fast_cost_aware_assignment,
+)
+from src.optimization.common.soc_helpers import is_electric_vehicle
 from src.preprocess.weather.operation_policy import apply_weather_policy_to_problem
+
+
+DEFAULT_STAGE1_STRATEGY = "full_network_milp"
+DEFAULT_FORMAL_MIP_GAP = 0.05
+
+
+class FastFixedPathSearchError(RuntimeError):
+    """Raised with a complete audit when no fixed-path candidate is accepted."""
+
+    def __init__(self, message: str, audit: dict[str, Any]) -> None:
+        super().__init__(message)
+        self.audit = audit
 
 
 def _canonical_hash(value: Any) -> str:
@@ -181,6 +198,76 @@ def _apply_bev_availability_sensitivity(
     return audit
 
 
+def _configure_research_discretization(
+    scenario: dict[str, Any],
+    *,
+    timestep_min: int,
+) -> dict[str, int | bool]:
+    """Apply the formal weather-comparison resolution without persisting it."""
+
+    if int(timestep_min) != 15:
+        raise ValueError("Formal frontend weather comparison requires 15-minute slots")
+    simulation_config = dict(scenario.get("simulation_config") or {})
+    simulation_config["timestep_min"] = int(timestep_min)
+    simulation_config["time_step_min"] = int(timestep_min)
+    simulation_config["milp_max_successors_per_trip"] = 0
+    scenario["simulation_config"] = simulation_config
+
+    scenario_overlay = dict(scenario.get("scenario_overlay") or {})
+    solver_config = dict(scenario_overlay.get("solver_config") or {})
+    solver_config["timestep_min"] = int(timestep_min)
+    solver_config["time_step_min"] = int(timestep_min)
+    # Zero is the canonical full-network sentinel; ModelBuilder normalizes it
+    # to no successor cap.
+    solver_config["milp_max_successors_per_trip"] = 0
+    scenario_overlay["solver_config"] = solver_config
+    scenario["scenario_overlay"] = scenario_overlay
+    return {
+        "timestep_min": int(timestep_min),
+        "milp_max_successors_per_trip": 0,
+        "successor_pruning_enabled": False,
+    }
+
+
+def _trip_distance_audit(
+    problem: Any,
+    prepared_payload: dict[str, Any],
+) -> dict[str, Any]:
+    distances = [float(trip.distance_km) for trip in problem.trips]
+    nonpositive_trip_ids = [
+        str(trip.trip_id)
+        for trip in problem.trips
+        if not math.isfinite(float(trip.distance_km)) or float(trip.distance_km) <= 0.0
+    ]
+    if nonpositive_trip_ids:
+        raise ValueError(
+            "Research weather run refuses zero/missing trip distance: "
+            + ", ".join(nonpositive_trip_ids[:10])
+        )
+    prepared_audit = dict(prepared_payload.get("prepared_scope_audit") or {})
+    distance_join = dict(prepared_audit.get("distance_join_diagnosis") or {})
+    source_summary = dict(distance_join.get("route_distance_source_summary") or {})
+    distance_enrichment = dict(
+        prepared_payload.get("trip_distance_enrichment") or {}
+    )
+    return {
+        "trip_count": len(distances),
+        "nonpositive_trip_count": 0,
+        "minimum_trip_distance_km": min(distances) if distances else None,
+        "maximum_trip_distance_km": max(distances) if distances else None,
+        "prepared_trip_distance_audit": dict(
+            prepared_audit.get("trip_distance_audit") or {}
+        ),
+        "prepared_route_distance_audit": dict(
+            prepared_audit.get("route_distance_audit") or {}
+        ),
+        "prepared_trip_distance_enrichment": distance_enrichment,
+        "prepared_distance_source_kind_counts": dict(
+            source_summary.get("route_distance_source_kind_counts") or {}
+        ),
+    }
+
+
 def _assignment_mix(problem: Any, result: Any) -> dict[str, dict[str, int]]:
     vehicle_type_by_id = {
         str(vehicle.vehicle_id): str(vehicle.vehicle_type).upper()
@@ -200,16 +287,332 @@ def _assignment_mix(problem: Any, result: Any) -> dict[str, dict[str, int]]:
     }
 
 
-def _git_state() -> dict[str, Any]:
-    sha = subprocess.check_output(
-        ["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, text=True
-    ).strip()
-    dirty = bool(
-        subprocess.check_output(
-            ["git", "status", "--porcelain"], cwd=REPO_ROOT, text=True
-        ).strip()
+def _solve_fast_fixed_path_candidates(
+    problem: Any,
+    config: OptimizationConfig,
+    *,
+    total_time_limit_sec: int,
+    per_case_time_limit_sec: int,
+) -> tuple[Any, dict[str, Any]]:
+    """Select a fixed-path vehicle mix and validate every candidate exactly.
+
+    Assignment is heuristic.  Each accepted candidate has nevertheless passed
+    the canonical Phase 1 charging/SOC MILP without fallback or post-solve
+    repair.  The result must therefore not be described as a globally optimal
+    dispatch assignment.
+    """
+
+    if total_time_limit_sec <= 0:
+        raise ValueError("fast_assignment_time_limit_sec must be positive")
+    if per_case_time_limit_sec <= 0:
+        raise ValueError("fast_stage2_case_time_limit_sec must be positive")
+    baseline = problem.baseline_plan
+    if baseline is None or not baseline.duties:
+        raise RuntimeError("Fast assignment requires a complete baseline path cover")
+    duty_count = len(baseline.duties)
+    available_vehicles = [
+        vehicle for vehicle in problem.vehicles if bool(vehicle.available)
+    ]
+    available_bev_count = sum(
+        1 for vehicle in available_vehicles if is_electric_vehicle(problem, vehicle)
     )
-    return {"git_sha": sha, "git_dirty": dirty}
+    available_non_bev_count = len(available_vehicles) - available_bev_count
+    minimum_bev_count = max(0, duty_count - available_non_bev_count)
+    maximum_bev_count = min(duty_count, available_bev_count)
+    if minimum_bev_count > maximum_bev_count:
+        raise RuntimeError("Available fleet cannot cover the fixed timetable duties")
+
+    vehicle_by_id = {
+        str(vehicle.vehicle_id): vehicle for vehicle in available_vehicles
+    }
+    baseline_vehicle_ids = set(baseline.duties_by_vehicle())
+    unknown_baseline_vehicle_ids = baseline_vehicle_ids - set(vehicle_by_id)
+    if unknown_baseline_vehicle_ids:
+        raise RuntimeError(
+            "Baseline path cover references unavailable vehicles: "
+            + ", ".join(sorted(unknown_baseline_vehicle_ids))
+        )
+    baseline_bev_count = sum(
+        1
+        for vehicle_id in baseline_vehicle_ids
+        if is_electric_vehicle(problem, vehicle_by_id[vehicle_id])
+    )
+    if not minimum_bev_count <= baseline_bev_count <= maximum_bev_count:
+        raise RuntimeError("Baseline BEV count is outside the available fleet bounds")
+
+    expected_trip_ids = {str(trip.trip_id) for trip in problem.trips}
+    started = time.perf_counter()
+    candidates: list[dict[str, Any]] = []
+    best_result = None
+    best_total_cost = math.inf
+    best_requested_bev_count = None
+    best_candidate_source = None
+    candidate_specs = [
+        ("canonical_baseline", baseline_bev_count),
+        *(
+            ("cost_aware", requested_bev_count)
+            for requested_bev_count in range(
+                baseline_bev_count + 1, maximum_bev_count + 1
+            )
+        ),
+        ("cost_aware", baseline_bev_count),
+        *(
+            ("cost_aware", requested_bev_count)
+            for requested_bev_count in range(
+                baseline_bev_count - 1, minimum_bev_count - 1, -1
+            )
+        ),
+    ]
+    for candidate_source, requested_bev_count in candidate_specs:
+        elapsed_before_case = time.perf_counter() - started
+        remaining_time = float(total_time_limit_sec) - elapsed_before_case
+        if remaining_time <= 0.0:
+            break
+        observed_case_wall_seconds = [
+            float(candidate.get("elapsed_seconds") or 0.0)
+            for candidate in candidates
+        ]
+        estimated_next_case_seconds = max(
+            [float(per_case_time_limit_sec), *observed_case_wall_seconds]
+        )
+        if candidates and remaining_time < estimated_next_case_seconds:
+            break
+        case_limit = max(
+            1,
+            min(int(per_case_time_limit_sec), int(math.ceil(remaining_time))),
+        )
+        case_started = time.perf_counter()
+        if candidate_source == "canonical_baseline":
+            candidate_plan = baseline
+            assignment_audit = {
+                "requested_bev_count": baseline_bev_count,
+                "actual_bev_count": baseline_bev_count,
+                "duty_count": duty_count,
+                "trip_count": len(expected_trip_ids),
+                "proxy_total_cost_jpy": None,
+                "timetable_chains_modified": False,
+                "assignment_global_optimality": False,
+            }
+        else:
+            try:
+                candidate_plan, assignment_audit = build_fast_cost_aware_assignment(
+                    problem,
+                    requested_bev_count=requested_bev_count,
+                )
+            except ValueError as exc:
+                candidates.append(
+                    {
+                        "candidate_source": candidate_source,
+                        "requested_bev_count": requested_bev_count,
+                        "accepted": False,
+                        "rejection_reason": f"assignment_build_failed: {exc}",
+                        "elapsed_seconds": time.perf_counter() - case_started,
+                    }
+                )
+                continue
+
+        candidate_config = replace(
+            config,
+            time_limit_sec=case_limit,
+            stage1_time_limit_sec=None,
+            stage2_time_limit_sec=case_limit,
+            thesis_mode=False,
+            research_run=True,
+            allow_postsolve_repair=False,
+            phase="phase1_charging_only",
+            requested_phase_token="phase1_charging_only",
+            requested_phase="phase1_charging_only",
+            resolved_phase="phase1_charging_only",
+            executed_phase="phase1_charging_only",
+            fixed_assignment=candidate_plan,
+        )
+        candidate_result = OptimizationEngine().solve(problem, candidate_config)
+        solver_metadata = dict(candidate_result.solver_metadata or {})
+        served_trip_ids = {
+            str(trip_id) for trip_id in candidate_result.plan.served_trip_ids
+        }
+        postsolve_modified = bool(
+            solver_metadata.get("postsolve_repair_applied", False)
+            or solver_metadata.get("postsolve_repaired", False)
+        )
+        total_cost = _finite(
+            dict(candidate_result.cost_breakdown or {}).get("total_cost")
+        )
+        candidate_cost_breakdown = dict(candidate_result.cost_breakdown or {})
+        stage2_solver_status = str(
+            solver_metadata.get("stage2_solver_status") or ""
+        ).strip().lower()
+        stage2_cost_optimal = stage2_solver_status == "optimal"
+        accepted = bool(
+            candidate_result.feasible
+            and served_trip_ids == expected_trip_ids
+            and not candidate_result.plan.unserved_trip_ids
+            and candidate_result.plan.max_fragments_observed() <= 1
+            and not postsolve_modified
+            and solver_metadata.get("research_run_accepted", False)
+            and stage2_cost_optimal
+            and total_cost is not None
+        )
+        rejection_reasons = []
+        if not candidate_result.feasible:
+            rejection_reasons.append("engine_reported_infeasible")
+        if served_trip_ids != expected_trip_ids or candidate_result.plan.unserved_trip_ids:
+            rejection_reasons.append("trip_coverage_mismatch")
+        if candidate_result.plan.max_fragments_observed() > 1:
+            rejection_reasons.append("multiple_fragments_per_vehicle")
+        if postsolve_modified:
+            rejection_reasons.append("postsolve_modification_detected")
+        if not solver_metadata.get("research_run_accepted", False):
+            rejection_reasons.append("research_acceptance_gate_failed")
+        if not stage2_cost_optimal:
+            rejection_reasons.append("fixed_assignment_charging_not_optimal")
+        if total_cost is None:
+            rejection_reasons.append("nonfinite_accounting_total")
+        candidate_row = {
+            **assignment_audit,
+            "candidate_source": candidate_source,
+            "accepted": accepted,
+            "rejection_reason": ",".join(rejection_reasons) or None,
+            "case_time_limit_sec": case_limit,
+            "elapsed_seconds": time.perf_counter() - case_started,
+            "solver_status": str(candidate_result.solver_status or ""),
+            "stage2_solver_status": stage2_solver_status,
+            "stage2_cost_optimal_for_fixed_assignment": stage2_cost_optimal,
+            "research_run_accepted": bool(
+                solver_metadata.get("research_run_accepted", False)
+            ),
+            "research_acceptance_checks": dict(
+                solver_metadata.get("research_acceptance_checks") or {}
+            ),
+            "total_cost_jpy": total_cost,
+            "costs_jpy": {
+                key: _finite(candidate_cost_breakdown.get(key))
+                for key in (
+                    "electricity_cost",
+                    "fuel_cost",
+                    "co2_cost",
+                    "vehicle_cost",
+                    "vehicle_usage_cost",
+                    "demand_cost",
+                    "degradation_cost",
+                    "contract_overage_cost",
+                )
+            },
+            "energy_flows": {
+                key: _finite(candidate_cost_breakdown.get(key))
+                for key in (
+                    "grid_to_bus_kwh",
+                    "pv_to_bus_kwh",
+                    "bess_to_bus_kwh",
+                    "grid_import_kwh",
+                    "peak_grid_kw",
+                )
+            },
+            "full_cost_breakdown": candidate_cost_breakdown,
+            **_assignment_mix(problem, candidate_result),
+        }
+        candidates.append(candidate_row)
+        if accepted and total_cost is not None and total_cost < best_total_cost:
+            best_result = candidate_result
+            best_total_cost = total_cost
+            best_requested_bev_count = requested_bev_count
+            best_candidate_source = candidate_source
+
+    total_elapsed = time.perf_counter() - started
+    audit = {
+        "strategy": "fast_fixed_path",
+        "assignment_global_optimality": False,
+        "timetable_chains_modified": False,
+        "charging_and_soc_validation": "exact_phase1_charging_milp",
+        "total_time_limit_sec": int(total_time_limit_sec),
+        "per_case_time_limit_sec": int(per_case_time_limit_sec),
+        "elapsed_seconds": total_elapsed,
+        "duty_count": duty_count,
+        "minimum_bev_count": minimum_bev_count,
+        "maximum_bev_count": maximum_bev_count,
+        "baseline_bev_count": baseline_bev_count,
+        "selected_requested_bev_count": best_requested_bev_count,
+        "selected_candidate_source": best_candidate_source,
+        "selected_total_cost_jpy": (
+            best_total_cost if math.isfinite(best_total_cost) else None
+        ),
+        "candidate_count_evaluated": len(candidates),
+        "candidates": candidates,
+    }
+    if best_result is None:
+        raise FastFixedPathSearchError(
+            "No fast fixed-path candidate passed the exact charging/SOC acceptance gate",
+            audit,
+        )
+    selected_plan = replace(
+        best_result.plan,
+        metadata={
+            **dict(best_result.plan.metadata or {}),
+            "source": (
+                "canonical_baseline_revalidated_exact_charging"
+                if best_candidate_source == "canonical_baseline"
+                else "fast_cost_aware_fixed_path_assignment_exact_charging"
+            ),
+            "assignment_heuristic": True,
+            "assignment_global_optimality": False,
+            "assignment_timetable_chains_modified": False,
+            "selected_requested_bev_count": best_requested_bev_count,
+            "selected_candidate_source": best_candidate_source,
+            "objective_semantics": (
+                "cost_aware_fixed_path_assignment_heuristic_then_exact_"
+                "charging_dispatch_and_accounting"
+            ),
+        },
+    )
+    selected_solver_metadata = {
+        **dict(best_result.solver_metadata or {}),
+        "stage1_strategy": "fast_fixed_path",
+        "assignment_solution_method": (
+            "canonical_baseline_revalidated"
+            if best_candidate_source == "canonical_baseline"
+            else "cost_aware_fixed_path_heuristic"
+        ),
+        "assignment_global_optimality": False,
+        "charging_solution_method": "exact_phase1_charging_milp",
+        "research_cost_optimality_eligible": False,
+        "fast_assignment_candidate_count": len(candidates),
+        "fast_assignment_selected_requested_bev_count": best_requested_bev_count,
+        "fast_assignment_selected_candidate_source": best_candidate_source,
+    }
+    best_result = replace(
+        best_result,
+        plan=selected_plan,
+        solver_metadata=selected_solver_metadata,
+    )
+    return best_result, audit
+
+
+def _git_state() -> dict[str, Any]:
+    try:
+        sha = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, text=True
+        ).strip()
+        dirty = bool(
+            subprocess.check_output(
+                ["git", "status", "--porcelain"], cwd=REPO_ROOT, text=True
+            ).strip()
+        )
+    except (FileNotFoundError, OSError, subprocess.CalledProcessError) as exc:
+        # Provenance collection must never prevent the optimization itself.
+        # Keep the missing state explicit so the artifact is not mistaken for
+        # a fully commit-pinned run.
+        return {
+            "git_sha": None,
+            "git_dirty": None,
+            "git_state_available": False,
+            "git_state_error": f"{type(exc).__name__}: {exc}",
+        }
+    return {
+        "git_sha": sha,
+        "git_dirty": dirty,
+        "git_state_available": True,
+        "git_state_error": None,
+    }
 
 
 def _write_json(path: Path, payload: Any) -> None:
@@ -217,6 +620,37 @@ def _write_json(path: Path, payload: Any) -> None:
         json.dumps(payload, ensure_ascii=False, indent=2, default=str),
         encoding="utf-8",
     )
+
+
+def _compact_fast_assignment_audit(audit: dict[str, Any]) -> dict[str, Any]:
+    compact = {
+        key: value
+        for key, value in audit.items()
+        if key != "candidates"
+    }
+    compact["candidates"] = [
+        {
+            key: candidate.get(key)
+            for key in (
+                "candidate_source",
+                "requested_bev_count",
+                "actual_bev_count",
+                "accepted",
+                "rejection_reason",
+                "solver_status",
+                "stage2_solver_status",
+                "stage2_cost_optimal_for_fixed_assignment",
+                "total_cost_jpy",
+                "elapsed_seconds",
+                "used_vehicle_count_by_type",
+                "served_trip_count_by_vehicle_type",
+                "costs_jpy",
+                "energy_flows",
+            )
+        }
+        for candidate in audit.get("candidates", ())
+    ]
+    return compact
 
 
 def _write_vehicle_schedule(path: Path, result: Any) -> None:
@@ -390,10 +824,12 @@ def _validate_frontend_case(
     }
     if fleet != {"BEV": 35, "ICE": 25}:
         raise ValueError(f"Expected BEV35 + ICE25, got {fleet}")
-    if int(problem.scenario.timestep_min) != 60 or len(problem.price_slots) != 24:
+    if int(problem.scenario.timestep_min) != 15 or len(problem.price_slots) != 96:
         raise ValueError(
-            "Frontend weather comparison must retain its 60-minute, 24-slot setting"
+            "Formal frontend weather comparison requires 15-minute, 96-slot input"
         )
+    if problem.metadata.get("milp_max_successors_per_trip") not in (None, 0, ""):
+        raise ValueError("Formal frontend weather comparison forbids successor pruning")
     fragment_limits = {
         "max_start_fragments_per_vehicle": int(
             problem.metadata.get("max_start_fragments_per_vehicle", 0) or 0
@@ -423,6 +859,26 @@ def _validate_frontend_case(
 
 
 def run(args: argparse.Namespace) -> int:
+    stage1_strategy = str(
+        getattr(args, "stage1_strategy", DEFAULT_STAGE1_STRATEGY)
+        or DEFAULT_STAGE1_STRATEGY
+    ).strip()
+    if stage1_strategy not in {
+        "full_network_milp",
+        "fast_fixed_path",
+    }:
+        raise ValueError(f"Unsupported stage1_strategy: {stage1_strategy}")
+    fast_assignment_time_limit_sec = int(
+        getattr(args, "fast_assignment_time_limit_sec", 30)
+    )
+    fast_stage2_case_time_limit_sec = int(
+        getattr(args, "fast_stage2_case_time_limit_sec", 5)
+    )
+    executed_phase = (
+        "phase1_charging_only"
+        if stage1_strategy == "fast_fixed_path"
+        else "phase3_two_stage"
+    )
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     print("[1/4] Loading persisted frontend scenario and prepared scope", flush=True)
@@ -438,6 +894,10 @@ def run(args: argparse.Namespace) -> int:
             store.get_scenario_document_shallow(args.scenario_id),
             prepared_payload,
         )
+    )
+    discretization = _configure_research_discretization(
+        scenario,
+        timestep_min=int(args.time_step_min),
     )
     bev_availability_sensitivity = _apply_bev_availability_sensitivity(
         scenario,
@@ -495,6 +955,7 @@ def run(args: argparse.Namespace) -> int:
         raise ValueError(
             "Frontend weather comparison requires exact initial SOC inputs for 35 BEVs"
         )
+    trip_distance_audit = _trip_distance_audit(problem, prepared_payload)
     _validate_frontend_case(
         problem,
         scenario,
@@ -538,6 +999,9 @@ def run(args: argparse.Namespace) -> int:
             "bev_terminal_soc_policy": bev_terminal_soc_policy.value,
             "charger_configuration": charger_configuration,
             "timestep_min": int(problem.scenario.timestep_min),
+            "milp_max_successors_per_trip": problem.metadata.get(
+                "milp_max_successors_per_trip"
+            ),
             "depot_energy_assets": depot_energy_assets,
             "depot_import_limit_kw_by_depot": depot_import_limit_kw_by_depot,
             "depot_import_limit_semantics": "nonpositive_means_no_finite_contract_limit",
@@ -549,7 +1013,10 @@ def run(args: argparse.Namespace) -> int:
             "weather_operation_profile": weather_operation_profile,
             "research_fragment_policy": fragment_policy,
             "bev_availability_sensitivity": bev_availability_sensitivity,
-            "phase": "phase3_two_stage",
+            "phase": executed_phase,
+            "stage1_strategy": stage1_strategy,
+            "fast_assignment_time_limit_sec": fast_assignment_time_limit_sec,
+            "fast_stage2_case_time_limit_sec": fast_stage2_case_time_limit_sec,
             "research_run": True,
             "time_limit_sec": int(args.time_limit_sec),
             "stage1_time_limit_sec": args.stage1_time_limit_sec,
@@ -568,7 +1035,15 @@ def run(args: argparse.Namespace) -> int:
         "prepared_input_id": args.prepared_input_id,
         "prepared_input_sha256": _sha256(prepared_path),
         "service_date": str(problem.metadata.get("service_date") or "")[:10],
-        "phase": "phase3_two_stage",
+        "phase": executed_phase,
+        "stage1_strategy": stage1_strategy,
+        "assignment_global_optimality": (
+            False if stage1_strategy == "fast_fixed_path" else None
+        ),
+        "assignment_global_optimality_scope": None,
+        "full_network_global_optimality": None,
+        "fast_assignment_time_limit_sec": fast_assignment_time_limit_sec,
+        "fast_stage2_case_time_limit_sec": fast_stage2_case_time_limit_sec,
         "time_limit_sec": int(args.time_limit_sec),
         "stage1_time_limit_sec": args.stage1_time_limit_sec,
         "stage2_time_limit_sec": args.stage2_time_limit_sec,
@@ -596,6 +1071,18 @@ def run(args: argparse.Namespace) -> int:
         "bev_availability_sensitivity": bev_availability_sensitivity,
         "timestep_min": int(problem.scenario.timestep_min),
         "price_slot_count": len(problem.price_slots),
+        "planning_horizon_hours": float(problem.scenario.planning_horizon_hours),
+        "energy_horizon_duration_min": int(
+            problem.metadata.get("energy_horizon_duration_min", 0) or 0
+        ),
+        "service_window_start_min": problem.metadata.get("service_window_start_min"),
+        "service_window_end_min": problem.metadata.get("service_window_end_min"),
+        "milp_max_successors_per_trip": problem.metadata.get(
+            "milp_max_successors_per_trip"
+        ),
+        "successor_pruning_enabled": False,
+        "research_discretization": discretization,
+        "trip_distance_audit": trip_distance_audit,
         "clock_hour_grid_price_yen_per_kwh": _clock_hour_prices(problem),
         "demand_charge_monthly_yen_per_kw": float(problem.scenario.demand_charge_on_peak_yen_per_kw),
         "demand_charge_horizon_yen_per_kw": float(
@@ -648,6 +1135,20 @@ def run(args: argparse.Namespace) -> int:
         "vehicle_input_hash": vehicle_input_hash,
         "trip_input_hash": trip_input_hash,
         "experiment_hash": experiment_hash,
+        "stage1_candidate_warm_start_configuration": {
+            "enabled": (
+                stage1_strategy == "full_network_milp"
+                and int(args.stage1_candidate_time_limit_sec) > 0
+            ),
+            "time_limit_sec": int(args.stage1_candidate_time_limit_sec),
+            "milp_max_successors_per_trip": int(
+                args.stage1_candidate_successors
+            ),
+            "semantics": (
+                "restricted_arc_relaxed_soc_primal_heuristic_only_final_stage1_"
+                "uses_full_network_and_time_indexed_soc_relaxation"
+            ),
+        },
         **git_state,
     }
     _write_json(output_dir / "effective_scenario.json", scenario)
@@ -661,10 +1162,136 @@ def run(args: argparse.Namespace) -> int:
         problem.metadata["phase3_diagnostics_dir"] = str(output_dir / "diagnostics")
         problem.metadata["vehicle_soc_semantics"] = "slot_start"
         problem.metadata["frontend_weather_cost_experiment"] = True
-    print("[3/4] Solving Phase 3 (no fallback, no postsolve repair)", flush=True)
-    started = time.perf_counter()
-    result = OptimizationEngine().solve(problem, config)
-    elapsed = time.perf_counter() - started
+    candidate_audit: dict[str, Any] = {
+        "enabled": False,
+        "accepted_as_final_stage1_warm_start": False,
+    }
+    if (
+        stage1_strategy == "full_network_milp"
+        and int(args.stage1_candidate_time_limit_sec) > 0
+    ):
+        candidate_successors = int(args.stage1_candidate_successors)
+        if candidate_successors <= 0:
+            raise ValueError(
+                "stage1_candidate_successors must be positive when candidate generation is enabled"
+            )
+        candidate_metadata = {
+            **dict(problem.metadata or {}),
+            "milp_max_successors_per_trip": candidate_successors,
+            "stage1_candidate_generation": True,
+            "stage1_candidate_final_network_unrestricted": True,
+            # Candidate generation is a primal heuristic only.  Omitting the
+            # expensive 15-minute SOC necessary-condition relaxation here
+            # recovers a useful assignment quickly; the unrestricted final
+            # Stage 1 restores it and rejects any incompatible MIP start.
+            "stage1_time_indexed_soc_relaxation_enabled": False,
+        }
+        candidate_problem = replace(problem, metadata=candidate_metadata)
+        candidate_limit = int(args.stage1_candidate_time_limit_sec)
+        candidate_config = replace(
+            config,
+            time_limit_sec=candidate_limit,
+            stage1_time_limit_sec=candidate_limit,
+            stage2_time_limit_sec=None,
+            phase="phase2_assignment_only",
+            requested_phase="phase2_assignment_only",
+            resolved_phase="phase2_assignment_only",
+            executed_phase="phase2_assignment_only",
+            fixed_assignment=None,
+        )
+        print(
+            "[3/5] Generating a weather-specific Stage 1 primal warm start ",
+            f"with {candidate_successors} successors per trip",
+            flush=True,
+        )
+        candidate_started = time.perf_counter()
+        candidate_result = OptimizationEngine().solve(
+            candidate_problem,
+            candidate_config,
+        )
+        candidate_elapsed = time.perf_counter() - candidate_started
+        candidate_solver_metadata = dict(candidate_result.solver_metadata or {})
+        candidate_stage1_has_incumbent = bool(
+            candidate_solver_metadata.get("stage1_has_feasible_incumbent")
+            or candidate_solver_metadata.get("has_feasible_incumbent")
+        )
+        expected_trip_ids = {str(trip.trip_id) for trip in candidate_problem.trips}
+        candidate_trip_ids = {
+            str(trip_id) for trip_id in candidate_result.plan.served_trip_ids
+        }
+        candidate_complete = (
+            candidate_stage1_has_incumbent
+            and candidate_trip_ids == expected_trip_ids
+            and not candidate_result.plan.unserved_trip_ids
+        )
+        candidate_audit = {
+            "enabled": True,
+            "accepted_as_final_stage1_warm_start": candidate_complete,
+            "time_limit_sec": candidate_limit,
+            "milp_max_successors_per_trip": candidate_successors,
+            "stage1_time_indexed_soc_relaxation_enabled": False,
+            "elapsed_seconds": candidate_elapsed,
+            "solver_status": candidate_result.solver_status,
+            "stage1_has_feasible_incumbent": candidate_stage1_has_incumbent,
+            "stage1_solver_status": candidate_solver_metadata.get(
+                "stage1_solver_status"
+            ),
+            "stage1_objective": _finite(
+                candidate_solver_metadata.get("stage1_objective")
+            ),
+            "stage1_best_bound": _finite(
+                candidate_solver_metadata.get("stage1_best_bound")
+            ),
+            "stage1_mip_gap_percent": _mip_gap_percent(
+                candidate_solver_metadata.get("stage1_mip_gap_ratio")
+            ),
+            "trip_count_served": len(candidate_trip_ids),
+            **_assignment_mix(candidate_problem, candidate_result),
+            "semantics": (
+                "restricted_arc_relaxed_soc_primal_heuristic_only_final_stage1_"
+                "uses_full_network_and_time_indexed_soc_relaxation"
+            ),
+        }
+        if candidate_complete:
+            candidate_plan = replace(
+                candidate_result.plan,
+                metadata={
+                    **dict(candidate_result.plan.metadata or {}),
+                    "source": "stage1_restricted_candidate_warm_start",
+                    "candidate_milp_max_successors_per_trip": candidate_successors,
+                },
+            )
+            config = replace(config, fixed_assignment=candidate_plan)
+        _write_json(
+            output_dir / "stage1_candidate_warm_start.json",
+            candidate_audit,
+        )
+    fast_assignment_audit: dict[str, Any] = {
+        "strategy": stage1_strategy,
+        "enabled": stage1_strategy == "fast_fixed_path",
+    }
+    if stage1_strategy == "fast_fixed_path":
+        print(
+            "[4/5] Evaluating cost-aware fixed-path assignments with exact charging/SOC validation",
+            flush=True,
+        )
+        try:
+            result, fast_assignment_audit = _solve_fast_fixed_path_candidates(
+                problem,
+                config,
+                total_time_limit_sec=fast_assignment_time_limit_sec,
+                per_case_time_limit_sec=fast_stage2_case_time_limit_sec,
+            )
+        except FastFixedPathSearchError as exc:
+            _write_json(output_dir / "fast_assignment_audit.json", exc.audit)
+            raise
+        elapsed = float(fast_assignment_audit["elapsed_seconds"])
+        _write_json(output_dir / "fast_assignment_audit.json", fast_assignment_audit)
+    else:
+        print("[4/5] Solving full-network Phase 3 (no fallback, no repair)", flush=True)
+        started = time.perf_counter()
+        result = OptimizationEngine().solve(problem, config)
+        elapsed = time.perf_counter() - started
     metadata = dict(result.solver_metadata or {})
     breakdown = dict(result.cost_breakdown or {})
     flows = {
@@ -707,6 +1334,30 @@ def run(args: argparse.Namespace) -> int:
     assignment_mix = _assignment_mix(problem, result)
     summary = {
         **input_audit,
+        "stage1_candidate_warm_start": candidate_audit,
+        "fast_assignment_audit": _compact_fast_assignment_audit(
+            fast_assignment_audit
+        ),
+        "assignment_solution_method": metadata.get("assignment_solution_method"),
+        "assignment_global_optimality": metadata.get(
+            "assignment_global_optimality"
+        ),
+        "stage1_exact_optimality_certified": bool(
+            metadata.get("stage1_exact_optimality_certified", False)
+        ),
+        "assignment_global_optimality_scope": metadata.get(
+            "assignment_global_optimality_scope"
+        ),
+        "assignment_certified_mip_gap_ratio": _finite(
+            metadata.get("assignment_certified_mip_gap_ratio")
+        ),
+        "full_network_global_optimality": metadata.get(
+            "full_network_global_optimality"
+        ),
+        "charging_solution_method": metadata.get("charging_solution_method"),
+        "charging_global_optimality_for_fixed_assignment": metadata.get(
+            "charging_global_optimality_for_fixed_assignment"
+        ),
         "solver_status": str(result.solver_status or ""),
         "feasible": bool(result.feasible),
         "elapsed_seconds": elapsed,
@@ -717,9 +1368,27 @@ def run(args: argparse.Namespace) -> int:
         "max_fragments_observed": int(result.plan.max_fragments_observed()),
         "stage1_solver_status": metadata.get("stage1_solver_status"),
         "stage2_solver_status": metadata.get("stage2_solver_status"),
+        "stage2_exact_optimality_certified": bool(
+            metadata.get("stage2_exact_optimality_certified", False)
+        ),
         "stage1_objective": _finite(metadata.get("stage1_objective")),
         "stage2_objective": _finite(metadata.get("stage2_objective")),
         "stage1_best_bound": _finite(metadata.get("stage1_best_bound")),
+        "stage1_solver_best_bound": _finite(
+            metadata.get("stage1_solver_best_bound")
+        ),
+        "stage1_analytical_objective_lower_bound": _finite(
+            metadata.get("stage1_analytical_objective_lower_bound")
+        ),
+        "stage1_analytical_objective_lower_bound_semantics": metadata.get(
+            "stage1_analytical_objective_lower_bound_semantics"
+        ),
+        "stage1_certified_gap_stop_threshold": _finite(
+            metadata.get("stage1_certified_gap_stop_threshold")
+        ),
+        "stage1_certified_gap_stop_triggered": bool(
+            metadata.get("stage1_certified_gap_stop_triggered", False)
+        ),
         "stage2_best_bound": _finite(metadata.get("stage2_best_bound")),
         "stage1_mip_gap_ratio": _finite(metadata.get("stage1_mip_gap_ratio")),
         "stage2_mip_gap_ratio": _finite(metadata.get("stage2_mip_gap_ratio")),
@@ -730,6 +1399,18 @@ def run(args: argparse.Namespace) -> int:
             metadata.get("stage2_mip_gap_ratio")
         ),
         "stage1_runtime_seconds": _finite(metadata.get("stage1_runtime_seconds")),
+        "stage1_pre_optimize_seconds": _finite(
+            metadata.get("stage1_pre_optimize_seconds")
+        ),
+        "stage1_model_variable_count": metadata.get(
+            "stage1_model_variable_count"
+        ),
+        "stage1_model_constraint_count": metadata.get(
+            "stage1_model_constraint_count"
+        ),
+        "stage1_search_telemetry": dict(
+            metadata.get("stage1_search_telemetry") or {}
+        ),
         "stage2_runtime_seconds": _finite(metadata.get("stage2_runtime_seconds")),
         "stage1_time_limit_sec_effective": metadata.get(
             "stage1_time_limit_sec_effective"
@@ -740,11 +1421,41 @@ def run(args: argparse.Namespace) -> int:
         "stage1_energy_envelope_constraint_count": metadata.get(
             "stage1_energy_envelope_constraint_count"
         ),
+        "stage1_vehicle_count_lower_bound": metadata.get(
+            "stage1_vehicle_count_lower_bound"
+        ),
+        "stage1_vehicle_count_lower_bound_constraint_count": metadata.get(
+            "stage1_vehicle_count_lower_bound_constraint_count"
+        ),
+        "stage1_vehicle_count_lower_bound_semantics": metadata.get(
+            "stage1_vehicle_count_lower_bound_semantics"
+        ),
+        "stage1_redundant_arc_link_constraints_omitted": metadata.get(
+            "stage1_redundant_arc_link_constraints_omitted"
+        ),
+        "fragment_pairwise_depot_reset_constraint_count": metadata.get(
+            "fragment_pairwise_depot_reset_constraint_count"
+        ),
+        "fragment_temporal_occupancy_constraint_count": metadata.get(
+            "fragment_temporal_occupancy_constraint_count"
+        ),
+        "overlap_clique_constraint_count": metadata.get(
+            "overlap_clique_constraint_count"
+        ),
+        "stage1_single_path_redundancy_elimination_applied": bool(
+            metadata.get(
+                "stage1_single_path_redundancy_elimination_applied",
+                False,
+            )
+        ),
         "stage1_energy_envelope_semantics": metadata.get(
             "stage1_energy_envelope_semantics"
         ),
         "stage1_time_indexed_soc_relaxation_constraint_count": metadata.get(
             "stage1_time_indexed_soc_relaxation_constraint_count"
+        ),
+        "stage1_time_indexed_soc_relaxation_enabled": metadata.get(
+            "stage1_time_indexed_soc_relaxation_enabled"
         ),
         "stage1_time_indexed_soc_relaxation_semantics": metadata.get(
             "stage1_time_indexed_soc_relaxation_semantics"
@@ -757,6 +1468,12 @@ def run(args: argparse.Namespace) -> int:
         ),
         "stage1_energy_cost_proxy_result": dict(
             metadata.get("stage1_energy_cost_proxy_result") or {}
+        ),
+        "stage1_ice_boundary_fuel_cost_terms_enabled": bool(
+            metadata.get("stage1_ice_boundary_fuel_cost_terms_enabled", False)
+        ),
+        "stage1_ice_boundary_fuel_cost_semantics": metadata.get(
+            "stage1_ice_boundary_fuel_cost_semantics"
         ),
         "research_run_accepted": bool(metadata.get("research_run_accepted", False)),
         "research_feasibility_eligible": bool(
@@ -801,7 +1518,9 @@ def run(args: argparse.Namespace) -> int:
             metadata.get("bev_terminal_soc_balance_satisfied", False)
         ),
         "cost_comparison_scope": (
-            "feasible_schedule_accounting_not_global_total_cost_optimum"
+            "validated_fixed_path_accounting_not_global_assignment_optimum"
+            if result.feasible and stage1_strategy == "fast_fixed_path"
+            else "feasible_schedule_accounting_not_global_total_cost_optimum"
             if result.feasible
             else "not_available_for_infeasible_result"
         ),
@@ -811,7 +1530,7 @@ def run(args: argparse.Namespace) -> int:
         "warnings": list(result.warnings or ()),
         "infeasibility_reasons": list(result.infeasibility_reasons or ()),
     }
-    print("[4/4] Writing reproducibility artifacts", flush=True)
+    print("[5/5] Writing reproducibility artifacts", flush=True)
     _write_json(output_dir / "solver_result.json", ResultSerializer.serialize_result(result))
     _write_json(output_dir / "summary.json", summary)
     if result.feasible:
@@ -831,6 +1550,29 @@ def main() -> int:
     parser.add_argument("--service-id", default="WEEKDAY")
     parser.add_argument("--time-limit-sec", type=int, default=1500)
     parser.add_argument(
+        "--stage1-strategy",
+        choices=("full_network_milp", "fast_fixed_path"),
+        default=DEFAULT_STAGE1_STRATEGY,
+        help=(
+            "full_network_milp preserves the formal Stage 1 solve. "
+            "fast_fixed_path keeps the canonical timetable path cover, uses a "
+            "cost-aware diagnostic heuristic vehicle mapping, and validates "
+            "charging/SOC exactly; it is not a formal assignment optimum."
+        ),
+    )
+    parser.add_argument(
+        "--fast-assignment-time-limit-sec",
+        type=int,
+        default=30,
+        help="Total wall-clock budget for fast fixed-path mix candidates.",
+    )
+    parser.add_argument(
+        "--fast-stage2-case-time-limit-sec",
+        type=int,
+        default=5,
+        help="Exact fixed-assignment charging/SOC MILP budget per mix candidate.",
+    )
+    parser.add_argument(
         "--stage1-time-limit-sec",
         type=int,
         default=None,
@@ -842,8 +1584,40 @@ def main() -> int:
         default=None,
         help="Optional fixed-assignment charging-stage limit.",
     )
-    parser.add_argument("--mip-gap", type=float, default=0.1)
+    parser.add_argument(
+        "--stage1-candidate-time-limit-sec",
+        type=int,
+        default=0,
+        help=(
+            "Optional time for a restricted-arc weather-specific primal heuristic. "
+            "The formal default is 0 (disabled): measured full-network runs were "
+            "faster and found a better sunny incumbent without it. Enabling this "
+            "never restricts the final Stage 1 candidate network."
+        ),
+    )
+    parser.add_argument(
+        "--stage1-candidate-successors",
+        type=int,
+        default=8,
+        help="Successor cap used only while generating the primal warm start.",
+    )
+    parser.add_argument(
+        "--mip-gap",
+        type=float,
+        default=DEFAULT_FORMAL_MIP_GAP,
+        help=(
+            "Certified relative MIP-gap target. The formal default is 0.05; "
+            "use an explicit value when reproducing older 0.10 runs."
+        ),
+    )
     parser.add_argument("--random-seed", type=int, default=42)
+    parser.add_argument(
+        "--time-step-min",
+        type=int,
+        choices=(15,),
+        default=15,
+        help="Formal weather comparison is fixed to 15-minute slots.",
+    )
     parser.add_argument(
         "--bev-terminal-soc-policy",
         choices=(

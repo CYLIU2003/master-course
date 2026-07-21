@@ -611,6 +611,18 @@ class OptimizationEngine:
             result = self._strict_precheck_infeasible_result(problem, config, precheck)
             return self._finalize_result(problem, result, config)
 
+        # The strict path-cover precheck is already paid for at this point.
+        # Preserve its valid relaxed lower bound so the MILP can add an
+        # explicit aggregate vehicle-count cut instead of rediscovering the
+        # same bound through a very weak disaggregated LP relaxation.
+        problem = replace(
+            problem,
+            metadata={
+                **dict(problem.metadata or {}),
+                "strict_coverage_precheck": precheck.to_metadata(),
+            },
+        )
+
         if config.mode == OptimizationMode.MILP:
             result = self._milp.solve(problem, config)
         elif config.mode == OptimizationMode.ALNS:
@@ -898,13 +910,18 @@ class OptimizationEngine:
             "supports_assignment_milp",
             "binding_constraint_report",
             "fragment_temporal_occupancy_constraint_count",
+            "fragment_pairwise_depot_reset_constraint_count",
+            "overlap_clique_constraint_count",
+            "stage1_single_path_redundancy_elimination_applied",
             "stage1_energy_envelope_constraint_count",
             "stage1_energy_envelope_semantics",
             "stage1_time_indexed_soc_relaxation_constraint_count",
+            "stage1_time_indexed_soc_relaxation_enabled",
             "stage1_time_indexed_soc_relaxation_semantics",
             "stage1_energy_cost_proxy_configuration",
             "stage1_energy_cost_proxy_weather_input",
             "stage1_energy_cost_proxy_result",
+            "stage1_redundant_arc_link_constraints_omitted",
         ):
             if key in plan_metadata:
                 solver_metadata[key] = plan_metadata[key]
@@ -1280,11 +1297,18 @@ class OptimizationEngine:
                         "feasible_incumbent_research_acceptance_failed"
                     )
             elif not bool(solver_metadata["research_cost_kpi_eligible"]):
-                warnings.append(
-                    "Research run accepted for feasibility/constraint analysis; "
-                    "its cost KPI is not comparable because terminal energy "
-                    "inventory or realized-flow accounting is incomplete."
-                )
+                if charging_only and all(cost_acceptance_checks.values()):
+                    warnings.append(
+                        "Research fixed-assignment charging run accepted; its "
+                        "accounting trace is balanced, but global assignment "
+                        "and total-cost optimality are not established by Phase 1."
+                    )
+                else:
+                    warnings.append(
+                        "Research run accepted for feasibility/constraint analysis; "
+                        "its cost KPI is not comparable because terminal energy "
+                        "inventory or realized-flow accounting is incomplete."
+                    )
             elif not bool(research_cost_optimality_eligible):
                 warnings.append(
                     "Research accounting cost is valid for this feasible "

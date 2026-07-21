@@ -8,10 +8,19 @@ Phase 1: Multi-day simulation basic validation
 
 """
 
-import requests
 import json
 import time
 from pprint import pprint
+
+# This is a manual, state-changing BFF smoke script: it creates a scenario and
+# launches long-running optimization jobs against localhost.  It is not an
+# isolated pytest test and must never run during the unit-test suite.
+__test__ = False
+
+try:
+    import requests
+except ModuleNotFoundError:  # Keep pytest collection independent of this optional client.
+    requests = None
 
 BASE_URL = "http://localhost:8000/api"
 
@@ -39,6 +48,10 @@ def poll_job(job_id, timeout=600, poll_interval=2):
 
 def test_multiday_scenario():
     """Test multi-day scenario end-to-end."""
+    if requests is None:
+        raise RuntimeError(
+            "The manual multi-day smoke script requires the optional 'requests' package."
+        )
     
     # Step 1: Scenarios
     print("\n=== STEP 1: Fetching base scenarios ===")

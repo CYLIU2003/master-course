@@ -54,6 +54,16 @@ def test_trip_fingerprint_changes_when_model_input_changes() -> None:
     assert canonical_trip_input_hash(problem) != canonical_trip_input_hash(changed)
 
 
+def test_trip_fingerprint_ignores_separately_tracked_service_date_label() -> None:
+    problem = _problem()
+    changed = replace(
+        problem,
+        trips=(replace(problem.trips[0], service_id="2025-08-10"),),
+    )
+
+    assert canonical_trip_input_hash(problem) == canonical_trip_input_hash(changed)
+
+
 def test_vehicle_fingerprint_changes_when_initial_inventory_changes() -> None:
     problem = _problem()
     changed = replace(

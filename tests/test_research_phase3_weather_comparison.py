@@ -90,8 +90,24 @@ def _summary(
         },
         "trip_count": 264,
         "fleet": {"BEV": 35, "ICE": 25},
-        "timestep_min": 60,
-        "price_slot_count": 24,
+        "timestep_min": 15,
+        "price_slot_count": 96,
+        "planning_horizon_hours": 24.0,
+        "energy_horizon_duration_min": 1440,
+        "milp_max_successors_per_trip": 0,
+        "successor_pruning_enabled": False,
+        "research_discretization": {
+            "timestep_min": 15,
+            "milp_max_successors_per_trip": 0,
+            "successor_pruning_enabled": False,
+        },
+        "trip_distance_audit": {
+            "trip_count": 264,
+            "nonpositive_trip_count": 0,
+            "prepared_distance_source_kind_counts": {
+                "trip.haversine_distance": 264
+            },
+        },
         "clock_hour_grid_price_yen_per_kwh": {"8": 18.0, "16": 22.0},
         "demand_charge_monthly_yen_per_kw": 1200.0,
         "demand_charge_horizon_yen_per_kw": 40.0,
@@ -191,7 +207,9 @@ def _summary(
         "stage2_runtime_seconds": 0.1,
         "research_run_accepted": True,
         "research_feasibility_eligible": True,
-        "research_cost_kpi_eligible": False,
+        "research_cost_kpi_eligible": True,
+        "research_accounting_cost_eligible": True,
+        "research_cost_optimality_eligible": False,
         "solver_objective_matches_accounting_total": False,
         "accounting_total_cost_jpy": total_cost,
         "cost_comparison_scope": (
@@ -307,6 +325,30 @@ def test_rejects_unaccepted_result_before_comparing_costs() -> None:
     with pytest.raises(
         ComparisonContractError,
         match="rain.research_run_accepted must be true",
+    ):
+        build_weather_comparison(sunny, rain)
+
+
+def test_rejects_accounting_cost_without_accounting_eligibility() -> None:
+    sunny, rain = _valid_pair()
+    rain = deepcopy(rain)
+    rain["research_accounting_cost_eligible"] = False
+
+    with pytest.raises(
+        ComparisonContractError,
+        match="rain.research_accounting_cost_eligible must be true",
+    ):
+        build_weather_comparison(sunny, rain)
+
+
+def test_rejects_two_stage_result_claiming_cost_optimality() -> None:
+    sunny, rain = _valid_pair()
+    rain = deepcopy(rain)
+    rain["research_cost_optimality_eligible"] = True
+
+    with pytest.raises(
+        ComparisonContractError,
+        match="rain.research_cost_optimality_eligible must be false",
     ):
         build_weather_comparison(sunny, rain)
 

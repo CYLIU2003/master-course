@@ -111,3 +111,49 @@ def test_stage1_warm_start_rejects_trip_assigned_to_two_vehicles() -> None:
         f"baseline_duplicate_assignment:{trip.trip_id}:veh-available:veh-second"
     )
     assert all(variable.Start is None for variable in y.values())
+
+
+def test_stage1_warm_start_prefers_explicit_candidate_plan() -> None:
+    problem = _problem()
+    trip = problem.trips[0]
+    candidate = AssignmentPlan(
+        duties=(
+            VehicleDuty(
+                duty_id="candidate-duty",
+                vehicle_type="ICE",
+                legs=(DutyLeg(trip=trip),),
+            ),
+        ),
+        served_trip_ids=(trip.trip_id,),
+        metadata={
+            "source": "stage1_restricted_candidate_warm_start",
+            "duty_vehicle_map": {"candidate-duty": "veh-available"},
+        },
+    )
+    y = {("veh-available", trip.trip_id): _variable()}
+    start_arc = {("veh-available", trip.trip_id): _variable()}
+    end_arc = {("veh-available", trip.trip_id): _variable()}
+    used_vehicle = {"veh-available": _variable()}
+    used_vehicle_day = {("veh-available", 0): _variable()}
+
+    applied, source, reason = GurobiMILPAdapter()._apply_stage1_assignment_warm_start(
+        problem,
+        enabled=True,
+        preferred_plan=candidate,
+        y=y,
+        x={},
+        start_arc=start_arc,
+        end_arc=end_arc,
+        used_vehicle=used_vehicle,
+        used_vehicle_day=used_vehicle_day,
+        trip_day_index_by_trip_id={trip.trip_id: 0},
+    )
+
+    assert applied is True
+    assert source == "stage1_restricted_candidate_warm_start"
+    assert reason == ""
+    assert y[("veh-available", trip.trip_id)].Start == 1.0
+    assert start_arc[("veh-available", trip.trip_id)].Start == 1.0
+    assert end_arc[("veh-available", trip.trip_id)].Start == 1.0
+    assert used_vehicle["veh-available"].Start == 1.0
+    assert used_vehicle_day[("veh-available", 0)].Start == 1.0

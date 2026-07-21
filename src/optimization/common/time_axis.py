@@ -3,7 +3,8 @@ from __future__ import annotations
 from typing import Any, Tuple
 
 
-ALLOWED_TIMESTEP_MIN = {15, 30, 60}
+ALLOWED_TIMESTEP_MIN = {5, 15, 30, 60}
+_TIMESTEP_ERROR = "timestep_min must be 5, 15, 30, or 60 minutes"
 
 
 def normalize_timestep_min(raw: Any, *, default: int = 30) -> int:
@@ -12,6 +13,10 @@ def normalize_timestep_min(raw: Any, *, default: int = 30) -> int:
     elif isinstance(raw, str):
         text = raw.strip().lower()
         aliases = {
+            "5": 5,
+            "5m": 5,
+            "5min": 5,
+            "pt5m": 5,
             "15": 15,
             "15m": 15,
             "15min": 15,
@@ -32,15 +37,15 @@ def normalize_timestep_min(raw: Any, *, default: int = 30) -> int:
             try:
                 value = int(float(text))
             except ValueError as exc:
-                raise ValueError(f"timestep_min must be 15, 30, or 60 minutes, got {raw!r}") from exc
+                raise ValueError(f"{_TIMESTEP_ERROR}, got {raw!r}") from exc
     else:
         try:
             value = int(raw)
         except (TypeError, ValueError) as exc:
-            raise ValueError(f"timestep_min must be 15, 30, or 60 minutes, got {raw!r}") from exc
+            raise ValueError(f"{_TIMESTEP_ERROR}, got {raw!r}") from exc
 
     if value not in ALLOWED_TIMESTEP_MIN:
-        raise ValueError(f"timestep_min must be 15, 30, or 60 minutes, got {value!r}")
+        raise ValueError(f"{_TIMESTEP_ERROR}, got {value!r}")
     return value
 
 

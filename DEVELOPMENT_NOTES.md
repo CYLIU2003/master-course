@@ -1,8 +1,364 @@
 # Development Notes
 
+## 2026-07-21 Stage 1 探索時間差の実測分解（晴天・雨天、gap 2.5%）
+
+### 結論
+
+- 現在の実行経路は `scripts/run_research_phase3_frontend_weather.py` → `OptimizationEngine.solve()` → `MILPOptimizer.solve()` → `GurobiMILPAdapter._solve_thesis_two_stage()` → `stage1.optimize(callback)` である。今回の変更は Gurobi callback による読取り専用テレメトリ追加だけで、目的関数、変数、制約、solver parameter は変更していない。
+- 晴天と雨天の時間差は「実行可能解の発見速度」ではない。最初の incumbent は晴天 0.854 秒、雨天 0.893 秒で、両方とも約 0.9 秒だった。
+- 雨天は root node の下界 `697,846.853334円` が 60.966 秒で得られ、最初の incumbent `715,275.268466円` との gap が `2.436603%` となり、設定した `2.5%` をその場で満たした。
+- 晴天は root node の下界 `689,291.366319円` が 87.962 秒で得られたが、最初の incumbent `707,349.173370円` との gap は `2.552884%` で、目標をわずか `0.052884 percentage point` 超えた。2.5%を満たす incumbent 閾値 `706,965.503917円` より `383.669452円` 高かったため終了できず、その後 214.003 秒に incumbent を `703,718.306415円` へ改善して終了した。
+- したがって、晴天の長時間化は二つに分解できる。(1) root relaxation / bound 構築が雨天より約27秒遅い、(2) 最初の incumbent が gap 閾値を僅差で外し、root node 内の追加探索に約126秒必要だった。最終 node count は両ケースとも1で、深い分枝探索ではない。
+- 最終反復数は晴天が simplex `301,789`、barrier `41`、雨天が simplex `0`、barrier `24` だった。晴天では weather/PV により Stage 1 energy proxy の目的係数と近接代替解の構造が変わり、root node 内処理が重くなったことが直接観測された。ただし、係数構造から反復数増加への因果機構は現時点では推論であり、複数 seed・単独実行での再現確認が必要である。
+
+### 成果物と再現条件
+
+| ケース | 原記録 | Stage 1 runtime | first incumbent | target gap到達 | final gap | simplex / barrier |
+|---|---|---:|---:|---:|---:|---:|
+| 晴天 | `output/research_phase3_sunny_gap2p5_telemetry_20260721/solver_result.json` の `metadata.stage1_search_telemetry` | 214.246秒 | 0.854秒 | 214.003秒 | 2.050102% | 301,789 / 41 |
+| 雨天 | `output/research_phase3_rain_gap2p5_telemetry_20260721/solver_result.json` の `metadata.stage1_search_telemetry` | 61.186秒 | 0.893秒 | 60.966秒 | 2.436603% | 0 / 24 |
+
+- 両ケースは全候補ネットワーク、15分間隔、seed 42、Stage 1上限240秒、Stage 2上限60秒、candidate warm start無効、MIP gap 2.5%で実行した。並列実行のため壁時計の絶対値は単独実行の性能ベンチマークには使わず、Gurobi内部の同一run内イベント時刻を原因分解に使う。
+- 両ケースとも264/264便、hard validation全通過、candidate restrictionなし、fallbackなし、postsolve repairなし。晴天はBEV/ICE担当便78/186、雨天は46/218で、天候による担当比率差も維持された。
+- 道路距離、`timetable_rows`、`operator_id`、および `arrival + turnaround + deadhead <= next departure` は変更していない。
+
+### 実装で塞いだ穴
+
+- `src/optimization/milp/solver_adapter.py` に `_Stage1SearchTelemetry` を追加し、5秒間隔の MIP progress、全 incumbent notification（保存上限200件）、first incumbent、requested gap到達時刻、最終 node/solution/iteration count、callback error を保存するようにした。
+- 初回の本番再実行では、テレメトリは最終 plan metadata と `solver_result.json` の `metadata` に完全保存された一方、`MILPOptimizer` の明示的な metadata 選別により簡易 `summary.json` へ伝播しなかった。この成果物伝播バグを `src/optimization/milp/engine.py` で修正し、既存2 runの `summary.json` も同一runの原記録で補完した。数理結果への影響はない。
+- `tests/test_stage1_search_telemetry.py` にsampling、Gurobi infinity sentinel、gap到達時刻、保存上限、最終集計の回帰テストを追加した。`tests/test_milp_fragment_pairwise_reset_cut.py` では実Gurobi callbackのエラーなしと plan → solver metadata伝播を検証する。
+
+### 残る穴と次の順序
+
+1. 今回の時間値は同一seed・並列実行なので、性能の一般化には晴天/雨天それぞれを単独で複数seed・複数反復し、first incumbent、root bound、target gap到達、反復数の分布を比較する必要がある。
+2. 晴天の初期 incumbent は終了閾値から僅か383.67円だけ悪い。既存candidate warm startは実測で遅く、かつ悪い解だったため既定で再有効化しない。数式を変えずに改善するなら、Gurobiの探索設定（例: primal emphasis）を対照実験として比較し、目的値・gap・hard validation・担当比率が退行しない場合だけ採用を検討する。
+3. `assignment_global_optimality=false` はバグではない。今回の2.05%/2.44%は設定gap以内の証明であって gap 0 の厳密大域最適性ではない。これを `true` に見せる変更は禁止する。
+
+
+## 2026-07-21 Stage 1下界強化・統合MILP照合・候補生成退行の解消（最終監査）
+
+### 結論
+
+- 正式なweather runnerの実行経路は `run_research_phase3_frontend_weather.py` → `OptimizationEngine.solve()` → `GurobiMILPAdapter._solve_thesis_two_stage()` である。最終Stage 1は全候補ネットワークを使い、時刻表パスを固定していない。`timetable_rows`、`operator_id`、および `arrival + turnaround + deadhead <= next departure` は変更していない。
+- 統合MILPのICE経路で、始業・終業回送燃料の目的関数・燃料残量・事後会計が不一致だった。MILPへ始業/終業回送燃料・CO2・燃料状態遷移を追加し、事後会計へ欠けていた終業回送燃料・CO2・終端燃料を追加した。さらにStage 1目的にも始業/終業回送燃料・CO2を追加し、有効な下界を強化した。
+- ICE固定10便の厳密監査 `output/small_integrated_rain_ice_only_oracle_20260721/audit.json` では、二段階Stage 1、統合MILP、事後会計がすべて `44,293.380321円`、gap 0、会計残差0円、未配車0、hard validation全通過となった。これによりICE経路を直接通した一致を確認した。
+- 制限付きStage 1候補生成は晴天で126秒を消費したうえ、BEV 14台/46便の劣るincumbentへ探索を誘導した。候補生成なしではBEV 19台/78便、ICE 13台/186便、gap 2.0501%、総runner時間235.77秒となり、候補ありの実測約350.5秒より約103秒短く、目的も改善した。雨天でも候補生成なしは同じ解を維持し、約126秒を削減した。この比較に基づき `--stage1-candidate-time-limit-sec` の既定値を240秒から0秒（無効）へ変更した。明示的opt-inは残し、opt-inしても最終Stage 1ネットワークは制限しない。
+
+### フル264便の最終結果（seed 42、15分、候補生成なし、MIP gap目標2.5%）
+
+| 天候 | 成果物 | Stage 1目的 | Stage 1下界 | 認証gap | runner時間 | 使用車両 | BEV/ICE担当便 | 会計総費用 |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| 晴 | `output/research_phase3_sunny_gap2p5_no_candidate_20260721/summary.json` | 703,718.31円 | 689,291.37円 | 2.0501% | 235.77秒 | 32台 | 78 / 186 | 705,429.48円 |
+| 雨 | `output/research_phase3_rain_gap2p5_no_candidate_20260721/summary.json` | 715,275.27円 | 697,846.85円 | 2.4366% | 80.13秒 | 32台 | 46 / 218 | 716,289.31円 |
+
+- 両ケースとも264/264便、未配車0、重複0、時間重複0、不可能接続0、EV/BESS SOC違反0、充電器同時使用違反0、契約電力違反0で、research run acceptanceと全hard validationを通過した。
+- 晴雨でBEV担当が78便対46便となり、以前観測されていた天候別のEV/ICE割合差が復元した。これは候補生成の恣意的固定ではなく、同一の全候補ネットワーク・seed・時間離散化・gap目標で得た結果である。
+- `assignment_global_optimality=false` は正しい。2.05%/2.44%の認証gapが残るためStage 1大域最適を証明しておらず、二段階法は統合総費用の大域最適も主張しない。`false` を表示上だけ `true` にする修正は禁止する。
+- 道路距離への置換はユーザー指示により今回の範囲外とした。trip距離入力は既存stop-sequence haversine、deadhead燃料は既存のdeadhead時間×設定速度を維持している。
+
+### 小規模厳密照合・感度分析
+
+- 混成10便の厳密照合は、晴 `output/small_integrated_sunny_formal_oracle_20260721/audit.json`、雨 `output/small_integrated_rain_formal_oracle_20260721/audit.json` で、二段階法と統合MILPの費用・台数・車種別担当便が一致した。晴40,000円、雨41,966.821777円、統合MILP gap 0、会計残差0円である。
+- 5分感度は `output/small_integrated_sunny_5min_sensitivity_20260721/audit.json` と `output/small_integrated_rain_5min_sensitivity_20260721/audit.json`。晴は15分との差0円、雨は5分が5.995435円（0.0143%）安く、両方ともBEV 2台/10便で車種構成は不変だった。
+- seed×時間上限（17/42/73 × 5/15/60秒）は晴雨合計18ケースすべて未配車0。晴の費用範囲は40,000～40,000円、雨は41,966.821777～41,966.821777円で、seed・時間によるぶれは0円だった。
+- PV×BEV電費（PV 0.8/1.0/1.2、電費0.9/1.0/1.1）は晴雨合計18ケースすべて未配車0。晴は全ケース40,000円、雨は41,128.690526～42,804.953027円で、全ケースBEV 2台/10便を維持した。成果物は `output/small_integrated_sunny_full_sensitivity_20260721/audit.json` と `output/small_integrated_rain_full_sensitivity_20260721/audit.json`。
+- これらは「一日の端を含む決定論的10便subset」の検証であり、264便全体の統合MILP大域最適性へ一般化しない。
+
+### 実装・回帰検証
+
+- `solver_adapter.py`: 統合MILPのICE始業/終業回送燃料・CO2、燃料出発準備、slot遷移、終端reserve、車庫外給油禁止を追加。Stage 1目的にも同じICE境界費用を追加した。
+- `evaluator.py`: ICE終業回送を燃料費イベント、終端燃料、CO2へ追加し、MILPと会計の境界を一致させた。
+- `audit_small_integrated_weather_milp.py`: 15分対5分、seed/時間、PV/電費の要約、fail-closed exact gate、監査専用BEV/ICE固定を追加した。
+- `test_multiday_phase1.py` はlocalhostへシナリオ作成・長時間job起動を行う手動スモークスクリプトであり、単体pytestではない。`__test__ = False` を明示し、任意依存 `requests` がなくても安全に収集できるようにした。手動実行時の機能は維持した。
+- `python -m compileall -q src scripts tests bff test_multiday_phase1.py` 成功。ルート全体の `python -m pytest -q` は `790 passed`。
+
+### 残る主張上の限界
+
+- `assignment_global_optimality=false` と `full_network_global_optimality=false` は未解決バグではなく、現在の証明範囲を正直に示す研究上の制約である。0%証明を求める場合は数分ではなく追加計算資源が必要であり、今回の「時間を掛けすぎない」という要件とは別実験として扱う。
+- 小規模統合MILPは10便subsetでのみ厳密oracleとして成立する。264便の統合MILP照合、他subset、実道路距離は今回の結論に含めない。
+
+## 2026-07-21 Stage 1 gap縮小と小規模統合MILP照合
+
+### 結論
+
+- 正式weather runnerの既定MIP gapを`0.10`から`0.05`へ変更した。晴天264便の同一入力・seed 42では、Stage 1の目的値`703,389.366847円`、BEV/ICE使用台数`14/18`、BEV/ICE担当便数`46/218`を変えず、認証gapを`9.011988%`から`4.827341%`へ縮小した。
+- 上記のStage 1実行時間は`23.702秒`から`38.511秒`へ増加した。gapは縮小したが0ではないため、`assignment_global_optimality=false`および`full_network_global_optimality=false`を維持する。過去の`0.10`設定を再現する場合は`--mip-gap 0.10`を明示する。
+- 晴天の10便day-spanning subset、各車種最大5台、15分刻み、seed 42、終端SOC=`return_to_initial`、会計費用項目だけを目的関数に含める条件で、小規模統合MILPを厳密に照合した。成果物は`output/small_integrated_sunny_formal_oracle_20260721/audit.json`である。
+- Phase 3二段階と統合MILPはともにBEV 2台で10/10便を担当し、会計費用はともに`40,000円`だった。統合MILPはraw objective=`40,000円`、accounting residual=`0円`、gap=`0`、全hard validation通過、終端エネルギー均衡済みで、`integrated_exact_oracle_eligible=true`となった。二段階と統合の費用差、車種別使用台数差、車種別担当便数差はいずれも0である。
+
+### verified call chainと修正した穴
+
+- 正式Stage 1: `run_research_phase3_frontend_weather.py` → `OptimizationEngine.solve()` → `GurobiMILPAdapter._solve_thesis_two_stage()` → full candidate network Stage 1 MILP。時刻表、`operator_id`、および`arrival + turnaround + deadhead <= next departure`は変更していない。
+- 小規模照合: `audit_small_integrated_weather_milp.py` → 同じ`ProblemBuilder`入力 → Phase 3二段階および`phase4_integrated`のGurobi経路。fallback、postsolve repair、未配車許容は使用していない。
+- 統合MILPに、Phase 3 Stage 2と同じ開始前の車庫充電窓、選択接続arcにより確認される運行間車庫滞在充電窓、出庫・接続回送中の充電禁止、出庫回送エネルギーのSOC遷移および出発時必要SOCを追加した。
+- 会計外の`opportunistic_topup_deficit_penalty`が共通cost-component契約に未登録で、監査設定で無効化しても正規化時に捨てられる問題を修正した。小規模費用オラクルではこの項を含む運用上のsoft preferenceを明示的に除外する。
+- 最小SOCだけの終端条件では初期電池在庫を一日で取り崩せて事後会計との残差が生じるため、小規模費用照合は代表日境界`return_to_initial`に固定した。これは照合条件の変更であり、本番weather scenarioを暗黙に書き換えるものではない。
+- 監査JSONに統合MILPの厳密性、gap、全便配車、hard validation、終端エネルギー均衡、objective-accounting一致をまとめたfail-closed gateと、二段階対統合の費用・台数・担当車種差を追加した。
+- `python -m compileall -q src scripts tests`と自動回帰`python -m pytest tests -q`を実行し、`786 passed`を確認した。リポジトリ直下の手動BFF試験`test_multiday_phase1.py`は、この仮想環境に`requests`がないため収集対象外とした。
+
+### 限界と次の穴
+
+- 小規模統合MILPとの一致は上記10便subsetに限る。264便全体の統合最適性、他subset、雨天、複数seedへの一般化は未証明である。
+- Stage 1の4.827341%は改善後の上界・下界差であり、厳密最適解ではない。次段階では同じfull networkを保ったまま下界またはincumbentをさらに改善し、複数seed・計算時間感度へ進む。
+- 今回はユーザー指示どおり道路距離を変更していない。距離入力・時刻表・運行事業者契約の比較可能性は維持した。
+- 旧`small_integrated_*`成果物には、会計外SOC top-up penalty、終端在庫評価、またはPhase 3と異なる充電可能窓が混在するものがある。正式な小規模オラクルとして使用するのは`small_integrated_sunny_formal_oracle_20260721/audit.json`のみとする。
+
+## 2026-07-21 最終全ネットワーク実行と総合評価
+
+### 実行条件（再現可能な正式成果物）
+
+- 晴天: `771d115b-75b0-49f7-a7f0-25f259a2cd21`、`2025-08-05`、成果物 `output/research_phase3_sunny_full_network_final_20260721`。
+- 雨天: `b23fd26c-1233-4c73-bb9e-bdb8b1584760`、`2025-08-10`、成果物 `output/research_phase3_rain_full_network_final_20260721`。
+- 両ケースとも `full_network_milp`、全678,600接続候補、15分刻み、seed 42、総時間上限1,500秒、Stage 1/2各750秒の設定で実行した。固定仕業・候補網の削減・fallback・postsolve repair は用いていない。
+- `summary.json` を標準JSONパーサで再読込し、供給便数、SOC、充電器、契約電力、最適性ラベルの一貫性を再監査した。
+
+### 結果
+
+| ケース | 供給便 | 使用車両 | EV/ICE供給便 | Stage 1 | Stage 2 | 会計費用 |
+|---|---:|---:|---:|---|---|---:|
+| 晴天 | 264/264 | 32 | 46 / 218 | objective limit、gap 9.012% | 厳密最適（gap 0） | 705,759.17円 |
+| 雨天 | 264/264 | 32 | 46 / 218 | solver optimal、gap 4.754% | 厳密最適（gap 0） | 714,699.31円 |
+
+- 晴天ではPV 614.709 kWh、grid import 0 kWh、雨天ではPV 101.114 kWh、grid import 429.814 kWh、peak grid 21.491 kW となった。雨天の費用差は 8,940.14円で、主に電力購入・需要料金・CO2料金の増分による。
+- 両ケースで未割当・重複・車両時刻重複・接続不可能・EV/BESS SOC違反・契約電力違反・充電器同時使用違反は全て0件。
+
+### 最適性主張の是正（P1を発見・修正）
+
+- Gurobiの生の `OPTIMAL` 表示だけでは、正のMIP gapが残る設定で「厳密な大域最適」とは主張できない。`stage1_exact_optimality_certified` は status が `optimal` かつ gap が 1e-8 以下の場合だけ true とし、`assignment_global_optimality` も同じ条件と全候補網条件を満たす場合だけ true とした。
+- Phase 3はStage 1の配車を固定してStage 2の充電を最適化する二段階構造であるため、統合総費用の大域最適性は常に false と明記する。今回の晴・雨の `assignment_global_optimality` と `full_network_global_optimality` はいずれも false である。
+- solver adapter → MILP engine → weather runner → `summary.json` の証明情報中継を追加し、全テスト `784 passed` を確認した。
+
+### 総合判断と残る穴
+
+- この一組は「全ネットワークで実行可能な配車・充電計画」としては有効である。一方、晴雨でEV/ICEの担当比率は同じ 46/218 であり、単一日・単一seedの比較から気象に応じた車種配分効果を主張してはならない。
+- 次の研究上の穴は、Stage 1の上界をさらに改善してgapを縮めること、単一小規模日における統合MILPとの照合、複数seed・時間上限・5分刻み・PV/電費不確実性の感度分析である。道路距離は現段階では stop-sequence haversine 由来であり、道路ネットワーク距離へ置換するまでは距離起因の精密な費用比較は限定的に解釈する。
+
+## 2026-07-21 正式Stage 1の等価な冗長制約削減と晴雨実測
+
+### 開発原則として銘記
+
+- 根拠未確認の固定化、近似、proxy、最適性主張を正式モデルへ昇格させない。変更前に実行経路と数理的意味を確認し、変更後に同一入力で比較測定と回帰検証を行う。効果がない変更や退行した変更は採用しない。
+- 今回は全264便、全接続候補、`timetable_rows`、`operator_id`、`arrival + turnaround + deadhead <= next departure` を一切変えず、同じMILPから論理的に含意される制約だけを除いた。
+
+### Verified call chainと原因
+
+- 正式runnerは `run_research_phase3_frontend_weather.py` → `OptimizationEngine.solve()` → `MILPOptimizer.solve()` → `GurobiMILPAdapter._solve_thesis_two_stage()` → 全候補 `enumerate_arc_pairs()` のStage 1 MILPを実行する。`stage1_strategy=full_network_milp`、successor pruning無効、fallback・postsolve repair無効を維持した。
+- 67.86万本の接続変数それぞれに `x(v,i,j) <= y(v,i)` と `x(v,i,j) <= y(v,j)` を明示していた。しかし同じモデルの `sum(outgoing x) + end = y`、`sum(incoming x) + start = y` と非負変数条件から両不等式は自動的に成立する。このため1,357,200本の冗長制約を削除した。
+- 研究policyは1車両につきstart/endを各1以下に制限する。さらに全arcが出発時刻について厳密に前進することを実行時検査できた場合、node-flowは各車両を高々1本の非巡回pathに限定する。この条件下では複数fragment用のdepot-reset pairwise cut、fragment occupancy、trip overlap cliqueも含意済みなので生成しない。開始・終了数が2以上、同時刻逆向きarc、trip欠損のいずれかがあれば従来制約を保持するfail-closed実装とした。
+
+### 実測結果（seed 42、15分、Stage 1上限30秒）
+
+- 晴 `771d115b-75b0-49f7-a7f0-25f259a2cd21`: Stage 1制約数1,348,331→70,871、準備42.15→27.25秒、求解30.38→22.91秒、solver-path全体76.81→54.17秒。264/264便、32台、BEV14/ICE18、Stage 2 optimal、独立validation全項目合格。Stage 1目的703,389.367円、解析下界640,000円、証明gap 9.012%、status `objective_limit`。成果物は `output/research_phase3_sunny_full_network_single_path_redundancy_v3_20260721`。
+- 雨 `b23fd26c-1233-4c73-bb9e-bdb8b1584760`: 70,871制約、準備27.60秒、求解30.30秒、solver-path全体62.07秒。264/264便、32台、BEV14/ICE18、Stage 2 optimal、独立validation全項目合格。Stage 1目的711,315.462円、解析下界640,000円、証明gap 10.026%、status `time_limit`。成果物は `output/research_phase3_rain_full_network_single_path_redundancy_v3_20260721`。
+- `assignment_global_optimality` は両ケースともfalseである。晴は指定10% gap以内を証明したが大域最適解ではなく、雨は10%を0.026 percentage point超えた。`full_network_global_optimality` は二段階法全体について常にfalseとし、Stage 1の最適性と総費用最適性を混同しない。
+- Gurobi一括変数生成も同一条件で測定したが、準備27.25→31.18秒、solver-path全体54.17→58.04秒へ退行したため撤回した。比較成果物へ `NOT_ADOPTED.md` を付け、コードは元へ戻した。
+
+### 残る穴
+
+- 変数数は729,638のままであり、準備時間約27秒の主因である。次は全接続を保持した同値な定式化、または列生成・network flow分解を小規模統合MILPと照合してから導入する。
+- 晴雨とも既存warm startのBEV14/ICE18から新しい割当incumbentを得ていない。今回改善したのはモデル規模とgap証明時間であり、気象別の車種割合最適化が完了したとは主張しない。
+- 雨を10%以内へ入れるには、恣意的に許容gapを広げず、Stage 1下界強化または全ネットワーク上の有効なincumbent生成を行う。
+
+## 2026-07-21 訂正: 固定32仕業方式の正式採用を撤回
+
+### 誤りと確認した実行経路
+
+- 「固定した32本の時刻表パス」という表現と、それを正式な最適化範囲として既定化した判断は誤りだった。32は入力時刻表やユーザー指定の制約ではない。
+- verified call chain は `ProblemBuilder._build_baseline_plan()` → `_build_pooled_shared_baseline()` → `_minimum_cost_maximum_matching()` である。便間接続グラフの最大マッチングから初期chainを作り、そのchainを利用可能車両とエネルギー可否に応じて分割した結果が32仕業だった。これは canonical baseline、すなわち初期解生成ヒューリスティックの出力である。
+- `exact_fixed_path` は、この初期解32仕業を不変にして車両だけを割り当てていた。したがって、便のつなぎ替えと使用車両数を同時に探索するStage 1の代替にはならず、今回求める配車最適化の正式解として扱えない。
+- 接続グラフ自体は `ConnectionGraphBuilder` → `FeasibilityEngine.can_connect()` を通り、`arrival + turnaround + deadhead <= next departure` を保持する。今回の訂正でも `timetable_rows` と `operator_id` を変更していない。
+
+### 撤回した実装と成果物
+
+- `build_exact_cost_aware_assignment()` とrunnerの `exact_fixed_path` 選択肢を削除した。正式runnerの既定値は `full_network_milp` に戻した。
+- `fast_fixed_path` は比較・診断用の明示的opt-inとしてのみ残す。これは baseline chainを固定するheuristicであり、`assignment_global_optimality=false` のままである。正式なStage 1最適化結果には使用しない。
+- 晴・雨の `output/research_phase3_*_exact_fixed_path_v2_20260721` は、固定32仕業内の診断結果にすぎず、正式な配車最適化結果として撤回する。各ディレクトリへ `WITHDRAWN.md` を追加し、元データは監査用に改変せず保存する。
+- 固定割当の充電/SOC MILPがexactであることは、固定済み割当に対するエネルギー運用だけを指す。配車割当や会計総費用の大域最適性を意味しない。
+
+### 検証と次の方針
+
+- 回帰テストでは正式runnerの既定値が `full_network_milp` であることを固定する。
+- 計算時間短縮は、32仕業を固定する方法ではなく、全便接続を最適化対象に残したまま、妥当な下界、変数削減、対称性除去、warm start、停止条件を改善して行う。
+- Stage 1がtime limitで `assignment_global_optimality=false` の場合は、その事実とgapをそのまま報告する。速さのために探索空間を黙って別問題へ置き換えない。
+
+## 2026-07-21 高速・費用対応の固定便列割当と晴雨再計算
+
+### 今回つぶした問題
+
+- 264便の正式経路は、Stage 1だけで約67.9万本の接続候補と6,755本の時刻別SOC必要条件を持ち、60秒ではroot relaxationにも到達せず、既存baselineから割当が動かなかった。晴雨ともBEV14台・46便、ICE18台・218便のままなのは、EVが高いからではなく、時間内に新しいincumbentを得られていない退行だった。
+- baseline path coverの車両選択は、費用より先に「便列全体を無充電で走れる長さ」を優先してICEを選ぶため、走行単価の安いBEVが短い便列に偏っていた。一方、単純に長距離便列をBEVへ割り当てると、日中PVを受けられず系統充電と需要料金が増えた。EVの走行単価だけでなく、便列の時刻、PV利用可能量、充電可能時間、需要料金を候補生成へ入れる必要があった。
+- 固定割当の`phase1_charging_only`はGurobiで完全な充電・PV・BESS・SOCモデルを解いていたが、割当arcのpruning監査を流用したため`supports_exact_milp=false`になり、研究受入ゲートに誤拒否されていた。固定割当Phase 1には割当arc探索がないため、Gurobi経路では「固定割当に対する充電問題がexact」であることを明示した。これは配車割当の大域最適性を意味しない。
+
+### 最小修正
+
+- `src/optimization/common/fast_cost_assignment.py`を追加した。canonical baselineが作った時刻表便列を一切分割・並べ替えず、利用可能な実車へだけ再割当する。全便の正距離、車種許可、実車availability、初期SOC、電費・燃費、電力・軽油・CO2、固定費、PVの時刻別利用可能性、日内充電可能時間、需要料金proxyを検査する。ゼロ又は欠損距離は停止し、補完しない。
+- `scripts/run_research_phase3_frontend_weather.py`へ`--stage1-strategy fast_fixed_path`を追加した。最初に既存baselineを再検証し、そこからBEV台数を1台ずつ増やした候補を評価する。各候補はcanonical `phase1_charging_only` Gurobiで、全264便、接続、EV SOC上下限・終端SOC、10口の充電器競合、PV/BESS/grid収支、BESS終端、契約電力を検証する。fallback、postsolve repair、未配車、複数fragment、Stage 2非optimalの候補は採用しない。
+- 候補選択は検証後の`total_cost`で行う。割当は高速heuristicであり、固定割当ごとの充電問題だけがoptimalである。`assignment_global_optimality=false`、`research_cost_optimality_eligible=false`を成果物へ残し、大規模総費用最適解とは呼ばない。
+- 既定の正式`full_network_milp`経路は変更していない。`timetable_rows`、`operator_id`、`arrival + turnaround + deadhead <= next departure`も変更していない。
+
+### 全候補照合結果（seed 42、15分、return-to-initial）
+
+- 晴天scenario `771d115b-75b0-49f7-a7f0-25f259a2cd21`: baseline 705,759.17円（BEV14台・46便）に対し、最良候補は702,422.85円、BEV29台・250便、ICE3台・14便。PV 614.709 kWh、grid 2,575.7 kWh。全独立validationは0違反、Stage 2 optimal、研究feasibility gate通過。候補探索約51秒、入力構築込み約63秒。
+- 雨天scenario `b23fd26c-1233-4c73-bb9e-bdb8b1584760`: baseline 714,699.31円（BEV14台・46便）に対し、最良の受理候補は712,679.86円、BEV27台・232便、ICE5台・32便。PV 101.114 kWh、grid 2,823.6 kWh。BEV28・29台候補は見かけの会計費用が低くても充電/SOC MILPがinfeasibleのため拒否した。全独立validationは0違反、Stage 2 optimal、研究feasibility gate通過。候補探索約50秒、入力構築込み約61秒。
+- 晴天29台対雨天27台、BEV担当250便対232便となり、晴雨の車種担当割合が再び変化した。これはPV量と充電可能時刻を候補生成へ反映し、各候補を実費で比較した結果である。ただし固定便列を変えない近傍探索なので、全接続ネットワーク上の大域総費用最適性は未証明である。
+- 成果物は`output/research_phase3_sunny_fast_complete_20260721`と`output/research_phase3_rain_fast_complete_20260721`。詳細候補、不採用理由、費用内訳は各`fast_assignment_audit.json`に保存した。
+- 回帰テストは`python -m pytest -q tests`で777件すべて通過した。リポジトリ直下の手動用`test_multiday_phase1.py`は任意依存`requests`が`.venv`にないためroot全収集では停止するが、正規`tests/`の失敗ではない。
+
+### 指定された外部実装との照合
+
+- [UCDavis-EVResearchCenter-Bus-Scheduling](https://github.com/radhika2026/UCDavis-EVResearchCenter-Bus-Scheduling)の「割当・設備・エネルギーを分解して解く」構成を参考にした。ただし同実装のcolumn generationはdual閾値で既存変数をfixする簡略デモで、pricing subproblemを持つ厳密な列生成ではない。コード移植や「列生成済み」という主張はしていない。
+- [Electric-Bus-Depot-Charging-Simulation](https://github.com/pulkitgarg3/Electric-Bus-Depot-Charging-Simulation)の充電器飽和、待ち時間、設備台数のシナリオ比較は、今後の充電器台数・Monte Carlo感度の参考にする。現段階の厳密な時刻表配車・SOC制約の代替にはしていない。
+- [CentralPointEvacuateRouteOptimizer](https://github.com/ReedGAOOO/CentralPointEvacuateRouteOptimizer-use_GMM_pre-devide_angle_partition)のOSMnx/NetworkX道路網利用は道路距離化の参考になる。一方、GMM角度分割とGA-TSPは中心点避難路向けで、固定時刻表の便接続には適用しない。
+
+### 残る最大の穴
+
+1. 現在の264便距離は停留所緯度経度を使った隣接停留所間Haversine折線であり、道路ネットワーク距離ではない。sourceも`trip_stop_sequence_polyline_haversine`、semanticsも`adjacent_stop_haversine_polyline_not_road_network_distance`のままである。次はGTFS shapeを第一候補、OSM/道路routingを第二候補としてroute/trip距離を置換し、現行代理との差と到達不能区間を監査する。ゼロ距離は引き続き拒否する。
+2. 固定path cover heuristicと正式full-network Stage 1の下界は別物である。小規模統合MILPとの照合、複数seed、時間上限感度、5分間隔の小規模感度、PV・電費の不確実性は継続する。
+3. `05:00/23:00`を便の切出し条件には使わず、配車はscope済み時刻表全件を使う方針を維持する。ただし内部energy horizonはPV/BESS/TOU/需要料金/終端SOCを閉じるため必要であり、単純削除しない。通常UIの恣意的な開始終了入力を廃止し、service windowとenergy horizonを自動導出する契約の完全移行は引き続き未完了である。
+
+## 2026-07-21 Stage 1下界・小規模統合MILP・道路距離代理・晴雨退行監査
+
+### 確認した実行経路と研究上の前提
+
+- 正式な晴雨runは、保存済みscenarioとprepared inputを読み、`materialize_scenario_from_prepared_input()`、weather policy、`ProblemBuilder`、`OptimizationEngine`、Gurobi Phase 3 Stage 1/2の順に通る。fallbackとpostsolve repairは許可していない。
+- Slackの指導教員 @Chiyori T. Urabe との会話から、BESS日末エネルギー差、grid/PV/bus/BESSの全収支、PV→BESS、EV/BESS上下限、EV初期SOC、PV抑制、充電時間・90/50 kW上限、充電器台数、車両台数費用、晴雨比較、晴天時のEV35台利用有無を監査項目として再確認した。
+- ローカルの先行文献レビューで整理済みの「15分離散化、充電器競合、EV/BESS終端SOC、PV/BESS/grid/curtailment同時収支、二段階法と統合MILPの役割分離」を今回の判断基準に用いた。二段階法の会計費用を大規模な総費用最適値とは呼ばない。
+- `timetable_rows`、`operator_id`、および `arrival + turnaround + deadhead <= next departure` は変更していない。
+
+### Stage 1下界の強化
+
+- strict coverage precheckの緩和最小パス被覆から、全264便に必要な車両日数の下界32台をStage 1の `sum(used_vehicle_day) >= 32` として追加した。従来は車両変数と車両日変数の逆向きlinkが不足していたため、`used_vehicle <= sum(used_vehicle_day)` もStage 1と小規模統合MILPへ追加した。
+- 車両日利用費が20,000円/台、その他のStage 1目的係数が非負である場合、解析的目的下界 `32 * 20,000 = 640,000円` を証明できる。Gurobi自身の `ObjBound` と混同しないよう、`stage1_solver_best_bound` と `stage1_analytical_objective_lower_bound` を分離し、有効下界とgapを合成するようにした。
+- 30秒晴天probeでは、目的703,389.367円、Gurobi下界未確定、解析下界640,000円、証明gap 9.012%となった。以前のgap 100%より監査可能になったが、全候補ネットワークの最適性は未証明である。
+
+### 小規模統合MILPとの照合と修正したP1
+
+- 18便の決定論的・日跨ぎ小規模scopeで、Phase 3、15分統合MILP、5分統合MILPを比較する `scripts/audit_small_integrated_weather_milp.py` を追加した。小規模結果を264便全体へ一般化しない警告を成果物に固定した。
+- 統合MILPで、帰庫deadheadを誤ったtransitionへ載せていたこと、最終slot endのSOC上限・終端SOC評価が欠けていたこと、車両別実在初期SOCを一律80%で上書きしていたことをP1として検出・修正した。修正後は独立validationのEV/BESS SOC、時刻、充電器、契約電力をすべて通過した。
+- 全回帰テストで、車両レコードがない小規模caseの `initial_soc_percent` と `final_soc_floor_percent` が生成車両へ反映されず、常に100%初期SOC・10%下限になっていたP1を追加で検出した。生成車両にも指定率を適用し、80%/20%指定なら300 kWh車で240/60 kWhとなるよう修正した。保存済み実車inventoryを使う正式晴雨runのSOC値は変更しない。
+- 60秒比較では、Phase 3 15分は5 BEV・18便すべてBEV・会計費用100,843.432円でoptimal。統合15分はBEV 5便/ICE 13便・会計費用144,538.535円・gap 5.111%。統合5分は同じBEV 5便/ICE 13便・144,791.719円・gap 6.574%。統合15分/5分は60秒では最適性未証明で、目的関数もPhase 3会計費用と同一ではないため、単純な最良下界比較はしない。
+- seed 17/42/73、計算時間5/15/60秒では、Phase 3の割当は全ケース5 BEV・18 BEV便でoptimalだったが、選ばれる車両IDにより会計費用が100,843.432～101,850.034円と約1,006.6円変動した。これはPhase 3 Stage 1が最終会計費用を直接最適化しておらず、同価割当があることを示す。
+- PV倍率0.8/1.0/1.2、BEV電費倍率0.9/1.0/1.1の9ケースは全件実行可能・Phase 3 optimalだった。費用は100,843～102,546円の範囲で一部非単調であり、現段階では因果効果推定ではなく退行検知用の感度と扱う。
+- 成果物は `output/small_integrated_sunny_complete_20260721/audit.json`。
+
+### 停留所緯度経度を用いた距離入力
+
+- `data/built/tokyu_full/stops.parquet` と `stop_times.parquet` の停留所緯度経度・便別停車順序をprepared input生成へ接続した。全264便・77停留所で座標欠損はなく、隣接停留所間Haversine距離の総和を採用した。
+- 新prepared inputは晴天 `prepared-cd884f1f3c16855d-e6406a7fd75ec751-0ec9cc15`、雨天 `prepared-3ed40c5d57fd5f91-0b337aa1f091e729-0ec9cc15`。距離は最小2.743 km、最大9.377 km、総計2,136.737 km、ゼロ距離0件。
+- これは直線OD距離より路線形状を反映するが、道路ネットワーク距離ではない。sourceは `trip_stop_sequence_polyline_haversine`、semanticsは `adjacent_stop_haversine_polyline_not_road_network_distance` と明示した。GTFS shape、道路ネットワーク、実績走行距離による置換が次のP2である。
+
+### 最新の全264便・晴雨比較と退行原因
+
+- 晴天scenario `771d115b-75b0-49f7-a7f0-25f259a2cd21`：BEV14台・46便、ICE18台・218便、Stage 1目的703,389.367円、解析下界640,000円、gap 9.012%、会計費用705,759.174円。PV 614.709 kWh、grid import 0 kWh、peak 0 kW。
+- 雨天scenario `b23fd26c-1233-4c73-bb9e-bdb8b1584760`：BEV14台・46便、ICE18台・218便、Stage 1目的711,315.462円、解析下界640,000円、gap 10.026%、会計費用714,699.315円。PV 101.114 kWh、grid import 429.814 kWh、peak 21.491 kW。
+- 両runとも264/264便、Stage 2 optimal、EV/BESS終端SOC、時刻遷移、充電器同時使用、契約電力、全エネルギー収支の違反0。成果物は `output/research_phase3_sunny_multifidelity_20260721` と `output/research_phase3_rain_lb_probe_20260721`。
+- 天候入力はPV・系統購入・ピーク・Stage 1目的へ正しく伝播している。しかし60秒Stage 1では両天候が共通のbaseline incumbentから動かず、BEV/ICE配車構成が同じである。数日前の60分・後継8・約750秒runで晴天141 BEV便、雨天119 BEV便となった差が今回消えた原因は、15分化でSOC必要条件が875本から6,755本へ増え、全枝67.86万の根緩和と探索が時間制限内に進まないためである。前回結果も枝制限付きheuristicであり、今回より正しい最適解だったとは断定しない。
+- 候補段階だけ時系列SOC必要条件を省略し、最終Stage 1で全枝・全6,755条件を復元する多忠実度warm startも試した。120秒ではbaselineを改善できなかった。最終モデルは弱めていないが、これだけでは退行解消にならなかった。
+
+### 次に塞ぐ穴（優先順）
+
+1. Stage 1を車両個体の巨大対称MILPから、車種別path/column生成または対称性を除いたnetwork flow masterへ分解し、天候別の配車incumbentを短時間で生成する。解析下界と全モデルvalidationは維持する。
+2. 過去の天候別実行可能解を現行距離・15分SOC条件で再検証してwarm startへ再利用し、同一時間予算での改善量を測る。旧解を最終結果として無条件採用しない。
+3. GTFS shapeまたは道路routingで隣接停留所間距離を道路距離へ置換し、現行停留所折線代理との差をroute/trip別に監査する。ゼロ・欠損距離は引き続き拒否する。
+4. 小規模統合MILPの目的関数と二段階会計費用の項目を揃えた条件を追加し、15分/5分を最適性gapが十分小さくなるまで解いて離散化誤差を評価する。
+5. 全264便で複数seed・計算時間感度を実施する。小規模PV・電費感度を、複数実日または分布シナリオへ拡張し、robust/stochastic主張に必要な標本数と評価指標を事前定義する。
+
+現段階のモデルは、実行可能性とエネルギー会計の穴は大きく縮小したが、大規模Stage 1の総費用最適性と天候別配車の探索性能は未解決である。「完璧なモデル」「晴雨の大域最適解」とは表現しない。
+
+## 2026-04-22 時刻表駆動・15分フルケース晴雨再計算と会計監査
+
+- 実行経路を再確認した。frontend/BFF の正式経路は、保存scenarioとprepared inputをmaterializeし、`ProblemBuilder.build_from_scenario()`、`OptimizationEngine.solve()`、Phase 3 Stage 1 Gurobi割当、固定割当のStage 2 Gurobi充電・PV・BESSへ進む。研究runnerも同じcanonical stackを使用し、fallbackとpostsolve repairを禁止する。
+- 固定の`05:00`/`23:00`を運行便の切出し条件にする設計は採用しない。運行範囲はscope済み`timetable_rows`から導き、今回の264便では05:51発から23:24着までを全件保持する。電力評価範囲は別に24時間・15分96枠として保持する。これにより23:00以降の便を落とさず、PV/BESS/TOU/需要料金/終端SOCの日次収支を閉じる。
+- `OptimizationScenario`へ明示的な`horizon_duration_min`を追加し、`planning_horizon_hours`をclock表記差ではなく実slot数×timestepから決めるようにした。`ProblemBuilder`は時刻表範囲と電力範囲を別metadataとして保存する。`timetable_rows`、`operator_id`、接続条件`arrival + turnaround + deadhead <= next departure`は変更していない。
+- 研究runnerは主実験を15分へ固定し、`milp_max_successors_per_trip=0`（全実行可能後続）を明示する。距離は全264便について正値を要求し、非正距離が1件でもあれば停止する。今回の最小距離は2.241 km、最大10.935 km、sourceは全件`trip.haversine_distance`だった。
+- 晴雨の比較指紋からservice-dateというラベルだけを除外し、実際の運行入力が同じならtrip hashが一致するschema v2へ更新した。今回の晴雨はtrip hashとvehicle hashが完全一致し、意図した天候/PV入力だけが異なる。
+
+### 自己検出して修正した穴
+
+- P1: 厳密なsolver電源フローで`grid_to_bus={}`が「系統0」を意味するのに、会計層が充電slotから系統量を再導出していた。さらに`pv:<depot>`をPVとして認識しないため、晴天のPV直給262.046 kWhを系統購入として重複計上していた。`source_provenance_exact=true`なら空mappingをゼロとして尊重し、PV sourceを明示認識するよう修正した。旧晴天会計は電力量料金・需要料金・系統CO2を合計8,193.462円過大計上していた。
+- P1: 独立エネルギー監査が再構成時に研究runnerの15分設定を再適用せず、60分PV profileを96枠へ誤対応させていた。監査再構成にも記録済みtimestepとBEV終端policyを適用し、晴雨ともPV・bus source・BESSの最大残差を約`10^-14 kWh`まで低下させた。
+- P1: 晴雨比較器が旧仕様の`research_cost_kpi_eligible=false`を要求し、現在の「検証済み会計KPI=true、総費用最適性=false」という分離と矛盾していた。`research_accounting_cost_eligible=true`と`research_cost_optimality_eligible=false`を個別に要求する契約へ更新した。
+- 環境: project `.venv`に`gurobipy`がなく正式runが開始前停止した。Gurobi 13.0.1を同環境へ導入し、academic license（2027-07-20まで）と最小モデルのoptimal statusを確認した。fallbackには切り替えていない。
+
+### 指導教員Slackと先行文献を反映した受入条件
+
+- Slack DM（@Chiyori T. Urabe、2026-06-11〜2026-07-16）から、BESS日末SOC差0、PV→BESS、BESS上下限、EV初期/終端SOC、PV抑制、grid/PV/BESS時系列、充電時間とkW上限、充電器台数、燃料量と運行の一致、車両台数費用、晴雨比較を受入条件として再確認した。
+- `先行文献/`のNo. 42、61〜64、日本語EVバス充電需要・PV低炭素化・MPC逐次充電の論文、および`docs/reviews/literature_model_gap_review_20260719.md`を照合した。主実験15分、明示的charger competition、BEV/BESS終端SOC、PV/BESS/grid/curtailment同時収支、実フロー会計は整合する。一方、現在の一方向二段階法はフィードバック分解や統合MILPではないため、大域総費用最適解とは呼ばない。
+
+### 修正版の実行結果
+
+- 共通条件: 264便、BEV 35台+ICE 25台、15分96枠、後続枝刈りなし、90 kW×5口+50 kW×5口、BESS 600 kWh/300 kW、初期=終端300 kWh、grid→BESS禁止、PV→BESS許可、各BEV`return_to_initial`、Gurobi 13.0.1、seed 42、総上限1500秒。
+- 晴天（scenario `771d115b-75b0-49f7-a7f0-25f259a2cd21`）: 264/264便、使用32台（BEV14、ICE18）、PV 614.709 kWh、系統0 kWh、peak 0 kW、総会計費712,853.642円。Stage 1はtime limit・gap 100%、Stage 2はoptimal。全必須validation 0違反、BEV/BESS終端SOC合格。
+- 雨天（scenario `b23fd26c-1233-4c73-bb9e-bdb8b1584760`）: 264/264便、使用32台（BEV14、ICE18）、PV 101.114 kWh、系統480.466 kWh、peak 24.050 kW、総会計費722,848.015円。Stage 1はtime limit・gap 100%、Stage 2はoptimal（gap 0.00683%表示だがstatusはoptimal）。全必須validation 0違反、BEV/BESS終端SOC合格。
+- 雨天−晴天: PV -513.595 kWh、系統購入 +480.466 kWh、peak +24.050 kW、検証済み会計費 +9,994.373円。これは同一構造入力から得た実行可能scheduleの会計差であり、大域最適値の差ではない。
+- 成果物: `output/research_phase3_sunny_15min_full_20260422/summary.json`、`output/research_phase3_rain_15min_full_20260422/summary.json`、`output/research_phase3_weather_energy_audit_15min_full_20260422/weather_energy_balance_audit.json`、同`weather_energy_hourly.csv`、同`weather_energy_daily_summary.csv`。
+
+### 検証と残課題
+
+- `python -m pytest -q tests`は`768 passed`、`git diff --check`は合格。root直下を含む`pytest -q`はlegacy `test_multiday_phase1.py`の`requests`未導入でcollection停止するため、テスト環境依存の残課題として分離する。
+- strict晴雨比較器は両runの`git_dirty=true`を正しく拒否した。既存のREADME/docs frontend変更を含む作業ツリーを勝手にcommitしないため、今回の成果は検証済みだが正式なclean-commit比較artifactではない。変更をレビュー・commit後、同一コマンドで再実行する。
+- 最大の数理的残課題はStage 1 gap 100%である。全候補化により物理的な枝落としは解消したが、下界が弱く、大域割当最適性は証明できない。次は小規模統合MILPとの照合、Stage 1下界強化、Stage 2 infeasibility/cost feedback、複数seed・計算時間感度を実施する。
+- 距離はHaversine推定であり、道路実測距離ではない。燃料・電費KPIの正式主張前にGTFS shape/道路ネットワーク/実績走行距離へ置換して感度を確認する。
+- 不確実性は今回の晴雨2実現値比較に留まる。No. 62/64に対応するPV・消費電力のrobust/stochastic条件、rolling/fixed/oracle比較、5分小規模感度を今後実施する。
+
+
 このファイルは、今後の編集内容をメイン直下で日時付き管理するための開発ノートです。
 
 既存の研究実験ログは `docs/notes/DEVELOPMENT_NOTES.md` に残し、このファイルでは現在の編集判断、検証結果、残課題を短く追記します。
+
+## 2026-04-22 時刻表駆動の運行範囲と電力ホライズンの再検討（今後やるべきこと）
+
+- 前回の「開始・終了時刻を手入力せず、時刻表から自動導出する」という方向は維持する。ただし、再検討の結果、**運行範囲と電力評価ホライズンを同じ開始・終了時刻で表す設計は不十分**と判断した。配車は時刻表と回送・折返し条件で決まり、充電・PV・BESS・TOU・需要料金・終端SOCは別の評価時間軸を必要とする。削除対象は通常利用者向けの恣意的な`05:00`/`23:00`入力であり、内部ホライズンそのものではない。
+- 現行canonical経路は、準備済みの正本`timetable_rows`を時刻で切り捨てず配車へ渡す一方、`ProblemBuilder`は`start_time`未指定時`05:00`、`end_time`未指定時`23:00`を使用する。また`planning_horizon_hours`、`horizon_start/end`から求める需要料金換算期間、設備又は終端SOC方針により24時間へ拡張される電力slot数が別々に決まる。確認済みの鶴巻prepared scopeでは152便が`05:58`出発から`23:14`到着まで存在し、設定上の`23:00`は最終便到着より前である。このため、現在は設定20時間、`05:00-23:00`から導く18時間、実際の24電力slotが混在し得る。
+- 自分から上げた反対仮説は、「最初の出発から最後の到着までへ単純に縮めればよい」である。これは採用しない。始発前の営業所出庫回送・充電、最終便後の帰庫回送・充電、終端SOC回復を落とし、日ごとに需要料金換算期間と充電機会が変わって研究比較を歪めるためである。`25:00`等の日跨ぎ表記を時計時刻へ`mod 24`するだけでもサービス日を誤るため、導出は日付付き又はサービス日起点の絶対分で行う。
+
+### 実装前に固定する契約
+
+- `service_window`を「対象scopeの全便に、始発地点までの出庫回送と最終到着地から営業所までの帰庫回送を加えた実運行範囲」とする。便間接続は既存の`arrival + turnaround + deadhead <= next departure`を一切弱めず、`timetable_rows`と`operator_id`を再生成・欠落させない。
+- `energy_horizon`を「充電・PV・BESS・TOU・需要料金・SOCを評価するslot範囲」として分離する。代表日1日runの既定は、`service_window`を包含するサービス日起点24時間とし、複数日は`planning_days * 24時間`を基本に、最終帰庫又は明示した終端SOC期限を包含できなければ停止又は明示拡張する。通常画面では自動導出値を読取表示し、研究用の明示overrideだけを詳細設定に残す。
+- 電力slot数、PV/TOUの回転基準、需要料金のhorizon係数、BESS/EV終端時刻は、すべて同じ`energy_horizon`を参照する。`planning_horizon_hours`と`start_time/end_time`を独立した正本として併存させない。
+- 出庫・帰庫回送の距離又は時間が欠損・ゼロで、同一地点であることも確認できない場合は自動導出を失敗させる。ゼロ回送を発明して範囲内と判定しない。全便・回送・SOCイベントの一部でもslot外へ出る場合は、現行のout-of-horizon補正へ黙って渡さずbuild-time contract errorにする。
+
+### 今後の実装順
+
+1. `ProblemBuilder`へ副作用のない時間軸導出器を追加し、scope済み時刻表を絶対サービス分へ正規化して`service_window`と`energy_horizon`を返す。導出根拠として最初便、最終便、出庫・帰庫回送、slot丸め、planning days、終端SOC方針をmetadataへ保存する。
+2. canonical problemの公開契約を上記2軸へ分離し、料金slot、PV/BESS系列、SOC、rolling horizon、需要料金換算を`energy_horizon`へ統一する。legacy `start_time`、`end_time`、`planning_horizon_hours`は移行期間だけ入力互換として読み、矛盾時は優先順位で黙って上書きせずエラー又は警告付き変換にする。
+3. BFF prepare結果とscenario hashへ導出値・導出元・policy versionを含める。通常UIの開始・終了手入力は「自動計算」の読取表示へ置き換え、最初便、最終帰庫、電力評価終了を別々に表示する。
+4. 既存成果物との比較影響を監査する。配車割当が同じでも、旧runの需要料金係数、終業後充電、PV/BESS利用可能slotが変わる場合は費用KPIの直接比較を禁止し、新契約のclean固定input baselineを作り直す。README、モデル仕様、実験runbook、Development Notesを同じ変更で更新する。
+
+### 必須テストと完了条件
+
+- 最終便が`23:14`、`24:xx`、`25:xx`となるケース、始発前出庫回送、最終便後帰庫回送、日跨ぎ便、空時刻表、欠損回送、15/30/60分slot、1日/複数日、`minimum_only`/`return_to_initial`/`fixed_target`を回帰テストする。
+- 全`ProblemTrip`、出庫・便間・帰庫回送、充放電、EV/BESS SOCイベントが`energy_horizon`内にあり、slot外エネルギーが0 kWhとして消えないことを独立検証する。
+- `len(price_slots) * timestep`、PV/BESS系列長、`planning_horizon_hours`、需要料金換算期間が一致することを数値テストする。代表日1日なら原則24時間、複数日なら原則`24 * planning_days`時間である。
+- 同一scope・同一seedで、変更前後の対象便集合、`operator_id`、時刻表時刻、接続可否が不変であることを確認する。費用差が出た場合は、旧設定不整合の修正によるものか、充電可能時間の変更によるものかを分解して記録する。
+- この項目は現時点では**設計メモのみで未実装**である。受入完了までは、`05:00/23:00`を削除済み、又は時刻表駆動ホライズンが完成済みとは説明しない。
+
+## 2026-07-20 BEV終端SOC・費用KPI・日次→毎時連鎖の修正
+
+- 7月19日の不足点レビューを実装へ反映した。正式な代表日比較では、各BEVを一日の開始時と同じ蓄電量まで戻す`return_to_initial`を既定とし、最低残量だけ守る`minimum_only`は可行性診断専用として明示した。従来の明示的な終端目標は`fixed_target`として互換性を保つ。
+- Stage 2の最終slot後まで含め、車両別の開始・終端・目標SOC、実測開始SOCからの減少量、固定した終端目標への不足量を監査出力する。費用は、当日に購入・供給したエネルギー費と、初期在庫を消費した分の評価額を分離する。Phase 3の可行スケジュールに対する会計値と、全体費用の大域最適性の主張も別のeligibilityへ分離した。
+- 日次解から毎時見直しへ移る際、実測SOCで`return_to_initial`の基準まで下がるP1を修正した。BEVとBESSの一日開始時目標を固定してから実測状態だけを更新する。日次runnerは実際に使用した`effective_scenario.json`、共通trip/vehicle fingerprint、`input_audit.json`を保存し、毎時runnerは同じsnapshotとhashが一致しなければ停止する。
+- dirty worktree・successor上限8・20秒の日次診断解は264/264便、Stage 2 optimal、独立違反0、EV終端目標不足`3.7e-13 kWh`だった。これを入力契約の動作確認にのみ使い、5:00から翌5:00まで24回の固定割当充電見直しを完走した。全24回で264/264便、Stage 2 optimal、終端目標不足の最大`3.98e-13 kWh`、各回のwall time最大2.35秒だった。候補削減とdirty条件のため修論の正式費用結果には採用しない。
+- Gurobi runtime修正後の全回帰は`755 passed`。除外した`test_multiday_phase1.py`はlocalhost BFFを必要とする手動E2Eである。
+- Gurobi本体を先にimportすると期限切れの別ライセンスを自動選択するP1も修正した。モジュール読込時と`ensure_gurobi()`の双方で、ライセンスとDLL探索先をGurobi importより先に構成する。
+- 詳細な実行経路、修正理由、用語、検証範囲は`docs/notes/DEVELOPMENT_NOTES.md`の同日追補を正本とする。正式baselineはclean commit・候補削減なし・固定入力で再実行し、その後に同じ契約でPV予測誤差、晴雨、successor感度へ進む。
+
+## 2026-07-19 最新run監査後のP0帳票修正
+
+- `output/2026-07-19/run_20260719_1617`を監査し、全264便・fallbackなし・Stage 2 optimalまで進んだ一方、MIP gap 41.0807%を0.4108%と表示する単位誤り、目的値721,657.93円・営業費76,926.89円・会計総額830,717.20円の混在、BEV/ICE便数125/133と担当表127/137の不一致、使用車両32台と38車両日の不一致、BESS効率を無視した9.7577kWhの偽ERRORを確認した。
+- 便数・使用車両数・車両日数は、1時間枠へ集約された車両台帳ではなく`graph/trip_assignment.csv`を正本として再集計する。これにより同一時間枠に複数便がある場合の便欠落と、分割された運用を別車両として数える問題を防いだ。SOC統計はBEVだけを対象とし、ICEのSOC=0を最小SOCへ混入させない。
+- BESSのSOC遷移は`終了SOC = 開始SOC + 充電量×充電効率 − 放電量÷放電効率`で検証する。reporting finalizerが終了SOCを開始・終了の両方へ上書きしていた問題も修正し、`bess_timeseries.csv`の明示的な開始SOC・終了SOCを保持する。古い成果物に開始・終了列がない場合は単一SOCを表示互換のため保持するが、1枠内の遷移は復元できないため検証を`SKIPPED`と明示する。
+- MIP gapはratioからpercentへ100倍変換して表示する。実験レポートは目的値と「会計総費用」を分離し、車両使用費を含む最終台帳値を表示する。電気代は系統購入費とPV・BESSの台帳費用を一度ずつ足し、需要料金も同じ会計台帳を参照する。`solver_objective_matches_accounting_total`は明示フラグがあり、かつ数値が一致した場合だけtrueとし、欠落時の既定値をfalseへ変更した。実験hashには運行日、天候条件、営業所エネルギー設備を含めた。
+- 最新runを一時コピーして再集計した結果、会計総費用716,926.890円、目的値721,657.933円、BEV/ICE 127/137便、使用車両・車両日32、MIP gap目標10.000%・実績41.0807%、BESS遷移OK、validation error 0を確認した。元のrunは証拠保全のため変更していない。
+- 帳票・会計・不可行gateを含む関連回帰は59件pass、全体回帰は`731 passed, 15 skipped`。残課題は、7月19日run自体が60分刻み・`research_run_accepted=false`・successor上限8・Stage 1 gap 41.08%・天候PV未適用・毎時再最適化未実行である点であり、今回の修正で研究採用可能になったとは扱わない。
+
+## 2026-07-19 React + FastAPI移行 Phase 0 要件・UI/UX設計
+
+- Tkinterを破壊・置換しない前提で、React + FastAPIを先行し、同等性確認後にTauri sidecar化する移行仕様を`docs/frontend/`へ追加した。今回の変更は文書のみで、`run_app.py`、`tools/scenario_backup_tk.py`、BFF、最適化コアは変更していない。
+- 現行到達経路を確認し、API prefixは`/api`、OpenAPIは82 paths/108 operations、ジョブ状態は`pending/running/completed/failed`、キャンセルAPIなし、現ワークツリーに`frontend/`なしであることを現行仕様として固定した。
+- 自己レビューで、汎用`Dict[str, Any]`応答によるOpenAPI型生成の見せかけの型安全性、canonical/legacy結果漏出、無効結果の0 KPI誤表示、scenario選択とactivateの混同、Tauri終了時のsolver強制停止を主要課題として起票した。typed BFF DTO、validity/KPI gate、明示activate、Tauri shutdown policyを各受入Gateへ組み込んだ。
+- 成果物は要件、現行機能、API契約、実装/Tauriアーキテクチャ、画面遷移、UI/UX、受入基準、要件追跡、課題/ADR、baseline fixture計画で構成する。実シナリオのmutation fixture取得は、使い捨て複製の選定後に別タスクとして実施する。
 
 ## 2026-07-18 不足点の確認とPhase 3モデルの初回修正
 
@@ -116,3 +472,11 @@
 - `tests/test_solution_validity.py` に `gurobi_unavailable_baseline` の fallback 分類テストと postsolve repair 検知テストを追加しました。
 - `tests/optimization/test_weather_policy_problem_integration.py` に `solcast_pv_proxy_v1` のPV曲線適用テストを追加しました。
 - 検証 `python -m pytest -q [全11ファイル]` は `97 passed` でした。
+## 2026-07-19 先行文献との照合による研究モデル不足点レビュー
+
+- `先行文献/`内のPDF 23本と、現行研究概要、定式化、実装状況、正式15分baseline、2026-07-19結果を照合し、`docs/reviews/literature_model_gap_review_20260719.md`へ整理した。
+- 正式15分baselineは264/264便、独立違反0、fallbackなし、候補接続削減0まで達成している一方、現行Phase 3はStage 1割当固定後にStage 2で充電を決める二階層計画であり、研究概要の「運行・充電・PV/BESSを一体で最適化」という説明とは一致しない。Stage 2の費用や設備情報をStage 1へ返す仕組みもない。
+- 新たなP0として、正式baselineが32台のBEV初期残量8,038.4 kWhを一日で約3,668.6 kWh減らし、当日充電は32.3 kWh、最低終了SOCは10%で成立していることを確認した。この結果は一日可行性の証拠だが、翌日を含む日次運用費やPV効果の公平な比較には使わない。代表日比較では終了SOCを開始SOCへ戻すか、複数日引継ぎ又は翌日に残す電気の価値が必要である。
+- 会計総額707,747.0円の電気関連費66,438.1円には、実買電32.3 kWh相当581.7円だけでなく、暫定走行費の残額65,856.4円が含まれる。出力も`objective_is_actual_cost=false`、`research_cost_kpi_eligible=false`であり、この金額を実際の一日費用や最適費用として使わない。
+- 文献対応上の必須不足は、PV/BESSありの正式15分run、24回の毎時状態引継ぎ、固定日次計画・毎時見直し・完全予測の比較、PV誤差と走行電力±10%の感度、複数seed、設備感度、小規模同時最適化との比較である。V2G、配電潮流、GA/ABC/ALNS拡大は現時点の必須課題から外す。
+- 次のモデル修正は、BEV終端SOCの公平化、実現フロー会計への統一、研究表現を「二階層運行・充電計画」へ統一、PV/BESSあり15分固定入力、24時間毎時見直しの順とする。今回の作業はレビューと開発メモ更新のみで、数理制約・既存実験結果・実行コードは変更していない。

@@ -287,16 +287,27 @@ class OptimizationScenario:
     fixed_operations_before_t0: Tuple[LockedOperation, ...] = ()
     uncertainty_flags: Mapping[str, bool] = field(default_factory=dict)
     service_coverage_mode: str = "strict"
+    # Keep this additive field at the end so existing positional callers retain
+    # the historical constructor order.
+    horizon_duration_min: Optional[int] = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "timestep_min", normalize_timestep_min(self.timestep_min, default=30))
+        if self.horizon_duration_min is not None:
+            duration_min = int(self.horizon_duration_min)
+            if duration_min <= 0:
+                raise ValueError("horizon_duration_min must be positive when provided")
+            object.__setattr__(self, "horizon_duration_min", duration_min)
     
     @property
     def planning_horizon_hours(self) -> float:
         """Calculate planning horizon in hours from scenario configuration.
         
-        Uses horizon_start/horizon_end if available, otherwise planning_days * 24.
+        Uses the explicit slot-derived duration when available.  The legacy
+        clock calculation remains only for callers that have not migrated.
         """
+        if self.horizon_duration_min is not None:
+            return float(self.horizon_duration_min) / 60.0
         if not self.horizon_start or not self.horizon_end:
             return float(self.planning_days) * 24.0
         try:

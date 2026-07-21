@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 
 import pytest
 
@@ -43,9 +44,24 @@ from scripts.run_research_phase3_minimal import (
     _resolve_expected_service_date,
 )
 from scripts.run_research_phase3_frontend_weather import (
+    DEFAULT_FORMAL_MIP_GAP,
+    DEFAULT_STAGE1_STRATEGY,
     _apply_bev_availability_sensitivity,
+    _configure_research_discretization,
+    _git_state,
     _resolve_initial_soc_policy,
+    run,
 )
+
+
+def test_formal_weather_runner_defaults_to_full_network_stage1() -> None:
+    assert DEFAULT_STAGE1_STRATEGY == "full_network_milp"
+    assert DEFAULT_FORMAL_MIP_GAP == pytest.approx(0.05)
+
+
+def test_formal_weather_runner_rejects_removed_exact_fixed_path() -> None:
+    with pytest.raises(ValueError, match="Unsupported stage1_strategy"):
+        run(SimpleNamespace(stage1_strategy="exact_fixed_path"))
 
 
 def test_uniform_initial_soc_policy_overrides_only_electric_vehicles() -> None:
@@ -66,6 +82,20 @@ def test_uniform_initial_soc_policy_overrides_only_electric_vehicles() -> None:
     assert updated["vehicles"][0]["initialSoc"] == pytest.approx(0.8)
     assert updated["vehicles"][1]["initialSoc"] == pytest.approx(0.1)
     assert updated["simulation_config"]["initial_soc_policy"] == "uniform_scenario_value"
+
+
+def test_git_state_failure_is_recorded_without_aborting(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _missing_git(*args: object, **kwargs: object) -> str:
+        raise FileNotFoundError("git is unavailable")
+
+    monkeypatch.setattr("scripts.run_research_phase3_frontend_weather.subprocess.check_output", _missing_git)
+
+    state = _git_state()
+
+    assert state["git_sha"] is None
+    assert state["git_dirty"] is None
+    assert state["git_state_available"] is False
+    assert "FileNotFoundError" in state["git_state_error"]
 
 
 def test_initial_soc_metadata_hashes_the_solver_inputs() -> None:
@@ -1133,6 +1163,36 @@ def test_frontend_weather_runner_requires_explicit_soc_input_source() -> None:
     ) is InitialSocPolicy.UNIFORM_SCENARIO_VALUE
     with pytest.raises(ValueError, match="initial_soc_policy"):
         _resolve_initial_soc_policy({"simulation_config": {}})
+
+
+def test_frontend_weather_runner_forces_formal_resolution_and_full_network() -> None:
+    scenario = {
+        "simulation_config": {
+            "timestep_min": 60,
+            "milp_max_successors_per_trip": 8,
+        },
+        "scenario_overlay": {
+            "solver_config": {
+                "time_step_min": 60,
+                "milp_max_successors_per_trip": 8,
+            }
+        },
+    }
+
+    audit = _configure_research_discretization(scenario, timestep_min=15)
+
+    assert scenario["simulation_config"]["timestep_min"] == 15
+    assert scenario["simulation_config"]["milp_max_successors_per_trip"] == 0
+    assert scenario["scenario_overlay"]["solver_config"]["timestep_min"] == 15
+    assert scenario["scenario_overlay"]["solver_config"][
+        "milp_max_successors_per_trip"
+    ] == 0
+    assert audit["successor_pruning_enabled"] is False
+
+
+def test_frontend_weather_runner_rejects_nonformal_resolution() -> None:
+    with pytest.raises(ValueError, match="15-minute"):
+        _configure_research_discretization({}, timestep_min=60)
 
 
 def test_bev_availability_sensitivity_keeps_highest_soc_without_mutating_inventory_size() -> None:

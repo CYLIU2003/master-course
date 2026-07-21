@@ -137,6 +137,11 @@ def test_milp_optimizer_propagates_phase_metadata(monkeypatch) -> None:
                         "charging_dispatch_evaluated": False,
                         "soc_constraints_evaluated": False,
                         "supports_assignment_milp": True,
+                        "stage1_vehicle_count_lower_bound": 1,
+                        "stage1_vehicle_count_lower_bound_constraint_count": 1,
+                        "stage1_vehicle_count_lower_bound_semantics": (
+                            "relaxed_dispatch_feasible_minimum_path_cover_vehicle_day_lb"
+                        ),
                     },
                 ),
             )
@@ -188,7 +193,13 @@ def test_milp_optimizer_propagates_phase_metadata(monkeypatch) -> None:
                 reserve_soc=30.0,
             ),
         ),
-        metadata={"solver_objective_matches_accounting_total": False},
+        metadata={
+            "solver_objective_matches_accounting_total": False,
+            "strict_coverage_precheck": {
+                "checked": True,
+                "relaxed_vehicle_lower_bound": 1,
+            },
+        },
     )
 
     result = optimizer.solve(
@@ -202,6 +213,11 @@ def test_milp_optimizer_propagates_phase_metadata(monkeypatch) -> None:
     assert result.solver_metadata["charging_dispatch_evaluated"] is False
     assert result.solver_metadata["soc_constraints_evaluated"] is False
     assert result.solver_metadata["solver_objective_matches_accounting_total"] is False
+    assert result.solver_metadata["stage1_vehicle_count_lower_bound"] == 1
+    assert result.solver_metadata["stage1_vehicle_count_lower_bound_constraint_count"] == 1
+    assert result.solver_metadata["strict_coverage_precheck"][
+        "relaxed_vehicle_lower_bound"
+    ] == 1
     assert result.solver_metadata["eligible_for_main_benchmark"] is False
     assert result.solver_metadata["eligible_for_appendix_benchmark"] is True
     assert result.solver_metadata["candidate_generation_mode"] == (

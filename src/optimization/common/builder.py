@@ -730,6 +730,11 @@ class ProblemBuilder:
                     context.vehicle_profiles,
                     vehicle_counts,
                     default_home_depot_id=canonical_depot_id,
+                    initial_soc_percent=initial_soc_percent,
+                    initial_soc=initial_soc,
+                    final_soc_floor_percent=final_soc_floor_percent,
+                    initial_ice_fuel_percent=initial_ice_fuel_percent,
+                    min_ice_fuel_percent=min_ice_fuel_percent,
                 )
             )
         available_vehicles = tuple(
@@ -796,6 +801,12 @@ class ProblemBuilder:
             time_slots = tuple(all_time_slots)
         else:
             time_slots = tuple(base_time_slots)
+
+        energy_horizon_duration_min = len(time_slots) * int(timestep_min)
+        energy_horizon_end_time = self._clock_time_after_minutes(
+            normalized_start_time,
+            energy_horizon_duration_min,
+        )
         
         pv_series = tuple(
             self._build_pv_slots(
@@ -877,7 +888,8 @@ class ProblemBuilder:
             scenario=OptimizationScenario(
                 scenario_id=scenario_id,
                 horizon_start=normalized_start_time,
-                horizon_end=normalized_end_time,
+                horizon_end=energy_horizon_end_time,
+                horizon_duration_min=energy_horizon_duration_min,
                 timestep_min=timestep_min,
                 planning_days=planning_days,
                 objective_mode=normalize_objective_mode(objective_mode),
@@ -941,6 +953,20 @@ class ProblemBuilder:
                 "planning_days": planning_days,
                 "operation_start_time": normalized_start_time,
                 "operation_end_time": operation_end_clock_time,
+                "service_window_source": "scoped_timetable_rows",
+                "service_window_start_min": min(
+                    (int(trip.departure_min) for trip in trip_nodes),
+                    default=None,
+                ),
+                "service_window_end_min": max(
+                    (int(trip.arrival_min) for trip in trip_nodes),
+                    default=None,
+                ),
+                "energy_horizon_start": normalized_start_time,
+                "energy_horizon_end": energy_horizon_end_time,
+                "energy_horizon_duration_min": energy_horizon_duration_min,
+                "energy_horizon_slot_count": len(time_slots),
+                "energy_horizon_source": "price_slot_count_x_timestep",
                 "post_return_soc_target_enabled": bool(post_return_target_enabled),
                 "post_return_target_horizon_extended": bool(
                     post_return_target_enabled and planning_days == 1
@@ -2040,23 +2066,54 @@ class ProblemBuilder:
         vehicle_counts: Dict[str, int],
         *,
         default_home_depot_id: str,
+        initial_soc_percent: Optional[float] = None,
+        initial_soc: Optional[float] = None,
+        final_soc_floor_percent: Optional[float] = None,
+        initial_ice_fuel_percent: Optional[float] = None,
+        min_ice_fuel_percent: Optional[float] = None,
     ) -> Iterable[ProblemVehicle]:
+        initial_soc_ratio = normalize_soc_ratio_like(
+            initial_soc_percent if initial_soc_percent is not None else initial_soc
+        )
+        reserve_soc_ratio = self._normalize_percent_like_to_ratio(
+            final_soc_floor_percent
+        )
+        initial_fuel_ratio = self._normalize_percent_like_to_ratio(
+            initial_ice_fuel_percent
+        )
+        reserve_fuel_ratio = self._normalize_percent_like_to_ratio(
+            min_ice_fuel_percent
+        )
         for vehicle_type, profile in profiles.items():
             count = vehicle_counts.get(vehicle_type, self.default_vehicle_count_per_type)
             for idx in range(count):
+                battery_capacity_kwh = profile.battery_capacity_kwh
+                fuel_tank_capacity_l = profile.fuel_tank_capacity_l
                 yield ProblemVehicle(
                     vehicle_id=f"{vehicle_type}_{idx + 1:03d}",
                     vehicle_type=vehicle_type,
                     home_depot_id=str(default_home_depot_id or "depot_default"),
-                    initial_soc=profile.battery_capacity_kwh,
-                    battery_capacity_kwh=profile.battery_capacity_kwh,
-                    reserve_soc=profile.battery_capacity_kwh * 0.1
-                    if profile.battery_capacity_kwh
+                    initial_soc=(
+                        battery_capacity_kwh * initial_soc_ratio
+                        if battery_capacity_kwh is not None
+                        and initial_soc_ratio is not None
+                        else battery_capacity_kwh
+                    ),
+                    battery_capacity_kwh=battery_capacity_kwh,
+                    reserve_soc=battery_capacity_kwh
+                    * (reserve_soc_ratio if reserve_soc_ratio is not None else 0.1)
+                    if battery_capacity_kwh
                     else None,
-                    initial_fuel_l=profile.fuel_tank_capacity_l,
-                    fuel_tank_capacity_l=profile.fuel_tank_capacity_l,
-                    fuel_reserve_l=profile.fuel_tank_capacity_l * 0.1
-                    if profile.fuel_tank_capacity_l
+                    initial_fuel_l=(
+                        fuel_tank_capacity_l * initial_fuel_ratio
+                        if fuel_tank_capacity_l is not None
+                        and initial_fuel_ratio is not None
+                        else fuel_tank_capacity_l
+                    ),
+                    fuel_tank_capacity_l=fuel_tank_capacity_l,
+                    fuel_reserve_l=fuel_tank_capacity_l
+                    * (reserve_fuel_ratio if reserve_fuel_ratio is not None else 0.1)
+                    if fuel_tank_capacity_l
                     else None,
                     fuel_consumption_l_per_km=profile.fuel_consumption_l_per_km,
                     energy_consumption_kwh_per_km=profile.energy_consumption_kwh_per_km,
@@ -3847,6 +3904,12 @@ class ProblemBuilder:
         if not context.trips:
             return None
         return max(trip.arrival_time for trip in context.trips)
+
+    def _clock_time_after_minutes(self, start_hhmm: str, duration_min: int) -> str:
+        """Return the clock label at the end of an explicit energy horizon."""
+
+        end_min = (self._hhmm_to_min(start_hhmm) + int(duration_min)) % (24 * 60)
+        return f"{end_min // 60:02d}:{end_min % 60:02d}"
 
     def _normalize_hhmm(self, value: Any) -> Optional[str]:
         if value is None:

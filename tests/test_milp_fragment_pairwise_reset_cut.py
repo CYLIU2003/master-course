@@ -142,6 +142,11 @@ def test_milp_blocks_nested_fragments_inside_selected_connection_span() -> None:
 
     assert result.feasible is False
     assert result.plan.unserved_trip_ids == ("t1", "t2", "t3")
+    telemetry = result.plan.metadata["stage1_search_telemetry"]
+    assert telemetry["schema_version"] == "stage1_search_telemetry_v1"
+    assert telemetry["callback_error"] is None
+    assert telemetry["final"]["solution_count"] == 0
+    assert result.solver_metadata["stage1_search_telemetry"] == telemetry
 
 
 @pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")

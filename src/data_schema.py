@@ -23,11 +23,11 @@ def _normalize_timestep_min(raw: Any, *, default: int = 30) -> int:
         value = default
     else:
         text = str(raw).strip().lower()
-        value = {"15": 15, "15.0": 15, "15min": 15, "pt15m": 15, "30": 30, "30.0": 30, "30min": 30, "pt30m": 30, "60": 60, "60.0": 60, "60min": 60, "1h": 60, "pt1h": 60}.get(text)
+        value = {"5": 5, "5.0": 5, "5min": 5, "pt5m": 5, "15": 15, "15.0": 15, "15min": 15, "pt15m": 15, "30": 30, "30.0": 30, "30min": 30, "pt30m": 30, "60": 60, "60.0": 60, "60min": 60, "1h": 60, "pt1h": 60}.get(text)
         if value is None:
             value = int(float(text))
-    if value not in {15, 30, 60}:
-        raise ValueError(f"timestep_min must be 15, 30, or 60 minutes, got {value!r}")
+    if value not in {5, 15, 30, 60}:
+        raise ValueError(f"timestep_min must be 5, 15, 30, or 60 minutes, got {value!r}")
     return value
 
 

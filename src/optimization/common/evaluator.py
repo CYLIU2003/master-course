@@ -295,7 +295,7 @@ class CostEvaluator:
         energy_cost_components = self._evaluate_electricity_with_overwrite(problem, plan, operating_slot_totals)
         fuel_cost_components = self._evaluate_liquid_fuel_with_overwrite(problem, plan)
         grid_import_by_slot = self._grid_import_kwh_by_slot_from_plan(plan)
-        if not grid_import_by_slot:
+        if not grid_import_by_slot and not self._source_provenance_is_exact(plan):
             grid_import_by_slot = self._grid_import_kwh_by_slot_from_charging_slots(problem, plan)
         has_realized_energy_flow = any(
             max(float(energy_cost_components.get(key, 0.0) or 0.0), 0.0) > 0.0
@@ -799,9 +799,17 @@ class CostEvaluator:
             depot_slot_map = target.setdefault(str(depot_id), {})
             depot_slot_map[int(slot.slot_index)] = depot_slot_map.get(int(slot.slot_index), 0.0) + charge_kwh
 
-        effective_grid_to_bus = grid_to_bus if self._mapping_has_positive_flow(grid_to_bus) else derived_grid_to_bus
-        effective_pv_to_bus = pv_to_bus if self._mapping_has_positive_flow(pv_to_bus) else derived_pv_to_bus
-        effective_bess_to_bus = bess_to_bus if self._mapping_has_positive_flow(bess_to_bus) else derived_bess_to_bus
+        if self._source_provenance_is_exact(plan):
+            # An empty exact mapping means the optimized flow is zero.  Falling
+            # back per source would reinterpret physical charger IDs and can
+            # double-count PV charging as grid import.
+            effective_grid_to_bus = grid_to_bus
+            effective_pv_to_bus = pv_to_bus
+            effective_bess_to_bus = bess_to_bus
+        else:
+            effective_grid_to_bus = grid_to_bus if self._mapping_has_positive_flow(grid_to_bus) else derived_grid_to_bus
+            effective_pv_to_bus = pv_to_bus if self._mapping_has_positive_flow(pv_to_bus) else derived_pv_to_bus
+            effective_bess_to_bus = bess_to_bus if self._mapping_has_positive_flow(bess_to_bus) else derived_bess_to_bus
 
         provisional_price_by_depot = self._provisional_price_by_depot(problem)
         drive_events = self._collect_drive_energy_events(problem, plan)
@@ -1404,6 +1412,7 @@ class CostEvaluator:
             if not self._is_non_electric_powertrain(duty.vehicle_type, vehicle_type_by_id):
                 continue
             vehicle_id = duty_vehicle_map.get(duty.duty_id, duty.duty_id)
+            vehicle = vehicle_by_id.get(str(vehicle_id))
             depot_id = vehicle_depot.get(vehicle_id, "depot_default")
             fuel_rate = self._fuel_rate_l_per_km(problem, duty.vehicle_type)
             for leg in duty.legs:
@@ -1419,6 +1428,32 @@ class CostEvaluator:
                     dh_fuel_l = self._deadhead_distance_km(problem, leg.deadhead_from_prev_min) * fuel_rate
                     if dh_fuel_l > 0.0:
                         events.append((vehicle_id, depot_id, int(trip.departure_min), dh_fuel_l))
+            if vehicle is not None and duty.legs and fuel_rate > 0.0:
+                last_trip = problem.trip_by_id().get(duty.legs[-1].trip.trip_id)
+                if last_trip is not None:
+                    return_exists, return_deadhead_min = return_deadhead_min_to_home(
+                        problem,
+                        vehicle,
+                        last_trip,
+                    )
+                    if return_exists and return_deadhead_min > 0:
+                        return_fuel_l = (
+                            self._deadhead_distance_km(
+                                problem,
+                                return_deadhead_min,
+                            )
+                            * fuel_rate
+                        )
+                        if return_fuel_l > 0.0:
+                            events.append(
+                                (
+                                    vehicle_id,
+                                    depot_id,
+                                    int(last_trip.arrival_min)
+                                    + int(return_deadhead_min),
+                                    return_fuel_l,
+                                )
+                            )
         events.sort(key=lambda item: item[2])
         return events
 
@@ -1580,6 +1615,22 @@ class CostEvaluator:
                 fuel -= trip_fuel_l
                 if leg.deadhead_from_prev_min > 0 and fuel_rate > 0.0:
                     fuel -= self._deadhead_distance_km(problem, leg.deadhead_from_prev_min) * fuel_rate
+            if duty.legs and fuel_rate > 0.0:
+                last_trip = problem.trip_by_id().get(duty.legs[-1].trip.trip_id)
+                if last_trip is not None:
+                    return_exists, return_deadhead_min = return_deadhead_min_to_home(
+                        problem,
+                        vehicle,
+                        last_trip,
+                    )
+                    if return_exists and return_deadhead_min > 0:
+                        fuel -= (
+                            self._deadhead_distance_km(
+                                problem,
+                                return_deadhead_min,
+                            )
+                            * fuel_rate
+                        )
         for slot in plan.refuel_slots:
             if str(slot.vehicle_id) == vehicle_id:
                 fuel += max(float(slot.refuel_liters or 0.0), 0.0)
@@ -1606,9 +1657,19 @@ class CostEvaluator:
         if ":" in raw:
             source, depot_id = raw.split(":", 1)
             source_norm = source.strip().lower()
-            if source_norm in {"grid", "bess"}:
+            if source_norm in {"grid", "pv", "bess"}:
                 return source_norm, depot_id.strip() or fallback_depot_id
         return "grid", fallback_depot_id
+
+    def _source_provenance_is_exact(self, plan: AssignmentPlan) -> bool:
+        metadata = dict(plan.metadata or {})
+        canonical_context = metadata.get("canonical_source_flow_context")
+        context_exact = (
+            bool(canonical_context.get("source_provenance_exact", False))
+            if isinstance(canonical_context, dict)
+            else False
+        )
+        return bool(metadata.get("source_provenance_exact", False) or context_exact)
 
     def _dailyized_capex_om(self, capacity: float, capex_unit: float, om_unit_year: float, life_years: int) -> float:
         cap = max(float(capacity or 0.0), 0.0)
@@ -2057,6 +2118,10 @@ class CostEvaluator:
     ) -> Dict[str, float]:
         ice_co2_kg_per_l = max(problem.scenario.ice_co2_kg_per_l, 0.0)
         vehicle_type_by_id = {vt.vehicle_type_id: vt for vt in problem.vehicle_types}
+        vehicle_by_id = {
+            str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles
+        }
+        duty_vehicle_map = plan.duty_vehicle_map()
         ice_co2_kg = 0.0
         grid_electricity_co2_kg = 0.0
 
@@ -2073,8 +2138,8 @@ class CostEvaluator:
             if not self._is_non_electric_powertrain(duty.vehicle_type, vehicle_type_by_id):
                 continue
             vehicle_ice_co2_kg_per_l = _ice_co2_kg_per_l_for_vehicle_type(duty.vehicle_type)
+            fuel_rate = self._fuel_rate_l_per_km(problem, duty.vehicle_type)
             for leg in duty.legs:
-                fuel_rate = self._fuel_rate_l_per_km(problem, duty.vehicle_type)
                 # Trip fuel CO₂.
                 trip = problem.trip_by_id().get(leg.trip.trip_id)
                 if trip is not None:
@@ -2086,6 +2151,27 @@ class CostEvaluator:
                 if leg.deadhead_from_prev_min > 0 and fuel_rate > 0:
                     dh_km = self._deadhead_distance_km(problem, leg.deadhead_from_prev_min)
                     ice_co2_kg += vehicle_ice_co2_kg_per_l * dh_km * fuel_rate
+            vehicle_id = duty_vehicle_map.get(duty.duty_id, duty.duty_id)
+            vehicle = vehicle_by_id.get(str(vehicle_id))
+            if vehicle is not None and duty.legs and fuel_rate > 0.0:
+                last_trip = problem.trip_by_id().get(duty.legs[-1].trip.trip_id)
+                if last_trip is not None:
+                    return_exists, return_deadhead_min = return_deadhead_min_to_home(
+                        problem,
+                        vehicle,
+                        last_trip,
+                    )
+                    if return_exists and return_deadhead_min > 0:
+                        return_fuel_l = (
+                            self._deadhead_distance_km(
+                                problem,
+                                return_deadhead_min,
+                            )
+                            * fuel_rate
+                        )
+                        ice_co2_kg += (
+                            vehicle_ice_co2_kg_per_l * return_fuel_l
+                        )
 
         # BEV electricity CO2: prefer actual grid-import flows (Grid->Bus + Grid->BESS).
         grid_import_by_slot = self._grid_import_kwh_by_slot_from_plan(plan)
@@ -2097,7 +2183,11 @@ class CostEvaluator:
                     continue
                 grid_electricity_co2_kg += co2_factor * max(imported_kwh, 0.0)
         # Backward-compatible fallback.
-        elif slot_totals_kwh and problem.price_slots:
+        elif (
+            not self._source_provenance_is_exact(plan)
+            and slot_totals_kwh
+            and problem.price_slots
+        ):
             co2_factor_map = {slot.slot_index: slot.co2_factor for slot in problem.price_slots}
             for slot_idx, energy_kwh in slot_totals_kwh.items():
                 co2_factor = co2_factor_map.get(slot_idx, 0.0)

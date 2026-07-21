@@ -7,7 +7,7 @@ import json
 from typing import Any
 
 
-INPUT_FINGERPRINT_SCHEMA = "canonical_optimization_input_v1"
+INPUT_FINGERPRINT_SCHEMA = "canonical_optimization_input_v2"
 
 
 def _canonical_hash(payload: Any) -> str:
@@ -31,7 +31,10 @@ def canonical_trip_input_hash(problem: Any) -> str:
             "route_family_code": str(trip.route_family_code),
             "route_variant_type": str(trip.route_variant_type),
             "direction": str(trip.direction),
-            "service_id": str(trip.service_id or ""),
+            # The selected service date is fingerprinted separately by every
+            # research runner.  Once the canonical trip set is built, this
+            # label does not alter assignment or energy behavior and would
+            # make controlled sunny/rainy dates look structurally different.
             "origin": str(trip.origin),
             "destination": str(trip.destination),
             "departure_min": int(trip.departure_min),

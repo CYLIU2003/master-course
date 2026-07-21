@@ -7,6 +7,9 @@ import pandas as pd
 from bff.errors import AppErrorCode
 from bff.services.run_preparation import _build_prepared_scope_audit
 from bff.services.run_preparation import _build_run_preparation
+from bff.services.run_preparation import (
+    _enrich_trip_distances_from_stop_sequences,
+)
 
 
 def _prepared_payload(*, vehicle_count: int = 1) -> dict:
@@ -111,6 +114,62 @@ def test_prepared_scope_audit_relaxes_warning_when_vehicle_lower_bound_is_met() 
     assert audit["strict_coverage_precheck"]["checked"] is True
     assert audit["strict_coverage_precheck"]["infeasible"] is False
     assert audit["strict_coverage_precheck"]["relaxed_vehicle_lower_bound"] == 2
+
+
+def test_trip_distance_uses_all_ordered_stop_coordinates() -> None:
+    trips = [{"trip_id": "trip-1", "distance_km": 0.0}]
+    stops = [
+        {"id": "A", "lat": 35.0, "lon": 139.0},
+        {"id": "B", "lat": 35.01, "lon": 139.01},
+        {"id": "C", "lat": 35.0, "lon": 139.02},
+    ]
+    stop_sequences = [
+        {"trip_id": "trip-1", "stop_id": "C", "sequence": 2},
+        {"trip_id": "trip-1", "stop_id": "A", "sequence": 0},
+        {"trip_id": "trip-1", "stop_id": "B", "sequence": 1},
+    ]
+
+    audit = _enrich_trip_distances_from_stop_sequences(
+        trips,
+        stops=stops,
+        stop_sequences=stop_sequences,
+    )
+
+    assert trips[0]["distance_km"] > 0.0
+    assert trips[0]["distance_source"] == (
+        "trip_stop_sequence_polyline_haversine"
+    )
+    assert trips[0]["distance_stop_count"] == 3
+    assert trips[0]["distance_segment_count"] == 2
+    assert audit["source_counts"] == {
+        "trip_stop_sequence_polyline_haversine": 1
+    }
+    assert audit["semantics"] == (
+        "adjacent_stop_haversine_polyline_not_road_network_distance"
+    )
+
+
+def test_trip_distance_requires_complete_stop_coordinate_coverage() -> None:
+    trips = [{"trip_id": "trip-1", "distance_km": 0.0}]
+    stops = [
+        {"id": "A", "lat": 35.0, "lon": 139.0},
+        {"id": "C", "lat": 35.0, "lon": 139.02},
+    ]
+    stop_sequences = [
+        {"trip_id": "trip-1", "stop_id": "A", "sequence": 0},
+        {"trip_id": "trip-1", "stop_id": "B", "sequence": 1},
+        {"trip_id": "trip-1", "stop_id": "C", "sequence": 2},
+    ]
+
+    audit = _enrich_trip_distances_from_stop_sequences(
+        trips,
+        stops=stops,
+        stop_sequences=stop_sequences,
+    )
+
+    assert trips[0]["distance_km"] == 0.0
+    assert "distance_source" not in trips[0]
+    assert audit["source_counts"] == {"unresolved": 1}
 
 
 def test_prepared_scope_audit_does_not_fail_when_route_band_block_samples_are_emitted() -> None:

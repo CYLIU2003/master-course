@@ -54,6 +54,8 @@ def test_milp_objective_matches_evaluator_on_tiny_case() -> None:
         cost_component_flags={"electricity_cost": False},
         price_slots=(EnergyPriceSlot(slot_index=8, grid_buy_yen_per_kwh=20.0),),
     )
+    assert problem.vehicles[0].initial_soc == pytest.approx(240.0)
+    assert problem.vehicles[0].reserve_soc == pytest.approx(60.0)
     result = MILPOptimizer().solve(
         problem,
         OptimizationConfig(

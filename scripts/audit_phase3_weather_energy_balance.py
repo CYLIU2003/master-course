@@ -172,11 +172,21 @@ def _build_problem(
             prepared_payload,
         )
     )
+    runner._configure_research_discretization(
+        scenario,
+        timestep_min=int(input_audit["timestep_min"]),
+    )
     scenario, weather_forecast, weather_profile = runner._prepare_weather_policy_for_scenario(
         scenario,
         enable_weather_operation_policy=None,
         weather_proxy_forecast_path=None,
     )
+    terminal_policy = dict(input_audit.get("terminal_soc_policy") or {})
+    simulation_config = dict(scenario.get("simulation_config") or {})
+    simulation_config["bev_terminal_soc_policy"] = str(
+        terminal_policy.get("bev_terminal_soc_policy") or "return_to_initial"
+    )
+    scenario["simulation_config"] = simulation_config
     runner.enforce_research_phase3_single_continuous_duty(scenario)
     config = OptimizationConfig(
         mode=OptimizationMode.MILP,
