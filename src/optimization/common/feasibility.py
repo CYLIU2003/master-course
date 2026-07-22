@@ -19,6 +19,10 @@ from .problem import (
     normalize_service_coverage_mode,
 )
 from .bess_terminal_policy import resolve_bess_terminal_soc_target_kwh
+from .bev_terminal_policy import (
+    BevTerminalSocPolicy,
+    normalize_bev_terminal_soc_policy,
+)
 from .time_axis import chronological_duty_key, service_minute
 from .soc_helpers import (
     deadhead_energy_kwh,
@@ -516,20 +520,71 @@ class FeasibilityChecker:
         if not problem.chargers:
             return 0
         ports_by_depot: Dict[str, int] = {}
+        charger_by_id = {}
         for charger in problem.chargers:
             depot_id = str(getattr(charger, "depot_id", "") or "depot_default")
             ports_by_depot[depot_id] = ports_by_depot.get(depot_id, 0) + max(int(getattr(charger, "simultaneous_ports", 1) or 1), 1)
-        vehicle_home = {str(vehicle.vehicle_id): str(vehicle.home_depot_id or "depot_default") for vehicle in problem.vehicles}
+            charger_by_id[str(charger.charger_id)] = charger
+        vehicle_by_id = {str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles}
+        vehicle_home = {vehicle_id: str(vehicle.home_depot_id or "depot_default") for vehicle_id, vehicle in vehicle_by_id.items()}
         active: Dict[tuple[str, int], set[str]] = {}
+        active_by_charger: Dict[tuple[str, int], set[str]] = {}
+        power_by_vehicle_charger_slot: Dict[tuple[str, str, int], float] = {}
+        violations = 0
         for slot in plan.charging_slots:
-            if max(float(getattr(slot, "charge_kw", 0.0) or 0.0), 0.0) <= 1.0e-9:
+            charge_kw = max(float(getattr(slot, "charge_kw", 0.0) or 0.0), 0.0)
+            if charge_kw <= 1.0e-9:
                 continue
             vehicle_id = str(getattr(slot, "vehicle_id", "") or "")
             depot_id = str(getattr(slot, "charging_depot_id", "") or vehicle_home.get(vehicle_id) or "depot_default")
-            active.setdefault((depot_id, int(getattr(slot, "slot_index", 0) or 0)), set()).add(vehicle_id)
-        violations = 0
+            slot_idx = int(getattr(slot, "slot_index", 0) or 0)
+            active.setdefault((depot_id, slot_idx), set()).add(vehicle_id)
+            charger_id = str(getattr(slot, "charger_id", "") or "")
+            charger = charger_by_id.get(charger_id)
+            if charger is None:
+                # Legacy artifacts encode energy source in charger_id.  The
+                # depot-level fallback remains auditable but cannot prove
+                # charger-type compatibility.
+                continue
+            active_by_charger.setdefault((charger_id, slot_idx), set()).add(vehicle_id)
+            key = (vehicle_id, charger_id, slot_idx)
+            power_by_vehicle_charger_slot[key] = (
+                power_by_vehicle_charger_slot.get(key, 0.0) + charge_kw
+            )
+            if str(charger.depot_id or "depot_default") != depot_id:
+                violations += 1
+            vehicle = vehicle_by_id.get(vehicle_id)
+            explicit_ids = tuple(
+                getattr(vehicle, "compatible_charger_ids", ()) or ()
+            ) if vehicle is not None else ()
+            if explicit_ids and charger_id not in explicit_ids:
+                violations += 1
         for (depot_id, _slot_idx), vehicle_ids in active.items():
             if len(vehicle_ids) > ports_by_depot.get(depot_id, 0):
+                violations += 1
+        for (charger_id, _slot_idx), vehicle_ids in active_by_charger.items():
+            charger = charger_by_id[charger_id]
+            ports = max(int(charger.simultaneous_ports or 1), 1)
+            if len(vehicle_ids) > ports:
+                violations += 1
+        for (vehicle_id, charger_id, _slot_idx), charge_kw in power_by_vehicle_charger_slot.items():
+            charger = charger_by_id[charger_id]
+            vehicle = vehicle_by_id.get(vehicle_id)
+            vehicle_limit = getattr(vehicle, "charge_power_max_kw", None)
+            if vehicle_limit is None and vehicle is not None:
+                vehicle_type = next(
+                    (
+                        item
+                        for item in problem.vehicle_types
+                        if item.vehicle_type_id == vehicle.vehicle_type
+                    ),
+                    None,
+                )
+                vehicle_limit = getattr(vehicle_type, "charge_power_max_kw", None)
+            limit_kw = max(float(charger.power_kw or 0.0), 0.0)
+            if vehicle_limit is not None:
+                limit_kw = min(limit_kw, max(float(vehicle_limit), 0.0))
+            if charge_kw > limit_kw + 1.0e-6:
                 violations += 1
         return violations
 
@@ -789,6 +844,29 @@ class FeasibilityChecker:
                     errors.append(
                         f"[SOC_TARGET] duty={duty.duty_id} vehicle={vehicle_id} post-return target SOC {checked_soc:.2f} < required {target_kwh:.2f}"
                     )
+                terminal_policy = normalize_bev_terminal_soc_policy(
+                    problem.metadata.get("bev_terminal_soc_policy"),
+                    has_explicit_target=(
+                        problem.metadata.get("final_soc_target_percent") is not None
+                    ),
+                )
+                if terminal_policy is BevTerminalSocPolicy.RETURN_TO_INITIAL:
+                    tolerance_kwh = max(
+                        float(
+                            problem.metadata.get(
+                                "bev_terminal_soc_equality_tolerance_kwh", 1.0e-6
+                            )
+                            or 1.0e-6
+                        ),
+                        0.0,
+                    )
+                    if checked_soc > target_kwh + tolerance_kwh + 1.0e-9:
+                        errors.append(
+                            f"[SOC_TARGET] duty={duty.duty_id} vehicle={vehicle_id} "
+                            f"post-return target SOC {checked_soc:.6f} exceeds "
+                            f"return-to-initial target {target_kwh:.6f} by more than "
+                            f"{tolerance_kwh:.6f} kWh"
+                        )
 
         return errors
 

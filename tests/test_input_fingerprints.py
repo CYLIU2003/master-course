@@ -74,3 +74,21 @@ def test_vehicle_fingerprint_changes_when_initial_inventory_changes() -> None:
     assert canonical_vehicle_input_hash(problem) != canonical_vehicle_input_hash(
         changed
     )
+
+
+def test_vehicle_fingerprint_covers_charger_limit_and_compatibility() -> None:
+    problem = _problem()
+    changed = replace(
+        problem,
+        vehicles=(
+            replace(
+                problem.vehicles[0],
+                charge_power_max_kw=50.0,
+                compatible_charger_ids=("charger-50",),
+            ),
+        ),
+    )
+
+    assert canonical_vehicle_input_hash(problem) != canonical_vehicle_input_hash(
+        changed
+    )

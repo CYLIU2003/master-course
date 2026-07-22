@@ -18,6 +18,10 @@ from src.optimization.common.cost_components import normalize_cost_component_fla
 from src.optimization.common.bess_terminal_policy import (
     resolve_bess_terminal_soc_target_kwh,
 )
+from src.optimization.common.bev_terminal_policy import (
+    BevTerminalSocPolicy,
+    normalize_bev_terminal_soc_policy,
+)
 from src.optimization.milp.model_builder import MILPModelBuilder
 from src.optimization.common.weather_strategy import weather_assignment_objective_bias
 from src.route_code_utils import extract_route_series_from_candidates
@@ -1191,6 +1195,9 @@ class GurobiMILPAdapter:
         soc_bound_violation_var: Dict[Tuple[str, int, str], Any] = {}
         slot_concurrency_excess_var: Dict[Tuple[str, int], Any] = {}
         charge_ports_by_depot: Dict[str, float] = {}
+        physical_charger_assignment_var: Dict[Tuple[str, str, int], Any] = {}
+        physical_charger_power_var: Dict[Tuple[str, str, int], Any] = {}
+        physical_charger_metadata: Dict[str, Any] = {}
         w_on_var = None
         w_off_var = None
         effective_depot_energy_assets: Dict[str, DepotEnergyAsset] = {}
@@ -1426,10 +1433,10 @@ class GurobiMILPAdapter:
                 else:
                     soc_min = reserve
 
-                charge_max_kw = self._charge_power_max_kw(problem, vehicle.vehicle_type)
+                charge_max_kw = self._vehicle_charge_power_max_kw(problem, vehicle)
                 if problem.chargers:
-                    # Charger assignment is aggregated in this model, so use the strongest
-                    # available charger as the charger-side per-vehicle cap.
+                    # The physical assignment below applies the selected
+                    # charger's exact limit; this is only a safe variable bound.
                     max_charger_kw = max(float(charger.power_kw or 0.0) for charger in problem.chargers)
                     if max_charger_kw > 0.0:
                         charge_max_kw = min(charge_max_kw, max_charger_kw)
@@ -1560,6 +1567,26 @@ class GurobiMILPAdapter:
                                 _slot_end_soc_expr(target_slot_idx, day_idx)
                                 >= hard_target_kwh * day_use_var
                             )
+                            terminal_policy = normalize_bev_terminal_soc_policy(
+                                problem.metadata.get("bev_terminal_soc_policy"),
+                                has_explicit_target=(
+                                    problem.metadata.get("final_soc_target_percent")
+                                    is not None
+                                ),
+                            )
+                            if terminal_policy is BevTerminalSocPolicy.RETURN_TO_INITIAL:
+                                tolerance_kwh = self._safe_nonnegative_float(
+                                    problem.metadata.get(
+                                        "bev_terminal_soc_equality_tolerance_kwh"
+                                    ),
+                                    default=1.0e-6,
+                                )
+                                model.addConstr(
+                                    _slot_end_soc_expr(target_slot_idx, day_idx)
+                                    <= hard_target_kwh
+                                    + tolerance_kwh
+                                    + cap * (1 - day_use_var)
+                                )
                         continue
 
                 if upper_buffer_ratio is not None and upper_buffer_ratio > 0.0:
@@ -1752,46 +1779,54 @@ class GurobiMILPAdapter:
                             >= charge_on_var[start_key] - charge_on_var[(vehicle.vehicle_id, prev_slot_idx)]
                         )
 
-            if problem.chargers:
+            if bev_ids and slot_indices:
+                vehicle_by_id = {v.vehicle_id: v for v in problem.vehicles}
+                (
+                    physical_charger_assignment_var,
+                    physical_charger_power_var,
+                    physical_charger_metadata,
+                ) = self._add_physical_charger_assignment(
+                    model=model,
+                    gp=gp,
+                    grb=GRB,
+                    problem=problem,
+                    vehicle_by_id=vehicle_by_id,
+                    vehicle_ids=tuple(sorted(bev_ids)),
+                    slot_indices=slot_indices,
+                    charge_power_var=c_var,
+                    charge_on_var=charge_on_var,
+                    name_prefix="physical_charger",
+                )
                 ports_by_depot: Dict[str, float] = {}
-                kw_by_depot: Dict[str, float] = {}
                 for charger in problem.chargers:
                     depot_id = str(charger.depot_id or "depot_default")
-                    ports = max(int(charger.simultaneous_ports or 1), 1)
-                    power_kw = max(float(charger.power_kw or 0.0), 0.0)
-                    ports_by_depot[depot_id] = ports_by_depot.get(depot_id, 0.0) + float(ports)
-                    kw_by_depot[depot_id] = kw_by_depot.get(depot_id, 0.0) + power_kw * float(ports)
+                    ports_by_depot[depot_id] = ports_by_depot.get(depot_id, 0.0) + float(
+                        max(int(charger.simultaneous_ports or 1), 1)
+                    )
                 charge_ports_by_depot = dict(ports_by_depot)
-
-                vehicle_by_id = {v.vehicle_id: v for v in problem.vehicles}
-                bev_ids_by_depot_for_charge: Dict[str, List[str]] = {}
-                for vehicle_id in bev_ids:
-                    vehicle = vehicle_by_id.get(vehicle_id)
-                    depot_id = str(getattr(vehicle, "home_depot_id", "") or "depot_default")
-                    bev_ids_by_depot_for_charge.setdefault(depot_id, []).append(vehicle_id)
-
                 for slot_idx in slot_indices:
-                    for depot_id, vehicle_ids in bev_ids_by_depot_for_charge.items():
-                        port_limit = float(ports_by_depot.get(depot_id, 0.0))
-                        kw_limit = float(kw_by_depot.get(depot_id, 0.0))
-                        model.addConstr(
-                            gp.quicksum(charge_on_var[(vehicle_id, slot_idx)] for vehicle_id in vehicle_ids)
-                            <= port_limit
-                        )
-                        model.addConstr(
-                            gp.quicksum(c_var[(vehicle_id, slot_idx)] for vehicle_id in vehicle_ids)
-                            <= kw_limit
-                        )
+                    for depot_id, port_limit in ports_by_depot.items():
+                        vehicle_ids = [
+                            vehicle_id
+                            for vehicle_id in bev_ids
+                            if str(vehicle_by_id[vehicle_id].home_depot_id or "depot_default")
+                            == depot_id
+                        ]
                         soft_ratio = self._safe_nonnegative_float(
                             problem.metadata.get("charge_concurrency_soft_limit_ratio"),
                             default=0.7,
                         )
                         soft_limit = self._soft_charge_concurrency_limit(port_limit, soft_ratio)
                         excess_key = (depot_id, slot_idx)
-                        slot_concurrency_excess_var[excess_key] = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
+                        slot_concurrency_excess_var[excess_key] = model.addVar(
+                            lb=0.0, vtype=GRB.CONTINUOUS
+                        )
                         model.addConstr(
                             slot_concurrency_excess_var[excess_key]
-                            >= gp.quicksum(charge_on_var[(vehicle_id, slot_idx)] for vehicle_id in vehicle_ids)
+                            >= gp.quicksum(
+                                charge_on_var[(vehicle_id, slot_idx)]
+                                for vehicle_id in vehicle_ids
+                            )
                             - float(soft_limit)
                         )
 
@@ -3108,6 +3143,21 @@ class GurobiMILPAdapter:
                         continue
                     vehicle = vehicle_by_id.get(vehicle_id)
                     depot_id = str(getattr(vehicle, "home_depot_id", "") or "depot_default")
+                    selected_charger_id = next(
+                        (
+                            charger_id
+                            for (candidate_vehicle_id, charger_id, candidate_slot_idx), assignment in physical_charger_assignment_var.items()
+                            if candidate_vehicle_id == vehicle_id
+                            and candidate_slot_idx == slot_idx
+                            and _var_val(assignment) > 0.5
+                        ),
+                        None,
+                    )
+                    if selected_charger_id is None:
+                        raise RuntimeError(
+                            "Positive charging power has no selected physical charger: "
+                            f"vehicle={vehicle_id}, slot={slot_idx}"
+                        )
                     vehicle_key = (vehicle_id, slot_idx)
                     bess_kwh = max(_var_val(bess2vehicle_var.get(vehicle_key)), 0.0)
                     pv_kwh = max(_var_val(pv2vehicle_var.get(vehicle_key)), 0.0)
@@ -3118,7 +3168,8 @@ class GurobiMILPAdapter:
                             ChargingSlot(
                                 vehicle_id=vehicle_id,
                                 slot_index=slot_idx,
-                                charger_id=f"bess:{depot_id}",
+                                charger_id=selected_charger_id,
+                                energy_source="bess",
                                 charge_kw=bess_kwh / timestep_h,
                                 discharge_kw=0.0,
                                 charging_depot_id=depot_id,
@@ -3132,7 +3183,8 @@ class GurobiMILPAdapter:
                             ChargingSlot(
                                 vehicle_id=vehicle_id,
                                 slot_index=slot_idx,
-                                charger_id=f"pv:{depot_id}",
+                                charger_id=selected_charger_id,
+                                energy_source="pv",
                                 charge_kw=pv_kwh / timestep_h,
                                 discharge_kw=0.0,
                                 charging_depot_id=depot_id,
@@ -3146,7 +3198,8 @@ class GurobiMILPAdapter:
                             ChargingSlot(
                                 vehicle_id=vehicle_id,
                                 slot_index=slot_idx,
-                                charger_id=f"grid:{depot_id}",
+                                charger_id=selected_charger_id,
+                                energy_source="grid",
                                 charge_kw=grid_kwh / timestep_h,
                                 discharge_kw=0.0,
                                 charging_depot_id=depot_id,
@@ -3271,6 +3324,7 @@ class GurobiMILPAdapter:
                 "vehicle_source_provenance_exact": True,
                 "vehicle_source_allocation_policy": "milp_vehicle_source_variables_tied_to_depot_source_totals",
                 "derived_source_split": False,
+                **physical_charger_metadata,
                 "arc_pruning_summary": arc_pruning_summary,
                 "integrated_single_path_redundancy_elimination_applied": (
                     integrated_single_path_redundancy_elimination_applied
@@ -4762,6 +4816,9 @@ class GurobiMILPAdapter:
         dispatch_trip_by_id = problem.dispatch_context.trips_by_id()
         c_var: Dict[Tuple[str, int], Any] = {}
         charge_on_var: Dict[Tuple[str, int], Any] = {}
+        physical_charger_assignment_var: Dict[Tuple[str, str, int], Any] = {}
+        physical_charger_power_var: Dict[Tuple[str, str, int], Any] = {}
+        physical_charger_metadata: Dict[str, Any] = {}
         s_var: Dict[Tuple[str, int], Any] = {}
         g2vehicle_var: Dict[Tuple[str, int], Any] = {}
         pv2vehicle_var: Dict[Tuple[str, int], Any] = {}
@@ -5092,7 +5149,7 @@ class GurobiMILPAdapter:
             cap = max(float(vehicle.battery_capacity_kwh or 300.0), 1.0)
             reserve = vehicle.reserve_soc
             soc_min = 0.15 * cap if reserve is None else (float(reserve) * cap if float(reserve) <= 1.0 else float(reserve))
-            charge_max_kw = self._charge_power_max_kw(problem, vehicle.vehicle_type)
+            charge_max_kw = self._vehicle_charge_power_max_kw(problem, vehicle)
             if problem.chargers:
                 max_charger_kw = max(float(charger.power_kw or 0.0) for charger in problem.chargers)
                 if max_charger_kw > 0.0:
@@ -5173,6 +5230,23 @@ class GurobiMILPAdapter:
                     terminal_soc_expr >= target_kwh,
                     name=f"terminal_soc__{vehicle_id}__target",
                 )
+                terminal_policy = normalize_bev_terminal_soc_policy(
+                    problem.metadata.get("bev_terminal_soc_policy"),
+                    has_explicit_target=(
+                        problem.metadata.get("final_soc_target_percent") is not None
+                    ),
+                )
+                if terminal_policy is BevTerminalSocPolicy.RETURN_TO_INITIAL:
+                    tolerance_kwh = self._safe_nonnegative_float(
+                        problem.metadata.get(
+                            "bev_terminal_soc_equality_tolerance_kwh"
+                        ),
+                        default=1.0e-6,
+                    )
+                    stage2.addConstr(
+                        terminal_soc_expr <= target_kwh + tolerance_kwh,
+                        name=f"terminal_soc__{vehicle_id}__return_to_initial_upper",
+                    )
             for pos in range(len(slot_indices) - 1):
                 slot_idx = slot_indices[pos]
                 next_slot = slot_indices[pos + 1]
@@ -5221,31 +5295,23 @@ class GurobiMILPAdapter:
                     name=f"departure_soc__{vehicle_id}__{trip.trip_id}",
                 )
 
-        if problem.chargers:
-            ports_by_depot: Dict[str, float] = {}
-            kw_by_depot: Dict[str, float] = {}
-            for charger in problem.chargers:
-                depot_id = str(charger.depot_id or "depot_default")
-                ports = max(int(charger.simultaneous_ports or 1), 1)
-                power_kw = max(float(charger.power_kw or 0.0), 0.0)
-                ports_by_depot[depot_id] = ports_by_depot.get(depot_id, 0.0) + float(ports)
-                kw_by_depot[depot_id] = kw_by_depot.get(depot_id, 0.0) + power_kw * float(ports)
-            bev_ids_by_depot: Dict[str, List[str]] = {}
-            for vehicle_id in assigned_bev_ids:
-                depot_id = str(getattr(vehicle_by_id[vehicle_id], "home_depot_id", "") or "depot_default")
-                bev_ids_by_depot.setdefault(depot_id, []).append(vehicle_id)
-            for slot_idx in slot_indices:
-                for depot_id, vehicle_ids in bev_ids_by_depot.items():
-                    stage2.addConstr(
-                        gp.quicksum(charge_on_var[(vehicle_id, slot_idx)] for vehicle_id in vehicle_ids)
-                        <= float(ports_by_depot.get(depot_id, 0.0)),
-                        name=f"charger_ports__{depot_id}__slot_{slot_idx}",
-                    )
-                    stage2.addConstr(
-                        gp.quicksum(c_var[(vehicle_id, slot_idx)] for vehicle_id in vehicle_ids)
-                        <= float(kw_by_depot.get(depot_id, 0.0)),
-                        name=f"charger_power__{depot_id}__slot_{slot_idx}",
-                    )
+        if assigned_bev_ids and slot_indices:
+            (
+                physical_charger_assignment_var,
+                physical_charger_power_var,
+                physical_charger_metadata,
+            ) = self._add_physical_charger_assignment(
+                model=stage2,
+                gp=gp,
+                grb=GRB,
+                problem=problem,
+                vehicle_by_id=vehicle_by_id,
+                vehicle_ids=tuple(sorted(assigned_bev_ids)),
+                slot_indices=slot_indices,
+                charge_power_var=c_var,
+                charge_on_var=charge_on_var,
+                name_prefix="stage2_physical_charger",
+            )
 
         depot_by_id = {depot.depot_id: depot for depot in problem.depots}
         depot_energy_assets: Dict[str, DepotEnergyAsset] = dict(problem.depot_energy_assets or {})
@@ -5610,6 +5676,7 @@ class GurobiMILPAdapter:
         vehicle_terminal_soc_target_kwh_by_vehicle: Dict[str, float] = {}
         vehicle_terminal_soc_drawdown_kwh_by_vehicle: Dict[str, float] = {}
         vehicle_terminal_soc_target_shortfall_kwh_by_vehicle: Dict[str, float] = {}
+        vehicle_terminal_soc_target_surplus_kwh_by_vehicle: Dict[str, float] = {}
         if slot_indices:
             terminal_slot = slot_indices[-1]
             for vehicle_id in sorted(assigned_bev_ids):
@@ -5669,6 +5736,9 @@ class GurobiMILPAdapter:
                     vehicle_terminal_soc_target_shortfall_kwh_by_vehicle[
                         vehicle_id
                     ] = max(float(target_kwh) - float(terminal_kwh), 0.0)
+                    vehicle_terminal_soc_target_surplus_kwh_by_vehicle[
+                        vehicle_id
+                    ] = max(float(terminal_kwh) - float(target_kwh), 0.0)
                 vehicle_terminal_soc_drawdown_kwh_by_vehicle[vehicle_id] = max(
                     float(initial_kwh) - float(terminal_kwh),
                     0.0,
@@ -5679,11 +5749,26 @@ class GurobiMILPAdapter:
                 continue
             vehicle = vehicle_by_id.get(vehicle_id)
             depot_id = str(getattr(vehicle, "home_depot_id", "") or "depot_default")
+            selected_charger_id = next(
+                (
+                    charger_id
+                    for (candidate_vehicle_id, charger_id, candidate_slot_idx), assignment in physical_charger_assignment_var.items()
+                    if candidate_vehicle_id == vehicle_id
+                    and candidate_slot_idx == slot_idx
+                    and _var_val(assignment) > 0.5
+                ),
+                None,
+            )
+            if selected_charger_id is None:
+                raise RuntimeError(
+                    "Positive Stage 2 charging power has no selected physical charger: "
+                    f"vehicle={vehicle_id}, slot={slot_idx}"
+                )
             vehicle_key = (vehicle_id, slot_idx)
-            for source, source_var, charger_id in (
-                ("grid", g2vehicle_var.get(vehicle_key), f"grid:{depot_id}"),
-                ("pv", pv2vehicle_var.get(vehicle_key), f"pv:{depot_id}"),
-                ("bess", bess2vehicle_var.get(vehicle_key), f"bess:{depot_id}"),
+            for source, source_var in (
+                ("grid", g2vehicle_var.get(vehicle_key)),
+                ("pv", pv2vehicle_var.get(vehicle_key)),
+                ("bess", bess2vehicle_var.get(vehicle_key)),
             ):
                 source_kwh = max(_var_val(source_var), 0.0)
                 if source_kwh <= 1.0e-9:
@@ -5693,7 +5778,8 @@ class GurobiMILPAdapter:
                     ChargingSlot(
                         vehicle_id=vehicle_id,
                         slot_index=slot_idx,
-                        charger_id=charger_id,
+                        charger_id=selected_charger_id,
+                        energy_source=source,
                         charge_kw=source_kwh / timestep_h,
                         discharge_kw=0.0,
                         charging_depot_id=depot_id,
@@ -5769,6 +5855,7 @@ class GurobiMILPAdapter:
             "source_provenance_exact": True,
             "vehicle_source_provenance_exact": True,
             "vehicle_source_allocation_policy": "stage2_vehicle_source_variables_tied_to_fixed_stage1_schedule",
+            **physical_charger_metadata,
             "stage2_return_deadhead_soc_semantics": (
                 "return_energy_subtracted_in_transition_ending_at_first_post_return_slot"
             ),
@@ -5796,17 +5883,54 @@ class GurobiMILPAdapter:
             "vehicle_terminal_soc_target_kwh_by_vehicle": vehicle_terminal_soc_target_kwh_by_vehicle,
             "vehicle_terminal_soc_drawdown_kwh_by_vehicle": vehicle_terminal_soc_drawdown_kwh_by_vehicle,
             "vehicle_terminal_soc_target_shortfall_kwh_by_vehicle": vehicle_terminal_soc_target_shortfall_kwh_by_vehicle,
+            "vehicle_terminal_soc_target_surplus_kwh_by_vehicle": vehicle_terminal_soc_target_surplus_kwh_by_vehicle,
             "bev_terminal_soc_total_drawdown_kwh": float(
                 sum(vehicle_terminal_soc_drawdown_kwh_by_vehicle.values())
             ),
             "bev_terminal_soc_total_target_shortfall_kwh": float(
                 sum(vehicle_terminal_soc_target_shortfall_kwh_by_vehicle.values())
             ),
+            "bev_terminal_soc_total_target_surplus_kwh": float(
+                sum(vehicle_terminal_soc_target_surplus_kwh_by_vehicle.values())
+            ),
+            "bev_terminal_soc_max_abs_target_deviation_kwh": float(
+                max(
+                    (
+                        max(
+                            vehicle_terminal_soc_target_shortfall_kwh_by_vehicle.get(
+                                vehicle_id, 0.0
+                            ),
+                            vehicle_terminal_soc_target_surplus_kwh_by_vehicle.get(
+                                vehicle_id, 0.0
+                            ),
+                        )
+                        for vehicle_id in vehicle_terminal_soc_target_kwh_by_vehicle
+                    ),
+                    default=0.0,
+                )
+            ),
             "bev_terminal_soc_balance_satisfied": bool(
-                vehicle_terminal_soc_target_shortfall_kwh_by_vehicle
+                vehicle_terminal_soc_target_kwh_by_vehicle
                 and max(
-                    vehicle_terminal_soc_target_shortfall_kwh_by_vehicle.values()
-                ) <= 1.0e-6
+                    (
+                        max(
+                            vehicle_terminal_soc_target_shortfall_kwh_by_vehicle.get(
+                                vehicle_id, 0.0
+                            ),
+                            vehicle_terminal_soc_target_surplus_kwh_by_vehicle.get(
+                                vehicle_id, 0.0
+                            ),
+                        )
+                        for vehicle_id in vehicle_terminal_soc_target_kwh_by_vehicle
+                    ),
+                    default=0.0,
+                )
+                <= self._safe_nonnegative_float(
+                    problem.metadata.get(
+                        "bev_terminal_soc_equality_tolerance_kwh"
+                    ),
+                    default=1.0e-6,
+                )
             ),
             "bess_soc_start_kwh_by_depot_slot": bess_soc_start,
             "bess_soc_end_kwh_by_depot_slot": bess_soc_end or bess_soc,
@@ -8259,6 +8383,180 @@ class GurobiMILPAdapter:
         if problem.chargers:
             return max(charger.power_kw for charger in problem.chargers)
         return 50.0
+
+    def _vehicle_charge_power_max_kw(
+        self,
+        problem: CanonicalOptimizationProblem,
+        vehicle: Any,
+    ) -> float:
+        concrete_limit = getattr(vehicle, "charge_power_max_kw", None)
+        if concrete_limit is not None:
+            return max(float(concrete_limit), 0.0)
+        return self._charge_power_max_kw(problem, str(vehicle.vehicle_type))
+
+    def _add_physical_charger_assignment(
+        self,
+        *,
+        model: Any,
+        gp: Any,
+        grb: Any,
+        problem: CanonicalOptimizationProblem,
+        vehicle_by_id: Mapping[str, Any],
+        vehicle_ids: Sequence[str],
+        slot_indices: Sequence[int],
+        charge_power_var: Mapping[Tuple[str, int], Any],
+        charge_on_var: Mapping[Tuple[str, int], Any],
+        name_prefix: str,
+    ) -> Tuple[Dict[Tuple[str, str, int], Any], Dict[Tuple[str, str, int], Any], Dict[str, Any]]:
+        """Assign every active charge session to one physical charger type.
+
+        A charger definition may represent multiple identical ports through
+        ``simultaneous_ports``.  Empty vehicle compatibility is an explicit
+        legacy contract meaning all positive-power chargers at its home depot.
+        """
+
+        charger_by_id: Dict[str, Any] = {}
+        for charger in problem.chargers:
+            charger_id = str(charger.charger_id).strip()
+            if not charger_id:
+                raise ValueError("Physical charger_id must not be empty")
+            if charger_id in charger_by_id:
+                raise ValueError(f"Duplicate physical charger_id: {charger_id}")
+            charger_by_id[charger_id] = charger
+
+        assignment_var: Dict[Tuple[str, str, int], Any] = {}
+        power_var: Dict[Tuple[str, str, int], Any] = {}
+        candidates_by_vehicle: Dict[str, Tuple[str, ...]] = {}
+        implicit_compatibility_vehicle_ids: List[str] = []
+
+        for vehicle_id in vehicle_ids:
+            vehicle = vehicle_by_id[vehicle_id]
+            home_depot_id = str(
+                getattr(vehicle, "home_depot_id", "") or "depot_default"
+            )
+            explicit_ids = tuple(
+                str(charger_id)
+                for charger_id in (
+                    getattr(vehicle, "compatible_charger_ids", ()) or ()
+                )
+            )
+            if not explicit_ids:
+                implicit_compatibility_vehicle_ids.append(vehicle_id)
+            else:
+                unknown_ids = sorted(set(explicit_ids) - set(charger_by_id))
+                if unknown_ids:
+                    raise ValueError(
+                        f"Vehicle {vehicle_id} references unknown compatible "
+                        f"charger IDs: {unknown_ids}"
+                    )
+                wrong_depot_ids = sorted(
+                    charger_id
+                    for charger_id in explicit_ids
+                    if str(
+                        charger_by_id[charger_id].depot_id or "depot_default"
+                    )
+                    != home_depot_id
+                )
+                if wrong_depot_ids:
+                    raise ValueError(
+                        f"Vehicle {vehicle_id} at depot {home_depot_id} references "
+                        f"chargers at another depot: {wrong_depot_ids}"
+                    )
+            candidates = tuple(
+                charger_id
+                for charger_id, charger in sorted(charger_by_id.items())
+                if str(charger.depot_id or "depot_default") == home_depot_id
+                and float(charger.power_kw or 0.0) > 0.0
+                and (not explicit_ids or charger_id in explicit_ids)
+            )
+            candidates_by_vehicle[vehicle_id] = candidates
+            vehicle_limit_kw = self._vehicle_charge_power_max_kw(problem, vehicle)
+            for slot_idx in slot_indices:
+                if not candidates:
+                    model.addConstr(
+                        charge_on_var[(vehicle_id, slot_idx)] == 0,
+                        name=f"{name_prefix}_unavailable__{vehicle_id}__slot_{slot_idx}",
+                    )
+                    model.addConstr(
+                        charge_power_var[(vehicle_id, slot_idx)] == 0,
+                        name=f"{name_prefix}_power_unavailable__{vehicle_id}__slot_{slot_idx}",
+                    )
+                    continue
+                for charger_id in candidates:
+                    charger = charger_by_id[charger_id]
+                    key = (vehicle_id, charger_id, slot_idx)
+                    assignment_var[key] = model.addVar(
+                        vtype=grb.BINARY,
+                        name=f"{name_prefix}_on__{vehicle_id}__{charger_id}__slot_{slot_idx}",
+                    )
+                    power_limit_kw = min(
+                        vehicle_limit_kw,
+                        max(float(charger.power_kw or 0.0), 0.0),
+                    )
+                    power_var[key] = model.addVar(
+                        lb=0.0,
+                        ub=power_limit_kw,
+                        vtype=grb.CONTINUOUS,
+                        name=f"{name_prefix}_kw__{vehicle_id}__{charger_id}__slot_{slot_idx}",
+                    )
+                    model.addConstr(
+                        power_var[key] <= power_limit_kw * assignment_var[key],
+                        name=f"{name_prefix}_link__{vehicle_id}__{charger_id}__slot_{slot_idx}",
+                    )
+                model.addConstr(
+                    gp.quicksum(
+                        assignment_var[(vehicle_id, charger_id, slot_idx)]
+                        for charger_id in candidates
+                    )
+                    == charge_on_var[(vehicle_id, slot_idx)],
+                    name=f"{name_prefix}_one__{vehicle_id}__slot_{slot_idx}",
+                )
+                model.addConstr(
+                    gp.quicksum(
+                        power_var[(vehicle_id, charger_id, slot_idx)]
+                        for charger_id in candidates
+                    )
+                    == charge_power_var[(vehicle_id, slot_idx)],
+                    name=f"{name_prefix}_power_sum__{vehicle_id}__slot_{slot_idx}",
+                )
+
+        for charger_id, charger in sorted(charger_by_id.items()):
+            ports = max(int(charger.simultaneous_ports or 1), 1)
+            charger_power_kw = max(float(charger.power_kw or 0.0), 0.0)
+            for slot_idx in slot_indices:
+                keys = [
+                    (vehicle_id, charger_id, slot_idx)
+                    for vehicle_id in vehicle_ids
+                    if (vehicle_id, charger_id, slot_idx) in assignment_var
+                ]
+                if not keys:
+                    continue
+                model.addConstr(
+                    gp.quicksum(assignment_var[key] for key in keys) <= ports,
+                    name=f"{name_prefix}_ports__{charger_id}__slot_{slot_idx}",
+                )
+                model.addConstr(
+                    gp.quicksum(power_var[key] for key in keys)
+                    <= charger_power_kw * ports,
+                    name=f"{name_prefix}_capacity__{charger_id}__slot_{slot_idx}",
+                )
+
+        metadata = {
+            "physical_charger_assignment_semantics": (
+                "one_physical_charger_definition_per_active_vehicle_slot; "
+                "simultaneous_ports_are_identical_ports"
+            ),
+            "physical_charger_assignment_variable_count": len(assignment_var),
+            "physical_charger_power_variable_count": len(power_var),
+            "implicit_home_depot_charger_compatibility_vehicle_ids": tuple(
+                sorted(implicit_compatibility_vehicle_ids)
+            ),
+            "vehicle_compatible_charger_ids": {
+                vehicle_id: candidates_by_vehicle[vehicle_id]
+                for vehicle_id in sorted(candidates_by_vehicle)
+            },
+        }
+        return assignment_var, power_var, metadata
 
     def _discharge_power_max_kw(self, problem: CanonicalOptimizationProblem, vehicle_type: str) -> float:
         vt = next((item for item in problem.vehicle_types if item.vehicle_type_id == vehicle_type), None)

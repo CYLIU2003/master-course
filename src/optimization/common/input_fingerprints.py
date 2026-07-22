@@ -7,7 +7,7 @@ import json
 from typing import Any
 
 
-INPUT_FINGERPRINT_SCHEMA = "canonical_optimization_input_v2"
+INPUT_FINGERPRINT_SCHEMA = "canonical_optimization_input_v3"
 
 
 def _canonical_hash(payload: Any) -> str:
@@ -74,6 +74,8 @@ def canonical_vehicle_input_hash(problem: Any) -> str:
             "fuel_reserve_l": vehicle.fuel_reserve_l,
             "fuel_consumption_l_per_km": vehicle.fuel_consumption_l_per_km,
             "fixed_use_cost_jpy": float(vehicle.fixed_use_cost_jpy or 0.0),
+            "charge_power_max_kw": vehicle.charge_power_max_kw,
+            "compatible_charger_ids": list(vehicle.compatible_charger_ids),
         }
         for vehicle in sorted(
             problem.vehicles,

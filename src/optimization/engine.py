@@ -147,6 +147,14 @@ def _charging_source_and_depot(
         or str(getattr(charging_slot, "charging_depot_id", "") or "")
         or _fallback_depot_id(problem)
     )
+    explicit_source = str(
+        getattr(charging_slot, "energy_source", "") or ""
+    ).strip().lower()
+    explicit_depot = str(
+        getattr(charging_slot, "charging_depot_id", "") or ""
+    ).strip()
+    if explicit_source in {"grid", "pv", "bess"}:
+        return explicit_source, explicit_depot or fallback_depot
     charger_id = str(getattr(charging_slot, "charger_id", "") or "").strip()
     if ":" in charger_id:
         source, depot_id = charger_id.split(":", 1)
@@ -979,6 +987,7 @@ class OptimizationEngine:
             "vehicle_terminal_soc_target_kwh_by_vehicle",
             "vehicle_terminal_soc_drawdown_kwh_by_vehicle",
             "vehicle_terminal_soc_target_shortfall_kwh_by_vehicle",
+            "vehicle_terminal_soc_target_surplus_kwh_by_vehicle",
         ):
             solver_metadata[key] = dict(plan.metadata.get(key, {}) or {})
         solver_metadata["bev_terminal_soc_total_drawdown_kwh"] = float(
@@ -991,9 +1000,31 @@ class OptimizationEngine:
             )
             or 0.0
         )
+        solver_metadata["bev_terminal_soc_total_target_surplus_kwh"] = float(
+            plan.metadata.get(
+                "bev_terminal_soc_total_target_surplus_kwh",
+                0.0,
+            )
+            or 0.0
+        )
+        solver_metadata["bev_terminal_soc_max_abs_target_deviation_kwh"] = float(
+            plan.metadata.get(
+                "bev_terminal_soc_max_abs_target_deviation_kwh",
+                0.0,
+            )
+            or 0.0
+        )
         solver_metadata["bev_terminal_soc_balance_satisfied"] = bool(
             plan.metadata.get("bev_terminal_soc_balance_satisfied", False)
         )
+        for key in (
+            "physical_charger_assignment_semantics",
+            "physical_charger_assignment_variable_count",
+            "physical_charger_power_variable_count",
+            "implicit_home_depot_charger_compatibility_vehicle_ids",
+            "vehicle_compatible_charger_ids",
+        ):
+            solver_metadata[key] = plan.metadata.get(key)
         solver_metadata["source_provenance_exact"] = bool(
             dict(plan.metadata or {}).get("source_provenance_exact", False)
         )

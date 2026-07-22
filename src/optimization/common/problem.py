@@ -170,6 +170,10 @@ class ProblemVehicle:
     fuel_consumption_l_per_km: Optional[float] = None
     energy_consumption_kwh_per_km: Optional[float] = None
     fixed_use_cost_jpy: float = 0.0
+    charge_power_max_kw: Optional[float] = None
+    # Empty means that every charger at the home depot is compatible.  When
+    # populated, the formal MILP may use only the listed physical chargers.
+    compatible_charger_ids: Tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -391,6 +395,9 @@ class ChargingSlot:
     charging_depot_id: Optional[str] = None
     charging_latitude: Optional[float] = None
     charging_longitude: Optional[float] = None
+    # Energy provenance is independent of the physical charger.  Legacy
+    # artifacts may omit this and encode the source as ``grid:<depot>`` etc.
+    energy_source: Optional[str] = None
 
 
 @dataclass(frozen=True)

@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import hashlib
+import json
+from pathlib import Path
 
 import pytest
 
 from scripts.compare_research_phase3_weather import (
     ComparisonContractError,
+    _validate_manifest,
     build_weather_comparison,
     render_markdown_report,
 )
@@ -90,6 +94,7 @@ def _summary(
         },
         "trip_count": 264,
         "fleet": {"BEV": 35, "ICE": 25},
+        "expected_fleet": {"BEV": 35, "ICE": 25},
         "timestep_min": 15,
         "price_slot_count": 96,
         "planning_horizon_hours": 24.0,
@@ -143,6 +148,11 @@ def _summary(
         },
         "charger_configuration": [{"charger_id": "charger-1", "power_kw": 90.0}],
         "charger_configuration_hash": "charger-hash",
+        "physical_charger_assignment_semantics": (
+            "one_physical_charger_definition_per_active_vehicle_slot; "
+            "simultaneous_ports_are_identical_ports"
+        ),
+        "implicit_home_depot_charger_compatibility_vehicle_ids": [],
         "depot_energy_assets": {
             "tsurumaki": {
                 "pv_enabled": True,
@@ -382,7 +392,7 @@ def test_rejects_smoke_run_or_inconsistent_cost_components() -> None:
     rain = deepcopy(rain)
     rain["time_limit_sec"] = 20
 
-    with pytest.raises(ComparisonContractError, match="rain.time_limit_sec"):
+    with pytest.raises(ComparisonContractError, match="time_limit_sec"):
         build_weather_comparison(sunny, rain)
 
     sunny, rain = _valid_pair()
@@ -406,3 +416,40 @@ def test_rejects_a_different_contract_power_limit() -> None:
         match="Fixed contract-power control differs at depot_import_limit_kw_by_depot",
     ):
         build_weather_comparison(sunny, rain)
+
+
+def test_manifest_detects_tampered_artifact(tmp_path: Path) -> None:
+    sunny, _rain = _valid_pair()
+    summary_path = tmp_path / "summary.json"
+    summary_path.write_text(json.dumps(sunny), encoding="utf-8")
+    solver_path = tmp_path / "solver_result.json"
+    solver_path.write_text("{}", encoding="utf-8")
+
+    def record(path: Path) -> dict[str, int | str]:
+        return {
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "size_bytes": path.stat().st_size,
+        }
+
+    (tmp_path / "manifest.json").write_text(
+        json.dumps(
+            {
+                "schema": "research_run_manifest_v1",
+                "run_state": "complete",
+                "declared_controls": {
+                    "mip_gap": sunny["mip_gap"],
+                    "fleet": sunny["fleet"],
+                },
+                "artifacts": {
+                    "summary.json": record(summary_path),
+                    "solver_result.json": record(solver_path),
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    _validate_manifest("sunny", summary_path, sunny)
+
+    solver_path.write_text('{"tampered": true}', encoding="utf-8")
+    with pytest.raises(ComparisonContractError, match="solver_result.json.sha256"):
+        _validate_manifest("sunny", summary_path, sunny)

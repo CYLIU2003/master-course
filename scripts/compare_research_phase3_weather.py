@@ -10,6 +10,7 @@ two-stage result as a global total-cost optimum.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import sys
@@ -21,12 +22,8 @@ from typing import Any, Mapping, Sequence
 EXPECTED_PHASE = "phase3_two_stage"
 EXPECTED_COST_SCOPE = "feasible_schedule_accounting_not_global_total_cost_optimum"
 EXPECTED_TRIP_COUNT = 264
-EXPECTED_FLEET = {"BEV": 35, "ICE": 25}
 EXPECTED_TIMESTEP_MIN = 15
 EXPECTED_PRICE_SLOT_COUNT = 96
-EXPECTED_TIME_LIMIT_SEC = 1500
-EXPECTED_MIP_GAP = 0.1
-EXPECTED_RANDOM_SEED = 42
 
 # These are experimental controls, not weather inputs.  Any difference means
 # the pair answers different research questions and must not be compared.
@@ -41,6 +38,7 @@ FIXED_CONTROL_FIELDS = (
     "weather_operation_policy_enabled",
     "trip_count",
     "fleet",
+    "expected_fleet",
     "timestep_min",
     "price_slot_count",
     "planning_horizon_hours",
@@ -68,6 +66,8 @@ FIXED_CONTROL_FIELDS = (
     "research_fragment_policy",
     "charger_configuration",
     "charger_configuration_hash",
+    "physical_charger_assignment_semantics",
+    "implicit_home_depot_charger_compatibility_vehicle_ids",
     "vehicle_input_hash",
     "trip_input_hash",
     "stage1_energy_envelope_constraint_count",
@@ -385,7 +385,6 @@ def render_markdown_report(comparison: Mapping[str, Any]) -> str:
 def _validate_accepted_case(case: str, summary: Mapping[str, Any]) -> None:
     _expect(case, "phase", summary.get("phase"), EXPECTED_PHASE)
     _expect(case, "trip_count", summary.get("trip_count"), EXPECTED_TRIP_COUNT)
-    _expect(case, "fleet", summary.get("fleet"), EXPECTED_FLEET)
     _expect(case, "timestep_min", summary.get("timestep_min"), EXPECTED_TIMESTEP_MIN)
     _expect(
         case,
@@ -393,14 +392,24 @@ def _validate_accepted_case(case: str, summary: Mapping[str, Any]) -> None:
         summary.get("price_slot_count"),
         EXPECTED_PRICE_SLOT_COUNT,
     )
-    _expect(
-        case,
-        "time_limit_sec",
-        summary.get("time_limit_sec"),
-        EXPECTED_TIME_LIMIT_SEC,
+    fleet = _require_mapping(summary.get("fleet"), f"{case}.fleet")
+    expected_fleet = _require_mapping(
+        summary.get("expected_fleet"), f"{case}.expected_fleet"
     )
-    _expect(case, "mip_gap", summary.get("mip_gap"), EXPECTED_MIP_GAP)
-    _expect(case, "random_seed", summary.get("random_seed"), EXPECTED_RANDOM_SEED)
+    if dict(fleet) != dict(expected_fleet):
+        raise ComparisonContractError(
+            f"{case}.fleet must match its declared expected_fleet: "
+            f"fleet={dict(fleet)}, expected={dict(expected_fleet)}"
+        )
+    time_limit = _finite_number(
+        summary.get("time_limit_sec"), f"{case}.time_limit_sec"
+    )
+    mip_gap = _finite_number(summary.get("mip_gap"), f"{case}.mip_gap")
+    _finite_number(summary.get("random_seed"), f"{case}.random_seed")
+    if time_limit <= 0.0:
+        raise ComparisonContractError(f"{case}.time_limit_sec must be positive")
+    if not 0.0 <= mip_gap < 1.0:
+        raise ComparisonContractError(f"{case}.mip_gap must be in [0, 1)")
     _expect(case, "feasible", summary.get("feasible"), True)
     _expect(case, "research_run_accepted", summary.get("research_run_accepted"), True)
     _expect(
@@ -933,6 +942,79 @@ def _load_summary(path: Path) -> Mapping[str, Any]:
     return _require_mapping(payload, f"summary {path}")
 
 
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _validate_manifest(
+    case: str,
+    summary_path: Path,
+    summary: Mapping[str, Any],
+) -> None:
+    manifest_path = summary_path.parent / "manifest.json"
+    if not manifest_path.is_file():
+        raise ComparisonContractError(
+            f"{case} is missing required manifest: {manifest_path}"
+        )
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ComparisonContractError(
+            f"{case} manifest cannot be read: {error}"
+        ) from error
+    manifest = _require_mapping(manifest, f"{case}.manifest")
+    _expect(case, "manifest.schema", manifest.get("schema"), "research_run_manifest_v1")
+    _expect(case, "manifest.run_state", manifest.get("run_state"), "complete")
+    artifacts = _require_mapping(
+        manifest.get("artifacts"), f"{case}.manifest.artifacts"
+    )
+    artifact_root = manifest_path.parent.resolve()
+    if summary_path.resolve() != artifact_root / "summary.json":
+        raise ComparisonContractError(
+            f"{case} summary must be the manifest-pinned summary.json in its run directory"
+        )
+    for artifact_name, raw_record in artifacts.items():
+        record = _require_mapping(
+            raw_record, f"{case}.manifest.artifacts.{artifact_name}"
+        )
+        artifact_path = (artifact_root / str(artifact_name)).resolve()
+        if artifact_path.parent != artifact_root or not artifact_path.is_file():
+            raise ComparisonContractError(
+                f"{case} manifest artifact is missing or outside its run directory: "
+                f"{artifact_name}"
+            )
+        _expect(
+            case,
+            f"manifest.artifacts.{artifact_name}.sha256",
+            record.get("sha256"),
+            _file_sha256(artifact_path),
+        )
+        _expect(
+            case,
+            f"manifest.artifacts.{artifact_name}.size_bytes",
+            record.get("size_bytes"),
+            artifact_path.stat().st_size,
+        )
+    if "summary.json" not in artifacts:
+        raise ComparisonContractError(
+            f"{case} manifest must include summary.json"
+        )
+    controls = _require_mapping(
+        manifest.get("declared_controls"),
+        f"{case}.manifest.declared_controls",
+    )
+    for field, declared_value in controls.items():
+        if field in summary and summary.get(field) != declared_value:
+            raise ComparisonContractError(
+                f"{case}.{field} differs from its manifest declaration: "
+                f"summary={summary.get(field)!r}, manifest={declared_value!r}"
+            )
+
+
 def _write_json(path: Path, value: Mapping[str, Any]) -> None:
     path.write_text(
         json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
@@ -951,9 +1033,13 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
+        sunny_summary = _load_summary(args.sunny_summary)
+        rain_summary = _load_summary(args.rain_summary)
+        _validate_manifest("sunny", args.sunny_summary, sunny_summary)
+        _validate_manifest("rain", args.rain_summary, rain_summary)
         comparison = build_weather_comparison(
-            _load_summary(args.sunny_summary),
-            _load_summary(args.rain_summary),
+            sunny_summary,
+            rain_summary,
         )
     except ComparisonContractError as error:
         print(error, file=sys.stderr)

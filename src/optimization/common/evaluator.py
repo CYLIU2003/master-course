@@ -786,7 +786,11 @@ class CostEvaluator:
 
         charge_events: list[tuple[int, str, str, float]] = []
         for slot in plan.charging_slots:
-            source, depot_id = self._charging_source_and_depot(slot.charger_id, vehicle_depot.get(slot.vehicle_id, "depot_default"))
+            source, depot_id = self._charging_source_and_depot(
+                slot.charger_id,
+                vehicle_depot.get(slot.vehicle_id, "depot_default"),
+                getattr(slot, "energy_source", None),
+            )
             charge_kwh = max(float(slot.charge_kw or 0.0) - max(float(slot.discharge_kw or 0.0), 0.0), 0.0) * timestep_h
             if charge_kwh <= 0.0:
                 continue
@@ -1652,7 +1656,15 @@ class CostEvaluator:
             result["depot_default"] = avg_price
         return result
 
-    def _charging_source_and_depot(self, charger_id: str | None, fallback_depot_id: str) -> tuple[str, str]:
+    def _charging_source_and_depot(
+        self,
+        charger_id: str | None,
+        fallback_depot_id: str,
+        energy_source: str | None = None,
+    ) -> tuple[str, str]:
+        source_norm = str(energy_source or "").strip().lower()
+        if source_norm in {"grid", "pv", "bess"}:
+            return source_norm, fallback_depot_id
         raw = str(charger_id or "")
         if ":" in raw:
             source, depot_id = raw.split(":", 1)
@@ -1696,7 +1708,11 @@ class CostEvaluator:
         timestep_h = max(problem.scenario.timestep_min, 1) / 60.0
         merged: Dict[int, float] = {}
         for slot in plan.charging_slots:
-            source, _depot_id = self._charging_source_and_depot(slot.charger_id, "depot_default")
+            source, _depot_id = self._charging_source_and_depot(
+                slot.charger_id,
+                "depot_default",
+                getattr(slot, "energy_source", None),
+            )
             if source != "grid":
                 continue
             charge_kwh = max(float(slot.charge_kw or 0.0) - max(float(slot.discharge_kw or 0.0), 0.0), 0.0) * timestep_h

@@ -63,6 +63,7 @@ class ResultSerializer:
                     "vehicle_id": slot.vehicle_id,
                     "slot_index": slot.slot_index,
                     "charger_id": slot.charger_id,
+                    "energy_source": slot.energy_source,
                     "charge_kw": slot.charge_kw,
                     "discharge_kw": slot.discharge_kw,
                     "charging_depot_id": slot.charging_depot_id,

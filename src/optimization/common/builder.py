@@ -2200,6 +2200,27 @@ class ProblemBuilder:
             if energy_kwh_per_km is None and profile is not None:
                 energy_kwh_per_km = profile.energy_consumption_kwh_per_km
 
+            charge_power_max_kw = self._safe_float(
+                vehicle.get("chargePowerKw")
+                or vehicle.get("charge_power_max_kw")
+            )
+            compatible_charger_ids_raw = (
+                vehicle.get("compatibleChargerIds")
+                or vehicle.get("compatible_charger_ids")
+                or ()
+            )
+            if isinstance(compatible_charger_ids_raw, str):
+                compatible_charger_ids_raw = (compatible_charger_ids_raw,)
+            compatible_charger_ids = tuple(
+                sorted(
+                    {
+                        str(charger_id).strip()
+                        for charger_id in compatible_charger_ids_raw
+                        if str(charger_id).strip()
+                    }
+                )
+            )
+
             fixed_use_cost_jpy = self._vehicle_fixed_use_cost_jpy(
                 vehicle,
                 disable_acquisition_cost=disable_vehicle_acquisition_cost,
@@ -2231,6 +2252,8 @@ class ProblemBuilder:
                 fuel_consumption_l_per_km=fuel_l_per_km,
                 energy_consumption_kwh_per_km=energy_kwh_per_km,
                 fixed_use_cost_jpy=fixed_use_cost_jpy,
+                charge_power_max_kw=charge_power_max_kw,
+                compatible_charger_ids=compatible_charger_ids,
             )
 
     def _build_vehicle_profiles(

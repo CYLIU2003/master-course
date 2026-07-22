@@ -144,7 +144,8 @@ def test_result_serializer_includes_charging_depot_coordinates() -> None:
             ChargingSlot(
                 vehicle_id="bev-1",
                 slot_index=1,
-                charger_id="grid:dep-1",
+                charger_id="charger-90-1",
+                energy_source="grid",
                 charge_kw=20.0,
                 charging_depot_id="dep-1",
                 charging_latitude=35.621,
@@ -167,6 +168,8 @@ def test_result_serializer_includes_charging_depot_coordinates() -> None:
     assert row["charging_depot_id"] == "dep-1"
     assert row["charging_latitude"] == 35.621
     assert row["charging_longitude"] == 139.699
+    assert row["charger_id"] == "charger-90-1"
+    assert row["energy_source"] == "grid"
 
 
 def test_result_serializer_includes_cost_ledgers_and_operating_splits() -> None:

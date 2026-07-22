@@ -15,7 +15,9 @@ from dataclasses import replace
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import time
@@ -588,13 +590,34 @@ def _solve_fast_fixed_path_candidates(
 
 
 def _git_state() -> dict[str, Any]:
+    git_executable = shutil.which("git")
+    if git_executable is None:
+        candidates = (
+            Path(os.environ.get("ProgramFiles", "")) / "Git" / "cmd" / "git.exe",
+            Path(os.environ.get("LOCALAPPDATA", ""))
+            / "Programs"
+            / "Git"
+            / "cmd"
+            / "git.exe",
+        )
+        git_executable = next(
+            (str(path) for path in candidates if str(path) and path.is_file()),
+            None,
+        )
+    if git_executable is None:
+        return {
+            "git_sha": None,
+            "git_dirty": None,
+            "git_state_available": False,
+            "git_state_error": "Git executable was not found",
+        }
     try:
         sha = subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, text=True
+            [git_executable, "rev-parse", "HEAD"], cwd=REPO_ROOT, text=True
         ).strip()
         dirty = bool(
             subprocess.check_output(
-                ["git", "status", "--porcelain"], cwd=REPO_ROOT, text=True
+                [git_executable, "status", "--porcelain"], cwd=REPO_ROOT, text=True
             ).strip()
         )
     except (FileNotFoundError, OSError, subprocess.CalledProcessError) as exc:
@@ -677,6 +700,62 @@ def _write_vehicle_schedule(path: Path, result: Any) -> None:
         )
         writer.writeheader()
         writer.writerows(rows)
+
+
+def _write_research_manifest(
+    output_dir: Path,
+    *,
+    input_audit: dict[str, Any],
+    run_state: str,
+) -> None:
+    artifact_names = (
+        "effective_scenario.json",
+        "input_audit.json",
+        "solver_result.json",
+        "summary.json",
+        "vehicle_schedule.csv",
+    )
+    artifacts = {
+        name: {
+            "sha256": _sha256(output_dir / name),
+            "size_bytes": (output_dir / name).stat().st_size,
+        }
+        for name in artifact_names
+        if (output_dir / name).is_file()
+    }
+    declared_fields = (
+        "case_name",
+        "scenario_id",
+        "prepared_input_id",
+        "service_date",
+        "phase",
+        "stage1_strategy",
+        "time_limit_sec",
+        "stage1_time_limit_sec",
+        "stage2_time_limit_sec",
+        "mip_gap",
+        "random_seed",
+        "expected_fleet",
+        "fleet",
+        "fleet_available",
+        "timestep_min",
+        "price_slot_count",
+        "terminal_soc_policy",
+        "charger_configuration_hash",
+        "vehicle_input_hash",
+        "trip_input_hash",
+        "git_sha",
+        "git_dirty",
+    )
+    manifest = {
+        "schema": "research_run_manifest_v1",
+        "run_state": run_state,
+        "declared_controls": {
+            field: input_audit.get(field) for field in declared_fields
+        },
+        "artifacts": artifacts,
+    }
+    _write_json(output_dir / "manifest.json", manifest)
 
 
 def _clock_hour_prices(problem: Any) -> dict[str, float]:
@@ -806,6 +885,8 @@ def _validate_frontend_case(
     scenario: dict[str, Any],
     *,
     expected_service_date: str,
+    expected_bev_count: int,
+    expected_ice_count: int,
 ) -> None:
     if len(problem.trips) != 264:
         raise ValueError(f"Expected the 264-trip research scope, got {len(problem.trips)}")
@@ -822,8 +903,16 @@ def _validate_frontend_case(
         )
         for vehicle_type in ("BEV", "ICE")
     }
-    if fleet != {"BEV": 35, "ICE": 25}:
-        raise ValueError(f"Expected BEV35 + ICE25, got {fleet}")
+    expected_fleet = {
+        "BEV": int(expected_bev_count),
+        "ICE": int(expected_ice_count),
+    }
+    if fleet != expected_fleet:
+        raise ValueError(
+            f"Expected formal fleet {expected_fleet}, got {fleet}. "
+            "Do not invent the missing vehicle: correct the persisted scenario "
+            "or explicitly declare a legacy sensitivity with the CLI flags."
+        )
     if int(problem.scenario.timestep_min) != 15 or len(problem.price_slots) != 96:
         raise ValueError(
             "Formal frontend weather comparison requires 15-minute, 96-slot input"
@@ -913,6 +1002,9 @@ def run(args: argparse.Namespace) -> int:
     )
     simulation_config = dict(scenario.get("simulation_config") or {})
     simulation_config["bev_terminal_soc_policy"] = bev_terminal_soc_policy.value
+    simulation_config["bev_terminal_soc_equality_tolerance_kwh"] = float(
+        args.bev_terminal_soc_equality_tolerance_kwh
+    )
     scenario["simulation_config"] = simulation_config
     fragment_policy = enforce_research_phase3_single_continuous_duty(scenario)
     initial_soc_policy = _resolve_initial_soc_policy(scenario)
@@ -947,19 +1039,33 @@ def run(args: argparse.Namespace) -> int:
             weather_profile,
             random_seed=int(args.random_seed),
         )
+    problem = replace(
+        problem,
+        metadata={
+            **dict(problem.metadata or {}),
+            "bev_terminal_soc_equality_tolerance_kwh": float(
+                args.bev_terminal_soc_equality_tolerance_kwh
+            ),
+        },
+    )
     initial_soc_metadata = initial_soc_input_metadata(
         problem,
         policy=initial_soc_policy,
     )
-    if len(initial_soc_metadata["initial_soc_by_vehicle"]) != 35:
+    if len(initial_soc_metadata["initial_soc_by_vehicle"]) != int(
+        args.expected_bev_count
+    ):
         raise ValueError(
-            "Frontend weather comparison requires exact initial SOC inputs for 35 BEVs"
+            "Frontend weather comparison requires exact initial SOC inputs for "
+            f"{int(args.expected_bev_count)} BEVs"
         )
     trip_distance_audit = _trip_distance_audit(problem, prepared_payload)
     _validate_frontend_case(
         problem,
         scenario,
         expected_service_date=args.expected_service_date,
+        expected_bev_count=args.expected_bev_count,
+        expected_ice_count=args.expected_ice_count,
     )
     git_state = _git_state()
     trip_input_hash = _trip_input_hash(problem)
@@ -986,6 +1092,9 @@ def run(args: argparse.Namespace) -> int:
         "final_soc_target_percent": problem.metadata.get("final_soc_target_percent"),
         "final_soc_target_tolerance_percent": problem.metadata.get(
             "final_soc_target_tolerance_percent"
+        ),
+        "bev_terminal_soc_equality_tolerance_kwh": problem.metadata.get(
+            "bev_terminal_soc_equality_tolerance_kwh"
         ),
     }
     experiment_hash = _canonical_hash(
@@ -1028,6 +1137,7 @@ def run(args: argparse.Namespace) -> int:
     )
     input_audit = {
         "effective_scenario_artifact": "effective_scenario.json",
+        "manifest_artifact": "manifest.json",
         "effective_scenario_sha256": _canonical_hash(scenario),
         "input_fingerprint_schema": INPUT_FINGERPRINT_SCHEMA,
         "case_name": args.case_name,
@@ -1149,11 +1259,20 @@ def run(args: argparse.Namespace) -> int:
                 "uses_full_network_and_time_indexed_soc_relaxation"
             ),
         },
+        "expected_fleet": {
+            "BEV": int(args.expected_bev_count),
+            "ICE": int(args.expected_ice_count),
+        },
         **git_state,
     }
     _write_json(output_dir / "effective_scenario.json", scenario)
     _write_json(output_dir / "input_audit.json", input_audit)
     if args.build_only:
+        _write_research_manifest(
+            output_dir,
+            input_audit=input_audit,
+            run_state="build_only",
+        )
         print(json.dumps(input_audit, ensure_ascii=False, indent=2), flush=True)
         return 0
     if not is_gurobi_available():
@@ -1412,6 +1531,21 @@ def run(args: argparse.Namespace) -> int:
             metadata.get("stage1_search_telemetry") or {}
         ),
         "stage2_runtime_seconds": _finite(metadata.get("stage2_runtime_seconds")),
+        "physical_charger_assignment_semantics": metadata.get(
+            "physical_charger_assignment_semantics"
+        ),
+        "physical_charger_assignment_variable_count": metadata.get(
+            "physical_charger_assignment_variable_count"
+        ),
+        "physical_charger_power_variable_count": metadata.get(
+            "physical_charger_power_variable_count"
+        ),
+        "implicit_home_depot_charger_compatibility_vehicle_ids": list(
+            metadata.get(
+                "implicit_home_depot_charger_compatibility_vehicle_ids"
+            )
+            or ()
+        ),
         "stage1_time_limit_sec_effective": metadata.get(
             "stage1_time_limit_sec_effective"
         ),
@@ -1514,6 +1648,12 @@ def run(args: argparse.Namespace) -> int:
         "bev_terminal_soc_total_target_shortfall_kwh": _finite(
             metadata.get("bev_terminal_soc_total_target_shortfall_kwh")
         ),
+        "bev_terminal_soc_total_target_surplus_kwh": _finite(
+            metadata.get("bev_terminal_soc_total_target_surplus_kwh")
+        ),
+        "bev_terminal_soc_max_abs_target_deviation_kwh": _finite(
+            metadata.get("bev_terminal_soc_max_abs_target_deviation_kwh")
+        ),
         "bev_terminal_soc_balance_satisfied": bool(
             metadata.get("bev_terminal_soc_balance_satisfied", False)
         ),
@@ -1535,6 +1675,11 @@ def run(args: argparse.Namespace) -> int:
     _write_json(output_dir / "summary.json", summary)
     if result.feasible:
         _write_vehicle_schedule(output_dir / "vehicle_schedule.csv", result)
+    _write_research_manifest(
+        output_dir,
+        input_audit=input_audit,
+        run_state="complete" if result.feasible else "infeasible",
+    )
     print(json.dumps(summary, ensure_ascii=False, indent=2, default=str), flush=True)
     return 0 if result.feasible else 2
 
@@ -1545,6 +1690,16 @@ def main() -> int:
     parser.add_argument("--scenario-id", required=True)
     parser.add_argument("--prepared-input-id", required=True)
     parser.add_argument("--expected-service-date", required=True)
+    parser.add_argument("--expected-bev-count", type=int, default=35)
+    parser.add_argument(
+        "--expected-ice-count",
+        type=int,
+        default=26,
+        help=(
+            "Formal supervisor-agreed ICE inventory. Use 25 only for an "
+            "explicitly labelled legacy sensitivity."
+        ),
+    )
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--depot-id", default="tsurumaki")
     parser.add_argument("--service-id", default="WEEKDAY")
@@ -1629,6 +1784,12 @@ def main() -> int:
             "End-of-day BEV energy rule. return_to_initial is required for "
             "fair cost comparison; minimum_only is diagnostic only."
         ),
+    )
+    parser.add_argument(
+        "--bev-terminal-soc-equality-tolerance-kwh",
+        type=float,
+        default=1.0e-6,
+        help="Absolute numerical tolerance for return_to_initial equality.",
     )
     parser.add_argument(
         "--available-bev-count",

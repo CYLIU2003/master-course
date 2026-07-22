@@ -60,6 +60,47 @@ def test_feasible_requires_energy_contract_and_charger_metrics_clean() -> None:
     assert report.metrics["bess_terminal_soc_deviation_kwh"] > 0.0
 
 
+def test_physical_charger_validator_rejects_power_above_selected_type() -> None:
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(scenario_id="physical", timestep_min=15),
+        dispatch_context=None,
+        trips=(),
+        vehicles=(
+            ProblemVehicle(
+                vehicle_id="bev-1",
+                vehicle_type="BEV",
+                home_depot_id="dep",
+                charge_power_max_kw=90.0,
+            ),
+        ),
+        chargers=(
+            ChargerDefinition(
+                charger_id="charger-50",
+                depot_id="dep",
+                power_kw=50.0,
+                simultaneous_ports=1,
+            ),
+        ),
+    )
+    plan = AssignmentPlan(
+        charging_slots=(
+            ChargingSlot(
+                vehicle_id="bev-1",
+                slot_index=0,
+                charger_id="charger-50",
+                energy_source="grid",
+                charge_kw=90.0,
+                charging_depot_id="dep",
+            ),
+        ),
+    )
+
+    report = FeasibilityChecker().evaluate(problem, plan)
+
+    assert report.metrics["charger_concurrency_violation_count"] == 1
+    assert report.feasible is False
+
+
 def test_assignment_diagnostics_report_the_exact_rejected_trip_connection() -> None:
     previous = Trip(
         trip_id="t1",

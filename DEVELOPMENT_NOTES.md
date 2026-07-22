@@ -1,5 +1,29 @@
 # Development Notes
 
+## 2026-07-22 充電器種類・終端SOC・正式実験契約の修正（未実行）
+
+### 結論
+- 正式経路 `run_research_phase3_frontend_weather.py -> OptimizationEngine -> GurobiMILPAdapter._solve_thesis_two_stage()` の Stage 2 と統合MILPについて、90 kW×5口・50 kW×5口を合計10口・700 kWとして扱う集約制約を廃止し、車両×物理充電器×時刻の割当制約へ置換した。各充電中車両は同一時刻に1基だけを使い、充電器ごとの口数・出力、車両固有の最大受電電力、明示された互換充電器IDを同時に守る。
+- `ChargingSlot.charger_id` は物理充電器IDとし、系統・PV・BESSの別は新設した `energy_source` に保存する。旧成果物の `grid:<depot>` 等は読取互換を維持する。
+- BEV終端方針 `return_to_initial` は従来の `SOC_end >= SOC_initial` から、数値許容差 `1e-6 kWh` 内の上下限制約へ変更した。終端不足だけでなく超過量・最大絶対偏差も成果物に出す。
+- 正式weather runnerは既定でBEV 35台・ICE 26台を要求する。現行シナリオのICE 25台では解く前に停止する。26台目の実在ID・諸元は捏造せず、シナリオ側で確定させる。旧25台条件は `--expected-ice-count 25` を明示した感度ケースとしてのみ実行できる。
+- `summary.json`、`solver_result.json`、`input_audit.json`、`effective_scenario.json`、`vehicle_schedule.csv` のSHA-256とサイズを `manifest.json` に保存する。晴雨比較器はコード埋込みのgap 10%・ICE 25台・1500秒を要求せず、各runのmanifest宣言との一致と晴雨間の非天候条件一致を検査する。
+- GitがPATHにないWindows環境でも標準的なGitインストール先を探索し、commit SHA・dirty状態を記録する。
+- `timetable_rows`、`operator_id`、道路距離、ならびに `arrival + turnaround + deadhead <= next departure` は変更していない。道路距離は今回の明示的な保留範囲である。
+
+### 検証
+- 本番の晴雨最適化はユーザーが手動実行するため未実行。
+- 物理充電器回帰では、90 kW充電6台を90 kW充電器5口へ割り当てるケースが infeasible、90 kW×5台＋50 kW×2台が feasible になることをGurobiで確認した。
+- 終端SOC、Stage 2、成果物serializer、晴雨比較、manifest改ざん検出を含む対象テストは `111 passed`。追加の集中テストは `23 passed`、全回帰は `797 passed`。
+- 2026-07-21の既存晴雨成果物は事後監査上、充電器種類別包絡と終端SOC等値を満たしていた。ただし旧モデルがそれを保証していたわけではないため、新モデルの正式結果として流用しない。
+
+### 手動実行前に残る必須作業
+1. 指導教員条件のICE 26台目について、実在する車両ID・燃費・燃料タンク・利用可否を晴雨両シナリオへ同条件で登録する。整備中等で当日25台のみなら、保有26・当日利用可能25と不可理由をデータ上で分ける。
+2. cleanなmain commitから晴雨を同じgap・seed・時間上限で実行する。新しい物理充電器変数がStage 2時間へ与える影響は実測していないため、`stage2_runtime_seconds` と変数数を旧runと比較する。
+3. 各runの `manifest.json`、`summary.json`、`solver_result.json` と `vehicle_schedule.csv` を保存し、比較器でmanifest検証後に晴雨差を作成する。
+4. 新結果について、物理充電器ID別の同時使用、車両別終端SOC不足・超過、全264便、fallback/repairなし、Git cleanを確認する。
+5. この後の研究上の穴は、全規模の複数seed・計算時間感度・電費±10%・PV予測誤差、最新割当を固定した24時間rollingである。総費用の大域最適性は引き続き主張しない。
+
 ## 2026-07-21 Stage 1 探索時間差の実測分解（晴天・雨天、gap 2.5%）
 
 ### 結論
