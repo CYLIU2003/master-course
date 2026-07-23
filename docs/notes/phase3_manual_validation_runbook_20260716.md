@@ -65,6 +65,15 @@ python scripts\run_research_phase3_frontend_weather.py `
 
 各runの`input_audit.json`で、`calendar_service_contract.matches=true`、`weather_pv_forecast_applied=true`、`weather_pv_forecast_skip_reason=null`を先に確認する。続いて、比較契約と電力・燃料帳尻を検査する。ここでの監査は日次計画の暫定監査であり、rollingを含む最終受理は4節の後に行う。
 
+フロントから通常の手動実行を行ったdated runでは、次の入力provenanceも確認する。
+
+```powershell
+python scripts\verify_run_input_provenance.py `
+  --run-dir C:\master-course\output\<YYYY-MM-DD>\<run_YYYYMMDD_HHMM>
+```
+
+`run_input_validation.json.valid=true`を要求する。`scenario_input_snapshot.json`でscenario/inventory、`prepare_input_audit.json`でPrepare profile/scopeと元prepared JSONのSHA-256、`optimization_parameters.json`でフロント要求値とcanonical実効値を照合する。既存の古いrunへこれらを推測で後付けせず、新規手動実行で生成されたbundleだけを正式な入力証跡として扱う。
+
 ```powershell
 python scripts\compare_research_phase3_weather.py `
   --sunny-summary C:\master-course\output\research_phase3_sunny_formal_current\summary.json `

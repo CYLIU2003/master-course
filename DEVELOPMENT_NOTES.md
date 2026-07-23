@@ -1,5 +1,32 @@
 # Development Notes
 
+## 2026-07-23 フロント手動runの入力provenance出力（本番最適化未実行）
+
+### 結論
+- フロントの手動実行経路`run-optimization -> _run_optimization() -> prepared input materialize -> runtime/weather override -> ProblemBuilder -> OptimizationEngine`について、solver開始前にscenario・Prepare・要求パラメータ・canonical実効値を`output/<date>/run_*`へ固定する。
+- 従来の`optimization_audit.json`や`solver_settings.json`には個別情報があったが、元scenario、Prepare scope/profile、実行時override、実効モデル値、prepared artifactそのものの同一性が一つの検証契約になっていなかった。新しいbundleはこれらを相互参照し、後付け改変をSHA-256で検出する。
+
+### 新しいrun直下成果物
+- `scenario_input_snapshot.json`: 保存scenarioの軽量snapshot、実効`simulation_config`/`scenario_overlay`/dispatch scope、実際にPrepareされた車両・充電器・営業所・路線inventoryと各hash。
+- `prepare_input_audit.json`: prepared input ID/schema、作成時刻、dataset、service date、選択営業所・路線・曜日、Prepare profile、scope/count、距離監査、scenario/scope hash、元prepared JSONの絶対/相対path・byte size・完全SHA-256。
+- `optimization_parameters.json`: Pydanticで受理したフロントrequest body、BFF正規化後の要求値、`OptimizationConfig`実効値、canonical horizon/timestep/coverage、model metadata、入力件数とtrip/vehicle/charger ID hash、値の上書き優先順位。
+- `run_input_summary.md`: 上記の人間向け索引。JSONを正本とし、Markdownは説明用とする。
+- `run_input_manifest.json`: compact成果物のbyte sizeとSHA-256。
+- `run_input_validation.json`: run生成時のschema、hash、scenario ID、prepared input ID相互整合結果。
+- 既存`run_manifest.json`にも`run_input_provenance.status=OK`、schema、prepared ID/source SHA、artifact一覧を載せる。
+
+### 実装上の判断
+- 現行prepared inputは1件約249.7MBであるため、各runへ全量複製しない。row-level trips/stop sequences等は元artifactへ残し、run側は完全SHA-256、size、path、scope/count/auditとcompact inventoryを保存する。これによりoutput肥大化を避けつつ、元prepared artifactが残る場合はbyte単位の一致を再検証できる。
+- `scripts/verify_run_input_provenance.py --run-dir <RUN_DIR>`はcompact bundleと元prepared sourceを再hashし、不一致時は終了コード2を返す。`--skip-prepared-source`ではrun内bundleだけを検査する。
+- provenanceの保存・内部検証に失敗した場合はsolverを開始しない。研究runで入力監査だけ欠落した成功成果物を新たに作らない。
+- `timetable_rows`、`operator_id`、数理制約、費用式、SOC/PV/BESS式は変更していない。今回の変更は入力provenanceの保存契約だけであり、既存実験の数理的意味は変えない。
+
+### 検証
+- 実prepared input`prepared-9bdbed865edc013c-e6406a7fd75ec751-0ec9cc15`（249,714,439 bytes）を用いた軽量preflightで、source再hashを含め`valid=true`を確認した。
+- 追加されたrun内6ファイルは合計約0.4MB（scenario snapshot約273KB、Prepare audit約116KB、parameters約13KB、その他約4KB）だった。
+- compact artifact改変、元prepared source改変、scenario/prepared ID不一致、manifest hash不一致の回帰を追加した。Python全回帰は`810 passed`、compileallと`git diff --check`も通過した。
+- 本番最適化はユーザーが手動実行するため未実行。既存runにはこのbundleがないため、新しい正確な成果物を過去runへ推測でbackfillしない。
+
 ## 2026-07-23 13:50/13:55成果物の厳格監査と入力ゲート修正（本番再計算前）
 
 ### 結論

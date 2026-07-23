@@ -64,6 +64,10 @@ from bff.services.optimization_run.execute import (
     parse_optimization_mode as _parse_optimization_mode,
     phase_from_solver_mode as _phase_from_solver_mode,
 )
+from bff.services.optimization_run.input_provenance import (
+    MANIFEST_FILE as RUN_INPUT_MANIFEST_FILE,
+    persist_run_input_provenance,
+)
 from bff.services.optimization_run.rich_outputs import (
     persist_json_outputs as _persist_json_outputs,
     run_stamp as _run_stamp,
@@ -2391,6 +2395,12 @@ def _persist_rich_run_outputs(
     except Exception:
         pass
 
+    run_input_manifest_path = run_dir / RUN_INPUT_MANIFEST_FILE
+    run_input_manifest = {}
+    if run_input_manifest_path.is_file():
+        run_input_manifest = json.loads(
+            run_input_manifest_path.read_text(encoding="utf-8")
+        )
     run_manifest = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "scenario_id": optimization_result.get("scenario_id"),
@@ -2440,6 +2450,18 @@ def _persist_rich_run_outputs(
             else []
         ),
         "solver_settings": solver_settings,
+        "run_input_provenance": {
+            "status": "OK" if run_input_manifest else "MISSING",
+            "manifest_path": (
+                RUN_INPUT_MANIFEST_FILE if run_input_manifest else None
+            ),
+            "schema_version": run_input_manifest.get("schema_version"),
+            "prepared_input_id": run_input_manifest.get("prepared_input_id"),
+            "prepared_source_sha256": run_input_manifest.get(
+                "prepared_source_sha256"
+            ),
+            "artifacts": dict(run_input_manifest.get("artifacts") or {}),
+        },
         "graph": {
             "manifest_path": "graph/manifest.json",
             "route_band_diagrams_manifest": str(
@@ -5187,6 +5209,7 @@ def _run_optimization(
     research_run: bool = False,
     stage1_time_limit_seconds: Optional[int] = None,
     stage2_time_limit_seconds: Optional[int] = None,
+    frontend_request_payload: Optional[Dict[str, Any]] = None,
 ) -> None:
     try:
         solver_mode = _normalize_solver_mode(mode)
@@ -5281,6 +5304,10 @@ def _run_optimization(
         charging_summary_payload: Optional[Dict[str, Any]] = None
         charging_flow_payload: Optional[Dict[str, Any]] = None
         charging_payload_warning: Optional[str] = None
+        run_input_provenance: Dict[str, Any] = {
+            "status": "not_captured",
+            "reason": "solver_path_did_not_build_canonical_input_provenance",
+        }
 
         if solver_mode in {
             "thesis_mode", "debug_mode", "mode_milp_only", "mode_alns_only",
@@ -5359,6 +5386,42 @@ def _run_optimization(
                 problem.metadata["phase3_diagnostics_dir"] = str(
                     Path(output_dir) / "diagnostics"
                 )
+            run_input_provenance = persist_run_input_provenance(
+                run_dir=Path(output_dir),
+                base_scenario=base_scenario,
+                effective_scenario=scenario,
+                prepared_input=prepared_payload,
+                prepared_input_path=prepared_input_path,
+                requested_prepared_input_id=requested_prepared_input_id,
+                frontend_request={
+                    "raw_frontend_body": dict(frontend_request_payload or {}),
+                    "scenario_id": scenario_id,
+                    "prepared_input_id": prepared_input_id,
+                    "requested_prepared_input_id": requested_prepared_input_id,
+                    "mode": mode,
+                    "solver_mode_effective": solver_mode,
+                    "time_limit_seconds": time_limit_seconds,
+                    "stage1_time_limit_seconds": stage1_time_limit_seconds,
+                    "stage2_time_limit_seconds": stage2_time_limit_seconds,
+                    "mip_gap": mip_gap,
+                    "random_seed": random_seed,
+                    "service_id": service_id,
+                    "depot_id": depot_id,
+                    "rebuild_dispatch": rebuild_dispatch,
+                    "use_existing_duties": use_existing_duties,
+                    "alns_iterations": alns_iterations,
+                    "no_improvement_limit": no_improvement_limit,
+                    "destroy_fraction": destroy_fraction,
+                    "timestep_min": timestep_min,
+                    "enable_weather_operation_policy": (
+                        enable_weather_operation_policy
+                    ),
+                    "weather_proxy_forecast_path": weather_proxy_forecast_path,
+                    "research_run": bool(research_run),
+                },
+                optimization_config=opt_config,
+                canonical_problem=problem,
+            )
             feasible_arc_count = sum(
                 len(v) for v in (problem.feasible_connections or {}).values()
             )
@@ -5913,6 +5976,7 @@ def _run_optimization(
             "prepared_scope_summary": prepared_scope_summary,
             "scenario_hash": prepared_scenario_hash,
             "scope_hash": prepared_scope_hash,
+            "run_input_provenance": run_input_provenance,
             "case_type": scenario.get("experiment_case_type"),
             "input_counts": {
                 "vehicles": build_report.vehicle_count,
@@ -6513,6 +6577,7 @@ def run_optimization(
             request.research_run,
             request.stage1_time_limit_seconds,
             request.stage2_time_limit_seconds,
+            request.model_dump(),
         ),
         job_id=job.job_id,
         scenario_id=scenario_id,

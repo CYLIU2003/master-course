@@ -556,6 +556,18 @@ def test_rich_run_outputs_restore_charging_schedule_and_vehicle_timelines_json(t
     canonical_solver_result = ResultSerializer.serialize_result(result)
     charging_payload = optimization._canonical_charging_output_payload(problem, result)
     run_dir = tmp_path / "run"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / optimization.RUN_INPUT_MANIFEST_FILE).write_text(
+        json.dumps(
+            {
+                "schema_version": "frontend_run_input_provenance_v1",
+                "prepared_input_id": "prepared-test",
+                "prepared_source_sha256": "prepared-sha",
+                "artifacts": {"scenario_input_snapshot.json": {"sha256": "x"}},
+            }
+        ),
+        encoding="utf-8",
+    )
 
     optimization._persist_rich_run_outputs(
         run_dir=run_dir,
@@ -607,6 +619,11 @@ def test_rich_run_outputs_restore_charging_schedule_and_vehicle_timelines_json(t
     assert (run_dir / "raw" / "unserved_trips.csv").exists()
     run_manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
     assert run_manifest["graph"]["manifest_path"] == "graph/manifest.json"
+    assert run_manifest["run_input_provenance"]["status"] == "OK"
+    assert (
+        run_manifest["run_input_provenance"]["prepared_input_id"]
+        == "prepared-test"
+    )
     assert run_manifest["graph"]["route_band_diagrams_manifest"] == "graph/route_band_diagrams/manifest.json"
     assert run_manifest["graph"]["route_band_diagram_count"] == artifacts["diagram_count"]
     charging_summary_json = json.loads((run_dir / "charging_summary.json").read_text(encoding="utf-8"))

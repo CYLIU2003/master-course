@@ -93,8 +93,13 @@ def test_run_optimization_uses_canonical_engine_for_ga_mode() -> None:
             return_value={"solver_mode": "ga", "vehicle_paths": {"veh-1": ["trip-1"]}},
         ),
         mock.patch.object(optimization, "_scenario_feed_context", return_value={}),
-        mock.patch.object(optimization, "_scoped_output_dir", return_value="outputs/test"),
-        mock.patch.object(optimization, "_persist_canonical_graph_exports", return_value={"enabled": False, "diagram_count": 0}),
+            mock.patch.object(optimization, "_scoped_output_dir", return_value="outputs/test"),
+            mock.patch.object(
+                optimization,
+                "persist_run_input_provenance",
+                return_value={"status": "OK"},
+            ) as persist_input_provenance,
+            mock.patch.object(optimization, "_persist_canonical_graph_exports", return_value={"enabled": False, "diagram_count": 0}),
         mock.patch.object(optimization, "_persist_json_outputs"),
         mock.patch.object(optimization, "_cost_breakdown", return_value={}),
         mock.patch.object(optimization, "log_optimization_experiment", return_value={"experiment_id": "exp-1"}),
@@ -129,6 +134,11 @@ def test_run_optimization_uses_canonical_engine_for_ga_mode() -> None:
     build_problem_data.assert_not_called()
     solve_problem_data.assert_not_called()
     assert problem_builder_cls.return_value.build_from_scenario.call_args.kwargs["config"].warm_start is True
+    persist_input_provenance.assert_called_once()
+    provenance_kwargs = persist_input_provenance.call_args.kwargs
+    assert provenance_kwargs["prepared_input"]["prepared_input_id"] == "prepared-1"
+    assert provenance_kwargs["frontend_request"]["mode"] == "ga"
+    assert provenance_kwargs["canonical_problem"] is canonical_problem
     assert "trips" not in stored_fields
     assert "timetable_rows" not in stored_fields
     assert stored_fields["optimization_result"]["solver_mode"] == "mode_ga_only"
@@ -234,9 +244,14 @@ def test_run_optimization_records_canonical_graph_artifacts_for_milp_mode() -> N
                 "vehicle_timeline_path": "graph/vehicle_timeline.csv",
             },
         ) as persist_graph_exports,
-        mock.patch.object(optimization, "_scenario_feed_context", return_value={}),
-        mock.patch.object(optimization, "_scoped_output_dir", return_value="outputs/test"),
-        mock.patch.object(optimization, "_persist_json_outputs"),
+            mock.patch.object(optimization, "_scenario_feed_context", return_value={}),
+            mock.patch.object(optimization, "_scoped_output_dir", return_value="outputs/test"),
+            mock.patch.object(
+                optimization,
+                "persist_run_input_provenance",
+                return_value={"status": "OK"},
+            ) as persist_input_provenance,
+            mock.patch.object(optimization, "_persist_json_outputs"),
         mock.patch.object(optimization, "_cost_breakdown", return_value={}),
         mock.patch.object(optimization, "log_optimization_experiment", return_value={"experiment_id": "exp-1"}),
         mock.patch.object(optimization.store, "set_field", side_effect=_record_set_field),
@@ -269,6 +284,13 @@ def test_run_optimization_records_canonical_graph_artifacts_for_milp_mode() -> N
     rebuild_dispatch.assert_not_called()
     build_problem_data.assert_not_called()
     solve_problem_data.assert_not_called()
+    persist_input_provenance.assert_called_once()
+    assert (
+        persist_input_provenance.call_args.kwargs["frontend_request"][
+            "solver_mode_effective"
+        ]
+        == "mode_milp_only"
+    )
     persist_graph_exports.assert_called_once()
     assert problem_builder_cls.return_value.build_from_scenario.call_args.kwargs["config"].warm_start is True
     assert canonical_problem.metadata["phase3_diagnostics_dir"] == str(

@@ -126,6 +126,7 @@ flowchart LR
 <details>
 <summary><strong>更新メモ</strong></summary>
 
+- 2026-07-23: フロントから手動実行した`output/<date>/run_*`へ、`scenario_input_snapshot.json`、`prepare_input_audit.json`、`optimization_parameters.json`、`run_input_summary.md`、`run_input_manifest.json`、`run_input_validation.json`をsolver開始前に保存する。保存scenario、実行時override、Prepare profile/scope、車両・充電器・営業所・路線inventory、canonical実効パラメータを分離し、巨大prepared input本体は複製せずpath・size・完全SHA-256で固定する。後日確認は`python scripts/verify_run_input_provenance.py --run-dir <RUN_DIR>`を使用し、hash又はscenario/prepared ID不一致時は終了コード2となる。
 - 2026-07-23: `output/2026-07-23`の晴雨成果物を再監査し、非研究run、2025-08-10（日曜）の`WEEKDAY`指定、未適用のPV予測曲線、車両別電源由来の過剰なexact表明を正式結果の停止条件にした。formal runnerは暦日・service IDとPV曲線適用をfail-closedで検査する。車両別の系統/PV/BESS内訳は営業所×時刻の確定比率による按分と明示し、BEV35台全数使用は基準費用最小化と分けた`--minimum-used-bev-count 35`政策感度として扱う。1時間rollingは実装済みだが当該runでは未実行であり、最終監査は`--require-rolling`で晴雨双方の受理済みchainを要求できる。本番再計算は未実施で、同日・同一ダイヤの晴雨入力と実在ICE26台を準備するまで既存結果を研究結論に使わない。
 - 2026-07-18: `core_new` commit`1b5deeb`のclean worktree、固定prepared SHA、15分、候補接続削減なしでgrid-only正式baselineを実行した。264/264便、Stage 2 optimal、独立違反0、fallback/postsolve repairなし、会計再計算残差0円を確認し、正式検証14項目をすべて通過した。Stage 1はtime limit・gap 12.582%のため最適解とは扱わない。成果物は`output/research_phase3_grid_only_15min_formal_20260718_full_network`。
 - 2026-07-18: 15分grid-only正式baseline runnerで候補接続上限`0`（削減なし）を明示できるようにし、prepared input SHA、候補上限、input hash、commitを実験識別子へ固定した。最終planの費用を再評価して会計残差`1e-6円`以下を受理条件とし、264/264便、独立違反0、fallback/postsolve repairなし、候補削減0、clean commitを`scripts/verify_research_phase3_baseline.py`で一括検査する。
