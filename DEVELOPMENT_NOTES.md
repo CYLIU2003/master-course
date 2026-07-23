@@ -1,5 +1,25 @@
 # Development Notes
 
+## 2026-07-23 指導教員受入条件のfail-closed化（未実行）
+
+### Slack原文から確定した受入観点
+- 2026-06-11: 系統購入、bus/BESS充放電、PVの行き先、PV抑制を時系列で帳尻確認し、ICE燃料を運行と照合する。
+- 2026-06-17: 充電量を瞬時に計上せず、車両・充電器のkW上限と所要時間を反映し、時間帯ピークを説明できるようにする。
+- 2026-06-18: 一日終了時のBESS SOC差分0、BEV35台・ICE26台の入力、全グラフでの晴雨比較を確認する。BEV35台全数使用は質問事項であり、最適化へ強制する要件とは解釈しない。
+- 2026-07-16: 修正内容と用語を具体化し、計算時間を短縮し、日次計画後に毎時再最適化する二段階運用を示す。
+
+### 今回塞いだ穴
+- `run_hourly_charging_reoptimization.py` の24時間連鎖は、従来は各stepが可行なら終了コード0になり、実行prefixをつないだ一日会計が不完全、BEV終端不均衡、BESS終端SOCが初期/指定値と不一致、又はGit provenance不明でも成功扱いになり得た。`chain_accepted`を追加し、全step可行、実行slotの重複・欠落なし、一日会計受理、BEV終端均衡、BESS終端偏差`1e-6 kWh`以下、日次・rolling双方のGit cleanを全て満たす場合だけ終了コード0にした。
+- rolling開始前に日次runの`manifest.json`を検証し、`summary.json`、`solver_result.json`、`input_audit.json`、`effective_scenario.json`等の改ざん・欠損を拒否する。PATHにGitがないCodex/Windows環境でも同梱runtimeを探索し、Git不明をcleanと誤認しない。
+- `audit_phase3_weather_energy_balance.py` は、変更可能な現在のscenario storeを読み直す方式をやめ、run内の`effective_scenario.json`をSHA-256照合してcanonical problemを再構築する。晴雨manifestと非天候条件一致も監査前に必須化した。
+- 同監査へ`advisor_acceptance`を追加した。BEV35/ICE26、宣言在庫一致、全便担当、全hard validation、PV/bus/BESS需給残差、BEV/BESS終端、物理充電器割当、燃料費残差、Git cleanを満たす場合だけ終了コード0になる。これは代表日可行性・会計の受入であり、統合総費用の大域最適性を意味しない。
+- `start_time`/`end_time`は配車対象便を32本等へ固定する条件ではない。formal runnerはprepared scopeの`timetable_rows`全264便を対象にし、時間値は24時間の電力・SOC slot基準として使う。rolling手順では`05:00`を再ハードコードせず、日次`solver_result.json`の`metadata.horizon_start`を使用する。`timetable_rows`、`operator_id`、`arrival + turnaround + deadhead <= next departure`は変更していない。
+
+### 検証と残作業
+- 対象回帰は`35 passed`、compileallと`git diff --check`を通過した。本番の晴雨・24時間rollingはユーザーが手動実行するため未実行。
+- 現行保存scenarioはICE25台なので、正式監査は意図どおり不合格になる。実在する26台目を登録し、晴雨を同条件でPrepareし直すまで正式計算を開始しない。
+- 手動実行後は`weather_energy_balance_audit.json.advisor_acceptance.all_cases_accepted=true`、各`rolling_chain_summary.json.chain_accepted=true`を確認する。失敗時は`failed_checks`又は`rejection_reasons`を次の修正対象とし、結果を成功扱いしない。
+
 ## 2026-07-22 充電器種類・終端SOC・正式実験契約の修正（未実行）
 
 ### 結論

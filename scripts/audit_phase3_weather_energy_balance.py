@@ -20,6 +20,7 @@ import argparse
 from copy import deepcopy
 import csv
 from datetime import datetime, timezone
+import hashlib
 import json
 import math
 import os
@@ -36,13 +37,15 @@ from src.optimization.common.bess_terminal_policy import (  # noqa: E402
     normalize_bess_terminal_policy,
     resolve_bess_terminal_soc_target_kwh,
 )
+from scripts.compare_research_phase3_weather import (  # noqa: E402
+    _validate_manifest,
+    build_weather_comparison,
+)
 
 DEFAULT_OUTPUTS_ROOT = Path(r"C:\master-course\output")
-DEFAULT_SUNNY_RUN = DEFAULT_OUTPUTS_ROOT / "research_phase3_sunny_final_1500s_20260716"
-DEFAULT_RAIN_RUN = DEFAULT_OUTPUTS_ROOT / "research_phase3_rain_final_1500s_20260716"
-DEFAULT_AUDIT_DIR = DEFAULT_OUTPUTS_ROOT / "phase3_weather_energy_audit_20260716"
 CASE_LABELS = {"sunny": "晴天", "rain": "雨天"}
 BALANCE_TOLERANCE = 1.0e-6
+FUEL_COST_TOLERANCE_JPY = 1.0e-6
 
 
 def _number(value: Any, default: float = 0.0) -> float:
@@ -57,6 +60,42 @@ def _load_json(path: Path) -> dict[str, Any]:
     if not path.is_file():
         raise FileNotFoundError(f"Required artifact is missing: {path}")
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _canonical_hash(value: Any) -> str:
+    encoded = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _load_effective_scenario(
+    run_dir: Path,
+    input_audit: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    """Load the immutable run input and reject path/hash substitution."""
+
+    artifact_name = str(input_audit.get("effective_scenario_artifact") or "").strip()
+    if not artifact_name:
+        return None
+    run_root = run_dir.resolve()
+    artifact_path = (run_root / artifact_name).resolve()
+    if artifact_path.parent != run_root:
+        raise ValueError(
+            "effective_scenario_artifact must be a file directly inside the run directory"
+        )
+    scenario = _load_json(artifact_path)
+    expected_hash = str(input_audit.get("effective_scenario_sha256") or "").strip()
+    actual_hash = _canonical_hash(scenario)
+    if not expected_hash or actual_hash != expected_hash:
+        raise ValueError(
+            "effective_scenario.json does not match input_audit.json"
+        )
+    return scenario
 
 
 def _nested_slot_values(
@@ -149,6 +188,7 @@ def _slot_label(slot_index: int, *, horizon_start_min: int, timestep_min: int) -
 
 def _build_problem(
     *,
+    run_dir: Path,
     outputs_root: Path,
     input_audit: Mapping[str, Any],
 ) -> Any:
@@ -161,21 +201,25 @@ def _build_problem(
 
     scenario_id = str(input_audit["scenario_id"])
     prepared_input_id = str(input_audit["prepared_input_id"])
-    prepared_payload = runner.load_prepared_input(
-        scenario_id=scenario_id,
-        prepared_input_id=prepared_input_id,
-        scenarios_dir=runner._prepared_inputs_root(),
-    )
-    scenario = deepcopy(
-        runner.materialize_scenario_from_prepared_input(
-            runner.store.get_scenario_document_shallow(scenario_id),
-            prepared_payload,
+    scenario = _load_effective_scenario(run_dir, input_audit)
+    if scenario is None:
+        prepared_payload = runner.load_prepared_input(
+            scenario_id=scenario_id,
+            prepared_input_id=prepared_input_id,
+            scenarios_dir=runner._prepared_inputs_root(),
         )
-    )
-    runner._configure_research_discretization(
-        scenario,
-        timestep_min=int(input_audit["timestep_min"]),
-    )
+        scenario = deepcopy(
+            runner.materialize_scenario_from_prepared_input(
+                runner.store.get_scenario_document_shallow(scenario_id),
+                prepared_payload,
+            )
+        )
+        runner._configure_research_discretization(
+            scenario,
+            timestep_min=int(input_audit["timestep_min"]),
+        )
+    else:
+        scenario = deepcopy(scenario)
     scenario, weather_forecast, weather_profile = runner._prepare_weather_policy_for_scenario(
         scenario,
         enable_weather_operation_policy=None,
@@ -364,7 +408,11 @@ def _audit_case(
     input_audit = _load_json(run_dir / "input_audit.json")
     result = _load_json(run_dir / "solver_result.json")
     summary = _load_json(run_dir / "summary.json")
-    problem = _build_problem(outputs_root=outputs_root, input_audit=input_audit)
+    problem = _build_problem(
+        run_dir=run_dir,
+        outputs_root=outputs_root,
+        input_audit=input_audit,
+    )
 
     timestep_min = int(input_audit["timestep_min"])
     timestep_h = timestep_min / 60.0
@@ -523,6 +571,27 @@ def _audit_case(
             "stage2_runtime_seconds": _number(result["metadata"]["stage2_runtime_seconds"]),
             "research_cost_kpi_eligible": bool(result["metadata"]["research_cost_kpi_eligible"]),
             "objective_semantics": result["metadata"]["objective_semantics"],
+            "bev_terminal_soc_balance_satisfied": bool(
+                result["metadata"].get("bev_terminal_soc_balance_satisfied")
+            ),
+            "bev_terminal_soc_total_target_shortfall_kwh": _number(
+                result["metadata"].get(
+                    "bev_terminal_soc_total_target_shortfall_kwh"
+                )
+            ),
+            "bev_terminal_soc_total_target_surplus_kwh": _number(
+                result["metadata"].get(
+                    "bev_terminal_soc_total_target_surplus_kwh"
+                )
+            ),
+            "bev_terminal_soc_max_abs_target_deviation_kwh": _number(
+                result["metadata"].get(
+                    "bev_terminal_soc_max_abs_target_deviation_kwh"
+                )
+            ),
+            "physical_charger_assignment_semantics": result["metadata"].get(
+                "physical_charger_assignment_semantics"
+            ),
         },
         "scenario_parameters": {
             "phase": input_audit["phase"],
@@ -537,6 +606,7 @@ def _audit_case(
             "horizon_start": result["metadata"]["horizon_start"],
             "trip_count": int(input_audit["trip_count"]),
             "fleet": dict(input_audit["fleet"]),
+            "expected_fleet": dict(input_audit.get("expected_fleet") or {}),
             "fleet_available": dict(input_audit["fleet_available"]),
             "research_fragment_policy": dict(input_audit["research_fragment_policy"]),
             "charger_configuration": list(input_audit["charger_configuration"]),
@@ -629,6 +699,81 @@ def _audit_case(
     }
 
 
+def _advisor_case_acceptance(case: Mapping[str, Any]) -> dict[str, Any]:
+    """Evaluate the supervisor-facing representative-day evidence contract."""
+
+    parameters = dict(case.get("scenario_parameters") or {})
+    solver = dict(case.get("solver") or {})
+    operation = dict(case.get("operation") or {})
+    balances = dict(case.get("balances") or {})
+    bess = dict(case.get("bess") or {})
+    fuel = dict(case.get("fuel") or {})
+    validation = dict(case.get("validation_metrics") or {})
+    assigned_counts = dict(operation.get("assigned_trip_count") or {})
+    charger_ports_by_power_kw: dict[float, int] = {}
+    for charger in parameters.get("charger_configuration") or []:
+        if not isinstance(charger, Mapping):
+            continue
+        power_kw = float(charger.get("power_kw") or 0.0)
+        charger_ports_by_power_kw[power_kw] = (
+            charger_ports_by_power_kw.get(power_kw, 0)
+            + int(charger.get("simultaneous_ports") or 0)
+        )
+    checks = {
+        "git_clean": case.get("git_dirty") is False,
+        "formal_fleet_bev35_ice26": parameters.get("fleet")
+        == {"BEV": 35, "ICE": 26},
+        "fleet_matches_declared_expectation": parameters.get("fleet")
+        == parameters.get("expected_fleet"),
+        "all_trips_assigned": sum(int(value) for value in assigned_counts.values())
+        == int(parameters.get("trip_count") or 0),
+        "all_hard_validations_passed": validation.get(
+            "all_required_validation_checks_passed"
+        )
+        is True,
+        "all_energy_balances_passed": balances.get("all_balances_passed") is True,
+        "bev_terminal_soc_balanced": solver.get(
+            "bev_terminal_soc_balance_satisfied"
+        )
+        is True,
+        "bess_terminal_target_declared": bess.get("terminal_target_kwh") is not None,
+        "bess_terminal_soc_balanced": (
+            bess.get("terminal_target_deviation_kwh") is not None
+            and abs(float(bess["terminal_target_deviation_kwh"]))
+            <= BALANCE_TOLERANCE
+        ),
+        "physical_charger_assignment_enforced": solver.get(
+            "physical_charger_assignment_semantics"
+        )
+        == (
+            "one_physical_charger_definition_per_active_vehicle_slot; "
+            "simultaneous_ports_are_identical_ports"
+        ),
+        "charger_inventory_90kw5_50kw5": charger_ports_by_power_kw
+        == {90.0: 5, 50.0: 5},
+        "fuel_cost_reconciled": (
+            fuel.get("cost_residual_jpy") is not None
+            and math.isfinite(float(fuel["cost_residual_jpy"]))
+            and abs(float(fuel["cost_residual_jpy"]))
+            <= FUEL_COST_TOLERANCE_JPY
+        ),
+    }
+    failed = sorted(name for name, passed in checks.items() if not passed)
+    return {
+        "accepted": not failed,
+        "checks": checks,
+        "failed_checks": failed,
+        "scope": (
+            "representative_day_feasibility_and_accounting_evidence; "
+            "not_global_total_cost_optimality"
+        ),
+        "charger_ports_by_power_kw": {
+            str(power_kw): count
+            for power_kw, count in sorted(charger_ports_by_power_kw.items())
+        },
+    }
+
+
 def _write_csv(path: Path, rows: list[Mapping[str, Any]]) -> None:
     if not rows:
         raise ValueError(f"Cannot write empty CSV: {path}")
@@ -642,25 +787,43 @@ def run(args: argparse.Namespace) -> int:
     outputs_root = Path(args.outputs_root).resolve()
     audit_dir = Path(args.audit_dir).resolve()
     audit_dir.mkdir(parents=True, exist_ok=True)
+    sunny_run = Path(args.sunny_run).resolve()
+    rain_run = Path(args.rain_run).resolve()
+    sunny_summary_path = sunny_run / "summary.json"
+    rain_summary_path = rain_run / "summary.json"
+    sunny_summary = _load_json(sunny_summary_path)
+    rain_summary = _load_json(rain_summary_path)
+    _validate_manifest("sunny", sunny_summary_path, sunny_summary)
+    _validate_manifest("rain", rain_summary_path, rain_summary)
+    build_weather_comparison(sunny_summary, rain_summary)
     cases = {
         "sunny": _audit_case(
             case_key="sunny",
-            run_dir=Path(args.sunny_run).resolve(),
+            run_dir=sunny_run,
             outputs_root=outputs_root,
         ),
         "rain": _audit_case(
             case_key="rain",
-            run_dir=Path(args.rain_run).resolve(),
+            run_dir=rain_run,
             outputs_root=outputs_root,
         ),
     }
+    advisor_acceptance = {
+        case_key: _advisor_case_acceptance(case)
+        for case_key, case in cases.items()
+    }
+    advisor_acceptance["all_cases_accepted"] = all(
+        item["accepted"]
+        for item in advisor_acceptance.values()
+        if isinstance(item, Mapping)
+    )
     fleet_discrepancy = {
         "requested_text_ice_count": 26,
         "recorded_model_input_ice_count": int(cases["sunny"]["fleet_input"]["ICE"]),
         "matches": int(cases["sunny"]["fleet_input"]["ICE"]) == 26,
         "handling": (
-            "Current evidence is reported as BEV 35 / ICE 25. "
-            "A BEV 35 / ICE 26 claim requires correcting the persisted scenario and rerunning."
+            "The formal evidence requires BEV 35 / ICE 26. A different input "
+            "is rejected unless it is run and labelled as a separate sensitivity."
         ),
     }
     payload = {
@@ -673,6 +836,7 @@ def run(args: argparse.Namespace) -> int:
             "balance_tolerance_kwh": BALANCE_TOLERANCE,
         },
         "known_input_discrepancy": fleet_discrepancy,
+        "advisor_acceptance": advisor_acceptance,
         "cases": cases,
         "comparison": {
             "used_bev_delta_rain_minus_sunny": (
@@ -748,15 +912,15 @@ def run(args: argparse.Namespace) -> int:
     print(audit_path)
     print(audit_dir / "weather_energy_hourly.csv")
     print(audit_dir / "weather_energy_daily_summary.csv")
-    return 0
+    return 0 if advisor_acceptance["all_cases_accepted"] else 2
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--outputs-root", default=str(DEFAULT_OUTPUTS_ROOT))
-    parser.add_argument("--sunny-run", default=str(DEFAULT_SUNNY_RUN))
-    parser.add_argument("--rain-run", default=str(DEFAULT_RAIN_RUN))
-    parser.add_argument("--audit-dir", default=str(DEFAULT_AUDIT_DIR))
+    parser.add_argument("--sunny-run", required=True)
+    parser.add_argument("--rain-run", required=True)
+    parser.add_argument("--audit-dir", required=True)
     return run(parser.parse_args())
 
 

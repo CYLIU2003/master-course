@@ -1,4 +1,4 @@
-# Phase 3 残課題の手動計算・受理手順（2026-07-16）
+# Phase 3 残課題の手動計算・受理手順（2026-07-23更新）
 
 ## 1. この手順の目的
 
@@ -8,10 +8,10 @@
 
 | 天候 | scenario ID | service date | prepared input ID |
 |---|---|---|---|
-| 晴天 | `771d115b-75b0-49f7-a7f0-25f259a2cd21` | 2025-08-05 | `prepared-727dfea51bff15c9-e6406a7fd75ec751` |
-| 雨天 | `b23fd26c-1233-4c73-bb9e-bdb8b1584760` | 2025-08-10 | `prepared-3ed40c5d57fd5f91-0b337aa1f091e729` |
+| 晴天 | `771d115b-75b0-49f7-a7f0-25f259a2cd21` | 2025-08-05 | `<ICE26台登録後に再PrepareしたID>` |
+| 雨天 | `b23fd26c-1233-4c73-bb9e-bdb8b1584760` | 2025-08-10 | `<晴天と同じ車両・設備条件で再PrepareしたID>` |
 
-prepared inputは現在の正式候補成果物に記録された値である。画面から設備、車両、ダイヤ、費用又は終端方針を保存し直した場合は、必ずPrepareを再実行し、新しいprepared input IDへ置き換える。
+旧prepared inputはICE25台なので正式条件には使用しない。実在する26台目の車両ID・諸元・利用可否を登録し、必ずPrepareを再実行して上表を新しいIDへ置き換える。25台で試す場合は`--expected-ice-count 25`を明示し、「旧在庫感度」と表示する。
 
 ## 2. BESS終端方針
 
@@ -25,43 +25,51 @@ prepared inputは現在の正式候補成果物に記録された値である。
 
 `minimum_only`でもBESS SOC下限・上限、容量、出力、充放電効率、終端SOC下限は緩和されない。終端SOCを初期値へ戻さない単日結果は、初期在庫の取り崩しを含む可能性があるため、`return_to_initial`の単日費用とそのまま経済性比較しない。
 
-## 3. 正式な晴天・雨天1500秒計算
+## 3. 正式な晴天・雨天計算（Stage 1: 240秒、Stage 2: 60秒）
 
 PowerShellで実行する。
 
 ```powershell
 $env:GRB_LICENSE_FILE = 'C:\Users\RTDS_admin\gurobi.lic'
-Set-Location C:\master-course-core-new
+Set-Location C:\master-course
 
 python scripts\run_research_phase3_frontend_weather.py `
-  --case-name sunny_clean_1500s `
+  --case-name sunny_formal_current `
   --scenario-id 771d115b-75b0-49f7-a7f0-25f259a2cd21 `
-  --prepared-input-id prepared-727dfea51bff15c9-e6406a7fd75ec751 `
+  --prepared-input-id <SUNNY_PREPARED_INPUT_ID> `
   --expected-service-date 2025-08-05 `
-  --output-dir C:\master-course\output\research_phase3_sunny_clean_1500s `
-  --time-limit-sec 1500 --mip-gap 0.1 --random-seed 42
+  --output-dir C:\master-course\output\research_phase3_sunny_formal_current `
+  --expected-bev-count 35 --expected-ice-count 26 `
+  --time-step-min 15 --time-limit-sec 300 `
+  --stage1-time-limit-sec 240 --stage2-time-limit-sec 60 `
+  --stage1-candidate-time-limit-sec 0 `
+  --mip-gap 0.025 --random-seed 42
 
 python scripts\run_research_phase3_frontend_weather.py `
-  --case-name rain_clean_1500s `
+  --case-name rain_formal_current `
   --scenario-id b23fd26c-1233-4c73-bb9e-bdb8b1584760 `
-  --prepared-input-id prepared-3ed40c5d57fd5f91-0b337aa1f091e729 `
+  --prepared-input-id <RAIN_PREPARED_INPUT_ID> `
   --expected-service-date 2025-08-10 `
-  --output-dir C:\master-course\output\research_phase3_rain_clean_1500s `
-  --time-limit-sec 1500 --mip-gap 0.1 --random-seed 42
+  --output-dir C:\master-course\output\research_phase3_rain_formal_current `
+  --expected-bev-count 35 --expected-ice-count 26 `
+  --time-step-min 15 --time-limit-sec 300 `
+  --stage1-time-limit-sec 240 --stage2-time-limit-sec 60 `
+  --stage1-candidate-time-limit-sec 0 `
+  --mip-gap 0.025 --random-seed 42
 ```
 
 続いて、比較契約と電力・燃料帳尻を検査する。
 
 ```powershell
 python scripts\compare_research_phase3_weather.py `
-  --sunny-summary C:\master-course\output\research_phase3_sunny_clean_1500s\summary.json `
-  --rain-summary C:\master-course\output\research_phase3_rain_clean_1500s\summary.json `
-  --output-dir C:\master-course\output\research_phase3_weather_clean_comparison
+  --sunny-summary C:\master-course\output\research_phase3_sunny_formal_current\summary.json `
+  --rain-summary C:\master-course\output\research_phase3_rain_formal_current\summary.json `
+  --output-dir C:\master-course\output\research_phase3_weather_formal_comparison
 
 python scripts\audit_phase3_weather_energy_balance.py `
-  --sunny-run C:\master-course\output\research_phase3_sunny_clean_1500s `
-  --rain-run C:\master-course\output\research_phase3_rain_clean_1500s `
-  --audit-dir C:\master-course\output\research_phase3_weather_clean_audit
+  --sunny-run C:\master-course\output\research_phase3_sunny_formal_current `
+  --rain-run C:\master-course\output\research_phase3_rain_formal_current `
+  --audit-dir C:\master-course\output\research_phase3_weather_formal_audit
 ```
 
 受理条件は、両日264便担当、fallbackなし、postsolve repairなし、Stage 2可行、全hard validation違反0、晴雨間の非天候条件一致、電力収支残差`1e-6 kWh`以下、燃料費再計算残差`1e-6円`以下である。Stage 1がtime limitの場合はincumbent、bound、gapを必ず併記し、大域最適とは表現しない。
@@ -70,16 +78,20 @@ python scripts\audit_phase3_weather_energy_balance.py `
 
 日次結果の車両・便割当を固定し、各時刻で残り1日を見通して充電、PV、BESS、系統受電だけを再最適化する。先頭60分を実行した結果から、次時刻のEV SOC、BESS SOC、既発生の最大需要を自動抽出する。
 
-晴天の24時間連鎖例は次の通りである。`--end-time 05:00`は翌日05:00までを意味する。
+晴天の24時間連鎖例は次の通りである。開始時刻は固定値を手入力せず、日次結果の電力・SOC horizon開始時刻を使う。これは配車対象便の切捨て条件ではなく、15分slotの基準である。配車はprepared scopeの`264/264`便を対象にする。
 
 ```powershell
+$dayAheadPath = 'C:\master-course\output\research_phase3_sunny_formal_current\solver_result.json'
+$dayAhead = Get-Content $dayAheadPath -Raw | ConvertFrom-Json
+$rollingStart = [string]$dayAhead.metadata.horizon_start
+
 python scripts\run_hourly_charging_reoptimization.py `
   --scenario-id 771d115b-75b0-49f7-a7f0-25f259a2cd21 `
-  --prepared-input-id prepared-727dfea51bff15c9-e6406a7fd75ec751 `
+  --prepared-input-id <SUNNY_PREPARED_INPUT_ID> `
   --expected-service-date 2025-08-05 `
-  --day-ahead-result C:\master-course\output\research_phase3_sunny_clean_1500s\solver_result.json `
+  --day-ahead-result $dayAheadPath `
   --output-dir C:\master-course\output\research_phase3_sunny_hourly_chain `
-  --current-time 05:00 --end-time 05:00 `
+  --current-time $rollingStart --end-time $rollingStart `
   --execution-minutes 60 --time-limit-sec 60 `
   --mip-gap 0.1 --random-seed 42 `
   --bess-terminal-policy scenario
@@ -87,7 +99,7 @@ python scripts\run_hourly_charging_reoptimization.py `
 
 雨天もscenario、prepared input、日付、日次結果、出力先だけを対応する値へ置き換える。各`step_*`にsolver result、summary、次時刻用stateを保存し、全体を`rolling_chain_summary.json`へまとめる。残り時間目的値は時間ごとに同じ将来区間を重複して含むため、合計して1日の費用にしない。
 
-受理条件は、後続計算がある全stepで`state_handoff_error`なし、全step可行、固定割当不変、EV SOCが次slot開始値、BESS SOCが実行slot終了値、on/off-peak最大需要が時間とともに減少しないことである。
+受理条件は`rolling_chain_summary.json.chain_accepted=true`である。内訳として、全step可行、実行slotの欠落・重複なし、固定割当不変、EV SOCが次slot開始値、BESS SOCが実行slot終了値、on/off-peak最大需要が時間とともに減少しない、BEV終端均衡、BESS終端偏差`1e-6 kWh`以下、日次・rolling双方のGit cleanを要求する。`--bess-terminal-policy minimum_only`は感度分析には使えるが、代表日受入では終了コード2になる。
 
 ## 5. PV予測誤差の検証
 
@@ -118,7 +130,7 @@ python scripts\run_hourly_charging_reoptimization.py `
 
 次の成果物が揃った時点で残課題を完了とする。
 
-- clean commit由来の晴天・雨天1500秒成果物とstrict comparison
+- clean commit由来の晴天・雨天正式成果物とstrict comparison
 - 両天候の毎時連鎖結果
 - PV予測誤差4条件
 - BESS終端3方針と2日連続評価

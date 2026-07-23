@@ -176,6 +176,7 @@ def _hourly_result_problem() -> CanonicalOptimizationProblem:
                 bess_initial_soc_kwh=50.0,
                 bess_soc_min_kwh=20.0,
                 bess_soc_max_kwh=90.0,
+                bess_terminal_soc_policy="return_to_initial",
             )
         },
     )
@@ -271,6 +272,7 @@ def test_executed_day_accounting_stitches_each_slot_once() -> None:
         solver_metadata={"bev_terminal_soc_balance_satisfied": True},
         plan=AssignmentPlan(
             grid_to_bus_kwh_by_depot_slot={"dep-1": {0: 10.0, 1: 999.0}},
+            bess_soc_kwh_by_depot_slot={"dep-1": {0: 49.0, 1: 999.0}},
             vehicle_soc_kwh_by_vehicle_slot={"ev-1": {0: 100.0, 1: 90.0}},
         ),
     )
@@ -279,6 +281,7 @@ def test_executed_day_accounting_stitches_each_slot_once() -> None:
         solver_metadata={"bev_terminal_soc_balance_satisfied": True},
         plan=AssignmentPlan(
             grid_to_bus_kwh_by_depot_slot={"dep-1": {1: 20.0}},
+            bess_soc_kwh_by_depot_slot={"dep-1": {1: 50.0}},
             vehicle_soc_kwh_by_vehicle_slot={"ev-1": {1: 90.0, 2: 100.0}},
         ),
     )
@@ -293,6 +296,45 @@ def test_executed_day_accounting_stitches_each_slot_once() -> None:
     assert accounting["missing_slots"] == []
     assert accounting["duplicate_slots"] == []
     assert accounting["cost_breakdown"]["grid_import_kwh"] == pytest.approx(30.0)
+    assert accounting["bev_terminal_energy_balanced"] is True
+    assert accounting["bess_terminal_energy_balanced"] is True
+    assert accounting["bess_terminal_soc_by_depot"]["dep-1"] == {
+        "policy": "return_to_initial",
+        "initial_soc_kwh": 50.0,
+        "target_soc_kwh": 50.0,
+        "terminal_soc_kwh": 50.0,
+        "absolute_deviation_kwh": 0.0,
+        "balanced": True,
+    }
+
+
+def test_executed_day_accounting_rejects_bess_terminal_soc_difference() -> None:
+    problem = _hourly_result_problem()
+    result = SimpleNamespace(
+        feasible=True,
+        solver_metadata={"bev_terminal_soc_balance_satisfied": True},
+        plan=AssignmentPlan(
+            bess_soc_kwh_by_depot_slot={"dep-1": {0: 49.0, 1: 49.0}},
+            vehicle_soc_kwh_by_vehicle_slot={
+                "ev-1": {0: 100.0, 1: 100.0, 2: 100.0}
+            },
+        ),
+    )
+
+    accounting = hourly_runner._build_executed_day_accounting(
+        problem,
+        AssignmentPlan(),
+        [(problem, result, 0, 2)],
+    )
+
+    assert accounting["eligible"] is False
+    assert accounting["bess_terminal_energy_balanced"] is False
+    assert accounting["rejection_reasons"] == [
+        "bess_terminal_energy_not_balanced"
+    ]
+    assert accounting["bess_terminal_soc_by_depot"]["dep-1"][
+        "absolute_deviation_kwh"
+    ] == pytest.approx(1.0)
 
 
 def test_executed_day_accounting_rejects_missing_slot() -> None:

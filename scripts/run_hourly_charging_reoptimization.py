@@ -16,7 +16,6 @@ import hashlib
 import json
 import math
 from pathlib import Path
-import subprocess
 import sys
 import time
 from typing import Any
@@ -51,6 +50,10 @@ from src.optimization.common.problem import AssignmentPlan  # noqa: E402
 from src.optimization.common.bev_terminal_policy import (  # noqa: E402
     normalize_bev_terminal_soc_policy,
 )
+from src.optimization.common.bess_terminal_policy import (  # noqa: E402
+    normalize_bess_terminal_policy,
+    resolve_bess_terminal_soc_target_kwh,
+)
 from src.optimization.common.input_fingerprints import (  # noqa: E402
     INPUT_FINGERPRINT_SCHEMA,
 )
@@ -65,9 +68,11 @@ from src.preprocess.weather.operation_policy import (  # noqa: E402
     apply_weather_policy_to_problem,
 )
 from scripts.run_research_phase3_frontend_weather import (  # noqa: E402
+    _git_state,
     _trip_input_hash,
     _vehicle_input_hash,
 )
+from scripts.compare_research_phase3_weather import _validate_manifest  # noqa: E402
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -104,21 +109,13 @@ def _canonical_hash(value: Any) -> str:
 def _git_snapshot(repo_root: Path) -> tuple[str, bool]:
     """Return the exact rolling-runner commit and whether it has local edits."""
 
-    sha = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=repo_root,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-    status = subprocess.run(
-        ["git", "status", "--porcelain", "--untracked-files=normal"],
-        cwd=repo_root,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout
-    return sha, bool(status.strip())
+    if repo_root.resolve() != REPO_ROOT.resolve():
+        raise ValueError("Git snapshot must be taken from the repository root")
+    state = _git_state()
+    sha = str(state.get("git_sha") or "")
+    dirty = state.get("git_dirty")
+    # Missing provenance is never equivalent to a clean research run.
+    return sha, dirty is not False
 
 
 _EXECUTED_SLOT_MAP_FIELDS = (
@@ -271,7 +268,7 @@ def _build_executed_day_accounting(
         **stitched_maps,
     )
     breakdown = CostEvaluator().evaluate(accounting_problem, accounting_plan).to_dict()
-    terminal_balanced = all(
+    bev_terminal_balanced = all(
         bool(
             {
                 **dict(getattr(segment_result.plan, "metadata", {}) or {}),
@@ -280,13 +277,66 @@ def _build_executed_day_accounting(
         )
         for _, segment_result, _, _ in executed_segments
     )
+    bess_terminal_details: dict[str, dict[str, Any]] = {}
+    bess_terminal_balanced = True
+    for depot_id, asset in dict(problem.depot_energy_assets or {}).items():
+        if not bool(getattr(asset, "bess_enabled", False)):
+            continue
+        policy = normalize_bess_terminal_policy(
+            getattr(asset, "bess_terminal_soc_policy", ""),
+            has_explicit_target=(
+                float(getattr(asset, "bess_terminal_soc_target_kwh", 0.0) or 0.0)
+                > 0.0
+            ),
+        )
+        target_kwh = resolve_bess_terminal_soc_target_kwh(
+            policy=policy,
+            initial_soc_kwh=float(asset.bess_initial_soc_kwh or 0.0),
+            configured_target_kwh=float(
+                asset.bess_terminal_soc_target_kwh or 0.0
+            ),
+            terminal_soc_floor_kwh=max(
+                float(asset.bess_terminal_soc_min_kwh or 0.0),
+                float(asset.bess_soc_min_kwh or 0.0),
+            ),
+            maximum_soc_kwh=float(asset.bess_soc_max_kwh or 0.0),
+        )
+        trajectory = dict(
+            stitched_maps["bess_soc_kwh_by_depot_slot"].get(str(depot_id)) or {}
+        )
+        terminal_kwh = (
+            float(trajectory[max(trajectory)]) if trajectory else None
+        )
+        deviation_kwh = (
+            abs(terminal_kwh - target_kwh)
+            if terminal_kwh is not None and target_kwh is not None
+            else None
+        )
+        depot_balanced = deviation_kwh is not None and deviation_kwh <= 1.0e-6
+        bess_terminal_balanced = bess_terminal_balanced and depot_balanced
+        bess_terminal_details[str(depot_id)] = {
+            "policy": policy,
+            "initial_soc_kwh": float(asset.bess_initial_soc_kwh or 0.0),
+            "target_soc_kwh": target_kwh,
+            "terminal_soc_kwh": terminal_kwh,
+            "absolute_deviation_kwh": deviation_kwh,
+            "balanced": depot_balanced,
+        }
     unreplenished_kwh = float(
         breakdown.get("ev_unreplenished_drive_energy_kwh", 0.0) or 0.0
     )
-    eligible = terminal_balanced and unreplenished_kwh <= 1.0e-6
+    rejection_reasons = []
+    if not bev_terminal_balanced:
+        rejection_reasons.append("bev_terminal_energy_not_balanced")
+    if not bess_terminal_balanced:
+        rejection_reasons.append("bess_terminal_energy_not_balanced")
+    if unreplenished_kwh > 1.0e-6:
+        rejection_reasons.append("unreplenished_drive_energy_remains")
+    eligible = not rejection_reasons
     return {
         "eligible": eligible,
         "reason": None if eligible else "terminal_energy_inventory_not_balanced",
+        "rejection_reasons": rejection_reasons,
         "accounting_basis": (
             "executed_hourly_energy_flows_plus_inventory_valuation_for_unrefueled_fuel"
         ),
@@ -295,7 +345,12 @@ def _build_executed_day_accounting(
         "executed_slot_count": len(expected_slots),
         "missing_slots": [],
         "duplicate_slots": [],
-        "terminal_energy_balanced": terminal_balanced,
+        "terminal_energy_balanced": (
+            bev_terminal_balanced and bess_terminal_balanced
+        ),
+        "bev_terminal_energy_balanced": bev_terminal_balanced,
+        "bess_terminal_energy_balanced": bess_terminal_balanced,
+        "bess_terminal_soc_by_depot": bess_terminal_details,
         "cost_breakdown": breakdown,
         "executed_energy_flow_hash": _canonical_hash(
             {field_name: stitched_maps[field_name] for field_name in _EXECUTED_SLOT_MAP_FIELDS}
@@ -416,11 +471,18 @@ def run(args: argparse.Namespace) -> int:
 
     day_ahead_result_path = Path(args.day_ahead_result).resolve()
     input_audit_path = day_ahead_result_path.parent / "input_audit.json"
+    day_ahead_summary_path = day_ahead_result_path.parent / "summary.json"
     if not input_audit_path.is_file():
         raise ValueError(
             "The day-ahead result must have a sibling input_audit.json so its "
             "scenario, prepared input, and canonical hashes can be verified"
         )
+    day_ahead_summary = _load_json(day_ahead_summary_path)
+    _validate_manifest(
+        "day_ahead",
+        day_ahead_summary_path,
+        day_ahead_summary,
+    )
     rolling_git_sha, rolling_git_dirty = _git_snapshot(REPO_ROOT)
     input_audit = _load_json(input_audit_path)
     audited_bev_terminal_policy = str(
@@ -756,6 +818,20 @@ def run(args: argparse.Namespace) -> int:
             "executed_day_accounting": executed_day_accounting,
             "steps": summaries,
         }
+        chain_summary["chain_accepted"] = bool(
+            chain_summary["all_steps_feasible"]
+            and executed_day_accounting.get("eligible") is True
+            and not rolling_git_dirty
+            and input_audit.get("git_dirty") is False
+        )
+        chain_summary["acceptance_checks"] = {
+            "all_steps_feasible": chain_summary["all_steps_feasible"],
+            "executed_day_accounting_eligible": (
+                executed_day_accounting.get("eligible") is True
+            ),
+            "day_ahead_git_clean": input_audit.get("git_dirty") is False,
+            "rolling_runner_git_clean": not rolling_git_dirty,
+        }
         _write_json(output_dir / "rolling_chain_summary.json", chain_summary)
         print(
             json.dumps(chain_summary, ensure_ascii=False, indent=2, default=str),
@@ -766,6 +842,8 @@ def run(args: argparse.Namespace) -> int:
             json.dumps(summaries[-1], ensure_ascii=False, indent=2, default=str),
             flush=True,
         )
+    if end_min is not None:
+        return 0 if chain_summary["chain_accepted"] else 2
     return 0 if summaries and all(item["feasible"] for item in summaries) else 2
 
 

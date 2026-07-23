@@ -592,14 +592,27 @@ def _solve_fast_fixed_path_candidates(
 def _git_state() -> dict[str, Any]:
     git_executable = shutil.which("git")
     if git_executable is None:
-        candidates = (
+        candidates = [
             Path(os.environ.get("ProgramFiles", "")) / "Git" / "cmd" / "git.exe",
             Path(os.environ.get("LOCALAPPDATA", ""))
             / "Programs"
             / "Git"
             / "cmd"
             / "git.exe",
+        ]
+        codex_runtime_root = (
+            Path(os.environ.get("USERPROFILE", ""))
+            / ".cache"
+            / "codex-runtimes"
         )
+        if codex_runtime_root.is_dir():
+            candidates.extend(
+                sorted(
+                    codex_runtime_root.glob(
+                        "*/dependencies/native/git/cmd/git.exe"
+                    )
+                )
+            )
         git_executable = next(
             (str(path) for path in candidates if str(path) and path.is_file()),
             None,
