@@ -57,6 +57,14 @@ def _summary(
         "prepared_input_id": f"prepared-{service_date}",
         "prepared_input_sha256": f"sha-{service_date}",
         "service_date": service_date,
+        "service_id": "WEEKDAY",
+        "calendar_service_contract": {
+            "service_date": service_date,
+            "calendar_weekday_index": 1,
+            "calendar_day_name": "Tuesday",
+            "service_id": "WEEKDAY",
+            "matches": True,
+        },
         "experiment_hash": f"experiment-{service_date}",
         "git_sha": "95ade40",
         "git_dirty": False,
@@ -67,6 +75,8 @@ def _summary(
         "postsolve_repair_enabled": False,
         "vehicle_soc_semantics": "slot_start",
         "weather_operation_policy_enabled": True,
+        "weather_pv_forecast_applied": True,
+        "weather_pv_forecast_skip_reason": None,
         "weather_configuration": {
             "weather_mode": "actual_date_profile",
             "weather_factor_scalar": 1.0,
@@ -122,6 +132,7 @@ def _summary(
         "diesel_price_yen_per_l": 150.0,
         "co2_price_yen_per_kg": 1.0,
         "vehicle_usage_cost_jpy_per_used_bus": 20000.0,
+        "minimum_used_bev_count": 0,
         "cost_component_flags": {"vehicle_usage_cost": True},
         "objective_weights": {
             "energy": 1.0,
@@ -268,7 +279,7 @@ def _valid_pair() -> tuple[dict, dict]:
     rain = _summary(
         case_name="rain",
         scenario_id="rain-id",
-        service_date="2025-08-10",
+        service_date="2025-08-05",
         pv_generation_kwh=101.1,
         pv_case_id="pv-rain",
         pv_hash="pv-hash-rain",
@@ -277,6 +288,23 @@ def _valid_pair() -> tuple[dict, dict]:
         grid_import_kwh=519.4,
     )
     return sunny, rain
+
+
+def test_rejects_weather_comparison_across_different_service_dates() -> None:
+    sunny, rain = _valid_pair()
+    rain = deepcopy(rain)
+    rain["service_date"] = "2025-08-10"
+    rain["calendar_service_contract"] = {
+        "service_date": "2025-08-10",
+        "calendar_weekday_index": 6,
+        "calendar_day_name": "Sunday",
+        "service_id": "SUN_HOL",
+        "matches": True,
+    }
+    rain["service_id"] = "SUN_HOL"
+
+    with pytest.raises(ComparisonContractError, match="service_date"):
+        build_weather_comparison(sunny, rain)
 
 
 def test_accepts_only_weather_pv_differences_and_reports_effects() -> None:

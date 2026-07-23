@@ -1,5 +1,28 @@
 # Development Notes
 
+## 2026-07-23 13:50/13:55成果物の厳格監査と入力ゲート修正（本番再計算前）
+
+### 結論
+- `output/2026-07-23/run_20260723_1350`（晴天）と`run_20260723_1355`（雨天）は、説明用の非研究runであり、正式な晴雨比較には使用しない。両runは`research_run=false`、`research_run_accepted=false`、`research_cost_kpi_eligible=false`で、雨天runはtime limit、さらに2025-08-10（日曜）を`WEEKDAY`として構築している。
+- 検証済みの実行経路は、フロント/BFFの非研究実行 → `ProblemBuilder` → `OptimizationEngine` → `GurobiMILPAdapter._solve_thesis_two_stage()` → graph export → reporting finalizerである。既存成果物のサイト電力収支とBESS終端SOCは整合するが、車両別電源内訳は数理モデルで直接決定した値ではなかった。
+- 「1時間rollingが未実装」という評価は正確ではない。`scripts/run_hourly_charging_reoptimization.py`に24時間連鎖と受入判定は実装済みだが、対象2runでは実行されていない。したがって現状の正しい表現は「実装済み・当該成果物では未実行」である。
+
+### 根本原因と修正
+- Stage 2 MILPは営業所×時刻の系統/PV/BESS供給量と車両別充電量を決定するが、車両×電源の直積変数は持たない。それにもかかわらず`vehicle_source_provenance_exact=true`を出していたため、BFFが物理充電器IDを電源IDとして解釈し、車両別646.15 kWhを全量系統扱いした。metadataを`false`へ修正し、車両別表示は営業所×時刻の確定比率による按分であることを`proportional_by_depot_timestep`として明示した。サイト台帳は確定値、車両別電源は推計値であり、大域的に一意な車両別由来とは主張しない。
+- 晴雨のproxy forecast JSONが旧schemaのままで`capacity_factor_by_slot`を欠き、`missing_capacity_factor_by_slot`としてPV予測曲線が適用されていなかった。既存の生成器から24点の時刻別係数を再生成し、formal runnerは`weather_pv_forecast_applied=true`でないrunをbuild-only段階から拒否する。
+- 現在の`solcast_pv_proxy_v1`は対象日実PV形状を読む検証用・Oracle寄りのproxyであり、実運用の予報精度を証明するものではない。まず制御された晴雨可行性比較に用い、予報頑健性はrollingのPV予測誤差ケースで別評価する。
+- formal runnerに暦日と`service_id`の整合ゲートを追加した。`WEEKDAY`は月曜～金曜、`SAT`は土曜、`SUN_HOL`は日曜を要求する。監査側のproblem再構築も`input_audit.json`に記録した`service_id`を用い、`WEEKDAY`へ固定しない。
+- BEV35台全数使用は費用最小化の基準ケースへ暗黙に混ぜず、`--minimum-used-bev-count 35`を明示した政策感度として実装した。基準ケースは0台下限のまま、車両日費用は`--vehicle-usage-cost-jpy-per-used-bus`で永続scenarioを変更せず感度比較できる。これは数理的に`sum(used_vehicle[BEV]) >= N`を追加するため、過去結果との直接比較には政策制約の有無を必ず併記する。
+- 指導教員向け監査に、formal research acceptance、暦日整合、PV予測曲線適用、明示したBEV最低使用台数、任意の`--require-rolling`を追加した。rollingを要求する最終監査では、晴雨双方の`rolling_chain_summary.json.chain_accepted=true`と60分実行間隔に加え、scenario、prepared input、service date、trip/vehicle hash、Git SHA、日次`solver_result.json` SHA-256が監査対象の日次runと一致することを必要とする。
+
+### 軽量検証と残作業
+- 2025-08-05晴天・ICE25台のbuild-onlyは、264便、15分×96 slot、BEV35/ICE25、`calendar_service_contract.matches=true`、`weather_pv_forecast_applied=true`まで確認した。ICE26台を要求したbuild-onlyは在庫不一致で停止し、2025-08-10を`WEEKDAY`としたbuild-onlyは日曜不一致で停止した。これは意図したfail-closed動作である。
+- 政策感度のbuild-onlyで`minimum_used_bev_count=35`と`vehicle_usage_cost_jpy_per_used_bus=10000.0`がcanonical problem、input audit、experiment hashへ伝播することを確認した。Python全回帰は`808 passed`、compileallと`git diff --check`も通過した。
+- 現行prepared inputは晴雨ともICE25台である。実在する26台目を登録して再Prepareするか、当日利用可能25台である根拠をデータ化し、25台ケースを明示的な在庫感度として扱うまで正式計算を開始しない。車両IDや諸元は捏造しない。
+- 2025-08-05（火）と2025-08-10（日）の結果を「PVだけが異なる晴雨比較」とは呼べない。推奨する正式比較は、同一service date・同一`service_id`・同一prepared trip scopeへ晴天/雨天の予測曲線だけを与える反実仮想ケースである。日曜実績を使う場合は`SUN_HOL`の別ダイヤ分析として分離する。
+- 本番の晴雨最適化と24時間rollingはユーザーが手動実行するため未実行。再実行後も、Stage 1 gapは代理目的のgapであり、最終会計総費用の大域最適性とは表現しない。
+- `timetable_rows`、`operator_id`、道路距離、`arrival + turnaround + deadhead <= next departure`は変更していない。道路距離は今回も明示的な保留範囲である。
+
 ## 2026-07-23 指導教員受入条件のfail-closed化（未実行）
 
 ### Slack原文から確定した受入観点

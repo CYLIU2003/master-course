@@ -47,6 +47,7 @@ from scripts.run_research_phase3_frontend_weather import (
     DEFAULT_FORMAL_MIP_GAP,
     DEFAULT_STAGE1_STRATEGY,
     _apply_bev_availability_sensitivity,
+    _calendar_service_contract,
     _configure_research_discretization,
     _git_state,
     _resolve_initial_soc_policy,
@@ -57,6 +58,23 @@ from scripts.run_research_phase3_frontend_weather import (
 def test_formal_weather_runner_defaults_to_full_network_stage1() -> None:
     assert DEFAULT_STAGE1_STRATEGY == "full_network_milp"
     assert DEFAULT_FORMAL_MIP_GAP == pytest.approx(0.05)
+
+
+@pytest.mark.parametrize(
+    ("service_date", "service_id", "expected"),
+    [
+        ("2025-08-05", "WEEKDAY", True),
+        ("2025-08-10", "WEEKDAY", False),
+        ("2025-08-10", "SUN_HOL", True),
+        ("2025-08-09", "SAT", True),
+    ],
+)
+def test_calendar_service_contract_detects_day_type_mismatch(
+    service_date: str,
+    service_id: str,
+    expected: bool,
+) -> None:
+    assert _calendar_service_contract(service_date, service_id)["matches"] is expected
 
 
 def test_formal_weather_runner_rejects_removed_exact_fixed_path() -> None:

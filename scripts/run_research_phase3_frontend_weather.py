@@ -12,6 +12,7 @@ import argparse
 from copy import deepcopy
 import csv
 from dataclasses import replace
+from datetime import date
 import hashlib
 import json
 import math
@@ -59,6 +60,34 @@ from src.preprocess.weather.operation_policy import apply_weather_policy_to_prob
 
 DEFAULT_STAGE1_STRATEGY = "full_network_milp"
 DEFAULT_FORMAL_MIP_GAP = 0.05
+
+
+def _calendar_service_contract(
+    service_date: str,
+    service_id: str,
+) -> dict[str, Any]:
+    """Return the calendar/service-table alignment used by formal runs."""
+
+    parsed_date = date.fromisoformat(str(service_date)[:10])
+    normalized_service_id = str(service_id or "").strip().upper()
+    weekday_index = parsed_date.weekday()
+    if normalized_service_id == "WEEKDAY":
+        matches = weekday_index <= 4
+    elif normalized_service_id in {"SAT", "SATURDAY"}:
+        matches = weekday_index == 5
+    elif normalized_service_id in {"SUN_HOL", "SUN_HOLIDAY", "HOLIDAY", "SUNDAY"}:
+        matches = weekday_index == 6
+    elif normalized_service_id in {"SAT_HOL", "SAT_HOLIDAY"}:
+        matches = weekday_index >= 5
+    else:
+        matches = False
+    return {
+        "service_date": parsed_date.isoformat(),
+        "calendar_weekday_index": weekday_index,
+        "calendar_day_name": parsed_date.strftime("%A"),
+        "service_id": normalized_service_id,
+        "matches": matches,
+    }
 
 
 class FastFixedPathSearchError(RuntimeError):
@@ -900,6 +929,7 @@ def _validate_frontend_case(
     expected_service_date: str,
     expected_bev_count: int,
     expected_ice_count: int,
+    service_id: str,
 ) -> None:
     if len(problem.trips) != 264:
         raise ValueError(f"Expected the 264-trip research scope, got {len(problem.trips)}")
@@ -907,6 +937,14 @@ def _validate_frontend_case(
     if service_date != expected_service_date:
         raise ValueError(
             f"Expected service date {expected_service_date}, got {service_date or 'missing'}"
+        )
+    calendar_contract = _calendar_service_contract(service_date, service_id)
+    if not calendar_contract["matches"]:
+        raise ValueError(
+            "Formal frontend weather comparison rejects calendar/service-table "
+            f"mismatch: {calendar_contract}. Use the service table matching the "
+            "date, or build an explicitly labelled same-date counterfactual "
+            "weather case."
         )
     fleet = {
         vehicle_type: sum(
@@ -958,6 +996,12 @@ def _validate_frontend_case(
     simulation_config = dict(scenario.get("simulation_config") or {})
     if not bool(simulation_config.get("enable_weather_operation_policy", False)):
         raise ValueError("Frontend weather operation policy must remain enabled")
+    if problem.metadata.get("weather_pv_forecast_applied") is not True:
+        raise ValueError(
+            "Frontend weather comparison requires the forecast PV curve to be "
+            "applied; skip_reason="
+            f"{problem.metadata.get('weather_pv_forecast_skip_reason')!r}"
+        )
 
 
 def run(args: argparse.Namespace) -> int:
@@ -1018,6 +1062,22 @@ def run(args: argparse.Namespace) -> int:
     simulation_config["bev_terminal_soc_equality_tolerance_kwh"] = float(
         args.bev_terminal_soc_equality_tolerance_kwh
     )
+    vehicle_usage_cost_override = getattr(
+        args,
+        "vehicle_usage_cost_jpy_per_used_bus",
+        None,
+    )
+    if vehicle_usage_cost_override is not None:
+        if float(vehicle_usage_cost_override) < 0.0:
+            raise ValueError(
+                "vehicle_usage_cost_jpy_per_used_bus must be nonnegative"
+            )
+        scenario.setdefault("scenario_overlay", {}).setdefault(
+            "cost_coefficients",
+            {},
+        )["vehicle_usage_cost_jpy_per_used_bus"] = float(
+            vehicle_usage_cost_override
+        )
     scenario["simulation_config"] = simulation_config
     fragment_policy = enforce_research_phase3_single_continuous_duty(scenario)
     initial_soc_policy = _resolve_initial_soc_policy(scenario)
@@ -1059,8 +1119,14 @@ def run(args: argparse.Namespace) -> int:
             "bev_terminal_soc_equality_tolerance_kwh": float(
                 args.bev_terminal_soc_equality_tolerance_kwh
             ),
+            "minimum_used_bev_count": int(args.minimum_used_bev_count),
+            "minimum_used_bev_count_policy_case": (
+                int(args.minimum_used_bev_count) > 0
+            ),
         },
     )
+    if int(args.minimum_used_bev_count) < 0:
+        raise ValueError("minimum_used_bev_count must be nonnegative")
     initial_soc_metadata = initial_soc_input_metadata(
         problem,
         policy=initial_soc_policy,
@@ -1079,6 +1145,7 @@ def run(args: argparse.Namespace) -> int:
         expected_service_date=args.expected_service_date,
         expected_bev_count=args.expected_bev_count,
         expected_ice_count=args.expected_ice_count,
+        service_id=args.service_id,
     )
     git_state = _git_state()
     trip_input_hash = _trip_input_hash(problem)
@@ -1135,6 +1202,11 @@ def run(args: argparse.Namespace) -> int:
             "weather_operation_profile": weather_operation_profile,
             "research_fragment_policy": fragment_policy,
             "bev_availability_sensitivity": bev_availability_sensitivity,
+            "minimum_used_bev_count": int(args.minimum_used_bev_count),
+            "vehicle_usage_cost_jpy_per_used_bus": float(
+                problem.metadata.get("vehicle_usage_cost_jpy_per_used_bus", 0.0)
+                or 0.0
+            ),
             "phase": executed_phase,
             "stage1_strategy": stage1_strategy,
             "fast_assignment_time_limit_sec": fast_assignment_time_limit_sec,
@@ -1158,6 +1230,11 @@ def run(args: argparse.Namespace) -> int:
         "prepared_input_id": args.prepared_input_id,
         "prepared_input_sha256": _sha256(prepared_path),
         "service_date": str(problem.metadata.get("service_date") or "")[:10],
+        "service_id": str(args.service_id),
+        "calendar_service_contract": _calendar_service_contract(
+            str(problem.metadata.get("service_date") or "")[:10],
+            str(args.service_id),
+        ),
         "phase": executed_phase,
         "stage1_strategy": stage1_strategy,
         "assignment_global_optimality": (
@@ -1177,6 +1254,12 @@ def run(args: argparse.Namespace) -> int:
         "weather_operation_policy_enabled": True,
         "weather_configuration": weather_configuration,
         "weather_operation_profile": weather_operation_profile,
+        "weather_pv_forecast_applied": bool(
+            problem.metadata.get("weather_pv_forecast_applied", False)
+        ),
+        "weather_pv_forecast_skip_reason": problem.metadata.get(
+            "weather_pv_forecast_skip_reason"
+        ),
         "trip_count": len(problem.trips),
         "fleet": {
             "BEV": sum(1 for item in problem.vehicles if str(item.vehicle_type).upper() == "BEV"),
@@ -1192,6 +1275,7 @@ def run(args: argparse.Namespace) -> int:
             for vehicle_type in ("BEV", "ICE")
         },
         "bev_availability_sensitivity": bev_availability_sensitivity,
+        "minimum_used_bev_count": int(args.minimum_used_bev_count),
         "timestep_min": int(problem.scenario.timestep_min),
         "price_slot_count": len(problem.price_slots),
         "planning_horizon_hours": float(problem.scenario.planning_horizon_hours),
@@ -1812,6 +1896,25 @@ def main() -> int:
             "Optional in-memory BEV readiness sensitivity. Keeps the N BEVs "
             "with highest persisted initial SOC available; never modifies the "
             "persisted scenario."
+        ),
+    )
+    parser.add_argument(
+        "--minimum-used-bev-count",
+        type=int,
+        default=0,
+        help=(
+            "Explicit policy-sensitivity lower bound on BEVs assigned at least "
+            "one trip. The formal cost-minimizing baseline is 0; use 35 only "
+            "for the separately labelled all-BEV-use policy case."
+        ),
+    )
+    parser.add_argument(
+        "--vehicle-usage-cost-jpy-per-used-bus",
+        type=float,
+        default=None,
+        help=(
+            "Optional in-memory vehicle-day cost sensitivity. It does not "
+            "modify the persisted scenario."
         ),
     )
     parser.add_argument("--build-only", action="store_true")

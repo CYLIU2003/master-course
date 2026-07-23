@@ -29,6 +29,9 @@ EXPECTED_PRICE_SLOT_COUNT = 96
 # the pair answers different research questions and must not be compared.
 FIXED_CONTROL_FIELDS = (
     "git_sha",
+    "service_date",
+    "service_id",
+    "calendar_service_contract",
     "phase",
     "time_limit_sec",
     "mip_gap",
@@ -36,6 +39,8 @@ FIXED_CONTROL_FIELDS = (
     "postsolve_repair_enabled",
     "vehicle_soc_semantics",
     "weather_operation_policy_enabled",
+    "weather_pv_forecast_applied",
+    "weather_pv_forecast_skip_reason",
     "trip_count",
     "fleet",
     "expected_fleet",
@@ -53,6 +58,7 @@ FIXED_CONTROL_FIELDS = (
     "diesel_price_yen_per_l",
     "co2_price_yen_per_kg",
     "vehicle_usage_cost_jpy_per_used_bus",
+    "minimum_used_bev_count",
     "cost_component_flags",
     "objective_weights",
     "grid_co2_kg_per_kwh",

@@ -95,8 +95,13 @@ def test_advisor_acceptance_requires_terminal_energy_and_formal_fleet() -> None:
                 {"power_kw": 90.0, "simultaneous_ports": 5},
                 {"power_kw": 50.0, "simultaneous_ports": 5},
             ],
+            "calendar_service_contract": {"matches": True},
+            "weather_pv_forecast_applied": True,
+            "weather_pv_forecast_skip_reason": None,
         },
         "solver": {
+            "research_run": True,
+            "research_run_accepted": True,
             "bev_terminal_soc_balance_satisfied": True,
             "physical_charger_assignment_semantics": (
                 "one_physical_charger_definition_per_active_vehicle_slot; "
@@ -122,6 +127,81 @@ def test_advisor_acceptance_requires_terminal_energy_and_formal_fleet() -> None:
     rejected = _advisor_case_acceptance(case)
     assert rejected["accepted"] is False
     assert rejected["failed_checks"] == ["bess_terminal_soc_balanced"]
+
+
+def test_advisor_acceptance_rejects_missing_required_rolling_chain() -> None:
+    case = {
+        "git_dirty": False,
+        "scenario_parameters": {
+            "fleet": {"BEV": 35, "ICE": 26},
+            "expected_fleet": {"BEV": 35, "ICE": 26},
+            "trip_count": 1,
+            "charger_configuration": [
+                {"power_kw": 90.0, "simultaneous_ports": 5},
+                {"power_kw": 50.0, "simultaneous_ports": 5},
+            ],
+            "calendar_service_contract": {"matches": True},
+            "weather_pv_forecast_applied": True,
+            "weather_pv_forecast_skip_reason": None,
+        },
+        "solver": {
+            "research_run": True,
+            "research_run_accepted": True,
+            "bev_terminal_soc_balance_satisfied": True,
+            "physical_charger_assignment_semantics": (
+                "one_physical_charger_definition_per_active_vehicle_slot; "
+                "simultaneous_ports_are_identical_ports"
+            ),
+        },
+        "operation": {
+            "assigned_trip_count": {"BEV": 1, "ICE": 0},
+            "used_vehicle_count": {"BEV": 1, "ICE": 0},
+        },
+        "balances": {"all_balances_passed": True},
+        "bess": {
+            "terminal_target_kwh": 300.0,
+            "terminal_target_deviation_kwh": 0.0,
+        },
+        "fuel": {"cost_residual_jpy": 0.0},
+        "validation_metrics": {"all_required_validation_checks_passed": True},
+        "rolling": {"required": True, "provided": False},
+    }
+
+    result = _advisor_case_acceptance(case)
+
+    assert result["accepted"] is False
+    assert result["failed_checks"] == ["hourly_rolling_chain_accepted"]
+
+    case.update(
+        {
+            "scenario_id": "sunny",
+            "prepared_input_id": "prepared-sunny",
+            "service_date": "2025-08-05",
+            "trip_input_hash": "trip-sunny",
+            "vehicle_input_hash": "vehicle-common",
+            "git_sha": "commit-a",
+            "solver_result_sha256": "result-sunny",
+        }
+    )
+    case["rolling"] = {
+        "required": True,
+        "provided": True,
+        "chain_accepted": True,
+        "all_steps_feasible": True,
+        "execution_minutes": 60,
+        "scenario_id": "rain",
+        "prepared_input_id": "prepared-rain",
+        "service_date": "2025-08-10",
+        "trip_input_hash": "trip-rain",
+        "vehicle_input_hash": "vehicle-common",
+        "day_ahead_git_sha": "commit-a",
+        "day_ahead_result_sha256": "result-rain",
+    }
+
+    mismatched = _advisor_case_acceptance(case)
+
+    assert mismatched["accepted"] is False
+    assert mismatched["failed_checks"] == ["hourly_rolling_chain_accepted"]
 
 
 def test_service_minute_wraps_clock_time_before_horizon() -> None:

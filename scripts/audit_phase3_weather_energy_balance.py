@@ -249,7 +249,7 @@ def _build_problem(
     problem = ProblemBuilder().build_from_scenario(
         scenario,
         depot_id="tsurumaki",
-        service_id="WEEKDAY",
+        service_id=str(input_audit.get("service_id") or "WEEKDAY"),
         config=config,
         planning_days=1,
     )
@@ -558,6 +558,11 @@ def _audit_case(
         "scenario_id": input_audit["scenario_id"],
         "service_date": input_audit["service_date"],
         "prepared_input_id": input_audit["prepared_input_id"],
+        "trip_input_hash": input_audit["trip_input_hash"],
+        "vehicle_input_hash": input_audit["vehicle_input_hash"],
+        "solver_result_sha256": hashlib.sha256(
+            (run_dir / "solver_result.json").read_bytes()
+        ).hexdigest(),
         "experiment_hash": input_audit["experiment_hash"],
         "git_sha": input_audit["git_sha"],
         "git_dirty": bool(input_audit["git_dirty"]),
@@ -570,6 +575,16 @@ def _audit_case(
             "stage2_status": result["metadata"]["stage2_solver_status"],
             "stage2_runtime_seconds": _number(result["metadata"]["stage2_runtime_seconds"]),
             "research_cost_kpi_eligible": bool(result["metadata"]["research_cost_kpi_eligible"]),
+            "research_run": bool(result["metadata"].get("research_run")),
+            "research_run_accepted": bool(
+                result["metadata"].get("research_run_accepted")
+            ),
+            "vehicle_source_provenance_exact": bool(
+                result["metadata"].get("vehicle_source_provenance_exact")
+            ),
+            "vehicle_source_allocation_policy": result["metadata"].get(
+                "vehicle_source_allocation_policy"
+            ),
             "objective_semantics": result["metadata"]["objective_semantics"],
             "bev_terminal_soc_balance_satisfied": bool(
                 result["metadata"].get("bev_terminal_soc_balance_satisfied")
@@ -628,6 +643,9 @@ def _audit_case(
             "vehicle_usage_cost_jpy_per_used_bus": _number(
                 input_audit["vehicle_usage_cost_jpy_per_used_bus"]
             ),
+            "minimum_used_bev_count": int(
+                input_audit.get("minimum_used_bev_count") or 0
+            ),
             "grid_co2_kg_per_kwh": dict(input_audit["grid_co2_kg_per_kwh"]),
             "pv_marginal_charge_cost_yen_per_kwh": _number(
                 input_audit["pv_marginal_charge_cost_yen_per_kwh"]
@@ -643,6 +661,15 @@ def _audit_case(
             "depot_energy_assets": dict(input_audit["depot_energy_assets"]),
             "weather_configuration": dict(input_audit["weather_configuration"]),
             "weather_operation_profile": dict(input_audit["weather_operation_profile"]),
+            "weather_pv_forecast_applied": bool(
+                input_audit.get("weather_pv_forecast_applied")
+            ),
+            "weather_pv_forecast_skip_reason": input_audit.get(
+                "weather_pv_forecast_skip_reason"
+            ),
+            "calendar_service_contract": dict(
+                input_audit.get("calendar_service_contract") or {}
+            ),
         },
         "fleet_input": dict(input_audit["fleet"]),
         "operation": operation,
@@ -709,6 +736,7 @@ def _advisor_case_acceptance(case: Mapping[str, Any]) -> dict[str, Any]:
     bess = dict(case.get("bess") or {})
     fuel = dict(case.get("fuel") or {})
     validation = dict(case.get("validation_metrics") or {})
+    rolling = dict(case.get("rolling") or {})
     assigned_counts = dict(operation.get("assigned_trip_count") or {})
     charger_ports_by_power_kw: dict[float, int] = {}
     for charger in parameters.get("charger_configuration") or []:
@@ -721,10 +749,44 @@ def _advisor_case_acceptance(case: Mapping[str, Any]) -> dict[str, Any]:
         )
     checks = {
         "git_clean": case.get("git_dirty") is False,
+        "formal_research_run_accepted": (
+            solver.get("research_run") is True
+            and solver.get("research_run_accepted") is True
+        ),
+        "calendar_matches_service_table": dict(
+            parameters.get("calendar_service_contract") or {}
+        ).get("matches")
+        is True,
+        "weather_pv_curve_applied": (
+            parameters.get("weather_pv_forecast_applied") is True
+            and not parameters.get("weather_pv_forecast_skip_reason")
+        ),
         "formal_fleet_bev35_ice26": parameters.get("fleet")
         == {"BEV": 35, "ICE": 26},
         "fleet_matches_declared_expectation": parameters.get("fleet")
         == parameters.get("expected_fleet"),
+        "minimum_used_bev_policy_satisfied": int(
+            operation.get("used_vehicle_count", {}).get("BEV") or 0
+        )
+        >= int(parameters.get("minimum_used_bev_count") or 0),
+        "hourly_rolling_chain_accepted": (
+            not rolling.get("required")
+            or (
+                rolling.get("chain_accepted") is True
+                and int(rolling.get("execution_minutes") or 0) == 60
+                and rolling.get("all_steps_feasible") is True
+                and rolling.get("scenario_id") == case.get("scenario_id")
+                and rolling.get("prepared_input_id")
+                == case.get("prepared_input_id")
+                and rolling.get("service_date") == case.get("service_date")
+                and rolling.get("trip_input_hash") == case.get("trip_input_hash")
+                and rolling.get("vehicle_input_hash")
+                == case.get("vehicle_input_hash")
+                and rolling.get("day_ahead_git_sha") == case.get("git_sha")
+                and rolling.get("day_ahead_result_sha256")
+                == case.get("solver_result_sha256")
+            )
+        ),
         "all_trips_assigned": sum(int(value) for value in assigned_counts.values())
         == int(parameters.get("trip_count") or 0),
         "all_hard_validations_passed": validation.get(
@@ -774,6 +836,37 @@ def _advisor_case_acceptance(case: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _rolling_evidence(path: str | Path | None, *, required: bool) -> dict[str, Any]:
+    if not path:
+        return {
+            "required": required,
+            "provided": False,
+            "chain_accepted": False,
+            "all_steps_feasible": False,
+            "execution_minutes": None,
+            "step_count": 0,
+        }
+    summary_path = Path(path).resolve()
+    payload = _load_json(summary_path)
+    return {
+        "required": required,
+        "provided": True,
+        "path": str(summary_path),
+        "chain_accepted": payload.get("chain_accepted") is True,
+        "all_steps_feasible": payload.get("all_steps_feasible") is True,
+        "execution_minutes": payload.get("execution_minutes"),
+        "step_count": int(payload.get("step_count") or 0),
+        "scenario_id": payload.get("scenario_id"),
+        "prepared_input_id": payload.get("prepared_input_id"),
+        "service_date": payload.get("service_date"),
+        "trip_input_hash": payload.get("trip_input_hash"),
+        "vehicle_input_hash": payload.get("vehicle_input_hash"),
+        "day_ahead_git_sha": payload.get("day_ahead_git_sha"),
+        "day_ahead_result_sha256": payload.get("day_ahead_result_sha256"),
+        "acceptance_checks": dict(payload.get("acceptance_checks") or {}),
+    }
+
+
 def _write_csv(path: Path, rows: list[Mapping[str, Any]]) -> None:
     if not rows:
         raise ValueError(f"Cannot write empty CSV: {path}")
@@ -808,6 +901,15 @@ def run(args: argparse.Namespace) -> int:
             outputs_root=outputs_root,
         ),
     }
+    require_rolling = bool(getattr(args, "require_rolling", False))
+    cases["sunny"]["rolling"] = _rolling_evidence(
+        getattr(args, "sunny_rolling_summary", None),
+        required=require_rolling,
+    )
+    cases["rain"]["rolling"] = _rolling_evidence(
+        getattr(args, "rain_rolling_summary", None),
+        required=require_rolling,
+    )
     advisor_acceptance = {
         case_key: _advisor_case_acceptance(case)
         for case_key, case in cases.items()
@@ -921,6 +1023,13 @@ def main() -> int:
     parser.add_argument("--sunny-run", required=True)
     parser.add_argument("--rain-run", required=True)
     parser.add_argument("--audit-dir", required=True)
+    parser.add_argument(
+        "--require-rolling",
+        action="store_true",
+        help="Require accepted 60-minute rolling chains for both cases.",
+    )
+    parser.add_argument("--sunny-rolling-summary")
+    parser.add_argument("--rain-rolling-summary")
     return run(parser.parse_args())
 
 

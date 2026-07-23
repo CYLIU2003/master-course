@@ -823,6 +823,26 @@ class GurobiMILPAdapter:
         for vehicle in problem.vehicles:
             if not bool(getattr(vehicle, "available", True)):
                 model.addConstr(used_vehicle[vehicle.vehicle_id] == 0)
+        minimum_used_bev_count = max(
+            int(problem.metadata.get("minimum_used_bev_count") or 0),
+            0,
+        )
+        available_bev_use_vars = [
+            used_vehicle[vehicle.vehicle_id]
+            for vehicle in problem.vehicles
+            if bool(getattr(vehicle, "available", True))
+            and str(getattr(vehicle, "vehicle_type", "") or "").upper() == "BEV"
+        ]
+        if minimum_used_bev_count > len(available_bev_use_vars):
+            raise ValueError(
+                "minimum_used_bev_count exceeds available BEV inventory: "
+                f"{minimum_used_bev_count} > {len(available_bev_use_vars)}"
+            )
+        if minimum_used_bev_count > 0:
+            model.addConstr(
+                gp.quicksum(available_bev_use_vars) >= minimum_used_bev_count,
+                name="minimum_used_bev_count_policy",
+            )
 
         # Per-day vehicle usage linkage for multi-day constraints.
         for vehicle in problem.vehicles:
@@ -3308,6 +3328,10 @@ class GurobiMILPAdapter:
                 "bess_soc_start_kwh_by_depot_slot": bess_soc_start_kwh_by_depot_slot,
                 "bess_soc_end_kwh_by_depot_slot": bess_soc_end_kwh_by_depot_slot,
                 "vehicle_usage_cost_jpy_per_used_bus": vehicle_usage_unit_cost,
+                "minimum_used_bev_count": minimum_used_bev_count,
+                "minimum_used_bev_count_policy_enabled": (
+                    minimum_used_bev_count > 0
+                ),
                 "pv_curtail_penalty_auto_defaulted": pv_curtail_penalty_auto_defaulted,
                 "charge_session_start_penalty_yen": charge_session_start_penalty,
                 "slot_concurrency_penalty_yen": slot_concurrency_penalty,
@@ -3321,8 +3345,12 @@ class GurobiMILPAdapter:
                 "opportunistic_topup_unfilled_vehicle_day_ids": opportunistic_topup_unfilled_vehicle_day_ids,
                 "opportunistic_topup_unfilled_vehicle_ids": opportunistic_topup_unfilled_vehicle_ids,
                 "source_provenance_exact": True,
-                "vehicle_source_provenance_exact": True,
-                "vehicle_source_allocation_policy": "milp_vehicle_source_variables_tied_to_depot_source_totals",
+                # Source-flow variables are depot/slot aggregates.  The
+                # physical charger assignment identifies a charger, not the
+                # grid/PV/BESS source used by each vehicle, so vehicle-level
+                # source splits must remain explicitly derived.
+                "vehicle_source_provenance_exact": False,
+                "vehicle_source_allocation_policy": "proportional_by_depot_timestep",
                 "derived_source_split": False,
                 **physical_charger_metadata,
                 "arc_pruning_summary": arc_pruning_summary,
@@ -3862,6 +3890,26 @@ class GurobiMILPAdapter:
         for vehicle in problem.vehicles:
             if not bool(getattr(vehicle, "available", True)):
                 stage1.addConstr(used_vehicle[vehicle.vehicle_id] == 0)
+        minimum_used_bev_count = max(
+            int(problem.metadata.get("minimum_used_bev_count") or 0),
+            0,
+        )
+        available_bev_use_vars = [
+            used_vehicle[vehicle.vehicle_id]
+            for vehicle in problem.vehicles
+            if bool(getattr(vehicle, "available", True))
+            and str(getattr(vehicle, "vehicle_type", "") or "").upper() == "BEV"
+        ]
+        if minimum_used_bev_count > len(available_bev_use_vars):
+            raise ValueError(
+                "minimum_used_bev_count exceeds available BEV inventory: "
+                f"{minimum_used_bev_count} > {len(available_bev_use_vars)}"
+            )
+        if minimum_used_bev_count > 0:
+            stage1.addConstr(
+                gp.quicksum(available_bev_use_vars) >= minimum_used_bev_count,
+                name="minimum_used_bev_count_policy",
+            )
 
         for vehicle in problem.vehicles:
             vehicle_id = vehicle.vehicle_id
@@ -4426,6 +4474,10 @@ class GurobiMILPAdapter:
                     "stage1_vehicle_count_lower_bound_semantics": (
                         "relaxed_dispatch_feasible_minimum_path_cover_vehicle_day_lb"
                     ),
+                    "minimum_used_bev_count": minimum_used_bev_count,
+                    "minimum_used_bev_count_policy_enabled": (
+                        minimum_used_bev_count > 0
+                    ),
                     "stage1_energy_envelope_semantics": (
                         "optimistic_vehicle_local_necessary_condition"
                     ),
@@ -4579,6 +4631,10 @@ class GurobiMILPAdapter:
                 "stage1_vehicle_count_lower_bound_semantics": (
                     "relaxed_dispatch_feasible_minimum_path_cover_vehicle_day_lb"
                 ),
+                "minimum_used_bev_count": minimum_used_bev_count,
+                "minimum_used_bev_count_policy_enabled": (
+                    minimum_used_bev_count > 0
+                ),
                 "stage1_energy_envelope_semantics": (
                     "optimistic_vehicle_local_necessary_condition"
                 ),
@@ -4696,6 +4752,10 @@ class GurobiMILPAdapter:
         component_flags = normalize_cost_component_flags(
             problem.metadata.get("cost_component_flags")
         )
+        minimum_used_bev_count = max(
+            int(problem.metadata.get("minimum_used_bev_count") or 0),
+            0,
+        )
         raw_arc_pruning_summary = (stage1_plan.metadata or {}).get(
             "arc_pruning_summary"
         )
@@ -4770,10 +4830,15 @@ class GurobiMILPAdapter:
                 "stage1_objective_value": stage1_objective_value,
                 "stage2_mip_gap": None,
                 "stage2_objective_value": None,
+                "minimum_used_bev_count": minimum_used_bev_count,
+                "minimum_used_bev_count_policy_enabled": (
+                    minimum_used_bev_count > 0
+                ),
                 "solver_objective_matches_accounting_total": False,
                 "objective_semantics": "fixed_assignment_energy_dispatch_not_global_total_cost",
                 "source_provenance_exact": True,
-                "vehicle_source_provenance_exact": True,
+                "vehicle_source_provenance_exact": False,
+                "vehicle_source_allocation_policy": "not_required_no_ev_charging",
                 "derived_source_split": False,
                 # Phase 3 establishes a feasible dispatch under fixed Stage 1
                 # assignments. Its accounting total is not a globally
@@ -5853,8 +5918,12 @@ class GurobiMILPAdapter:
                 else "fixed_assignment_energy_dispatch_not_global_total_cost"
             ),
             "source_provenance_exact": True,
-            "vehicle_source_provenance_exact": True,
-            "vehicle_source_allocation_policy": "stage2_vehicle_source_variables_tied_to_fixed_stage1_schedule",
+            # Stage 2 decides exact depot/slot source totals and exact
+            # vehicle/slot charging, but it has no vehicle/source decision
+            # variable.  Reporting therefore allocates the depot totals to
+            # vehicles proportionally within each timestep.
+            "vehicle_source_provenance_exact": False,
+            "vehicle_source_allocation_policy": "proportional_by_depot_timestep",
             **physical_charger_metadata,
             "stage2_return_deadhead_soc_semantics": (
                 "return_energy_subtracted_in_transition_ending_at_first_post_return_slot"
