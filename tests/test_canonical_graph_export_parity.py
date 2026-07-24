@@ -715,8 +715,14 @@ def test_rich_run_outputs_finalize_reporting_after_top_level_files_exist(tmp_pat
     assert reporting_result["status"] == "completed"
     assert (tmp_path / "cost_breakdown_detail.csv").exists()
     assert (tmp_path / "rebuild_reporting_log.json").exists()
+    assert (tmp_path / "experiment_report.md").exists()
     persisted = json.loads((tmp_path / "optimization_result.json").read_text(encoding="utf-8"))
     assert persisted["graph_artifacts"]["reporting_finalizer"]["status"] == "completed"
+    audit = json.loads((tmp_path / "optimization_audit.json").read_text(encoding="utf-8"))
+    assert audit["experiment_report"]["status"] == "generated"
+    assert audit["experiment_report"]["accounting_reconciled"] is True
+    assert audit["experiment_report"]["run_json_path"] == "experiment_report.json"
+    assert audit["experiment_report"]["run_md_path"] == "experiment_report.md"
 
 
 def test_charging_summary_reports_electricity_cost_not_propulsion_aggregate() -> None:

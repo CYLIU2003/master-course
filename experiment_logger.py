@@ -76,6 +76,7 @@ class SimulationResults:
     demand_charge_jpy: float | None
     vehicle_fixed_cost_jpy: float | None
     co2_kg: float | None
+    co2_cost_jpy: float | None
     bev_trips: int | None
     ice_trips: int | None
     total_trips: int | None
@@ -184,6 +185,8 @@ class ExperimentReport:
             lines.append(f"    デマンド  : {r.demand_charge_jpy:,.2f} JPY")
         if r.co2_kg is not None:
             lines.append(f"  CO₂排出量  : {r.co2_kg:,.4f} kg")
+        if r.co2_cost_jpy is not None:
+            lines.append(f"    CO₂ cost : {r.co2_cost_jpy:,.2f} JPY")
         if r.bev_trips is not None or r.ice_trips is not None:
             bev_s = str(r.bev_trips) if r.bev_trips is not None else "-"
             ice_s = str(r.ice_trips) if r.ice_trips is not None else "-"
@@ -291,6 +294,7 @@ class ExperimentReport:
         _add("　デマンド料金", r.demand_charge_jpy, "{:,.2f} JPY")
         _add("　車両使用費", r.vehicle_fixed_cost_jpy, "{:,.2f} JPY")
         _add("CO₂排出量", r.co2_kg, "{:,.4f} kg")
+        _add("CO₂費用", r.co2_cost_jpy, "{:,.2f} JPY")
 
         if r.bev_trips is not None or r.ice_trips is not None:
             bev_s = str(r.bev_trips) if r.bev_trips is not None else "-"
@@ -361,6 +365,7 @@ class ExperimentLogger:
         method: str | None = None,
         seed: int | None = None,
         extra_solver: dict | None = None,
+        git_commit: str | None = None,
     ) -> ExperimentReport:
         """
         シナリオと結果からレポートを生成して保存する。
@@ -404,7 +409,7 @@ class ExperimentLogger:
         repro = ReproducibilityInfo(
             timestamp_utc=ts_utc.isoformat(),
             timestamp_local=ts.isoformat(),
-            git_commit=self._git_commit(),
+            git_commit=git_commit if git_commit is not None else self._git_commit(),
             python_version=f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
             platform=platform.platform(),
             scenario_hash=scenario_hash,
@@ -512,6 +517,11 @@ class ExperimentLogger:
                 or cost_breakdown.get("vehicle_fixed")
             ),
             co2_kg=r.get("co2_kg") or r.get("co2"),
+            co2_cost_jpy=(
+                r.get("co2_cost_jpy")
+                if r.get("co2_cost_jpy") is not None
+                else cost_breakdown.get("co2_cost")
+            ),
             bev_trips=r.get("bev_trips") or r.get("trips", {}).get("bev"),
             ice_trips=r.get("ice_trips") or r.get("trips", {}).get("ice"),
             total_trips=(
@@ -538,7 +548,7 @@ class ExperimentLogger:
                 "status", "objective_value", "obj_value", "total_cost_jpy",
                 "total_cost", "cost_breakdown", "electricity_cost_jpy",
                 "diesel_cost_jpy", "demand_charge_jpy", "vehicle_fixed_cost_jpy",
-                "co2_kg", "co2", "bev_trips", "ice_trips", "total_trips", "trips",
+                "co2_kg", "co2", "co2_cost_jpy", "bev_trips", "ice_trips", "total_trips", "trips",
                 "total_charging_kwh", "peak_charging_kw", "charging",
                 "solve_time_sec", "solve_time", "mip_gap_pct", "mip_gap",
                 "charging_schedule",

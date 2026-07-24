@@ -110,6 +110,44 @@ def _best_objective_stop_from_certified_lower_bound(
     return lower_bound / (1.0 - gap)
 
 
+def _stage1_termination_reason(
+    *,
+    solver_status: str,
+    best_obj_stop_applied: bool,
+) -> str:
+    """Describe the Stage 1 stopping mechanism without relabelling Gurobi.
+
+    ``objective_limit`` is Gurobi's raw status.  In this model it is expected
+    when the configured ``BestObjStop`` is crossed, but keeping the two fields
+    separate prevents an objective-limit exit from being mistaken for a
+    time-limit or an optimality certificate in research artifacts.
+    """
+
+    normalized_status = str(solver_status or "unknown").strip().lower()
+    if normalized_status == "objective_limit":
+        return "best_obj_stop" if best_obj_stop_applied else "objective_limit"
+    if normalized_status == "time_limit":
+        return "time_limit"
+    if normalized_status == "optimal":
+        return "optimality_proven"
+    return normalized_status or "unknown"
+
+
+def _configured_gurobi_threads(config: OptimizationConfig) -> Optional[int]:
+    """Return an explicit Gurobi thread count, if the experiment supplied one."""
+
+    configured = getattr(config, "gurobi_threads", None)
+    if configured is None:
+        return None
+    try:
+        threads = int(configured)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("gurobi_threads must be a positive integer") from exc
+    if threads < 1:
+        raise ValueError("gurobi_threads must be a positive integer")
+    return threads
+
+
 def _has_exact_mip_optimality_certificate(
     solver_status: str,
     mip_gap: Optional[float],
@@ -653,6 +691,9 @@ class GurobiMILPAdapter:
         model.Params.TimeLimit = max(1, int(config.time_limit_sec))
         model.Params.MIPGap = max(float(config.mip_gap), 0.0)
         model.Params.Seed = int(config.random_seed)
+        configured_threads = _configured_gurobi_threads(config)
+        if configured_threads is not None:
+            model.Params.Threads = configured_threads
         
         # Feasibility-focused Gurobi parameters
         model.Params.MIPFocus = 1  # Focus on finding feasible solutions
@@ -3728,6 +3769,16 @@ class GurobiMILPAdapter:
                         "stage1_has_feasible_incumbent": False,
                         "stage1_objective": None,
                         "stage1_best_bound": None,
+                        "stage1_gurobi_raw_best_bound": None,
+                        "stage1_gurobi_raw_mip_gap_ratio": None,
+                        "stage1_certified_best_bound": None,
+                        "stage1_certified_mip_gap_ratio": None,
+                        "stage1_best_obj_stop_enabled": bool(
+                            getattr(config, "stage1_best_obj_stop_enabled", True)
+                        ),
+                        "stage1_best_obj_stop_applied": False,
+                        "stage1_termination_reason": "gurobi_unavailable",
+                        "gurobi_threads": _configured_gurobi_threads(config),
                         "stage1_mip_gap_ratio": None,
                         "stage1_runtime_seconds": None,
                         "stage2_solver_status": "not_run_gurobi_unavailable",
@@ -3753,6 +3804,9 @@ class GurobiMILPAdapter:
         stage1.Params.TimeLimit = stage_time_limit
         stage1.Params.MIPGap = max(float(config.mip_gap), 0.0)
         stage1.Params.Seed = int(config.random_seed)
+        configured_threads = _configured_gurobi_threads(config)
+        if configured_threads is not None:
+            stage1.Params.Threads = configured_threads
 
         builder = MILPModelBuilder()
         trip_by_id = problem.trip_by_id()
@@ -4262,7 +4316,14 @@ class GurobiMILPAdapter:
                 float(config.mip_gap),
             )
         )
-        if stage1_certified_gap_stop_threshold is not None:
+        stage1_best_obj_stop_enabled = bool(
+            getattr(config, "stage1_best_obj_stop_enabled", True)
+        )
+        stage1_best_obj_stop_applied = bool(
+            stage1_best_obj_stop_enabled
+            and stage1_certified_gap_stop_threshold is not None
+        )
+        if stage1_best_obj_stop_applied:
             stage1.Params.BestObjStop = stage1_certified_gap_stop_threshold
         stage1.setObjective(objective1, GRB.MINIMIZE)
         (
@@ -4354,9 +4415,14 @@ class GurobiMILPAdapter:
             else stage1_solver_gap
         )
         stage1_certified_gap_stop_triggered = bool(
-            stage1_status == "objective_limit"
+            stage1_best_obj_stop_applied
+            and stage1_status == "objective_limit"
             and stage1_gap is not None
             and stage1_gap <= max(float(config.mip_gap), 0.0) + 1.0e-12
+        )
+        stage1_termination_reason = _stage1_termination_reason(
+            solver_status=stage1_status,
+            best_obj_stop_applied=stage1_best_obj_stop_applied,
         )
         stage1_uses_full_candidate_network = (
             _supports_full_candidate_network_exact_milp(arc_pruning_summary)
@@ -4404,6 +4470,14 @@ class GurobiMILPAdapter:
                     "stage1_best_bound": stage1_bound,
                     "stage1_solver_best_bound": stage1_solver_bound,
                     "stage1_solver_mip_gap_ratio": stage1_solver_gap,
+                    "stage1_gurobi_raw_best_bound": stage1_solver_bound,
+                    "stage1_gurobi_raw_mip_gap_ratio": stage1_solver_gap,
+                    "stage1_certified_best_bound": stage1_bound,
+                    "stage1_certified_mip_gap_ratio": stage1_gap,
+                    "stage1_certified_mip_gap_semantics": (
+                        "maximum_of_gurobi_objbound_and_analytical_path_cover_"
+                        "lower_bound"
+                    ),
                     "stage1_analytical_objective_lower_bound": (
                         stage1_analytical_objective_lower_bound
                     ),
@@ -4414,9 +4488,13 @@ class GurobiMILPAdapter:
                     "stage1_certified_gap_stop_threshold": (
                         stage1_certified_gap_stop_threshold
                     ),
+                    "stage1_best_obj_stop_enabled": stage1_best_obj_stop_enabled,
+                    "stage1_best_obj_stop_applied": stage1_best_obj_stop_applied,
                     "stage1_certified_gap_stop_triggered": (
                         stage1_certified_gap_stop_triggered
                     ),
+                    "stage1_termination_reason": stage1_termination_reason,
+                    "gurobi_threads": configured_threads,
                     "stage1_mip_gap_ratio": stage1_gap,
                     "stage1_runtime_seconds": float(time.perf_counter() - total_started),
                     "stage1_pre_optimize_seconds": stage1_pre_optimize_seconds,
@@ -4565,6 +4643,14 @@ class GurobiMILPAdapter:
                 "stage1_best_bound": stage1_bound,
                 "stage1_solver_best_bound": stage1_solver_bound,
                 "stage1_solver_mip_gap_ratio": stage1_solver_gap,
+                "stage1_gurobi_raw_best_bound": stage1_solver_bound,
+                "stage1_gurobi_raw_mip_gap_ratio": stage1_solver_gap,
+                "stage1_certified_best_bound": stage1_bound,
+                "stage1_certified_mip_gap_ratio": stage1_gap,
+                "stage1_certified_mip_gap_semantics": (
+                    "maximum_of_gurobi_objbound_and_analytical_path_cover_"
+                    "lower_bound"
+                ),
                 "stage1_analytical_objective_lower_bound": (
                     stage1_analytical_objective_lower_bound
                 ),
@@ -4575,9 +4661,13 @@ class GurobiMILPAdapter:
                 "stage1_certified_gap_stop_threshold": (
                     stage1_certified_gap_stop_threshold
                 ),
+                "stage1_best_obj_stop_enabled": stage1_best_obj_stop_enabled,
+                "stage1_best_obj_stop_applied": stage1_best_obj_stop_applied,
                 "stage1_certified_gap_stop_triggered": (
                     stage1_certified_gap_stop_triggered
                 ),
+                "stage1_termination_reason": stage1_termination_reason,
+                "gurobi_threads": configured_threads,
                 "stage1_mip_gap_ratio": stage1_gap,
                 "stage1_runtime_seconds": float(
                     getattr(stage1, "Runtime", 0.0) or 0.0
@@ -4876,6 +4966,9 @@ class GurobiMILPAdapter:
         stage2.Params.TimeLimit = _resolved_stage_time_limit_sec(config, stage=2)
         stage2.Params.MIPGap = max(float(config.mip_gap), 0.0)
         stage2.Params.Seed = int(config.random_seed)
+        configured_threads = _configured_gurobi_threads(config)
+        if configured_threads is not None:
+            stage2.Params.Threads = configured_threads
 
         trip_by_id = problem.trip_by_id()
         dispatch_trip_by_id = problem.dispatch_context.trips_by_id()

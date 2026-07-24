@@ -351,6 +351,14 @@ class OptimizationConfig:
     # of seconds for the usually small fixed-assignment charging MILP.
     stage1_time_limit_sec: Optional[int] = None
     stage2_time_limit_sec: Optional[int] = None
+    # Stage 1 may derive a Gurobi ``BestObjStop`` threshold from an analytical
+    # lower bound.  It is useful for obtaining a feasible planning result
+    # quickly, but it changes the stopping rule and therefore must be disabled
+    # for like-for-like wall-clock comparisons.
+    stage1_best_obj_stop_enabled: bool = True
+    # ``None`` leaves Gurobi's default thread selection intact.  Experiments
+    # that compare solve time should set this explicitly and record it.
+    gurobi_threads: Optional[int] = None
     mip_gap: float = 0.02
     random_seed: int = 42
     alns_iterations: int = 800  # Increased from 500

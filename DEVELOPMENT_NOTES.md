@@ -1,5 +1,64 @@
 # Development Notes
 
+## 2026-07-24 Major revision: stop-rule transparency and canonical research reporting
+
+### Problems raised and closed in code
+
+- **P1 — apparent sunny/low-PV runtime differences could be caused by a hidden
+  stopping rule:** Stage 1 previously always set Gurobi `BestObjStop` whenever
+  its analytical vehicle-day lower bound existed. A high-PV case could therefore
+  stop as soon as its first incumbent crossed the threshold while another case
+  ran to its time limit. `OptimizationConfig.stage1_best_obj_stop_enabled` now
+  makes that rule explicit (default `true` preserves operational planning
+  behavior). The BFF and formal runner record whether it was enabled, actually
+  applied, its threshold, whether it triggered, and the Stage 1 termination
+  reason. Runtime experiments must use `--no-stage1-best-obj-stop` and an
+  explicit, common `--gurobi-threads` value for every repetition.
+- **P1 — a displayed Stage 1 gap could be mistaken for Gurobi's native gap:**
+  artifacts now expose `stage1_gurobi_raw_mip_gap_ratio` separately from
+  `stage1_certified_mip_gap_ratio`. The latter may use the maximum of Gurobi's
+  `ObjBound` and the analytical path-cover lower bound; it is not the same
+  object as the raw Gurobi MIP gap. The legacy `stage1_mip_gap_ratio` remains
+  for compatibility and denotes the certified/composite value.
+- **P1 — experiment reports were generated before the reporting finalizer:**
+  this could omit final demand-charge and CO₂-cost terms even when
+  `summary.json` and `kpi_summary.json` reconciled. The report is now generated
+  only after finalization, from those canonical sidecars, and rejects a report
+  when total cost differs from grid electricity + demand allocation + fuel +
+  CO₂ cost + vehicle-use cost. The report records the run Git SHA supplied by
+  the pre-solve provenance capture rather than relying on a best-effort shell
+  lookup.
+- **P1 — manual PV-only runs could be relabelled after the fact:** every manual
+  frontend artifact now writes `research_claim_scope.json`. A PV-only,
+  unaccepted day-ahead run is labelled
+  `exploratory_pv_supply_sensitivity_not_weather_adaptive_dispatch`; it
+  explicitly disallows claims of weather-adaptive dispatch, formal weather
+  comparison, integrated global optimum, monthly demand-bill savings, PV/BESS
+  investment economics, or any standalone wall-clock comparison. Disabling
+  `BestObjStop` is necessary but still requires matched controls and repeated
+  paired measurements.
+
+### Current interpretation of the 2026-07-24 pair
+
+`run_20260724_1345` and `run_20260724_1348` remain useful physical-feasibility
+and high-PV/low-PV energy-flow sensitivity artifacts. They are not formal
+sunny/rainy evidence: their service dates differ, the low-PV date is a Sunday
+while using the weekday timetable, the runs are not accepted research runs, and
+no hourly rolling chain was executed. They must not be presented as proof that
+sunny cases solve faster, that weather adapted the assignment, or that the
+integrated total cost was optimized globally.
+
+### Required follow-up experiments
+
+1. Create the strict same-service-date PV-counterfactual pair with ICE26 real
+   inventory, identical timetable/fleet/initial SOC, and `return_to_initial`
+   BEV terminal SOC.
+2. Run the actual 24-step hourly rolling chain for both cases; do not infer it
+   from a day-ahead result.
+3. Benchmark time only with `--no-stage1-best-obj-stop`, fixed seed, explicit
+   fixed Gurobi threads, identical time limits, and multiple repetitions. Report
+   the raw Gurobi gap, certified gap, and termination reason for every run.
+
 ## 2026-07-24 Research evidence contract: counterfactual weather comparison and run provenance
 
 ### Problems raised and closed in code

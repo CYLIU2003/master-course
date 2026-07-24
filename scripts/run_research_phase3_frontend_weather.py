@@ -190,6 +190,10 @@ def _comparison_control_hash(
     weather_configuration: Mapping[str, Any],
     weather_operation_profile: Mapping[str, Any],
     time_limit_sec: int,
+    stage1_time_limit_sec: int | None,
+    stage2_time_limit_sec: int | None,
+    stage1_best_obj_stop_enabled: bool,
+    gurobi_threads: int | None,
     mip_gap: float,
     random_seed: int,
     git_sha: str | None,
@@ -221,6 +225,10 @@ def _comparison_control_hash(
             "weather_configuration": dict(weather_configuration),
             "weather_operation_profile": dict(weather_operation_profile),
             "time_limit_sec": int(time_limit_sec),
+            "stage1_time_limit_sec": stage1_time_limit_sec,
+            "stage2_time_limit_sec": stage2_time_limit_sec,
+            "stage1_best_obj_stop_enabled": bool(stage1_best_obj_stop_enabled),
+            "gurobi_threads": gurobi_threads,
             "mip_gap": float(mip_gap),
             "random_seed": int(random_seed),
             "git_sha": git_sha,
@@ -1122,6 +1130,12 @@ def _validate_frontend_case(
 
 
 def run(args: argparse.Namespace) -> int:
+    gurobi_threads = getattr(args, "gurobi_threads", None)
+    stage1_best_obj_stop_enabled = bool(
+        getattr(args, "stage1_best_obj_stop_enabled", True)
+    )
+    if gurobi_threads is not None and int(gurobi_threads) < 1:
+        raise ValueError("gurobi_threads must be at least 1 when specified")
     stage1_strategy = str(
         getattr(args, "stage1_strategy", DEFAULT_STAGE1_STRATEGY)
         or DEFAULT_STAGE1_STRATEGY
@@ -1222,6 +1236,8 @@ def run(args: argparse.Namespace) -> int:
         time_limit_sec=int(args.time_limit_sec),
         stage1_time_limit_sec=args.stage1_time_limit_sec,
         stage2_time_limit_sec=args.stage2_time_limit_sec,
+        stage1_best_obj_stop_enabled=stage1_best_obj_stop_enabled,
+        gurobi_threads=gurobi_threads,
         mip_gap=float(args.mip_gap),
         random_seed=int(args.random_seed),
         warm_start=True,
@@ -1345,6 +1361,10 @@ def run(args: argparse.Namespace) -> int:
         weather_configuration=weather_configuration,
         weather_operation_profile=weather_operation_profile,
         time_limit_sec=int(args.time_limit_sec),
+        stage1_time_limit_sec=args.stage1_time_limit_sec,
+        stage2_time_limit_sec=args.stage2_time_limit_sec,
+        stage1_best_obj_stop_enabled=stage1_best_obj_stop_enabled,
+        gurobi_threads=gurobi_threads,
         mip_gap=float(args.mip_gap),
         random_seed=int(args.random_seed),
         git_sha=git_state.get("git_sha"),
@@ -1414,6 +1434,8 @@ def run(args: argparse.Namespace) -> int:
             "time_limit_sec": int(args.time_limit_sec),
             "stage1_time_limit_sec": args.stage1_time_limit_sec,
             "stage2_time_limit_sec": args.stage2_time_limit_sec,
+            "stage1_best_obj_stop_enabled": stage1_best_obj_stop_enabled,
+            "gurobi_threads": gurobi_threads,
             "mip_gap": float(args.mip_gap),
             "random_seed": int(args.random_seed),
             "git_sha": git_state["git_sha"],
@@ -1446,6 +1468,8 @@ def run(args: argparse.Namespace) -> int:
         "time_limit_sec": int(args.time_limit_sec),
         "stage1_time_limit_sec": args.stage1_time_limit_sec,
         "stage2_time_limit_sec": args.stage2_time_limit_sec,
+        "stage1_best_obj_stop_enabled": stage1_best_obj_stop_enabled,
+        "gurobi_threads": gurobi_threads,
         "mip_gap": float(args.mip_gap),
         "random_seed": int(args.random_seed),
         "postsolve_repair_enabled": False,
@@ -1802,6 +1826,27 @@ def run(args: argparse.Namespace) -> int:
         "stage1_solver_best_bound": _finite(
             metadata.get("stage1_solver_best_bound")
         ),
+        "stage1_gurobi_raw_best_bound": _finite(
+            metadata.get("stage1_gurobi_raw_best_bound")
+        ),
+        "stage1_gurobi_raw_mip_gap_ratio": _finite(
+            metadata.get("stage1_gurobi_raw_mip_gap_ratio")
+        ),
+        "stage1_gurobi_raw_mip_gap_percent": _mip_gap_percent(
+            metadata.get("stage1_gurobi_raw_mip_gap_ratio")
+        ),
+        "stage1_certified_best_bound": _finite(
+            metadata.get("stage1_certified_best_bound")
+        ),
+        "stage1_certified_mip_gap_ratio": _finite(
+            metadata.get("stage1_certified_mip_gap_ratio")
+        ),
+        "stage1_certified_mip_gap_percent": _mip_gap_percent(
+            metadata.get("stage1_certified_mip_gap_ratio")
+        ),
+        "stage1_certified_mip_gap_semantics": metadata.get(
+            "stage1_certified_mip_gap_semantics"
+        ),
         "stage1_analytical_objective_lower_bound": _finite(
             metadata.get("stage1_analytical_objective_lower_bound")
         ),
@@ -1811,8 +1856,19 @@ def run(args: argparse.Namespace) -> int:
         "stage1_certified_gap_stop_threshold": _finite(
             metadata.get("stage1_certified_gap_stop_threshold")
         ),
+        "stage1_best_obj_stop_enabled": bool(
+            metadata.get("stage1_best_obj_stop_enabled", stage1_best_obj_stop_enabled)
+        ),
+        "stage1_best_obj_stop_applied": bool(
+            metadata.get("stage1_best_obj_stop_applied", False)
+        ),
         "stage1_certified_gap_stop_triggered": bool(
             metadata.get("stage1_certified_gap_stop_triggered", False)
+        ),
+        "stage1_termination_reason": metadata.get("stage1_termination_reason"),
+        "gurobi_threads": metadata.get("gurobi_threads", gurobi_threads),
+        "runtime_comparison_eligible": not bool(
+            metadata.get("stage1_best_obj_stop_applied", False)
         ),
         "stage2_best_bound": _finite(metadata.get("stage2_best_bound")),
         "stage1_mip_gap_ratio": _finite(metadata.get("stage1_mip_gap_ratio")),
@@ -2071,6 +2127,35 @@ def main() -> int:
         type=int,
         default=None,
         help="Optional fixed-assignment charging-stage limit.",
+    )
+    parser.add_argument(
+        "--stage1-best-obj-stop",
+        dest="stage1_best_obj_stop_enabled",
+        action="store_true",
+        default=True,
+        help=(
+            "Enable Stage 1's analytical-lower-bound BestObjStop rule. This "
+            "is the planning default but must be disabled for wall-clock "
+            "comparisons."
+        ),
+    )
+    parser.add_argument(
+        "--no-stage1-best-obj-stop",
+        dest="stage1_best_obj_stop_enabled",
+        action="store_false",
+        help=(
+            "Disable Stage 1 BestObjStop. Use this for like-for-like runtime "
+            "experiments, with the same seed, threads, and time limits."
+        ),
+    )
+    parser.add_argument(
+        "--gurobi-threads",
+        type=int,
+        default=None,
+        help=(
+            "Optional explicit Gurobi thread count. Runtime comparisons should "
+            "set the same positive value in every repetition."
+        ),
     )
     parser.add_argument(
         "--stage1-candidate-time-limit-sec",

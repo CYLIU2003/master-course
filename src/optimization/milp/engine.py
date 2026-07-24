@@ -198,6 +198,24 @@ class MILPOptimizer:
                 "stage1_solver_mip_gap_ratio": (plan.metadata or {}).get(
                     "stage1_solver_mip_gap_ratio"
                 ),
+                # Keep Gurobi's native certificate distinct from the stronger
+                # reporting lower bound that may combine it with the analytic
+                # path-cover certificate.
+                "stage1_gurobi_raw_best_bound": (plan.metadata or {}).get(
+                    "stage1_gurobi_raw_best_bound"
+                ),
+                "stage1_gurobi_raw_mip_gap_ratio": (plan.metadata or {}).get(
+                    "stage1_gurobi_raw_mip_gap_ratio"
+                ),
+                "stage1_certified_best_bound": (plan.metadata or {}).get(
+                    "stage1_certified_best_bound"
+                ),
+                "stage1_certified_mip_gap_ratio": (plan.metadata or {}).get(
+                    "stage1_certified_mip_gap_ratio"
+                ),
+                "stage1_certified_mip_gap_semantics": (plan.metadata or {}).get(
+                    "stage1_certified_mip_gap_semantics"
+                ),
                 "stage1_analytical_objective_lower_bound": (
                     plan.metadata or {}
                 ).get("stage1_analytical_objective_lower_bound"),
@@ -207,9 +225,19 @@ class MILPOptimizer:
                 "stage1_certified_gap_stop_threshold": (plan.metadata or {}).get(
                     "stage1_certified_gap_stop_threshold"
                 ),
+                "stage1_best_obj_stop_enabled": bool(
+                    (plan.metadata or {}).get("stage1_best_obj_stop_enabled", True)
+                ),
+                "stage1_best_obj_stop_applied": bool(
+                    (plan.metadata or {}).get("stage1_best_obj_stop_applied", False)
+                ),
                 "stage1_certified_gap_stop_triggered": (plan.metadata or {}).get(
                     "stage1_certified_gap_stop_triggered"
                 ),
+                "stage1_termination_reason": (plan.metadata or {}).get(
+                    "stage1_termination_reason"
+                ),
+                "gurobi_threads": (plan.metadata or {}).get("gurobi_threads"),
                 "stage1_mip_gap_ratio": (plan.metadata or {}).get("stage1_mip_gap_ratio"),
                 "stage1_runtime_seconds": (plan.metadata or {}).get("stage1_runtime_seconds"),
                 "stage1_pre_optimize_seconds": (plan.metadata or {}).get(

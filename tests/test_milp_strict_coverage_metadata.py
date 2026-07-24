@@ -15,8 +15,10 @@ from src.optimization.common.problem import (
 from src.optimization.milp.engine import MILPOptimizer
 from src.optimization.milp.solver_adapter import (
     _best_objective_stop_from_certified_lower_bound,
+    _configured_gurobi_threads,
     _has_exact_mip_optimality_certificate,
     _single_path_flow_implies_temporal_exclusivity,
+    _stage1_termination_reason,
 )
 from src.optimization.engine import OptimizationEngine
 
@@ -74,6 +76,27 @@ def test_certified_lower_bound_converts_to_positive_objective_stop() -> None:
     ) == pytest.approx(711_111.1111111111)
     assert _best_objective_stop_from_certified_lower_bound(-1.0, 0.1) is None
     assert _best_objective_stop_from_certified_lower_bound(1.0, 1.0) is None
+
+
+def test_stage1_termination_reason_keeps_best_obj_stop_distinct_from_time_limit() -> None:
+    assert _stage1_termination_reason(
+        solver_status="objective_limit",
+        best_obj_stop_applied=True,
+    ) == "best_obj_stop"
+    assert _stage1_termination_reason(
+        solver_status="objective_limit",
+        best_obj_stop_applied=False,
+    ) == "objective_limit"
+    assert _stage1_termination_reason(
+        solver_status="time_limit",
+        best_obj_stop_applied=False,
+    ) == "time_limit"
+
+
+def test_explicit_gurobi_threads_must_be_positive() -> None:
+    assert _configured_gurobi_threads(OptimizationConfig(gurobi_threads=1)) == 1
+    with pytest.raises(ValueError, match="positive integer"):
+        _configured_gurobi_threads(OptimizationConfig(gurobi_threads=0))
 
 
 def test_single_path_redundancy_requires_strictly_forward_arcs() -> None:

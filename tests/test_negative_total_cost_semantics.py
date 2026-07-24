@@ -111,6 +111,42 @@ def test_experiment_report_uses_accounting_total_and_percent_gap() -> None:
     assert payload["trip_count_unserved"] == 0
 
 
+def test_experiment_report_uses_finalized_accounting_components() -> None:
+    payload = _optimization_result_payload(
+        {
+            "solver_status": "feasible",
+            "objective_value": 721_185.99,
+            "summary": {},
+            "simulation_summary": {},
+            "cost_breakdown": {
+                "total_cost": 721_185.99,
+                "electricity_cost": 9_999.0,
+                "fuel_cost": 63_000.0,
+                "demand_charge": 0.0,
+                "vehicle_usage_cost": 640_000.0,
+                "co2_cost": 0.0,
+            },
+        },
+        accounting_summary_override={
+            "accounting_total_cost_jpy": 715_823.25,
+            "grid_purchase_cost_jpy": 10_015.66,
+            "bess_total_flow_cost_jpy": 0.0,
+            "fuel_cost_jpy": 63_291.84,
+            "demand_charge_cost_jpy": 1_151.23,
+            "vehicle_usage_cost_jpy": 640_000.0,
+            "co2_cost_jpy": 1_364.52,
+            "total_co2_kg": 1_364.52,
+        },
+    )
+
+    assert payload["total_cost_jpy"] == 715_823.25
+    assert payload["electricity_cost_jpy"] == 10_015.66
+    assert payload["demand_charge_jpy"] == 1_151.23
+    assert payload["vehicle_fixed_cost_jpy"] == 640_000.0
+    assert payload["co2_cost_jpy"] == 1_364.52
+    assert payload["cost_breakdown"]["total_cost"] == 715_823.25
+
+
 def test_logger_scenario_payload_uses_vehicle_and_depot_asset_fallbacks() -> None:
     payload = _logger_scenario_payload(
         scenario_doc={

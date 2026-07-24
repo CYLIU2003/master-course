@@ -1,4 +1,34 @@
-# Phase 3 残課題の手動計算・受理手順（2026-07-23更新）
+# Phase 3 残課題の手動計算・受理手順（2026-07-24更新）
+
+## 0. 2026-07-24 追記: 主張の範囲と計算時間比較
+
+`output/2026-07-24/run_20260724_1345` と
+`output/2026-07-24/run_20260724_1348` は、正式な晴天／雨天比較ではない。
+同一サービス日・同一ダイヤ・同一 prepared input・同一初期 SOC を固定した
+反実仮想ではなく、hourly rolling も未実行である。したがって、提出資料では
+「固定された日次配車に対する高 PV／低 PV の探索的エネルギー感度」とだけ
+表現し、「天候適応配車」「晴天の方が高速」「統合総費用の最適解」とは書かない。
+
+Stage 1 の `BestObjStop` は計画用の早期停止規則である。これが有効なままでは、
+ケース間の wall-clock 時間を比較してはいけない。各 run の
+`solver_settings.json` で次を確認する。
+
+- `stage1_gurobi_raw_mip_gap_ratio`: Gurobi native gap
+- `stage1_certified_mip_gap_ratio`: Gurobi bound と解析的下界を統合した証明値
+- `stage1_termination_reason`: `best_obj_stop` / `time_limit` / `optimality_proven`
+- `stage1_best_obj_stop_applied`: `true` なら計算時間比較は不可
+
+計算時間比較は、同一の seed、threads、time limit、prepared input を使い、
+少なくとも複数反復で実施する。formal runner では両ケースに必ず以下を追加する。
+
+```powershell
+--no-stage1-best-obj-stop --gurobi-threads 1
+```
+
+手動フロント実行後は `research_claim_scope.json`、`experiment_report.json`、
+`experiment_report.md` を確認する。後二者の会計総費用は、canonical
+`summary.json` / `kpi_summary.json` の電力費・需要料金配賦・燃料費・CO₂費・
+車両使用費と一致していなければならない。
 
 ## 1. この手順の目的
 

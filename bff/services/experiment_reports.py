@@ -14,6 +14,8 @@ def log_optimization_experiment(
     scenario_id: str,
     scenario_doc: Dict[str, Any],
     optimization_result: Dict[str, Any],
+    accounting_summary_override: Dict[str, Any] | None = None,
+    git_commit_override: str | None = None,
 ) -> Dict[str, Any]:
     method = _optimization_method_label(scenario_doc, optimization_result)
     logger = ExperimentLogger(results_dir=_results_dir(scenario_id, "optimization"))
@@ -29,9 +31,21 @@ def log_optimization_experiment(
             mode=optimization_result.get("mode"),
             result_summary=dict(optimization_result.get("summary") or {}),
         ),
-        result=_optimization_result_payload(optimization_result),
+        result=_optimization_result_payload(
+            optimization_result,
+            accounting_summary_override=accounting_summary_override,
+        ),
         method=method,
         seed=_random_seed(scenario_doc),
+        extra_solver={
+            "mip_gap_pct": dict(optimization_result.get("solver_settings") or {}).get(
+                "mip_gap_achieved_percent"
+            ),
+            "threads": dict(optimization_result.get("solver_settings") or {}).get(
+                "gurobi_threads"
+            ),
+        },
+        git_commit=git_commit_override,
     )
     return _experiment_report_payload(
         report=report,
@@ -482,12 +496,18 @@ def _pv_capacity_kw(scenario_doc: Dict[str, Any]) -> float:
     return float(cost_coefficients.get("pv_scale") or 0.0)
 
 
-def _optimization_result_payload(optimization_result: Dict[str, Any]) -> Dict[str, Any]:
+def _optimization_result_payload(
+    optimization_result: Dict[str, Any],
+    *,
+    accounting_summary_override: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
     cost_breakdown = dict(optimization_result.get("cost_breakdown") or {})
     cost_breakdown.update(normalize_pv_energy_breakdown(cost_breakdown))
     summary = dict(optimization_result.get("summary") or {})
     accounting_summary = dict(
-        ((optimization_result.get("graph_artifacts") or {}).get("accounting_summary"))
+        accounting_summary_override
+        if accounting_summary_override is not None
+        else ((optimization_result.get("graph_artifacts") or {}).get("accounting_summary"))
         or {}
     )
     trip_count_by_type = dict(summary.get("trip_count_by_type") or {})
@@ -521,15 +541,20 @@ def _optimization_result_payload(optimization_result: Dict[str, Any]) -> Dict[st
         "accounting_total_cost_jpy", accounting_summary.get("total_cost_jpy")
     )
     accounting_electricity_cost = electricity_cost_final
-    if accounting_summary.get("energy_cost_jpy") is not None:
-        accounting_electricity_cost = accounting_summary["energy_cost_jpy"]
-    elif (
+    if (
         accounting_summary.get("grid_purchase_cost_jpy") is not None
         or accounting_summary.get("bess_total_flow_cost_jpy") is not None
     ):
-        accounting_electricity_cost = float(
-            accounting_summary.get("grid_purchase_cost_jpy", 0.0) or 0.0
-        ) + float(accounting_summary.get("bess_total_flow_cost_jpy", 0.0) or 0.0)
+        # Currency is reported in yen to two decimal places.  Round the
+        # reconstructed component sum so binary floating-point noise does not
+        # create a different canonical report value (e.g., 21599.850000000002).
+        accounting_electricity_cost = round(
+            float(accounting_summary.get("grid_purchase_cost_jpy", 0.0) or 0.0)
+            + float(accounting_summary.get("bess_total_flow_cost_jpy", 0.0) or 0.0),
+            2,
+        )
+    elif accounting_summary.get("energy_cost_jpy") is not None:
+        accounting_electricity_cost = accounting_summary["energy_cost_jpy"]
     accounting_demand_charge = accounting_summary.get("demand_charge_cost_jpy")
     if accounting_demand_charge is None:
         accounting_demand_charge = (
@@ -537,6 +562,24 @@ def _optimization_result_payload(optimization_result: Dict[str, Any]) -> Dict[st
             if cost_breakdown.get("demand_charge") is not None
             else cost_breakdown.get("demand_cost")
         )
+    report_cost_breakdown = dict(cost_breakdown)
+    if accounting_total_cost is not None:
+        report_cost_breakdown["total_cost"] = accounting_total_cost
+    report_cost_breakdown.update(
+        {
+            "electricity_cost": accounting_electricity_cost,
+            "fuel_cost": accounting_summary.get(
+                "fuel_cost_jpy", cost_breakdown.get("fuel_cost")
+            ),
+            "demand_charge": accounting_demand_charge,
+            "vehicle_usage_cost": accounting_summary.get(
+                "vehicle_usage_cost_jpy", cost_breakdown.get("vehicle_usage_cost")
+            ),
+            "co2_cost": accounting_summary.get(
+                "co2_cost_jpy", cost_breakdown.get("co2_cost")
+            ),
+        }
+    )
     return {
         "status": str(optimization_result.get("solver_status", "UNKNOWN") or "UNKNOWN").upper(),
         "objective_value": optimization_result.get("objective_value"),
@@ -547,6 +590,9 @@ def _optimization_result_payload(optimization_result: Dict[str, Any]) -> Dict[st
         "diesel_cost_jpy": accounting_summary.get("fuel_cost_jpy", cost_breakdown.get("fuel_cost")),
         "demand_charge_jpy": accounting_demand_charge,
         "vehicle_fixed_cost_jpy": accounting_summary.get("vehicle_usage_cost_jpy", cost_breakdown.get("vehicle_usage_cost")),
+        "co2_cost_jpy": accounting_summary.get(
+            "co2_cost_jpy", cost_breakdown.get("co2_cost")
+        ),
         "return_leg_bonus_jpy": cost_breakdown.get("return_leg_bonus"),
         "grid_to_bus_kwh": cost_breakdown.get("grid_to_bus_kwh"),
         "bess_to_bus_kwh": cost_breakdown.get("bess_to_bus_kwh"),
@@ -563,7 +609,7 @@ def _optimization_result_payload(optimization_result: Dict[str, Any]) -> Dict[st
         "peak_charging_kw": simulation_summary.get("peak_demand_kw"),
         "solve_time_sec": optimization_result.get("solve_time_seconds"),
         "mip_gap_pct": achieved_gap_percent,
-        "cost_breakdown": cost_breakdown,
+        "cost_breakdown": report_cost_breakdown,
         "charging_schedule": (
             optimization_result.get("solver_result") or {}
         ).get("charge_schedule"),

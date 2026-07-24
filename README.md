@@ -28,6 +28,18 @@ simulation artifact, not an automatically accepted research result.
 - Hourly rolling execution is reported as `not_executed` unless an actual rolling
   chain was run and its log is attached. No output fabricates rolling evidence,
   a missing ICE vehicle, or weather-dispatch behavior.
+- Stage 1 `BestObjStop` is explicit. It is allowed for operational planning but
+  is a stopping-rule intervention, not evidence that one case is intrinsically
+  faster. `solver_settings.json` separates Gurobi's raw MIP gap from the
+  analytical/certified gap and records the termination reason. Disable it for
+  runtime experiments and fix the Gurobi thread count across repetitions.
+- `experiment_report.json` and `experiment_report.md` are copied into each run
+  after canonical reporting finalization; they reconcile the accounting total
+  with electricity, demand allocation, fuel, CO₂, and vehicle-use terms.
+  `research_claim_scope.json` states the claims the
+  run supports. A manual PV-only pair is an exploratory PV-supply sensitivity,
+  not weather-adaptive dispatch, an integrated global optimum, or a monthly
+  demand-charge/investment result.
 
 The formal command sequence and required acceptance checks are in
 [the Phase 3 manual validation runbook](docs/notes/phase3_manual_validation_runbook_20260716.md).

@@ -172,6 +172,8 @@ class RunOptimizationBody(BaseModel):
     time_limit_seconds: int = 300
     stage1_time_limit_seconds: Optional[int] = None
     stage2_time_limit_seconds: Optional[int] = None
+    stage1_best_obj_stop_enabled: bool = True
+    gurobi_threads: Optional[int] = Field(default=None, ge=1)
     mip_gap: float = 0.01
     random_seed: int = 42
     prepared_input_id: Optional[str] = None
@@ -1592,6 +1594,10 @@ def _persist_rich_run_outputs(
         return parsed if math.isfinite(parsed) else None
 
     result_summary = dict(optimization_result.get("summary") or {})
+    # Older/alternative solver paths do not necessarily provide settings.  Keep
+    # rich-output persistence backward compatible and emit null telemetry in
+    # that case rather than failing after a feasible solve.
+    solver_settings = dict(optimization_result.get("solver_settings") or {})
     summary = {
         "scenario_id": optimization_result.get("scenario_id"),
         "mode": optimization_result.get("mode"),
@@ -1635,6 +1641,29 @@ def _persist_rich_run_outputs(
             )
         ),
         "supports_exact_milp": bool((optimization_result.get("solver_metadata") or {}).get("supports_exact_milp", False)),
+        "stage1_solver_status": solver_settings.get("stage1_solver_status"),
+        "stage1_termination_reason": solver_settings.get(
+            "stage1_termination_reason"
+        ),
+        "stage1_best_obj_stop_enabled": solver_settings.get(
+            "stage1_best_obj_stop_enabled"
+        ),
+        "stage1_best_obj_stop_applied": solver_settings.get(
+            "stage1_best_obj_stop_applied"
+        ),
+        "stage1_best_obj_stop_threshold": solver_settings.get(
+            "stage1_best_obj_stop_threshold"
+        ),
+        "stage1_gurobi_raw_mip_gap_ratio": solver_settings.get(
+            "stage1_gurobi_raw_mip_gap_ratio"
+        ),
+        "stage1_certified_mip_gap_ratio": solver_settings.get(
+            "stage1_certified_mip_gap_ratio"
+        ),
+        "runtime_comparison_eligible": solver_settings.get(
+            "runtime_comparison_eligible"
+        ),
+        "gurobi_threads": solver_settings.get("gurobi_threads"),
         "solve_time_seconds": optimization_result.get("solve_time_seconds"),
         "solve_time_unit": "s",
         "trip_count_served": (
@@ -1663,7 +1692,6 @@ def _persist_rich_run_outputs(
     (run_dir / "summary.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
     )
-    solver_settings = dict(optimization_result.get("solver_settings") or {})
     (run_dir / "solver_settings.json").write_text(
         json.dumps(solver_settings, ensure_ascii=False, indent=2), encoding="utf-8"
     )
@@ -2317,6 +2345,29 @@ def _persist_rich_run_outputs(
         "mip_gap_requested_percent": solver_settings.get("mip_gap_requested_percent"),
         "mip_gap_achieved_ratio": solver_settings.get("mip_gap_achieved_ratio"),
         "mip_gap_achieved_percent": solver_settings.get("mip_gap_achieved_percent"),
+        "stage1_solver_status": solver_settings.get("stage1_solver_status"),
+        "stage1_termination_reason": solver_settings.get(
+            "stage1_termination_reason"
+        ),
+        "stage1_best_obj_stop_enabled": solver_settings.get(
+            "stage1_best_obj_stop_enabled"
+        ),
+        "stage1_best_obj_stop_applied": solver_settings.get(
+            "stage1_best_obj_stop_applied"
+        ),
+        "stage1_best_obj_stop_threshold": solver_settings.get(
+            "stage1_best_obj_stop_threshold"
+        ),
+        "stage1_gurobi_raw_mip_gap_ratio": solver_settings.get(
+            "stage1_gurobi_raw_mip_gap_ratio"
+        ),
+        "stage1_certified_mip_gap_ratio": solver_settings.get(
+            "stage1_certified_mip_gap_ratio"
+        ),
+        "runtime_comparison_eligible": solver_settings.get(
+            "runtime_comparison_eligible"
+        ),
+        "gurobi_threads": solver_settings.get("gurobi_threads"),
     }
     if accounting_summary:
         def _prefer_accounting_value(key: str, fallback: Any) -> Any:
@@ -2471,14 +2522,11 @@ def _persist_rich_run_outputs(
         json.dumps(kpi_summary, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
-    exp_report = dict(optimization_result.get("experiment_report") or {})
-    md_path = exp_report.get("md_path")
-    if isinstance(md_path, str) and md_path.strip():
-        src_md = Path(md_path)
-        if src_md.exists():
-            shutil.copy2(src_md, run_dir / "experiment_report.md")
-
     reporting_finalizer_result: Optional[Dict[str, Any]] = None
+    optimization_audit["experiment_report"] = {
+        "status": "not_requested",
+        "reason": "Reporting finalization was not requested for this run.",
+    }
     if finalize_reporting:
         reporting_finalizer_result = _run_reporting_finalizer(run_dir)
         graph_artifacts = dict(optimization_result.get("graph_artifacts") or {})
@@ -2495,6 +2543,83 @@ def _persist_rich_run_outputs(
             optimization_audit["warnings"] = list(
                 dict.fromkeys([*list(optimization_audit.get("warnings") or []), warning])
             )
+        (run_dir / "optimization_result.json").write_text(
+            json.dumps(optimization_result, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        (run_dir / "optimization_audit.json").write_text(
+            json.dumps(optimization_audit, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        (raw_dir / "optimization_result.json").write_text(
+            json.dumps(optimization_result, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        (raw_dir / "optimization_audit.json").write_text(
+            json.dumps(optimization_audit, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
+        if reporting_finalizer_result.get("status") == "completed":
+            try:
+                finalized_accounting = _finalized_accounting_summary_for_experiment_report(
+                    run_dir
+                )
+                experiment_report = log_optimization_experiment(
+                    scenario_id=str(optimization_result.get("scenario_id") or ""),
+                    scenario_doc=scenario,
+                    optimization_result=optimization_result,
+                    accounting_summary_override=finalized_accounting,
+                    git_commit_override=str(optimization_audit.get("git_sha") or "")
+                    or None,
+                )
+                optimization_result["experiment_report"] = experiment_report
+                source_json_path = experiment_report.get("json_path")
+                source_md_path = experiment_report.get("md_path")
+                local_json_path = None
+                local_md_path = None
+                if isinstance(source_json_path, str) and source_json_path.strip():
+                    src_json = Path(source_json_path)
+                    if src_json.exists():
+                        local_json_path = "experiment_report.json"
+                        shutil.copy2(src_json, run_dir / local_json_path)
+                if isinstance(source_md_path, str) and source_md_path.strip():
+                    src_md = Path(source_md_path)
+                    if src_md.exists():
+                        local_md_path = "experiment_report.md"
+                        shutil.copy2(src_md, run_dir / local_md_path)
+                optimization_audit["experiment_report"] = {
+                    "status": "generated",
+                    "experiment_id": experiment_report.get("experiment_id"),
+                    "source_json_path": source_json_path,
+                    "source_md_path": source_md_path,
+                    "run_json_path": local_json_path,
+                    "run_md_path": local_md_path,
+                    "accounting_source": finalized_accounting.get(
+                        "experiment_report_accounting_source"
+                    ),
+                    "accounting_reconciled": bool(
+                        finalized_accounting.get("experiment_report_accounting_reconciled")
+                    ),
+                    "accounting_residual_jpy": finalized_accounting.get(
+                        "experiment_report_accounting_residual_jpy"
+                    ),
+                }
+            except Exception as exc:
+                warning = f"Canonical experiment report generation failed: {exc}"
+                optimization_result["warnings"] = list(
+                    dict.fromkeys([*list(optimization_result.get("warnings") or []), warning])
+                )
+                optimization_audit["warnings"] = list(
+                    dict.fromkeys([*list(optimization_audit.get("warnings") or []), warning])
+                )
+                optimization_audit["experiment_report"] = {
+                    "status": "failed",
+                    "error": str(exc),
+                }
+        else:
+            optimization_audit["experiment_report"] = {
+                "status": "not_generated",
+                "reason": "Canonical reporting finalization failed.",
+                "reporting_finalizer_status": reporting_finalizer_result.get("status"),
+            }
+
         (run_dir / "optimization_result.json").write_text(
             json.dumps(optimization_result, ensure_ascii=False, indent=2), encoding="utf-8"
         )
@@ -2566,6 +2691,30 @@ def _persist_rich_run_outputs(
             "Hourly rolling evidence is a separate execution chain."
         ),
     }
+    research_claim_scope = _research_claim_scope_payload(
+        optimization_result=optimization_result,
+        solver_settings=solver_settings,
+        weather_policy=weather_policy,
+        rolling_execution=rolling_execution,
+    )
+    optimization_result["research_claim_scope"] = research_claim_scope
+    optimization_audit["research_claim_scope"] = research_claim_scope
+    (run_dir / "research_claim_scope.json").write_text(
+        json.dumps(research_claim_scope, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    (run_dir / "optimization_result.json").write_text(
+        json.dumps(optimization_result, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    (run_dir / "optimization_audit.json").write_text(
+        json.dumps(optimization_audit, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    (raw_dir / "optimization_result.json").write_text(
+        json.dumps(optimization_result, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    (raw_dir / "optimization_audit.json").write_text(
+        json.dumps(optimization_audit, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     run_manifest = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "scenario_id": optimization_result.get("scenario_id"),
@@ -2635,6 +2784,8 @@ def _persist_rich_run_outputs(
             "git_sha": input_git_provenance.get("git_sha"),
         },
         "rolling_execution": rolling_execution,
+        "research_claim_scope": research_claim_scope,
+        "experiment_report": dict(optimization_audit.get("experiment_report") or {}),
         "formal_phase3_weather_submission_readiness": {
             "ready": False,
             "reason": (
@@ -2691,6 +2842,184 @@ def _run_reporting_finalizer(run_dir: Path) -> Dict[str, Any]:
             "error": str(exc),
             "traceback": traceback.format_exc(),
         }
+
+
+def _finalized_accounting_summary_for_experiment_report(run_dir: Path) -> Dict[str, Any]:
+    """Load the final accounting ledger used by the human experiment report.
+
+    The reporting finalizer can rebuild the canonical ledger after the solver
+    result is first assembled.  Reading its sidecar artifacts here prevents an
+    early, provisional objective breakdown from being presented as the final
+    accounting cost.
+    """
+
+    def _read_mapping(path: Path) -> Dict[str, Any]:
+        if not path.is_file():
+            return {}
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+        return dict(loaded) if isinstance(loaded, dict) else {}
+
+    kpi_summary = _read_mapping(run_dir / "kpi_summary.json")
+    summary = _read_mapping(run_dir / "summary.json")
+    if not summary:
+        raise ValueError("Finalized summary.json is missing")
+
+    canonical = dict(kpi_summary)
+    # summary.json is the finalizer's canonical source for the values that a
+    # reviewer compares across runs.  It intentionally overrides the older
+    # provisional values in kpi_summary.json.
+    for key in (
+        "total_cost_jpy",
+        "accounting_total_cost_jpy",
+        "objective_value_jpy",
+        "energy_cost_jpy",
+        "grid_purchase_cost_jpy",
+        "demand_charge_cost_jpy",
+        "fuel_cost_jpy",
+        "co2_cost_jpy",
+        "vehicle_usage_cost_jpy",
+        "total_co2_kg",
+        "served_trip_count",
+        "unserved_trip_count",
+        "bev_trip_count",
+        "ice_trip_count",
+        "used_vehicle_count",
+        "bus_charging_total_kwh",
+        "peak_grid_import_kw",
+        "objective_is_actual_cost",
+    ):
+        if key in summary:
+            canonical[key] = summary[key]
+
+    required_cost_keys = (
+        "accounting_total_cost_jpy",
+        "grid_purchase_cost_jpy",
+        "demand_charge_cost_jpy",
+        "fuel_cost_jpy",
+        "co2_cost_jpy",
+        "vehicle_usage_cost_jpy",
+    )
+    missing = [key for key in required_cost_keys if canonical.get(key) is None]
+    if missing:
+        raise ValueError(
+            "Finalized accounting ledger is missing required cost fields: "
+            + ", ".join(missing)
+        )
+    accounting_total = float(canonical["accounting_total_cost_jpy"])
+    reconciled_components = sum(
+        float(canonical[key]) for key in required_cost_keys[1:]
+    )
+    residual = accounting_total - reconciled_components
+    if not math.isclose(residual, 0.0, abs_tol=1.0e-6):
+        raise ValueError(
+            "Finalized accounting ledger does not reconcile: "
+            f"total={accounting_total}, components={reconciled_components}, "
+            f"residual={residual}"
+        )
+    canonical["experiment_report_accounting_reconciled"] = True
+    canonical["experiment_report_accounting_residual_jpy"] = residual
+    canonical["experiment_report_accounting_source"] = (
+        "finalized_summary_and_kpi_sidecars"
+    )
+    return canonical
+
+
+def _research_claim_scope_payload(
+    *,
+    optimization_result: Dict[str, Any],
+    solver_settings: Dict[str, Any],
+    weather_policy: Dict[str, Any],
+    rolling_execution: Dict[str, Any],
+) -> Dict[str, Any]:
+    """State what a manual frontend run may, and may not, support.
+
+    This is deliberately a claim gate rather than a score.  It prevents a
+    PV-only manual day-ahead artifact from being relabelled later as a formal
+    weather-adaptive dispatch result, a runtime benchmark, or an integrated
+    global optimum.
+    """
+
+    metadata = dict(optimization_result.get("solver_metadata") or {})
+    solution_validity = dict(optimization_result.get("solution_validity") or {})
+    decision_policy = dict(
+        (weather_policy.get("audit") or {}).get("decision_policy")
+        or weather_policy.get("decision_policy")
+        or {}
+    )
+    weather_enabled = bool(weather_policy.get("enabled", False))
+    policy_scope = str(decision_policy.get("policy_scope") or "not_enabled")
+    physically_feasible = bool(solution_validity.get("validated_feasible", False))
+    is_integrated_exact = bool(metadata.get("supports_integrated_exact_milp", False))
+    is_manual_unaccepted = not bool(metadata.get("research_run_accepted", False))
+    if weather_enabled and policy_scope == "pv_curve_only":
+        result_label = "exploratory_pv_supply_sensitivity_not_weather_adaptive_dispatch"
+    elif weather_enabled:
+        result_label = "manual_weather_policy_day_ahead_result_not_formal_comparison"
+    else:
+        result_label = "manual_day_ahead_feasibility_result"
+
+    allowed_claims: list[str] = []
+    if physically_feasible:
+        allowed_claims.append("physical_schedule_feasibility_under_recorded_inputs")
+    if weather_enabled:
+        allowed_claims.append("recorded_pv_supply_effect_on_depot_energy_flows")
+    disallowed_claims = [
+        "integrated_global_total_cost_optimum",
+        "actual_monthly_demand_charge_savings",
+        "pv_or_bess_investment_economics",
+    ]
+    if policy_scope != "weather_dispatch_policy":
+        disallowed_claims.append("weather_adaptive_dispatch_or_charging_policy")
+    if is_manual_unaccepted:
+        disallowed_claims.append("formal_research_weather_comparison")
+    if rolling_execution.get("status") != "executed":
+        disallowed_claims.append("hourly_rolling_reoptimization_performance")
+    # A single manually initiated run can record whether BestObjStop was out of
+    # the way, but it cannot itself establish a runtime comparison.  That also
+    # needs matched cross-case controls and repeated measurements.
+    disallowed_claims.append("wall_clock_runtime_comparison")
+
+    return {
+        "schema_version": "research_claim_scope_v1",
+        "result_label": result_label,
+        "physical_feasibility_claim_eligible": physically_feasible,
+        "weather_policy_scope": policy_scope,
+        "weather_adaptive_dispatch_claim_eligible": (
+            weather_enabled
+            and policy_scope == "weather_dispatch_policy"
+            and not is_manual_unaccepted
+        ),
+        "formal_weather_comparison_claim_eligible": False,
+        "integrated_global_optimality_claim_eligible": is_integrated_exact,
+        "runtime_comparison_claim_eligible": False,
+        "demand_charge_claim_scope": (
+            "planning_horizon_allocation_proxy_not_actual_monthly_bill_savings"
+        ),
+        "asset_economics_claim_eligible": False,
+        "allowed_claims": allowed_claims,
+        "disallowed_claims": sorted(set(disallowed_claims)),
+        "evidence": {
+            "research_run": bool(metadata.get("research_run", False)),
+            "research_run_accepted": bool(
+                metadata.get("research_run_accepted", False)
+            ),
+            "optimization_structure": metadata.get("optimization_structure"),
+            "supports_integrated_exact_milp": is_integrated_exact,
+            "weather_policy_scope": policy_scope,
+            "rolling_execution_status": rolling_execution.get("status"),
+            "stage1_best_obj_stop_applied": solver_settings.get(
+                "stage1_best_obj_stop_applied"
+            ),
+            "stage1_stop_rule_runtime_control_eligible": solver_settings.get(
+                "runtime_comparison_eligible"
+            ),
+            "runtime_comparison_claim_requires": [
+                "matched_cross_case_solver_controls",
+                "fixed_explicit_gurobi_threads",
+                "multiple_repetitions",
+            ],
+        },
+    }
 
 
 def _canonical_vehicle_timeline_rows(
@@ -5390,6 +5719,13 @@ def _solver_settings_payload(
     effective_time_limit = _int_or_none(
         effective_limits.get("time_limit_sec", metadata.get("time_limit_sec", time_limit_seconds_requested))
     )
+    stage1_best_obj_stop_enabled = metadata.get("stage1_best_obj_stop_enabled")
+    stage1_best_obj_stop_applied = metadata.get("stage1_best_obj_stop_applied")
+    runtime_comparison_eligible = (
+        None
+        if stage1_best_obj_stop_applied is None
+        else not bool(stage1_best_obj_stop_applied)
+    )
     return {
         "time_limit_seconds_requested": _int_or_none(time_limit_seconds_requested),
         "time_limit_seconds_effective": effective_time_limit,
@@ -5434,6 +5770,53 @@ def _solver_settings_payload(
         "resolved_phase": str(metadata.get("resolved_phase") or ""),
         "executed_phase": str(metadata.get("executed_phase") or ""),
         "stage1_solver_status": metadata.get("stage1_solver_status"),
+        "stage1_termination_reason": metadata.get("stage1_termination_reason"),
+        "stage1_best_obj_stop_enabled": stage1_best_obj_stop_enabled,
+        "stage1_best_obj_stop_applied": stage1_best_obj_stop_applied,
+        "stage1_best_obj_stop_threshold": metadata.get(
+            "stage1_certified_gap_stop_threshold"
+        ),
+        "stage1_best_obj_stop_triggered": bool(
+            metadata.get("stage1_certified_gap_stop_triggered", False)
+        ),
+        "stage1_gurobi_raw_best_bound": _float_or_none(
+            metadata.get("stage1_gurobi_raw_best_bound")
+        ),
+        "stage1_gurobi_raw_mip_gap_ratio": _float_or_none(
+            metadata.get("stage1_gurobi_raw_mip_gap_ratio")
+        ),
+        "stage1_gurobi_raw_mip_gap_percent": (
+            None
+            if _float_or_none(metadata.get("stage1_gurobi_raw_mip_gap_ratio")) is None
+            else _float_or_none(metadata.get("stage1_gurobi_raw_mip_gap_ratio"))
+            * 100.0
+        ),
+        "stage1_certified_best_bound": _float_or_none(
+            metadata.get("stage1_certified_best_bound")
+        ),
+        "stage1_certified_mip_gap_ratio": _float_or_none(
+            metadata.get("stage1_certified_mip_gap_ratio")
+        ),
+        "stage1_certified_mip_gap_percent": (
+            None
+            if _float_or_none(metadata.get("stage1_certified_mip_gap_ratio")) is None
+            else _float_or_none(metadata.get("stage1_certified_mip_gap_ratio"))
+            * 100.0
+        ),
+        "stage1_certified_mip_gap_semantics": metadata.get(
+            "stage1_certified_mip_gap_semantics"
+        ),
+        "runtime_comparison_eligible": runtime_comparison_eligible,
+        "runtime_comparison_eligibility_reason": (
+            "Stage 1 BestObjStop was active; compare wall-clock time only after "
+            "disabling it in every case."
+            if runtime_comparison_eligible is False
+            else "No Stage 1 BestObjStop threshold was applied. Other solver "
+            "controls must still match across cases."
+            if runtime_comparison_eligible is True
+            else "Not applicable because this result has no Stage 1 telemetry."
+        ),
+        "gurobi_threads": _int_or_none(metadata.get("gurobi_threads")),
         "stage2_solver_status": metadata.get("stage2_solver_status"),
         "stage1_feasible": metadata.get("stage1_feasible"),
         "stage2_feasible": metadata.get("stage2_feasible"),
@@ -5465,6 +5848,8 @@ def _run_optimization(
     research_run: bool = False,
     stage1_time_limit_seconds: Optional[int] = None,
     stage2_time_limit_seconds: Optional[int] = None,
+    stage1_best_obj_stop_enabled: bool = True,
+    gurobi_threads: Optional[int] = None,
     frontend_request_payload: Optional[Dict[str, Any]] = None,
 ) -> None:
     try:
@@ -5605,6 +5990,8 @@ def _run_optimization(
                 time_limit_sec=time_limit_seconds,
                 stage1_time_limit_sec=stage1_time_limit_seconds,
                 stage2_time_limit_sec=stage2_time_limit_seconds,
+                stage1_best_obj_stop_enabled=bool(stage1_best_obj_stop_enabled),
+                gurobi_threads=gurobi_threads,
                 mip_gap=mip_gap,
                 random_seed=random_seed,
                 alns_iterations=alns_iterations,
@@ -5663,6 +6050,10 @@ def _run_optimization(
                     "time_limit_seconds": time_limit_seconds,
                     "stage1_time_limit_seconds": stage1_time_limit_seconds,
                     "stage2_time_limit_seconds": stage2_time_limit_seconds,
+                    "stage1_best_obj_stop_enabled": bool(
+                        stage1_best_obj_stop_enabled
+                    ),
+                    "gurobi_threads": gurobi_threads,
                     "mip_gap": mip_gap,
                     "random_seed": random_seed,
                     "service_id": service_id,
@@ -6329,22 +6720,6 @@ def _run_optimization(
         }
         if weather_policy_payload is not None:
             optimization_audit["weather_policy"] = weather_policy_payload.get("audit") or {}
-        try:
-            experiment_report = log_optimization_experiment(
-                scenario_id=scenario_id,
-                scenario_doc=scenario,
-                optimization_result=optimization_result,
-            )
-            optimization_result["experiment_report"] = experiment_report
-            optimization_audit["experiment_report"] = {
-                "experiment_id": experiment_report.get("experiment_id"),
-                "json_path": experiment_report.get("json_path"),
-                "md_path": experiment_report.get("md_path"),
-            }
-        except Exception as exc:
-            warnings = list(optimization_audit.get("warnings") or [])
-            warnings.append(f"Experiment report generation failed: {exc}")
-            optimization_audit["warnings"] = warnings
         optimization_result["audit"] = optimization_audit
 
         store.set_field(scenario_id, "optimization_result", optimization_result)
@@ -6870,6 +7245,8 @@ def run_optimization(
             request.research_run,
             request.stage1_time_limit_seconds,
             request.stage2_time_limit_seconds,
+            request.stage1_best_obj_stop_enabled,
+            request.gurobi_threads,
             request.model_dump(),
         ),
         job_id=job.job_id,
