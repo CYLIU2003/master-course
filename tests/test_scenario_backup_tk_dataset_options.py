@@ -257,6 +257,8 @@ def test_build_optimization_run_payload_centralizes_fast_and_manual_execution() 
         "time_step_min": 30,
         "timestep_min": 30,
         "time_limit_seconds": 180,
+        "stage1_best_obj_stop_enabled": False,
+        "gurobi_threads": 1,
         "mip_gap": 0.02,
         "alns_iterations": 750,
         "no_improvement_limit": 120,

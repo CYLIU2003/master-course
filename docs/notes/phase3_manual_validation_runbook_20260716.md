@@ -25,6 +25,11 @@ Stage 1 の `BestObjStop` は計画用の早期停止規則である。これが
 --no-stage1-best-obj-stop --gurobi-threads 1
 ```
 
+Tkフロントからの `run-optimization` は同じ値を自動送信し、BFF側でも
+`BestObjStop=OFF` と `Threads=1` を強制する。したがってフロント実行では
+手入力不要であり、成果物の `solver_settings.json` と input provenance に
+要求値・実効値の両方が残る。この強制はformal CLIには適用しない。
+
 手動フロント実行後は `research_claim_scope.json`、`experiment_report.json`、
 `experiment_report.md` を確認する。後二者の会計総費用は、canonical
 `summary.json` / `kpi_summary.json` の電力費・需要料金配賦・燃料費・CO₂費・

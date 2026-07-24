@@ -76,6 +76,11 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 _DERIVED_PV_PROFILE_DIR = _REPO_ROOT / "data" / "derived" / "pv_profiles"
 _SOLCAST_AVG_PROFILE_ID = "solcast_avg_2025_08_60min"
 _ACTUAL_DATE_PV_PROFILE_ID = "actual_date_profile"
+# The BFF independently enforces these values.  Including them in the Tk
+# payload makes the effective interactive solver controls visible in the
+# console and run provenance without asking the user to set them every time.
+_INTERACTIVE_STAGE1_BEST_OBJ_STOP_ENABLED = False
+_INTERACTIVE_GUROBI_THREADS = 1
 _WEATHER_MODE_OPTIONS = (
     _ACTUAL_DATE_PV_PROFILE_ID,
     "solcast_typical_sunny",
@@ -8576,6 +8581,8 @@ class App:
             "time_step_min": self._timestep_min_value(),
             "timestep_min": self._timestep_min_value(),
             "time_limit_seconds": self._effective_optimization_time_limit_seconds(),
+            "stage1_best_obj_stop_enabled": _INTERACTIVE_STAGE1_BEST_OBJ_STOP_ENABLED,
+            "gurobi_threads": _INTERACTIVE_GUROBI_THREADS,
             "mip_gap": self._parse_float(self.mip_gap_var.get(), 0.01),
             "alns_iterations": self._parse_int(self.alns_iter_var.get(), 500),
             "no_improvement_limit": self._parse_int(self.no_improvement_limit_var.get(), 100),

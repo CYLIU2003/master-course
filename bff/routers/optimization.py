@@ -118,6 +118,45 @@ from src.pipeline.solve import solve_problem_data
 
 router = APIRouter(tags=["optimization"])
 _OPTIMIZATION_EXECUTOR: Optional[Executor] = None
+
+# Interactive BFF/Tk launches are used for comparable research runs.  Keep
+# this policy at the BFF boundary so a stale client payload cannot silently
+# re-enable the Stage 1 early-stop rule or vary Gurobi parallelism.  The formal
+# CLI runner remains independently configurable for non-interactive studies.
+INTERACTIVE_RUNTIME_POLICY_VERSION = "interactive_runtime_controls_v1"
+INTERACTIVE_STAGE1_BEST_OBJ_STOP_ENABLED = False
+INTERACTIVE_GUROBI_THREADS = 1
+
+
+def _interactive_runtime_controls_payload(
+    *,
+    requested_stage1_best_obj_stop_enabled: Any,
+    requested_gurobi_threads: Any,
+) -> Dict[str, Any]:
+    """Describe the server-enforced solver controls for an interactive run."""
+
+    requested = {
+        "stage1_best_obj_stop_enabled": bool(
+            requested_stage1_best_obj_stop_enabled
+        ),
+        "gurobi_threads": requested_gurobi_threads,
+    }
+    effective = {
+        "stage1_best_obj_stop_enabled": INTERACTIVE_STAGE1_BEST_OBJ_STOP_ENABLED,
+        "gurobi_threads": INTERACTIVE_GUROBI_THREADS,
+    }
+    return {
+        "policy_version": INTERACTIVE_RUNTIME_POLICY_VERSION,
+        "scope": "interactive_bff_run_optimization",
+        "enforced": True,
+        "requested": requested,
+        "effective": effective,
+        "override_applied": requested != effective,
+        "reason": (
+            "Interactive runs disable Stage 1 BestObjStop and use one Gurobi "
+            "thread so their solver controls are recorded consistently."
+        ),
+    }
 _OPTIMIZATION_FUTURE: Optional[Future[Any]] = None
 _OPTIMIZATION_FUTURE_LOCK = threading.RLock()
 
@@ -172,8 +211,14 @@ class RunOptimizationBody(BaseModel):
     time_limit_seconds: int = 300
     stage1_time_limit_seconds: Optional[int] = None
     stage2_time_limit_seconds: Optional[int] = None
-    stage1_best_obj_stop_enabled: bool = True
-    gurobi_threads: Optional[int] = Field(default=None, ge=1)
+    # These interactive defaults are also enforced by _run_optimization so an
+    # older client cannot restore the early stop or a machine-dependent thread
+    # count through a request body.
+    stage1_best_obj_stop_enabled: bool = INTERACTIVE_STAGE1_BEST_OBJ_STOP_ENABLED
+    gurobi_threads: Optional[int] = Field(
+        default=INTERACTIVE_GUROBI_THREADS,
+        ge=1,
+    )
     mip_gap: float = 0.01
     random_seed: int = 42
     prepared_input_id: Optional[str] = None
@@ -264,6 +309,12 @@ def _optimization_capabilities() -> Dict[str, Any]:
             "mode_b_optimistic": "BLOCKED - no longer supported",
         },
         "default_mode": "thesis_mode",
+        "interactive_runtime_controls": {
+            "policy_version": INTERACTIVE_RUNTIME_POLICY_VERSION,
+            "stage1_best_obj_stop_enabled": INTERACTIVE_STAGE1_BEST_OBJ_STOP_ENABLED,
+            "gurobi_threads": INTERACTIVE_GUROBI_THREADS,
+            "enforced_server_side": True,
+        },
         "authoritative_engine": "canonical (src/optimization/)",
         "supports_reoptimization": True,
         "max_concurrent_jobs": 1,
@@ -281,6 +332,7 @@ def _optimization_capabilities() -> Dict[str, Any]:
             "Results are persisted to the scenario snapshot; job state is not.",
             "Optimization/re-optimization runs in a dedicated executor so API polling stays responsive.",
             "Only one optimization/re-optimization job is allowed at a time in this BFF process.",
+            "Interactive /run-optimization enforces Stage 1 BestObjStop=OFF and Gurobi Threads=1; the formal CLI runner remains explicit.",
         ],
     }
 
@@ -1664,6 +1716,9 @@ def _persist_rich_run_outputs(
             "runtime_comparison_eligible"
         ),
         "gurobi_threads": solver_settings.get("gurobi_threads"),
+        "interactive_runtime_controls": dict(
+            solver_settings.get("interactive_runtime_controls") or {}
+        ),
         "solve_time_seconds": optimization_result.get("solve_time_seconds"),
         "solve_time_unit": "s",
         "trip_count_served": (
@@ -5817,6 +5872,9 @@ def _solver_settings_payload(
             else "Not applicable because this result has no Stage 1 telemetry."
         ),
         "gurobi_threads": _int_or_none(metadata.get("gurobi_threads")),
+        "interactive_runtime_controls": dict(
+            metadata.get("interactive_runtime_controls") or {}
+        ),
         "stage2_solver_status": metadata.get("stage2_solver_status"),
         "stage1_feasible": metadata.get("stage1_feasible"),
         "stage2_feasible": metadata.get("stage2_feasible"),
@@ -5848,10 +5906,20 @@ def _run_optimization(
     research_run: bool = False,
     stage1_time_limit_seconds: Optional[int] = None,
     stage2_time_limit_seconds: Optional[int] = None,
-    stage1_best_obj_stop_enabled: bool = True,
-    gurobi_threads: Optional[int] = None,
+    stage1_best_obj_stop_enabled: bool = INTERACTIVE_STAGE1_BEST_OBJ_STOP_ENABLED,
+    gurobi_threads: Optional[int] = INTERACTIVE_GUROBI_THREADS,
     frontend_request_payload: Optional[Dict[str, Any]] = None,
 ) -> None:
+    raw_frontend_request_payload = dict(frontend_request_payload or {})
+    interactive_runtime_controls = _interactive_runtime_controls_payload(
+        requested_stage1_best_obj_stop_enabled=stage1_best_obj_stop_enabled,
+        requested_gurobi_threads=gurobi_threads,
+    )
+    # This worker is only entered by the BFF interactive endpoint.  Enforce at
+    # the last boundary before OptimizationConfig construction rather than
+    # trusting a UI/default request field.
+    stage1_best_obj_stop_enabled = INTERACTIVE_STAGE1_BEST_OBJ_STOP_ENABLED
+    gurobi_threads = INTERACTIVE_GUROBI_THREADS
     try:
         solver_mode = _normalize_solver_mode(mode)
         job_store.update_job(
@@ -6041,7 +6109,8 @@ def _run_optimization(
                 prepared_input_path=prepared_input_path,
                 requested_prepared_input_id=requested_prepared_input_id,
                 frontend_request={
-                    "raw_frontend_body": dict(frontend_request_payload or {}),
+                    "raw_frontend_body": raw_frontend_request_payload,
+                    "interactive_runtime_controls": interactive_runtime_controls,
                     "scenario_id": scenario_id,
                     "prepared_input_id": prepared_input_id,
                     "requested_prepared_input_id": requested_prepared_input_id,
@@ -6134,6 +6203,7 @@ def _run_optimization(
                         run_git_state.get("git_state_available", False)
                         and run_git_state.get("git_dirty") is False
                     ),
+                    "interactive_runtime_controls": interactive_runtime_controls,
                 }
             )
             # Production results are immutable dataclasses.  Lightweight

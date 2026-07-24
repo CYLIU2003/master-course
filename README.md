@@ -33,6 +33,10 @@ simulation artifact, not an automatically accepted research result.
   faster. `solver_settings.json` separates Gurobi's raw MIP gap from the
   analytical/certified gap and records the termination reason. Disable it for
   runtime experiments and fix the Gurobi thread count across repetitions.
+- The Tk/BFF interactive `run-optimization` route now enforces that runtime
+  baseline automatically: `BestObjStop=OFF`, `Gurobi Threads=1`. The run input
+  records both the submitted request and the server-enforced effective values;
+  the formal CLI runner is intentionally not overridden.
 - `experiment_report.json` and `experiment_report.md` are copied into each run
   after canonical reporting finalization; they reconcile the accounting total
   with electricity, demand allocation, fuel, CO₂, and vehicle-use terms.

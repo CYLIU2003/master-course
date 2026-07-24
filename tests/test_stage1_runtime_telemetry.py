@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from bff.routers.optimization import (
+    RunOptimizationBody,
+    _interactive_runtime_controls_payload,
     _research_claim_scope_payload,
     _solver_settings_payload,
 )
@@ -87,3 +89,20 @@ def test_single_manual_run_cannot_claim_runtime_comparison_after_disabling_stop_
     assert claim_scope["runtime_comparison_claim_eligible"] is False
     assert "wall_clock_runtime_comparison" in claim_scope["disallowed_claims"]
     assert claim_scope["evidence"]["stage1_stop_rule_runtime_control_eligible"] is True
+
+
+def test_interactive_run_defaults_and_provenance_record_server_enforcement() -> None:
+    request = RunOptimizationBody()
+    assert request.stage1_best_obj_stop_enabled is False
+    assert request.gurobi_threads == 1
+
+    controls = _interactive_runtime_controls_payload(
+        requested_stage1_best_obj_stop_enabled=True,
+        requested_gurobi_threads=8,
+    )
+    assert controls["enforced"] is True
+    assert controls["override_applied"] is True
+    assert controls["effective"] == {
+        "stage1_best_obj_stop_enabled": False,
+        "gurobi_threads": 1,
+    }

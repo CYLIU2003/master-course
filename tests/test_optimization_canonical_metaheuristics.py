@@ -128,20 +128,39 @@ def test_run_optimization_uses_canonical_engine_for_ga_mode() -> None:
             100,
             100,
             0.25,
+            stage1_best_obj_stop_enabled=True,
+            gurobi_threads=8,
+            frontend_request_payload={
+                "stage1_best_obj_stop_enabled": True,
+                "gurobi_threads": 8,
+            },
         )
 
     rebuild_dispatch.assert_not_called()
     build_problem_data.assert_not_called()
     solve_problem_data.assert_not_called()
-    assert problem_builder_cls.return_value.build_from_scenario.call_args.kwargs["config"].warm_start is True
+    config = problem_builder_cls.return_value.build_from_scenario.call_args.kwargs["config"]
+    assert config.warm_start is True
+    assert config.stage1_best_obj_stop_enabled is False
+    assert config.gurobi_threads == 1
     persist_input_provenance.assert_called_once()
     provenance_kwargs = persist_input_provenance.call_args.kwargs
     assert provenance_kwargs["prepared_input"]["prepared_input_id"] == "prepared-1"
     assert provenance_kwargs["frontend_request"]["mode"] == "ga"
+    assert provenance_kwargs["frontend_request"]["raw_frontend_body"] == {
+        "stage1_best_obj_stop_enabled": True,
+        "gurobi_threads": 8,
+    }
+    assert provenance_kwargs["frontend_request"]["interactive_runtime_controls"][
+        "effective"
+    ] == {"stage1_best_obj_stop_enabled": False, "gurobi_threads": 1}
     assert provenance_kwargs["canonical_problem"] is canonical_problem
     assert "trips" not in stored_fields
     assert "timetable_rows" not in stored_fields
     assert stored_fields["optimization_result"]["solver_mode"] == "mode_ga_only"
+    assert stored_fields["optimization_result"]["solver_settings"][
+        "interactive_runtime_controls"
+    ]["effective"] == {"stage1_best_obj_stop_enabled": False, "gurobi_threads": 1}
     assert stored_fields["optimization_result"]["summary"]["trip_count_served"] == 1
     assert stored_fields["optimization_result"]["solver_result"]["assignment"] == {"veh-1": ["trip-1"]}
     assert stored_fields["optimization_result"]["canonical_solver_result"]["solver_mode"] == "ga"

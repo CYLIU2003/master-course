@@ -4,6 +4,14 @@
 
 ### Problems raised and closed in code
 
+- **P1 — front-end runs required users to remember runtime controls:** the Tk
+  payload now supplies `stage1_best_obj_stop_enabled=false` and
+  `gurobi_threads=1`, and the BFF worker enforces the same values immediately
+  before `OptimizationConfig` is built. A stale or manually edited frontend
+  request cannot re-enable the early stop or change the thread count. The raw
+  request and the enforced effective values are both persisted under
+  `interactive_runtime_controls`; the formal CLI runner remains explicitly
+  configurable.
 - **P1 — apparent sunny/low-PV runtime differences could be caused by a hidden
   stopping rule:** Stage 1 previously always set Gurobi `BestObjStop` whenever
   its analytical vehicle-day lower bound existed. A high-PV case could therefore
