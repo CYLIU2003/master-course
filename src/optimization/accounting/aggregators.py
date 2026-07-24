@@ -305,7 +305,17 @@ def build_accounting_summary(
         "fallback_applied": bool(metadata.get("fallback_applied", False)),
         "is_optimization_result": is_optimization_result,
         "result_interpretation": "baseline_fallback_result" if solver_status.upper() in fallback_statuses else "optimization_result",
+        # The legacy name means vehicle-level exactness here; site/depot source
+        # totals are emitted separately because proportional vehicle allocation
+        # is an inference even when the underlying depot/time-slot flow is exact.
         "charging_source_provenance_exact": bool(metadata.get("charging_source_provenance_exact", False)),
+        "vehicle_source_provenance_exact": bool(
+            metadata.get("vehicle_source_provenance_exact", metadata.get("charging_source_provenance_exact", False))
+        ),
+        "depot_source_provenance_exact": bool(
+            metadata.get("depot_source_provenance_exact", False)
+        ),
+        "charging_source_provenance_scope": "vehicle_timestep",
         "vehicle_charging_source_allocation_method": str(metadata.get("vehicle_charging_source_allocation_method", "proportional_by_timestep") or "proportional_by_timestep"),
         "vehicle_charging_source_is_solver_native": bool(metadata.get("vehicle_charging_source_is_solver_native", False)),
         "contract_power_kw": float(metadata.get("contract_power_kw", 0.0) or 0.0),

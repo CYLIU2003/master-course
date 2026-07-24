@@ -7,15 +7,20 @@ from datetime import datetime, timezone
 from enum import Enum
 import hashlib
 import json
+import os
 from pathlib import Path
+import shutil
+import subprocess
 from typing import Any, Mapping, Sequence
 
 
-SCHEMA_VERSION = "frontend_run_input_provenance_v1"
+SCHEMA_VERSION = "frontend_run_input_provenance_v2"
+LEGACY_SCHEMA_VERSIONS = frozenset({"frontend_run_input_provenance_v1"})
 SCENARIO_SNAPSHOT_FILE = "scenario_input_snapshot.json"
 PREPARE_AUDIT_FILE = "prepare_input_audit.json"
 PARAMETERS_FILE = "optimization_parameters.json"
 SUMMARY_FILE = "run_input_summary.md"
+CODE_PROVENANCE_FILE = "code_provenance.json"
 MANIFEST_FILE = "run_input_manifest.json"
 VALIDATION_FILE = "run_input_validation.json"
 CORE_ARTIFACTS = (
@@ -23,7 +28,9 @@ CORE_ARTIFACTS = (
     PREPARE_AUDIT_FILE,
     PARAMETERS_FILE,
     SUMMARY_FILE,
+    CODE_PROVENANCE_FILE,
 )
+LEGACY_CORE_ARTIFACTS = CORE_ARTIFACTS[:-1]
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _HEAVY_SCENARIO_FIELDS = frozenset(
@@ -116,6 +123,98 @@ def _repo_relative_path(path: Path) -> str | None:
         return path.resolve().relative_to(_REPO_ROOT.resolve()).as_posix()
     except ValueError:
         return None
+
+
+def collect_git_state(*, repo_root: Path | None = None) -> dict[str, Any]:
+    """Collect an explicit, portable Git provenance record.
+
+    A manual frontend run must never silently emit an empty commit field merely
+    because the BFF process was launched without Git on ``PATH``.  The record
+    is intentionally non-fatal for diagnostic runs: a missing executable is
+    represented explicitly and formal acceptance can reject it later.
+    """
+
+    root = (repo_root or _REPO_ROOT).resolve()
+    git_executable = shutil.which("git")
+    if git_executable is None:
+        candidates = [
+            Path(os.environ.get("ProgramFiles", "")) / "Git" / "cmd" / "git.exe",
+            Path(os.environ.get("LOCALAPPDATA", ""))
+            / "Programs"
+            / "Git"
+            / "cmd"
+            / "git.exe",
+        ]
+        codex_runtime_root = (
+            Path(os.environ.get("USERPROFILE", ""))
+            / ".cache"
+            / "codex-runtimes"
+        )
+        if codex_runtime_root.is_dir():
+            candidates.extend(
+                sorted(
+                    codex_runtime_root.glob(
+                        "*/dependencies/native/git/cmd/git.exe"
+                    )
+                )
+            )
+        git_executable = next(
+            (str(candidate) for candidate in candidates if candidate.is_file()),
+            None,
+        )
+    if git_executable is None:
+        return {
+            "schema_version": "git_provenance_v1",
+            "captured_at_utc": datetime.now(timezone.utc).isoformat(),
+            "repository_root": str(root),
+            "git_sha": None,
+            "git_dirty": None,
+            "git_state_available": False,
+            "git_state_error": "Git executable was not found",
+        }
+
+    try:
+        git_sha = subprocess.check_output(
+            [git_executable, "rev-parse", "HEAD"],
+            cwd=root,
+            text=True,
+        ).strip()
+        git_dirty = bool(
+            subprocess.check_output(
+                [git_executable, "status", "--porcelain"],
+                cwd=root,
+                text=True,
+            ).strip()
+        )
+    except (FileNotFoundError, OSError, subprocess.CalledProcessError) as exc:
+        return {
+            "schema_version": "git_provenance_v1",
+            "captured_at_utc": datetime.now(timezone.utc).isoformat(),
+            "repository_root": str(root),
+            "git_sha": None,
+            "git_dirty": None,
+            "git_state_available": False,
+            "git_state_error": f"{type(exc).__name__}: {exc}",
+        }
+    if not git_sha:
+        return {
+            "schema_version": "git_provenance_v1",
+            "captured_at_utc": datetime.now(timezone.utc).isoformat(),
+            "repository_root": str(root),
+            "git_sha": None,
+            "git_dirty": None,
+            "git_state_available": False,
+            "git_state_error": "git rev-parse HEAD returned an empty SHA",
+        }
+    return {
+        "schema_version": "git_provenance_v1",
+        "captured_at_utc": datetime.now(timezone.utc).isoformat(),
+        "repository_root": str(root),
+        "git_sha": git_sha,
+        "git_dirty": git_dirty,
+        "git_state_available": True,
+        "git_state_error": None,
+    }
 
 
 def _bounded_mapping(
@@ -297,6 +396,7 @@ def _optimization_parameters(
     frontend_request: Mapping[str, Any],
     optimization_config: Any,
     canonical_problem: Any,
+    code_provenance: Mapping[str, Any],
 ) -> dict[str, Any]:
     metadata, omitted_metadata = _bounded_mapping(
         dict(getattr(canonical_problem, "metadata", {}) or {}),
@@ -319,6 +419,7 @@ def _optimization_parameters(
             "ProblemBuilder_defaults_and_normalization",
         ],
         "frontend_request": _json_safe(frontend_request),
+        "code_provenance": _json_safe(code_provenance),
         "effective_optimization_config": _json_safe(optimization_config),
         "effective_problem_scenario": _json_safe(problem_scenario),
         "effective_derived_values": {
@@ -375,6 +476,7 @@ def _summary_markdown(
     prepare = dict(prepare_audit.get("prepare_snapshot") or {})
     source = dict(prepare_audit.get("source_artifact") or {})
     request = dict(parameters.get("frontend_request") or {})
+    code_provenance = dict(parameters.get("code_provenance") or {})
     config = dict(parameters.get("effective_optimization_config") or {})
     dimensions = dict(parameters.get("canonical_input_dimensions") or {})
     lines = [
@@ -411,6 +513,9 @@ def _summary_markdown(
         f"- trips / vehicles / chargers: "
         f"`{dimensions.get('trip_count')} / {dimensions.get('vehicle_count')} / "
         f"{dimensions.get('charger_count')}`",
+        f"- git SHA: `{code_provenance.get('git_sha')}`",
+        f"- git dirty: `{code_provenance.get('git_dirty')}`",
+        f"- Git provenance available: `{code_provenance.get('git_state_available')}`",
         "",
         "## Verification",
         "",
@@ -436,6 +541,7 @@ def persist_run_input_provenance(
     frontend_request: Mapping[str, Any],
     optimization_config: Any,
     canonical_problem: Any,
+    code_provenance: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Write a compact, hash-verified input bundle before the solver starts."""
 
@@ -451,6 +557,7 @@ def persist_run_input_provenance(
             f"path={prepared_path.name!r}, id={prepared_input_id!r}"
         )
     prepared_sha256 = _sha256_file(prepared_path)
+    resolved_code_provenance = dict(code_provenance or collect_git_state())
     scenario_snapshot = _scenario_snapshot(
         base_scenario=base_scenario,
         effective_scenario=effective_scenario,
@@ -468,10 +575,12 @@ def persist_run_input_provenance(
         frontend_request=frontend_request,
         optimization_config=optimization_config,
         canonical_problem=canonical_problem,
+        code_provenance=resolved_code_provenance,
     )
     _write_json(resolved_run_dir / SCENARIO_SNAPSHOT_FILE, scenario_snapshot)
     _write_json(resolved_run_dir / PREPARE_AUDIT_FILE, prepare_audit)
     _write_json(resolved_run_dir / PARAMETERS_FILE, parameters)
+    _write_json(resolved_run_dir / CODE_PROVENANCE_FILE, resolved_code_provenance)
     (resolved_run_dir / SUMMARY_FILE).write_text(
         _summary_markdown(scenario_snapshot, prepare_audit, parameters),
         encoding="utf-8",
@@ -490,6 +599,11 @@ def persist_run_input_provenance(
         "scenario_id": scenario_snapshot.get("scenario_id"),
         "prepared_input_id": prepare_audit.get("prepared_input_id"),
         "prepared_source_sha256": prepared_sha256,
+        "git_sha": resolved_code_provenance.get("git_sha"),
+        "git_dirty": resolved_code_provenance.get("git_dirty"),
+        "git_state_available": bool(
+            resolved_code_provenance.get("git_state_available", False)
+        ),
         "artifacts": artifacts,
         "validation_command": (
             "python scripts/verify_run_input_provenance.py --run-dir "
@@ -514,6 +628,7 @@ def persist_run_input_provenance(
         "validation_path": VALIDATION_FILE,
         "summary_path": SUMMARY_FILE,
         "prepared_source_sha256": prepared_sha256,
+        "code_provenance": resolved_code_provenance,
         "artifacts": artifacts,
     }
 
@@ -538,11 +653,18 @@ def validate_run_input_provenance(
             "details": details,
         }
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    checks["schema_version_supported"] = (
-        manifest.get("schema_version") == SCHEMA_VERSION
+    schema_version = str(manifest.get("schema_version") or "")
+    checks["schema_version_supported"] = schema_version in {
+        SCHEMA_VERSION,
+        *LEGACY_SCHEMA_VERSIONS,
+    }
+    artifact_names = (
+        CORE_ARTIFACTS
+        if schema_version == SCHEMA_VERSION
+        else LEGACY_CORE_ARTIFACTS
     )
     artifact_payloads: dict[str, Any] = {}
-    for name in CORE_ARTIFACTS:
+    for name in artifact_names:
         artifact_path = (resolved_run_dir / name).resolve()
         within_run = artifact_path.parent == resolved_run_dir
         exists = within_run and artifact_path.is_file()
@@ -592,6 +714,28 @@ def validate_run_input_provenance(
         not frontend_request.get("prepared_input_id")
         or str(frontend_request.get("prepared_input_id")) in prepared_ids
     )
+    if schema_version == SCHEMA_VERSION:
+        code_provenance = dict(artifact_payloads.get(CODE_PROVENANCE_FILE) or {})
+        checks["code_provenance_git_state_declared"] = {
+            "git_sha",
+            "git_dirty",
+            "git_state_available",
+            "git_state_error",
+        }.issubset(code_provenance)
+        checks["code_provenance_git_state_available_is_boolean"] = isinstance(
+            code_provenance.get("git_state_available"),
+            bool,
+        )
+        checks["code_provenance_matches_manifest"] = (
+            manifest.get("git_sha") == code_provenance.get("git_sha")
+            and manifest.get("git_dirty") == code_provenance.get("git_dirty")
+            and bool(manifest.get("git_state_available", False))
+            == bool(code_provenance.get("git_state_available", False))
+        )
+    else:
+        details["legacy_code_provenance"] = (
+            "This v1 input bundle predates the explicit Git provenance artifact."
+        )
 
     source = dict(prepare.get("source_artifact") or {})
     if verify_prepared_source:

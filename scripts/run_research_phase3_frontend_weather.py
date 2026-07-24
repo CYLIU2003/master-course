@@ -22,7 +22,7 @@ import shutil
 import subprocess
 import sys
 import time
-from typing import Any
+from typing import Any, Mapping
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -55,7 +55,14 @@ from src.optimization.common.fast_cost_assignment import (
     build_fast_cost_aware_assignment,
 )
 from src.optimization.common.soc_helpers import is_electric_vehicle
-from src.preprocess.weather.operation_policy import apply_weather_policy_to_problem
+from src.optimization.common.weather_strategy import weather_decision_policy_audit
+from src.preprocess.weather.operation_policy import (
+    apply_same_service_date_pv_counterfactual_to_problem,
+    apply_weather_policy_to_problem,
+)
+from src.preprocess.weather.weather_proxy_builder import (
+    load_weather_proxy_forecast_json,
+)
 
 
 DEFAULT_STAGE1_STRATEGY = "full_network_milp"
@@ -115,6 +122,110 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _counterfactual_pv_curve_audit(
+    *,
+    comparison_role: str,
+    raw_path: str | None,
+) -> dict[str, Any]:
+    """Load and fingerprint a PV-only counterfactual source when requested."""
+
+    role = str(comparison_role or "").strip()
+    path_text = str(raw_path or "").strip()
+    if role == "baseline":
+        if path_text:
+            raise ValueError(
+                "baseline comparison role must not receive a counterfactual PV "
+                "curve file"
+            )
+        return {
+            "enabled": False,
+            "weather_difference_scope": "none",
+            "curve_source_path": None,
+        }
+    if role != "pv_curve_counterfactual":
+        raise ValueError(f"Unsupported weather comparison role: {role!r}")
+    if not path_text:
+        raise ValueError(
+            "pv_curve_counterfactual requires --counterfactual-pv-curve-file"
+        )
+    path = Path(path_text).expanduser().resolve()
+    if not path.is_file():
+        raise FileNotFoundError(f"Counterfactual PV curve file was not found: {path}")
+    forecast = load_weather_proxy_forecast_json(path)
+    return {
+        "enabled": True,
+        "weather_difference_scope": "pv_curve_only",
+        "curve_source_path": str(path),
+        "curve_source_sha256": _sha256(path),
+        "curve_source_size_bytes": path.stat().st_size,
+        "curve_source_forecast": {
+            "service_date": str(forecast.service_date),
+            "analog_date": str(forecast.analog_date),
+            "forecast_type": str(forecast.forecast_type),
+            "station_id": str(forecast.station_id),
+            "weather_label": str(forecast.weather_label),
+            "operation_mode": str(forecast.operation_mode),
+            "no_future_leakage": bool(forecast.no_future_leakage),
+        },
+        "forecast": forecast,
+    }
+
+
+def _comparison_control_hash(
+    *,
+    scenario_id: str,
+    prepared_input_id: str,
+    prepared_input_sha256: str,
+    service_date: str,
+    service_id: str,
+    expected_fleet: Mapping[str, int],
+    trip_input_hash: str,
+    vehicle_input_hash: str,
+    initial_soc_input_hash: str,
+    terminal_soc_policy: Mapping[str, Any],
+    charger_configuration: list[dict[str, Any]],
+    depot_energy_assets: Mapping[str, Mapping[str, Any]],
+    weather_configuration: Mapping[str, Any],
+    weather_operation_profile: Mapping[str, Any],
+    time_limit_sec: int,
+    mip_gap: float,
+    random_seed: int,
+    git_sha: str | None,
+) -> str:
+    """Hash every fixed control while deliberately excluding PV curve values."""
+
+    fixed_assets = {
+        depot_id: {
+            key: value
+            for key, value in dict(asset).items()
+            if key not in {"pv_case_id", "pv_generation_kwh", "pv_generation_hash"}
+        }
+        for depot_id, asset in sorted(depot_energy_assets.items())
+    }
+    return _canonical_hash(
+        {
+            "scenario_id": scenario_id,
+            "prepared_input_id": prepared_input_id,
+            "prepared_input_sha256": prepared_input_sha256,
+            "service_date": service_date,
+            "service_id": service_id,
+            "expected_fleet": dict(expected_fleet),
+            "trip_input_hash": trip_input_hash,
+            "vehicle_input_hash": vehicle_input_hash,
+            "initial_soc_input_hash": initial_soc_input_hash,
+            "terminal_soc_policy": dict(terminal_soc_policy),
+            "charger_configuration": charger_configuration,
+            "depot_energy_assets_except_pv_curve": fixed_assets,
+            "weather_configuration": dict(weather_configuration),
+            "weather_operation_profile": dict(weather_operation_profile),
+            "time_limit_sec": int(time_limit_sec),
+            "mip_gap": float(mip_gap),
+            "random_seed": int(random_seed),
+            "git_sha": git_sha,
+        }
+    )
 
 
 def _finite(value: Any) -> float | None:
@@ -769,7 +880,11 @@ def _write_research_manifest(
         "case_name",
         "scenario_id",
         "prepared_input_id",
+        "prepared_input_sha256",
         "service_date",
+        "service_id",
+        "weather_comparison_contract",
+        "weather_decision_policy",
         "phase",
         "stage1_strategy",
         "time_limit_sec",
@@ -788,6 +903,8 @@ def _write_research_manifest(
         "trip_input_hash",
         "git_sha",
         "git_dirty",
+        "git_state_available",
+        "git_state_error",
     )
     manifest = {
         "schema": "research_run_manifest_v1",
@@ -1014,6 +1131,25 @@ def run(args: argparse.Namespace) -> int:
         "fast_fixed_path",
     }:
         raise ValueError(f"Unsupported stage1_strategy: {stage1_strategy}")
+    comparison_design = str(
+        getattr(args, "comparison_design", "same_service_date_pv_counterfactual")
+        or "same_service_date_pv_counterfactual"
+    ).strip()
+    if comparison_design != "same_service_date_pv_counterfactual":
+        raise ValueError(
+            "Formal weather comparisons must use "
+            "same_service_date_pv_counterfactual"
+        )
+    comparison_role = str(
+        getattr(args, "comparison_role", "baseline") or "baseline"
+    ).strip()
+    counterfactual_curve_audit = _counterfactual_pv_curve_audit(
+        comparison_role=comparison_role,
+        raw_path=getattr(args, "counterfactual_pv_curve_file", None),
+    )
+    counterfactual_curve_forecast = counterfactual_curve_audit.pop(
+        "forecast", None
+    )
     fast_assignment_time_limit_sec = int(
         getattr(args, "fast_assignment_time_limit_sec", 30)
     )
@@ -1112,6 +1248,16 @@ def run(args: argparse.Namespace) -> int:
             weather_profile,
             random_seed=int(args.random_seed),
         )
+    if counterfactual_curve_forecast is not None:
+        problem = apply_same_service_date_pv_counterfactual_to_problem(
+            problem,
+            counterfactual_curve_forecast,
+            source_descriptor={
+                key: value
+                for key, value in counterfactual_curve_audit.items()
+                if key != "enabled"
+            },
+        )
     problem = replace(
         problem,
         metadata={
@@ -1177,6 +1323,57 @@ def run(args: argparse.Namespace) -> int:
             "bev_terminal_soc_equality_tolerance_kwh"
         ),
     }
+    prepared_input_sha256 = _sha256(prepared_path)
+    expected_fleet = {
+        "BEV": int(args.expected_bev_count),
+        "ICE": int(args.expected_ice_count),
+    }
+    weather_decision_policy = weather_decision_policy_audit(problem.metadata)
+    comparison_control_hash = _comparison_control_hash(
+        scenario_id=args.scenario_id,
+        prepared_input_id=args.prepared_input_id,
+        prepared_input_sha256=prepared_input_sha256,
+        service_date=str(problem.metadata.get("service_date") or "")[:10],
+        service_id=str(args.service_id),
+        expected_fleet=expected_fleet,
+        trip_input_hash=trip_input_hash,
+        vehicle_input_hash=vehicle_input_hash,
+        initial_soc_input_hash=str(initial_soc_metadata["initial_soc_input_hash"]),
+        terminal_soc_policy=terminal_soc_policy,
+        charger_configuration=charger_configuration,
+        depot_energy_assets=depot_energy_assets,
+        weather_configuration=weather_configuration,
+        weather_operation_profile=weather_operation_profile,
+        time_limit_sec=int(args.time_limit_sec),
+        mip_gap=float(args.mip_gap),
+        random_seed=int(args.random_seed),
+        git_sha=git_state.get("git_sha"),
+    )
+    weather_comparison_contract = {
+        "schema_version": "weather_comparison_contract_v1",
+        "comparison_design": comparison_design,
+        "comparison_role": comparison_role,
+        "weather_difference_scope": str(
+            counterfactual_curve_audit.get("weather_difference_scope", "none")
+        ),
+        "base_service_date": str(problem.metadata.get("service_date") or "")[:10],
+        "same_service_date_required": True,
+        "same_timetable_required": True,
+        "same_fleet_required": True,
+        "same_initial_soc_required": True,
+        "comparison_control_hash": comparison_control_hash,
+        "counterfactual_pv_curve": counterfactual_curve_audit,
+        "interpretation": (
+            "Only the PV availability curve may differ across this pair. "
+            "It does not establish a weather-dependent dispatch policy unless "
+            "the separately reported decision-policy audit shows active controls."
+        ),
+    }
+    scenario["research_execution_overrides"] = {
+        "weather_comparison_contract": weather_comparison_contract,
+        "weather_decision_policy": weather_decision_policy,
+        "persisted_scenario_modified": False,
+    }
     experiment_hash = _canonical_hash(
         {
             "service_date": str(problem.metadata.get("service_date") or "")[:10],
@@ -1200,6 +1397,8 @@ def run(args: argparse.Namespace) -> int:
             ),
             "weather_configuration": weather_configuration,
             "weather_operation_profile": weather_operation_profile,
+            "weather_decision_policy": weather_decision_policy,
+            "weather_comparison_contract": weather_comparison_contract,
             "research_fragment_policy": fragment_policy,
             "bev_availability_sensitivity": bev_availability_sensitivity,
             "minimum_used_bev_count": int(args.minimum_used_bev_count),
@@ -1228,7 +1427,7 @@ def run(args: argparse.Namespace) -> int:
         "case_name": args.case_name,
         "scenario_id": args.scenario_id,
         "prepared_input_id": args.prepared_input_id,
-        "prepared_input_sha256": _sha256(prepared_path),
+        "prepared_input_sha256": prepared_input_sha256,
         "service_date": str(problem.metadata.get("service_date") or "")[:10],
         "service_id": str(args.service_id),
         "calendar_service_contract": _calendar_service_contract(
@@ -1254,6 +1453,8 @@ def run(args: argparse.Namespace) -> int:
         "weather_operation_policy_enabled": True,
         "weather_configuration": weather_configuration,
         "weather_operation_profile": weather_operation_profile,
+        "weather_decision_policy": weather_decision_policy,
+        "weather_comparison_contract": weather_comparison_contract,
         "weather_pv_forecast_applied": bool(
             problem.metadata.get("weather_pv_forecast_applied", False)
         ),
@@ -1356,10 +1557,7 @@ def run(args: argparse.Namespace) -> int:
                 "uses_full_network_and_time_indexed_soc_relaxation"
             ),
         },
-        "expected_fleet": {
-            "BEV": int(args.expected_bev_count),
-            "ICE": int(args.expected_ice_count),
-        },
+        "expected_fleet": expected_fleet,
         **git_state,
     }
     _write_json(output_dir / "effective_scenario.json", scenario)
@@ -1378,6 +1576,8 @@ def run(args: argparse.Namespace) -> int:
         problem.metadata["phase3_diagnostics_dir"] = str(output_dir / "diagnostics")
         problem.metadata["vehicle_soc_semantics"] = "slot_start"
         problem.metadata["frontend_weather_cost_experiment"] = True
+        problem.metadata["weather_comparison_contract"] = weather_comparison_contract
+        problem.metadata["weather_decision_policy"] = weather_decision_policy
     candidate_audit: dict[str, Any] = {
         "enabled": False,
         "accepted_as_final_stage1_warm_start": False,
@@ -1508,6 +1708,15 @@ def run(args: argparse.Namespace) -> int:
         started = time.perf_counter()
         result = OptimizationEngine().solve(problem, config)
         elapsed = time.perf_counter() - started
+    result = replace(
+        result,
+        solver_metadata={
+            **dict(result.solver_metadata or {}),
+            "weather_comparison_contract": weather_comparison_contract,
+            "weather_decision_policy": weather_decision_policy,
+            "git_provenance_captured_before_solve": True,
+        },
+    )
     metadata = dict(result.solver_metadata or {})
     breakdown = dict(result.cost_breakdown or {})
     flows = {
@@ -1800,6 +2009,33 @@ def main() -> int:
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--depot-id", default="tsurumaki")
     parser.add_argument("--service-id", default="WEEKDAY")
+    parser.add_argument(
+        "--comparison-design",
+        choices=("same_service_date_pv_counterfactual",),
+        default="same_service_date_pv_counterfactual",
+        help=(
+            "Hold service date, timetable, fleet, and initial SOC fixed; "
+            "only an explicitly labelled PV curve may differ across the pair."
+        ),
+    )
+    parser.add_argument(
+        "--comparison-role",
+        choices=("baseline", "pv_curve_counterfactual"),
+        default="baseline",
+        help=(
+            "baseline uses the scenario's service-date PV curve. "
+            "pv_curve_counterfactual substitutes only the curve source."
+        ),
+    )
+    parser.add_argument(
+        "--counterfactual-pv-curve-file",
+        default=None,
+        help=(
+            "Required only for pv_curve_counterfactual. The source is hashed "
+            "and recorded as a counterfactual curve, never as a forecast for "
+            "the base service date."
+        ),
+    )
     parser.add_argument("--time-limit-sec", type=int, default=1500)
     parser.add_argument(
         "--stage1-strategy",

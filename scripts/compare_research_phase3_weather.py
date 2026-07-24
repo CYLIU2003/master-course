@@ -29,6 +29,10 @@ EXPECTED_PRICE_SLOT_COUNT = 96
 # the pair answers different research questions and must not be compared.
 FIXED_CONTROL_FIELDS = (
     "git_sha",
+    "git_state_available",
+    "scenario_id",
+    "prepared_input_id",
+    "prepared_input_sha256",
     "service_date",
     "service_id",
     "calendar_service_contract",
@@ -39,6 +43,7 @@ FIXED_CONTROL_FIELDS = (
     "postsolve_repair_enabled",
     "vehicle_soc_semantics",
     "weather_operation_policy_enabled",
+    "weather_decision_policy",
     "weather_pv_forecast_applied",
     "weather_pv_forecast_skip_reason",
     "trip_count",
@@ -82,15 +87,14 @@ FIXED_CONTROL_FIELDS = (
     "stage1_time_indexed_soc_relaxation_semantics",
 )
 
-# The labels and paths are weather provenance.  Every other differing key is
-# rejected so that a later operational knob cannot silently enter this study.
-ALLOWED_WEATHER_CONFIGURATION_FIELDS = frozenset(
-    {"weather_operation_mode", "pv_profile_id", "weather_proxy_forecast_path"}
-)
+# Formal pairs hold the operational weather configuration fixed. The sole
+# permitted difference is the separately fingerprinted counterfactual PV curve
+# and its derived PV asset values.
+ALLOWED_WEATHER_CONFIGURATION_FIELDS = frozenset()
 ALLOWED_PV_ASSET_FIELDS = frozenset(
     {"pv_case_id", "pv_generation_kwh", "pv_generation_hash"}
 )
-ALLOWED_WEATHER_OPERATION_PROFILE_FIELDS = frozenset({"operation_mode"})
+ALLOWED_WEATHER_OPERATION_PROFILE_FIELDS = frozenset()
 VALIDATION_ZERO_FIELDS = (
     "unassigned_trip_count",
     "duplicate_trip_count",
@@ -163,12 +167,18 @@ def build_weather_comparison(
     rain = _require_mapping(rain_summary, "rain summary")
     _validate_accepted_case("sunny", sunny)
     _validate_accepted_case("rain", rain)
+    weather_comparison_contract = _validate_weather_comparison_contract(
+        sunny, rain
+    )
     _validate_fixed_controls(sunny, rain)
     energy_proxy_control_audit = _validate_stage1_energy_proxy_controls(
         sunny, rain
     )
     contract_control_audit = _validate_contract_power_controls(sunny, rain)
     weather_differences = _validate_weather_inputs(sunny, rain)
+    counterfactual_pv_effect = _validate_counterfactual_pv_effect(
+        weather_differences
+    )
 
     return {
         "comparison_accepted": True,
@@ -192,6 +202,8 @@ def build_weather_comparison(
             "(legacy summaries are explicitly marked)"
         ],
         "contract_power_control_audit": contract_control_audit,
+        "weather_comparison_contract": weather_comparison_contract,
+        "counterfactual_pv_effect": counterfactual_pv_effect,
         "stage1_energy_cost_proxy_control_audit": energy_proxy_control_audit,
         "allowed_weather_input_differences": weather_differences,
         "run_status": {"sunny": _run_status(sunny), "rain": _run_status(rain)},
@@ -388,6 +400,157 @@ def render_markdown_report(comparison: Mapping[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _validate_weather_comparison_contract(
+    sunny: Mapping[str, Any],
+    rain: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Require the explicit same-service-date PV-only comparison contract."""
+
+    sunny_contract = _require_mapping(
+        sunny.get("weather_comparison_contract"),
+        "sunny.weather_comparison_contract",
+    )
+    rain_contract = _require_mapping(
+        rain.get("weather_comparison_contract"),
+        "rain.weather_comparison_contract",
+    )
+    expected_schema = "weather_comparison_contract_v1"
+    expected_design = "same_service_date_pv_counterfactual"
+    for case, contract, summary in (
+        ("sunny", sunny_contract, sunny),
+        ("rain", rain_contract, rain),
+    ):
+        _expect(
+            case,
+            "weather_comparison_contract.schema_version",
+            contract.get("schema_version"),
+            expected_schema,
+        )
+        _expect(
+            case,
+            "weather_comparison_contract.comparison_design",
+            contract.get("comparison_design"),
+            expected_design,
+        )
+        _expect(
+            case,
+            "weather_comparison_contract.same_service_date_required",
+            contract.get("same_service_date_required"),
+            True,
+        )
+        _expect(
+            case,
+            "weather_comparison_contract.same_timetable_required",
+            contract.get("same_timetable_required"),
+            True,
+        )
+        _expect(
+            case,
+            "weather_comparison_contract.same_fleet_required",
+            contract.get("same_fleet_required"),
+            True,
+        )
+        _expect(
+            case,
+            "weather_comparison_contract.same_initial_soc_required",
+            contract.get("same_initial_soc_required"),
+            True,
+        )
+        if str(contract.get("base_service_date") or "") != str(
+            summary.get("service_date") or ""
+        ):
+            raise ComparisonContractError(
+                f"{case}.weather_comparison_contract.base_service_date must "
+                "equal the run service_date"
+            )
+        if not str(contract.get("comparison_control_hash") or "").strip():
+            raise ComparisonContractError(
+                f"{case}.weather_comparison_contract.comparison_control_hash is required"
+            )
+
+    if (
+        sunny_contract.get("comparison_control_hash")
+        != rain_contract.get("comparison_control_hash")
+    ):
+        raise ComparisonContractError(
+            "weather_comparison_contract.comparison_control_hash differs; "
+            "the pair does not hold all non-PV controls fixed"
+        )
+    roles = {
+        str(sunny_contract.get("comparison_role") or ""),
+        str(rain_contract.get("comparison_role") or ""),
+    }
+    if roles != {"baseline", "pv_curve_counterfactual"}:
+        raise ComparisonContractError(
+            "weather_comparison_contract roles must be exactly baseline and "
+            "pv_curve_counterfactual"
+        )
+    # CLI arguments and report columns are named sunny/rain.  Permit neither
+    # accidental role reversal nor a silent sign reversal of rain-minus-sunny.
+    _expect(
+        "sunny",
+        "weather_comparison_contract.comparison_role",
+        sunny_contract.get("comparison_role"),
+        "baseline",
+    )
+    _expect(
+        "rain",
+        "weather_comparison_contract.comparison_role",
+        rain_contract.get("comparison_role"),
+        "pv_curve_counterfactual",
+    )
+    baseline_contract = sunny_contract
+    counterfactual_contract = rain_contract
+    _expect(
+        "baseline",
+        "weather_comparison_contract.weather_difference_scope",
+        baseline_contract.get("weather_difference_scope"),
+        "none",
+    )
+    _expect(
+        "pv_curve_counterfactual",
+        "weather_comparison_contract.weather_difference_scope",
+        counterfactual_contract.get("weather_difference_scope"),
+        "pv_curve_only",
+    )
+    baseline_curve = _require_mapping(
+        baseline_contract.get("counterfactual_pv_curve"),
+        "baseline.weather_comparison_contract.counterfactual_pv_curve",
+    )
+    counterfactual_curve = _require_mapping(
+        counterfactual_contract.get("counterfactual_pv_curve"),
+        "pv_curve_counterfactual.weather_comparison_contract.counterfactual_pv_curve",
+    )
+    _expect(
+        "baseline",
+        "weather_comparison_contract.counterfactual_pv_curve.enabled",
+        baseline_curve.get("enabled"),
+        False,
+    )
+    _expect(
+        "pv_curve_counterfactual",
+        "weather_comparison_contract.counterfactual_pv_curve.enabled",
+        counterfactual_curve.get("enabled"),
+        True,
+    )
+    if not str(counterfactual_curve.get("curve_source_sha256") or "").strip():
+        raise ComparisonContractError(
+            "pv_curve_counterfactual counterfactual PV curve SHA-256 is required"
+        )
+    return {
+        "schema_version": expected_schema,
+        "comparison_design": expected_design,
+        "comparison_control_hash": sunny_contract.get("comparison_control_hash"),
+        "roles": {
+            "sunny": sunny_contract.get("comparison_role"),
+            "rain": rain_contract.get("comparison_role"),
+        },
+        "counterfactual_curve_source_sha256": counterfactual_curve.get(
+            "curve_source_sha256"
+        ),
+    }
+
+
 def _validate_accepted_case(case: str, summary: Mapping[str, Any]) -> None:
     _expect(case, "phase", summary.get("phase"), EXPECTED_PHASE)
     _expect(case, "trip_count", summary.get("trip_count"), EXPECTED_TRIP_COUNT)
@@ -454,6 +617,9 @@ def _validate_accepted_case(case: str, summary: Mapping[str, Any]) -> None:
         summary.get("cost_comparison_scope"),
         EXPECTED_COST_SCOPE,
     )
+    _expect(case, "git_state_available", summary.get("git_state_available"), True)
+    if not str(summary.get("git_sha") or "").strip():
+        raise ComparisonContractError(f"{case}.git_sha must be a non-empty commit SHA")
     _expect(case, "git_dirty", summary.get("git_dirty"), False)
 
     trip_count = _finite_number(summary.get("trip_count"), f"{case}.trip_count")
@@ -670,6 +836,34 @@ def _validate_weather_inputs(
             )
             for depot_id in sorted(sunny_assets)
         },
+    }
+
+
+def _validate_counterfactual_pv_effect(
+    weather_differences: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Reject a labelled counterfactual that leaves every PV curve unchanged."""
+
+    pv_assets = _require_mapping(
+        weather_differences.get("pv_assets"), "weather differences.pv_assets"
+    )
+    depots_with_changed_curve = [
+        depot_id
+        for depot_id, differences in pv_assets.items()
+        if isinstance(differences, Mapping)
+        and (
+            "pv_generation_hash" in differences
+            or "pv_generation_kwh" in differences
+        )
+    ]
+    if not depots_with_changed_curve:
+        raise ComparisonContractError(
+            "pv_curve_counterfactual must change pv_generation_hash or "
+            "pv_generation_kwh for at least one depot"
+        )
+    return {
+        "pv_curve_changed": True,
+        "depot_ids_with_changed_pv_curve": sorted(depots_with_changed_curve),
     }
 
 

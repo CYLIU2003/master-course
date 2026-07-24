@@ -31,7 +31,7 @@
 
 ## 3. 正式な同日晴天・雨天計算（Stage 1: 240秒、Stage 2: 60秒）
 
-以下は同日・同一平日scopeを用意できた後のPowerShell例である。`<MATCHED_RAIN_SCENARIO_ID>`と`<MATCHED_RAIN_PREPARED_INPUT_ID>`には、2025-08-05の同一ダイヤ・同一在庫へ雨天代表曲線だけを適用した入力を指定する。用意できるまでは雨天コマンドを実行せず、2025-08-10を`WEEKDAY`に偽装しない。
+以下は同日・同一平日scopeを用意できた後のPowerShell例である。baseline と PV-counterfactual は同じ `scenario-id`、同じ `prepared-input-id`、同じ `service-id` を使い、後者にだけ雨天代表PV曲線JSONを渡す。用意できるまでは雨天コマンドを実行せず、2025-08-10を`WEEKDAY`に偽装しない。
 
 ```powershell
 $env:GRB_LICENSE_FILE = 'C:\Users\RTDS_admin\gurobi.lic'
@@ -43,6 +43,8 @@ python scripts\run_research_phase3_frontend_weather.py `
   --prepared-input-id <SUNNY_PREPARED_INPUT_ID> `
   --expected-service-date 2025-08-05 `
   --output-dir C:\master-course\output\research_phase3_sunny_formal_current `
+  --comparison-design same_service_date_pv_counterfactual `
+  --comparison-role baseline `
   --expected-bev-count 35 --expected-ice-count 26 `
   --time-step-min 15 --time-limit-sec 300 `
   --stage1-time-limit-sec 240 --stage2-time-limit-sec 60 `
@@ -50,12 +52,15 @@ python scripts\run_research_phase3_frontend_weather.py `
   --mip-gap 0.025 --random-seed 42
 
 python scripts\run_research_phase3_frontend_weather.py `
-  --case-name rain_formal_current `
-  --scenario-id <MATCHED_RAIN_SCENARIO_ID> `
-  --prepared-input-id <MATCHED_RAIN_PREPARED_INPUT_ID> `
+  --case-name rain_pv_counterfactual_formal_current `
+  --scenario-id 771d115b-75b0-49f7-a7f0-25f259a2cd21 `
+  --prepared-input-id <SUNNY_PREPARED_INPUT_ID> `
   --expected-service-date 2025-08-05 `
-  --output-dir C:\master-course\output\research_phase3_rain_formal_current `
+  --output-dir C:\master-course\output\research_phase3_rain_pv_counterfactual_formal_current `
   --service-id WEEKDAY `
+  --comparison-design same_service_date_pv_counterfactual `
+  --comparison-role pv_curve_counterfactual `
+  --counterfactual-pv-curve-file <RAIN_PV_PROXY_OR_TYPICAL_CURVE_JSON> `
   --expected-bev-count 35 --expected-ice-count 26 `
   --time-step-min 15 --time-limit-sec 300 `
   --stage1-time-limit-sec 240 --stage2-time-limit-sec 60 `
@@ -63,7 +68,7 @@ python scripts\run_research_phase3_frontend_weather.py `
   --mip-gap 0.025 --random-seed 42
 ```
 
-各runの`input_audit.json`で、`calendar_service_contract.matches=true`、`weather_pv_forecast_applied=true`、`weather_pv_forecast_skip_reason=null`を先に確認する。続いて、比較契約と電力・燃料帳尻を検査する。ここでの監査は日次計画の暫定監査であり、rollingを含む最終受理は4節の後に行う。
+各runの`input_audit.json`で、`calendar_service_contract.matches=true`、`weather_pv_forecast_applied=true`、`weather_pv_forecast_skip_reason=null`、`git_state_available=true`、空でない`git_sha`を先に確認する。晴天runは`weather_comparison_contract.comparison_role=baseline`、雨天曲線runは`pv_curve_counterfactual`、両者の`comparison_control_hash`が一致することを要求する。`weather_decision_policy.policy_scope=pv_curve_only`なら、結果はPV曲線差の反実仮想であり、天候に応じた配車方策差を証明するものではない。続いて、比較契約と電力・燃料帳尻を検査する。ここでの監査は日次計画の暫定監査であり、rollingを含む最終受理は4節の後に行う。
 
 フロントから通常の手動実行を行ったdated runでは、次の入力provenanceも確認する。
 
@@ -72,21 +77,21 @@ python scripts\verify_run_input_provenance.py `
   --run-dir C:\master-course\output\<YYYY-MM-DD>\<run_YYYYMMDD_HHMM>
 ```
 
-`run_input_validation.json.valid=true`を要求する。`scenario_input_snapshot.json`でscenario/inventory、`prepare_input_audit.json`でPrepare profile/scopeと元prepared JSONのSHA-256、`optimization_parameters.json`でフロント要求値とcanonical実効値を照合する。既存の古いrunへこれらを推測で後付けせず、新規手動実行で生成されたbundleだけを正式な入力証跡として扱う。
+`run_input_validation.json.valid=true`を要求する。`scenario_input_snapshot.json`でscenario/inventory、`prepare_input_audit.json`でPrepare profile/scopeと元prepared JSONのSHA-256、`optimization_parameters.json`でフロント要求値とcanonical実効値、`code_provenance.json`で実行開始前のGit SHA/dirty状態を照合する。既存の古いrunへこれらを推測で後付けせず、新規手動実行で生成されたbundleだけを正式な入力証跡として扱う。
 
 ```powershell
 python scripts\compare_research_phase3_weather.py `
   --sunny-summary C:\master-course\output\research_phase3_sunny_formal_current\summary.json `
-  --rain-summary C:\master-course\output\research_phase3_rain_formal_current\summary.json `
+  --rain-summary C:\master-course\output\research_phase3_rain_pv_counterfactual_formal_current\summary.json `
   --output-dir C:\master-course\output\research_phase3_weather_formal_comparison
 
 python scripts\audit_phase3_weather_energy_balance.py `
   --sunny-run C:\master-course\output\research_phase3_sunny_formal_current `
-  --rain-run C:\master-course\output\research_phase3_rain_formal_current `
+  --rain-run C:\master-course\output\research_phase3_rain_pv_counterfactual_formal_current `
   --audit-dir C:\master-course\output\research_phase3_weather_formal_audit
 ```
 
-受理条件は、両ケース264便担当、fallbackなし、postsolve repairなし、Stage 2可行、全hard validation違反0、晴雨間の非天候条件一致、電力収支残差`1e-6 kWh`以下、燃料費再計算残差`1e-6円`以下である。Stage 1がtime limitの場合はincumbent、bound、gapを必ず併記し、大域最適とは表現しない。車両別の系統/PV/BESS内訳は営業所×時刻の確定比率による按分であり、サイト電源変数と同じ意味の厳密な車両別決定変数ではない。
+受理条件は、両ケース264便担当、fallbackなし、postsolve repairなし、Stage 2可行、全hard validation違反0、晴雨間の`scenario_id`・prepared SHA・service date・fleet・initial SOC・`comparison_control_hash`一致、電力収支残差`1e-6 kWh`以下、燃料費再計算残差`1e-6円`以下である。Stage 1がtime limitの場合はincumbent、bound、gapを必ず併記し、大域最適とは表現しない。`charging_source_provenance.json`で、サイト／営業所×時刻のsource flowが厳密か、車両別splitがsolver-nativeか比例按分かを別々に確認する。車両別の比例按分をサイト電源変数と同じ意味の厳密な車両別決定変数として扱わない。
 
 ### 3.1 BEV全数使用と車両日費用の政策感度
 
@@ -145,7 +150,7 @@ rolling完了後の最終監査は、日次runとrolling summaryを同時に要�
 ```powershell
 python scripts\audit_phase3_weather_energy_balance.py `
   --sunny-run C:\master-course\output\research_phase3_sunny_formal_current `
-  --rain-run C:\master-course\output\research_phase3_rain_formal_current `
+  --rain-run C:\master-course\output\research_phase3_rain_pv_counterfactual_formal_current `
   --audit-dir C:\master-course\output\research_phase3_weather_formal_audit_final `
   --require-rolling `
   --sunny-rolling-summary C:\master-course\output\research_phase3_sunny_hourly_chain\rolling_chain_summary.json `

@@ -347,3 +347,88 @@ def apply_weather_policy_to_problem(
     )
     pv_adjusted_problem = _apply_pv_proxy_curve_to_problem(problem, forecast, metadata)
     return replace(pv_adjusted_problem, vehicles=updated_vehicles, metadata=metadata)
+
+
+def apply_same_service_date_pv_counterfactual_to_problem(
+    problem: CanonicalOptimizationProblem,
+    curve_source_forecast: WeatherProxyForecast,
+    *,
+    source_descriptor: Mapping[str, Any] | None = None,
+) -> CanonicalOptimizationProblem:
+    """Replace only the PV curve for an explicitly labelled counterfactual.
+
+    This is deliberately separate from :func:`apply_weather_policy_to_problem`.
+    The service date, timetable, fleet, initial SOC, and weather-operation
+    profile remain those of ``problem``.  ``curve_source_forecast`` may come
+    from another observed/representative date, but its metadata is retained as
+    a *curve source*, never recast as a real-time forecast for the service
+    date.  This makes a same-service-date PV-only comparison possible without
+    mixing a Sunday timetable with a weekday run.
+    """
+
+    if not curve_source_forecast.no_future_leakage:
+        raise ValueError(
+            "PV counterfactual source must satisfy no_future_leakage=true"
+        )
+    if curve_source_forecast.analog_date >= curve_source_forecast.service_date:
+        raise ValueError(
+            "PV counterfactual source analog_date/forecast_issue_date must "
+            "precede its source service_date"
+        )
+    if curve_source_forecast.forecast_type not in {
+        FORECAST_TYPE_SOLCAST_PV_PROXY_V1,
+        FORECAST_TYPE_SOLCAST_TYPICAL_PV_PROXY_V1,
+    }:
+        raise ValueError(
+            "PV counterfactual requires a Solcast PV-proxy forecast curve; "
+            f"got {curve_source_forecast.forecast_type!r}"
+        )
+    curve_metadata = dict(curve_source_forecast.metadata or {})
+    raw_capacity_factor = curve_metadata.get("capacity_factor_by_slot")
+    if not isinstance(raw_capacity_factor, (list, tuple)) or not raw_capacity_factor:
+        raise ValueError(
+            "PV counterfactual requires non-empty metadata.capacity_factor_by_slot"
+        )
+
+    metadata = dict(problem.metadata or {})
+    base_service_date = str(metadata.get("service_date") or "")[:10]
+    counterfactual_metadata = {
+        "enabled": True,
+        "comparison_design": "same_service_date_pv_counterfactual",
+        "weather_difference_scope": "pv_curve_only",
+        "base_service_date": base_service_date or None,
+        "curve_source_service_date": str(curve_source_forecast.service_date),
+        "curve_source_analog_date": str(curve_source_forecast.analog_date),
+        "curve_source_forecast_type": str(curve_source_forecast.forecast_type),
+        "curve_source_weather_label": str(curve_source_forecast.weather_label),
+        "curve_source_operation_mode": str(curve_source_forecast.operation_mode),
+        "curve_source_descriptor": dict(source_descriptor or {}),
+        "service_date_forecast_claim": False,
+        "semantics": (
+            "The PV availability curve is counterfactually substituted while "
+            "all non-PV controls remain fixed. It is not a real-time weather "
+            "forecast claim for the base service date."
+        ),
+    }
+    metadata["weather_pv_counterfactual"] = counterfactual_metadata
+    updated = _apply_pv_proxy_curve_to_problem(
+        problem,
+        curve_source_forecast,
+        metadata,
+    )
+    if metadata.get("weather_pv_forecast_applied") is not True:
+        raise ValueError(
+            "PV counterfactual curve was not applied: "
+            f"{metadata.get('weather_pv_forecast_skip_reason')!r}"
+        )
+    representative_curve = dict(metadata.get("weather_pv_representative_curve") or {})
+    representative_curve.update(
+        {
+            "comparison_design": "same_service_date_pv_counterfactual",
+            "weather_difference_scope": "pv_curve_only",
+            "curve_source_service_date": str(curve_source_forecast.service_date),
+            "service_date_forecast_claim": False,
+        }
+    )
+    metadata["weather_pv_representative_curve"] = representative_curve
+    return replace(updated, metadata=metadata)

@@ -7,6 +7,31 @@
 ![Optimization](https://img.shields.io/badge/Optimization-MILP%2BALNS-FF6F00)
 ![Status](https://img.shields.io/badge/Status-Core%20Package%20%28Tkinter%2BFastAPI%29-0A66C2)
 
+## Research-evidence contract (2026-07-24)
+
+Manual frontend runs now preserve the input, Prepare output, code provenance, and
+validation context required for retrospective audit. A manual result remains a
+simulation artifact, not an automatically accepted research result.
+
+- `code_provenance.json` records the Git SHA, dirty state, repository root, and
+  any capture failure before the solve begins.
+- `run_input_provenance/` records the scenario snapshot, Prepare audit, effective
+  optimization parameters, hashes, and validation result.
+- `charging_source_provenance.json` distinguishes exact depot/time-step energy
+  flows from vehicle-level allocations. A proportional allocation must never be
+  described as solver-native vehicle-source evidence.
+- Formal sunny/rainy comparison is fail-closed: it requires the same prepared
+  input, service day, fleet, initial SOC, and operational controls; only a
+  separately recorded PV curve may differ. Comparing a weekday to a Sunday is
+  rejected as a weather-only claim. The counterfactual must also change a
+  depot PV-generation hash or energy total; a relabelled duplicate is rejected.
+- Hourly rolling execution is reported as `not_executed` unless an actual rolling
+  chain was run and its log is attached. No output fabricates rolling evidence,
+  a missing ICE vehicle, or weather-dispatch behavior.
+
+The formal command sequence and required acceptance checks are in
+[the Phase 3 manual validation runbook](docs/notes/phase3_manual_validation_runbook_20260716.md).
+
 ---
 
 ## クイックナビ

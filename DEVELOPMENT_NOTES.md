@@ -1,5 +1,64 @@
 # Development Notes
 
+## 2026-07-24 Research evidence contract: counterfactual weather comparison and run provenance
+
+### Problems raised and closed in code
+
+- **P1 — code provenance could be blank:** frontend runs previously relied on a
+  bare `git` invocation, so `git_sha` and `git_dirty` could be absent. The run
+  now captures a structured pre-solve `code_provenance.json` using the configured
+  Git executable or standard Windows/Codex locations. The same state is copied
+  into the input manifest, solver metadata, and top-level run manifest. Formal
+  acceptance rejects unavailable, missing, or dirty Git provenance.
+- **P1 — exactness was overstated:** depot/time-step PV/grid/BESS flows are solver
+  variables, whereas vehicle-source rows can be proportional allocations. The
+  emitted `charging_source_provenance.json` now records both scopes separately:
+  `depot_source_provenance_exact` and
+  `vehicle_source_provenance_exact`, plus the allocation method. Root KPI and
+  graph metadata no longer promote an exact site total into an exact vehicle claim.
+- **P1 — weather-only comparison was not identifiable:** the formal Phase 3
+  runner and comparator now require a `same_service_date_pv_counterfactual`
+  contract. The baseline and counterfactual share prepared input, service date,
+  timetable, fleet, initial SOC, and all operational controls. The
+  counterfactual applies only an explicitly hashed PV curve. Old weekday-versus-
+  Sunday pairs are rejected rather than labelled as weather-only evidence. The
+  comparator also requires the substituted curve to change at least one depot's
+  PV-generation hash or total, preventing a relabelled duplicate run.
+- **P2 — neutral PV-only policy was easy to misread:** the runner now writes a
+  `weather_decision_policy` audit. When the policy changes only the PV curve, it
+  explicitly says that no weather dispatch or SOC policy was active; a cost or
+  assignment difference may not be claimed without a separately specified,
+  numerically auditable operating policy.
+
+### Preserved model meaning
+
+- The dispatch feasibility condition
+  `arrival + turnaround + deadhead <= next departure` is unchanged.
+- Neither a 26th ICE vehicle nor 35 used BEVs is fabricated. ICE26 and a
+  minimum-used-BEV condition remain explicit scenario/policy inputs that must be
+  prepared and solved with real vehicle records.
+- A frontend output records rolling execution as `not_executed` unless a real
+  hourly rolling chain and its logs are present. The changes do not claim that a
+  rolling result has been run.
+
+### Required next manual experiments
+
+1. Prepare a clean ICE26 scenario with an actual vehicle ID and run the formal
+   baseline and PV-counterfactual pair from the same service date and prepared
+   artifact.
+2. Run the actual hourly rolling chain and attach its state transitions,
+   re-solve times, feasibility checks, and plan-delta metrics.
+3. If EV35 use is a policy requirement rather than an investment decision, run it
+   as an explicit `minimum_used_bev_count=35` sensitivity alongside the
+   unconstrained cost-minimization case.
+
+### Validation
+
+- Focused regression tests cover provenance capture/validation, counterfactual PV
+  substitution, strict weather comparison contracts, and root/graph source-
+  provenance parity. The commands and acceptance interpretation are documented
+  in `docs/notes/phase3_manual_validation_runbook_20260716.md`.
+
 ## 2026-07-23 フロント手動runの入力provenance出力（本番最適化未実行）
 
 ### 結論

@@ -24,6 +24,7 @@ def _summary(
     pv_case_id: str,
     pv_hash: str,
     weather_operation_mode: str,
+    comparison_role: str,
     total_cost: float,
     grid_import_kwh: float,
 ) -> dict:
@@ -54,8 +55,8 @@ def _summary(
     return {
         "case_name": case_name,
         "scenario_id": scenario_id,
-        "prepared_input_id": f"prepared-{service_date}",
-        "prepared_input_sha256": f"sha-{service_date}",
+        "prepared_input_id": "prepared-same-service-day",
+        "prepared_input_sha256": "sha-same-service-day",
         "service_date": service_date,
         "service_id": "WEEKDAY",
         "calendar_service_contract": {
@@ -68,6 +69,7 @@ def _summary(
         "experiment_hash": f"experiment-{service_date}",
         "git_sha": "95ade40",
         "git_dirty": False,
+        "git_state_available": True,
         "phase": "phase3_two_stage",
         "time_limit_sec": 1500,
         "mip_gap": 0.1,
@@ -102,9 +104,44 @@ def _summary(
             "grid_risk_penalty_multiplier": None,
             "pv_marginal_charge_cost_yen_per_kwh": 0.0,
         },
+        "weather_decision_policy": {
+            "weather_policy_enabled": True,
+            "operation_mode": weather_operation_mode,
+            "operation_mode_is_provenance_label_only": True,
+            "policy_scope": "pv_curve_only",
+            "assignment_bias_base_jpy_per_trip": 300.0,
+            "assignment_bias_multiplier_by_vehicle_type": {"BEV": 1.0, "ICE": 1.0},
+            "effective_assignment_bias_jpy_per_trip_by_vehicle_type": {"BEV": 0.0, "ICE": 0.0},
+            "assignment_bias_active": False,
+            "applied_operational_controls": {},
+        },
+        "weather_comparison_contract": {
+            "schema_version": "weather_comparison_contract_v1",
+            "comparison_design": "same_service_date_pv_counterfactual",
+            "comparison_role": comparison_role,
+            "weather_difference_scope": (
+                "pv_curve_only"
+                if comparison_role == "pv_curve_counterfactual"
+                else "none"
+            ),
+            "base_service_date": service_date,
+            "same_service_date_required": True,
+            "same_timetable_required": True,
+            "same_fleet_required": True,
+            "same_initial_soc_required": True,
+            "comparison_control_hash": "fixed-controls-hash",
+            "counterfactual_pv_curve": {
+                "enabled": comparison_role == "pv_curve_counterfactual",
+                "curve_source_sha256": (
+                    "counterfactual-curve-sha"
+                    if comparison_role == "pv_curve_counterfactual"
+                    else None
+                ),
+            },
+        },
         "trip_count": 264,
-        "fleet": {"BEV": 35, "ICE": 25},
-        "expected_fleet": {"BEV": 35, "ICE": 25},
+        "fleet": {"BEV": 35, "ICE": 26},
+        "expected_fleet": {"BEV": 35, "ICE": 26},
         "timestep_min": 15,
         "price_slot_count": 96,
         "planning_horizon_hours": 24.0,
@@ -267,23 +304,25 @@ def _summary(
 def _valid_pair() -> tuple[dict, dict]:
     sunny = _summary(
         case_name="sunny",
-        scenario_id="sunny-id",
+        scenario_id="same-scenario-id",
         service_date="2025-08-05",
         pv_generation_kwh=614.7,
         pv_case_id="pv-sunny",
         pv_hash="pv-hash-sunny",
-        weather_operation_mode="aggressive",
+        weather_operation_mode="normal",
+        comparison_role="baseline",
         total_cost=717249.0,
         grid_import_kwh=22.9,
     )
     rain = _summary(
         case_name="rain",
-        scenario_id="rain-id",
+        scenario_id="same-scenario-id",
         service_date="2025-08-05",
         pv_generation_kwh=101.1,
         pv_case_id="pv-rain",
         pv_hash="pv-hash-rain",
-        weather_operation_mode="conservative",
+        weather_operation_mode="normal",
+        comparison_role="pv_curve_counterfactual",
         total_cost=727636.0,
         grid_import_kwh=519.4,
     )
@@ -320,13 +359,75 @@ def test_accepts_only_weather_pv_differences_and_reports_effects() -> None:
     assert comparison["effects"]["stage1_energy_cost_proxy"]["metrics"][
         "grid_to_bus_kwh"
     ]["rain_minus_sunny"] == pytest.approx(498.9)
-    assert comparison["allowed_weather_input_differences"]["weather_configuration"][
-        "weather_operation_mode"
-    ] == {"sunny": "aggressive", "rain": "conservative"}
+    assert comparison["allowed_weather_input_differences"]["weather_configuration"] == {}
+    assert comparison["weather_comparison_contract"]["comparison_design"] == (
+        "same_service_date_pv_counterfactual"
+    )
     report = render_markdown_report(comparison)
     assert "総コストの大域最適性は主張しません" in report
     assert "会計総額へ重ねて加算してはいけません" in report
     assert "Stage 1 集約充電費用代理" in report
+
+
+def test_rejects_pair_without_same_service_date_pv_contract() -> None:
+    sunny, rain = _valid_pair()
+    rain = deepcopy(rain)
+    rain.pop("weather_comparison_contract")
+
+    with pytest.raises(
+        ComparisonContractError,
+        match="rain.weather_comparison_contract",
+    ):
+        build_weather_comparison(sunny, rain)
+
+
+def test_rejects_reversed_baseline_and_counterfactual_roles() -> None:
+    sunny, rain = _valid_pair()
+    sunny = deepcopy(sunny)
+    rain = deepcopy(rain)
+    sunny["weather_comparison_contract"]["comparison_role"] = (
+        "pv_curve_counterfactual"
+    )
+    sunny["weather_comparison_contract"]["weather_difference_scope"] = "pv_curve_only"
+    sunny["weather_comparison_contract"]["counterfactual_pv_curve"]["enabled"] = True
+    sunny["weather_comparison_contract"]["counterfactual_pv_curve"]["curve_source_sha256"] = "counterfactual-curve-sha"
+    rain["weather_comparison_contract"]["comparison_role"] = "baseline"
+    rain["weather_comparison_contract"]["weather_difference_scope"] = "none"
+    rain["weather_comparison_contract"]["counterfactual_pv_curve"]["enabled"] = False
+    rain["weather_comparison_contract"]["counterfactual_pv_curve"]["curve_source_sha256"] = None
+
+    with pytest.raises(
+        ComparisonContractError,
+        match="sunny.weather_comparison_contract.comparison_role",
+    ):
+        build_weather_comparison(sunny, rain)
+
+
+def test_rejects_pair_with_different_prepared_input() -> None:
+    sunny, rain = _valid_pair()
+    rain = deepcopy(rain)
+    rain["prepared_input_sha256"] = "different-prepared-input"
+
+    with pytest.raises(
+        ComparisonContractError,
+        match="prepared_input_sha256",
+    ):
+        build_weather_comparison(sunny, rain)
+
+
+def test_rejects_counterfactual_with_unchanged_pv_curve() -> None:
+    sunny, rain = _valid_pair()
+    rain = deepcopy(rain)
+    rain["depot_energy_assets"] = deepcopy(sunny["depot_energy_assets"])
+    rain["stage1_energy_cost_proxy_weather_input"] = deepcopy(
+        sunny["stage1_energy_cost_proxy_weather_input"]
+    )
+
+    with pytest.raises(
+        ComparisonContractError,
+        match="pv_curve_counterfactual must change",
+    ):
+        build_weather_comparison(sunny, rain)
 
 
 def test_rejects_a_different_fixed_tou_price() -> None:
@@ -399,6 +500,19 @@ def test_rejects_an_unclassified_weather_configuration_change() -> None:
     with pytest.raises(
         ComparisonContractError,
         match="Fixed control differs at weather_configuration.weather_factor_scalar",
+    ):
+        build_weather_comparison(sunny, rain)
+
+
+def test_rejects_missing_git_provenance() -> None:
+    sunny, rain = _valid_pair()
+    rain = deepcopy(rain)
+    rain["git_state_available"] = False
+    rain["git_sha"] = None
+
+    with pytest.raises(
+        ComparisonContractError,
+        match="rain.git_state_available",
     ):
         build_weather_comparison(sunny, rain)
 

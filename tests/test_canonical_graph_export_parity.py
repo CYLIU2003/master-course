@@ -432,6 +432,7 @@ def test_canonical_graph_exports_write_legacy_graph_files_even_when_diagrams_dis
     assert (tmp_path / "graph" / "trip_assignment.csv").exists()
     assert (tmp_path / "graph" / "cost_breakdown.json").exists()
     assert (tmp_path / "graph" / "kpi_summary.json").exists()
+    assert (tmp_path / "graph" / "charging_source_provenance.json").exists()
     assert (tmp_path / "graph" / "manifest.json").exists()
     assert artifacts["manifest_path"] == "graph/route_band_diagrams/manifest.json"
     route_band_manifest = json.loads((tmp_path / "graph" / "route_band_diagrams" / "manifest.json").read_text(encoding="utf-8"))
@@ -446,6 +447,16 @@ def test_canonical_graph_exports_write_legacy_graph_files_even_when_diagrams_dis
     assert grid_rows[0]["time"] == "00:00"
     assert grid_rows[-1]["time"] == "23:30"
     assert len(grid_rows) == 48
+    source_precision = json.loads(
+        (tmp_path / "graph" / "charging_source_provenance.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert source_precision["site_depot_timestep"]["exact"] is True
+    assert source_precision["vehicle_timestep"]["exact"] is False
+    assert source_precision["vehicle_timestep"]["allocation_method"] == (
+        "proportional_by_depot_timestep"
+    )
 
 
 def test_bess_soc_start_end_stay_within_configured_bounds_across_artifacts(tmp_path: Path) -> None:
@@ -609,6 +620,7 @@ def test_rich_run_outputs_restore_charging_schedule_and_vehicle_timelines_json(t
     assert (run_dir / "charging_schedule.csv").exists()
     assert (run_dir / "vehicle_timelines.json").exists()
     assert (run_dir / "charging_summary.json").exists()
+    assert (run_dir / "charging_source_provenance.json").exists()
     assert (run_dir / "depot_energy_flows.csv").exists()
     assert (run_dir / "site_power_balance.csv").exists()
     assert (run_dir / "raw" / "optimization_result.json").exists()
@@ -620,6 +632,13 @@ def test_rich_run_outputs_restore_charging_schedule_and_vehicle_timelines_json(t
     run_manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
     assert run_manifest["graph"]["manifest_path"] == "graph/manifest.json"
     assert run_manifest["run_input_provenance"]["status"] == "OK"
+    root_source_precision = json.loads(
+        (run_dir / "charging_source_provenance.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert root_source_precision["site_depot_timestep"]["exact"] is True
+    assert root_source_precision["vehicle_timestep"]["exact"] is False
     assert (
         run_manifest["run_input_provenance"]["prepared_input_id"]
         == "prepared-test"

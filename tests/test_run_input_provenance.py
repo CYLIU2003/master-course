@@ -5,6 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from bff.services.optimization_run.input_provenance import (
+    CODE_PROVENANCE_FILE,
     MANIFEST_FILE,
     PARAMETERS_FILE,
     PREPARE_AUDIT_FILE,
@@ -120,6 +121,15 @@ def test_frontend_run_input_bundle_is_self_verifying(tmp_path: Path) -> None:
             executed_phase="phase3_two_stage",
         ),
         canonical_problem=_problem(),
+        code_provenance={
+            "schema_version": "git_provenance_v1",
+            "captured_at_utc": "2026-07-24T00:00:00+00:00",
+            "repository_root": str(tmp_path),
+            "git_sha": "abc123",
+            "git_dirty": False,
+            "git_state_available": True,
+            "git_state_error": None,
+        },
     )
 
     assert result["status"] == "OK"
@@ -128,6 +138,7 @@ def test_frontend_run_input_bundle_is_self_verifying(tmp_path: Path) -> None:
         PREPARE_AUDIT_FILE,
         PARAMETERS_FILE,
         SUMMARY_FILE,
+        CODE_PROVENANCE_FILE,
         MANIFEST_FILE,
         VALIDATION_FILE,
     ):
@@ -155,6 +166,27 @@ def test_frontend_run_input_bundle_is_self_verifying(tmp_path: Path) -> None:
     )
     assert parameters["frontend_request"]["mip_gap"] == 0.025
     assert parameters["effective_problem_scenario"]["timestep_min"] == 15
+    code_provenance = json.loads(
+        (run_dir / CODE_PROVENANCE_FILE).read_text(encoding="utf-8")
+    )
+    assert code_provenance["git_sha"] == "abc123"
+    manifest = json.loads((run_dir / MANIFEST_FILE).read_text(encoding="utf-8"))
+    assert manifest["git_state_available"] is True
+    assert manifest["git_dirty"] is False
+
+    manifest["git_sha"] = "posthoc-different-sha"
+    (run_dir / MANIFEST_FILE).write_text(
+        json.dumps(manifest, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    mismatched_git_provenance = validate_run_input_provenance(
+        run_dir,
+        verify_prepared_source=True,
+    )
+    assert mismatched_git_provenance["valid"] is False
+    assert "code_provenance_matches_manifest" in mismatched_git_provenance[
+        "failed_checks"
+    ]
 
     prepared_path.write_text('{"modified":true}', encoding="utf-8")
     changed_source = validate_run_input_provenance(

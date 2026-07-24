@@ -13,6 +13,7 @@ from src.preprocess.weather.operation_policy import (
     WeatherOperationProfile,
     build_operation_profile,
 )
+from src.optimization.common.weather_strategy import weather_decision_policy_audit
 from src.preprocess.weather.weather_proxy_builder import load_weather_proxy_forecast_json
 
 
@@ -192,6 +193,8 @@ def weather_policy_payload_from_problem_metadata(
     profile = dict(metadata.get("weather_operation_profile") or {})
     initial_soc_policy = dict(metadata.get("weather_initial_soc_policy") or {})
     pv_curve = dict(metadata.get("weather_pv_representative_curve") or {})
+    pv_counterfactual = dict(metadata.get("weather_pv_counterfactual") or {})
+    decision_policy = weather_decision_policy_audit(metadata)
     audit = {
         "enabled": True,
         "forecast_type": forecast.get("forecast_type"),
@@ -219,6 +222,8 @@ def weather_policy_payload_from_problem_metadata(
         "typical_pv_thresholds": dict(
             (pv_curve.get("classification") or {}).get("thresholds") or {}
         ),
+        "pv_counterfactual": pv_counterfactual,
+        "decision_policy": decision_policy,
     }
     return {
         "enabled": True,
@@ -226,5 +231,7 @@ def weather_policy_payload_from_problem_metadata(
         "operation_profile": profile,
         "initial_soc_policy": initial_soc_policy,
         "representative_curve": pv_curve,
+        "pv_counterfactual": pv_counterfactual,
+        "decision_policy": decision_policy,
         "audit": audit,
     }

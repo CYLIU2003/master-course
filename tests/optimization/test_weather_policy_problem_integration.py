@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from bff.routers.optimization import (
     _canonical_vehicle_timeline_rows,
     _persist_rich_run_outputs,
@@ -31,6 +33,7 @@ from src.preprocess.weather.daily_weather_schema import (
     weather_proxy_forecast_to_dict,
 )
 from src.preprocess.weather.operation_policy import (
+    apply_same_service_date_pv_counterfactual_to_problem,
     apply_weather_policy_to_problem,
     build_operation_profile,
 )
@@ -247,6 +250,60 @@ def test_solcast_pv_proxy_applies_pv_curve_to_problem():
     assert updated.pv_slots[1].pv_available_kw == 40.0
 
 
+def test_same_service_date_counterfactual_replaces_only_pv_curve():
+    base_forecast = _typical_forecast()
+    profile = build_operation_profile(base_forecast)
+    base_problem = apply_weather_policy_to_problem(
+        _pv_problem(), base_forecast, profile, random_seed=42
+    )
+    rainy_factors = [0.0] * 24
+    rainy_factors[5] = 0.10
+    rainy_source = WeatherProxyForecast(
+        **{
+            **base_forecast.__dict__,
+            "service_date": "2025-08-10",
+            "analog_date": "2025-08-09",
+            "operation_mode": "conservative",
+            "metadata": {
+                **dict(base_forecast.metadata),
+                "capacity_factor_by_slot": rainy_factors,
+            },
+        }
+    )
+
+    updated = apply_same_service_date_pv_counterfactual_to_problem(
+        base_problem,
+        rainy_source,
+        source_descriptor={"curve_source_sha256": "test-sha"},
+    )
+
+    assert updated.metadata["service_date"] == "2025-09-01"
+    assert updated.metadata["weather_proxy"]["service_date"] == "2025-09-01"
+    assert updated.metadata["weather_operation_profile"] == base_problem.metadata[
+        "weather_operation_profile"
+    ]
+    assert updated.metadata["weather_pv_counterfactual"]["enabled"] is True
+    assert updated.metadata["weather_pv_counterfactual"]["curve_source_service_date"] == "2025-08-10"
+    assert updated.metadata["weather_pv_counterfactual"]["service_date_forecast_claim"] is False
+    assert updated.depot_energy_assets["DEPOT"].pv_generation_kwh_by_slot[0] == 10.0
+
+
+def test_same_service_date_counterfactual_rejects_future_leaking_curve_source():
+    source = _typical_forecast()
+    invalid_source = WeatherProxyForecast(
+        **{
+            **source.__dict__,
+            "no_future_leakage": False,
+        }
+    )
+
+    with pytest.raises(ValueError, match="no_future_leakage"):
+        apply_same_service_date_pv_counterfactual_to_problem(
+            _pv_problem(),
+            invalid_source,
+        )
+
+
 def test_conservative_weather_policy_does_not_override_soc_policy():
     forecast = _forecast()
     forecast = WeatherProxyForecast(
@@ -329,6 +386,9 @@ def test_weather_policy_audit_does_not_report_soc_override():
     assert "final_soc_target_percent" not in audit
     assert "final_soc_target_tolerance_percent" not in audit
     assert "final_soc_target_tolerance_percent" not in audit["optimizer_metadata_keys"]
+    assert audit["decision_policy"]["policy_scope"] == "pv_curve_only"
+    assert audit["decision_policy"]["assignment_bias_active"] is False
+    assert audit["decision_policy"]["operation_mode_is_provenance_label_only"] is True
 
 
 def test_weather_policy_does_not_add_vehicle_type_objective_bias():

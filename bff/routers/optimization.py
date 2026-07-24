@@ -8,12 +8,12 @@ Optimization endpoints:
 
 from __future__ import annotations
 
-import subprocess
 import traceback
 import json
 import csv
 import math
 import shutil
+from dataclasses import is_dataclass, replace
 from collections import Counter, defaultdict
 import threading
 import multiprocessing
@@ -66,6 +66,7 @@ from bff.services.optimization_run.execute import (
 )
 from bff.services.optimization_run.input_provenance import (
     MANIFEST_FILE as RUN_INPUT_MANIFEST_FILE,
+    collect_git_state,
     persist_run_input_provenance,
 )
 from bff.services.optimization_run.rich_outputs import (
@@ -436,13 +437,13 @@ def _resolve_dispatch_scope(
     return store._normalize_dispatch_scope(doc)
 
 def _git_sha() -> str:
-    try:
-        return subprocess.check_output(
-            ["git", "rev-parse", "HEAD"],
-            text=True,
-        ).strip()
-    except Exception:
-        return ""
+    """Return the current SHA when provenance collection succeeds.
+
+    Legacy call sites consume a string, while rich artifacts additionally emit
+    the full explicit state through :func:`collect_git_state`.
+    """
+
+    return str(collect_git_state().get("git_sha") or "")
 
 
 def _prepared_inputs_root() -> Path:
@@ -1143,6 +1144,27 @@ def _canonical_charging_output_payload(problem, engine_result) -> Dict[str, Any]
     breakdown = dict(engine_result.cost_breakdown or {})
     plan_metadata = dict(getattr(plan, "metadata", {}) or {})
     solver_metadata = dict(engine_result.solver_metadata or {})
+    # The source-flow variables are exact at depot × time-slot scope.  Unless
+    # the solver carried vehicle/source/slot variables, a vehicle ledger is a
+    # transparent post-allocation rather than another exact decision trace.
+    depot_source_provenance_exact = bool(flow_ctx["source_provenance_exact"])
+    vehicle_source_provenance_exact = bool(
+        depot_source_provenance_exact
+        and plan_metadata.get("vehicle_source_provenance_exact", False)
+    )
+    vehicle_source_allocation_method = (
+        "solver_native"
+        if vehicle_source_provenance_exact
+        else "proportional_by_depot_timestep"
+    )
+    vehicle_source_precision_note = (
+        "Vehicle source split is an exact MILP vehicle/source/slot decision trace."
+        if vehicle_source_provenance_exact
+        else (
+            "Vehicle source split is inferred by proportional allocation of exact "
+            "depot/time-slot source totals; it is not solver-native."
+        )
+    )
     penalty_enabled = bool(
         plan_metadata.get(
             "enable_contract_overage_penalty",
@@ -1270,7 +1292,9 @@ def _canonical_charging_output_payload(problem, engine_result) -> Dict[str, Any]
                     "contract_limit_exceeded": contract_over_limit_kwh > 1.0e-9,
                     "energy_price_yen_per_kwh": float((flow_ctx["price_by_slot"].get(slot_idx, 0.0)) or 0.0),
                     "demand_charge_window_flag": bool(flow_ctx["demand_flag_by_slot"].get(slot_idx, False)),
-                    "source_provenance_exact": bool(flow_ctx["source_provenance_exact"]),
+                    # Legacy field retains its depot/time-slot meaning.
+                    "source_provenance_exact": depot_source_provenance_exact,
+                    "depot_source_provenance_exact": depot_source_provenance_exact,
                 }
             )
 
@@ -1300,7 +1324,9 @@ def _canonical_charging_output_payload(problem, engine_result) -> Dict[str, Any]
         per_depot.append(
             {
                 "depot_id": depot_id,
-                "source_provenance_exact": bool(flow_ctx["source_provenance_exact"]) and depot_id not in set(flow_ctx["derived_depots"]),
+                # Legacy field retains its depot/time-slot meaning.
+                "source_provenance_exact": depot_source_provenance_exact and depot_id not in set(flow_ctx["derived_depots"]),
+                "depot_source_provenance_exact": depot_source_provenance_exact and depot_id not in set(flow_ctx["derived_depots"]),
                 "grid_to_bus_kwh": grid_to_bus_total,
                 "pv_to_bus_kwh": pv_to_bus_total,
                 "bess_to_bus_kwh": bess_to_bus_total,
@@ -1375,10 +1401,22 @@ def _canonical_charging_output_payload(problem, engine_result) -> Dict[str, Any]
     return {
         "summary": {
             "timestep_min": int(flow_ctx["timestep_min"]),
-            "source_provenance_exact": bool(flow_ctx["source_provenance_exact"]),
+            # ``source_provenance_exact`` is retained for older consumers and
+            # explicitly means depot × time-slot source-flow exactness.
+            "source_provenance_exact": depot_source_provenance_exact,
+            "source_provenance_scope": "depot_timestep",
+            "depot_source_provenance_exact": depot_source_provenance_exact,
+            "vehicle_source_provenance_exact": vehicle_source_provenance_exact,
+            "vehicle_source_allocation_method": vehicle_source_allocation_method,
+            "vehicle_source_precision_note": vehicle_source_precision_note,
             "source_provenance_note": str(flow_ctx["source_provenance_note"] or ""),
             "depots": per_depot,
             "totals": {
+                "source_provenance_exact": depot_source_provenance_exact,
+                "source_provenance_scope": "depot_timestep",
+                "depot_source_provenance_exact": depot_source_provenance_exact,
+                "vehicle_source_provenance_exact": vehicle_source_provenance_exact,
+                "vehicle_source_allocation_method": vehicle_source_allocation_method,
                 "grid_to_bus_kwh": sum(float(row["grid_to_bus_kwh"]) for row in per_depot),
                 "pv_to_bus_kwh": sum(float(row["pv_to_bus_kwh"]) for row in per_depot),
                 "bess_to_bus_kwh": sum(float(row["bess_to_bus_kwh"]) for row in per_depot),
@@ -2006,6 +2044,47 @@ def _persist_rich_run_outputs(
             json.dumps(charging_summary_payload, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+        charging_source_provenance = {
+            "schema_version": "charging_source_provenance_v1",
+            "site_depot_timestep": {
+                "exact": bool(
+                    charging_summary_payload.get(
+                        "depot_source_provenance_exact",
+                        charging_summary_payload.get("source_provenance_exact", False),
+                    )
+                ),
+                "scope": str(
+                    charging_summary_payload.get(
+                        "source_provenance_scope", "depot_timestep"
+                    )
+                ),
+                "note": charging_summary_payload.get("source_provenance_note"),
+            },
+            "vehicle_timestep": {
+                "exact": bool(
+                    charging_summary_payload.get(
+                        "vehicle_source_provenance_exact", False
+                    )
+                ),
+                "allocation_method": str(
+                    charging_summary_payload.get(
+                        "vehicle_source_allocation_method",
+                        "proportional_by_depot_timestep",
+                    )
+                ),
+                "note": charging_summary_payload.get(
+                    "vehicle_source_precision_note"
+                ),
+            },
+            "interpretation": (
+                "Site/depot source totals and vehicle source allocations have "
+                "different precision scopes and must not be conflated."
+            ),
+        }
+        (run_dir / "charging_source_provenance.json").write_text(
+            json.dumps(charging_source_provenance, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
         charging_summary_rows: List[Dict[str, Any]] = []
         for depot_row in list(charging_summary_payload.get("depots") or []):
             if isinstance(depot_row, dict):
@@ -2020,6 +2099,10 @@ def _persist_rich_run_outputs(
                 "scope",
                 "depot_id",
                 "source_provenance_exact",
+                "source_provenance_scope",
+                "depot_source_provenance_exact",
+                "vehicle_source_provenance_exact",
+                "vehicle_source_allocation_method",
                 "grid_to_bus_kwh",
                 "pv_to_bus_kwh",
                 "bess_to_bus_kwh",
@@ -2105,6 +2188,7 @@ def _persist_rich_run_outputs(
                 "energy_price_yen_per_kwh",
                 "demand_charge_window_flag",
                 "source_provenance_exact",
+                "depot_source_provenance_exact",
             ],
         )
     else:
@@ -2295,7 +2379,27 @@ def _persist_rich_run_outputs(
                 "objective_is_actual_cost": bool(accounting_summary.get("objective_is_actual_cost", kpi_summary.get("objective_is_actual_cost", False))),
                 "supports_exact_milp": bool(accounting_summary.get("supports_exact_milp", kpi_summary.get("supports_exact_milp", False))),
                 "fallback_applied": bool(accounting_summary.get("fallback_applied", kpi_summary.get("fallback_applied", False))),
-                "charging_source_provenance_exact": bool(accounting_summary.get("charging_source_provenance_exact", kpi_summary.get("charging_source_provenance_exact", False))),
+                # Accounting's legacy flag is vehicle-level: it is false for
+                # proportional post-allocation even when the site flow is exact.
+                "vehicle_source_provenance_exact": bool(
+                    accounting_summary.get(
+                        "vehicle_source_provenance_exact",
+                        accounting_summary.get(
+                            "charging_source_provenance_exact",
+                            kpi_summary.get("vehicle_source_provenance_exact", False),
+                        ),
+                    )
+                ),
+                "vehicle_source_allocation_method": str(
+                    accounting_summary.get(
+                        "vehicle_charging_source_allocation_method",
+                        kpi_summary.get(
+                            "vehicle_source_allocation_method",
+                            "proportional_by_depot_timestep",
+                        ),
+                    )
+                    or "proportional_by_depot_timestep"
+                ),
                 "contract_power_kw": float(accounting_summary.get("contract_power_kw", kpi_summary.get("contract_power_kw", 0.0)) or 0.0),
                 "contract_power_exceeded": bool(accounting_summary.get("contract_power_exceeded", kpi_summary.get("contract_power_exceeded", False))),
                 "contract_overage_kw": float(accounting_summary.get("contract_overage_kw", kpi_summary.get("contract_overage_kw", 0.0)) or 0.0),
@@ -2304,6 +2408,18 @@ def _persist_rich_run_outputs(
         )
     if charging_summary_payload:
         totals = dict(charging_summary_payload.get("totals") or {})
+        depot_source_provenance_exact = bool(
+            charging_summary_payload.get(
+                "depot_source_provenance_exact",
+                charging_summary_payload.get("source_provenance_exact", False),
+            )
+        )
+        vehicle_source_provenance_exact = bool(
+            charging_summary_payload.get(
+                "vehicle_source_provenance_exact",
+                kpi_summary.get("vehicle_source_provenance_exact", False),
+            )
+        )
         kpi_summary.update(
             {
                 "pv_to_bus_kwh": float(totals.get("pv_to_bus_kwh", 0.0) or 0.0),
@@ -2318,7 +2434,25 @@ def _persist_rich_run_outputs(
                 "demand_charge_cost_jpy": float(totals.get("demand_charge_cost_jpy", 0.0) or 0.0),
                 "peak_grid_import_kw_all_depots": float(totals.get("peak_grid_import_kw_all_depots", 0.0) or 0.0),
                 "contract_limit_exceeded": bool(totals.get("contract_limit_exceeded", False)),
-                "charging_source_provenance_exact": bool(charging_summary_payload.get("source_provenance_exact", False)),
+                "depot_source_provenance_exact": depot_source_provenance_exact,
+                "vehicle_source_provenance_exact": vehicle_source_provenance_exact,
+                "vehicle_source_allocation_method": str(
+                    charging_summary_payload.get(
+                        "vehicle_source_allocation_method",
+                        kpi_summary.get(
+                            "vehicle_source_allocation_method",
+                            "proportional_by_depot_timestep",
+                        ),
+                    )
+                    or "proportional_by_depot_timestep"
+                ),
+                # This combined flag is only true when neither the site nor
+                # per-vehicle source breakdown is inferred.
+                "charging_source_provenance_exact": bool(
+                    depot_source_provenance_exact
+                    and vehicle_source_provenance_exact
+                ),
+                "charging_source_provenance_scope": "site_and_vehicle",
             }
         )
     if not evaluation_valid:
@@ -2401,6 +2535,37 @@ def _persist_rich_run_outputs(
         run_input_manifest = json.loads(
             run_input_manifest_path.read_text(encoding="utf-8")
         )
+    solver_metadata = dict(optimization_result.get("solver_metadata") or {})
+    input_git_provenance = dict(run_input_manifest.get("code_provenance") or {})
+    git_provenance = {
+        "git_sha": solver_metadata.get("git_sha", input_git_provenance.get("git_sha")),
+        "git_dirty": solver_metadata.get("git_dirty", input_git_provenance.get("git_dirty")),
+        "git_state_available": bool(
+            solver_metadata.get(
+                "git_state_available",
+                input_git_provenance.get("git_state_available", False),
+            )
+        ),
+        "git_state_error": solver_metadata.get(
+            "git_state_error",
+            input_git_provenance.get("git_state_error"),
+        ),
+    }
+    rolling_execution_minutes = solver_metadata.get("rolling_execution_minutes")
+    rolling_policy = str(solver_metadata.get("rolling_horizon_policy") or "").strip()
+    rolling_execution = {
+        "status": (
+            "executed"
+            if rolling_execution_minutes is not None or rolling_policy
+            else "not_executed"
+        ),
+        "rolling_horizon_policy": rolling_policy or None,
+        "rolling_execution_minutes": rolling_execution_minutes,
+        "semantics": (
+            "This manual frontend artifact is a day-ahead optimization result. "
+            "Hourly rolling evidence is a separate execution chain."
+        ),
+    }
     run_manifest = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "scenario_id": optimization_result.get("scenario_id"),
@@ -2408,12 +2573,15 @@ def _persist_rich_run_outputs(
             (optimization_result.get("graph_artifacts") or {}).get("accounting_summary") or {}
         ).get("service_date")
         or ((scenario.get("simulation_config") or {}).get("service_date") or ""),
-        "git_sha": (optimization_result.get("solver_metadata") or {}).get("git_sha") or _git_sha(),
-        "research_run": bool((optimization_result.get("solver_metadata") or {}).get("research_run", False)),
-        "research_run_accepted": bool((optimization_result.get("solver_metadata") or {}).get("research_run_accepted", False)),
-        "requested_phase": (optimization_result.get("solver_metadata") or {}).get("requested_phase"),
-        "resolved_phase": (optimization_result.get("solver_metadata") or {}).get("resolved_phase"),
-        "executed_phase": (optimization_result.get("solver_metadata") or {}).get("executed_phase"),
+        **git_provenance,
+        "research_run": bool(solver_metadata.get("research_run", False)),
+        "research_run_accepted": bool(solver_metadata.get("research_run_accepted", False)),
+        "research_submission_git_provenance_eligible": bool(
+            solver_metadata.get("research_submission_git_provenance_eligible", False)
+        ),
+        "requested_phase": solver_metadata.get("requested_phase"),
+        "resolved_phase": solver_metadata.get("resolved_phase"),
+        "executed_phase": solver_metadata.get("executed_phase"),
         "files": sorted(
             [p.relative_to(run_dir).as_posix() for p in run_dir.rglob("*") if p.is_file()]
         ),
@@ -2461,6 +2629,27 @@ def _persist_rich_run_outputs(
                 "prepared_source_sha256"
             ),
             "artifacts": dict(run_input_manifest.get("artifacts") or {}),
+            "git_state_available": bool(
+                input_git_provenance.get("git_state_available", False)
+            ),
+            "git_sha": input_git_provenance.get("git_sha"),
+        },
+        "rolling_execution": rolling_execution,
+        "formal_phase3_weather_submission_readiness": {
+            "ready": False,
+            "reason": (
+                "This is a manual frontend day-ahead artifact. Formal Phase 3 "
+                "weather submission additionally requires the strict CLI runner, "
+                "an accepted same-service-date comparison, and a completed hourly "
+                "rolling chain."
+            ),
+            "day_ahead_research_run_accepted": bool(
+                solver_metadata.get("research_run_accepted", False)
+            ),
+            "git_provenance_eligible": bool(
+                solver_metadata.get("research_submission_git_provenance_eligible", False)
+            ),
+            "rolling_execution_status": rolling_execution["status"],
         },
         "graph": {
             "manifest_path": "graph/manifest.json",
@@ -4325,6 +4514,21 @@ def _persist_canonical_graph_exports(
         scenario_id=scenario_id,
         soc_rows=soc_rows,
     )
+    source_flow_context = _canonical_energy_flow_context(problem, engine_result.plan)
+    depot_source_provenance_exact = bool(
+        source_flow_context.get("source_provenance_exact", False)
+    )
+    vehicle_source_provenance_exact = bool(
+        depot_source_provenance_exact
+        and dict(getattr(engine_result.plan, "metadata", {}) or {}).get(
+            "vehicle_source_provenance_exact", False
+        )
+    )
+    vehicle_source_allocation_method = (
+        "solver_native"
+        if vehicle_source_provenance_exact
+        else "proportional_by_depot_timestep"
+    )
     try:
         from src.optimization.accounting import build_accounting_artifacts
     except Exception:
@@ -4433,9 +4637,17 @@ def _persist_canonical_graph_exports(
                     vehicle_charging_source_rows
                     and all(bool(row.get("source_provenance_exact", False)) for row in vehicle_charging_source_rows)
                 ),
+                "vehicle_source_provenance_exact": vehicle_source_provenance_exact,
+                "depot_source_provenance_exact": depot_source_provenance_exact,
                 "vehicle_charging_source_allocation_method": str(
-                    (vehicle_charging_source_rows[0].get("vehicle_charging_source_allocation_method") if vehicle_charging_source_rows else "none")
-                    or "none"
+                    (
+                        vehicle_charging_source_rows[0].get(
+                            "vehicle_charging_source_allocation_method"
+                        )
+                        if vehicle_charging_source_rows
+                        else vehicle_source_allocation_method
+                    )
+                    or vehicle_source_allocation_method
                 ),
                 "vehicle_charging_source_is_solver_native": bool(
                     vehicle_charging_source_rows
@@ -4582,6 +4794,41 @@ def _persist_canonical_graph_exports(
         cost_breakdown["validated_operating_cost_jpy"] = accounting_summary.get(
             "validated_operating_cost_jpy"
         )
+    kpi_summary.update(
+        {
+            "depot_source_provenance_exact": depot_source_provenance_exact,
+            "vehicle_source_provenance_exact": vehicle_source_provenance_exact,
+            "vehicle_source_allocation_method": vehicle_source_allocation_method,
+            "charging_source_provenance_exact": bool(
+                depot_source_provenance_exact and vehicle_source_provenance_exact
+            ),
+            "charging_source_provenance_scope": "site_and_vehicle",
+        }
+    )
+    charging_source_provenance = {
+        "schema_version": "charging_source_provenance_v1",
+        "site_depot_timestep": {
+            "exact": depot_source_provenance_exact,
+            "scope": "depot_timestep",
+            "note": source_flow_context.get("source_provenance_note"),
+        },
+        "vehicle_timestep": {
+            "exact": vehicle_source_provenance_exact,
+            "allocation_method": vehicle_source_allocation_method,
+            "note": (
+                "Vehicle source split is solver-native."
+                if vehicle_source_provenance_exact
+                else (
+                    "Vehicle source split is inferred by proportional allocation "
+                    "of exact depot/time-slot source totals."
+                )
+            ),
+        },
+    }
+    (graph_dir / "charging_source_provenance.json").write_text(
+        json.dumps(charging_source_provenance, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     (graph_dir / "cost_breakdown.json").write_text(
         json.dumps(cost_breakdown, ensure_ascii=False, indent=2),
         encoding="utf-8",
@@ -4668,6 +4915,7 @@ def _persist_canonical_graph_exports(
             "cost_timeseries.csv",
             "contract_limit_timeseries.csv",
             "bess_timeseries.csv",
+            "charging_source_provenance.json",
             "vehicle_charging_source_timeseries.csv",
             "fuel_timeseries.csv",
             "vehicle_soc_timeseries.csv",
@@ -4739,6 +4987,7 @@ def _persist_canonical_graph_exports(
         "cost_timeseries_path": "graph/cost_timeseries.csv",
         "contract_limit_timeseries_path": "graph/contract_limit_timeseries.csv",
         "bess_timeseries_path": "graph/bess_timeseries.csv",
+        "charging_source_provenance_path": "graph/charging_source_provenance.json",
         "vehicle_charging_source_timeseries_path": "graph/vehicle_charging_source_timeseries.csv",
         "fuel_timeseries_path": "graph/fuel_timeseries.csv",
         "vehicle_soc_timeseries_path": "graph/vehicle_soc_timeseries.csv",
@@ -5165,6 +5414,13 @@ def _solver_settings_payload(
             and bool(metadata.get("research_feasibility_eligible", False))
         ),
         "research_cost_kpi_eligible": bool(metadata.get("research_cost_kpi_eligible", False)),
+        "git_sha": metadata.get("git_sha"),
+        "git_dirty": metadata.get("git_dirty"),
+        "git_state_available": bool(metadata.get("git_state_available", False)),
+        "git_state_error": metadata.get("git_state_error"),
+        "research_submission_git_provenance_eligible": bool(
+            metadata.get("research_submission_git_provenance_eligible", False)
+        ),
         "source_provenance_exact": bool(metadata.get("source_provenance_exact", False)),
         "derived_source_split": bool(metadata.get("derived_source_split", False)),
         "synthetic_pv_fallback_allowed": bool(metadata.get("synthetic_pv_fallback_allowed", False)),
@@ -5300,6 +5556,10 @@ def _run_optimization(
             service_id=service_id,
             depot_id=depot_id,
         )
+        # Capture the code state before the solver starts.  This same record is
+        # written into both the input bundle and the result/audit artifacts so
+        # a later reviewer cannot be left with an empty Git SHA.
+        run_git_state = collect_git_state()
 
         charging_summary_payload: Optional[Dict[str, Any]] = None
         charging_flow_payload: Optional[Dict[str, Any]] = None
@@ -5421,6 +5681,7 @@ def _run_optimization(
                 },
                 optimization_config=opt_config,
                 canonical_problem=problem,
+                code_provenance=run_git_state,
             )
             feasible_arc_count = sum(
                 len(v) for v in (problem.feasible_connections or {}).values()
@@ -5468,6 +5729,33 @@ def _run_optimization(
             solve_started_at = time.perf_counter()
             engine_result = OptimizationEngine().solve(problem, opt_config)
             solve_elapsed = time.perf_counter() - solve_started_at
+            engine_solver_metadata = dict(engine_result.solver_metadata or {})
+            engine_solver_metadata.update(
+                {
+                    "git_sha": run_git_state.get("git_sha"),
+                    "git_dirty": run_git_state.get("git_dirty"),
+                    "git_state_available": bool(
+                        run_git_state.get("git_state_available", False)
+                    ),
+                    "git_state_error": run_git_state.get("git_state_error"),
+                    "git_provenance_captured_before_solve": True,
+                    "research_submission_git_provenance_eligible": bool(
+                        run_git_state.get("git_state_available", False)
+                        and run_git_state.get("git_dirty") is False
+                    ),
+                }
+            )
+            # Production results are immutable dataclasses.  Lightweight
+            # compatibility/test adapters may expose the same contract as a
+            # mutable object, so do not make provenance capture itself prevent
+            # result persistence for those adapters.
+            if is_dataclass(engine_result):
+                engine_result = replace(
+                    engine_result,
+                    solver_metadata=engine_solver_metadata,
+                )
+            else:
+                engine_result.solver_metadata = engine_solver_metadata
             graph_artifacts = _persist_canonical_graph_exports(
                 scenario=scenario,
                 problem=problem,
@@ -6029,7 +6317,12 @@ def _run_optimization(
             "alns_iterations": alns_iterations,
             "no_improvement_limit": no_improvement_limit,
             "destroy_fraction": destroy_fraction,
-            "git_sha": _git_sha(),
+            "git_sha": run_git_state.get("git_sha"),
+            "git_dirty": run_git_state.get("git_dirty"),
+            "git_state_available": bool(
+                run_git_state.get("git_state_available", False)
+            ),
+            "git_state_error": run_git_state.get("git_state_error"),
             "source_snapshot": store.get_field(scenario_id, "source_snapshot"),
             "output_dir": output_dir,
             "executed_at": datetime.now(timezone.utc).isoformat(),
