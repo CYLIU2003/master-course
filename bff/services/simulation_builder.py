@@ -667,9 +667,14 @@ def apply_builder_configuration(
     )
     if service_dates and not service_date:
         service_date = service_dates[0]
+    operation_time_window_enabled = bool(
+        getattr(body.simulation_settings, "operation_time_window_enabled", False)
+    )
     planning_horizon_hours = max(
         float(body.simulation_settings.planning_horizon_hours),
-        24.0 * float(planning_days) if planning_days > 1 else float(body.simulation_settings.planning_horizon_hours),
+        24.0 * float(planning_days)
+        if not operation_time_window_enabled or planning_days > 1
+        else float(body.simulation_settings.planning_horizon_hours),
     )
     cost_component_flags = normalize_cost_component_flags(
         body.simulation_settings.cost_component_flags,
@@ -729,6 +734,7 @@ def apply_builder_configuration(
         ),
         "soc_min": soc_min,
         "soc_max": soc_max,
+        "operation_time_window_enabled": operation_time_window_enabled,
         "start_time": body.simulation_settings.start_time,
         "end_time": body.simulation_settings.end_time,
         "planning_horizon_hours": planning_horizon_hours,

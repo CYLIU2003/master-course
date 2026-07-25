@@ -62,6 +62,7 @@ def test_build_quick_setup_payload_includes_saved_objective_weights() -> None:
                 "electricity_cost": False,
                 "fuel_cost": True,
             },
+            "operation_time_window_enabled": False,
             "enable_weather_operation_policy": True,
             "weather_proxy_forecast_path": "data/weather/proxy_forecasts/old.json",
             "weather_proxy_daily_csv_path": "data/weather/processed/tokyo.csv",
@@ -109,6 +110,7 @@ def test_build_quick_setup_payload_includes_saved_objective_weights() -> None:
     assert payload["simulationSettings"]["costComponentFlags"]["driver_cost"] is True
     assert payload["simulationSettings"]["costComponentFlags"]["electricity_cost"] is False
     assert payload["simulationSettings"]["costComponentFlags"]["fuel_cost"] is True
+    assert payload["simulationSettings"]["operationTimeWindowEnabled"] is False
     assert payload["simulationSettings"]["enableWeatherOperationPolicy"] is True
     assert payload["simulationSettings"]["weatherProxyForecastPath"] == "data/weather/proxy_forecasts/old.json"
     assert payload["simulationSettings"]["weatherProxyDailyCsvPath"] == "data/weather/processed/tokyo.csv"
@@ -169,6 +171,7 @@ def test_update_quick_setup_persists_cost_component_toggles() -> None:
         pvMarginalChargeCostYenPerKwh=4.25,
         pvCurtailPenaltyYenPerKwh=7.5,
         vehicleUsageCostJpyPerUsedBus=25000.0,
+        operationTimeWindowEnabled=False,
     )
 
     with (
@@ -199,6 +202,8 @@ def test_update_quick_setup_persists_cost_component_toggles() -> None:
     assert scenario_overlay["cost_coefficients"]["vehicle_usage_cost_jpy_per_used_bus"] == 25000.0
     assert simulation_config["pv_curtail_penalty_yen_per_kwh"] == 7.5
     assert simulation_config["vehicle_usage_cost_jpy_per_used_bus"] == 25000.0
+    assert simulation_config["operation_time_window_enabled"] is False
+    assert simulation_config["planning_horizon_hours"] == 24.0
 
 
 def test_update_quick_setup_persists_weather_proxy_state_without_validation() -> None:

@@ -13,6 +13,10 @@ def test_prepare_simulation_settings_defaults_enable_diagrams() -> None:
     # fixed_route_band_mode defaults to False (opt-in); matches SolverConfig default
     assert settings.fixed_route_band_mode is False
     assert settings.enable_vehicle_diagram_output is True
+    assert settings.operation_time_window_enabled is False
+    assert settings.start_time == "00:00"
+    assert settings.end_time == "23:59"
+    assert settings.planning_horizon_hours == 24.0
 
 
 def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -> None:

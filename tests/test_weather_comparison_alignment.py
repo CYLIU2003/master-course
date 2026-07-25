@@ -139,3 +139,13 @@ def test_alignment_rejects_a_time_axis_or_pv_slot_count_mismatch() -> None:
 
     with pytest.raises(ValueError, match="must contain 24 slot values"):
         align_simulation_config(reference, target)
+
+
+def test_alignment_rejects_a_different_operation_time_window_control() -> None:
+    reference = _simulation_config("2025-08-05", 80.0, 300.0, True)
+    target = _simulation_config("2025-08-10", 10.0, 0.0, False)
+    reference["operation_time_window_enabled"] = False
+    target["operation_time_window_enabled"] = True
+
+    with pytest.raises(ValueError, match="time-axis controls"):
+        align_simulation_config(reference, target)

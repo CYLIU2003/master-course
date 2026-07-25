@@ -113,16 +113,35 @@ class ProblemBuilder:
             ),
             default=30,
         )
-        operation_start_time = str(
+        operation_time_window_enabled = self._safe_bool(
+            self._first_present(
+                simulation_cfg.get("operation_time_window_enabled"),
+                simulation_cfg.get("operationTimeWindowEnabled"),
+                solver_cfg.get("operation_time_window_enabled"),
+                solver_cfg.get("operationTimeWindowEnabled"),
+            ),
+            # Preserve direct/legacy scenario behavior unless the new control
+            # is explicitly present.  The Tk Prepare path always writes it.
+            default=True,
+        )
+        requested_operation_start_time = str(
             simulation_cfg.get("start_time")
             or solver_cfg.get("start_time")
             or "05:00"
         )
-        operation_end_time = str(
+        requested_operation_end_time = str(
             simulation_cfg.get("end_time")
             or solver_cfg.get("end_time")
             or "23:00"
         )
+        if operation_time_window_enabled:
+            operation_start_time = requested_operation_start_time
+            operation_end_time = requested_operation_end_time
+        else:
+            # 23:59 is the user-facing inclusive end label.  The slot count
+            # below is explicitly 24 h, avoiding a 1-minute-short horizon.
+            operation_start_time = "00:00"
+            operation_end_time = "23:59"
         charging_cfg = ((scenario.get("scenario_overlay") or {}).get("charging_constraints") or {})
         final_soc_floor_percent = self._safe_float(
             self._first_present(
@@ -166,6 +185,7 @@ class ProblemBuilder:
         force_full_day_power_horizon = (
             bev_terminal_soc_policy is not BevTerminalSocPolicy.MINIMUM_ONLY
             or bool(simulation_cfg.get("depot_energy_assets") or overlay_energy_assets)
+            or not operation_time_window_enabled
         )
         chargers = self._build_chargers_from_scenario(scenario, depot_id)
         price_slots = self._build_price_slots_from_scenario(
@@ -497,6 +517,9 @@ class ProblemBuilder:
             timestep_min=timestep_min,
             operation_start_time=operation_start_time,
             operation_end_time=operation_end_time,
+            operation_time_window_enabled=operation_time_window_enabled,
+            requested_operation_start_time=requested_operation_start_time,
+            requested_operation_end_time=requested_operation_end_time,
             scenario_vehicles=scenario_vehicles,
             disable_vehicle_acquisition_cost=disable_acquisition_cost,
             cost_component_flags=cost_component_flags,
@@ -570,6 +593,9 @@ class ProblemBuilder:
         timestep_min: int = 30,
         operation_start_time: Optional[str] = None,
         operation_end_time: Optional[str] = None,
+        operation_time_window_enabled: bool = True,
+        requested_operation_start_time: Optional[str] = None,
+        requested_operation_end_time: Optional[str] = None,
         scenario_vehicles: Optional[Sequence[Dict[str, Any]]] = None,
         disable_vehicle_acquisition_cost: bool = False,
         enable_vehicle_cost: bool = True,
@@ -629,6 +655,13 @@ class ProblemBuilder:
             home_depot_charge_pre_window_min = float(timestep_min)
         if home_depot_charge_post_window_min is None:
             home_depot_charge_post_window_min = float(timestep_min)
+        requested_operation_start_time = (
+            requested_operation_start_time or operation_start_time
+        )
+        requested_operation_end_time = requested_operation_end_time or operation_end_time
+        if not operation_time_window_enabled:
+            operation_start_time = "00:00"
+            operation_end_time = "23:59"
         normalized_start_time = self._normalize_hhmm(operation_start_time) or self._min_hhmm(context) or "05:00"
         normalized_end_time = self._normalize_hhmm(operation_end_time) or self._max_hhmm(context) or "23:00"
         operation_end_clock_time = normalized_end_time
@@ -759,7 +792,11 @@ class ProblemBuilder:
             ),
         )
         slots_per_day: Optional[int] = None
-        if planning_days > 1 or post_return_target_enabled:
+        if (
+            planning_days > 1
+            or post_return_target_enabled
+            or not operation_time_window_enabled
+        ):
             slots_per_day = max(1, (24 * 60) // max(timestep_min, 1))
         elif operation_start_time and operation_end_time:
             duration_min = self._daily_window_duration_min(normalized_start_time, normalized_end_time)
@@ -951,6 +988,18 @@ class ProblemBuilder:
                 "service_coverage_mode": service_coverage_mode,
                 "milp_max_successors_per_trip": milp_max_successors_per_trip,
                 "planning_days": planning_days,
+                "operation_time_window_enabled": bool(operation_time_window_enabled),
+                "operation_time_window_requested_start_time": (
+                    self._normalize_hhmm(requested_operation_start_time)
+                ),
+                "operation_time_window_requested_end_time": (
+                    self._normalize_hhmm(requested_operation_end_time)
+                ),
+                "operation_time_window_effective_start_time": normalized_start_time,
+                "operation_time_window_effective_end_time": operation_end_clock_time,
+                "operation_time_window_mode": (
+                    "scoped" if operation_time_window_enabled else "full_day"
+                ),
                 "operation_start_time": normalized_start_time,
                 "operation_end_time": operation_end_clock_time,
                 "service_window_source": "scoped_timetable_rows",

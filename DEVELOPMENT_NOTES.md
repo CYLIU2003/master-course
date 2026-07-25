@@ -1,5 +1,51 @@
 # Development Notes
 
+## 2026-07-25 Frontend operation-time-window control: explicit full-day canonical horizon
+
+### Problems raised and closed in code
+
+- **P1 — `start_time` / `end_time` had no explicit enable state:** the Tk
+  screen formerly sent `05:00–23:00` as an implicit default.  The paired
+  fields now have the checkbox **「開始・終了時刻を時間帯制約として使う」**.
+  It is off by default; when off, the fields are disabled and the interactive
+  Prepare path sends `operation_time_window_enabled=false` with a 24-hour
+  planning horizon.  New UI defaults are `00:00–23:59`.
+- **P1 — `23:59` could accidentally mean a 1,439-minute horizon:** when the
+  checkbox is off, `ProblemBuilder` constructs exactly `24*60` minutes and an
+  integral number of timestep slots.  `23:59` remains the user-facing
+  inclusive end label; the canonical energy horizon ends at `00:00` on the
+  next clock cycle.
+- **P1 — a reviewer could not distinguish a saved pair from the solved
+  horizon:** Quick Setup, Prepare, BFF, and the canonical builder now carry
+  `operation_time_window_enabled`.  The requested pair is retained so it can
+  be re-enabled later, while `operation_time_window_effective_*` and
+  `interactive_operation_time_window_controls` record the actual solver
+  horizon in `effective_scenario.json`, input provenance, solver metadata,
+  and summary.  Weather-only comparison alignment also treats this boolean as
+  a time-axis control.
+
+### Scope and comparability
+
+- This control changes the **energy/SOC optimization horizon**; it does not
+  filter, rewrite, or invent timetable rows.  Dispatch feasibility remains
+  `arrival + turnaround + deadhead <= next departure`.
+- With the checkbox on, the stored pair is the requested scoped horizon.
+  Existing BEV/BESS terminal-SOC requirements may still extend the internal
+  energy horizon to a full day; reviewers must read
+  `operation_time_window_*` and `energy_horizon_*` separately.
+- A run made under the old implicit `05:00–23:00` condition is not directly
+  comparable to a new full-day run unless the control, timestep, terminal-SOC
+  policy, and all other input hashes match.
+
+### Validation
+
+- `C:\master-course\.venv\Scripts\python.exe -m py_compile` completed for the
+  Tk frontend, BFF control path, and canonical builder modules changed here.
+- `C:\master-course\.venv\Scripts\python.exe -m pytest -q` completed with
+  **835 passed** (2026-07-25).  The regression coverage includes Tk payload
+  generation, Quick Setup persistence, Prepare defaults, canonical full-day
+  slot construction, BFF provenance, and weather-comparison alignment.
+
 ## 2026-07-25 Major revision: manual-run terminal-SOC neutrality and evidence-table truthfulness
 
 ### Problems raised and closed in code

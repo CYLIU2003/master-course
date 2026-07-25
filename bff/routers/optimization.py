@@ -128,6 +128,11 @@ INTERACTIVE_STAGE1_BEST_OBJ_STOP_ENABLED = False
 INTERACTIVE_GUROBI_THREADS = 1
 INTERACTIVE_TERMINAL_SOC_POLICY_VERSION = "interactive_terminal_soc_controls_v1"
 INTERACTIVE_BEV_TERMINAL_SOC_POLICY = "return_to_initial"
+INTERACTIVE_OPERATION_TIME_WINDOW_CONTROLS_VERSION = (
+    "interactive_operation_time_window_controls_v1"
+)
+FULL_DAY_OPERATION_START_TIME = "00:00"
+FULL_DAY_OPERATION_END_TIME = "23:59"
 
 
 def _interactive_runtime_controls_payload(
@@ -252,6 +257,96 @@ def _apply_interactive_bev_terminal_soc_policy(
             "Interactive day-ahead runs enforce per-vehicle return_to_initial "
             "BEV terminal SOC so representative-day energy and cost comparisons "
             "do not consume or create BEV inventory."
+        ),
+    }
+
+
+def _coerce_bool(value: Any, *, default: bool) -> bool:
+    """Parse persisted/UI booleans without treating an invalid string as true."""
+
+    if value is None:
+        return bool(default)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+        return bool(default)
+    return bool(value)
+
+
+def _apply_interactive_operation_time_window_controls(
+    scenario: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Materialize the front-end time-window intent before canonical build.
+
+    The start/end pair is retained as the user's requested pair even when the
+    checkbox is disabled.  In that case this function writes separate effective
+    fields and a 24-hour horizon, while ``ProblemBuilder`` independently enforces
+    the same full-day semantics.  Keeping both representations makes a later
+    artifact review distinguish user input from solver input.
+    """
+
+    simulation_config = scenario.get("simulation_config")
+    if not isinstance(simulation_config, dict):
+        simulation_config = {}
+        scenario["simulation_config"] = simulation_config
+
+    requested_enabled = simulation_config.get("operation_time_window_enabled")
+    if requested_enabled is None:
+        requested_enabled = simulation_config.get("operationTimeWindowEnabled")
+    # Prepared inputs created before this feature retain their established
+    # scoped-time behavior.  Tk Prepare writes the flag explicitly.
+    enabled = _coerce_bool(requested_enabled, default=True)
+    requested_start_time = str(
+        simulation_config.get("start_time") or "05:00"
+    )
+    requested_end_time = str(
+        simulation_config.get("end_time") or "23:00"
+    )
+    planning_days = max(int(simulation_config.get("planning_days") or 1), 1)
+    effective_start_time = (
+        requested_start_time if enabled else FULL_DAY_OPERATION_START_TIME
+    )
+    effective_end_time = (
+        requested_end_time if enabled else FULL_DAY_OPERATION_END_TIME
+    )
+
+    simulation_config["operation_time_window_enabled"] = enabled
+    simulation_config["operation_time_window_effective_start_time"] = (
+        effective_start_time
+    )
+    simulation_config["operation_time_window_effective_end_time"] = (
+        effective_end_time
+    )
+    if not enabled:
+        simulation_config["planning_horizon_hours"] = 24.0 * float(planning_days)
+
+    return {
+        "schema_version": INTERACTIVE_OPERATION_TIME_WINDOW_CONTROLS_VERSION,
+        "scope": "interactive_bff_run_optimization",
+        "requested": {
+            "operation_time_window_enabled": requested_enabled,
+            "start_time": requested_start_time,
+            "end_time": requested_end_time,
+        },
+        "effective": {
+            "operation_time_window_enabled": enabled,
+            "start_time": effective_start_time,
+            "end_time": effective_end_time,
+            "planning_horizon_hours": (
+                24.0 * float(planning_days)
+                if not enabled
+                else simulation_config.get("planning_horizon_hours")
+            ),
+        },
+        "full_day_horizon_forced": not enabled,
+        "reason": (
+            "The start/end pair is inactive; canonical optimization uses the "
+            "complete 00:00-23:59 calendar day."
+            if not enabled
+            else "The explicitly enabled start/end pair scopes the optimization horizon."
         ),
     }
 _OPTIMIZATION_FUTURE: Optional[Future[Any]] = None
@@ -1938,6 +2033,9 @@ def _persist_rich_run_outputs(
         "gurobi_threads": solver_settings.get("gurobi_threads"),
         "interactive_runtime_controls": dict(
             solver_settings.get("interactive_runtime_controls") or {}
+        ),
+        "interactive_operation_time_window_controls": dict(
+            solver_settings.get("interactive_operation_time_window_controls") or {}
         ),
         "interactive_terminal_soc_controls": dict(
             solver_settings.get("interactive_terminal_soc_controls") or {}
@@ -6146,6 +6244,9 @@ def _solver_settings_payload(
         "interactive_runtime_controls": dict(
             metadata.get("interactive_runtime_controls") or {}
         ),
+        "interactive_operation_time_window_controls": dict(
+            metadata.get("interactive_operation_time_window_controls") or {}
+        ),
         "interactive_terminal_soc_controls": dict(
             metadata.get("interactive_terminal_soc_controls") or {}
         ),
@@ -6225,6 +6326,9 @@ def _run_optimization(
             prepared_payload,
         )
         _apply_timestep_min_to_scenario(scenario, timestep_min)
+        interactive_operation_time_window_controls = (
+            _apply_interactive_operation_time_window_controls(scenario)
+        )
         scenario, weather_forecast, weather_profile = _prepare_weather_policy_for_scenario(
             scenario,
             enable_weather_operation_policy=enable_weather_operation_policy,
@@ -6388,6 +6492,9 @@ def _run_optimization(
                 frontend_request={
                     "raw_frontend_body": raw_frontend_request_payload,
                     "interactive_runtime_controls": interactive_runtime_controls,
+                    "interactive_operation_time_window_controls": (
+                        interactive_operation_time_window_controls
+                    ),
                     "interactive_terminal_soc_controls": interactive_terminal_soc_controls,
                     "scenario_id": scenario_id,
                     "prepared_input_id": prepared_input_id,
@@ -6482,6 +6589,9 @@ def _run_optimization(
                         and run_git_state.get("git_dirty") is False
                     ),
                     "interactive_runtime_controls": interactive_runtime_controls,
+                    "interactive_operation_time_window_controls": (
+                        interactive_operation_time_window_controls
+                    ),
                     "interactive_terminal_soc_controls": interactive_terminal_soc_controls,
                 }
             )
@@ -7257,6 +7367,7 @@ def _run_reoptimization(
             body,
         )
         _apply_timestep_min_to_scenario(scenario, timestep_min)
+        _apply_interactive_operation_time_window_controls(scenario)
         job_store.update_job(
             job_id,
             status="running",

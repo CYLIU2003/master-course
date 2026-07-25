@@ -52,7 +52,13 @@ OVERLAY_IDENTITY_KEYS = frozenset(
     {"scenario_id", "dataset_id", "dataset_version", "depot_ids", "route_ids"}
 )
 TIME_AXIS_KEYS = frozenset(
-    {"start_time", "end_time", "planning_horizon_hours", "planning_days"}
+    {
+        "operation_time_window_enabled",
+        "start_time",
+        "end_time",
+        "planning_horizon_hours",
+        "planning_days",
+    }
 )
 
 

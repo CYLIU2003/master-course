@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from src.data_schema import ProblemData
+from src.optimization.common.builder import ProblemBuilder
 from src.optimization.common.problem import OptimizationScenario
 from src.optimization.common.time_axis import normalize_timestep_min
 
@@ -68,3 +69,79 @@ def test_explicit_energy_horizon_duration_supports_multiple_days() -> None:
     )
 
     assert scenario.planning_horizon_hours == 48.0
+
+
+def _operation_window_scenario(*, enabled: bool) -> dict:
+    return {
+        "meta": {"id": "operation-window-test"},
+        "simulation_config": {
+            "operation_time_window_enabled": enabled,
+            "start_time": "05:00",
+            "end_time": "23:00",
+            "timestep_min": 60,
+        },
+        "scenario_overlay": {
+            "solver_config": {},
+            "cost_coefficients": {},
+            "charging_constraints": {},
+        },
+        "depots": [{"id": "dep-1", "name": "Depot 1"}],
+        "routes": [{"id": "route-1", "route_id": "route-1"}],
+        "vehicles": [
+            {
+                "id": "bev-1",
+                "depotId": "dep-1",
+                "type": "BEV",
+                "batteryKwh": 300.0,
+                "energyConsumption": 1.2,
+                "chargePowerKw": 60.0,
+            }
+        ],
+        "chargers": [{"id": "charger-1", "siteId": "dep-1", "powerKw": 60.0}],
+        "timetable_rows": [
+            {
+                "trip_id": "trip-1",
+                "route_id": "route-1",
+                "origin": "A",
+                "destination": "B",
+                "departure": "08:00",
+                "arrival": "08:30",
+                "distance_km": 10.0,
+                "service_id": "WEEKDAY",
+                "allowed_vehicle_types": ["BEV"],
+            }
+        ],
+        "deadhead_rules": [],
+        "turnaround_rules": [],
+    }
+
+
+def test_problem_builder_uses_an_exact_full_day_when_window_is_disabled() -> None:
+    problem = ProblemBuilder().build_from_scenario(
+        _operation_window_scenario(enabled=False),
+        depot_id="dep-1",
+        service_id="WEEKDAY",
+    )
+
+    assert problem.scenario.horizon_start == "00:00"
+    assert problem.scenario.horizon_end == "00:00"
+    assert problem.scenario.horizon_duration_min == 24 * 60
+    assert len(problem.price_slots) == 24
+    assert problem.metadata["operation_time_window_enabled"] is False
+    assert problem.metadata["operation_time_window_requested_start_time"] == "05:00"
+    assert problem.metadata["operation_time_window_effective_start_time"] == "00:00"
+    assert problem.metadata["operation_time_window_effective_end_time"] == "23:59"
+
+
+def test_problem_builder_keeps_the_pair_when_window_is_enabled() -> None:
+    problem = ProblemBuilder().build_from_scenario(
+        _operation_window_scenario(enabled=True),
+        depot_id="dep-1",
+        service_id="WEEKDAY",
+    )
+
+    assert problem.scenario.horizon_start == "05:00"
+    assert problem.metadata["operation_time_window_enabled"] is True
+    assert problem.metadata["operation_time_window_mode"] == "scoped"
+    assert problem.metadata["operation_time_window_effective_start_time"] == "05:00"
+    assert problem.metadata["operation_time_window_effective_end_time"] == "23:00"

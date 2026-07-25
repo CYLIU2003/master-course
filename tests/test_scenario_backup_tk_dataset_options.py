@@ -270,6 +270,25 @@ def test_build_optimization_run_payload_centralizes_fast_and_manual_execution() 
     }
 
 
+def test_operation_time_window_payload_is_explicit_and_defaults_to_full_day() -> None:
+    app = App.__new__(App)
+    app.operation_time_window_enabled_var = DummyVar(False)
+    app.operation_start_time_var = DummyVar("05:00")
+    app.operation_end_time_var = DummyVar("23:00")
+
+    disabled_payload = App._operation_time_window_payload(app)
+
+    assert disabled_payload == {
+        "operationTimeWindowEnabled": False,
+        "startTime": "05:00",
+        "endTime": "23:00",
+    }
+    assert App._planning_horizon_hours_value(app, 1) == 24.0
+
+    app.operation_time_window_enabled_var.set(True)
+    assert App._planning_horizon_hours_value(app, 1) == 18.0
+
+
 def test_prepare_weather_proxy_validation_does_not_overwrite_soc_fields() -> None:
     app = App.__new__(App)
     app.enable_weather_operation_policy_var = DummyVar(True)

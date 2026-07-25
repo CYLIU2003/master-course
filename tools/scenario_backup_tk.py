@@ -1754,8 +1754,13 @@ class App:
         self.day_type_var = tk.StringVar(value="WEEKDAY")
         self.service_date_var = tk.StringVar(value="")
         self.planning_days_var = tk.StringVar(value="1")
-        self.operation_start_time_var = tk.StringVar(value="05:00")
-        self.operation_end_time_var = tk.StringVar(value="23:00")
+        # The operation-time window is an optional *energy/SOC optimization*
+        # horizon control.  New interactive runs use the whole calendar day by
+        # default; the explicit boolean travels with the prepared input so the
+        # canonical solver does not infer the intent from the clock values.
+        self.operation_time_window_enabled_var = tk.BooleanVar(value=False)
+        self.operation_start_time_var = tk.StringVar(value="00:00")
+        self.operation_end_time_var = tk.StringVar(value="23:59")
         self.service_dates_preview_var = tk.StringVar(value="対象日: 未設定")
         self.route_limit_var = tk.StringVar(value="600")
 
@@ -1770,14 +1775,36 @@ class App:
         ttk.Entry(day_row, textvariable=self.service_date_var, width=12).pack(side=tk.LEFT)
         ttk.Label(day_row, text="計画日数", width=10).pack(side=tk.LEFT, padx=(8, 2))
         ttk.Entry(day_row, textvariable=self.planning_days_var, width=4).pack(side=tk.LEFT)
-        ttk.Label(day_row, text="配車開始", width=8).pack(side=tk.LEFT, padx=(8, 2))
-        ttk.Entry(day_row, textvariable=self.operation_start_time_var, width=6).pack(side=tk.LEFT)
-        ttk.Label(day_row, text="配車終了", width=8).pack(side=tk.LEFT, padx=(8, 2))
-        ttk.Entry(day_row, textvariable=self.operation_end_time_var, width=6).pack(side=tk.LEFT)
+        ttk.Checkbutton(
+            day_row,
+            text="開始・終了時刻を時間帯制約として使う",
+            variable=self.operation_time_window_enabled_var,
+            command=self._sync_operation_time_window_controls,
+        ).pack(side=tk.LEFT, padx=(8, 2))
+        ttk.Label(day_row, text="最適化開始", width=8).pack(side=tk.LEFT, padx=(2, 2))
+        self.operation_start_time_entry = ttk.Entry(
+            day_row,
+            textvariable=self.operation_start_time_var,
+            width=6,
+        )
+        self.operation_start_time_entry.pack(side=tk.LEFT)
+        ttk.Label(day_row, text="最適化終了", width=8).pack(side=tk.LEFT, padx=(8, 2))
+        self.operation_end_time_entry = ttk.Entry(
+            day_row,
+            textvariable=self.operation_end_time_var,
+            width=6,
+        )
+        self.operation_end_time_entry.pack(side=tk.LEFT)
+        ttk.Label(
+            day_row,
+            text="未チェック時: 00:00–23:59 の24時間を最適化",
+            foreground="#555",
+        ).pack(side=tk.LEFT, padx=(6, 0))
         ttk.Label(day_row, textvariable=self.service_dates_preview_var, foreground="#444").pack(
             side=tk.LEFT,
             padx=(8, 0),
         )
+        self._sync_operation_time_window_controls()
 
         day_table = ttk.LabelFrame(scope, text="運行種別サマリ", padding=(4, 2))
         day_table.pack(fill=tk.X, pady=(2, 4))
@@ -4639,9 +4666,41 @@ class App:
         hh = hh % 24
         return f"{hh:02d}:{mm:02d}"
 
+    def _operation_time_window_payload(self) -> dict[str, Any]:
+        """Return the explicit UI intent and the clock pair for Prepare/save.
+
+        ``startTime`` / ``endTime`` retain the values that the user entered so
+        the pair can be re-enabled later.  The boolean, rather than an inferred
+        clock range, tells the BFF and canonical builder whether the pair is a
+        binding optimization-horizon constraint.
+        """
+
+        return {
+            "operationTimeWindowEnabled": bool(
+                self.operation_time_window_enabled_var.get()
+            ),
+            "startTime": self._normalize_hhmm_text(
+                self.operation_start_time_var.get(),
+                default="00:00",
+            ),
+            "endTime": self._normalize_hhmm_text(
+                self.operation_end_time_var.get(),
+                default="23:59",
+            ),
+        }
+
+    def _sync_operation_time_window_controls(self) -> None:
+        """Enable the paired clock fields only when their constraint is active."""
+
+        state = "!disabled" if self.operation_time_window_enabled_var.get() else "disabled"
+        self.operation_start_time_entry.state([state])
+        self.operation_end_time_entry.state([state])
+
     def _planning_horizon_hours_value(self, planning_days: int) -> float:
-        start_hhmm = self._normalize_hhmm_text(self.operation_start_time_var.get(), default="05:00")
-        end_hhmm = self._normalize_hhmm_text(self.operation_end_time_var.get(), default="23:00")
+        if not self.operation_time_window_enabled_var.get():
+            return 24.0 * float(max(planning_days, 1))
+        start_hhmm = self._normalize_hhmm_text(self.operation_start_time_var.get(), default="00:00")
+        end_hhmm = self._normalize_hhmm_text(self.operation_end_time_var.get(), default="23:59")
         start_h, start_m = [int(part) for part in start_hhmm.split(":")]
         end_h, end_m = [int(part) for part in end_hhmm.split(":")]
         start_min = start_h * 60 + start_m
@@ -6642,8 +6701,12 @@ class App:
                 service_dates = list(sim.get("serviceDates") or [])
                 planning_days = len(service_dates) if service_dates else 1
             self.planning_days_var.set(str(planning_days or 1))
-            self.operation_start_time_var.set(str(sim.get("startTime") or "05:00"))
-            self.operation_end_time_var.set(str(sim.get("endTime") or "23:00"))
+            self.operation_time_window_enabled_var.set(
+                bool(sim.get("operationTimeWindowEnabled", False))
+            )
+            self.operation_start_time_var.set(str(sim.get("startTime") or "00:00"))
+            self.operation_end_time_var.set(str(sim.get("endTime") or "23:59"))
+            self._sync_operation_time_window_controls()
             timestep_min = sim.get("timeStepMin") or sim.get("timestepMin") or sim.get("time_step_min") or sim.get("timestep_min") or 30
             self.timestep_min_var.set("60" if str(timestep_min).strip() == "60" else "30")
             self.solver_mode_var.set(str(solver.get("solverMode") or "hybrid"))
@@ -6948,8 +7011,7 @@ class App:
             "weatherFactorScalar": self._parse_float(self.weather_factor_scalar_var.get(), 1.0),
             "objectiveWeights": objective_weights,
             "randomSeed": self._parse_int(self.random_seed_var.get(), 42),
-            "startTime": self._normalize_hhmm_text(self.operation_start_time_var.get(), default="05:00"),
-            "endTime": self._normalize_hhmm_text(self.operation_end_time_var.get(), default="23:00"),
+            **self._operation_time_window_payload(),
             "planningHorizonHours": self._planning_horizon_hours_value(planning_days),
         }
         payload.update(self._weather_proxy_quick_setup_payload())
@@ -8190,7 +8252,8 @@ class App:
             messagebox.showwarning("入力不足", "Prepare 前に運行日を入力してください")
             raise ValueError("missing_service_date")
         planning_days = self._planning_days_value()
-        minimum_horizon_hours = 24.0 * float(planning_days) if planning_days > 1 else 20.0
+        operation_time_window = self._operation_time_window_payload()
+        planning_horizon_hours = self._planning_horizon_hours_value(planning_days)
         depot_energy_assets = self._sync_pv_assets_for_selected_depots(announce=False)
         if depot_energy_assets is None:
             raise ValueError("invalid_depot_energy_assets")
@@ -8292,12 +8355,12 @@ class App:
                 "pv_profile_id": self.pv_profile_id_var.get().strip() or None,
                 "weather_mode": self.weather_mode_var.get().strip() or _ACTUAL_DATE_PV_PROFILE_ID,
                 "weather_factor_scalar": self._parse_float(self.weather_factor_scalar_var.get(), 1.0),
-                "start_time": self._normalize_hhmm_text(
-                    self.operation_start_time_var.get(),
-                    default="05:00",
-                ),
-                "end_time": self._normalize_hhmm_text(self.operation_end_time_var.get(), default="23:00"),
-                "planning_horizon_hours": minimum_horizon_hours,
+                "operation_time_window_enabled": operation_time_window[
+                    "operationTimeWindowEnabled"
+                ],
+                "start_time": operation_time_window["startTime"],
+                "end_time": operation_time_window["endTime"],
+                "planning_horizon_hours": planning_horizon_hours,
                 "max_start_fragments_per_vehicle": self._parse_int(self.max_start_fragments_var.get(), 100),
                 "max_end_fragments_per_vehicle": self._parse_int(self.max_end_fragments_var.get(), 100),
                 "random_seed": self._parse_int(self.random_seed_var.get(), 42),

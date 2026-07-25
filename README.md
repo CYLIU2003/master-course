@@ -43,6 +43,16 @@ simulation artifact, not an automatically accepted research result.
   inventory carried out of the day. The requested and effective policy are
   recorded in `interactive_terminal_soc_controls`, and old fixed-target runs
   are not directly comparable on daily operating cost.
+- The Tk operation start/end pair is now controlled by an explicit checkbox.
+  It is off by default, disables the pair in the UI, and makes the canonical
+  energy/SOC horizon exactly `00:00–23:59` (24 hours, not 1,439 minutes).
+  The requested pair and `operation_time_window_enabled` flow through Quick
+  Setup, Prepare, BFF, and `ProblemBuilder`; a run records the requested and
+  effective values in `interactive_operation_time_window_controls` and
+  canonical metadata. This is an energy-horizon control, not a timetable-row
+  filter. If it is enabled, terminal-SOC requirements may still extend the
+  internal energy horizon; use the emitted `operation_time_window_*` and
+  `energy_horizon_*` fields when auditing or comparing runs.
 - `experiment_report.json` and `experiment_report.md` are copied into each run
   after canonical reporting finalization; they reconcile the accounting total
   with electricity, demand allocation, fuel, CO₂, and vehicle-use terms.

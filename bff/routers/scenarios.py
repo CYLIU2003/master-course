@@ -779,6 +779,7 @@ class UpdateQuickSetupBody(BaseModel):
     serviceDate: Optional[str] = None
     serviceDates: Optional[List[str]] = None
     planningDays: Optional[int] = None
+    operationTimeWindowEnabled: Optional[bool] = None
     includeShortTurn: Optional[bool] = None
     includeDepotMoves: Optional[bool] = None
     includeDeadhead: Optional[bool] = None
@@ -1903,10 +1904,13 @@ def _builder_defaults(
         "includeDeadhead": bool(
             (dispatch_scope.get("tripSelection") or {}).get("includeDeadhead", True)
         ),
-        "startTime": simulation_config.get("start_time") or "05:00",
-        "endTime": simulation_config.get("end_time") or "23:00",
+        "operationTimeWindowEnabled": bool(
+            simulation_config.get("operation_time_window_enabled", False)
+        ),
+        "startTime": simulation_config.get("start_time") or "00:00",
+        "endTime": simulation_config.get("end_time") or "23:59",
         "planningHorizonHours": float(
-            simulation_config.get("planning_horizon_hours") or 20.0
+            simulation_config.get("planning_horizon_hours") or 24.0
         ),
         "planningDays": int(simulation_config.get("planning_days") or 1),
     }
@@ -2271,9 +2275,12 @@ def _build_quick_setup_payload(
                 builder_defaults.get("enableVehicleDiagramOutput", True)
             ),
             "randomSeed": int(builder_defaults.get("randomSeed") or 42),
-            "startTime": builder_defaults.get("startTime") or "05:00",
-            "endTime": builder_defaults.get("endTime") or "23:00",
-            "planningHorizonHours": float(builder_defaults.get("planningHorizonHours") or 20.0),
+            "operationTimeWindowEnabled": bool(
+                builder_defaults.get("operationTimeWindowEnabled", False)
+            ),
+            "startTime": builder_defaults.get("startTime") or "00:00",
+            "endTime": builder_defaults.get("endTime") or "23:59",
+            "planningHorizonHours": float(builder_defaults.get("planningHorizonHours") or 24.0),
             "planningDays": int(builder_defaults.get("planningDays") or 1),
             "experimentMethod": builder_defaults.get("experimentMethod"),
             "experimentNotes": builder_defaults.get("experimentNotes"),
@@ -2350,9 +2357,12 @@ def _build_quick_setup_payload(
                 else bool(builder_defaults.get("allowPartialService", False))
             ),
             "unservedPenalty": float(builder_defaults.get("unservedPenalty") or 10000.0),
-            "startTime": builder_defaults.get("startTime") or "05:00",
-            "endTime": builder_defaults.get("endTime") or "23:00",
-            "planningHorizonHours": float(builder_defaults.get("planningHorizonHours") or 20.0),
+            "operationTimeWindowEnabled": bool(
+                builder_defaults.get("operationTimeWindowEnabled", False)
+            ),
+            "startTime": builder_defaults.get("startTime") or "00:00",
+            "endTime": builder_defaults.get("endTime") or "23:59",
+            "planningHorizonHours": float(builder_defaults.get("planningHorizonHours") or 24.0),
         },
     }
 
@@ -2996,6 +3006,14 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             simulation_config["end_time"] = str(body.endTime)
         if body.planningHorizonHours is not None:
             simulation_config["planning_horizon_hours"] = float(body.planningHorizonHours)
+        if body.operationTimeWindowEnabled is not None:
+            operation_time_window_enabled = bool(body.operationTimeWindowEnabled)
+            simulation_config["operation_time_window_enabled"] = operation_time_window_enabled
+            if not operation_time_window_enabled:
+                planning_days = max(int(simulation_config.get("planning_days") or 1), 1)
+                simulation_config["planning_horizon_hours"] = 24.0 * float(
+                    planning_days
+                )
         if body.experimentMethod is not None:
             simulation_config["experiment_method"] = str(body.experimentMethod)
         if body.experimentNotes is not None:

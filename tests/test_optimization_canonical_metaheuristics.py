@@ -8,6 +8,33 @@ from bff.routers import optimization
 from src.optimization.common.problem import OptimizationMode
 
 
+def test_interactive_operation_time_window_controls_force_full_day_without_losing_pair() -> None:
+    scenario = {
+        "simulation_config": {
+            "operation_time_window_enabled": False,
+            "start_time": "05:00",
+            "end_time": "23:00",
+            "planning_days": 1,
+        }
+    }
+
+    controls = optimization._apply_interactive_operation_time_window_controls(
+        scenario
+    )
+
+    assert scenario["simulation_config"]["start_time"] == "05:00"
+    assert scenario["simulation_config"]["end_time"] == "23:00"
+    assert scenario["simulation_config"]["planning_horizon_hours"] == 24.0
+    assert scenario["simulation_config"]["operation_time_window_effective_start_time"] == "00:00"
+    assert scenario["simulation_config"]["operation_time_window_effective_end_time"] == "23:59"
+    assert controls["effective"] == {
+        "operation_time_window_enabled": False,
+        "start_time": "00:00",
+        "end_time": "23:59",
+        "planning_horizon_hours": 24.0,
+    }
+
+
 def test_run_optimization_uses_canonical_engine_for_ga_mode() -> None:
     scenario_doc = {
         "meta": {"id": "scenario-1"},
@@ -19,7 +46,12 @@ def test_run_optimization_uses_canonical_engine_for_ga_mode() -> None:
         "prepared_input_id": "prepared-1",
         "dispatch_scope": {"effectiveRouteIds": ["route-a"]},
         "scenario_overlay": {"solver_config": {"objective_mode": "total_cost"}},
-        "simulation_config": {"solver_mode": "mode_ga_only"},
+        "simulation_config": {
+            "solver_mode": "mode_ga_only",
+            "operation_time_window_enabled": False,
+            "start_time": "05:00",
+            "end_time": "23:00",
+        },
         "depots": [{"id": "dep1"}],
         "routes": [{"id": "route-a"}],
         "vehicles": [{"id": "veh-1", "depotId": "dep1", "type": "BEV"}],
@@ -146,6 +178,8 @@ def test_run_optimization_uses_canonical_engine_for_ga_mode() -> None:
     assert config.gurobi_threads == 1
     assert effective_scenario["simulation_config"]["bev_terminal_soc_policy"] == "return_to_initial"
     assert effective_scenario["simulation_config"]["final_soc_target_percent"] is None
+    assert effective_scenario["simulation_config"]["operation_time_window_enabled"] is False
+    assert effective_scenario["simulation_config"]["operation_time_window_effective_start_time"] == "00:00"
     persist_input_provenance.assert_called_once()
     provenance_kwargs = persist_input_provenance.call_args.kwargs
     assert provenance_kwargs["prepared_input"]["prepared_input_id"] == "prepared-1"
@@ -160,6 +194,9 @@ def test_run_optimization_uses_canonical_engine_for_ga_mode() -> None:
     assert provenance_kwargs["frontend_request"]["interactive_terminal_soc_controls"][
         "effective"
     ]["bev_terminal_soc_policy"] == "return_to_initial"
+    assert provenance_kwargs["frontend_request"][
+        "interactive_operation_time_window_controls"
+    ]["effective"]["start_time"] == "00:00"
     assert provenance_kwargs["canonical_problem"] is canonical_problem
     assert "trips" not in stored_fields
     assert "timetable_rows" not in stored_fields
@@ -167,6 +204,9 @@ def test_run_optimization_uses_canonical_engine_for_ga_mode() -> None:
     assert stored_fields["optimization_result"]["solver_settings"][
         "interactive_runtime_controls"
     ]["effective"] == {"stage1_best_obj_stop_enabled": False, "gurobi_threads": 1}
+    assert stored_fields["optimization_result"]["solver_settings"][
+        "interactive_operation_time_window_controls"
+    ]["effective"]["end_time"] == "23:59"
     assert stored_fields["optimization_result"]["summary"]["trip_count_served"] == 1
     assert stored_fields["optimization_result"]["solver_result"]["assignment"] == {"veh-1": ["trip-1"]}
     assert stored_fields["optimization_result"]["canonical_solver_result"]["solver_mode"] == "ga"

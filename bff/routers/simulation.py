@@ -138,9 +138,13 @@ class PrepareSimulationSettingsBody(BaseModel):
     service_date: Optional[str] = None
     service_dates: list[str] = Field(default_factory=list)
     planning_days: int = 1
-    start_time: str = "05:00"
-    end_time: str = "23:00"
-    planning_horizon_hours: float = 20.0
+    # The paired clock values are binding only when this explicit flag is on.
+    # Interactive Prepare defaults to a complete calendar day; older callers
+    # can still opt into a scoped horizon by setting the flag to true.
+    operation_time_window_enabled: bool = False
+    start_time: str = "00:00"
+    end_time: str = "23:59"
+    planning_horizon_hours: float = 24.0
     time_step_min: Optional[int] = None
     timestep_min: Optional[int] = None
     depot_energy_assets: Optional[list[Dict[str, Any]]] = None
