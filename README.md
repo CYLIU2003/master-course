@@ -7,7 +7,7 @@
 ![Optimization](https://img.shields.io/badge/Optimization-MILP%2BALNS-FF6F00)
 ![Status](https://img.shields.io/badge/Status-Core%20Package%20%28Tkinter%2BFastAPI%29-0A66C2)
 
-## Research-evidence contract (2026-07-24)
+## Research-evidence contract (2026-07-25)
 
 Manual frontend runs now preserve the input, Prepare output, code provenance, and
 validation context required for retrospective audit. A manual result remains a
@@ -37,9 +37,23 @@ simulation artifact, not an automatically accepted research result.
   baseline automatically: `BestObjStop=OFF`, `Gurobi Threads=1`. The run input
   records both the submitted request and the server-enforced effective values;
   the formal CLI runner is intentionally not overridden.
+- The same interactive route now enforces per-vehicle BEV
+  `return_to_initial` terminal SOC. This changes the mathematical meaning of
+  manual day-ahead runs: a high/low-PV comparison can no longer use BEV energy
+  inventory carried out of the day. The requested and effective policy are
+  recorded in `interactive_terminal_soc_controls`, and old fixed-target runs
+  are not directly comparable on daily operating cost.
 - `experiment_report.json` and `experiment_report.md` are copied into each run
   after canonical reporting finalization; they reconcile the accounting total
   with electricity, demand allocation, fuel, CO₂, and vehicle-use terms.
+  Two-stage reports display the requested MIP gap, Stage 1 Gurobi native gap,
+  certified/analytical gap, and termination reason as distinct fields.
+  `simulation_conditions_tou_prices.csv` and
+  `simulation_conditions_contract_limits.csv` are emitted from the canonical
+  price slots and depot import limits actually supplied to the solver. A
+  physical base-load value is blank unless the canonical model represents it;
+  the separate `demand_charge_weight` column preserves the actual model value.
+  Their source is recorded in `simulation_conditions_provenance.json`.
   `research_claim_scope.json` states the claims the
   run supports. A manual PV-only pair is an exploratory PV-supply sensitivity,
   not weather-adaptive dispatch, an integrated global optimum, or a monthly

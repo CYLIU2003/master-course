@@ -1,5 +1,69 @@
 # Development Notes
 
+## 2026-07-25 Major revision: manual-run terminal-SOC neutrality and evidence-table truthfulness
+
+### Problems raised and closed in code
+
+- **P1 — the human report conflated three different MIP-gap concepts:**
+  `experiment_report.md` previously put the achieved/certified Stage 1 gap in
+  both the `MIP Gap 目標` and `MIP Gap 実績` rows. New reports now state the
+  requested Gurobi gap, Stage 1 Gurobi native gap, certified/analytical gap,
+  certified-gap semantics, and Stage 1 termination reason separately. For the
+  2026-07-24 high/low-PV reruns this means `10%` requested, `100%` native gap,
+  and the separate certified value (for example `9.205%`), not a claim that
+  Gurobi reached 9.205%.
+- **P1 — BEV terminal inventory made a day-cost comparison non-neutral:** the
+  interactive BFF path now applies `bev_terminal_soc_policy=return_to_initial`
+  after weather/scenario overlays and before `ProblemBuilder` runs. It clears
+  the legacy fixed-target percentage and tolerance in the effective in-memory
+  scenario, adds the matching upper equality constraint already implemented by
+  the MILP, and writes both requested and effective states to
+  `interactive_terminal_soc_controls`. This is a mathematical model change:
+  all earlier fixed-target manual runs must be treated as a separate legacy
+  condition and must not be compared as daily operating-cost evidence.
+- **P1 — condition CSVs did not describe the model actually solved:**
+  `simulation_conditions_tou_prices.csv` and
+  `simulation_conditions_contract_limits.csv` formerly read optional UI values
+  and could emit `depot_A`/zero values even when the canonical problem used a
+  real tariff and a 1,000 kW limit. Interactive output now derives TOU,
+  sell-back price, CO₂ factor, depot ID, import limit, and the distinct
+  `demand_charge_weight` from `CanonicalOptimizationProblem`. A physical base
+  load is left blank unless it is explicitly represented by the canonical
+  problem rather than being inferred from that weight. A separate
+  `simulation_conditions_provenance.json` records the exact source. A distinct
+  transformer limit is left blank rather than invented when it is not modeled.
+
+### Preserved and intentionally unresolved scope
+
+- Dispatch feasibility (`arrival + turnaround + deadhead <= next departure`),
+  timetable rows, operator IDs, PV/BESS physical constraints, and the formal
+  CLI-runner settings are unchanged.
+- This does **not** make the 2026-07-24 runs formal weather studies, global
+  total-cost optima, or hourly rolling results. They remain exploratory
+  high-PV/low-PV sensitivity runs until the strict same-service-date runner and
+  actual rolling chain are executed.
+
+### Required manual verification after the next frontend run
+
+1. In `experiment_report.md`, confirm the four distinct rows: requested gap,
+   Gurobi native gap, certified gap, and Stage 1 termination reason.
+2. Confirm `summary.json` says `bev_terminal_soc_policy=return_to_initial` and
+   `bev_terminal_soc_balance_satisfied=true`; the report should show zero BEV
+   terminal-SOC net drawdown within numerical tolerance.
+3. Confirm `simulation_conditions_provenance.json.source=canonical_problem`,
+   `simulation_conditions_tou_prices.csv` uses the actual depot ID and tariff,
+   and the contract CSV uses the canonical depot import limit.
+
+### Validation
+
+- Focused regression suite: report-gap semantics, terminal-policy enforcement,
+  canonical condition-table export, accounting-report payload, and graph-output
+  parity.
+- Full local regression after the change: `830 passed` (`python -m pytest -q`).
+- MIT-style code review found no remaining P0/P1 defect in this patch. The
+  review specifically rejected inferring a physical base load from
+  `demand_charge_weight`; the final export keeps those fields separate.
+
 ## 2026-07-24 Major revision: stop-rule transparency and canonical research reporting
 
 ### Problems raised and closed in code

@@ -18,6 +18,11 @@ def log_optimization_experiment(
     git_commit_override: str | None = None,
 ) -> Dict[str, Any]:
     method = _optimization_method_label(scenario_doc, optimization_result)
+    solver_settings = dict(optimization_result.get("solver_settings") or {})
+
+    def first_not_none(*values: Any) -> Any:
+        return next((value for value in values if value is not None), None)
+
     logger = ExperimentLogger(results_dir=_results_dir(scenario_id, "optimization"))
     report = logger.log(
         scenario=_logger_scenario_payload(
@@ -38,12 +43,28 @@ def log_optimization_experiment(
         method=method,
         seed=_random_seed(scenario_doc),
         extra_solver={
-            "mip_gap_pct": dict(optimization_result.get("solver_settings") or {}).get(
-                "mip_gap_achieved_percent"
+            # ``mip_gap_pct`` is retained only for the generic result schema.
+            # Prefer Gurobi's native Stage 1 gap when available; the report's
+            # explicit requested/raw/certified fields below carry the research
+            # semantics without conflating them.
+            "mip_gap_pct": first_not_none(
+                solver_settings.get("stage1_gurobi_raw_mip_gap_percent"),
+                solver_settings.get("mip_gap_achieved_percent"),
             ),
-            "threads": dict(optimization_result.get("solver_settings") or {}).get(
-                "gurobi_threads"
+            "mip_gap_requested_pct": solver_settings.get("mip_gap_requested_percent"),
+            "stage1_gurobi_raw_mip_gap_pct": solver_settings.get(
+                "stage1_gurobi_raw_mip_gap_percent"
             ),
+            "stage1_certified_mip_gap_pct": solver_settings.get(
+                "stage1_certified_mip_gap_percent"
+            ),
+            "stage1_certified_mip_gap_semantics": solver_settings.get(
+                "stage1_certified_mip_gap_semantics"
+            ),
+            "stage1_termination_reason": solver_settings.get(
+                "stage1_termination_reason"
+            ),
+            "threads": solver_settings.get("gurobi_threads"),
         },
         git_commit=git_commit_override,
     )
@@ -537,6 +558,14 @@ def _optimization_result_payload(
         achieved_gap_percent = _ratio_to_percent(
             optimization_result.get("mip_gap", solver_metadata.get("achieved_mip_gap"))
         )
+    stage1_gurobi_raw_gap_percent = solver_settings.get(
+        "stage1_gurobi_raw_mip_gap_percent"
+    )
+    reported_gap_percent = (
+        stage1_gurobi_raw_gap_percent
+        if stage1_gurobi_raw_gap_percent is not None
+        else achieved_gap_percent
+    )
     accounting_total_cost = accounting_summary.get(
         "accounting_total_cost_jpy", accounting_summary.get("total_cost_jpy")
     )
@@ -608,7 +637,17 @@ def _optimization_result_payload(
         "total_charging_kwh": simulation_summary.get("total_grid_kwh"),
         "peak_charging_kw": simulation_summary.get("peak_demand_kw"),
         "solve_time_sec": optimization_result.get("solve_time_seconds"),
-        "mip_gap_pct": achieved_gap_percent,
+        # Generic report consumers receive the solver-native result when the
+        # two-stage telemetry exists.  The detailed distinction is emitted by
+        # ``log_optimization_experiment`` via SolverSettings.
+        "mip_gap_pct": reported_gap_percent,
+        "bev_terminal_soc_policy": solver_metadata.get("bev_terminal_soc_policy"),
+        "bev_terminal_soc_balance_satisfied": solver_metadata.get(
+            "bev_terminal_soc_balance_satisfied"
+        ),
+        "bev_terminal_soc_total_drawdown_kwh": solver_metadata.get(
+            "bev_terminal_soc_total_drawdown_kwh"
+        ),
         "cost_breakdown": report_cost_breakdown,
         "charging_schedule": (
             optimization_result.get("solver_result") or {}

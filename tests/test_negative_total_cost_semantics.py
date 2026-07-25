@@ -111,6 +111,31 @@ def test_experiment_report_uses_accounting_total_and_percent_gap() -> None:
     assert payload["trip_count_unserved"] == 0
 
 
+def test_experiment_report_payload_prefers_stage1_native_gap_and_keeps_terminal_audit() -> None:
+    payload = _optimization_result_payload(
+        {
+            "solver_status": "feasible",
+            "summary": {},
+            "simulation_summary": {},
+            "solver_settings": {
+                "mip_gap_achieved_percent": 9.204876,
+                "stage1_gurobi_raw_mip_gap_percent": 100.0,
+            },
+            "solver_metadata": {
+                "bev_terminal_soc_policy": "return_to_initial",
+                "bev_terminal_soc_balance_satisfied": True,
+                "bev_terminal_soc_total_drawdown_kwh": 0.0,
+            },
+            "cost_breakdown": {"total_cost": 1.0},
+        }
+    )
+
+    assert payload["mip_gap_pct"] == 100.0
+    assert payload["bev_terminal_soc_policy"] == "return_to_initial"
+    assert payload["bev_terminal_soc_balance_satisfied"] is True
+    assert payload["bev_terminal_soc_total_drawdown_kwh"] == 0.0
+
+
 def test_experiment_report_uses_finalized_accounting_components() -> None:
     payload = _optimization_result_payload(
         {

@@ -126,6 +126,8 @@ _OPTIMIZATION_EXECUTOR: Optional[Executor] = None
 INTERACTIVE_RUNTIME_POLICY_VERSION = "interactive_runtime_controls_v1"
 INTERACTIVE_STAGE1_BEST_OBJ_STOP_ENABLED = False
 INTERACTIVE_GUROBI_THREADS = 1
+INTERACTIVE_TERMINAL_SOC_POLICY_VERSION = "interactive_terminal_soc_controls_v1"
+INTERACTIVE_BEV_TERMINAL_SOC_POLICY = "return_to_initial"
 
 
 def _interactive_runtime_controls_payload(
@@ -155,6 +157,101 @@ def _interactive_runtime_controls_payload(
         "reason": (
             "Interactive runs disable Stage 1 BestObjStop and use one Gurobi "
             "thread so their solver controls are recorded consistently."
+        ),
+    }
+
+
+def _apply_interactive_bev_terminal_soc_policy(
+    scenario: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Enforce energy-neutral BEV terminal SOC for interactive day-ahead runs.
+
+    A fixed percentage terminal target lets vehicles with heterogeneous initial
+    SOC contribute or retain inventory across the representative day.  That
+    makes a daily high-PV/low-PV cost comparison non-neutral.  The interactive
+    path therefore applies the per-vehicle ``return_to_initial`` policy after
+    all scenario/weather overlays and before ``ProblemBuilder`` is called.
+    The formal CLI remains explicit and independently configurable.
+    """
+
+    simulation_config = scenario.get("simulation_config")
+    if not isinstance(simulation_config, dict):
+        simulation_config = {}
+        scenario["simulation_config"] = simulation_config
+
+    scenario_overlay = scenario.get("scenario_overlay")
+    charging_constraints: Dict[str, Any] = {}
+    if isinstance(scenario_overlay, dict):
+        candidate = scenario_overlay.get("charging_constraints")
+        if isinstance(candidate, dict):
+            charging_constraints = candidate
+
+    terminal_fields = (
+        "bev_terminal_soc_policy",
+        "terminal_soc_policy",
+        "final_soc_target_percent",
+        "final_soc_target_tolerance_percent",
+    )
+    requested = {
+        "simulation_config": {
+            field: simulation_config.get(field) for field in terminal_fields
+        },
+        "charging_constraints": {
+            field: charging_constraints.get(field) for field in terminal_fields
+        },
+    }
+
+    # Set the policy in the source with builder precedence and clear legacy
+    # fixed-target inputs.  ``None`` deliberately masks an inherited overlay
+    # because ProblemBuilder's _first_present treats it as the explicit value.
+    simulation_config["bev_terminal_soc_policy"] = INTERACTIVE_BEV_TERMINAL_SOC_POLICY
+    simulation_config["terminal_soc_policy"] = INTERACTIVE_BEV_TERMINAL_SOC_POLICY
+    simulation_config["final_soc_target_percent"] = None
+    simulation_config["final_soc_target_tolerance_percent"] = None
+    if charging_constraints:
+        charging_constraints["bev_terminal_soc_policy"] = INTERACTIVE_BEV_TERMINAL_SOC_POLICY
+        charging_constraints["terminal_soc_policy"] = INTERACTIVE_BEV_TERMINAL_SOC_POLICY
+        charging_constraints["final_soc_target_percent"] = None
+        charging_constraints["final_soc_target_tolerance_percent"] = None
+
+    effective = {
+        "bev_terminal_soc_policy": INTERACTIVE_BEV_TERMINAL_SOC_POLICY,
+        "terminal_soc_policy": INTERACTIVE_BEV_TERMINAL_SOC_POLICY,
+        "final_soc_target_percent": None,
+        "final_soc_target_tolerance_percent": None,
+    }
+    requested_policy = requested["simulation_config"].get(
+        "bev_terminal_soc_policy"
+    ) or requested["charging_constraints"].get("bev_terminal_soc_policy")
+    requested_target = requested["simulation_config"].get(
+        "final_soc_target_percent"
+    )
+    if requested_target is None:
+        requested_target = requested["charging_constraints"].get(
+            "final_soc_target_percent"
+        )
+    requested_tolerance = requested["simulation_config"].get(
+        "final_soc_target_tolerance_percent"
+    )
+    if requested_tolerance is None:
+        requested_tolerance = requested["charging_constraints"].get(
+            "final_soc_target_tolerance_percent"
+        )
+    return {
+        "policy_version": INTERACTIVE_TERMINAL_SOC_POLICY_VERSION,
+        "scope": "interactive_bff_run_optimization",
+        "enforced": True,
+        "requested": requested,
+        "effective": effective,
+        "override_applied": bool(
+            requested_policy != INTERACTIVE_BEV_TERMINAL_SOC_POLICY
+            or requested_target is not None
+            or requested_tolerance is not None
+        ),
+        "reason": (
+            "Interactive day-ahead runs enforce per-vehicle return_to_initial "
+            "BEV terminal SOC so representative-day energy and cost comparisons "
+            "do not consume or create BEV inventory."
         ),
     }
 _OPTIMIZATION_FUTURE: Optional[Future[Any]] = None
@@ -313,6 +410,11 @@ def _optimization_capabilities() -> Dict[str, Any]:
             "policy_version": INTERACTIVE_RUNTIME_POLICY_VERSION,
             "stage1_best_obj_stop_enabled": INTERACTIVE_STAGE1_BEST_OBJ_STOP_ENABLED,
             "gurobi_threads": INTERACTIVE_GUROBI_THREADS,
+            "enforced_server_side": True,
+        },
+        "interactive_terminal_soc_controls": {
+            "policy_version": INTERACTIVE_TERMINAL_SOC_POLICY_VERSION,
+            "bev_terminal_soc_policy": INTERACTIVE_BEV_TERMINAL_SOC_POLICY,
             "enforced_server_side": True,
         },
         "authoritative_engine": "canonical (src/optimization/)",
@@ -1544,6 +1646,122 @@ def _canonical_charging_output_payload(problem, engine_result) -> Dict[str, Any]
     }
 
 
+def _canonical_simulation_condition_tables(
+    canonical_problem: Optional[Any],
+) -> Optional[tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]]]:
+    """Build condition tables from the canonical model actually solved.
+
+    ``simulation_config`` is a frontend-facing editable document and can omit
+    values inherited from a tariff CSV or the selected depot. These output
+    tables are evidence artifacts, so their prices and import limits must be
+    taken from the already-built canonical problem instead of that stale UI
+    payload.
+    """
+
+    if canonical_problem is None:
+        return None
+    price_slots = sorted(
+        list(getattr(canonical_problem, "price_slots", ()) or ()),
+        key=lambda slot: int(getattr(slot, "slot_index", 0) or 0),
+    )
+    depots = list(getattr(canonical_problem, "depots", ()) or ())
+    if not price_slots or not depots:
+        return None
+
+    tou_rows: List[Dict[str, Any]] = []
+    contract_rows: List[Dict[str, Any]] = []
+    depot_ids: List[str] = []
+    metadata = dict(getattr(canonical_problem, "metadata", {}) or {})
+    base_load_by_depot_slot = metadata.get("base_load_kw_by_depot_slot")
+    base_load_by_slot = metadata.get("base_load_kw_by_slot")
+
+    def canonical_base_load_kw(depot_id: str, slot_index: int) -> Any:
+        """Return an explicitly represented base load, never infer one."""
+
+        if isinstance(base_load_by_depot_slot, dict):
+            per_depot = base_load_by_depot_slot.get(depot_id)
+            if isinstance(per_depot, dict):
+                if slot_index in per_depot:
+                    return per_depot[slot_index]
+                if str(slot_index) in per_depot:
+                    return per_depot[str(slot_index)]
+        if isinstance(base_load_by_slot, dict):
+            if slot_index in base_load_by_slot:
+                return base_load_by_slot[slot_index]
+            if str(slot_index) in base_load_by_slot:
+                return base_load_by_slot[str(slot_index)]
+        if isinstance(base_load_by_slot, (list, tuple)) and 0 <= slot_index < len(
+            base_load_by_slot
+        ):
+            return base_load_by_slot[slot_index]
+        return None
+
+    for depot in depots:
+        depot_id = str(getattr(depot, "depot_id", "") or "").strip()
+        if not depot_id:
+            continue
+        depot_ids.append(depot_id)
+        import_limit_kw = float(getattr(depot, "import_limit_kw", 0.0) or 0.0)
+        for slot in price_slots:
+            slot_index = int(getattr(slot, "slot_index", 0) or 0)
+            tou_rows.append(
+                {
+                    "site_id": depot_id,
+                    "time_idx": slot_index,
+                    "grid_energy_price_yen_per_kwh": float(
+                        getattr(slot, "grid_buy_yen_per_kwh", 0.0) or 0.0
+                    ),
+                    "sell_back_price_yen_per_kwh": float(
+                        getattr(slot, "grid_sell_yen_per_kwh", 0.0) or 0.0
+                    ),
+                    # A demand-charge weight is not generally a physical base
+                    # load. Export a base load only when the canonical model
+                    # represents one explicitly; otherwise leave it blank.
+                    "base_load_kw": canonical_base_load_kw(depot_id, slot_index),
+                    "demand_charge_weight": float(
+                        getattr(slot, "demand_charge_weight", 0.0) or 0.0
+                    ),
+                    "grid_co2_factor_kg_per_kwh": float(
+                        getattr(slot, "co2_factor", 0.0) or 0.0
+                    ),
+                }
+            )
+        contract_rows.append(
+            {
+                "site_id": depot_id,
+                "site_type": "depot",
+                # The canonical model represents one grid-import limit. It is
+                # the operative contract limit; no separate transformer value
+                # is invented when the input did not provide one.
+                "contract_demand_limit_kw": import_limit_kw,
+                "grid_import_limit_kw": import_limit_kw,
+                "site_transformer_limit_kw": None,
+            }
+        )
+    if not depot_ids:
+        return None
+    return (
+        tou_rows,
+        contract_rows,
+        {
+            "schema_version": "simulation_conditions_provenance_v1",
+            "source": "canonical_problem",
+            "price_source": "canonical_problem.price_slots",
+            "contract_limit_source": "canonical_problem.depots[].import_limit_kw",
+            "base_load_source": (
+                "canonical_problem.metadata.base_load_kw_by_depot_slot_or_by_slot; "
+                "blank_when_not_represented"
+            ),
+            "demand_charge_weight_source": (
+                "canonical_problem.price_slots[].demand_charge_weight"
+            ),
+            "site_transformer_limit_semantics": "not_modeled_blank_in_csv",
+            "depot_ids": sorted(depot_ids),
+            "price_slot_count": len(price_slots),
+        },
+    )
+
+
 def _persist_rich_run_outputs(
     *,
     run_dir: Path,
@@ -1553,6 +1771,7 @@ def _persist_rich_run_outputs(
     result_payload: Dict[str, Any],
     sim_payload: Optional[Dict[str, Any]],
     canonical_solver_result: Optional[Dict[str, Any]],
+    canonical_problem: Optional[Any] = None,
     graph_source_dir: Optional[Path] = None,
     charging_summary: Optional[Dict[str, Any]] = None,
     charging_flow_payload: Optional[Dict[str, Any]] = None,
@@ -1650,6 +1869,7 @@ def _persist_rich_run_outputs(
     # rich-output persistence backward compatible and emit null telemetry in
     # that case rather than failing after a feasible solve.
     solver_settings = dict(optimization_result.get("solver_settings") or {})
+    solver_metadata = dict(optimization_result.get("solver_metadata") or {})
     summary = {
         "scenario_id": optimization_result.get("scenario_id"),
         "mode": optimization_result.get("mode"),
@@ -1718,6 +1938,16 @@ def _persist_rich_run_outputs(
         "gurobi_threads": solver_settings.get("gurobi_threads"),
         "interactive_runtime_controls": dict(
             solver_settings.get("interactive_runtime_controls") or {}
+        ),
+        "interactive_terminal_soc_controls": dict(
+            solver_settings.get("interactive_terminal_soc_controls") or {}
+        ),
+        "bev_terminal_soc_policy": solver_metadata.get("bev_terminal_soc_policy"),
+        "bev_terminal_soc_balance_satisfied": solver_metadata.get(
+            "bev_terminal_soc_balance_satisfied"
+        ),
+        "bev_terminal_soc_total_drawdown_kwh": solver_metadata.get(
+            "bev_terminal_soc_total_drawdown_kwh"
         ),
         "solve_time_seconds": optimization_result.get("solve_time_seconds"),
         "solve_time_unit": "s",
@@ -1913,29 +2143,73 @@ def _persist_rich_run_outputs(
         ],
     )
 
-    slot_count = int(sim_cfg.get("planning_horizon_hours") or 24)
-    timestep = int(sim_cfg.get("time_step_min") or sim_cfg.get("timestep_min") or 60)
-    if timestep > 0:
-        slot_count = max(slot_count * 60 // timestep, 1)
-    tou_price_series = list(sim_cfg.get("tou_prices_yen_per_kwh") or [])
-    default_price = float(sim_cfg.get("grid_energy_price_yen_per_kwh") or 0.0)
-    grid_co2_series = list(sim_cfg.get("grid_co2_factor_kg_per_kwh") or [])
-    base_load_series = list(sim_cfg.get("base_load_kw") or [])
-    site_id = str(sim_cfg.get("depot_id") or "depot_A")
-    tou_rows: List[Dict[str, Any]] = []
-    for time_idx in range(slot_count):
-        tou_rows.append(
+    canonical_condition_tables = _canonical_simulation_condition_tables(
+        canonical_problem
+    )
+    if canonical_condition_tables is not None:
+        tou_rows, contract_rows, condition_provenance = canonical_condition_tables
+    else:
+        # Retain a clearly-labelled legacy fallback for direct callers that do
+        # not provide a canonical problem. The interactive BFF execution path
+        # always supplies one, so formal evidence is generated from the model.
+        slot_count = int(sim_cfg.get("planning_horizon_hours") or 24)
+        timestep = int(
+            sim_cfg.get("time_step_min") or sim_cfg.get("timestep_min") or 60
+        )
+        if timestep > 0:
+            slot_count = max(slot_count * 60 // timestep, 1)
+        tou_price_series = list(sim_cfg.get("tou_prices_yen_per_kwh") or [])
+        default_price = float(sim_cfg.get("grid_energy_price_yen_per_kwh") or 0.0)
+        grid_co2_series = list(sim_cfg.get("grid_co2_factor_kg_per_kwh") or [])
+        base_load_series = list(sim_cfg.get("base_load_kw") or [])
+        site_id = str(sim_cfg.get("depot_id") or "depot_A")
+        tou_rows = []
+        for time_idx in range(slot_count):
+            tou_rows.append(
+                {
+                    "site_id": site_id,
+                    "time_idx": time_idx,
+                    "grid_energy_price_yen_per_kwh": (
+                        tou_price_series[time_idx]
+                        if time_idx < len(tou_price_series)
+                        else default_price
+                    ),
+                    "sell_back_price_yen_per_kwh": 0.0,
+                    "base_load_kw": (
+                        base_load_series[time_idx]
+                        if time_idx < len(base_load_series)
+                        else 0.0
+                    ),
+                    "demand_charge_weight": None,
+                    "grid_co2_factor_kg_per_kwh": (
+                        grid_co2_series[time_idx]
+                        if time_idx < len(grid_co2_series)
+                        else 0.0
+                    ),
+                }
+            )
+        contract_rows = [
             {
                 "site_id": site_id,
-                "time_idx": time_idx,
-                "grid_energy_price_yen_per_kwh": (
-                    tou_price_series[time_idx] if time_idx < len(tou_price_series) else default_price
+                "site_type": "depot",
+                "contract_demand_limit_kw": float(
+                    sim_cfg.get("contract_demand_limit_kw") or 0.0
                 ),
-                "sell_back_price_yen_per_kwh": 0.0,
-                "base_load_kw": base_load_series[time_idx] if time_idx < len(base_load_series) else 0.0,
-                "grid_co2_factor_kg_per_kwh": grid_co2_series[time_idx] if time_idx < len(grid_co2_series) else 0.0,
+                "grid_import_limit_kw": float(
+                    sim_cfg.get("grid_import_limit_kw") or 0.0
+                ),
+                "site_transformer_limit_kw": float(
+                    sim_cfg.get("site_transformer_limit_kw") or 0.0
+                ),
             }
-        )
+        ]
+        condition_provenance = {
+            "schema_version": "simulation_conditions_provenance_v1",
+            "source": "legacy_scenario_payload_fallback",
+            "reason": "canonical_problem_not_supplied_to_rich_output_writer",
+            "price_source": "scenario.simulation_config",
+            "contract_limit_source": "scenario.simulation_config",
+        }
     _write_csv_rows(
         run_dir / "simulation_conditions_tou_prices.csv",
         tou_rows,
@@ -1945,19 +2219,11 @@ def _persist_rich_run_outputs(
             "grid_energy_price_yen_per_kwh",
             "sell_back_price_yen_per_kwh",
             "base_load_kw",
+            "demand_charge_weight",
             "grid_co2_factor_kg_per_kwh",
         ],
     )
 
-    contract_rows = [
-        {
-            "site_id": site_id,
-            "site_type": "depot",
-            "contract_demand_limit_kw": float(sim_cfg.get("contract_demand_limit_kw") or 0.0),
-            "grid_import_limit_kw": float(sim_cfg.get("grid_import_limit_kw") or 0.0),
-            "site_transformer_limit_kw": float(sim_cfg.get("site_transformer_limit_kw") or 0.0),
-        }
-    ]
     _write_csv_rows(
         run_dir / "simulation_conditions_contract_limits.csv",
         contract_rows,
@@ -1968,6 +2234,10 @@ def _persist_rich_run_outputs(
             "grid_import_limit_kw",
             "site_transformer_limit_kw",
         ],
+    )
+    (run_dir / "simulation_conditions_provenance.json").write_text(
+        json.dumps(condition_provenance, ensure_ascii=False, indent=2),
+        encoding="utf-8",
     )
 
     ice_co2_kg = float(
@@ -2822,6 +3092,7 @@ def _persist_rich_run_outputs(
             else []
         ),
         "solver_settings": solver_settings,
+        "simulation_conditions": condition_provenance,
         "run_input_provenance": {
             "status": "OK" if run_input_manifest else "MISSING",
             "manifest_path": (
@@ -5875,6 +6146,9 @@ def _solver_settings_payload(
         "interactive_runtime_controls": dict(
             metadata.get("interactive_runtime_controls") or {}
         ),
+        "interactive_terminal_soc_controls": dict(
+            metadata.get("interactive_terminal_soc_controls") or {}
+        ),
         "stage2_solver_status": metadata.get("stage2_solver_status"),
         "stage1_feasible": metadata.get("stage1_feasible"),
         "stage2_feasible": metadata.get("stage2_feasible"),
@@ -5955,6 +6229,9 @@ def _run_optimization(
             scenario,
             enable_weather_operation_policy=enable_weather_operation_policy,
             weather_proxy_forecast_path=weather_proxy_forecast_path,
+        )
+        interactive_terminal_soc_controls = _apply_interactive_bev_terminal_soc_policy(
+            scenario
         )
 
         if rebuild_dispatch:
@@ -6111,6 +6388,7 @@ def _run_optimization(
                 frontend_request={
                     "raw_frontend_body": raw_frontend_request_payload,
                     "interactive_runtime_controls": interactive_runtime_controls,
+                    "interactive_terminal_soc_controls": interactive_terminal_soc_controls,
                     "scenario_id": scenario_id,
                     "prepared_input_id": prepared_input_id,
                     "requested_prepared_input_id": requested_prepared_input_id,
@@ -6204,6 +6482,7 @@ def _run_optimization(
                         and run_git_state.get("git_dirty") is False
                     ),
                     "interactive_runtime_controls": interactive_runtime_controls,
+                    "interactive_terminal_soc_controls": interactive_terminal_soc_controls,
                 }
             )
             # Production results are immutable dataclasses.  Lightweight
@@ -6820,6 +7099,7 @@ def _run_optimization(
             result_payload=result_payload,
             sim_payload=sim_payload,
             canonical_solver_result=_full_new_result,
+            canonical_problem=problem,
             graph_source_dir=Path(output_dir) / "graph",
             charging_summary=charging_summary_payload,
             charging_flow_payload=charging_flow_payload,

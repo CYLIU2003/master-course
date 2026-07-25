@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from bff.routers.optimization import (
     RunOptimizationBody,
+    _apply_interactive_bev_terminal_soc_policy,
     _interactive_runtime_controls_payload,
     _research_claim_scope_payload,
     _solver_settings_payload,
@@ -106,3 +107,39 @@ def test_interactive_run_defaults_and_provenance_record_server_enforcement() -> 
         "stage1_best_obj_stop_enabled": False,
         "gurobi_threads": 1,
     }
+
+
+def test_interactive_run_enforces_energy_neutral_bev_terminal_soc() -> None:
+    scenario = {
+        "simulation_config": {
+            "bev_terminal_soc_policy": "fixed_target",
+            "final_soc_target_percent": 80.0,
+            "final_soc_target_tolerance_percent": 20.0,
+        },
+        "scenario_overlay": {
+            "charging_constraints": {
+                "bev_terminal_soc_policy": "fixed_target",
+                "final_soc_target_percent": 80.0,
+                "final_soc_target_tolerance_percent": 20.0,
+            }
+        },
+    }
+
+    controls = _apply_interactive_bev_terminal_soc_policy(scenario)
+
+    assert controls["enforced"] is True
+    assert controls["override_applied"] is True
+    assert controls["effective"] == {
+        "bev_terminal_soc_policy": "return_to_initial",
+        "terminal_soc_policy": "return_to_initial",
+        "final_soc_target_percent": None,
+        "final_soc_target_tolerance_percent": None,
+    }
+    assert scenario["simulation_config"]["bev_terminal_soc_policy"] == "return_to_initial"
+    assert scenario["simulation_config"]["final_soc_target_percent"] is None
+    assert (
+        scenario["scenario_overlay"]["charging_constraints"][
+            "final_soc_target_tolerance_percent"
+        ]
+        is None
+    )

@@ -60,9 +60,32 @@ class SolverSettings:
     """ソルバー設定"""
     solver_name: str                   # gurobi / highs / cbc
     time_limit_sec: int
-    mip_gap_pct: float | None = None   # 終了時の MIP Gap (%)
+    # ``mip_gap_pct`` is retained for generic/legacy callers that provide one
+    # undifferentiated solver value.  New two-stage MILP reports must use the
+    # explicit fields below so an analytical certified bound is never displayed
+    # as Gurobi's native gap or as the requested setting.
+    mip_gap_pct: float | None = None
+    mip_gap_requested_pct: float | None = None
+    stage1_gurobi_raw_mip_gap_pct: float | None = None
+    stage1_certified_mip_gap_pct: float | None = None
+    stage1_certified_mip_gap_semantics: str | None = None
+    stage1_termination_reason: str | None = None
     threads: int | None = None
     seed: int | None = None            # 乱数シード（ALNS/GA 用）
+
+    @property
+    def has_stage1_gap_telemetry(self) -> bool:
+        """Whether this report can state Stage 1 gap semantics explicitly."""
+
+        return any(
+            value is not None
+            for value in (
+                self.mip_gap_requested_pct,
+                self.stage1_gurobi_raw_mip_gap_pct,
+                self.stage1_certified_mip_gap_pct,
+                self.stage1_termination_reason,
+            )
+        )
 
 
 @dataclass
@@ -156,8 +179,24 @@ class ExperimentReport:
             f"  ソルバー    : {s.solver_name}",
             f"  時間制限    : {s.time_limit_sec} 秒",
         ]
-        if s.mip_gap_pct is not None:
-            lines.append(f"  MIP Gap目標 : {s.mip_gap_pct:.3f} %")
+        if s.mip_gap_requested_pct is not None:
+            lines.append(f"  MIP Gap要求 (Gurobi) : {s.mip_gap_requested_pct:.3f} %")
+        elif s.mip_gap_pct is not None:
+            lines.append(f"  MIP Gap設定 (legacy) : {s.mip_gap_pct:.3f} %")
+        if s.stage1_gurobi_raw_mip_gap_pct is not None:
+            lines.append(
+                "  Stage 1 Gurobi native gap : "
+                f"{s.stage1_gurobi_raw_mip_gap_pct:.4f} %"
+            )
+        if s.stage1_certified_mip_gap_pct is not None:
+            lines.append(
+                "  Stage 1 certified gap     : "
+                f"{s.stage1_certified_mip_gap_pct:.4f} %"
+            )
+        if s.stage1_termination_reason:
+            lines.append(
+                f"  Stage 1 termination       : {s.stage1_termination_reason}"
+            )
         if s.threads:
             lines.append(f"  スレッド数  : {s.threads}")
         if s.seed is not None:
@@ -171,8 +210,20 @@ class ExperimentReport:
         ]
         if r.solve_time_sec is not None:
             lines.append(f"  求解時間    : {r.solve_time_sec:.2f} 秒")
-        if r.mip_gap_pct is not None:
-            lines.append(f"  MIP Gap実績 : {r.mip_gap_pct:.4f} %")
+        if r.mip_gap_pct is not None and not s.has_stage1_gap_telemetry:
+            lines.append(f"  Solver reported gap (legacy) : {r.mip_gap_pct:.4f} %")
+        terminal_policy = r.extra.get("bev_terminal_soc_policy")
+        if terminal_policy:
+            lines.append(f"  BEV終端SOC方針 : {terminal_policy}")
+        terminal_balanced = r.extra.get("bev_terminal_soc_balance_satisfied")
+        if terminal_balanced is not None:
+            lines.append(
+                "  BEV終端SOC収支 : "
+                f"{'OK' if bool(terminal_balanced) else 'NOT SATISFIED'}"
+            )
+        terminal_drawdown = r.extra.get("bev_terminal_soc_total_drawdown_kwh")
+        if terminal_drawdown is not None:
+            lines.append(f"  BEV終端SOC純取り崩し : {float(terminal_drawdown):.4f} kWh")
         if r.objective_value is not None:
             lines.append(f"  目的値      : {r.objective_value:,.4f}")
         if r.total_cost_jpy is not None:
@@ -267,8 +318,31 @@ class ExperimentReport:
             f"| ソルバー | {s.solver_name} |",
             f"| 時間制限 | {s.time_limit_sec} 秒 |",
         ]
-        if s.mip_gap_pct is not None:
-            lines.append(f"| MIP Gap 目標 | {s.mip_gap_pct:.3f} % |")
+        if s.mip_gap_requested_pct is not None:
+            lines.append(
+                f"| MIP Gap 要求 (Gurobi) | {s.mip_gap_requested_pct:.3f} % |"
+            )
+        elif s.mip_gap_pct is not None:
+            lines.append(f"| MIP Gap 設定 (legacy) | {s.mip_gap_pct:.3f} % |")
+        if s.stage1_gurobi_raw_mip_gap_pct is not None:
+            lines.append(
+                "| Stage 1 Gurobi native gap | "
+                f"{s.stage1_gurobi_raw_mip_gap_pct:.4f} % |"
+            )
+        if s.stage1_certified_mip_gap_pct is not None:
+            lines.append(
+                "| Stage 1 certified gap | "
+                f"{s.stage1_certified_mip_gap_pct:.4f} % |"
+            )
+        if s.stage1_certified_mip_gap_semantics:
+            lines.append(
+                "| Stage 1 certified gap scope | "
+                f"`{s.stage1_certified_mip_gap_semantics}` |"
+            )
+        if s.stage1_termination_reason:
+            lines.append(
+                f"| Stage 1 termination | `{s.stage1_termination_reason}` |"
+            )
         if s.threads:
             lines.append(f"| スレッド数 | {s.threads} |")
         if s.seed is not None:
@@ -305,8 +379,23 @@ class ExperimentReport:
         _add("充電量合計", r.total_charging_kwh, "{:,.3f} kWh")
         _add("充電ピーク", r.peak_charging_kw, "{:,.1f} kW")
         _add("求解時間", r.solve_time_sec, "{:.2f} 秒")
-        if r.mip_gap_pct is not None:
-            lines.append(f"| MIP Gap 実績 | {r.mip_gap_pct:.4f} % |")
+        if r.mip_gap_pct is not None and not s.has_stage1_gap_telemetry:
+            lines.append(f"| Solver reported gap (legacy) | {r.mip_gap_pct:.4f} % |")
+        terminal_policy = r.extra.get("bev_terminal_soc_policy")
+        if terminal_policy:
+            lines.append(f"| BEV終端SOC方針 | `{terminal_policy}` |")
+        terminal_balanced = r.extra.get("bev_terminal_soc_balance_satisfied")
+        if terminal_balanced is not None:
+            lines.append(
+                "| BEV終端SOC収支 | "
+                f"{'OK' if bool(terminal_balanced) else 'NOT SATISFIED'} |"
+            )
+        terminal_drawdown = r.extra.get("bev_terminal_soc_total_drawdown_kwh")
+        if terminal_drawdown is not None:
+            lines.append(
+                "| BEV終端SOC純取り崩し | "
+                f"{float(terminal_drawdown):,.4f} kWh |"
+            )
 
         lines += [
             "",
@@ -465,12 +554,36 @@ class ExperimentLogger:
 
     def _parse_solver_settings(self, sc: dict, extra: dict, seed: int | None) -> SolverSettings:
         solver = sc.get("solver", {})
+
+        def first_not_none(*values: Any) -> Any:
+            return next((value for value in values if value is not None), None)
+
         return SolverSettings(
             solver_name=solver.get("name", "unknown"),
             time_limit_sec=solver.get("time_limit_sec", 0),
-            mip_gap_pct=extra.get("mip_gap_pct") or solver.get("mip_gap_pct"),
-            threads=extra.get("threads") or solver.get("threads"),
-            seed=seed or solver.get("seed"),
+            mip_gap_pct=first_not_none(extra.get("mip_gap_pct"), solver.get("mip_gap_pct")),
+            mip_gap_requested_pct=first_not_none(
+                extra.get("mip_gap_requested_pct"),
+                solver.get("mip_gap_requested_pct"),
+            ),
+            stage1_gurobi_raw_mip_gap_pct=first_not_none(
+                extra.get("stage1_gurobi_raw_mip_gap_pct"),
+                solver.get("stage1_gurobi_raw_mip_gap_pct"),
+            ),
+            stage1_certified_mip_gap_pct=first_not_none(
+                extra.get("stage1_certified_mip_gap_pct"),
+                solver.get("stage1_certified_mip_gap_pct"),
+            ),
+            stage1_certified_mip_gap_semantics=first_not_none(
+                extra.get("stage1_certified_mip_gap_semantics"),
+                solver.get("stage1_certified_mip_gap_semantics"),
+            ),
+            stage1_termination_reason=first_not_none(
+                extra.get("stage1_termination_reason"),
+                solver.get("stage1_termination_reason"),
+            ),
+            threads=first_not_none(extra.get("threads"), solver.get("threads")),
+            seed=first_not_none(seed, solver.get("seed")),
         )
 
     def _parse_results(self, r: dict) -> SimulationResults:

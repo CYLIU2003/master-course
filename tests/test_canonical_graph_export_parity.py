@@ -656,6 +656,97 @@ def test_rich_run_outputs_restore_charging_schedule_and_vehicle_timelines_json(t
     assert kpi_summary_json["fuel_cost_provisional_leftover_jpy"] == 2.0
 
 
+def test_rich_run_condition_tables_use_canonical_prices_and_import_limit(
+    tmp_path: Path,
+) -> None:
+    problem, result, scenario = _problem_and_result()
+    artifacts = optimization._persist_canonical_graph_exports(
+        scenario=scenario,
+        problem=problem,
+        engine_result=result,
+        scenario_id="scenario-1",
+        output_dir=str(tmp_path),
+    )
+    run_dir = tmp_path / "run"
+
+    optimization._persist_rich_run_outputs(
+        run_dir=run_dir,
+        scenario={"simulation_config": {}},
+        optimization_result={
+            "scenario_id": "scenario-1",
+            "mode": "mode_alns_only",
+            "solver_status": "feasible",
+            "objective_mode": "total_cost",
+            "objective_value": 123.0,
+            "solve_time_seconds": 1.5,
+            "summary": {"trip_count_served": 1, "trip_count_unserved": 0},
+            "cost_breakdown": {"total_cost": 123.0},
+            "graph_artifacts": artifacts,
+        },
+        optimization_audit={},
+        result_payload={"assignment": {}, "unserved_tasks": [], "obj_breakdown": {}},
+        sim_payload=None,
+        canonical_solver_result=None,
+        canonical_problem=problem,
+    )
+
+    tou_rows = list(
+        csv.DictReader(
+            (run_dir / "simulation_conditions_tou_prices.csv").open(
+                encoding="utf-8"
+            )
+        )
+    )
+    contract_rows = list(
+        csv.DictReader(
+            (run_dir / "simulation_conditions_contract_limits.csv").open(
+                encoding="utf-8"
+            )
+        )
+    )
+    provenance = json.loads(
+        (run_dir / "simulation_conditions_provenance.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert [(row["site_id"], row["grid_energy_price_yen_per_kwh"]) for row in tou_rows] == [
+        ("dep1", "20.0"),
+        ("dep1", "20.0"),
+    ]
+    assert all(row["base_load_kw"] == "" for row in tou_rows)
+    assert all(row["demand_charge_weight"] == "0.0" for row in tou_rows)
+    assert contract_rows == [
+        {
+            "site_id": "dep1",
+            "site_type": "depot",
+            "contract_demand_limit_kw": "15.0",
+            "grid_import_limit_kw": "15.0",
+            "site_transformer_limit_kw": "",
+        }
+    ]
+    assert provenance["source"] == "canonical_problem"
+    assert provenance["contract_limit_source"] == (
+        "canonical_problem.depots[].import_limit_kw"
+    )
+
+
+def test_canonical_condition_tables_preserve_explicit_base_load_without_inference() -> None:
+    problem, _result, _scenario = _problem_and_result()
+    problem = replace(
+        problem,
+        metadata={"base_load_kw_by_slot": {"0": 3.5, "1": 4.0}},
+    )
+
+    tables = optimization._canonical_simulation_condition_tables(problem)
+
+    assert tables is not None
+    tou_rows, _contract_rows, provenance = tables
+    assert [row["base_load_kw"] for row in tou_rows] == [3.5, 4.0]
+    assert all(row["demand_charge_weight"] == 0.0 for row in tou_rows)
+    assert provenance["base_load_source"].endswith("blank_when_not_represented")
+
+
 def test_rich_run_outputs_finalize_reporting_after_top_level_files_exist(tmp_path: Path) -> None:
     problem, result, scenario = _problem_and_result()
     artifacts = optimization._persist_canonical_graph_exports(

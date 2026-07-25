@@ -140,9 +140,12 @@ def test_run_optimization_uses_canonical_engine_for_ga_mode() -> None:
     build_problem_data.assert_not_called()
     solve_problem_data.assert_not_called()
     config = problem_builder_cls.return_value.build_from_scenario.call_args.kwargs["config"]
+    effective_scenario = problem_builder_cls.return_value.build_from_scenario.call_args.args[0]
     assert config.warm_start is True
     assert config.stage1_best_obj_stop_enabled is False
     assert config.gurobi_threads == 1
+    assert effective_scenario["simulation_config"]["bev_terminal_soc_policy"] == "return_to_initial"
+    assert effective_scenario["simulation_config"]["final_soc_target_percent"] is None
     persist_input_provenance.assert_called_once()
     provenance_kwargs = persist_input_provenance.call_args.kwargs
     assert provenance_kwargs["prepared_input"]["prepared_input_id"] == "prepared-1"
@@ -154,6 +157,9 @@ def test_run_optimization_uses_canonical_engine_for_ga_mode() -> None:
     assert provenance_kwargs["frontend_request"]["interactive_runtime_controls"][
         "effective"
     ] == {"stage1_best_obj_stop_enabled": False, "gurobi_threads": 1}
+    assert provenance_kwargs["frontend_request"]["interactive_terminal_soc_controls"][
+        "effective"
+    ]["bev_terminal_soc_policy"] == "return_to_initial"
     assert provenance_kwargs["canonical_problem"] is canonical_problem
     assert "trips" not in stored_fields
     assert "timetable_rows" not in stored_fields

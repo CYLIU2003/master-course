@@ -2392,6 +2392,16 @@ class App:
         # ── SOC詳細 ──
         soc_detail_grp = ttk.LabelFrame(soc_fuel_tab, text="帰庫後SOC詳細", padding=4)
         soc_detail_grp.pack(fill=tk.X, pady=(0, 4))
+        ttk.Label(
+            soc_detail_grp,
+            text=(
+                "フロント最適化では、日次比較を公平にするため各BEVの終端SOCを"
+                "初期SOCへ戻す条件をBFFが強制します（下の目標値はシナリオ編集用）。"
+            ),
+            foreground="#555",
+            wraplength=720,
+            justify=tk.LEFT,
+        ).pack(fill=tk.X, pady=(0, 3))
         self._param_row2(
             soc_detail_grp,
             "帰庫後SOC目標 [%]", self.final_soc_target_percent_var,
