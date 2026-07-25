@@ -59,7 +59,22 @@ def build_accounting_summary(
     ice_fuel_consumed_l = _sum(vehicle_energy_rows, "fuel_consumed_l") if vehicle_energy_rows else _sum(vehicle_rows, "ice_fuel_liter")
     ice_refueled_l = _sum(vehicle_energy_rows, "refuel_l") if vehicle_energy_rows else _sum(vehicle_rows, "refuel_l")
     fuel_cost_jpy = _sum(vehicle_rows, "fuel_cost_jpy")
-    co2_cost_jpy = _sum(vehicle_rows, "co2_cost_jpy")
+    ice_co2_kg = (
+        _sum(vehicle_energy_rows, "ice_co2_kg")
+        if vehicle_energy_rows
+        else _sum(vehicle_rows, "ice_co2_kg")
+    )
+    electricity_co2_kg = sum(
+        float(row.get("grid_import_kwh", row.get("grid_total_kwh", 0.0)) or 0.0)
+        * float(row.get("grid_emission_factor_kg_per_kwh", 0.0) or 0.0)
+        for row in energy_rows
+    )
+    total_co2_kg = ice_co2_kg + electricity_co2_kg
+    co2_price_jpy_per_kg = max(
+        float(metadata.get("co2_price_jpy_per_kg", 0.0) or 0.0),
+        0.0,
+    )
+    co2_cost_jpy = total_co2_kg * co2_price_jpy_per_kg
     battery_degradation_cost_jpy = _sum(vehicle_rows, "battery_degradation_cost_jpy")
     grid_energy_cost_jpy = _sum(energy_rows, "energy_cost_jpy")
     bess_total_flow_cost_jpy = _sum(energy_rows, "bess_total_flow_cost_jpy")
@@ -189,8 +204,6 @@ def build_accounting_summary(
     )
     fallback_statuses = {"BASELINE_FALLBACK", "PARTIAL_BASELINE_FALLBACK"}
     is_optimization_result = bool(solver_status.upper() not in fallback_statuses and not bool(metadata.get("fallback_applied", False)))
-    total_co2_kg = _sum(vehicle_energy_rows, "ice_co2_kg")
-
     summary = {
         "scenario_id": scenario_id,
         "run_id": run_id,
@@ -290,9 +303,10 @@ def build_accounting_summary(
         "ice_fuel_consumed_l": ice_fuel_consumed_l,
         "ice_fuel_l": ice_fuel_consumed_l,
         "ice_refueled_l": ice_refueled_l,
-        "ice_co2_kg": total_co2_kg,
-        "electricity_co2_kg": 0.0,
-        "fuel_co2_kg": total_co2_kg,
+        "ice_co2_kg": ice_co2_kg,
+        "electricity_co2_kg": electricity_co2_kg,
+        "grid_co2_kg": electricity_co2_kg,
+        "fuel_co2_kg": ice_co2_kg,
         "total_co2_kg": total_co2_kg,
         "min_soc_ratio": min_soc_ratio,
         "mean_soc_ratio": mean_soc_ratio,

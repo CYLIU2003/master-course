@@ -25,11 +25,12 @@ from .bev_terminal_policy import (
 )
 from .time_axis import chronological_duty_key, service_minute
 from .soc_helpers import (
-    deadhead_energy_kwh,
+    deadhead_before_trip_energy_kwh,
     effective_final_soc_target_kwh,
     final_soc_floor_kwh,
     final_soc_target_enabled,
     post_return_target_slot_index,
+    remaining_posted_transition_fraction,
     return_deadhead_energy_kwh,
     return_deadhead_min_to_home,
     required_departure_soc_kwh,
@@ -781,6 +782,32 @@ class FeasibilityChecker:
                         problem, int(trip.departure_min)
                     )
                     if slot_idx == slots[0] and slot_idx == departure_slot:
+                        previous_trip = None
+                        if duty_leg_index > 0:
+                            previous_leg = duty.legs[duty_leg_index - 1]
+                            previous_trip = trip_by_id.get(
+                                previous_leg.trip.trip_id
+                            )
+                        deadhead_kwh = deadhead_before_trip_energy_kwh(
+                            problem,
+                            vehicle,
+                            trip,
+                            previous_trip=previous_trip,
+                        )
+                        if rolling_start_abs_min is not None:
+                            departure_abs_min = service_minute(
+                                trip.departure_min,
+                                horizon_start_min=horizon_start_min,
+                            )
+                            deadhead_kwh *= remaining_posted_transition_fraction(
+                                event_end_min=departure_abs_min,
+                                rolling_start_abs_min=rolling_start_abs_min,
+                            )
+                        soc -= deadhead_kwh
+                        if soc < -1.0e-6:
+                            errors.append(
+                                f"[SOC] duty={duty.duty_id} trip={trip.trip_id} deadhead-adjusted SOC {soc:.2f} < 0"
+                            )
                         required = required_departure_soc_kwh(
                             problem,
                             vehicle,
@@ -792,36 +819,6 @@ class FeasibilityChecker:
                             errors.append(
                                 f"[SOC] duty={duty.duty_id} trip={trip.trip_id} departure SOC {soc:.2f} < required {required:.2f}"
                             )
-                        if duty_leg_index > 0:
-                            previous_leg = duty.legs[duty_leg_index - 1]
-                            previous_trip = trip_by_id.get(
-                                previous_leg.trip.trip_id
-                            )
-                            deadhead_kwh = 0.0
-                            if previous_trip is not None:
-                                deadhead_kwh = deadhead_energy_kwh(
-                                    problem,
-                                    vehicle,
-                                    previous_trip,
-                                    trip,
-                                )
-                                if rolling_start_abs_min is not None:
-                                    deadhead_kwh *= (
-                                        self._remaining_deadhead_fraction(
-                                            problem,
-                                            vehicle,
-                                            previous_trip,
-                                            trip,
-                                            rolling_start_abs_min=(
-                                                rolling_start_abs_min
-                                            ),
-                                        )
-                                    )
-                            soc -= deadhead_kwh
-                            if soc < -1.0e-6:
-                                errors.append(
-                                    f"[SOC] duty={duty.duty_id} trip={trip.trip_id} deadhead-adjusted SOC {soc:.2f} < 0"
-                                )
 
                     trip_energy = trip_energy_kwh(problem, vehicle, trip)
                     fraction = trip_slot_energy_fraction(
@@ -919,13 +916,10 @@ class FeasibilityChecker:
         else:
             deadhead_start_min = next_departure_min - deadhead_min
         deadhead_end_min = deadhead_start_min + deadhead_min
-        if deadhead_end_min <= rolling_start_abs_min:
-            return 0.0
-        if deadhead_start_min < rolling_start_abs_min:
-            return (
-                deadhead_end_min - rolling_start_abs_min
-            ) / deadhead_min
-        return 1.0
+        return remaining_posted_transition_fraction(
+            event_end_min=deadhead_end_min,
+            rolling_start_abs_min=rolling_start_abs_min,
+        )
 
     def _evaluate_startup_deadhead(
         self,

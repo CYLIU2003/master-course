@@ -3,6 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from bff.routers.optimization import _canonical_cost_breakdown_json, _cost_breakdown
+from bff.services.optimization_run.cost_breakdown import canonical_cost_ledger_json
 from bff.services.experiment_reports import _logger_scenario_payload, _optimization_result_payload
 
 
@@ -49,6 +50,40 @@ def test_canonical_cost_breakdown_json_keeps_bonus_separate_from_total_cost() ->
     assert payload["total_cost"] == 61781.96300393706
     assert payload["components"]["vehicle_fixed_cost"] == 1234.0
     assert payload["components"]["return_leg_bonus"] == 111500.0
+
+
+def test_canonical_cost_ledger_preserves_demand_and_grid_co2_cost() -> None:
+    engine_result = SimpleNamespace(
+        cost_breakdown={
+            "electricity_cost": 7534.642538,
+            "grid_purchase_cost": 7534.642538,
+            "fuel_cost": 66659.497301,
+            "demand_cost": 866.050866,
+            "vehicle_usage_cost": 640000.0,
+            "co2_cost": 1354.850153,
+            "total_co2_kg": 1354.850153,
+            "grid_electricity_co2_kg": 205.687081,
+            "ice_co2_kg": 1149.163072,
+            "total_cost": 716415.040858,
+        },
+        objective_value=716415.040858,
+        solver_metadata={"solver_objective_matches_accounting_total": True},
+    )
+    problem = SimpleNamespace(
+        scenario=SimpleNamespace(co2_price_per_kg=1.0),
+    )
+
+    ledger = canonical_cost_ledger_json(
+        problem=problem,
+        engine_result=engine_result,
+        scenario_id="low-pv",
+    )
+
+    assert ledger["components"]["demand_charge_cost_jpy"] == 866.050866
+    assert ledger["components"]["co2_cost_jpy"] == 1354.850153
+    assert ledger["co2"]["grid_co2_kg"] == 205.687081
+    assert ledger["accounting_residual_jpy"] == 0.0
+    assert ledger["accounting_residual_satisfied"] is True
 
 
 def test_experiment_report_payload_exposes_return_leg_bonus_and_demand_charge() -> None:

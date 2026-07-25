@@ -13,7 +13,8 @@ def test_reporting_finalizer_summary_definition(tmp_path, run_id):
     cost = key_values(run_dir / "cost_breakdown_detail.csv")
     objective = key_values(run_dir / "objective_breakdown.csv")
 
-    assert cost["total_cost"] == pytest.approx(expected["gross_operating_cost_jpy"])
+    solver_cost = load_json(run_dir / "graph" / "cost_breakdown.json")
+    assert cost["total_cost"] == pytest.approx(solver_cost["total_cost"])
     assert objective["objective_value"] == pytest.approx(expected["objective_value_jpy"])
     assert summary["total_cost_jpy"] is None
     assert summary["gross_operating_cost_jpy"] is None

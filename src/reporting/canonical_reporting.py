@@ -488,36 +488,99 @@ def update_cost_breakdown(
     run_dir: Path,
     totals: dict[str, float],
     assignment: dict[str, int],
-) -> dict[str, float]:
+) -> dict[str, Any]:
     path = run_dir / "cost_breakdown_detail.csv"
     fields, rows, index = key_value_rows(path)
 
-    old_total_co2 = get_kv(rows, index, "total_co2_kg")
-    old_co2_cost = get_kv(rows, index, "co2_cost")
-    carbon_price = old_co2_cost / old_total_co2 if old_total_co2 > 0 and old_co2_cost > 0 else 0.0
-    co2_cost = totals["total_co2_kg"] * carbon_price
+    ledger_path = run_dir / "graph" / "canonical_cost_ledger.json"
+    if ledger_path.exists():
+        ledger = load_json(ledger_path)
+        components = dict(ledger.get("components") or {})
+        details = dict(ledger.get("details") or {})
+        co2_metadata = dict(ledger.get("co2") or {})
+        usage = dict(ledger.get("usage") or {})
+        ledger_source = str(ledger_path.relative_to(run_dir))
+        accounting_total = as_float(ledger.get("accounting_total_cost_jpy"))
+        accounting_residual = as_float(ledger.get("accounting_residual_jpy"))
+    else:
+        # Backward-compatible read path for pre-v1 runs. This still consumes
+        # solver-evaluated graph components; it never infers a missing cost
+        # from mutable reporting CSVs.
+        legacy_path = run_dir / "graph" / "cost_breakdown.json"
+        legacy = load_json(legacy_path)
+        legacy_components = dict(legacy.get("components") or {})
+        details = {
+            "grid_purchase_cost_jpy": as_float(
+                legacy_components.get("grid_energy_cost_jpy")
+            ),
+            "bess_total_flow_cost_jpy": (
+                as_float(legacy_components.get("pv_self_consumption_cost_jpy"))
+                + as_float(legacy_components.get("bess_discharge_cost_jpy"))
+                + as_float(legacy_components.get("pv_curtail_cost_jpy"))
+            ),
+        }
+        co2_metadata = {}
+        usage = {
+            "vehicle_usage_cost_jpy_per_used_bus": as_float(
+                legacy_components.get("vehicle_usage_cost_jpy_per_used_bus")
+            )
+        }
+        components = {
+            "electricity_cost_jpy": as_float(
+                legacy_components.get("electricity_energy_cost")
+            ),
+            "fuel_cost_jpy": as_float(legacy_components.get("fuel_cost_final")),
+            "demand_charge_cost_jpy": as_float(
+                legacy_components.get("demand_charge_cost")
+            ),
+            "contract_overage_cost_jpy": as_float(
+                legacy_components.get("contract_overage_cost_jpy")
+            ),
+            "vehicle_fixed_cost_jpy": as_float(
+                legacy_components.get("vehicle_fixed_cost")
+            ),
+            "vehicle_usage_cost_jpy": as_float(
+                legacy_components.get("vehicle_usage_cost_jpy")
+            ),
+            "driver_cost_jpy": as_float(legacy_components.get("driver_cost")),
+            "unserved_penalty_jpy": as_float(
+                legacy_components.get("unserved_trip_penalty")
+            ),
+            "switch_cost_jpy": 0.0,
+            "battery_degradation_cost_jpy": as_float(
+                legacy_components.get("battery_degradation_cost")
+            ),
+            "deviation_cost_jpy": 0.0,
+            "co2_cost_jpy": as_float(legacy_components.get("co2_cost")),
+        }
+        accounting_total = float(sum(components.values()))
+        accounting_residual = as_float(legacy.get("total_cost")) - accounting_total
+        ledger_source = str(legacy_path.relative_to(run_dir))
 
-    grid_purchase_cost = totals["grid_purchase_cost_jpy"]
-    bess_total_flow_cost = totals["bess_total_flow_cost_jpy"]
-    electricity_cost = grid_purchase_cost + bess_total_flow_cost
-    fuel_cost = totals["fuel_cost_jpy"]
+    electricity_cost = as_float(components.get("electricity_cost_jpy"))
+    grid_purchase_cost = as_float(details.get("grid_purchase_cost_jpy"))
+    bess_total_flow_cost = as_float(details.get("bess_total_flow_cost_jpy"))
+    fuel_cost = as_float(components.get("fuel_cost_jpy"))
     energy_cost = electricity_cost + fuel_cost
-    demand_charge = get_kv(rows, index, "demand_charge")
-    vehicle_cost = get_kv(rows, index, "vehicle_cost", get_kv(rows, index, "vehicle_fixed_cost"))
-    vehicle_usage_unit_cost = get_kv(rows, index, "vehicle_usage_cost_jpy_per_used_bus")
-    existing_vehicle_usage_cost = get_kv(
-        rows, index, "vehicle_usage_cost_jpy", get_kv(rows, index, "vehicle_usage_cost")
+    demand_charge = as_float(components.get("demand_charge_cost_jpy"))
+    vehicle_cost = as_float(components.get("vehicle_fixed_cost_jpy"))
+    vehicle_usage_cost = as_float(components.get("vehicle_usage_cost_jpy"))
+    vehicle_usage_unit_cost = as_float(
+        usage.get("vehicle_usage_cost_jpy_per_used_bus")
     )
-    vehicle_usage_cost = (
-        float(assignment["used_vehicle_day_count"]) * vehicle_usage_unit_cost
-        if assignment and vehicle_usage_unit_cost > 0.0
-        else existing_vehicle_usage_cost
+    battery_degradation_cost = as_float(
+        components.get("battery_degradation_cost_jpy")
     )
-    battery_degradation_cost = get_kv(
-        rows,
-        index,
-        "battery_degradation_cost",
-        get_kv(rows, index, "degradation_cost"),
+    co2_cost = as_float(components.get("co2_cost_jpy"))
+    carbon_price = as_float(
+        co2_metadata.get(
+            "carbon_price_jpy_per_kg",
+            (
+                co2_cost / totals["total_co2_kg"]
+                if totals["total_co2_kg"] > 0.0
+                else 0.0
+            ),
+        )
     )
 
     set_kv(rows, index, "electricity_cost", electricity_cost, "JPY")
@@ -537,9 +600,53 @@ def update_cost_breakdown(
     set_kv(rows, index, "fuel_cost_provisional", fuel_cost, "JPY")
     set_kv(rows, index, "fuel_cost_provisional_leftover", fuel_cost, "JPY")
     set_kv(rows, index, "total_fuel_cost", fuel_cost, "")
+    set_kv(rows, index, "demand_charge", demand_charge, "JPY")
+    set_kv(rows, index, "total_demand_charge", demand_charge, "JPY")
     set_kv(rows, index, "vehicle_cost", vehicle_cost, "JPY")
+    set_kv(
+        rows,
+        index,
+        "driver_cost",
+        as_float(components.get("driver_cost_jpy")),
+        "JPY",
+    )
+    set_kv(
+        rows,
+        index,
+        "contract_overage_cost",
+        as_float(components.get("contract_overage_cost_jpy")),
+        "JPY",
+    )
+    set_kv(
+        rows,
+        index,
+        "unserved_penalty",
+        as_float(components.get("unserved_penalty_jpy")),
+        "JPY",
+    )
+    set_kv(
+        rows,
+        index,
+        "switch_cost",
+        as_float(components.get("switch_cost_jpy")),
+        "JPY",
+    )
+    set_kv(
+        rows,
+        index,
+        "deviation_cost",
+        as_float(components.get("deviation_cost_jpy")),
+        "JPY",
+    )
     set_kv(rows, index, "vehicle_usage_cost", vehicle_usage_cost, "JPY")
     set_kv(rows, index, "vehicle_usage_cost_jpy", vehicle_usage_cost, "JPY")
+    set_kv(
+        rows,
+        index,
+        "vehicle_usage_cost_jpy_per_used_bus",
+        vehicle_usage_unit_cost,
+        "JPY/vehicle-day",
+    )
     if assignment:
         set_kv(rows, index, "used_vehicle_day_count", assignment["used_vehicle_day_count"], "vehicle-day")
     set_kv(rows, index, "battery_degradation_cost", battery_degradation_cost, "JPY")
@@ -555,21 +662,12 @@ def update_cost_breakdown(
     set_kv(rows, index, "total_co2_kg", totals["total_co2_kg"], "kg-CO2")
     set_kv(rows, index, "co2_cost", co2_cost, "JPY")
 
-    real_total = (
-        energy_cost
-        + demand_charge
-        + vehicle_cost
-        + vehicle_usage_cost
-        + get_kv(rows, index, "driver_cost")
-        + get_kv(rows, index, "deadhead_cost")
-        + battery_degradation_cost
-        + get_kv(rows, index, "contract_overage_cost")
-        + co2_cost
-    )
+    real_total = accounting_total
     total_with_assets = real_total + get_kv(rows, index, "pv_asset_cost") + get_kv(rows, index, "bess_asset_cost")
     set_kv(rows, index, "total_cost", real_total, "JPY")
     set_kv(rows, index, "total_cost_with_assets", total_with_assets, "")
     set_kv(rows, index, "total_operating_cost", real_total, "JPY")
+    set_kv(rows, index, "accounting_residual_jpy", accounting_residual, "JPY")
 
     write_csv(path, fields, rows)
     return {
@@ -583,6 +681,8 @@ def update_cost_breakdown(
         "battery_degradation_cost": battery_degradation_cost,
         "vehicle_usage_cost": vehicle_usage_cost,
         "carbon_price_jpy_per_kg": carbon_price,
+        "accounting_residual_jpy": accounting_residual,
+        "canonical_cost_ledger_source": ledger_source,
         "total_cost": real_total,
         "total_cost_with_assets": total_with_assets,
     }
@@ -622,6 +722,10 @@ def update_summary(
     summary["demand_charge_cost_jpy"] = cost["demand_charge"]
     summary["fuel_cost_jpy"] = cost["fuel_cost"]
     summary["co2_cost_jpy"] = cost["co2_cost"]
+    summary["accounting_residual_jpy"] = cost["accounting_residual_jpy"]
+    summary["canonical_cost_ledger_source"] = cost[
+        "canonical_cost_ledger_source"
+    ]
     summary["objective_is_actual_cost"] = objective_is_actual_cost
     summary["solver_objective_matches_accounting_total"] = solver_objective_matches_accounting_total
     if assignment:
@@ -633,9 +737,9 @@ def update_summary(
             "ICE": assignment["ice_trip_count"],
         }
     summary["cost_definition"] = {
-        "total_cost_jpy": "gross operating cost based on canonical reporting ledgers",
+        "total_cost_jpy": "gross operating cost from graph/canonical_cost_ledger.json",
         "reported_total_cost_jpy": "same as gross_operating_cost_jpy",
-        "gross_operating_cost_jpy": "actual operating cost terms from reporting ledgers",
+        "gross_operating_cost_jpy": "sum of solver-evaluated canonical cost ledger terms",
         "objective_value_jpy": "solver objective value; equals reported_total_cost_jpy only when objective_is_actual_cost=true",
         "objective_is_actual_cost": objective_is_actual_cost,
         "solver_objective_matches_accounting_total": solver_objective_matches_accounting_total,
@@ -703,6 +807,10 @@ def update_kpi_summary(
     kpi["gross_operating_cost_jpy"] = cost["total_cost"]
     kpi["reported_total_cost_jpy"] = cost["total_cost"]
     kpi["vehicle_usage_cost_jpy"] = cost["vehicle_usage_cost"]
+    kpi["accounting_residual_jpy"] = cost["accounting_residual_jpy"]
+    kpi["canonical_cost_ledger_source"] = cost[
+        "canonical_cost_ledger_source"
+    ]
     if kpi.get("validated_operating_cost_jpy") is not None:
         kpi["validated_operating_cost_jpy"] = cost["total_cost"]
     kpi["objective_value"] = objective_value
@@ -757,6 +865,10 @@ def update_kpi_summary(
             "objective_value": objective_value,
             "objective_value_jpy": objective_value,
             "objective_is_actual_cost": objective_is_actual_cost,
+            "accounting_residual_jpy": cost["accounting_residual_jpy"],
+            "canonical_cost_ledger_source": cost[
+                "canonical_cost_ledger_source"
+            ],
         }
     )
 
@@ -1374,10 +1486,32 @@ def update_data_flow_validation(
             source_files="kpi_summary.json;cost_breakdown_detail.csv",
         ),
         validation_row(
+            "canonical_cost_ledger_accounting_residual",
+            0.0,
+            cost["accounting_residual_jpy"],
+            tolerance=1.0e-6,
+            severity="ERROR",
+            source_files=cost["canonical_cost_ledger_source"],
+        ),
+        validation_row(
+            "objective_value_matches_canonical_accounting_total",
+            cost["total_cost"],
+            objective_value_from_breakdown(run_dir, 0.0),
+            tolerance=1.0e-6,
+            severity="ERROR",
+            source_files=(
+                f"{cost['canonical_cost_ledger_source']};objective_breakdown.csv"
+            ),
+        ),
+        validation_row(
             "kpi_fuel_cost_matches_fuel_canonical",
             totals["fuel_cost_jpy"],
             as_float(kpi.get("fuel_cost_jpy")),
-            source_files="kpi_summary.json;fuel_canonical_ledger.csv",
+            severity="ERROR",
+            source_files=(
+                "kpi_summary.json;fuel_canonical_ledger.csv;"
+                f"{cost['canonical_cost_ledger_source']}"
+            ),
         ),
         validation_row(
             "kpi_total_cost_matches_cost_breakdown",
@@ -1407,7 +1541,11 @@ def update_data_flow_validation(
             "cost_breakdown_fuel_cost_matches_fuel_canonical",
             totals["fuel_cost_jpy"],
             cost_breakdown_fuel_cost,
-            source_files="cost_breakdown_detail.csv;fuel_canonical_ledger.csv",
+            severity="ERROR",
+            source_files=(
+                "cost_breakdown_detail.csv;fuel_canonical_ledger.csv;"
+                f"{cost['canonical_cost_ledger_source']}"
+            ),
         ),
         validation_row(
             "cost_breakdown_ice_co2_matches_co2_timeseries",
@@ -1764,12 +1902,13 @@ def _reporting_log_payload(
         "source_of_truth": {
             "energy": "graph/energy_flow_ledger.csv",
             "bess_metadata": "graph/bess_timeseries.csv",
-            "grid_purchase_cost": "graph/cost_timeseries.csv",
-            "demand_charge": "cost_breakdown_detail.csv:demand_charge",
+            "cost": cost["canonical_cost_ledger_source"],
+            "grid_purchase_cost": cost["canonical_cost_ledger_source"],
+            "demand_charge": cost["canonical_cost_ledger_source"],
             "fuel": "graph/fuel_canonical_ledger.csv",
             "co2": "graph/co2_timeseries.csv",
             "objective": "objective_breakdown.csv",
-            "gross_operating_cost": "cost_breakdown_detail.csv",
+            "gross_operating_cost": cost["canonical_cost_ledger_source"],
         },
         "totals": totals,
         "cost": cost,

@@ -57,6 +57,7 @@ from bff.services.optimization_run.canonical_graph import (
 )
 from bff.services.optimization_run.cost_breakdown import (
     canonical_cost_breakdown_json as _canonical_cost_breakdown_json,
+    canonical_cost_ledger_json as _canonical_cost_ledger_json,
     cost_breakdown as _cost_breakdown,
 )
 from bff.services.optimization_run.execute import (
@@ -5261,6 +5262,11 @@ def _persist_canonical_graph_exports(
         engine_result=engine_result,
         scenario_id=scenario_id,
     )
+    canonical_cost_ledger = _canonical_cost_ledger_json(
+        problem=problem,
+        engine_result=engine_result,
+        scenario_id=scenario_id,
+    )
     kpi_summary = _canonical_kpi_summary_json(
         problem=problem,
         engine_result=engine_result,
@@ -5326,9 +5332,14 @@ def _persist_canonical_graph_exports(
         available_vehicle_count = sum(
             1 for vehicle in list(getattr(problem, "vehicles", ()) or []) if bool(getattr(vehicle, "available", True))
         )
+        evaluated_cost_breakdown = dict(engine_result.cost_breakdown or {})
         demand_rate = 0.0
-        peak_grid_kw = float(kpi_summary.get("peak_grid_import_kw_all_depots", 0.0) or 0.0)
-        demand_cost = float(kpi_summary.get("demand_charge_cost_jpy", 0.0) or 0.0)
+        peak_grid_kw = float(
+            evaluated_cost_breakdown.get("peak_grid_kw", 0.0) or 0.0
+        )
+        demand_cost = float(
+            evaluated_cost_breakdown.get("demand_cost", 0.0) or 0.0
+        )
         if peak_grid_kw > 0.0:
             demand_rate = demand_cost / peak_grid_kw
         scenario_cost_coeffs = dict(((scenario.get("scenario_overlay") or {}).get("cost_coefficients") or {}))
@@ -5408,6 +5419,15 @@ def _persist_canonical_graph_exports(
                 ),
                 "fuel_price_jpy_per_liter": float(
                     scenario_cost_coeffs.get("diesel_price_per_l", scenario_cost_coeffs.get("fuel_price_yen_per_liter", 0.0)) or 0.0
+                ),
+                "canonical_fuel_cost_jpy": float(
+                    evaluated_cost_breakdown.get("fuel_cost", 0.0) or 0.0
+                ),
+                "canonical_ice_co2_kg": float(
+                    evaluated_cost_breakdown.get("ice_co2_kg", 0.0) or 0.0
+                ),
+                "canonical_total_co2_kg": float(
+                    evaluated_cost_breakdown.get("total_co2_kg", 0.0) or 0.0
                 ),
                 "co2_price_jpy_per_kg": float(
                     scenario_cost_coeffs.get("co2_price_per_kg", scenario_cost_coeffs.get("carbon_price_jpy_per_kg", 0.0)) or 0.0
@@ -5586,6 +5606,10 @@ def _persist_canonical_graph_exports(
         json.dumps(cost_breakdown, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+    (graph_dir / "canonical_cost_ledger.json").write_text(
+        json.dumps(canonical_cost_ledger, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     (graph_dir / "kpi_summary.json").write_text(
         json.dumps(kpi_summary, ensure_ascii=False, indent=2),
         encoding="utf-8",
@@ -5688,6 +5712,7 @@ def _persist_canonical_graph_exports(
             "deadhead_ratio_by_band.csv",
             "deadhead_ratio_by_band.json",
             "cost_breakdown.json",
+            "canonical_cost_ledger.json",
             "kpi_summary.json",
         ],
         "optional_exports": {
@@ -5746,6 +5771,7 @@ def _persist_canonical_graph_exports(
         "vehicle_soc_timeseries_path": "graph/vehicle_soc_timeseries.csv",
         "fuel_summary_path": "graph/fuel_summary.csv",
         "cost_breakdown_path": "graph/cost_breakdown.json",
+        "canonical_cost_ledger_path": "graph/canonical_cost_ledger.json",
         "kpi_summary_path": "graph/kpi_summary.json",
         "vehicle_slot_ledger_path": accounting_paths.get("vehicle_slot_ledger_csv", "graph/vehicle_slot_ledger.csv"),
         "vehicle_energy_ledger_path": accounting_paths.get("vehicle_energy_ledger_csv", "graph/vehicle_energy_ledger.csv"),

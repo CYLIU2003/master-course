@@ -1,5 +1,62 @@
 # Development Notes
 
+## 2026-07-25 P0 closure: startup-deadhead SOC and canonical cost ledger
+
+### Problems raised and closed in code
+
+- **P0 — the independent SOC checker omitted the first depot deadhead:** the
+  Phase 3 solver deducted depot-to-first-trip energy, while
+  `FeasibilityChecker` deducted only inter-trip deadheads. Startup,
+  connection, and return deadhead energy now use shared functions in
+  `soc_helpers.py`. The checker deducts the departure-posted deadhead before
+  evaluating departure readiness. Rolling validation now follows the solver's
+  all-or-nothing posted-event convention instead of prorating a transition
+  across a rolling boundary.
+- **P0 — reporting removed demand and grid-CO2 costs:** frontend/BFF runs now
+  write `graph/canonical_cost_ledger.json` directly from the solver-evaluated
+  `CostBreakdown`. The reporting finalizer consumes that immutable ledger and
+  no longer reads an empty `demand_charge` alias or infers a carbon price from
+  a previously zeroed CO2 cost. Demand, CO2, fuel, vehicle-use, and the
+  accounting residual are therefore emitted from one definition.
+- **P1 found while closing the cost P0 — the reporting fuel allocation differed
+  from the solver total:** vehicle-level fuel and ICE-CO2 rows are explicitly
+  allocated to the solver-canonical totals before downstream ledgers are
+  built. The rows are marked
+  `created_by_stage=solver_canonical_cost_allocation`; this is an allocation
+  for reporting consistency, not a claim of solver-native per-vehicle fuel
+  metering.
+- **P0 — BESS fixed-target tolerance could fail the stricter validator:** fixed
+  BESS terminal targets are now mathematical equalities in both Stage 1 and
+  Stage 2. Gurobi `FeasibilityTol` is set to `1e-9`, while the independent
+  acceptance tolerance remains `1e-6 kWh`; the acceptance tolerance was not
+  weakened.
+
+### Research validity and comparability
+
+- This patch does not change timetable rows, operator identity, or the hard
+  dispatch condition
+  `arrival + turnaround + deadhead <= next departure`.
+- It changes SOC validation and the BESS terminal-target constraint. Results
+  generated before this patch must be rerun before claiming physical
+  feasibility or daily energy neutrality.
+- It changes which cost artifact is authoritative. Old reports whose demand or
+  CO2 rows were zeroed must not be quoted; new runs must have
+  `canonical_cost_ledger_accounting_residual=OK` and
+  `objective_value_matches_canonical_accounting_total=OK`.
+- This does **not** close the separate weather-study, ICE 26-vehicle, EV
+  35-vehicle-use, hourly rolling, or global integrated-optimality requirements.
+
+### Validation
+
+- Added a non-zero startup-deadhead + return-to-initial regression: startup
+  9 kWh, service 10 kWh, return 18 kWh, and 37 kWh restored charging.
+- Added canonical cost-ledger regressions that preserve demand charge and grid
+  CO2 cost, plus accounting-ledger tests for peak-kW demand charging and
+  grid-plus-ICE CO2.
+- Focused regression suite completed with **115 passed**. Full local
+  regression completed with **840 passed** (`python -m pytest -q`,
+  2026-07-25).
+
 ## 2026-07-25 Frontend operation-time-window control: explicit full-day canonical horizon
 
 ### Problems raised and closed in code

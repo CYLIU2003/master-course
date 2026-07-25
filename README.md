@@ -20,6 +20,16 @@ simulation artifact, not an automatically accepted research result.
 - `charging_source_provenance.json` distinguishes exact depot/time-step energy
   flows from vehicle-level allocations. A proportional allocation must never be
   described as solver-native vehicle-source evidence.
+- `graph/canonical_cost_ledger.json` is the single cost source for new
+  frontend/BFF runs. It is written from the solver-evaluated cost components
+  before report finalization and records the component sum, reported total,
+  objective value, and residual. Demand charge and grid-related CO2 cost must
+  not be reconstructed from mutable CSV aliases.
+- Startup, inter-trip, and return deadhead SOC events use the same canonical
+  energy functions in the solver and independent validator. For
+  `return_to_initial`, the first depot deadhead is part of the daily energy
+  balance. Fixed BESS terminal targets are equalities; the solver feasibility
+  tolerance is tighter than the independent `1e-6 kWh` acceptance tolerance.
 - Formal sunny/rainy comparison is fail-closed: it requires the same prepared
   input, service day, fleet, initial SOC, and operational controls; only a
   separately recorded PV curve may differ. Comparing a weekday to a Sunday is

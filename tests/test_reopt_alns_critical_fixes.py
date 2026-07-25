@@ -350,7 +350,7 @@ def test_rolling_soc_validation_starts_from_measured_slot_state() -> None:
     assert errors == []
 
 
-def test_rolling_soc_validation_counts_only_unfinished_deadhead() -> None:
+def test_rolling_soc_validation_keeps_discretely_posted_unfinished_deadhead() -> None:
     base = _minimal_problem()
     previous_trip = replace(
         base.trips[0],
@@ -393,7 +393,10 @@ def test_rolling_soc_validation_counts_only_unfinished_deadhead() -> None:
         rolling_start_abs_min=60,
     )
 
-    assert fraction == pytest.approx(0.5)
+    # The solver posts the transition as one departure-slot event. The
+    # independent validator must keep that whole event across a rolling
+    # boundary instead of prorating it.
+    assert fraction == pytest.approx(1.0)
 
 
 def test_hourly_charging_reoptimization_carries_measured_bess_state_and_fixed_assignment() -> None:

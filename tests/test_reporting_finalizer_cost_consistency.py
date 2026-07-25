@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 
 import pytest
 
@@ -26,10 +27,10 @@ def test_reporting_finalizer_cost_consistency(tmp_path, run_id):
     assert kpi["demand_charge_cost_jpy"] is None
     assert kpi["result_status"] == "INVALID"
     assert kpi["research_kpi_eligible"] is False
+    solver_cost = load_json(run_dir / "graph" / "cost_breakdown.json")
     assert cost["fuel_cost"] == pytest.approx(
-        sum_column(run_dir / "graph" / "fuel_canonical_ledger.csv", "fuel_cost_jpy")
+        solver_cost["components"]["fuel_cost_final"]
     )
-    assert cost["fuel_cost"] == pytest.approx(expected["fuel_cost_jpy"])
     assert cost["total_co2_kg"] == pytest.approx(
         sum_column(run_dir / "graph" / "co2_timeseries.csv", "total_co2_kg")
     )
@@ -51,6 +52,38 @@ def test_reporting_finalizer_counts_bess_flow_cost_once(tmp_path) -> None:
                 {"key": "bess_discharge_cost", "value": 999.0, "unit": "JPY"},
             ]
         )
+    graph_dir = tmp_path / "graph"
+    graph_dir.mkdir()
+    (graph_dir / "canonical_cost_ledger.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "canonical_cost_ledger_v1",
+                "components": {
+                    "electricity_cost_jpy": 130.0,
+                    "fuel_cost_jpy": 20.0,
+                    "demand_charge_cost_jpy": 5.0,
+                    "contract_overage_cost_jpy": 0.0,
+                    "vehicle_fixed_cost_jpy": 0.0,
+                    "vehicle_usage_cost_jpy": 0.0,
+                    "driver_cost_jpy": 0.0,
+                    "unserved_penalty_jpy": 0.0,
+                    "switch_cost_jpy": 0.0,
+                    "battery_degradation_cost_jpy": 0.0,
+                    "deviation_cost_jpy": 0.0,
+                    "co2_cost_jpy": 0.0,
+                },
+                "details": {
+                    "grid_purchase_cost_jpy": 100.0,
+                    "bess_total_flow_cost_jpy": 30.0,
+                },
+                "usage": {},
+                "co2": {"carbon_price_jpy_per_kg": 0.0},
+                "accounting_total_cost_jpy": 155.0,
+                "accounting_residual_jpy": 0.0,
+            }
+        ),
+        encoding="utf-8",
+    )
 
     cost = update_cost_breakdown(
         tmp_path,

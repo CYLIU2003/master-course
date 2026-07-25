@@ -3,6 +3,8 @@ from __future__ import annotations
 import math
 from typing import Any, Mapping, Sequence, Tuple
 
+from src.dispatch.feasibility import evaluate_startup_feasibility
+
 from .bev_terminal_policy import (
     BevTerminalSocPolicy,
     normalize_bev_terminal_soc_policy,
@@ -320,24 +322,88 @@ def deadhead_distance_km(problem: CanonicalOptimizationProblem, deadhead_min: in
     return max(float(deadhead_min or 0), 0.0) * speed_kmh / 60.0
 
 
+def deadhead_energy_from_minutes_kwh(
+    problem: CanonicalOptimizationProblem,
+    vehicle: Any,
+    fallback_trip: ProblemTrip,
+    deadhead_min: int,
+) -> float:
+    """Return electric deadhead energy using the canonical movement convention."""
+
+    if not is_electric_vehicle(problem, vehicle):
+        return 0.0
+    deadhead_km = deadhead_distance_km(problem, deadhead_min)
+    drive_rate = vehicle_energy_rate_kwh_per_km(problem, vehicle, fallback_trip)
+    return max(deadhead_km * drive_rate, 0.0)
+
+
 def deadhead_energy_kwh(
     problem: CanonicalOptimizationProblem,
     vehicle: Any,
     from_trip: ProblemTrip,
     to_trip: ProblemTrip,
 ) -> float:
-    vehicle_type_id = str(getattr(vehicle, "vehicle_type", "") or "")
-    vt = next((item for item in problem.vehicle_types if item.vehicle_type_id == vehicle_type_id), None)
-    powertrain = str(getattr(vt, "powertrain_type", "") or vehicle_type_id).upper()
-    if powertrain not in {"BEV", "PHEV", "FCEV"}:
-        return 0.0
     deadhead_min = problem.dispatch_context.get_deadhead_min(
         from_trip.destination,
         to_trip.origin,
     )
-    deadhead_km = deadhead_distance_km(problem, deadhead_min)
-    drive_rate = vehicle_energy_rate_kwh_per_km(problem, vehicle, from_trip)
-    return max(deadhead_km * drive_rate, 0.0)
+    return deadhead_energy_from_minutes_kwh(
+        problem,
+        vehicle,
+        from_trip,
+        deadhead_min,
+    )
+
+
+def startup_deadhead_energy_kwh(
+    problem: CanonicalOptimizationProblem,
+    vehicle: Any,
+    trip: ProblemTrip,
+) -> float:
+    """Return depot-to-first-trip deadhead energy for one duty."""
+
+    home_depot_id = str(getattr(vehicle, "home_depot_id", "") or "").strip()
+    trips_by_id = getattr(problem.dispatch_context, "trips_by_id", None)
+    dispatch_trip_by_id = trips_by_id() if callable(trips_by_id) else {}
+    startup_trip = dispatch_trip_by_id.get(trip.trip_id, trip)
+    startup_result = evaluate_startup_feasibility(
+        startup_trip,
+        problem.dispatch_context,
+        home_depot_id,
+    )
+    return deadhead_energy_from_minutes_kwh(
+        problem,
+        vehicle,
+        trip,
+        max(int(startup_result.deadhead_time_min or 0), 0),
+    )
+
+
+def deadhead_before_trip_energy_kwh(
+    problem: CanonicalOptimizationProblem,
+    vehicle: Any,
+    trip: ProblemTrip,
+    *,
+    previous_trip: ProblemTrip | None,
+) -> float:
+    """Return the movement energy posted at a trip departure.
+
+    ``previous_trip=None`` denotes the depot-to-first-trip startup movement.
+    """
+
+    if previous_trip is None:
+        return startup_deadhead_energy_kwh(problem, vehicle, trip)
+    return deadhead_energy_kwh(problem, vehicle, previous_trip, trip)
+
+
+def remaining_posted_transition_fraction(
+    *,
+    event_end_min: int,
+    rolling_start_abs_min: int,
+) -> float:
+    """Return the remaining share of a discretely posted movement event."""
+
+    return 0.0 if int(event_end_min) <= int(rolling_start_abs_min) else 1.0
 
 
 def return_deadhead_min_to_home(
@@ -373,12 +439,15 @@ def return_deadhead_energy_kwh(
     vehicle: Any,
     trip: ProblemTrip,
 ) -> float:
-    if not is_electric_vehicle(problem, vehicle):
-        return 0.0
     exists, deadhead_min = return_deadhead_min_to_home(problem, vehicle, trip)
     if not exists or deadhead_min <= 0:
         return 0.0
-    return deadhead_distance_km(problem, deadhead_min) * vehicle_energy_rate_kwh_per_km(problem, vehicle, trip)
+    return deadhead_energy_from_minutes_kwh(
+        problem,
+        vehicle,
+        trip,
+        deadhead_min,
+    )
 
 
 def post_return_target_slot_index(

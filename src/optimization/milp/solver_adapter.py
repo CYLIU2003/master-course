@@ -40,10 +40,13 @@ from src.optimization.common.problem import (
     normalize_required_soc_departure_ratio,
 )
 from src.optimization.common.soc_helpers import (
+    deadhead_energy_from_minutes_kwh,
+    deadhead_energy_kwh,
     effective_final_soc_target_kwh,
     final_soc_floor_kwh,
     final_soc_target_enabled,
     post_return_target_slot_index,
+    remaining_posted_transition_fraction,
     return_deadhead_energy_kwh,
     return_deadhead_min_to_home,
     slot_absolute_min,
@@ -267,7 +270,10 @@ def _remaining_posted_transition_fraction(
     remain whole; prorating it would silently lose its pre-boundary share.
     """
 
-    return 0.0 if int(event_end_min) <= int(rolling_start_abs_min) else 1.0
+    return remaining_posted_transition_fraction(
+        event_end_min=event_end_min,
+        rolling_start_abs_min=rolling_start_abs_min,
+    )
 
 
 def _transition_slot_ending_at_event(
@@ -2301,20 +2307,7 @@ class GurobiMILPAdapter:
                         terminal_soc_floor=terminal_soc_floor,
                     )
                     if terminal_soc_target is not None:
-                        terminal_tolerance = self._safe_nonnegative_float(
-                            problem.metadata.get(
-                                "bess_terminal_soc_tolerance_kwh"
-                            ),
-                            default=1.0e-6,
-                        )
-                        model.addConstr(
-                            final_soc_expr
-                            >= terminal_soc_target - terminal_tolerance
-                        )
-                        model.addConstr(
-                            final_soc_expr
-                            <= terminal_soc_target + terminal_tolerance
-                        )
+                        model.addConstr(final_soc_expr == terminal_soc_target)
                         dev_var = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
                         bess_terminal_soc_deviation_var[depot_id] = dev_var
                         model.addConstr(dev_var >= final_soc_expr - terminal_soc_target)
@@ -3804,6 +3797,8 @@ class GurobiMILPAdapter:
         stage1.Params.TimeLimit = stage_time_limit
         stage1.Params.MIPGap = max(float(config.mip_gap), 0.0)
         stage1.Params.Seed = int(config.random_seed)
+        # Terminal energy-neutrality is independently validated at 1e-6 kWh.
+        stage1.Params.FeasibilityTol = 1.0e-9
         configured_threads = _configured_gurobi_threads(config)
         if configured_threads is not None:
             stage1.Params.Threads = configured_threads
@@ -4966,6 +4961,7 @@ class GurobiMILPAdapter:
         stage2.Params.TimeLimit = _resolved_stage_time_limit_sec(config, stage=2)
         stage2.Params.MIPGap = max(float(config.mip_gap), 0.0)
         stage2.Params.Seed = int(config.random_seed)
+        stage2.Params.FeasibilityTol = 1.0e-9
         configured_threads = _configured_gurobi_threads(config)
         if configured_threads is not None:
             stage2.Params.Threads = configured_threads
@@ -5598,9 +5594,7 @@ class GurobiMILPAdapter:
                 stage2.addConstr(terminal_expr <= soc_ub)
                 terminal_target = _bess_terminal_soc_target_kwh(asset, terminal_soc_floor=terminal_floor)
                 if terminal_target is not None:
-                    tolerance = self._safe_nonnegative_float(problem.metadata.get("bess_terminal_soc_tolerance_kwh"), default=1.0e-6)
-                    stage2.addConstr(terminal_expr >= terminal_target - tolerance)
-                    stage2.addConstr(terminal_expr <= terminal_target + tolerance)
+                    stage2.addConstr(terminal_expr == terminal_target)
         if w_on_depot_var:
             w_on_var = stage2.addVar(lb=0.0, vtype=GRB.CONTINUOUS, name="w_on")
             w_off_var = stage2.addVar(lb=0.0, vtype=GRB.CONTINUOUS, name="w_off")
@@ -8445,9 +8439,12 @@ class GurobiMILPAdapter:
             )
         )
         initial_soc_kwh = min(max(initial_soc_kwh, 0.0), capacity_kwh)
-        startup_deadhead_energy_kwh = self._deadhead_distance_km(
-            problem, startup_deadhead_min
-        ) * self._vehicle_energy_rate_kwh_per_km(problem, vehicle, trip)
+        startup_deadhead_energy_kwh = deadhead_energy_from_minutes_kwh(
+            problem,
+            vehicle,
+            trip,
+            startup_deadhead_min,
+        )
 
         departure_min = self._service_minute(problem, int(trip.departure_min))
         leave_depot_min = departure_min - startup_deadhead_min
@@ -9007,16 +9004,7 @@ class GurobiMILPAdapter:
         to_trip = problem.trip_by_id().get(to_trip_id)
         if from_trip is None or to_trip is None:
             return 0.0
-        deadhead_min = problem.dispatch_context.get_deadhead_min(
-            from_trip.destination,
-            to_trip.origin,
-        )
-        deadhead_km = self._deadhead_distance_km(problem, deadhead_min)
-        vt = next((item for item in problem.vehicle_types if item.vehicle_type_id == vehicle.vehicle_type), None)
-        if vt and vt.powertrain_type.upper() in {"BEV", "PHEV", "FCEV"}:
-            drive_rate = self._vehicle_energy_rate_kwh_per_km(problem, vehicle, from_trip)
-            return deadhead_km * drive_rate
-        return 0.0
+        return deadhead_energy_kwh(problem, vehicle, from_trip, to_trip)
 
     def _trip_energy_kwh(
         self,

@@ -431,6 +431,7 @@ def test_canonical_graph_exports_write_legacy_graph_files_even_when_diagrams_dis
     assert (tmp_path / "graph" / "fuel_summary.csv").exists()
     assert (tmp_path / "graph" / "trip_assignment.csv").exists()
     assert (tmp_path / "graph" / "cost_breakdown.json").exists()
+    assert (tmp_path / "graph" / "canonical_cost_ledger.json").exists()
     assert (tmp_path / "graph" / "kpi_summary.json").exists()
     assert (tmp_path / "graph" / "charging_source_provenance.json").exists()
     assert (tmp_path / "graph" / "manifest.json").exists()

@@ -182,6 +182,129 @@ def test_postsolve_adds_return_home_target_charge_and_costs_it() -> None:
     assert breakdown.demand_cost > 0.0
 
 
+def test_initial_deadhead_is_counted_with_return_to_initial_soc() -> None:
+    context = DispatchContext(
+        service_date="2026-04-24",
+        trips=[
+            Trip(
+                trip_id="startup-trip",
+                route_id="r1",
+                origin="A",
+                destination="B",
+                departure_time="08:00",
+                arrival_time="09:00",
+                distance_km=10.0,
+                allowed_vehicle_types=("BEV",),
+                origin_stop_id="A",
+                destination_stop_id="B",
+            )
+        ],
+        turnaround_rules={},
+        deadhead_rules={
+            ("DEPOT", "A"): DeadheadRule("DEPOT", "A", 30),
+            ("B", "DEPOT"): DeadheadRule("B", "DEPOT", 60),
+        },
+        vehicle_profiles={
+            "BEV": VehicleProfile(
+                vehicle_type="BEV",
+                battery_capacity_kwh=100.0,
+                energy_consumption_kwh_per_km=1.0,
+            )
+        },
+    )
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="s_startup_soc_event",
+            horizon_start="00:00",
+            horizon_end="00:00",
+            timestep_min=60,
+        ),
+        dispatch_context=context,
+        trips=(
+            ProblemTrip(
+                trip_id="startup-trip",
+                route_id="r1",
+                origin="A",
+                destination="B",
+                departure_min=480,
+                arrival_min=540,
+                distance_km=10.0,
+                allowed_vehicle_types=("BEV",),
+                energy_kwh=10.0,
+            ),
+        ),
+        vehicles=(
+            ProblemVehicle(
+                vehicle_id="bev-1",
+                vehicle_type="BEV",
+                home_depot_id="DEPOT",
+                initial_soc=80.0,
+                battery_capacity_kwh=100.0,
+                reserve_soc=20.0,
+                energy_consumption_kwh_per_km=1.0,
+            ),
+        ),
+        vehicle_types=(
+            ProblemVehicleType(
+                vehicle_type_id="BEV",
+                powertrain_type="BEV",
+                battery_capacity_kwh=100.0,
+                reserve_soc=20.0,
+                energy_consumption_kwh_per_km=1.0,
+            ),
+        ),
+        depots=(
+            ProblemDepot(
+                depot_id="DEPOT",
+                name="Depot",
+                charger_ids=("chg-1",),
+                import_limit_kw=100.0,
+            ),
+        ),
+        chargers=(ChargerDefinition("chg-1", "DEPOT", 60.0),),
+        price_slots=tuple(
+            EnergyPriceSlot(slot_index=idx, grid_buy_yen_per_kwh=10.0)
+            for idx in range(24)
+        ),
+        metadata={
+            "bev_terminal_soc_policy": "return_to_initial",
+            "final_soc_floor_percent": 20.0,
+            "deadhead_speed_kmh": 18.0,
+        },
+    )
+    plan = AssignmentPlan(
+        duties=(
+            VehicleDuty(
+                duty_id="duty-1",
+                vehicle_type="BEV",
+                legs=(
+                    DutyLeg(
+                        trip=context.trips[0],
+                        deadhead_from_prev_min=30,
+                    ),
+                ),
+            ),
+        ),
+        charging_slots=(
+            # Startup 9 + service 10 + return 18 = 37 kWh. At 95%
+            # efficiency this charge restores the initial 80 kWh exactly.
+            ChargingSlot(
+                vehicle_id="bev-1",
+                slot_index=10,
+                charger_id="chg-1",
+                charge_kw=37.0 / 0.95,
+            ),
+        ),
+        served_trip_ids=("startup-trip",),
+        metadata={"duty_vehicle_map": {"duty-1": "bev-1"}},
+    )
+
+    report = FeasibilityChecker().evaluate(problem, plan)
+
+    assert report.feasible, report.errors
+    assert not any("exceeds return-to-initial" in error for error in report.errors)
+
+
 def test_post_return_target_violation_is_reported_when_overnight_charge_is_blocked() -> None:
     context = _dispatch_context()
     late_trip = Trip(

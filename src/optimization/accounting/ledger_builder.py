@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import replace
 from datetime import date, datetime, timedelta
 import math
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
@@ -10,6 +11,79 @@ from .schema import AccountingArtifacts, EnergyFlowLedgerRow, VehicleEnergyLedge
 from src.optimization.common.time_axis import normalize_timestep_min
 
 UNKNOWN_OPERATOR = "UNKNOWN_OPERATOR"
+
+
+def _align_vehicle_fuel_to_solver_cost_ledger(
+    rows: Sequence[VehicleSlotLedgerRow],
+    *,
+    metadata: Mapping[str, Any],
+) -> List[VehicleSlotLedgerRow]:
+    """Allocate solver-evaluated fuel and ICE CO2 totals across reporting rows."""
+
+    expected_fuel_cost = _finite_float(metadata.get("canonical_fuel_cost_jpy"))
+    expected_ice_co2 = _finite_float(metadata.get("canonical_ice_co2_kg"))
+    if expected_fuel_cost is None and expected_ice_co2 is None:
+        return list(rows)
+
+    current_fuel_cost = sum(float(row.fuel_cost_jpy or 0.0) for row in rows)
+    current_ice_co2 = sum(float(row.ice_co2_kg or 0.0) for row in rows)
+    if (
+        expected_fuel_cost is not None
+        and expected_fuel_cost > 0.0
+        and current_fuel_cost <= 0.0
+    ):
+        raise ValueError(
+            "Cannot allocate positive canonical fuel cost over an empty fuel ledger"
+        )
+    if (
+        expected_ice_co2 is not None
+        and expected_ice_co2 > 0.0
+        and current_ice_co2 <= 0.0
+    ):
+        raise ValueError(
+            "Cannot allocate positive canonical ICE CO2 over an empty ICE CO2 ledger"
+        )
+    fuel_factor = (
+        max(expected_fuel_cost, 0.0) / current_fuel_cost
+        if expected_fuel_cost is not None and current_fuel_cost > 0.0
+        else 1.0
+    )
+    co2_factor = (
+        max(expected_ice_co2, 0.0) / current_ice_co2
+        if expected_ice_co2 is not None and current_ice_co2 > 0.0
+        else 1.0
+    )
+    if abs(fuel_factor - 1.0) <= 1.0e-12 and abs(co2_factor - 1.0) <= 1.0e-12:
+        return list(rows)
+
+    aligned: List[VehicleSlotLedgerRow] = []
+    for row in rows:
+        reason = str(row.repair_reason or "").strip()
+        reason = ";".join(
+            item
+            for item in (
+                reason,
+                "allocated_to_solver_canonical_fuel_and_co2_totals",
+            )
+            if item
+        )
+        aligned.append(
+            replace(
+                row,
+                ice_fuel_liter=float(row.ice_fuel_liter or 0.0) * fuel_factor,
+                fuel_start_l=float(row.fuel_start_l or 0.0) * fuel_factor,
+                fuel_end_l=float(row.fuel_end_l or 0.0) * fuel_factor,
+                refuel_l=float(row.refuel_l or 0.0) * fuel_factor,
+                fuel_balance_error_l=float(row.fuel_balance_error_l or 0.0)
+                * fuel_factor,
+                fuel_cost_jpy=float(row.fuel_cost_jpy or 0.0) * fuel_factor,
+                ice_co2_kg=float(row.ice_co2_kg or 0.0) * co2_factor,
+                co2_cost_jpy=float(row.co2_cost_jpy or 0.0) * co2_factor,
+                repair_reason=reason,
+                created_by_stage="solver_canonical_cost_allocation",
+            )
+        )
+    return aligned
 
 
 def _parse_date(value: Any, fallback: date) -> date:
@@ -1233,6 +1307,10 @@ def build_accounting_artifacts(
         vehicle_charging_source_rows=vehicle_charging_source_rows,
         metadata=metadata,
         slot_minutes=slot_minutes,
+    )
+    vehicle_rows = _align_vehicle_fuel_to_solver_cost_ledger(
+        vehicle_rows,
+        metadata=metadata,
     )
     energy_rows = _build_energy_flow_ledger(
         scenario_id=scenario_id,
