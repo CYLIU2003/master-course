@@ -71,6 +71,16 @@ from .weather_strategy import (
     weather_assignment_objective_bias,
     weather_vehicle_type_sort_key,
 )
+from .service_calendar import validate_service_calendar_contract
+
+
+def _research_inventory_powertrain(value: Any) -> str:
+    normalized = str(value or "").strip().upper()
+    if normalized in {"BEV", "EV", "ELECTRIC"}:
+        return "BEV"
+    if normalized in {"ICE", "DIESEL", "GASOLINE", "PETROL"}:
+        return "ICE"
+    return normalized
 
 
 @dataclass(frozen=True)
@@ -607,6 +617,28 @@ class ProblemBuilder:
     ) -> CanonicalOptimizationProblem:
         config = config or OptimizationConfig()
         vehicle_counts = vehicle_counts or {}
+        metadata_source = scenario_metadata or {}
+        source_timetable_rows = list(
+            metadata_source.get("timetable_rows")
+            or metadata_source.get("trips")
+            or []
+        )
+        service_calendar_validation = (
+            validate_service_calendar_contract(
+                service_date_text=context.service_date,
+                timetable_rows=source_timetable_rows,
+                scenario_metadata=metadata_source,
+                strict=bool(getattr(config, "research_run", False)),
+            )
+            if source_timetable_rows
+            else {
+                "schema_version": "service_calendar_validation_v1",
+                "status": "UNVERIFIED",
+                "strict": bool(getattr(config, "research_run", False)),
+                "service_date": context.service_date,
+                "errors": ["source_timetable_rows_unavailable"],
+            }
+        )
         timestep_min = normalize_timestep_min(timestep_min, default=30)
         context.horizon_start_min = int(horizon_start_min or 0)
         context.fixed_route_band_mode = bool(fixed_route_band_mode)
@@ -622,7 +654,6 @@ class ProblemBuilder:
         )
         charge_upper_buffer_ratio = self._normalize_percent_like_to_ratio(charge_upper_buffer_ratio)
         if charge_upper_buffer_ratio is None:
-            metadata_source = scenario_metadata or {}
             charge_upper_buffer_ratio = self._normalize_percent_like_to_ratio(
                 self._first_present(
                     metadata_source.get("soc_max"),
@@ -776,6 +807,49 @@ class ProblemBuilder:
         unavailable_vehicles = tuple(
             vehicle for vehicle in vehicles if not bool(getattr(vehicle, "available", True))
         )
+        vehicle_type_by_id = {
+            str(item.vehicle_type_id): _research_inventory_powertrain(
+                item.powertrain_type
+            )
+            for item in vehicle_types
+        }
+        actual_inventory: Dict[str, int] = {}
+        for vehicle in vehicles:
+            powertrain = vehicle_type_by_id.get(
+                str(vehicle.vehicle_type),
+                _research_inventory_powertrain(vehicle.vehicle_type),
+            )
+            actual_inventory[powertrain] = actual_inventory.get(powertrain, 0) + 1
+        simulation_metadata = dict(metadata_source.get("simulation_config") or {})
+        expected_inventory_raw = (
+            simulation_metadata.get("research_vehicle_inventory")
+            or simulation_metadata.get("expected_vehicle_inventory")
+            or metadata_source.get("research_vehicle_inventory")
+            or {}
+        )
+        expected_inventory = {
+            _research_inventory_powertrain(key): int(value)
+            for key, value in dict(expected_inventory_raw or {}).items()
+        }
+        inventory_errors = [
+            f"{powertrain}:expected={expected},actual={actual_inventory.get(powertrain, 0)}"
+            for powertrain, expected in sorted(expected_inventory.items())
+            if actual_inventory.get(powertrain, 0) != expected
+        ]
+        research_fleet_validation = {
+            "schema_version": "research_fleet_validation_v1",
+            "status": "ERROR" if inventory_errors else (
+                "OK" if expected_inventory else "UNDECLARED"
+            ),
+            "expected_inventory": expected_inventory,
+            "actual_inventory": actual_inventory,
+            "errors": inventory_errors,
+        }
+        if bool(getattr(config, "research_run", False)) and inventory_errors:
+            raise ValueError(
+                "research vehicle inventory contract failed: "
+                + ", ".join(inventory_errors)
+            )
         inferred_import_limit = depot_import_limit_kw
         if inferred_import_limit is None:
             charger_capacity = sum(charger.power_kw * max(charger.simultaneous_ports, 1) for charger in chargers)
@@ -962,6 +1036,18 @@ class ProblemBuilder:
             baseline_plan=baseline,
             metadata={
                 "service_date": context.service_date,
+                "service_calendar_validation": service_calendar_validation,
+                "comparison_type": service_calendar_validation.get(
+                    "comparison_type",
+                    "actual_service_day",
+                ),
+                "weather_observation_date": service_calendar_validation.get(
+                    "weather_observation_date",
+                    context.service_date,
+                ),
+                "weather_profile_source": service_calendar_validation.get(
+                    "weather_profile_source"
+                ),
                 "config_mode": config.mode.value,
                 "thesis_mode": bool(getattr(config, "thesis_mode", False)),
                 "debug_mode": bool(getattr(config, "debug_mode", False)),
@@ -1028,6 +1114,7 @@ class ProblemBuilder:
                 "max_start_fragments_per_vehicle": int(max(1, max_start_fragments_per_vehicle)),
                 "max_end_fragments_per_vehicle": int(max(1, max_end_fragments_per_vehicle)),
                 "available_vehicle_count_total": len(available_vehicles),
+                "research_fleet_validation": research_fleet_validation,
                 "unavailable_vehicle_count_total": len(unavailable_vehicles),
                 "available_vehicle_ids": tuple(
                     sorted(str(vehicle.vehicle_id) for vehicle in available_vehicles)

@@ -1268,6 +1268,20 @@ class OptimizationEngine:
                     costs.get("ev_energy_inventory_balanced", False)
                 ),
             }
+            calendar_validation = dict(
+                (problem.metadata or {}).get("service_calendar_validation") or {}
+            )
+            if calendar_validation:
+                acceptance_checks["service_calendar_contract"] = (
+                    str(calendar_validation.get("status") or "").upper() == "OK"
+                )
+            fleet_validation = dict(
+                (problem.metadata or {}).get("research_fleet_validation") or {}
+            )
+            if str(fleet_validation.get("status") or "").upper() != "UNDECLARED":
+                acceptance_checks["research_vehicle_inventory_contract"] = (
+                    str(fleet_validation.get("status") or "").upper() == "OK"
+                )
             research_accounting_cost_eligible = bool(
                 all(cost_acceptance_checks.values())
                 and not assignment_only

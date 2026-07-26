@@ -8,9 +8,11 @@ from enum import Enum
 import hashlib
 import json
 import os
+import platform
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 from typing import Any, Mapping, Sequence
 
 
@@ -179,13 +181,39 @@ def collect_git_state(*, repo_root: Path | None = None) -> dict[str, Any]:
             cwd=root,
             text=True,
         ).strip()
-        git_dirty = bool(
-            subprocess.check_output(
-                [git_executable, "status", "--porcelain"],
-                cwd=root,
-                text=True,
-            ).strip()
+        status_porcelain = subprocess.check_output(
+            [git_executable, "status", "--porcelain"],
+            cwd=root,
+            text=True,
+        ).strip()
+        git_dirty = bool(status_porcelain)
+        tracked_patch = subprocess.check_output(
+            [git_executable, "diff", "--binary", "HEAD", "--"],
+            cwd=root,
         )
+        untracked_paths = subprocess.check_output(
+            [
+                git_executable,
+                "ls-files",
+                "--others",
+                "--exclude-standard",
+                "-z",
+            ],
+            cwd=root,
+        ).split(b"\0")
+        untracked_entries: list[dict[str, Any]] = []
+        for raw_path in sorted(item for item in untracked_paths if item):
+            relative_path = raw_path.decode("utf-8", errors="surrogateescape")
+            candidate = (root / relative_path).resolve()
+            if not candidate.is_file():
+                continue
+            untracked_entries.append(
+                {
+                    "path": relative_path.replace("\\", "/"),
+                    "size_bytes": candidate.stat().st_size,
+                    "sha256": _sha256_file(candidate),
+                }
+            )
     except (FileNotFoundError, OSError, subprocess.CalledProcessError) as exc:
         return {
             "schema_version": "git_provenance_v1",
@@ -206,14 +234,46 @@ def collect_git_state(*, repo_root: Path | None = None) -> dict[str, Any]:
             "git_state_available": False,
             "git_state_error": "git rev-parse HEAD returned an empty SHA",
         }
+    patch_identity = {
+        "tracked_patch_sha256": (
+            hashlib.sha256(tracked_patch).hexdigest() if tracked_patch else None
+        ),
+        "untracked_files": untracked_entries,
+    }
+    patch_bytes = _canonical_json_bytes(patch_identity)
     return {
         "schema_version": "git_provenance_v1",
         "captured_at_utc": datetime.now(timezone.utc).isoformat(),
         "repository_root": str(root),
         "git_sha": git_sha,
         "git_dirty": git_dirty,
+        "worktree_patch_sha256": (
+            hashlib.sha256(patch_bytes).hexdigest() if git_dirty else None
+        ),
+        **patch_identity,
         "git_state_available": True,
         "git_state_error": None,
+    }
+
+
+def _runtime_environment() -> dict[str, Any]:
+    gurobi_available = False
+    gurobi_version: str | None = None
+    try:
+        import gurobipy as gp
+
+        gurobi_available = True
+        version = gp.gurobi.version()
+        gurobi_version = ".".join(str(item) for item in version)
+    except (ImportError, AttributeError, RuntimeError):
+        pass
+    return {
+        "python_version": platform.python_version(),
+        "python_implementation": platform.python_implementation(),
+        "python_executable": sys.executable,
+        "platform": platform.platform(),
+        "gurobi_available": gurobi_available,
+        "gurobi_version": gurobi_version,
     }
 
 
@@ -407,6 +467,14 @@ def _optimization_parameters(
     chargers = tuple(getattr(canonical_problem, "chargers", ()) or ())
     price_slots = tuple(getattr(canonical_problem, "price_slots", ()) or ())
     pv_slots = tuple(getattr(canonical_problem, "pv_slots", ()) or ())
+    trip_input = [_json_safe(item) for item in trips]
+    vehicle_input = [_json_safe(item) for item in vehicles]
+    pv_input = {
+        "pv_slots": [_json_safe(item) for item in pv_slots],
+        "depot_energy_assets": _json_safe(
+            getattr(canonical_problem, "depot_energy_assets", {}) or {}
+        ),
+    }
     return {
         "schema_version": SCHEMA_VERSION,
         "scenario_id": scenario_id,
@@ -420,6 +488,7 @@ def _optimization_parameters(
         ],
         "frontend_request": _json_safe(frontend_request),
         "code_provenance": _json_safe(code_provenance),
+        "runtime_environment": _runtime_environment(),
         "effective_optimization_config": _json_safe(optimization_config),
         "effective_problem_scenario": _json_safe(problem_scenario),
         "effective_derived_values": {
@@ -450,6 +519,37 @@ def _optimization_parameters(
             ),
             "charger_ids_sha256": _inventory_hash(
                 [str(getattr(item, "charger_id", "")) for item in chargers]
+            ),
+            "trip_input_sha256": hashlib.sha256(
+                _canonical_json_bytes(trip_input)
+            ).hexdigest(),
+            "vehicle_input_sha256": hashlib.sha256(
+                _canonical_json_bytes(vehicle_input)
+            ).hexdigest(),
+            "pv_profile_sha256": hashlib.sha256(
+                _canonical_json_bytes(pv_input)
+            ).hexdigest(),
+        },
+        "comparison_contract": {
+            "service_date": metadata.get("service_date"),
+            "weather_observation_date": metadata.get(
+                "weather_observation_date",
+                metadata.get("weather_reference_date"),
+            ),
+            "weather_profile_source": metadata.get(
+                "weather_profile_source",
+                metadata.get("weather_source"),
+            ),
+            "comparison_type": metadata.get(
+                "comparison_type",
+                (
+                    "counterfactual_weather_profile"
+                    if metadata.get("weather_pv_counterfactual")
+                    else "actual_service_day"
+                ),
+            ),
+            "service_calendar_validation": metadata.get(
+                "service_calendar_validation"
             ),
         },
         "interpretation": {
@@ -624,6 +724,7 @@ def persist_run_input_provenance(
     return {
         "schema_version": SCHEMA_VERSION,
         "status": "OK",
+        "research_ready": bool(validation.get("research_ready", False)),
         "manifest_path": MANIFEST_FILE,
         "validation_path": VALIDATION_FILE,
         "summary_path": SUMMARY_FILE,
@@ -762,10 +863,41 @@ def validate_run_input_provenance(
         details["prepared_source_rehash_deferred"] = True
 
     failed_checks = [name for name, passed in checks.items() if not passed]
+    code_provenance = dict(artifact_payloads.get(CODE_PROVENANCE_FILE) or {})
+    research_ready = bool(
+        not failed_checks
+        and schema_version == SCHEMA_VERSION
+        and code_provenance.get("git_state_available") is True
+        and code_provenance.get("git_dirty") is False
+        and str(code_provenance.get("git_sha") or "").strip()
+    )
     return {
         "schema_version": SCHEMA_VERSION,
         "validated_at_utc": datetime.now(timezone.utc).isoformat(),
         "valid": not failed_checks,
+        "research_ready": research_ready,
+        "research_readiness_reasons": (
+            []
+            if research_ready
+            else [
+                *failed_checks,
+                *(
+                    ["git_state_unavailable"]
+                    if code_provenance.get("git_state_available") is not True
+                    else []
+                ),
+                *(
+                    ["git_worktree_dirty"]
+                    if code_provenance.get("git_dirty") is not False
+                    else []
+                ),
+                *(
+                    ["git_sha_missing"]
+                    if not str(code_provenance.get("git_sha") or "").strip()
+                    else []
+                ),
+            ]
+        ),
         "verify_prepared_source": verify_prepared_source,
         "checks": checks,
         "failed_checks": failed_checks,

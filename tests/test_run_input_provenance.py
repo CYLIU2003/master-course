@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from bff.services.optimization_run.input_provenance import (
     CODE_PROVENANCE_FILE,
     MANIFEST_FILE,
@@ -14,6 +16,10 @@ from bff.services.optimization_run.input_provenance import (
     VALIDATION_FILE,
     persist_run_input_provenance,
     validate_run_input_provenance,
+)
+from bff.routers.optimization import (
+    _require_clean_research_git_state,
+    _validate_git_state_after_solve,
 )
 from src.optimization.common.problem import OptimizationConfig, OptimizationScenario
 
@@ -133,6 +139,7 @@ def test_frontend_run_input_bundle_is_self_verifying(tmp_path: Path) -> None:
     )
 
     assert result["status"] == "OK"
+    assert result["research_ready"] is True
     for name in (
         SCENARIO_SNAPSHOT_FILE,
         PREPARE_AUDIT_FILE,
@@ -149,6 +156,7 @@ def test_frontend_run_input_bundle_is_self_verifying(tmp_path: Path) -> None:
         verify_prepared_source=True,
     )
     assert validation["valid"] is True
+    assert validation["research_ready"] is True
     scenario_snapshot = json.loads(
         (run_dir / SCENARIO_SNAPSHOT_FILE).read_text(encoding="utf-8")
     )
@@ -166,6 +174,10 @@ def test_frontend_run_input_bundle_is_self_verifying(tmp_path: Path) -> None:
     )
     assert parameters["frontend_request"]["mip_gap"] == 0.025
     assert parameters["effective_problem_scenario"]["timestep_min"] == 15
+    assert parameters["runtime_environment"]["python_version"]
+    assert parameters["canonical_input_dimensions"]["trip_input_sha256"]
+    assert parameters["canonical_input_dimensions"]["vehicle_input_sha256"]
+    assert parameters["canonical_input_dimensions"]["pv_profile_sha256"]
     code_provenance = json.loads(
         (run_dir / CODE_PROVENANCE_FILE).read_text(encoding="utf-8")
     )
@@ -225,3 +237,121 @@ def test_frontend_run_input_bundle_rejects_posthoc_tampering(tmp_path: Path) -> 
 
     assert validation["valid"] is False
     assert f"{SCENARIO_SNAPSHOT_FILE}:sha256" in validation["failed_checks"]
+
+
+def test_frontend_run_input_bundle_rejects_missing_manifest_artifact(
+    tmp_path: Path,
+) -> None:
+    prepared = _prepared_input()
+    prepared_path = tmp_path / "prepared-test.json"
+    prepared_path.write_text(json.dumps(prepared), encoding="utf-8")
+    run_dir = tmp_path / "run"
+    persist_run_input_provenance(
+        run_dir=run_dir,
+        base_scenario={"scenario_id": "scenario-test"},
+        effective_scenario={"scenario_id": "scenario-test"},
+        prepared_input=prepared,
+        prepared_input_path=prepared_path,
+        requested_prepared_input_id="prepared-test",
+        frontend_request={"mode": "mode_milp_only"},
+        optimization_config=OptimizationConfig(),
+        canonical_problem=_problem(),
+    )
+    (run_dir / PARAMETERS_FILE).unlink()
+
+    validation = validate_run_input_provenance(
+        run_dir,
+        verify_prepared_source=False,
+    )
+
+    assert validation["valid"] is False
+    assert validation["research_ready"] is False
+    assert f"{PARAMETERS_FILE}:exists" in validation["failed_checks"]
+
+
+def test_research_run_rejects_dirty_or_unavailable_git_state() -> None:
+    with pytest.raises(ValueError, match="clean Git worktree"):
+        _require_clean_research_git_state(
+            research_run=True,
+            git_state={
+                "git_state_available": True,
+                "git_dirty": True,
+                "worktree_patch_sha256": "patch-sha",
+            },
+        )
+    with pytest.raises(ValueError, match="git_state_available=False"):
+        _require_clean_research_git_state(
+            research_run=True,
+            git_state={
+                "git_state_available": False,
+                "git_dirty": None,
+            },
+        )
+    _require_clean_research_git_state(
+        research_run=True,
+        git_state={
+            "git_state_available": True,
+            "git_dirty": False,
+        },
+    )
+
+
+def test_research_run_rejects_source_change_during_solve() -> None:
+    before = {
+        "git_state_available": True,
+        "git_sha": "commit-a",
+        "git_dirty": False,
+        "worktree_patch_sha256": None,
+    }
+    assert (
+        _validate_git_state_after_solve(
+            research_run=True,
+            before=before,
+            after=dict(before),
+        )
+        is True
+    )
+    with pytest.raises(ValueError, match="source state changed during solve"):
+        _validate_git_state_after_solve(
+            research_run=True,
+            before=before,
+            after={**before, "git_sha": "commit-b"},
+        )
+
+
+def test_dirty_input_bundle_is_integrity_valid_but_not_research_ready(
+    tmp_path: Path,
+) -> None:
+    prepared = _prepared_input()
+    prepared_path = tmp_path / "prepared-test.json"
+    prepared_path.write_text(json.dumps(prepared), encoding="utf-8")
+    result = persist_run_input_provenance(
+        run_dir=tmp_path / "run",
+        base_scenario={"scenario_id": "scenario-test"},
+        effective_scenario={"scenario_id": "scenario-test"},
+        prepared_input=prepared,
+        prepared_input_path=prepared_path,
+        requested_prepared_input_id="prepared-test",
+        frontend_request={"mode": "mode_milp_only"},
+        optimization_config=OptimizationConfig(),
+        canonical_problem=_problem(),
+        code_provenance={
+            "schema_version": "git_provenance_v1",
+            "captured_at_utc": "2026-07-26T00:00:00+00:00",
+            "repository_root": str(tmp_path),
+            "git_sha": "dirty-sha",
+            "git_dirty": True,
+            "worktree_patch_sha256": "patch-sha",
+            "git_state_available": True,
+            "git_state_error": None,
+        },
+    )
+
+    assert result["status"] == "OK"
+    assert result["research_ready"] is False
+    validation = json.loads(
+        (tmp_path / "run" / VALIDATION_FILE).read_text(encoding="utf-8")
+    )
+    assert validation["valid"] is True
+    assert validation["research_ready"] is False
+    assert validation["research_readiness_reasons"] == ["git_worktree_dirty"]
