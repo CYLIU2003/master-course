@@ -6267,6 +6267,18 @@ def _solver_settings_payload(
             else "Not applicable because this result has no Stage 1 telemetry."
         ),
         "gurobi_threads": _int_or_none(metadata.get("gurobi_threads")),
+        "stage1_gurobi_feasibility_tol": _float_or_none(
+            metadata.get("stage1_gurobi_feasibility_tol")
+        ),
+        "stage2_gurobi_feasibility_tol": _float_or_none(
+            metadata.get("stage2_gurobi_feasibility_tol")
+        ),
+        "stage1_numeric_diagnostics": dict(
+            metadata.get("stage1_numeric_diagnostics") or {}
+        ),
+        "stage2_numeric_diagnostics": dict(
+            metadata.get("stage2_numeric_diagnostics") or {}
+        ),
         "interactive_runtime_controls": dict(
             metadata.get("interactive_runtime_controls") or {}
         ),

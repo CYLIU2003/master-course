@@ -1,5 +1,58 @@
 # Development Notes
 
+## 2026-07-26 Review correction: physical fuel ledger and objective semantics
+
+### Problems raised and closed in code
+
+- **P1 - reporting changed physical fuel quantities to match a cost total:**
+  the `fuel_factor` / `co2_factor` allocation introduced in `e2e54f1` was
+  invalid. A monetary discrepancy must never rewrite liters, tank start/end,
+  refueling, balance error, or physical ICE emissions. The allocation function
+  has been removed. Fuel liters and ICE CO2 now remain derived from distance
+  and vehicle parameters. `fuel_cost_jpy` alone follows the
+  `cost_component_flags.fuel_cost` switch. If the physical ledger and
+  solver-canonical cost or CO2 total disagree, the new
+  `solver_fuel_cost_matches_physical_fuel_ledger` /
+  `solver_ice_co2_matches_physical_fuel_ledger` checks remain `NG`; reporting
+  does not repair the evidence.
+- **P1 - non-cost objectives were incorrectly required to equal accounting
+  cost:** `graph/canonical_cost_ledger.json` now records
+  `objective_accounting_equality_required` as a semantic contract. The
+  objective-versus-accounting ERROR check runs only when that contract is
+  true. For CO2, balanced, utilization, and two-stage proxy objectives where
+  it is false, the check is `SKIPPED`; cost correctness is still enforced by
+  `canonical_cost_ledger_accounting_residual`. A coincidental numerical match
+  does not relabel a non-cost objective as actual cost. Non-cost objectives
+  are emitted with unit `solver_objective_score`, not JPY.
+- **P2 - global `FeasibilityTol=1e-9` could burden the runtime-dominant Stage
+  1 MILP:** tolerances are now explicit `OptimizationConfig` fields. Stage 1
+  defaults to Gurobi's `1e-6`; Stage 2 retains `1e-9` because terminal SOC is
+  audited at `1e-6 kWh`. Both effective values, maximum constraint/bound/
+  integrality violations, coefficient range, and a scaling-warning flag are
+  written to solver metadata and `solver_settings.json`.
+- **P2 - the startup-deadhead regression did not traverse the real solver:**
+  a Gurobi two-stage integration test now executes
+  `GurobiMILPAdapter -> AssignmentPlan -> FeasibilityChecker` with a 30-minute
+  non-zero startup deadhead and `return_to_initial`, and requires a feasible
+  Stage 2 result plus independent `VALID` feasibility.
+
+### Research validity and remaining measurement
+
+- This correction does not modify timetable rows, `operator_id`, or
+  `arrival + turnaround + deadhead <= next departure`.
+- It changes reporting semantics introduced only by `e2e54f1`; no result
+  produced with the fuel-allocation code may be used as a physical fuel or CO2
+  ledger. A fresh optimization run is required.
+- A five-repeat tiny paired smoke test at Stage 1 `FeasibilityTol=1e-6` and
+  `1e-9` produced feasible solutions, zero reported maximum constraint
+  violation, and zero Stage 1 gap in both cases. The model solved in roughly
+  one millisecond, so this is a correctness smoke test, **not** evidence about
+  full 264-trip runtime. Full-scale paired runtime, gap, and scaling comparison
+  remains a required manual experiment.
+- Focused accounting/reporting/SOC tests passed, including the real Gurobi
+  round trip. Full local regression completed with **844 passed**
+  (`python -m pytest -q`, 2026-07-26); `compileall` also passed.
+
 ## 2026-07-25 P0 closure: startup-deadhead SOC and canonical cost ledger
 
 ### Problems raised and closed in code
@@ -18,18 +71,13 @@
   no longer reads an empty `demand_charge` alias or infers a carbon price from
   a previously zeroed CO2 cost. Demand, CO2, fuel, vehicle-use, and the
   accounting residual are therefore emitted from one definition.
-- **P1 found while closing the cost P0 — the reporting fuel allocation differed
-  from the solver total:** vehicle-level fuel and ICE-CO2 rows are explicitly
-  allocated to the solver-canonical totals before downstream ledgers are
-  built. The rows are marked
-  `created_by_stage=solver_canonical_cost_allocation`; this is an allocation
-  for reporting consistency, not a claim of solver-native per-vehicle fuel
-  metering.
+- **Superseded on 2026-07-26:** the attempted vehicle-level fuel/ICE-CO2
+  allocation was physically invalid and has been removed. See the review
+  correction above.
 - **P0 — BESS fixed-target tolerance could fail the stricter validator:** fixed
-  BESS terminal targets are now mathematical equalities in both Stage 1 and
-  Stage 2. Gurobi `FeasibilityTol` is set to `1e-9`, while the independent
-  acceptance tolerance remains `1e-6 kWh`; the acceptance tolerance was not
-  weakened.
+  BESS terminal targets are mathematical equalities in both stages. As of
+  2026-07-26, Stage 1 uses `FeasibilityTol=1e-6` and Stage 2 uses `1e-9`;
+  independent acceptance remains `1e-6 kWh`.
 
 ### Research validity and comparability
 
@@ -41,8 +89,9 @@
   feasibility or daily energy neutrality.
 - It changes which cost artifact is authoritative. Old reports whose demand or
   CO2 rows were zeroed must not be quoted; new runs must have
-  `canonical_cost_ledger_accounting_residual=OK` and
-  `objective_value_matches_canonical_accounting_total=OK`.
+  `canonical_cost_ledger_accounting_residual=OK`. The objective/accounting
+  equality check is required only when
+  `objective_accounting_equality_required=true`; otherwise it is `SKIPPED`.
 - This does **not** close the separate weather-study, ICE 26-vehicle, EV
   35-vehicle-use, hourly rolling, or global integrated-optimality requirements.
 

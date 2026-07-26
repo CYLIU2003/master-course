@@ -238,6 +238,18 @@ class MILPOptimizer:
                     "stage1_termination_reason"
                 ),
                 "gurobi_threads": (plan.metadata or {}).get("gurobi_threads"),
+                "stage1_gurobi_feasibility_tol": (
+                    plan.metadata or {}
+                ).get("stage1_gurobi_feasibility_tol"),
+                "stage2_gurobi_feasibility_tol": (
+                    plan.metadata or {}
+                ).get("stage2_gurobi_feasibility_tol"),
+                "stage1_numeric_diagnostics": dict(
+                    (plan.metadata or {}).get("stage1_numeric_diagnostics") or {}
+                ),
+                "stage2_numeric_diagnostics": dict(
+                    (plan.metadata or {}).get("stage2_numeric_diagnostics") or {}
+                ),
                 "stage1_mip_gap_ratio": (plan.metadata or {}).get("stage1_mip_gap_ratio"),
                 "stage1_runtime_seconds": (plan.metadata or {}).get("stage1_runtime_seconds"),
                 "stage1_pre_optimize_seconds": (plan.metadata or {}).get(

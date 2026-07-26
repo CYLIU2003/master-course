@@ -151,6 +151,73 @@ def _configured_gurobi_threads(config: OptimizationConfig) -> Optional[int]:
     return threads
 
 
+def _configured_gurobi_feasibility_tol(
+    config: OptimizationConfig,
+    *,
+    stage: int,
+) -> float:
+    """Return and validate the effective Gurobi primal feasibility tolerance."""
+
+    if stage not in {1, 2}:
+        raise ValueError(f"stage must be 1 or 2, got {stage!r}")
+    field_name = (
+        "stage1_gurobi_feasibility_tol"
+        if stage == 1
+        else "stage2_gurobi_feasibility_tol"
+    )
+    default = 1.0e-6 if stage == 1 else 1.0e-9
+    try:
+        tolerance = float(getattr(config, field_name, default))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"{field_name} must be within [1e-9, 1e-2]"
+        ) from exc
+    if not 1.0e-9 <= tolerance <= 1.0e-2:
+        raise ValueError(f"{field_name} must be within [1e-9, 1e-2]")
+    return tolerance
+
+
+def _gurobi_numeric_diagnostics(model: Any) -> Dict[str, Any]:
+    """Collect solver quality/scaling evidence without changing the model."""
+
+    def _attribute(name: str) -> Optional[float]:
+        try:
+            value = float(getattr(model, name))
+        except Exception:
+            return None
+        return value if math.isfinite(value) else None
+
+    diagnostics = {
+        "maximum_constraint_violation": _attribute("MaxConstrVio"),
+        "maximum_bound_violation": _attribute("MaxBoundVio"),
+        "maximum_integrality_violation": _attribute("MaxIntVio"),
+        "minimum_nonzero_constraint_coefficient": _attribute("MinCoeff"),
+        "maximum_constraint_coefficient": _attribute("MaxCoeff"),
+        "minimum_nonzero_rhs": _attribute("MinRHS"),
+        "maximum_rhs": _attribute("MaxRHS"),
+    }
+    minimum_coefficient = diagnostics[
+        "minimum_nonzero_constraint_coefficient"
+    ]
+    maximum_coefficient = diagnostics["maximum_constraint_coefficient"]
+    coefficient_range_ratio = (
+        maximum_coefficient / minimum_coefficient
+        if minimum_coefficient is not None
+        and maximum_coefficient is not None
+        and minimum_coefficient > 0.0
+        else None
+    )
+    diagnostics["constraint_coefficient_range_ratio"] = (
+        coefficient_range_ratio
+    )
+    diagnostics["scaling_warning"] = bool(
+        coefficient_range_ratio is not None
+        and coefficient_range_ratio > 1.0e9
+    )
+    diagnostics["scaling_warning_threshold_ratio"] = 1.0e9
+    return diagnostics
+
+
 def _has_exact_mip_optimality_certificate(
     solver_status: str,
     mip_gap: Optional[float],
@@ -3772,6 +3839,12 @@ class GurobiMILPAdapter:
                         "stage1_best_obj_stop_applied": False,
                         "stage1_termination_reason": "gurobi_unavailable",
                         "gurobi_threads": _configured_gurobi_threads(config),
+                        "stage1_gurobi_feasibility_tol": (
+                            _configured_gurobi_feasibility_tol(config, stage=1)
+                        ),
+                        "stage2_gurobi_feasibility_tol": (
+                            _configured_gurobi_feasibility_tol(config, stage=2)
+                        ),
                         "stage1_mip_gap_ratio": None,
                         "stage1_runtime_seconds": None,
                         "stage2_solver_status": "not_run_gurobi_unavailable",
@@ -3797,8 +3870,10 @@ class GurobiMILPAdapter:
         stage1.Params.TimeLimit = stage_time_limit
         stage1.Params.MIPGap = max(float(config.mip_gap), 0.0)
         stage1.Params.Seed = int(config.random_seed)
-        # Terminal energy-neutrality is independently validated at 1e-6 kWh.
-        stage1.Params.FeasibilityTol = 1.0e-9
+        stage1_feasibility_tol = _configured_gurobi_feasibility_tol(
+            config, stage=1
+        )
+        stage1.Params.FeasibilityTol = stage1_feasibility_tol
         configured_threads = _configured_gurobi_threads(config)
         if configured_threads is not None:
             stage1.Params.Threads = configured_threads
@@ -4369,6 +4444,7 @@ class GurobiMILPAdapter:
         stage1.optimize(_stage1_search_callback)
 
         stage1_status = self._status_name(GRB, stage1.Status)
+        stage1_numeric_diagnostics = _gurobi_numeric_diagnostics(stage1)
         stage1_model_variable_count = int(getattr(stage1, "NumVars", 0) or 0)
         stage1_model_constraint_count = int(getattr(stage1, "NumConstrs", 0) or 0)
         stage1_solver_gap = self._model_gap(stage1)
@@ -4490,6 +4566,11 @@ class GurobiMILPAdapter:
                     ),
                     "stage1_termination_reason": stage1_termination_reason,
                     "gurobi_threads": configured_threads,
+                    "stage1_gurobi_feasibility_tol": stage1_feasibility_tol,
+                    "stage2_gurobi_feasibility_tol": (
+                        _configured_gurobi_feasibility_tol(config, stage=2)
+                    ),
+                    "stage1_numeric_diagnostics": stage1_numeric_diagnostics,
                     "stage1_mip_gap_ratio": stage1_gap,
                     "stage1_runtime_seconds": float(time.perf_counter() - total_started),
                     "stage1_pre_optimize_seconds": stage1_pre_optimize_seconds,
@@ -4663,6 +4744,11 @@ class GurobiMILPAdapter:
                 ),
                 "stage1_termination_reason": stage1_termination_reason,
                 "gurobi_threads": configured_threads,
+                "stage1_gurobi_feasibility_tol": stage1_feasibility_tol,
+                "stage2_gurobi_feasibility_tol": (
+                    _configured_gurobi_feasibility_tol(config, stage=2)
+                ),
+                "stage1_numeric_diagnostics": stage1_numeric_diagnostics,
                 "stage1_mip_gap_ratio": stage1_gap,
                 "stage1_runtime_seconds": float(
                     getattr(stage1, "Runtime", 0.0) or 0.0
@@ -4961,7 +5047,10 @@ class GurobiMILPAdapter:
         stage2.Params.TimeLimit = _resolved_stage_time_limit_sec(config, stage=2)
         stage2.Params.MIPGap = max(float(config.mip_gap), 0.0)
         stage2.Params.Seed = int(config.random_seed)
-        stage2.Params.FeasibilityTol = 1.0e-9
+        stage2_feasibility_tol = _configured_gurobi_feasibility_tol(
+            config, stage=2
+        )
+        stage2.Params.FeasibilityTol = stage2_feasibility_tol
         configured_threads = _configured_gurobi_threads(config)
         if configured_threads is not None:
             stage2.Params.Threads = configured_threads
@@ -5658,6 +5747,7 @@ class GurobiMILPAdapter:
             stage2.Params.DualReductions = 0
             stage2.optimize()
         stage2_status = self._status_name(GRB, stage2.Status)
+        stage2_numeric_diagnostics = _gurobi_numeric_diagnostics(stage2)
         stage2_gap = self._model_gap(stage2)
         stage2_bound = self._model_bound(stage2)
         if stage2.SolCount <= 0:
@@ -5700,6 +5790,13 @@ class GurobiMILPAdapter:
                 "stage2_best_bound": stage2_bound,
                 "stage2_mip_gap_ratio": stage2_gap,
                 "stage2_runtime_seconds": float(time.perf_counter() - started),
+                "stage1_gurobi_feasibility_tol": (
+                    None
+                    if stage1_status == "phase1_fixed_assignment"
+                    else _configured_gurobi_feasibility_tol(config, stage=1)
+                ),
+                "stage2_gurobi_feasibility_tol": stage2_feasibility_tol,
+                "stage2_numeric_diagnostics": stage2_numeric_diagnostics,
                 "stage1_time_limit_sec_effective": (
                     0
                     if stage1_status == "phase1_fixed_assignment"
@@ -5969,6 +6066,13 @@ class GurobiMILPAdapter:
             "stage2_best_bound": stage2_bound,
             "stage2_mip_gap_ratio": stage2_gap,
             "stage2_runtime_seconds": float(time.perf_counter() - started),
+            "stage1_gurobi_feasibility_tol": (
+                None
+                if stage1_status == "phase1_fixed_assignment"
+                else _configured_gurobi_feasibility_tol(config, stage=1)
+            ),
+            "stage2_gurobi_feasibility_tol": stage2_feasibility_tol,
+            "stage2_numeric_diagnostics": stage2_numeric_diagnostics,
             "stage1_time_limit_sec_effective": (
                 0
                 if stage1_status == "phase1_fixed_assignment"

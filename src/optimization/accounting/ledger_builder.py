@@ -1,89 +1,16 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import replace
 from datetime import date, datetime, timedelta
 import math
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
 from .aggregators import build_accounting_summary
 from .schema import AccountingArtifacts, EnergyFlowLedgerRow, VehicleEnergyLedgerRow, VehicleSlotLedgerRow
+from src.optimization.common.cost_components import normalize_cost_component_flags
 from src.optimization.common.time_axis import normalize_timestep_min
 
 UNKNOWN_OPERATOR = "UNKNOWN_OPERATOR"
-
-
-def _align_vehicle_fuel_to_solver_cost_ledger(
-    rows: Sequence[VehicleSlotLedgerRow],
-    *,
-    metadata: Mapping[str, Any],
-) -> List[VehicleSlotLedgerRow]:
-    """Allocate solver-evaluated fuel and ICE CO2 totals across reporting rows."""
-
-    expected_fuel_cost = _finite_float(metadata.get("canonical_fuel_cost_jpy"))
-    expected_ice_co2 = _finite_float(metadata.get("canonical_ice_co2_kg"))
-    if expected_fuel_cost is None and expected_ice_co2 is None:
-        return list(rows)
-
-    current_fuel_cost = sum(float(row.fuel_cost_jpy or 0.0) for row in rows)
-    current_ice_co2 = sum(float(row.ice_co2_kg or 0.0) for row in rows)
-    if (
-        expected_fuel_cost is not None
-        and expected_fuel_cost > 0.0
-        and current_fuel_cost <= 0.0
-    ):
-        raise ValueError(
-            "Cannot allocate positive canonical fuel cost over an empty fuel ledger"
-        )
-    if (
-        expected_ice_co2 is not None
-        and expected_ice_co2 > 0.0
-        and current_ice_co2 <= 0.0
-    ):
-        raise ValueError(
-            "Cannot allocate positive canonical ICE CO2 over an empty ICE CO2 ledger"
-        )
-    fuel_factor = (
-        max(expected_fuel_cost, 0.0) / current_fuel_cost
-        if expected_fuel_cost is not None and current_fuel_cost > 0.0
-        else 1.0
-    )
-    co2_factor = (
-        max(expected_ice_co2, 0.0) / current_ice_co2
-        if expected_ice_co2 is not None and current_ice_co2 > 0.0
-        else 1.0
-    )
-    if abs(fuel_factor - 1.0) <= 1.0e-12 and abs(co2_factor - 1.0) <= 1.0e-12:
-        return list(rows)
-
-    aligned: List[VehicleSlotLedgerRow] = []
-    for row in rows:
-        reason = str(row.repair_reason or "").strip()
-        reason = ";".join(
-            item
-            for item in (
-                reason,
-                "allocated_to_solver_canonical_fuel_and_co2_totals",
-            )
-            if item
-        )
-        aligned.append(
-            replace(
-                row,
-                ice_fuel_liter=float(row.ice_fuel_liter or 0.0) * fuel_factor,
-                fuel_start_l=float(row.fuel_start_l or 0.0) * fuel_factor,
-                fuel_end_l=float(row.fuel_end_l or 0.0) * fuel_factor,
-                refuel_l=float(row.refuel_l or 0.0) * fuel_factor,
-                fuel_balance_error_l=float(row.fuel_balance_error_l or 0.0)
-                * fuel_factor,
-                fuel_cost_jpy=float(row.fuel_cost_jpy or 0.0) * fuel_factor,
-                ice_co2_kg=float(row.ice_co2_kg or 0.0) * co2_factor,
-                co2_cost_jpy=float(row.co2_cost_jpy or 0.0) * co2_factor,
-                repair_reason=reason,
-                created_by_stage="solver_canonical_cost_allocation",
-            )
-        )
-    return aligned
 
 
 def _parse_date(value: Any, fallback: date) -> date:
@@ -306,6 +233,9 @@ def _build_vehicle_slot_ledger(
 ) -> List[VehicleSlotLedgerRow]:
     vehicle_by_id, vehicle_type_by_id = _vehicle_maps(problem)
     price_by_slot = _price_by_slot(problem)
+    component_flags = normalize_cost_component_flags(
+        metadata.get("cost_component_flags")
+    )
     soc_by_key = _soc_by_vehicle_time(vehicle_soc_timeseries_rows, slot_minutes=slot_minutes)
     charge_by_key = _charge_by_vehicle_time(vehicle_charging_source_rows, slot_minutes=slot_minutes)
     rows_by_key: Dict[tuple[str, date, int], Dict[str, Any]] = defaultdict(lambda: defaultdict(float))
@@ -405,8 +335,18 @@ def _build_vehicle_slot_ledger(
         ice_co2_kg = fuel_liter * co2_rate
         battery_degradation_rate = float(metadata.get("battery_degradation_price_jpy_per_kwh", 0.0) or 0.0)
         electricity_cost_jpy = float(bucket.get("charger_grid_kwh", 0.0) or 0.0) * tou_price
-        fuel_cost_jpy = fuel_liter * float(metadata.get("fuel_price_jpy_per_liter", 0.0) or 0.0)
-        co2_cost_jpy = ice_co2_kg * float(metadata.get("co2_price_jpy_per_kg", 0.0) or 0.0)
+        fuel_cost_jpy = (
+            fuel_liter
+            * float(metadata.get("fuel_price_jpy_per_liter", 0.0) or 0.0)
+            if component_flags["fuel_cost"]
+            else 0.0
+        )
+        co2_cost_jpy = (
+            ice_co2_kg
+            * float(metadata.get("co2_price_jpy_per_kg", 0.0) or 0.0)
+            if component_flags["co2_cost"]
+            else 0.0
+        )
         battery_degradation_cost_jpy = charge_input_kwh * battery_degradation_rate
         if vehicle_id not in current_soc_by_vehicle:
             current_soc_by_vehicle[vehicle_id] = _vehicle_initial_soc_kwh(vehicle, capacity_kwh) if capacity_kwh > 0.0 else 0.0
@@ -1050,8 +990,54 @@ def _build_data_flow_validation(
     add("fuel_consumption_balance", _sum(vehicle_energy_rows, "fuel_consumed_l"), float(summary.get("ice_fuel_consumed_l", 0.0) or 0.0), 1.0e-6, source_files="vehicle_energy_ledger.csv;kpi_summary.json")
     add("fuel_timeseries_matches_vehicle_fuel_ledger", _sum_dict(fuel_timeseries_rows, "fuel_consumption_l"), _sum(vehicle_energy_rows, "fuel_consumed_l"), 1.0e-6, source_files="fuel_timeseries.csv;vehicle_energy_ledger.csv")
     add("fuel_canonical_matches_vehicle_ledger", _sum_dict(fuel_canonical_rows, "fuel_consumption_l"), _sum(vehicle_energy_rows, "fuel_consumed_l"), 1.0e-6, source_files="fuel_canonical_ledger.csv;vehicle_energy_ledger.csv")
-    add("fuel_cost_matches_fuel_consumption", _sum_dict(fuel_canonical_rows, "fuel_cost_jpy"), sum(float(row.get("fuel_consumption_l", 0.0) or 0.0) * float(row.get("diesel_price_jpy_per_l", 0.0) or 0.0) for row in fuel_canonical_rows), 1.0e-6, source_files="fuel_canonical_ledger.csv")
+    fuel_cost_enabled = bool(
+        (summary.get("cost_component_flags") or {}).get("fuel_cost", True)
+    )
+    expected_fuel_cost = (
+        sum(
+            float(row.get("fuel_consumption_l", 0.0) or 0.0)
+            * float(row.get("diesel_price_jpy_per_l", 0.0) or 0.0)
+            for row in fuel_canonical_rows
+        )
+        if fuel_cost_enabled
+        else 0.0
+    )
+    add(
+        "fuel_cost_matches_fuel_consumption",
+        _sum_dict(fuel_canonical_rows, "fuel_cost_jpy"),
+        expected_fuel_cost,
+        1.0e-6,
+        source_files="fuel_canonical_ledger.csv",
+    )
+    canonical_fuel_cost = _finite_float(summary.get("canonical_fuel_cost_jpy"))
+    if canonical_fuel_cost is None:
+        skip(
+            "solver_fuel_cost_matches_physical_fuel_ledger",
+            source_files="fuel_canonical_ledger.csv;canonical solver cost ledger",
+        )
+    else:
+        add(
+            "solver_fuel_cost_matches_physical_fuel_ledger",
+            _sum_dict(fuel_canonical_rows, "fuel_cost_jpy"),
+            canonical_fuel_cost,
+            1.0e-6,
+            source_files="fuel_canonical_ledger.csv;canonical solver cost ledger",
+        )
     add("ice_co2_matches_fuel_consumption", _sum_dict(fuel_canonical_rows, "ice_co2_kg"), sum(float(row.get("fuel_consumption_l", 0.0) or 0.0) * float(row.get("fuel_emission_factor_kg_per_l", 0.0) or 0.0) for row in fuel_canonical_rows), 1.0e-6, source_files="fuel_canonical_ledger.csv")
+    canonical_ice_co2 = _finite_float(summary.get("canonical_ice_co2_kg"))
+    if canonical_ice_co2 is None:
+        skip(
+            "solver_ice_co2_matches_physical_fuel_ledger",
+            source_files="fuel_canonical_ledger.csv;canonical solver cost ledger",
+        )
+    else:
+        add(
+            "solver_ice_co2_matches_physical_fuel_ledger",
+            _sum_dict(fuel_canonical_rows, "ice_co2_kg"),
+            canonical_ice_co2,
+            1.0e-6,
+            source_files="fuel_canonical_ledger.csv;canonical solver cost ledger",
+        )
     add("co2_total_equals_grid_plus_ice", _sum_dict(co2_rows, "total_co2_kg"), _sum_dict(co2_rows, "grid_co2_kg") + _sum_dict(co2_rows, "ice_co2_kg"), 1.0e-6, source_files="co2_timeseries.csv")
     add("kpi_total_co2_matches_co2_ledger", float(summary.get("total_co2_kg", 0.0) or 0.0), _sum_dict(co2_rows, "total_co2_kg"), 1.0e-6, source_files="kpi_summary.json;co2_timeseries.csv")
     add("co2_balance", _sum_dict(co2_rows, "total_co2_kg"), float(summary.get("total_co2_kg", _sum_dict(co2_rows, "total_co2_kg")) or 0.0), 1.0e-6, source_files="co2_timeseries.csv;kpi_summary.json")
@@ -1307,10 +1293,6 @@ def build_accounting_artifacts(
         vehicle_charging_source_rows=vehicle_charging_source_rows,
         metadata=metadata,
         slot_minutes=slot_minutes,
-    )
-    vehicle_rows = _align_vehicle_fuel_to_solver_cost_ledger(
-        vehicle_rows,
-        metadata=metadata,
     )
     energy_rows = _build_energy_flow_ledger(
         scenario_id=scenario_id,

@@ -4,6 +4,8 @@ from collections import defaultdict
 from statistics import mean
 from typing import Any, Dict, Iterable, Mapping, Sequence
 
+from src.optimization.common.cost_components import normalize_cost_component_flags
+
 
 def _sum(rows: Sequence[Mapping[str, Any]], key: str) -> float:
     return float(sum(float(row.get(key, 0.0) or 0.0) for row in rows))
@@ -45,6 +47,9 @@ def build_accounting_summary(
     metadata: Mapping[str, Any] | None = None,
 ) -> Dict[str, Any]:
     metadata = dict(metadata or {})
+    component_flags = normalize_cost_component_flags(
+        metadata.get("cost_component_flags")
+    )
     vehicle_energy_rows = list(vehicle_energy_rows or [])
     trip_assignment_rows = list(trip_assignment_rows or [])
 
@@ -74,7 +79,11 @@ def build_accounting_summary(
         float(metadata.get("co2_price_jpy_per_kg", 0.0) or 0.0),
         0.0,
     )
-    co2_cost_jpy = total_co2_kg * co2_price_jpy_per_kg
+    co2_cost_jpy = (
+        total_co2_kg * co2_price_jpy_per_kg
+        if component_flags["co2_cost"]
+        else 0.0
+    )
     battery_degradation_cost_jpy = _sum(vehicle_rows, "battery_degradation_cost_jpy")
     grid_energy_cost_jpy = _sum(energy_rows, "energy_cost_jpy")
     bess_total_flow_cost_jpy = _sum(energy_rows, "bess_total_flow_cost_jpy")
@@ -171,7 +180,7 @@ def build_accounting_summary(
 
     vehicle_usage_unit_cost = float(metadata.get("vehicle_usage_cost_jpy_per_used_bus", 0.0) or 0.0)
     vehicle_usage_cost_jpy = used_vehicle_day_count * vehicle_usage_unit_cost
-    if not bool((metadata.get("cost_component_flags") or {}).get("vehicle_usage_cost", True)):
+    if not component_flags["vehicle_usage_cost"]:
         vehicle_usage_cost_jpy = 0.0
     total_cost_jpy = electricity_cost_jpy + demand_cost_jpy + fuel_cost_jpy + co2_cost_jpy + battery_degradation_cost_jpy + contract_overage_cost_jpy + vehicle_usage_cost_jpy
     solver_objective_matches_accounting_total = bool(
@@ -215,6 +224,9 @@ def build_accounting_summary(
         "run_created_at": str(metadata.get("run_created_at", "") or ""),
         "output_generated_at": str(metadata.get("output_generated_at", "") or ""),
         "operator_id": operator_id,
+        "cost_component_flags": dict(component_flags),
+        "canonical_fuel_cost_jpy": metadata.get("canonical_fuel_cost_jpy"),
+        "canonical_ice_co2_kg": metadata.get("canonical_ice_co2_kg"),
         "timestep_min": int(metadata.get("slot_minutes", 0) or 0),
         "num_periods": int(metadata.get("num_periods", len(energy_rows)) or len(energy_rows)),
         "planning_horizon_hours": float(metadata.get("planning_horizon_hours", (int(metadata.get("slot_minutes", 0) or 0) * max(len(energy_rows), 1) / 60.0 if energy_rows else 0.0)) or 0.0),

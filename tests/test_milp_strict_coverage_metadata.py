@@ -15,6 +15,7 @@ from src.optimization.common.problem import (
 from src.optimization.milp.engine import MILPOptimizer
 from src.optimization.milp.solver_adapter import (
     _best_objective_stop_from_certified_lower_bound,
+    _configured_gurobi_feasibility_tol,
     _configured_gurobi_threads,
     _has_exact_mip_optimality_certificate,
     _single_path_flow_implies_temporal_exclusivity,
@@ -97,6 +98,22 @@ def test_explicit_gurobi_threads_must_be_positive() -> None:
     assert _configured_gurobi_threads(OptimizationConfig(gurobi_threads=1)) == 1
     with pytest.raises(ValueError, match="positive integer"):
         _configured_gurobi_threads(OptimizationConfig(gurobi_threads=0))
+
+
+def test_gurobi_feasibility_tolerances_are_stage_specific_and_validated() -> None:
+    config = OptimizationConfig()
+    assert _configured_gurobi_feasibility_tol(
+        config, stage=1
+    ) == pytest.approx(1.0e-6)
+    assert _configured_gurobi_feasibility_tol(
+        config, stage=2
+    ) == pytest.approx(1.0e-9)
+
+    with pytest.raises(ValueError, match=r"\[1e-9, 1e-2\]"):
+        _configured_gurobi_feasibility_tol(
+            OptimizationConfig(stage2_gurobi_feasibility_tol=1.0e-10),
+            stage=2,
+        )
 
 
 def test_single_path_redundancy_requires_strictly_forward_arcs() -> None:

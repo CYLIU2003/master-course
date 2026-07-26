@@ -502,6 +502,21 @@ def update_cost_breakdown(
         ledger_source = str(ledger_path.relative_to(run_dir))
         accounting_total = as_float(ledger.get("accounting_total_cost_jpy"))
         accounting_residual = as_float(ledger.get("accounting_residual_jpy"))
+        objective_mode = str(ledger.get("objective_mode") or "")
+        objective_unit = str(
+            ledger.get("solver_objective_unit")
+            or (
+                "JPY"
+                if ledger.get("objective_is_actual_cost", False)
+                else "solver_objective_score"
+            )
+        )
+        objective_accounting_equality_required = bool(
+            ledger.get(
+                "objective_accounting_equality_required",
+                ledger.get("objective_is_actual_cost", False),
+            )
+        )
     else:
         # Backward-compatible read path for pre-v1 runs. This still consumes
         # solver-evaluated graph components; it never infers a missing cost
@@ -556,6 +571,15 @@ def update_cost_breakdown(
         accounting_total = float(sum(components.values()))
         accounting_residual = as_float(legacy.get("total_cost")) - accounting_total
         ledger_source = str(legacy_path.relative_to(run_dir))
+        objective_mode = str((legacy.get("meta") or {}).get("objective_mode") or "")
+        objective_accounting_equality_required = bool(
+            legacy_components.get("objective_is_actual_cost", False)
+        )
+        objective_unit = (
+            "JPY"
+            if objective_accounting_equality_required
+            else "solver_objective_score"
+        )
 
     electricity_cost = as_float(components.get("electricity_cost_jpy"))
     grid_purchase_cost = as_float(details.get("grid_purchase_cost_jpy"))
@@ -683,6 +707,11 @@ def update_cost_breakdown(
         "carbon_price_jpy_per_kg": carbon_price,
         "accounting_residual_jpy": accounting_residual,
         "canonical_cost_ledger_source": ledger_source,
+        "objective_mode": objective_mode,
+        "objective_unit": objective_unit,
+        "objective_accounting_equality_required": (
+            objective_accounting_equality_required
+        ),
         "total_cost": real_total,
         "total_cost_with_assets": total_with_assets,
     }
@@ -703,14 +732,20 @@ def update_summary(
     summary = load_json(path)
     objective_value = objective_value_from_breakdown(run_dir, as_float(summary.get("objective_value_jpy", summary.get("objective_value"))))
     total_cost = cost["total_cost"]
-    solver_objective_matches_accounting_total = bool(
-        summary.get("solver_objective_matches_accounting_total", False)
-    ) and abs(objective_value - total_cost) <= 1.0e-6
-    objective_is_actual_cost = solver_objective_matches_accounting_total
+    objective_accounting_equality_required = bool(
+        cost["objective_accounting_equality_required"]
+    )
+    solver_objective_matches_accounting_total = (
+        abs(objective_value - total_cost) <= 1.0e-6
+    )
+    objective_is_actual_cost = bool(
+        objective_accounting_equality_required
+        and solver_objective_matches_accounting_total
+    )
 
     summary["objective_value"] = objective_value
     summary["objective_value_jpy"] = objective_value
-    summary["objective_value_unit"] = "JPY"
+    summary["objective_value_unit"] = cost["objective_unit"]
     summary["total_cost_jpy"] = total_cost
     summary["accounting_total_cost_jpy"] = total_cost
     summary["reported_total_cost_jpy"] = total_cost
@@ -726,6 +761,12 @@ def update_summary(
     summary["canonical_cost_ledger_source"] = cost[
         "canonical_cost_ledger_source"
     ]
+    summary["objective_mode"] = cost["objective_mode"] or summary.get(
+        "objective_mode", ""
+    )
+    summary["objective_accounting_equality_required"] = (
+        objective_accounting_equality_required
+    )
     summary["objective_is_actual_cost"] = objective_is_actual_cost
     summary["solver_objective_matches_accounting_total"] = solver_objective_matches_accounting_total
     if assignment:
@@ -742,6 +783,9 @@ def update_summary(
         "gross_operating_cost_jpy": "sum of solver-evaluated canonical cost ledger terms",
         "objective_value_jpy": "solver objective value; equals reported_total_cost_jpy only when objective_is_actual_cost=true",
         "objective_is_actual_cost": objective_is_actual_cost,
+        "objective_accounting_equality_required": (
+            objective_accounting_equality_required
+        ),
         "solver_objective_matches_accounting_total": solver_objective_matches_accounting_total,
     }
     write_json(path, summary)
@@ -758,10 +802,16 @@ def update_kpi_summary(
     path = run_dir / "graph" / "kpi_summary.json"
     kpi = load_json(path)
     objective_value = objective_value_from_breakdown(run_dir, as_float(kpi.get("objective_value_jpy", kpi.get("objective_value"))))
-    solver_objective_matches_accounting_total = bool(
-        kpi.get("solver_objective_matches_accounting_total", False)
-    ) and abs(objective_value - cost["total_cost"]) <= 1.0e-6
-    objective_is_actual_cost = solver_objective_matches_accounting_total
+    objective_accounting_equality_required = bool(
+        cost["objective_accounting_equality_required"]
+    )
+    solver_objective_matches_accounting_total = (
+        abs(objective_value - cost["total_cost"]) <= 1.0e-6
+    )
+    objective_is_actual_cost = bool(
+        objective_accounting_equality_required
+        and solver_objective_matches_accounting_total
+    )
 
     energy_keys = [
         "pv_generation_kwh",
@@ -811,10 +861,17 @@ def update_kpi_summary(
     kpi["canonical_cost_ledger_source"] = cost[
         "canonical_cost_ledger_source"
     ]
+    kpi["objective_mode"] = cost["objective_mode"] or kpi.get(
+        "objective_mode", ""
+    )
+    kpi["objective_accounting_equality_required"] = (
+        objective_accounting_equality_required
+    )
     if kpi.get("validated_operating_cost_jpy") is not None:
         kpi["validated_operating_cost_jpy"] = cost["total_cost"]
     kpi["objective_value"] = objective_value
     kpi["objective_value_jpy"] = objective_value
+    kpi["objective_value_unit"] = cost["objective_unit"]
     kpi["objective_is_actual_cost"] = objective_is_actual_cost
     kpi["solver_objective_matches_accounting_total"] = solver_objective_matches_accounting_total
     if assignment:
@@ -864,7 +921,11 @@ def update_kpi_summary(
             "total_cost_jpy": cost["total_cost"],
             "objective_value": objective_value,
             "objective_value_jpy": objective_value,
+            "objective_value_unit": cost["objective_unit"],
             "objective_is_actual_cost": objective_is_actual_cost,
+            "objective_accounting_equality_required": (
+                objective_accounting_equality_required
+            ),
             "accounting_residual_jpy": cost["accounting_residual_jpy"],
             "canonical_cost_ledger_source": cost[
                 "canonical_cost_ledger_source"
@@ -913,6 +974,9 @@ def update_kpi_summary(
         "gross_operating_cost_jpy": "actual operating cost terms from reporting ledgers",
         "objective_value_jpy": "solver/fallback objective value; may include rewards and penalties",
         "objective_is_actual_cost": objective_is_actual_cost,
+        "objective_accounting_equality_required": (
+            objective_accounting_equality_required
+        ),
     }
 
     write_json(path, kpi)
@@ -935,7 +999,9 @@ def update_kpi_summary(
             "validated_operating_cost_jpy",
             "objective_value",
             "objective_value_jpy",
+            "objective_value_unit",
             "objective_is_actual_cost",
+            "objective_accounting_equality_required",
             "solver_objective_matches_accounting_total",
             "fuel_consumption_l",
             "ice_fuel_consumed_l",
@@ -1342,6 +1408,27 @@ def validation_row(
     }
 
 
+def skipped_validation_row(
+    check_name: str,
+    *,
+    message: str,
+    source_files: str = "",
+) -> dict[str, Any]:
+    """Return an explicit non-error row for an inapplicable validation."""
+
+    return {
+        "check_name": check_name,
+        "status": "SKIPPED",
+        "expected_value": "",
+        "actual_value": "",
+        "difference": "",
+        "tolerance": "",
+        "severity": "INFO",
+        "message": message,
+        "source_files": source_files,
+    }
+
+
 def update_data_flow_validation(
     run_dir: Path,
     totals: dict[str, float],
@@ -1493,15 +1580,31 @@ def update_data_flow_validation(
             severity="ERROR",
             source_files=cost["canonical_cost_ledger_source"],
         ),
-        validation_row(
-            "objective_value_matches_canonical_accounting_total",
-            cost["total_cost"],
-            objective_value_from_breakdown(run_dir, 0.0),
-            tolerance=1.0e-6,
-            severity="ERROR",
-            source_files=(
-                f"{cost['canonical_cost_ledger_source']};objective_breakdown.csv"
-            ),
+        (
+            validation_row(
+                "objective_value_matches_canonical_accounting_total",
+                cost["total_cost"],
+                objective_value_from_breakdown(run_dir, 0.0),
+                tolerance=1.0e-6,
+                severity="ERROR",
+                source_files=(
+                    f"{cost['canonical_cost_ledger_source']};"
+                    "objective_breakdown.csv"
+                ),
+            )
+            if cost["objective_accounting_equality_required"]
+            else skipped_validation_row(
+                "objective_value_matches_canonical_accounting_total",
+                message=(
+                    "The solver objective is not defined as accounting cost; "
+                    "cost correctness is validated by the canonical ledger "
+                    "residual instead."
+                ),
+                source_files=(
+                    f"{cost['canonical_cost_ledger_source']};"
+                    "objective_breakdown.csv"
+                ),
+            )
         ),
         validation_row(
             "kpi_fuel_cost_matches_fuel_canonical",
@@ -1533,7 +1636,14 @@ def update_data_flow_validation(
         ),
         validation_row(
             "summary_objective_actual_cost_flag_matches_values",
-            abs(objective_value_from_breakdown(run_dir, 0.0) - cost_breakdown_total) <= 1.0e-6,
+            bool(
+                cost["objective_accounting_equality_required"]
+                and abs(
+                    objective_value_from_breakdown(run_dir, 0.0)
+                    - cost_breakdown_total
+                )
+                <= 1.0e-6
+            ),
             bool(summary.get("objective_is_actual_cost")),
             source_files="summary.json",
         ),

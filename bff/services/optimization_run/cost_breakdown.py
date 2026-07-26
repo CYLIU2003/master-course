@@ -43,6 +43,16 @@ def canonical_cost_ledger_json(
     accounting_total = float(sum(components.values()))
     reported_total = float(breakdown.get("total_cost", accounting_total) or 0.0)
     residual = reported_total - accounting_total
+    objective_is_actual_cost = bool(
+        breakdown.get("objective_is_actual_cost", False)
+    )
+    objective_mode = str(
+        (engine_result.solver_metadata or {}).get("objective_mode")
+        or getattr(problem.scenario, "objective_mode", None)
+        or "total_cost"
+    )
+    objective_value = float(engine_result.objective_value or 0.0)
+    objective_unit = "JPY" if objective_is_actual_cost else "solver_objective_score"
     return {
         "schema_version": "canonical_cost_ledger_v1",
         "scenario_id": scenario_id,
@@ -54,10 +64,16 @@ def canonical_cost_ledger_json(
         "accounting_residual_jpy": residual,
         "accounting_residual_tolerance_jpy": 1.0e-6,
         "accounting_residual_satisfied": abs(residual) <= 1.0e-6,
-        "solver_objective_value_jpy": float(engine_result.objective_value or 0.0),
-        "objective_is_actual_cost": bool(
-            breakdown.get("objective_is_actual_cost", False)
+        "solver_objective_value": objective_value,
+        "solver_objective_unit": objective_unit,
+        "solver_objective_value_jpy": (
+            objective_value if objective_is_actual_cost else None
         ),
+        "objective_mode": objective_mode,
+        "objective_is_actual_cost": objective_is_actual_cost,
+        # This is a semantic contract, not a value-based inference.  A CO2 or
+        # balanced objective may differ from the accounting total by design.
+        "objective_accounting_equality_required": objective_is_actual_cost,
         "solver_objective_matches_accounting_total": bool(
             (engine_result.solver_metadata or {}).get(
                 "solver_objective_matches_accounting_total", False
