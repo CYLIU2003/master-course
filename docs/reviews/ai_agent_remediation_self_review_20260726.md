@@ -88,7 +88,7 @@ git diff --check
 
 Results:
 
-- 857 tests passed.
+- 858 tests passed.
 - Gurobi SOC round-trip was not skipped.
 - Compileall passed.
 - No whitespace errors were reported.

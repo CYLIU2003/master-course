@@ -147,6 +147,7 @@ def test_research_phase3_accepts_feasibility_but_not_a_global_cost_claim() -> No
         dispatch_context=None,
         trips=(),
         vehicles=(),
+        metadata={"research_fleet_validation": {"status": "OK"}},
     )
     fake_result = OptimizationEngineResult(
         mode=OptimizationMode.MILP,
@@ -230,6 +231,58 @@ def test_research_phase3_accepts_feasibility_but_not_a_global_cost_claim() -> No
     assert "objective_is_actual_cost" not in result.solver_metadata["research_acceptance_checks"]
 
 
+def test_research_run_rejects_undeclared_vehicle_inventory_contract() -> None:
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="s-research-undeclared-fleet",
+            timestep_min=60,
+        ),
+        dispatch_context=None,
+        trips=(),
+        vehicles=(),
+    )
+    fake_result = OptimizationEngineResult(
+        mode=OptimizationMode.MILP,
+        solver_status="optimal",
+        objective_value=0.0,
+        plan=AssignmentPlan(
+            metadata={
+                "source_provenance_exact": True,
+                "vehicle_source_provenance_exact": True,
+            }
+        ),
+        feasible=True,
+        cost_breakdown={"objective_value": 0.0, "total_cost": 0.0},
+        solver_metadata={
+            "supports_exact_milp": True,
+            "supports_two_stage_milp": True,
+            "requested_phase_token": "phase3_two_stage",
+            "requested_phase": "phase3_two_stage",
+            "resolved_phase": "phase3_two_stage",
+            "executed_phase": "phase3_two_stage",
+        },
+    )
+    engine = OptimizationEngine()
+    engine._milp = _FakeMILPOptimizer(fake_result)
+
+    result = engine.solve(
+        problem,
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            phase="phase3_two_stage",
+            research_run=True,
+        ),
+    )
+
+    assert result.solver_metadata["research_run_accepted"] is False
+    assert (
+        result.solver_metadata["research_acceptance_checks"][
+            "research_vehicle_inventory_contract"
+        ]
+        is False
+    )
+
+
 def test_research_phase3_publishes_accounting_cost_only_when_ev_energy_is_restored() -> None:
     problem = CanonicalOptimizationProblem(
         scenario=OptimizationScenario(
@@ -239,7 +292,10 @@ def test_research_phase3_publishes_accounting_cost_only_when_ev_energy_is_restor
         dispatch_context=None,
         trips=(),
         vehicles=(),
-        metadata={"bev_terminal_soc_policy": "return_to_initial"},
+        metadata={
+            "bev_terminal_soc_policy": "return_to_initial",
+            "research_fleet_validation": {"status": "OK"},
+        },
     )
     fake_result = OptimizationEngineResult(
         mode=OptimizationMode.MILP,
@@ -306,7 +362,10 @@ def test_balanced_phase1_warning_identifies_assignment_scope_not_energy_gap() ->
         dispatch_context=None,
         trips=(),
         vehicles=(),
-        metadata={"bev_terminal_soc_policy": "return_to_initial"},
+        metadata={
+            "bev_terminal_soc_policy": "return_to_initial",
+            "research_fleet_validation": {"status": "OK"},
+        },
     )
     fake_result = OptimizationEngineResult(
         mode=OptimizationMode.MILP,

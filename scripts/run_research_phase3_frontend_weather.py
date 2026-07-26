@@ -1228,6 +1228,14 @@ def run(args: argparse.Namespace) -> int:
         )["vehicle_usage_cost_jpy_per_used_bus"] = float(
             vehicle_usage_cost_override
         )
+    # Bind the CLI's declared formal fleet to the canonical problem before
+    # construction.  The builder/engine can then fail closed on a missing bus
+    # instead of leaving the 35 BEV + 26 ICE requirement only in a post-hoc
+    # script assertion.
+    simulation_config["research_vehicle_inventory"] = {
+        "BEV": int(args.expected_bev_count),
+        "ICE": int(args.expected_ice_count),
+    }
     scenario["simulation_config"] = simulation_config
     fragment_policy = enforce_research_phase3_single_continuous_duty(scenario)
     initial_soc_policy = _resolve_initial_soc_policy(scenario)

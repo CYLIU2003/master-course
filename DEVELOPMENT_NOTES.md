@@ -25,6 +25,12 @@
   `graph/research_fleet_validation.json` preserve both contracts. A declared
   research inventory mismatch (including 35 BEV + 26 ICE versus 35 + 25)
   hard-fails instead of silently changing vehicle counts.
+- Self-review found and fixed an acceptance-order bug: calendar/fleet checks
+  were initially appended after `failed_checks` and `accepted` had already
+  been calculated. They now participate in the decision itself. The formal
+  weather runner binds its CLI `--expected-bev-count` /
+  `--expected-ice-count` declaration into the canonical problem before build,
+  and an undeclared research fleet is not accepted.
 - Input provenance now includes complete canonical trip/vehicle/PV hashes,
   runtime Python/Gurobi details, tracked-patch and untracked-file hashes. A
   research run requires clean Git at start and rejects a SHA/dirty-state change
@@ -40,7 +46,7 @@
   `rolling_execution=not_executed` until that chain is actually completed and
   accepted; no status is inferred from code availability.
 - Validation on 2026-07-26 completed with Gurobi enabled:
-  `python -m pytest -q -p no:cacheprovider` returned **857 passed**,
+  `python -m pytest -q -p no:cacheprovider` returned **858 passed**,
   `python -m compileall -q src bff` passed, and `git diff --check` reported no
   whitespace errors.
 
