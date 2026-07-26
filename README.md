@@ -7,14 +7,17 @@
 ![Optimization](https://img.shields.io/badge/Optimization-MILP%2BALNS-FF6F00)
 ![Status](https://img.shields.io/badge/Status-Core%20Package%20%28Tkinter%2BFastAPI%29-0A66C2)
 
-## Research-evidence contract (2026-07-25)
+## Research-evidence contract (2026-07-26)
 
 Manual frontend runs now preserve the input, Prepare output, code provenance, and
 validation context required for retrospective audit. A manual result remains a
 simulation artifact, not an automatically accepted research result.
 
-- `code_provenance.json` records the Git SHA, dirty state, repository root, and
-  any capture failure before the solve begins.
+- `code_provenance.json` records the Git SHA, dirty state, tracked-patch hash,
+  untracked-file hashes, repository root, Python/Gurobi environment, and any
+  capture failure before the solve begins. A research run requires a clean
+  worktree and rechecks that the SHA/dirty identity did not change during the
+  solve.
 - `run_input_provenance/` records the scenario snapshot, Prepare audit, effective
   optimization parameters, hashes, and validation result.
 - `charging_source_provenance.json` distinguishes exact depot/time-step energy
@@ -29,6 +32,12 @@ simulation artifact, not an automatically accepted research result.
   a monetary total: any solver-versus-physical mismatch remains an explicit
   `NG`. Disabling the fuel-cost component makes `fuel_cost_jpy=0` while
   preserving liters and emissions.
+- Non-service travel is canonicalized as one row per physical event in
+  `graph/movement_event_ledger.(csv|json)`. The only event types are
+  `startup`, `connection`, and `terminal_return`; a connection belongs to the
+  following trip and is not copied to the prior trip's `deadhead_after`.
+  Vehicle-slot fuel, CO2, and BEV energy are aggregated from this event ledger,
+  preventing before/after double counting.
 - Objective/accounting equality is a semantic contract, not a universal
   reporting rule. `objective_accounting_equality_required=true` requires an
   exact match; CO2/balanced/utilization and two-stage proxy objectives use
@@ -47,6 +56,11 @@ simulation artifact, not an automatically accepted research result.
   separately recorded PV curve may differ. Comparing a weekday to a Sunday is
   rejected as a weather-only claim. The counterfactual must also change a
   depot PV-generation hash or energy total; a relabelled duplicate is rejected.
+  `graph/calendar_weather_validation.json` records service date, timetable day
+  type, weather observation date/source, and comparison type. A declared
+  research fleet is separately hard-checked and written to
+  `graph/research_fleet_validation.json`; the model does not invent an ICE bus
+  or force unused BEVs into service.
 - Hourly rolling execution is reported as `not_executed` unless an actual rolling
   chain was run and its log is attached. No output fabricates rolling evidence,
   a missing ICE vehicle, or weather-dispatch behavior.
@@ -90,6 +104,9 @@ simulation artifact, not an automatically accepted research result.
   run supports. A manual PV-only pair is an exploratory PV-supply sensitivity,
   not weather-adaptive dispatch, an integrated global optimum, or a monthly
   demand-charge/investment result.
+- Reporting rebuild logs list a file in `updated_files` only when its content
+  hash actually changed. In particular, an existing but untouched
+  `results.xlsx` is not reported as regenerated.
 
 The formal command sequence and required acceptance checks are in
 [the Phase 3 manual validation runbook](docs/notes/phase3_manual_validation_runbook_20260716.md).

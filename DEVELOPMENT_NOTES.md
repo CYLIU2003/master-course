@@ -1,5 +1,76 @@
 # Development Notes
 
+## 2026-07-26 remediation implementation: physical movement, provenance, and comparison gates
+
+### Implemented in the current working tree
+
+- The verified interactive call path remains
+  `BFF _run_optimization -> ProblemBuilder -> OptimizationEngine ->
+  _persist_canonical_graph_exports -> build_accounting_artifacts`.
+  Canonical export now emits exactly one `startup`, `connection`, or
+  `terminal_return` row per modeled non-service movement in
+  `graph/movement_event_ledger.(csv|json)`. A connection is owned only by the
+  following trip; `trip_assignment.deadhead_after_km` no longer duplicates the
+  next leg's `deadhead_from_prev_min`.
+- ICE service fuel/CO2 and movement fuel/CO2 are calculated from physical
+  distance and canonical vehicle/type rates. The accounting layer aggregates
+  these quantities without scaling them to a monetary total. The BFF
+  regression with 12 km service plus 18 km of startup/connection/return travel
+  obtains 6.0 L total fuel, of which 3.6 L is movement fuel, and checks the
+  solver fuel/CO2 reconciliation rows.
+- Service date and timetable day type are validated before canonical problem
+  construction. Counterfactual PV input keeps the operating service date
+  separate from `weather_observation_date` and `weather_profile_source`.
+  `graph/calendar_weather_validation.json` and
+  `graph/research_fleet_validation.json` preserve both contracts. A declared
+  research inventory mismatch (including 35 BEV + 26 ICE versus 35 + 25)
+  hard-fails instead of silently changing vehicle counts.
+- Input provenance now includes complete canonical trip/vehicle/PV hashes,
+  runtime Python/Gurobi details, tracked-patch and untracked-file hashes. A
+  research run requires clean Git at start and rejects a SHA/dirty-state change
+  during the solve. Missing or modified manifest artifacts remain
+  non-research.
+- `return_to_initial` BEV failure or BESS terminal deviation beyond the
+  recorded tolerance blocks `validated_feasible` and research KPI eligibility.
+  Reporting rebuild `updated_files` is now derived from before/after content
+  hashes; an unchanged `results.xlsx` is not claimed as regenerated.
+- Existing hourly rolling remains a separate, explicit chain:
+  `scripts/run_hourly_charging_reoptimization.py` writes every step and
+  `rolling_chain_summary.json`. A day-ahead frontend run remains
+  `rolling_execution=not_executed` until that chain is actually completed and
+  accepted; no status is inferred from code availability.
+- Validation on 2026-07-26 completed with Gurobi enabled:
+  `python -m pytest -q -p no:cacheprovider` returned **857 passed**,
+  `python -m compileall -q src bff` passed, and `git diff --check` reported no
+  whitespace errors.
+
+### Comparability and unfinished external gates
+
+- This changes the physical fuel/CO2 and deadhead accounting definition.
+  `run_20260726_1502` and `run_20260726_1518` must not be repaired in place or
+  reused as research evidence. A new clean-commit paired run is required.
+- No new 264-trip high/low-PV optimization or hourly chain has been executed by
+  this code-editing task. Therefore the four final reporting checks, full-run
+  terminal balances, ≤10% predeclared gap gate, and weather-comparison
+  acceptance are not yet empirically closed.
+- Independent Claude Code and executive reviews required by
+  `docs/AI_AGENT_REMEDIATION_20260726.md` have not yet been performed. P0/P1
+  closure and teacher-facing completion must not be claimed until those
+  reviews and the clean rerun are complete. The current Codex self-review is
+  recorded separately in
+  `docs/reviews/ai_agent_remediation_self_review_20260726.md`.
+
+## 2026-07-26 AI agent remediation specification for the reviewed runs
+
+- Added docs/AI_AGENT_REMEDIATION_20260726.md. It turns the strict review of
+  the 2026-07-26 high-PV and low-PV outputs into an implementation order,
+  non-negotiable research guardrails, regression requirements, clean-rerun
+  acceptance gates, and independent-review checklist.
+- This documentation change does not alter the solver, model inputs, or any
+  historical result artifact. The reviewed ZIP remains non-research evidence
+  until a new run meets the documented provenance, physical-ledger, calendar,
+  terminal-SOC, and rolling-horizon gates.
+
 ## 2026-07-26 Review correction: physical fuel ledger and objective semantics
 
 ### Problems raised and closed in code
