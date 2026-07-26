@@ -36,6 +36,8 @@ def export_accounting_outputs(output_dir: str | Path, artifacts: AccountingArtif
     root.mkdir(parents=True, exist_ok=True)
     vehicle_csv = root / "vehicle_slot_ledger.csv"
     vehicle_json = root / "vehicle_slot_ledger.json"
+    movement_csv = root / "movement_event_ledger.csv"
+    movement_json = root / "movement_event_ledger.json"
     vehicle_energy_csv = root / "vehicle_energy_ledger.csv"
     vehicle_energy_json = root / "vehicle_energy_ledger.json"
     energy_csv = root / "energy_flow_ledger.csv"
@@ -50,6 +52,7 @@ def export_accounting_outputs(output_dir: str | Path, artifacts: AccountingArtif
     summary_json = root / "kpi_summary.json"
 
     vehicle_rows = [_row_dict(row) for row in artifacts.vehicle_slot_ledger]
+    movement_rows = [_row_dict(row) for row in artifacts.movement_event_ledger]
     vehicle_energy_rows = [_row_dict(row) for row in artifacts.vehicle_energy_ledger]
     energy_rows = [_row_dict(row) for row in artifacts.energy_flow_ledger]
     fuel_canonical_rows = [_row_dict(row) for row in artifacts.fuel_canonical_ledger]
@@ -92,6 +95,7 @@ def export_accounting_outputs(output_dir: str | Path, artifacts: AccountingArtif
     ]
 
     _write_csv(vehicle_csv, vehicle_rows)
+    _write_csv(movement_csv, movement_rows)
     _write_csv(vehicle_energy_csv, vehicle_energy_rows)
     _write_csv(energy_csv, energy_rows)
     _write_csv(bess_timeseries_csv, bess_rows)
@@ -102,12 +106,18 @@ def export_accounting_outputs(output_dir: str | Path, artifacts: AccountingArtif
     _write_csv(initial_soc_precheck_csv, initial_soc_precheck_rows)
     _write_csv(validation_csv, validation_rows)
     vehicle_json.write_text(json.dumps(vehicle_rows, ensure_ascii=False, indent=2), encoding="utf-8")
+    movement_json.write_text(
+        json.dumps(movement_rows, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     vehicle_energy_json.write_text(json.dumps(vehicle_energy_rows, ensure_ascii=False, indent=2), encoding="utf-8")
     energy_json.write_text(json.dumps(energy_rows, ensure_ascii=False, indent=2), encoding="utf-8")
     summary_json.write_text(json.dumps(artifacts.summary, ensure_ascii=False, indent=2), encoding="utf-8")
     return {
         "vehicle_slot_ledger_csv": str(vehicle_csv),
         "vehicle_slot_ledger_json": str(vehicle_json),
+        "movement_event_ledger_csv": str(movement_csv),
+        "movement_event_ledger_json": str(movement_json),
         "vehicle_energy_ledger_csv": str(vehicle_energy_csv),
         "vehicle_energy_ledger_json": str(vehicle_energy_json),
         "energy_flow_ledger_csv": str(energy_csv),

@@ -11,7 +11,13 @@ from unittest import mock
 import pytest
 
 from bff.routers import optimization
-from src.dispatch.models import DispatchContext, DutyLeg, Trip, VehicleDuty
+from src.dispatch.models import (
+    DeadheadRule,
+    DispatchContext,
+    DutyLeg,
+    Trip,
+    VehicleDuty,
+)
 from src.optimization.common.problem import (
     AssignmentPlan,
     CanonicalOptimizationProblem,
@@ -24,6 +30,7 @@ from src.optimization.common.problem import (
     ProblemDepot,
     ProblemTrip,
     ProblemVehicle,
+    ProblemVehicleType,
 )
 from src.optimization.engine import OptimizationEngine
 from src.optimization.common.result import ResultSerializer
@@ -149,6 +156,239 @@ def _problem_and_result() -> tuple[CanonicalOptimizationProblem, OptimizationEng
         ],
     }
     return problem, result, scenario
+
+
+def test_bff_canonical_export_counts_each_ice_movement_once(
+    tmp_path: Path,
+) -> None:
+    """Exercise the production BFF canonical-export/accounting call chain."""
+
+    dispatch_trips = (
+        Trip(
+            trip_id="ice-t1",
+            route_id="route-1",
+            origin="stop-a",
+            destination="stop-b",
+            departure_time="08:00",
+            arrival_time="08:30",
+            distance_km=5.0,
+            allowed_vehicle_types=("ICE",),
+        ),
+        Trip(
+            trip_id="ice-t2",
+            route_id="route-1",
+            origin="stop-c",
+            destination="stop-d",
+            departure_time="09:30",
+            arrival_time="10:00",
+            distance_km=7.0,
+            allowed_vehicle_types=("ICE",),
+        ),
+    )
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="movement-e2e",
+            timestep_min=30,
+            horizon_start="00:00",
+            objective_mode="total_cost",
+            diesel_price_yen_per_l=100.0,
+            ice_co2_kg_per_l=2.58,
+        ),
+        dispatch_context=DispatchContext(
+            service_date="2026-07-27",
+            trips=list(dispatch_trips),
+            turnaround_rules={},
+            deadhead_rules={
+                ("stop-d", "dep1"): DeadheadRule(
+                    from_stop="stop-d",
+                    to_stop="dep1",
+                    travel_time_min=30,
+                )
+            },
+            vehicle_profiles={},
+        ),
+        trips=(
+            ProblemTrip(
+                trip_id="ice-t1",
+                route_id="route-1",
+                origin="stop-a",
+                destination="stop-b",
+                departure_min=480,
+                arrival_min=510,
+                distance_km=5.0,
+                allowed_vehicle_types=("ICE",),
+            ),
+            ProblemTrip(
+                trip_id="ice-t2",
+                route_id="route-1",
+                origin="stop-c",
+                destination="stop-d",
+                departure_min=570,
+                arrival_min=600,
+                distance_km=7.0,
+                allowed_vehicle_types=("ICE",),
+            ),
+        ),
+        vehicle_types=(
+            ProblemVehicleType(
+                vehicle_type_id="ICE",
+                powertrain_type="ICE",
+                fuel_consumption_l_per_km=0.2,
+                co2_emission_kg_per_l=2.58,
+            ),
+        ),
+        vehicles=(
+            ProblemVehicle(
+                vehicle_id="ice-1",
+                vehicle_type="ICE",
+                home_depot_id="dep1",
+                fuel_consumption_l_per_km=0.2,
+            ),
+        ),
+        depots=(
+            ProblemDepot(depot_id="dep1", name="Depot 1", import_limit_kw=100.0),
+        ),
+        price_slots=tuple(
+            EnergyPriceSlot(slot_index=index, grid_buy_yen_per_kwh=20.0)
+            for index in range(48)
+        ),
+        metadata={
+            "service_date": "2026-07-27",
+            "deadhead_speed_kmh": 18.0,
+        },
+    )
+    plan = AssignmentPlan(
+        duties=(
+            VehicleDuty(
+                duty_id="ice-duty-1",
+                vehicle_type="ICE",
+                legs=(
+                    DutyLeg(
+                        trip=dispatch_trips[0],
+                        deadhead_from_prev_min=10,
+                    ),
+                    DutyLeg(
+                        trip=dispatch_trips[1],
+                        deadhead_from_prev_min=20,
+                    ),
+                ),
+            ),
+        ),
+        served_trip_ids=("ice-t1", "ice-t2"),
+        metadata={"duty_vehicle_map": {"ice-duty-1": "ice-1"}},
+    )
+    expected_fuel_l = (5.0 + 7.0 + 3.0 + 6.0 + 9.0) * 0.2
+    result = OptimizationEngineResult(
+        mode=OptimizationMode.MILP,
+        solver_status="feasible",
+        objective_value=expected_fuel_l * 100.0,
+        plan=plan,
+        feasible=True,
+        cost_breakdown={
+            "fuel_cost": expected_fuel_l * 100.0,
+            "ice_co2_kg": expected_fuel_l * 2.58,
+            "total_co2_kg": expected_fuel_l * 2.58,
+            "total_cost": expected_fuel_l * 100.0,
+        },
+        solver_metadata={
+            "objective_mode": "total_cost",
+            "objective_is_actual_cost": True,
+            "research_run": False,
+        },
+    )
+    scenario = {
+        "operator_id": "operator-1",
+        "simulation_config": {
+            "enable_vehicle_diagram_output": False,
+            "service_date": "2026-07-27",
+        },
+        "scenario_overlay": {
+            "cost_coefficients": {
+                "diesel_price_per_l": 100.0,
+            }
+        },
+        "trips": [
+            {
+                "trip_id": trip.trip_id,
+                "route_id": trip.route_id,
+                "origin": trip.origin,
+                "destination": trip.destination,
+                "departure": trip.departure_time,
+                "arrival": trip.arrival_time,
+            }
+            for trip in dispatch_trips
+        ],
+    }
+
+    artifacts = optimization._persist_canonical_graph_exports(
+        scenario=scenario,
+        problem=problem,
+        engine_result=result,
+        scenario_id="movement-e2e",
+        output_dir=str(tmp_path),
+    )
+
+    with (tmp_path / "graph" / "movement_event_ledger.json").open(
+        encoding="utf-8"
+    ) as handle:
+        movement_rows = json.load(handle)
+    assert [row["event_type"] for row in movement_rows] == [
+        "startup",
+        "connection",
+        "terminal_return",
+    ]
+    assert sum(row["distance_km"] for row in movement_rows) == pytest.approx(
+        18.0
+    )
+    assert sum(row["ice_fuel_liter"] for row in movement_rows) == pytest.approx(
+        3.6
+    )
+
+    with (tmp_path / "graph" / "vehicle_slot_ledger.json").open(
+        encoding="utf-8"
+    ) as handle:
+        slot_rows = json.load(handle)
+    assert sum(row["ice_fuel_liter"] for row in slot_rows) == pytest.approx(
+        expected_fuel_l
+    )
+    assert sum(row["ice_co2_kg"] for row in slot_rows) == pytest.approx(
+        expected_fuel_l * 2.58
+    )
+    referenced_event_ids = {
+        event_id
+        for row in slot_rows
+        for event_id in str(row.get("source_event_ids") or "").split(";")
+        if event_id
+    }
+    assert {
+        row["event_id"] for row in movement_rows
+    }.issubset(referenced_event_ids)
+    with (tmp_path / "graph" / "trip_assignment.csv").open(
+        encoding="utf-8",
+        newline="",
+    ) as handle:
+        trip_rows = list(csv.DictReader(handle))
+    assert all(float(row["deadhead_after_km"]) == 0.0 for row in trip_rows)
+    with (tmp_path / "graph" / "data_flow_validation.csv").open(
+        encoding="utf-8-sig",
+        newline="",
+    ) as handle:
+        validation_by_name = {
+            row["check_name"]: row for row in csv.DictReader(handle)
+        }
+    for check_name in (
+        "solver_fuel_cost_matches_physical_fuel_ledger",
+        "solver_ice_co2_matches_physical_fuel_ledger",
+    ):
+        assert validation_by_name[check_name]["status"] == "OK"
+    assert artifacts["accounting_summary"]["fuel_cost_jpy"] == pytest.approx(
+        expected_fuel_l * 100.0
+    )
+    assert artifacts["accounting_summary"]["movement_event_count"] == 3
+    assert artifacts["accounting_summary"][
+        "movement_ice_fuel_liter"
+    ] == pytest.approx(3.6)
+    assert artifacts["accounting_summary"]["movement_event_id_unique"] is True
 
 
 def test_normalize_postsolve_plan_preserves_pre_postsolve_source_flow_context() -> None:

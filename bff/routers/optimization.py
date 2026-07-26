@@ -106,6 +106,12 @@ from src.optimization.common.energy_flow_accounting import (
     normalize_pv_energy_breakdown,
 )
 from src.optimization.common.time_axis import normalize_timestep_min
+from src.optimization.common.soc_helpers import (
+    deadhead_distance_km,
+    is_electric_vehicle,
+    return_deadhead_min_to_home,
+    vehicle_energy_rate_kwh_per_km,
+)
 from src.optimization.rolling.reoptimizer import (
     RollingReoptimizer,
     assignment_plan_from_serialized_result,
@@ -134,6 +140,56 @@ INTERACTIVE_OPERATION_TIME_WINDOW_CONTROLS_VERSION = (
 )
 FULL_DAY_OPERATION_START_TIME = "00:00"
 FULL_DAY_OPERATION_END_TIME = "23:59"
+
+
+def _require_clean_research_git_state(
+    *, research_run: bool, git_state: Dict[str, Any]
+) -> None:
+    if not research_run:
+        return
+    if bool(git_state.get("git_state_available", False)) and not bool(
+        git_state.get("git_dirty", True)
+    ):
+        return
+    raise ValueError(
+        "research run requires an available, clean Git worktree; "
+        f"git_state_available={git_state.get('git_state_available')}, "
+        f"git_dirty={git_state.get('git_dirty')}, "
+        f"patch_sha256={git_state.get('worktree_patch_sha256')}"
+    )
+
+
+def _validate_git_state_after_solve(
+    *,
+    research_run: bool,
+    before: Dict[str, Any],
+    after: Dict[str, Any],
+) -> bool:
+    """Reject a research solve if its source tree changed while it was running."""
+
+    unchanged = all(
+        before.get(key) == after.get(key)
+        for key in (
+            "git_state_available",
+            "git_sha",
+            "git_dirty",
+            "worktree_patch_sha256",
+        )
+    )
+    if research_run:
+        _require_clean_research_git_state(
+            research_run=True,
+            git_state=after,
+        )
+        if not unchanged:
+            raise ValueError(
+                "research run source state changed during solve; "
+                f"before_sha={before.get('git_sha')}, "
+                f"after_sha={after.get('git_sha')}, "
+                f"before_dirty={before.get('git_dirty')}, "
+                f"after_dirty={after.get('git_dirty')}"
+            )
+    return unchanged
 
 
 def _interactive_runtime_controls_payload(
@@ -3817,12 +3873,23 @@ def _canonical_trip_assignment_rows(
                 problem_trip = problem_trip_by_id.get(trip_id)
                 if problem_trip is None:
                     continue
-                next_deadhead_min = 0
-                if index + 1 < len(duty_legs):
-                    next_deadhead_min = max(int(getattr(duty_legs[index + 1], "deadhead_from_prev_min", 0) or 0), 0)
                 route_family_code = str(getattr(dispatch_trip, "route_family_code", "") or "")
                 departure_dt = _canonical_datetime_from_min(base_date, int(getattr(dispatch_trip, "departure_min", 0) or 0))
                 arrival_dt = _canonical_datetime_from_min(base_date, int(getattr(dispatch_trip, "arrival_min", 0) or 0))
+                fuel_rate, co2_rate = _canonical_vehicle_fuel_and_co2_rates(
+                    problem,
+                    vehicle,
+                )
+                is_electric = (
+                    vehicle is not None
+                    and is_electric_vehicle(problem, vehicle)
+                )
+                service_fuel_l = (
+                    0.0
+                    if is_electric
+                    else max(float(problem_trip.distance_km or 0.0), 0.0)
+                    * fuel_rate
+                )
                 rows.append(
                     {
                         "scenario_id": scenario_id,
@@ -3846,14 +3913,230 @@ def _canonical_trip_assignment_rows(
                         "unserved_reason": "",
                         "energy_used_kwh": float(getattr(problem_trip, "energy_kwh", 0.0) or 0.0),
                         "distance_km": float(getattr(problem_trip, "distance_km", 0.0) or 0.0),
+                        "fuel_used_l": float(service_fuel_l),
+                        "ice_co2_kg": float(service_fuel_l * co2_rate),
                         "delay_departure_min": 0.0,
                         "delay_arrival_min": 0.0,
                         "deadhead_before_km": _canonical_deadhead_distance_km(problem, int(getattr(leg, "deadhead_from_prev_min", 0) or 0)),
-                        "deadhead_after_km": _canonical_deadhead_distance_km(problem, next_deadhead_min),
+                        # Connection ownership is exclusively the next trip's
+                        # before-event.  Terminal return is exported in the
+                        # movement event ledger, never inferred here.
+                        "deadhead_after_km": 0.0,
                         "swap_type": "none",
                     }
                 )
     rows.sort(key=lambda row: (str(row.get("assigned_vehicle_id") or ""), int(row.get("vehicle_sequence", 0) or 0), str(row.get("scheduled_departure") or ""), str(row.get("trip_id") or "")))
+    return rows
+
+
+def _canonical_vehicle_fuel_and_co2_rates(problem, vehicle) -> tuple[float, float]:
+    vehicle_type_id = str(getattr(vehicle, "vehicle_type", "") or "")
+    vehicle_type = next(
+        (
+            item
+            for item in tuple(getattr(problem, "vehicle_types", ()) or ())
+            if str(getattr(item, "vehicle_type_id", "") or "") == vehicle_type_id
+        ),
+        None,
+    )
+    fuel_rate = max(
+        float(
+            getattr(vehicle, "fuel_consumption_l_per_km", None)
+            or getattr(vehicle_type, "fuel_consumption_l_per_km", 0.0)
+            or 0.0
+        ),
+        0.0,
+    )
+    co2_rate = max(
+        float(
+            getattr(vehicle_type, "co2_emission_kg_per_l", 0.0)
+            or getattr(getattr(problem, "scenario", None), "ice_co2_kg_per_l", 0.0)
+            or 0.0
+        ),
+        0.0,
+    )
+    return fuel_rate, co2_rate
+
+
+def _canonical_movement_event_rows(
+    *,
+    problem,
+    engine_result,
+    scenario_id: str,
+    base_date: date,
+    operator_id: str,
+) -> List[Dict[str, Any]]:
+    """Export every modeled non-service movement exactly once.
+
+    A connection belongs to the next trip.  It is not copied to the previous
+    trip's ``deadhead_after`` field.  Terminal return is emitted only when the
+    canonical return-to-home helper confirms that the model contains it.
+    """
+
+    problem_trip_by_id = problem.trip_by_id()
+    vehicle_by_id = {
+        str(vehicle.vehicle_id): vehicle
+        for vehicle in tuple(getattr(problem, "vehicles", ()) or ())
+    }
+    rows: List[Dict[str, Any]] = []
+    seen_event_ids: set[str] = set()
+    for vehicle_id, duties in sorted(engine_result.plan.duties_by_vehicle().items()):
+        vehicle_id = str(vehicle_id)
+        vehicle = vehicle_by_id.get(vehicle_id)
+        if vehicle is None:
+            raise ValueError(
+                f"canonical movement export cannot resolve vehicle {vehicle_id!r}"
+            )
+        fuel_rate, co2_rate = _canonical_vehicle_fuel_and_co2_rates(
+            problem, vehicle
+        )
+        vehicle_type = str(getattr(vehicle, "vehicle_type", "") or "")
+        is_electric = is_electric_vehicle(problem, vehicle)
+
+        def append_event(
+            *,
+            duty_id: str,
+            event_type: str,
+            sequence: int,
+            start_min: int,
+            end_min: int,
+            from_location_id: str,
+            to_location_id: str,
+            previous_trip_id: str,
+            next_trip_id: str,
+            reference_trip,
+        ) -> None:
+            duration_min = max(int(end_min) - int(start_min), 0)
+            if duration_min <= 0:
+                return
+            event_id = (
+                f"{vehicle_id}:{duty_id}:{sequence}:{event_type}:"
+                f"{previous_trip_id or 'depot'}:{next_trip_id or 'depot'}"
+            )
+            if event_id in seen_event_ids:
+                raise ValueError(
+                    f"duplicate canonical movement event generated: {event_id}"
+                )
+            seen_event_ids.add(event_id)
+            distance_km = deadhead_distance_km(problem, duration_min)
+            energy_rate = vehicle_energy_rate_kwh_per_km(
+                problem,
+                vehicle,
+                reference_trip,
+            )
+            bev_energy_kwh = distance_km * energy_rate if is_electric else 0.0
+            ice_fuel_liter = distance_km * fuel_rate if not is_electric else 0.0
+            rows.append(
+                {
+                    "scenario_id": scenario_id,
+                    "operator_id": operator_id,
+                    "event_id": event_id,
+                    "event_type": event_type,
+                    "vehicle_id": vehicle_id,
+                    "vehicle_type": vehicle_type,
+                    "duty_id": duty_id,
+                    "event_start": _canonical_datetime_from_min(
+                        base_date, start_min
+                    ).isoformat(),
+                    "event_end": _canonical_datetime_from_min(
+                        base_date, end_min
+                    ).isoformat(),
+                    "duration_min": float(duration_min),
+                    "distance_km": float(distance_km),
+                    "from_location_id": from_location_id,
+                    "to_location_id": to_location_id,
+                    "previous_trip_id": previous_trip_id,
+                    "next_trip_id": next_trip_id,
+                    "bev_energy_kwh": float(bev_energy_kwh),
+                    "ice_fuel_liter": float(ice_fuel_liter),
+                    "ice_co2_kg": float(ice_fuel_liter * co2_rate),
+                    "distance_method": "deadhead_minutes_x_problem_deadhead_speed",
+                    "energy_method": "distance_x_canonical_vehicle_energy_rate",
+                    "fuel_method": "distance_x_canonical_vehicle_fuel_rate",
+                    "provenance_mode": "solver_plan_exact",
+                    "created_by_stage": "canonical_bff_export",
+                }
+            )
+
+        for duty in duties:
+            duty_id = str(getattr(duty, "duty_id", "") or "")
+            duty_legs = list(getattr(duty, "legs", ()) or ())
+            for index, leg in enumerate(duty_legs):
+                trip_id = str(getattr(leg.trip, "trip_id", "") or "")
+                trip = problem_trip_by_id.get(trip_id)
+                if trip is None:
+                    raise ValueError(
+                        f"canonical movement export cannot resolve trip {trip_id!r}"
+                    )
+                deadhead_min = max(
+                    int(getattr(leg, "deadhead_from_prev_min", 0) or 0),
+                    0,
+                )
+                if deadhead_min <= 0:
+                    continue
+                previous_trip = (
+                    problem_trip_by_id.get(
+                        str(getattr(duty_legs[index - 1].trip, "trip_id", "") or "")
+                    )
+                    if index > 0
+                    else None
+                )
+                append_event(
+                    duty_id=duty_id,
+                    event_type="startup" if index == 0 else "connection",
+                    sequence=index,
+                    start_min=int(trip.departure_min) - deadhead_min,
+                    end_min=int(trip.departure_min),
+                    from_location_id=(
+                        str(getattr(vehicle, "home_depot_id", "") or "")
+                        if previous_trip is None
+                        else str(previous_trip.destination or "")
+                    ),
+                    to_location_id=str(trip.origin or ""),
+                    previous_trip_id=(
+                        str(previous_trip.trip_id) if previous_trip is not None else ""
+                    ),
+                    next_trip_id=str(trip.trip_id),
+                    reference_trip=trip,
+                )
+            if not duty_legs:
+                continue
+            last_trip_id = str(
+                getattr(duty_legs[-1].trip, "trip_id", "") or ""
+            )
+            last_trip = problem_trip_by_id.get(last_trip_id)
+            if last_trip is None:
+                raise ValueError(
+                    f"canonical movement export cannot resolve final trip "
+                    f"{last_trip_id!r}"
+                )
+            return_exists, return_min = return_deadhead_min_to_home(
+                problem,
+                vehicle,
+                last_trip,
+            )
+            if return_exists and return_min > 0:
+                append_event(
+                    duty_id=duty_id,
+                    event_type="terminal_return",
+                    sequence=len(duty_legs),
+                    start_min=int(last_trip.arrival_min),
+                    end_min=int(last_trip.arrival_min) + int(return_min),
+                    from_location_id=str(last_trip.destination or ""),
+                    to_location_id=str(
+                        getattr(vehicle, "home_depot_id", "") or ""
+                    ),
+                    previous_trip_id=str(last_trip.trip_id),
+                    next_trip_id="",
+                    reference_trip=last_trip,
+                )
+    rows.sort(
+        key=lambda row: (
+            str(row.get("vehicle_id") or ""),
+            str(row.get("event_start") or ""),
+            str(row.get("event_id") or ""),
+        )
+    )
     return rows
 
 
@@ -5244,6 +5527,13 @@ def _persist_canonical_graph_exports(
     )
     for row in trip_assignment_rows:
         row["operator_id"] = operator_id
+    movement_event_rows = _canonical_movement_event_rows(
+        problem=problem,
+        engine_result=engine_result,
+        scenario_id=scenario_id,
+        base_date=base_date,
+        operator_id=operator_id,
+    )
     soc_rows = _canonical_soc_event_rows(
         problem=problem,
         engine_result=engine_result,
@@ -5345,18 +5635,26 @@ def _persist_canonical_graph_exports(
         scenario_cost_coeffs = dict(((scenario.get("scenario_overlay") or {}).get("cost_coefficients") or {}))
         generated_at = datetime.now(timezone.utc).isoformat()
         weather_reference_date = str(
-            ((scenario.get("simulation_config") or {}).get("weather_reference_date"))
+            problem_metadata.get("weather_observation_date")
+            or (
+                (scenario.get("simulation_config") or {}).get(
+                    "weather_observation_date"
+                )
+            )
+            or ((scenario.get("simulation_config") or {}).get("weather_reference_date"))
             or ((scenario.get("simulation_config") or {}).get("service_date"))
             or base_date.isoformat()
         )[:10]
+        weather_date = date.fromisoformat(weather_reference_date)
         accounting_artifacts = build_accounting_artifacts(
             problem=problem,
             scenario_id=scenario_id,
             run_id=str(Path(output_dir).name),
             service_date=base_date,
-            weather_date=base_date,
+            weather_date=weather_date,
             operator_id=operator_id,
             trip_assignment_rows=trip_assignment_rows,
+            movement_event_rows=movement_event_rows,
             vehicle_soc_timeseries_rows=vehicle_soc_timeseries_rows,
             vehicle_charging_source_rows=vehicle_charging_source_rows,
             energy_flow_rows=energy_flow_export_rows,
@@ -5364,7 +5662,7 @@ def _persist_canonical_graph_exports(
                 "scenario_id": scenario_id,
                 "run_id": str(Path(output_dir).name),
                 "service_date": base_date.isoformat(),
-                "weather_date": base_date.isoformat(),
+                "weather_date": weather_date.isoformat(),
                 "weather_reference_date": weather_reference_date,
                 "weather_profile": str(((scenario.get("simulation_config") or {}).get("weather_profile") or "") or ""),
                 "operation_mode": str(((scenario.get("simulation_config") or {}).get("operation_mode") or getattr(problem.scenario, "objective_mode", "")) or ""),
@@ -5602,6 +5900,20 @@ def _persist_canonical_graph_exports(
         json.dumps(charging_source_provenance, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+    calendar_weather_validation = dict(
+        getattr(problem, "metadata", {}).get("service_calendar_validation") or {}
+    )
+    research_fleet_validation = dict(
+        getattr(problem, "metadata", {}).get("research_fleet_validation") or {}
+    )
+    (graph_dir / "calendar_weather_validation.json").write_text(
+        json.dumps(calendar_weather_validation, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    (graph_dir / "research_fleet_validation.json").write_text(
+        json.dumps(research_fleet_validation, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     (graph_dir / "cost_breakdown.json").write_text(
         json.dumps(cost_breakdown, ensure_ascii=False, indent=2),
         encoding="utf-8",
@@ -5693,11 +6005,15 @@ def _persist_canonical_graph_exports(
             "contract_limit_timeseries.csv",
             "bess_timeseries.csv",
             "charging_source_provenance.json",
+            "calendar_weather_validation.json",
+            "research_fleet_validation.json",
             "vehicle_charging_source_timeseries.csv",
             "fuel_timeseries.csv",
             "vehicle_soc_timeseries.csv",
             "vehicle_slot_ledger.csv",
             "vehicle_slot_ledger.json",
+            "movement_event_ledger.csv",
+            "movement_event_ledger.json",
             "vehicle_energy_ledger.csv",
             "vehicle_energy_ledger.json",
             "energy_flow_ledger.csv",
@@ -5774,12 +6090,17 @@ def _persist_canonical_graph_exports(
         "canonical_cost_ledger_path": "graph/canonical_cost_ledger.json",
         "kpi_summary_path": "graph/kpi_summary.json",
         "vehicle_slot_ledger_path": accounting_paths.get("vehicle_slot_ledger_csv", "graph/vehicle_slot_ledger.csv"),
+        "movement_event_ledger_path": accounting_paths.get(
+            "movement_event_ledger_csv", "graph/movement_event_ledger.csv"
+        ),
         "vehicle_energy_ledger_path": accounting_paths.get("vehicle_energy_ledger_csv", "graph/vehicle_energy_ledger.csv"),
         "energy_flow_ledger_path": accounting_paths.get("energy_flow_ledger_csv", "graph/energy_flow_ledger.csv"),
         "fuel_canonical_ledger_path": accounting_paths.get("fuel_canonical_ledger_csv", "graph/fuel_canonical_ledger.csv"),
         "initial_soc_ledger_path": accounting_paths.get("initial_soc_ledger_csv", "graph/initial_soc_ledger.csv"),
         "initial_soc_precheck_path": accounting_paths.get("initial_soc_precheck_csv", "graph/initial_soc_precheck.csv"),
         "data_flow_validation_path": accounting_paths.get("data_flow_validation_csv", "graph/data_flow_validation.csv"),
+        "calendar_weather_validation_path": "graph/calendar_weather_validation.json",
+        "research_fleet_validation_path": "graph/research_fleet_validation.json",
         "accounting_summary": getattr(accounting_artifacts, "summary", {}),
         "reporting_finalizer": {
             "status": "deferred",
@@ -5830,6 +6151,23 @@ def _solution_validity_payload(
         blocking_reasons.append("repaired_heuristic")
     if meta.get("postsolve_modified_solution"):
         blocking_reasons.append("repaired_heuristic")
+    terminal_policy = str(
+        meta.get("bev_terminal_soc_policy") or ""
+    ).strip().lower()
+    if (
+        terminal_policy == "return_to_initial"
+        and not bool(meta.get("bev_terminal_soc_balance_satisfied", False))
+    ):
+        blocking_reasons.append("bev_terminal_soc_balance_failed")
+    bess_terminal_deviation_kwh = abs(
+        float(meta.get("bess_terminal_soc_deviation_kwh", 0.0) or 0.0)
+    )
+    bess_terminal_tolerance_kwh = max(
+        float(meta.get("bess_terminal_soc_tolerance_kwh", 1.0e-6) or 1.0e-6),
+        0.0,
+    )
+    if bess_terminal_deviation_kwh > bess_terminal_tolerance_kwh:
+        blocking_reasons.append("bess_terminal_soc_balance_failed")
     if bool(meta.get("research_run", False)) and not bool(
         meta.get("research_run_accepted", False)
     ):
@@ -5871,6 +6209,12 @@ def _solution_validity_payload(
     elif "research_acceptance_failed" in blocking_reasons:
         status_reason = "research_acceptance_failed"
         result_class = "research_invalid"
+    elif (
+        "bev_terminal_soc_balance_failed" in blocking_reasons
+        or "bess_terminal_soc_balance_failed" in blocking_reasons
+    ):
+        status_reason = "terminal_soc_balance_failed"
+        result_class = "postsolve_infeasible"
     elif "repaired_heuristic" in blocking_reasons or "postsolve_repaired" in blocking_reasons:
         status_reason = "repaired_heuristic"
         result_class = "repaired_heuristic"
@@ -5922,6 +6266,14 @@ def _solution_validity_payload(
         ),
         "validation_metrics": dict(meta.get("validation_metrics") or {}),
         "research_acceptance_checks": dict(meta.get("research_acceptance_checks") or {}),
+        "terminal_soc_validation": {
+            "bev_terminal_soc_policy": terminal_policy or None,
+            "bev_terminal_soc_balance_satisfied": meta.get(
+                "bev_terminal_soc_balance_satisfied"
+            ),
+            "bess_terminal_soc_deviation_kwh": bess_terminal_deviation_kwh,
+            "bess_terminal_soc_tolerance_kwh": bess_terminal_tolerance_kwh,
+        },
     }
 
 
@@ -6432,6 +6784,10 @@ def _run_optimization(
         # written into both the input bundle and the result/audit artifacts so
         # a later reviewer cannot be left with an empty Git SHA.
         run_git_state = collect_git_state()
+        _require_clean_research_git_state(
+            research_run=bool(research_run),
+            git_state=run_git_state,
+        )
 
         charging_summary_payload: Optional[Dict[str, Any]] = None
         charging_flow_payload: Optional[Dict[str, Any]] = None
@@ -6612,6 +6968,12 @@ def _run_optimization(
             solve_started_at = time.perf_counter()
             engine_result = OptimizationEngine().solve(problem, opt_config)
             solve_elapsed = time.perf_counter() - solve_started_at
+            run_git_state_after_solve = collect_git_state()
+            git_state_unchanged_during_solve = _validate_git_state_after_solve(
+                research_run=bool(research_run),
+                before=run_git_state,
+                after=run_git_state_after_solve,
+            )
             engine_solver_metadata = dict(engine_result.solver_metadata or {})
             engine_solver_metadata.update(
                 {
@@ -6622,9 +6984,19 @@ def _run_optimization(
                     ),
                     "git_state_error": run_git_state.get("git_state_error"),
                     "git_provenance_captured_before_solve": True,
+                    "git_sha_after_solve": run_git_state_after_solve.get(
+                        "git_sha"
+                    ),
+                    "git_dirty_after_solve": run_git_state_after_solve.get(
+                        "git_dirty"
+                    ),
+                    "git_state_unchanged_during_solve": (
+                        git_state_unchanged_during_solve
+                    ),
                     "research_submission_git_provenance_eligible": bool(
                         run_git_state.get("git_state_available", False)
                         and run_git_state.get("git_dirty") is False
+                        and git_state_unchanged_during_solve
                     ),
                     "interactive_runtime_controls": interactive_runtime_controls,
                     "interactive_operation_time_window_controls": (

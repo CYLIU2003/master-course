@@ -23,6 +23,7 @@ class VehicleSlotLedgerRow:
     block_id: str = ""
     activity_type: str = "idle"
     source_event_id: str = ""
+    source_event_ids: str = ""
     service_km: float = 0.0
     deadhead_before_km: float = 0.0
     deadhead_after_km: float = 0.0
@@ -64,6 +65,40 @@ class VehicleSlotLedgerRow:
     provenance_mode: str = "inferred"
     repair_reason: str = ""
     created_by_stage: str = "reporting_aggregation"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class MovementEventLedgerRow:
+    """One physical non-service vehicle movement, recorded exactly once."""
+
+    scenario_id: str
+    run_id: str
+    service_date: str
+    operator_id: str
+    event_id: str
+    event_type: str
+    vehicle_id: str
+    vehicle_type: str
+    duty_id: str
+    event_start: str
+    event_end: str
+    duration_min: float
+    distance_km: float
+    from_location_id: str = ""
+    to_location_id: str = ""
+    previous_trip_id: str = ""
+    next_trip_id: str = ""
+    bev_energy_kwh: float = 0.0
+    ice_fuel_liter: float = 0.0
+    ice_co2_kg: float = 0.0
+    distance_method: str = "deadhead_minutes_x_speed"
+    energy_method: str = "distance_x_vehicle_energy_rate"
+    fuel_method: str = "distance_x_vehicle_fuel_rate"
+    provenance_mode: str = "solver_plan_exact"
+    created_by_stage: str = "canonical_bff_export"
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -196,6 +231,7 @@ class VehicleEnergyLedgerRow:
 
 @dataclass(frozen=True)
 class AccountingArtifacts:
+    movement_event_ledger: List[MovementEventLedgerRow] = field(default_factory=list)
     vehicle_slot_ledger: List[VehicleSlotLedgerRow] = field(default_factory=list)
     vehicle_energy_ledger: List[VehicleEnergyLedgerRow] = field(default_factory=list)
     energy_flow_ledger: List[EnergyFlowLedgerRow] = field(default_factory=list)

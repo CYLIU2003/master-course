@@ -6,7 +6,13 @@ import math
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
 from .aggregators import build_accounting_summary
-from .schema import AccountingArtifacts, EnergyFlowLedgerRow, VehicleEnergyLedgerRow, VehicleSlotLedgerRow
+from .schema import (
+    AccountingArtifacts,
+    EnergyFlowLedgerRow,
+    MovementEventLedgerRow,
+    VehicleEnergyLedgerRow,
+    VehicleSlotLedgerRow,
+)
 from src.optimization.common.cost_components import normalize_cost_component_flags
 from src.optimization.common.time_axis import normalize_timestep_min
 
@@ -226,6 +232,7 @@ def _build_vehicle_slot_ledger(
     weather_date: date,
     operator_id: str,
     trip_assignment_rows: Sequence[Mapping[str, Any]],
+    movement_event_rows: Sequence[Mapping[str, Any]],
     vehicle_soc_timeseries_rows: Sequence[Mapping[str, Any]],
     vehicle_charging_source_rows: Sequence[Mapping[str, Any]],
     metadata: Mapping[str, Any],
@@ -257,27 +264,104 @@ def _build_vehicle_slot_ledger(
             share = overlap_min / service_duration_min
             bucket["service_km"] += float(trip.get("distance_km", 0.0) or 0.0) * share
             bucket["bev_drive_energy_kwh"] += float(trip.get("energy_used_kwh", 0.0) or 0.0) * share
-            bucket["trip_id"] = str(trip.get("trip_id") or bucket.get("trip_id") or "")
+            bucket["service_fuel_liter"] += float(
+                trip.get("fuel_used_l", 0.0) or 0.0
+            ) * share
+            bucket["service_ice_co2_kg"] += float(
+                trip.get("ice_co2_kg", 0.0) or 0.0
+            ) * share
+            trip_id = str(trip.get("trip_id") or "")
+            bucket.setdefault("source_event_ids", []).append(f"trip:{trip_id}")
+            bucket["trip_id"] = str(trip_id or bucket.get("trip_id") or "")
             bucket["route_id"] = str(trip.get("route_id") or bucket.get("route_id") or "")
             bucket["route_short_name"] = str(trip.get("route_series_code") or trip.get("band_id") or bucket.get("route_short_name") or "")
             bucket["activity_type"] = "service"
 
-        before_km = max(float(trip.get("deadhead_before_km", 0.0) or 0.0), 0.0)
-        after_km = max(float(trip.get("deadhead_after_km", 0.0) or 0.0), 0.0)
-        before_slot = _parse_dt(trip.get("actual_departure") or trip.get("scheduled_departure"), service_date)
-        after_slot = _parse_dt(trip.get("actual_arrival") or trip.get("scheduled_arrival"), service_date)
-        for slot_date, slot_index, overlap_min in _split_duration(before_slot - timedelta(minutes=slot_minutes), before_slot, slot_minutes=slot_minutes):
+        # New canonical BFF exports provide one row per physical movement.
+        # The legacy before/after columns remain readable only for callers that
+        # have not yet adopted that contract; never combine both sources.
+        if not movement_event_rows:
+            before_km = max(
+                float(trip.get("deadhead_before_km", 0.0) or 0.0), 0.0
+            )
+            after_km = max(
+                float(trip.get("deadhead_after_km", 0.0) or 0.0), 0.0
+            )
+            before_slot = _parse_dt(
+                trip.get("actual_departure") or trip.get("scheduled_departure"),
+                service_date,
+            )
+            after_slot = _parse_dt(
+                trip.get("actual_arrival") or trip.get("scheduled_arrival"),
+                service_date,
+            )
+            for slot_date, slot_index, overlap_min in _split_duration(
+                before_slot - timedelta(minutes=slot_minutes),
+                before_slot,
+                slot_minutes=slot_minutes,
+            ):
+                key = (vehicle_id, slot_date, slot_index)
+                bucket = rows_by_key[key]
+                bucket["deadhead_before_km"] += before_km * (
+                    overlap_min / slot_minutes
+                )
+                bucket["activity_type"] = (
+                    bucket.get("activity_type") or "deadhead_before"
+                )
+                rows_meta.setdefault(key, dict(trip))
+            for slot_date, slot_index, overlap_min in _split_duration(
+                after_slot,
+                after_slot + timedelta(minutes=slot_minutes),
+                slot_minutes=slot_minutes,
+            ):
+                key = (vehicle_id, slot_date, slot_index)
+                bucket = rows_by_key[key]
+                bucket["deadhead_after_km"] += after_km * (
+                    overlap_min / slot_minutes
+                )
+                bucket["activity_type"] = (
+                    bucket.get("activity_type") or "deadhead_after"
+                )
+                rows_meta.setdefault(key, dict(trip))
+
+    for event in movement_event_rows:
+        vehicle_id = str(event.get("vehicle_id") or "")
+        event_id = str(event.get("event_id") or "")
+        event_type = str(event.get("event_type") or "")
+        if not vehicle_id or not event_id:
+            raise ValueError("canonical movement event requires vehicle_id and event_id")
+        start = _parse_dt(event.get("event_start"), service_date)
+        end = _parse_dt(event.get("event_end"), service_date)
+        if end <= start:
+            raise ValueError(
+                f"canonical movement event {event_id!r} must have positive duration"
+            )
+        duration_min = max((end - start).total_seconds() / 60.0, 1.0e-9)
+        for slot_date, slot_index, overlap_min in _split_duration(
+            start,
+            end,
+            slot_minutes=slot_minutes,
+        ):
+            share = overlap_min / duration_min
             key = (vehicle_id, slot_date, slot_index)
             bucket = rows_by_key[key]
-            bucket["deadhead_before_km"] += before_km * (overlap_min / slot_minutes)
-            bucket["activity_type"] = bucket.get("activity_type") or "deadhead_before"
-            rows_meta.setdefault(key, dict(trip))
-        for slot_date, slot_index, overlap_min in _split_duration(after_slot, after_slot + timedelta(minutes=slot_minutes), slot_minutes=slot_minutes):
-            key = (vehicle_id, slot_date, slot_index)
-            bucket = rows_by_key[key]
-            bucket["deadhead_after_km"] += after_km * (overlap_min / slot_minutes)
-            bucket["activity_type"] = bucket.get("activity_type") or "deadhead_after"
-            rows_meta.setdefault(key, dict(trip))
+            distance_km = max(float(event.get("distance_km", 0.0) or 0.0), 0.0)
+            if event_type == "terminal_return":
+                bucket["deadhead_after_km"] += distance_km * share
+            else:
+                bucket["deadhead_before_km"] += distance_km * share
+            bucket["deadhead_bev_energy_kwh"] += max(
+                float(event.get("bev_energy_kwh", 0.0) or 0.0), 0.0
+            ) * share
+            bucket["deadhead_fuel_liter"] += max(
+                float(event.get("ice_fuel_liter", 0.0) or 0.0), 0.0
+            ) * share
+            bucket["deadhead_ice_co2_kg"] += max(
+                float(event.get("ice_co2_kg", 0.0) or 0.0), 0.0
+            ) * share
+            bucket.setdefault("source_event_ids", []).append(event_id)
+            bucket["activity_type"] = f"deadhead_{event_type}"
+            rows_meta.setdefault(key, dict(event))
 
     for key, soc_row in soc_by_key.items():
         vehicle_id, slot_date, slot_index = key
@@ -322,17 +406,47 @@ def _build_vehicle_slot_ledger(
         deadhead_before_km = float(bucket.get("deadhead_before_km", 0.0) or 0.0)
         deadhead_after_km = float(bucket.get("deadhead_after_km", 0.0) or 0.0)
         deadhead_total_km = deadhead_before_km + deadhead_after_km
-        bev_drive_energy_kwh = float(bucket.get("bev_drive_energy_kwh", 0.0) or 0.0)
+        bev_drive_energy_kwh = float(
+            bucket.get("bev_drive_energy_kwh", 0.0) or 0.0
+        )
         if not bev_drive_energy_kwh and service_km > 0.0:
             bev_drive_energy_kwh = service_km * energy_rate
+        bev_drive_energy_kwh += float(
+            bucket.get("deadhead_bev_energy_kwh", 0.0) or 0.0
+        )
         charge_efficiency = max(float(getattr(vehicle, "charge_efficiency", 0.95) or 0.95), 0.0)
         charge_to_battery_kwh = charge_input_kwh * charge_efficiency
         charge_loss_kwh = charge_input_kwh - charge_to_battery_kwh
         tou_price = float(price_by_slot.get(slot_index, 0.0) or 0.0)
         fuel_liter = 0.0
         if vehicle_type.upper() == "ICE":
-            fuel_liter = max((service_km + deadhead_total_km) * fuel_rate, 0.0)
-        ice_co2_kg = fuel_liter * co2_rate
+            explicit_service_fuel = max(
+                float(bucket.get("service_fuel_liter", 0.0) or 0.0), 0.0
+            )
+            service_fuel = (
+                explicit_service_fuel
+                if explicit_service_fuel > 0.0
+                else max(service_km * fuel_rate, 0.0)
+            )
+            explicit_deadhead_fuel = max(
+                float(bucket.get("deadhead_fuel_liter", 0.0) or 0.0), 0.0
+            )
+            deadhead_fuel = (
+                explicit_deadhead_fuel
+                if movement_event_rows
+                else max(deadhead_total_km * fuel_rate, 0.0)
+            )
+            fuel_liter = service_fuel + deadhead_fuel
+        explicit_ice_co2_kg = max(
+            float(bucket.get("service_ice_co2_kg", 0.0) or 0.0)
+            + float(bucket.get("deadhead_ice_co2_kg", 0.0) or 0.0),
+            0.0,
+        )
+        ice_co2_kg = (
+            explicit_ice_co2_kg
+            if explicit_ice_co2_kg > 0.0
+            else fuel_liter * co2_rate
+        )
         battery_degradation_rate = float(metadata.get("battery_degradation_price_jpy_per_kwh", 0.0) or 0.0)
         electricity_cost_jpy = float(bucket.get("charger_grid_kwh", 0.0) or 0.0) * tou_price
         fuel_cost_jpy = (
@@ -383,6 +497,13 @@ def _build_vehicle_slot_ledger(
                 violation_types.append("soc_non_finite")
         slot_start, slot_end = _slot_bounds(slot_date, slot_index, slot_minutes=slot_minutes)
         activity_type = str(bucket.get("activity_type") or "idle")
+        source_event_ids = sorted(
+            {
+                str(item)
+                for item in list(bucket.get("source_event_ids") or ())
+                if str(item)
+            }
+        )
         provenance_exact = bool(metadata.get("charging_source_provenance_exact", False))
         if not provenance_exact:
             provenance_mode = "inferred"
@@ -408,7 +529,13 @@ def _build_vehicle_slot_ledger(
                 trip_id=str(bucket.get("trip_id") or trip_meta.get("trip_id") or ""),
                 block_id=str(trip_meta.get("block_id") or ""),
                 activity_type=activity_type,
-                source_event_id=str(bucket.get("trip_id") or trip_meta.get("trip_id") or f"{vehicle_id}:{slot_index}"),
+                source_event_id=str(
+                    (source_event_ids[0] if source_event_ids else "")
+                    or bucket.get("trip_id")
+                    or trip_meta.get("trip_id")
+                    or f"{vehicle_id}:{slot_index}"
+                ),
+                source_event_ids=";".join(source_event_ids),
                 service_km=service_km,
                 deadhead_before_km=deadhead_before_km,
                 deadhead_after_km=deadhead_after_km,
@@ -1250,6 +1377,85 @@ def _attach_nested_kpi_summary(summary: Dict[str, Any]) -> None:
     }
 
 
+def _build_movement_event_ledger(
+    *,
+    scenario_id: str,
+    run_id: str,
+    service_date: date,
+    operator_id: str,
+    movement_event_rows: Sequence[Mapping[str, Any]],
+) -> List[MovementEventLedgerRow]:
+    rows: List[MovementEventLedgerRow] = []
+    seen_event_ids: set[str] = set()
+    allowed_types = {"startup", "connection", "terminal_return"}
+    for source in movement_event_rows:
+        event_id = str(source.get("event_id") or "").strip()
+        event_type = str(source.get("event_type") or "").strip()
+        if not event_id:
+            raise ValueError("canonical movement event requires a non-empty event_id")
+        if event_id in seen_event_ids:
+            raise ValueError(f"duplicate canonical movement event_id: {event_id}")
+        if event_type not in allowed_types:
+            raise ValueError(
+                f"canonical movement event {event_id!r} has unsupported type "
+                f"{event_type!r}"
+            )
+        seen_event_ids.add(event_id)
+        rows.append(
+            MovementEventLedgerRow(
+                scenario_id=scenario_id,
+                run_id=run_id,
+                service_date=service_date.isoformat(),
+                operator_id=operator_id,
+                event_id=event_id,
+                event_type=event_type,
+                vehicle_id=str(source.get("vehicle_id") or ""),
+                vehicle_type=str(source.get("vehicle_type") or ""),
+                duty_id=str(source.get("duty_id") or ""),
+                event_start=str(source.get("event_start") or ""),
+                event_end=str(source.get("event_end") or ""),
+                duration_min=max(
+                    float(source.get("duration_min", 0.0) or 0.0), 0.0
+                ),
+                distance_km=max(
+                    float(source.get("distance_km", 0.0) or 0.0), 0.0
+                ),
+                from_location_id=str(source.get("from_location_id") or ""),
+                to_location_id=str(source.get("to_location_id") or ""),
+                previous_trip_id=str(source.get("previous_trip_id") or ""),
+                next_trip_id=str(source.get("next_trip_id") or ""),
+                bev_energy_kwh=max(
+                    float(source.get("bev_energy_kwh", 0.0) or 0.0), 0.0
+                ),
+                ice_fuel_liter=max(
+                    float(source.get("ice_fuel_liter", 0.0) or 0.0), 0.0
+                ),
+                ice_co2_kg=max(
+                    float(source.get("ice_co2_kg", 0.0) or 0.0), 0.0
+                ),
+                distance_method=str(
+                    source.get("distance_method")
+                    or "deadhead_minutes_x_speed"
+                ),
+                energy_method=str(
+                    source.get("energy_method")
+                    or "distance_x_vehicle_energy_rate"
+                ),
+                fuel_method=str(
+                    source.get("fuel_method")
+                    or "distance_x_vehicle_fuel_rate"
+                ),
+                provenance_mode=str(
+                    source.get("provenance_mode") or "solver_plan_exact"
+                ),
+                created_by_stage=str(
+                    source.get("created_by_stage") or "canonical_bff_export"
+                ),
+            )
+        )
+    return rows
+
+
 def build_accounting_artifacts(
     *,
     problem: Any,
@@ -1259,6 +1465,7 @@ def build_accounting_artifacts(
     weather_date: date | None,
     operator_id: str,
     trip_assignment_rows: Sequence[Mapping[str, Any]],
+    movement_event_rows: Sequence[Mapping[str, Any]] = (),
     vehicle_soc_timeseries_rows: Sequence[Mapping[str, Any]],
     vehicle_charging_source_rows: Sequence[Mapping[str, Any]],
     energy_flow_rows: Sequence[Mapping[str, Any]],
@@ -1274,6 +1481,13 @@ def build_accounting_artifacts(
     resolved_operator_id = str(operator_id or metadata.get("operator_id") or "").strip() or UNKNOWN_OPERATOR
     metadata["operator_id"] = resolved_operator_id
     metadata["slot_minutes"] = slot_minutes
+    movement_rows = _build_movement_event_ledger(
+        scenario_id=scenario_id,
+        run_id=run_id,
+        service_date=service_date,
+        operator_id=resolved_operator_id,
+        movement_event_rows=movement_event_rows,
+    )
     bess_efficiency_by_depot = {
         str(depot_id): (
             min(max(float(getattr(asset, "bess_charge_efficiency", 1.0) or 1.0), 1.0e-9), 1.0),
@@ -1289,6 +1503,7 @@ def build_accounting_artifacts(
         weather_date=resolved_weather_date,
         operator_id=resolved_operator_id,
         trip_assignment_rows=trip_assignment_rows,
+        movement_event_rows=[row.to_dict() for row in movement_rows],
         vehicle_soc_timeseries_rows=vehicle_soc_timeseries_rows,
         vehicle_charging_source_rows=vehicle_charging_source_rows,
         metadata=metadata,
@@ -1321,6 +1536,27 @@ def build_accounting_artifacts(
         trip_assignment_rows=trip_assignment_rows,
         metadata=metadata,
     )
+    summary.update(
+        {
+            "movement_event_count": len(movement_rows),
+            "movement_distance_km": sum(
+                row.distance_km for row in movement_rows
+            ),
+            "movement_bev_energy_kwh": sum(
+                row.bev_energy_kwh for row in movement_rows
+            ),
+            "movement_ice_fuel_liter": sum(
+                row.ice_fuel_liter for row in movement_rows
+            ),
+            "movement_ice_co2_kg": sum(
+                row.ice_co2_kg for row in movement_rows
+            ),
+            "movement_event_id_unique": (
+                len({row.event_id for row in movement_rows})
+                == len(movement_rows)
+            ),
+        }
+    )
     _enrich_summary_from_canonical_ledgers(
         summary,
         co2_rows=co2_rows,
@@ -1343,6 +1579,7 @@ def build_accounting_artifacts(
     _apply_validation_summary(summary, validation_rows)
     _attach_nested_kpi_summary(summary)
     return AccountingArtifacts(
+        movement_event_ledger=movement_rows,
         vehicle_slot_ledger=vehicle_rows,
         vehicle_energy_ledger=vehicle_energy_rows,
         energy_flow_ledger=energy_rows,

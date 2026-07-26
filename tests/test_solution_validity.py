@@ -93,6 +93,28 @@ def test_debug_result_is_not_research_kpi_eligible() -> None:
     assert "debug_result" in payload["blocking_reasons"]
 
 
+def test_terminal_soc_failure_blocks_validated_feasible_label() -> None:
+    payload = _solution_validity_payload(
+        solver_status="FEASIBLE",
+        feasible=True,
+        trip_count_unserved=0,
+        infeasibility_reasons=[],
+        solver_metadata={
+            "bev_terminal_soc_policy": "return_to_initial",
+            "bev_terminal_soc_balance_satisfied": False,
+            "bess_terminal_soc_deviation_kwh": 2.0e-6,
+            "bess_terminal_soc_tolerance_kwh": 1.0e-6,
+        },
+    )
+
+    assert payload["validated_feasible"] is False
+    assert payload["status_reason"] == "terminal_soc_balance_failed"
+    assert payload["blocking_reasons"] == [
+        "bess_terminal_soc_balance_failed",
+        "bev_terminal_soc_balance_failed",
+    ]
+
+
 def test_phase2_assignment_only_is_not_full_research_kpi() -> None:
     payload = _solution_validity_payload(
         solver_status="phase2_assignment_feasible",
