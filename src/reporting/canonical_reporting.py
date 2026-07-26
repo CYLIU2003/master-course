@@ -1999,6 +1999,7 @@ def _reporting_log_payload(
     kpi: dict[str, Any],
     mode: str,
     input_dir: Path | None = None,
+    updated_files: list[str] | None = None,
 ) -> dict[str, Any]:
     log = {
         "mode": mode,
@@ -2008,7 +2009,7 @@ def _reporting_log_payload(
         "simulation_rerun": False,
         "vehicle_assignment_regenerated": False,
         "no_reoptimization_performed": True,
-        "updated_files": REPORTING_FILES,
+        "updated_files": list(updated_files or []),
         "source_of_truth": {
             "energy": "graph/energy_flow_ledger.csv",
             "bess_metadata": "graph/bess_timeseries.csv",
@@ -2036,6 +2037,11 @@ def _reporting_log_payload(
 
 def rebuild_reporting_artifacts_in_place(run_dir: Path) -> ReportingRebuildResult:
     run_dir = run_dir.resolve()
+    before_hashes = {
+        rel: hashlib.sha256((run_dir / rel).read_bytes()).hexdigest()
+        for rel in REPORTING_FILES
+        if (run_dir / rel).is_file()
+    }
     bess_metadata = update_energy_flow_bess_metadata(run_dir)
     totals = compute_ledger_totals(run_dir)
     assignment = compute_assignment_summary(run_dir)
@@ -2053,7 +2059,22 @@ def rebuild_reporting_artifacts_in_place(run_dir: Path) -> ReportingRebuildResul
     update_validation_counts(run_dir, validation_rows, kpi)
     kpi = load_json(run_dir / "graph" / "kpi_summary.json")
     write_strict_reconciliation(run_dir, validation_rows, summary)
-    log = _reporting_log_payload(run_dir, totals, cost, bess_metadata, kpi, "in_place_after_optimization")
+    actually_updated_files = [
+        rel
+        for rel in REPORTING_FILES
+        if (run_dir / rel).is_file()
+        and hashlib.sha256((run_dir / rel).read_bytes()).hexdigest()
+        != before_hashes.get(rel)
+    ]
+    log = _reporting_log_payload(
+        run_dir,
+        totals,
+        cost,
+        bess_metadata,
+        kpi,
+        "in_place_after_optimization",
+        updated_files=actually_updated_files,
+    )
     write_json(run_dir / "rebuild_reporting_log.json", log)
     warnings = [
         str(row.get("check_name"))
@@ -2062,7 +2083,7 @@ def rebuild_reporting_artifacts_in_place(run_dir: Path) -> ReportingRebuildResul
     ]
     return ReportingRebuildResult(
         run_dir=run_dir,
-        updated_files=list(REPORTING_FILES),
+        updated_files=actually_updated_files,
         ledger_totals=totals,
         cost_totals=cost,
         validation_status={
@@ -2092,6 +2113,7 @@ def rebuild_reporting_artifacts_to_output_dir(
         kpi,
         "copy_backfill_existing_run",
         input_dir=input_dir,
+        updated_files=result.updated_files,
     )
     write_json(output_dir / "rebuild_reporting_log.json", log)
     write_manifest(input_dir, output_dir)

@@ -104,3 +104,19 @@ def test_actual_cost_objective_difference_remains_error(tmp_path) -> None:
     )
     assert row["status"] == "NG"
     assert row["severity"] == "ERROR"
+
+
+def test_rebuild_does_not_claim_unchanged_excel_was_updated(tmp_path) -> None:
+    run_dir = tmp_path / "unchanged-excel"
+    shutil.copytree(source_run_dir("run_20260606_1559"), run_dir)
+    workbook = run_dir / "results.xlsx"
+    before = workbook.read_bytes()
+
+    result = rebuild_reporting_artifacts_in_place(run_dir)
+
+    assert workbook.read_bytes() == before
+    assert "results.xlsx" not in result.updated_files
+    log = json.loads(
+        (run_dir / "rebuild_reporting_log.json").read_text(encoding="utf-8")
+    )
+    assert "results.xlsx" not in log["updated_files"]
