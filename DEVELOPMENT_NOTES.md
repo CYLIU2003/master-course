@@ -68,12 +68,39 @@
   accounting now comes only from the canonical ledger, `openpyxl` is an
   explicit runtime dependency, and a missing experiment report or workbook is
   a job failure rather than a successful frontend run.
-- A clean-commit 264-trip high/low-PV frontend execution has not yet been
-  completed at the time of this code note. Do not claim empirical completion,
-  teacher readiness, or formal weather-comparison acceptance until both real
-  frontend jobs finish and their run directories pass the documented artifact
-  checks. `research_vehicle_inventory_contract` remains an allowed explicit
-  blocker; it has not been weakened or removed.
+- Clean-commit, frontend-equivalent HTTP jobs were completed from
+  `9a517c31c09af2ba1400ef40698a522373a0e761`:
+  high PV `output/2026-07-27/run_20260727_1800` and low PV
+  `output/2026-07-27/run_20260727_1744`. Both use service date 2025-08-05,
+  serve 264/264 trips, execute 24/24 feasible hourly steps, pass rolling-chain
+  acceptance and executed-day accounting, preserve BEV/BESS terminal energy,
+  and write the mandatory canonical report and workbook. Both manifests record
+  the same clean Git SHA. The trip, vehicle, initial-SOC, charger, and
+  day-ahead assignment hashes match across the pair; only the declared PV
+  profile differs (614.709375 versus 101.114300 kWh).
+- Before the accepted low-PV rerun, the stored low-PV scenario still combined
+  2025-08-10 (Sunday) with `WEEKDAY`; the frontend job correctly failed closed
+  in `output/2026-07-27/run_20260727_1740`. The scenario was then prepared as
+  an explicit same-service-date PV counterfactual: the service/timetable date
+  is 2025-08-05, while the low-PV curve source remains identified as
+  2025-08-10. Weather-operation policy is disabled in both final cases so that
+  future information from the proxy curve cannot alter operational controls.
+  These prepared choices are persisted in each run's `effective_scenario.json`
+  and input provenance.
+- This closes the frontend orchestration requirement, not the research release
+  gates. Both final runs deliberately remain
+  `teacher_release_status=BLOCKED` and
+  `research_submission_ready=false`. The recorded blockers are
+  `research_vehicle_inventory_contract`, `exact_milp_backend`,
+  `day_ahead_research_acceptance_failed`, and
+  `physical_schedule_not_validated`. In particular, the inventory gate has not
+  been weakened or removed, and the two-stage/pruned model is not relabelled as
+  an integrated global optimum. The pair is valid evidence that the normal
+  frontend path completes day-ahead plus hourly rolling; it is not yet a
+  teacher-ready formal weather comparison.
+- Validation for the implementation commit completed with
+  `python -m pytest -q -p no:cacheprovider` (**896 passed**),
+  `python -m compileall -q src bff scripts tools`, and `git diff --check`.
 
 ## 2026-07-26 remediation implementation: physical movement, provenance, and comparison gates
 
