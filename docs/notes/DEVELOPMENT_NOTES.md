@@ -5,6 +5,15 @@
 
 ---
 
+## 2026-07-27 AI Agent rolling-first remediation instruction
+
+- 日次 Phase 3 後の1時間刻みrollingを最優先で実行可能・監査可能にするための実装指示書を `docs/notes/AI_AGENT_ROLLING_FIRST_REMEDIATION_20260727.md` に追加した。固定平日時刻表のPV反実仮想は明示waiverとして扱い、実際の日曜運行とは表示しない。実装・実験結果そのものはまだ未完了であり、この記録は修正仕様である。
+- 実装では `RollingChainRequest` / `run_rolling_chain()` をCLIから分離し、日次runの `--run-hourly-rolling` はsubprocessを使わず同じプロセスで呼び出す。正式chainは任意の`05:00–23:00`固定ではなく、日次ProblemBuilderが確定した実効エネルギー地平を60分刻みで全走査する。時刻を短縮した実行は診断用に保存しても `chain_accepted=false` とする。
+- chain受理は、全step可行、全slotを一度だけ実行、固定vehicle-trip assignment hash、state handoff、BEV/BESS終端SOC、day-ahead/rolling Git clean、Gurobi利用可能、input/charger/PV/初期SOC hashを確認する。途中不可能・handoff失敗・hash不一致・slot欠落は`rejection_reasons`へ残し、部分成功に見せない。
+- `return_to_initial` のBEV終端SOCは、MILP上限を科学的許容値（既定`1e-6 kWh`）で表現し、後処理は同値にGurobi由来の数値marginを加えた境界だけを許容する。生の最大偏差、科学的許容値、数値margin、最終受理理由を成果物へ分離保存する。これにより、丸めだけで境界直上となった解と、実質的なSOC持ち越しを区別する。
+- `rolling_hourly_chain/`には `rolling_chain_summary.json`、`executed_day_accounting.json`、`day_ahead_vs_rolling_summary.json`、実行prefixのみの`hourly_energy_flow_chart.csv`、`energy_source`列と由来精度を明記した`charging_schedule.csv`を保存する。日次実効PV曲線はrootの`effective_pv_profiles.json`とSHA-256で固定し、rolling開始前に再読込して日次PV hash・BESS設定を照合する。`charging_schedule.csv`の同一`(vehicle_id, slot_index, charger_id)`の複数行は物理充電枠の電源別配分であり、vehicle source provenanceがfalseなら営業所×時刻の比例按分である。各stepの残り地平目的値は日次実績費用へ加算しない。
+- `fixed_weekday_timetable_pv_counterfactual` waiverは、日曜サービス日かつWEEKDAY時刻表という一例にだけ限定してcore calendar validationも明示的に記録する。trip・fleet・SOC・charger・BESS・TOU・seed・solver設定の変更はwaiverしない。新しい正式264便runとfull chainはまだ未実行であり、既存成果物の研究主張は更新しない。
+
 ## 2026-07-20 — 代表日会計の終端SOC公平化と24回rolling完走
 
 ### 確認した実行経路

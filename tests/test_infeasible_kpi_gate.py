@@ -4,6 +4,9 @@ import csv
 import json
 
 from bff.routers.optimization import _apply_invalid_result_kpi_gate
+from src.optimization.rolling.acceptance import (
+    ROLLING_CHAIN_REQUIRED_ACCEPTANCE_CHECKS,
+)
 from src.reporting.canonical_reporting import apply_solution_validity_gate
 
 
@@ -183,3 +186,280 @@ def test_reporting_gate_marks_infeasible_zero_ledgers_as_invalid(tmp_path) -> No
     report = (tmp_path / "experiment_report.md").read_text(encoding="utf-8")
     assert report.startswith("<!-- solution-validity-gate -->")
     assert "research_kpi_eligible: `false`" in report
+
+
+def test_export_experiment_report_blocks_submission_without_provenance(tmp_path):
+    from dataclasses import dataclass
+
+    from src.result_exporter import export_experiment_report
+
+    @dataclass
+    class _ProblemData:
+        delta_t_min: float = 15.0
+        num_periods: int = 96
+        enable_pv: bool = True
+        enable_v2g: bool = False
+        enable_demand_charge: bool = True
+
+    @dataclass
+    class _VehicleSet:
+        K_BEV: list = ()
+        K_ICE: list = ()
+        R: list = ()
+        C: list = ()
+
+    @dataclass
+    class _MILP:
+        status: str = "INFEASIBLE"
+        objective_value: object = None
+        mip_gap: object = None
+        solve_time_sec: float = 0.0
+        infeasibility_info: str = "strict coverage infeasible"
+
+    @dataclass
+    class _Sim:
+        provisional_energy_cost: float = 0.0
+        charged_energy_cost: float = 0.0
+        total_energy_cost: float = 0.0
+        total_demand_charge: float = 0.0
+        total_fuel_cost: float = 0.0
+        total_degradation_cost: float = 0.0
+        total_operating_cost: float = 0.0
+        served_task_ratio: float = 0.0
+        unserved_tasks: list = ("trip-1",)
+        total_grid_kwh: float = 0.0
+        total_pv_kwh: float = 0.0
+        pv_self_consumption_ratio: float = 0.0
+        peak_demand_kw: float = 0.0
+        total_co2_kg: float = 0.0
+        soc_min_kwh: float = 0.0
+        soc_violations: list = ()
+
+    export_experiment_report(
+        tmp_path,
+        _ProblemData(),
+        _VehicleSet(),
+        _MILP(),
+        _Sim(),
+        run_label="test",
+    )
+    report = (tmp_path / "experiment_report.md").read_text(encoding="utf-8")
+
+    assert "> EXPLORATORY — RESEARCH SUBMISSION BLOCKED" in report
+    assert "research_submission_ready: False" in report
+    assert "input_provenance_ready: False" in report
+    assert "solver_status_not_research_feasible" in report
+    assert "unserved_trips_remain" in report
+
+
+def test_export_experiment_report_blocks_submission_without_rolling_chain(tmp_path):
+    from dataclasses import dataclass
+
+    from src.result_exporter import export_experiment_report
+
+    (tmp_path / "manifest.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "input_audit.json").write_text("{}", encoding="utf-8")
+
+    @dataclass
+    class _ProblemData:
+        delta_t_min: float = 15.0
+        num_periods: int = 96
+        enable_pv: bool = True
+        enable_v2g: bool = False
+        enable_demand_charge: bool = True
+
+    @dataclass
+    class _VehicleSet:
+        K_BEV: list = ("ev-1",)
+        K_ICE: list = ()
+        R: list = ("trip-1",)
+        C: list = ("chgr-1",)
+
+    @dataclass
+    class _MILP:
+        status: str = "OPTIMAL"
+        objective_value: object = 1.0
+        mip_gap: object = 0.0
+        solve_time_sec: float = 1.0
+        infeasibility_info: str = ""
+
+    @dataclass
+    class _Sim:
+        provisional_energy_cost: float = 0.0
+        charged_energy_cost: float = 0.0
+        total_energy_cost: float = 1.0
+        total_demand_charge: float = 0.0
+        total_fuel_cost: float = 0.0
+        total_degradation_cost: float = 0.0
+        total_operating_cost: float = 1.0
+        served_task_ratio: float = 1.0
+        unserved_tasks: list = ()
+        total_grid_kwh: float = 0.0
+        total_pv_kwh: float = 0.0
+        pv_self_consumption_ratio: float = 0.0
+        peak_demand_kw: float = 0.0
+        total_co2_kg: float = 0.0
+        soc_min_kwh: float = 0.0
+        soc_violations: list = ()
+
+    export_experiment_report(
+        tmp_path,
+        _ProblemData(),
+        _VehicleSet(),
+        _MILP(),
+        _Sim(),
+        run_label="test",
+    )
+    report = (tmp_path / "experiment_report.md").read_text(encoding="utf-8")
+
+    assert "EXPLORATORY — RESEARCH SUBMISSION BLOCKED" in report
+    assert "research_submission_ready: False" in report
+    assert "input_provenance_ready: True" in report
+    assert "hourly_rolling_chain_missing" in report
+
+
+def test_export_experiment_report_blocks_when_rolling_chain_is_not_accepted(tmp_path):
+    from dataclasses import dataclass
+
+    from src.result_exporter import export_experiment_report
+
+    (tmp_path / "manifest.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "input_audit.json").write_text("{}", encoding="utf-8")
+    rolling_dir = tmp_path / "rolling_hourly_chain"
+    rolling_dir.mkdir()
+    (rolling_dir / "rolling_chain_summary.json").write_text(
+        json.dumps({"chain_accepted": False}), encoding="utf-8"
+    )
+
+    @dataclass
+    class _ProblemData:
+        delta_t_min: float = 15.0
+        num_periods: int = 96
+        enable_pv: bool = True
+        enable_v2g: bool = False
+        enable_demand_charge: bool = True
+
+    @dataclass
+    class _VehicleSet:
+        K_BEV: list = ("ev-1",)
+        K_ICE: list = ()
+        R: list = ("trip-1",)
+        C: list = ("chgr-1",)
+
+    @dataclass
+    class _MILP:
+        status: str = "OPTIMAL"
+        objective_value: object = 1.0
+        mip_gap: object = 0.0
+        solve_time_sec: float = 1.0
+        infeasibility_info: str = ""
+
+    @dataclass
+    class _Sim:
+        provisional_energy_cost: float = 0.0
+        charged_energy_cost: float = 0.0
+        total_energy_cost: float = 1.0
+        total_demand_charge: float = 0.0
+        total_fuel_cost: float = 0.0
+        total_degradation_cost: float = 0.0
+        total_operating_cost: float = 1.0
+        served_task_ratio: float = 1.0
+        unserved_tasks: list = ()
+        total_grid_kwh: float = 0.0
+        total_pv_kwh: float = 0.0
+        pv_self_consumption_ratio: float = 0.0
+        peak_demand_kw: float = 0.0
+        total_co2_kg: float = 0.0
+        soc_min_kwh: float = 0.0
+        soc_violations: list = ()
+
+    export_experiment_report(
+        tmp_path,
+        _ProblemData(),
+        _VehicleSet(),
+        _MILP(),
+        _Sim(),
+        run_label="test",
+    )
+    report = (tmp_path / "experiment_report.md").read_text(encoding="utf-8")
+
+    assert "> EXPLORATORY — RESEARCH SUBMISSION BLOCKED" in report
+    assert "hourly_rolling_chain_not_accepted" in report
+
+
+def test_export_experiment_report_accepts_only_verified_rolling_chain(tmp_path):
+    from dataclasses import dataclass
+
+    from src.result_exporter import export_experiment_report
+
+    (tmp_path / "manifest.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "input_audit.json").write_text("{}", encoding="utf-8")
+    rolling_dir = tmp_path / "rolling_hourly_chain"
+    rolling_dir.mkdir()
+    (rolling_dir / "rolling_chain_summary.json").write_text(
+        json.dumps(
+            {
+                "chain_accepted": True,
+                "acceptance_checks": {
+                    name: True
+                    for name in ROLLING_CHAIN_REQUIRED_ACCEPTANCE_CHECKS
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    @dataclass
+    class _ProblemData:
+        delta_t_min: float = 15.0
+        num_periods: int = 96
+        enable_pv: bool = True
+        enable_v2g: bool = False
+        enable_demand_charge: bool = True
+
+    @dataclass
+    class _VehicleSet:
+        K_BEV: list = ("ev-1",)
+        K_ICE: list = ()
+        R: list = ("trip-1",)
+        C: list = ("chgr-1",)
+
+    @dataclass
+    class _MILP:
+        status: str = "OPTIMAL"
+        objective_value: object = 1.0
+        mip_gap: object = 0.0
+        solve_time_sec: float = 1.0
+        infeasibility_info: str = ""
+
+    @dataclass
+    class _Sim:
+        provisional_energy_cost: float = 0.0
+        charged_energy_cost: float = 0.0
+        total_energy_cost: float = 1.0
+        total_demand_charge: float = 0.0
+        total_fuel_cost: float = 0.0
+        total_degradation_cost: float = 0.0
+        total_operating_cost: float = 1.0
+        served_task_ratio: float = 1.0
+        unserved_tasks: list = ()
+        total_grid_kwh: float = 0.0
+        total_pv_kwh: float = 0.0
+        pv_self_consumption_ratio: float = 0.0
+        peak_demand_kw: float = 0.0
+        total_co2_kg: float = 0.0
+        soc_min_kwh: float = 0.0
+        soc_violations: list = ()
+
+    export_experiment_report(
+        tmp_path,
+        _ProblemData(),
+        _VehicleSet(),
+        _MILP(),
+        _Sim(),
+        run_label="test",
+    )
+    report = (tmp_path / "experiment_report.md").read_text(encoding="utf-8")
+
+    assert "EXPLORATORY — RESEARCH SUBMISSION BLOCKED" not in report
+    assert "research_submission_ready: True" in report

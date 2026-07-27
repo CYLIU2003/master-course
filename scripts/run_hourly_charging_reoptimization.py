@@ -11,14 +11,14 @@ from __future__ import annotations
 
 import argparse
 from copy import deepcopy
-from dataclasses import replace
+from dataclasses import dataclass, replace
 import hashlib
 import json
 import math
 from pathlib import Path
 import sys
 import time
-from typing import Any
+from typing import Any, Mapping, Optional
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -46,7 +46,10 @@ from src.optimization.common.research_phase3_policy import (  # noqa: E402
     enforce_research_phase3_single_continuous_duty,
 )
 from src.optimization.common.evaluator import CostEvaluator  # noqa: E402
-from src.optimization.common.problem import AssignmentPlan  # noqa: E402
+from src.optimization.common.problem import (  # noqa: E402
+    AssignmentPlan,
+    classify_peak_slots,
+)
 from src.optimization.common.bev_terminal_policy import (  # noqa: E402
     normalize_bev_terminal_soc_policy,
 )
@@ -56,6 +59,10 @@ from src.optimization.common.bess_terminal_policy import (  # noqa: E402
 )
 from src.optimization.common.input_fingerprints import (  # noqa: E402
     INPUT_FINGERPRINT_SCHEMA,
+)
+from src.optimization.common.initial_soc_policy import (  # noqa: E402
+    initial_soc_input_metadata,
+    normalize_initial_soc_policy,
 )
 from src.optimization.rolling.reoptimizer import (  # noqa: E402
     RollingReoptimizer,
@@ -183,7 +190,7 @@ def _build_executed_day_accounting(
     }
     vehicle_soc: dict[str, dict[int, float]] = {}
     charging_slots = []
-    seen_charging_slots: set[tuple[str, int, str]] = set()
+    seen_charging_slots: set[tuple[str, int, str, str]] = set()
     executed_pv_profiles = {
         str(depot_id): list(asset.pv_generation_kwh_by_slot or ())
         for depot_id, asset in dict(problem.depot_energy_assets or {}).items()
@@ -217,6 +224,7 @@ def _build_executed_day_accounting(
                 str(charging_slot.vehicle_id),
                 slot,
                 str(charging_slot.charger_id or ""),
+                str(charging_slot.energy_source or ""),
             )
             if key not in seen_charging_slots:
                 charging_slots.append(charging_slot)
@@ -419,6 +427,66 @@ def _apply_pv_forecast_update(
     return replace(problem, depot_energy_assets=assets), audit
 
 
+def _depot_energy_assets_fixed_hash(problem: Any) -> str:
+    """Hash non-PV-curve depot controls using the day-ahead snapshot schema.
+
+    The snapshot originates in the day-ahead research runner, which is the
+    single source of truth for this artifact schema. Keeping the same helper
+    prevents a rolling run from treating BESS configuration changes as a
+    harmless PV forecast update.
+    """
+
+    # The day-ahead runner imports the rolling service only for an explicit
+    # rolling request, so this local import avoids a module-import cycle.
+    from scripts.run_research_phase3_frontend_weather import _asset_snapshot
+
+    snapshot = _asset_snapshot(problem)
+    fixed_snapshot = {
+        depot_id: {
+            key: value
+            for key, value in dict(asset).items()
+            if key not in {"pv_generation_kwh", "pv_generation_hash"}
+        }
+        for depot_id, asset in sorted(snapshot.items())
+    }
+    return _canonical_hash(fixed_snapshot)
+
+
+def _load_day_ahead_effective_pv_profiles(
+    *,
+    day_ahead_output_dir: Path,
+    input_audit: Mapping[str, Any],
+) -> tuple[dict[str, Any], str]:
+    """Load and hash-verify the resolved PV curve used by day-ahead planning."""
+
+    artifact_name = str(
+        input_audit.get("effective_pv_profiles_artifact") or ""
+    ).strip()
+    expected_sha256 = str(
+        input_audit.get("effective_pv_profiles_sha256") or ""
+    ).strip()
+    if not artifact_name or not expected_sha256:
+        raise ValueError(
+            "Day-ahead input audit is missing effective PV profile provenance"
+        )
+    profile_path = day_ahead_output_dir / artifact_name
+    if not profile_path.is_file():
+        raise ValueError(
+            "Day-ahead effective PV profile artifact is missing: "
+            f"{profile_path}"
+        )
+    actual_sha256 = hashlib.sha256(profile_path.read_bytes()).hexdigest()
+    if actual_sha256 != expected_sha256:
+        raise ValueError(
+            "Day-ahead effective PV profile artifact hash does not match "
+            "input_audit.json"
+        )
+    payload = _load_json(profile_path)
+    if str(payload.get("schema_version") or "") != "effective_pv_profiles_v1":
+        raise ValueError("Unsupported effective PV profile artifact schema")
+    return payload, actual_sha256
+
+
 def _validate_day_ahead_input_contract(
     problem: Any,
     input_audit: dict[str, Any],
@@ -426,9 +494,31 @@ def _validate_day_ahead_input_contract(
     scenario_id: str,
     prepared_input_id: str,
     service_date: str,
+    service_id: str,
 ) -> None:
     """Ensure the persisted assignment was solved from the current inputs."""
 
+    initial_soc_policy = normalize_initial_soc_policy(
+        str(input_audit.get("initial_soc_policy") or "")
+    )
+    current_initial_soc = initial_soc_input_metadata(
+        problem,
+        policy=initial_soc_policy,
+    )
+    current_charger_hash = _charger_configuration_hash(problem)
+    current_pv_hashes = {
+        str(depot_id): _canonical_hash(
+            list(asset.pv_generation_kwh_by_slot or ())
+        )
+        for depot_id, asset in dict(problem.depot_energy_assets or {}).items()
+    }
+    expected_pv_hashes = {
+        str(depot_id): str(
+            dict(asset or {}).get("pv_generation_hash") or ""
+        )
+        for depot_id, asset in dict(input_audit.get("depot_energy_assets") or {}).items()
+    }
+    current_fixed_asset_hash = _depot_energy_assets_fixed_hash(problem)
     expected_values = {
         "input_fingerprint_schema": INPUT_FINGERPRINT_SCHEMA,
         "scenario_id": str(scenario_id),
@@ -439,6 +529,12 @@ def _validate_day_ahead_input_contract(
         "bev_terminal_soc_policy": str(
             problem.metadata.get("bev_terminal_soc_policy") or ""
         ),
+        "service_id": str(service_id),
+        "timestep_min": str(int(problem.scenario.timestep_min)),
+        "price_slot_count": str(len(problem.price_slots)),
+        "charger_configuration_hash": current_charger_hash,
+        "initial_soc_input_hash": str(current_initial_soc["initial_soc_input_hash"]),
+        "depot_energy_assets_fixed_hash": current_fixed_asset_hash,
     }
     audited_terminal_policy = str(
         input_audit.get("bev_terminal_soc_policy")
@@ -461,15 +557,567 @@ def _validate_day_ahead_input_contract(
             "Persisted day-ahead input contract does not match the current problem: "
             f"{mismatches}"
         )
+    if expected_pv_hashes and current_pv_hashes != expected_pv_hashes:
+        raise ValueError(
+            "Persisted day-ahead PV profiles do not match the current rolling "
+            f"problem: expected={expected_pv_hashes}, actual={current_pv_hashes}"
+        )
+
+
+def _gurobi_version_snapshot() -> dict[str, Any]:
+    """Record the solver backend name and version without hiding failures."""
+
+    backend = "gurobi"
+    version: str | None = None
+    if not is_gurobi_available():
+        return {
+            "backend": backend,
+            "version": None,
+            "available": False,
+            "capture_error": "gurobi_runtime_unavailable",
+        }
+    try:
+        from src.gurobi_runtime import gp as _gp  # local import keeps module import cheap
+
+        if _gp is not None and hasattr(_gp, "gurobi"):
+            raw = _gp.gurobi.version()
+            if isinstance(raw, (list, tuple)):
+                version = ".".join(str(item) for item in raw)
+            else:
+                version = str(raw)
+    except Exception as exc:  # pragma: no cover - environment-only failure
+        return {
+            "backend": backend,
+            "version": None,
+            "available": False,
+            "capture_error": f"{type(exc).__name__}: {exc}",
+        }
+    return {
+        "backend": backend,
+        "version": version,
+        "available": True,
+        "capture_error": None,
+    }
+
+
+def _day_ahead_assignment_hash(plan: AssignmentPlan) -> str:
+    """Hash the vehicle-trip assignment so chain steps can prove it is fixed."""
+
+    duties = []
+    for duty in sorted(plan.duties, key=lambda item: str(item.duty_id)):
+        duties.append(
+            {
+                "duty_id": str(duty.duty_id),
+                "vehicle_type": str(duty.vehicle_type or ""),
+                "trip_ids": [str(trip_id) for trip_id in duty.trip_ids],
+                "deadhead_from_prev_min": [
+                    int(leg.deadhead_from_prev_min or 0) for leg in duty.legs
+                ],
+            }
+        )
+    served = [str(trip_id) for trip_id in plan.served_trip_ids]
+    unserved = [str(trip_id) for trip_id in plan.unserved_trip_ids]
+    duty_vehicle_map = plan.duty_vehicle_map()
+    return _canonical_hash(
+        {
+            "duties": duties,
+            "served_trip_ids": served,
+            "unserved_trip_ids": unserved,
+            "duty_vehicle_map": {
+                str(key): str(value) for key, value in sorted(duty_vehicle_map.items())
+            },
+        }
+    )
+
+
+def _pv_forecast_hash(problem: Any) -> str:
+    """Pin the full-horizon PV curves used by day-ahead and rolling solves."""
+
+    payload = {
+        str(depot_id): [float(value or 0.0) for value in (asset.pv_generation_kwh_by_slot or ())]
+        for depot_id, asset in sorted((problem.depot_energy_assets or {}).items())
+    }
+    return _canonical_hash(payload)
+
+
+def _charger_configuration_hash(problem: Any) -> str:
+    payload = [
+        {
+            "charger_id": str(charger.charger_id),
+            "depot_id": str(charger.depot_id),
+            "power_kw": float(charger.power_kw),
+            "bidirectional": bool(charger.bidirectional),
+            "simultaneous_ports": int(charger.simultaneous_ports),
+        }
+        for charger in sorted(problem.chargers, key=lambda item: str(item.charger_id))
+    ]
+    return _canonical_hash(payload)
+
+
+def _assert_duties_unchanged(day_ahead_hash: str, result: Any) -> dict[str, Any]:
+    """Record whether a rolling step preserved the fixed vehicle-trip assignment."""
+
+    plan = result.plan if hasattr(result, "plan") else None
+    if plan is None:
+        return {
+            "fixed_assignment_check": "missing_plan",
+            "day_ahead_assignment_hash": day_ahead_hash,
+            "step_assignment_hash": None,
+            "matched": False,
+        }
+    step_hash = _day_ahead_assignment_hash(plan)
+    return {
+        "fixed_assignment_check": (
+            "matched" if step_hash == day_ahead_hash else "changed"
+        ),
+        "day_ahead_assignment_hash": day_ahead_hash,
+        "step_assignment_hash": step_hash,
+        "matched": bool(step_hash == day_ahead_hash),
+    }
+
+
+def _finite(value: Any) -> float | None:
+    """Return a finite float, otherwise None.
+
+    Mirrors ``scripts.run_research_phase3_frontend_weather._finite`` so the
+    rolling runner can compare cost/energy values without importing the
+    heavier day-ahead runner module.
+    """
+
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if math.isfinite(parsed) else None
+
+
+def _build_day_ahead_vs_rolling_summary(
+    *,
+    day_ahead_summary: dict[str, Any],
+    executed_day_accounting: dict[str, Any],
+    day_ahead_assignment_hash: str,
+    step_assignment_hashes: list[bool],
+    step_count: int,
+) -> dict[str, Any]:
+    """Compare the day-ahead plan and the executed rolling chain inline.
+
+    Only fields that exist in both summaries are compared on the same unit.
+    Missing fields or units are reported as ``null`` with an explicit reason
+    so a chart cannot imply a comparison the data does not support.
+    """
+
+    breakdown = dict(executed_day_accounting.get("cost_breakdown") or {})
+    comparisons: dict[str, Any] = {}
+    cost_keys = (
+        "total_cost",
+        "accounting_total_cost_jpy",
+        "electricity_cost",
+        "fuel_cost",
+        "co2_cost",
+        "demand_cost",
+        "vehicle_cost",
+        "vehicle_usage_cost",
+    )
+    for key in cost_keys:
+        day_ahead_value = _finite(day_ahead_summary.get(key))
+        rolling_value = _finite(breakdown.get(key))
+        if day_ahead_value is None or rolling_value is None:
+            comparisons[key] = {
+                "day_ahead": day_ahead_value,
+                "rolling_executed": rolling_value,
+                "difference": None,
+                "comparable": False,
+                "reason": (
+                    "missing_in_day_ahead"
+                    if day_ahead_value is None
+                    else "missing_in_rolling_accounting"
+                ),
+            }
+        else:
+            comparisons[key] = {
+                "day_ahead": day_ahead_value,
+                "rolling_executed": rolling_value,
+                "difference": rolling_value - day_ahead_value,
+                "comparable": True,
+                "reason": "same_unit_jpy",
+                "note": (
+                    "Day-ahead is the planning plan evaluation; rolling is the "
+                    "executed-chain accounting evaluation."
+                ),
+            }
+    energy_keys = (
+        "grid_import_kwh",
+        "grid_to_bus_kwh",
+        "grid_to_bess_kwh",
+        "pv_to_bus_kwh",
+        "pv_to_bess_kwh",
+        "bess_to_bus_kwh",
+        "pv_curtailed_kwh",
+        "peak_grid_kw",
+    )
+    for key in energy_keys:
+        day_ahead_value = _finite(day_ahead_summary.get(key))
+        rolling_value = _finite(breakdown.get(key))
+        if day_ahead_value is None or rolling_value is None:
+            comparisons[key] = {
+                "day_ahead": day_ahead_value,
+                "rolling_executed": rolling_value,
+                "difference": None,
+                "comparable": False,
+                "reason": (
+                    "missing_in_day_ahead"
+                    if day_ahead_value is None
+                    else "missing_in_rolling_accounting"
+                ),
+            }
+        else:
+            comparisons[key] = {
+                "day_ahead": day_ahead_value,
+                "rolling_executed": rolling_value,
+                "difference": rolling_value - day_ahead_value,
+                "comparable": True,
+                "reason": "same_unit_kwh_or_kw",
+                "note": (
+                    "Both values are evaluated on the same depot/slot energy "
+                    "ledger definition."
+                ),
+            }
+    return {
+        "schema_version": "day_ahead_vs_rolling_summary_v1",
+        "step_count_executed": step_count,
+        "day_ahead_assignment_hash": day_ahead_assignment_hash,
+        "rolling_assignment_hash_constant": bool(step_assignment_hashes) and all(
+            step_assignment_hashes
+        ),
+        "compare_scope": (
+            "Day-ahead planning evaluation vs. executed rolling chain "
+            "accounting evaluation. Both are cost/energy values in the same "
+            "units; neither is the integrated global optimum."
+        ),
+        "fields": comparisons,
+    }
+
+
+def _write_hourly_chart_csv(
+    path: Path,
+    *,
+    problem: Any,
+    executed_segments: list[tuple[Any, Any, int, int]],
+) -> None:
+    """Write a per-hour energy flow table for the supervisor figures.
+
+    One row per step records only the executed window's PV/grid/BESS flow and
+    charger power.  Remaining-horizon objective values are intentionally not
+    written here because adding or charting them as realised daily cost would
+    double-count future slots.
+    """
+
+    import csv as _csv
+
+    field_names = [
+        "step_index",
+        "current_time",
+        "execution_minutes",
+        "pv_generated_kwh",
+        "pv_to_bus_kwh",
+        "pv_to_bess_kwh",
+        "pv_curtailed_kwh",
+        "bess_to_bus_kwh",
+        "grid_to_bus_kwh",
+        "grid_to_bess_kwh",
+        "bess_end_soc_kwh_by_depot",
+        "bev_soc_min_kwh",
+        "bev_soc_mean_kwh",
+        "charging_kw_max",
+        "on_peak_kw_max",
+        "off_peak_kw_max",
+        "vehicle_source_provenance_exact",
+        "vehicle_source_allocation_policy",
+    ]
+    rows: list[dict[str, Any]] = []
+    timestep_h = max(int(problem.scenario.timestep_min), 1) / 60.0
+    observed_on_peak_by_depot: dict[str, float] = {}
+    observed_off_peak_by_depot: dict[str, float] = {}
+    for step_index, (step_problem, result, start_slot, stop_slot) in enumerate(
+        executed_segments
+    ):
+        plan = result.plan
+        metadata = {
+            **dict(getattr(plan, "metadata", {}) or {}),
+            **dict(getattr(result, "solver_metadata", {}) or {}),
+        }
+
+        def _sum_slots(field_name: str) -> float:
+            source = dict(getattr(plan, field_name, {}) or {})
+            return float(
+                sum(
+                    float(value or 0.0)
+                    for slot_map in source.values()
+                    for slot, value in dict(slot_map or {}).items()
+                    if start_slot <= int(slot) < stop_slot
+                )
+            )
+
+        pv_generated = float(
+            sum(
+                float(value or 0.0)
+                for asset in dict(step_problem.depot_energy_assets or {}).values()
+                for value in list(asset.pv_generation_kwh_by_slot or ())[start_slot:stop_slot]
+            )
+        )
+        charging_kw_max = max(
+            (
+                sum(
+                    max(float(slot.charge_kw or 0.0), 0.0)
+                    for slot in plan.charging_slots
+                    if int(slot.slot_index) == slot_index
+                )
+                for slot_index in range(start_slot, stop_slot)
+            ),
+            default=0.0,
+        )
+        bess_end = {
+            str(depot_id): float(slot_map[stop_slot - 1])
+            for depot_id, slot_map in dict(
+                plan.bess_soc_kwh_by_depot_slot or {}
+            ).items()
+            if stop_slot - 1 in dict(slot_map or {})
+        }
+        vehicle_soc_values = [
+            float(value)
+            for slot_map in dict(plan.vehicle_soc_kwh_by_vehicle_slot or {}).values()
+            for slot, value in dict(slot_map or {}).items()
+            if start_slot <= int(slot) <= stop_slot
+        ]
+        on_peak_slots, off_peak_slots = classify_peak_slots(step_problem.price_slots)
+        grid_bus = dict(plan.grid_to_bus_kwh_by_depot_slot or {})
+        grid_bess = dict(plan.grid_to_bess_kwh_by_depot_slot or {})
+        for depot_id in dict(step_problem.depot_energy_assets or {}):
+            depot_key = str(depot_id)
+            bus_by_slot = dict(grid_bus.get(depot_key) or {})
+            bess_by_slot = dict(grid_bess.get(depot_key) or {})
+            for slot_index in range(start_slot, stop_slot):
+                import_kw = (
+                    float(bus_by_slot.get(slot_index, 0.0) or 0.0)
+                    + float(bess_by_slot.get(slot_index, 0.0) or 0.0)
+                ) / timestep_h
+                if slot_index in on_peak_slots:
+                    observed_on_peak_by_depot[depot_key] = max(
+                        observed_on_peak_by_depot.get(depot_key, 0.0), import_kw
+                    )
+                elif slot_index in off_peak_slots:
+                    observed_off_peak_by_depot[depot_key] = max(
+                        observed_off_peak_by_depot.get(depot_key, 0.0), import_kw
+                    )
+        rows.append(
+            {
+                "step_index": step_index,
+                "current_time": _minute_label(
+                    hhmm_to_min(str(step_problem.scenario.horizon_start))
+                    + start_slot * int(step_problem.scenario.timestep_min)
+                ),
+                "execution_minutes": int((stop_slot - start_slot) * timestep_h * 60),
+                "pv_generated_kwh": pv_generated,
+                "pv_to_bus_kwh": _sum_slots("pv_to_bus_kwh_by_depot_slot"),
+                "pv_to_bess_kwh": _sum_slots("pv_to_bess_kwh_by_depot_slot"),
+                "pv_curtailed_kwh": _sum_slots("pv_curtail_kwh_by_depot_slot"),
+                "bess_to_bus_kwh": _sum_slots("bess_to_bus_kwh_by_depot_slot"),
+                "grid_to_bus_kwh": _sum_slots("grid_to_bus_kwh_by_depot_slot"),
+                "grid_to_bess_kwh": _sum_slots("grid_to_bess_kwh_by_depot_slot"),
+                "bess_end_soc_kwh_by_depot": json.dumps(
+                    bess_end, ensure_ascii=False, sort_keys=True
+                ),
+                "bev_soc_min_kwh": min(vehicle_soc_values, default=None),
+                "bev_soc_mean_kwh": (
+                    sum(vehicle_soc_values) / len(vehicle_soc_values)
+                    if vehicle_soc_values
+                    else None
+                ),
+                "charging_kw_max": charging_kw_max,
+                "on_peak_kw_max": max(
+                    observed_on_peak_by_depot.values(), default=0.0
+                ),
+                "off_peak_kw_max": max(
+                    observed_off_peak_by_depot.values(), default=0.0
+                ),
+                "vehicle_source_provenance_exact": metadata.get(
+                    "vehicle_source_provenance_exact"
+                ),
+                "vehicle_source_allocation_policy": metadata.get(
+                    "vehicle_source_allocation_policy"
+                ),
+            }
+        )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = _csv.DictWriter(handle, fieldnames=field_names)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _write_executed_charging_schedule(
+    path: Path,
+    *,
+    problem: Any,
+    executed_segments: list[tuple[Any, Any, int, int]],
+) -> None:
+    """Write the physically executed charging prefixes with source semantics."""
+
+    import csv as _csv
+
+    timestep_h = max(int(problem.scenario.timestep_min), 1) / 60.0
+    rows: list[dict[str, Any]] = []
+    seen: set[tuple[str, int, str, str]] = set()
+    for step_problem, result, start_slot, stop_slot in executed_segments:
+        metadata = {
+            **dict(getattr(result.plan, "metadata", {}) or {}),
+            **dict(getattr(result, "solver_metadata", {}) or {}),
+        }
+        for slot in result.plan.charging_slots:
+            slot_index = int(slot.slot_index)
+            if not start_slot <= slot_index < stop_slot:
+                continue
+            key = (
+                str(slot.vehicle_id),
+                slot_index,
+                str(slot.charger_id or ""),
+                str(slot.energy_source or ""),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append(
+                {
+                    "vehicle_id": str(slot.vehicle_id),
+                    "slot_index": slot_index,
+                    "time": _minute_label(
+                        hhmm_to_min(str(step_problem.scenario.horizon_start))
+                        + slot_index * int(step_problem.scenario.timestep_min)
+                    ),
+                    "charger_id": str(slot.charger_id or ""),
+                    "charging_depot_id": str(slot.charging_depot_id or ""),
+                    "energy_source": str(slot.energy_source or "unspecified"),
+                    "charge_kw": float(slot.charge_kw or 0.0),
+                    "energy_kwh": float(slot.charge_kw or 0.0) * timestep_h,
+                    "vehicle_source_provenance_exact": metadata.get(
+                        "vehicle_source_provenance_exact"
+                    ),
+                    "vehicle_source_allocation_policy": metadata.get(
+                        "vehicle_source_allocation_policy"
+                    ),
+                }
+            )
+    rows.sort(
+        key=lambda row: (
+            row["slot_index"],
+            row["vehicle_id"],
+            row["charger_id"],
+            row["energy_source"],
+        )
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = _csv.DictWriter(
+            handle,
+            fieldnames=[
+                "vehicle_id",
+                "slot_index",
+                "time",
+                "charger_id",
+                "charging_depot_id",
+                "energy_source",
+                "charge_kw",
+                "energy_kwh",
+                "vehicle_source_provenance_exact",
+                "vehicle_source_allocation_policy",
+            ],
+        )
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def run(args: argparse.Namespace) -> int:
+    request = RollingChainRequest.from_args(args)
+    return run_rolling_chain(request, args=args)
+
+
+@dataclass(frozen=True)
+class RollingChainRequest:
+    """Explicit, testable inputs for the full hourly rolling chain.
+
+    The CLI ``run`` wrapper builds this and calls :func:`run_rolling_chain`.
+    Tests may construct it directly without going through ``argparse``. Every
+    required rolling configuration is captured here so the run manifest and
+    chain summary can record it without implicit defaults.
+    """
+
+    scenario_id: str
+    prepared_input_id: str
+    expected_service_date: str
+    day_ahead_result_path: str
+    output_dir: str
+    current_time: Optional[str] = None
+    end_time: Optional[str] = None
+    full_chain: bool = False
+    execution_minutes: int = 60
+    time_limit_sec: int = 30
+    mip_gap: float = 0.1
+    random_seed: int = 42
+    gurobi_threads: Optional[int] = None
+    depot_id: str = "tsurumaki"
+    service_id: str = "WEEKDAY"
+    state_json: Optional[str] = None
+    pv_forecast_updates_json: Optional[str] = None
+    bess_terminal_policy: str = "scenario"
+    bess_terminal_min_kwh: Optional[float] = None
+
+    @classmethod
+    def from_args(cls, args: argparse.Namespace) -> "RollingChainRequest":
+        return cls(
+            scenario_id=str(args.scenario_id),
+            prepared_input_id=str(args.prepared_input_id),
+            expected_service_date=str(args.expected_service_date),
+            day_ahead_result_path=str(args.day_ahead_result),
+            output_dir=str(args.output_dir),
+            current_time=getattr(args, "current_time", None),
+            end_time=getattr(args, "end_time", None),
+            full_chain=bool(getattr(args, "full_chain", False)),
+            execution_minutes=int(args.execution_minutes),
+            time_limit_sec=int(args.time_limit_sec),
+            mip_gap=float(args.mip_gap),
+            random_seed=int(args.random_seed),
+            gurobi_threads=getattr(args, "gurobi_threads", None),
+            depot_id=str(args.depot_id),
+            service_id=str(args.service_id),
+            state_json=getattr(args, "state_json", None),
+            pv_forecast_updates_json=getattr(args, "pv_forecast_updates_json", None),
+            bess_terminal_policy=str(args.bess_terminal_policy),
+            bess_terminal_min_kwh=(
+                None if args.bess_terminal_min_kwh is None else float(args.bess_terminal_min_kwh)
+            ),
+        )
+
+
+def run_rolling_chain(
+    request: RollingChainRequest,
+    *,
+    args: Optional[argparse.Namespace] = None,
+) -> int:
+    """Execute a fixed-assignment remaining-day charging re-optimization chain.
+
+    This is the testable service behind ``run``. It deliberately mirrors the
+    historical command sequence so the persisted artifacts remain audit-
+    comparable, but all inputs flow through ``request`` so unit tests do not
+    rely on subprocesses or argument parsing. The CLI ``run`` wrapper only
+    builds the request and forwards ``args`` for provenance capture.
+    """
+
     if not is_gurobi_available():
         raise RuntimeError(
             "Gurobi is unavailable; hourly research runs do not allow fallback"
         )
 
-    day_ahead_result_path = Path(args.day_ahead_result).resolve()
+    day_ahead_result_path = Path(request.day_ahead_result_path).resolve()
     input_audit_path = day_ahead_result_path.parent / "input_audit.json"
     day_ahead_summary_path = day_ahead_result_path.parent / "summary.json"
     if not input_audit_path.is_file():
@@ -484,6 +1132,7 @@ def run(args: argparse.Namespace) -> int:
         day_ahead_summary,
     )
     rolling_git_sha, rolling_git_dirty = _git_snapshot(REPO_ROOT)
+    gurobi_snapshot = _gurobi_version_snapshot()
     input_audit = _load_json(input_audit_path)
     audited_bev_terminal_policy = str(
         input_audit.get("bev_terminal_soc_policy")
@@ -502,8 +1151,8 @@ def run(args: argparse.Namespace) -> int:
 
     prepared_root = _prepared_inputs_root()
     prepared_payload = load_prepared_input(
-        scenario_id=args.scenario_id,
-        prepared_input_id=args.prepared_input_id,
+        scenario_id=request.scenario_id,
+        prepared_input_id=request.prepared_input_id,
         scenarios_dir=prepared_root,
     )
     effective_scenario_name = str(
@@ -531,7 +1180,7 @@ def run(args: argparse.Namespace) -> int:
     else:
         scenario = deepcopy(
             materialize_scenario_from_prepared_input(
-                store.get_scenario_document_shallow(args.scenario_id),
+                store.get_scenario_document_shallow(request.scenario_id),
                 prepared_payload,
             )
         )
@@ -548,10 +1197,13 @@ def run(args: argparse.Namespace) -> int:
     enforce_research_phase3_single_continuous_duty(scenario)
     config = OptimizationConfig(
         mode=OptimizationMode.MILP,
-        time_limit_sec=int(args.time_limit_sec),
-        stage2_time_limit_sec=int(args.time_limit_sec),
-        mip_gap=float(args.mip_gap),
-        random_seed=int(args.random_seed),
+        time_limit_sec=int(request.time_limit_sec),
+        stage2_time_limit_sec=int(request.time_limit_sec),
+        mip_gap=float(request.mip_gap),
+        random_seed=int(request.random_seed),
+        gurobi_threads=(
+            None if request.gurobi_threads is None else int(request.gurobi_threads)
+        ),
         research_run=True,
         allow_postsolve_repair=False,
         phase="phase1_charging_only",
@@ -561,8 +1213,8 @@ def run(args: argparse.Namespace) -> int:
     )
     problem = ProblemBuilder().build_from_scenario(
         scenario,
-        depot_id=args.depot_id,
-        service_id=args.service_id,
+        depot_id=request.depot_id,
+        service_id=request.service_id,
         config=config,
         planning_days=1,
     )
@@ -571,15 +1223,25 @@ def run(args: argparse.Namespace) -> int:
             problem,
             weather_forecast,
             weather_profile,
-            random_seed=int(args.random_seed),
+            random_seed=int(request.random_seed),
         )
+    effective_pv_profiles, effective_pv_profiles_sha256 = (
+        _load_day_ahead_effective_pv_profiles(
+            day_ahead_output_dir=day_ahead_result_path.parent,
+            input_audit=input_audit,
+        )
+    )
+    problem, effective_pv_profile_audit = _apply_pv_forecast_update(
+        problem,
+        effective_pv_profiles,
+    )
     service_date = str(problem.metadata.get("service_date") or "")[:10]
-    if service_date != args.expected_service_date:
+    if service_date != request.expected_service_date:
         raise ValueError(
-            f"Service date mismatch: expected {args.expected_service_date}, got {service_date}"
+            f"Service date mismatch: expected {request.expected_service_date}, got {service_date}"
         )
 
-    terminal_floor_override = args.bess_terminal_min_kwh
+    terminal_floor_override = request.bess_terminal_min_kwh
     if terminal_floor_override is not None:
         assets = {
             str(depot_id): replace(
@@ -593,19 +1255,25 @@ def run(args: argparse.Namespace) -> int:
     _validate_day_ahead_input_contract(
         problem,
         input_audit,
-        scenario_id=args.scenario_id,
-        prepared_input_id=args.prepared_input_id,
+        scenario_id=request.scenario_id,
+        prepared_input_id=request.prepared_input_id,
         service_date=service_date,
+        service_id=request.service_id,
     )
     day_ahead_payload = _load_json(day_ahead_result_path)
     day_ahead_plan = assignment_plan_from_serialized_result(
         problem,
         day_ahead_payload,
     )
-    state = _load_json(Path(args.state_json)) if args.state_json else {}
-    if int(args.execution_minutes) <= 0:
+    state = _load_json(Path(request.state_json)) if request.state_json else {}
+    if int(request.execution_minutes) <= 0:
         raise ValueError("--execution-minutes must be positive")
-    current_min = hhmm_to_min(args.current_time)
+    if request.gurobi_threads is not None and int(request.gurobi_threads) < 1:
+        raise ValueError("--gurobi-threads must be positive when supplied")
+    horizon_start_time = str(problem.scenario.horizon_start)
+    horizon_end_time = str(problem.scenario.horizon_end)
+    current_time = str(request.current_time or horizon_start_time)
+    current_min = hhmm_to_min(current_time)
     state_current_min = state.get("current_min")
     if state_current_min is not None:
         absolute_state_min = int(state_current_min)
@@ -616,29 +1284,59 @@ def run(args: argparse.Namespace) -> int:
             )
         current_min = absolute_state_min
 
-    end_min = hhmm_to_min(args.end_time) if args.end_time else None
-    while end_min is not None and end_min <= current_min:
-        end_min += 24 * 60
+    end_time = request.end_time
+    chain_requested = bool(request.full_chain or end_time)
+    if request.full_chain:
+        expected_start_min = hhmm_to_min(horizon_start_time)
+        if current_min % (24 * 60) != expected_start_min % (24 * 60):
+            raise ValueError(
+                "A formal rolling chain must begin at the day-ahead energy "
+                f"horizon start {horizon_start_time}, not {current_time}"
+            )
+        expected_end_min = current_min + (
+            len(problem.price_slots) * int(problem.scenario.timestep_min)
+        )
+        if end_time:
+            supplied_end_min = hhmm_to_min(str(end_time))
+            while supplied_end_min <= current_min:
+                supplied_end_min += 24 * 60
+            if supplied_end_min != expected_end_min:
+                raise ValueError(
+                    "A formal rolling chain must cover the full day-ahead energy "
+                    f"horizon [{horizon_start_time}, {horizon_end_time}], got "
+                    f"[{current_time}, {end_time}]"
+                )
+        end_min = expected_end_min
+        end_time = horizon_end_time
+    else:
+        end_min = hhmm_to_min(str(end_time)) if end_time else None
+        while end_min is not None and end_min <= current_min:
+            end_min += 24 * 60
     if end_min is not None and end_min <= current_min:
         raise ValueError("--end-time must be later than --current-time")
-    if end_min is not None and (
-        end_min - current_min
-    ) % int(args.execution_minutes) != 0:
+    if end_min is not None and (end_min - current_min) % int(request.execution_minutes) != 0:
         raise ValueError(
             "The --current-time to --end-time interval must be divisible by "
             "--execution-minutes"
         )
+    chain_start_min = current_min
+    chain_start_time = _minute_label(chain_start_min)
     pv_forecast_updates = (
-        _load_json(Path(args.pv_forecast_updates_json))
-        if args.pv_forecast_updates_json
+        _load_json(Path(request.pv_forecast_updates_json))
+        if request.pv_forecast_updates_json
         else None
     )
 
-    output_dir = Path(args.output_dir)
+    output_dir = Path(request.output_dir)
     rolling = RollingReoptimizer()
     summaries: list[dict[str, Any]] = []
     executed_segments: list[tuple[Any, Any, int, int]] = []
     step_index = 0
+    day_ahead_assignment_hash = _day_ahead_assignment_hash(day_ahead_plan)
+    day_ahead_pv_forecast_hash = _pv_forecast_hash(problem)
+    day_ahead_charger_hash = _charger_configuration_hash(problem)
+    input_audit_sha256 = hashlib.sha256(input_audit_path.read_bytes()).hexdigest()
+    chain_failure_reason: Optional[str] = None
     while True:
         current_label = _minute_label(current_min)
         step_problem = problem
@@ -659,22 +1357,41 @@ def run(args: argparse.Namespace) -> int:
             else output_dir
         )
         started = time.perf_counter()
-        result = rolling.reoptimize_charging_hour(
-            step_problem,
-            day_ahead_plan,
-            config,
-            current_min,
-            actual_soc=dict(state.get("actual_vehicle_soc_kwh") or {}),
-            actual_bess_soc_kwh=dict(state.get("actual_bess_soc_kwh") or {}),
-            observed_on_peak_kw_by_depot=dict(
-                state.get("observed_on_peak_kw_by_depot") or {}
-            ),
-            observed_off_peak_kw_by_depot=dict(
-                state.get("observed_off_peak_kw_by_depot") or {}
-            ),
-            execution_minutes=int(args.execution_minutes),
-            bess_terminal_policy=args.bess_terminal_policy,
-        )
+        try:
+            result = rolling.reoptimize_charging_hour(
+                step_problem,
+                day_ahead_plan,
+                config,
+                current_min,
+                actual_soc=dict(state.get("actual_vehicle_soc_kwh") or {}),
+                actual_bess_soc_kwh=dict(state.get("actual_bess_soc_kwh") or {}),
+                observed_on_peak_kw_by_depot=dict(
+                    state.get("observed_on_peak_kw_by_depot") or {}
+                ),
+                observed_off_peak_kw_by_depot=dict(
+                    state.get("observed_off_peak_kw_by_depot") or {}
+                ),
+                execution_minutes=int(request.execution_minutes),
+                bess_terminal_policy=request.bess_terminal_policy,
+            )
+        except Exception as exc:
+            elapsed = time.perf_counter() - started
+            summary = {
+                "scenario_id": request.scenario_id,
+                "prepared_input_id": request.prepared_input_id,
+                "service_date": service_date,
+                "step_index": step_index,
+                "current_time": current_label,
+                "execution_minutes": int(request.execution_minutes),
+                "feasible": False,
+                "solver_status": "execution_error",
+                "elapsed_seconds": elapsed,
+                "execution_error": f"{type(exc).__name__}: {exc}",
+            }
+            _write_json(step_output_dir / "hourly_summary.json", summary)
+            summaries.append(summary)
+            chain_failure_reason = "step_execution_error"
+            break
         elapsed = time.perf_counter() - started
         metadata = dict(result.solver_metadata or {})
         bess_end_by_depot = {
@@ -684,17 +1401,20 @@ def run(args: argparse.Namespace) -> int:
             ).items()
             if slot_map
         }
+        assignment_audit = _assert_duties_unchanged(day_ahead_assignment_hash, result)
         summary = {
-            "scenario_id": args.scenario_id,
-            "prepared_input_id": args.prepared_input_id,
+            "scenario_id": request.scenario_id,
+            "prepared_input_id": request.prepared_input_id,
             "service_date": service_date,
             "day_ahead_result": str(day_ahead_result_path),
             "day_ahead_input_audit": str(input_audit_path),
             "step_index": step_index,
             "current_time": current_label,
-            "execution_minutes": int(args.execution_minutes),
+            "execution_minutes": int(request.execution_minutes),
             "lookahead": "remaining_service_day",
             "vehicle_assignment_policy": "fixed_to_persisted_day_ahead_result",
+            "assignment_audit": assignment_audit,
+            "day_ahead_assignment_hash": day_ahead_assignment_hash,
             "bev_terminal_soc_policy": audited_bev_terminal_policy,
             "bev_terminal_soc_target_source": metadata.get(
                 "bev_terminal_soc_target_source"
@@ -711,7 +1431,7 @@ def run(args: argparse.Namespace) -> int:
             "bev_terminal_soc_balance_satisfied": metadata.get(
                 "bev_terminal_soc_balance_satisfied"
             ),
-            "bess_terminal_policy": args.bess_terminal_policy,
+            "bess_terminal_policy": request.bess_terminal_policy,
             "bess_terminal_soc_target_source": metadata.get(
                 "bess_terminal_soc_target_source"
             ),
@@ -720,7 +1440,13 @@ def run(args: argparse.Namespace) -> int:
             ),
             "bess_terminal_min_kwh_override": terminal_floor_override,
             "pv_forecast_update": pv_forecast_update_audit,
-            "time_limit_sec": int(args.time_limit_sec),
+            "solver_backend": gurobi_snapshot["backend"],
+            "solver_version": gurobi_snapshot["version"],
+            "gurobi_threads": metadata.get("gurobi_threads"),
+            "time_limit_sec": int(request.time_limit_sec),
+            "mip_gap": float(request.mip_gap),
+            "random_seed": int(request.random_seed),
+            "timestep_min": int(problem.scenario.timestep_min),
             "elapsed_seconds": elapsed,
             "solver_status": result.solver_status,
             "feasible": bool(result.feasible),
@@ -744,16 +1470,23 @@ def run(args: argparse.Namespace) -> int:
         if not result.feasible:
             _write_json(step_output_dir / "hourly_summary.json", summary)
             summaries.append(summary)
+            chain_failure_reason = "step_infeasible"
             break
 
         start_slot = int(metadata.get("rolling_start_slot_index") or 0)
-        executed_slot_count = int(args.execution_minutes) // max(
+        executed_slot_count = int(request.execution_minutes) // max(
             int(step_problem.scenario.timestep_min), 1
         )
         stop_slot = min(start_slot + executed_slot_count, len(step_problem.price_slots))
+        if not bool(assignment_audit.get("matched")):
+            summary["chain_rejection_reason"] = "fixed_assignment_changed"
+            _write_json(step_output_dir / "hourly_summary.json", summary)
+            summaries.append(summary)
+            chain_failure_reason = "fixed_assignment_changed"
+            break
         executed_segments.append((step_problem, result, start_slot, stop_slot))
 
-        next_min = current_min + int(args.execution_minutes)
+        next_min = current_min + int(request.execution_minutes)
         should_continue = end_min is not None and next_min < end_min
         if end_min is not None and not should_continue:
             summary["state_handoff"] = "not_required_at_chain_end"
@@ -763,7 +1496,7 @@ def run(args: argparse.Namespace) -> int:
                     step_problem,
                     result,
                     current_min=current_min,
-                    execution_minutes=int(args.execution_minutes),
+                    execution_minutes=int(request.execution_minutes),
                     prior_on_peak_kw_by_depot=dict(
                         state.get("observed_on_peak_kw_by_depot") or {}
                     ),
@@ -781,58 +1514,164 @@ def run(args: argparse.Namespace) -> int:
                 summary["state_handoff_error"] = str(exc)
                 if should_continue:
                     _write_json(step_output_dir / "hourly_summary.json", summary)
-                    raise
+                    summaries.append(summary)
+                    chain_failure_reason = "state_handoff_failed"
+                    break
 
         _write_json(step_output_dir / "hourly_summary.json", summary)
         summaries.append(summary)
+        if chain_failure_reason:
+            break
         if not should_continue:
             break
         current_min = next_min
         step_index += 1
 
-    if end_min is not None:
-        executed_day_accounting = _build_executed_day_accounting(
-            problem,
-            day_ahead_plan,
-            executed_segments,
+    if chain_requested:
+        try:
+            executed_day_accounting = _build_executed_day_accounting(
+                problem,
+                day_ahead_plan,
+                executed_segments,
+            )
+        except Exception as exc:
+            executed_day_accounting = {
+                "eligible": False,
+                "reason": "executed_day_accounting_error",
+                "rejection_reasons": [f"{type(exc).__name__}: {exc}"],
+                "cost_breakdown": None,
+            }
+            chain_failure_reason = chain_failure_reason or "executed_day_accounting_error"
+        expected_step_count = (end_min - chain_start_min) // int(request.execution_minutes)
+        all_steps_feasible = bool(summaries) and all(
+            bool(item.get("feasible")) for item in summaries
         )
-        chain_summary = {
-            "scenario_id": args.scenario_id,
-            "prepared_input_id": args.prepared_input_id,
-            "service_date": service_date,
-            "current_time": args.current_time,
-            "end_time": args.end_time,
-            "execution_minutes": int(args.execution_minutes),
-            "step_count": len(summaries),
-            "all_steps_feasible": all(item["feasible"] for item in summaries),
-            "objective_aggregation": "not_additive_remaining_horizon_objectives",
-            "day_ahead_git_sha": input_audit.get("git_sha"),
-            "rolling_runner_git_sha": rolling_git_sha,
-            "rolling_runner_git_dirty": rolling_git_dirty,
-            "prepared_input_sha256": input_audit.get("prepared_input_sha256"),
-            "trip_input_hash": input_audit.get("trip_input_hash"),
-            "vehicle_input_hash": input_audit.get("vehicle_input_hash"),
-            "day_ahead_result_sha256": hashlib.sha256(
-                day_ahead_result_path.read_bytes()
-            ).hexdigest(),
-            "executed_day_accounting": executed_day_accounting,
-            "steps": summaries,
-        }
-        chain_summary["chain_accepted"] = bool(
-            chain_summary["all_steps_feasible"]
-            and executed_day_accounting.get("eligible") is True
-            and not rolling_git_dirty
-            and input_audit.get("git_dirty") is False
+        assignment_hash_constant = bool(summaries) and all(
+            bool(step.get("assignment_audit", {}).get("matched"))
+            for step in summaries
         )
-        chain_summary["acceptance_checks"] = {
-            "all_steps_feasible": chain_summary["all_steps_feasible"],
+        step_count_complete = len(summaries) == expected_step_count
+        full_energy_horizon = bool(request.full_chain)
+        acceptance_checks = {
+            "full_energy_horizon_requested": full_energy_horizon,
+            "all_steps_feasible": all_steps_feasible,
+            "expected_step_count_observed": step_count_complete,
             "executed_day_accounting_eligible": (
                 executed_day_accounting.get("eligible") is True
             ),
             "day_ahead_git_clean": input_audit.get("git_dirty") is False,
             "rolling_runner_git_clean": not rolling_git_dirty,
+            "day_ahead_assignment_hash_constant": assignment_hash_constant,
+            "gurobi_available": bool(gurobi_snapshot["available"]),
+            "no_chain_runtime_error": chain_failure_reason is None,
         }
+        rejection_reasons = [
+            name for name, passed in acceptance_checks.items() if not passed
+        ]
+        if chain_failure_reason:
+            rejection_reasons.append(chain_failure_reason)
+        rejection_reasons.extend(
+            str(value)
+            for value in list(executed_day_accounting.get("rejection_reasons") or [])
+        )
+        if executed_day_accounting.get("reason"):
+            rejection_reasons.append(str(executed_day_accounting["reason"]))
+        chain_summary = {
+            "schema_version": "rolling_chain_summary_v1",
+            "scenario_id": request.scenario_id,
+            "prepared_input_id": request.prepared_input_id,
+            "service_date": service_date,
+            "rolling_start_time": chain_start_time,
+            "rolling_end_time": end_time,
+            "execution_minutes": int(request.execution_minutes),
+            "timestep_min": int(problem.scenario.timestep_min),
+            "energy_horizon_start_time": horizon_start_time,
+            "energy_horizon_end_time": horizon_end_time,
+            "energy_horizon_slot_count": len(problem.price_slots),
+            "expected_step_count": expected_step_count,
+            "step_count": len(summaries),
+            "all_steps_feasible": all_steps_feasible,
+            "objective_aggregation": "not_additive_remaining_horizon_objectives",
+            "remaining_day_charging_only_fixed_assignment": True,
+            "day_ahead_git_sha": input_audit.get("git_sha"),
+            "rolling_runner_git_sha": rolling_git_sha,
+            "rolling_runner_git_dirty": rolling_git_dirty,
+            "solver_backend": gurobi_snapshot["backend"],
+            "solver_version": gurobi_snapshot["version"],
+            "gurobi_available": bool(gurobi_snapshot["available"]),
+            "gurobi_threads": (
+                summaries[0].get("gurobi_threads") if summaries else None
+            ),
+            "time_limit_sec": int(request.time_limit_sec),
+            "mip_gap": float(request.mip_gap),
+            "random_seed": int(request.random_seed),
+            "prepared_input_sha256": input_audit.get("prepared_input_sha256"),
+            "effective_scenario_sha256": input_audit.get(
+                "effective_scenario_sha256"
+            ),
+            "trip_input_hash": input_audit.get("trip_input_hash"),
+            "vehicle_input_hash": input_audit.get("vehicle_input_hash"),
+            "charger_configuration_hash": input_audit.get(
+                "charger_configuration_hash"
+            ),
+            "initial_soc_input_hash": input_audit.get("initial_soc_input_hash"),
+            "calendar_policy": input_audit.get("calendar_policy"),
+            "calendar_validation_status": input_audit.get(
+                "calendar_validation_status"
+            ),
+            "day_ahead_result_sha256": hashlib.sha256(
+                day_ahead_result_path.read_bytes()
+            ).hexdigest(),
+            "day_ahead_input_audit_sha256": input_audit_sha256,
+            "day_ahead_assignment_hash": day_ahead_assignment_hash,
+            "day_ahead_pv_forecast_hash": day_ahead_pv_forecast_hash,
+            "day_ahead_effective_pv_profiles_sha256": effective_pv_profiles_sha256,
+            "day_ahead_effective_pv_profile_audit": effective_pv_profile_audit,
+            "day_ahead_charger_hash": day_ahead_charger_hash,
+            "bess_terminal_policy": request.bess_terminal_policy,
+            "bev_terminal_soc_policy": audited_bev_terminal_policy,
+            "executed_day_accounting": executed_day_accounting,
+            "steps": summaries,
+            "rejection_reasons": sorted(set(rejection_reasons)),
+        }
+        chain_summary["acceptance_checks"] = acceptance_checks
+        chain_summary["chain_accepted"] = not chain_summary["rejection_reasons"]
         _write_json(output_dir / "rolling_chain_summary.json", chain_summary)
+        _write_json(output_dir / "executed_day_accounting.json", executed_day_accounting)
+        day_ahead_summary_for_compare = {
+            key: _finite(day_ahead_summary.get(key))
+            for key in (
+                "accounting_total_cost_jpy",
+                "total_cost",
+                "grid_import_kwh",
+                "peak_grid_kw",
+                "trip_count_served",
+                "trip_count_unserved",
+                "used_vehicle_count",
+            )
+            if key in day_ahead_summary
+        }
+        day_ahead_vs_rolling = _build_day_ahead_vs_rolling_summary(
+            day_ahead_summary=day_ahead_summary_for_compare,
+            executed_day_accounting=executed_day_accounting,
+            day_ahead_assignment_hash=day_ahead_assignment_hash,
+            step_assignment_hashes=[
+                bool(step.get("assignment_audit", {}).get("matched"))
+                for step in summaries
+            ],
+            step_count=len(summaries),
+        )
+        _write_json(output_dir / "day_ahead_vs_rolling_summary.json", day_ahead_vs_rolling)
+        _write_hourly_chart_csv(
+            output_dir / "hourly_energy_flow_chart.csv",
+            problem=problem,
+            executed_segments=executed_segments,
+        )
+        _write_executed_charging_schedule(
+            output_dir / "charging_schedule.csv",
+            problem=problem,
+            executed_segments=executed_segments,
+        )
         print(
             json.dumps(chain_summary, ensure_ascii=False, indent=2, default=str),
             flush=True,
@@ -842,7 +1681,7 @@ def run(args: argparse.Namespace) -> int:
             json.dumps(summaries[-1], ensure_ascii=False, indent=2, default=str),
             flush=True,
         )
-    if end_min is not None:
+    if chain_requested:
         return 0 if chain_summary["chain_accepted"] else 2
     return 0 if summaries and all(item["feasible"] for item in summaries) else 2
 
@@ -854,7 +1693,11 @@ def main() -> int:
     parser.add_argument("--expected-service-date", required=True)
     parser.add_argument("--day-ahead-result", required=True)
     parser.add_argument("--output-dir", required=True)
-    parser.add_argument("--current-time", default="05:00")
+    parser.add_argument(
+        "--current-time",
+        default=None,
+        help="Optional HH:MM; defaults to the persisted day-ahead energy horizon start.",
+    )
     parser.add_argument(
         "--end-time",
         default=None,
@@ -867,9 +1710,19 @@ def main() -> int:
     parser.add_argument("--time-limit-sec", type=int, default=30)
     parser.add_argument("--mip-gap", type=float, default=0.1)
     parser.add_argument("--random-seed", type=int, default=42)
+    parser.add_argument("--gurobi-threads", type=int, default=None)
     parser.add_argument("--depot-id", default="tsurumaki")
     parser.add_argument("--service-id", default="WEEKDAY")
     parser.add_argument("--state-json", default=None)
+    parser.add_argument(
+        "--full-chain",
+        action="store_true",
+        default=False,
+        help=(
+            "Execute and audit every slot of the day-ahead energy horizon. "
+            "Only this mode can produce an accepted rolling_chain_summary.json."
+        ),
+    )
     parser.add_argument(
         "--pv-forecast-updates-json",
         default=None,

@@ -177,6 +177,182 @@ def _configured_gurobi_feasibility_tol(
     return tolerance
 
 
+def _safe_nonnegative_float_metadata(
+    metadata: Mapping[str, Any],
+    key: str,
+    *,
+    default: float,
+) -> float:
+    """Resolve a non-negative number from problem/run metadata.
+
+    Mirrors ``MILPSolver._safe_nonnegative_float`` but is usable from module
+    helpers that do not have a solver instance. Negative or invalid values
+    fall back to ``default`` so a corrupted tweak cannot silently widen the
+    acceptance band.
+    """
+
+    try:
+        value = float((metadata or {}).get(key))
+    except (TypeError, ValueError):
+        return default
+    return value if value >= 0.0 else default
+
+
+def bev_terminal_numeric_acceptance_contract(
+    problem_metadata: Mapping[str, Any],
+    *,
+    gurobi_feasibility_tol: Optional[float],
+) -> dict[str, Any]:
+    """Resolve the explicit terminal-SOC numeric contract in one place.
+
+    Separates the scientific tolerance (the energy-balance judgement used by
+    receding-horizon rolling) from the numeric comparison margin that the
+    Stage 2 MILP is allowed to relax. Both values, together with the raw
+    deviation, are recorded so a result cannot be silently ``INVALID`` on a
+    floating-point boundary.
+    """
+
+    scientific = _safe_nonnegative_float_metadata(
+        problem_metadata,
+        "bev_terminal_soc_scientific_tolerance_kwh",
+        default=_safe_nonnegative_float_metadata(
+            problem_metadata,
+            "bev_terminal_soc_equality_tolerance_kwh",
+            default=1.0e-6,
+        ),
+    )
+    if gurobi_feasibility_tol is None:
+        gurobi_feasibility_tol = _safe_nonnegative_float_metadata(
+            problem_metadata,
+            "stage2_gurobi_feasibility_tol",
+            default=1.0e-9,
+        )
+    numeric_margin = _safe_nonnegative_float_metadata(
+        problem_metadata,
+        "bev_terminal_soc_numeric_margin_kwh",
+        default=max(float(gurobi_feasibility_tol), 1.0e-9),
+    )
+    return {
+        "scientific_tolerance_kwh": scientific,
+        "numeric_comparison_margin_kwh": numeric_margin,
+        "gurobi_feasibility_tol_kwh": float(gurobi_feasibility_tol),
+        "contract_source_keys": (
+            "bev_terminal_soc_scientific_tolerance_kwh",
+            "bev_terminal_soc_numeric_margin_kwh",
+            "bev_terminal_soc_equality_tolerance_kwh",
+        ),
+        "legacy_equality_tolerance_kwh": _safe_nonnegative_float_metadata(
+            problem_metadata,
+            "bev_terminal_soc_equality_tolerance_kwh",
+            default=1.0e-6,
+        ),
+    }
+
+
+def _max_abs_terminal_target_deviation_kwh(
+    *,
+    target_by_vehicle: Mapping[str, float],
+    shortfall_by_vehicle: Mapping[str, float],
+    surplus_by_vehicle: Mapping[str, float],
+) -> float:
+    """Return the largest absolute per-vehicle deviation from the target."""
+
+    return float(
+        max(
+            (
+                max(
+                    float(shortfall_by_vehicle.get(vehicle_id, 0.0) or 0.0),
+                    float(surplus_by_vehicle.get(vehicle_id, 0.0) or 0.0),
+                )
+                for vehicle_id in target_by_vehicle
+            ),
+            default=0.0,
+        )
+    )
+
+
+def _bev_terminal_balance_satisfied(
+    *,
+    target_by_vehicle: Mapping[str, float],
+    shortfall_by_vehicle: Mapping[str, float],
+    surplus_by_vehicle: Mapping[str, float],
+    scientific_tolerance_kwh: float,
+    numeric_margin_kwh: float,
+) -> bool:
+    """Return whether terminal SOC is within science plus numeric margin."""
+
+    if not target_by_vehicle:
+        return False
+    deviation = _max_abs_terminal_target_deviation_kwh(
+        target_by_vehicle=target_by_vehicle,
+        shortfall_by_vehicle=shortfall_by_vehicle,
+        surplus_by_vehicle=surplus_by_vehicle,
+    )
+    acceptance_limit_kwh = float(scientific_tolerance_kwh) + float(
+        numeric_margin_kwh
+    )
+    return deviation <= acceptance_limit_kwh
+
+
+def _bev_terminal_acceptance_reason(
+    *,
+    target_by_vehicle: Mapping[str, float],
+    shortfall_by_vehicle: Mapping[str, float],
+    surplus_by_vehicle: Mapping[str, float],
+    scientific_tolerance_kwh: float,
+    numeric_margin_kwh: float,
+) -> dict[str, Any]:
+    """Return the raw deviation and the explicit tolerances used.
+
+    The reasons are split so a floating-point boundary near ``1e-6 kWh`` is
+    never silently hidden: the scientific tolerance is the modelled
+    energy-balance band, while ``numeric_comparison_margin_kwh`` is a narrow
+    post-solve guard for floating-point comparison at that boundary. The same
+    scientific band is used in the MILP upper constraint; a solution may pass
+    just beyond it only by the explicitly reported numeric margin.
+    ``raw_deviation_kwh`` is the absolute deviation the judgement inspected.
+    """
+
+    deviation = _max_abs_terminal_target_deviation_kwh(
+        target_by_vehicle=target_by_vehicle,
+        shortfall_by_vehicle=shortfall_by_vehicle,
+        surplus_by_vehicle=surplus_by_vehicle,
+    )
+    scientific = float(scientific_tolerance_kwh)
+    numeric = float(numeric_margin_kwh)
+    acceptance_limit = scientific + numeric
+    if not target_by_vehicle:
+        category = "no_target_vehicles"
+    elif deviation <= scientific:
+        category = "within_scientific_tolerance"
+    elif deviation <= acceptance_limit:
+        category = "within_numeric_margin_of_scientific_tolerance"
+    else:
+        category = "exceeds_acceptance_tolerance"
+    return {
+        "raw_deviation_kwh": deviation,
+        "scientific_tolerance_kwh": scientific,
+        "numeric_comparison_margin_kwh": numeric,
+        "postsolve_acceptance_limit_kwh": acceptance_limit,
+        "category": category,
+        "judgement": (
+            "accepted"
+            if category
+            in {
+                "within_scientific_tolerance",
+                "within_numeric_margin_of_scientific_tolerance",
+            }
+            else "rejected"
+        ),
+        "note": (
+            "Deviation is reported as an absolute SOC-energy delta in kWh. "
+            "scientific_tolerance_kwh is the modelled energy-balance band. "
+            "numeric_comparison_margin_kwh is added only for post-solve "
+            "floating-point comparison at that boundary."
+        ),
+    }
+
+
 def _gurobi_numeric_diagnostics(model: Any) -> Dict[str, Any]:
     """Collect solver quality/scaling evidence without changing the model."""
 
@@ -1709,11 +1885,14 @@ class GurobiMILPAdapter:
                                 ),
                             )
                             if terminal_policy is BevTerminalSocPolicy.RETURN_TO_INITIAL:
-                                tolerance_kwh = self._safe_nonnegative_float(
-                                    problem.metadata.get(
-                                        "bev_terminal_soc_equality_tolerance_kwh"
+                                terminal_contract = bev_terminal_numeric_acceptance_contract(
+                                    problem.metadata,
+                                    gurobi_feasibility_tol=getattr(
+                                        model, "_mc_stage_feasibility_tol_kwh", None
                                     ),
-                                    default=1.0e-6,
+                                )
+                                tolerance_kwh = float(
+                                    terminal_contract["scientific_tolerance_kwh"]
                                 )
                                 model.addConstr(
                                     _slot_end_soc_expr(target_slot_idx, day_idx)
@@ -5480,11 +5659,12 @@ class GurobiMILPAdapter:
                     ),
                 )
                 if terminal_policy is BevTerminalSocPolicy.RETURN_TO_INITIAL:
-                    tolerance_kwh = self._safe_nonnegative_float(
-                        problem.metadata.get(
-                            "bev_terminal_soc_equality_tolerance_kwh"
-                        ),
-                        default=1.0e-6,
+                    terminal_contract = bev_terminal_numeric_acceptance_contract(
+                        problem.metadata,
+                        gurobi_feasibility_tol=stage2_feasibility_tol,
+                    )
+                    tolerance_kwh = float(
+                        terminal_contract["scientific_tolerance_kwh"]
                     )
                     stage2.addConstr(
                         terminal_soc_expr <= target_kwh + tolerance_kwh,
@@ -6047,6 +6227,10 @@ class GurobiMILPAdapter:
         # integrated total-cost optimality proof. Exactness is exposed only in
         # the separate Stage 1/Stage 2 certificate fields below.
         solver_status = "feasible"
+        terminal_acceptance_contract_for_metadata = bev_terminal_numeric_acceptance_contract(
+            problem.metadata,
+            gurobi_feasibility_tol=stage2_feasibility_tol,
+        )
         metadata = {
             **dict(stage1_plan.metadata or {}),
             "status": solver_status,
@@ -6169,28 +6353,41 @@ class GurobiMILPAdapter:
                     default=0.0,
                 )
             ),
+            "bev_terminal_soc_numeric_acceptance_contract": (
+                terminal_acceptance_contract_for_metadata
+            ),
             "bev_terminal_soc_balance_satisfied": bool(
                 vehicle_terminal_soc_target_kwh_by_vehicle
-                and max(
-                    (
-                        max(
-                            vehicle_terminal_soc_target_shortfall_kwh_by_vehicle.get(
-                                vehicle_id, 0.0
-                            ),
-                            vehicle_terminal_soc_target_surplus_kwh_by_vehicle.get(
-                                vehicle_id, 0.0
-                            ),
-                        )
-                        for vehicle_id in vehicle_terminal_soc_target_kwh_by_vehicle
+                and _bev_terminal_balance_satisfied(
+                    target_by_vehicle=vehicle_terminal_soc_target_kwh_by_vehicle,
+                    shortfall_by_vehicle=vehicle_terminal_soc_target_shortfall_kwh_by_vehicle,
+                    surplus_by_vehicle=vehicle_terminal_soc_target_surplus_kwh_by_vehicle,
+                    scientific_tolerance_kwh=(
+                        terminal_acceptance_contract_for_metadata[
+                            "scientific_tolerance_kwh"
+                        ]
                     ),
-                    default=0.0,
-                )
-                <= self._safe_nonnegative_float(
-                    problem.metadata.get(
-                        "bev_terminal_soc_equality_tolerance_kwh"
+                    numeric_margin_kwh=(
+                        terminal_acceptance_contract_for_metadata[
+                            "numeric_comparison_margin_kwh"
+                        ]
                     ),
-                    default=1.0e-6,
                 )
+            ),
+            "bev_terminal_soc_acceptance_reason": _bev_terminal_acceptance_reason(
+                target_by_vehicle=vehicle_terminal_soc_target_kwh_by_vehicle,
+                shortfall_by_vehicle=vehicle_terminal_soc_target_shortfall_kwh_by_vehicle,
+                surplus_by_vehicle=vehicle_terminal_soc_target_surplus_kwh_by_vehicle,
+                scientific_tolerance_kwh=(
+                    terminal_acceptance_contract_for_metadata[
+                        "scientific_tolerance_kwh"
+                    ]
+                ),
+                numeric_margin_kwh=(
+                    terminal_acceptance_contract_for_metadata[
+                        "numeric_comparison_margin_kwh"
+                    ]
+                ),
             ),
             "bess_soc_start_kwh_by_depot_slot": bess_soc_start,
             "bess_soc_end_kwh_by_depot_slot": bess_soc_end or bess_soc,

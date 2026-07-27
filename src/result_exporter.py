@@ -32,6 +32,7 @@ from .optimization.common.energy_flow_accounting import (
     normalize_depot_slot_flow,
     normalize_pv_energy_breakdown,
 )
+from .optimization.rolling.acceptance import rolling_chain_acceptance_audit
 from .optimization.accounting import build_accounting_artifacts, export_accounting_outputs
 from .parameter_builder import DerivedParams, get_grid_price, get_pv_gen
 from .reporting import rebuild_reporting_artifacts_in_place
@@ -4493,6 +4494,70 @@ def export_depot_energy_flows(
 # ---------------------------------------------------------------------------
 
 
+def _input_provenance_ready(run_dir: Path) -> bool:
+    """Return whether the run directory preserved input provenance.
+
+    A research-submission artifact must have a persisted manifest and input
+    audit so the run can be re-derived. Missing files therefore downgrade
+    ``research_submission_ready`` even when the solution validity gate alone
+    would pass.
+    """
+
+    return (run_dir / "manifest.json").is_file() and (
+        run_dir / "input_audit.json"
+    ).is_file()
+
+
+def _research_submission_status(
+    *,
+    milp: MILPResult,
+    sim: SimulationResult,
+    run_dir: Path,
+) -> tuple[str, list[str]]:
+    """Decide whether the run clears the research submission gate.
+
+    Separates ``input_provenance_ready`` from ``research_submission_ready``.
+    Solution validity (``state`` and an accounting residual check supplied by
+    ``sim``) is necessary but not sufficient: a missing manifest, input audit,
+    fleet declaration, or rolling-chain for hour-by-hour claims blocks the
+    submission even when the solver returned an incumbent.
+    """
+
+    reasons: list[str] = []
+    status = str(getattr(milp, "status", "") or "").upper()
+    feasible_for_research = status in {"OPTIMAL", "TIME_LIMIT", "SUBOPTIMAL", "FEASIBLE"}
+    if not feasible_for_research:
+        reasons.append(f"solver_status_not_research_feasible:{status}")
+
+    served_ratio = float(getattr(sim, "served_task_ratio", 0.0) or 0.0)
+    unserved = list(getattr(sim, "unserved_tasks", []) or [])
+    if served_ratio < 1.0 or unserved:
+        reasons.append("unserved_trips_remain")
+
+    soc_violations = list(getattr(sim, "soc_violations", []) or [])
+    if soc_violations:
+        reasons.append("soc_violations_present")
+
+    if not _input_provenance_ready(run_dir):
+        reasons.append("input_provenance_missing")
+
+    rolling_chain_summary = run_dir / "rolling_hourly_chain" / "rolling_chain_summary.json"
+    if not rolling_chain_summary.is_file():
+        reasons.append("hourly_rolling_chain_missing")
+    else:
+        import json as _json
+        try:
+            chain = _json.loads(rolling_chain_summary.read_text(encoding="utf-8"))
+            if not rolling_chain_acceptance_audit(chain)["accepted"]:
+                reasons.append("hourly_rolling_chain_not_accepted")
+        except Exception:
+            reasons.append("hourly_rolling_chain_unreadable")
+
+    if reasons:
+        return ("blocked", reasons)
+    return ("submitted", [])
+
+
 def export_experiment_report(
     run_dir: Path,
     data: ProblemData,
@@ -4506,9 +4571,30 @@ def export_experiment_report(
         float(sim.provisional_energy_cost or 0.0) - float(sim.charged_energy_cost or 0.0),
         0.0,
     )
+    submission_status, submission_reasons = _research_submission_status(
+        milp=milp, sim=sim, run_dir=run_dir
+    )
     lines = [
         f"# 実験レポート — {run_label or ts}",
         "",
+    ]
+    if submission_status != "submitted":
+        lines.extend(
+            [
+                "> EXPLORATORY — RESEARCH SUBMISSION BLOCKED",
+                "",
+            ]
+        )
+    lines.extend(
+        [
+            "## 研究提出資格",
+            f"- research_submission_ready: {submission_status == 'submitted'}",
+            f"- input_provenance_ready: {_input_provenance_ready(run_dir)}",
+            f"- submission_reason: {', '.join(submission_reasons) or 'all_gates_passed'}",
+            "",
+        ]
+    )
+    lines.extend([
         "## 条件一覧",
         f"- 実行日時: {ts}",
         f"- 車両数 BEV: {len(ms.K_BEV)}, ICE: {len(ms.K_ICE)}",
@@ -4554,7 +4640,7 @@ def export_experiment_report(
         "",
         "---",
         "*本レポートは result_exporter.py により自動生成されました。*",
-    ]
+    ])
     with open(run_dir / "experiment_report.md", "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
 

@@ -51,6 +51,7 @@ from src.optimization.common.bev_terminal_policy import (
 from src.optimization.common.research_phase3_policy import (
     enforce_research_phase3_single_continuous_duty,
 )
+from src.optimization.rolling.acceptance import rolling_chain_acceptance_audit
 from src.optimization.common.fast_cost_assignment import (
     build_fast_cost_aware_assignment,
 )
@@ -871,10 +872,16 @@ def _write_research_manifest(
 ) -> None:
     artifact_names = (
         "effective_scenario.json",
+        "effective_pv_profiles.json",
         "input_audit.json",
         "solver_result.json",
         "summary.json",
         "vehicle_schedule.csv",
+        "rolling_hourly_chain/rolling_chain_summary.json",
+        "rolling_hourly_chain/executed_day_accounting.json",
+        "rolling_hourly_chain/day_ahead_vs_rolling_summary.json",
+        "rolling_hourly_chain/hourly_energy_flow_chart.csv",
+        "rolling_hourly_chain/charging_schedule.csv",
     )
     artifacts = {
         name: {
@@ -907,12 +914,18 @@ def _write_research_manifest(
         "price_slot_count",
         "terminal_soc_policy",
         "charger_configuration_hash",
+        "depot_energy_assets_fixed_hash",
+        "effective_pv_profiles_artifact",
+        "effective_pv_profiles_sha256",
         "vehicle_input_hash",
         "trip_input_hash",
         "git_sha",
         "git_dirty",
         "git_state_available",
         "git_state_error",
+        "calendar_audit",
+        "calendar_policy",
+        "calendar_validation_status",
     )
     manifest = {
         "schema": "research_run_manifest_v1",
@@ -986,6 +999,34 @@ def _asset_snapshot(problem: Any) -> dict[str, Any]:
     }
 
 
+def _effective_pv_profiles(problem: Any) -> dict[str, Any]:
+    """Serialize the exact full-horizon PV curves passed to day-ahead solving.
+
+    A weather counterfactual may replace the canonical scenario curve after
+    scenario materialisation. Persisting this resolved input ensures rolling
+    reproduces the day-ahead energy model rather than falling back to the
+    original scenario PV data.
+    """
+
+    forecast_by_depot = {
+        str(depot_id): [
+            float(value or 0.0)
+            for value in tuple(asset.pv_generation_kwh_by_slot or ())
+        ]
+        for depot_id, asset in sorted(problem.depot_energy_assets.items())
+    }
+    return {
+        "schema_version": "effective_pv_profiles_v1",
+        "semantics": (
+            "Exact full-horizon kWh PV profiles supplied to the accepted "
+            "day-ahead canonical problem; rolling must load these before "
+            "applying any declared per-step forecast update."
+        ),
+        "forecast_by_depot": forecast_by_depot,
+        "forecast_by_depot_hash": _canonical_hash(forecast_by_depot),
+    }
+
+
 def _depot_import_limit_snapshot(problem: Any) -> dict[str, float]:
     """Return the raw frontend-configured grid import limit for every depot.
 
@@ -1055,6 +1096,7 @@ def _validate_frontend_case(
     expected_bev_count: int,
     expected_ice_count: int,
     service_id: str,
+    allow_fixed_weekday_timetable_pv_counterfactual: bool,
 ) -> None:
     if len(problem.trips) != 264:
         raise ValueError(f"Expected the 264-trip research scope, got {len(problem.trips)}")
@@ -1064,12 +1106,27 @@ def _validate_frontend_case(
             f"Expected service date {expected_service_date}, got {service_date or 'missing'}"
         )
     calendar_contract = _calendar_service_contract(service_date, service_id)
-    if not calendar_contract["matches"]:
+    calendar_validation = dict(
+        problem.metadata.get("service_calendar_validation") or {}
+    )
+    calendar_status = str(calendar_validation.get("status") or "").upper()
+    calendar_waiver = dict(calendar_validation.get("waiver") or {})
+    waiver_is_exact = bool(
+        allow_fixed_weekday_timetable_pv_counterfactual
+        and calendar_status == "WAIVED_BY_EXPERIMENT_POLICY"
+        and str(calendar_waiver.get("calendar_policy") or "")
+        == "fixed_weekday_timetable_pv_counterfactual"
+        and str(calendar_waiver.get("scope") or "")
+        == "weekday_timetable_on_sunday_for_pv_only_counterfactual"
+        and str(service_id).upper() == "WEEKDAY"
+        and date.fromisoformat(service_date).weekday() == 6
+    )
+    if not calendar_contract["matches"] and not waiver_is_exact:
         raise ValueError(
             "Formal frontend weather comparison rejects calendar/service-table "
-            f"mismatch: {calendar_contract}. Use the service table matching the "
-            "date, or build an explicitly labelled same-date counterfactual "
-            "weather case."
+            f"mismatch: contract={calendar_contract}, validation={calendar_validation}. "
+            "Only the explicitly declared weekday-timetable-on-Sunday PV-only "
+            "counterfactual may waive this gate."
         )
     fleet = {
         vehicle_type: sum(
@@ -1127,6 +1184,51 @@ def _validate_frontend_case(
             "applied; skip_reason="
             f"{problem.metadata.get('weather_pv_forecast_skip_reason')!r}"
         )
+
+
+def _calendar_audit(
+    *,
+    problem: Any,
+    service_id: str,
+    fixed_control_hash: str,
+) -> dict[str, Any]:
+    """Persist either a matched calendar or the one permitted experiment waiver."""
+
+    service_date = str(problem.metadata.get("service_date") or "")[:10]
+    contract = _calendar_service_contract(service_date, service_id)
+    validation = dict(problem.metadata.get("service_calendar_validation") or {})
+    waiver = dict(validation.get("waiver") or {})
+    if str(validation.get("status") or "").upper() == "WAIVED_BY_EXPERIMENT_POLICY":
+        if not (
+            str(waiver.get("calendar_policy") or "")
+            == "fixed_weekday_timetable_pv_counterfactual"
+            and str(waiver.get("scope") or "")
+            == "weekday_timetable_on_sunday_for_pv_only_counterfactual"
+            and str(service_id).upper() == "WEEKDAY"
+            and date.fromisoformat(service_date).weekday() == 6
+        ):
+            raise ValueError("Calendar waiver is not the permitted PV-only experiment")
+        return {
+            **contract,
+            "timetable_service_id": "WEEKDAY",
+            "weather_profile_date": service_date,
+            "calendar_policy": "fixed_weekday_timetable_pv_counterfactual",
+            "calendar_validation_status": "WAIVED_BY_EXPERIMENT_POLICY",
+            "waiver": {
+                **waiver,
+                "fixed_control_hash": fixed_control_hash,
+            },
+        }
+    if str(validation.get("status") or "").upper() != "OK" or not contract["matches"]:
+        raise ValueError(f"Calendar contract is not accepted: {validation}")
+    return {
+        **contract,
+        "timetable_service_id": str(service_id).upper(),
+        "weather_profile_date": service_date,
+        "calendar_policy": "matched_service_calendar",
+        "calendar_validation_status": "matched",
+        "waiver": None,
+    }
 
 
 def run(args: argparse.Namespace) -> int:
@@ -1191,6 +1293,25 @@ def run(args: argparse.Namespace) -> int:
             prepared_payload,
         )
     )
+    fixed_weekday_waiver_requested = bool(
+        getattr(args, "allow_fixed_weekday_timetable_pv_counterfactual", False)
+    )
+    if fixed_weekday_waiver_requested:
+        requested_service_date = date.fromisoformat(str(args.expected_service_date)[:10])
+        if str(args.service_id).upper() != "WEEKDAY" or requested_service_date.weekday() != 6:
+            raise ValueError(
+                "--allow-fixed-weekday-timetable-pv-counterfactual is valid only "
+                "for a WEEKDAY timetable on a Sunday service date"
+            )
+        waiver_config = dict(scenario.get("simulation_config") or {})
+        waiver_config.update(
+            {
+                "allow_fixed_weekday_timetable_pv_counterfactual": True,
+                "calendar_policy": "fixed_weekday_timetable_pv_counterfactual",
+                "weather_profile_date": requested_service_date.isoformat(),
+            }
+        )
+        scenario["simulation_config"] = waiver_config
     discretization = _configure_research_discretization(
         scenario,
         timestep_min=int(args.time_step_min),
@@ -1316,6 +1437,7 @@ def run(args: argparse.Namespace) -> int:
         expected_bev_count=args.expected_bev_count,
         expected_ice_count=args.expected_ice_count,
         service_id=args.service_id,
+        allow_fixed_weekday_timetable_pv_counterfactual=fixed_weekday_waiver_requested,
     )
     git_state = _git_state()
     trip_input_hash = _trip_input_hash(problem)
@@ -1376,6 +1498,11 @@ def run(args: argparse.Namespace) -> int:
         mip_gap=float(args.mip_gap),
         random_seed=int(args.random_seed),
         git_sha=git_state.get("git_sha"),
+    )
+    calendar_audit = _calendar_audit(
+        problem=problem,
+        service_id=str(args.service_id),
+        fixed_control_hash=comparison_control_hash,
     )
     weather_comparison_contract = {
         "schema_version": "weather_comparison_contract_v1",
@@ -1449,6 +1576,17 @@ def run(args: argparse.Namespace) -> int:
             "git_sha": git_state["git_sha"],
         }
     )
+    effective_pv_profiles_path = output_dir / "effective_pv_profiles.json"
+    _write_json(effective_pv_profiles_path, _effective_pv_profiles(problem))
+    effective_pv_profiles_sha256 = _sha256(effective_pv_profiles_path)
+    fixed_depot_energy_assets = {
+        depot_id: {
+            key: value
+            for key, value in dict(asset).items()
+            if key not in {"pv_generation_kwh", "pv_generation_hash"}
+        }
+        for depot_id, asset in sorted(depot_energy_assets.items())
+    }
     input_audit = {
         "effective_scenario_artifact": "effective_scenario.json",
         "manifest_artifact": "manifest.json",
@@ -1464,6 +1602,12 @@ def run(args: argparse.Namespace) -> int:
             str(problem.metadata.get("service_date") or "")[:10],
             str(args.service_id),
         ),
+        "calendar_audit": calendar_audit,
+        "calendar_policy": calendar_audit.get("calendar_policy"),
+        "calendar_validation_status": calendar_audit.get(
+            "calendar_validation_status"
+        ),
+        "actual_service_day_display_forbidden": True,
         "phase": executed_phase,
         "stage1_strategy": stage1_strategy,
         "assignment_global_optimality": (
@@ -1572,6 +1716,11 @@ def run(args: argparse.Namespace) -> int:
         "charger_configuration": charger_configuration,
         "charger_configuration_hash": _canonical_hash(charger_configuration),
         "depot_energy_assets": depot_energy_assets,
+        "depot_energy_assets_fixed_hash": _canonical_hash(
+            fixed_depot_energy_assets
+        ),
+        "effective_pv_profiles_artifact": effective_pv_profiles_path.name,
+        "effective_pv_profiles_sha256": effective_pv_profiles_sha256,
         "vehicle_input_hash": vehicle_input_hash,
         "trip_input_hash": trip_input_hash,
         "experiment_hash": experiment_hash,
@@ -2051,7 +2200,205 @@ def run(args: argparse.Namespace) -> int:
         run_state="complete" if result.feasible else "infeasible",
     )
     print(json.dumps(summary, ensure_ascii=False, indent=2, default=str), flush=True)
-    return 0 if result.feasible else 2
+
+    if not result.feasible:
+        return 2
+    if not bool(getattr(args, "run_hourly_rolling", False)):
+        _finalize_day_ahead_rolling_artifacts(
+            day_ahead_output_dir=output_dir,
+            rolling_exit_code=2,
+        )
+        return 0
+    try:
+        _validate_day_ahead_rolling_start_contract(output_dir)
+    except ValueError:
+        _finalize_day_ahead_rolling_artifacts(
+            day_ahead_output_dir=output_dir,
+            rolling_exit_code=2,
+        )
+        raise
+    rolling_result = _invoke_hourly_rolling_after_day_ahead(args, output_dir)
+    _finalize_day_ahead_rolling_artifacts(
+        day_ahead_output_dir=output_dir,
+        rolling_exit_code=rolling_result,
+    )
+    return rolling_result
+
+
+def _finalize_day_ahead_rolling_artifacts(
+    *,
+    day_ahead_output_dir: Path,
+    rolling_exit_code: int,
+) -> None:
+    """Link the day-ahead artifact to the persisted rolling outcome."""
+
+    summary_path = day_ahead_output_dir / "summary.json"
+    input_audit_path = day_ahead_output_dir / "input_audit.json"
+    chain_path = day_ahead_output_dir / "rolling_hourly_chain" / "rolling_chain_summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    input_audit = json.loads(input_audit_path.read_text(encoding="utf-8"))
+    chain: dict[str, Any] = {}
+    chain_error: str | None = None
+    if chain_path.is_file():
+        try:
+            chain = json.loads(chain_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            chain_error = f"{type(exc).__name__}: {exc}"
+    acceptance_audit = rolling_chain_acceptance_audit(chain)
+    acceptance_checks = dict(acceptance_audit["acceptance_checks"])
+    accepted = bool(acceptance_audit["accepted"] and rolling_exit_code == 0)
+    status = (
+        "executed_and_accepted"
+        if accepted
+        else "executed_not_accepted"
+        if chain_path.is_file()
+        else "not_executed"
+    )
+    rolling_execution = {
+        "status": status,
+        "chain_summary_path": str(chain_path.relative_to(day_ahead_output_dir)),
+        "chain_accepted": bool(chain.get("chain_accepted")),
+        "rolling_exit_code": int(rolling_exit_code),
+        "acceptance_checks": acceptance_checks,
+        "rejection_reasons": (
+            list(chain.get("rejection_reasons") or [])
+            + [
+                f"missing_required_check:{name}"
+                for name in acceptance_audit["missing_required_checks"]
+            ]
+            + [
+                f"failed_acceptance_check:{name}"
+                for name in acceptance_audit["failing_checks"]
+            ]
+            or (
+                ["hourly_rolling_chain_missing"]
+                if not chain_path.is_file()
+                else ["hourly_rolling_chain_not_accepted"]
+                if not accepted
+                else []
+            )
+        ),
+        "chain_read_error": chain_error,
+    }
+    summary["rolling_execution"] = rolling_execution
+    _write_json(summary_path, summary)
+    research_submission_ready = bool(
+        summary.get("research_run_accepted") and accepted
+    )
+    report_lines = [
+        "# 実験レポート — 日次Phase 3後の1時間Rolling",
+        "",
+    ]
+    if not research_submission_ready:
+        report_lines.extend(["> EXPLORATORY — RESEARCH SUBMISSION BLOCKED", ""])
+    report_lines.extend(
+        [
+            "## 研究提出資格",
+            f"- input_provenance_ready: {bool(input_audit)}",
+            f"- day_ahead_research_run_accepted: {bool(summary.get('research_run_accepted'))}",
+            f"- rolling_execution_status: {status}",
+            f"- rolling_chain_accepted: {accepted}",
+            f"- research_submission_ready: {research_submission_ready}",
+            "- rolling_rejection_reasons: "
+            + ", ".join(rolling_execution["rejection_reasons"] or ["none"]),
+            "",
+            "## 主張範囲",
+            "- 日次配車を固定した残り日充電/PV/BESSの逐次再最適化であり、統合総費用の大域最適解ではない。",
+            "- 各stepの残り地平目的値は加算せず、実行prefixを一度だけ接続した会計のみを用いる。",
+        ]
+    )
+    (day_ahead_output_dir / "experiment_report.md").write_text(
+        "\n".join(report_lines) + "\n", encoding="utf-8"
+    )
+    _write_research_manifest(
+        day_ahead_output_dir,
+        input_audit=input_audit,
+        run_state="complete" if accepted else "rolling_not_accepted",
+    )
+
+
+def _validate_day_ahead_rolling_start_contract(day_ahead_output_dir: Path) -> None:
+    """Fail closed before rolling from an unaccepted day-ahead artifact."""
+
+    summary_path = day_ahead_output_dir / "summary.json"
+    input_audit_path = day_ahead_output_dir / "input_audit.json"
+    solver_result_path = day_ahead_output_dir / "solver_result.json"
+    missing = [
+        path.name
+        for path in (summary_path, input_audit_path, solver_result_path)
+        if not path.is_file()
+    ]
+    if missing:
+        raise ValueError(
+            "Hourly rolling requires a complete day-ahead artifact contract; "
+            f"missing={missing}"
+        )
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    blockers = []
+    if not bool(summary.get("feasible")):
+        blockers.append("day_ahead_not_feasible")
+    if not bool(summary.get("research_run_accepted")):
+        blockers.append("day_ahead_research_acceptance_failed")
+    if not bool(summary.get("research_feasibility_eligible")):
+        blockers.append("day_ahead_research_feasibility_ineligible")
+    if str(summary.get("phase") or "") != "phase3_two_stage":
+        blockers.append("day_ahead_not_phase3_two_stage")
+    if blockers:
+        raise ValueError(
+            "Hourly rolling will not start from an unaccepted day-ahead result: "
+            + ", ".join(blockers)
+        )
+
+
+def _invoke_hourly_rolling_after_day_ahead(
+    args: argparse.Namespace,
+    day_ahead_output_dir: Path,
+) -> int:
+    """Launch the rolling chain in-process after a feasible day-ahead run.
+
+    This is the explicit opt-in path enabled by ``--run-hourly-rolling``. It
+    never shells out to the CLI; it builds a :class:`RollingChainRequest` and
+    calls :func:`run_rolling_chain` directly so the chain inherits the same
+    process provenance as the day-ahead solve.
+    """
+
+    from scripts.run_hourly_charging_reoptimization import (
+        RollingChainRequest,
+        run_rolling_chain,
+    )
+
+    if not bool(getattr(args, "run_hourly_rolling", False)):
+        raise ValueError("Hourly rolling is opt-in and requires --run-hourly-rolling")
+    rolling_current_time = getattr(args, "rolling_current_time", None) or None
+    rolling_end_time = getattr(args, "rolling_end_time", None) or None
+    execution_minutes = int(getattr(args, "rolling_execution_minutes", 60) or 60)
+    if execution_minutes <= 0:
+        raise ValueError("--rolling-execution-minutes must be positive")
+    rolling_output_dir = day_ahead_output_dir / "rolling_hourly_chain"
+    rolling_request = RollingChainRequest(
+        scenario_id=args.scenario_id,
+        prepared_input_id=args.prepared_input_id,
+        expected_service_date=args.expected_service_date,
+        day_ahead_result_path=str(day_ahead_output_dir / "solver_result.json"),
+        output_dir=str(rolling_output_dir),
+        current_time=rolling_current_time,
+        end_time=rolling_end_time,
+        full_chain=True,
+        execution_minutes=execution_minutes,
+        time_limit_sec=int(getattr(args, "rolling_time_limit_sec", 30) or 30),
+        mip_gap=float(getattr(args, "rolling_mip_gap", 0.1) or 0.1),
+        random_seed=int(getattr(args, "rolling_random_seed", args.random_seed) or args.random_seed),
+        gurobi_threads=getattr(args, "gurobi_threads", None),
+        depot_id=args.depot_id,
+        service_id=args.service_id,
+        state_json=None,
+        pv_forecast_updates_json=getattr(args, "rolling_pv_forecast_updates_json", None),
+        bess_terminal_policy=str(
+            getattr(args, "rolling_bess_terminal_policy", "scenario") or "scenario"
+        ),
+        bess_terminal_min_kwh=getattr(args, "rolling_bess_terminal_min_kwh", None),
+    )
+    return run_rolling_chain(rolling_request, args=args)
 
 
 def main() -> int:
@@ -2247,6 +2594,91 @@ def main() -> int:
         ),
     )
     parser.add_argument("--build-only", action="store_true")
+    parser.add_argument(
+        "--allow-fixed-weekday-timetable-pv-counterfactual",
+        action="store_true",
+        default=False,
+        help=(
+            "Explicitly waive the calendar gate: hold the weekday timetable "
+            "fixed on a Sunday PV-only counterfactual. Results are labelled "
+            "fixed_weekday_timetable_pv_counterfactual and are never called "
+            "actual Sunday operation or Sunday timetable."
+        ),
+    )
+    parser.add_argument(
+        "--run-hourly-rolling",
+        action="store_true",
+        default=False,
+        help=(
+            "After a feasible day-ahead run, launch the full hourly rolling "
+            "chain in-process. Rolling is opt-in and only starts when the "
+            "day-ahead result is feasible and accepted; it is never implicit."
+        ),
+    )
+    parser.add_argument(
+        "--rolling-current-time",
+        default=None,
+        help=(
+            "Optional HH:MM start. Formal full chains default to, and require, "
+            "the day-ahead effective energy-horizon start."
+        ),
+    )
+    parser.add_argument(
+        "--rolling-end-time",
+        default=None,
+        help=(
+            "Optional HH:MM end. Formal full chains default to, and require, "
+            "the day-ahead effective energy-horizon end."
+        ),
+    )
+    parser.add_argument(
+        "--rolling-execution-minutes",
+        type=int,
+        default=60,
+        help="Execution window length per rolling step. Must be a positive multiple of timestep_min.",
+    )
+    parser.add_argument(
+        "--rolling-time-limit-sec",
+        type=int,
+        default=30,
+        help="Per-step Gurobi time limit for the rolling charging re-optimization.",
+    )
+    parser.add_argument(
+        "--rolling-mip-gap",
+        type=float,
+        default=0.1,
+        help="Per-step certified MIP gap target for the rolling solve.",
+    )
+    parser.add_argument(
+        "--rolling-random-seed",
+        type=int,
+        default=None,
+        help=(
+            "Random seed for the rolling solve. Defaults to the day-ahead "
+            "--random-seed so the pair stays reproducible from one declared "
+            "seed."
+        ),
+    )
+    parser.add_argument(
+        "--rolling-pv-forecast-updates-json",
+        default=None,
+        help=(
+            "Optional JSON object keyed by HH:MM supplying per-step full-"
+            "horizon PV forecasts for rolling forecast-error experiments."
+        ),
+    )
+    parser.add_argument(
+        "--rolling-bess-terminal-policy",
+        choices=("scenario", "minimum_only"),
+        default="scenario",
+        help="BESS terminal SOC policy for the rolling solve.",
+    )
+    parser.add_argument(
+        "--rolling-bess-terminal-min-kwh",
+        type=float,
+        default=None,
+        help="Optional override for the rolling BESS terminal SOC floor [kWh].",
+    )
     return run(parser.parse_args())
 
 

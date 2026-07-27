@@ -101,6 +101,44 @@ def _comparison_type(simulation_config: Mapping[str, Any]) -> str:
     return "actual_service_day"
 
 
+def _fixed_weekday_timetable_pv_counterfactual_waiver(
+    *,
+    service_date: date,
+    observed_types: Sequence[str],
+    simulation_config: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    """Return the narrowly-scoped weekday-on-Sunday waiver, if declared.
+
+    The exception exists only for the explicitly labelled PV supply
+    counterfactual used by the research runner.  It does not make a Sunday
+    timetable interchangeable with a weekday timetable, and it deliberately
+    cannot waive fleet, trip, SOC, charger, or energy-balance contracts.
+    """
+
+    policy = str(simulation_config.get("calendar_policy") or "").strip()
+    enabled = bool(
+        simulation_config.get(
+            "allow_fixed_weekday_timetable_pv_counterfactual", False
+        )
+    )
+    if (
+        not enabled
+        or policy != "fixed_weekday_timetable_pv_counterfactual"
+        or service_date.weekday() != 6
+        or set(observed_types) != {"weekday"}
+    ):
+        return None
+    return {
+        "calendar_policy": policy,
+        "calendar_validation_status": "WAIVED_BY_EXPERIMENT_POLICY",
+        "scope": "weekday_timetable_on_sunday_for_pv_only_counterfactual",
+        "rationale": (
+            "A Sunday weather/PV profile is evaluated with the weekday timetable "
+            "held fixed. This is not actual Sunday operation."
+        ),
+    }
+
+
 def validate_service_calendar_contract(
     *,
     service_date_text: str,
@@ -147,6 +185,11 @@ def validate_service_calendar_contract(
         or ""
     ).strip()
     errors: list[str] = []
+    waiver = _fixed_weekday_timetable_pv_counterfactual_waiver(
+        service_date=service_date,
+        observed_types=observed_types,
+        simulation_config=simulation_config,
+    )
     if not observed_types:
         errors.append("timetable_service_day_type_unverifiable")
     elif any(
@@ -156,7 +199,7 @@ def validate_service_calendar_contract(
             and expected_type in {"saturday", "sunday_or_holiday"}
         )
         for observed_type in observed_types
-    ):
+    ) and waiver is None:
         errors.append("service_date_timetable_day_type_mismatch")
     if (
         comparison_type == "actual_service_day"
@@ -165,7 +208,13 @@ def validate_service_calendar_contract(
         errors.append("actual_weather_date_differs_from_service_date")
     result = {
         "schema_version": "service_calendar_validation_v1",
-        "status": "ERROR" if errors else "OK",
+        "status": (
+            "ERROR"
+            if errors
+            else "WAIVED_BY_EXPERIMENT_POLICY"
+            if waiver is not None
+            else "OK"
+        ),
         "strict": bool(strict),
         "service_date": service_date.isoformat(),
         "service_date_weekday": service_date.strftime("%A"),
@@ -186,6 +235,11 @@ def validate_service_calendar_contract(
             and weather_observation_date == service_date.isoformat()
         ),
         "errors": errors,
+        "calendar_policy": waiver.get("calendar_policy") if waiver else None,
+        "calendar_validation_status": (
+            waiver.get("calendar_validation_status") if waiver else "matched"
+        ),
+        "waiver": waiver,
     }
     if strict and errors:
         raise ValueError(

@@ -48,9 +48,14 @@ simulation artifact, not an automatically accepted research result.
   `return_to_initial`, the first depot deadhead is part of the daily energy
   balance. Fixed BESS terminal targets are equalities; the solver feasibility
   tolerance is stage-specific: Stage 1 defaults to `1e-6`, while Stage 2 uses
-  `1e-9` against the independent `1e-6 kWh` terminal-SOC acceptance limit.
+  `1e-9`; BEV terminal SOC separately declares its scientific tolerance
+  (default `1e-6 kWh`).
   Effective tolerances and Gurobi violation/scaling diagnostics are persisted
   in `solver_settings.json`.
+  The Phase 3 terminal-SOC contract records the raw deviation, scientific
+  tolerance, Gurobi-derived numeric margin, acceptance limit, and reason; the
+  MILP uses the scientific tolerance and post-solve adds only that narrow
+  numeric margin.
 - Formal sunny/rainy comparison is fail-closed: it requires the same prepared
   input, service day, fleet, initial SOC, and operational controls; only a
   separately recorded PV curve may differ. Comparing a weekday to a Sunday is
@@ -62,8 +67,11 @@ simulation artifact, not an automatically accepted research result.
   `graph/research_fleet_validation.json`; the model does not invent an ICE bus
   or force unused BEVs into service.
 - Hourly rolling execution is reported as `not_executed` unless an actual rolling
-  chain was run and its log is attached. No output fabricates rolling evidence,
-  a missing ICE vehicle, or weather-dispatch behavior.
+  chain was run and its log is attached. `executed_and_accepted` additionally
+  requires a persisted full-horizon `rolling_chain_summary.json` whose every
+  acceptance check passes; a partial or failed chain is
+  `executed_not_accepted`. No output fabricates rolling evidence, a missing ICE
+  vehicle, or weather-dispatch behavior.
 - Stage 1 `BestObjStop` is explicit. It is allowed for operational planning but
   is a stopping-rule intervention, not evidence that one case is intrinsically
   faster. `solver_settings.json` separates Gurobi's raw MIP gap from the
@@ -230,6 +238,7 @@ flowchart LR
 <details>
 <summary><strong>更新メモ</strong></summary>
 
+- 2026-07-27: 日次Phase 3後の1時間rollingは、日次入力契約が受理済みの場合にのみin-processで起動し、日次モデルの実効エネルギー地平を先頭から末尾まで走査する。日次で解いた実効PV時系列は `effective_pv_profiles.json` とそのSHA-256で固定し、rollingはこれを再読込してから予測更新を適用する。残り地平の目的値は加算せず、実行prefixだけを一度接続した `executed_day_accounting.json` を出力する。`rolling_chain_summary.json`、比較表、時刻別PV/grid/BESS/SOCグラフCSV、`energy_source`付き充電CSVを同じrunの`rolling_hourly_chain/`へ保存する。`charging_schedule.csv` は `(vehicle_id, slot_index, charger_id)` を物理充電枠のキーとし、`energy_source`別の行はその枠の電源内訳である。現行Phase 3の車両別内訳は営業所・時刻別の比例配分であり、`vehicle_source_provenance_exact=false` のときsolver-nativeな電源割当ではない。固定平日時刻表を日曜PV反実仮想へ使う例外は、明示policyと固定control hashを持つ `fixed_weekday_timetable_pv_counterfactual` に限定し、実際の日曜運行とは表示しない。
 - 2026-07-23: フロントから手動実行した`output/<date>/run_*`へ、`scenario_input_snapshot.json`、`prepare_input_audit.json`、`optimization_parameters.json`、`run_input_summary.md`、`run_input_manifest.json`、`run_input_validation.json`をsolver開始前に保存する。保存scenario、実行時override、Prepare profile/scope、車両・充電器・営業所・路線inventory、canonical実効パラメータを分離し、巨大prepared input本体は複製せずpath・size・完全SHA-256で固定する。後日確認は`python scripts/verify_run_input_provenance.py --run-dir <RUN_DIR>`を使用し、hash又はscenario/prepared ID不一致時は終了コード2となる。
 - 2026-07-23: `output/2026-07-23`の晴雨成果物を再監査し、非研究run、2025-08-10（日曜）の`WEEKDAY`指定、未適用のPV予測曲線、車両別電源由来の過剰なexact表明を正式結果の停止条件にした。formal runnerは暦日・service IDとPV曲線適用をfail-closedで検査する。車両別の系統/PV/BESS内訳は営業所×時刻の確定比率による按分と明示し、BEV35台全数使用は基準費用最小化と分けた`--minimum-used-bev-count 35`政策感度として扱う。1時間rollingは実装済みだが当該runでは未実行であり、最終監査は`--require-rolling`で晴雨双方の受理済みchainを要求できる。本番再計算は未実施で、同日・同一ダイヤの晴雨入力と実在ICE26台を準備するまで既存結果を研究結論に使わない。
 - 2026-07-18: `core_new` commit`1b5deeb`のclean worktree、固定prepared SHA、15分、候補接続削減なしでgrid-only正式baselineを実行した。264/264便、Stage 2 optimal、独立違反0、fallback/postsolve repairなし、会計再計算残差0円を確認し、正式検証14項目をすべて通過した。Stage 1はtime limit・gap 12.582%のため最適解とは扱わない。成果物は`output/research_phase3_grid_only_15min_formal_20260718_full_network`。

@@ -116,6 +116,7 @@ from src.optimization.rolling.reoptimizer import (
     RollingReoptimizer,
     assignment_plan_from_serialized_result,
 )
+from src.optimization.rolling.acceptance import rolling_chain_acceptance_audit
 from src.optimization.common.bess_terminal_policy import (
     resolve_bess_terminal_soc_target_kwh,
 )
@@ -1914,6 +1915,78 @@ def _canonical_simulation_condition_tables(
     )
 
 
+def _rolling_execution_evidence(
+    *,
+    run_dir: Path,
+    solver_metadata: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Classify rolling from its persisted chain, never day-ahead metadata.
+
+    A Phase 1 solve can carry rolling-shaped metadata without any hour being
+    executed.  The accepted state therefore requires a complete, accepted
+    chain summary produced by the in-process rolling service.
+    """
+
+    rolling_dir = run_dir / "rolling_hourly_chain"
+    summary_path = rolling_dir / "rolling_chain_summary.json"
+    policy = str(solver_metadata.get("rolling_horizon_policy") or "").strip()
+    minutes = solver_metadata.get("rolling_execution_minutes")
+    if not summary_path.is_file():
+        return {
+            "status": "not_executed",
+            "rolling_horizon_policy": policy or None,
+            "rolling_execution_minutes": minutes,
+            "chain_summary_path": None,
+            "semantics": (
+                "No persisted hourly chain exists. Day-ahead metadata alone is "
+                "not evidence that rolling was executed."
+            ),
+        }
+    try:
+        chain = json.loads(summary_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return {
+            "status": "executed_not_accepted",
+            "rolling_horizon_policy": policy or None,
+            "rolling_execution_minutes": minutes,
+            "chain_summary_path": str(summary_path),
+            "chain_read_error": f"{type(exc).__name__}: {exc}",
+            "semantics": "A rolling chain artifact exists but cannot be verified.",
+        }
+    acceptance_audit = rolling_chain_acceptance_audit(chain)
+    checks = dict(acceptance_audit["acceptance_checks"])
+    accepted = bool(acceptance_audit["accepted"])
+    rejection_reasons = list(chain.get("rejection_reasons") or [])
+    rejection_reasons.extend(
+        f"missing_required_check:{name}"
+        for name in acceptance_audit["missing_required_checks"]
+    )
+    rejection_reasons.extend(
+        f"failed_acceptance_check:{name}"
+        for name in acceptance_audit["failing_checks"]
+    )
+    return {
+        "status": "executed_and_accepted" if accepted else "executed_not_accepted",
+        "rolling_horizon_policy": (
+            chain.get("remaining_day_charging_only_fixed_assignment")
+            and "remaining_day_charging_only_fixed_assignment"
+            or policy
+            or None
+        ),
+        "rolling_execution_minutes": chain.get(
+            "execution_minutes", minutes
+        ),
+        "chain_summary_path": str(summary_path),
+        "chain_accepted": bool(chain.get("chain_accepted")),
+        "acceptance_checks": checks,
+        "rejection_reasons": sorted(set(rejection_reasons)),
+        "semantics": (
+            "Rolling evidence is accepted only when the persisted chain summary "
+            "and every recorded acceptance check pass."
+        ),
+    }
+
+
 def _persist_rich_run_outputs(
     *,
     run_dir: Path,
@@ -3156,21 +3229,10 @@ def _persist_rich_run_outputs(
             input_git_provenance.get("git_state_error"),
         ),
     }
-    rolling_execution_minutes = solver_metadata.get("rolling_execution_minutes")
-    rolling_policy = str(solver_metadata.get("rolling_horizon_policy") or "").strip()
-    rolling_execution = {
-        "status": (
-            "executed"
-            if rolling_execution_minutes is not None or rolling_policy
-            else "not_executed"
-        ),
-        "rolling_horizon_policy": rolling_policy or None,
-        "rolling_execution_minutes": rolling_execution_minutes,
-        "semantics": (
-            "This manual frontend artifact is a day-ahead optimization result. "
-            "Hourly rolling evidence is a separate execution chain."
-        ),
-    }
+    rolling_execution = _rolling_execution_evidence(
+        run_dir=run_dir,
+        solver_metadata=solver_metadata,
+    )
     research_claim_scope = _research_claim_scope_payload(
         optimization_result=optimization_result,
         solver_settings=solver_settings,
@@ -3453,7 +3515,7 @@ def _research_claim_scope_payload(
         disallowed_claims.append("weather_adaptive_dispatch_or_charging_policy")
     if is_manual_unaccepted:
         disallowed_claims.append("formal_research_weather_comparison")
-    if rolling_execution.get("status") != "executed":
+    if rolling_execution.get("status") != "executed_and_accepted":
         disallowed_claims.append("hourly_rolling_reoptimization_performance")
     # A single manually initiated run can record whether BestObjStop was out of
     # the way, but it cannot itself establish a runtime comparison.  That also

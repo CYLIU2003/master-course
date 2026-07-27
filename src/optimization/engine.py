@@ -1232,8 +1232,19 @@ class OptimizationEngine:
                 (problem.metadata or {}).get("service_calendar_validation") or {}
             )
             if calendar_validation:
-                acceptance_checks["service_calendar_contract"] = (
-                    str(calendar_validation.get("status") or "").upper() == "OK"
+                calendar_status = str(
+                    calendar_validation.get("status") or ""
+                ).upper()
+                calendar_waiver = dict(calendar_validation.get("waiver") or {})
+                acceptance_checks["service_calendar_contract"] = bool(
+                    calendar_status == "OK"
+                    or (
+                        calendar_status == "WAIVED_BY_EXPERIMENT_POLICY"
+                        and str(calendar_waiver.get("calendar_policy") or "")
+                        == "fixed_weekday_timetable_pv_counterfactual"
+                        and str(calendar_waiver.get("scope") or "")
+                        == "weekday_timetable_on_sunday_for_pv_only_counterfactual"
+                    )
                 )
             fleet_validation = dict(
                 (problem.metadata or {}).get("research_fleet_validation") or {}

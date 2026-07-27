@@ -37,6 +37,43 @@ def test_research_calendar_rejects_sunday_with_weekday_timetable() -> None:
         )
 
 
+def test_explicit_fixed_weekday_pv_counterfactual_waives_only_sunday_mismatch() -> None:
+    result = validate_service_calendar_contract(
+        service_date_text="2025-08-10",
+        timetable_rows=[_weekday_row()],
+        scenario_metadata={
+            "simulation_config": {
+                "service_date": "2025-08-10",
+                "allow_fixed_weekday_timetable_pv_counterfactual": True,
+                "calendar_policy": "fixed_weekday_timetable_pv_counterfactual",
+            }
+        },
+        strict=True,
+    )
+
+    assert result["status"] == "WAIVED_BY_EXPERIMENT_POLICY"
+    assert result["calendar_validation_status"] == "WAIVED_BY_EXPERIMENT_POLICY"
+    assert result["waiver"]["scope"] == (
+        "weekday_timetable_on_sunday_for_pv_only_counterfactual"
+    )
+
+
+def test_fixed_weekday_pv_counterfactual_does_not_waive_a_saturday() -> None:
+    with pytest.raises(ValueError, match="service_date_timetable_day_type_mismatch"):
+        validate_service_calendar_contract(
+            service_date_text="2025-08-09",
+            timetable_rows=[_weekday_row()],
+            scenario_metadata={
+                "simulation_config": {
+                    "service_date": "2025-08-09",
+                    "allow_fixed_weekday_timetable_pv_counterfactual": True,
+                    "calendar_policy": "fixed_weekday_timetable_pv_counterfactual",
+                }
+            },
+            strict=True,
+        )
+
+
 def test_counterfactual_keeps_service_date_and_separate_weather_date() -> None:
     result = validate_service_calendar_contract(
         service_date_text="2025-08-05",
