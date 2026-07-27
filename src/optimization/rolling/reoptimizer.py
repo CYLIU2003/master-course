@@ -29,6 +29,9 @@ from src.optimization.milp.solver_adapter import (
 from .state_locking import lock_started_trips
 
 
+_SOC_BOUNDARY_TOLERANCE_KWH = 1.0e-6
+
+
 def assignment_plan_from_serialized_result(
     problem: CanonicalOptimizationProblem,
     serialized_result: Mapping[str, Any],
@@ -541,11 +544,20 @@ class RollingReoptimizer:
                 lower,
             )
             value = float(raw)
-            if not math.isfinite(value) or value < lower or value > upper:
+            if (
+                not math.isfinite(value)
+                or value < lower - _SOC_BOUNDARY_TOLERANCE_KWH
+                or value > upper + _SOC_BOUNDARY_TOLERANCE_KWH
+            ):
                 raise ValueError(
                     f"Measured BESS SOC for {depot_id!r} is outside "
                     f"[{lower}, {upper}] kWh"
                 )
+            # A solver handoff can differ from an active bound by a few ULPs
+            # (for example 119.99999999999999 for a 120 kWh lower bound).
+            # Clamp only values already within the shared numerical tolerance;
+            # materially out-of-range measurements remain hard failures.
+            value = min(max(value, lower), upper)
             assets[str(depot_id)] = replace(asset, bess_initial_soc_kwh=value)
             applied += 1
         metadata = dict(problem.metadata or {})

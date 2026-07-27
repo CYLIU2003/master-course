@@ -488,6 +488,33 @@ def test_hourly_charging_reoptimization_carries_measured_bess_state_and_fixed_as
     assert capture.last_problem.depot_energy_assets["dep-1"].bess_terminal_soc_policy == "minimum_only"
     assert capture.last_problem.depot_energy_assets["dep-1"].bess_terminal_soc_target_kwh == 0.0
 
+    optimizer.reoptimize_charging_hour(
+        problem,
+        day_ahead_plan,
+        OptimizationConfig(time_limit_sec=30),
+        current_min=0,
+        actual_soc={"veh-1": 240.0},
+        actual_bess_soc_kwh={"dep-1": 119.99999999999999},
+        observed_on_peak_kw_by_depot={"dep-1": 90.0},
+        observed_off_peak_kw_by_depot={"dep-1": 70.0},
+        bess_terminal_policy="scenario",
+    )
+    assert capture.last_problem is not None
+    assert capture.last_problem.depot_energy_assets["dep-1"].bess_initial_soc_kwh == 120.0
+
+    with pytest.raises(ValueError, match="Measured BESS SOC"):
+        optimizer.reoptimize_charging_hour(
+            problem,
+            day_ahead_plan,
+            OptimizationConfig(time_limit_sec=30),
+            current_min=0,
+            actual_soc={"veh-1": 240.0},
+            actual_bess_soc_kwh={"dep-1": 119.99},
+            observed_on_peak_kw_by_depot={"dep-1": 90.0},
+            observed_off_peak_kw_by_depot={"dep-1": 70.0},
+            bess_terminal_policy="scenario",
+        )
+
     with pytest.raises(ValueError, match="finite and non-negative"):
         optimizer.reoptimize_charging_hour(
             problem,

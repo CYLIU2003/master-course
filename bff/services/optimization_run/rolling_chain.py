@@ -440,6 +440,17 @@ def execute_frontend_rolling_chain(
     technical_failures = tuple(
         name for name in technical_check_names if checks.get(name) is not True
     )
+    if technical_failures:
+        _write_json(
+            Path(request.output_dir) / "rolling_execution_failure.json",
+            {
+                "status": "failed",
+                "reason": "rolling_execution_checks_failed",
+                "technical_failure_reasons": list(technical_failures),
+                "chain_summary_path": str(chain_summary_path),
+                "exit_code": int(exit_code),
+            },
+        )
     refresh_frontend_rolling_manifest(
         run_dir=Path(run_dir),
         run_state=(

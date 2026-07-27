@@ -52,6 +52,14 @@
 - Focused BFF/rolling/provenance tests are included for server-enforced
   defaults, explicit day-ahead exploratory mode, same-object handoff, dirty
   provenance classification, exact Sunday waiver, and rolling evidence.
+- The first clean-commit full-size frontend-path trial
+  (`output/2026-07-27/run_20260727_1645`) reached rolling step 06 and exposed a
+  numerical boundary handoff bug: Gurobi returned the 120 kWh BESS minimum as
+  `119.99999999999999`, which the next step rejected by an exact comparison.
+  Rolling BESS measurements now reject values outside the bound by more than
+  `1e-6 kWh` and clamp only within-tolerance floating-point residue to the
+  physical bound. A `119.99 kWh` measurement still fails. This changes no
+  physical SOC constraint and does not waive a material violation.
 - A clean-commit 264-trip high/low-PV frontend execution has not yet been
   completed at the time of this code note. Do not claim empirical completion,
   teacher readiness, or formal weather-comparison acceptance until both real

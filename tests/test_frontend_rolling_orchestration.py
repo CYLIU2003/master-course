@@ -247,3 +247,16 @@ def test_infeasible_rolling_step_is_a_technical_job_failure(
     }
     manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["run_state"] == "rolling_execution_failed"
+    failure = json.loads(
+        (
+            tmp_path
+            / "rolling_hourly_chain"
+            / "rolling_execution_failure.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert failure["reason"] == "rolling_execution_checks_failed"
+    assert set(failure["technical_failure_reasons"]) == {
+        "all_steps_feasible",
+        "expected_step_count_observed",
+        "executed_day_accounting_eligible",
+    }

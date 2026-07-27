@@ -90,6 +90,9 @@ simulation artifact, not an automatically accepted research result.
   raw versus certified Stage 1 gap, the requested gap, and cost/objective
   semantics. Any infeasible/truncated/state-handoff-failed rolling step fails
   the frontend job while preserving the day-ahead and rolling diagnostics.
+- Rolling state handoff treats solver values within `1e-6 kWh` of a BESS SOC
+  bound as numerical residue and clamps them to that bound. Values beyond that
+  tolerance remain hard errors; this does not relax the physical BESS limits.
 - Stage 1 `BestObjStop` is explicit. It is allowed for operational planning but
   is a stopping-rule intervention, not evidence that one case is intrinsically
   faster. `solver_settings.json` separates Gurobi's raw MIP gap from the
