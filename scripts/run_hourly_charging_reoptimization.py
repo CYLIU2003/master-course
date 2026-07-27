@@ -1070,6 +1070,10 @@ class RollingChainRequest:
     pv_forecast_updates_json: Optional[str] = None
     bess_terminal_policy: str = "scenario"
     bess_terminal_min_kwh: Optional[float] = None
+    # Production BFF calls pass the exact canonical problem that produced the
+    # sibling day-ahead result. CLI calls leave this unset and reconstruct from
+    # the persisted, hash-pinned effective scenario.
+    day_ahead_problem: Optional[Any] = None
 
     @classmethod
     def from_args(cls, args: argparse.Namespace) -> "RollingChainRequest":
@@ -1149,52 +1153,6 @@ def run_rolling_chain(
         audited_bev_terminal_policy
     ).value
 
-    prepared_root = _prepared_inputs_root()
-    prepared_payload = load_prepared_input(
-        scenario_id=request.scenario_id,
-        prepared_input_id=request.prepared_input_id,
-        scenarios_dir=prepared_root,
-    )
-    effective_scenario_name = str(
-        input_audit.get("effective_scenario_artifact") or ""
-    ).strip()
-    effective_scenario_path = (
-        input_audit_path.parent / effective_scenario_name
-        if effective_scenario_name
-        else None
-    )
-    if input_audit.get("input_fingerprint_schema") == INPUT_FINGERPRINT_SCHEMA:
-        if effective_scenario_path is None or not effective_scenario_path.is_file():
-            raise ValueError(
-                "Current day-ahead input audit requires effective_scenario.json"
-            )
-        scenario = deepcopy(_load_json(effective_scenario_path))
-        expected_scenario_hash = str(
-            input_audit.get("effective_scenario_sha256") or ""
-        )
-        actual_scenario_hash = _canonical_hash(scenario)
-        if not expected_scenario_hash or actual_scenario_hash != expected_scenario_hash:
-            raise ValueError(
-                "Day-ahead effective scenario hash does not match input_audit.json"
-            )
-    else:
-        scenario = deepcopy(
-            materialize_scenario_from_prepared_input(
-                store.get_scenario_document_shallow(request.scenario_id),
-                prepared_payload,
-            )
-        )
-    simulation_config = dict(scenario.get("simulation_config") or {})
-    simulation_config["bev_terminal_soc_policy"] = audited_bev_terminal_policy
-    scenario["simulation_config"] = simulation_config
-    scenario, weather_forecast, weather_profile = (
-        _prepare_weather_policy_for_scenario(
-            scenario,
-            enable_weather_operation_policy=None,
-            weather_proxy_forecast_path=None,
-        )
-    )
-    enforce_research_phase3_single_continuous_duty(scenario)
     config = OptimizationConfig(
         mode=OptimizationMode.MILP,
         time_limit_sec=int(request.time_limit_sec),
@@ -1211,20 +1169,75 @@ def run_rolling_chain(
         resolved_phase="phase1_charging_only",
         executed_phase="phase1_charging_only",
     )
-    problem = ProblemBuilder().build_from_scenario(
-        scenario,
-        depot_id=request.depot_id,
-        service_id=request.service_id,
-        config=config,
-        planning_days=1,
-    )
-    if weather_forecast is not None and weather_profile is not None:
-        problem = apply_weather_policy_to_problem(
-            problem,
-            weather_forecast,
-            weather_profile,
-            random_seed=int(request.random_seed),
+    if request.day_ahead_problem is not None:
+        # The frontend production path must use the very same canonical object
+        # that generated the persisted assignment. Rebuilding duties or input
+        # rows here would create an un-auditable second interpretation.
+        problem = request.day_ahead_problem
+    else:
+        prepared_root = _prepared_inputs_root()
+        prepared_payload = load_prepared_input(
+            scenario_id=request.scenario_id,
+            prepared_input_id=request.prepared_input_id,
+            scenarios_dir=prepared_root,
         )
+        effective_scenario_name = str(
+            input_audit.get("effective_scenario_artifact") or ""
+        ).strip()
+        effective_scenario_path = (
+            input_audit_path.parent / effective_scenario_name
+            if effective_scenario_name
+            else None
+        )
+        if input_audit.get("input_fingerprint_schema") == INPUT_FINGERPRINT_SCHEMA:
+            if effective_scenario_path is None or not effective_scenario_path.is_file():
+                raise ValueError(
+                    "Current day-ahead input audit requires effective_scenario.json"
+                )
+            scenario = deepcopy(_load_json(effective_scenario_path))
+            expected_scenario_hash = str(
+                input_audit.get("effective_scenario_sha256") or ""
+            )
+            actual_scenario_hash = _canonical_hash(scenario)
+            if (
+                not expected_scenario_hash
+                or actual_scenario_hash != expected_scenario_hash
+            ):
+                raise ValueError(
+                    "Day-ahead effective scenario hash does not match input_audit.json"
+                )
+        else:
+            scenario = deepcopy(
+                materialize_scenario_from_prepared_input(
+                    store.get_scenario_document_shallow(request.scenario_id),
+                    prepared_payload,
+                )
+            )
+        simulation_config = dict(scenario.get("simulation_config") or {})
+        simulation_config["bev_terminal_soc_policy"] = audited_bev_terminal_policy
+        scenario["simulation_config"] = simulation_config
+        scenario, weather_forecast, weather_profile = (
+            _prepare_weather_policy_for_scenario(
+                scenario,
+                enable_weather_operation_policy=None,
+                weather_proxy_forecast_path=None,
+            )
+        )
+        enforce_research_phase3_single_continuous_duty(scenario)
+        problem = ProblemBuilder().build_from_scenario(
+            scenario,
+            depot_id=request.depot_id,
+            service_id=request.service_id,
+            config=config,
+            planning_days=1,
+        )
+        if weather_forecast is not None and weather_profile is not None:
+            problem = apply_weather_policy_to_problem(
+                problem,
+                weather_forecast,
+                weather_profile,
+                random_seed=int(request.random_seed),
+            )
     effective_pv_profiles, effective_pv_profiles_sha256 = (
         _load_day_ahead_effective_pv_profiles(
             day_ahead_output_dir=day_ahead_result_path.parent,
@@ -1561,6 +1574,11 @@ def run_rolling_chain(
             ),
             "day_ahead_git_clean": input_audit.get("git_dirty") is False,
             "rolling_runner_git_clean": not rolling_git_dirty,
+            "day_ahead_and_rolling_git_sha_match": bool(
+                input_audit.get("git_sha")
+                and rolling_git_sha
+                and str(input_audit.get("git_sha")) == str(rolling_git_sha)
+            ),
             "day_ahead_assignment_hash_constant": assignment_hash_constant,
             "gurobi_available": bool(gurobi_snapshot["available"]),
             "no_chain_runtime_error": chain_failure_reason is None,

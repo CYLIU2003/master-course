@@ -92,10 +92,42 @@ def test_single_manual_run_cannot_claim_runtime_comparison_after_disabling_stop_
     assert claim_scope["evidence"]["stage1_stop_rule_runtime_control_eligible"] is True
 
 
+def test_teacher_release_preserves_vehicle_inventory_blocker() -> None:
+    claim_scope = _research_claim_scope_payload(
+        optimization_result={
+            "run_profile": "day_ahead_and_hourly_rolling",
+            "solver_metadata": {
+                "research_run": True,
+                "research_run_accepted": False,
+                "research_submission_git_provenance_eligible": True,
+                "research_acceptance_checks": {
+                    "research_vehicle_inventory_contract": False,
+                },
+            },
+            "solution_validity": {"validated_feasible": True},
+        },
+        solver_settings={},
+        weather_policy={"enabled": False},
+        rolling_execution={
+            "status": "executed_and_accepted",
+            "rolling_execution_minutes": 60,
+        },
+    )
+
+    assert claim_scope["teacher_release_status"] == "BLOCKED"
+    assert "research_vehicle_inventory_contract" in claim_scope[
+        "teacher_release_failed_checks"
+    ]
+    assert claim_scope["research_submission_ready"] is False
+
+
 def test_interactive_run_defaults_and_provenance_record_server_enforcement() -> None:
     request = RunOptimizationBody()
     assert request.stage1_best_obj_stop_enabled is False
     assert request.gurobi_threads == 1
+    assert request.run_profile == "day_ahead_and_hourly_rolling"
+    assert request.run_hourly_rolling is True
+    assert request.rolling_execution_minutes == 60
 
     controls = _interactive_runtime_controls_payload(
         requested_stage1_best_obj_stop_enabled=True,

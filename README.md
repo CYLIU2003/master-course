@@ -15,9 +15,10 @@ simulation artifact, not an automatically accepted research result.
 
 - `code_provenance.json` records the Git SHA, dirty state, tracked-patch hash,
   untracked-file hashes, repository root, Python/Gurobi environment, and any
-  capture failure before the solve begins. A research run requires a clean
-  worktree and rechecks that the SHA/dirty identity did not change during the
-  solve.
+  capture failure before the solve begins. A dirty worktree may finish a
+  diagnostic calculation, but it is always `teacher_release_status=BLOCKED`;
+  only a clean/stable Git identity is research-submission eligible. A source
+  change during the solve remains a hard failure.
 - `run_input_provenance/` records the scenario snapshot, Prepare audit, effective
   optimization parameters, hashes, and validation result.
 - `charging_source_provenance.json` distinguishes exact depot/time-step energy
@@ -72,6 +73,23 @@ simulation artifact, not an automatically accepted research result.
   acceptance check passes; a partial or failed chain is
   `executed_not_accepted`. No output fabricates rolling evidence, a missing ICE
   vehicle, or weather-dispatch behavior.
+- The ordinary Tk frontend optimization action now sends
+  `run_profile=day_ahead_and_hourly_rolling`, `research_run=true`,
+  `run_hourly_rolling=true`, and `rolling_execution_minutes=60`. The BFF
+  enforces the 60-minute full-chain policy for that profile, persists the exact
+  canonical day-ahead problem/result/input hashes, and invokes
+  `run_rolling_chain()` in-process in the same job and run directory. A stale
+  client cannot turn rolling off by sending `run_hourly_rolling=false`.
+  Day-ahead-only diagnostics require the explicit
+  `run_profile=day_ahead_exploratory`; their report is labelled
+  `DAY-AHEAD ONLY - NOT A ROLLING RESULT`.
+- Final human/reporting artifacts are regenerated after rolling validation.
+  `summary.json`, `experiment_report.md`, `results.xlsx`, and
+  `run_manifest.json` expose `rolling_execution.status`,
+  `research_submission_ready`, `teacher_release_status`, all failed checks,
+  raw versus certified Stage 1 gap, the requested gap, and cost/objective
+  semantics. Any infeasible/truncated/state-handoff-failed rolling step fails
+  the frontend job while preserving the day-ahead and rolling diagnostics.
 - Stage 1 `BestObjStop` is explicit. It is allowed for operational planning but
   is a stopping-rule intervention, not evidence that one case is intrinsically
   faster. `solver_settings.json` separates Gurobi's raw MIP gap from the

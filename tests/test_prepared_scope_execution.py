@@ -236,6 +236,7 @@ def test_run_optimization_uses_prepared_scope_without_dispatch_rebuild_fallback(
             100,
             100,
             0.25,
+            run_profile=optimization.DAY_AHEAD_EXPLORATORY_PROFILE,
         )
 
     rebuild_dispatch.assert_not_called()

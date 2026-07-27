@@ -1182,7 +1182,11 @@ def _validate_manifest(
             raw_record, f"{case}.manifest.artifacts.{artifact_name}"
         )
         artifact_path = (artifact_root / str(artifact_name)).resolve()
-        if artifact_path.parent != artifact_root or not artifact_path.is_file():
+        if (
+            not artifact_path.is_relative_to(artifact_root)
+            or artifact_path == artifact_root
+            or not artifact_path.is_file()
+        ):
             raise ComparisonContractError(
                 f"{case} manifest artifact is missing or outside its run directory: "
                 f"{artifact_name}"

@@ -8650,12 +8650,16 @@ class App:
         depots = self._selected_depot_ids()
         payload = {
             "mode": self.solver_mode_var.get().strip(),
+            "research_run": True,
             "prepared_input_id": prepared_input_id or self.prepared_input_id,
             "time_step_min": self._timestep_min_value(),
             "timestep_min": self._timestep_min_value(),
             "time_limit_seconds": self._effective_optimization_time_limit_seconds(),
             "stage1_best_obj_stop_enabled": _INTERACTIVE_STAGE1_BEST_OBJ_STOP_ENABLED,
             "gurobi_threads": _INTERACTIVE_GUROBI_THREADS,
+            "run_profile": "day_ahead_and_hourly_rolling",
+            "run_hourly_rolling": True,
+            "rolling_execution_minutes": 60,
             "mip_gap": self._parse_float(self.mip_gap_var.get(), 0.01),
             "alns_iterations": self._parse_int(self.alns_iter_var.get(), 500),
             "no_improvement_limit": self._parse_int(self.no_improvement_limit_var.get(), 100),

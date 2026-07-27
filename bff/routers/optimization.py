@@ -70,6 +70,16 @@ from bff.services.optimization_run.input_provenance import (
     collect_git_state,
     persist_run_input_provenance,
 )
+from bff.services.optimization_run.rolling_chain import (
+    DAY_AHEAD_EXPLORATORY_PROFILE,
+    DEFAULT_FRONTEND_RUN_PROFILE,
+    RollingChainExecutionError,
+    execute_frontend_rolling_chain,
+    frontend_rolling_is_required,
+    normalize_frontend_run_profile,
+    persist_frontend_day_ahead_rolling_contract,
+    refresh_frontend_rolling_manifest,
+)
 from bff.services.optimization_run.rich_outputs import (
     persist_json_outputs as _persist_json_outputs,
     run_stamp as _run_stamp,
@@ -146,18 +156,20 @@ FULL_DAY_OPERATION_END_TIME = "23:59"
 def _require_clean_research_git_state(
     *, research_run: bool, git_state: Dict[str, Any]
 ) -> None:
+    """Allow calculation while leaving dirty provenance ineligible for release.
+
+    A dirty or unavailable Git state must never become research-ready, but it
+    is still useful to finish a diagnostic calculation and preserve evidence.
+    The release gate consumes the persisted ``git_dirty`` fields later.
+    """
+
     if not research_run:
         return
     if bool(git_state.get("git_state_available", False)) and not bool(
         git_state.get("git_dirty", True)
     ):
         return
-    raise ValueError(
-        "research run requires an available, clean Git worktree; "
-        f"git_state_available={git_state.get('git_state_available')}, "
-        f"git_dirty={git_state.get('git_dirty')}, "
-        f"patch_sha256={git_state.get('worktree_patch_sha256')}"
-    )
+    return
 
 
 def _validate_git_state_after_solve(
@@ -166,7 +178,7 @@ def _validate_git_state_after_solve(
     before: Dict[str, Any],
     after: Dict[str, Any],
 ) -> bool:
-    """Reject a research solve if its source tree changed while it was running."""
+    """Reject a research solve only when its source changes during the solve."""
 
     unchanged = all(
         before.get(key) == after.get(key)
@@ -469,6 +481,9 @@ class RunOptimizationBody(BaseModel):
         default=INTERACTIVE_GUROBI_THREADS,
         ge=1,
     )
+    run_profile: str = DEFAULT_FRONTEND_RUN_PROFILE
+    run_hourly_rolling: bool = True
+    rolling_execution_minutes: int = Field(default=60, ge=1)
     mip_gap: float = 0.01
     random_seed: int = 42
     prepared_input_id: Optional[str] = None
@@ -570,6 +585,13 @@ def _optimization_capabilities() -> Dict[str, Any]:
             "bev_terminal_soc_policy": INTERACTIVE_BEV_TERMINAL_SOC_POLICY,
             "enforced_server_side": True,
         },
+        "interactive_rolling_controls": {
+            "default_run_profile": DEFAULT_FRONTEND_RUN_PROFILE,
+            "run_hourly_rolling": True,
+            "rolling_execution_minutes": 60,
+            "day_ahead_only_profile": DAY_AHEAD_EXPLORATORY_PROFILE,
+            "enforced_server_side": True,
+        },
         "authoritative_engine": "canonical (src/optimization/)",
         "supports_reoptimization": True,
         "max_concurrent_jobs": 1,
@@ -588,6 +610,7 @@ def _optimization_capabilities() -> Dict[str, Any]:
             "Optimization/re-optimization runs in a dedicated executor so API polling stays responsive.",
             "Only one optimization/re-optimization job is allowed at a time in this BFF process.",
             "Interactive /run-optimization enforces Stage 1 BestObjStop=OFF and Gurobi Threads=1; the formal CLI runner remains explicit.",
+            "The default interactive profile executes the complete 60-minute rolling chain in the same job; day-ahead-only diagnostics require run_profile=day_ahead_exploratory.",
         ],
     }
 
@@ -1929,9 +1952,34 @@ def _rolling_execution_evidence(
 
     rolling_dir = run_dir / "rolling_hourly_chain"
     summary_path = rolling_dir / "rolling_chain_summary.json"
+    failure_path = rolling_dir / "rolling_execution_failure.json"
     policy = str(solver_metadata.get("rolling_horizon_policy") or "").strip()
     minutes = solver_metadata.get("rolling_execution_minutes")
     if not summary_path.is_file():
+        if failure_path.is_file():
+            try:
+                failure = json.loads(failure_path.read_text(encoding="utf-8"))
+            except Exception as exc:
+                failure = {
+                    "status": "failed",
+                    "reason": "rolling_failure_artifact_unreadable",
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+            return {
+                "status": "executed_not_accepted",
+                "rolling_horizon_policy": policy or None,
+                "rolling_execution_minutes": minutes,
+                "chain_summary_path": None,
+                "failure_artifact_path": str(failure_path),
+                "rejection_reasons": [
+                    str(failure.get("reason") or "rolling_service_failed")
+                ],
+                "failure": failure,
+                "semantics": (
+                    "The requested rolling chain did not produce an auditable "
+                    "complete chain. The optimization job must fail."
+                ),
+            }
         return {
             "status": "not_executed",
             "rolling_horizon_policy": policy or None,
@@ -2160,6 +2208,7 @@ def _persist_rich_run_outputs(
         "runtime_comparison_eligible": solver_settings.get(
             "runtime_comparison_eligible"
         ),
+        "mip_gap_target_met": solver_settings.get("mip_gap_target_met"),
         "gurobi_threads": solver_settings.get("gurobi_threads"),
         "interactive_runtime_controls": dict(
             solver_settings.get("interactive_runtime_controls") or {}
@@ -3245,6 +3294,48 @@ def _persist_rich_run_outputs(
         json.dumps(research_claim_scope, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+    if finalize_reporting:
+        summary_path = run_dir / "summary.json"
+        if summary_path.is_file():
+            finalized_summary = json.loads(
+                summary_path.read_text(encoding="utf-8")
+            )
+            if isinstance(finalized_summary, dict):
+                finalized_summary.update(
+                    {
+                        "run_profile": research_claim_scope.get("run_profile"),
+                        "rolling_execution": rolling_execution,
+                        "research_submission_ready": research_claim_scope.get(
+                            "research_submission_ready"
+                        ),
+                        "teacher_release_status": research_claim_scope.get(
+                            "teacher_release_status"
+                        ),
+                        "teacher_release_failed_checks": research_claim_scope.get(
+                            "teacher_release_failed_checks"
+                        ),
+                        "mip_gap_target_met": solver_settings.get(
+                            "mip_gap_target_met"
+                        ),
+                    }
+                )
+                summary_path.write_text(
+                    json.dumps(finalized_summary, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+        _prepend_experiment_release_header(
+            run_dir=run_dir,
+            research_claim_scope=research_claim_scope,
+            rolling_execution=rolling_execution,
+            solver_settings=solver_settings,
+            optimization_result=optimization_result,
+        )
+        _write_results_workbook_release_status(
+            run_dir=run_dir,
+            research_claim_scope=research_claim_scope,
+            rolling_execution=rolling_execution,
+            solver_settings=solver_settings,
+        )
     (run_dir / "optimization_result.json").write_text(
         json.dumps(optimization_result, ensure_ascii=False, indent=2), encoding="utf-8"
     )
@@ -3328,14 +3419,22 @@ def _persist_rich_run_outputs(
         },
         "rolling_execution": rolling_execution,
         "research_claim_scope": research_claim_scope,
+        "teacher_release_status": research_claim_scope.get(
+            "teacher_release_status"
+        ),
+        "teacher_release_failed_checks": research_claim_scope.get(
+            "teacher_release_failed_checks"
+        ),
         "experiment_report": dict(optimization_audit.get("experiment_report") or {}),
         "formal_phase3_weather_submission_readiness": {
+            # A single run can clear its own day-ahead/rolling release gate, but
+            # it cannot by itself establish the paired same-service-date
+            # weather comparison contract.
             "ready": False,
             "reason": (
-                "This is a manual frontend day-ahead artifact. Formal Phase 3 "
-                "weather submission additionally requires the strict CLI runner, "
-                "an accepted same-service-date comparison, and a completed hourly "
-                "rolling chain."
+                "An accepted individual frontend run is not yet a formal "
+                "Phase 3 weather comparison. A matched same-service-date pair "
+                "and comparison audit are still required."
             ),
             "day_ahead_research_run_accepted": bool(
                 solver_metadata.get("research_run_accepted", False)
@@ -3467,6 +3566,150 @@ def _finalized_accounting_summary_for_experiment_report(run_dir: Path) -> Dict[s
     return canonical
 
 
+def _prepend_experiment_release_header(
+    *,
+    run_dir: Path,
+    research_claim_scope: Dict[str, Any],
+    rolling_execution: Dict[str, Any],
+    solver_settings: Dict[str, Any],
+    optimization_result: Dict[str, Any],
+) -> None:
+    """Put the release/claim gate before any human-facing result narrative."""
+
+    report_path = run_dir / "experiment_report.md"
+    if not report_path.is_file():
+        return
+    marker = "<!-- frontend-run-release-header-v1 -->"
+    body = report_path.read_text(encoding="utf-8")
+    if marker in body:
+        body = body.split("<!-- /frontend-run-release-header-v1 -->", 1)[-1].lstrip()
+    failed_checks = list(
+        research_claim_scope.get("teacher_release_failed_checks") or ()
+    )
+    objective_is_actual_cost = bool(
+        dict(optimization_result.get("cost_breakdown") or {}).get(
+            "objective_is_actual_cost", False
+        )
+    )
+    header = [
+        marker,
+        "# Run and release status",
+        "",
+        f"- run_profile: `{research_claim_scope.get('run_profile')}`",
+        f"- rolling_execution.status: `{rolling_execution.get('status')}`",
+        (
+            "- rolling_execution_minutes: "
+            f"`{rolling_execution.get('rolling_execution_minutes')}`"
+        ),
+        (
+            "- research_submission_ready: "
+            f"`{str(bool(research_claim_scope.get('research_submission_ready'))).lower()}`"
+        ),
+        (
+            "- teacher_release_status: "
+            f"`{research_claim_scope.get('teacher_release_status')}`"
+        ),
+        (
+            "- failed_checks: "
+            + (
+                ", ".join(f"`{value}`" for value in failed_checks)
+                if failed_checks
+                else "none"
+            )
+        ),
+        (
+            "- requested_mip_gap: "
+            f"`{solver_settings.get('mip_gap_requested_ratio')}`"
+        ),
+        (
+            "- stage1_gurobi_raw_mip_gap: "
+            f"`{solver_settings.get('stage1_gurobi_raw_mip_gap_ratio')}`"
+        ),
+        (
+            "- stage1_certified_mip_gap: "
+            f"`{solver_settings.get('stage1_certified_mip_gap_ratio')}`"
+        ),
+        (
+            "- mip_gap_target_met: "
+            f"`{str(bool(solver_settings.get('mip_gap_target_met'))).lower()}`"
+        ),
+        (
+            "- solver_termination_reason: "
+            f"`{solver_settings.get('solver_termination_reason')}`"
+        ),
+        (
+            "- objective_is_actual_cost: "
+            f"`{str(objective_is_actual_cost).lower()}`"
+        ),
+        (
+            "- cost_semantics: `canonical accounting total is the cost KPI; "
+            "a non-cost or proxy objective is reported separately`"
+        ),
+    ]
+    if research_claim_scope.get("run_profile") == DAY_AHEAD_EXPLORATORY_PROFILE:
+        header.extend(
+            [
+                "",
+                "> **DAY-AHEAD ONLY - NOT A ROLLING RESULT**",
+            ]
+        )
+    header.extend(["", "<!-- /frontend-run-release-header-v1 -->", ""])
+    report_path.write_text("\n".join(header) + body, encoding="utf-8")
+
+
+def _write_results_workbook_release_status(
+    *,
+    run_dir: Path,
+    research_claim_scope: Dict[str, Any],
+    rolling_execution: Dict[str, Any],
+    solver_settings: Dict[str, Any],
+) -> None:
+    """Synchronize results.xlsx with the final rolling/release decision."""
+
+    workbook_path = run_dir / "results.xlsx"
+    if not workbook_path.is_file():
+        return
+    from openpyxl import load_workbook
+
+    workbook = load_workbook(workbook_path)
+    if "release_status" in workbook.sheetnames:
+        del workbook["release_status"]
+    sheet = workbook.create_sheet("release_status", 0)
+    sheet.append(["field", "value"])
+    rows = (
+        ("run_profile", research_claim_scope.get("run_profile")),
+        ("rolling_execution_status", rolling_execution.get("status")),
+        (
+            "rolling_execution_minutes",
+            rolling_execution.get("rolling_execution_minutes"),
+        ),
+        (
+            "research_submission_ready",
+            research_claim_scope.get("research_submission_ready"),
+        ),
+        ("teacher_release_status", research_claim_scope.get("teacher_release_status")),
+        (
+            "teacher_release_failed_checks",
+            ";".join(
+                research_claim_scope.get("teacher_release_failed_checks") or ()
+            ),
+        ),
+        ("requested_mip_gap", solver_settings.get("mip_gap_requested_ratio")),
+        (
+            "stage1_gurobi_raw_mip_gap",
+            solver_settings.get("stage1_gurobi_raw_mip_gap_ratio"),
+        ),
+        (
+            "stage1_certified_mip_gap",
+            solver_settings.get("stage1_certified_mip_gap_ratio"),
+        ),
+        ("mip_gap_target_met", solver_settings.get("mip_gap_target_met")),
+    )
+    for row in rows:
+        sheet.append(list(row))
+    workbook.save(workbook_path)
+
+
 def _research_claim_scope_payload(
     *,
     optimization_result: Dict[str, Any],
@@ -3494,6 +3737,44 @@ def _research_claim_scope_payload(
     physically_feasible = bool(solution_validity.get("validated_feasible", False))
     is_integrated_exact = bool(metadata.get("supports_integrated_exact_milp", False))
     is_manual_unaccepted = not bool(metadata.get("research_run_accepted", False))
+    run_profile = str(
+        optimization_result.get("run_profile")
+        or metadata.get("run_profile")
+        or DEFAULT_FRONTEND_RUN_PROFILE
+    )
+    research_failed_checks = [
+        str(value)
+        for value in list(
+            metadata.get("research_acceptance_failed_checks")
+            or metadata.get("research_run_failed_checks")
+            or ()
+        )
+    ]
+    if not research_failed_checks:
+        research_failed_checks = sorted(
+            str(name)
+            for name, passed in dict(
+                metadata.get("research_acceptance_checks") or {}
+            ).items()
+            if passed is not True
+        )
+    teacher_release_failed_checks = list(research_failed_checks)
+    if not physically_feasible:
+        teacher_release_failed_checks.append("physical_schedule_not_validated")
+    if not bool(metadata.get("research_run", False)):
+        teacher_release_failed_checks.append("research_run_not_requested")
+    if not bool(metadata.get("research_run_accepted", False)):
+        teacher_release_failed_checks.append("day_ahead_research_acceptance_failed")
+    if rolling_execution.get("status") != "executed_and_accepted":
+        teacher_release_failed_checks.append("hourly_rolling_chain_not_accepted")
+    if not bool(
+        metadata.get("research_submission_git_provenance_eligible", False)
+    ):
+        teacher_release_failed_checks.append("git_provenance_not_research_eligible")
+    if run_profile == DAY_AHEAD_EXPLORATORY_PROFILE:
+        teacher_release_failed_checks.append("day_ahead_only_exploratory_profile")
+    teacher_release_failed_checks = sorted(set(teacher_release_failed_checks))
+    research_submission_ready = not teacher_release_failed_checks
     if weather_enabled and policy_scope == "pv_curve_only":
         result_label = "exploratory_pv_supply_sensitivity_not_weather_adaptive_dispatch"
     elif weather_enabled:
@@ -3524,6 +3805,12 @@ def _research_claim_scope_payload(
 
     return {
         "schema_version": "research_claim_scope_v1",
+        "run_profile": run_profile,
+        "research_submission_ready": research_submission_ready,
+        "teacher_release_status": (
+            "READY" if research_submission_ready else "BLOCKED"
+        ),
+        "teacher_release_failed_checks": teacher_release_failed_checks,
         "result_label": result_label,
         "physical_feasibility_claim_eligible": physically_feasible,
         "weather_policy_scope": policy_scope,
@@ -3550,6 +3837,13 @@ def _research_claim_scope_payload(
             "supports_integrated_exact_milp": is_integrated_exact,
             "weather_policy_scope": policy_scope,
             "rolling_execution_status": rolling_execution.get("status"),
+            "rolling_execution_minutes": rolling_execution.get(
+                "rolling_execution_minutes"
+            ),
+            "research_submission_git_provenance_eligible": bool(
+                metadata.get("research_submission_git_provenance_eligible", False)
+            ),
+            "research_acceptance_failed_checks": research_failed_checks,
             "stage1_best_obj_stop_applied": solver_settings.get(
                 "stage1_best_obj_stop_applied"
             ),
@@ -6585,10 +6879,12 @@ def _solver_settings_payload(
     )
     stage1_best_obj_stop_enabled = metadata.get("stage1_best_obj_stop_enabled")
     stage1_best_obj_stop_applied = metadata.get("stage1_best_obj_stop_applied")
-    runtime_comparison_eligible = (
-        None
-        if stage1_best_obj_stop_applied is None
-        else not bool(stage1_best_obj_stop_applied)
+    certified_gap = _float_or_none(metadata.get("stage1_certified_mip_gap_ratio"))
+    gap_for_target = certified_gap if certified_gap is not None else achieved_gap
+    mip_gap_target_met = bool(
+        requested_gap is not None
+        and gap_for_target is not None
+        and gap_for_target <= requested_gap
     )
     return {
         "time_limit_seconds_requested": _int_or_none(time_limit_seconds_requested),
@@ -6629,6 +6925,7 @@ def _solver_settings_payload(
         "arc_pruning_summary": dict(metadata.get("arc_pruning_summary") or {}),
         "requested_mip_gap": requested_gap,
         "achieved_mip_gap": achieved_gap,
+        "mip_gap_target_met": mip_gap_target_met,
         "requested_phase": str(metadata.get("requested_phase") or ""),
         "requested_phase_token": str(metadata.get("requested_phase_token") or ""),
         "resolved_phase": str(metadata.get("resolved_phase") or ""),
@@ -6658,9 +6955,7 @@ def _solver_settings_payload(
         "stage1_certified_best_bound": _float_or_none(
             metadata.get("stage1_certified_best_bound")
         ),
-        "stage1_certified_mip_gap_ratio": _float_or_none(
-            metadata.get("stage1_certified_mip_gap_ratio")
-        ),
+        "stage1_certified_mip_gap_ratio": certified_gap,
         "stage1_certified_mip_gap_percent": (
             None
             if _float_or_none(metadata.get("stage1_certified_mip_gap_ratio")) is None
@@ -6670,15 +6965,15 @@ def _solver_settings_payload(
         "stage1_certified_mip_gap_semantics": metadata.get(
             "stage1_certified_mip_gap_semantics"
         ),
-        "runtime_comparison_eligible": runtime_comparison_eligible,
+        # A single frontend run is never a runtime comparison. Matched solver
+        # controls and repeated executions are a separate experiment contract.
+        "runtime_comparison_eligible": False,
         "runtime_comparison_eligibility_reason": (
             "Stage 1 BestObjStop was active; compare wall-clock time only after "
             "disabling it in every case."
-            if runtime_comparison_eligible is False
-            else "No Stage 1 BestObjStop threshold was applied. Other solver "
-            "controls must still match across cases."
-            if runtime_comparison_eligible is True
-            else "Not applicable because this result has no Stage 1 telemetry."
+            if stage1_best_obj_stop_applied is True
+            else "Single frontend execution: repeated matched cases are required "
+            "before any wall-clock comparison claim."
         ),
         "gurobi_threads": _int_or_none(metadata.get("gurobi_threads")),
         "stage1_gurobi_feasibility_tol": _float_or_none(
@@ -6735,9 +7030,30 @@ def _run_optimization(
     stage2_time_limit_seconds: Optional[int] = None,
     stage1_best_obj_stop_enabled: bool = INTERACTIVE_STAGE1_BEST_OBJ_STOP_ENABLED,
     gurobi_threads: Optional[int] = INTERACTIVE_GUROBI_THREADS,
+    run_profile: str = DEFAULT_FRONTEND_RUN_PROFILE,
+    run_hourly_rolling: bool = True,
+    rolling_execution_minutes: int = 60,
     frontend_request_payload: Optional[Dict[str, Any]] = None,
 ) -> None:
+    output_dir: Optional[str] = None
     raw_frontend_request_payload = dict(frontend_request_payload or {})
+    run_profile = normalize_frontend_run_profile(run_profile)
+    rolling_required = frontend_rolling_is_required(run_profile)
+    requested_rolling_controls = {
+        "run_hourly_rolling": bool(run_hourly_rolling),
+        "rolling_execution_minutes": int(rolling_execution_minutes),
+    }
+    # The ordinary frontend profile is server authoritative: stale clients or
+    # hand-written requests cannot silently downgrade it to day-ahead only.
+    run_hourly_rolling = bool(rolling_required)
+    rolling_execution_minutes = 60
+    effective_rolling_controls = {
+        "run_profile": run_profile,
+        "run_hourly_rolling": run_hourly_rolling,
+        "rolling_execution_minutes": rolling_execution_minutes,
+        "server_enforced": bool(rolling_required),
+        "requested": requested_rolling_controls,
+    }
     interactive_runtime_controls = _interactive_runtime_controls_payload(
         requested_stage1_best_obj_stop_enabled=stage1_best_obj_stop_enabled,
         requested_gurobi_threads=gurobi_threads,
@@ -6964,6 +7280,10 @@ def _run_optimization(
                         stage1_best_obj_stop_enabled
                     ),
                     "gurobi_threads": gurobi_threads,
+                    "run_profile": run_profile,
+                    "run_hourly_rolling": run_hourly_rolling,
+                    "rolling_execution_minutes": rolling_execution_minutes,
+                    "effective_rolling_controls": effective_rolling_controls,
                     "mip_gap": mip_gap,
                     "random_seed": random_seed,
                     "service_id": service_id,
@@ -7673,6 +7993,203 @@ def _run_optimization(
                 },
             },
         )
+        optimization_result["run_profile"] = run_profile
+        optimization_result["rolling_execution_minutes"] = (
+            rolling_execution_minutes if run_hourly_rolling else None
+        )
+        optimization_audit["run_profile"] = run_profile
+        optimization_audit["effective_rolling_controls"] = effective_rolling_controls
+        result_solver_metadata = dict(
+            optimization_result.get("solver_metadata") or {}
+        )
+        result_solver_metadata.update(
+            {
+                "run_profile": run_profile,
+                "rolling_horizon_policy": (
+                    "remaining_day_charging_only_fixed_assignment"
+                    if run_hourly_rolling
+                    else None
+                ),
+                "rolling_execution_minutes": (
+                    rolling_execution_minutes if run_hourly_rolling else None
+                ),
+            }
+        )
+        optimization_result["solver_metadata"] = result_solver_metadata
+
+        # First persist only the completed day-ahead contract. Human-facing
+        # reporting is intentionally deferred until rolling and its independent
+        # acceptance audit have finished.
+        _persist_rich_run_outputs(
+            run_dir=Path(output_dir),
+            scenario=scenario,
+            optimization_result=optimization_result,
+            optimization_audit=optimization_audit,
+            result_payload=result_payload,
+            sim_payload=sim_payload,
+            canonical_solver_result=_full_new_result,
+            canonical_problem=problem,
+            graph_source_dir=Path(output_dir) / "graph",
+            charging_summary=charging_summary_payload,
+            charging_flow_payload=charging_flow_payload,
+            finalize_reporting=False,
+        )
+        rolling_technical_failure: Optional[RollingChainExecutionError] = None
+        if run_hourly_rolling:
+            day_ahead_feasible = bool(
+                getattr(engine_result, "feasible", False)
+                and not list(
+                    getattr(getattr(engine_result, "plan", None), "unserved_trip_ids", ())
+                    or ()
+                )
+            )
+            if not day_ahead_feasible:
+                rolling_technical_failure = RollingChainExecutionError(
+                    "Hourly rolling was not started because the day-ahead "
+                    "canonical result is not fully feasible"
+                )
+                failure_payload = {
+                    "status": "not_started",
+                    "reason": "day_ahead_not_fully_feasible",
+                    "run_profile": run_profile,
+                }
+                _persist_json_outputs(
+                    str(Path(output_dir) / "rolling_hourly_chain"),
+                    {"rolling_execution_failure.json": failure_payload},
+                )
+            else:
+                job_store.update_job(
+                    job_id,
+                    status="running",
+                    progress=70,
+                    message="Day-ahead solved; preparing hourly rolling contract...",
+                    metadata=_job_metadata(
+                        scenario_id=scenario_id,
+                        service_id=service_id,
+                        depot_id=depot_id,
+                        stage="day_ahead_solved",
+                        mode=mode,
+                        extra={
+                            "run_dir": output_dir,
+                            "prepared_input_id": prepared_input_id,
+                            "run_profile": run_profile,
+                        },
+                    ),
+                )
+                try:
+                    rolling_input_audit = persist_frontend_day_ahead_rolling_contract(
+                        run_dir=Path(output_dir),
+                        scenario=scenario,
+                        problem=problem,
+                        prepared_input_path=prepared_input_path,
+                        scenario_id=scenario_id,
+                        prepared_input_id=prepared_input_id,
+                        service_id=service_id,
+                        git_state=run_git_state,
+                    )
+                    if (
+                        rolling_input_audit.get("calendar_validation_status")
+                        == "ERROR"
+                    ):
+                        result_solver_metadata = dict(
+                            optimization_result.get("solver_metadata") or {}
+                        )
+                        failed_checks = list(
+                            result_solver_metadata.get(
+                                "research_acceptance_failed_checks"
+                            )
+                            or ()
+                        )
+                        failed_checks.append("service_calendar_contract")
+                        result_solver_metadata[
+                            "research_acceptance_failed_checks"
+                        ] = sorted(set(map(str, failed_checks)))
+                        result_solver_metadata["research_run_accepted"] = False
+                        optimization_result[
+                            "solver_metadata"
+                        ] = result_solver_metadata
+                    job_store.update_job(
+                        job_id,
+                        status="running",
+                        progress=75,
+                        message="Running 60-minute rolling chain...",
+                        metadata=_job_metadata(
+                            scenario_id=scenario_id,
+                            service_id=service_id,
+                            depot_id=depot_id,
+                            stage="rolling_running",
+                            mode=mode,
+                            extra={
+                                "run_dir": output_dir,
+                                "rolling_execution_minutes": 60,
+                            },
+                        ),
+                    )
+                    rolling_result = execute_frontend_rolling_chain(
+                        run_dir=Path(output_dir),
+                        problem=problem,
+                        scenario_id=scenario_id,
+                        prepared_input_id=prepared_input_id,
+                        service_id=service_id,
+                        depot_id=str(depot_id),
+                        execution_minutes=rolling_execution_minutes,
+                        # Rolling is a charging-only conditional solve. Preserve
+                        # an explicit user override, otherwise use the audited
+                        # service default rather than the long Stage 1 limit.
+                        time_limit_sec=int(stage2_time_limit_seconds or 30),
+                        mip_gap=mip_gap,
+                        random_seed=random_seed,
+                        gurobi_threads=gurobi_threads,
+                    )
+                    optimization_result["rolling_execution"] = {
+                        "status": rolling_result.status,
+                        "chain_summary_path": rolling_result.chain_summary_path,
+                        "chain_accepted": rolling_result.chain_accepted,
+                        "technical_failure_reasons": list(
+                            rolling_result.technical_failure_reasons
+                        ),
+                    }
+                    if rolling_result.technical_failure_reasons:
+                        rolling_technical_failure = RollingChainExecutionError(
+                            "Hourly rolling chain failed required execution "
+                            "checks: "
+                            + ", ".join(rolling_result.technical_failure_reasons)
+                        )
+                except Exception as exc:
+                    failure_payload = {
+                        "status": "failed",
+                        "reason": "rolling_service_exception",
+                        "error": f"{type(exc).__name__}: {exc}",
+                        "traceback": traceback.format_exc(),
+                        "run_profile": run_profile,
+                    }
+                    _persist_json_outputs(
+                        str(Path(output_dir) / "rolling_hourly_chain"),
+                        {"rolling_execution_failure.json": failure_payload},
+                    )
+                    rolling_technical_failure = RollingChainExecutionError(
+                        f"Hourly rolling service failed: {type(exc).__name__}: {exc}"
+                    )
+        else:
+            optimization_result["rolling_execution"] = {
+                "status": "not_executed",
+                "reason": "explicit_day_ahead_exploratory_profile",
+            }
+
+        job_store.update_job(
+            job_id,
+            status="running",
+            progress=95,
+            message="Validating rolling evidence and finalizing reports...",
+            metadata=_job_metadata(
+                scenario_id=scenario_id,
+                service_id=service_id,
+                depot_id=depot_id,
+                stage="rolling_validating",
+                mode=mode,
+                extra={"run_dir": output_dir, "run_profile": run_profile},
+            ),
+        )
         reporting_finalizer_result = _persist_rich_run_outputs(
             run_dir=Path(output_dir),
             scenario=scenario,
@@ -7687,6 +8204,15 @@ def _run_optimization(
             charging_flow_payload=charging_flow_payload,
             finalize_reporting=True,
         )
+        if (Path(output_dir) / "input_audit.json").is_file():
+            refresh_frontend_rolling_manifest(
+                run_dir=Path(output_dir),
+                run_state=(
+                    "complete"
+                    if rolling_technical_failure is None
+                    else "rolling_execution_failed"
+                ),
+            )
         if reporting_finalizer_result is not None:
             store.set_field(scenario_id, "optimization_result", optimization_result)
             store.set_field(scenario_id, "optimization_audit", optimization_audit)
@@ -7697,6 +8223,8 @@ def _run_optimization(
                     "optimization_audit.json": optimization_audit,
                 },
             )
+        if rolling_technical_failure is not None:
+            raise rolling_technical_failure
         is_fallback = bool(solution_validity.get("result_class") in {"baseline_fallback", "postsolve_infeasible", "postsolve_repaired", "repaired_heuristic", "debug_result"})
         final_status = "optimized" if not is_fallback else "optimized_provisional"
         store.update_scenario(scenario_id, status=final_status)
@@ -7725,11 +8253,16 @@ def _run_optimization(
                 },
             ),
         )
-    except Exception:
+    except Exception as exc:
         job_store.update_job(
             job_id,
             status="failed",
-            message="Optimization failed.",
+            progress=100,
+            message=(
+                "Hourly rolling failed; day-ahead diagnostics were preserved."
+                if isinstance(exc, RollingChainExecutionError)
+                else "Optimization failed."
+            ),
             error=traceback.format_exc(),
             metadata=_job_metadata(
                 scenario_id=scenario_id,
@@ -7737,6 +8270,11 @@ def _run_optimization(
                 depot_id=depot_id,
                 stage="failed",
                 mode=mode,
+                extra={
+                    "run_dir": output_dir,
+                    "run_profile": run_profile,
+                    "failure_type": type(exc).__name__,
+                },
             ),
         )
 
@@ -8085,6 +8623,20 @@ def run_optimization(
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
     request = body or RunOptimizationBody()
+    try:
+        run_profile = normalize_frontend_run_profile(request.run_profile)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=make_error(
+                AppErrorCode.SCHEMA_VALIDATION_ERROR,
+                str(exc),
+                field="run_profile",
+            ),
+        ) from exc
+    rolling_required = frontend_rolling_is_required(run_profile)
+    effective_run_hourly_rolling = bool(rolling_required)
+    effective_rolling_execution_minutes = 60
     timestep_min = _request_timestep_min(request.timestep_min, request.time_step_min)
     # Apply the request's depot/service to the persisted scope BEFORE building the
     # run preparation, so that resolve_scope sees the correct depotId/serviceId
@@ -8180,7 +8732,16 @@ def run_optimization(
             request.stage2_time_limit_seconds,
             request.stage1_best_obj_stop_enabled,
             request.gurobi_threads,
-            request.model_dump(),
+            run_profile,
+            effective_run_hourly_rolling,
+            effective_rolling_execution_minutes,
+            {
+                **request.model_dump(),
+                "run_profile": run_profile,
+                "run_hourly_rolling": effective_run_hourly_rolling,
+                "rolling_execution_minutes": effective_rolling_execution_minutes,
+                "rolling_controls_server_enforced": bool(rolling_required),
+            },
         ),
         job_id=job.job_id,
         scenario_id=scenario_id,

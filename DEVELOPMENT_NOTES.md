@@ -1,5 +1,64 @@
 # Development Notes
 
+## 2026-07-27 frontend day-ahead -> hourly rolling production orchestration
+
+### Verified call path and implementation
+
+- The active frontend is the Tk application launched by `run_app.py`; it calls
+  `POST /api/scenarios/{scenario_id}/run-optimization` through
+  `tools/scenario_backup_tk.py`. The production path is now:
+  `Tk -> BFF run_optimization -> _run_optimization -> ProblemBuilder ->
+  OptimizationEngine.solve -> RollingChainRequest -> run_rolling_chain ->
+  rolling_chain_acceptance_audit -> final reporting/persistence`.
+- The normal frontend payload explicitly sets
+  `run_profile=day_ahead_and_hourly_rolling`, `research_run=true`,
+  `run_hourly_rolling=true`, and `rolling_execution_minutes=60`. The BFF treats
+  the normal profile as server-authoritative and forces rolling/60 minutes even
+  if an old or hand-written client submits different rolling fields.
+  Day-ahead-only diagnostics require the explicit
+  `run_profile=day_ahead_exploratory`.
+- `bff/services/optimization_run/rolling_chain.py` persists the exact
+  day-ahead `CanonicalOptimizationProblem`, serialized result, prepared-input
+  SHA-256, effective scenario/PV curves, trip/vehicle/charger/initial-SOC
+  hashes, calendar audit, and Git provenance. The in-process rolling service
+  receives the same canonical problem object; it does not rebuild
+  `timetable_rows`, duties, `operator_id`, or the day-ahead assignment.
+- A full chain must cover the complete energy horizon, keep the assignment
+  hash fixed, execute every 60-minute prefix exactly once, preserve EV/BESS
+  state handoff, produce eligible executed-day accounting, keep the day-ahead
+  and rolling Git SHA identical, and pass the shared acceptance audit.
+  Infeasible/missing/truncated/handoff-failed chains make the BFF job `failed`
+  and preserve `rolling_execution_failure.json` plus available diagnostics.
+  Dirty Git alone does not abort the calculation; it keeps the chain and
+  teacher/research release status blocked.
+- Weekday timetable use on a Sunday is still fail-closed. It is waived only
+  when both exact labels
+  `comparison_type=fixed_weekday_timetable_pv_counterfactual` and
+  `calendar_policy=fixed_weekday_timetable_pv_counterfactual` are declared.
+  The output explicitly says this is not actual Sunday operation.
+- Reporting is finalized after rolling. `summary.json`,
+  `experiment_report.md`, `results.xlsx`, `research_claim_scope.json`, and
+  `run_manifest.json` include the run profile, rolling state/minutes,
+  research/teacher release gate, failed checks, requested/raw/certified gaps,
+  `mip_gap_target_met`, solver termination, and objective-versus-accounting
+  semantics. An individual accepted run is not relabelled as a formal weather
+  comparison; a matched pair and comparison audit remain separate gates.
+- Runtime comparison remains ineligible for every single frontend run even
+  with `BestObjStop=OFF` and one Gurobi thread. Repeated matched cases are
+  still required.
+
+### Validation and remaining external evidence
+
+- Focused BFF/rolling/provenance tests are included for server-enforced
+  defaults, explicit day-ahead exploratory mode, same-object handoff, dirty
+  provenance classification, exact Sunday waiver, and rolling evidence.
+- A clean-commit 264-trip high/low-PV frontend execution has not yet been
+  completed at the time of this code note. Do not claim empirical completion,
+  teacher readiness, or formal weather-comparison acceptance until both real
+  frontend jobs finish and their run directories pass the documented artifact
+  checks. `research_vehicle_inventory_contract` remains an allowed explicit
+  blocker; it has not been weakened or removed.
+
 ## 2026-07-26 remediation implementation: physical movement, provenance, and comparison gates
 
 ### Implemented in the current working tree

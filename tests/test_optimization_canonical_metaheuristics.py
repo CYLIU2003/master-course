@@ -140,8 +140,24 @@ def test_run_optimization_uses_canonical_engine_for_ga_mode() -> None:
         mock.patch.object(optimization.store, "update_scenario"),
         mock.patch.object(optimization.store, "get_field", return_value=None),
         mock.patch.object(optimization.job_store, "update_job"),
-        mock.patch.object(optimization, "_git_sha", return_value="deadbeef"),
+        mock.patch.multiple(
+            optimization,
+            _git_sha=mock.Mock(return_value="deadbeef"),
+            persist_frontend_day_ahead_rolling_contract=mock.DEFAULT,
+            execute_frontend_rolling_chain=mock.DEFAULT,
+        ) as rolling_mocks,
     ):
+        rolling_mocks["execute_frontend_rolling_chain"].return_value = (
+            SimpleNamespace(
+                status="executed_and_accepted",
+                chain_summary_path=(
+                    "outputs/test/rolling_hourly_chain/"
+                    "rolling_chain_summary.json"
+                ),
+                chain_accepted=True,
+                technical_failure_reasons=(),
+            )
+        )
         problem_builder_cls.return_value.build_from_scenario.return_value = canonical_problem
         engine_cls.return_value.solve.return_value = engine_result
         optimization._run_optimization(
@@ -212,6 +228,17 @@ def test_run_optimization_uses_canonical_engine_for_ga_mode() -> None:
     assert stored_fields["optimization_result"]["canonical_solver_result"]["solver_mode"] == "ga"
     assert stored_fields["optimization_result"]["canonical_solver_result"]["vehicle_paths"] == {"veh-1": ["trip-1"]}
     assert stored_fields["optimization_result"]["canonical_solver_result"]["solution_validity"]["validated_no_cancellation"] is True
+    rolling_mocks["persist_frontend_day_ahead_rolling_contract"].assert_called_once()
+    rolling_mocks["execute_frontend_rolling_chain"].assert_called_once()
+    assert (
+        rolling_mocks["execute_frontend_rolling_chain"].call_args.kwargs["problem"]
+        is canonical_problem
+    )
+    assert (
+        rolling_mocks["execute_frontend_rolling_chain"]
+        .call_args.kwargs["execution_minutes"]
+        == 60
+    )
 
 
 def test_run_optimization_records_canonical_graph_artifacts_for_milp_mode() -> None:
@@ -344,6 +371,7 @@ def test_run_optimization_records_canonical_graph_artifacts_for_milp_mode() -> N
             100,
             100,
             0.25,
+            run_profile=optimization.DAY_AHEAD_EXPLORATORY_PROFILE,
         )
 
     rebuild_dispatch.assert_not_called()
@@ -416,5 +444,77 @@ def test_run_optimization_endpoint_submits_current_prepared_input_job() -> None:
         )
 
     assert result == {"job_id": "job-1", "status": "pending"}
-    assert submit_job.call_args.kwargs["args"][2] == "prepared-current"
-    assert submit_job.call_args.kwargs["args"][4] == "mode_milp_only"
+    submitted_args = submit_job.call_args.kwargs["args"]
+    assert submitted_args[2] == "prepared-current"
+    assert submitted_args[4] == "mode_milp_only"
+    assert submitted_args[23] == "day_ahead_and_hourly_rolling"
+    assert submitted_args[24] is True
+    assert submitted_args[25] == 60
+    assert submitted_args[26]["run_hourly_rolling"] is True
+    assert submitted_args[26]["rolling_execution_minutes"] == 60
+
+
+def test_run_optimization_endpoint_only_allows_day_ahead_with_explicit_profile() -> None:
+    fake_job = SimpleNamespace(
+        job_id="job-2",
+        status="pending",
+        progress=0,
+        message="",
+        result_key=None,
+        error=None,
+        metadata={},
+    )
+    prep = SimpleNamespace(
+        is_valid=True,
+        prepared_input_id="prepared-current",
+        scope_summary={"trip_count": 1},
+        error=None,
+    )
+
+    with (
+        mock.patch.object(optimization, "_require_scenario"),
+        mock.patch.object(
+            optimization.store,
+            "get_scenario_document_shallow",
+            return_value={},
+        ),
+        mock.patch.object(
+            optimization, "get_or_build_run_preparation", return_value=prep
+        ),
+        mock.patch.object(
+            optimization,
+            "_resolve_dispatch_scope",
+            return_value={"serviceId": "WEEKDAY", "depotId": "dep1"},
+        ),
+        mock.patch.object(
+            optimization.job_store, "create_job", return_value=fake_job
+        ),
+        mock.patch.object(optimization.job_store, "update_job"),
+        mock.patch.object(
+            optimization.job_store,
+            "job_to_dict",
+            return_value={"job_id": "job-2", "status": "pending"},
+        ),
+        mock.patch.object(
+            optimization, "_submit_optimization_job", return_value=True
+        ) as submit_job,
+    ):
+        optimization.run_optimization(
+            "scenario-1",
+            optimization.RunOptimizationBody(
+                mode="mode_milp_only",
+                run_profile="day_ahead_exploratory",
+                run_hourly_rolling=True,
+                rolling_execution_minutes=15,
+            ),
+            {
+                "built_ready": True,
+                "built_dir": "data/built/tokyu_full",
+                "routes_df": None,
+            },
+        )
+
+    submitted_args = submit_job.call_args.kwargs["args"]
+    assert submitted_args[23] == "day_ahead_exploratory"
+    assert submitted_args[24] is False
+    assert submitted_args[25] == 60

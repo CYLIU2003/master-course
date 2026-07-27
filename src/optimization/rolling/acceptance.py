@@ -13,6 +13,7 @@ ROLLING_CHAIN_REQUIRED_ACCEPTANCE_CHECKS = frozenset(
         "executed_day_accounting_eligible",
         "day_ahead_git_clean",
         "rolling_runner_git_clean",
+        "day_ahead_and_rolling_git_sha_match",
         "day_ahead_assignment_hash_constant",
         "gurobi_available",
         "no_chain_runtime_error",

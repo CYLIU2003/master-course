@@ -253,12 +253,16 @@ def test_build_optimization_run_payload_centralizes_fast_and_manual_execution() 
 
     assert payload == {
         "mode": "mode_alns_only",
+        "research_run": True,
         "prepared_input_id": "prepared-new",
         "time_step_min": 30,
         "timestep_min": 30,
         "time_limit_seconds": 180,
         "stage1_best_obj_stop_enabled": False,
         "gurobi_threads": 1,
+        "run_profile": "day_ahead_and_hourly_rolling",
+        "run_hourly_rolling": True,
+        "rolling_execution_minutes": 60,
         "mip_gap": 0.02,
         "alns_iterations": 750,
         "no_improvement_limit": 120,
