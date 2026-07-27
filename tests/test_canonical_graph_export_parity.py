@@ -992,6 +992,15 @@ def test_canonical_condition_tables_preserve_explicit_base_load_without_inferenc
 
 def test_rich_run_outputs_finalize_reporting_after_top_level_files_exist(tmp_path: Path) -> None:
     problem, result, scenario = _problem_and_result()
+    result = replace(
+        result,
+        cost_breakdown={
+            "energy_cost": 10.0,
+            "electricity_cost": 10.0,
+            "vehicle_usage_cost": 113.0,
+            "total_cost": 123.0,
+        },
+    )
     artifacts = optimization._persist_canonical_graph_exports(
         scenario=scenario,
         problem=problem,

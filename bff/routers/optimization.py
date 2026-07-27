@@ -3215,6 +3215,7 @@ def _persist_rich_run_outputs(
                     "status": "failed",
                     "error": str(exc),
                 }
+                raise RuntimeError(warning) from exc
         else:
             optimization_audit["experiment_report"] = {
                 "status": "not_generated",
@@ -3253,8 +3254,11 @@ def _persist_rich_run_outputs(
             ws_cost.append([row.get("key"), row.get("value"), row.get("unit")])
 
         wb.save(run_dir / "results.xlsx")
-    except Exception:
-        pass
+    except Exception as exc:
+        if finalize_reporting:
+            raise RuntimeError(
+                f"Required results.xlsx generation failed: {exc}"
+            ) from exc
 
     run_input_manifest_path = run_dir / RUN_INPUT_MANIFEST_FILE
     run_input_manifest = {}
@@ -3503,23 +3507,18 @@ def _finalized_accounting_summary_for_experiment_report(run_dir: Path) -> Dict[s
 
     kpi_summary = _read_mapping(run_dir / "kpi_summary.json")
     summary = _read_mapping(run_dir / "summary.json")
+    ledger = _read_mapping(run_dir / "graph" / "canonical_cost_ledger.json")
     if not summary:
         raise ValueError("Finalized summary.json is missing")
+    if not ledger:
+        raise ValueError("Finalized graph/canonical_cost_ledger.json is missing")
 
     canonical = dict(kpi_summary)
     # summary.json is the finalizer's canonical source for the values that a
     # reviewer compares across runs.  It intentionally overrides the older
     # provisional values in kpi_summary.json.
     for key in (
-        "total_cost_jpy",
-        "accounting_total_cost_jpy",
         "objective_value_jpy",
-        "energy_cost_jpy",
-        "grid_purchase_cost_jpy",
-        "demand_charge_cost_jpy",
-        "fuel_cost_jpy",
-        "co2_cost_jpy",
-        "vehicle_usage_cost_jpy",
         "total_co2_kg",
         "served_trip_count",
         "unserved_trip_count",
@@ -3533,35 +3532,78 @@ def _finalized_accounting_summary_for_experiment_report(run_dir: Path) -> Dict[s
         if key in summary:
             canonical[key] = summary[key]
 
-    required_cost_keys = (
-        "accounting_total_cost_jpy",
-        "grid_purchase_cost_jpy",
-        "demand_charge_cost_jpy",
+    components = dict(ledger.get("components") or {})
+    details = dict(ledger.get("details") or {})
+    co2 = dict(ledger.get("co2") or {})
+    required_component_keys = (
+        "electricity_cost_jpy",
         "fuel_cost_jpy",
-        "co2_cost_jpy",
+        "demand_charge_cost_jpy",
         "vehicle_usage_cost_jpy",
+        "co2_cost_jpy",
     )
-    missing = [key for key in required_cost_keys if canonical.get(key) is None]
-    if missing:
+    missing_components = [
+        key for key in required_component_keys if components.get(key) is None
+    ]
+    if missing_components:
         raise ValueError(
-            "Finalized accounting ledger is missing required cost fields: "
-            + ", ".join(missing)
+            "Finalized canonical cost ledger is missing components: "
+            + ", ".join(missing_components)
         )
-    accounting_total = float(canonical["accounting_total_cost_jpy"])
-    reconciled_components = sum(
-        float(canonical[key]) for key in required_cost_keys[1:]
+    required_ledger_keys = (
+        "accounting_total_cost_jpy",
+        "accounting_residual_jpy",
     )
-    residual = accounting_total - reconciled_components
-    if not math.isclose(residual, 0.0, abs_tol=1.0e-6):
+    missing_ledger_keys = [
+        key for key in required_ledger_keys if ledger.get(key) is None
+    ]
+    if missing_ledger_keys:
         raise ValueError(
-            "Finalized accounting ledger does not reconcile: "
-            f"total={accounting_total}, components={reconciled_components}, "
-            f"residual={residual}"
+            "Finalized canonical cost ledger is missing fields: "
+            + ", ".join(missing_ledger_keys)
         )
+    residual = float(ledger["accounting_residual_jpy"])
+    tolerance = float(
+        ledger.get("accounting_residual_tolerance_jpy", 1.0e-6) or 1.0e-6
+    )
+    if not math.isclose(residual, 0.0, abs_tol=tolerance):
+        raise ValueError(
+            "Finalized canonical cost ledger does not reconcile: "
+            f"residual={residual}, tolerance={tolerance}"
+        )
+
+    accounting_total = float(ledger["accounting_total_cost_jpy"])
+    canonical.update(
+        {
+            "total_cost_jpy": accounting_total,
+            "accounting_total_cost_jpy": accounting_total,
+            "energy_cost_jpy": (
+                float(components["electricity_cost_jpy"])
+                + float(components["fuel_cost_jpy"])
+            ),
+            "grid_purchase_cost_jpy": float(
+                details.get("grid_purchase_cost_jpy", 0.0) or 0.0
+            ),
+            "bess_total_flow_cost_jpy": float(
+                details.get("bess_total_flow_cost_jpy", 0.0) or 0.0
+            ),
+            "demand_charge_cost_jpy": float(
+                components["demand_charge_cost_jpy"]
+            ),
+            "fuel_cost_jpy": float(components["fuel_cost_jpy"]),
+            "co2_cost_jpy": float(components["co2_cost_jpy"]),
+            "vehicle_usage_cost_jpy": float(
+                components["vehicle_usage_cost_jpy"]
+            ),
+            "total_co2_kg": co2.get(
+                "total_co2_kg", canonical.get("total_co2_kg")
+            ),
+        }
+    )
     canonical["experiment_report_accounting_reconciled"] = True
     canonical["experiment_report_accounting_residual_jpy"] = residual
     canonical["experiment_report_accounting_source"] = (
-        "finalized_summary_and_kpi_sidecars"
+        "graph/canonical_cost_ledger.json"
     )
     return canonical
 

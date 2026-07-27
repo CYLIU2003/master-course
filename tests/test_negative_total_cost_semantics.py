@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
-from bff.routers.optimization import _canonical_cost_breakdown_json, _cost_breakdown
+from bff.routers.optimization import (
+    _canonical_cost_breakdown_json,
+    _cost_breakdown,
+    _finalized_accounting_summary_for_experiment_report,
+)
 from bff.services.optimization_run.cost_breakdown import canonical_cost_ledger_json
 from bff.services.experiment_reports import _logger_scenario_payload, _optimization_result_payload
 
@@ -205,6 +210,64 @@ def test_experiment_report_uses_finalized_accounting_components() -> None:
     assert payload["vehicle_fixed_cost_jpy"] == 640_000.0
     assert payload["co2_cost_jpy"] == 1_364.52
     assert payload["cost_breakdown"]["total_cost"] == 715_823.25
+
+
+def test_finalized_experiment_accounting_reads_canonical_cost_ledger(
+    tmp_path,
+) -> None:
+    graph_dir = tmp_path / "graph"
+    graph_dir.mkdir()
+    (tmp_path / "summary.json").write_text(
+        json.dumps(
+            {
+                "objective_value_jpy": None,
+                "trip_count_served": 264,
+                "trip_count_unserved": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "kpi_summary.json").write_text(
+        json.dumps({"served_trip_count": 264, "unserved_trip_count": 0}),
+        encoding="utf-8",
+    )
+    (graph_dir / "canonical_cost_ledger.json").write_text(
+        json.dumps(
+            {
+                "components": {
+                    "electricity_cost_jpy": 100.0,
+                    "fuel_cost_jpy": 20.0,
+                    "demand_charge_cost_jpy": 5.0,
+                    "vehicle_usage_cost_jpy": 200.0,
+                    "co2_cost_jpy": 2.0,
+                },
+                "details": {
+                    "grid_purchase_cost_jpy": 90.0,
+                    "bess_total_flow_cost_jpy": 10.0,
+                },
+                "co2": {"total_co2_kg": 2.0},
+                "accounting_total_cost_jpy": 327.0,
+                "accounting_residual_jpy": 0.0,
+                "accounting_residual_tolerance_jpy": 1.0e-6,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = _finalized_accounting_summary_for_experiment_report(tmp_path)
+
+    assert result["accounting_total_cost_jpy"] == 327.0
+    assert result["grid_purchase_cost_jpy"] == 90.0
+    assert result["bess_total_flow_cost_jpy"] == 10.0
+    assert result["fuel_cost_jpy"] == 20.0
+    assert result["demand_charge_cost_jpy"] == 5.0
+    assert result["vehicle_usage_cost_jpy"] == 200.0
+    assert result["co2_cost_jpy"] == 2.0
+    assert result["experiment_report_accounting_reconciled"] is True
+    assert (
+        result["experiment_report_accounting_source"]
+        == "graph/canonical_cost_ledger.json"
+    )
 
 
 def test_logger_scenario_payload_uses_vehicle_and_depot_asset_fallbacks() -> None:

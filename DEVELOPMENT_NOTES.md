@@ -60,6 +60,14 @@
   `1e-6 kWh` and clamp only within-tolerance floating-point residue to the
   physical bound. A `119.99 kWh` measurement still fails. This changes no
   physical SOC constraint and does not waive a material violation.
+- The next clean trial (`output/2026-07-27/run_20260727_1703`) completed all 24
+  feasible rolling steps and passed chain acceptance, then exposed two final
+  reporting blockers. The experiment report adapter expected flattened cost
+  keys instead of reading `graph/canonical_cost_ledger.json`, and the workbook
+  export silently ignored a missing `openpyxl` dependency. Final experiment
+  accounting now comes only from the canonical ledger, `openpyxl` is an
+  explicit runtime dependency, and a missing experiment report or workbook is
+  a job failure rather than a successful frontend run.
 - A clean-commit 264-trip high/low-PV frontend execution has not yet been
   completed at the time of this code note. Do not claim empirical completion,
   teacher readiness, or formal weather-comparison acceptance until both real
