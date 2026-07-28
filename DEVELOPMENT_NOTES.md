@@ -1291,3 +1291,11 @@ integrated total cost was optimized globally.
 - 会計総額707,747.0円の電気関連費66,438.1円には、実買電32.3 kWh相当581.7円だけでなく、暫定走行費の残額65,856.4円が含まれる。出力も`objective_is_actual_cost=false`、`research_cost_kpi_eligible=false`であり、この金額を実際の一日費用や最適費用として使わない。
 - 文献対応上の必須不足は、PV/BESSありの正式15分run、24回の毎時状態引継ぎ、固定日次計画・毎時見直し・完全予測の比較、PV誤差と走行電力±10%の感度、複数seed、設備感度、小規模同時最適化との比較である。V2G、配電潮流、GA/ABC/ALNS拡大は現時点の必須課題から外す。
 - 次のモデル修正は、BEV終端SOCの公平化、実現フロー会計への統一、研究表現を「二階層運行・充電計画」へ統一、PV/BESSあり15分固定入力、24時間毎時見直しの順とする。今回の作業はレビューと開発メモ更新のみで、数理制約・既存実験結果・実行コードは変更していない。
+# 2026-07-28 — Rolling report gate consistency
+
+The frontend-equivalent Phase 3 finalizer now derives the human-readable
+`experiment_report.md` research-submission flag from the existing
+`summary.json` release gate as well as rolling acceptance.  A completed
+24-step chain is an operational result; it cannot upgrade a run whose cost,
+optimality, provenance, or comparison gates remain blocked.  A regression test
+locks this distinction in place.

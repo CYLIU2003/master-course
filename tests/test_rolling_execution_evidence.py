@@ -90,3 +90,44 @@ def test_day_ahead_finalizer_rejects_chain_without_passing_checks(tmp_path) -> N
     assert "RESEARCH SUBMISSION BLOCKED" in (
         tmp_path / "experiment_report.md"
     ).read_text(encoding="utf-8")
+
+
+def test_day_ahead_finalizer_does_not_upgrade_blocked_summary(tmp_path) -> None:
+    """A rolling chain cannot promote a run blocked by another research gate."""
+
+    (tmp_path / "summary.json").write_text(
+        json.dumps(
+            {
+                "research_run_accepted": True,
+                "research_submission_ready": False,
+                "teacher_release_status": "BLOCKED",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "input_audit.json").write_text("{}", encoding="utf-8")
+    rolling_dir = tmp_path / "rolling_hourly_chain"
+    rolling_dir.mkdir()
+    (rolling_dir / "rolling_chain_summary.json").write_text(
+        json.dumps(
+            {
+                "chain_accepted": True,
+                "acceptance_checks": {
+                    name: True for name in ROLLING_CHAIN_REQUIRED_ACCEPTANCE_CHECKS
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    _finalize_day_ahead_rolling_artifacts(
+        day_ahead_output_dir=tmp_path,
+        rolling_exit_code=0,
+    )
+
+    summary = json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
+    report = (tmp_path / "experiment_report.md").read_text(encoding="utf-8")
+    assert summary["research_submission_ready"] is False
+    assert summary["teacher_release_status"] == "BLOCKED"
+    assert "research_submission_ready: False" in report
+    assert "RESEARCH SUBMISSION BLOCKED" in report

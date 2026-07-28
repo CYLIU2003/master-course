@@ -2393,8 +2393,13 @@ def _finalize_day_ahead_rolling_artifacts(
     }
     summary["rolling_execution"] = rolling_execution
     _write_json(summary_path, summary)
+    # Rolling acceptance is only one gate.  The day-ahead summary already
+    # records the complete research-release decision (cost semantics,
+    # optimality scope, provenance, and all other gates).  Do not let a
+    # successful rolling chain upgrade a blocked run in the human-readable
+    # report while summary.json remains blocked.
     research_submission_ready = bool(
-        summary.get("research_run_accepted") and accepted
+        summary.get("research_submission_ready") and accepted
     )
     report_lines = [
         "# 実験レポート — 日次Phase 3後の1時間Rolling",

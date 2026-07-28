@@ -1430,3 +1430,10 @@ python scripts/audit_timetable_alignment.py `
 - 一時ファイル・cache・tmp スクリプトは core 配布前に整理する。
 - 変更が README / development note に反映されているか確認する。
 - 迷ったらまず既存の章と `docs/constant/` を優先して参照する。
+# Research execution note
+
+The frontend-equivalent Phase 3 runner keeps the release decision in
+`summary.json` as the canonical gate.  A successful 24-step hourly rolling
+chain records operational acceptance but must not promote a run that is still
+blocked by research-cost, optimality, provenance, or comparison checks.  The
+generated `experiment_report.md` mirrors that gate.
