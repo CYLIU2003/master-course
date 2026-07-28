@@ -4179,3 +4179,7 @@ master-course/
 - 研究の最小構成は、(1) 264便の可行性、(2) 公平な開始・終了SOC下でのPV/BESS効果、(3) PV予測誤差下での固定日次計画と毎時見直しの比較とする。正式比較は15分、clean commit、固定hash、実適用PV、違反0、fallbackなし、実現フロー会計を受理条件とする。
 - 必須実験は、24回rolling完走、完全予測oracle、PV誤差、走行電力±10%、3 seed、successor 8/16/32/削減なし、60/30/15分、小規模統合oracleとの差である。V2G、配電線潮流、複数営業所、メタヒューリスティクス拡大は修士論文の成立条件に含めない。
 - この追補は文献照合と証拠整理のみで、dispatch可行性条件、時刻表、`operator_id`、SOC/電力制約、費用計算コード、既存成果物を変更していない。
+# 2026-07-27: Frontend rolling release-blocker remediation instruction
+
+- `docs/notes/AI_AGENT_FRONTEND_ROLLING_RELEASE_BLOCKER_20260727.md` を追加した。対象は通常フロントの `POST /run-optimization` 実経路を、日次最適化だけで終わらせず、60分rolling、chain受理監査、提出可否、最終帳票まで一つのジョブとして完結させることである。
+- 2026-07-27の最新成果物にはrolling chainがなく、CLIのopt-in実装だけでは通常フロントの要件を満たさないことを記録した。車両在庫契約の未宣言は今回の修正対象外であり、既存ゲートを緩めない。
