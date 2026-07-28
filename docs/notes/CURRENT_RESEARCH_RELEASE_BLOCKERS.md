@@ -83,6 +83,18 @@ weaken physical validation, SOC limits, Rolling acceptance, or accounting.
 `run_20260728_1949` remains diagnostic; it has no successful final
 reconciliation or artifact-completeness result.
 
+The first fresh run from the subsequent reporting commit,
+`run_20260728_2028`, confirmed the corrected P0 path again: 24/24 accepted
+Rolling, eligible executed accounting, and `physical_schedule_validation`
+`VALID` all passed. It then failed before artifact acceptance because the
+Markdown total marker was compared byte-for-byte against a separately parsed
+floating-point representation (`707808.6603727042` versus
+`707808.660372704`). The values differ by less than `1e-6 JPY` and represent
+the same canonical accounting total. The comparison is now a finite numeric
+check under the existing `1e-6 JPY` contract; missing, ambiguous, non-finite,
+or materially different markers remain `ERROR`. This run is diagnostic only;
+a further new clean-commit normal frontend run remains required.
+
 ## Closed in the current working tree, pending clean-run confirmation
 
 1. Physical-schedule validation is separated from research acceptance. A

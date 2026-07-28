@@ -86,6 +86,17 @@
   and positive/negative controlled-PV pair gates. The local suite passed
   `1025` tests; `compileall` and `git diff --check` also passed before the
   pending clean-commit normal frontend rerun.
+- The first fresh run from `bfcfa41`, `run_20260728_2028`, reached 24/24
+  accepted Rolling, eligible executed accounting, and `VALID` independent
+  physical validation, but correctly stopped before artifact acceptance on a
+  report-marker false positive. The Markdown header carried the canonical
+  ledger total `707808.6603727042`, while the executed JSON parsed as
+  `707808.660372704`; the old byte-for-byte float representation check rejected
+  their `2e-10 JPY` difference despite the existing `1e-6 JPY` accounting
+  tolerance. The marker is now finite numeric evidence checked at that same
+  tolerance; missing, ambiguous, non-finite, or materially different values
+  still fail closed. This run remains diagnostic and a new clean-commit rerun
+  is required.
 
 ## 2026-07-28 Stage 2 charger-assignment numeric consistency fix
 

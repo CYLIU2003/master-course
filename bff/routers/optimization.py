@@ -4631,11 +4631,45 @@ def _assert_final_cost_artifact_consistency(
                 failures[f"{metric}:{artifact}"] = residual
     report_md_path = run_dir / "experiment_report.md"
     report_md = report_md_path.read_text(encoding="utf-8")
-    exact_marker = (
-        f"canonical_executed_total_cost_jpy: `{executed_total!r}`"
-    )
-    if exact_marker not in report_md:
-        failures["experiment_report_md_exact_marker"] = None
+    marker_prefix = "canonical_executed_total_cost_jpy: `"
+    marker_values: List[str] = []
+    for line in report_md.splitlines():
+        normalized_line = line[2:] if line.startswith("- ") else line
+        if (
+            normalized_line.startswith(marker_prefix)
+            and normalized_line.endswith("`")
+        ):
+            marker_values.append(normalized_line[len(marker_prefix) : -1])
+    if len(marker_values) != 1:
+        failures["experiment_report_md_canonical_total"] = {
+            "reason": "missing_or_ambiguous_marker",
+            "marker_count": len(marker_values),
+        }
+    else:
+        try:
+            markdown_total = float(marker_values[0])
+        except (TypeError, ValueError):
+            failures["experiment_report_md_canonical_total"] = {
+                "reason": "invalid_marker_value",
+                "value": marker_values[0],
+            }
+        else:
+            if not math.isfinite(markdown_total):
+                failures["experiment_report_md_canonical_total"] = {
+                    "reason": "nonfinite_marker_value",
+                    "value": markdown_total,
+                }
+            elif executed_total is not None and not math.isclose(
+                markdown_total,
+                executed_total,
+                rel_tol=0.0,
+                abs_tol=float(tolerance_jpy),
+            ):
+                failures["experiment_report_md_canonical_total"] = {
+                    "expected": executed_total,
+                    "observed": markdown_total,
+                    "residual": markdown_total - executed_total,
+                }
     payload = {
         "schema_version": "final_cost_reconciliation_v1",
         "status": "OK" if not failures else "ERROR",

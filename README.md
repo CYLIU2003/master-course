@@ -63,6 +63,9 @@ simulation artifact, not an automatically accepted research result.
   preserving liters and emissions.
   Vehicle activation/usage cost, fixed ownership cost, and acquisition cost
   are separate report fields; one must never be used as an alias for another.
+  The Markdown canonical-total marker is parsed as finite numeric evidence and
+  compared under that same `1e-6 JPY` contract; a byte-for-byte float rendering
+  difference is not treated as a distinct monetary result.
 - Non-service travel is canonicalized as one row per physical event in
   `graph/movement_event_ledger.(csv|json)`. The only event types are
   `startup`, `connection`, and `terminal_return`; a connection belongs to the

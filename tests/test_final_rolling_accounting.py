@@ -263,6 +263,27 @@ def test_missing_zero_valued_report_component_fails_with_reconciliation_diagnost
     )
 
 
+def test_markdown_canonical_total_accepts_ledger_precision_within_tolerance(
+    tmp_path: Path,
+) -> None:
+    """The Markdown marker is numeric evidence, not a float-repr byte match."""
+
+    total = 724_618.0043661146
+    optimization_result = _write_cost_artifacts(tmp_path, total=total)
+    (tmp_path / "experiment_report.md").write_text(
+        "- canonical_executed_total_cost_jpy: "
+        f"`{total + 5.0e-10!r}`\n",
+        encoding="utf-8",
+    )
+
+    reconciliation = _assert_final_cost_artifact_consistency(
+        run_dir=tmp_path,
+        optimization_result=optimization_result,
+    )
+
+    assert reconciliation["status"] == "OK"
+
+
 def test_finalized_ledger_replaces_provisional_summary_components(
     tmp_path: Path,
 ) -> None:
