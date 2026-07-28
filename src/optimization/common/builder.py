@@ -1263,6 +1263,14 @@ class ProblemBuilder:
                 "max_start_fragments_per_vehicle": int(max(1, max_start_fragments_per_vehicle)),
                 "max_end_fragments_per_vehicle": int(max(1, max_end_fragments_per_vehicle)),
                 "available_vehicle_count_total": len(available_vehicles),
+                # Rolling must consume the exact contract already resolved from
+                # the materialized prepared scenario.  Keeping only the
+                # validation summary loses active IDs, initial state, vehicle
+                # parameters, exclusions, and their hashes.
+                "scenario_fleet_contract": fleet_contract_payload,
+                "scenario_fleet_contract_hash": fleet_contract_payload.get(
+                    "fleet_contract_hash"
+                ),
                 "research_fleet_validation": research_fleet_validation,
                 "unavailable_vehicle_count_total": len(unavailable_vehicles),
                 "available_vehicle_ids": tuple(

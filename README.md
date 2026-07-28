@@ -31,6 +31,10 @@ simulation artifact, not an automatically accepted research result.
   powertrains, initial-state hash, vehicle-parameter hash, and the complete
   contract hash. There is no global BEV/ICE count. Optional CLI count arguments
   are assertions only.
+  `ProblemBuilder` preserves this complete contract in canonical problem
+  metadata; the frontend rolling preflight writes that same payload to
+  `scenario_fleet_contract.json` and refuses to infer it from a count or
+  validation summary.
   Formal records must explicitly define initial SOC/fuel and availability;
   contradictory availability fields fail. Prepare schema
   `v3_trip_stop_polyline_distance_explicit_fleet_state` materializes the

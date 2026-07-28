@@ -1,5 +1,31 @@
 # Development Notes
 
+## 2026-07-28 frontend Rolling fleet-contract handoff fix
+
+- Manual frontend run `output/2026-07-28/run_20260728_1737` completed its
+  day-ahead solve but correctly failed closed before Rolling with
+  `Canonical problem is missing scenario_fleet_contract_v2`.
+- Root cause: the prepared scenario contained the complete v2 contract and
+  `ProblemBuilder` used it to produce an `OK` research-fleet validation, but
+  canonical problem metadata retained only the derived validation summary.
+  `persist_frontend_day_ahead_rolling_contract()` requires the original
+  contract because counts alone cannot recover active IDs, initial state,
+  vehicle parameters, exclusions, or their hashes.
+- `ProblemBuilder` now preserves the exact resolved contract and its contract
+  hash in canonical problem metadata. Rolling continues to fail closed when
+  the v2 contract is genuinely absent; no contract is reconstructed from
+  solver output.
+- Added a Builder-to-canonical-metadata regression using the real research
+  path, including an excluded maintenance vehicle and exact hash equality.
+  The regression also calls the same Rolling contract-persistence function
+  that failed in the manual run and verifies the emitted contract and hash.
+  Focused fleet/frontend/Rolling tests: `44 passed`; full suite:
+  `994 passed`; `compileall` and `git diff --check` passed.
+- Mathematical effect: none. The dispatch, charging, SOC, energy, and cost
+  models are unchanged. This repairs provenance handoff needed to start the
+  already-required 24-step Rolling chain. The failed 17:37 run remains a
+  diagnostic artifact and must not be resumed or cited as a completed result.
+
 ## 2026-07-28 pre-manual-run literature artifact hardening
 
 - Closed the review finding that the literature bundle recorded SHA-256 values

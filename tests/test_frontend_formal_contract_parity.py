@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import json
+from pathlib import Path
 from types import SimpleNamespace
 
 from bff.routers.optimization import (
     _apply_interactive_bev_utilization_policy,
     _apply_interactive_research_contract,
 )
+from bff.services.optimization_run.rolling_chain import (
+    persist_frontend_day_ahead_rolling_contract,
+)
+from src.optimization import OptimizationConfig, ProblemBuilder
 from src.optimization.common.fleet_contract import (
     resolve_scenario_fleet_contract,
 )
@@ -14,6 +20,7 @@ from src.optimization.common.fleet_contract import (
 
 def _scenario() -> dict:
     return {
+        "meta": {"id": "frontend-formal-contract-parity"},
         "vehicles": [
             {
                 "id": "bev-a",
@@ -45,7 +52,31 @@ def _scenario() -> dict:
                 "fuelEfficiencyKmPerL": 5.0,
             },
         ],
-        "simulation_config": {},
+        "depots": [{"id": "depot-a", "name": "Depot A"}],
+        "routes": [{"id": "route-a"}],
+        "chargers": [
+            {
+                "id": "charger-a",
+                "depotId": "depot-a",
+                "powerKw": 90.0,
+                "ports": 1,
+            }
+        ],
+        "timetable_rows": [
+            {
+                "trip_id": "odpt.BusTimetable:Example.Weekday.0800",
+                "route_id": "route-a",
+                "origin": "stop-a",
+                "destination": "stop-b",
+                "departure": "08:00",
+                "arrival": "08:30",
+                "distance_km": 5.0,
+                "service_id": "WEEKDAY",
+                "allowed_vehicle_types": ["BEV", "ICE"],
+                "operator_id": "operator-a",
+            }
+        ],
+        "simulation_config": {"service_date": "2025-08-05"},
         "scenario_overlay": {"solver_config": {}},
     }
 
@@ -87,6 +118,66 @@ def test_frontend_contract_is_the_shared_scenario_fleet_contract() -> None:
     assert simulation["scenario_fleet_contract"][
         "active_vehicle_parameters"
     ][0]["source_record"]["id"] == "bev-a"
+
+
+def test_problem_builder_preserves_exact_fleet_contract_for_rolling(
+    tmp_path: Path,
+) -> None:
+    scenario = _scenario()
+    expected = resolve_scenario_fleet_contract(
+        deepcopy(scenario),
+        selected_depot_ids=("depot-a",),
+        research_run=True,
+    )
+
+    problem = ProblemBuilder().build_from_scenario(
+        scenario,
+        depot_id="depot-a",
+        service_id="WEEKDAY",
+        config=OptimizationConfig(research_run=True),
+    )
+
+    contract = problem.metadata["scenario_fleet_contract"]
+    assert contract == expected.to_dict(include_source_records=True)
+    assert contract["schema_version"] == "scenario_fleet_contract_v2"
+    assert problem.metadata["scenario_fleet_contract_hash"] == (
+        expected.fleet_contract_hash
+    )
+    assert problem.metadata["research_fleet_validation"]["status"] == "OK"
+    assert problem.metadata["research_fleet_validation"]["fleet_contract_hash"] == (
+        expected.fleet_contract_hash
+    )
+
+    prepared_path = tmp_path / "prepared.json"
+    prepared_path.write_text('{"prepared_input_id":"prepared-1"}', encoding="utf-8")
+    (tmp_path / "canonical_solver_result.json").write_text(
+        '{"feasible":true}',
+        encoding="utf-8",
+    )
+    (tmp_path / "summary.json").write_text(
+        '{"scenario_id":"frontend-formal-contract-parity"}',
+        encoding="utf-8",
+    )
+    audit = persist_frontend_day_ahead_rolling_contract(
+        run_dir=tmp_path,
+        scenario=scenario,
+        problem=problem,
+        prepared_input_path=prepared_path,
+        scenario_id="frontend-formal-contract-parity",
+        prepared_input_id="prepared-1",
+        service_id="WEEKDAY",
+        git_state={
+            "git_sha": "abc123",
+            "git_dirty": False,
+            "git_state_available": True,
+        },
+    )
+
+    persisted_contract = json.loads(
+        (tmp_path / "scenario_fleet_contract.json").read_text(encoding="utf-8")
+    )
+    assert persisted_contract == expected.to_dict(include_source_records=True)
+    assert audit["scenario_fleet_contract_hash"] == expected.fleet_contract_hash
 
 
 def test_all_available_bev_policy_uses_canonical_powertrain_not_type_label() -> None:

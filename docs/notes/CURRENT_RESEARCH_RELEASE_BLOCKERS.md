@@ -1,7 +1,7 @@
 # Current research release blockers
 
 Status date: 2026-07-28
-Code status: 986 local regression tests passed; no post-change 264-trip
+Code status: 994 local regression tests passed; no post-fix 264-trip
 ordinary frontend run yet
 Teacher release status: **BLOCKED**
 
@@ -51,7 +51,9 @@ optimality remain separate decisions.
    IDs, initial state, vehicle parameters, and the fleet-contract hash must
    match. Unavailable persisted records are excluded with reasons; contradictory
    or malformed availability, duplicate/empty IDs, unknown types, implicit
-   initial state, missing catalog/physical parameters, or hash drift fail.
+   initial state, missing catalog/physical parameters, or hash drift fail. The
+   full validated v2 contract is preserved in canonical problem metadata and
+   handed unchanged to Rolling; a count-only validation summary is not accepted.
 5. Formal Phase 3 frontend runs force the complete successor network and
    prohibit fallback/post-solve repair.
 6. Stage 1 now shares charge reachability across physical charger definitions,
@@ -92,6 +94,11 @@ low-PV, and no-PV cases. All three require 24/24 rolling and accepted run
 contracts. Each completed job must additionally show
 `artifact_completeness.status=OK`; otherwise it is an incomplete diagnostic
 bundle, irrespective of solver feasibility.
+The 2026-07-28 17:37 manual run is diagnostic only: day-ahead completed, but
+Rolling preflight stopped before step 1 because the canonical problem omitted
+the already-resolved fleet-contract payload. The handoff is corrected in code,
+but this does not become execution evidence until a fresh clean-commit run
+completes.
 It must also contain a `READY` (generation status only)
 `graph/literature_figures/manifest.json` with all declared PNG/SVG/source/raw
 CSV files. Its manifest hashes and canonical-source hashes must revalidate
