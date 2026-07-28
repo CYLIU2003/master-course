@@ -593,6 +593,30 @@ def _optimization_result_payload(
             if cost_breakdown.get("demand_charge") is not None
             else cost_breakdown.get("demand_cost")
         )
+    canonical_cost_components = dict(
+        accounting_summary.get("canonical_cost_components_jpy") or {}
+    )
+    vehicle_usage_cost_jpy = accounting_summary.get(
+        "vehicle_usage_cost_jpy",
+        canonical_cost_components.get(
+            "vehicle_usage_cost_jpy",
+            cost_breakdown.get("vehicle_usage_cost"),
+        ),
+    )
+    vehicle_fixed_cost_jpy = accounting_summary.get(
+        "vehicle_fixed_cost_jpy",
+        canonical_cost_components.get(
+            "vehicle_fixed_cost_jpy",
+            cost_breakdown.get(
+                "vehicle_cost",
+                cost_breakdown.get("vehicle_fixed_cost", 0.0),
+            ),
+        ),
+    )
+    vehicle_acquisition_cost_jpy = accounting_summary.get(
+        "vehicle_acquisition_cost_jpy",
+        cost_breakdown.get("vehicle_acquisition_cost", 0.0),
+    )
     report_cost_breakdown = dict(cost_breakdown)
     if accounting_total_cost is not None:
         report_cost_breakdown["total_cost"] = accounting_total_cost
@@ -603,9 +627,9 @@ def _optimization_result_payload(
                 "fuel_cost_jpy", cost_breakdown.get("fuel_cost")
             ),
             "demand_charge": accounting_demand_charge,
-            "vehicle_usage_cost": accounting_summary.get(
-                "vehicle_usage_cost_jpy", cost_breakdown.get("vehicle_usage_cost")
-            ),
+            "vehicle_usage_cost": vehicle_usage_cost_jpy,
+            "vehicle_fixed_cost": vehicle_fixed_cost_jpy,
+            "vehicle_acquisition_cost": vehicle_acquisition_cost_jpy,
             "co2_cost": accounting_summary.get(
                 "co2_cost_jpy", cost_breakdown.get("co2_cost")
             ),
@@ -620,9 +644,17 @@ def _optimization_result_payload(
         "electricity_cost_provisional_leftover_jpy": electricity_cost_leftover,
         "diesel_cost_jpy": accounting_summary.get("fuel_cost_jpy", cost_breakdown.get("fuel_cost")),
         "demand_charge_jpy": accounting_demand_charge,
-        "vehicle_fixed_cost_jpy": accounting_summary.get("vehicle_usage_cost_jpy", cost_breakdown.get("vehicle_usage_cost")),
+        "vehicle_usage_cost_jpy": vehicle_usage_cost_jpy,
+        "vehicle_fixed_cost_jpy": vehicle_fixed_cost_jpy,
+        "vehicle_acquisition_cost_jpy": vehicle_acquisition_cost_jpy,
         "co2_cost_jpy": accounting_summary.get(
             "co2_cost_jpy", cost_breakdown.get("co2_cost")
+        ),
+        "canonical_cost_components_jpy": dict(
+            accounting_summary.get("canonical_cost_components_jpy") or {}
+        ),
+        "canonical_cost_component_status": dict(
+            accounting_summary.get("canonical_cost_component_status") or {}
         ),
         "return_leg_bonus_jpy": cost_breakdown.get("return_leg_bonus"),
         "grid_to_bus_kwh": cost_breakdown.get("grid_to_bus_kwh"),
@@ -672,7 +704,9 @@ def _simulation_result_payload(simulation_result: Dict[str, Any]) -> Dict[str, A
         "electricity_cost_jpy": sim_summary.get("total_energy_cost"),
         "diesel_cost_jpy": sim_summary.get("total_fuel_cost"),
         "demand_charge_jpy": sim_summary.get("total_demand_charge"),
+        "vehicle_usage_cost_jpy": 0.0,
         "vehicle_fixed_cost_jpy": 0.0,
+        "vehicle_acquisition_cost_jpy": 0.0,
         "co2_kg": sim_summary.get("total_co2_kg"),
         "bev_trips": trip_count_by_type.get("BEV"),
         "ice_trips": trip_count_by_type.get("ICE"),

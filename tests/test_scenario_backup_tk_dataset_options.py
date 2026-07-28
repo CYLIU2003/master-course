@@ -412,20 +412,23 @@ def test_solver_settings_window_exposes_timestep_selector() -> None:
     source = inspect.getsource(App.open_solver_settings_window)
 
     assert "計算ステップ" in source
-    assert 'values=["30", "60"]' in source
+    assert 'values=["5", "15", "30", "60"]' in source
     assert "Prepareをやり直してください" in source
 
 
-def test_timestep_payload_uses_30_or_60_only() -> None:
+def test_timestep_payload_uses_supported_discretization() -> None:
     app = App.__new__(App)
-    app.timestep_min_var = DummyVar("60")
+    app.timestep_min_var = DummyVar("30")
 
-    assert App._timestep_min_value(app) == 60
-
-    app.timestep_min_var.set("15")
-    assert App._timestep_min_value(app) == 30
-    app.timestep_min_var.set("5")
-    assert App._timestep_min_value(app) == 30
+    for raw, expected in (
+        ("5", 5),
+        ("15", 15),
+        ("30", 30),
+        ("60", 60),
+        ("17", 30),
+    ):
+        app.timestep_min_var.set(raw)
+        assert App._timestep_min_value(app) == expected
 
 
 def test_timestep_payload_fields_are_wired() -> None:

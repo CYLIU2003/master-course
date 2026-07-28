@@ -1,6 +1,78 @@
 # Development Notes
 
-## 2026-07-28 selected-depot research fleet declaration
+## 2026-07-28 scenario fleet contract v2 and independent release gates
+
+- Replaced the remaining fixed fleet-count authority with the exact active
+  vehicle set derived from the materialized prepared scenario and explicitly
+  selected depot/scope. `scenario_fleet_contract_v2` persists active IDs,
+  exclusions, canonical powertrains, initial-state hash, parameter hash, and
+  the complete contract hash. Equal counts no longer imply equal input.
+- Raw formal records now fail before Canonical conversion on empty/duplicate
+  ID, missing type/powertrain/depot, invalid or contradictory availability,
+  implicit initial SOC/fuel, or missing positive BEV/ICE physical parameters.
+  `"false"` and `"0"` are correctly unavailable.
+  Persisted inactive vehicles are excluded with reasons rather than making
+  their mere existence an error.
+- Vehicle-type-catalog battery, consumption, charge-power, and compatibility
+  values are materialized into the canonical active vehicle record. Formal
+  artifacts include both the raw vehicle and catalog source records used by the
+  exact parameter hash.
+- BFF preflight, ProblemBuilder, formal CLI, policy sensitivity, comparison,
+  and energy audit use the shared availability/powertrain/fleet resolver.
+  `--assert-bev-count` and `--assert-ice-count` are optional checks with no
+  defaults; they never define the fleet. “Use every available BEV” derives the
+  policy lower bound from the active set.
+- Formal CLI now executes full Rolling by default. Only
+  `--day-ahead-only-exploratory` skips it; that path remains teacher-blocked and
+  returns a non-completion code. The generic comparison derives trip/slot
+  counts from the prepared input, uses immutable content hashes, and reports
+  solver outcomes such as feedback-cut count without requiring them to match.
+- Added independent event reconstruction for startup deadhead, service,
+  connection deadhead, waiting, charging, refueling, and terminal return.
+  Missing required metrics, unknown/blank chargers, depot/compatibility/power
+  errors, charging away from the vehicle location, overlaps, SOC/fuel failure,
+  and trip/operator defects fail closed. Grid/PV/BESS source rows belonging to
+  one physical charging session are aggregated before occupancy validation.
+- Stage 2 infeasibility feedback iterations now share one monotonic global
+  deadline. Each Gurobi invocation receives only the remaining time, and
+  feedback telemetry records cumulative time and remaining budget.
+- The rolling executed-day ledger now publishes enabled/SKIPPED status for
+  every canonical accounting component. Every enabled component must agree
+  across executed accounting, ledger, summary, experiment JSON, detailed CSV,
+  XLSX, and the optimization result within `1e-6 JPY`.
+  Human-facing output now exposes `vehicle_usage_cost_jpy`,
+  `vehicle_fixed_cost_jpy`, and `vehicle_acquisition_cost_jpy` separately;
+  a daily activation charge is no longer relabelled as a fixed ownership cost.
+- The legacy feasibility checker now treats a missing, nonnumeric, nonfinite,
+  fractional, or negative required count as an error. Duplicate-trip count is
+  part of the clean gate instead of being reported without affecting release
+  validity.
+- The frontend selector now preserves the common 5/15/30/60-minute time-axis
+  values. The formal Phase 3 experiment spec remains 15-minute internal slots
+  with 60-minute Rolling updates. `--available-bev-count` is now restricted to
+  blocked day-ahead exploratory runs because a formal run may not mutate the
+  prepared active fleet.
+- Removed tracked `.tmp_*` / `tmp_*` one-off scripts and added
+  `.github/workflows/research-validation.yml`. The workflow compiles sources,
+  runs focused research-contract tests, and runs the full suite without a
+  licensed Gurobi requirement.
+- Local validation after these changes: `972 passed`; compileall and
+  `git diff --check` pass. A remote CI execution and fresh full-scale formal
+  solver run are still absent.
+- Mathematical effect: the dispatch feasible set is now parameterized by the
+  prepared scenario's exact active vehicles rather than a repository-wide
+  count. The independent validator adds a release gate without altering the
+  MILP feasible region. The global deadline changes termination only. All
+  pre-change outputs are non-comparable and must not be reused.
+- Documentation:
+  `docs/model/SCENARIO_FLEET_CONTRACT.md`,
+  `docs/notes/FORMAL_RUNBOOK_CURRENT.md`, and
+  `docs/notes/DYNAMIC_FLEET_REMEDIATION_LOG_20260728.md`.
+- Release status remains **BLOCKED** until a clean frozen commit produces fresh
+  high-PV, low-PV, and no-PV full Rolling runs and the complete acceptance
+  table is filled.
+
+## SUPERSEDED 2026-07-28 selected-depot count declaration
 
 - The interactive formal-run fleet declaration now comes from the available
   BEV/ICE records of the selected scenario depot, not a global `35 BEV / 26

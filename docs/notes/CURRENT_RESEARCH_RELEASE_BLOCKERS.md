@@ -1,7 +1,7 @@
 # Current research release blockers
 
 Status date: 2026-07-28
-Code status: implementation under review; no post-change 264-trip formal run yet
+Code status: local regression passed; no post-change 264-trip formal run yet
 Teacher release status: **BLOCKED**
 
 This file is the single current blocker register. Older rolling remediation
@@ -39,15 +39,18 @@ optimality remain separate decisions.
    physically validated schedule into `INVALID`.
 2. After accepted rolling,
    `rolling_hourly_chain/executed_day_accounting.json` is the unique final cost
-   source. Total and electricity, fuel, demand, vehicle-use, and CO2 components
-   must agree across ledger, summary, JSON, Markdown, Excel, and optimization
-   result within `1e-6 JPY`; otherwise the job fails.
+   source. Total and every enabled canonical component must agree across ledger,
+   summary, JSON, Markdown, Excel, and optimization result within `1e-6 JPY`;
+   disabled components must be explicit `SKIPPED` zeroes. Missing component
+   evidence fails the job.
 3. Formal frontend runs fail before solving unless Git is clean and has a SHA.
    A source-state change during the run is also fatal.
-4. Formal frontend runs declare and hard-check the available BEV/ICE inventory
-   of the selected scenario depot (currently Tsurumaki: 35 BEV / 25 ICE).
-   Duplicate/empty IDs, unknown types, unavailable records, or a mismatch
-   between that declaration and canonical input fail input construction.
+4. Formal frontend runs derive and hard-check the exact active vehicle set
+   from the materialized prepared scenario and selected depot/scope. Counts,
+   IDs, initial state, vehicle parameters, and the fleet-contract hash must
+   match. Unavailable persisted records are excluded with reasons; contradictory
+   or malformed availability, duplicate/empty IDs, unknown types, implicit
+   initial state, missing catalog/physical parameters, or hash drift fail.
 5. Formal Phase 3 frontend runs force the complete successor network and
    prohibit fallback/post-solve repair.
 6. Stage 1 now shares charge reachability across physical charger definitions,
@@ -58,7 +61,8 @@ optimality remain separate decisions.
 7. If and only if Stage 2 returns a Gurobi `INFEASIBLE` certificate, the full
    failed vehicle-trip assignment is returned to Stage 1 as a no-good cut and
    re-solved (maximum two feedback iterations in a formal frontend run).
-   `TIME_LIMIT` without a feasible incumbent does not justify a cut.
+   `TIME_LIMIT` without a feasible incumbent does not justify a cut. All
+   feedback iterations share one global wall-clock deadline.
 8. Each run emits a counterfactual-case manifest. A separate pair builder
    verifies the fixed-control hash, PV hashes/difference, physical validation,
    rolling cost source, and comparison table.
@@ -95,20 +99,22 @@ independently feasible schedule; it does not prove that the bounded feedback
 loop exhausts every full-scale infeasible assignment. Small integrated-MILP
 comparison remains required to quantify decomposition loss.
 
-### B4 — All-BEV policy sensitivity has not been executed
+### B4 — All-available-BEV policy sensitivity has not been executed
 
-The baseline and “all 35 available BEVs serve at least one trip” policy case
-must be run separately. Report feasibility, BEV/ICE vehicles and trips, grid
-energy, PV use, cost, charger requirement, peak kW, and incremental cost. Do
-not infer why the baseline uses fewer BEVs without these outputs.
+The baseline and “every BEV in the scenario-derived active fleet serves at
+least one trip” policy case must be run separately. Report feasibility,
+BEV/ICE vehicles and trips, grid energy, PV use, cost, charger requirement,
+peak kW, and incremental cost. Do not infer why the baseline uses fewer BEVs
+without these outputs.
 
 ### B5 — Counterfactual pair is not yet assembled from new runs
 
-High/low/no-PV runs must share the same service date, 264 trips, fleet, initial
-SOC, charger/BESS/tariff inputs, seed, thread count, time limits, and solver
-controls. Only the PV curve hash may differ. Build and archive the pair
-manifest after the new runs; do not call it an actual sunny/rainy operating-day
-comparison.
+High/low/no-PV runs must share the same service date, trip-content hash, fleet
+contract, initial-state hash, charger/BESS/tariff inputs, seed, thread count,
+time limits, and solver controls. Only the PV curve hash may differ. The
+Tsurumaki experiment spec may separately assert 264 trips. Build and archive
+the pair manifest after the new runs; do not call it an actual sunny/rainy
+operating-day comparison.
 
 ### B6 — Uncertainty evidence remains incomplete
 
@@ -125,8 +131,8 @@ row from an assumption.
 | Check | Acceptance condition | Evidence field/file | Result |
 |---|---|---|---|
 | Git | clean; non-empty start/end SHA identical | `code_provenance.json`, `run_manifest.json` | PENDING |
-| Fleet | available BEV/ICE counts match selected-depot scenario inventory; unique IDs; no unavailable/unknown records | `graph/research_fleet_validation.json` | PENDING |
-| Trips | 264/264 served; duplicate=0 | physical validation, summary | PENDING |
+| Fleet | exact active IDs, initial state and parameter hashes match the materialized prepared selected scope; exclusions have reasons | `scenario_fleet_contract.json`, `graph/research_fleet_validation.json` | PENDING |
+| Trips | prepared-scope trip count fully served; duplicate=0 (Tsurumaki spec may assert 264) | physical validation, summary | PENDING |
 | Operator | `UNKNOWN=0` | operator audit | PENDING |
 | Dispatch | transition violations=0 | hard validation | PENDING |
 | Deadhead | startup/connection/return counted exactly once | movement event ledger | PENDING |
@@ -157,7 +163,8 @@ If any row fails, preserve the numbers but add all three labels:
 ## Release procedure
 
 1. Finish review and tests.
-2. Commit in small logical units on the research release-candidate branch.
+2. Commit the reviewed changes on `main` as requested, then freeze the selected
+   full SHA for the experiment.
 3. Freeze that commit; do not edit code after the formal experiment starts.
 4. Run all formal cases from that clean SHA.
 5. Never reuse an older result after a code/model change.

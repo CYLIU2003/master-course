@@ -1,6 +1,8 @@
 # AI Agent向け修正指示書: 日次最適化後の1時間Rollingを最優先で成立させる
 
 > **Status: IMPLEMENTED; retained as historical specification (2026-07-28).**
+> Any fixed 35/26 inventory reference below is historical and is superseded by
+> the exact active vehicle set in `scenario_fleet_contract_v2`.
 > 日次配車固定、60分×24 step、state handoff、実行prefix会計、
 > acceptance auditのproduction pathは成立した。最新の提出可否と残課題は
 > [`CURRENT_RESEARCH_RELEASE_BLOCKERS.md`](CURRENT_RESEARCH_RELEASE_BLOCKERS.md)

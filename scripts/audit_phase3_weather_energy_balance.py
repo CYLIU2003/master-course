@@ -622,6 +622,16 @@ def _audit_case(
             "trip_count": int(input_audit["trip_count"]),
             "fleet": dict(input_audit["fleet"]),
             "expected_fleet": dict(input_audit.get("expected_fleet") or {}),
+            "scenario_fleet_contract_hash": input_audit.get(
+                "scenario_fleet_contract_hash"
+            ),
+            "active_vehicle_id_hash": input_audit.get(
+                "active_vehicle_id_hash"
+            ),
+            "vehicle_parameter_hash": input_audit.get(
+                "vehicle_parameter_hash"
+            ),
+            "initial_state_hash": input_audit.get("initial_state_hash"),
             "fleet_available": dict(input_audit["fleet_available"]),
             "research_fragment_policy": dict(input_audit["research_fragment_policy"]),
             "charger_configuration": list(input_audit["charger_configuration"]),
@@ -761,8 +771,15 @@ def _advisor_case_acceptance(case: Mapping[str, Any]) -> dict[str, Any]:
             parameters.get("weather_pv_forecast_applied") is True
             and not parameters.get("weather_pv_forecast_skip_reason")
         ),
-        "formal_fleet_bev35_ice26": parameters.get("fleet")
-        == {"BEV": 35, "ICE": 26},
+        "scenario_fleet_contract_present": all(
+            bool(parameters.get(key))
+            for key in (
+                "scenario_fleet_contract_hash",
+                "active_vehicle_id_hash",
+                "vehicle_parameter_hash",
+                "initial_state_hash",
+            )
+        ),
         "fleet_matches_declared_expectation": parameters.get("fleet")
         == parameters.get("expected_fleet"),
         "minimum_used_bev_policy_satisfied": int(
@@ -919,14 +936,25 @@ def run(args: argparse.Namespace) -> int:
         for item in advisor_acceptance.values()
         if isinstance(item, Mapping)
     )
-    fleet_discrepancy = {
-        "requested_text_ice_count": 26,
-        "recorded_model_input_ice_count": int(cases["sunny"]["fleet_input"]["ICE"]),
-        "matches": int(cases["sunny"]["fleet_input"]["ICE"]) == 26,
-        "handling": (
-            "The formal evidence requires BEV 35 / ICE 26. A different input "
-            "is rejected unless it is run and labelled as a separate sensitivity."
-        ),
+    fleet_contract_audit = {
+        case_key: {
+            "recorded_model_input": dict(case["fleet_input"]),
+            "scenario_fleet_contract_hash": (
+                case["scenario_parameters"].get(
+                    "scenario_fleet_contract_hash"
+                )
+            ),
+            "active_vehicle_id_hash": (
+                case["scenario_parameters"].get("active_vehicle_id_hash")
+            ),
+            "vehicle_parameter_hash": (
+                case["scenario_parameters"].get("vehicle_parameter_hash")
+            ),
+            "initial_state_hash": (
+                case["scenario_parameters"].get("initial_state_hash")
+            ),
+        }
+        for case_key, case in cases.items()
     }
     payload = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -937,7 +965,7 @@ def run(args: argparse.Namespace) -> int:
             "fuel_semantics": "provisional_distance_based",
             "balance_tolerance_kwh": BALANCE_TOLERANCE,
         },
-        "known_input_discrepancy": fleet_discrepancy,
+        "scenario_fleet_contract_audit": fleet_contract_audit,
         "advisor_acceptance": advisor_acceptance,
         "cases": cases,
         "comparison": {

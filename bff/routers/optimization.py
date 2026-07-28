@@ -56,6 +56,7 @@ from bff.services.optimization_run.canonical_graph import (
     canonical_vehicle_initial_soc_kwh as _canonical_vehicle_initial_soc_kwh,
 )
 from bff.services.optimization_run.cost_breakdown import (
+    CANONICAL_LEDGER_COMPONENT_SOURCES,
     canonical_cost_breakdown_json as _canonical_cost_breakdown_json,
     canonical_cost_ledger_json as _canonical_cost_ledger_json,
     cost_breakdown as _cost_breakdown,
@@ -115,6 +116,10 @@ from src.optimization.common.energy_flow_accounting import (
     compute_pv_curtail_kwh,
     compute_pv_utilization_rate,
     normalize_pv_energy_breakdown,
+)
+from src.optimization.common.fleet_contract import (
+    canonical_powertrain,
+    resolve_scenario_fleet_contract,
 )
 from src.optimization.common.time_axis import normalize_timestep_min
 from src.optimization.common.soc_helpers import (
@@ -185,33 +190,14 @@ def _available_inventory_for_selected_depot(
     *,
     depot_id: Optional[str],
 ) -> Dict[str, int]:
-    """Count solver-available BEV/ICE records in the selected scenario depot.
+    """Return scenario-derived counts using the canonical fleet resolver."""
 
-    The canonical problem builder treats ``available`` as authoritative and
-    otherwise falls back to ``enabled``. Keep this pre-solve declaration
-    aligned with that behavior so a formal run validates the inventory the
-    selected scenario actually supplies, rather than a global fleet constant.
-    """
-
-    selected_depot_id = str(depot_id or "").strip()
-    inventory: Counter[str] = Counter()
-    for raw_vehicle in scenario.get("vehicles") or []:
-        if not isinstance(raw_vehicle, dict):
-            continue
-        vehicle_depot_id = str(raw_vehicle.get("depotId") or "").strip()
-        if selected_depot_id and vehicle_depot_id != selected_depot_id:
-            continue
-        raw_available = raw_vehicle.get("available")
-        if raw_available is None:
-            raw_available = raw_vehicle.get("enabled", True)
-        if not bool(raw_available):
-            continue
-        powertrain = str(raw_vehicle.get("type") or "").strip().upper()
-        if powertrain in {"BEV", "EV", "ELECTRIC"}:
-            inventory["BEV"] += 1
-        elif powertrain in {"ICE", "DIESEL", "GASOLINE", "PETROL"}:
-            inventory["ICE"] += 1
-    return dict(sorted(inventory.items()))
+    contract = resolve_scenario_fleet_contract(
+        scenario,
+        selected_depot_ids=(str(depot_id or "").strip(),),
+        research_run=True,
+    )
+    return dict(contract.inventory_by_powertrain)
 
 
 def _apply_interactive_research_contract(
@@ -240,16 +226,31 @@ def _apply_interactive_research_contract(
         solver_config = {}
         scenario_overlay["solver_config"] = solver_config
 
-    expected_inventory = _available_inventory_for_selected_depot(
+    fleet_contract = resolve_scenario_fleet_contract(
         scenario,
-        depot_id=depot_id,
+        selected_depot_ids=(str(depot_id or "").strip(),),
+        research_run=True,
     )
-    if not expected_inventory:
-        raise ValueError(
-            "formal research run requires an available BEV or ICE vehicle in "
-            "the selected scenario depot"
-        )
+    expected_inventory = dict(fleet_contract.inventory_by_powertrain)
     simulation_config["research_vehicle_inventory"] = expected_inventory
+    simulation_config["research_vehicle_ids"] = list(
+        fleet_contract.active_vehicle_ids
+    )
+    simulation_config["research_vehicle_id_hash"] = (
+        fleet_contract.active_vehicle_id_hash
+    )
+    simulation_config["research_vehicle_parameter_hash"] = (
+        fleet_contract.vehicle_parameter_hash
+    )
+    simulation_config["research_vehicle_initial_state_hash"] = (
+        fleet_contract.initial_state_hash
+    )
+    simulation_config["research_fleet_contract_hash"] = (
+        fleet_contract.fleet_contract_hash
+    )
+    simulation_config["scenario_fleet_contract"] = fleet_contract.to_dict(
+        include_source_records=True
+    )
     simulation_config["milp_max_successors_per_trip"] = (
         FORMAL_RESEARCH_MAX_SUCCESSORS_PER_TRIP
     )
@@ -262,6 +263,14 @@ def _apply_interactive_research_contract(
         "expected_available_inventory": expected_inventory,
         "inventory_source": "selected_scenario_depot_available_vehicles",
         "inventory_depot_id": str(depot_id or "").strip() or None,
+        "active_vehicle_ids": list(fleet_contract.active_vehicle_ids),
+        "active_vehicle_id_hash": fleet_contract.active_vehicle_id_hash,
+        "vehicle_parameter_hash": fleet_contract.vehicle_parameter_hash,
+        "initial_state_hash": fleet_contract.initial_state_hash,
+        "fleet_contract_hash": fleet_contract.fleet_contract_hash,
+        "excluded_vehicle_records": [
+            dict(item) for item in fleet_contract.excluded_vehicle_records
+        ],
         "milp_successor_policy": FORMAL_RESEARCH_SUCCESSOR_POLICY,
         "milp_max_successors_per_trip": (
             FORMAL_RESEARCH_MAX_SUCCESSORS_PER_TRIP
@@ -550,7 +559,7 @@ def _request_timestep_min(*values: Any) -> Optional[int]:
                 AppErrorCode.SCHEMA_VALIDATION_ERROR,
                 str(exc),
                 field="timestep_min",
-                allowed=[30, 60],
+                allowed=[5, 15, 30, 60],
             ),
         ) from exc
 
@@ -573,11 +582,63 @@ def _apply_interactive_bev_utilization_policy(
 ) -> Dict[str, Any]:
     """Reuse the formal minimum-BEV-use constraint for an explicit sensitivity."""
 
+    metadata = getattr(problem, "metadata", None)
+    if not isinstance(metadata, dict):
+        raise ValueError(
+            "Canonical problem metadata must be mutable before applying the "
+            "BEV utilization sensitivity."
+        )
+    fleet_contract = dict(metadata.get("scenario_fleet_contract") or {})
+    contract_parameters = list(
+        fleet_contract.get("active_vehicle_parameters") or ()
+    )
+    contract_bev_ids = {
+        str(item.get("vehicle_id") or "").strip()
+        for item in contract_parameters
+        if isinstance(item, dict)
+        and str(item.get("powertrain") or "").strip().upper() == "BEV"
+    }
+    powertrain_by_vehicle_type = {
+        str(getattr(item, "vehicle_type_id", "") or "").strip(): str(
+            getattr(item, "powertrain_type", "") or ""
+        )
+        .strip()
+        .upper()
+        for item in tuple(getattr(problem, "vehicle_types", ()) or ())
+    }
+
+    def _problem_vehicle_powertrain(vehicle: Any) -> str:
+        vehicle_id = str(getattr(vehicle, "vehicle_id", "") or "").strip()
+        if vehicle_id in contract_bev_ids:
+            return "BEV"
+        vehicle_type = str(
+            getattr(vehicle, "vehicle_type", "") or ""
+        ).strip()
+        catalog_powertrain = powertrain_by_vehicle_type.get(vehicle_type)
+        if catalog_powertrain:
+            return catalog_powertrain
+        return canonical_powertrain(
+            {
+                "type": vehicle_type,
+                "battery_capacity_kwh": getattr(
+                    vehicle,
+                    "battery_capacity_kwh",
+                    None,
+                ),
+                "fuel_consumption_l_per_km": getattr(
+                    vehicle,
+                    "fuel_consumption_l_per_km",
+                    None,
+                ),
+            },
+            research_run=False,
+        )
+
     available_bev_ids = sorted(
         str(getattr(vehicle, "vehicle_id", "") or "")
         for vehicle in tuple(getattr(problem, "vehicles", ()) or ())
         if bool(getattr(vehicle, "available", True))
-        and str(getattr(vehicle, "vehicle_type", "") or "").upper() == "BEV"
+        and _problem_vehicle_powertrain(vehicle) == "BEV"
     )
     if require_all_available_bevs and not available_bev_ids:
         raise ValueError(
@@ -587,12 +648,6 @@ def _apply_interactive_bev_utilization_policy(
     minimum_used_bev_count = (
         len(available_bev_ids) if require_all_available_bevs else 0
     )
-    metadata = getattr(problem, "metadata", None)
-    if not isinstance(metadata, dict):
-        raise ValueError(
-            "Canonical problem metadata must be mutable before applying the "
-            "BEV utilization sensitivity."
-        )
     metadata["minimum_used_bev_count"] = minimum_used_bev_count
     metadata["minimum_used_bev_count_policy_case"] = bool(
         require_all_available_bevs
@@ -2395,6 +2450,12 @@ def _persist_rich_run_outputs(
             else result_summary.get("trip_count_unserved")
         ),
         "vehicle_count_used": accounting_summary.get("used_vehicle_count", (optimization_result.get("summary") or {}).get("vehicle_count_used")),
+        "canonical_cost_components_jpy": dict(
+            accounting_summary.get("canonical_cost_components_jpy") or {}
+        ),
+        "canonical_cost_component_status": dict(
+            accounting_summary.get("canonical_cost_component_status") or {}
+        ),
         "same_day_depot_cycles_enabled": (optimization_result.get("summary") or {}).get("same_day_depot_cycles_enabled"),
         "max_depot_cycles_per_vehicle_per_day": (optimization_result.get("summary") or {}).get("max_depot_cycles_per_vehicle_per_day"),
         "vehicle_fragment_counts": (optimization_result.get("summary") or {}).get("vehicle_fragment_counts"),
@@ -3767,6 +3828,13 @@ def _finalized_accounting_summary_for_experiment_report(run_dir: Path) -> Dict[s
             "total_co2_kg": co2.get(
                 "total_co2_kg", canonical.get("total_co2_kg")
             ),
+            "canonical_cost_components_jpy": {
+                str(key): float(value)
+                for key, value in components.items()
+            },
+            "canonical_cost_component_status": dict(
+                ledger.get("component_status") or {}
+            ),
         }
     )
     canonical["experiment_report_accounting_reconciled"] = True
@@ -3920,7 +3988,7 @@ def _assert_final_cost_artifact_consistency(
                 ledger_components["vehicle_usage_cost_jpy"]
             ),
             "experiment_report_json": float(
-                report_results["vehicle_fixed_cost_jpy"]
+                report_results["vehicle_usage_cost_jpy"]
             ),
             "cost_breakdown_detail": float(
                 detail_by_key["vehicle_usage_cost"]
@@ -3941,6 +4009,117 @@ def _assert_final_cost_artifact_consistency(
             "results_xlsx": float(workbook_costs["co2_cost"]),
         },
     }
+    component_status = dict(ledger.get("component_status") or {})
+    pre_failures: Dict[str, Any] = {}
+    if not component_status:
+        pre_failures["canonical_cost_ledger:component_status:missing"] = True
+    else:
+        summary_components = dict(
+            summary.get("canonical_cost_components_jpy") or {}
+        )
+        report_components = dict(
+            report_results.get("canonical_cost_components_jpy") or {}
+        )
+        optimization_components = dict(
+            optimization_result.get("cost_breakdown") or {}
+        )
+
+        def _required_component_value(
+            mapping: Dict[str, Any],
+            key: str,
+            *,
+            artifact: str,
+            metric: str,
+        ) -> float:
+            if key not in mapping or mapping.get(key) is None:
+                pre_failures[f"{metric}:{artifact}:missing"] = key
+                return 0.0
+            try:
+                value = float(mapping[key])
+            except (TypeError, ValueError):
+                pre_failures[f"{metric}:{artifact}:invalid"] = mapping[key]
+                return 0.0
+            if not math.isfinite(value):
+                pre_failures[f"{metric}:{artifact}:nonfinite"] = value
+                return 0.0
+            return value
+
+        for component_key, (default_source_key, _flag_key) in (
+            CANONICAL_LEDGER_COMPONENT_SOURCES.items()
+        ):
+            status = dict(component_status.get(component_key) or {})
+            source_key = str(
+                status.get("source_key") or default_source_key
+            )
+            enabled = status.get("enabled") is True
+            status_label = str(status.get("status") or "")
+            source_present = status.get("source_present") is True
+            ledger_value = _required_component_value(
+                ledger_components,
+                component_key,
+                artifact="canonical_cost_ledger",
+                metric=component_key,
+            )
+            if not enabled:
+                if status_label != "SKIPPED":
+                    pre_failures[
+                        f"{component_key}:component_status"
+                    ] = status_label
+                if not math.isclose(
+                    ledger_value,
+                    0.0,
+                    rel_tol=0.0,
+                    abs_tol=float(tolerance_jpy),
+                ):
+                    pre_failures[
+                        f"{component_key}:disabled_nonzero"
+                    ] = ledger_value
+                continue
+            if not source_present:
+                pre_failures[
+                    f"{component_key}:enabled_source_missing"
+                ] = source_key
+
+            expected_by_metric[component_key] = ledger_value
+            observed_by_metric[component_key] = {
+                "executed_day_accounting": _required_component_value(
+                    executed_breakdown,
+                    source_key,
+                    artifact="executed_day_accounting",
+                    metric=component_key,
+                ),
+                "canonical_cost_ledger": ledger_value,
+                "summary": _required_component_value(
+                    summary_components,
+                    component_key,
+                    artifact="summary",
+                    metric=component_key,
+                ),
+                "experiment_report_json": _required_component_value(
+                    report_components,
+                    component_key,
+                    artifact="experiment_report_json",
+                    metric=component_key,
+                ),
+                "cost_breakdown_detail": _required_component_value(
+                    detail_by_key,
+                    source_key,
+                    artifact="cost_breakdown_detail",
+                    metric=component_key,
+                ),
+                "results_xlsx": _required_component_value(
+                    workbook_costs,
+                    source_key,
+                    artifact="results_xlsx",
+                    metric=component_key,
+                ),
+                "optimization_result": _required_component_value(
+                    optimization_components,
+                    source_key,
+                    artifact="optimization_result",
+                    metric=component_key,
+                ),
+            }
     residuals_by_metric = {
         metric: {
             artifact: value - expected_by_metric[metric]
@@ -3948,7 +4127,7 @@ def _assert_final_cost_artifact_consistency(
         }
         for metric, observations in observed_by_metric.items()
     }
-    failures = {}
+    failures = dict(pre_failures)
     for metric, residuals in residuals_by_metric.items():
         for artifact, residual in residuals.items():
             if not math.isclose(

@@ -62,6 +62,8 @@ _DRIVER_REGULAR_HOURS_PER_DAY = 8.0
 _DRIVER_OVERTIME_FACTOR = 1.25
 
 ROLLING_REMAINING_DAY_FIXED_ASSIGNMENT = "remaining_day_fixed_assignment"
+_FEEDBACK_GLOBAL_DEADLINE_KEY = "_stage2_feedback_global_deadline_monotonic"
+_FEEDBACK_GLOBAL_STARTED_KEY = "_stage2_feedback_global_started_monotonic"
 
 
 def _resolved_stage_time_limit_sec(
@@ -90,6 +92,49 @@ def _resolved_stage_time_limit_sec(
     if stage == 2 and normalize_phase(phase) == "phase1_charging_only":
         return total
     return max(int(max(total, 2) / 2), 1)
+
+
+def _resolve_stage2_feedback_global_budget(
+    problem: CanonicalOptimizationProblem,
+    config: OptimizationConfig,
+    *,
+    now_monotonic: Optional[float] = None,
+) -> Tuple[float, float, float]:
+    """Return one wall-clock budget shared by every Stage 2 feedback retry."""
+
+    now = time.monotonic() if now_monotonic is None else float(now_monotonic)
+    metadata = dict(problem.metadata or {})
+    total_limit_sec = max(
+        float(getattr(config, "time_limit_sec", 0) or 0.0),
+        1.0,
+    )
+    try:
+        started = float(metadata.get(_FEEDBACK_GLOBAL_STARTED_KEY))
+        deadline = float(metadata.get(_FEEDBACK_GLOBAL_DEADLINE_KEY))
+    except (TypeError, ValueError):
+        started = now
+        deadline = now + total_limit_sec
+    if (
+        not math.isfinite(started)
+        or not math.isfinite(deadline)
+        or deadline < started
+    ):
+        started = now
+        deadline = now + total_limit_sec
+    return started, deadline, total_limit_sec
+
+
+def _remaining_stage_budget_sec(
+    *,
+    deadline_monotonic: float,
+    requested_sec: float,
+    now_monotonic: Optional[float] = None,
+) -> float:
+    """Cap one solver invocation by the remaining shared wall-clock budget."""
+
+    now = time.monotonic() if now_monotonic is None else float(now_monotonic)
+    remaining = max(float(deadline_monotonic) - now, 0.0)
+    return min(max(float(requested_sec), 0.0), remaining)
 
 
 def _best_objective_stop_from_certified_lower_bound(
@@ -3987,6 +4032,29 @@ class GurobiMILPAdapter:
         stage2_enabled: bool = True,
         diagnostic_mode: bool = False,
     ) -> Tuple[MILPSolverOutcome, AssignmentPlan]:
+        (
+            feedback_global_started,
+            feedback_global_deadline,
+            feedback_global_limit_sec,
+        ) = _resolve_stage2_feedback_global_budget(problem, config)
+        budget_metadata = dict(problem.metadata or {})
+        budget_metadata.update(
+            {
+                _FEEDBACK_GLOBAL_STARTED_KEY: feedback_global_started,
+                _FEEDBACK_GLOBAL_DEADLINE_KEY: feedback_global_deadline,
+            }
+        )
+        problem = replace(problem, metadata=budget_metadata)
+        if _remaining_stage_budget_sec(
+            deadline_monotonic=feedback_global_deadline,
+            requested_sec=feedback_global_limit_sec,
+        ) <= 0.0:
+            return self._empty_unserved_outcome(
+                problem,
+                config,
+                reason="stage2_feedback_global_deadline_exhausted",
+                status="TIME_LIMIT",
+            )
         if not is_gurobi_available():
             status = "NO_VALID_INCUMBENT" if bool(getattr(config, "research_run", False)) else "gurobi_unavailable"
             return (
@@ -4043,10 +4111,13 @@ class GurobiMILPAdapter:
 
         gp, GRB = ensure_gurobi()
         total_started = time.perf_counter()
-        stage_time_limit = _resolved_stage_time_limit_sec(config, stage=1)
+        stage_time_limit = _remaining_stage_budget_sec(
+            deadline_monotonic=feedback_global_deadline,
+            requested_sec=_resolved_stage_time_limit_sec(config, stage=1),
+        )
         stage1 = gp.Model("thesis_stage1_vehicle_scheduling")
         stage1.Params.OutputFlag = 0
-        stage1.Params.TimeLimit = stage_time_limit
+        stage1.Params.TimeLimit = max(stage_time_limit, 0.001)
         stage1.Params.MIPGap = max(float(config.mip_gap), 0.0)
         stage1.Params.Seed = int(config.random_seed)
         stage1_feasibility_tol = _configured_gurobi_feasibility_tol(
@@ -4412,13 +4483,13 @@ class GurobiMILPAdapter:
             )
         )
         # The all-day energy envelope above deliberately ignores time order.
-        # Add a second, still optimistic relaxation that carries SOC across
-        # slots.  It lets a vehicle charge at full power in every non-trip
-        # slot regardless of its physical location, charger-port contention,
-        # grid capacity, PV, BESS, and deadhead.  Those omissions make it a
-        # necessary condition for Stage 2 rather than a duplicate of Stage 2,
-        # while preventing Stage 1 from assigning an early sequence that
-        # depletes a low-SOC BEV before its first possible recharge.
+        # Add a cumulative, location-supported relaxation that carries SOC
+        # across slots and shares physical charger/port/power upper bounds.
+        # Charger assignment stays continuous and site supply remains
+        # optimistic (grid + PV + BESS), so this is still a necessary
+        # condition rather than a duplicate of Stage 2's binary energy
+        # dispatch. It prevents Stage 1 from assigning an early sequence that
+        # depletes a low-SOC BEV before its first reachable recharge.
         stage1_time_indexed_soc_relaxation_enabled = bool(
             problem.metadata.get("stage1_time_indexed_soc_relaxation_enabled", True)
         )
@@ -5165,6 +5236,18 @@ class GurobiMILPAdapter:
     ) -> Tuple[MILPSolverOutcome, AssignmentPlan]:
         gp, GRB = ensure_gurobi()
         started = time.perf_counter()
+        (
+            feedback_global_started,
+            feedback_global_deadline,
+            feedback_global_limit_sec,
+        ) = _resolve_stage2_feedback_global_budget(problem, config)
+        stage1_effective_time_limit = float(
+            (stage1_plan.metadata or {}).get(
+                "stage1_time_limit_sec_effective",
+                _resolved_stage_time_limit_sec(config, stage=1),
+            )
+            or 0.0
+        )
         component_flags = normalize_cost_component_flags(
             problem.metadata.get("cost_component_flags")
         )
@@ -5230,6 +5313,19 @@ class GurobiMILPAdapter:
                 "stage2_time_limit_sec_effective": _resolved_stage_time_limit_sec(
                     config, stage=2
                 ),
+                "stage2_feedback_global_time_limit_sec": (
+                    feedback_global_limit_sec
+                ),
+                "stage2_feedback_cumulative_wall_time_sec": max(
+                    time.monotonic() - feedback_global_started,
+                    0.0,
+                ),
+                "stage2_feedback_remaining_budget_sec": (
+                    _remaining_stage_budget_sec(
+                        deadline_monotonic=feedback_global_deadline,
+                        requested_sec=feedback_global_limit_sec,
+                    )
+                ),
                 "rolling_horizon_policy": rolling_policy,
                 "rolling_start_slot_index": (
                     slot_indices[0] if is_remaining_day_reoptimization and slot_indices else None
@@ -5289,7 +5385,11 @@ class GurobiMILPAdapter:
 
         stage2 = gp.Model("thesis_stage2_charging_dispatch")
         stage2.Params.OutputFlag = 0
-        stage2.Params.TimeLimit = _resolved_stage_time_limit_sec(config, stage=2)
+        stage2_time_limit = _remaining_stage_budget_sec(
+            deadline_monotonic=feedback_global_deadline,
+            requested_sec=_resolved_stage_time_limit_sec(config, stage=2),
+        )
+        stage2.Params.TimeLimit = max(stage2_time_limit, 0.001)
         stage2.Params.MIPGap = max(float(config.mip_gap), 0.0)
         stage2.Params.Seed = int(config.random_seed)
         stage2_feasibility_tol = _configured_gurobi_feasibility_tol(
@@ -6037,10 +6137,15 @@ class GurobiMILPAdapter:
                 ),
                 0,
             )
+            remaining_feedback_budget_sec = _remaining_stage_budget_sec(
+                deadline_monotonic=feedback_global_deadline,
+                requested_sec=feedback_global_limit_sec,
+            )
             can_add_proven_infeasible_assignment_cut = bool(
                 stage2.Status == GRB.INFEASIBLE
                 and stage1_status != "phase1_fixed_assignment"
                 and feedback_iteration < feedback_max_iterations
+                and remaining_feedback_budget_sec > 0.0
             )
             if can_add_proven_infeasible_assignment_cut:
                 assignment_pairs_for_cut = tuple(
@@ -6117,6 +6222,17 @@ class GurobiMILPAdapter:
                             "cut_type": (
                                 "full_assignment_no_good_cut"
                             ),
+                            "stage1_runtime_seconds": stage1_runtime_sec,
+                            "stage2_runtime_seconds": float(
+                                time.perf_counter() - started
+                            ),
+                            "remaining_global_budget_seconds": (
+                                remaining_feedback_budget_sec
+                            ),
+                            "cumulative_wall_time_seconds": max(
+                                time.monotonic() - feedback_global_started,
+                                0.0,
+                            ),
                         }
                     )
                     retry_metadata = dict(problem.metadata or {})
@@ -6128,6 +6244,12 @@ class GurobiMILPAdapter:
                             "stage2_feedback_history": feedback_history,
                             "stage2_feedback_iteration": (
                                 feedback_iteration + 1
+                            ),
+                            _FEEDBACK_GLOBAL_STARTED_KEY: (
+                                feedback_global_started
+                            ),
+                            _FEEDBACK_GLOBAL_DEADLINE_KEY: (
+                                feedback_global_deadline
                             ),
                         }
                     )
@@ -6172,10 +6294,21 @@ class GurobiMILPAdapter:
                 "stage1_time_limit_sec_effective": (
                     0
                     if stage1_status == "phase1_fixed_assignment"
-                    else _resolved_stage_time_limit_sec(config, stage=1)
+                    else stage1_effective_time_limit
                 ),
-                "stage2_time_limit_sec_effective": _resolved_stage_time_limit_sec(
-                    config, stage=2
+                "stage2_time_limit_sec_effective": stage2_time_limit,
+                "stage2_feedback_global_time_limit_sec": (
+                    feedback_global_limit_sec
+                ),
+                "stage2_feedback_cumulative_wall_time_sec": max(
+                    time.monotonic() - feedback_global_started,
+                    0.0,
+                ),
+                "stage2_feedback_remaining_budget_sec": (
+                    _remaining_stage_budget_sec(
+                        deadline_monotonic=feedback_global_deadline,
+                        requested_sec=feedback_global_limit_sec,
+                    )
                 ),
                 "rolling_horizon_policy": rolling_policy,
                 "rolling_start_slot_index": (
@@ -6452,10 +6585,21 @@ class GurobiMILPAdapter:
             "stage1_time_limit_sec_effective": (
                 0
                 if stage1_status == "phase1_fixed_assignment"
-                else _resolved_stage_time_limit_sec(config, stage=1)
+                else stage1_effective_time_limit
             ),
-            "stage2_time_limit_sec_effective": _resolved_stage_time_limit_sec(
-                config, stage=2
+            "stage2_time_limit_sec_effective": stage2_time_limit,
+            "stage2_feedback_global_time_limit_sec": (
+                feedback_global_limit_sec
+            ),
+            "stage2_feedback_cumulative_wall_time_sec": max(
+                time.monotonic() - feedback_global_started,
+                0.0,
+            ),
+            "stage2_feedback_remaining_budget_sec": (
+                _remaining_stage_budget_sec(
+                    deadline_monotonic=feedback_global_deadline,
+                    requested_sec=feedback_global_limit_sec,
+                )
             ),
             "rolling_horizon_policy": rolling_policy,
             "rolling_start_slot_index": (

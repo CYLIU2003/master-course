@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping
 
@@ -304,6 +305,7 @@ class FeasibilityChecker:
     def _metric_errors(self, metrics: Mapping[str, Any]) -> List[str]:
         checks = {
             "unassigned_trip_count": "unassigned trips remain",
+            "duplicate_trip_count": "duplicate trip assignments remain",
             "vehicle_time_overlap_count": "vehicle time overlaps remain",
             "infeasible_transition_count": "infeasible vehicle transitions remain",
             "ev_soc_violation_count": "EV SOC bound/readiness violations remain",
@@ -313,10 +315,45 @@ class FeasibilityChecker:
         }
         errors: List[str] = []
         for key, label in checks.items():
-            if int(metrics.get(key, 0) or 0) > 0:
-                errors.append(f"[VALIDATION] {label}: {int(metrics.get(key, 0) or 0)}")
-        deviation = float(metrics.get("bess_terminal_soc_deviation_kwh", 0.0) or 0.0)
-        tolerance = float(metrics.get("bess_terminal_soc_tolerance_kwh", 0.0) or 0.0)
+            if key not in metrics:
+                errors.append(f"[VALIDATION] missing required metric: {key}")
+                continue
+            raw_value = metrics[key]
+            if isinstance(raw_value, bool) or not isinstance(raw_value, (int, float)):
+                errors.append(f"[VALIDATION] invalid required metric type: {key}")
+                continue
+            value = float(raw_value)
+            if not math.isfinite(value) or value < 0.0 or not value.is_integer():
+                errors.append(f"[VALIDATION] invalid required metric value: {key}={raw_value!r}")
+                continue
+            if int(value) != 0:
+                errors.append(f"[VALIDATION] {label}: {int(value)}")
+        terminal_keys = (
+            "bess_terminal_soc_deviation_kwh",
+            "bess_terminal_soc_tolerance_kwh",
+        )
+        invalid_terminal = False
+        terminal_values: Dict[str, float] = {}
+        for key in terminal_keys:
+            if key not in metrics:
+                errors.append(f"[VALIDATION] missing required metric: {key}")
+                invalid_terminal = True
+                continue
+            raw_value = metrics[key]
+            if isinstance(raw_value, bool) or not isinstance(raw_value, (int, float)):
+                errors.append(f"[VALIDATION] invalid required metric type: {key}")
+                invalid_terminal = True
+                continue
+            value = float(raw_value)
+            if not math.isfinite(value) or value < 0.0:
+                errors.append(f"[VALIDATION] invalid required metric value: {key}={raw_value!r}")
+                invalid_terminal = True
+                continue
+            terminal_values[key] = value
+        if invalid_terminal:
+            return errors
+        deviation = terminal_values["bess_terminal_soc_deviation_kwh"]
+        tolerance = terminal_values["bess_terminal_soc_tolerance_kwh"]
         if deviation > tolerance + 1.0e-9:
             errors.append(
                 f"[VALIDATION] BESS terminal SOC deviation {deviation:.6f} kWh exceeds tolerance {tolerance:.6f} kWh"
@@ -324,20 +361,7 @@ class FeasibilityChecker:
         return errors
 
     def _metrics_are_clean(self, metrics: Mapping[str, Any]) -> bool:
-        required_zero_keys = (
-            "unassigned_trip_count",
-            "vehicle_time_overlap_count",
-            "infeasible_transition_count",
-            "ev_soc_violation_count",
-            "bess_soc_violation_count",
-            "contract_power_violation_count",
-            "charger_concurrency_violation_count",
-        )
-        if any(int(metrics.get(key, 0) or 0) != 0 for key in required_zero_keys):
-            return False
-        deviation = float(metrics.get("bess_terminal_soc_deviation_kwh", 0.0) or 0.0)
-        tolerance = float(metrics.get("bess_terminal_soc_tolerance_kwh", 0.0) or 0.0)
-        return deviation <= tolerance + 1.0e-9
+        return not self._metric_errors(metrics)
 
     def _count_vehicle_time_overlaps(
         self,

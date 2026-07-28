@@ -74,6 +74,21 @@ def test_problem_builder_uses_configured_timestep_30() -> None:
     assert problem.depot_energy_assets["dep-1"].pv_generation_kwh_by_slot == (17.5, 35.0)
 
 
+def test_problem_builder_normalizes_ev_alias_to_canonical_powertrain() -> None:
+    scenario = _scenario(15)
+    scenario["vehicles"][0]["type"] = "EV"
+
+    problem = ProblemBuilder().build_from_scenario(
+        scenario,
+        depot_id="dep-1",
+        service_id="WEEKDAY",
+    )
+
+    assert problem.vehicles[0].vehicle_type == "BEV"
+    assert problem.vehicle_types[0].vehicle_type_id == "BEV"
+    assert problem.vehicle_types[0].powertrain_type == "BEV"
+
+
 def test_problem_builder_preserves_explicit_zero_turnaround() -> None:
     scenario = _scenario(60)
     scenario["simulation_config"]["default_turnaround_min"] = 0

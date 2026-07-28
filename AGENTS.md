@@ -44,9 +44,14 @@ priority over convenience or attractive output.
 
 - Formal frontend runs require a clean worktree, a non-empty Git SHA, and the
   same SHA/dirty state before and after the solve.
-- The prepared available fleet must contain exactly 35 BEVs and 26 ICE buses,
-  with unique non-empty vehicle IDs, known vehicle types, and no unavailable
-  records in the selected formal inventory.
+- Formal runs must use the exact active vehicle set derived from the
+  materialized prepared scenario and the explicitly selected depot/dispatch
+  scope. No global BEV/ICE count is hard-coded. Counts are derived from that
+  exact set; vehicle IDs, initial state, parameters, availability exclusions,
+  and the fleet-contract hash must be preserved and checked.
+- Persisted unavailable/disabled/maintenance vehicles may exist, but they must
+  be excluded with a recorded reason. A vehicle that was active at Prepare
+  time must not silently disappear or change before execution.
 - Formal Phase 3 runs use the complete feasible successor network. Pruned
   8/16/32-successor cases are explicitly heuristic sensitivity cases.
 - Fallback and post-solve repair are forbidden.

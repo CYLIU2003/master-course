@@ -44,6 +44,9 @@ from src.optimization.common.input_fingerprints import (
     canonical_trip_input_hash,
     canonical_vehicle_input_hash,
 )
+from src.optimization.common.fleet_contract import (
+    resolve_scenario_fleet_contract,
+)
 from src.optimization.common.bev_terminal_policy import (
     BevTerminalSocPolicy,
     normalize_bev_terminal_soc_policy,
@@ -349,6 +352,21 @@ def _apply_bev_availability_sensitivity(
     return audit
 
 
+def _validate_fleet_mutation_scope(
+    *,
+    available_bev_count: int | None,
+    day_ahead_only_exploratory: bool,
+) -> None:
+    """Prevent a formal run from selecting vehicles outside Prepare."""
+
+    if available_bev_count is not None and not day_ahead_only_exploratory:
+        raise ValueError(
+            "--available-bev-count mutates the prepared active fleet and is "
+            "allowed only with --day-ahead-only-exploratory; formal runs use "
+            "the exact prepared scenario fleet contract"
+        )
+
+
 def _configure_research_discretization(
     scenario: dict[str, Any],
     *,
@@ -356,8 +374,8 @@ def _configure_research_discretization(
 ) -> dict[str, int | bool]:
     """Apply the formal weather-comparison resolution without persisting it."""
 
-    if int(timestep_min) != 15:
-        raise ValueError("Formal frontend weather comparison requires 15-minute slots")
+    if int(timestep_min) not in {5, 15, 30, 60}:
+        raise ValueError("research timestep must be one of 5, 15, 30, or 60 minutes")
     simulation_config = dict(scenario.get("simulation_config") or {})
     simulation_config["timestep_min"] = int(timestep_min)
     simulation_config["time_step_min"] = int(timestep_min)
@@ -873,6 +891,7 @@ def _write_research_manifest(
     artifact_names = (
         "effective_scenario.json",
         "effective_pv_profiles.json",
+        "scenario_fleet_contract.json",
         "input_audit.json",
         "solver_result.json",
         "summary.json",
@@ -1093,13 +1112,18 @@ def _validate_frontend_case(
     scenario: dict[str, Any],
     *,
     expected_service_date: str,
-    expected_bev_count: int,
-    expected_ice_count: int,
+    assert_bev_count: int | None,
+    assert_ice_count: int | None,
+    assert_trip_count: int | None,
+    assert_timestep_min: int | None,
+    assert_price_slot_count: int | None,
     service_id: str,
     allow_fixed_weekday_timetable_pv_counterfactual: bool,
 ) -> None:
-    if len(problem.trips) != 264:
-        raise ValueError(f"Expected the 264-trip research scope, got {len(problem.trips)}")
+    if assert_trip_count is not None and len(problem.trips) != int(assert_trip_count):
+        raise ValueError(
+            f"Expected asserted trip count {int(assert_trip_count)}, got {len(problem.trips)}"
+        )
     service_date = str(problem.metadata.get("service_date") or "")[:10]
     if service_date != expected_service_date:
         raise ValueError(
@@ -1128,27 +1152,35 @@ def _validate_frontend_case(
             "Only the explicitly declared weekday-timetable-on-Sunday PV-only "
             "counterfactual may waive this gate."
         )
-    fleet = {
-        vehicle_type: sum(
-            1
-            for vehicle in problem.vehicles
-            if str(vehicle.vehicle_type).upper() == vehicle_type
-        )
-        for vehicle_type in ("BEV", "ICE")
-    }
-    expected_fleet = {
-        "BEV": int(expected_bev_count),
-        "ICE": int(expected_ice_count),
-    }
-    if fleet != expected_fleet:
+    fleet_validation = dict(problem.metadata.get("research_fleet_validation") or {})
+    fleet = dict(fleet_validation.get("available_inventory") or {})
+    if assert_bev_count is not None and int(fleet.get("BEV", 0)) != int(
+        assert_bev_count
+    ):
         raise ValueError(
-            f"Expected formal fleet {expected_fleet}, got {fleet}. "
-            "Do not invent the missing vehicle: correct the persisted scenario "
-            "or explicitly declare a legacy sensitivity with the CLI flags."
+            f"assert_bev_count={int(assert_bev_count)} does not match "
+            f"scenario-derived BEV count {int(fleet.get('BEV', 0))}"
         )
-    if int(problem.scenario.timestep_min) != 15 or len(problem.price_slots) != 96:
+    if assert_ice_count is not None and int(fleet.get("ICE", 0)) != int(
+        assert_ice_count
+    ):
         raise ValueError(
-            "Formal frontend weather comparison requires 15-minute, 96-slot input"
+            f"assert_ice_count={int(assert_ice_count)} does not match "
+            f"scenario-derived ICE count {int(fleet.get('ICE', 0))}"
+        )
+    if assert_timestep_min is not None and int(problem.scenario.timestep_min) != int(
+        assert_timestep_min
+    ):
+        raise ValueError(
+            f"assert_timestep_min={int(assert_timestep_min)} does not match "
+            f"effective timestep {int(problem.scenario.timestep_min)}"
+        )
+    if assert_price_slot_count is not None and len(problem.price_slots) != int(
+        assert_price_slot_count
+    ):
+        raise ValueError(
+            f"assert_price_slot_count={int(assert_price_slot_count)} does not match "
+            f"effective price slots {len(problem.price_slots)}"
         )
     if problem.metadata.get("milp_max_successors_per_trip") not in (None, 0, ""):
         raise ValueError("Formal frontend weather comparison forbids successor pruning")
@@ -1232,6 +1264,16 @@ def _calendar_audit(
 
 
 def run(args: argparse.Namespace) -> int:
+    day_ahead_only_exploratory = bool(
+        getattr(args, "day_ahead_only_exploratory", False)
+    )
+    # Formal execution is day-ahead plus the complete rolling chain. The only
+    # supported opt-out is explicitly diagnostic and cannot complete a release.
+    args.run_hourly_rolling = not day_ahead_only_exploratory
+    _validate_fleet_mutation_scope(
+        available_bev_count=getattr(args, "available_bev_count", None),
+        day_ahead_only_exploratory=day_ahead_only_exploratory,
+    )
     gurobi_threads = getattr(args, "gurobi_threads", None)
     stage1_best_obj_stop_enabled = bool(
         getattr(args, "stage1_best_obj_stop_enabled", True)
@@ -1349,14 +1391,32 @@ def run(args: argparse.Namespace) -> int:
         )["vehicle_usage_cost_jpy_per_used_bus"] = float(
             vehicle_usage_cost_override
         )
-    # Bind the CLI's declared formal fleet to the canonical problem before
-    # construction.  The builder/engine can then fail closed on a missing bus
-    # instead of leaving the 35 BEV + 26 ICE requirement only in a post-hoc
-    # script assertion.
-    simulation_config["research_vehicle_inventory"] = {
-        "BEV": int(args.expected_bev_count),
-        "ICE": int(args.expected_ice_count),
-    }
+    fleet_contract = resolve_scenario_fleet_contract(
+        scenario,
+        selected_depot_ids=(str(args.depot_id),),
+        research_run=True,
+    )
+    simulation_config["research_vehicle_inventory"] = dict(
+        fleet_contract.inventory_by_powertrain
+    )
+    simulation_config["research_vehicle_ids"] = list(
+        fleet_contract.active_vehicle_ids
+    )
+    simulation_config["research_vehicle_id_hash"] = (
+        fleet_contract.active_vehicle_id_hash
+    )
+    simulation_config["research_vehicle_parameter_hash"] = (
+        fleet_contract.vehicle_parameter_hash
+    )
+    simulation_config["research_vehicle_initial_state_hash"] = (
+        fleet_contract.initial_state_hash
+    )
+    simulation_config["research_fleet_contract_hash"] = (
+        fleet_contract.fleet_contract_hash
+    )
+    simulation_config["scenario_fleet_contract"] = fleet_contract.to_dict(
+        include_source_records=True
+    )
     scenario["simulation_config"] = simulation_config
     fragment_policy = enforce_research_phase3_single_continuous_duty(scenario)
     initial_soc_policy = _resolve_initial_soc_policy(scenario)
@@ -1409,6 +1469,11 @@ def run(args: argparse.Namespace) -> int:
                 if key != "enabled"
             },
         )
+    minimum_used_bev_count = int(args.minimum_used_bev_count)
+    if bool(getattr(args, "require_all_available_bevs", False)):
+        minimum_used_bev_count = int(
+            fleet_contract.inventory_by_powertrain.get("BEV", 0)
+        )
     problem = replace(
         problem,
         metadata={
@@ -1416,32 +1481,37 @@ def run(args: argparse.Namespace) -> int:
             "bev_terminal_soc_equality_tolerance_kwh": float(
                 args.bev_terminal_soc_equality_tolerance_kwh
             ),
-            "minimum_used_bev_count": int(args.minimum_used_bev_count),
+            "minimum_used_bev_count": minimum_used_bev_count,
             "minimum_used_bev_count_policy_case": (
-                int(args.minimum_used_bev_count) > 0
+                minimum_used_bev_count > 0
+            ),
+            "require_all_available_bevs": bool(
+                getattr(args, "require_all_available_bevs", False)
             ),
         },
     )
-    if int(args.minimum_used_bev_count) < 0:
+    if minimum_used_bev_count < 0:
         raise ValueError("minimum_used_bev_count must be nonnegative")
     initial_soc_metadata = initial_soc_input_metadata(
         problem,
         policy=initial_soc_policy,
     )
-    if len(initial_soc_metadata["initial_soc_by_vehicle"]) != int(
-        args.expected_bev_count
-    ):
+    active_bev_count = int(fleet_contract.inventory_by_powertrain.get("BEV", 0))
+    if len(initial_soc_metadata["initial_soc_by_vehicle"]) != active_bev_count:
         raise ValueError(
             "Frontend weather comparison requires exact initial SOC inputs for "
-            f"{int(args.expected_bev_count)} BEVs"
+            f"the scenario-derived {active_bev_count} BEVs"
         )
     trip_distance_audit = _trip_distance_audit(problem, prepared_payload)
     _validate_frontend_case(
         problem,
         scenario,
         expected_service_date=args.expected_service_date,
-        expected_bev_count=args.expected_bev_count,
-        expected_ice_count=args.expected_ice_count,
+        assert_bev_count=getattr(args, "assert_bev_count", None),
+        assert_ice_count=getattr(args, "assert_ice_count", None),
+        assert_trip_count=getattr(args, "assert_trip_count", None),
+        assert_timestep_min=getattr(args, "assert_timestep_min", None),
+        assert_price_slot_count=getattr(args, "assert_price_slot_count", None),
         service_id=args.service_id,
         allow_fixed_weekday_timetable_pv_counterfactual=fixed_weekday_waiver_requested,
     )
@@ -1476,10 +1546,7 @@ def run(args: argparse.Namespace) -> int:
         ),
     }
     prepared_input_sha256 = _sha256(prepared_path)
-    expected_fleet = {
-        "BEV": int(args.expected_bev_count),
-        "ICE": int(args.expected_ice_count),
-    }
+    expected_fleet = dict(fleet_contract.inventory_by_powertrain)
     weather_decision_policy = weather_decision_policy_audit(problem.metadata)
     comparison_control_hash = _comparison_control_hash(
         scenario_id=args.scenario_id,
@@ -1562,7 +1629,7 @@ def run(args: argparse.Namespace) -> int:
             "weather_comparison_contract": weather_comparison_contract,
             "research_fragment_policy": fragment_policy,
             "bev_availability_sensitivity": bev_availability_sensitivity,
-            "minimum_used_bev_count": int(args.minimum_used_bev_count),
+            "minimum_used_bev_count": minimum_used_bev_count,
             "vehicle_usage_cost_jpy_per_used_bus": float(
                 problem.metadata.get("vehicle_usage_cost_jpy_per_used_bus", 0.0)
                 or 0.0
@@ -1644,21 +1711,17 @@ def run(args: argparse.Namespace) -> int:
             "weather_pv_forecast_skip_reason"
         ),
         "trip_count": len(problem.trips),
-        "fleet": {
-            "BEV": sum(1 for item in problem.vehicles if str(item.vehicle_type).upper() == "BEV"),
-            "ICE": sum(1 for item in problem.vehicles if str(item.vehicle_type).upper() == "ICE"),
-        },
-        "fleet_available": {
-            vehicle_type: sum(
-                1
-                for item in problem.vehicles
-                if str(item.vehicle_type).upper() == vehicle_type
-                and bool(item.available)
-            )
-            for vehicle_type in ("BEV", "ICE")
-        },
+        "fleet": dict(expected_fleet),
+        "fleet_available": dict(expected_fleet),
+        "scenario_fleet_contract": fleet_contract.to_dict(
+            include_source_records=True
+        ),
+        "scenario_fleet_contract_hash": fleet_contract.fleet_contract_hash,
+        "active_vehicle_id_hash": fleet_contract.active_vehicle_id_hash,
+        "vehicle_parameter_hash": fleet_contract.vehicle_parameter_hash,
+        "initial_state_hash": fleet_contract.initial_state_hash,
         "bev_availability_sensitivity": bev_availability_sensitivity,
-        "minimum_used_bev_count": int(args.minimum_used_bev_count),
+        "minimum_used_bev_count": minimum_used_bev_count,
         "timestep_min": int(problem.scenario.timestep_min),
         "price_slot_count": len(problem.price_slots),
         "planning_horizon_hours": float(problem.scenario.planning_horizon_hours),
@@ -1749,6 +1812,10 @@ def run(args: argparse.Namespace) -> int:
     }
     _write_json(output_dir / "effective_scenario.json", scenario)
     _write_json(output_dir / "input_audit.json", input_audit)
+    _write_json(
+        output_dir / "scenario_fleet_contract.json",
+        fleet_contract.to_dict(include_source_records=True),
+    )
     if args.build_only:
         _write_research_manifest(
             output_dir,
@@ -2206,6 +2273,16 @@ def run(args: argparse.Namespace) -> int:
         "costs_jpy": costs,
         "warnings": list(result.warnings or ()),
         "infeasibility_reasons": list(result.infeasibility_reasons or ()),
+        "day_ahead_only_exploratory": day_ahead_only_exploratory,
+        "research_submission_ready": False,
+        "teacher_release_status": "BLOCKED",
+        "rolling_execution": {
+            "status": (
+                "not_executed_exploratory"
+                if day_ahead_only_exploratory
+                else "pending_full_chain"
+            )
+        },
     }
     print("[5/5] Writing reproducibility artifacts", flush=True)
     _write_json(output_dir / "solver_result.json", ResultSerializer.serialize_result(result))
@@ -2226,7 +2303,7 @@ def run(args: argparse.Namespace) -> int:
             day_ahead_output_dir=output_dir,
             rolling_exit_code=2,
         )
-        return 0
+        return 3
     try:
         _validate_day_ahead_rolling_start_contract(output_dir)
     except ValueError:
@@ -2372,12 +2449,12 @@ def _invoke_hourly_rolling_after_day_ahead(
     args: argparse.Namespace,
     day_ahead_output_dir: Path,
 ) -> int:
-    """Launch the rolling chain in-process after a feasible day-ahead run.
+    """Launch the mandatory formal rolling chain after a feasible day-ahead run.
 
-    This is the explicit opt-in path enabled by ``--run-hourly-rolling``. It
-    never shells out to the CLI; it builds a :class:`RollingChainRequest` and
-    calls :func:`run_rolling_chain` directly so the chain inherits the same
-    process provenance as the day-ahead solve.
+    The formal profile enables this path by default. Only
+    ``--day-ahead-only-exploratory`` may disable it, and that path is blocked
+    from research submission. The chain runs in-process so it inherits the
+    same source provenance as the day-ahead solve.
     """
 
     from scripts.run_hourly_charging_reoptimization import (
@@ -2386,7 +2463,10 @@ def _invoke_hourly_rolling_after_day_ahead(
     )
 
     if not bool(getattr(args, "run_hourly_rolling", False)):
-        raise ValueError("Hourly rolling is opt-in and requires --run-hourly-rolling")
+        raise ValueError(
+            "Formal execution requires hourly rolling; use only "
+            "--day-ahead-only-exploratory to produce a blocked diagnostic run"
+        )
     rolling_current_time = getattr(args, "rolling_current_time", None) or None
     rolling_end_time = getattr(args, "rolling_end_time", None) or None
     execution_minutes = int(getattr(args, "rolling_execution_minutes", 60) or 60)
@@ -2425,19 +2505,30 @@ def main() -> int:
     parser.add_argument("--scenario-id", required=True)
     parser.add_argument("--prepared-input-id", required=True)
     parser.add_argument("--expected-service-date", required=True)
-    parser.add_argument("--expected-bev-count", type=int, default=35)
     parser.add_argument(
-        "--expected-ice-count",
+        "--assert-bev-count",
         type=int,
-        default=26,
+        default=None,
         help=(
-            "Formal supervisor-agreed ICE inventory. Use 25 only for an "
-            "explicitly labelled legacy sensitivity."
+            "Optional assertion against the scenario-derived active BEV count. "
+            "This never defines or changes the fleet."
         ),
     )
+    parser.add_argument(
+        "--assert-ice-count",
+        type=int,
+        default=None,
+        help=(
+            "Optional assertion against the scenario-derived active ICE count. "
+            "This never defines or changes the fleet."
+        ),
+    )
+    parser.add_argument("--assert-trip-count", type=int, default=None)
+    parser.add_argument("--assert-timestep-min", type=int, default=None)
+    parser.add_argument("--assert-price-slot-count", type=int, default=None)
     parser.add_argument("--output-dir", required=True)
-    parser.add_argument("--depot-id", default="tsurumaki")
-    parser.add_argument("--service-id", default="WEEKDAY")
+    parser.add_argument("--depot-id", required=True)
+    parser.add_argument("--service-id", required=True)
     parser.add_argument(
         "--comparison-design",
         choices=("same_service_date_pv_counterfactual",),
@@ -2560,9 +2651,13 @@ def main() -> int:
     parser.add_argument(
         "--time-step-min",
         type=int,
-        choices=(15,),
+        choices=(5, 15, 30, 60),
         default=15,
-        help="Formal weather comparison is fixed to 15-minute slots.",
+        help=(
+            "Canonical research discretization. Current formal experiment "
+            "specs should assert 15 minutes; other values are explicit "
+            "diagnostic/sensitivity settings."
+        ),
     )
     parser.add_argument(
         "--bev-terminal-soc-policy",
@@ -2587,9 +2682,9 @@ def main() -> int:
         type=int,
         default=None,
         help=(
-            "Optional in-memory BEV readiness sensitivity. Keeps the N BEVs "
-            "with highest persisted initial SOC available; never modifies the "
-            "persisted scenario."
+            "Exploratory-only in-memory BEV readiness sensitivity. It requires "
+            "--day-ahead-only-exploratory because a formal run may not select "
+            "a subset outside the prepared fleet contract."
         ),
     )
     parser.add_argument(
@@ -2598,8 +2693,17 @@ def main() -> int:
         default=0,
         help=(
             "Explicit policy-sensitivity lower bound on BEVs assigned at least "
-            "one trip. The formal cost-minimizing baseline is 0; use 35 only "
-            "for the separately labelled all-BEV-use policy case."
+            "one trip. The formal cost-minimizing baseline is 0; never derive "
+            "this value from a global fleet constant."
+        ),
+    )
+    parser.add_argument(
+        "--require-all-available-bevs",
+        action="store_true",
+        default=False,
+        help=(
+            "Policy sensitivity: set the minimum used BEV count to the exact "
+            "active BEV count in the scenario fleet contract."
         ),
     )
     parser.add_argument(
@@ -2624,13 +2728,13 @@ def main() -> int:
         ),
     )
     parser.add_argument(
-        "--run-hourly-rolling",
+        "--day-ahead-only-exploratory",
         action="store_true",
         default=False,
         help=(
-            "After a feasible day-ahead run, launch the full hourly rolling "
-            "chain in-process. Rolling is opt-in and only starts when the "
-            "day-ahead result is feasible and accepted; it is never implicit."
+            "Explicitly stop after day-ahead for diagnostics. This mode writes "
+            "teacher_release_status=BLOCKED and returns a non-completion exit "
+            "code; formal runs execute the full rolling chain by default."
         ),
     )
     parser.add_argument(

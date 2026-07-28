@@ -207,7 +207,9 @@ def test_experiment_report_uses_finalized_accounting_components() -> None:
     assert payload["total_cost_jpy"] == 715_823.25
     assert payload["electricity_cost_jpy"] == 10_015.66
     assert payload["demand_charge_jpy"] == 1_151.23
-    assert payload["vehicle_fixed_cost_jpy"] == 640_000.0
+    assert payload["vehicle_usage_cost_jpy"] == 640_000.0
+    assert payload["vehicle_fixed_cost_jpy"] == 0.0
+    assert payload["vehicle_acquisition_cost_jpy"] == 0.0
     assert payload["co2_cost_jpy"] == 1_364.52
     assert payload["cost_breakdown"]["total_cost"] == 715_823.25
 

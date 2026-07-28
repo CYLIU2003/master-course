@@ -231,3 +231,11 @@ python scripts\audit_phase3_weather_energy_balance.py `
 - 全ケースの入力hash、Gurobi version、license path、time limit、gap、seed、fallback/postsolve repair、validation結果
 
 計算を実行していない項目は「実装済み・未実行」と記載し、完了済みの研究結果には数えない。2025-08-10雨天実績を使う別分析では`SUN_HOL`を指定し、2025-08-05平日晴天とのweather-only効果量には含めない。
+# SUPERSEDED — fixed 35/26 inventory contract
+
+This historical procedure is retained only to explain pre-2026-07-28 runs.
+It is not a current execution procedure. Its fixed BEV/ICE counts and
+`--expected-*-count` commands must not be used for a new formal run.
+
+Current procedure:
+[`FORMAL_RUNBOOK_CURRENT.md`](./FORMAL_RUNBOOK_CURRENT.md)

@@ -1634,6 +1634,16 @@ def run_rolling_chain(
             ),
             "trip_input_hash": input_audit.get("trip_input_hash"),
             "vehicle_input_hash": input_audit.get("vehicle_input_hash"),
+            "scenario_fleet_contract_hash": input_audit.get(
+                "scenario_fleet_contract_hash"
+            ),
+            "active_vehicle_id_hash": input_audit.get(
+                "active_vehicle_id_hash"
+            ),
+            "vehicle_parameter_hash": input_audit.get(
+                "vehicle_parameter_hash"
+            ),
+            "initial_state_hash": input_audit.get("initial_state_hash"),
             "charger_configuration_hash": input_audit.get(
                 "charger_configuration_hash"
             ),

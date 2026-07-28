@@ -90,6 +90,10 @@ def test_advisor_acceptance_requires_terminal_energy_and_formal_fleet() -> None:
         "scenario_parameters": {
             "fleet": {"BEV": 35, "ICE": 26},
             "expected_fleet": {"BEV": 35, "ICE": 26},
+            "scenario_fleet_contract_hash": "fleet-contract",
+            "active_vehicle_id_hash": "vehicle-ids",
+            "vehicle_parameter_hash": "vehicle-parameters",
+            "initial_state_hash": "initial-state",
             "trip_count": 264,
             "charger_configuration": [
                 {"power_kw": 90.0, "simultaneous_ports": 5},
@@ -135,6 +139,10 @@ def test_advisor_acceptance_rejects_missing_required_rolling_chain() -> None:
         "scenario_parameters": {
             "fleet": {"BEV": 35, "ICE": 26},
             "expected_fleet": {"BEV": 35, "ICE": 26},
+            "scenario_fleet_contract_hash": "fleet-contract",
+            "active_vehicle_id_hash": "vehicle-ids",
+            "vehicle_parameter_hash": "vehicle-parameters",
+            "initial_state_hash": "initial-state",
             "trip_count": 1,
             "charger_configuration": [
                 {"power_kw": 90.0, "simultaneous_ports": 5},

@@ -1,5 +1,9 @@
 # 2026-07-26 remediation self-review
 
+> **Status: HISTORICAL — superseded by the scenario-derived fleet contract
+> and current blocker register on 2026-07-28.** Fixed 35/26 references below
+> describe an earlier review target and are not current formal-run authority.
+
 ## Code Review Summary
 
 **Reviewer:** Codex self-review (MIT-style lenses)

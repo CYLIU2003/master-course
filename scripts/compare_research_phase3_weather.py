@@ -21,18 +21,12 @@ from typing import Any, Mapping, Sequence
 
 EXPECTED_PHASE = "phase3_two_stage"
 EXPECTED_COST_SCOPE = "feasible_schedule_accounting_not_global_total_cost_optimum"
-EXPECTED_TRIP_COUNT = 264
-EXPECTED_TIMESTEP_MIN = 15
-EXPECTED_PRICE_SLOT_COUNT = 96
 
 # These are experimental controls, not weather inputs.  Any difference means
 # the pair answers different research questions and must not be compared.
 FIXED_CONTROL_FIELDS = (
     "git_sha",
     "git_state_available",
-    "scenario_id",
-    "prepared_input_id",
-    "prepared_input_sha256",
     "service_date",
     "service_id",
     "calendar_service_contract",
@@ -49,6 +43,10 @@ FIXED_CONTROL_FIELDS = (
     "trip_count",
     "fleet",
     "expected_fleet",
+    "scenario_fleet_contract_hash",
+    "active_vehicle_id_hash",
+    "vehicle_parameter_hash",
+    "initial_state_hash",
     "timestep_min",
     "price_slot_count",
     "planning_horizon_hours",
@@ -86,7 +84,15 @@ FIXED_CONTROL_FIELDS = (
     "stage1_time_indexed_soc_relaxation_constraint_count",
     "stage1_time_indexed_soc_relaxation_semantics",
     "stage1_shared_charger_relaxation",
+)
+
+# These fields describe solver outcomes. They are reported, never required to
+# match between scientifically controlled cases.
+OUTCOME_FIELDS = (
     "stage1_feasibility_no_good_cut_count",
+    "stage1_nodes_explored",
+    "stage1_first_incumbent_time_sec",
+    "solve_time_sec",
 )
 
 # Formal pairs hold the operational weather configuration fixed. The sole
@@ -209,6 +215,13 @@ def build_weather_comparison(
         "stage1_energy_cost_proxy_control_audit": energy_proxy_control_audit,
         "allowed_weather_input_differences": weather_differences,
         "run_status": {"sunny": _run_status(sunny), "rain": _run_status(rain)},
+        "solver_outcomes": {
+            field: {
+                "sunny": sunny.get(field),
+                "rain": rain.get(field),
+            }
+            for field in OUTCOME_FIELDS
+        },
         "effects": {
             "flows_kwh_or_kw": _metric_effects(
                 sunny, rain, "flows_kwh_or_kw", FLOW_FIELDS
@@ -555,14 +568,23 @@ def _validate_weather_comparison_contract(
 
 def _validate_accepted_case(case: str, summary: Mapping[str, Any]) -> None:
     _expect(case, "phase", summary.get("phase"), EXPECTED_PHASE)
-    _expect(case, "trip_count", summary.get("trip_count"), EXPECTED_TRIP_COUNT)
-    _expect(case, "timestep_min", summary.get("timestep_min"), EXPECTED_TIMESTEP_MIN)
-    _expect(
-        case,
-        "price_slot_count",
-        summary.get("price_slot_count"),
-        EXPECTED_PRICE_SLOT_COUNT,
+    trip_count = int(_finite_number(summary.get("trip_count"), f"{case}.trip_count"))
+    timestep_min = int(
+        _finite_number(summary.get("timestep_min"), f"{case}.timestep_min")
     )
+    price_slot_count = int(
+        _finite_number(summary.get("price_slot_count"), f"{case}.price_slot_count")
+    )
+    if trip_count <= 0:
+        raise ComparisonContractError(f"{case}.trip_count must be positive")
+    if timestep_min <= 0 or (24 * 60) % timestep_min != 0:
+        raise ComparisonContractError(
+            f"{case}.timestep_min must evenly divide one day"
+        )
+    if price_slot_count <= 0:
+        raise ComparisonContractError(
+            f"{case}.price_slot_count must be positive"
+        )
     fleet = _require_mapping(summary.get("fleet"), f"{case}.fleet")
     expected_fleet = _require_mapping(
         summary.get("expected_fleet"), f"{case}.expected_fleet"

@@ -1,5 +1,10 @@
 # AIエージェント向け修正指示書 — 2026-07-26 実行結果の是正
 
+> **Status: HISTORICAL — superseded on 2026-07-28.**
+> Fixed 35/26 references below describe an earlier result-review contract.
+> Current authority: `docs/model/SCENARIO_FLEET_CONTRACT.md` and
+> `docs/notes/CURRENT_RESEARCH_RELEASE_BLOCKERS.md`.
+
 ## 0. 目的と完了条件
 
 この指示書は、次の二つの出力を研究・教員説明に耐える状態へ是正するための実装指示である。

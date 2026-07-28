@@ -10,8 +10,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+import csv
 import hashlib
 import json
+import math
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -28,6 +30,11 @@ from src.optimization.common.input_fingerprints import (
     canonical_vehicle_input_hash,
 )
 from src.optimization.rolling.acceptance import rolling_chain_acceptance_audit
+from src.optimization.validation.physical_event_schedule import (
+    PHYSICAL_EVENT_VALIDATION_SCHEMA_VERSION,
+    REQUIRED_ZERO_METRICS,
+    validate_physical_event_schedule,
+)
 
 
 DEFAULT_FRONTEND_RUN_PROFILE = "day_ahead_and_hourly_rolling"
@@ -128,24 +135,62 @@ def _load_json_object(path: Path) -> dict[str, Any]:
 
 
 def _zero_hard_validation_counts(metrics: Mapping[str, Any]) -> bool:
-    count_keys = (
-        "unassigned_trip_count",
-        "duplicate_trip_count",
-        "vehicle_time_overlap_count",
-        "infeasible_transition_count",
-        "ev_soc_lower_violation_count",
-        "ev_soc_upper_violation_count",
-        "ev_soc_violation_count",
-        "bess_soc_lower_violation_count",
-        "bess_soc_upper_violation_count",
-        "bess_soc_violation_count",
-        "contract_power_violation_count",
-        "charger_concurrency_violation_count",
+    """Fail closed when a required metric is absent, malformed, or nonzero."""
+
+    for key in REQUIRED_ZERO_METRICS:
+        if key not in metrics:
+            return False
+        value = metrics[key]
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return False
+        if not math.isfinite(float(value)) or int(value) != 0:
+            return False
+    return True
+
+
+def _write_csv(path: Path, rows: list[Mapping[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = sorted({str(key) for row in rows for key in row})
+    with path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _persist_physical_event_artifacts(
+    *,
+    run_dir: Path,
+    event_validation: Mapping[str, Any],
+) -> None:
+    graph_dir = Path(run_dir) / "graph"
+    graph_dir.mkdir(parents=True, exist_ok=True)
+    events = [
+        dict(item) for item in list(event_validation.get("events") or ())
+    ]
+    violations = [
+        dict(item) for item in list(event_validation.get("violations") or ())
+    ]
+    _write_csv(graph_dir / "vehicle_event_timeline.csv", events)
+    _write_csv(
+        graph_dir / "charger_occupancy_timeline.csv",
+        [item for item in events if item.get("event_type") == "charging"],
     )
-    try:
-        return all(int(metrics.get(key, 0) or 0) == 0 for key in count_keys)
-    except (TypeError, ValueError):
-        return False
+    _write_csv(
+        graph_dir / "vehicle_location_timeline.csv",
+        [
+            {
+                "event_id": item.get("event_id"),
+                "vehicle_id": item.get("vehicle_id"),
+                "event_type": item.get("event_type"),
+                "start_min": item.get("start_min"),
+                "end_min": item.get("end_min"),
+                "start_location": item.get("start_location"),
+                "end_location": item.get("end_location"),
+            }
+            for item in events
+        ],
+    )
+    _write_csv(graph_dir / "physical_schedule_violations.csv", violations)
 
 
 def _physical_schedule_validation(
@@ -154,6 +199,7 @@ def _physical_schedule_validation(
     optimization_result: Mapping[str, Any],
     chain: Mapping[str, Any],
     executed_day: Mapping[str, Any],
+    event_validation: Mapping[str, Any],
 ) -> dict[str, Any]:
     """Independently classify physical feasibility, not research acceptance."""
 
@@ -168,11 +214,12 @@ def _physical_schedule_validation(
         or canonical.get("solution_validity")
         or {}
     )
-    validation_metrics = dict(
+    solver_validation_metrics = dict(
         validity.get("validation_metrics")
         or solver_metadata.get("validation_metrics")
         or {}
     )
+    validation_metrics = dict(event_validation.get("metrics") or {})
     trip_count_unserved = int(canonical.get("trip_count_unserved", 0) or 0)
     chain_audit = rolling_chain_acceptance_audit(chain)
     no_fallback_or_repair = not any(
@@ -193,8 +240,15 @@ def _physical_schedule_validation(
         "hard_validation_counts_zero": _zero_hard_validation_counts(
             validation_metrics
         ),
+        "independent_event_schema_current": (
+            event_validation.get("schema_version")
+            == PHYSICAL_EVENT_VALIDATION_SCHEMA_VERSION
+        ),
+        "independent_event_schedule_accepted": (
+            event_validation.get("accepted") is True
+        ),
         "all_required_hard_validation_checks_passed": (
-            validation_metrics.get("all_required_validation_checks_passed")
+            solver_validation_metrics.get("all_required_validation_checks_passed")
             is True
         ),
         "no_fallback_or_postsolve_repair": no_fallback_or_repair,
@@ -219,6 +273,10 @@ def _physical_schedule_validation(
             for key in (
                 "trip_input_hash",
                 "vehicle_input_hash",
+                "scenario_fleet_contract_hash",
+                "active_vehicle_id_hash",
+                "vehicle_parameter_hash",
+                "initial_state_hash",
                 "initial_soc_input_hash",
                 "charger_configuration_hash",
                 "day_ahead_assignment_hash",
@@ -229,12 +287,18 @@ def _physical_schedule_validation(
         name for name, passed in checks.items() if passed is not True
     )
     return {
-        "schema_version": "physical_schedule_validation_v1",
+        "schema_version": "physical_schedule_validation_v2",
         "accepted": not failed_checks,
         "status": "VALID" if not failed_checks else "INVALID",
         "checks": checks,
         "failed_checks": failed_checks,
         "validation_metrics": validation_metrics,
+        "solver_validation_metrics": solver_validation_metrics,
+        "independent_event_validation": {
+            key: value
+            for key, value in event_validation.items()
+            if key not in {"events", "violations"}
+        },
         "evidence": {
             "canonical_solver_result": "canonical_solver_result.json",
             "rolling_chain_summary": (
@@ -245,6 +309,16 @@ def _physical_schedule_validation(
             ),
             "trip_input_hash": chain.get("trip_input_hash"),
             "vehicle_input_hash": chain.get("vehicle_input_hash"),
+            "scenario_fleet_contract_hash": chain.get(
+                "scenario_fleet_contract_hash"
+            ),
+            "active_vehicle_id_hash": chain.get(
+                "active_vehicle_id_hash"
+            ),
+            "vehicle_parameter_hash": chain.get(
+                "vehicle_parameter_hash"
+            ),
+            "initial_state_hash": chain.get("initial_state_hash"),
             "initial_soc_input_hash": chain.get("initial_soc_input_hash"),
             "charger_configuration_hash": chain.get(
                 "charger_configuration_hash"
@@ -252,6 +326,16 @@ def _physical_schedule_validation(
             "assignment_hash": chain.get("day_ahead_assignment_hash"),
             "day_ahead_git_sha": chain.get("day_ahead_git_sha"),
             "rolling_runner_git_sha": chain.get("rolling_runner_git_sha"),
+            "vehicle_event_timeline": "graph/vehicle_event_timeline.csv",
+            "charger_occupancy_timeline": (
+                "graph/charger_occupancy_timeline.csv"
+            ),
+            "vehicle_location_timeline": (
+                "graph/vehicle_location_timeline.csv"
+            ),
+            "physical_schedule_violations": (
+                "graph/physical_schedule_violations.csv"
+            ),
         },
         "semantics": (
             "This artifact proves physical schedule and executed rolling-chain "
@@ -341,6 +425,12 @@ def _comparison_case_manifest(
         "service_id": input_audit.get("service_id"),
         "trip_input_hash": chain.get("trip_input_hash"),
         "vehicle_input_hash": chain.get("vehicle_input_hash"),
+        "scenario_fleet_contract_hash": chain.get(
+            "scenario_fleet_contract_hash"
+        ),
+        "active_vehicle_id_hash": chain.get("active_vehicle_id_hash"),
+        "vehicle_parameter_hash": chain.get("vehicle_parameter_hash"),
+        "initial_state_hash": chain.get("initial_state_hash"),
         "initial_soc_input_hash": chain.get("initial_soc_input_hash"),
         "charger_configuration_hash": chain.get(
             "charger_configuration_hash"
@@ -489,6 +579,7 @@ def _research_manifest(
     artifact_names = (
         "effective_scenario.json",
         "effective_pv_profiles.json",
+        "scenario_fleet_contract.json",
         "input_audit.json",
         "canonical_solver_result.json",
         "summary.json",
@@ -522,6 +613,10 @@ def _research_manifest(
                 "service_id",
                 "timestep_min",
                 "price_slot_count",
+                "scenario_fleet_contract_hash",
+                "active_vehicle_id_hash",
+                "vehicle_parameter_hash",
+                "initial_state_hash",
                 "bev_terminal_soc_policy",
                 "charger_configuration_hash",
                 "depot_energy_assets_fixed_hash",
@@ -581,6 +676,18 @@ def persist_frontend_day_ahead_rolling_contract(
             "Canonical problem is missing bev_terminal_soc_policy; rolling "
             "must not infer the day-ahead terminal SOC meaning"
         )
+    fleet_contract = dict(metadata.get("scenario_fleet_contract") or {})
+    if (
+        fleet_contract.get("schema_version")
+        != "scenario_fleet_contract_v2"
+    ):
+        raise ValueError(
+            "Canonical problem is missing scenario_fleet_contract_v2"
+        )
+    _write_json(
+        run_dir / "scenario_fleet_contract.json",
+        fleet_contract,
+    )
 
     effective_scenario = dict(scenario)
     effective_scenario_path = run_dir / "effective_scenario.json"
@@ -625,6 +732,16 @@ def persist_frontend_day_ahead_rolling_contract(
         "price_slot_count": len(problem.price_slots),
         "trip_input_hash": canonical_trip_input_hash(problem),
         "vehicle_input_hash": canonical_vehicle_input_hash(problem),
+        "scenario_fleet_contract_hash": fleet_contract.get(
+            "fleet_contract_hash"
+        ),
+        "active_vehicle_id_hash": fleet_contract.get(
+            "active_vehicle_id_hash"
+        ),
+        "vehicle_parameter_hash": fleet_contract.get(
+            "vehicle_parameter_hash"
+        ),
+        "initial_state_hash": fleet_contract.get("initial_state_hash"),
         "initial_soc_policy": initial_soc["initial_soc_policy"],
         "initial_soc_source": initial_soc["initial_soc_source"],
         "initial_soc_input_hash": initial_soc["initial_soc_input_hash"],
@@ -712,14 +829,41 @@ def finalize_frontend_rolling_evidence(
             "Cannot finalize accounting from an ineligible executed day"
         )
 
+    executed_result_for_validation = dict(optimization_result)
+    executed_charging_path = (
+        run_dir / "rolling_hourly_chain" / "charging_schedule.csv"
+    )
+    if not executed_charging_path.is_file():
+        raise RollingChainExecutionError(
+            "Executed rolling charging_schedule.csv is missing"
+        )
+    with executed_charging_path.open(
+        "r", encoding="utf-8", newline=""
+    ) as handle:
+        executed_result_for_validation["charging_schedule"] = list(
+            csv.DictReader(handle)
+        )
+    event_validation = validate_physical_event_schedule(
+        problem=problem,
+        serialized_result=executed_result_for_validation,
+    )
+    _persist_physical_event_artifacts(
+        run_dir=run_dir,
+        event_validation=event_validation,
+    )
     physical_validation = _physical_schedule_validation(
         run_dir=run_dir,
         optimization_result=optimization_result,
         chain=chain,
         executed_day=executed_day,
+        event_validation=event_validation,
     )
     _write_json(
         run_dir / PHYSICAL_SCHEDULE_VALIDATION_ARTIFACT,
+        physical_validation,
+    )
+    _write_json(
+        run_dir / "graph" / "physical_schedule_validation.json",
         physical_validation,
     )
     if physical_validation.get("accepted") is not True:
@@ -746,6 +890,9 @@ def finalize_frontend_rolling_evidence(
     )
     executed_breakdown["fuel_cost_final"] = float(
         executed_breakdown.get("fuel_cost", 0.0) or 0.0
+    )
+    executed_breakdown["cost_component_flags"] = dict(
+        problem.metadata.get("cost_component_flags") or {}
     )
     solver_metadata = dict(optimization_result.get("solver_metadata") or {})
     ledger = canonical_cost_ledger_from_breakdown(

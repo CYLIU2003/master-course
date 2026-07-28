@@ -2,7 +2,30 @@ from __future__ import annotations
 
 from typing import Any, Dict, Mapping
 
+from src.optimization.common.cost_components import normalize_cost_component_flags
 from src.optimization.common.energy_flow_accounting import normalize_pv_energy_breakdown
+
+
+CANONICAL_LEDGER_COMPONENT_SOURCES: Dict[str, tuple[str, str]] = {
+    "electricity_cost_jpy": ("electricity_cost", "electricity_cost"),
+    "fuel_cost_jpy": ("fuel_cost", "fuel_cost"),
+    "demand_charge_cost_jpy": ("demand_cost", "demand_charge_cost"),
+    "contract_overage_cost_jpy": (
+        "contract_overage_cost",
+        "contract_overage_penalty",
+    ),
+    "vehicle_fixed_cost_jpy": ("vehicle_cost", "vehicle_fixed_cost"),
+    "vehicle_usage_cost_jpy": ("vehicle_usage_cost", "vehicle_usage_cost"),
+    "driver_cost_jpy": ("driver_cost", "driver_cost"),
+    "unserved_penalty_jpy": ("unserved_penalty", "unserved_penalty"),
+    "switch_cost_jpy": ("switch_cost", "switch_cost"),
+    "battery_degradation_cost_jpy": (
+        "degradation_cost",
+        "battery_degradation_cost",
+    ),
+    "deviation_cost_jpy": ("deviation_cost", "deviation_cost"),
+    "co2_cost_jpy": ("co2_cost", "co2_cost"),
+}
 
 
 def canonical_cost_ledger_from_breakdown(
@@ -25,40 +48,44 @@ def canonical_cost_ledger_from_breakdown(
     """
 
     normalized = dict(breakdown or {})
+    if (
+        "vehicle_usage_cost" not in normalized
+        and "vehicle_usage_cost_jpy" in normalized
+    ):
+        normalized["vehicle_usage_cost"] = normalized[
+            "vehicle_usage_cost_jpy"
+        ]
     components = {
-        "electricity_cost_jpy": float(
-            normalized.get("electricity_cost", 0.0) or 0.0
-        ),
-        "fuel_cost_jpy": float(normalized.get("fuel_cost", 0.0) or 0.0),
-        "demand_charge_cost_jpy": float(
-            normalized.get("demand_cost", 0.0) or 0.0
-        ),
-        "contract_overage_cost_jpy": float(
-            normalized.get("contract_overage_cost", 0.0) or 0.0
-        ),
-        "vehicle_fixed_cost_jpy": float(
-            normalized.get("vehicle_cost", 0.0) or 0.0
-        ),
-        "vehicle_usage_cost_jpy": float(
-            normalized.get(
-                "vehicle_usage_cost",
-                normalized.get("vehicle_usage_cost_jpy", 0.0),
-            )
-            or 0.0
-        ),
-        "driver_cost_jpy": float(normalized.get("driver_cost", 0.0) or 0.0),
-        "unserved_penalty_jpy": float(
-            normalized.get("unserved_penalty", 0.0) or 0.0
-        ),
-        "switch_cost_jpy": float(normalized.get("switch_cost", 0.0) or 0.0),
-        "battery_degradation_cost_jpy": float(
-            normalized.get("degradation_cost", 0.0) or 0.0
-        ),
-        "deviation_cost_jpy": float(
-            normalized.get("deviation_cost", 0.0) or 0.0
-        ),
-        "co2_cost_jpy": float(normalized.get("co2_cost", 0.0) or 0.0),
+        component_key: float(normalized.get(source_key, 0.0) or 0.0)
+        for component_key, (source_key, _flag_key) in (
+            CANONICAL_LEDGER_COMPONENT_SOURCES.items()
+        )
     }
+    explicit_flags = normalized.get("cost_component_flags")
+    normalized_flags = normalize_cost_component_flags(
+        explicit_flags if isinstance(explicit_flags, Mapping) else None
+    )
+    component_status = {
+        component_key: {
+            "enabled": bool(normalized_flags.get(flag_key, True)),
+            "status": (
+                "ENABLED"
+                if bool(normalized_flags.get(flag_key, True))
+                else "SKIPPED"
+            ),
+            "source_key": source_key,
+            "source_present": source_key in normalized,
+            "value_jpy": components[component_key],
+        }
+        for component_key, (source_key, flag_key) in (
+            CANONICAL_LEDGER_COMPONENT_SOURCES.items()
+        )
+    }
+    missing_enabled_sources = sorted(
+        component_key
+        for component_key, status in component_status.items()
+        if status["enabled"] and not status["source_present"]
+    )
     accounting_total = float(sum(components.values()))
     reported_total = float(
         normalized.get("total_cost", accounting_total) or 0.0
@@ -71,11 +98,14 @@ def canonical_cost_ledger_from_breakdown(
         "currency": "JPY",
         "source": str(source),
         "components": components,
+        "component_status": component_status,
         "accounting_total_cost_jpy": accounting_total,
         "reported_total_cost_jpy": reported_total,
         "accounting_residual_jpy": residual,
         "accounting_residual_tolerance_jpy": 1.0e-6,
         "accounting_residual_satisfied": abs(residual) <= 1.0e-6,
+        "missing_enabled_component_sources": missing_enabled_sources,
+        "component_schema_satisfied": not missing_enabled_sources,
         "solver_objective_value": objective_value,
         "solver_objective_unit": objective_unit,
         "solver_objective_value_jpy": (

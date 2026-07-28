@@ -195,18 +195,31 @@ def test_formal_frontend_contract_forces_fleet_and_full_network() -> None:
                 "depotId": "tsurumaki",
                 "type": "BEV",
                 "enabled": True,
+                "initialSoc": 80.0,
+                "batteryKwh": 300.0,
+                "energyConsumption": 1.2,
+                "chargePowerKw": 90.0,
+                "compatibleChargerIds": ["charger-1"],
             },
             {
                 "id": "bev-2",
                 "depotId": "tsurumaki",
                 "type": "EV",
                 "enabled": True,
+                "initialSoc": 70.0,
+                "batteryKwh": 300.0,
+                "energyConsumption": 1.2,
+                "chargePowerKw": 90.0,
+                "compatibleChargerIds": ["charger-1"],
             },
             {
                 "id": "ice-1",
                 "depotId": "tsurumaki",
                 "type": "ICE",
                 "enabled": True,
+                "initialFuelL": 100.0,
+                "fuelTankL": 200.0,
+                "fuelEfficiencyKmPerL": 5.0,
             },
             {
                 "id": "ice-disabled",
@@ -255,9 +268,18 @@ def test_formal_frontend_contract_forces_fleet_and_full_network() -> None:
 
 
 def test_formal_frontend_contract_requires_available_scenario_fleet() -> None:
-    with pytest.raises(ValueError, match="available BEV or ICE vehicle"):
+    with pytest.raises(ValueError, match="active_vehicle_set_is_empty"):
         _apply_interactive_research_contract(
-            {"vehicles": [{"id": "disabled", "type": "ICE", "enabled": False}]},
+            {
+                "vehicles": [
+                    {
+                        "id": "disabled",
+                        "depotId": "tsurumaki",
+                        "type": "ICE",
+                        "enabled": False,
+                    }
+                ]
+            },
             research_run=True,
             depot_id="tsurumaki",
         )

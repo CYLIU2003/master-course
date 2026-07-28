@@ -205,7 +205,7 @@ def test_research_builder_rejects_declared_fleet_inventory_mismatch() -> None:
 
     with pytest.raises(
         ValueError,
-        match=r"ICE:expected_available=26,actual_available=25",
+        match=r"inventory_mismatch",
     ):
         ProblemBuilder().build_from_dispatch(
             context,
@@ -213,13 +213,12 @@ def test_research_builder_rejects_declared_fleet_inventory_mismatch() -> None:
             scenario_metadata={
                 "simulation_config": {
                     "service_date": "2025-08-05",
-                    "research_vehicle_inventory": {
-                        "BEV": 35,
-                        "ICE": 26,
+                        "research_vehicle_inventory": {
+                            "ICE": 2,
                     },
                 },
                 "timetable_rows": [_weekday_row()],
             },
             config=OptimizationConfig(research_run=True),
-            vehicle_counts={"BEV": 35, "ICE": 25},
+            vehicle_counts={"ICE": 1},
         )

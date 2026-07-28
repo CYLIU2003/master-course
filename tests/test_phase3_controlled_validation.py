@@ -52,6 +52,7 @@ from scripts.run_research_phase3_frontend_weather import (
     _configure_research_discretization,
     _git_state,
     _resolve_initial_soc_policy,
+    _validate_fleet_mutation_scope,
     run,
 )
 
@@ -1344,9 +1345,23 @@ def test_frontend_weather_runner_forces_formal_resolution_and_full_network() -> 
     assert audit["successor_pruning_enabled"] is False
 
 
-def test_frontend_weather_runner_rejects_nonformal_resolution() -> None:
-    with pytest.raises(ValueError, match="15-minute"):
-        _configure_research_discretization({}, timestep_min=60)
+def test_frontend_weather_runner_accepts_all_shared_canonical_resolutions() -> None:
+    for timestep_min in (5, 15, 30, 60):
+        scenario: dict = {}
+        audit = _configure_research_discretization(
+            scenario,
+            timestep_min=timestep_min,
+        )
+
+        assert audit["timestep_min"] == timestep_min
+        assert scenario["simulation_config"]["timestep_min"] == timestep_min
+        assert (
+            scenario["scenario_overlay"]["solver_config"]["timestep_min"]
+            == timestep_min
+        )
+
+    with pytest.raises(ValueError, match="5, 15, 30, or 60"):
+        _configure_research_discretization({}, timestep_min=17)
 
 
 def test_bev_availability_sensitivity_keeps_highest_soc_without_mutating_inventory_size() -> None:
@@ -1382,6 +1397,23 @@ def test_bev_availability_sensitivity_rejects_count_above_persisted_availability
 
     with pytest.raises(ValueError, match=r"persisted available BEV count \(1\)"):
         _apply_bev_availability_sensitivity(scenario, 2)
+
+
+def test_bev_availability_mutation_is_exploratory_only() -> None:
+    with pytest.raises(ValueError, match="exact prepared scenario fleet"):
+        _validate_fleet_mutation_scope(
+            available_bev_count=2,
+            day_ahead_only_exploratory=False,
+        )
+
+    _validate_fleet_mutation_scope(
+        available_bev_count=2,
+        day_ahead_only_exploratory=True,
+    )
+    _validate_fleet_mutation_scope(
+        available_bev_count=None,
+        day_ahead_only_exploratory=False,
+    )
 
 
 def test_return_deadhead_is_posted_to_transition_ending_at_return_slot() -> None:

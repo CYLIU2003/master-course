@@ -3588,7 +3588,7 @@ class App:
 
     def _timestep_min_value(self) -> int:
         value = self._parse_int(self.timestep_min_var.get(), 30)
-        return 60 if value == 60 else 30
+        return value if value in {5, 15, 30, 60} else 30
 
     @staticmethod
     def _soc_percent_for_ui(value: Any, default: float) -> str:
@@ -6709,7 +6709,12 @@ class App:
             self.operation_end_time_var.set(str(sim.get("endTime") or "23:59"))
             self._sync_operation_time_window_controls()
             timestep_min = sim.get("timeStepMin") or sim.get("timestepMin") or sim.get("time_step_min") or sim.get("timestep_min") or 30
-            self.timestep_min_var.set("60" if str(timestep_min).strip() == "60" else "30")
+            normalized_timestep = str(timestep_min).strip()
+            self.timestep_min_var.set(
+                normalized_timestep
+                if normalized_timestep in {"5", "15", "30", "60"}
+                else "30"
+            )
             self.solver_mode_var.set(str(solver.get("solverMode") or "hybrid"))
             self.objective_mode_var.set(
                 normalize_objective_mode(solver.get("objectiveMode") or "total_cost")
@@ -9919,7 +9924,7 @@ class App:
             row_timestep,
             textvariable=self.timestep_min_var,
             state="readonly",
-            values=["30", "60"],
+            values=["5", "15", "30", "60"],
             width=10,
         ).pack(side=tk.LEFT)
         ttk.Label(row_timestep, text="分", foreground="#555").pack(side=tk.LEFT, padx=(4, 0))

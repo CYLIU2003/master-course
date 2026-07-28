@@ -71,6 +71,10 @@ NUL
 *.log
 *.zip
 *.tar.gz
+.tmp_*
+tmp_*
+*.tmp.xml
+output/tmp_*
 
 
 # Legacy cache locations (kept ignored for backward compatibility)
@@ -98,5 +102,8 @@ dist/
 *.egg-info/
 *.egg
 output/
-.github/
+.github/*
+!.github/workflows/
+.github/workflows/*
+!.github/workflows/research-validation.yml
 先行文献/

@@ -9,7 +9,7 @@
 
 ## Research-evidence contract (updated 2026-07-28)
 
-The current release is **BLOCKED** pending a fresh clean-commit 264-trip run.
+The current release is **BLOCKED** pending fresh clean-commit formal runs.
 The authoritative open-item register and per-run acceptance table are
 [`docs/notes/CURRENT_RESEARCH_RELEASE_BLOCKERS.md`](docs/notes/CURRENT_RESEARCH_RELEASE_BLOCKERS.md).
 
@@ -25,6 +25,17 @@ simulation artifact, not an automatically accepted research result.
   runs. A source change during the solve is a hard failure.
 - `run_input_provenance/` records the scenario snapshot, Prepare audit, effective
   optimization parameters, hashes, and validation result.
+- `scenario_fleet_contract_v2` makes the exact active vehicle set from the
+  materialized prepared scenario and explicitly selected depot/scope
+  authoritative. It records active IDs, excluded records/reasons, canonical
+  powertrains, initial-state hash, vehicle-parameter hash, and the complete
+  contract hash. There is no global BEV/ICE count. Optional CLI count arguments
+  are assertions only.
+  Formal records must explicitly define initial SOC/fuel and availability;
+  contradictory availability fields fail. Vehicle-type-catalog battery,
+  consumption, charge-power, and charger-compatibility data are materialized
+  into the active record and parameter hash, while the raw model/type remains
+  auditable in the artifact.
 - `charging_source_provenance.json` distinguishes exact depot/time-step energy
   flows from vehicle-level allocations. A proportional allocation must never be
   described as solver-native vehicle-source evidence.
@@ -40,6 +51,8 @@ simulation artifact, not an automatically accepted research result.
   a monetary total: any solver-versus-physical mismatch remains an explicit
   `NG`. Disabling the fuel-cost component makes `fuel_cost_jpy=0` while
   preserving liters and emissions.
+  Vehicle activation/usage cost, fixed ownership cost, and acquisition cost
+  are separate report fields; one must never be used as an alias for another.
 - Non-service travel is canonicalized as one row per physical event in
   `graph/movement_event_ledger.(csv|json)`. The only event types are
   `startup`, `connection`, and `terminal_return`; a connection belongs to the
@@ -64,19 +77,22 @@ simulation artifact, not an automatically accepted research result.
   tolerance, Gurobi-derived numeric margin, acceptance limit, and reason; the
   MILP uses the scientific tolerance and post-solve adds only that narrow
   numeric margin.
-- Formal sunny/rainy comparison is fail-closed: it requires the same prepared
-  input, service day, fleet, initial SOC, and operational controls; only a
-  separately recorded PV curve may differ. Comparing a weekday to a Sunday is
-  rejected as a weather-only claim. The counterfactual must also change a
-  depot PV-generation hash or energy total; a relabelled duplicate is rejected.
+- Formal PV counterfactual comparison is fail-closed: it requires equal trip,
+  active-vehicle, vehicle-parameter, initial-state, charger, BESS, tariff,
+  calendar, and solver-control content hashes; only a separately recorded PV
+  curve may differ. Scenario/prepared IDs are provenance, not scientific
+  equality by themselves. Comparing a weekday to a Sunday is rejected as a
+  weather-only claim. The counterfactual must also change a depot
+  PV-generation hash or energy total; a relabelled duplicate is rejected.
   `graph/calendar_weather_validation.json` records service date, timetable day
   type, weather observation date/source, and comparison type. A declared
   research fleet is separately hard-checked and written to
-  `graph/research_fleet_validation.json`. Formal frontend runs declare the
-  available BEV/ICE inventory from the selected scenario depot; the declaration
-  and canonical input must match. Duplicate/empty vehicle IDs, unknown types,
-  or unavailable selected records fail before optimization. The model does not
-  invent a missing vehicle or substitute a global fleet constant.
+  `graph/research_fleet_validation.json`. Formal frontend runs bind the exact
+  active vehicle IDs and parameter hashes from the prepared selected scope to
+  Canonical input. Duplicate/empty IDs, unknown types, invalid availability,
+  or physical-parameter omissions fail before optimization. Persisted inactive
+  records are excluded with reasons. The model does not invent an ID/type or
+  substitute a global fleet constant.
   Requiring all available BEVs to serve is a separate policy-sensitivity
   checkbox and constraint, not the unconstrained baseline.
 - Hourly rolling execution is reported as `not_executed` unless an actual rolling
@@ -85,6 +101,16 @@ simulation artifact, not an automatically accepted research result.
   acceptance check passes; a partial or failed chain is
   `executed_not_accepted`. No output fabricates rolling evidence, a missing ICE
   vehicle, or weather-dispatch behavior.
+- After accepted Rolling, an independent event-level validator reconstructs
+  service, startup/connection/return deadheads, waiting, charging, and
+  refueling. Required metric absence is an error. Unknown chargers, charging
+  at an impossible location, event overlap, charger concurrency/compatibility,
+  and independent SOC/fuel failures block finalization. Multiple energy-source
+  rows for one vehicle/charger/slot are one physical charging session.
+- The Tk/BFF time-axis selector preserves `5`, `15`, `30`, and `60` minute
+  values. The current formal experiment specification is 15-minute internal
+  slots plus 60-minute Rolling updates; other widths must be declared as
+  sensitivities.
 - The ordinary Tk frontend optimization action now sends
   `run_profile=day_ahead_and_hourly_rolling`, `research_run=true`,
   `run_hourly_rolling=true`, and `rolling_execution_minutes=60`. The BFF

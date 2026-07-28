@@ -156,3 +156,47 @@ def test_assignment_diagnostics_report_the_exact_rejected_trip_connection() -> N
     assert connection["previous_trip_id"] == "t1"
     assert connection["next_trip_id"] == "t2"
     assert connection["rejection_reason_code"] == "missing_deadhead"
+
+
+def test_required_validation_metric_missing_is_not_treated_as_zero() -> None:
+    checker = FeasibilityChecker()
+    metrics = {
+        "unassigned_trip_count": 0,
+        "duplicate_trip_count": 0,
+        "vehicle_time_overlap_count": 0,
+        "infeasible_transition_count": 0,
+        "ev_soc_violation_count": 0,
+        "bess_soc_violation_count": 0,
+        "contract_power_violation_count": 0,
+        # charger_concurrency_violation_count is intentionally absent.
+        "bess_terminal_soc_deviation_kwh": 0.0,
+        "bess_terminal_soc_tolerance_kwh": 1.0e-6,
+    }
+
+    assert checker._metrics_are_clean(metrics) is False
+    assert (
+        "[VALIDATION] missing required metric: "
+        "charger_concurrency_violation_count"
+    ) in checker._metric_errors(metrics)
+
+
+def test_duplicate_trip_metric_prevents_clean_validation() -> None:
+    checker = FeasibilityChecker()
+    metrics = {
+        "unassigned_trip_count": 0,
+        "duplicate_trip_count": 1,
+        "vehicle_time_overlap_count": 0,
+        "infeasible_transition_count": 0,
+        "ev_soc_violation_count": 0,
+        "bess_soc_violation_count": 0,
+        "contract_power_violation_count": 0,
+        "charger_concurrency_violation_count": 0,
+        "bess_terminal_soc_deviation_kwh": 0.0,
+        "bess_terminal_soc_tolerance_kwh": 1.0e-6,
+    }
+
+    assert checker._metrics_are_clean(metrics) is False
+    assert any(
+        "duplicate trip assignments remain" in error
+        for error in checker._metric_errors(metrics)
+    )

@@ -142,6 +142,10 @@ def _summary(
         "trip_count": 264,
         "fleet": {"BEV": 35, "ICE": 26},
         "expected_fleet": {"BEV": 35, "ICE": 26},
+        "scenario_fleet_contract_hash": "fleet-contract-hash",
+        "active_vehicle_id_hash": "active-vehicle-id-hash",
+        "vehicle_parameter_hash": "vehicle-parameter-hash",
+        "initial_state_hash": "initial-state-hash",
         "timestep_min": 15,
         "price_slot_count": 96,
         "planning_horizon_hours": 24.0,
@@ -421,16 +425,64 @@ def test_rejects_reversed_baseline_and_counterfactual_roles() -> None:
         build_weather_comparison(sunny, rain)
 
 
-def test_rejects_pair_with_different_prepared_input() -> None:
+def test_accepts_different_prepared_provenance_when_content_hashes_match() -> None:
     sunny, rain = _valid_pair()
     rain = deepcopy(rain)
+    rain["scenario_id"] = "different-provenance-scenario"
+    rain["prepared_input_id"] = "different-provenance-id"
     rain["prepared_input_sha256"] = "different-prepared-input"
+
+    comparison = build_weather_comparison(sunny, rain)
+
+    assert comparison["comparison_accepted"] is True
+    assert (
+        comparison["allowed_weather_input_differences"]["case_identity"][
+            "rain"
+        ]["prepared_input_id"]
+        == "different-provenance-id"
+    )
+
+
+def test_rejects_same_counts_with_different_active_vehicle_set_hash() -> None:
+    sunny, rain = _valid_pair()
+    rain = deepcopy(rain)
+    rain["active_vehicle_id_hash"] = "different-active-vehicle-set"
 
     with pytest.raises(
         ComparisonContractError,
-        match="prepared_input_sha256",
+        match="active_vehicle_id_hash",
     ):
         build_weather_comparison(sunny, rain)
+
+
+def test_generic_comparison_does_not_require_264_trips_or_15_minute_slots() -> None:
+    sunny, rain = _valid_pair()
+    for summary in (sunny, rain):
+        summary["trip_count"] = 37
+        summary["trip_count_served"] = 37
+        summary["trip_distance_audit"]["trip_count"] = 37
+        summary["trip_distance_audit"][
+            "prepared_distance_source_kind_counts"
+        ] = {"fixture": 37}
+        summary["timestep_min"] = 30
+        summary["price_slot_count"] = 48
+        summary["research_discretization"]["timestep_min"] = 30
+
+    comparison = build_weather_comparison(sunny, rain)
+
+    assert comparison["comparison_accepted"] is True
+
+
+def test_solver_outcome_differences_are_reported_not_fixed_controls() -> None:
+    sunny, rain = _valid_pair()
+    sunny["stage1_feasibility_no_good_cut_count"] = 0
+    rain["stage1_feasibility_no_good_cut_count"] = 2
+
+    comparison = build_weather_comparison(sunny, rain)
+
+    assert comparison["solver_outcomes"][
+        "stage1_feasibility_no_good_cut_count"
+    ] == {"sunny": 0, "rain": 2}
 
 
 def test_rejects_counterfactual_with_unchanged_pv_curve() -> None:

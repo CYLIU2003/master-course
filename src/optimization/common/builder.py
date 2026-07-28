@@ -34,6 +34,12 @@ from src.route_family_runtime import (
 from .soc_utils import normalize_soc_ratio_like, resolve_soc_kwh
 from .time_axis import normalize_timestep_min
 from .tou_pricing import price_for_minute
+from .fleet_contract import (
+    FleetContractError,
+    canonical_powertrain,
+    resolve_scenario_fleet_contract,
+    vehicle_record_available,
+)
 from src.preprocess.emission_factor_loader import lookup_ice_emission_factor
 from src.preprocess.tariff_loader import build_electricity_prices_from_tariff, load_tariff_csv
 from src.objective_modes import (
@@ -75,12 +81,13 @@ from .service_calendar import validate_service_calendar_contract
 
 
 def _research_inventory_powertrain(value: Any) -> str:
-    normalized = str(value or "").strip().upper()
-    if normalized in {"BEV", "EV", "ELECTRIC"}:
-        return "BEV"
-    if normalized in {"ICE", "DIESEL", "GASOLINE", "PETROL"}:
-        return "ICE"
-    return normalized
+    try:
+        return canonical_powertrain(
+            {"type": value},
+            research_run=True,
+        )
+    except FleetContractError:
+        return str(value or "").strip().upper()
 
 
 @dataclass(frozen=True)
@@ -98,11 +105,52 @@ class ProblemBuilder:
         config: Optional[OptimizationConfig] = None,
         planning_days: int = 1,
     ) -> CanonicalOptimizationProblem:
+        research_run = bool(getattr(config, "research_run", False))
+        fleet_contract = None
+        if research_run:
+            fleet_contract = resolve_scenario_fleet_contract(
+                scenario,
+                selected_depot_ids=(str(depot_id or "").strip(),),
+                research_run=True,
+            )
+            # Canonical problem construction consumes only the exact active set.
+            # Excluded persisted records remain in the fleet-contract artifact.
+            scenario = dict(scenario)
+            scenario["vehicles"] = [
+                dict(item) for item in fleet_contract.active_vehicle_records
+            ]
+            simulation_config = dict(scenario.get("simulation_config") or {})
+            simulation_config.update(
+                {
+                    "research_vehicle_inventory": dict(
+                        fleet_contract.inventory_by_powertrain
+                    ),
+                    "research_vehicle_ids": list(
+                        fleet_contract.active_vehicle_ids
+                    ),
+                    "research_vehicle_id_hash": (
+                        fleet_contract.active_vehicle_id_hash
+                    ),
+                    "research_vehicle_parameter_hash": (
+                        fleet_contract.vehicle_parameter_hash
+                    ),
+                    "research_vehicle_initial_state_hash": (
+                        fleet_contract.initial_state_hash
+                    ),
+                    "research_fleet_contract_hash": (
+                        fleet_contract.fleet_contract_hash
+                    ),
+                    "scenario_fleet_contract": fleet_contract.to_dict(
+                        include_source_records=True
+                    ),
+                }
+            )
+            scenario["simulation_config"] = simulation_config
         context = self._build_dispatch_context_from_scenario(
             scenario,
             depot_id=depot_id,
             service_id=service_id,
-            research_run=bool(getattr(config, "research_run", False)),
+            research_run=research_run,
         )
         scenario_vehicles = self._filter_scenario_vehicles_for_scope(
             scenario,
@@ -773,7 +821,11 @@ class ProblemBuilder:
         
         trip_nodes = tuple(trip_nodes_list)
         route_nodes = self._build_routes(trip_nodes)
-        vehicle_types = self._build_vehicle_types(context.vehicle_profiles)
+        vehicle_types = self._build_vehicle_types(
+            context.vehicle_profiles,
+            scenario_vehicles=scenario_vehicles or (),
+            research_run=bool(getattr(config, "research_run", False)),
+        )
         vehicles = tuple(
             self._build_vehicles_from_records(
                 scenario_vehicles or (),
@@ -786,6 +838,7 @@ class ProblemBuilder:
                 initial_ice_fuel_percent=initial_ice_fuel_percent,
                 min_ice_fuel_percent=min_ice_fuel_percent,
                 max_ice_fuel_percent=max_ice_fuel_percent,
+                research_run=bool(getattr(config, "research_run", False)),
             )
         )
         if not vehicles:
@@ -853,14 +906,40 @@ class ProblemBuilder:
             _research_inventory_powertrain(key): int(value)
             for key, value in dict(expected_inventory_raw or {}).items()
         }
-        inventory_errors = [
-            (
-                f"{powertrain}:expected_available={expected},"
-                f"actual_available={available_inventory.get(powertrain, 0)}"
+        fleet_contract_payload = dict(
+            simulation_metadata.get("scenario_fleet_contract") or {}
+        )
+        expected_vehicle_ids = tuple(
+            sorted(
+                str(vehicle_id).strip()
+                for vehicle_id in (
+                    fleet_contract_payload.get("active_vehicle_ids")
+                    or simulation_metadata.get("research_vehicle_ids")
+                    or ()
+                )
+                if str(vehicle_id).strip()
             )
-            for powertrain, expected in sorted(expected_inventory.items())
-            if available_inventory.get(powertrain, 0) != expected
-        ]
+        )
+        actual_available_vehicle_ids = tuple(
+            sorted(
+                str(getattr(vehicle, "vehicle_id", "") or "").strip()
+                for vehicle in available_vehicles
+                if str(getattr(vehicle, "vehicle_id", "") or "").strip()
+            )
+        )
+        inventory_errors: List[str] = []
+        if expected_inventory and expected_inventory != available_inventory:
+            inventory_errors.append(
+                "inventory_mismatch:"
+                f"expected={dict(sorted(expected_inventory.items()))},"
+                f"actual={dict(sorted(available_inventory.items()))}"
+            )
+        if expected_vehicle_ids and expected_vehicle_ids != actual_available_vehicle_ids:
+            inventory_errors.append(
+                "active_vehicle_id_set_mismatch:"
+                f"expected={list(expected_vehicle_ids)},"
+                f"actual={list(actual_available_vehicle_ids)}"
+            )
         if duplicate_vehicle_ids:
             inventory_errors.append(
                 "duplicate_vehicle_ids=" + ",".join(duplicate_vehicle_ids)
@@ -874,13 +953,8 @@ class ProblemBuilder:
                 "unknown_vehicle_type_ids="
                 + ",".join(sorted(unknown_vehicle_type_ids))
             )
-        if unavailable_vehicle_ids:
-            inventory_errors.append(
-                "unavailable_vehicle_ids="
-                + ",".join(unavailable_vehicle_ids)
-            )
         research_fleet_validation = {
-            "schema_version": "research_fleet_validation_v1",
+            "schema_version": "research_fleet_validation_v2",
             "status": "ERROR" if inventory_errors else (
                 "OK" if expected_inventory else "UNDECLARED"
             ),
@@ -892,6 +966,28 @@ class ProblemBuilder:
             "actual_inventory": available_inventory,
             "total_vehicle_record_count": len(vehicles),
             "available_vehicle_count": len(available_vehicles),
+            "expected_active_vehicle_ids": list(expected_vehicle_ids),
+            "actual_active_vehicle_ids": list(actual_available_vehicle_ids),
+            "active_vehicle_id_set_exact_match": bool(
+                expected_vehicle_ids
+                and expected_vehicle_ids == actual_available_vehicle_ids
+            ),
+            "active_vehicle_id_hash": fleet_contract_payload.get(
+                "active_vehicle_id_hash"
+            ),
+            "initial_state_hash": fleet_contract_payload.get(
+                "initial_state_hash"
+            ),
+            "vehicle_parameter_hash": fleet_contract_payload.get(
+                "vehicle_parameter_hash"
+            ),
+            "fleet_contract_hash": fleet_contract_payload.get(
+                "fleet_contract_hash"
+            ),
+            "fleet_contract_source": fleet_contract_payload.get("source"),
+            "excluded_vehicle_records": list(
+                fleet_contract_payload.get("excluded_vehicle_records") or []
+            ),
             "unavailable_vehicle_ids": unavailable_vehicle_ids,
             "duplicate_vehicle_ids": duplicate_vehicle_ids,
             "missing_vehicle_id_count": missing_vehicle_id_count,
@@ -2322,6 +2418,7 @@ class ProblemBuilder:
         initial_ice_fuel_percent: Optional[float] = None,
         min_ice_fuel_percent: Optional[float] = None,
         max_ice_fuel_percent: Optional[float] = None,
+        research_run: bool = False,
     ) -> Iterable[ProblemVehicle]:
         initial_soc_ratio_override = normalize_soc_ratio_like(
             initial_soc_percent if initial_soc_percent is not None else initial_soc
@@ -2333,8 +2430,22 @@ class ProblemBuilder:
         for index, vehicle in enumerate(vehicles):
             if not isinstance(vehicle, dict):
                 continue
-            vehicle_id = str(vehicle.get("id") or "").strip() or f"veh_{index + 1:03d}"
-            vehicle_type = str(vehicle.get("type") or "BEV").upper()
+            raw_vehicle_id = str(
+                vehicle.get("id")
+                or vehicle.get("vehicleId")
+                or vehicle.get("vehicle_id")
+                or ""
+            ).strip()
+            if research_run and not raw_vehicle_id:
+                raise ValueError("formal vehicle record is missing vehicle_id")
+            vehicle_id = raw_vehicle_id or f"veh_{index + 1:03d}"
+            # CanonicalOptimizationProblem uses the powertrain class as its
+            # assignment/energy type. The fleet contract separately preserves
+            # the raw model/type (for example BYD_K8) and its hash.
+            vehicle_type = canonical_powertrain(
+                vehicle,
+                research_run=research_run,
+            )
             profile = profiles.get(vehicle_type)
 
             battery_capacity_kwh = self._safe_float(vehicle.get("batteryKwh"))
@@ -2420,12 +2531,18 @@ class ProblemBuilder:
             home_depot_id = str(
                 vehicle.get("depotId")
                 or vehicle.get("homeDepotId")
-                or default_home_depot_id
-                or "depot_default"
-            ).strip() or "depot_default"
-            raw_available = vehicle.get("available")
-            if raw_available is None:
-                raw_available = vehicle.get("enabled", True)
+                or (None if research_run else default_home_depot_id)
+                or (None if research_run else "depot_default")
+                or ""
+            ).strip()
+            if research_run and not home_depot_id:
+                raise ValueError(
+                    f"formal vehicle {vehicle_id!r} is missing its depot"
+                )
+            available, _availability_source = vehicle_record_available(
+                vehicle,
+                research_run=research_run,
+            )
 
             yield ProblemVehicle(
                 vehicle_id=vehicle_id,
@@ -2434,7 +2551,7 @@ class ProblemBuilder:
                 initial_soc=initial_soc_kwh,
                 battery_capacity_kwh=battery_capacity_kwh,
                 reserve_soc=reserve_soc,
-                available=bool(raw_available),
+                available=available,
                 initial_fuel_l=initial_fuel_l,
                 fuel_tank_capacity_l=fuel_tank_capacity_l,
                 fuel_reserve_l=fuel_reserve_l,
@@ -2454,7 +2571,10 @@ class ProblemBuilder:
     ) -> Dict[str, VehicleProfile]:
         profiles: Dict[str, VehicleProfile] = {}
         for vehicle in vehicles:
-            vehicle_type = str(vehicle.get("type") or "BEV").upper()
+            vehicle_type = canonical_powertrain(
+                vehicle,
+                research_run=False,
+            )
             fuel_eff_km_per_l = self._safe_float(vehicle.get("fuelEfficiencyKmPerL") or vehicle.get("fuel_efficiency_km_per_l"))
             fuel_l_per_km = None
             if fuel_eff_km_per_l and fuel_eff_km_per_l > 0:
@@ -2528,10 +2648,31 @@ class ProblemBuilder:
     def _build_vehicle_types(
         self,
         profiles: Dict[str, VehicleProfile],
+        *,
+        scenario_vehicles: Sequence[Mapping[str, Any]] = (),
+        research_run: bool = False,
     ) -> Tuple[ProblemVehicleType, ...]:
+        powertrain_by_vehicle_type: Dict[str, str] = {}
+        for record in scenario_vehicles:
+            vehicle_type = canonical_powertrain(
+                record,
+                research_run=research_run,
+            )
+            powertrain_by_vehicle_type[vehicle_type] = vehicle_type
         items: List[ProblemVehicleType] = []
         for vehicle_type_id, profile in profiles.items():
-            powertrain = "BEV" if profile.battery_capacity_kwh is not None else "ICE"
+            powertrain = powertrain_by_vehicle_type.get(vehicle_type_id)
+            if not powertrain:
+                powertrain = canonical_powertrain(
+                    {
+                        "type": vehicle_type_id,
+                        "batteryKwh": profile.battery_capacity_kwh,
+                        "fuelConsumptionLPerKm": (
+                            profile.fuel_consumption_l_per_km
+                        ),
+                    },
+                    research_run=research_run,
+                )
             items.append(
                 ProblemVehicleType(
                     vehicle_type_id=vehicle_type_id,
