@@ -88,8 +88,11 @@ candidate only.
 Phase 3 remains a two-stage method. Stage 1 creates a dispatch candidate and
 Stage 2 optimizes energy operation for that fixed assignment. The new
 reachability relaxation/cuts reduce infeasible handoffs but do not prove a
-single globally minimum accounting cost. Small integrated-MILP comparison
-remains required to quantify decomposition loss.
+single globally minimum accounting cost. The real Gurobi regression covers an
+IIS-backed Stage 2 rejection, two full-assignment no-good retries, and a final
+independently feasible schedule; it does not prove that the bounded feedback
+loop exhausts every full-scale infeasible assignment. Small integrated-MILP
+comparison remains required to quantify decomposition loss.
 
 ### B4 — All-BEV policy sensitivity has not been executed
 

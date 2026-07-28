@@ -62,7 +62,17 @@
 
 ### Validation and remaining evidence
 
-- 2026-07-28時点で全回帰`905 passed`（`pytest -q -p no:cacheprovider`）を
+- 2026-07-28 follow-up: I reproduced the actual Stage 2 feedback path with a
+  two-trip, two-BEV, two-charger Gurobi model. The continuous Stage 1 charger
+  relaxation accepts two all-BEV candidates that the binary Stage 2 charger
+  assignment proves infeasible. The retry branch previously referenced
+  `_solve_thesis_two_stage` local variables outside their scope and raised
+  `NameError` before adding the next Stage 1 cut. The minimal fix removes those
+  invalid arguments. `tests/test_stage2_infeasibility_feedback.py` now requires
+  two IIS-backed no-good cuts, an eventual BEV/ICE schedule, and a separate
+  `FeasibilityChecker` pass. This proves the feedback control path, not global
+  completeness of a bounded two-stage decomposition.
+- 2026-07-28 follow-up の全回帰は`906 passed`（`pytest -q -p no:cacheprovider`）を
   確認した。compileall、diff check、clean release commitからの264便高PV/
   低PV/no-PV、24/24 rolling、全BEV政策感度は、まだ未実行の正式証拠である。
 - したがって`teacher_release_status=READY`、修論モデル完成、統合総費用

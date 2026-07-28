@@ -133,6 +133,12 @@ simulation artifact, not an automatically accepted research result.
   Stage 1 as a no-good cut; a `TIME_LIMIT` without an incumbent does not justify
   a cut. This improves Stage 1→Stage 2 consistency but does not turn Phase 3
   into an integrated global total-cost optimum.
+- The Stage 2 infeasibility retry is covered by a real Gurobi/IIS regression:
+  continuous Stage 1 charger sharing first produces infeasible all-BEV
+  assignments, then full-assignment no-good cuts reach an independently
+  feasible BEV/ICE schedule. This validates the retry call path, but does not
+  make the bounded feedback loop exhaustive or Phase 3 an integrated global
+  total-cost model.
 - The Tk operation start/end pair is now controlled by an explicit checkbox.
   It is off by default, disables the pair in the UI, and makes the canonical
   energy/SOC horizon exactly `00:00–23:59` (24 hours, not 1,439 minutes).
