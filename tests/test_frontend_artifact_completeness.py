@@ -49,6 +49,58 @@ def _complete_run(tmp_path: Path) -> Path:
         encoding="utf-8",
     )
     _write_artifact(run_dir / "graph" / "declared_graph_artifact.csv")
+    literature_entries = []
+    literature_dir = run_dir / "graph" / "literature_figures"
+    for index in range(5):
+        artifact_files = [
+            f"{index:02d}_figure.png",
+            f"{index:02d}_figure.svg",
+            f"{index:02d}_figure_source.csv",
+        ]
+        for artifact_file in artifact_files:
+            _write_artifact(literature_dir / artifact_file)
+        literature_entries.append(
+            {
+                "kind": "figure",
+                "figure_id": f"figure-{index}",
+                "artifact_files": artifact_files,
+            }
+        )
+    raw_data_files = [
+        f"raw_data/{index:02d}_dataset.csv" for index in range(15)
+    ] + ["raw_data/raw_data_catalog.csv"]
+    for artifact_file in raw_data_files:
+        _write_artifact(literature_dir / artifact_file)
+    literature_entries.append(
+        {
+            "kind": "raw_data_bundle",
+            "figure_id": "analysis_ready_raw_data",
+            "artifact_files": raw_data_files,
+        }
+    )
+    (literature_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "literature_figure_bundle_v1",
+                "status": "READY",
+                "figure_count": 5,
+                "raw_data_csv_count": 16,
+                "raw_data_catalog": "raw_data/raw_data_catalog.csv",
+                "entries": literature_entries,
+            }
+        ),
+        encoding="utf-8",
+    )
+    graph_manifest["optional_exports"] = {
+        "literature_figures": {
+            "enabled": True,
+            "manifest_file": "literature_figures/manifest.json",
+        }
+    }
+    (run_dir / "graph" / "manifest.json").write_text(
+        json.dumps(graph_manifest),
+        encoding="utf-8",
+    )
 
     rolling_dir = run_dir / "rolling_hourly_chain"
     rolling_summary = {
@@ -215,6 +267,59 @@ def test_unsafe_graph_manifest_path_fails_without_leaving_run_dir(
     assert audit["status"] == "ERROR"
     assert any(
         "unsafe file path" in error
+        for error in audit["content_errors"]
+    )
+
+
+def test_missing_literature_bundle_artifact_fails_contract(
+    tmp_path: Path,
+) -> None:
+    run_dir = _complete_run(tmp_path)
+    (
+        run_dir
+        / "graph"
+        / "literature_figures"
+        / "00_figure_source.csv"
+    ).unlink()
+
+    audit = audit_frontend_run_artifacts(
+        run_dir,
+        research_run=True,
+        require_rolling=True,
+    )
+
+    assert audit["status"] == "ERROR"
+    assert (
+        "graph/literature_figures/00_figure_source.csv"
+        in audit["missing_artifacts"]
+    )
+
+
+def test_malformed_literature_bundle_counts_fail_without_crashing(
+    tmp_path: Path,
+) -> None:
+    run_dir = _complete_run(tmp_path)
+    manifest_path = (
+        run_dir / "graph" / "literature_figures" / "manifest.json"
+    )
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["figure_count"] = "5"
+    manifest["raw_data_csv_count"] = True
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    audit = audit_frontend_run_artifacts(
+        run_dir,
+        research_run=True,
+        require_rolling=True,
+    )
+
+    assert audit["status"] == "ERROR"
+    assert any(
+        "figure_count must be a non-negative integer" in error
+        for error in audit["content_errors"]
+    )
+    assert any(
+        "raw_data_csv_count must be a non-negative integer" in error
         for error in audit["content_errors"]
     )
 

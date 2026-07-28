@@ -71,6 +71,8 @@ def _event(
     distance_km: float = 0.0,
     energy_kwh: float = 0.0,
     fuel_l: float = 0.0,
+    power_kw: float = 0.0,
+    power_limit_kw: float = 0.0,
     trip_id: str = "",
     charger_id: str = "",
     depot_id: str = "",
@@ -87,6 +89,8 @@ def _event(
         "distance_km": float(distance_km),
         "energy_kwh": float(energy_kwh),
         "fuel_l": float(fuel_l),
+        "power_kw": float(power_kw),
+        "power_limit_kw": float(power_limit_kw),
         "trip_id": str(trip_id or ""),
         "charger_id": str(charger_id or ""),
         "depot_id": str(depot_id or ""),
@@ -526,6 +530,8 @@ def validate_physical_event_schedule(
                 start_location=str(charger.depot_id),
                 end_location=str(charger.depot_id),
                 energy_kwh=charge_kw * timestep_min / 60.0,
+                power_kw=charge_kw,
+                power_limit_kw=allowed_power,
                 charger_id=charger_id,
                 depot_id=str(charger.depot_id),
                 source_artifact="executed_charging_schedule",
@@ -701,6 +707,7 @@ def validate_physical_event_schedule(
     )
     if not 0.0 < charging_efficiency <= 1.0:
         charging_efficiency = 0.95
+    vehicle_soc_events: list[Dict[str, Any]] = []
     for vehicle_id, vehicle in vehicle_by_id.items():
         vehicle_events = sorted(
             events_by_vehicle.get(vehicle_id, ()),
@@ -712,11 +719,70 @@ def validate_physical_event_schedule(
             soc = initial_soc
             capacity = _finite_float(vehicle.battery_capacity_kwh)
             reserve = _finite_float(vehicle.reserve_soc)
+            vehicle_soc_events.append(
+                {
+                    "vehicle_id": vehicle_id,
+                    "event_id": f"{vehicle_id}:initial_state",
+                    "event_type": "initial_state",
+                    "time_min": int(horizon_start_min),
+                    "soc_before_kwh": initial_soc,
+                    "soc_after_kwh": initial_soc,
+                    "soc_before_percent": (
+                        100.0 * initial_soc / capacity
+                        if capacity > 0.0
+                        else 0.0
+                    ),
+                    "soc_after_percent": (
+                        100.0 * initial_soc / capacity
+                        if capacity > 0.0
+                        else 0.0
+                    ),
+                    "reserve_soc_kwh": reserve,
+                    "reserve_soc_percent": (
+                        100.0 * reserve / capacity
+                        if capacity > 0.0
+                        else 0.0
+                    ),
+                    "battery_capacity_kwh": capacity,
+                    "charging_efficiency": charging_efficiency,
+                    "source_artifact": "scenario_fleet_contract",
+                }
+            )
             for item in vehicle_events:
+                soc_before = soc
                 if item["event_type"] == "charging":
                     soc += float(item["energy_kwh"]) * charging_efficiency
                 else:
                     soc -= max(float(item["energy_kwh"]), 0.0)
+                vehicle_soc_events.append(
+                    {
+                        "vehicle_id": vehicle_id,
+                        "event_id": str(item["event_id"]),
+                        "event_type": str(item["event_type"]),
+                        "time_min": int(item["end_min"]),
+                        "soc_before_kwh": soc_before,
+                        "soc_after_kwh": soc,
+                        "soc_before_percent": (
+                            100.0 * soc_before / capacity
+                            if capacity > 0.0
+                            else 0.0
+                        ),
+                        "soc_after_percent": (
+                            100.0 * soc / capacity
+                            if capacity > 0.0
+                            else 0.0
+                        ),
+                        "reserve_soc_kwh": reserve,
+                        "reserve_soc_percent": (
+                            100.0 * reserve / capacity
+                            if capacity > 0.0
+                            else 0.0
+                        ),
+                        "battery_capacity_kwh": capacity,
+                        "charging_efficiency": charging_efficiency,
+                        "source_artifact": str(item["source_artifact"]),
+                    }
+                )
                 if soc < reserve - 1.0e-6:
                     _record_violation(
                         violations,
@@ -843,6 +909,14 @@ def validate_physical_event_schedule(
             key=lambda item: (
                 str(item["vehicle_id"]),
                 int(item["start_min"]),
+                str(item["event_id"]),
+            ),
+        ),
+        "vehicle_soc_events": sorted(
+            vehicle_soc_events,
+            key=lambda item: (
+                str(item["vehicle_id"]),
+                int(item["time_min"]),
                 str(item["event_id"]),
             ),
         ),

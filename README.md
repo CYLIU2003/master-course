@@ -155,6 +155,17 @@ simulation artifact, not an automatically accepted research result.
   verified/required artifact counts. Recheck a saved run with
   `python scripts/verify_frontend_run_artifacts.py <RUN_DIR>
   --research-run --require-rolling`.
+- An accepted Rolling run also generates a literature-aligned evidence bundle
+  under `graph/literature_figures/`: five PNG/SVG figures, one source CSV per
+  figure, a literature/page mapping, a run KPI table, and sixteen
+  analysis-ready raw CSV files covering vehicle events, BEV SOC, charger
+  sessions, hourly PV/BESS/grid flows, costs, CO2, fleet parameters, validation
+  metrics, and excluded vehicles. `raw_data/raw_data_catalog.csv` defines every
+  dataset and its canonical source; `manifest.json` records file hashes.
+  Missing figure or CSV evidence fails the ordinary frontend artifact contract.
+  Single-run output never fabricates paired-PV, Monte Carlo, capacity-sweep, or
+  runtime-distribution figures. See
+  [`docs/model/LITERATURE_FIGURE_MAPPING.md`](docs/model/LITERATURE_FIGURE_MAPPING.md).
 - Final experiment-report costs are sourced from
   `graph/canonical_cost_ledger.json`. `experiment_report.md` and
   `results.xlsx` are required final artifacts; generation failure fails the

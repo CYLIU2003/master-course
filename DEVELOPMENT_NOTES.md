@@ -1,5 +1,39 @@
 # Development Notes
 
+## 2026-07-28 literature-aligned plots and analysis-ready CSV evidence
+
+- The ordinary frontend finalizer now generates five newly rendered figures
+  after accepted 24-step Rolling, independent physical validation, and
+  executed-day cost reconciliation: vehicle operations, BEV SOC profiles,
+  PV/BESS/grid energy management, physical charger occupancy, and canonical
+  cost/CO2 components.
+- Each figure has a source CSV. A separate sixteen-file `raw_data/` bundle contains
+  canonical copies and deterministic JSON-to-CSV tables for executed vehicle
+  events, SOC transitions, charger sessions, hourly energy, cost, CO2, active
+  vehicle parameters, cost/CO2 components, physical validation metrics,
+  executed-day accounting, and excluded vehicle records. The data catalog
+  states row count, evidence level, canonical source, and semantics.
+- The independent physical validator now exports per-BEV event-level SOC and
+  actual charger power/limit fields. These are derived from the accepted
+  Rolling charging sessions and physical problem definition, not from stale
+  day-ahead display data.
+- `graph/literature_figures/manifest.json` records all plot/table/CSV hashes,
+  cited local PDF pages, claim scope, and limitations. The graph manifest and
+  frontend artifact-completeness audit require the bundle; missing PNG, SVG,
+  source CSV, SOC timeline, or raw-data file fails finalization.
+- Paired PV comparisons, uncertainty distributions, equipment sensitivities,
+  and runtime distributions remain explicit multi-run outputs and are not
+  fabricated from one run. Figure generation remains separate from
+  `teacher_release_status`.
+- Mathematical effect: none on the MILP feasible set or objective. This change
+  adds deterministic reporting and a stricter post-run artifact gate.
+- Validation: literature/physical/completeness focused tests `22 passed`; full
+  suite `986 passed`; `compileall` and `git diff --check` passed. The five
+  synthetic PNG/SVG outputs were visually inspected. A fresh full-scale
+  frontend solver run is still pending.
+- Mapping and evidence contract:
+  `docs/model/LITERATURE_FIGURE_MAPPING.md`.
+
 ## 2026-07-28 Prepare schema v3: explicit fleet state for formal runs
 
 - The first clean-HEAD formal attempt correctly stopped before MILP because

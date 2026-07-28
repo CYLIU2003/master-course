@@ -1,7 +1,7 @@
 # Current research release blockers
 
 Status date: 2026-07-28
-Code status: 981 local regression tests passed; no post-change 264-trip
+Code status: 986 local regression tests passed; no post-change 264-trip
 ordinary frontend run yet
 Teacher release status: **BLOCKED**
 
@@ -76,6 +76,11 @@ optimality remain separate decisions.
     24-step Rolling, physical-validation, accounting, Markdown, JSON, and
     Excel bundle must be present and readable. Missing artifacts preserve the
     diagnostic run directory but fail the job.
+12. Accepted Rolling output now includes five literature-aligned plots, one
+    plot-source CSV each, and sixteen analysis-ready raw CSVs with a data
+    catalog and hashes. These expose executed vehicle/SOC/charger/energy/cost/
+    CO2 evidence without copying paper graphics or fabricating multi-run
+    sensitivity results.
 
 ## Open blockers
 
@@ -87,6 +92,10 @@ low-PV, and no-PV cases. All three require 24/24 rolling and the run acceptance
 Each completed job must additionally show
 `artifact_completeness.status=OK`; otherwise it is an incomplete diagnostic
 bundle, irrespective of solver feasibility.
+It must also contain a `READY` (generation status only)
+`graph/literature_figures/manifest.json` with all declared PNG/SVG/source/raw
+CSV files. This figure-bundle status does not override research-release
+blockers.
 
 ### B2 — Full-scale Stage 1 performance and gap are unmeasured
 

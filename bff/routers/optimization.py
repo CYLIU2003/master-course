@@ -3573,6 +3573,46 @@ def _persist_rich_run_outputs(
         optimization_audit[
             "final_cost_reconciliation"
         ] = final_cost_reconciliation
+        if rolling_execution.get("status") == "executed_and_accepted":
+            from bff.services.optimization_run.literature_figures import (
+                generate_literature_figure_bundle,
+            )
+
+            literature_figure_bundle = generate_literature_figure_bundle(
+                run_dir
+            )
+            literature_figure_summary = {
+                "status": literature_figure_bundle.get("status"),
+                "schema_version": literature_figure_bundle.get(
+                    "schema_version"
+                ),
+                "figure_count": literature_figure_bundle.get("figure_count"),
+                "diagnostic_only": literature_figure_bundle.get(
+                    "diagnostic_only"
+                ),
+                "manifest": "graph/literature_figures/manifest.json",
+            }
+            optimization_result[
+                "literature_figure_bundle"
+            ] = literature_figure_summary
+            optimization_audit[
+                "literature_figure_bundle"
+            ] = literature_figure_summary
+        else:
+            literature_figure_summary = {
+                "status": "NOT_GENERATED",
+                "reason": (
+                    "literature figures require an executed and accepted "
+                    "hourly rolling chain"
+                ),
+                "diagnostic_only": True,
+            }
+            optimization_result[
+                "literature_figure_bundle"
+            ] = literature_figure_summary
+            optimization_audit[
+                "literature_figure_bundle"
+            ] = literature_figure_summary
     (run_dir / "optimization_result.json").write_text(
         json.dumps(optimization_result, ensure_ascii=False, indent=2), encoding="utf-8"
     )

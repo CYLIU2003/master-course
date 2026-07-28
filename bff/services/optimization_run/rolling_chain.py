@@ -167,6 +167,10 @@ def _persist_physical_event_artifacts(
     events = [
         dict(item) for item in list(event_validation.get("events") or ())
     ]
+    vehicle_soc_events = [
+        dict(item)
+        for item in list(event_validation.get("vehicle_soc_events") or ())
+    ]
     violations = [
         dict(item) for item in list(event_validation.get("violations") or ())
     ]
@@ -189,6 +193,10 @@ def _persist_physical_event_artifacts(
             }
             for item in events
         ],
+    )
+    _write_csv(
+        graph_dir / "vehicle_soc_event_timeline.csv",
+        vehicle_soc_events,
     )
     _write_csv(graph_dir / "physical_schedule_violations.csv", violations)
 
@@ -297,7 +305,7 @@ def _physical_schedule_validation(
         "independent_event_validation": {
             key: value
             for key, value in event_validation.items()
-            if key not in {"events", "violations"}
+            if key not in {"events", "vehicle_soc_events", "violations"}
         },
         "evidence": {
             "canonical_solver_result": "canonical_solver_result.json",
@@ -332,6 +340,9 @@ def _physical_schedule_validation(
             ),
             "vehicle_location_timeline": (
                 "graph/vehicle_location_timeline.csv"
+            ),
+            "vehicle_soc_event_timeline": (
+                "graph/vehicle_soc_event_timeline.csv"
             ),
             "physical_schedule_violations": (
                 "graph/physical_schedule_violations.csv"

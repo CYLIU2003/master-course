@@ -99,6 +99,8 @@ ROLLING_REQUIRED_ARTIFACTS = (
     "graph/physical_schedule_violations.csv",
     "graph/vehicle_event_timeline.csv",
     "graph/vehicle_location_timeline.csv",
+    "graph/vehicle_soc_event_timeline.csv",
+    "graph/literature_figures/manifest.json",
 )
 
 REQUIRED_WORKBOOK_SHEETS = (
@@ -141,6 +143,22 @@ def _safe_relative_path(value: Any) -> str | None:
     if path.is_absolute() or any(part == ".." for part in path.parts):
         return None
     return path.as_posix()
+
+
+def _required_manifest_count(
+    payload: dict[str, Any],
+    *,
+    key: str,
+    artifact: str,
+    content_errors: list[str],
+) -> int:
+    value = payload.get(key)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        content_errors.append(
+            f"{artifact}: {key} must be a non-negative integer"
+        )
+        return 0
+    return value
 
 
 def required_frontend_artifacts(
@@ -216,6 +234,33 @@ def _graph_manifest_artifacts(
                 content_errors.append(
                     f"{optional_manifest_relative}: non-object entry"
                 )
+                continue
+            raw_artifact_files = entry.get("artifact_files")
+            if raw_artifact_files is not None:
+                if not isinstance(raw_artifact_files, (list, tuple)):
+                    content_errors.append(
+                        f"{optional_manifest_relative}: artifact_files must "
+                        "be a list"
+                    )
+                    continue
+                if not raw_artifact_files:
+                    content_errors.append(
+                        f"{optional_manifest_relative}: artifact_files is "
+                        "empty"
+                    )
+                    continue
+                for raw_artifact_file in raw_artifact_files:
+                    artifact_file = _safe_relative_path(raw_artifact_file)
+                    if artifact_file is None:
+                        content_errors.append(
+                            f"{optional_manifest_relative}: entry has an "
+                            "empty or unsafe artifact file "
+                            f"{raw_artifact_file!r}"
+                        )
+                        continue
+                    declared.append(
+                        (optional_parent / Path(artifact_file)).as_posix()
+                    )
                 continue
             raw_diagram_file = entry.get("diagram_file")
             diagram_file = _safe_relative_path(raw_diagram_file)
@@ -346,6 +391,99 @@ def _validate_rolling_content(
             if reconciliation.get("status") != "OK":
                 content_errors.append(
                     "final_cost_reconciliation.status is not OK"
+                )
+
+    literature_manifest_path = (
+        run_dir / "graph" / "literature_figures" / "manifest.json"
+    )
+    if literature_manifest_path.is_file():
+        try:
+            literature_manifest = _load_json_object(
+                literature_manifest_path
+            )
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            content_errors.append(
+                f"graph/literature_figures/manifest.json: {exc}"
+            )
+        else:
+            if (
+                literature_manifest.get("schema_version")
+                != "literature_figure_bundle_v1"
+            ):
+                content_errors.append(
+                    "literature figure manifest schema_version is invalid"
+                )
+            if literature_manifest.get("status") != "READY":
+                content_errors.append(
+                    "literature figure manifest status is not READY"
+                )
+            figure_count = _required_manifest_count(
+                literature_manifest,
+                key="figure_count",
+                artifact="graph/literature_figures/manifest.json",
+                content_errors=content_errors,
+            )
+            entries = [
+                entry
+                for entry in list(
+                    literature_manifest.get("entries") or ()
+                )
+                if isinstance(entry, dict)
+                and entry.get("kind") == "figure"
+            ]
+            if figure_count < 5 or len(entries) != figure_count:
+                content_errors.append(
+                    "literature figure manifest does not declare all five "
+                    "required figures"
+                )
+            for entry in entries:
+                artifact_files = list(entry.get("artifact_files") or ())
+                if not {
+                    Path(str(path)).suffix.lower()
+                    for path in artifact_files
+                }.issuperset({".png", ".svg", ".csv"}):
+                    content_errors.append(
+                        "literature figure entry is missing PNG, SVG, or "
+                        f"source CSV: {entry.get('figure_id')!r}"
+                    )
+            raw_entries = [
+                entry
+                for entry in list(
+                    literature_manifest.get("entries") or ()
+                )
+                if isinstance(entry, dict)
+                and entry.get("kind") == "raw_data_bundle"
+            ]
+            raw_data_csv_count = _required_manifest_count(
+                literature_manifest,
+                key="raw_data_csv_count",
+                artifact="graph/literature_figures/manifest.json",
+                content_errors=content_errors,
+            )
+            if raw_data_csv_count < 16 or len(raw_entries) != 1:
+                content_errors.append(
+                    "literature figure manifest does not declare the "
+                    "analysis-ready raw CSV bundle"
+                )
+            elif len(
+                [
+                    path
+                    for path in list(
+                        raw_entries[0].get("artifact_files") or ()
+                    )
+                    if Path(str(path)).suffix.lower() == ".csv"
+                ]
+            ) != raw_data_csv_count:
+                content_errors.append(
+                    "literature raw-data CSV count does not match its "
+                    "declared artifact files"
+                )
+            if (
+                literature_manifest.get("raw_data_catalog")
+                != "raw_data/raw_data_catalog.csv"
+            ):
+                content_errors.append(
+                    "literature raw-data catalog path is missing or invalid"
                 )
 
 

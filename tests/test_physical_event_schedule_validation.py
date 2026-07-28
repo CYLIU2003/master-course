@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import replace
+import csv
+from pathlib import Path
 
 from bff.services.optimization_run.rolling_chain import (
+    _persist_physical_event_artifacts,
     _zero_hard_validation_counts,
 )
 from src.dispatch.models import DispatchContext, Trip, VehicleProfile
@@ -152,6 +155,11 @@ def test_valid_schedule_is_reconstructed_independently() -> None:
     assert [
         event["event_type"] for event in validation["events"]
     ] == ["service_trip", "waiting", "service_trip"]
+    assert [
+        event["event_type"] for event in validation["vehicle_soc_events"]
+    ] == ["initial_state", "service_trip", "service_trip"]
+    assert validation["vehicle_soc_events"][0]["soc_after_kwh"] == 200.0
+    assert validation["vehicle_soc_events"][-1]["soc_after_kwh"] == 180.0
 
 
 def test_service_and_charging_overlap_fails() -> None:
@@ -234,6 +242,14 @@ def test_source_split_rows_are_one_physical_charging_session() -> None:
     assert validation["accepted"] is True
     assert len(charging_events) == 1
     assert charging_events[0]["energy_kwh"] == 12.5
+    assert charging_events[0]["power_kw"] == 50.0
+    assert charging_events[0]["power_limit_kw"] == 90.0
+    charging_soc_event = next(
+        event
+        for event in validation["vehicle_soc_events"]
+        if event["event_type"] == "charging"
+    )
+    assert charging_soc_event["soc_after_kwh"] == 180.0 + 12.5 * 0.95
 
 
 def test_charging_while_vehicle_waits_away_from_depot_fails() -> None:
@@ -341,3 +357,34 @@ def test_required_physical_metric_missing_or_wrong_type_is_not_zero() -> None:
     wrong_type = deepcopy(complete)
     wrong_type["unknown_charger_id_count"] = "0"
     assert _zero_hard_validation_counts(wrong_type) is False
+
+
+def test_persists_event_soc_and_charger_csv_evidence(
+    tmp_path: Path,
+) -> None:
+    result = _result()
+    result["charging_schedule"] = [
+        _charging_row(slot_index=40, charge_kw=45.0)
+    ]
+    validation = validate_physical_event_schedule(
+        problem=_problem(),
+        serialized_result=result,
+    )
+
+    _persist_physical_event_artifacts(
+        run_dir=tmp_path,
+        event_validation=validation,
+    )
+
+    with (
+        tmp_path / "graph" / "vehicle_soc_event_timeline.csv"
+    ).open(encoding="utf-8-sig", newline="") as handle:
+        soc_rows = list(csv.DictReader(handle))
+    with (
+        tmp_path / "graph" / "charger_occupancy_timeline.csv"
+    ).open(encoding="utf-8-sig", newline="") as handle:
+        charger_rows = list(csv.DictReader(handle))
+    assert soc_rows[0]["event_type"] == "initial_state"
+    assert any(row["event_type"] == "charging" for row in soc_rows)
+    assert charger_rows[0]["power_kw"] == "45.0"
+    assert charger_rows[0]["power_limit_kw"] == "90.0"
