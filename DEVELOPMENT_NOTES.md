@@ -1,5 +1,24 @@
 # Development Notes
 
+## 2026-07-28 Prepare schema v3: explicit fleet state for formal runs
+
+- The first clean-HEAD formal attempt correctly stopped before MILP because
+  the existing v2 Prepare artifacts omitted charger compatibility declarations
+  and per-vehicle initial ICE fuel, even though the solver had always derived
+  those values from the selected depot charger inventory and the simulation
+  fuel-percentage settings.
+- Prepare now emits schema
+  `v3_trip_stop_polyline_distance_explicit_fleet_state`, so the new
+  `prepared_input_id` cannot collide with a v2 artifact. It materializes only
+  the effective solver inputs: BEVs receive the selected depot charger IDs
+  when no declaration exists, and ICE buses receive
+  `fuelTankL * min(initial_ice_fuel_percent, max_ice_fuel_percent)` (or the
+  configured initial ratio when no maximum is configured).
+- The decision rule and derived record counts are saved in
+  `fleet_state_materialization`. No distance, SOC, fuel consumption, or
+  energy quantity is modified. The previous v2 run attempt is not reused;
+  fresh v3 Prepare artifacts are required before the sunny/rain executions.
+
 ## 2026-07-28 scenario fleet contract v2 and independent release gates
 
 - Replaced the remaining fixed fleet-count authority with the exact active

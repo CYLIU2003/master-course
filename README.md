@@ -32,10 +32,16 @@ simulation artifact, not an automatically accepted research result.
   contract hash. There is no global BEV/ICE count. Optional CLI count arguments
   are assertions only.
   Formal records must explicitly define initial SOC/fuel and availability;
-  contradictory availability fields fail. Vehicle-type-catalog battery,
-  consumption, charge-power, and charger-compatibility data are materialized
-  into the active record and parameter hash, while the raw model/type remains
-  auditable in the artifact.
+  contradictory availability fields fail. Prepare schema
+  `v3_trip_stop_polyline_distance_explicit_fleet_state` materializes the
+  effective initial ICE fuel (tank capacity × the configured initial/max
+  percentage) and, when omitted by legacy records, the selected depot's full
+  charger-ID set. The derivation rule and counts are persisted in
+  `fleet_state_materialization`; no physical distance, SOC, fuel consumption,
+  or energy value is rescaled. Vehicle-type-catalog battery, consumption,
+  charge-power, and charger-compatibility data are materialized into the active
+  record and parameter hash, while the raw model/type remains auditable in the
+  artifact.
 - `charging_source_provenance.json` distinguishes exact depot/time-step energy
   flows from vehicle-level allocations. A proportional allocation must never be
   described as solver-native vehicle-source evidence.

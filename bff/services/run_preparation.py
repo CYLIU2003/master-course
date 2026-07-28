@@ -14,6 +14,7 @@ from typing import Any, Optional
 
 import pandas as pd
 from bff.services.route_catalog_audit import audit_route_catalog_consistency
+from src.optimization.common.fleet_contract import canonical_powertrain
 from src.optimization.common.pv_area import (
     DEFAULT_PERFORMANCE_RATIO,
     estimate_depot_pv_from_area,
@@ -23,7 +24,10 @@ from src.value_normalization import normalize_for_python
 
 log = logging.getLogger("run_prep")
 
-PREPARED_INPUT_SCHEMA_VERSION = "v2_trip_stop_polyline_distance"
+# Bump this whenever the prepared payload changes in a way that affects the
+# canonical solver input.  The schema suffix is part of prepared_input_id, so
+# old prepared files cannot be silently reused after a fleet-contract change.
+PREPARED_INPUT_SCHEMA_VERSION = "v3_trip_stop_polyline_distance_explicit_fleet_state"
 
 
 def _normalize_solver_mode(mode: Any) -> str:
@@ -1042,6 +1046,150 @@ def _enrich_trip_distances_from_stop_sequences(
     }
 
 
+def _ratio_like(value: Any) -> Optional[float]:
+    """Normalize a percentage-or-ratio configuration value without guessing."""
+
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(parsed):
+        return None
+    ratio = parsed / 100.0 if parsed > 1.0 else parsed
+    if ratio < 0.0 or ratio > 1.0:
+        return None
+    return ratio
+
+
+def _materialize_explicit_fleet_state(
+    vehicles: list[dict[str, Any]],
+    chargers: list[dict[str, Any]],
+    simulation_config: dict[str, Any],
+    *,
+    selected_depot_ids: list[str],
+    vehicle_type_catalog: Any = None,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Persist the effective fleet state required by the formal contract.
+
+    Older scenario records relied on two deterministic solver defaults: a BEV
+    could use the selected depot's charger inventory when no compatibility list
+    was present, and ICE initial fuel was derived from the configured tank
+    percentage.  Formal runs must not hide either decision, so Prepare expands
+    those existing configuration rules into explicit vehicle fields and records
+    the derivation in an auditable payload.  No distance, SOC, fuel consumption,
+    or energy value is changed here.
+    """
+
+    selected_depots = {
+        str(value or "").strip()
+        for value in selected_depot_ids
+        if str(value or "").strip()
+    }
+    charger_ids_by_depot: dict[str, list[str]] = {}
+    for charger in chargers:
+        if not isinstance(charger, dict):
+            continue
+        charger_id = str(
+            charger.get("id")
+            or charger.get("chargerId")
+            or charger.get("charger_id")
+            or ""
+        ).strip()
+        depot_id = str(
+            charger.get("siteId")
+            or charger.get("depotId")
+            or charger.get("depot_id")
+            or ""
+        ).strip()
+        if charger_id and depot_id and depot_id in selected_depots:
+            charger_ids_by_depot.setdefault(depot_id, []).append(charger_id)
+    for depot_id in charger_ids_by_depot:
+        charger_ids_by_depot[depot_id] = sorted(set(charger_ids_by_depot[depot_id]))
+
+    initial_fuel_ratio = _ratio_like(
+        simulation_config.get("initial_ice_fuel_percent")
+    )
+    max_fuel_ratio = _ratio_like(simulation_config.get("max_ice_fuel_percent"))
+    effective_initial_fuel_ratio = None
+    if initial_fuel_ratio is not None:
+        effective_initial_fuel_ratio = (
+            min(initial_fuel_ratio, max_fuel_ratio)
+            if max_fuel_ratio is not None
+            else initial_fuel_ratio
+        )
+
+    materialized: list[dict[str, Any]] = []
+    compatibility_derived = 0
+    initial_fuel_derived = 0
+    for vehicle in vehicles:
+        row = dict(vehicle)
+        try:
+            powertrain = canonical_powertrain(
+                row,
+                vehicle_type_catalog,
+                research_run=False,
+            )
+        except Exception:
+            powertrain = ""
+
+        depot_id = str(
+            row.get("depotId")
+            or row.get("depot_id")
+            or row.get("homeDepotId")
+            or row.get("home_depot_id")
+            or ""
+        ).strip()
+        if powertrain == "BEV" and not (
+            row.get("compatibleChargerIds")
+            or row.get("compatible_charger_ids")
+        ):
+            compatible_ids = list(charger_ids_by_depot.get(depot_id) or ())
+            if compatible_ids:
+                row["compatibleChargerIds"] = compatible_ids
+                row["chargerCompatibilitySource"] = (
+                    "selected_depot_charger_inventory"
+                )
+                compatibility_derived += 1
+
+        if powertrain == "ICE" and not (
+            "initialFuelL" in row or "initial_fuel_l" in row
+        ):
+            tank_capacity = row.get("fuelTankL")
+            if tank_capacity is not None and effective_initial_fuel_ratio is not None:
+                try:
+                    tank_value = float(tank_capacity)
+                except (TypeError, ValueError):
+                    tank_value = None
+                if tank_value is not None and math.isfinite(tank_value) and tank_value >= 0.0:
+                    row["initialFuelL"] = tank_value * effective_initial_fuel_ratio
+                    row["initialFuelSource"] = (
+                        "simulation_config.initial_ice_fuel_percent"
+                    )
+                    initial_fuel_derived += 1
+        materialized.append(row)
+
+    return materialized, {
+        "schema_version": "explicit_fleet_state_v1",
+        "source": "prepare_effective_solver_defaults",
+        "selected_depot_ids": sorted(selected_depots),
+        "charger_compatibility_rule": (
+            "all_selected_depot_chargers_when_vehicle_record_omits_compatibility"
+        ),
+        "charger_compatibility_derived_vehicle_count": compatibility_derived,
+        "initial_fuel_rule": (
+            "fuel_tank_l_times_effective_initial_ice_fuel_ratio"
+        ),
+        "initial_ice_fuel_percent": simulation_config.get(
+            "initial_ice_fuel_percent"
+        ),
+        "max_ice_fuel_percent": simulation_config.get("max_ice_fuel_percent"),
+        "effective_initial_fuel_ratio": effective_initial_fuel_ratio,
+        "initial_fuel_derived_vehicle_count": initial_fuel_derived,
+    }
+
+
 def _build_canonical_input(
     *,
     scenario: dict,
@@ -1067,8 +1215,14 @@ def _build_canonical_input(
     planning_days = max(int(simulation_config.get("planning_days") or 1), 1)
     dataset_id = _dataset_id(scenario)
     random_seed = _random_seed(scenario)
-    vehicles = [dict(item) for item in list(scenario.get("vehicles") or [])]
     chargers = [dict(item) for item in list(scenario.get("chargers") or [])]
+    vehicles, fleet_state_materialization = _materialize_explicit_fleet_state(
+        [dict(item) for item in list(scenario.get("vehicles") or [])],
+        chargers,
+        simulation_config,
+        selected_depot_ids=list(scope.depot_ids),
+        vehicle_type_catalog=scenario,
+    )
     solver_mode_requested = str(
         simulation_config.get("solver_mode")
         or (scenario_overlay.get("solver_config") or {}).get("mode")
@@ -1170,6 +1324,7 @@ def _build_canonical_input(
         "dispatch_scope": dispatch_scope,
         "scenario_overlay": scenario_overlay,
         "simulation_config": simulation_config,
+        "fleet_state_materialization": fleet_state_materialization,
         "depots": depots,
         "routes": routes,
         "vehicles": vehicles,

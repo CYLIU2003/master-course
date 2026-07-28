@@ -7,12 +7,56 @@ from unittest import mock
 from bff.routers import optimization
 from bff.services.run_preparation import (
     _scenario_hash,
+    _materialize_explicit_fleet_state,
     RunPreparation,
     get_or_build_run_preparation,
     invalidate_scenario,
     materialize_scenario_from_prepared_input,
     solver_prepare_profile,
 )
+
+
+def test_prepare_materializes_explicit_fleet_state_from_existing_solver_rules() -> None:
+    vehicles = [
+        {
+            "id": "bev-1",
+            "type": "BEV",
+            "depotId": "dep1",
+            "batteryKwh": 314.0,
+            "chargePowerKw": 90.0,
+            "initialSoc": 0.8,
+        },
+        {
+            "id": "ice-1",
+            "type": "ICE",
+            "depotId": "dep1",
+            "fuelTankL": 300.0,
+            "fuelEfficiencyKmPerL": 4.5,
+        },
+    ]
+    chargers = [
+        {"id": "dep1-fast-1", "siteId": "dep1", "powerKw": 90.0},
+        {"id": "dep1-normal-1", "siteId": "dep1", "powerKw": 50.0},
+        {"id": "other-fast-1", "siteId": "other", "powerKw": 90.0},
+    ]
+
+    materialized, audit = _materialize_explicit_fleet_state(
+        vehicles,
+        chargers,
+        {
+            "initial_ice_fuel_percent": 100.0,
+            "max_ice_fuel_percent": 90.0,
+        },
+        selected_depot_ids=["dep1"],
+    )
+
+    assert materialized[0]["compatibleChargerIds"] == [
+        "dep1-fast-1",
+        "dep1-normal-1",
+    ]
+    assert materialized[1]["initialFuelL"] == 270.0
+    assert audit["charger_compatibility_derived_vehicle_count"] == 1
+    assert audit["initial_fuel_derived_vehicle_count"] == 1
 
 
 def test_materialize_scenario_from_prepared_input_overlays_scope_artifacts() -> None:
