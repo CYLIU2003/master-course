@@ -1,5 +1,45 @@
 # Development Notes
 
+## 2026-07-28 P0 physical-validation payload provenance fix
+
+- The clean baseline `1acfdff8095932c848bfe91fd79fd4e09f493ca5` produced
+  diagnostic runs `run_20260728_1835` and `run_20260728_1841` that completed
+  all 24 Rolling steps, had `chain_accepted=true`, and had eligible
+  executed-day accounting, but failed only during independent physical-event
+  validation. The BFF wrapper lacked top-level `vehicle_paths`, so the
+  validator reconstructed charging without service/deadhead energy and
+  falsely reported 264 unassigned trips, 13 terminal-SOC violations, and one
+  upper-SOC violation.
+- Finalization now constructs a fail-closed validation payload from the
+  persisted `canonical_solver_result.json`, whose SHA-256 must match the
+  rolling-chain provenance. It verifies non-empty/malformed paths, exact
+  equality of flattened paths, `served_trip_ids`, and canonical problem trips,
+  zero unserved trips, and preserves canonical refueling. It overlays only
+  `rolling_hourly_chain/charging_schedule.csv` and writes the source hashes
+  and counts to `physical_validation_input_manifest.json`.
+- This is not a validation bypass. The independent event validator remains the
+  final physical gate; a real charger/location/SOC violation still rejects the
+  run. The artifact-completeness contract verifies the input-manifest schema,
+  source paths, hashes, counts, and verified checks.
+- The corrected reconstruction exposed one genuine numeric-boundary
+  inconsistency: `1.0000000116860974e-06 kWh` was just above the old validator
+  comparison of `1e-6 kWh`. The pure terminal-SOC contract now lives in the
+  common policy module and is used by both Stage 2 and independent validation:
+  scientific tolerance `1e-6 kWh` plus numerical margin `1e-9 kWh` yields an
+  acceptance limit of `1.001e-6 kWh`. This does not relax the scientific
+  tolerance; deviations beyond that explicit limit still fail.
+- Focused P0 regression tests cover the original BFF-wrapper boundary, CSV
+  overlay, SHA/path/served-trip negative cases, a genuine charger violation,
+  terminal boundary behavior, and tampered provenance. A fresh clean-commit
+  264-trip normal frontend run is still required before these changes can be
+  treated as operational evidence.
+- Independent strict review found and closed one additional P1: a
+  self-consistent but false input manifest could previously evade the
+  artifact-completeness audit. The audit now binds both hashes to
+  `rolling_chain_summary.json` and recomputes vehicle-path, assigned,
+  served, unserved, and total-trip counts from `canonical_solver_result.json`.
+  Negative regression cases cover count and assignment-hash tampering.
+
 ## 2026-07-28 Stage 2 charger-assignment numeric consistency fix
 
 - Manual frontend run `output/2026-07-28/run_20260728_1755` passed Prepare,

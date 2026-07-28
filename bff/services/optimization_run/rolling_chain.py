@@ -8,6 +8,7 @@ CLI.  It never rebuilds timetable rows, duties, or vehicle assignments.
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from datetime import date
 import csv
@@ -40,6 +41,12 @@ from src.optimization.validation.physical_event_schedule import (
 DEFAULT_FRONTEND_RUN_PROFILE = "day_ahead_and_hourly_rolling"
 DAY_AHEAD_EXPLORATORY_PROFILE = "day_ahead_exploratory"
 PHYSICAL_SCHEDULE_VALIDATION_ARTIFACT = "physical_schedule_validation.json"
+PHYSICAL_VALIDATION_INPUT_MANIFEST_ARTIFACT = (
+    "physical_validation_input_manifest.json"
+)
+PHYSICAL_VALIDATION_INPUT_MANIFEST_SCHEMA_VERSION = (
+    "physical_validation_input_manifest_v1"
+)
 COMPARISON_CASE_MANIFEST_ARTIFACT = "comparison_case_manifest.json"
 SUPPORTED_FRONTEND_RUN_PROFILES = frozenset(
     {DEFAULT_FRONTEND_RUN_PROFILE, DAY_AHEAD_EXPLORATORY_PROFILE}
@@ -134,6 +141,200 @@ def _load_json_object(path: Path) -> dict[str, Any]:
     return dict(loaded)
 
 
+def _is_sha256(value: str) -> bool:
+    """Return whether ``value`` is a normalized SHA-256 digest."""
+
+    return len(value) == 64 and all(
+        character in "0123456789abcdef" for character in value
+    )
+
+
+def _build_executed_physical_validation_payload(
+    *,
+    run_dir: Path,
+    problem: Any,
+    chain: Mapping[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Build the independently validated executed-day schedule fail-closed.
+
+    The day-ahead canonical result remains the only assignment/refueling
+    source. The rolling chain contributes only the executed charging rows.
+    This deliberately prevents the BFF reporting wrapper from erasing
+    ``vehicle_paths`` before the independent event reconstruction.
+    """
+
+    canonical_path = Path(run_dir) / "canonical_solver_result.json"
+    try:
+        canonical = _load_json_object(canonical_path)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise RollingChainExecutionError(
+            "Cannot load canonical solver result for physical validation: "
+            f"{exc}"
+        ) from exc
+
+    expected_canonical_sha = str(
+        chain.get("day_ahead_result_sha256") or ""
+    ).strip().lower()
+    if not _is_sha256(expected_canonical_sha):
+        raise RollingChainExecutionError(
+            "Rolling chain has a missing or malformed day_ahead_result_sha256"
+        )
+    actual_canonical_sha = _file_sha256(canonical_path)
+    if actual_canonical_sha != expected_canonical_sha:
+        raise RollingChainExecutionError(
+            "Canonical solver result SHA-256 does not match rolling chain "
+            "day_ahead_result_sha256"
+        )
+
+    assignment_hash = str(
+        chain.get("day_ahead_assignment_hash") or ""
+    ).strip().lower()
+    if not _is_sha256(assignment_hash):
+        raise RollingChainExecutionError(
+            "Rolling chain has a missing or malformed day_ahead_assignment_hash"
+        )
+
+    raw_paths = canonical.get("vehicle_paths")
+    if not isinstance(raw_paths, dict):
+        raise RollingChainExecutionError(
+            "Canonical solver result is missing vehicle_paths mapping"
+        )
+
+    problem_trip_ids = [
+        str(getattr(trip, "trip_id", "") or "").strip()
+        for trip in tuple(getattr(problem, "trips", ()) or ())
+    ]
+    if not all(problem_trip_ids):
+        raise RollingChainExecutionError(
+            "Canonical problem contains a missing trip_id for physical validation"
+        )
+    if len(problem_trip_ids) != len(set(problem_trip_ids)):
+        raise RollingChainExecutionError(
+            "Canonical problem contains duplicate trip_ids for physical validation"
+        )
+    if problem_trip_ids and not raw_paths:
+        raise RollingChainExecutionError(
+            "Canonical solver result has empty vehicle_paths"
+        )
+
+    assigned_trip_ids: list[str] = []
+    for raw_vehicle_id, raw_trip_ids in raw_paths.items():
+        vehicle_id = str(raw_vehicle_id or "").strip()
+        if not vehicle_id:
+            raise RollingChainExecutionError(
+                "Canonical solver result vehicle_paths contains an empty vehicle id"
+            )
+        if not isinstance(raw_trip_ids, list):
+            raise RollingChainExecutionError(
+                "Canonical solver result vehicle_paths must map each vehicle to a list"
+            )
+        for raw_trip_id in raw_trip_ids:
+            trip_id = str(raw_trip_id or "").strip()
+            if not trip_id:
+                raise RollingChainExecutionError(
+                    "Canonical solver result vehicle_paths contains an empty trip id"
+                )
+            assigned_trip_ids.append(trip_id)
+    if problem_trip_ids and not assigned_trip_ids:
+        raise RollingChainExecutionError(
+            "Canonical solver result has empty vehicle_paths"
+        )
+
+    served_trip_ids = canonical.get("served_trip_ids")
+    if not isinstance(served_trip_ids, list):
+        raise RollingChainExecutionError(
+            "Canonical solver result is missing served_trip_ids list"
+        )
+    normalized_served_trip_ids = [
+        str(trip_id or "").strip() for trip_id in served_trip_ids
+    ]
+    if not all(normalized_served_trip_ids):
+        raise RollingChainExecutionError(
+            "Canonical solver result served_trip_ids contains an empty trip id"
+        )
+    if Counter(assigned_trip_ids) != Counter(normalized_served_trip_ids):
+        raise RollingChainExecutionError(
+            "Canonical solver result vehicle_paths and served_trip_ids disagree"
+        )
+    if Counter(assigned_trip_ids) != Counter(problem_trip_ids):
+        raise RollingChainExecutionError(
+            "Canonical solver result vehicle_paths do not cover canonical "
+            "problem trips exactly"
+        )
+
+    unserved_trip_ids = canonical.get("unserved_trip_ids")
+    if not isinstance(unserved_trip_ids, list):
+        raise RollingChainExecutionError(
+            "Canonical solver result is missing unserved_trip_ids list"
+        )
+    if unserved_trip_ids:
+        raise RollingChainExecutionError(
+            "Canonical solver result has non-empty unserved_trip_ids"
+        )
+    try:
+        trip_count_unserved = int(canonical.get("trip_count_unserved") or 0)
+    except (TypeError, ValueError) as exc:
+        raise RollingChainExecutionError(
+            "Canonical solver result has malformed trip_count_unserved"
+        ) from exc
+    if trip_count_unserved != 0:
+        raise RollingChainExecutionError(
+            "Canonical solver result trip_count_unserved is not zero"
+        )
+    if not isinstance(canonical.get("refueling_schedule"), list):
+        raise RollingChainExecutionError(
+            "Canonical solver result is missing refueling_schedule list"
+        )
+
+    executed_charging_path = (
+        Path(run_dir) / "rolling_hourly_chain" / "charging_schedule.csv"
+    )
+    if not executed_charging_path.is_file():
+        raise RollingChainExecutionError(
+            "Executed rolling charging_schedule.csv is missing"
+        )
+    try:
+        with executed_charging_path.open(
+            "r", encoding="utf-8", newline=""
+        ) as handle:
+            reader = csv.DictReader(handle)
+            if not reader.fieldnames:
+                raise ValueError("CSV header is missing")
+            executed_charging_rows = [dict(row) for row in reader]
+    except (OSError, csv.Error, ValueError) as exc:
+        raise RollingChainExecutionError(
+            "Cannot load executed rolling charging_schedule.csv: "
+            f"{exc}"
+        ) from exc
+
+    payload = dict(canonical)
+    payload["charging_schedule"] = executed_charging_rows
+    manifest = {
+        "schema_version": PHYSICAL_VALIDATION_INPUT_MANIFEST_SCHEMA_VERSION,
+        "assignment_source": "canonical_solver_result.json",
+        "charging_source": "rolling_hourly_chain/charging_schedule.csv",
+        "refueling_source": "canonical_solver_result.json",
+        "day_ahead_assignment_hash": assignment_hash,
+        "canonical_solver_result_sha256": actual_canonical_sha,
+        "executed_charging_schedule_sha256": _file_sha256(
+            executed_charging_path
+        ),
+        "vehicle_path_count": len(raw_paths),
+        "assigned_trip_occurrence_count": len(assigned_trip_ids),
+        "served_trip_occurrence_count": len(normalized_served_trip_ids),
+        "problem_trip_count": len(problem_trip_ids),
+        "unserved_trip_count": len(unserved_trip_ids),
+        "validation_contract": {
+            "canonical_sha_matches_rolling_chain": True,
+            "vehicle_paths_match_served_trip_ids": True,
+            "vehicle_paths_cover_problem_trips_exactly": True,
+            "unserved_trip_ids_empty": True,
+            "executed_charging_overlay_only": True,
+        },
+    }
+    return payload, manifest
+
+
 def _zero_hard_validation_counts(metrics: Mapping[str, Any]) -> bool:
     """Fail closed when a required metric is absent, malformed, or nonzero."""
 
@@ -143,7 +344,7 @@ def _zero_hard_validation_counts(metrics: Mapping[str, Any]) -> bool:
         value = metrics[key]
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             return False
-        if not math.isfinite(float(value)) or int(value) != 0:
+        if not math.isfinite(float(value)) or float(value) != 0.0:
             return False
     return True
 
@@ -208,6 +409,7 @@ def _physical_schedule_validation(
     chain: Mapping[str, Any],
     executed_day: Mapping[str, Any],
     event_validation: Mapping[str, Any],
+    validation_input_manifest: Mapping[str, Any],
 ) -> dict[str, Any]:
     """Independently classify physical feasibility, not research acceptance."""
 
@@ -254,6 +456,42 @@ def _physical_schedule_validation(
         ),
         "independent_event_schedule_accepted": (
             event_validation.get("accepted") is True
+        ),
+        "independent_event_input_manifest_current": (
+            validation_input_manifest.get("schema_version")
+            == PHYSICAL_VALIDATION_INPUT_MANIFEST_SCHEMA_VERSION
+        ),
+        "independent_event_input_matches_rolling_chain": (
+            validation_input_manifest.get("assignment_source")
+            == "canonical_solver_result.json"
+            and validation_input_manifest.get("charging_source")
+            == "rolling_hourly_chain/charging_schedule.csv"
+            and validation_input_manifest.get("refueling_source")
+            == "canonical_solver_result.json"
+            and validation_input_manifest.get("canonical_solver_result_sha256")
+            == chain.get("day_ahead_result_sha256")
+            and validation_input_manifest.get("day_ahead_assignment_hash")
+            == chain.get("day_ahead_assignment_hash")
+            and dict(
+                validation_input_manifest.get("validation_contract") or {}
+            ).get("canonical_sha_matches_rolling_chain")
+            is True
+            and dict(
+                validation_input_manifest.get("validation_contract") or {}
+            ).get("vehicle_paths_match_served_trip_ids")
+            is True
+            and dict(
+                validation_input_manifest.get("validation_contract") or {}
+            ).get("vehicle_paths_cover_problem_trips_exactly")
+            is True
+            and dict(
+                validation_input_manifest.get("validation_contract") or {}
+            ).get("unserved_trip_ids_empty")
+            is True
+            and dict(
+                validation_input_manifest.get("validation_contract") or {}
+            ).get("executed_charging_overlay_only")
+            is True
         ),
         "all_required_hard_validation_checks_passed": (
             solver_validation_metrics.get("all_required_validation_checks_passed")
@@ -309,6 +547,9 @@ def _physical_schedule_validation(
         },
         "evidence": {
             "canonical_solver_result": "canonical_solver_result.json",
+            "physical_validation_input_manifest": (
+                PHYSICAL_VALIDATION_INPUT_MANIFEST_ARTIFACT
+            ),
             "rolling_chain_summary": (
                 "rolling_hourly_chain/rolling_chain_summary.json"
             ),
@@ -599,6 +840,7 @@ def _research_manifest(
         "rolling_hourly_chain/day_ahead_vs_rolling_summary.json",
         "rolling_hourly_chain/hourly_energy_flow_chart.csv",
         "rolling_hourly_chain/charging_schedule.csv",
+        PHYSICAL_VALIDATION_INPUT_MANIFEST_ARTIFACT,
         PHYSICAL_SCHEDULE_VALIDATION_ARTIFACT,
         COMPARISON_CASE_MANIFEST_ARTIFACT,
         "final_cost_reconciliation.json",
@@ -840,20 +1082,18 @@ def finalize_frontend_rolling_evidence(
             "Cannot finalize accounting from an ineligible executed day"
         )
 
-    executed_result_for_validation = dict(optimization_result)
-    executed_charging_path = (
-        run_dir / "rolling_hourly_chain" / "charging_schedule.csv"
+    (
+        executed_result_for_validation,
+        validation_input_manifest,
+    ) = _build_executed_physical_validation_payload(
+        run_dir=run_dir,
+        problem=problem,
+        chain=chain,
     )
-    if not executed_charging_path.is_file():
-        raise RollingChainExecutionError(
-            "Executed rolling charging_schedule.csv is missing"
-        )
-    with executed_charging_path.open(
-        "r", encoding="utf-8", newline=""
-    ) as handle:
-        executed_result_for_validation["charging_schedule"] = list(
-            csv.DictReader(handle)
-        )
+    _write_json(
+        run_dir / PHYSICAL_VALIDATION_INPUT_MANIFEST_ARTIFACT,
+        validation_input_manifest,
+    )
     event_validation = validate_physical_event_schedule(
         problem=problem,
         serialized_result=executed_result_for_validation,
@@ -868,6 +1108,7 @@ def finalize_frontend_rolling_evidence(
         chain=chain,
         executed_day=executed_day,
         event_validation=event_validation,
+        validation_input_manifest=validation_input_manifest,
     )
     _write_json(
         run_dir / PHYSICAL_SCHEDULE_VALIDATION_ARTIFACT,
@@ -878,9 +1119,29 @@ def finalize_frontend_rolling_evidence(
         physical_validation,
     )
     if physical_validation.get("accepted") is not True:
+        validation_metrics = dict(
+            physical_validation.get("validation_metrics") or {}
+        )
+        nonzero_metrics = {
+            key: value
+            for key, value in validation_metrics.items()
+            if key in REQUIRED_ZERO_METRICS
+            and isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and value != 0
+        }
         raise RollingChainExecutionError(
             "Physical schedule validation failed: "
-            + ", ".join(physical_validation.get("failed_checks") or ())
+            + json.dumps(
+                {
+                    "failed_checks": list(
+                        physical_validation.get("failed_checks") or ()
+                    ),
+                    "nonzero_validation_metrics": nonzero_metrics,
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            )
         )
 
     executed_breakdown = dict(executed_day.get("cost_breakdown") or {})

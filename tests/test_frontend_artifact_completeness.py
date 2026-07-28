@@ -154,6 +154,62 @@ def _complete_run(tmp_path: Path) -> Path:
         ),
         encoding="utf-8",
     )
+    canonical_path = run_dir / "canonical_solver_result.json"
+    executed_charging_path = rolling_dir / "charging_schedule.csv"
+    canonical_path.write_text(
+        json.dumps(
+            {
+                "vehicle_paths": {"vehicle-1": ["trip-1", "trip-2"]},
+                "served_trip_ids": ["trip-1", "trip-2"],
+                "unserved_trip_ids": [],
+                "trip_count_served": 2,
+                "trip_count_unserved": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+    rolling_summary.update(
+        {
+            "day_ahead_result_sha256": hashlib.sha256(
+                canonical_path.read_bytes()
+            ).hexdigest(),
+            "day_ahead_assignment_hash": "a" * 64,
+        }
+    )
+    (rolling_dir / "rolling_chain_summary.json").write_text(
+        json.dumps(rolling_summary),
+        encoding="utf-8",
+    )
+    (run_dir / "physical_validation_input_manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "physical_validation_input_manifest_v1",
+                "assignment_source": "canonical_solver_result.json",
+                "charging_source": "rolling_hourly_chain/charging_schedule.csv",
+                "refueling_source": "canonical_solver_result.json",
+                "day_ahead_assignment_hash": "a" * 64,
+                "canonical_solver_result_sha256": hashlib.sha256(
+                    canonical_path.read_bytes()
+                ).hexdigest(),
+                "executed_charging_schedule_sha256": hashlib.sha256(
+                    executed_charging_path.read_bytes()
+                ).hexdigest(),
+                "vehicle_path_count": 1,
+                "assigned_trip_occurrence_count": 2,
+                "served_trip_occurrence_count": 2,
+                "problem_trip_count": 2,
+                "unserved_trip_count": 0,
+                "validation_contract": {
+                    "canonical_sha_matches_rolling_chain": True,
+                    "vehicle_paths_match_served_trip_ids": True,
+                    "vehicle_paths_cover_problem_trips_exactly": True,
+                    "unserved_trip_ids_empty": True,
+                    "executed_charging_overlay_only": True,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     (run_dir / "physical_schedule_validation.json").write_text(
         json.dumps({"accepted": True}),
         encoding="utf-8",
@@ -211,6 +267,80 @@ def test_complete_frontend_run_artifact_contract_passes(
     assert (
         audit["required_artifact_count"]
         == audit["verified_artifact_count"]
+    )
+
+
+def test_artifact_contract_rejects_tampered_physical_validation_input_manifest(
+    tmp_path: Path,
+) -> None:
+    run_dir = _complete_run(tmp_path)
+    manifest_path = run_dir / "physical_validation_input_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["canonical_solver_result_sha256"] = "0" * 64
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    audit = audit_frontend_run_artifacts(
+        run_dir,
+        research_run=True,
+        require_rolling=True,
+    )
+
+    assert audit["status"] == "ERROR"
+    assert any(
+        "canonical_solver_result_sha256 does not match" in error
+        for error in audit["content_errors"]
+    )
+
+
+def test_artifact_contract_rejects_manifest_counts_that_do_not_match_canonical(
+    tmp_path: Path,
+) -> None:
+    run_dir = _complete_run(tmp_path)
+    manifest_path = run_dir / "physical_validation_input_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest.update(
+        {
+            "vehicle_path_count": 0,
+            "assigned_trip_occurrence_count": 0,
+            "served_trip_occurrence_count": 0,
+            "problem_trip_count": 0,
+        }
+    )
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    audit = audit_frontend_run_artifacts(
+        run_dir,
+        research_run=True,
+        require_rolling=True,
+    )
+
+    assert audit["status"] == "ERROR"
+    assert any(
+        "vehicle_path_count does not match canonical_solver_result" in error
+        for error in audit["content_errors"]
+    )
+
+
+def test_artifact_contract_rejects_manifest_assignment_hash_not_in_chain(
+    tmp_path: Path,
+) -> None:
+    run_dir = _complete_run(tmp_path)
+    manifest_path = run_dir / "physical_validation_input_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["day_ahead_assignment_hash"] = "f" * 64
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    audit = audit_frontend_run_artifacts(
+        run_dir,
+        research_run=True,
+        require_rolling=True,
+    )
+
+    assert audit["status"] == "ERROR"
+    assert any(
+        "day_ahead_assignment_hash does not match rolling_chain_summary"
+        in error
+        for error in audit["content_errors"]
     )
 
 

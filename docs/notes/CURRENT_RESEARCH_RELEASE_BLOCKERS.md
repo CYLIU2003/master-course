@@ -1,7 +1,7 @@
 # Current research release blockers
 
 Status date: 2026-07-28
-Code status: 997 local regression tests plus exact-data dirty probes passed;
+Code status: 1012 local regression tests plus exact-data dirty probes passed;
 no post-fix clean 264-trip ordinary frontend run yet
 Teacher release status: **BLOCKED**
 
@@ -32,6 +32,28 @@ Tk frontend
 Rolling orchestration itself is no longer a blocker. Physical feasibility,
 research acceptance, accounting eligibility, comparison validity, and
 optimality remain separate decisions.
+
+## P0 physical-validation provenance correction, pending fresh evidence
+
+The archived 18:35 and 18:41 runs are diagnostic only. They completed 24/24
+Rolling steps with `chain_accepted=true` and eligible executed accounting, but
+the finalizer passed the lossy BFF reporting wrapper to the independent event
+validator. That wrapper had no top-level `vehicle_paths`; the validator therefore
+reconstructed charging without the 264 service/deadhead events and produced
+false unassigned-trip and terminal-SOC findings.
+
+The current fix uses only the SHA-matched persisted canonical result for
+assignment/refueling, overlays only executed Rolling charging, and persists
+`physical_validation_input_manifest.json`. It fails closed when canonical SHA,
+vehicle paths, served trips, canonical problem trips, or zero-unserved status
+do not agree. The independent validator and every physical metric remain
+mandatory. Its terminal-SOC comparison now shares the solver's explicit
+scientific tolerance plus numerical margin; this does not widen the scientific
+tolerance or excuse material energy imbalance.
+
+This code is not accepted evidence until the new frozen clean commit completes
+the normal 264-trip frontend execution and all physical, accounting, artifact,
+and provenance gates are measured from its new run directory.
 
 ## Closed in the current working tree, pending clean-run confirmation
 
@@ -171,6 +193,7 @@ row from an assumption.
 | Check | Acceptance condition | Evidence field/file | Result |
 |---|---|---|---|
 | Git | clean; non-empty start/end SHA identical | `code_provenance.json`, `run_manifest.json` | PENDING |
+| Validation input | SHA-matched canonical paths/refueling plus executed Rolling charging overlay | `physical_validation_input_manifest.json` | PENDING |
 | Fleet | exact active IDs, initial state and parameter hashes match the materialized prepared selected scope; exclusions have reasons | `scenario_fleet_contract.json`, `graph/research_fleet_validation.json` | PENDING |
 | Trips | prepared-scope trip count fully served; duplicate=0 (Tsurumaki spec may assert 264) | physical validation, summary | PENDING |
 | Operator | `UNKNOWN=0` | operator audit | PENDING |

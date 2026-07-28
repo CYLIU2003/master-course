@@ -5,6 +5,11 @@ import math
 from typing import Any, Dict, Mapping, Sequence
 
 from src.dispatch.feasibility import FeasibilityEngine, evaluate_startup_feasibility
+from src.optimization.common.bev_terminal_policy import (
+    BevTerminalSocPolicy,
+    bev_terminal_numeric_acceptance_contract,
+    normalize_bev_terminal_soc_policy,
+)
 from src.optimization.common.soc_helpers import (
     deadhead_before_trip_energy_kwh,
     return_deadhead_energy_kwh,
@@ -799,19 +804,25 @@ def validate_physical_event_schedule(
                         event_id=str(item["event_id"]),
                         detail=f"soc={soc},capacity={capacity}",
                     )
-            terminal_policy = str(
-                problem.metadata.get("bev_terminal_soc_policy") or ""
-            ).strip().lower()
-            if terminal_policy == "return_to_initial":
-                terminal_tolerance = max(
-                    _finite_float(
-                        problem.metadata.get(
-                            "bev_terminal_soc_equality_tolerance_kwh"
-                        ),
-                        1.0e-6,
-                    ),
-                    0.0,
+            terminal_policy = normalize_bev_terminal_soc_policy(
+                problem.metadata.get("bev_terminal_soc_policy"),
+                has_explicit_target=(
+                    problem.metadata.get("final_soc_target_percent")
+                    is not None
+                ),
+            )
+            if terminal_policy is BevTerminalSocPolicy.RETURN_TO_INITIAL:
+                terminal_contract = bev_terminal_numeric_acceptance_contract(
+                    problem.metadata,
+                    gurobi_feasibility_tol=None,
                 )
+                scientific_tolerance = float(
+                    terminal_contract["scientific_tolerance_kwh"]
+                )
+                numeric_margin = float(
+                    terminal_contract["numeric_comparison_margin_kwh"]
+                )
+                terminal_tolerance = scientific_tolerance + numeric_margin
                 terminal_deviation = soc - initial_soc
                 if abs(terminal_deviation) > terminal_tolerance:
                     _record_violation(
@@ -820,7 +831,9 @@ def validate_physical_event_schedule(
                         vehicle_id=vehicle_id,
                         detail=(
                             f"terminal_deviation_kwh={terminal_deviation},"
-                            f"tolerance_kwh={terminal_tolerance}"
+                            f"scientific_tolerance_kwh={scientific_tolerance},"
+                            f"numeric_margin_kwh={numeric_margin},"
+                            f"acceptance_limit_kwh={terminal_tolerance}"
                         ),
                     )
         elif powertrain == "ICE":

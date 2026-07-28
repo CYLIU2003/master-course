@@ -88,7 +88,9 @@ simulation artifact, not an automatically accepted research result.
   The Phase 3 terminal-SOC contract records the raw deviation, scientific
   tolerance, Gurobi-derived numeric margin, acceptance limit, and reason; the
   MILP uses the scientific tolerance and post-solve adds only that narrow
-  numeric margin.
+  numeric margin. The independent physical-event validator consumes this same
+  contract: it does not widen the scientific tolerance or suppress a terminal
+  SOC violation.
 - Formal PV counterfactual comparison is fail-closed: it requires equal trip,
   active-vehicle, vehicle-parameter, initial-state, charger, BESS, tariff,
   calendar, and solver-control content hashes; only a separately recorded PV
@@ -129,6 +131,13 @@ simulation artifact, not an automatically accepted research result.
   at an impossible location, event overlap, charger concurrency/compatibility,
   and independent SOC/fuel failures block finalization. Multiple energy-source
   rows for one vehicle/charger/slot are one physical charging session.
+  Its input is recorded in `physical_validation_input_manifest.json`: the
+  SHA-verified `canonical_solver_result.json` supplies vehicle paths and
+  refueling, while only
+  `rolling_hourly_chain/charging_schedule.csv` replaces day-ahead charging.
+  The finalizer fails closed if the canonical SHA, served-trip set, or exact
+  prepared-problem trip coverage does not match; it never validates the
+  lossy BFF reporting wrapper as a substitute for the canonical schedule.
 - The Tk/BFF time-axis selector preserves `5`, `15`, `30`, and `60` minute
   values. The current formal experiment specification is 15-minute internal
   slots plus 60-minute Rolling updates; other widths must be declared as

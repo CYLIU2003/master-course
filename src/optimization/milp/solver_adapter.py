@@ -20,6 +20,7 @@ from src.optimization.common.bess_terminal_policy import (
 )
 from src.optimization.common.bev_terminal_policy import (
     BevTerminalSocPolicy,
+    bev_terminal_numeric_acceptance_contract,
     normalize_bev_terminal_soc_policy,
 )
 from src.optimization.milp.model_builder import MILPModelBuilder
@@ -242,78 +243,6 @@ def _configured_gurobi_integrality_tol(
     if not 1.0e-9 <= tolerance <= 1.0e-1:
         raise ValueError(f"{field_name} must be within [1e-9, 1e-1]")
     return tolerance
-
-
-def _safe_nonnegative_float_metadata(
-    metadata: Mapping[str, Any],
-    key: str,
-    *,
-    default: float,
-) -> float:
-    """Resolve a non-negative number from problem/run metadata.
-
-    Mirrors ``MILPSolver._safe_nonnegative_float`` but is usable from module
-    helpers that do not have a solver instance. Negative or invalid values
-    fall back to ``default`` so a corrupted tweak cannot silently widen the
-    acceptance band.
-    """
-
-    try:
-        value = float((metadata or {}).get(key))
-    except (TypeError, ValueError):
-        return default
-    return value if value >= 0.0 else default
-
-
-def bev_terminal_numeric_acceptance_contract(
-    problem_metadata: Mapping[str, Any],
-    *,
-    gurobi_feasibility_tol: Optional[float],
-) -> dict[str, Any]:
-    """Resolve the explicit terminal-SOC numeric contract in one place.
-
-    Separates the scientific tolerance (the energy-balance judgement used by
-    receding-horizon rolling) from the numeric comparison margin that the
-    Stage 2 MILP is allowed to relax. Both values, together with the raw
-    deviation, are recorded so a result cannot be silently ``INVALID`` on a
-    floating-point boundary.
-    """
-
-    scientific = _safe_nonnegative_float_metadata(
-        problem_metadata,
-        "bev_terminal_soc_scientific_tolerance_kwh",
-        default=_safe_nonnegative_float_metadata(
-            problem_metadata,
-            "bev_terminal_soc_equality_tolerance_kwh",
-            default=1.0e-6,
-        ),
-    )
-    if gurobi_feasibility_tol is None:
-        gurobi_feasibility_tol = _safe_nonnegative_float_metadata(
-            problem_metadata,
-            "stage2_gurobi_feasibility_tol",
-            default=1.0e-9,
-        )
-    numeric_margin = _safe_nonnegative_float_metadata(
-        problem_metadata,
-        "bev_terminal_soc_numeric_margin_kwh",
-        default=max(float(gurobi_feasibility_tol), 1.0e-9),
-    )
-    return {
-        "scientific_tolerance_kwh": scientific,
-        "numeric_comparison_margin_kwh": numeric_margin,
-        "gurobi_feasibility_tol_kwh": float(gurobi_feasibility_tol),
-        "contract_source_keys": (
-            "bev_terminal_soc_scientific_tolerance_kwh",
-            "bev_terminal_soc_numeric_margin_kwh",
-            "bev_terminal_soc_equality_tolerance_kwh",
-        ),
-        "legacy_equality_tolerance_kwh": _safe_nonnegative_float_metadata(
-            problem_metadata,
-            "bev_terminal_soc_equality_tolerance_kwh",
-            default=1.0e-6,
-        ),
-    }
 
 
 def _max_abs_terminal_target_deviation_kwh(

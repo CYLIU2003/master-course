@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 import hashlib
 import json
 from pathlib import Path
@@ -9,6 +10,9 @@ from typing import Any, Iterable
 
 
 ARTIFACT_CONTRACT_VERSION = "frontend_run_artifacts_v1"
+PHYSICAL_VALIDATION_INPUT_MANIFEST_SCHEMA_VERSION = (
+    "physical_validation_input_manifest_v1"
+)
 
 # These artifacts are generated for every successfully finalized interactive
 # optimization run.  Optional visualizations are validated through
@@ -87,6 +91,7 @@ ROLLING_REQUIRED_ARTIFACTS = (
     "final_cost_reconciliation.json",
     "input_audit.json",
     "manifest.json",
+    "physical_validation_input_manifest.json",
     "physical_schedule_validation.json",
     "scenario_fleet_contract.json",
     "rolling_hourly_chain/charging_schedule.csv",
@@ -528,6 +533,249 @@ def _validate_rolling_content(
                 content_errors.append(
                     "executed-day slot coverage is incomplete: "
                     f"{executed_slots} != {expected_slots}"
+                )
+
+    input_manifest_path = run_dir / "physical_validation_input_manifest.json"
+    if input_manifest_path.is_file():
+        try:
+            input_manifest = _load_json_object(input_manifest_path)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            content_errors.append(
+                f"physical_validation_input_manifest.json: {exc}"
+            )
+        else:
+            if (
+                input_manifest.get("schema_version")
+                != PHYSICAL_VALIDATION_INPUT_MANIFEST_SCHEMA_VERSION
+            ):
+                content_errors.append(
+                    "physical_validation_input_manifest schema_version is invalid"
+                )
+            expected_sources = {
+                "assignment_source": "canonical_solver_result.json",
+                "charging_source": (
+                    "rolling_hourly_chain/charging_schedule.csv"
+                ),
+                "refueling_source": "canonical_solver_result.json",
+            }
+            for key, expected_source in expected_sources.items():
+                if input_manifest.get(key) != expected_source:
+                    content_errors.append(
+                        "physical_validation_input_manifest "
+                        f"{key} is not {expected_source!r}"
+                    )
+            for key, source in (
+                ("canonical_solver_result_sha256", "canonical_solver_result.json"),
+                (
+                    "executed_charging_schedule_sha256",
+                    "rolling_hourly_chain/charging_schedule.csv",
+                ),
+            ):
+                declared_sha = str(input_manifest.get(key) or "").strip().lower()
+                source_path = run_dir / source
+                if (
+                    len(declared_sha) != 64
+                    or not all(
+                        character in "0123456789abcdef"
+                        for character in declared_sha
+                    )
+                ):
+                    content_errors.append(
+                        "physical_validation_input_manifest "
+                        f"{key} is not a SHA-256 digest"
+                    )
+                elif (
+                    source_path.is_file()
+                    and declared_sha != _sha256(source_path)
+                ):
+                    content_errors.append(
+                        "physical_validation_input_manifest "
+                        f"{key} does not match {source}"
+                    )
+            assignment_hash = str(
+                input_manifest.get("day_ahead_assignment_hash") or ""
+            ).strip().lower()
+            if (
+                len(assignment_hash) != 64
+                or not all(
+                    character in "0123456789abcdef"
+                    for character in assignment_hash
+                )
+            ):
+                content_errors.append(
+                    "physical_validation_input_manifest "
+                    "day_ahead_assignment_hash is not a SHA-256 digest"
+                )
+            chain_summary_path = (
+                run_dir
+                / "rolling_hourly_chain"
+                / "rolling_chain_summary.json"
+            )
+            canonical_path = run_dir / "canonical_solver_result.json"
+            try:
+                chain_summary = _load_json_object(chain_summary_path)
+                canonical = _load_json_object(canonical_path)
+            except (OSError, ValueError, json.JSONDecodeError) as exc:
+                content_errors.append(
+                    "physical_validation_input_manifest provenance source "
+                    f"is unreadable: {exc}"
+                )
+            else:
+                chain_canonical_sha = str(
+                    chain_summary.get("day_ahead_result_sha256") or ""
+                ).strip().lower()
+                chain_assignment_hash = str(
+                    chain_summary.get("day_ahead_assignment_hash") or ""
+                ).strip().lower()
+                if (
+                    len(chain_canonical_sha) != 64
+                    or not all(
+                        character in "0123456789abcdef"
+                        for character in chain_canonical_sha
+                    )
+                ):
+                    content_errors.append(
+                        "rolling_chain_summary day_ahead_result_sha256 "
+                        "is not a SHA-256 digest"
+                    )
+                elif chain_canonical_sha != _sha256(canonical_path):
+                    content_errors.append(
+                        "rolling_chain_summary day_ahead_result_sha256 does "
+                        "not match canonical_solver_result.json"
+                    )
+                elif (
+                    input_manifest.get("canonical_solver_result_sha256")
+                    != chain_canonical_sha
+                ):
+                    content_errors.append(
+                        "physical_validation_input_manifest "
+                        "canonical_solver_result_sha256 does not match "
+                        "rolling_chain_summary"
+                    )
+                if (
+                    len(chain_assignment_hash) != 64
+                    or not all(
+                        character in "0123456789abcdef"
+                        for character in chain_assignment_hash
+                    )
+                ):
+                    content_errors.append(
+                        "rolling_chain_summary day_ahead_assignment_hash "
+                        "is not a SHA-256 digest"
+                    )
+                elif assignment_hash != chain_assignment_hash:
+                    content_errors.append(
+                        "physical_validation_input_manifest "
+                        "day_ahead_assignment_hash does not match "
+                        "rolling_chain_summary"
+                    )
+
+                raw_paths = canonical.get("vehicle_paths")
+                served_trip_ids = canonical.get("served_trip_ids")
+                unserved_trip_ids = canonical.get("unserved_trip_ids")
+                if not isinstance(raw_paths, dict):
+                    content_errors.append(
+                        "canonical_solver_result.vehicle_paths must be an object"
+                    )
+                elif not isinstance(served_trip_ids, list):
+                    content_errors.append(
+                        "canonical_solver_result.served_trip_ids must be a list"
+                    )
+                elif not isinstance(unserved_trip_ids, list):
+                    content_errors.append(
+                        "canonical_solver_result.unserved_trip_ids must be a list"
+                    )
+                elif not all(
+                    isinstance(trip_ids, list)
+                    for trip_ids in raw_paths.values()
+                ):
+                    content_errors.append(
+                        "canonical_solver_result.vehicle_paths values must be lists"
+                    )
+                else:
+                    assigned_trip_ids = [
+                        str(trip_id)
+                        for trip_ids in raw_paths.values()
+                        for trip_id in trip_ids
+                    ]
+                    normalized_served_trip_ids = [
+                        str(trip_id) for trip_id in served_trip_ids
+                    ]
+                    actual_counts = {
+                        "vehicle_path_count": len(raw_paths),
+                        "assigned_trip_occurrence_count": len(
+                            assigned_trip_ids
+                        ),
+                        "served_trip_occurrence_count": len(
+                            normalized_served_trip_ids
+                        ),
+                        "problem_trip_count": len(normalized_served_trip_ids)
+                        + len(unserved_trip_ids),
+                        "unserved_trip_count": len(unserved_trip_ids),
+                    }
+                    for key, actual_count in actual_counts.items():
+                        if input_manifest.get(key) != actual_count:
+                            content_errors.append(
+                                "physical_validation_input_manifest "
+                                f"{key} does not match canonical_solver_result"
+                            )
+                    if Counter(assigned_trip_ids) != Counter(
+                        normalized_served_trip_ids
+                    ):
+                        content_errors.append(
+                            "canonical_solver_result vehicle_paths and "
+                            "served_trip_ids disagree"
+                        )
+                    if unserved_trip_ids:
+                        content_errors.append(
+                            "canonical_solver_result unserved_trip_ids is not empty"
+                        )
+            counts: dict[str, int] = {}
+            for key in (
+                "vehicle_path_count",
+                "assigned_trip_occurrence_count",
+                "served_trip_occurrence_count",
+                "problem_trip_count",
+                "unserved_trip_count",
+            ):
+                value = input_manifest.get(key)
+                if (
+                    isinstance(value, bool)
+                    or not isinstance(value, int)
+                    or value < 0
+                ):
+                    content_errors.append(
+                        "physical_validation_input_manifest "
+                        f"{key} must be a non-negative integer"
+                    )
+                    continue
+                counts[key] = value
+            if counts and (
+                counts.get("assigned_trip_occurrence_count")
+                != counts.get("served_trip_occurrence_count")
+                or counts.get("assigned_trip_occurrence_count")
+                != counts.get("problem_trip_count")
+                or counts.get("unserved_trip_count") != 0
+            ):
+                content_errors.append(
+                    "physical_validation_input_manifest trip coverage counts "
+                    "are inconsistent"
+                )
+            validation_contract = input_manifest.get("validation_contract")
+            required_contract_checks = (
+                "canonical_sha_matches_rolling_chain",
+                "vehicle_paths_match_served_trip_ids",
+                "vehicle_paths_cover_problem_trips_exactly",
+                "unserved_trip_ids_empty",
+                "executed_charging_overlay_only",
+            )
+            if not isinstance(validation_contract, dict) or any(
+                validation_contract.get(key) is not True
+                for key in required_contract_checks
+            ):
+                content_errors.append(
+                    "physical_validation_input_manifest validation_contract "
+                    "is incomplete or not verified"
                 )
 
     physical_path = run_dir / "physical_schedule_validation.json"

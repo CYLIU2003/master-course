@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import math
 from enum import StrEnum
-from typing import Any
+from typing import Any, Mapping, Optional
 
 
 class BevTerminalSocPolicy(StrEnum):
@@ -12,6 +13,87 @@ class BevTerminalSocPolicy(StrEnum):
     MINIMUM_ONLY = "minimum_only"
     RETURN_TO_INITIAL = "return_to_initial"
     FIXED_TARGET = "fixed_target"
+
+
+def _safe_nonnegative_float_metadata(
+    metadata: Mapping[str, Any],
+    key: str,
+    *,
+    default: float,
+) -> float:
+    """Resolve a finite non-negative number from problem/run metadata.
+
+    Invalid overrides must not widen a terminal-SOC acceptance band. This
+    helper therefore treats negative, non-finite, and non-numeric values as
+    absent and retains the documented default.
+    """
+
+    try:
+        value = float((metadata or {}).get(key))
+    except (TypeError, ValueError):
+        return default
+    return value if math.isfinite(value) and value >= 0.0 else default
+
+
+def bev_terminal_numeric_acceptance_contract(
+    problem_metadata: Mapping[str, Any],
+    *,
+    gurobi_feasibility_tol: Optional[float],
+) -> dict[str, Any]:
+    """Resolve the shared terminal-SOC scientific/numeric contract.
+
+    The scientific tolerance is the physical energy-balance criterion. The
+    numeric comparison margin only absorbs solver/float representation noise;
+    it does not change the scientific tolerance. Stage 2 and the independent
+    physical-event validator must consume this same contract.
+    """
+
+    scientific = _safe_nonnegative_float_metadata(
+        problem_metadata,
+        "bev_terminal_soc_scientific_tolerance_kwh",
+        default=_safe_nonnegative_float_metadata(
+            problem_metadata,
+            "bev_terminal_soc_equality_tolerance_kwh",
+            default=1.0e-6,
+        ),
+    )
+    if gurobi_feasibility_tol is None:
+        gurobi_feasibility_tol = _safe_nonnegative_float_metadata(
+            problem_metadata,
+            "stage2_gurobi_feasibility_tol",
+            default=1.0e-9,
+        )
+    else:
+        try:
+            parsed_gurobi_feasibility_tol = float(gurobi_feasibility_tol)
+        except (TypeError, ValueError):
+            parsed_gurobi_feasibility_tol = 1.0e-9
+        gurobi_feasibility_tol = (
+            parsed_gurobi_feasibility_tol
+            if math.isfinite(parsed_gurobi_feasibility_tol)
+            and parsed_gurobi_feasibility_tol >= 0.0
+            else 1.0e-9
+        )
+    numeric_margin = _safe_nonnegative_float_metadata(
+        problem_metadata,
+        "bev_terminal_soc_numeric_margin_kwh",
+        default=max(float(gurobi_feasibility_tol), 1.0e-9),
+    )
+    return {
+        "scientific_tolerance_kwh": scientific,
+        "numeric_comparison_margin_kwh": numeric_margin,
+        "gurobi_feasibility_tol_kwh": float(gurobi_feasibility_tol),
+        "contract_source_keys": (
+            "bev_terminal_soc_scientific_tolerance_kwh",
+            "bev_terminal_soc_numeric_margin_kwh",
+            "bev_terminal_soc_equality_tolerance_kwh",
+        ),
+        "legacy_equality_tolerance_kwh": _safe_nonnegative_float_metadata(
+            problem_metadata,
+            "bev_terminal_soc_equality_tolerance_kwh",
+            default=1.0e-6,
+        ),
+    }
 
 
 def normalize_bev_terminal_soc_policy(
