@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from bff.routers.optimization import (
     RunOptimizationBody,
     _apply_interactive_bev_utilization_policy,
@@ -187,23 +189,58 @@ def test_formal_frontend_contract_forces_fleet_and_full_network() -> None:
         "scenario_overlay": {
             "solver_config": {"milp_max_successors_per_trip": 16}
         },
+        "vehicles": [
+            {
+                "id": "bev-1",
+                "depotId": "tsurumaki",
+                "type": "BEV",
+                "enabled": True,
+            },
+            {
+                "id": "bev-2",
+                "depotId": "tsurumaki",
+                "type": "EV",
+                "enabled": True,
+            },
+            {
+                "id": "ice-1",
+                "depotId": "tsurumaki",
+                "type": "ICE",
+                "enabled": True,
+            },
+            {
+                "id": "ice-disabled",
+                "depotId": "tsurumaki",
+                "type": "ICE",
+                "enabled": False,
+            },
+            {
+                "id": "ice-other",
+                "depotId": "other",
+                "type": "ICE",
+                "enabled": True,
+            },
+        ],
     }
 
     contract = _apply_interactive_research_contract(
         scenario,
         research_run=True,
+        depot_id="tsurumaki",
     )
 
     assert contract["expected_available_inventory"] == {
-        "BEV": 35,
-        "ICE": 26,
+        "BEV": 2,
+        "ICE": 1,
     }
+    assert contract["inventory_source"] == "selected_scenario_depot_available_vehicles"
+    assert contract["inventory_depot_id"] == "tsurumaki"
     assert contract["successor_pruning_allowed"] is False
     assert contract["milp_successor_policy"] == "full_network"
     assert contract["milp_max_successors_per_trip"] == 0
     assert scenario["simulation_config"]["research_vehicle_inventory"] == {
-        "BEV": 35,
-        "ICE": 26,
+        "BEV": 2,
+        "ICE": 1,
     }
     assert (
         scenario["simulation_config"]["milp_max_successors_per_trip"]
@@ -215,6 +252,15 @@ def test_formal_frontend_contract_forces_fleet_and_full_network() -> None:
         ]
         == 0
     )
+
+
+def test_formal_frontend_contract_requires_available_scenario_fleet() -> None:
+    with pytest.raises(ValueError, match="available BEV or ICE vehicle"):
+        _apply_interactive_research_contract(
+            {"vehicles": [{"id": "disabled", "type": "ICE", "enabled": False}]},
+            research_run=True,
+            depot_id="tsurumaki",
+        )
 
 
 def test_interactive_run_enforces_energy_neutral_bev_terminal_soc() -> None:

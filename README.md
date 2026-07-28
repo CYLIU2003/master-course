@@ -72,10 +72,11 @@ simulation artifact, not an automatically accepted research result.
   `graph/calendar_weather_validation.json` records service date, timetable day
   type, weather observation date/source, and comparison type. A declared
   research fleet is separately hard-checked and written to
-  `graph/research_fleet_validation.json`. Formal frontend runs hard-declare
-  exactly 35 available BEVs and 26 available ICE buses; count mismatch,
-  duplicate/empty vehicle IDs, unknown types, or unavailable selected records
-  fail before optimization. The model does not invent a missing ICE bus.
+  `graph/research_fleet_validation.json`. Formal frontend runs declare the
+  available BEV/ICE inventory from the selected scenario depot; the declaration
+  and canonical input must match. Duplicate/empty vehicle IDs, unknown types,
+  or unavailable selected records fail before optimization. The model does not
+  invent a missing vehicle or substitute a global fleet constant.
   Requiring all available BEVs to serve is a separate policy-sensitivity
   checkbox and constraint, not the unconstrained baseline.
 - Hourly rolling execution is reported as `not_executed` unless an actual rolling

@@ -44,9 +44,10 @@ optimality remain separate decisions.
    result within `1e-6 JPY`; otherwise the job fails.
 3. Formal frontend runs fail before solving unless Git is clean and has a SHA.
    A source-state change during the run is also fatal.
-4. Formal frontend runs declare and hard-check exactly 35 available BEVs and
-   26 available ICE buses. Duplicate/empty IDs, unknown types, unavailable
-   records, or a count mismatch fail input construction.
+4. Formal frontend runs declare and hard-check the available BEV/ICE inventory
+   of the selected scenario depot (currently Tsurumaki: 35 BEV / 25 ICE).
+   Duplicate/empty IDs, unknown types, unavailable records, or a mismatch
+   between that declaration and canonical input fail input construction.
 5. Formal Phase 3 frontend runs force the complete successor network and
    prohibit fallback/post-solve repair.
 6. Stage 1 now shares charge reachability across physical charger definitions,
@@ -124,7 +125,7 @@ row from an assumption.
 | Check | Acceptance condition | Evidence field/file | Result |
 |---|---|---|---|
 | Git | clean; non-empty start/end SHA identical | `code_provenance.json`, `run_manifest.json` | PENDING |
-| Fleet | available BEV=35, ICE=26; unique IDs; no unavailable/unknown records | `graph/research_fleet_validation.json` | PENDING |
+| Fleet | available BEV/ICE counts match selected-depot scenario inventory; unique IDs; no unavailable/unknown records | `graph/research_fleet_validation.json` | PENDING |
 | Trips | 264/264 served; duplicate=0 | physical validation, summary | PENDING |
 | Operator | `UNKNOWN=0` | operator audit | PENDING |
 | Dispatch | transition violations=0 | hard validation | PENDING |

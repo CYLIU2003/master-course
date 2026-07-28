@@ -152,8 +152,6 @@ INTERACTIVE_OPERATION_TIME_WINDOW_CONTROLS_VERSION = (
 )
 FULL_DAY_OPERATION_START_TIME = "00:00"
 FULL_DAY_OPERATION_END_TIME = "23:59"
-FORMAL_RESEARCH_AVAILABLE_BEV_COUNT = 35
-FORMAL_RESEARCH_AVAILABLE_ICE_COUNT = 26
 # ``0`` is the canonical numeric full-network sentinel consumed by
 # ``MILPModelBuilder._successor_limit``. Do not send a presentation label into
 # the typed solver setting.
@@ -182,12 +180,47 @@ def _require_clean_research_git_state(
     )
 
 
+def _available_inventory_for_selected_depot(
+    scenario: Dict[str, Any],
+    *,
+    depot_id: Optional[str],
+) -> Dict[str, int]:
+    """Count solver-available BEV/ICE records in the selected scenario depot.
+
+    The canonical problem builder treats ``available`` as authoritative and
+    otherwise falls back to ``enabled``. Keep this pre-solve declaration
+    aligned with that behavior so a formal run validates the inventory the
+    selected scenario actually supplies, rather than a global fleet constant.
+    """
+
+    selected_depot_id = str(depot_id or "").strip()
+    inventory: Counter[str] = Counter()
+    for raw_vehicle in scenario.get("vehicles") or []:
+        if not isinstance(raw_vehicle, dict):
+            continue
+        vehicle_depot_id = str(raw_vehicle.get("depotId") or "").strip()
+        if selected_depot_id and vehicle_depot_id != selected_depot_id:
+            continue
+        raw_available = raw_vehicle.get("available")
+        if raw_available is None:
+            raw_available = raw_vehicle.get("enabled", True)
+        if not bool(raw_available):
+            continue
+        powertrain = str(raw_vehicle.get("type") or "").strip().upper()
+        if powertrain in {"BEV", "EV", "ELECTRIC"}:
+            inventory["BEV"] += 1
+        elif powertrain in {"ICE", "DIESEL", "GASOLINE", "PETROL"}:
+            inventory["ICE"] += 1
+    return dict(sorted(inventory.items()))
+
+
 def _apply_interactive_research_contract(
     scenario: Dict[str, Any],
     *,
     research_run: bool,
+    depot_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Apply the fail-closed inventory and full-network formal-run contract."""
+    """Apply the fail-closed scenario-fleet and full-network formal-run contract."""
 
     if not research_run:
         return {
@@ -207,10 +240,15 @@ def _apply_interactive_research_contract(
         solver_config = {}
         scenario_overlay["solver_config"] = solver_config
 
-    expected_inventory = {
-        "BEV": FORMAL_RESEARCH_AVAILABLE_BEV_COUNT,
-        "ICE": FORMAL_RESEARCH_AVAILABLE_ICE_COUNT,
-    }
+    expected_inventory = _available_inventory_for_selected_depot(
+        scenario,
+        depot_id=depot_id,
+    )
+    if not expected_inventory:
+        raise ValueError(
+            "formal research run requires an available BEV or ICE vehicle in "
+            "the selected scenario depot"
+        )
     simulation_config["research_vehicle_inventory"] = expected_inventory
     simulation_config["milp_max_successors_per_trip"] = (
         FORMAL_RESEARCH_MAX_SUCCESSORS_PER_TRIP
@@ -222,6 +260,8 @@ def _apply_interactive_research_contract(
         "enabled": True,
         "scope": "interactive_formal_research_run",
         "expected_available_inventory": expected_inventory,
+        "inventory_source": "selected_scenario_depot_available_vehicles",
+        "inventory_depot_id": str(depot_id or "").strip() or None,
         "milp_successor_policy": FORMAL_RESEARCH_SUCCESSOR_POLICY,
         "milp_max_successors_per_trip": (
             FORMAL_RESEARCH_MAX_SUCCESSORS_PER_TRIP
@@ -7649,6 +7689,7 @@ def _run_optimization(
         interactive_research_contract = _apply_interactive_research_contract(
             scenario,
             research_run=bool(research_run),
+            depot_id=depot_id,
         )
 
         if rebuild_dispatch:

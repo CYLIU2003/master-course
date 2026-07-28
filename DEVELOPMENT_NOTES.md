@@ -1,5 +1,17 @@
 # Development Notes
 
+## 2026-07-28 selected-depot research fleet declaration
+
+- The interactive formal-run fleet declaration now comes from the available
+  BEV/ICE records of the selected scenario depot, not a global `35 BEV / 26
+  ICE` constant. For the current `tsurumaki` scenario this declares `35 BEV /
+  25 ICE`. The canonical builder still fails closed on a declaration/input
+  mismatch, duplicate or empty IDs, unknown types, and any unavailable selected
+  vehicle. The contract provenance records both the source and selected depot.
+- This changes input-contract scope only. It does not establish research
+  acceptance, solver optimality, physical validation, rolling acceptance, or
+  accounting eligibility; those gates remain separate.
+
 ## 2026-07-28 research release correctness and Stage 1→Stage 2 closure
 
 ### Verified call path and defects addressed
@@ -37,9 +49,9 @@
   incumbent欠如、推測した不足量ではcutを作らない。各attemptのIISと
   candidate hashを別成果物へ保存する。
 - formal frontendはclean Git + 非空SHAをsolve前にhard gateし、solve中
-  のSHA/dirty変化も拒否する。prepared available fleetはBEV35/ICE26を
-  hard contractとし、重複/空ID、unknown type、unavailable record、
-  count mismatchをbuild時に停止する。正式Phase 3はfull successor
+  のSHA/dirty変化も拒否する。prepared available fleetは選択営業所の
+  scenario inventoryをhard contractとし、重複/空ID、unknown type、
+  unavailable record、count mismatchをbuild時に停止する。正式Phase 3はfull successor
   network、fallbackなし、post-solve repairなしを強制する。
 - 全BEV使用はbaselineへ混ぜず、既存
   `minimum_used_bev_count`制約を使う明示的な政策感度checkboxとした。
