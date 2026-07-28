@@ -1386,6 +1386,12 @@ def run(args: argparse.Namespace) -> int:
         config=config,
         planning_days=1,
     )
+    if isinstance(problem.metadata, dict):
+        problem.metadata["stage2_feedback_max_iterations"] = 2
+        problem.metadata["stage2_feedback_policy"] = (
+            "retry_only_after_gurobi_infeasible_certificate_with_"
+            "full_assignment_no_good_cut"
+        )
     if weather_forecast is not None and weather_profile is not None:
         problem = apply_weather_policy_to_problem(
             problem,
@@ -2112,6 +2118,18 @@ def run(args: argparse.Namespace) -> int:
         ),
         "stage1_time_indexed_soc_relaxation_semantics": metadata.get(
             "stage1_time_indexed_soc_relaxation_semantics"
+        ),
+        "stage1_shared_charger_relaxation": dict(
+            metadata.get("stage1_shared_charger_relaxation") or {}
+        ),
+        "stage1_feasibility_no_good_cut_count": metadata.get(
+            "stage1_feasibility_no_good_cut_count"
+        ),
+        "stage2_feedback_iteration": metadata.get(
+            "stage2_feedback_iteration"
+        ),
+        "stage2_feedback_history": list(
+            metadata.get("stage2_feedback_history") or ()
         ),
         "stage1_energy_cost_proxy_configuration": dict(
             metadata.get("stage1_energy_cost_proxy_configuration") or {}

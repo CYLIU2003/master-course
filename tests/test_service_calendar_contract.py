@@ -205,7 +205,7 @@ def test_research_builder_rejects_declared_fleet_inventory_mismatch() -> None:
 
     with pytest.raises(
         ValueError,
-        match=r"ICE:expected=26,actual=25",
+        match=r"ICE:expected_available=26,actual_available=25",
     ):
         ProblemBuilder().build_from_dispatch(
             context,

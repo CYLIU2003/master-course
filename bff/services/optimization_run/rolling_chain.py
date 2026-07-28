@@ -15,6 +15,9 @@ import json
 from pathlib import Path
 from typing import Any, Mapping
 
+from bff.services.optimization_run.cost_breakdown import (
+    canonical_cost_ledger_from_breakdown,
+)
 from src.optimization.common.initial_soc_policy import (
     InitialSocPolicy,
     initial_soc_input_metadata,
@@ -29,6 +32,8 @@ from src.optimization.rolling.acceptance import rolling_chain_acceptance_audit
 
 DEFAULT_FRONTEND_RUN_PROFILE = "day_ahead_and_hourly_rolling"
 DAY_AHEAD_EXPLORATORY_PROFILE = "day_ahead_exploratory"
+PHYSICAL_SCHEDULE_VALIDATION_ARTIFACT = "physical_schedule_validation.json"
+COMPARISON_CASE_MANIFEST_ARTIFACT = "comparison_case_manifest.json"
 SUPPORTED_FRONTEND_RUN_PROFILES = frozenset(
     {DEFAULT_FRONTEND_RUN_PROFILE, DAY_AHEAD_EXPLORATORY_PROFILE}
 )
@@ -113,6 +118,308 @@ def _effective_pv_profiles(problem: Any) -> dict[str, Any]:
     }
 
 
+def _load_json_object(path: Path) -> dict[str, Any]:
+    if not path.is_file():
+        raise FileNotFoundError(f"Required rolling artifact is missing: {path}")
+    loaded = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(loaded, dict):
+        raise ValueError(f"Expected a JSON object: {path}")
+    return dict(loaded)
+
+
+def _zero_hard_validation_counts(metrics: Mapping[str, Any]) -> bool:
+    count_keys = (
+        "unassigned_trip_count",
+        "duplicate_trip_count",
+        "vehicle_time_overlap_count",
+        "infeasible_transition_count",
+        "ev_soc_lower_violation_count",
+        "ev_soc_upper_violation_count",
+        "ev_soc_violation_count",
+        "bess_soc_lower_violation_count",
+        "bess_soc_upper_violation_count",
+        "bess_soc_violation_count",
+        "contract_power_violation_count",
+        "charger_concurrency_violation_count",
+    )
+    try:
+        return all(int(metrics.get(key, 0) or 0) == 0 for key in count_keys)
+    except (TypeError, ValueError):
+        return False
+
+
+def _physical_schedule_validation(
+    *,
+    run_dir: Path,
+    optimization_result: Mapping[str, Any],
+    chain: Mapping[str, Any],
+    executed_day: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Independently classify physical feasibility, not research acceptance."""
+
+    canonical = _load_json_object(run_dir / "canonical_solver_result.json")
+    solver_metadata = dict(
+        canonical.get("solver_metadata")
+        or optimization_result.get("solver_metadata")
+        or {}
+    )
+    validity = dict(
+        optimization_result.get("solution_validity")
+        or canonical.get("solution_validity")
+        or {}
+    )
+    validation_metrics = dict(
+        validity.get("validation_metrics")
+        or solver_metadata.get("validation_metrics")
+        or {}
+    )
+    trip_count_unserved = int(canonical.get("trip_count_unserved", 0) or 0)
+    chain_audit = rolling_chain_acceptance_audit(chain)
+    no_fallback_or_repair = not any(
+        bool(solver_metadata.get(key))
+        for key in (
+            "fallback_applied",
+            "postsolve_soc_repair_applied",
+            "postsolve_charging_recomputed",
+            "postsolve_modified_solution",
+        )
+    )
+    checks = {
+        "canonical_solver_feasible": canonical.get("feasible") is True,
+        "all_trips_served": (
+            trip_count_unserved == 0
+            and not list(canonical.get("unserved_trip_ids") or ())
+        ),
+        "hard_validation_counts_zero": _zero_hard_validation_counts(
+            validation_metrics
+        ),
+        "all_required_hard_validation_checks_passed": (
+            validation_metrics.get("all_required_validation_checks_passed")
+            is True
+        ),
+        "no_fallback_or_postsolve_repair": no_fallback_or_repair,
+        "rolling_chain_accepted": chain_audit.get("accepted") is True,
+        "rolling_assignment_hash_constant": dict(
+            chain.get("acceptance_checks") or {}
+        ).get("day_ahead_assignment_hash_constant")
+        is True,
+        "day_ahead_and_rolling_git_sha_match": dict(
+            chain.get("acceptance_checks") or {}
+        ).get("day_ahead_and_rolling_git_sha_match")
+        is True,
+        "executed_day_accounting_eligible": executed_day.get("eligible") is True,
+        "bev_terminal_energy_balanced": (
+            executed_day.get("bev_terminal_energy_balanced") is True
+        ),
+        "bess_terminal_energy_balanced": (
+            executed_day.get("bess_terminal_energy_balanced") is True
+        ),
+        "required_input_hashes_present": all(
+            bool(str(chain.get(key) or "").strip())
+            for key in (
+                "trip_input_hash",
+                "vehicle_input_hash",
+                "initial_soc_input_hash",
+                "charger_configuration_hash",
+                "day_ahead_assignment_hash",
+            )
+        ),
+    }
+    failed_checks = sorted(
+        name for name, passed in checks.items() if passed is not True
+    )
+    return {
+        "schema_version": "physical_schedule_validation_v1",
+        "accepted": not failed_checks,
+        "status": "VALID" if not failed_checks else "INVALID",
+        "checks": checks,
+        "failed_checks": failed_checks,
+        "validation_metrics": validation_metrics,
+        "evidence": {
+            "canonical_solver_result": "canonical_solver_result.json",
+            "rolling_chain_summary": (
+                "rolling_hourly_chain/rolling_chain_summary.json"
+            ),
+            "executed_day_accounting": (
+                "rolling_hourly_chain/executed_day_accounting.json"
+            ),
+            "trip_input_hash": chain.get("trip_input_hash"),
+            "vehicle_input_hash": chain.get("vehicle_input_hash"),
+            "initial_soc_input_hash": chain.get("initial_soc_input_hash"),
+            "charger_configuration_hash": chain.get(
+                "charger_configuration_hash"
+            ),
+            "assignment_hash": chain.get("day_ahead_assignment_hash"),
+            "day_ahead_git_sha": chain.get("day_ahead_git_sha"),
+            "rolling_runner_git_sha": chain.get("rolling_runner_git_sha"),
+        },
+        "semantics": (
+            "This artifact proves physical schedule and executed rolling-chain "
+            "validity only. Research acceptance, fleet-contract compliance, "
+            "and global optimality are separate gates."
+        ),
+    }
+
+
+def _price_slot_hash(problem: Any) -> str:
+    return _canonical_hash(
+        [
+            {
+                "slot_index": int(getattr(slot, "slot_index", 0) or 0),
+                "grid_buy_yen_per_kwh": float(
+                    getattr(slot, "grid_buy_yen_per_kwh", 0.0) or 0.0
+                ),
+                "grid_sell_yen_per_kwh": float(
+                    getattr(slot, "grid_sell_yen_per_kwh", 0.0) or 0.0
+                ),
+                "demand_charge_weight": float(
+                    getattr(slot, "demand_charge_weight", 0.0) or 0.0
+                ),
+                "co2_factor": float(
+                    getattr(slot, "co2_factor", 0.0) or 0.0
+                ),
+            }
+            for slot in tuple(getattr(problem, "price_slots", ()) or ())
+        ]
+    )
+
+
+def _non_pv_depot_asset_hash(problem: Any) -> str:
+    from scripts.run_research_phase3_frontend_weather import _asset_snapshot
+
+    fixed = {
+        depot_id: {
+            key: value
+            for key, value in dict(asset).items()
+            if key
+            not in {
+                "pv_case_id",
+                "pv_generation_kwh",
+                "pv_generation_hash",
+            }
+        }
+        for depot_id, asset in sorted(_asset_snapshot(problem).items())
+    }
+    return _canonical_hash(fixed)
+
+
+def _comparison_case_manifest(
+    *,
+    scenario: Mapping[str, Any],
+    problem: Any,
+    input_audit: Mapping[str, Any],
+    chain: Mapping[str, Any],
+    physical_validation: Mapping[str, Any],
+    executed_day: Mapping[str, Any],
+    optimization_result: Mapping[str, Any],
+) -> dict[str, Any]:
+    simulation_config = dict(scenario.get("simulation_config") or {})
+    comparison_type = str(
+        simulation_config.get("comparison_type") or ""
+    ).strip()
+    comparison_requested = (
+        comparison_type == "same_service_date_pv_counterfactual"
+    )
+    service_date = str(chain.get("service_date") or "")[:10]
+    source_date = str(
+        simulation_config.get("counterfactual_pv_source_date") or ""
+    )[:10]
+    explicit_role = str(
+        simulation_config.get("comparison_role") or ""
+    ).strip()
+    comparison_role = explicit_role or (
+        "baseline"
+        if source_date and source_date == service_date
+        else "pv_curve_counterfactual"
+    )
+    solver_settings = dict(
+        optimization_result.get("solver_settings") or {}
+    )
+    control_payload = {
+        "schema_version": "frontend_pv_control_contract_v1",
+        "service_date": service_date,
+        "service_id": input_audit.get("service_id"),
+        "trip_input_hash": chain.get("trip_input_hash"),
+        "vehicle_input_hash": chain.get("vehicle_input_hash"),
+        "initial_soc_input_hash": chain.get("initial_soc_input_hash"),
+        "charger_configuration_hash": chain.get(
+            "charger_configuration_hash"
+        ),
+        "non_pv_depot_asset_hash": _non_pv_depot_asset_hash(problem),
+        "price_slot_hash": _price_slot_hash(problem),
+        "bev_terminal_soc_policy": chain.get("bev_terminal_soc_policy"),
+        "bess_terminal_policy": chain.get("bess_terminal_policy"),
+        "timestep_min": chain.get("timestep_min"),
+        "energy_horizon_start_time": chain.get("energy_horizon_start_time"),
+        "energy_horizon_end_time": chain.get("energy_horizon_end_time"),
+        "energy_horizon_slot_count": chain.get("energy_horizon_slot_count"),
+        "solver_backend": chain.get("solver_backend"),
+        "solver_version": chain.get("solver_version"),
+        "day_ahead_solver_controls": {
+            "time_limit_seconds_effective": solver_settings.get(
+                "time_limit_seconds_effective"
+            ),
+            "stage2_time_limit_seconds_effective": solver_settings.get(
+                "stage2_time_limit_seconds_effective"
+            ),
+            "mip_gap_requested_ratio": solver_settings.get(
+                "mip_gap_requested_ratio"
+            ),
+            "stage1_best_obj_stop_enabled": solver_settings.get(
+                "stage1_best_obj_stop_enabled"
+            ),
+            "gurobi_threads": solver_settings.get("gurobi_threads"),
+            "random_seed": dict(
+                optimization_result.get("solver_metadata") or {}
+            ).get("random_seed"),
+        },
+        "rolling_solver_controls": {
+            "gurobi_threads": chain.get("gurobi_threads"),
+            "mip_gap": chain.get("mip_gap"),
+            "time_limit_sec": chain.get("time_limit_sec"),
+            "random_seed": chain.get("random_seed"),
+            "execution_minutes": chain.get("execution_minutes"),
+        },
+        "git_sha": chain.get("day_ahead_git_sha"),
+        "weather_operation_policy_enabled": bool(
+            simulation_config.get("enable_weather_operation_policy", False)
+        ),
+        "minimum_used_bev_count": int(
+            dict(getattr(problem, "metadata", {}) or {}).get(
+                "minimum_used_bev_count", 0
+            )
+            or 0
+        ),
+    }
+    cost_breakdown = dict(executed_day.get("cost_breakdown") or {})
+    return {
+        "schema_version": "frontend_pv_comparison_case_v1",
+        "comparison_requested": comparison_requested,
+        "comparison_type": comparison_type or None,
+        "comparison_role": comparison_role,
+        # Every accepted frontend run receives a case-level control hash. This
+        # allows an explicitly selected baseline run (which need not itself be
+        # configured as a counterfactual) to be paired fail-closed later.
+        "comparison_control_hash": _canonical_hash(control_payload),
+        "comparison_control_payload": control_payload,
+        "pv_profile_hash": chain.get("day_ahead_pv_forecast_hash"),
+        "pv_source_date": source_date or None,
+        "assignment_hash": chain.get("day_ahead_assignment_hash"),
+        "physical_schedule_validated": physical_validation.get("accepted")
+        is True,
+        "rolling_chain_accepted": chain.get("chain_accepted") is True,
+        "executed_day_accounting_eligible": executed_day.get("eligible") is True,
+        "executed_total_cost_jpy": cost_breakdown.get("total_cost"),
+        "pv_generated_kwh": cost_breakdown.get("pv_generated_kwh"),
+        "grid_import_kwh": cost_breakdown.get("grid_import_kwh"),
+        "semantics": (
+            "A case-level comparison contract. A separate pair manifest must "
+            "verify matching control hashes and different PV hashes before "
+            "cross-case claims are allowed."
+        ),
+    }
+
+
 def _calendar_audit(
     *,
     service_date: str,
@@ -190,6 +497,9 @@ def _research_manifest(
         "rolling_hourly_chain/day_ahead_vs_rolling_summary.json",
         "rolling_hourly_chain/hourly_energy_flow_chart.csv",
         "rolling_hourly_chain/charging_schedule.csv",
+        PHYSICAL_SCHEDULE_VALIDATION_ARTIFACT,
+        COMPARISON_CASE_MANIFEST_ARTIFACT,
+        "final_cost_reconciliation.json",
     )
     artifacts = {
         name: {
@@ -367,6 +677,163 @@ def refresh_frontend_rolling_manifest(
             run_state=run_state,
         ),
     )
+
+
+def finalize_frontend_rolling_evidence(
+    *,
+    run_dir: Path,
+    scenario: Mapping[str, Any],
+    problem: Any,
+    optimization_result: dict[str, Any],
+) -> dict[str, Any]:
+    """Promote accepted rolling execution to the final physical/cost evidence.
+
+    The day-ahead solver objective remains untouched.  Only the accounting
+    source is replaced, and only after the complete chain is independently
+    accepted.
+    """
+
+    run_dir = Path(run_dir)
+    chain_path = run_dir / "rolling_hourly_chain" / "rolling_chain_summary.json"
+    executed_day_path = (
+        run_dir / "rolling_hourly_chain" / "executed_day_accounting.json"
+    )
+    input_audit_path = run_dir / "input_audit.json"
+    chain = _load_json_object(chain_path)
+    executed_day = _load_json_object(executed_day_path)
+    input_audit = _load_json_object(input_audit_path)
+    chain_audit = rolling_chain_acceptance_audit(chain)
+    if chain_audit.get("accepted") is not True:
+        raise RollingChainExecutionError(
+            "Cannot finalize accounting from an unaccepted rolling chain"
+        )
+    if executed_day.get("eligible") is not True:
+        raise RollingChainExecutionError(
+            "Cannot finalize accounting from an ineligible executed day"
+        )
+
+    physical_validation = _physical_schedule_validation(
+        run_dir=run_dir,
+        optimization_result=optimization_result,
+        chain=chain,
+        executed_day=executed_day,
+    )
+    _write_json(
+        run_dir / PHYSICAL_SCHEDULE_VALIDATION_ARTIFACT,
+        physical_validation,
+    )
+    if physical_validation.get("accepted") is not True:
+        raise RollingChainExecutionError(
+            "Physical schedule validation failed: "
+            + ", ".join(physical_validation.get("failed_checks") or ())
+        )
+
+    executed_breakdown = dict(executed_day.get("cost_breakdown") or {})
+    if not executed_breakdown:
+        raise RollingChainExecutionError(
+            "Executed-day accounting is missing cost_breakdown"
+        )
+    # Keep the executed accounting values authoritative while supplying the
+    # stable reporting aliases consumed by CSV/XLSX writers.
+    executed_breakdown["demand_charge"] = float(
+        executed_breakdown.get("demand_cost", 0.0) or 0.0
+    )
+    executed_breakdown["total_demand_charge"] = float(
+        executed_breakdown.get("demand_cost", 0.0) or 0.0
+    )
+    executed_breakdown["electricity_cost_final"] = float(
+        executed_breakdown.get("electricity_cost", 0.0) or 0.0
+    )
+    executed_breakdown["fuel_cost_final"] = float(
+        executed_breakdown.get("fuel_cost", 0.0) or 0.0
+    )
+    solver_metadata = dict(optimization_result.get("solver_metadata") or {})
+    ledger = canonical_cost_ledger_from_breakdown(
+        breakdown=executed_breakdown,
+        scenario_id=str(optimization_result.get("scenario_id") or ""),
+        source="rolling_hourly_chain/executed_day_accounting.json",
+        objective_mode=str(
+            optimization_result.get("objective_mode")
+            or solver_metadata.get("objective_mode")
+            or "total_cost"
+        ),
+        objective_value=(
+            float(optimization_result["objective_value"])
+            if optimization_result.get("objective_value") is not None
+            else None
+        ),
+        # Phase 3's day-ahead objective is not the stitched rolling cost.
+        objective_is_actual_cost=False,
+        solver_objective_matches_accounting_total=False,
+        carbon_price_jpy_per_kg=float(
+            getattr(problem.scenario, "co2_price_per_kg", 0.0) or 0.0
+        ),
+        evidence={
+            "accounting_basis": executed_day.get("accounting_basis"),
+            "objective_aggregation": executed_day.get(
+                "objective_aggregation"
+            ),
+            "executed_energy_flow_hash": executed_day.get(
+                "executed_energy_flow_hash"
+            ),
+            "expected_slot_count": executed_day.get("expected_slot_count"),
+            "executed_slot_count": executed_day.get("executed_slot_count"),
+        },
+    )
+    if ledger.get("accounting_residual_satisfied") is not True:
+        raise RollingChainExecutionError(
+            "Executed-day canonical cost ledger does not reconcile: "
+            f"{ledger.get('accounting_residual_jpy')}"
+        )
+    _write_json(
+        run_dir / "graph" / "canonical_cost_ledger.json",
+        ledger,
+    )
+
+    day_ahead_breakdown = dict(optimization_result.get("cost_breakdown") or {})
+    optimization_result["day_ahead_cost_breakdown"] = day_ahead_breakdown
+    optimization_result["cost_breakdown"] = executed_breakdown
+    optimization_result["final_accounting_source"] = (
+        "rolling_hourly_chain/executed_day_accounting.json"
+    )
+    optimization_result["final_accounting_total_cost_jpy"] = ledger[
+        "accounting_total_cost_jpy"
+    ]
+    solution_validity = dict(
+        optimization_result.get("solution_validity") or {}
+    )
+    solution_validity.update(
+        {
+            "validated_feasible": True,
+            "validated_no_cancellation": True,
+            "physical_schedule_validation_status": "VALID",
+            "physical_schedule_validation_artifact": (
+                PHYSICAL_SCHEDULE_VALIDATION_ARTIFACT
+            ),
+        }
+    )
+    optimization_result["solution_validity"] = solution_validity
+    if isinstance(optimization_result.get("summary"), dict):
+        optimization_result["summary"]["solution_validity"] = solution_validity
+
+    comparison_case = _comparison_case_manifest(
+        scenario=scenario,
+        problem=problem,
+        input_audit=input_audit,
+        chain=chain,
+        physical_validation=physical_validation,
+        executed_day=executed_day,
+        optimization_result=optimization_result,
+    )
+    _write_json(
+        run_dir / COMPARISON_CASE_MANIFEST_ARTIFACT,
+        comparison_case,
+    )
+    return {
+        "physical_schedule_validation": physical_validation,
+        "canonical_cost_ledger": ledger,
+        "comparison_case_manifest": comparison_case,
+    }
 
 
 def execute_frontend_rolling_chain(

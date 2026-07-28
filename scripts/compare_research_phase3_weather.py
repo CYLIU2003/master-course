@@ -85,6 +85,8 @@ FIXED_CONTROL_FIELDS = (
     "stage1_energy_envelope_semantics",
     "stage1_time_indexed_soc_relaxation_constraint_count",
     "stage1_time_indexed_soc_relaxation_semantics",
+    "stage1_shared_charger_relaxation",
+    "stage1_feasibility_no_good_cut_count",
 )
 
 # Formal pairs hold the operational weather configuration fixed. The sole

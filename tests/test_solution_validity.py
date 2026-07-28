@@ -151,7 +151,7 @@ def test_phase2_research_assignment_eligibility_is_explicitly_separate_from_soc_
     assert payload["research_kpi_eligible"] is False
 
 
-def test_research_run_rejection_is_explicitly_not_a_valid_optimization_result() -> None:
+def test_physical_infeasibility_remains_distinct_from_research_rejection() -> None:
     payload = _solution_validity_payload(
         solver_status="NO_VALID_INCUMBENT",
         feasible=False,
@@ -164,8 +164,39 @@ def test_research_run_rejection_is_explicitly_not_a_valid_optimization_result() 
         },
     )
 
-    assert payload["result_class"] == "research_invalid"
-    assert "research_acceptance_failed" in payload["blocking_reasons"]
+    assert payload["result_class"] == "postsolve_infeasible"
+    assert "research_acceptance_failed" not in payload["blocking_reasons"]
+    assert "research_acceptance_failed" in payload["research_blocking_reasons"]
+    assert payload["physical_validation_status"] == "INVALID"
+    assert payload["research_kpi_eligible"] is False
+
+
+def test_physical_feasibility_is_preserved_when_research_contract_is_rejected() -> None:
+    payload = _solution_validity_payload(
+        solver_status="OPTIMAL",
+        feasible=True,
+        trip_count_unserved=0,
+        infeasibility_reasons=[],
+        solver_metadata={
+            "research_run": True,
+            "research_run_accepted": False,
+            "research_acceptance_checks": {
+                "all_trips_served": True,
+                "fleet_contract_match": False,
+            },
+        },
+    )
+
+    assert payload["validated_feasible"] is True
+    assert payload["physical_validation_status"] == "VALID"
+    assert payload["blocking_reasons"] == []
+    assert payload["research_acceptance_status"] == "REJECTED"
+    assert payload["research_blocking_reasons"] == [
+        "research_acceptance_failed"
+    ]
+    assert payload["research_acceptance_failed_checks"] == [
+        "fleet_contract_match"
+    ]
     assert payload["research_kpi_eligible"] is False
 
 

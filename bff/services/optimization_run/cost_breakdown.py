@@ -1,63 +1,75 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, Mapping
 
 from src.optimization.common.energy_flow_accounting import normalize_pv_energy_breakdown
 
 
-def canonical_cost_ledger_json(
+def canonical_cost_ledger_from_breakdown(
     *,
-    problem,
-    engine_result,
+    breakdown: Mapping[str, Any],
     scenario_id: str,
+    source: str,
+    objective_mode: str,
+    objective_value: float | None,
+    objective_is_actual_cost: bool,
+    solver_objective_matches_accounting_total: bool,
+    carbon_price_jpy_per_kg: float,
+    evidence: Mapping[str, Any] | None = None,
 ) -> Dict[str, Any]:
-    """Build the immutable accounting ledger from solver-evaluated components."""
+    """Build one reconciled cost ledger from an explicitly named source.
 
-    breakdown = dict(engine_result.cost_breakdown or {})
+    ``breakdown`` may come from the day-ahead solver or from stitched rolling
+    execution.  The source is mandatory so a reader never has to infer which
+    schedule the accounting represents.
+    """
+
+    normalized = dict(breakdown or {})
     components = {
-        "electricity_cost_jpy": float(breakdown.get("electricity_cost", 0.0) or 0.0),
-        "fuel_cost_jpy": float(breakdown.get("fuel_cost", 0.0) or 0.0),
-        "demand_charge_cost_jpy": float(breakdown.get("demand_cost", 0.0) or 0.0),
-        "contract_overage_cost_jpy": float(
-            breakdown.get("contract_overage_cost", 0.0) or 0.0
+        "electricity_cost_jpy": float(
+            normalized.get("electricity_cost", 0.0) or 0.0
         ),
-        "vehicle_fixed_cost_jpy": float(breakdown.get("vehicle_cost", 0.0) or 0.0),
+        "fuel_cost_jpy": float(normalized.get("fuel_cost", 0.0) or 0.0),
+        "demand_charge_cost_jpy": float(
+            normalized.get("demand_cost", 0.0) or 0.0
+        ),
+        "contract_overage_cost_jpy": float(
+            normalized.get("contract_overage_cost", 0.0) or 0.0
+        ),
+        "vehicle_fixed_cost_jpy": float(
+            normalized.get("vehicle_cost", 0.0) or 0.0
+        ),
         "vehicle_usage_cost_jpy": float(
-            breakdown.get(
+            normalized.get(
                 "vehicle_usage_cost",
-                breakdown.get("vehicle_usage_cost_jpy", 0.0),
+                normalized.get("vehicle_usage_cost_jpy", 0.0),
             )
             or 0.0
         ),
-        "driver_cost_jpy": float(breakdown.get("driver_cost", 0.0) or 0.0),
+        "driver_cost_jpy": float(normalized.get("driver_cost", 0.0) or 0.0),
         "unserved_penalty_jpy": float(
-            breakdown.get("unserved_penalty", 0.0) or 0.0
+            normalized.get("unserved_penalty", 0.0) or 0.0
         ),
-        "switch_cost_jpy": float(breakdown.get("switch_cost", 0.0) or 0.0),
+        "switch_cost_jpy": float(normalized.get("switch_cost", 0.0) or 0.0),
         "battery_degradation_cost_jpy": float(
-            breakdown.get("degradation_cost", 0.0) or 0.0
+            normalized.get("degradation_cost", 0.0) or 0.0
         ),
-        "deviation_cost_jpy": float(breakdown.get("deviation_cost", 0.0) or 0.0),
-        "co2_cost_jpy": float(breakdown.get("co2_cost", 0.0) or 0.0),
+        "deviation_cost_jpy": float(
+            normalized.get("deviation_cost", 0.0) or 0.0
+        ),
+        "co2_cost_jpy": float(normalized.get("co2_cost", 0.0) or 0.0),
     }
     accounting_total = float(sum(components.values()))
-    reported_total = float(breakdown.get("total_cost", accounting_total) or 0.0)
+    reported_total = float(
+        normalized.get("total_cost", accounting_total) or 0.0
+    )
     residual = reported_total - accounting_total
-    objective_is_actual_cost = bool(
-        breakdown.get("objective_is_actual_cost", False)
-    )
-    objective_mode = str(
-        (engine_result.solver_metadata or {}).get("objective_mode")
-        or getattr(problem.scenario, "objective_mode", None)
-        or "total_cost"
-    )
-    objective_value = float(engine_result.objective_value or 0.0)
     objective_unit = "JPY" if objective_is_actual_cost else "solver_objective_score"
     return {
-        "schema_version": "canonical_cost_ledger_v1",
+        "schema_version": "canonical_cost_ledger_v2",
         "scenario_id": scenario_id,
         "currency": "JPY",
-        "source": "engine_result.cost_breakdown",
+        "source": str(source),
         "components": components,
         "accounting_total_cost_jpy": accounting_total,
         "reported_total_cost_jpy": reported_total,
@@ -69,47 +81,86 @@ def canonical_cost_ledger_json(
         "solver_objective_value_jpy": (
             objective_value if objective_is_actual_cost else None
         ),
-        "objective_mode": objective_mode,
-        "objective_is_actual_cost": objective_is_actual_cost,
-        # This is a semantic contract, not a value-based inference.  A CO2 or
-        # balanced objective may differ from the accounting total by design.
-        "objective_accounting_equality_required": objective_is_actual_cost,
+        "objective_mode": str(objective_mode or "total_cost"),
+        "objective_is_actual_cost": bool(objective_is_actual_cost),
+        "objective_accounting_equality_required": bool(
+            objective_is_actual_cost
+        ),
         "solver_objective_matches_accounting_total": bool(
-            (engine_result.solver_metadata or {}).get(
-                "solver_objective_matches_accounting_total", False
-            )
+            solver_objective_matches_accounting_total
         ),
         "details": {
             "grid_purchase_cost_jpy": float(
-                breakdown.get("grid_purchase_cost", 0.0) or 0.0
+                normalized.get("grid_purchase_cost", 0.0) or 0.0
             ),
             "bess_total_flow_cost_jpy": float(
-                breakdown.get("bess_total_flow_cost_jpy", 0.0) or 0.0
+                normalized.get("bess_total_flow_cost_jpy", 0.0) or 0.0
             ),
             "pv_self_consumption_cost_jpy": float(
-                breakdown.get("pv_self_consumption_cost_jpy", 0.0) or 0.0
+                normalized.get("pv_self_consumption_cost_jpy", 0.0) or 0.0
             ),
         },
         "co2": {
-            "total_co2_kg": float(breakdown.get("total_co2_kg", 0.0) or 0.0),
-            "grid_co2_kg": float(
-                breakdown.get("grid_electricity_co2_kg", 0.0) or 0.0
+            "total_co2_kg": float(
+                normalized.get("total_co2_kg", 0.0) or 0.0
             ),
-            "ice_co2_kg": float(breakdown.get("ice_co2_kg", 0.0) or 0.0),
+            "grid_co2_kg": float(
+                normalized.get("grid_electricity_co2_kg", 0.0) or 0.0
+            ),
+            "ice_co2_kg": float(normalized.get("ice_co2_kg", 0.0) or 0.0),
             "carbon_price_jpy_per_kg": float(
-                getattr(problem.scenario, "co2_price_per_kg", 0.0)
-                or 0.0
+                carbon_price_jpy_per_kg or 0.0
             ),
         },
         "usage": {
             "used_vehicle_day_count": int(
-                breakdown.get("used_vehicle_day_count", 0) or 0
+                normalized.get("used_vehicle_day_count", 0) or 0
             ),
             "vehicle_usage_cost_jpy_per_used_bus": float(
-                breakdown.get("vehicle_usage_cost_jpy_per_used_bus", 0.0) or 0.0
+                normalized.get(
+                    "vehicle_usage_cost_jpy_per_used_bus", 0.0
+                )
+                or 0.0
             ),
         },
+        "evidence": dict(evidence or {}),
     }
+
+
+def canonical_cost_ledger_json(
+    *,
+    problem,
+    engine_result,
+    scenario_id: str,
+) -> Dict[str, Any]:
+    """Build the immutable accounting ledger from solver-evaluated components."""
+
+    breakdown = dict(engine_result.cost_breakdown or {})
+    objective_is_actual_cost = bool(
+        breakdown.get("objective_is_actual_cost", False)
+    )
+    objective_mode = str(
+        (engine_result.solver_metadata or {}).get("objective_mode")
+        or getattr(problem.scenario, "objective_mode", None)
+        or "total_cost"
+    )
+    return canonical_cost_ledger_from_breakdown(
+        breakdown=breakdown,
+        scenario_id=scenario_id,
+        source="engine_result.cost_breakdown",
+        objective_mode=objective_mode,
+        objective_value=float(engine_result.objective_value or 0.0),
+        objective_is_actual_cost=objective_is_actual_cost,
+        solver_objective_matches_accounting_total=bool(
+            (engine_result.solver_metadata or {}).get(
+                "solver_objective_matches_accounting_total", False
+            )
+        ),
+        carbon_price_jpy_per_kg=float(
+            getattr(problem.scenario, "co2_price_per_kg", 0.0) or 0.0
+        ),
+        evidence={"accounting_basis": "day_ahead_solver_evaluation"},
+    )
 
 
 def canonical_cost_breakdown_json(*, problem, engine_result, scenario_id: str) -> Dict[str, Any]:

@@ -445,7 +445,12 @@ def _depot_energy_assets_fixed_hash(problem: Any) -> str:
         depot_id: {
             key: value
             for key, value in dict(asset).items()
-            if key not in {"pv_generation_kwh", "pv_generation_hash"}
+            if key
+            not in {
+                "pv_case_id",
+                "pv_generation_kwh",
+                "pv_generation_hash",
+            }
         }
         for depot_id, asset in sorted(snapshot.items())
     }

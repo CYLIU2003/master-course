@@ -243,6 +243,7 @@ def test_build_optimization_run_payload_centralizes_fast_and_manual_execution() 
     app.destroy_fraction_var = DummyVar("0.3")
     app.day_type_var = DummyVar("WEEKDAY")
     app.rebuild_dispatch_before_opt_var = DummyVar(False)
+    app.require_all_available_bevs_var = DummyVar(True)
     app.prepared_input_id = "prepared-old"
     app._selected_depot_ids = lambda: ["dep-1"]
     app._timestep_min_value = lambda: 30
@@ -263,6 +264,7 @@ def test_build_optimization_run_payload_centralizes_fast_and_manual_execution() 
         "run_profile": "day_ahead_and_hourly_rolling",
         "run_hourly_rolling": True,
         "rolling_execution_minutes": 60,
+        "require_all_available_bevs": True,
         "mip_gap": 0.02,
         "alns_iterations": 750,
         "no_improvement_limit": 120,

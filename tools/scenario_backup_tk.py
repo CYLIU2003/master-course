@@ -1540,6 +1540,7 @@ class App:
         self.optimization_last_snapshot_json = ""
         self.wait_until_finish_var = tk.BooleanVar(value=False)
         self.rebuild_dispatch_before_opt_var = tk.BooleanVar(value=False)
+        self.require_all_available_bevs_var = tk.BooleanVar(value=False)
         self.execution_mode_var: tk.StringVar | None = None
         self._suspend_prepare_watchers = False
         self._suspend_route_lock_sync = False
@@ -8660,6 +8661,9 @@ class App:
             "run_profile": "day_ahead_and_hourly_rolling",
             "run_hourly_rolling": True,
             "rolling_execution_minutes": 60,
+            "require_all_available_bevs": bool(
+                self.require_all_available_bevs_var.get()
+            ),
             "mip_gap": self._parse_float(self.mip_gap_var.get(), 0.01),
             "alns_iterations": self._parse_int(self.alns_iter_var.get(), 500),
             "no_improvement_limit": self._parse_int(self.no_improvement_limit_var.get(), 100),
@@ -9946,6 +9950,24 @@ class App:
             text="実行前にdispatchを再構築する（重い）",
             variable=self.rebuild_dispatch_before_opt_var,
         ).pack(side=tk.LEFT)
+
+        row_bev_policy = ttk.Frame(sim_box)
+        row_bev_policy.pack(fill=tk.X, pady=3)
+        bev_policy_check = ttk.Checkbutton(
+            row_bev_policy,
+            text=(
+                "利用可能なBEVを全台最低1便使用する"
+                "（政策感度・通常最適化とは別ケース）"
+            ),
+            variable=self.require_all_available_bevs_var,
+        )
+        bev_policy_check.pack(side=tk.LEFT)
+        _Tooltip(
+            bev_policy_check,
+            "利用可能なBEV全台に少なくとも1便を割り当てる制約を追加します。\n"
+            "先生への「全EV利用」反実仮想用です。通常の費用最小化結果とは"
+            "別の政策感度として比較してください。",
+        )
 
         row_gap = ttk.Frame(solver_box)
         row_gap.pack(fill=tk.X, pady=3)

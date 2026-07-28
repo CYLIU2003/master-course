@@ -570,20 +570,22 @@ def _optimization_result_payload(
         "accounting_total_cost_jpy", accounting_summary.get("total_cost_jpy")
     )
     accounting_electricity_cost = electricity_cost_final
-    if (
+    if accounting_summary.get("energy_cost_jpy") is not None:
+        # Use the canonical aggregate directly when it exists. Re-adding its
+        # components can introduce a binary floating-point representation
+        # change even when the monetary value is identical.
+        accounting_electricity_cost = accounting_summary["energy_cost_jpy"]
+    elif (
         accounting_summary.get("grid_purchase_cost_jpy") is not None
         or accounting_summary.get("bess_total_flow_cost_jpy") is not None
     ):
-        # Currency is reported in yen to two decimal places.  Round the
-        # reconstructed component sum so binary floating-point noise does not
-        # create a different canonical report value (e.g., 21599.850000000002).
-        accounting_electricity_cost = round(
+        # Preserve the canonical ledger value at full precision. Human-facing
+        # Markdown may format currency, but machine-readable artifacts must
+        # reconcile to executed-day accounting within 1e-6 JPY.
+        accounting_electricity_cost = (
             float(accounting_summary.get("grid_purchase_cost_jpy", 0.0) or 0.0)
-            + float(accounting_summary.get("bess_total_flow_cost_jpy", 0.0) or 0.0),
-            2,
+            + float(accounting_summary.get("bess_total_flow_cost_jpy", 0.0) or 0.0)
         )
-    elif accounting_summary.get("energy_cost_jpy") is not None:
-        accounting_electricity_cost = accounting_summary["energy_cost_jpy"]
     accounting_demand_charge = accounting_summary.get("demand_charge_cost_jpy")
     if accounting_demand_charge is None:
         accounting_demand_charge = (

@@ -4213,6 +4213,38 @@ class GurobiMILPAdapter:
                 gp.quicksum(available_bev_use_vars) >= minimum_used_bev_count,
                 name="minimum_used_bev_count_policy",
             )
+        stage1_feasibility_no_good_cuts = tuple(
+            problem.metadata.get("stage1_feasibility_no_good_cuts") or ()
+        )
+        stage1_feasibility_no_good_cut_count = 0
+        for cut_index, raw_cut in enumerate(stage1_feasibility_no_good_cuts):
+            if not isinstance(raw_cut, Mapping):
+                raise ValueError(
+                    "stage1_feasibility_no_good_cuts entries must be mappings"
+                )
+            raw_pairs = tuple(raw_cut.get("assignment_pairs") or ())
+            cut_pairs = tuple(
+                (str(pair[0]), str(pair[1]))
+                for pair in raw_pairs
+                if isinstance(pair, (list, tuple)) and len(pair) == 2
+            )
+            if len(cut_pairs) != len(raw_pairs) or not cut_pairs:
+                raise ValueError(
+                    "Stage 1 feasibility no-good cut must contain non-empty "
+                    "(vehicle_id, trip_id) assignment pairs"
+                )
+            missing_pairs = tuple(pair for pair in cut_pairs if pair not in y)
+            if missing_pairs:
+                raise ValueError(
+                    "Stage 1 feasibility no-good cut references assignment "
+                    f"pairs absent from the current full model: {missing_pairs[:5]}"
+                )
+            stage1.addConstr(
+                gp.quicksum(y[pair] for pair in cut_pairs)
+                <= len(cut_pairs) - 1,
+                name=f"stage1_stage2_nogood__{cut_index}",
+            )
+            stage1_feasibility_no_good_cut_count += 1
 
         for vehicle in problem.vehicles:
             vehicle_id = vehicle.vehicle_id
@@ -4390,9 +4422,13 @@ class GurobiMILPAdapter:
         stage1_time_indexed_soc_relaxation_enabled = bool(
             problem.metadata.get("stage1_time_indexed_soc_relaxation_enabled", True)
         )
-        stage1_time_indexed_soc_relaxation_constraint_count = (
+        (
+            stage1_time_indexed_soc_relaxation_constraint_count,
+            stage1_shared_charger_relaxation_metadata,
+        ) = (
             self._add_stage1_time_indexed_soc_relaxation(
                 stage1,
+                gp=gp,
                 grb=GRB,
                 problem=problem,
                 trip_by_id=trip_by_id,
@@ -4408,7 +4444,13 @@ class GurobiMILPAdapter:
                 used_vehicle=used_vehicle,
             )
             if stage1_time_indexed_soc_relaxation_enabled
-            else 0
+            else (
+                0,
+                {
+                    "enabled": False,
+                    "reason": "disabled_by_problem_metadata",
+                },
+            )
         )
 
         component_flags = normalize_cost_component_flags(
@@ -4811,6 +4853,15 @@ class GurobiMILPAdapter:
                     "minimum_used_bev_count_policy_enabled": (
                         minimum_used_bev_count > 0
                     ),
+                    "stage1_feasibility_no_good_cut_count": (
+                        stage1_feasibility_no_good_cut_count
+                    ),
+                    "stage2_feedback_iteration": int(
+                        problem.metadata.get("stage2_feedback_iteration") or 0
+                    ),
+                    "stage2_feedback_history": list(
+                        problem.metadata.get("stage2_feedback_history") or ()
+                    ),
                     "stage1_energy_envelope_semantics": (
                         "optimistic_vehicle_local_necessary_condition"
                     ),
@@ -4820,9 +4871,12 @@ class GurobiMILPAdapter:
                     "stage1_time_indexed_soc_relaxation_enabled": (
                         stage1_time_indexed_soc_relaxation_enabled
                     ),
+                    "stage1_shared_charger_relaxation": dict(
+                        stage1_shared_charger_relaxation_metadata
+                    ),
                     "stage1_time_indexed_soc_relaxation_semantics": (
-                        "location_aware_cumulative_soc_with_single_vehicle_slot_"
-                        "charge_cap_necessary_condition"
+                        "location_aware_cumulative_soc_with_shared_physical_"
+                        "charger_and_optimistic_site_supply_necessary_condition"
                     ),
                     "stage1_energy_cost_proxy_configuration": dict(
                         stage1_energy_cost_proxy.configuration
@@ -4985,6 +5039,15 @@ class GurobiMILPAdapter:
                 "minimum_used_bev_count_policy_enabled": (
                     minimum_used_bev_count > 0
                 ),
+                "stage1_feasibility_no_good_cut_count": (
+                    stage1_feasibility_no_good_cut_count
+                ),
+                "stage2_feedback_iteration": int(
+                    problem.metadata.get("stage2_feedback_iteration") or 0
+                ),
+                "stage2_feedback_history": list(
+                    problem.metadata.get("stage2_feedback_history") or ()
+                ),
                 "stage1_energy_envelope_semantics": (
                     "optimistic_vehicle_local_necessary_condition"
                 ),
@@ -4994,9 +5057,12 @@ class GurobiMILPAdapter:
                 "stage1_time_indexed_soc_relaxation_enabled": (
                     stage1_time_indexed_soc_relaxation_enabled
                 ),
+                "stage1_shared_charger_relaxation": dict(
+                    stage1_shared_charger_relaxation_metadata
+                ),
                 "stage1_time_indexed_soc_relaxation_semantics": (
-                    "location_aware_cumulative_soc_with_single_vehicle_slot_"
-                    "charge_cap_necessary_condition"
+                    "location_aware_cumulative_soc_with_shared_physical_"
+                    "charger_and_optimistic_site_supply_necessary_condition"
                 ),
                 "stage1_energy_cost_proxy_configuration": dict(
                     stage1_energy_cost_proxy.configuration
@@ -5953,6 +6019,128 @@ class GurobiMILPAdapter:
                 stage1_objective=stage1_objective_value,
                 stage1_runtime_seconds=stage1_runtime_sec,
             )
+            feedback_iteration = max(
+                int(
+                    (problem.metadata or {}).get(
+                        "stage2_feedback_iteration", 0
+                    )
+                    or 0
+                ),
+                0,
+            )
+            feedback_max_iterations = max(
+                int(
+                    (problem.metadata or {}).get(
+                        "stage2_feedback_max_iterations", 0
+                    )
+                    or 0
+                ),
+                0,
+            )
+            can_add_proven_infeasible_assignment_cut = bool(
+                stage2.Status == GRB.INFEASIBLE
+                and stage1_status != "phase1_fixed_assignment"
+                and feedback_iteration < feedback_max_iterations
+            )
+            if can_add_proven_infeasible_assignment_cut:
+                assignment_pairs_for_cut = tuple(
+                    sorted(
+                        (
+                            str(vehicle_id),
+                            str(trip_id),
+                        )
+                        for vehicle_id, trip_ids in assigned_paths.items()
+                        for trip_id in trip_ids
+                    )
+                )
+                if assignment_pairs_for_cut:
+                    candidate_hash = hashlib.sha256(
+                        json.dumps(
+                            assignment_pairs_for_cut,
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        ).encode("utf-8")
+                    ).hexdigest()
+                    existing_cuts = list(
+                        (problem.metadata or {}).get(
+                            "stage1_feasibility_no_good_cuts"
+                        )
+                        or ()
+                    )
+                    existing_cuts.append(
+                        {
+                            "cut_type": (
+                                "stage2_proven_infeasible_full_assignment_"
+                                "no_good"
+                            ),
+                            "candidate_hash": candidate_hash,
+                            "assignment_pairs": [
+                                list(pair)
+                                for pair in assignment_pairs_for_cut
+                            ],
+                            "stage2_status": stage2_status,
+                            "iis_generated": bool(
+                                diagnostic_metadata.get(
+                                    "stage2_iis_generated", False
+                                )
+                            ),
+                            "iis_constraint_count": int(
+                                diagnostic_metadata.get(
+                                    "stage2_iis_constraint_count", 0
+                                )
+                                or 0
+                            ),
+                        }
+                    )
+                    feedback_history = list(
+                        (problem.metadata or {}).get(
+                            "stage2_feedback_history"
+                        )
+                        or ()
+                    )
+                    feedback_history.append(
+                        {
+                            "iteration": feedback_iteration,
+                            "candidate_hash": candidate_hash,
+                            "stage2_status": stage2_status,
+                            "iis_generated": bool(
+                                diagnostic_metadata.get(
+                                    "stage2_iis_generated", False
+                                )
+                            ),
+                            "iis_constraint_count": int(
+                                diagnostic_metadata.get(
+                                    "stage2_iis_constraint_count", 0
+                                )
+                                or 0
+                            ),
+                            "cut_type": (
+                                "full_assignment_no_good_cut"
+                            ),
+                        }
+                    )
+                    retry_metadata = dict(problem.metadata or {})
+                    retry_metadata.update(
+                        {
+                            "stage1_feasibility_no_good_cuts": (
+                                existing_cuts
+                            ),
+                            "stage2_feedback_history": feedback_history,
+                            "stage2_feedback_iteration": (
+                                feedback_iteration + 1
+                            ),
+                        }
+                    )
+                    retry_problem = replace(
+                        problem,
+                        metadata=retry_metadata,
+                    )
+                    return self._solve_thesis_two_stage(
+                        retry_problem,
+                        config,
+                        stage2_enabled=stage2_enabled,
+                        diagnostic_mode=diagnostic_mode,
+                    )
             metadata = {
                 **dict(stage1_plan.metadata or {}),
                 "stage2_solver_status": stage2_status,
@@ -6485,6 +6673,14 @@ class GurobiMILPAdapter:
         if not raw_dir:
             return {"stage2_diagnostics_written": False}
         output_dir = Path(raw_dir)
+        feedback_iteration = max(
+            int((problem.metadata or {}).get("stage2_feedback_iteration") or 0),
+            0,
+        )
+        if feedback_iteration > 0:
+            output_dir = output_dir / (
+                f"stage2_feedback_attempt_{feedback_iteration}"
+            )
         output_dir.mkdir(parents=True, exist_ok=True)
         trip_by_id = problem.trip_by_id()
         dispatch_trip_by_id = problem.dispatch_context.trips_by_id()
@@ -6845,6 +7041,8 @@ class GurobiMILPAdapter:
             "stage2_diagnostics_dir": str(output_dir),
             "stage2_iis_generated": iis_written,
             "stage2_iis_constraint_count": len(iis_constraint_names),
+            "stage2_iis_constraint_names": iis_constraint_names,
+            "stage2_feedback_iteration": feedback_iteration,
         }
 
     @staticmethod
@@ -7962,6 +8160,7 @@ class GurobiMILPAdapter:
         self,
         model: Any,
         *,
+        gp: Any,
         grb: Any,
         problem: CanonicalOptimizationProblem,
         trip_by_id: Mapping[str, ProblemTrip],
@@ -7975,7 +8174,7 @@ class GurobiMILPAdapter:
         start_arc: Mapping[Tuple[str, str], Any],
         end_arc: Mapping[Tuple[str, str], Any],
         used_vehicle: Mapping[str, Any],
-    ) -> int:
+    ) -> Tuple[int, Dict[str, Any]]:
         """Add cumulative, location-aware SOC necessary conditions.
 
         For every electric vehicle and slot boundary, cumulative trip and
@@ -7991,7 +8190,10 @@ class GurobiMILPAdapter:
             sorted({slot.slot_index for slot in problem.price_slots})
         )
         if not slot_indices:
-            return 0
+            return 0, {
+                "enabled": False,
+                "reason": "no_energy_price_slots",
+            }
 
         valid_slots = set(slot_indices)
         timestep_h = max(int(problem.scenario.timestep_min), 1) / 60.0
@@ -8014,6 +8216,9 @@ class GurobiMILPAdapter:
             )
 
         constraint_count = 0
+        stage1_charge_power_var: Dict[Tuple[str, int], Any] = {}
+        stage1_charge_on_var: Dict[Tuple[str, int], Any] = {}
+        electric_vehicle_by_id: Dict[str, Any] = {}
         for vehicle in vehicles:
             vehicle_id = str(getattr(vehicle, "vehicle_id", "") or "")
             vehicle_type = str(
@@ -8027,6 +8232,7 @@ class GurobiMILPAdapter:
                 or vehicle_id not in used_vehicle
             ):
                 continue
+            electric_vehicle_by_id[vehicle_id] = vehicle
 
             capacity_kwh = max(
                 float(vehicle.battery_capacity_kwh or 300.0), 1.0
@@ -8067,10 +8273,6 @@ class GurobiMILPAdapter:
                 )
                 if max_charger_kw > 0.0:
                     charge_max_kw = min(charge_max_kw, max_charger_kw)
-            delivered_charge_cap_kwh = max(
-                charge_max_kw * timestep_h * charge_efficiency,
-                0.0,
-            )
             load_terms_by_slot: Dict[int, List[Any]] = {
                 slot_idx: [] for slot_idx in slot_indices
             }
@@ -8235,11 +8437,8 @@ class GurobiMILPAdapter:
                 for slot_idx in residence_slots.intersection(valid_slots):
                     charge_terms_by_slot[slot_idx].append(arc_var)
 
-            charge_availability_by_slot: Dict[int, Any] = {}
             for slot_idx in slot_indices:
                 opportunity_terms = charge_terms_by_slot[slot_idx]
-                if not opportunity_terms:
-                    continue
                 charge_availability = model.addVar(
                     lb=0.0,
                     ub=1.0,
@@ -8249,24 +8448,40 @@ class GurobiMILPAdapter:
                         f"{vehicle_id}__slot_{slot_idx}"
                     ),
                 )
+                charge_power = model.addVar(
+                    lb=0.0,
+                    ub=charge_max_kw,
+                    vtype=grb.CONTINUOUS,
+                    name=(
+                        "stage1_charge_power_kw__"
+                        f"{vehicle_id}__slot_{slot_idx}"
+                    ),
+                )
+                support = gp.quicksum(opportunity_terms)
                 model.addConstr(
-                    charge_availability <= sum(opportunity_terms),
+                    (
+                        charge_availability <= support
+                        if opportunity_terms
+                        else charge_availability == 0.0
+                    ),
                     name=(
                         "stage1_charge_window_support__"
                         f"{vehicle_id}__slot_{slot_idx}"
                     ),
                 )
                 constraint_count += 1
-                charge_availability_by_slot[slot_idx] = charge_availability
+                stage1_charge_on_var[(vehicle_id, slot_idx)] = (
+                    charge_availability
+                )
+                stage1_charge_power_var[(vehicle_id, slot_idx)] = charge_power
 
             cumulative_load = 0.0
-            cumulative_charge_opportunities = 0.0
+            cumulative_charge_energy = 0.0
             for slot_idx in slot_indices:
                 model.addConstr(
                     cumulative_load
                     <= usable_initial_energy
-                    + delivered_charge_cap_kwh
-                    * cumulative_charge_opportunities,
+                    + cumulative_charge_energy,
                     name=(
                         "stage1_soc_relax_cumulative__"
                         f"{vehicle_id}__slot_{slot_idx}"
@@ -8274,19 +8489,141 @@ class GurobiMILPAdapter:
                 )
                 constraint_count += 1
                 cumulative_load += sum(load_terms_by_slot[slot_idx])
-                cumulative_charge_opportunities += (
-                    charge_availability_by_slot.get(slot_idx, 0.0)
+                cumulative_charge_energy += (
+                    stage1_charge_power_var[(vehicle_id, slot_idx)]
+                    * timestep_h
+                    * charge_efficiency
                 )
             cumulative_load += sum(terminal_load_terms)
             model.addConstr(
                 cumulative_load
                 <= usable_initial_energy
-                + delivered_charge_cap_kwh * cumulative_charge_opportunities,
+                + cumulative_charge_energy,
                 name=f"stage1_soc_relax_cumulative_terminal__{vehicle_id}",
             )
             constraint_count += 1
 
-        return constraint_count
+        shared_charger_metadata: Dict[str, Any] = {
+            "enabled": bool(stage1_charge_power_var),
+            "relaxation_semantics": (
+                "continuous physical-charger assignment with exact vehicle, "
+                "charger, port, power, depot, and charging-window upper bounds; "
+                "Stage 2 retains binary charger assignment and exact energy dispatch"
+            ),
+            "site_supply_constraint_count": 0,
+        }
+        if stage1_charge_power_var:
+            constraint_count_before_chargers = constraint_count
+            _, _, physical_metadata = self._add_physical_charger_assignment(
+                model=model,
+                gp=gp,
+                grb=grb,
+                problem=problem,
+                vehicle_by_id=electric_vehicle_by_id,
+                vehicle_ids=tuple(sorted(electric_vehicle_by_id)),
+                slot_indices=slot_indices,
+                charge_power_var=stage1_charge_power_var,
+                charge_on_var=stage1_charge_on_var,
+                name_prefix="stage1_charger_relax",
+                relaxed_assignment=True,
+            )
+            constraint_count += int(
+                physical_metadata.get("physical_charger_constraint_count", 0)
+                or 0
+            )
+            shared_charger_metadata.update(physical_metadata)
+
+            depot_by_id = {
+                str(depot.depot_id): depot for depot in problem.depots
+            }
+            assets_by_depot = {
+                str(depot_id): asset
+                for depot_id, asset in (
+                    problem.depot_energy_assets or {}
+                ).items()
+            }
+            global_pv_kw_by_slot = {
+                int(slot.slot_index): max(
+                    float(slot.pv_available_kw or 0.0), 0.0
+                )
+                for slot in problem.pv_slots
+            }
+            site_supply_constraint_count = 0
+            for depot_id, depot in depot_by_id.items():
+                vehicle_ids_at_depot = tuple(
+                    vehicle_id
+                    for vehicle_id, vehicle in electric_vehicle_by_id.items()
+                    if str(
+                        getattr(vehicle, "home_depot_id", "")
+                        or "depot_default"
+                    )
+                    == depot_id
+                )
+                if not vehicle_ids_at_depot:
+                    continue
+                asset = assets_by_depot.get(depot_id)
+                configured_import_limit_kw = float(
+                    getattr(depot, "import_limit_kw", 0.0) or 0.0
+                )
+                # Match both Stage 2 and the independent feasibility checker:
+                # a non-positive contract value means that no finite import
+                # limit was supplied. Treating it as zero would make this
+                # necessary-condition relaxation stricter than the exact
+                # charging model and can falsely reject a feasible assignment.
+                import_limit_kw = (
+                    configured_import_limit_kw
+                    if configured_import_limit_kw > 0.0
+                    else None
+                )
+                for slot_idx in slot_indices:
+                    pv_kw = global_pv_kw_by_slot.get(slot_idx, 0.0)
+                    bess_discharge_kw = 0.0
+                    if asset is not None:
+                        pv_kw = (
+                            _pv_generation_kwh_at_slot(asset, slot_idx)
+                            / timestep_h
+                        )
+                        if bool(getattr(asset, "bess_enabled", False)) and bool(
+                            getattr(asset, "allow_bess_to_bus", True)
+                        ):
+                            bess_discharge_kw = max(
+                                float(
+                                    getattr(asset, "bess_power_kw", 0.0)
+                                    or 0.0
+                                ),
+                                0.0,
+                            )
+                    if import_limit_kw is None:
+                        # The physical charger capacity remains enforced
+                        # above. No artificial site-supply cap is valid
+                        # without an explicit contract import limit.
+                        continue
+                    optimistic_supply_cap_kw = (
+                        import_limit_kw + pv_kw + bess_discharge_kw
+                    )
+                    model.addConstr(
+                        gp.quicksum(
+                            stage1_charge_power_var[(vehicle_id, slot_idx)]
+                            for vehicle_id in vehicle_ids_at_depot
+                            if (vehicle_id, slot_idx)
+                            in stage1_charge_power_var
+                        )
+                        <= optimistic_supply_cap_kw,
+                        name=(
+                            "stage1_site_supply_relax__"
+                            f"{depot_id}__slot_{slot_idx}"
+                        ),
+                    )
+                    constraint_count += 1
+                    site_supply_constraint_count += 1
+            shared_charger_metadata["site_supply_constraint_count"] = (
+                site_supply_constraint_count
+            )
+            shared_charger_metadata[
+                "physical_charger_constraint_count_included"
+            ] = constraint_count - constraint_count_before_chargers
+
+        return constraint_count, shared_charger_metadata
 
     def _repaired_baseline_plan_for_warm_start(
         self,
@@ -8867,6 +9204,7 @@ class GurobiMILPAdapter:
         charge_power_var: Mapping[Tuple[str, int], Any],
         charge_on_var: Mapping[Tuple[str, int], Any],
         name_prefix: str,
+        relaxed_assignment: bool = False,
     ) -> Tuple[Dict[Tuple[str, str, int], Any], Dict[Tuple[str, str, int], Any], Dict[str, Any]]:
         """Assign every active charge session to one physical charger type.
 
@@ -8888,6 +9226,7 @@ class GurobiMILPAdapter:
         power_var: Dict[Tuple[str, str, int], Any] = {}
         candidates_by_vehicle: Dict[str, Tuple[str, ...]] = {}
         implicit_compatibility_vehicle_ids: List[str] = []
+        constraint_count = 0
 
         for vehicle_id in vehicle_ids:
             vehicle = vehicle_by_id[vehicle_id]
@@ -8937,16 +9276,24 @@ class GurobiMILPAdapter:
                         charge_on_var[(vehicle_id, slot_idx)] == 0,
                         name=f"{name_prefix}_unavailable__{vehicle_id}__slot_{slot_idx}",
                     )
+                    constraint_count += 1
                     model.addConstr(
                         charge_power_var[(vehicle_id, slot_idx)] == 0,
                         name=f"{name_prefix}_power_unavailable__{vehicle_id}__slot_{slot_idx}",
                     )
+                    constraint_count += 1
                     continue
                 for charger_id in candidates:
                     charger = charger_by_id[charger_id]
                     key = (vehicle_id, charger_id, slot_idx)
                     assignment_var[key] = model.addVar(
-                        vtype=grb.BINARY,
+                        lb=0.0,
+                        ub=1.0,
+                        vtype=(
+                            grb.CONTINUOUS
+                            if relaxed_assignment
+                            else grb.BINARY
+                        ),
                         name=f"{name_prefix}_on__{vehicle_id}__{charger_id}__slot_{slot_idx}",
                     )
                     power_limit_kw = min(
@@ -8963,6 +9310,7 @@ class GurobiMILPAdapter:
                         power_var[key] <= power_limit_kw * assignment_var[key],
                         name=f"{name_prefix}_link__{vehicle_id}__{charger_id}__slot_{slot_idx}",
                     )
+                    constraint_count += 1
                 model.addConstr(
                     gp.quicksum(
                         assignment_var[(vehicle_id, charger_id, slot_idx)]
@@ -8971,6 +9319,7 @@ class GurobiMILPAdapter:
                     == charge_on_var[(vehicle_id, slot_idx)],
                     name=f"{name_prefix}_one__{vehicle_id}__slot_{slot_idx}",
                 )
+                constraint_count += 1
                 model.addConstr(
                     gp.quicksum(
                         power_var[(vehicle_id, charger_id, slot_idx)]
@@ -8979,6 +9328,7 @@ class GurobiMILPAdapter:
                     == charge_power_var[(vehicle_id, slot_idx)],
                     name=f"{name_prefix}_power_sum__{vehicle_id}__slot_{slot_idx}",
                 )
+                constraint_count += 1
 
         for charger_id, charger in sorted(charger_by_id.items()):
             ports = max(int(charger.simultaneous_ports or 1), 1)
@@ -8995,19 +9345,30 @@ class GurobiMILPAdapter:
                     gp.quicksum(assignment_var[key] for key in keys) <= ports,
                     name=f"{name_prefix}_ports__{charger_id}__slot_{slot_idx}",
                 )
+                constraint_count += 1
                 model.addConstr(
                     gp.quicksum(power_var[key] for key in keys)
                     <= charger_power_kw * ports,
                     name=f"{name_prefix}_capacity__{charger_id}__slot_{slot_idx}",
                 )
+                constraint_count += 1
 
         metadata = {
             "physical_charger_assignment_semantics": (
-                "one_physical_charger_definition_per_active_vehicle_slot; "
-                "simultaneous_ports_are_identical_ports"
+                (
+                    "continuous_relaxation_of_one_physical_charger_definition_"
+                    "per_active_vehicle_slot"
+                    if relaxed_assignment
+                    else "one_physical_charger_definition_per_active_vehicle_slot"
+                )
+                + "; simultaneous_ports_are_identical_ports"
+            ),
+            "physical_charger_assignment_relaxed": bool(
+                relaxed_assignment
             ),
             "physical_charger_assignment_variable_count": len(assignment_var),
             "physical_charger_power_variable_count": len(power_var),
+            "physical_charger_constraint_count": constraint_count,
             "implicit_home_depot_charger_compatibility_vehicle_ids": tuple(
                 sorted(implicit_compatibility_vehicle_ids)
             ),

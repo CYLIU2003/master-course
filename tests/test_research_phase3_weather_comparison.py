@@ -229,6 +229,24 @@ def _summary(
             "location_aware_cumulative_soc_with_single_vehicle_slot_"
             "charge_cap_necessary_condition"
         ),
+        "stage1_shared_charger_relaxation": {
+            "enabled": True,
+            "relaxation_semantics": (
+                "continuous_physical_charger_assignment_with_shared_port_and_"
+                "power_capacity_necessary_conditions"
+            ),
+            "site_supply_constraint_count": 96,
+            "physical_charger_assignment_semantics": (
+                "continuous_assignment_to_compatible_physical_chargers"
+            ),
+            "physical_charger_assignment_relaxed": True,
+            "physical_charger_assignment_variable_count": 100,
+            "physical_charger_power_variable_count": 100,
+            "physical_charger_constraint_count": 200,
+            "implicit_home_depot_charger_compatibility_vehicle_ids": [],
+            "vehicle_compatible_charger_ids": {"bev-1": ["charger-1"]},
+        },
+        "stage1_feasibility_no_good_cut_count": 0,
         "stage1_energy_cost_proxy_configuration": {
             "enabled": True,
             "semantics": (

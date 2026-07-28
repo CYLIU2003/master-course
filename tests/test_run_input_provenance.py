@@ -269,27 +269,48 @@ def test_frontend_run_input_bundle_rejects_missing_manifest_artifact(
     assert f"{PARAMETERS_FILE}:exists" in validation["failed_checks"]
 
 
-def test_research_run_allows_diagnostic_compute_with_ineligible_git_state() -> None:
+def test_formal_research_run_requires_clean_versioned_git_state() -> None:
+    with pytest.raises(ValueError, match="clean Git worktree"):
+        _require_clean_research_git_state(
+            research_run=True,
+            git_state={
+                "git_state_available": True,
+                "git_sha": "commit",
+                "git_dirty": True,
+                "worktree_patch_sha256": "patch-sha",
+            },
+        )
+    with pytest.raises(ValueError, match="clean Git worktree"):
+        _require_clean_research_git_state(
+            research_run=True,
+            git_state={
+                "git_state_available": False,
+                "git_dirty": None,
+            },
+        )
+    with pytest.raises(ValueError, match="clean Git worktree"):
+        _require_clean_research_git_state(
+            research_run=True,
+            git_state={
+                "git_state_available": True,
+                "git_dirty": False,
+                "git_sha": "",
+            },
+        )
     _require_clean_research_git_state(
         research_run=True,
         git_state={
             "git_state_available": True,
-            "git_dirty": True,
-            "worktree_patch_sha256": "patch-sha",
-        },
-    )
-    _require_clean_research_git_state(
-        research_run=True,
-        git_state={
-            "git_state_available": False,
-            "git_dirty": None,
-        },
-    )
-    _require_clean_research_git_state(
-        research_run=True,
-        git_state={
-            "git_state_available": True,
+            "git_sha": "commit",
             "git_dirty": False,
+        },
+    )
+    _require_clean_research_git_state(
+        research_run=False,
+        git_state={
+            "git_state_available": True,
+            "git_sha": "commit",
+            "git_dirty": True,
         },
     )
 

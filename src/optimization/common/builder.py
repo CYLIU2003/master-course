@@ -813,13 +813,35 @@ class ProblemBuilder:
             )
             for item in vehicle_types
         }
-        actual_inventory: Dict[str, int] = {}
-        for vehicle in vehicles:
+        vehicle_ids = [
+            str(getattr(vehicle, "vehicle_id", "") or "").strip()
+            for vehicle in vehicles
+        ]
+        duplicate_vehicle_ids = sorted(
+            vehicle_id
+            for vehicle_id, count in Counter(vehicle_ids).items()
+            if vehicle_id and count > 1
+        )
+        missing_vehicle_id_count = sum(not vehicle_id for vehicle_id in vehicle_ids)
+        unavailable_vehicle_ids = sorted(
+            str(getattr(vehicle, "vehicle_id", "") or "").strip()
+            for vehicle in unavailable_vehicles
+        )
+        available_inventory: Dict[str, int] = {}
+        unknown_vehicle_type_ids: List[str] = []
+        for vehicle in available_vehicles:
             powertrain = vehicle_type_by_id.get(
                 str(vehicle.vehicle_type),
                 _research_inventory_powertrain(vehicle.vehicle_type),
             )
-            actual_inventory[powertrain] = actual_inventory.get(powertrain, 0) + 1
+            if powertrain not in {"BEV", "ICE"}:
+                unknown_vehicle_type_ids.append(
+                    str(getattr(vehicle, "vehicle_id", "") or "")
+                )
+                continue
+            available_inventory[powertrain] = (
+                available_inventory.get(powertrain, 0) + 1
+            )
         simulation_metadata = dict(metadata_source.get("simulation_config") or {})
         expected_inventory_raw = (
             simulation_metadata.get("research_vehicle_inventory")
@@ -832,17 +854,48 @@ class ProblemBuilder:
             for key, value in dict(expected_inventory_raw or {}).items()
         }
         inventory_errors = [
-            f"{powertrain}:expected={expected},actual={actual_inventory.get(powertrain, 0)}"
+            (
+                f"{powertrain}:expected_available={expected},"
+                f"actual_available={available_inventory.get(powertrain, 0)}"
+            )
             for powertrain, expected in sorted(expected_inventory.items())
-            if actual_inventory.get(powertrain, 0) != expected
+            if available_inventory.get(powertrain, 0) != expected
         ]
+        if duplicate_vehicle_ids:
+            inventory_errors.append(
+                "duplicate_vehicle_ids=" + ",".join(duplicate_vehicle_ids)
+            )
+        if missing_vehicle_id_count:
+            inventory_errors.append(
+                f"missing_vehicle_id_count={missing_vehicle_id_count}"
+            )
+        if unknown_vehicle_type_ids:
+            inventory_errors.append(
+                "unknown_vehicle_type_ids="
+                + ",".join(sorted(unknown_vehicle_type_ids))
+            )
+        if unavailable_vehicle_ids:
+            inventory_errors.append(
+                "unavailable_vehicle_ids="
+                + ",".join(unavailable_vehicle_ids)
+            )
         research_fleet_validation = {
             "schema_version": "research_fleet_validation_v1",
             "status": "ERROR" if inventory_errors else (
                 "OK" if expected_inventory else "UNDECLARED"
             ),
             "expected_inventory": expected_inventory,
-            "actual_inventory": actual_inventory,
+            "available_inventory": available_inventory,
+            # Backward-compatible alias. The research contract is explicitly
+            # about vehicles available to the solver, not merely persisted
+            # records.
+            "actual_inventory": available_inventory,
+            "total_vehicle_record_count": len(vehicles),
+            "available_vehicle_count": len(available_vehicles),
+            "unavailable_vehicle_ids": unavailable_vehicle_ids,
+            "duplicate_vehicle_ids": duplicate_vehicle_ids,
+            "missing_vehicle_id_count": missing_vehicle_id_count,
+            "unknown_vehicle_type_ids": sorted(unknown_vehicle_type_ids),
             "errors": inventory_errors,
         }
         if bool(getattr(config, "research_run", False)) and inventory_errors:

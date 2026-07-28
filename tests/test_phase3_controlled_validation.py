@@ -16,6 +16,7 @@ from src.optimization.common.problem import (
     DepotEnergyAsset,
     EnergyPriceSlot,
     OptimizationScenario,
+    ProblemDepot,
     ProblemTrip,
     ProblemVehicle,
 )
@@ -710,8 +711,12 @@ def test_stage1_time_indexed_soc_relaxation_blocks_early_soc_shortage() -> None:
     }
     used_vehicle = {"bev": model.addVar(vtype=gp.GRB.BINARY, lb=1.0, ub=1.0)}
 
-    constraint_count = adapter._add_stage1_time_indexed_soc_relaxation(
+    (
+        constraint_count,
+        shared_charger_metadata,
+    ) = adapter._add_stage1_time_indexed_soc_relaxation(
         model,
+        gp=gp,
         grb=gp.GRB,
         problem=problem,
         trip_by_id=problem.trip_by_id(),
@@ -727,6 +732,11 @@ def test_stage1_time_indexed_soc_relaxation_blocks_early_soc_shortage() -> None:
     model.optimize()
 
     assert constraint_count > 0
+    assert shared_charger_metadata["enabled"] is True
+    assert (
+        shared_charger_metadata["physical_charger_assignment_relaxed"]
+        is True
+    )
     assert (
         model.getConstrByName("stage1_soc_relax_cumulative__bev__slot_2")
         is not None
@@ -800,6 +810,7 @@ def test_stage1_time_indexed_soc_relaxation_blocks_off_depot_charge() -> None:
 
     adapter._add_stage1_time_indexed_soc_relaxation(
         model,
+        gp=gp,
         grb=gp.GRB,
         problem=problem,
         trip_by_id=problem.trip_by_id(),
@@ -922,6 +933,7 @@ def test_stage1_time_indexed_soc_relaxation_caps_charge_and_blocks_trip_overlap(
 
     adapter._add_stage1_time_indexed_soc_relaxation(
         model,
+        gp=gp,
         grb=gp.GRB,
         problem=problem,
         trip_by_id=problem.trip_by_id(),
@@ -937,6 +949,130 @@ def test_stage1_time_indexed_soc_relaxation_caps_charge_and_blocks_trip_overlap(
     model.optimize()
 
     assert model.getVarByName("stage1_charge_available__bev__slot_1") is not None
+    assert model.Status == gp.GRB.INFEASIBLE
+
+
+@pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
+def test_stage1_time_indexed_soc_relaxation_shares_physical_charger_ports() -> None:
+    """Two vehicles may not both consume one charger's full slot capacity."""
+    import gurobipy as gp
+
+    adapter = GurobiMILPAdapter()
+    vehicles = tuple(
+        ProblemVehicle(
+            vehicle_id=f"bev-{index}",
+            vehicle_type="BEV",
+            home_depot_id="depot",
+            initial_soc=0.2,
+            battery_capacity_kwh=100.0,
+            reserve_soc=0.2,
+            energy_consumption_kwh_per_km=1.0,
+        )
+        for index in range(2)
+    )
+    trips = tuple(
+        ProblemTrip(
+            trip_id=f"trip-{index}",
+            route_id="r",
+            origin="depot",
+            destination=f"remote-{index}",
+            departure_min=6 * 60,
+            arrival_min=7 * 60,
+            distance_km=90.0,
+            allowed_vehicle_types=("BEV",),
+        )
+        for index in range(2)
+    )
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="stage1-shared-charger-relaxation",
+            timestep_min=60,
+            horizon_start="05:00",
+            horizon_end="07:00",
+        ),
+        dispatch_context=_DispatchContext(),
+        trips=trips,
+        vehicles=vehicles,
+        depots=(
+            ProblemDepot(
+                depot_id="depot",
+                name="Depot",
+                charger_ids=("charger",),
+                # Non-positive means an unspecified (not zero) grid contract.
+                # Stage 1 must still apply the shared physical charger limit,
+                # without creating an artificial zero-kW site cap.
+                import_limit_kw=0.0,
+            ),
+        ),
+        chargers=(
+            ChargerDefinition(
+                charger_id="charger",
+                depot_id="depot",
+                power_kw=100.0,
+                simultaneous_ports=1,
+            ),
+        ),
+        price_slots=(
+            EnergyPriceSlot(slot_index=0),
+            EnergyPriceSlot(slot_index=1),
+        ),
+    )
+    model = gp.Model("stage1_shared_charger_relaxation")
+    model.Params.OutputFlag = 0
+    y = {}
+    start_arc = {}
+    used_vehicle = {}
+    startup_prechecks = {}
+    assignment_trip_ids_by_vehicle = {}
+    for vehicle, trip in zip(vehicles, trips):
+        key = (vehicle.vehicle_id, trip.trip_id)
+        y[key] = model.addVar(vtype=gp.GRB.BINARY, lb=1.0, ub=1.0)
+        start_arc[key] = model.addVar(
+            vtype=gp.GRB.BINARY,
+            lb=1.0,
+            ub=1.0,
+        )
+        used_vehicle[vehicle.vehicle_id] = model.addVar(
+            vtype=gp.GRB.BINARY,
+            lb=1.0,
+            ub=1.0,
+        )
+        startup_prechecks[key] = StartupEnergyPrecheck(
+            path_feasible=True,
+            energy_feasible=True,
+            initial_soc_kwh=20.0,
+            minimum_soc_kwh=20.0,
+            startup_deadhead_min=0,
+            startup_deadhead_energy_kwh=0.0,
+            required_departure_soc_kwh=110.0,
+            complete_precharge_slot_count=1,
+            maximum_precharge_energy_kwh=95.0,
+            energy_margin_kwh=5.0,
+        )
+        assignment_trip_ids_by_vehicle[vehicle.vehicle_id] = [trip.trip_id]
+
+    _, metadata = adapter._add_stage1_time_indexed_soc_relaxation(
+        model,
+        gp=gp,
+        grb=gp.GRB,
+        problem=problem,
+        trip_by_id=problem.trip_by_id(),
+        vehicles=problem.vehicles,
+        assignment_trip_ids_by_vehicle=assignment_trip_ids_by_vehicle,
+        startup_energy_precheck_by_assignment=startup_prechecks,
+        y=y,
+        x={},
+        start_arc=start_arc,
+        end_arc={},
+        used_vehicle=used_vehicle,
+    )
+    model.optimize()
+
+    assert metadata["physical_charger_assignment_relaxed"] is True
+    assert metadata["site_supply_constraint_count"] == 0
+    assert model.getConstrByName(
+        "stage1_charger_relax_ports__charger__slot_0"
+    ) is not None
     assert model.Status == gp.GRB.INFEASIBLE
 
 

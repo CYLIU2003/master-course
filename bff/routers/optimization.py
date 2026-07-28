@@ -75,6 +75,7 @@ from bff.services.optimization_run.rolling_chain import (
     DEFAULT_FRONTEND_RUN_PROFILE,
     RollingChainExecutionError,
     execute_frontend_rolling_chain,
+    finalize_frontend_rolling_evidence,
     frontend_rolling_is_required,
     normalize_frontend_run_profile,
     persist_frontend_day_ahead_rolling_contract,
@@ -151,25 +152,85 @@ INTERACTIVE_OPERATION_TIME_WINDOW_CONTROLS_VERSION = (
 )
 FULL_DAY_OPERATION_START_TIME = "00:00"
 FULL_DAY_OPERATION_END_TIME = "23:59"
+FORMAL_RESEARCH_AVAILABLE_BEV_COUNT = 35
+FORMAL_RESEARCH_AVAILABLE_ICE_COUNT = 26
+# ``0`` is the canonical numeric full-network sentinel consumed by
+# ``MILPModelBuilder._successor_limit``. Do not send a presentation label into
+# the typed solver setting.
+FORMAL_RESEARCH_MAX_SUCCESSORS_PER_TRIP = 0
+FORMAL_RESEARCH_SUCCESSOR_POLICY = "full_network"
 
 
 def _require_clean_research_git_state(
     *, research_run: bool, git_state: Dict[str, Any]
 ) -> None:
-    """Allow calculation while leaving dirty provenance ineligible for release.
-
-    A dirty or unavailable Git state must never become research-ready, but it
-    is still useful to finish a diagnostic calculation and preserve evidence.
-    The release gate consumes the persisted ``git_dirty`` fields later.
-    """
+    """Fail closed before a formal research solve on unversioned source."""
 
     if not research_run:
         return
-    if bool(git_state.get("git_state_available", False)) and not bool(
-        git_state.get("git_dirty", True)
+    if (
+        bool(git_state.get("git_state_available", False))
+        and bool(str(git_state.get("git_sha") or "").strip())
+        and not bool(git_state.get("git_dirty", True))
     ):
         return
-    return
+    raise ValueError(
+        "formal research run requires a clean Git worktree with an available "
+        f"commit SHA; git_state_available={bool(git_state.get('git_state_available', False))}, "
+        f"git_dirty={git_state.get('git_dirty')}, "
+        f"git_state_error={git_state.get('git_state_error')!r}"
+    )
+
+
+def _apply_interactive_research_contract(
+    scenario: Dict[str, Any],
+    *,
+    research_run: bool,
+) -> Dict[str, Any]:
+    """Apply the fail-closed inventory and full-network formal-run contract."""
+
+    if not research_run:
+        return {
+            "enabled": False,
+            "scope": "non_research_interactive_run",
+        }
+    simulation_config = scenario.get("simulation_config")
+    if not isinstance(simulation_config, dict):
+        simulation_config = {}
+        scenario["simulation_config"] = simulation_config
+    scenario_overlay = scenario.get("scenario_overlay")
+    if not isinstance(scenario_overlay, dict):
+        scenario_overlay = {}
+        scenario["scenario_overlay"] = scenario_overlay
+    solver_config = scenario_overlay.get("solver_config")
+    if not isinstance(solver_config, dict):
+        solver_config = {}
+        scenario_overlay["solver_config"] = solver_config
+
+    expected_inventory = {
+        "BEV": FORMAL_RESEARCH_AVAILABLE_BEV_COUNT,
+        "ICE": FORMAL_RESEARCH_AVAILABLE_ICE_COUNT,
+    }
+    simulation_config["research_vehicle_inventory"] = expected_inventory
+    simulation_config["milp_max_successors_per_trip"] = (
+        FORMAL_RESEARCH_MAX_SUCCESSORS_PER_TRIP
+    )
+    solver_config["milp_max_successors_per_trip"] = (
+        FORMAL_RESEARCH_MAX_SUCCESSORS_PER_TRIP
+    )
+    return {
+        "enabled": True,
+        "scope": "interactive_formal_research_run",
+        "expected_available_inventory": expected_inventory,
+        "milp_successor_policy": FORMAL_RESEARCH_SUCCESSOR_POLICY,
+        "milp_max_successors_per_trip": (
+            FORMAL_RESEARCH_MAX_SUCCESSORS_PER_TRIP
+        ),
+        "successor_pruning_allowed": False,
+        "fallback_allowed": False,
+        "postsolve_repair_allowed": False,
+        "clean_git_worktree_required": True,
+    }
 
 
 def _validate_git_state_after_solve(
@@ -465,6 +526,60 @@ def _apply_timestep_min_to_scenario(scenario: Dict[str, Any], timestep_min: Opti
     sim_cfg["timestep_min"] = timestep_min
 
 
+def _apply_interactive_bev_utilization_policy(
+    problem: Any,
+    *,
+    require_all_available_bevs: bool,
+) -> Dict[str, Any]:
+    """Reuse the formal minimum-BEV-use constraint for an explicit sensitivity."""
+
+    available_bev_ids = sorted(
+        str(getattr(vehicle, "vehicle_id", "") or "")
+        for vehicle in tuple(getattr(problem, "vehicles", ()) or ())
+        if bool(getattr(vehicle, "available", True))
+        and str(getattr(vehicle, "vehicle_type", "") or "").upper() == "BEV"
+    )
+    if require_all_available_bevs and not available_bev_ids:
+        raise ValueError(
+            "All-available-BEV sensitivity was requested, but the canonical "
+            "problem contains no available BEV."
+        )
+    minimum_used_bev_count = (
+        len(available_bev_ids) if require_all_available_bevs else 0
+    )
+    metadata = getattr(problem, "metadata", None)
+    if not isinstance(metadata, dict):
+        raise ValueError(
+            "Canonical problem metadata must be mutable before applying the "
+            "BEV utilization sensitivity."
+        )
+    metadata["minimum_used_bev_count"] = minimum_used_bev_count
+    metadata["minimum_used_bev_count_policy_case"] = bool(
+        require_all_available_bevs
+    )
+    metadata["minimum_used_bev_vehicle_ids"] = (
+        available_bev_ids if require_all_available_bevs else []
+    )
+    return {
+        "policy": "require_all_available_bevs_at_least_one_trip",
+        "enabled": bool(require_all_available_bevs),
+        "available_bev_count": len(available_bev_ids),
+        "available_bev_ids": available_bev_ids,
+        "minimum_used_bev_count": minimum_used_bev_count,
+        "mathematical_effect": (
+            "sum(used_vehicle[v] for available BEV v) >= "
+            f"{minimum_used_bev_count}"
+            if require_all_available_bevs
+            else "no additional minimum-BEV-use constraint"
+        ),
+        "claim_scope": (
+            "policy sensitivity; not the unconstrained total-cost optimum"
+            if require_all_available_bevs
+            else "baseline optimization policy"
+        ),
+    }
+
+
 class RunOptimizationBody(BaseModel):
     mode: str = "thesis_mode"
     research_run: bool = False
@@ -497,6 +612,7 @@ class RunOptimizationBody(BaseModel):
     destroy_fraction: float = 0.25
     weatherProxyForecastPath: Optional[str] = None
     enableWeatherOperationPolicy: Optional[bool] = None
+    require_all_available_bevs: bool = False
 
 
 class DelayEventBody(BaseModel):
@@ -3339,7 +3455,20 @@ def _persist_rich_run_outputs(
             research_claim_scope=research_claim_scope,
             rolling_execution=rolling_execution,
             solver_settings=solver_settings,
+            result_claim_classification=dict(
+                optimization_result.get("result_claim_classification") or {}
+            ),
         )
+        final_cost_reconciliation = _assert_final_cost_artifact_consistency(
+            run_dir=run_dir,
+            optimization_result=optimization_result,
+        )
+        optimization_result[
+            "final_cost_reconciliation"
+        ] = final_cost_reconciliation
+        optimization_audit[
+            "final_cost_reconciliation"
+        ] = final_cost_reconciliation
     (run_dir / "optimization_result.json").write_text(
         json.dumps(optimization_result, ensure_ascii=False, indent=2), encoding="utf-8"
     )
@@ -3608,6 +3737,218 @@ def _finalized_accounting_summary_for_experiment_report(run_dir: Path) -> Dict[s
     return canonical
 
 
+def _assert_final_cost_artifact_consistency(
+    *,
+    run_dir: Path,
+    optimization_result: Dict[str, Any],
+    tolerance_jpy: float = 1.0e-6,
+) -> Dict[str, Any]:
+    """Fail the frontend job unless every final cost artifact agrees.
+
+    Accepted rolling execution makes ``executed_day_accounting.json`` the only
+    final cost source.  Day-ahead objective values remain available as solver
+    telemetry but are not substituted for the executed accounting total.
+    """
+
+    executed_path = (
+        run_dir / "rolling_hourly_chain" / "executed_day_accounting.json"
+    )
+    if not executed_path.is_file():
+        return {
+            "status": "SKIPPED",
+            "reason": "no_executed_rolling_day",
+        }
+
+    def _json_object(path: Path) -> Dict[str, Any]:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(loaded, dict):
+            raise RuntimeError(f"Final cost artifact is not a JSON object: {path}")
+        return dict(loaded)
+
+    executed = _json_object(executed_path)
+    if executed.get("eligible") is not True:
+        raise RuntimeError("Executed-day accounting is not eligible")
+    executed_total = float(
+        dict(executed.get("cost_breakdown") or {})["total_cost"]
+    )
+    ledger = _json_object(run_dir / "graph" / "canonical_cost_ledger.json")
+    if ledger.get("source") != (
+        "rolling_hourly_chain/executed_day_accounting.json"
+    ):
+        raise RuntimeError(
+            "Final canonical cost ledger does not identify executed rolling "
+            f"accounting as its source: {ledger.get('source')!r}"
+        )
+    summary = _json_object(run_dir / "summary.json")
+    experiment = _json_object(run_dir / "experiment_report.json")
+    report_results = dict(experiment.get("results") or {})
+
+    with (run_dir / "cost_breakdown_detail.csv").open(
+        "r", encoding="utf-8", newline=""
+    ) as handle:
+        detail_rows = list(csv.DictReader(handle))
+    detail_by_key = {
+        str(row.get("key") or ""): row.get("value") for row in detail_rows
+    }
+
+    from openpyxl import load_workbook
+
+    workbook = load_workbook(run_dir / "results.xlsx", data_only=True)
+    if "cost_breakdown" not in workbook.sheetnames:
+        raise RuntimeError("results.xlsx is missing cost_breakdown sheet")
+    workbook_costs = {
+        str(row[0].value or ""): row[1].value
+        for row in workbook["cost_breakdown"].iter_rows(min_row=2)
+        if row and row[0].value not in (None, "")
+    }
+    workbook.close()
+    executed_breakdown = dict(executed.get("cost_breakdown") or {})
+    ledger_components = dict(ledger.get("components") or {})
+    expected_by_metric = {
+        "total_cost_jpy": executed_total,
+        "electricity_cost_jpy": float(
+            executed_breakdown.get("electricity_cost", 0.0) or 0.0
+        ),
+        "fuel_cost_jpy": float(
+            executed_breakdown.get("fuel_cost", 0.0) or 0.0
+        ),
+        "demand_charge_cost_jpy": float(
+            executed_breakdown.get("demand_cost", 0.0) or 0.0
+        ),
+        "vehicle_usage_cost_jpy": float(
+            executed_breakdown.get("vehicle_usage_cost", 0.0) or 0.0
+        ),
+        "co2_cost_jpy": float(
+            executed_breakdown.get("co2_cost", 0.0) or 0.0
+        ),
+    }
+    observed_by_metric = {
+        "total_cost_jpy": {
+            "executed_day_accounting": executed_total,
+            "canonical_cost_ledger": float(
+                ledger["accounting_total_cost_jpy"]
+            ),
+            "summary": float(summary["accounting_total_cost_jpy"]),
+            "experiment_report_json": float(
+                report_results["total_cost_jpy"]
+            ),
+            "cost_breakdown_detail": float(detail_by_key["total_cost"]),
+            "results_xlsx": float(workbook_costs["total_cost"]),
+            "optimization_result": float(
+                optimization_result["final_accounting_total_cost_jpy"]
+            ),
+        },
+        "electricity_cost_jpy": {
+            "canonical_cost_ledger": float(
+                ledger_components["electricity_cost_jpy"]
+            ),
+            "summary": float(summary["energy_cost_jpy"]),
+            "experiment_report_json": float(
+                report_results["electricity_cost_jpy"]
+            ),
+            "cost_breakdown_detail": float(
+                detail_by_key["electricity_cost"]
+            ),
+            "results_xlsx": float(workbook_costs["electricity_cost"]),
+        },
+        "fuel_cost_jpy": {
+            "canonical_cost_ledger": float(
+                ledger_components["fuel_cost_jpy"]
+            ),
+            "summary": float(summary["fuel_cost_jpy"]),
+            "experiment_report_json": float(
+                report_results["diesel_cost_jpy"]
+            ),
+            "cost_breakdown_detail": float(detail_by_key["fuel_cost"]),
+            "results_xlsx": float(workbook_costs["fuel_cost"]),
+        },
+        "demand_charge_cost_jpy": {
+            "canonical_cost_ledger": float(
+                ledger_components["demand_charge_cost_jpy"]
+            ),
+            "summary": float(summary["demand_charge_cost_jpy"]),
+            "experiment_report_json": float(
+                report_results["demand_charge_jpy"]
+            ),
+            "cost_breakdown_detail": float(
+                detail_by_key["demand_charge"]
+            ),
+            "results_xlsx": float(workbook_costs["demand_charge"]),
+        },
+        "vehicle_usage_cost_jpy": {
+            "canonical_cost_ledger": float(
+                ledger_components["vehicle_usage_cost_jpy"]
+            ),
+            "experiment_report_json": float(
+                report_results["vehicle_fixed_cost_jpy"]
+            ),
+            "cost_breakdown_detail": float(
+                detail_by_key["vehicle_usage_cost"]
+            ),
+            "results_xlsx": float(
+                workbook_costs["vehicle_usage_cost"]
+            ),
+        },
+        "co2_cost_jpy": {
+            "canonical_cost_ledger": float(
+                ledger_components["co2_cost_jpy"]
+            ),
+            "summary": float(summary["co2_cost_jpy"]),
+            "experiment_report_json": float(
+                report_results["co2_cost_jpy"]
+            ),
+            "cost_breakdown_detail": float(detail_by_key["co2_cost"]),
+            "results_xlsx": float(workbook_costs["co2_cost"]),
+        },
+    }
+    residuals_by_metric = {
+        metric: {
+            artifact: value - expected_by_metric[metric]
+            for artifact, value in observations.items()
+        }
+        for metric, observations in observed_by_metric.items()
+    }
+    failures = {}
+    for metric, residuals in residuals_by_metric.items():
+        for artifact, residual in residuals.items():
+            if not math.isclose(
+                residual,
+                0.0,
+                rel_tol=0.0,
+                abs_tol=float(tolerance_jpy),
+            ):
+                failures[f"{metric}:{artifact}"] = residual
+    report_md_path = run_dir / "experiment_report.md"
+    report_md = report_md_path.read_text(encoding="utf-8")
+    exact_marker = (
+        f"canonical_executed_total_cost_jpy: `{executed_total!r}`"
+    )
+    if exact_marker not in report_md:
+        failures["experiment_report_md_exact_marker"] = None
+    payload = {
+        "schema_version": "final_cost_reconciliation_v1",
+        "status": "OK" if not failures else "ERROR",
+        "source": (
+            "rolling_hourly_chain/executed_day_accounting.json"
+        ),
+        "tolerance_jpy": float(tolerance_jpy),
+        "expected_by_metric_jpy": expected_by_metric,
+        "observed_by_metric_jpy": observed_by_metric,
+        "residual_to_executed_day_by_metric_jpy": residuals_by_metric,
+        "failed_artifacts": failures,
+    }
+    (run_dir / "final_cost_reconciliation.json").write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    if failures:
+        raise RuntimeError(
+            "Final cost artifacts disagree with executed rolling accounting: "
+            + json.dumps(failures, ensure_ascii=False, sort_keys=True)
+        )
+    return payload
+
+
 def _prepend_experiment_release_header(
     *,
     run_dir: Path,
@@ -3632,6 +3973,17 @@ def _prepend_experiment_release_header(
         dict(optimization_result.get("cost_breakdown") or {}).get(
             "objective_is_actual_cost", False
         )
+    )
+    canonical_ledger_path = run_dir / "graph" / "canonical_cost_ledger.json"
+    canonical_ledger = (
+        json.loads(canonical_ledger_path.read_text(encoding="utf-8"))
+        if canonical_ledger_path.is_file()
+        else {}
+    )
+    canonical_total = canonical_ledger.get("accounting_total_cost_jpy")
+    canonical_source = canonical_ledger.get("source")
+    result_claim = dict(
+        optimization_result.get("result_claim_classification") or {}
     )
     header = [
         marker,
@@ -3679,6 +4031,23 @@ def _prepend_experiment_release_header(
             "- solver_termination_reason: "
             f"`{solver_settings.get('solver_termination_reason')}`"
         ),
+        f"- result_claim_label: `{result_claim.get('label')}`",
+        (
+            "- optimality_claim_eligible: "
+            f"`{str(bool(result_claim.get('optimality_claim_eligible'))).lower()}`"
+        ),
+        (
+            "- optimality_blocking_reasons: "
+            + (
+                ", ".join(
+                    f"`{value}`"
+                    for value in list(
+                        result_claim.get("optimality_blocking_reasons") or ()
+                    )
+                )
+                or "none"
+            )
+        ),
         (
             "- objective_is_actual_cost: "
             f"`{str(objective_is_actual_cost).lower()}`"
@@ -3686,6 +4055,14 @@ def _prepend_experiment_release_header(
         (
             "- cost_semantics: `canonical accounting total is the cost KPI; "
             "a non-cost or proxy objective is reported separately`"
+        ),
+        (
+            "- canonical_cost_source: "
+            f"`{canonical_source}`"
+        ),
+        (
+            "- canonical_executed_total_cost_jpy: "
+            f"`{canonical_total!r}`"
         ),
     ]
     if research_claim_scope.get("run_profile") == DAY_AHEAD_EXPLORATORY_PROFILE:
@@ -3705,6 +4082,7 @@ def _write_results_workbook_release_status(
     research_claim_scope: Dict[str, Any],
     rolling_execution: Dict[str, Any],
     solver_settings: Dict[str, Any],
+    result_claim_classification: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Synchronize results.xlsx with the final rolling/release decision."""
 
@@ -3746,6 +4124,16 @@ def _write_results_workbook_release_status(
             solver_settings.get("stage1_certified_mip_gap_ratio"),
         ),
         ("mip_gap_target_met", solver_settings.get("mip_gap_target_met")),
+        (
+            "result_claim_label",
+            dict(result_claim_classification or {}).get("label"),
+        ),
+        (
+            "optimality_claim_eligible",
+            dict(result_claim_classification or {}).get(
+                "optimality_claim_eligible"
+            ),
+        ),
     )
     for row in rows:
         sheet.append(list(row))
@@ -3776,8 +4164,18 @@ def _research_claim_scope_payload(
     )
     weather_enabled = bool(weather_policy.get("enabled", False))
     policy_scope = str(decision_policy.get("policy_scope") or "not_enabled")
+    bev_utilization_policy = dict(
+        optimization_result.get("bev_utilization_policy") or {}
+    )
+    all_available_bevs_required = bool(
+        bev_utilization_policy.get("enabled", False)
+    )
     physically_feasible = bool(solution_validity.get("validated_feasible", False))
     is_integrated_exact = bool(metadata.get("supports_integrated_exact_milp", False))
+    mip_gap_target_met = solver_settings.get("mip_gap_target_met") is True
+    optimality_claim_eligible = bool(
+        physically_feasible and is_integrated_exact and mip_gap_target_met
+    )
     is_manual_unaccepted = not bool(metadata.get("research_run_accepted", False))
     run_profile = str(
         optimization_result.get("run_profile")
@@ -3829,6 +4227,10 @@ def _research_claim_scope_payload(
         allowed_claims.append("physical_schedule_feasibility_under_recorded_inputs")
     if weather_enabled:
         allowed_claims.append("recorded_pv_supply_effect_on_depot_energy_flows")
+    if all_available_bevs_required and physically_feasible:
+        allowed_claims.append(
+            "all_available_bev_minimum_use_policy_feasibility"
+        )
     disallowed_claims = [
         "integrated_global_total_cost_optimum",
         "actual_monthly_demand_charge_savings",
@@ -3838,6 +4240,10 @@ def _research_claim_scope_payload(
         disallowed_claims.append("weather_adaptive_dispatch_or_charging_policy")
     if is_manual_unaccepted:
         disallowed_claims.append("formal_research_weather_comparison")
+    if all_available_bevs_required:
+        disallowed_claims.append(
+            "unconstrained_total_cost_minimum_without_policy_constraint"
+        )
     if rolling_execution.get("status") != "executed_and_accepted":
         disallowed_claims.append("hourly_rolling_reoptimization_performance")
     # A single manually initiated run can record whether BestObjStop was out of
@@ -3862,12 +4268,13 @@ def _research_claim_scope_payload(
             and not is_manual_unaccepted
         ),
         "formal_weather_comparison_claim_eligible": False,
-        "integrated_global_optimality_claim_eligible": is_integrated_exact,
+        "integrated_global_optimality_claim_eligible": optimality_claim_eligible,
         "runtime_comparison_claim_eligible": False,
         "demand_charge_claim_scope": (
             "planning_horizon_allocation_proxy_not_actual_monthly_bill_savings"
         ),
         "asset_economics_claim_eligible": False,
+        "bev_utilization_policy": bev_utilization_policy,
         "allowed_claims": allowed_claims,
         "disallowed_claims": sorted(set(disallowed_claims)),
         "evidence": {
@@ -3877,6 +4284,7 @@ def _research_claim_scope_payload(
             ),
             "optimization_structure": metadata.get("optimization_structure"),
             "supports_integrated_exact_milp": is_integrated_exact,
+            "mip_gap_target_met": mip_gap_target_met,
             "weather_policy_scope": policy_scope,
             "rolling_execution_status": rolling_execution.get("status"),
             "rolling_execution_minutes": rolling_execution.get(
@@ -6520,7 +6928,11 @@ def _solution_validity_payload(
     status = str(solver_status or "").strip()
     status_upper = status.upper()
     reasons = [str(item) for item in list(infeasibility_reasons or []) if str(item).strip()]
+    # Physical schedule validity and research acceptance are deliberately
+    # separate.  A fleet-contract or exactness rejection must not turn a
+    # physically valid schedule into an infeasible one.
     blocking_reasons: List[str] = []
+    research_blocking_reasons: List[str] = []
     meta = dict(solver_metadata or {})
 
     is_fallback_status = (
@@ -6569,7 +6981,7 @@ def _solution_validity_payload(
     if bool(meta.get("research_run", False)) and not bool(
         meta.get("research_run_accepted", False)
     ):
-        blocking_reasons.append("research_acceptance_failed")
+        research_blocking_reasons.append("research_acceptance_failed")
     if not bool(feasible):
         blocking_reasons.append("postsolve_infeasible")
     if reasons:
@@ -6581,6 +6993,7 @@ def _solution_validity_payload(
     if unserved > 0:
         blocking_reasons.append("unserved_trips_present")
     blocking_reasons = sorted(set(blocking_reasons))
+    research_blocking_reasons = sorted(set(research_blocking_reasons))
     supports_exact = bool(meta.get("supports_exact_milp", False))
     fallback_applied = bool(meta.get("fallback_applied", False) or meta.get("fallback_reason"))
     result_class: str
@@ -6604,9 +7017,6 @@ def _solution_validity_payload(
     elif "assignment_only_result" in blocking_reasons:
         status_reason = "assignment_only_no_charging_soc_validation"
         result_class = "assignment_only_result"
-    elif "research_acceptance_failed" in blocking_reasons:
-        status_reason = "research_acceptance_failed"
-        result_class = "research_invalid"
     elif (
         "bev_terminal_soc_balance_failed" in blocking_reasons
         or "bess_terminal_soc_balance_failed" in blocking_reasons
@@ -6642,6 +7052,25 @@ def _solution_validity_payload(
         "status_reason": status_reason,
         "result_class": result_class,
         "blocking_reasons": blocking_reasons,
+        "physical_blocking_reasons": blocking_reasons,
+        "physical_validation_status": (
+            "VALID" if validated_feasible else "INVALID"
+        ),
+        "research_acceptance_status": (
+            "ACCEPTED"
+            if bool(meta.get("research_run_accepted", False))
+            else "REJECTED"
+            if bool(meta.get("research_run", False))
+            else "NOT_REQUESTED"
+        ),
+        "research_blocking_reasons": research_blocking_reasons,
+        "research_acceptance_failed_checks": sorted(
+            str(name)
+            for name, passed in dict(
+                meta.get("research_acceptance_checks") or {}
+            ).items()
+            if passed is not True
+        ),
         "research_kpi_eligible": bool(
             validated_feasible
             and result_class == "exact_or_validated"
@@ -6889,6 +7318,65 @@ def _apply_invalid_result_kpi_gate(
         charging_summary["depots"] = gated_depots
 
 
+def _apply_result_claim_classification(
+    optimization_result: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Label a feasible incumbent without overstating global optimality."""
+
+    validity = dict(optimization_result.get("solution_validity") or {})
+    settings = dict(optimization_result.get("solver_settings") or {})
+    metadata = dict(optimization_result.get("solver_metadata") or {})
+    physically_feasible = bool(validity.get("validated_feasible", False))
+    optimality_blockers: List[str] = []
+    if physically_feasible:
+        if settings.get("mip_gap_target_met") is not True:
+            optimality_blockers.append("requested_mip_gap_not_met")
+        if not bool(metadata.get("supports_integrated_exact_milp", False)):
+            optimality_blockers.append(
+                "not_an_integrated_global_assignment_and_charging_milp"
+            )
+    optimality_claim_eligible = bool(
+        physically_feasible and not optimality_blockers
+    )
+    if physically_feasible and not optimality_claim_eligible:
+        label = "feasible_candidate"
+        display_name = "Feasible candidate"
+        optimization_result["result_status"] = "FEASIBLE_CANDIDATE"
+    elif physically_feasible:
+        label = "validated_optimality_claim_candidate"
+        display_name = "Validated result"
+    else:
+        label = "invalid_or_infeasible_result"
+        display_name = "Invalid or infeasible result"
+    payload = {
+        "schema_version": "result_claim_classification_v1",
+        "label": label,
+        "display_name": display_name,
+        "physical_feasibility_claim_eligible": physically_feasible,
+        "optimality_claim_eligible": optimality_claim_eligible,
+        "optimality_blocking_reasons": optimality_blockers,
+        "requested_mip_gap": settings.get("mip_gap_requested_ratio"),
+        "certified_mip_gap": settings.get(
+            "stage1_certified_mip_gap_ratio"
+        ),
+        "gurobi_raw_mip_gap": settings.get(
+            "stage1_gurobi_raw_mip_gap_ratio"
+        ),
+        "interpretation": (
+            "A physically feasible incumbent; do not describe it as a global "
+            "optimum or as meeting the requested MIP gap."
+            if label == "feasible_candidate"
+            else "See physical and research acceptance artifacts for scope."
+        ),
+    }
+    optimization_result["result_claim_classification"] = payload
+    summary = optimization_result.get("summary")
+    if isinstance(summary, dict):
+        summary["result_claim_classification"] = payload
+        summary["result_status"] = optimization_result.get("result_status")
+    return payload
+
+
 def _solver_settings_payload(
     *,
     time_limit_seconds_requested: Any,
@@ -7079,6 +7567,17 @@ def _run_optimization(
 ) -> None:
     output_dir: Optional[str] = None
     raw_frontend_request_payload = dict(frontend_request_payload or {})
+    require_all_available_bevs = bool(
+        raw_frontend_request_payload.get("require_all_available_bevs", False)
+    )
+    interactive_bev_utilization_policy: Dict[str, Any] = {
+        "enabled": require_all_available_bevs,
+        "status": "not_applied",
+    }
+    interactive_research_contract: Dict[str, Any] = {
+        "enabled": bool(research_run),
+        "status": "not_applied",
+    }
     run_profile = normalize_frontend_run_profile(run_profile)
     rolling_required = frontend_rolling_is_required(run_profile)
     requested_rolling_controls = {
@@ -7146,6 +7645,10 @@ def _run_optimization(
         )
         interactive_terminal_soc_controls = _apply_interactive_bev_terminal_soc_policy(
             scenario
+        )
+        interactive_research_contract = _apply_interactive_research_contract(
+            scenario,
+            research_run=bool(research_run),
         )
 
         if rebuild_dispatch:
@@ -7264,7 +7767,9 @@ def _run_optimization(
                 thesis_mode=solver_mode in {"thesis_mode", "mode_milp_only"} or phase_token == "phase3_two_stage",
                 debug_mode=solver_mode == "debug_mode" or phase_token == "diagnostic",
                 research_run=bool(research_run),
-                allow_postsolve_repair=solver_mode == "debug_mode",
+                allow_postsolve_repair=(
+                    solver_mode == "debug_mode" and not bool(research_run)
+                ),
                 phase=phase_token,
                 requested_phase_token=solver_mode,
                 requested_phase=requested_phase,
@@ -7289,12 +7794,25 @@ def _run_optimization(
                     weather_profile,
                     random_seed=random_seed,
                 )
+            interactive_bev_utilization_policy = (
+                _apply_interactive_bev_utilization_policy(
+                    problem,
+                    require_all_available_bevs=require_all_available_bevs,
+                )
+            )
             if (
                 phase_token == "phase3_two_stage"
                 and isinstance(problem.metadata, dict)
             ):
                 problem.metadata["phase3_diagnostics_dir"] = str(
                     Path(output_dir) / "diagnostics"
+                )
+                problem.metadata["stage2_feedback_max_iterations"] = (
+                    2 if bool(research_run) else 1
+                )
+                problem.metadata["stage2_feedback_policy"] = (
+                    "retry_only_after_gurobi_infeasible_certificate_with_"
+                    "full_assignment_no_good_cut"
                 )
             run_input_provenance = persist_run_input_provenance(
                 run_dir=Path(output_dir),
@@ -7310,6 +7828,12 @@ def _run_optimization(
                         interactive_operation_time_window_controls
                     ),
                     "interactive_terminal_soc_controls": interactive_terminal_soc_controls,
+                    "interactive_bev_utilization_policy": (
+                        interactive_bev_utilization_policy
+                    ),
+                    "interactive_research_contract": (
+                        interactive_research_contract
+                    ),
                     "scenario_id": scenario_id,
                     "prepared_input_id": prepared_input_id,
                     "requested_prepared_input_id": requested_prepared_input_id,
@@ -7427,6 +7951,9 @@ def _run_optimization(
                         interactive_operation_time_window_controls
                     ),
                     "interactive_terminal_soc_controls": interactive_terminal_soc_controls,
+                    "interactive_research_contract": (
+                        interactive_research_contract
+                    ),
                 }
             )
             # Production results are immutable dataclasses.  Lightweight
@@ -7912,6 +8439,12 @@ def _run_optimization(
         }
         if weather_policy_payload is not None:
             optimization_result["weather_policy"] = weather_policy_payload
+        optimization_result[
+            "bev_utilization_policy"
+        ] = interactive_bev_utilization_policy
+        optimization_result[
+            "formal_research_contract"
+        ] = interactive_research_contract
         if charging_summary_payload is not None:
             optimization_result["charging_summary"] = charging_summary_payload
         if charging_payload_warning:
@@ -8013,6 +8546,12 @@ def _run_optimization(
         }
         if weather_policy_payload is not None:
             optimization_audit["weather_policy"] = weather_policy_payload.get("audit") or {}
+        optimization_audit[
+            "bev_utilization_policy"
+        ] = interactive_bev_utilization_policy
+        optimization_audit[
+            "formal_research_contract"
+        ] = interactive_research_contract
         optimization_result["audit"] = optimization_audit
 
         store.set_field(scenario_id, "optimization_result", optimization_result)
@@ -8197,6 +8736,37 @@ def _run_optimization(
                             "checks: "
                             + ", ".join(rolling_result.technical_failure_reasons)
                         )
+                    else:
+                        final_rolling_evidence = (
+                            finalize_frontend_rolling_evidence(
+                                run_dir=Path(output_dir),
+                                scenario=scenario,
+                                problem=problem,
+                                optimization_result=optimization_result,
+                            )
+                        )
+                        optimization_audit["final_rolling_evidence"] = {
+                            "physical_schedule_validation_status": dict(
+                                final_rolling_evidence.get(
+                                    "physical_schedule_validation"
+                                )
+                                or {}
+                            ).get("status"),
+                            "final_accounting_source": optimization_result.get(
+                                "final_accounting_source"
+                            ),
+                            "final_accounting_total_cost_jpy": (
+                                optimization_result.get(
+                                    "final_accounting_total_cost_jpy"
+                                )
+                            ),
+                            "comparison_control_hash": dict(
+                                final_rolling_evidence.get(
+                                    "comparison_case_manifest"
+                                )
+                                or {}
+                            ).get("comparison_control_hash"),
+                        }
                 except Exception as exc:
                     failure_payload = {
                         "status": "failed",
@@ -8218,6 +8788,12 @@ def _run_optimization(
                 "reason": "explicit_day_ahead_exploratory_profile",
             }
 
+        result_claim_classification = _apply_result_claim_classification(
+            optimization_result
+        )
+        optimization_audit[
+            "result_claim_classification"
+        ] = result_claim_classification
         job_store.update_job(
             job_id,
             status="running",
@@ -8268,9 +8844,30 @@ def _run_optimization(
         if rolling_technical_failure is not None:
             raise rolling_technical_failure
         is_fallback = bool(solution_validity.get("result_class") in {"baseline_fallback", "postsolve_infeasible", "postsolve_repaired", "repaired_heuristic", "debug_result"})
-        final_status = "optimized" if not is_fallback else "optimized_provisional"
+        is_feasible_candidate = (
+            dict(
+                optimization_result.get("result_claim_classification") or {}
+            ).get("label")
+            == "feasible_candidate"
+        )
+        final_status = (
+            "optimized"
+            if not is_fallback and not is_feasible_candidate
+            else "optimized_provisional"
+        )
         store.update_scenario(scenario_id, status=final_status)
-        job_message = "Optimization complete." if not is_fallback else f"Optimization complete ({solution_validity.get('status_reason', 'provisional')})."
+        if is_feasible_candidate:
+            job_message = (
+                "Feasible candidate complete; physical checks passed, but "
+                "global optimality or the requested MIP gap is not established."
+            )
+        elif not is_fallback:
+            job_message = "Optimization complete."
+        else:
+            job_message = (
+                "Optimization complete "
+                f"({solution_validity.get('status_reason', 'provisional')})."
+            )
         job_store.update_job(
             job_id,
             status="completed",

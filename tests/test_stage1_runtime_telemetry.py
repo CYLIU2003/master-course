@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from bff.routers.optimization import (
     RunOptimizationBody,
+    _apply_interactive_bev_utilization_policy,
+    _apply_interactive_research_contract,
     _apply_interactive_bev_terminal_soc_policy,
     _interactive_runtime_controls_payload,
     _research_claim_scope_payload,
@@ -128,6 +132,7 @@ def test_interactive_run_defaults_and_provenance_record_server_enforcement() -> 
     assert request.run_profile == "day_ahead_and_hourly_rolling"
     assert request.run_hourly_rolling is True
     assert request.rolling_execution_minutes == 60
+    assert request.require_all_available_bevs is False
 
     controls = _interactive_runtime_controls_payload(
         requested_stage1_best_obj_stop_enabled=True,
@@ -139,6 +144,77 @@ def test_interactive_run_defaults_and_provenance_record_server_enforcement() -> 
         "stage1_best_obj_stop_enabled": False,
         "gurobi_threads": 1,
     }
+
+
+def test_all_available_bev_policy_reuses_minimum_use_constraint() -> None:
+    problem = SimpleNamespace(
+        vehicles=(
+            SimpleNamespace(
+                vehicle_id="bev-1", vehicle_type="BEV", available=True
+            ),
+            SimpleNamespace(
+                vehicle_id="bev-2", vehicle_type="BEV", available=True
+            ),
+            SimpleNamespace(
+                vehicle_id="bev-maintenance",
+                vehicle_type="BEV",
+                available=False,
+            ),
+            SimpleNamespace(
+                vehicle_id="ice-1", vehicle_type="ICE", available=True
+            ),
+        ),
+        metadata={},
+    )
+
+    policy = _apply_interactive_bev_utilization_policy(
+        problem,
+        require_all_available_bevs=True,
+    )
+
+    assert policy["minimum_used_bev_count"] == 2
+    assert policy["available_bev_ids"] == ["bev-1", "bev-2"]
+    assert problem.metadata["minimum_used_bev_count"] == 2
+    assert problem.metadata["minimum_used_bev_count_policy_case"] is True
+
+
+def test_formal_frontend_contract_forces_fleet_and_full_network() -> None:
+    scenario = {
+        "simulation_config": {
+            "research_vehicle_inventory": {"BEV": 1, "ICE": 1},
+            "milp_max_successors_per_trip": 8,
+        },
+        "scenario_overlay": {
+            "solver_config": {"milp_max_successors_per_trip": 16}
+        },
+    }
+
+    contract = _apply_interactive_research_contract(
+        scenario,
+        research_run=True,
+    )
+
+    assert contract["expected_available_inventory"] == {
+        "BEV": 35,
+        "ICE": 26,
+    }
+    assert contract["successor_pruning_allowed"] is False
+    assert contract["milp_successor_policy"] == "full_network"
+    assert contract["milp_max_successors_per_trip"] == 0
+    assert scenario["simulation_config"]["research_vehicle_inventory"] == {
+        "BEV": 35,
+        "ICE": 26,
+    }
+    assert (
+        scenario["simulation_config"]["milp_max_successors_per_trip"]
+        == 0
+    )
+    assert (
+        scenario["scenario_overlay"]["solver_config"][
+            "milp_max_successors_per_trip"
+        ]
+        == 0
+    )
 
 
 def test_interactive_run_enforces_energy_neutral_bev_terminal_soc() -> None:
