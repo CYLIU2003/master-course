@@ -1,5 +1,11 @@
 # AI Agent向け修正指示書: 日次最適化後の1時間Rollingを最優先で成立させる
 
+> **Status: IMPLEMENTED; retained as historical specification (2026-07-28).**
+> 日次配車固定、60分×24 step、state handoff、実行prefix会計、
+> acceptance auditのproduction pathは成立した。最新の提出可否と残課題は
+> [`CURRENT_RESEARCH_RELEASE_BLOCKERS.md`](CURRENT_RESEARCH_RELEASE_BLOCKERS.md)
+> に集約する。
+
 ## 目的と完了条件
 
 有効な日次Phase 3結果を入力として、日次で決めた車両・便割当を変更せず、残り運行日を1時間ごとに充電・PV・BESS再最適化する。これは再配車ではなく、固定配車に対するreceding-horizon charging controllerである。日次＋rollingを統合MILPの大域最適解とは表現しない。

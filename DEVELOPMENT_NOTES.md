@@ -1,5 +1,74 @@
 # Development Notes
 
+## 2026-07-28 research release correctness and Stage 1→Stage 2 closure
+
+### Verified call path and defects addressed
+
+- 実経路は通常フロント
+  `POST /api/scenarios/{scenario_id}/run-optimization`
+  → `_run_optimization`
+  → `ProblemBuilder`
+  → `OptimizationEngine`
+  → Phase 3 Stage 1/Stage 2
+  → `run_rolling_chain`
+  → rolling acceptance
+  → final reportingである。CLIだけの修正ではない。
+- 研究受理失敗と物理可行性を分離した。全便、接続、SOC、充電器、
+  終端条件、assignment/input hash、24-step rollingを独立検査する
+  `physical_schedule_validation.json`を持ち、fleet/exactness/gap等の研究
+  gateだけを理由に物理的なscheduleを`INVALID`またはKPI nullへ変えない。
+- accepted rolling後の唯一の最終費用源を
+  `rolling_hourly_chain/executed_day_accounting.json`とした。総額だけで
+  なく、電力、燃料、需要、車両使用、CO2の各費目についてledger、
+  summary、experiment JSON/Markdown、Excel、optimization resultの残差を
+  `1e-6 JPY`以内で強制する。1項目でも外れればjobを失敗させる。
+- Stage 1の既存startup precheck、all-day energy envelope、累積SOC必要条件
+  を削除せず強化した。充電可能窓に裏付けられた連続充電変数を導入し、
+  車両/充電器互換性、90/50 kW等の物理出力、口数、home depot、時刻、
+  有限の系統契約がある場合だけ、楽観的な系統+PV+BESS供給上限を全車両で
+  共有する（非正値はStage 2と同じく「有限上限なし」であり0 kWではない）。
+  charger assignment
+  はStage 1では連続緩和なので必要条件、Stage 2ではbinaryの厳密条件
+  であり、Phase 3を統合大域最適解とは扱わない。
+- Stage 2がGurobi `INFEASIBLE`を返した場合だけ、失敗した全
+  `(vehicle, trip)` assignmentをno-good cutとしてStage 1へ戻す
+  logic-based feedbackを追加した。通常フロントは最大1回、formal
+  research frontend/runnerは最大2回再試行する。`TIME_LIMIT`、単なる
+  incumbent欠如、推測した不足量ではcutを作らない。各attemptのIISと
+  candidate hashを別成果物へ保存する。
+- formal frontendはclean Git + 非空SHAをsolve前にhard gateし、solve中
+  のSHA/dirty変化も拒否する。prepared available fleetはBEV35/ICE26を
+  hard contractとし、重複/空ID、unknown type、unavailable record、
+  count mismatchをbuild時に停止する。正式Phase 3はfull successor
+  network、fallbackなし、post-solve repairなしを強制する。
+- 全BEV使用はbaselineへ混ぜず、既存
+  `minimum_used_bev_count`制約を使う明示的な政策感度checkboxとした。
+  `sum(used_vehicle[v] for available BEV)>=35`の影響を別runで評価する。
+- runごとに固定control hash、PV profile hash、assignment/rolling/cost
+  evidenceを保存し、pair builderがPV差分hashと比較表を作る。物理条件を
+  通過しても事前gap未達または非統合なら
+  `FEASIBLE_CANDIDATE`とし、「最適解」とは表示しない。
+
+### Repository and release management
+
+- 実ファイルの`AGENTS.md`へdispatch、timetable、operator、exactness、
+  fallback、物理量、再現性の研究guardrailを復元した。
+- 旧`AI_AGENT_FRONTEND_ROLLING_RELEASE_BLOCKER_20260727.md`は
+  `RESOLVED AND SUPERSEDED`、rolling-first指示書はhistorical
+  specificationと明記した。現在の唯一の残課題とrun単位の正式合格表は
+  `docs/notes/CURRENT_RESEARCH_RELEASE_BLOCKERS.md`へ集約した。
+- 正式実験はこの変更をclean commitへ固定した後だけ実行する。実験開始後
+  はコードを変更せず、コード変更後に旧結果を再利用しない。
+
+### Validation and remaining evidence
+
+- 2026-07-28時点で全回帰`905 passed`（`pytest -q -p no:cacheprovider`）を
+  確認した。compileall、diff check、clean release commitからの264便高PV/
+  低PV/no-PV、24/24 rolling、全BEV政策感度は、まだ未実行の正式証拠である。
+- したがって`teacher_release_status=READY`、修論モデル完成、統合総費用
+  の大域最適性、正式KPI改善はまだ主張しない。新制約がStage 1の変数数、
+  runtime、raw/certified gapへ与える影響もclean full runで測定する。
+
 ## 2026-07-27 frontend day-ahead -> hourly rolling production orchestration
 
 ### Verified call path and implementation
@@ -29,8 +98,10 @@
   and rolling Git SHA identical, and pass the shared acceptance audit.
   Infeasible/missing/truncated/handoff-failed chains make the BFF job `failed`
   and preserve `rolling_execution_failure.json` plus available diagnostics.
-  Dirty Git alone does not abort the calculation; it keeps the chain and
-  teacher/research release status blocked.
+  This historical 2026-07-27 behavior allowed a dirty worktree but blocked
+  release. As of the 2026-07-28 formal-run contract, `research_run=true`
+  fails before solving on a dirty or unversioned worktree; only explicitly
+  non-research diagnostics may run dirty.
 - Weekday timetable use on a Sunday is still fail-closed. It is waived only
   when both exact labels
   `comparison_type=fixed_weekday_timetable_pv_counterfactual` and

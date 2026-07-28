@@ -1,5 +1,17 @@
 # AI Agent 修正指示書: フロント実行を日次→1時間Rollingまで完結させる
 
+> **Status: RESOLVED AND SUPERSEDED (2026-07-28).**
+>
+> **Historical note:** the old instruction that a dirty research run may
+> continue is superseded. From 2026-07-28, formal `research_run=true` fails
+> before solving unless Git provenance is available and the worktree is clean.
+> 通常フロント経路から日次解後に60分rollingを24回実行し、1 stepでも
+> 失敗すればジョブを失敗させるproduction orchestrationは実装・回帰確認済み。
+> この文書は当時の受入仕様として保存するが、現在の未解決事項を示す文書ではない。
+> 現在の唯一の残ブロッカー一覧は
+> [`CURRENT_RESEARCH_RELEASE_BLOCKERS.md`](CURRENT_RESEARCH_RELEASE_BLOCKERS.md)
+> を参照すること。
+
 ## 0. このタスクの判定
 
 これは「rolling のコードがある」ことを確認するタスクではない。通常のフロント画面から最適化を開始したとき、日次最適化、1時間rolling、監査、帳票までが一つのジョブとして完結し、失敗時に成功結果として見えないようにする**リリース阻止（release-blocker）修正**である。

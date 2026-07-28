@@ -7,7 +7,11 @@
 ![Optimization](https://img.shields.io/badge/Optimization-MILP%2BALNS-FF6F00)
 ![Status](https://img.shields.io/badge/Status-Core%20Package%20%28Tkinter%2BFastAPI%29-0A66C2)
 
-## Research-evidence contract (2026-07-26)
+## Research-evidence contract (updated 2026-07-28)
+
+The current release is **BLOCKED** pending a fresh clean-commit 264-trip run.
+The authoritative open-item register and per-run acceptance table are
+[`docs/notes/CURRENT_RESEARCH_RELEASE_BLOCKERS.md`](docs/notes/CURRENT_RESEARCH_RELEASE_BLOCKERS.md).
 
 Manual frontend runs now preserve the input, Prepare output, code provenance, and
 validation context required for retrospective audit. A manual result remains a
@@ -15,20 +19,23 @@ simulation artifact, not an automatically accepted research result.
 
 - `code_provenance.json` records the Git SHA, dirty state, tracked-patch hash,
   untracked-file hashes, repository root, Python/Gurobi environment, and any
-  capture failure before the solve begins. A dirty worktree may finish a
-  diagnostic calculation, but it is always `teacher_release_status=BLOCKED`;
-  only a clean/stable Git identity is research-submission eligible. A source
-  change during the solve remains a hard failure.
+  capture failure before the solve begins. A formal `research_run=true` request
+  now fails before solving unless the worktree is clean and a non-empty SHA is
+  available. Dirty diagnostics remain possible only as explicitly non-research
+  runs. A source change during the solve is a hard failure.
 - `run_input_provenance/` records the scenario snapshot, Prepare audit, effective
   optimization parameters, hashes, and validation result.
 - `charging_source_provenance.json` distinguishes exact depot/time-step energy
   flows from vehicle-level allocations. A proportional allocation must never be
   described as solver-native vehicle-source evidence.
-- `graph/canonical_cost_ledger.json` is the single cost source for new
-  frontend/BFF runs. It is written from the solver-evaluated cost components
-  before report finalization and records the component sum, reported total,
-  objective value, and residual. Demand charge and grid-related CO2 cost must
-  not be reconstructed from mutable CSV aliases. Physical fuel liters, tank
+- For an accepted rolling run,
+  `rolling_hourly_chain/executed_day_accounting.json` is the unique final cost
+  source. The final `graph/canonical_cost_ledger.json`, summary, experiment
+  JSON/Markdown, `results.xlsx`, and optimization result must match its total
+  and each cost component within `1e-6 JPY`, or the job fails. Day-ahead-only
+  diagnostics retain a solver-evaluated ledger but cannot be presented as a
+  rolling result. Demand charge and grid-related CO2 cost must not be
+  reconstructed from mutable CSV aliases. Physical fuel liters, tank
   balances, refueling, and ICE CO2 are never rescaled to force agreement with
   a monetary total: any solver-versus-physical mismatch remains an explicit
   `NG`. Disabling the fuel-cost component makes `fuel_cost_jpy=0` while
@@ -65,8 +72,12 @@ simulation artifact, not an automatically accepted research result.
   `graph/calendar_weather_validation.json` records service date, timetable day
   type, weather observation date/source, and comparison type. A declared
   research fleet is separately hard-checked and written to
-  `graph/research_fleet_validation.json`; the model does not invent an ICE bus
-  or force unused BEVs into service.
+  `graph/research_fleet_validation.json`. Formal frontend runs hard-declare
+  exactly 35 available BEVs and 26 available ICE buses; count mismatch,
+  duplicate/empty vehicle IDs, unknown types, or unavailable selected records
+  fail before optimization. The model does not invent a missing ICE bus.
+  Requiring all available BEVs to serve is a separate policy-sensitivity
+  checkbox and constraint, not the unconstrained baseline.
 - Hourly rolling execution is reported as `not_executed` unless an actual rolling
   chain was run and its log is attached. `executed_and_accepted` additionally
   requires a persisted full-horizon `rolling_chain_summary.json` whose every
@@ -113,6 +124,15 @@ simulation artifact, not an automatically accepted research result.
   inventory carried out of the day. The requested and effective policy are
   recorded in `interactive_terminal_soc_controls`, and old fixed-target runs
   are not directly comparable on daily operating cost.
+- Formal Phase 3 frontend runs force the complete feasible successor network,
+  prohibit fallback/post-solve repair, and add a Stage 1 charging-reachability
+  relaxation shared across physical charger definitions, compatibility, port
+  count, charger power, depot charging windows, and an optimistic site supply
+  cap. Stage 2 remains the exact fixed-assignment charging/SOC check. Only a
+  Gurobi `INFEASIBLE` certificate may return the failed full assignment to
+  Stage 1 as a no-good cut; a `TIME_LIMIT` without an incumbent does not justify
+  a cut. This improves Stage 1→Stage 2 consistency but does not turn Phase 3
+  into an integrated global total-cost optimum.
 - The Tk operation start/end pair is now controlled by an explicit checkbox.
   It is off by default, disables the pair in the UI, and makes the canonical
   energy/SOC horizon exactly `00:00–23:59` (24 hours, not 1,439 minutes).
