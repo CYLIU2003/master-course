@@ -107,6 +107,10 @@ simulation artifact, not an automatically accepted research result.
   `fixed_weekday_timetable_pv_counterfactual` waiver; it is intentionally a
   weekday timetable on the requested date, not a claim about the Sunday
   timetable.
+- The day-ahead/Rolling fixed depot-asset hash excludes the PV curve identity,
+  generation total, and generation hash together. BESS, charger, tariff, and
+  depot-limit fields remain in the hash; this prevents a legitimate PV-only
+  update from being rejected as a control mismatch.
 - Hourly rolling execution is reported as `not_executed` unless an actual rolling
   chain was run and its log is attached. `executed_and_accepted` additionally
   requires a persisted full-horizon `rolling_chain_summary.json` whose every

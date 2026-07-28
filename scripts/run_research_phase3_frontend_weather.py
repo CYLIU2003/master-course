@@ -1668,7 +1668,11 @@ def run(args: argparse.Namespace) -> int:
         depot_id: {
             key: value
             for key, value in dict(asset).items()
-            if key not in {"pv_generation_kwh", "pv_generation_hash"}
+            # ``pv_case_id`` identifies the weather/PV curve just like the
+            # generation total and hash.  It must not enter the fixed-control
+            # hash, otherwise Rolling rejects a valid PV-only update.
+            if key
+            not in {"pv_case_id", "pv_generation_kwh", "pv_generation_hash"}
         }
         for depot_id, asset in sorted(depot_energy_assets.items())
     }

@@ -24,6 +24,12 @@
   retaining the prepared `WEEKDAY` timetable rows, and records the
   `fixed_weekday_timetable_pv_counterfactual` waiver. This is intentional
   weekday-difference suppression, not a Sunday timetable claim.
+- A first v3 sunny solve exposed a day-ahead/Rolling asset-hash definition
+  mismatch: day-ahead included `pv_case_id` while Rolling correctly treated it
+  as part of the PV-only curve. The day-ahead fixed hash now excludes
+  `pv_case_id`, `pv_generation_kwh`, and `pv_generation_hash` together; BESS,
+  charger, tariff, and depot-limit fields remain fixed. The failed rolling
+  attempt is diagnostic only and will not be reused.
 
 ## 2026-07-28 scenario fleet contract v2 and independent release gates
 
