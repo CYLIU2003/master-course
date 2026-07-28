@@ -161,6 +161,169 @@ def _required_manifest_count(
     return value
 
 
+def _validate_artifact_record(
+    *,
+    root: Path,
+    record: Any,
+    artifact: str,
+    content_errors: list[str],
+) -> str | None:
+    if not isinstance(record, dict):
+        content_errors.append(f"{artifact}: artifact record must be an object")
+        return None
+    relative_path = _safe_relative_path(record.get("path"))
+    if relative_path is None:
+        content_errors.append(
+            f"{artifact}: artifact record has an empty or unsafe path"
+        )
+        return None
+    size_bytes = record.get("size_bytes")
+    if (
+        isinstance(size_bytes, bool)
+        or not isinstance(size_bytes, int)
+        or size_bytes < 0
+    ):
+        content_errors.append(
+            f"{artifact}: {relative_path} has invalid size_bytes"
+        )
+        return relative_path
+    expected_sha256 = str(record.get("sha256") or "").strip().lower()
+    if len(expected_sha256) != 64 or any(
+        character not in "0123456789abcdef" for character in expected_sha256
+    ):
+        content_errors.append(
+            f"{artifact}: {relative_path} has invalid sha256"
+        )
+        return relative_path
+    path = root / relative_path
+    if not path.is_file():
+        content_errors.append(
+            f"{artifact}: recorded artifact is missing: {relative_path}"
+        )
+        return relative_path
+    try:
+        actual_size = path.stat().st_size
+        actual_sha256 = _sha256(path)
+    except OSError as exc:
+        content_errors.append(
+            f"{artifact}: cannot verify {relative_path}: "
+            f"{type(exc).__name__}: {exc}"
+        )
+        return relative_path
+    if actual_size != size_bytes:
+        content_errors.append(
+            f"{artifact}: size mismatch for {relative_path}: "
+            f"{actual_size} != {size_bytes}"
+        )
+    if actual_sha256 != expected_sha256:
+        content_errors.append(
+            f"{artifact}: sha256 mismatch for {relative_path}: "
+            f"{actual_sha256} != {expected_sha256}"
+        )
+    return relative_path
+
+
+def _validate_literature_artifact_integrity(
+    *,
+    run_dir: Path,
+    manifest_path: Path,
+    manifest: dict[str, Any],
+    content_errors: list[str],
+) -> None:
+    artifact_name = manifest_path.relative_to(run_dir).as_posix()
+    manifest_parent = manifest_path.parent
+    canonical_source_paths: list[str] = []
+    for entry in list(manifest.get("entries") or ()):
+        if not isinstance(entry, dict):
+            continue
+        figure_id = str(entry.get("figure_id") or "<missing>")
+        entry_artifact = f"{artifact_name}:{figure_id}"
+        raw_files = entry.get("artifact_files")
+        artifact_files = (
+            [
+                relative_path
+                for value in raw_files
+                if (relative_path := _safe_relative_path(value)) is not None
+            ]
+            if isinstance(raw_files, (list, tuple))
+            else []
+        )
+        records = entry.get("artifact_records")
+        if not isinstance(records, (list, tuple)):
+            content_errors.append(
+                f"{entry_artifact}: artifact_records must be a list"
+            )
+            continue
+        recorded_paths = [
+            relative_path
+            for record in records
+            if (
+                relative_path := _validate_artifact_record(
+                    root=manifest_parent,
+                    record=record,
+                    artifact=entry_artifact,
+                    content_errors=content_errors,
+                )
+            )
+            is not None
+        ]
+        if len(recorded_paths) != len(set(recorded_paths)):
+            content_errors.append(
+                f"{entry_artifact}: duplicate artifact record paths"
+            )
+        if sorted(artifact_files) != sorted(recorded_paths):
+            content_errors.append(
+                f"{entry_artifact}: artifact_files and artifact_records "
+                "do not declare the same paths"
+            )
+        for raw_source in list(entry.get("canonical_sources") or ()):
+            source_path = _safe_relative_path(raw_source)
+            if source_path is None:
+                content_errors.append(
+                    f"{entry_artifact}: canonical source has an empty or "
+                    f"unsafe path {raw_source!r}"
+                )
+                continue
+            canonical_source_paths.append(source_path)
+
+    source_artifacts = manifest.get("source_artifacts")
+    if not isinstance(source_artifacts, dict) or not source_artifacts:
+        content_errors.append(
+            f"{artifact_name}: source_artifacts must be a non-empty object"
+        )
+        return
+    recorded_source_paths: list[str] = []
+    for raw_path, record in source_artifacts.items():
+        declared_path = _safe_relative_path(raw_path)
+        record_path = _validate_artifact_record(
+            root=run_dir,
+            record=record,
+            artifact=f"{artifact_name}:source_artifacts",
+            content_errors=content_errors,
+        )
+        if declared_path is None:
+            content_errors.append(
+                f"{artifact_name}: source_artifacts has an unsafe key "
+                f"{raw_path!r}"
+            )
+            continue
+        recorded_source_paths.append(declared_path)
+        if record_path != declared_path:
+            content_errors.append(
+                f"{artifact_name}: source_artifacts key/path mismatch for "
+                f"{declared_path}"
+            )
+    if len(recorded_source_paths) != len(set(recorded_source_paths)):
+        content_errors.append(
+            f"{artifact_name}: duplicate source artifact paths"
+        )
+    if sorted(set(canonical_source_paths)) != sorted(recorded_source_paths):
+        content_errors.append(
+            f"{artifact_name}: canonical_sources and source_artifacts "
+            "do not declare the same paths"
+        )
+
+
 def required_frontend_artifacts(
     *,
     research_run: bool,
@@ -485,6 +648,12 @@ def _validate_rolling_content(
                 content_errors.append(
                     "literature raw-data catalog path is missing or invalid"
                 )
+            _validate_literature_artifact_integrity(
+                run_dir=run_dir,
+                manifest_path=literature_manifest_path,
+                manifest=literature_manifest,
+                content_errors=content_errors,
+            )
 
 
 def audit_frontend_run_artifacts(

@@ -8,6 +8,7 @@ they do not copy source-paper graphics or invent missing sensitivity results.
 
 from __future__ import annotations
 
+from collections import Counter
 import csv
 from datetime import datetime, timezone
 from functools import wraps
@@ -629,21 +630,50 @@ def _energy_management_figure(
     cost_rows: Sequence[Mapping[str, Any]],
     output_dir: Path,
 ) -> tuple[list[Path], Path, dict[str, Any]]:
-    co2_by_time = {
-        _time_key(row.get("timestamp") or row.get("time")): _float(
-            row.get("grid_emission_factor_kg_per_kwh")
-        )
-        for row in co2_rows
-    }
-    price_by_time = {
-        _time_key(row.get("time") or row.get("timestamp")): _float(
-            row.get("grid_energy_price_yen_per_kwh")
-        )
-        for row in cost_rows
-    }
+    co2_by_time: dict[str, float] = {}
+    for row in co2_rows:
+        time = _time_key(row.get("timestamp") or row.get("time"))
+        value = _float(row.get("grid_emission_factor_kg_per_kwh"))
+        if time in co2_by_time and not math.isclose(
+            co2_by_time[time],
+            value,
+            rel_tol=0.0,
+            abs_tol=1.0e-9,
+        ):
+            raise LiteratureFigureError(
+                "Conflicting grid CO2 factors were found for the same "
+                f"timestamp: {time}"
+            )
+        co2_by_time[time] = value
+    price_by_time_and_depot: dict[str, dict[str, float]] = {}
+    for row in cost_rows:
+        time = _time_key(row.get("time") or row.get("timestamp"))
+        depot_id = str(row.get("depot_id") or "unspecified").strip()
+        value = _float(row.get("grid_energy_price_yen_per_kwh"))
+        depot_prices = price_by_time_and_depot.setdefault(time, {})
+        if depot_id in depot_prices and not math.isclose(
+            depot_prices[depot_id],
+            value,
+            rel_tol=0.0,
+            abs_tol=1.0e-9,
+        ):
+            raise LiteratureFigureError(
+                "Conflicting grid prices were found for the same depot and "
+                f"timestamp: depot={depot_id}, time={time}"
+            )
+        depot_prices[depot_id] = value
+    price_depot_ids = sorted(
+        {
+            depot_id
+            for depot_prices in price_by_time_and_depot.values()
+            for depot_id in depot_prices
+        }
+    )
     normalized: list[dict[str, Any]] = []
     for index, row in enumerate(hourly_rows):
         time = _time_key(row.get("current_time") or row.get("time"))
+        depot_prices = dict(price_by_time_and_depot.get(time) or {})
+        price_values = list(depot_prices.values())
         normalized.append(
             {
                 "step_index": _int(row.get("step_index"), index),
@@ -663,7 +693,20 @@ def _energy_management_figure(
                     row.get("bess_end_soc_kwh_by_depot")
                 ),
                 "grid_emission_factor_kg_per_kwh": co2_by_time.get(time, 0.0),
-                "grid_energy_price_yen_per_kwh": price_by_time.get(time, 0.0),
+                "grid_energy_price_yen_per_kwh": (
+                    price_values[0] if len(price_values) == 1 else None
+                ),
+                "grid_energy_price_min_yen_per_kwh": (
+                    min(price_values) if price_values else None
+                ),
+                "grid_energy_price_max_yen_per_kwh": (
+                    max(price_values) if price_values else None
+                ),
+                "grid_energy_price_by_depot_json": json.dumps(
+                    depot_prices,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                ),
                 "execution_minutes": _int(row.get("execution_minutes"), 60),
             }
         )
@@ -690,10 +733,6 @@ def _energy_management_figure(
     grid_ci = np.array(
         [float(row["grid_emission_factor_kg_per_kwh"]) for row in normalized]
     )
-    grid_price = np.array(
-        [float(row["grid_energy_price_yen_per_kwh"]) for row in normalized]
-    )
-
     figure, axes = plt.subplots(4, 1, figsize=(14.5, 12.5), sharex=True)
     axis = axes[0]
     axis.bar(x_values, pv_bus, color=_BLUE, label="PV to bus")
@@ -788,14 +827,27 @@ def _energy_management_figure(
     )
     axis.set_ylabel("Grid CO2 factor [kg/kWh]")
     price_axis = axis.twinx()
-    price_axis.step(
-        x_values,
-        grid_price,
-        where="mid",
-        color=_INK,
-        linewidth=1.3,
-        label="Grid energy price",
-    )
+    line_styles = ("-", "--", ":", "-.")
+    for depot_index, depot_id in enumerate(price_depot_ids):
+        depot_prices = np.array(
+            [
+                price_by_time_and_depot.get(str(row["time"]), {}).get(
+                    depot_id,
+                    np.nan,
+                )
+                for row in normalized
+            ],
+            dtype=float,
+        )
+        price_axis.step(
+            x_values,
+            depot_prices,
+            where="mid",
+            color=_INK if depot_index == 0 else _BLUE,
+            linestyle=line_styles[depot_index % len(line_styles)],
+            linewidth=1.3,
+            label=f"Grid price: {depot_id}",
+        )
     price_axis.set_ylabel("Grid energy price [JPY/kWh]")
     axis.set_title("Executed grid carbon and price signals")
     handles_1, labels_1 = axis.get_legend_handles_labels()
@@ -838,6 +890,9 @@ def _energy_management_figure(
         "bess_soc_total_kwh",
         "grid_emission_factor_kg_per_kwh",
         "grid_energy_price_yen_per_kwh",
+        "grid_energy_price_min_yen_per_kwh",
+        "grid_energy_price_max_yen_per_kwh",
+        "grid_energy_price_by_depot_json",
     ]
     _write_csv(source_path, normalized, fields)
     return (
@@ -851,6 +906,8 @@ def _energy_management_figure(
             "interval_count": len(normalized),
             "pv_generated_kwh": float(pv_generated.sum()),
             "grid_import_kwh": float(grid_import.sum()),
+            "price_depot_count": len(price_depot_ids),
+            "price_depot_ids": price_depot_ids,
         },
     )
 
@@ -892,57 +949,170 @@ def _charger_figure(
     ]
     resolution_min = min(positive_durations, default=60)
     resolution_min = max(min(resolution_min, 60), 1)
-    charger_ids = sorted(
+    charger_resources = sorted(
         {
-            str(row.get("charger_id") or "")
+            (
+                str(row.get("depot_id") or ""),
+                str(row.get("charger_id") or ""),
+            )
             for row in normalized
             if str(row.get("charger_id") or "")
         }
     )
     slot_count = max(math.ceil(1440 / resolution_min), 1)
-    matrix = np.zeros((max(len(charger_ids), 1), slot_count))
-    charger_index = {charger_id: index for index, charger_id in enumerate(charger_ids)}
+    row_count = max(len(charger_resources), 1)
+    occupancy_matrix = np.zeros((row_count, slot_count), dtype=int)
+    power_matrix = np.zeros((row_count, slot_count))
+    charger_index = {
+        resource: index for index, resource in enumerate(charger_resources)
+    }
+    slot_evidence: dict[tuple[int, int], dict[str, Any]] = {}
     for row in normalized:
         charger_id = str(row.get("charger_id") or "")
-        if charger_id not in charger_index:
+        depot_id = str(row.get("depot_id") or "")
+        resource = (depot_id, charger_id)
+        if resource not in charger_index:
             continue
         first = max(int(row["start_min"]) // resolution_min, 0)
         last = min(
             math.ceil(int(row["end_min"]) / resolution_min),
             slot_count,
         )
-        matrix[charger_index[charger_id], first:last] = np.maximum(
-            matrix[charger_index[charger_id], first:last],
-            float(row["power_kw"]),
+        resource_index = charger_index[resource]
+        for slot_index in range(first, last):
+            occupancy_matrix[resource_index, slot_index] += 1
+            power_matrix[resource_index, slot_index] += float(row["power_kw"])
+            evidence = slot_evidence.setdefault(
+                (resource_index, slot_index),
+                {
+                    "charger_id": charger_id,
+                    "depot_id": depot_id,
+                    "slot_index": slot_index,
+                    "start_min": slot_index * resolution_min,
+                    "end_min": min(
+                        (slot_index + 1) * resolution_min,
+                        1440,
+                    ),
+                    "occupied_port_count": 0,
+                    "vehicle_ids": set(),
+                    "event_ids": set(),
+                    "total_power_kw": 0.0,
+                    "max_vehicle_power_kw": 0.0,
+                    "sum_vehicle_power_limit_kw": 0.0,
+                    "source_artifact": (
+                        "graph/charger_occupancy_timeline.csv"
+                    ),
+                },
+            )
+            evidence["occupied_port_count"] += 1
+            evidence["vehicle_ids"].add(str(row.get("vehicle_id") or ""))
+            evidence["event_ids"].add(str(row.get("event_id") or ""))
+            evidence["total_power_kw"] += float(row["power_kw"])
+            evidence["max_vehicle_power_kw"] = max(
+                float(evidence["max_vehicle_power_kw"]),
+                float(row["power_kw"]),
+            )
+            evidence["sum_vehicle_power_limit_kw"] += float(
+                row["power_limit_kw"]
+            )
+    source_rows: list[dict[str, Any]] = []
+    for evidence in slot_evidence.values():
+        power_limit = float(evidence["sum_vehicle_power_limit_kw"])
+        source_rows.append(
+            {
+                **evidence,
+                "vehicle_ids": sorted(
+                    item for item in evidence["vehicle_ids"] if item
+                ),
+                "event_ids": sorted(
+                    item for item in evidence["event_ids"] if item
+                ),
+                "aggregate_utilization_ratio": (
+                    float(evidence["total_power_kw"]) / power_limit
+                    if power_limit > 0.0
+                    else 0.0
+                ),
+            }
         )
-    figure, axis = plt.subplots(
-        figsize=(14.5, max(4.2, 2.0 + 0.46 * max(len(charger_ids), 1)))
+    source_rows.sort(
+        key=lambda row: (
+            str(row["depot_id"]),
+            str(row["charger_id"]),
+            int(row["slot_index"]),
+        )
+    )
+    figure, axes = plt.subplots(
+        2,
+        1,
+        figsize=(
+            14.5,
+            max(6.8, 3.0 + 0.72 * max(len(charger_resources), 1)),
+        ),
+        sharex=True,
     )
     cmap = LinearSegmentedColormap.from_list(
         "charger_power",
         ["#FFFFFF", _LIGHT_BLUE, _BLUE],
     )
-    image = axis.imshow(
-        matrix,
+    occupancy_image = axes[0].imshow(
+        occupancy_matrix,
         aspect="auto",
         interpolation="nearest",
         cmap=cmap,
         vmin=0.0,
-        vmax=max(float(matrix.max()), 1.0),
-        extent=(0, 24, max(len(charger_ids), 1) - 0.5, -0.5),
+        vmax=max(float(occupancy_matrix.max()), 1.0),
+        extent=(0, 24, row_count - 0.5, -0.5),
     )
-    if charger_ids:
-        axis.set_yticks(range(len(charger_ids)))
-        axis.set_yticklabels(charger_ids)
+    power_image = axes[1].imshow(
+        power_matrix,
+        aspect="auto",
+        interpolation="nearest",
+        cmap=cmap,
+        vmin=0.0,
+        vmax=max(float(power_matrix.max()), 1.0),
+        extent=(0, 24, row_count - 0.5, -0.5),
+    )
+    charger_ids = [charger_id for _depot_id, charger_id in charger_resources]
+    charger_id_counts = Counter(charger_ids)
+    duplicate_charger_ids = {
+        charger_id
+        for charger_id, count in charger_id_counts.items()
+        if count > 1
+    }
+    labels = [
+        (
+            f"{depot_id} / {charger_id}"
+            if charger_id in duplicate_charger_ids
+            else charger_id
+        )
+        for depot_id, charger_id in charger_resources
+    ]
+    if charger_resources:
+        for axis in axes:
+            axis.set_yticks(range(len(charger_resources)))
+            axis.set_yticklabels(labels)
     else:
-        axis.set_yticks([0])
-        axis.set_yticklabels(["No charging sessions"])
-    axis.set_xticks(np.arange(0, 25, 3))
-    axis.set_xlabel("Time of day [hour]")
-    axis.set_ylabel("Physical charger ID")
-    axis.set_title("Executed charger occupancy and charging power")
-    colorbar = figure.colorbar(image, ax=axis, pad=0.015)
-    colorbar.set_label("Charging power [kW]")
+        for axis in axes:
+            axis.set_yticks([0])
+            axis.set_yticklabels(["No charging sessions"])
+    axes[0].set_ylabel("Physical charger ID")
+    axes[0].set_title("Simultaneously occupied ports")
+    occupancy_colorbar = figure.colorbar(
+        occupancy_image,
+        ax=axes[0],
+        pad=0.015,
+    )
+    occupancy_colorbar.set_label("Occupied ports [count]")
+    axes[1].set_xticks(np.arange(0, 25, 3))
+    axes[1].set_xlabel("Time of day [hour]")
+    axes[1].set_ylabel("Physical charger ID")
+    axes[1].set_title("Aggregate charging power")
+    power_colorbar = figure.colorbar(power_image, ax=axes[1], pad=0.015)
+    power_colorbar.set_label("Total charging power [kW]")
+    figure.suptitle(
+        "Executed charger occupancy and charging power",
+        fontsize=14,
+    )
     figure.text(
         0.01,
         0.01,
@@ -956,20 +1126,21 @@ def _charger_figure(
     figure.tight_layout(rect=(0, 0.035, 1, 0.98))
     source_path = output_dir / "04_charger_occupancy_heatmap_source.csv"
     fields = [
-        "event_id",
-        "vehicle_id",
         "charger_id",
         "depot_id",
+        "slot_index",
         "start_min",
         "end_min",
-        "duration_min",
-        "energy_kwh",
-        "power_kw",
-        "power_limit_kw",
-        "utilization_ratio",
+        "occupied_port_count",
+        "vehicle_ids",
+        "event_ids",
+        "total_power_kw",
+        "max_vehicle_power_kw",
+        "sum_vehicle_power_limit_kw",
+        "aggregate_utilization_ratio",
         "source_artifact",
     ]
-    _write_csv(source_path, normalized, fields)
+    _write_csv(source_path, source_rows, fields)
     return (
         _save_figure(
             figure,
@@ -978,9 +1149,13 @@ def _charger_figure(
         ),
         source_path,
         {
-            "charger_count_observed": len(charger_ids),
+            "charger_count_observed": len(charger_resources),
             "charging_session_count": len(normalized),
             "time_resolution_minutes": resolution_min,
+            "maximum_simultaneous_occupied_ports": int(
+                occupancy_matrix.max()
+            ),
+            "peak_aggregate_charging_power_kw": float(power_matrix.max()),
         },
     )
 
@@ -1129,12 +1304,26 @@ def _literature_reference_rows(repo_root: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for item in _LITERATURE_REFERENCES:
         path = repo_root / str(item["relative_path"])
+        try:
+            is_file = path.is_file()
+            size_bytes = path.stat().st_size if is_file else None
+            file_sha256 = _sha256(path) if is_file else None
+            hash_status = "VERIFIED" if is_file else "NOT_AVAILABLE"
+            hash_error = None
+        except OSError as exc:
+            is_file = False
+            size_bytes = None
+            file_sha256 = None
+            hash_status = "ERROR"
+            hash_error = f"{type(exc).__name__}: {exc}"
         rows.append(
             {
                 **dict(item),
-                "local_file_available": path.is_file(),
-                "local_file_size_bytes": path.stat().st_size if path.is_file() else None,
-                "local_file_sha256": _sha256(path) if path.is_file() else None,
+                "local_file_available": is_file,
+                "local_file_size_bytes": size_bytes,
+                "local_file_sha256": file_sha256,
+                "local_file_hash_status": hash_status,
+                "local_file_hash_error": hash_error,
                 "reuse_policy": (
                     "analytical relationship adapted; source image not copied"
                 ),
@@ -1924,6 +2113,8 @@ def generate_literature_figure_bundle(run_dir: Path) -> dict[str, Any]:
             "local_file_available",
             "local_file_size_bytes",
             "local_file_sha256",
+            "local_file_hash_status",
+            "local_file_hash_error",
         ],
     )
     eligibility_path = output_dir / "figure_eligibility.csv"

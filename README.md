@@ -162,7 +162,14 @@ simulation artifact, not an automatically accepted research result.
   sessions, hourly PV/BESS/grid flows, costs, CO2, fleet parameters, validation
   metrics, and excluded vehicles. `raw_data/raw_data_catalog.csv` defines every
   dataset and its canonical source; `manifest.json` records file hashes.
-  Missing figure or CSV evidence fails the ordinary frontend artifact contract.
+  The ordinary frontend artifact audit recalculates and checks every declared
+  plot/table/raw-CSV hash and every canonical-source hash; a size or SHA-256
+  mismatch fails the run. The charger figure separately exposes simultaneous
+  occupied-port count and aggregate charging kW, so a multi-port charger is not
+  collapsed to the maximum single-vehicle power. Depot-specific tariff signals
+  are retained separately rather than overwritten by timestamp.
+  Missing or modified figure/CSV evidence fails the ordinary frontend artifact
+  contract.
   Single-run output never fabricates paired-PV, Monte Carlo, capacity-sweep, or
   runtime-distribution figures. See
   [`docs/model/LITERATURE_FIGURE_MAPPING.md`](docs/model/LITERATURE_FIGURE_MAPPING.md).

@@ -990,7 +990,19 @@ def test_canonical_condition_tables_preserve_explicit_base_load_without_inferenc
     assert provenance["base_load_source"].endswith("blank_when_not_represented")
 
 
-def test_rich_run_outputs_finalize_reporting_after_top_level_files_exist(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("rolling_status", "expected_generated"),
+    (
+        ("executed_and_accepted", True),
+        ("not_executed", False),
+    ),
+)
+def test_rich_run_outputs_finalize_reporting_after_top_level_files_exist(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    rolling_status: str,
+    expected_generated: bool,
+) -> None:
     problem, result, scenario = _problem_and_result()
     result = replace(
         result,
@@ -1010,6 +1022,45 @@ def test_rich_run_outputs_finalize_reporting_after_top_level_files_exist(tmp_pat
     )
     canonical_solver_result = ResultSerializer.serialize_result(result)
     charging_payload = optimization._canonical_charging_output_payload(problem, result)
+    generated_for: list[Path] = []
+
+    monkeypatch.setattr(
+        optimization,
+        "_rolling_execution_evidence",
+        lambda **_kwargs: {
+            "status": rolling_status,
+            "rolling_execution_minutes": 60,
+            "step_count": 24 if expected_generated else 0,
+            "expected_step_count": 24,
+            "chain_accepted": expected_generated,
+        },
+    )
+
+    def _generate_bundle(run_dir: Path) -> dict:
+        generated_for.append(run_dir)
+        literature_dir = run_dir / "graph" / "literature_figures"
+        literature_dir.mkdir(parents=True, exist_ok=True)
+        (literature_dir / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "literature_figure_bundle_v1",
+                    "status": "READY",
+                }
+            ),
+            encoding="utf-8",
+        )
+        return {
+            "status": "READY",
+            "schema_version": "literature_figure_bundle_v1",
+            "figure_count": 5,
+            "diagnostic_only": True,
+        }
+
+    monkeypatch.setattr(
+        "bff.services.optimization_run.literature_figures."
+        "generate_literature_figure_bundle",
+        _generate_bundle,
+    )
 
     reporting_result = optimization._persist_rich_run_outputs(
         run_dir=tmp_path,
@@ -1066,6 +1117,27 @@ def test_rich_run_outputs_finalize_reporting_after_top_level_files_exist(tmp_pat
     assert audit["experiment_report"]["accounting_reconciled"] is True
     assert audit["experiment_report"]["run_json_path"] == "experiment_report.json"
     assert audit["experiment_report"]["run_md_path"] == "experiment_report.md"
+    if expected_generated:
+        assert generated_for == [tmp_path]
+        assert persisted["literature_figure_bundle"] == {
+            "status": "READY",
+            "schema_version": "literature_figure_bundle_v1",
+            "figure_count": 5,
+            "diagnostic_only": True,
+            "manifest": "graph/literature_figures/manifest.json",
+        }
+        run_manifest = json.loads(
+            (tmp_path / "run_manifest.json").read_text(encoding="utf-8")
+        )
+        assert (
+            "graph/literature_figures/manifest.json"
+            in run_manifest["files"]
+        )
+    else:
+        assert generated_for == []
+        assert persisted["literature_figure_bundle"]["status"] == (
+            "NOT_GENERATED"
+        )
 
 
 def test_charging_summary_reports_electricity_cost_not_propulsion_aggregate() -> None:

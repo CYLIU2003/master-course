@@ -1,5 +1,37 @@
 # Development Notes
 
+## 2026-07-28 pre-manual-run literature artifact hardening
+
+- Closed the review finding that the literature bundle recorded SHA-256 values
+  without checking them. The frontend completeness audit now verifies every
+  entry's `artifact_files` against `artifact_records`, recalculates size and
+  SHA-256, verifies all canonical `source_artifacts`, and fails closed on a
+  missing, unsafe, duplicate, mismatched, or malformed record. Regression tests
+  mutate both a generated CSV and a canonical source after manifest creation
+  and require `artifact_completeness.status=ERROR`.
+- Corrected the multi-port charger visualization. The source CSV and PNG/SVG
+  now report occupied-port count and aggregate charging kW per physical
+  charger/time slot. Concurrent sessions sharing one multi-port `charger_id`
+  are summed instead of being reduced to the maximum individual-bus kW.
+- Preserved multi-depot tariff evidence as a depot-keyed mapping and separate
+  plot line per depot. Conflicting duplicate depot/time prices and conflicting
+  duplicate time-level CO2 factors now fail instead of being silently
+  overwritten.
+- Local ignored literature PDFs are non-canonical supporting references.
+  Permission/hash failures are recorded in `literature_source_mapping.csv` and
+  no longer abort an otherwise valid optimization-result finalization.
+- Added production-finalizer integration coverage for both accepted Rolling
+  (bundle generator must run) and non-accepted Rolling (bundle must remain
+  `NOT_GENERATED`). Mathematical effect: none on dispatch, charging, SOC,
+  energy, or cost optimization; these changes correct reporting semantics and
+  strengthen post-run integrity validation.
+- Validation after these changes: focused literature/completeness/physical/
+  frontend-finalizer tests `50 passed`; full suite `993 passed`; `compileall`
+  and `git diff --check` passed. The revised energy-management and two-panel
+  charger-occupancy PNGs were rendered and visually inspected. A fresh
+  full-scale frontend solver run remains pending and must be created manually
+  from the final clean commit before its numbers are used as research evidence.
+
 ## 2026-07-28 literature-aligned plots and analysis-ready CSV evidence
 
 - The ordinary frontend finalizer now generates five newly rendered figures
@@ -20,7 +52,8 @@
 - `graph/literature_figures/manifest.json` records all plot/table/CSV hashes,
   cited local PDF pages, claim scope, and limitations. The graph manifest and
   frontend artifact-completeness audit require the bundle; missing PNG, SVG,
-  source CSV, SOC timeline, or raw-data file fails finalization.
+  source CSV, SOC timeline, raw-data file, or a recorded hash mismatch fails
+  finalization.
 - Paired PV comparisons, uncertainty distributions, equipment sensitivities,
   and runtime distributions remain explicit multi-run outputs and are not
   fabricated from one run. Figure generation remains separate from

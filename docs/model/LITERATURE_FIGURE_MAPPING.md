@@ -28,8 +28,8 @@ blocking reasons.
 |---|---|---|
 | `01_vehicle_operation_timeline.(png\|svg)` | No42 Fig. 7; No16 Fig. 3 | `graph/vehicle_event_timeline.csv` |
 | `02_bev_soc_profiles.(png\|svg)` | No55 Fig. 6; No16 Fig. 5; No61 Fig. 4 | `graph/vehicle_soc_event_timeline.csv` |
-| `03_energy_management_profile.(png\|svg)` | No61 Figs. 7–9; IEEJ rolling Figs. 2–3; No16 Figs. 4, 8 | accepted Rolling hourly flows, canonical cost/CO2 time series |
-| `04_charger_occupancy_heatmap.(png\|svg)` | No42 charger-conflict formulation | physical charger occupancy timeline |
+| `03_energy_management_profile.(png\|svg)` | No61 Figs. 7–9; IEEJ rolling Figs. 2–3; No16 Figs. 4, 8 | accepted Rolling hourly flows, canonical cost/CO2 time series; tariff signals remain separated by depot |
+| `04_charger_occupancy_heatmap.(png\|svg)` | No42 charger-conflict formulation | physical charger occupancy timeline, rendered as occupied-port count and aggregate charging kW |
 | `05_cost_and_emissions.(png\|svg)` | No16 Fig. 6; No55 Table 5 | executed-day canonical cost ledger |
 
 Each figure has a sibling `*_source.csv` containing exactly the values sent to
@@ -61,7 +61,8 @@ used.
 The canonical-copy CSV files preserve source values. JSON-to-CSV exports only
 flatten named mappings; they never rescale SOC, energy, fuel, distance, cost,
 or emissions. The bundle manifest stores the size and SHA-256 of every plot,
-table, and raw CSV.
+table, raw CSV, and canonical source. The frontend completeness audit
+recalculates these values; any size or SHA-256 mismatch is a hard failure.
 
 ## Outputs that require more than one run
 
@@ -90,5 +91,6 @@ pages, and the adapted analytical relationship in
 - the 2025 IEEJ rolling-charging study, p. 2.
 
 The local PDFs are input literature, not run artifacts. Their hashes are
-recorded when available, but absence of the ignored local PDF directory does
-not alter solver results or the generated-data evidence.
+recorded when available. Absence, permission failure, or hash failure is
+recorded as reference metadata and does not alter solver results or abort the
+generated-data evidence bundle.

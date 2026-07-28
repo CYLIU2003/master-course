@@ -8,6 +8,10 @@ import xml.etree.ElementTree as ET
 from PIL import Image
 import pytest
 
+from bff.services.optimization_run import literature_figures
+from bff.services.optimization_run.artifact_completeness import (
+    _validate_literature_artifact_integrity,
+)
 from bff.services.optimization_run.literature_figures import (
     LiteratureFigureError,
     generate_literature_figure_bundle,
@@ -395,6 +399,157 @@ def test_generates_literature_figures_and_analysis_ready_csv_bundle(
         literature_export["manifest_file"]
         == "literature_figures/manifest.json"
     )
+    integrity_errors: list[str] = []
+    _validate_literature_artifact_integrity(
+        run_dir=run_dir,
+        manifest_path=output_dir / "manifest.json",
+        manifest=manifest,
+        content_errors=integrity_errors,
+    )
+    assert integrity_errors == []
+
+
+def test_charger_figure_preserves_simultaneous_ports_and_total_power(
+    tmp_path: Path,
+) -> None:
+    run_dir = _fixture_run(tmp_path)
+    charger_path = run_dir / "graph" / "charger_occupancy_timeline.csv"
+    _write_csv(
+        charger_path,
+        [
+            {
+                "event_id": "bev-1-charge",
+                "vehicle_id": "bev-1",
+                "charger_id": "charger-1",
+                "depot_id": "depot-a",
+                "start_min": 720,
+                "end_min": 780,
+                "energy_kwh": 45.0,
+                "power_kw": 45.0,
+                "power_limit_kw": 90.0,
+                "source_artifact": "executed",
+            },
+            {
+                "event_id": "bev-2-charge",
+                "vehicle_id": "bev-2",
+                "charger_id": "charger-1",
+                "depot_id": "depot-a",
+                "start_min": 720,
+                "end_min": 780,
+                "energy_kwh": 30.0,
+                "power_kw": 30.0,
+                "power_limit_kw": 90.0,
+                "source_artifact": "executed",
+            },
+        ],
+    )
+
+    manifest = generate_literature_figure_bundle(run_dir)
+
+    source_rows = list(
+        csv.DictReader(
+            (
+                run_dir
+                / "graph"
+                / "literature_figures"
+                / "04_charger_occupancy_heatmap_source.csv"
+            ).open(encoding="utf-8-sig")
+        )
+    )
+    occupied = next(
+        row
+        for row in source_rows
+        if row["charger_id"] == "charger-1"
+        and int(row["start_min"]) == 720
+    )
+    assert int(occupied["occupied_port_count"]) == 2
+    assert float(occupied["total_power_kw"]) == pytest.approx(75.0)
+    charger_entry = next(
+        entry
+        for entry in manifest["entries"]
+        if entry.get("figure_id") == "charger_occupancy_heatmap"
+    )
+    assert (
+        charger_entry["metrics"]["maximum_simultaneous_occupied_ports"]
+        == 2
+    )
+    assert charger_entry["metrics"][
+        "peak_aggregate_charging_power_kw"
+    ] == pytest.approx(75.0)
+
+
+def test_energy_figure_preserves_depot_specific_price_signals(
+    tmp_path: Path,
+) -> None:
+    run_dir = _fixture_run(tmp_path)
+    cost_path = run_dir / "graph" / "cost_timeseries.csv"
+    existing_rows = list(
+        csv.DictReader(cost_path.open(encoding="utf-8-sig"))
+    )
+    multi_depot_rows: list[dict] = []
+    for row in existing_rows:
+        multi_depot_rows.append({**row, "depot_id": "depot-a"})
+        multi_depot_rows.append(
+            {
+                **row,
+                "depot_id": "depot-b",
+                "grid_energy_price_yen_per_kwh": (
+                    float(row["grid_energy_price_yen_per_kwh"]) + 5.0
+                ),
+            }
+        )
+    _write_csv(cost_path, multi_depot_rows)
+
+    manifest = generate_literature_figure_bundle(run_dir)
+
+    source_rows = list(
+        csv.DictReader(
+            (
+                run_dir
+                / "graph"
+                / "literature_figures"
+                / "03_energy_management_profile_source.csv"
+            ).open(encoding="utf-8-sig")
+        )
+    )
+    prices = json.loads(source_rows[0]["grid_energy_price_by_depot_json"])
+    assert set(prices) == {"depot-a", "depot-b"}
+    assert source_rows[0]["grid_energy_price_yen_per_kwh"] == ""
+    energy_entry = next(
+        entry
+        for entry in manifest["entries"]
+        if entry.get("figure_id") == "energy_management_profile"
+    )
+    assert energy_entry["metrics"]["price_depot_count"] == 2
+
+
+def test_unreadable_local_literature_file_is_recorded_not_raised(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reference = literature_figures._LITERATURE_REFERENCES[0]
+    reference_path = tmp_path / str(reference["relative_path"])
+    reference_path.parent.mkdir(parents=True, exist_ok=True)
+    reference_path.write_bytes(b"reference")
+    original_sha256 = literature_figures._sha256
+
+    def _raise_for_reference(path: Path) -> str:
+        if path == reference_path:
+            raise PermissionError("locked for review")
+        return original_sha256(path)
+
+    monkeypatch.setattr(literature_figures, "_sha256", _raise_for_reference)
+
+    rows = literature_figures._literature_reference_rows(tmp_path)
+
+    affected = next(
+        row
+        for row in rows
+        if row["reference_id"] == reference["reference_id"]
+    )
+    assert affected["local_file_available"] is False
+    assert affected["local_file_hash_status"] == "ERROR"
+    assert "PermissionError" in affected["local_file_hash_error"]
 
 
 def test_rejects_unaccepted_physical_schedule(tmp_path: Path) -> None:

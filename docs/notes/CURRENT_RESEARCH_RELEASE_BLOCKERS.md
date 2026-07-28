@@ -88,14 +88,16 @@ optimality remain separate decisions.
 
 The model, accounting, and artifact-contract changes invalidate all older KPI
 claims. A frozen clean commit must be executed through the normal frontend for high-PV,
-low-PV, and no-PV cases. All three require 24/24 rolling and the run acceptance
-Each completed job must additionally show
+low-PV, and no-PV cases. All three require 24/24 rolling and accepted run
+contracts. Each completed job must additionally show
 `artifact_completeness.status=OK`; otherwise it is an incomplete diagnostic
 bundle, irrespective of solver feasibility.
 It must also contain a `READY` (generation status only)
 `graph/literature_figures/manifest.json` with all declared PNG/SVG/source/raw
-CSV files. This figure-bundle status does not override research-release
-blockers.
+CSV files. Its manifest hashes and canonical-source hashes must revalidate
+without size or SHA-256 mismatch. The charger evidence must preserve concurrent
+port count and aggregate power rather than only the maximum vehicle power.
+This figure-bundle status does not override research-release blockers.
 
 ### B2 — Full-scale Stage 1 performance and gap are unmeasured
 
