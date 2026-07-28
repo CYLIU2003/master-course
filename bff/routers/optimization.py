@@ -3466,6 +3466,11 @@ def _persist_rich_run_outputs(
                 finalized_accounting = _finalized_accounting_summary_for_experiment_report(
                     run_dir
                 )
+                summary = _synchronize_finalized_accounting_summary(
+                    run_dir=run_dir,
+                    summary=summary,
+                    finalized_accounting=finalized_accounting,
+                )
                 experiment_report = log_optimization_experiment(
                     scenario_id=str(optimization_result.get("scenario_id") or ""),
                     scenario_doc=scenario,
@@ -4038,7 +4043,14 @@ def _finalized_accounting_summary_for_experiment_report(run_dir: Path) -> Dict[s
         {
             "total_cost_jpy": accounting_total,
             "accounting_total_cost_jpy": accounting_total,
-            "energy_cost_jpy": (
+            # ``summary.energy_cost_jpy`` is the established electricity-only
+            # contract. Keep ICE fuel separate; callers that need combined
+            # propulsion energy must opt into the explicitly named aggregate.
+            "energy_cost_jpy": float(components["electricity_cost_jpy"]),
+            "electricity_cost_jpy": float(
+                components["electricity_cost_jpy"]
+            ),
+            "propulsion_energy_cost_jpy": (
                 float(components["electricity_cost_jpy"])
                 + float(components["fuel_cost_jpy"])
             ),
@@ -4074,6 +4086,55 @@ def _finalized_accounting_summary_for_experiment_report(run_dir: Path) -> Dict[s
         "graph/canonical_cost_ledger.json"
     )
     return canonical
+
+
+def _synchronize_finalized_accounting_summary(
+    *,
+    run_dir: Path,
+    summary: Dict[str, Any],
+    finalized_accounting: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Make summary.json expose the same finalized ledger used by reports.
+
+    The reporting finalizer may replace provisional day-ahead accounting after
+    the initial summary has been written.  Keep the machine-readable summary
+    aligned with the canonical ledger before final cross-artifact comparison.
+    """
+
+    required_keys = (
+        "total_cost_jpy",
+        "accounting_total_cost_jpy",
+        "energy_cost_jpy",
+        "electricity_cost_jpy",
+        "propulsion_energy_cost_jpy",
+        "fuel_cost_jpy",
+        "demand_charge_cost_jpy",
+        "vehicle_usage_cost_jpy",
+        "co2_cost_jpy",
+        "canonical_cost_components_jpy",
+        "canonical_cost_component_status",
+    )
+    missing_keys = [
+        key for key in required_keys if finalized_accounting.get(key) is None
+    ]
+    if missing_keys:
+        raise ValueError(
+            "Finalized accounting is missing summary fields: "
+            + ", ".join(missing_keys)
+        )
+
+    summary_path = run_dir / "summary.json"
+    persisted = json.loads(summary_path.read_text(encoding="utf-8"))
+    if not isinstance(persisted, dict):
+        raise ValueError("Finalized summary.json is not a JSON object")
+    updates = {key: finalized_accounting[key] for key in required_keys}
+    summary.update(updates)
+    persisted.update(updates)
+    summary_path.write_text(
+        json.dumps(persisted, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return summary
 
 
 def _should_finalize_reporting_after_rolling(
@@ -4124,9 +4185,6 @@ def _assert_final_cost_artifact_consistency(
             f"reason={executed.get('reason')!r}, "
             f"rejection_reasons={list(executed.get('rejection_reasons') or ())!r}"
         )
-    executed_total = float(
-        dict(executed.get("cost_breakdown") or {})["total_cost"]
-    )
     ledger = _json_object(run_dir / "graph" / "canonical_cost_ledger.json")
     if ledger.get("source") != (
         "rolling_hourly_chain/executed_day_accounting.json"
@@ -4160,105 +4218,274 @@ def _assert_final_cost_artifact_consistency(
     workbook.close()
     executed_breakdown = dict(executed.get("cost_breakdown") or {})
     ledger_components = dict(ledger.get("components") or {})
+    pre_failures: Dict[str, Any] = {}
+
+    def _required_component_value(
+        mapping: Dict[str, Any],
+        key: str,
+        *,
+        artifact: str,
+        metric: str,
+    ) -> Optional[float]:
+        """Read a required monetary value without fabricating a fallback.
+
+        A reconciliation artifact is diagnostic evidence.  In particular, a
+        missing value must remain ``null`` in the persisted observation and
+        residual maps instead of being replaced with ``0.0`` merely to make
+        downstream arithmetic convenient.
+        """
+        if key not in mapping or mapping.get(key) is None:
+            pre_failures[f"{metric}:{artifact}:missing"] = key
+            return None
+        try:
+            value = float(mapping[key])
+        except (TypeError, ValueError):
+            pre_failures[f"{metric}:{artifact}:invalid"] = mapping[key]
+            return None
+        if not math.isfinite(value):
+            pre_failures[f"{metric}:{artifact}:nonfinite"] = value
+            return None
+        return value
+
+    executed_total = _required_component_value(
+        executed_breakdown,
+        "total_cost",
+        artifact="executed_day_accounting",
+        metric="total_cost_jpy",
+    )
     expected_by_metric = {
         "total_cost_jpy": executed_total,
-        "electricity_cost_jpy": float(
-            executed_breakdown.get("electricity_cost", 0.0) or 0.0
+        "electricity_cost_jpy": _required_component_value(
+            executed_breakdown,
+            "electricity_cost",
+            artifact="executed_day_accounting",
+            metric="electricity_cost_jpy",
         ),
-        "fuel_cost_jpy": float(
-            executed_breakdown.get("fuel_cost", 0.0) or 0.0
+        "fuel_cost_jpy": _required_component_value(
+            executed_breakdown,
+            "fuel_cost",
+            artifact="executed_day_accounting",
+            metric="fuel_cost_jpy",
         ),
-        "demand_charge_cost_jpy": float(
-            executed_breakdown.get("demand_cost", 0.0) or 0.0
+        "demand_charge_cost_jpy": _required_component_value(
+            executed_breakdown,
+            "demand_cost",
+            artifact="executed_day_accounting",
+            metric="demand_charge_cost_jpy",
         ),
-        "vehicle_usage_cost_jpy": float(
-            executed_breakdown.get("vehicle_usage_cost", 0.0) or 0.0
+        "vehicle_usage_cost_jpy": _required_component_value(
+            executed_breakdown,
+            "vehicle_usage_cost",
+            artifact="executed_day_accounting",
+            metric="vehicle_usage_cost_jpy",
         ),
-        "co2_cost_jpy": float(
-            executed_breakdown.get("co2_cost", 0.0) or 0.0
+        "co2_cost_jpy": _required_component_value(
+            executed_breakdown,
+            "co2_cost",
+            artifact="executed_day_accounting",
+            metric="co2_cost_jpy",
         ),
     }
     observed_by_metric = {
         "total_cost_jpy": {
             "executed_day_accounting": executed_total,
-            "canonical_cost_ledger": float(
-                ledger["accounting_total_cost_jpy"]
+            "canonical_cost_ledger": _required_component_value(
+                ledger,
+                "accounting_total_cost_jpy",
+                artifact="canonical_cost_ledger",
+                metric="total_cost_jpy",
             ),
-            "summary": float(summary["accounting_total_cost_jpy"]),
-            "experiment_report_json": float(
-                report_results["total_cost_jpy"]
+            "summary": _required_component_value(
+                summary,
+                "accounting_total_cost_jpy",
+                artifact="summary",
+                metric="total_cost_jpy",
             ),
-            "cost_breakdown_detail": float(detail_by_key["total_cost"]),
-            "results_xlsx": float(workbook_costs["total_cost"]),
-            "optimization_result": float(
-                optimization_result["final_accounting_total_cost_jpy"]
+            "experiment_report_json": _required_component_value(
+                report_results,
+                "total_cost_jpy",
+                artifact="experiment_report_json",
+                metric="total_cost_jpy",
+            ),
+            "cost_breakdown_detail": _required_component_value(
+                detail_by_key,
+                "total_cost",
+                artifact="cost_breakdown_detail",
+                metric="total_cost_jpy",
+            ),
+            "results_xlsx": _required_component_value(
+                workbook_costs,
+                "total_cost",
+                artifact="results_xlsx",
+                metric="total_cost_jpy",
+            ),
+            "optimization_result": _required_component_value(
+                optimization_result,
+                "final_accounting_total_cost_jpy",
+                artifact="optimization_result",
+                metric="total_cost_jpy",
             ),
         },
         "electricity_cost_jpy": {
-            "canonical_cost_ledger": float(
-                ledger_components["electricity_cost_jpy"]
+            "canonical_cost_ledger": _required_component_value(
+                ledger_components,
+                "electricity_cost_jpy",
+                artifact="canonical_cost_ledger",
+                metric="electricity_cost_jpy",
             ),
-            "summary": float(summary["energy_cost_jpy"]),
-            "experiment_report_json": float(
-                report_results["electricity_cost_jpy"]
+            "summary": _required_component_value(
+                summary,
+                (
+                    "electricity_cost_jpy"
+                    if "electricity_cost_jpy" in summary
+                    else "energy_cost_jpy"
+                ),
+                artifact="summary",
+                metric="electricity_cost_jpy",
             ),
-            "cost_breakdown_detail": float(
-                detail_by_key["electricity_cost"]
+            "experiment_report_json": _required_component_value(
+                report_results,
+                "electricity_cost_jpy",
+                artifact="experiment_report_json",
+                metric="electricity_cost_jpy",
             ),
-            "results_xlsx": float(workbook_costs["electricity_cost"]),
+            "cost_breakdown_detail": _required_component_value(
+                detail_by_key,
+                "electricity_cost",
+                artifact="cost_breakdown_detail",
+                metric="electricity_cost_jpy",
+            ),
+            "results_xlsx": _required_component_value(
+                workbook_costs,
+                "electricity_cost",
+                artifact="results_xlsx",
+                metric="electricity_cost_jpy",
+            ),
         },
         "fuel_cost_jpy": {
-            "canonical_cost_ledger": float(
-                ledger_components["fuel_cost_jpy"]
+            "canonical_cost_ledger": _required_component_value(
+                ledger_components,
+                "fuel_cost_jpy",
+                artifact="canonical_cost_ledger",
+                metric="fuel_cost_jpy",
             ),
-            "summary": float(summary["fuel_cost_jpy"]),
-            "experiment_report_json": float(
-                report_results["diesel_cost_jpy"]
+            "summary": _required_component_value(
+                summary,
+                "fuel_cost_jpy",
+                artifact="summary",
+                metric="fuel_cost_jpy",
             ),
-            "cost_breakdown_detail": float(detail_by_key["fuel_cost"]),
-            "results_xlsx": float(workbook_costs["fuel_cost"]),
+            "experiment_report_json": _required_component_value(
+                report_results,
+                "diesel_cost_jpy",
+                artifact="experiment_report_json",
+                metric="fuel_cost_jpy",
+            ),
+            "cost_breakdown_detail": _required_component_value(
+                detail_by_key,
+                "fuel_cost",
+                artifact="cost_breakdown_detail",
+                metric="fuel_cost_jpy",
+            ),
+            "results_xlsx": _required_component_value(
+                workbook_costs,
+                "fuel_cost",
+                artifact="results_xlsx",
+                metric="fuel_cost_jpy",
+            ),
         },
         "demand_charge_cost_jpy": {
-            "canonical_cost_ledger": float(
-                ledger_components["demand_charge_cost_jpy"]
+            "canonical_cost_ledger": _required_component_value(
+                ledger_components,
+                "demand_charge_cost_jpy",
+                artifact="canonical_cost_ledger",
+                metric="demand_charge_cost_jpy",
             ),
-            "summary": float(summary["demand_charge_cost_jpy"]),
-            "experiment_report_json": float(
-                report_results["demand_charge_jpy"]
+            "summary": _required_component_value(
+                summary,
+                "demand_charge_cost_jpy",
+                artifact="summary",
+                metric="demand_charge_cost_jpy",
             ),
-            "cost_breakdown_detail": float(
-                detail_by_key["demand_charge"]
+            "experiment_report_json": _required_component_value(
+                report_results,
+                "demand_charge_jpy",
+                artifact="experiment_report_json",
+                metric="demand_charge_cost_jpy",
             ),
-            "results_xlsx": float(workbook_costs["demand_charge"]),
+            "cost_breakdown_detail": _required_component_value(
+                detail_by_key,
+                "demand_charge",
+                artifact="cost_breakdown_detail",
+                metric="demand_charge_cost_jpy",
+            ),
+            "results_xlsx": _required_component_value(
+                workbook_costs,
+                "demand_charge",
+                artifact="results_xlsx",
+                metric="demand_charge_cost_jpy",
+            ),
         },
         "vehicle_usage_cost_jpy": {
-            "canonical_cost_ledger": float(
-                ledger_components["vehicle_usage_cost_jpy"]
+            "canonical_cost_ledger": _required_component_value(
+                ledger_components,
+                "vehicle_usage_cost_jpy",
+                artifact="canonical_cost_ledger",
+                metric="vehicle_usage_cost_jpy",
             ),
-            "experiment_report_json": float(
-                report_results["vehicle_usage_cost_jpy"]
+            "experiment_report_json": _required_component_value(
+                report_results,
+                "vehicle_usage_cost_jpy",
+                artifact="experiment_report_json",
+                metric="vehicle_usage_cost_jpy",
             ),
-            "cost_breakdown_detail": float(
-                detail_by_key["vehicle_usage_cost"]
+            "cost_breakdown_detail": _required_component_value(
+                detail_by_key,
+                "vehicle_usage_cost",
+                artifact="cost_breakdown_detail",
+                metric="vehicle_usage_cost_jpy",
             ),
-            "results_xlsx": float(
-                workbook_costs["vehicle_usage_cost"]
+            "results_xlsx": _required_component_value(
+                workbook_costs,
+                "vehicle_usage_cost",
+                artifact="results_xlsx",
+                metric="vehicle_usage_cost_jpy",
             ),
         },
         "co2_cost_jpy": {
-            "canonical_cost_ledger": float(
-                ledger_components["co2_cost_jpy"]
+            "canonical_cost_ledger": _required_component_value(
+                ledger_components,
+                "co2_cost_jpy",
+                artifact="canonical_cost_ledger",
+                metric="co2_cost_jpy",
             ),
-            "summary": float(summary["co2_cost_jpy"]),
-            "experiment_report_json": float(
-                report_results["co2_cost_jpy"]
+            "summary": _required_component_value(
+                summary,
+                "co2_cost_jpy",
+                artifact="summary",
+                metric="co2_cost_jpy",
             ),
-            "cost_breakdown_detail": float(detail_by_key["co2_cost"]),
-            "results_xlsx": float(workbook_costs["co2_cost"]),
+            "experiment_report_json": _required_component_value(
+                report_results,
+                "co2_cost_jpy",
+                artifact="experiment_report_json",
+                metric="co2_cost_jpy",
+            ),
+            "cost_breakdown_detail": _required_component_value(
+                detail_by_key,
+                "co2_cost",
+                artifact="cost_breakdown_detail",
+                metric="co2_cost_jpy",
+            ),
+            "results_xlsx": _required_component_value(
+                workbook_costs,
+                "co2_cost",
+                artifact="results_xlsx",
+                metric="co2_cost_jpy",
+            ),
         },
     }
     component_status = dict(ledger.get("component_status") or {})
-    pre_failures: Dict[str, Any] = {}
     if not component_status:
         pre_failures["canonical_cost_ledger:component_status:missing"] = True
     else:
@@ -4271,26 +4498,6 @@ def _assert_final_cost_artifact_consistency(
         optimization_components = dict(
             optimization_result.get("cost_breakdown") or {}
         )
-
-        def _required_component_value(
-            mapping: Dict[str, Any],
-            key: str,
-            *,
-            artifact: str,
-            metric: str,
-        ) -> float:
-            if key not in mapping or mapping.get(key) is None:
-                pre_failures[f"{metric}:{artifact}:missing"] = key
-                return 0.0
-            try:
-                value = float(mapping[key])
-            except (TypeError, ValueError):
-                pre_failures[f"{metric}:{artifact}:invalid"] = mapping[key]
-                return 0.0
-            if not math.isfinite(value):
-                pre_failures[f"{metric}:{artifact}:nonfinite"] = value
-                return 0.0
-            return value
 
         for component_key, (default_source_key, _flag_key) in (
             CANONICAL_LEDGER_COMPONENT_SOURCES.items()
@@ -4313,7 +4520,7 @@ def _assert_final_cost_artifact_consistency(
                     pre_failures[
                         f"{component_key}:component_status"
                     ] = status_label
-                if not math.isclose(
+                if ledger_value is not None and not math.isclose(
                     ledger_value,
                     0.0,
                     rel_tol=0.0,
@@ -4322,55 +4529,92 @@ def _assert_final_cost_artifact_consistency(
                     pre_failures[
                         f"{component_key}:disabled_nonzero"
                     ] = ledger_value
-                continue
-            if not source_present:
+            elif not source_present:
                 pre_failures[
                     f"{component_key}:enabled_source_missing"
                 ] = source_key
 
+            # Disabled components have an expected ledger value of exactly
+            # zero, but they still must be represented consistently by every
+            # final artifact. Do not let ``SKIPPED`` bypass those comparisons.
             expected_by_metric[component_key] = ledger_value
-            observed_by_metric[component_key] = {
-                "executed_day_accounting": _required_component_value(
+            existing_observations = observed_by_metric.get(component_key, {})
+
+            def _component_artifact_name(artifact: str) -> str:
+                """Avoid overwriting a direct report observation with its map."""
+
+                return (
+                    f"{artifact}_canonical_component"
+                    if artifact in existing_observations
+                    else artifact
+                )
+
+            component_observations = {
+                _component_artifact_name(
+                    "executed_day_accounting"
+                ): _required_component_value(
                     executed_breakdown,
                     source_key,
-                    artifact="executed_day_accounting",
+                    artifact=_component_artifact_name(
+                        "executed_day_accounting"
+                    ),
                     metric=component_key,
                 ),
-                "canonical_cost_ledger": ledger_value,
-                "summary": _required_component_value(
+                _component_artifact_name("canonical_cost_ledger"): ledger_value,
+                _component_artifact_name("summary"): _required_component_value(
                     summary_components,
                     component_key,
-                    artifact="summary",
+                    artifact=_component_artifact_name("summary"),
                     metric=component_key,
                 ),
-                "experiment_report_json": _required_component_value(
+                _component_artifact_name(
+                    "experiment_report_json"
+                ): _required_component_value(
                     report_components,
                     component_key,
-                    artifact="experiment_report_json",
+                    artifact=_component_artifact_name(
+                        "experiment_report_json"
+                    ),
                     metric=component_key,
                 ),
-                "cost_breakdown_detail": _required_component_value(
+                _component_artifact_name(
+                    "cost_breakdown_detail"
+                ): _required_component_value(
                     detail_by_key,
                     source_key,
-                    artifact="cost_breakdown_detail",
+                    artifact=_component_artifact_name(
+                        "cost_breakdown_detail"
+                    ),
                     metric=component_key,
                 ),
-                "results_xlsx": _required_component_value(
+                _component_artifact_name("results_xlsx"): _required_component_value(
                     workbook_costs,
                     source_key,
-                    artifact="results_xlsx",
+                    artifact=_component_artifact_name("results_xlsx"),
                     metric=component_key,
                 ),
-                "optimization_result": _required_component_value(
+                _component_artifact_name(
+                    "optimization_result"
+                ): _required_component_value(
                     optimization_components,
                     source_key,
-                    artifact="optimization_result",
+                    artifact=_component_artifact_name(
+                        "optimization_result"
+                    ),
                     metric=component_key,
                 ),
             }
+            if existing_observations:
+                existing_observations.update(component_observations)
+            else:
+                observed_by_metric[component_key] = component_observations
     residuals_by_metric = {
         metric: {
-            artifact: value - expected_by_metric[metric]
+            artifact: (
+                value - expected_by_metric[metric]
+                if value is not None and expected_by_metric[metric] is not None
+                else None
+            )
             for artifact, value in observations.items()
         }
         for metric, observations in observed_by_metric.items()
@@ -4378,7 +4622,7 @@ def _assert_final_cost_artifact_consistency(
     failures = dict(pre_failures)
     for metric, residuals in residuals_by_metric.items():
         for artifact, residual in residuals.items():
-            if not math.isclose(
+            if residual is not None and not math.isclose(
                 residual,
                 0.0,
                 rel_tol=0.0,
@@ -4607,6 +4851,210 @@ def _write_results_workbook_release_status(
     workbook.save(workbook_path)
 
 
+def _mark_frontend_run_claims_failed(
+    *,
+    run_dir: Path,
+    error: BaseException,
+) -> None:
+    """Downgrade partially written human-facing artifacts after a job failure.
+
+    Reporting finalization writes several artifacts before all later gates have
+    completed. If one of those gates raises, preserve diagnostics but never
+    leave a release-capable label in the run directory.
+    """
+
+    scope_path = run_dir / "research_claim_scope.json"
+    if not scope_path.is_file():
+        return
+    loaded_scope = json.loads(scope_path.read_text(encoding="utf-8"))
+    if not isinstance(loaded_scope, dict):
+        return
+    scope = dict(loaded_scope)
+    failed_checks = set(scope.get("teacher_release_failed_checks") or ())
+    failed_checks.update(
+        {
+            "frontend_run_failed",
+            "final_reporting_or_artifact_contract_failed",
+        }
+    )
+    failure = {
+        "type": type(error).__name__,
+        "message": str(error),
+    }
+    failed_artifact_audit_summary: Optional[Dict[str, Any]] = None
+    artifact_audit_path = run_dir / "artifact_completeness.json"
+    if artifact_audit_path.is_file():
+        terminal_failure_reason = "frontend_run_failed_after_finalization"
+        try:
+            loaded_artifact_audit = json.loads(
+                artifact_audit_path.read_text(encoding="utf-8")
+            )
+        except (OSError, json.JSONDecodeError) as exc:
+            artifact_audit = {
+                "prior_audit_read_error": f"{type(exc).__name__}: {exc}"
+            }
+        else:
+            artifact_audit = (
+                dict(loaded_artifact_audit)
+                if isinstance(loaded_artifact_audit, dict)
+                else {"prior_audit_invalid_type": type(loaded_artifact_audit).__name__}
+            )
+        content_errors = list(artifact_audit.get("content_errors") or ())
+        if terminal_failure_reason not in content_errors:
+            content_errors.append(terminal_failure_reason)
+        artifact_audit.update(
+            {
+                "status": "ERROR",
+                "accepted": False,
+                "content_errors": content_errors,
+                "terminal_failure": failure,
+            }
+        )
+        artifact_audit_path.write_text(
+            json.dumps(artifact_audit, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        failed_artifact_audit_summary = {
+            "status": "ERROR",
+            "accepted": False,
+            "artifact": artifact_audit_path.name,
+            "reason": terminal_failure_reason,
+        }
+    scope.update(
+        {
+            "research_submission_ready": False,
+            "teacher_release_status": "BLOCKED",
+            "teacher_release_failed_checks": sorted(map(str, failed_checks)),
+            "result_label": "diagnostic_run_finalization_failed",
+            "diagnostic_only": True,
+            "diagnostic_label": "NOT USED FOR RESEARCH CONCLUSIONS",
+            "finalization_failure": failure,
+        }
+    )
+    scope_path.write_text(
+        json.dumps(scope, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+    summary_path = run_dir / "summary.json"
+    if summary_path.is_file():
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        if isinstance(summary, dict):
+            summary.update(
+                {
+                    "research_submission_ready": False,
+                    "teacher_release_status": "BLOCKED",
+                    "teacher_release_failed_checks": scope[
+                        "teacher_release_failed_checks"
+                    ],
+                    "diagnostic_only": True,
+                    "diagnostic_label": scope["diagnostic_label"],
+                    "finalization_failure": failure,
+                }
+            )
+            summary_path.write_text(
+                json.dumps(summary, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+
+    optimization_result: Dict[str, Any] = {}
+    optimization_result_path = run_dir / "optimization_result.json"
+    if optimization_result_path.is_file():
+        loaded_result = json.loads(
+            optimization_result_path.read_text(encoding="utf-8")
+        )
+        if isinstance(loaded_result, dict):
+            optimization_result = dict(loaded_result)
+            optimization_result["research_claim_scope"] = scope
+            optimization_result["diagnostic_only"] = True
+            optimization_result["finalization_failure"] = failure
+            if failed_artifact_audit_summary is not None:
+                optimization_result["artifact_completeness"] = (
+                    failed_artifact_audit_summary
+                )
+            for path in (
+                optimization_result_path,
+                run_dir / "raw" / "optimization_result.json",
+            ):
+                if path.parent.is_dir():
+                    path.write_text(
+                        json.dumps(optimization_result, ensure_ascii=False, indent=2),
+                        encoding="utf-8",
+                    )
+
+    optimization_audit_path = run_dir / "optimization_audit.json"
+    if optimization_audit_path.is_file():
+        loaded_audit = json.loads(optimization_audit_path.read_text(encoding="utf-8"))
+        if isinstance(loaded_audit, dict):
+            audit = dict(loaded_audit)
+            audit["research_claim_scope"] = scope
+            audit["finalization_failure"] = failure
+            if failed_artifact_audit_summary is not None:
+                audit["artifact_completeness"] = failed_artifact_audit_summary
+            for path in (
+                optimization_audit_path,
+                run_dir / "raw" / "optimization_audit.json",
+            ):
+                if path.parent.is_dir():
+                    path.write_text(
+                        json.dumps(audit, ensure_ascii=False, indent=2),
+                        encoding="utf-8",
+                    )
+
+    solver_settings = dict(optimization_result.get("solver_settings") or {})
+    solver_metadata = dict(optimization_result.get("solver_metadata") or {})
+    rolling_execution = _rolling_execution_evidence(
+        run_dir=run_dir,
+        solver_metadata=solver_metadata,
+    )
+    _prepend_experiment_release_header(
+        run_dir=run_dir,
+        research_claim_scope=scope,
+        rolling_execution=rolling_execution,
+        solver_settings=solver_settings,
+        optimization_result=optimization_result,
+    )
+    _write_results_workbook_release_status(
+        run_dir=run_dir,
+        research_claim_scope=scope,
+        rolling_execution=rolling_execution,
+        solver_settings=solver_settings,
+        result_claim_classification=dict(
+            optimization_result.get("result_claim_classification") or {}
+        ),
+    )
+
+    run_manifest_path = run_dir / "run_manifest.json"
+    if run_manifest_path.is_file():
+        run_manifest = json.loads(run_manifest_path.read_text(encoding="utf-8"))
+        if isinstance(run_manifest, dict):
+            run_manifest_updates = {
+                "run_state": "failed",
+                "research_claim_scope": scope,
+                "teacher_release_status": "BLOCKED",
+                "teacher_release_failed_checks": scope[
+                    "teacher_release_failed_checks"
+                ],
+                "finalization_failure": failure,
+            }
+            if failed_artifact_audit_summary is not None:
+                run_manifest_updates["artifact_completeness"] = (
+                    failed_artifact_audit_summary
+                )
+            run_manifest.update(run_manifest_updates)
+            run_manifest_path.write_text(
+                json.dumps(run_manifest, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+    # The rolling provenance manifest is distinct from run_manifest.json. A
+    # report-finalization exception must not leave its previous `complete`
+    # state behind as contradictory provenance.
+    if (run_dir / "input_audit.json").is_file():
+        refresh_frontend_rolling_manifest(
+            run_dir=run_dir,
+            run_state="reporting_finalization_failed",
+        )
+
+
 def _research_claim_scope_payload(
     *,
     optimization_result: Dict[str, Any],
@@ -4680,6 +5128,13 @@ def _research_claim_scope_payload(
         teacher_release_failed_checks.append("git_provenance_not_research_eligible")
     if run_profile == DAY_AHEAD_EXPLORATORY_PROFILE:
         teacher_release_failed_checks.append("day_ahead_only_exploratory_profile")
+    # A single frontend run cannot establish the required same-service-date,
+    # fixed-control counterfactual evidence. Keep release claims blocked until
+    # the separately verified pair manifest exists; this also prevents an
+    # interrupted reporting finalizer from leaving a misleading READY label.
+    teacher_release_failed_checks.append(
+        "controlled_counterfactual_pair_not_verified"
+    )
     teacher_release_failed_checks = sorted(set(teacher_release_failed_checks))
     research_submission_ready = not teacher_release_failed_checks
     if weather_enabled and policy_scope == "pv_curve_only":
@@ -9385,6 +9840,16 @@ def _run_optimization(
             ),
         )
     except Exception as exc:
+        if output_dir:
+            try:
+                _mark_frontend_run_claims_failed(
+                    run_dir=Path(output_dir),
+                    error=exc,
+                )
+            except Exception:
+                # Preserve the primary optimization/reporting error even if a
+                # best-effort diagnostic label cannot be written.
+                pass
         job_store.update_job(
             job_id,
             status="failed",

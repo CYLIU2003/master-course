@@ -23,6 +23,9 @@ def _case(
     pv_hash: str,
     pv_values: list[float],
     total_cost: float,
+    failed_checks: list[str] | None = None,
+    artifact_contract_accepted: bool = True,
+    terminal_run_state: str = "complete",
 ) -> None:
     _write_json(
         run_dir / "comparison_case_manifest.json",
@@ -49,8 +52,24 @@ def _case(
         {"status": "OK"},
     )
     _write_json(
+        run_dir / "artifact_completeness.json",
+        {
+            "status": "OK" if artifact_contract_accepted else "ERROR",
+            "accepted": artifact_contract_accepted,
+        },
+    )
+    _write_json(run_dir / "manifest.json", {"run_state": terminal_run_state})
+    _write_json(
         run_dir / "research_claim_scope.json",
-        {"research_submission_ready": False},
+        {
+            "research_submission_ready": False,
+            "teacher_release_status": "BLOCKED",
+            "teacher_release_failed_checks": (
+                failed_checks
+                if failed_checks is not None
+                else ["controlled_counterfactual_pair_not_verified"]
+            ),
+        },
     )
     _write_json(
         run_dir / "graph" / "canonical_cost_ledger.json",
@@ -96,13 +115,131 @@ def test_pair_manifest_proves_fixed_controls_and_exact_pv_difference(
     )
 
     assert manifest["accepted_for_controlled_pv_sensitivity_comparison"] is True
-    assert manifest["formal_research_submission_ready"] is False
+    assert manifest["formal_research_submission_ready"] is True
     assert manifest["pv_difference"]["total_difference_kwh"] == pytest.approx(
         -2.5
     )
     assert manifest["assignment_hashes_equal"] is True
     assert (output_dir / "comparison_table.csv").is_file()
     assert (output_dir / "comparison_report.md").is_file()
+
+
+def test_pair_manifest_rejects_case_with_a_non_pair_release_blocker(
+    tmp_path: Path,
+) -> None:
+    """Only the pending-pair blocker may be discharged by the pair itself."""
+
+    baseline = tmp_path / "baseline"
+    counterfactual = tmp_path / "counterfactual"
+    output_dir = tmp_path / "pair"
+    _case(
+        baseline,
+        role="baseline",
+        control_hash="fixed-controls",
+        pv_hash="high-pv",
+        pv_values=[1.0, 2.0],
+        total_cost=100.0,
+        failed_checks=[
+            "controlled_counterfactual_pair_not_verified",
+            "final_cost_reconciliation_failed",
+        ],
+    )
+    _case(
+        counterfactual,
+        role="pv_curve_counterfactual",
+        control_hash="fixed-controls",
+        pv_hash="low-pv",
+        pv_values=[0.2, 0.3],
+        total_cost=120.0,
+    )
+
+    with pytest.raises(
+        ValueError, match="baseline_case_base_release_gate_passes"
+    ):
+        build_frontend_pv_pair_artifacts(
+            baseline_run_dir=baseline,
+            counterfactual_run_dir=counterfactual,
+            output_dir=output_dir,
+        )
+
+    manifest = json.loads((output_dir / "pair_manifest.json").read_text())
+    assert manifest["formal_research_submission_ready"] is False
+
+
+def test_pair_manifest_rejects_case_without_accepted_artifact_contract(
+    tmp_path: Path,
+) -> None:
+    """A paired comparison cannot rehabilitate a failed terminal artifact gate."""
+
+    baseline = tmp_path / "baseline"
+    counterfactual = tmp_path / "counterfactual"
+    output_dir = tmp_path / "pair"
+    _case(
+        baseline,
+        role="baseline",
+        control_hash="fixed-controls",
+        pv_hash="high-pv",
+        pv_values=[1.0, 2.0],
+        total_cost=100.0,
+        artifact_contract_accepted=False,
+    )
+    _case(
+        counterfactual,
+        role="pv_curve_counterfactual",
+        control_hash="fixed-controls",
+        pv_hash="low-pv",
+        pv_values=[0.2, 0.3],
+        total_cost=120.0,
+    )
+
+    with pytest.raises(
+        ValueError, match="baseline_artifact_contract_accepted"
+    ):
+        build_frontend_pv_pair_artifacts(
+            baseline_run_dir=baseline,
+            counterfactual_run_dir=counterfactual,
+            output_dir=output_dir,
+        )
+
+    manifest = json.loads((output_dir / "pair_manifest.json").read_text())
+    assert manifest["formal_research_submission_ready"] is False
+
+
+def test_pair_manifest_rejects_case_without_complete_terminal_state(
+    tmp_path: Path,
+) -> None:
+    """An accepted audit cannot override a terminal failure provenance state."""
+
+    baseline = tmp_path / "baseline"
+    counterfactual = tmp_path / "counterfactual"
+    output_dir = tmp_path / "pair"
+    _case(
+        baseline,
+        role="baseline",
+        control_hash="fixed-controls",
+        pv_hash="high-pv",
+        pv_values=[1.0, 2.0],
+        total_cost=100.0,
+        terminal_run_state="reporting_finalization_failed",
+    )
+    _case(
+        counterfactual,
+        role="pv_curve_counterfactual",
+        control_hash="fixed-controls",
+        pv_hash="low-pv",
+        pv_values=[0.2, 0.3],
+        total_cost=120.0,
+    )
+
+    with pytest.raises(ValueError, match="baseline_terminal_run_complete"):
+        build_frontend_pv_pair_artifacts(
+            baseline_run_dir=baseline,
+            counterfactual_run_dir=counterfactual,
+            output_dir=output_dir,
+        )
+
+    manifest = json.loads((output_dir / "pair_manifest.json").read_text())
+    assert manifest["formal_research_submission_ready"] is False
 
 
 def test_pair_manifest_rejects_control_hash_mismatch(tmp_path: Path) -> None:

@@ -5,12 +5,13 @@ import json
 from pathlib import Path
 
 import pytest
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 
 from bff.routers.optimization import (
     _apply_result_claim_classification,
     _assert_final_cost_artifact_consistency,
     _should_finalize_reporting_after_rolling,
+    _synchronize_finalized_accounting_summary,
 )
 from bff.services.optimization_run.cost_breakdown import (
     CANONICAL_LEDGER_COMPONENT_SOURCES,
@@ -217,6 +218,107 @@ def test_final_cost_mismatch_fails_job_above_one_micro_yen(
     assert reconciliation["status"] == "ERROR"
 
 
+def test_missing_zero_valued_report_component_fails_with_reconciliation_diagnostic(
+    tmp_path: Path,
+) -> None:
+    """A null report component is missing evidence, never an implicit zero."""
+
+    total = 724_618.0043661146
+    optimization_result = _write_cost_artifacts(tmp_path, total=total)
+    experiment = json.loads(
+        (tmp_path / "experiment_report.json").read_text(encoding="utf-8")
+    )
+    experiment["results"]["demand_charge_jpy"] = None
+    _write_json(tmp_path / "experiment_report.json", experiment)
+
+    with pytest.raises(
+        RuntimeError,
+        match="demand_charge_cost_jpy:experiment_report_json:missing",
+    ):
+        _assert_final_cost_artifact_consistency(
+            run_dir=tmp_path,
+            optimization_result=optimization_result,
+        )
+
+    reconciliation = json.loads(
+        (tmp_path / "final_cost_reconciliation.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert reconciliation["status"] == "ERROR"
+    assert reconciliation["failed_artifacts"][
+        "demand_charge_cost_jpy:experiment_report_json:missing"
+    ] == "demand_charge_jpy"
+    assert (
+        reconciliation["observed_by_metric_jpy"][
+            "demand_charge_cost_jpy"
+        ]["experiment_report_json"]
+        is None
+    )
+    assert (
+        reconciliation["residual_to_executed_day_by_metric_jpy"][
+            "demand_charge_cost_jpy"
+        ]["experiment_report_json"]
+        is None
+    )
+
+
+def test_finalized_ledger_replaces_provisional_summary_components(
+    tmp_path: Path,
+) -> None:
+    """Final summary component maps must come from the canonical ledger."""
+
+    _write_json(
+        tmp_path / "summary.json",
+        {
+            "energy_cost_jpy": -1.8189894035458565e-12,
+            "canonical_cost_components_jpy": {},
+            "canonical_cost_component_status": {},
+        },
+    )
+    finalized = {
+        "total_cost_jpy": 707_808.6603727042,
+        "accounting_total_cost_jpy": 707_808.6603727042,
+        "energy_cost_jpy": -1.8189894035458565e-12,
+        "electricity_cost_jpy": -1.8189894035458565e-12,
+        "propulsion_energy_cost_jpy": 66_659.49730088498,
+        "fuel_cost_jpy": 66_659.49730088498,
+        "demand_charge_cost_jpy": 0.0,
+        "vehicle_usage_cost_jpy": 640_000.0,
+        "co2_cost_jpy": 1_149.1630718191466,
+        "canonical_cost_components_jpy": {
+            "electricity_cost_jpy": -1.8189894035458565e-12,
+            "vehicle_usage_cost_jpy": 640_000.0,
+        },
+        "canonical_cost_component_status": {
+            "electricity_cost_jpy": {"status": "ENABLED"},
+        },
+    }
+
+    synchronized = _synchronize_finalized_accounting_summary(
+        run_dir=tmp_path,
+        summary={"canonical_cost_components_jpy": {}},
+        finalized_accounting=finalized,
+    )
+    persisted = json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
+
+    assert synchronized["electricity_cost_jpy"] == pytest.approx(
+        -1.8189894035458565e-12
+    )
+    assert synchronized["energy_cost_jpy"] == pytest.approx(
+        -1.8189894035458565e-12
+    )
+    assert synchronized["propulsion_energy_cost_jpy"] == pytest.approx(
+        66_659.49730088498
+    )
+    assert persisted["canonical_cost_components_jpy"] == finalized[
+        "canonical_cost_components_jpy"
+    ]
+    assert persisted["canonical_cost_component_status"] == finalized[
+        "canonical_cost_component_status"
+    ]
+
+
 def _write_full_component_artifacts(run_dir: Path) -> dict:
     component_values = {
         component_key: float(index)
@@ -262,12 +364,31 @@ def _write_full_component_artifacts(run_dir: Path) -> dict:
         },
     )
     summary = json.loads((run_dir / "summary.json").read_text())
-    summary["accounting_total_cost_jpy"] = total
-    summary["canonical_cost_components_jpy"] = component_values
+    summary.update(
+        {
+            "accounting_total_cost_jpy": total,
+            "energy_cost_jpy": source_values["electricity_cost"],
+            "electricity_cost_jpy": source_values["electricity_cost"],
+            "fuel_cost_jpy": source_values["fuel_cost"],
+            "demand_charge_cost_jpy": source_values["demand_cost"],
+            "vehicle_usage_cost_jpy": source_values["vehicle_usage_cost"],
+            "co2_cost_jpy": source_values["co2_cost"],
+            "canonical_cost_components_jpy": component_values,
+        }
+    )
     _write_json(run_dir / "summary.json", summary)
     report = json.loads((run_dir / "experiment_report.json").read_text())
-    report["results"]["total_cost_jpy"] = total
-    report["results"]["canonical_cost_components_jpy"] = component_values
+    report["results"].update(
+        {
+            "total_cost_jpy": total,
+            "electricity_cost_jpy": source_values["electricity_cost"],
+            "diesel_cost_jpy": source_values["fuel_cost"],
+            "demand_charge_jpy": source_values["demand_cost"],
+            "vehicle_usage_cost_jpy": source_values["vehicle_usage_cost"],
+            "co2_cost_jpy": source_values["co2_cost"],
+            "canonical_cost_components_jpy": component_values,
+        }
+    )
     _write_json(run_dir / "experiment_report.json", report)
     with (run_dir / "cost_breakdown_detail.csv").open(
         "w", encoding="utf-8", newline=""
@@ -322,6 +443,65 @@ def test_missing_enabled_component_in_human_report_fails(
     _write_json(tmp_path / "experiment_report.json", report)
 
     with pytest.raises(RuntimeError, match="driver_cost_jpy"):
+        _assert_final_cost_artifact_consistency(
+            run_dir=tmp_path,
+            optimization_result=optimization_result,
+        )
+
+
+def test_disabled_component_must_remain_zero_in_every_final_artifact(
+    tmp_path: Path,
+) -> None:
+    """SKIPPED ledger components cannot become nonzero in a report map."""
+
+    optimization_result = _write_full_component_artifacts(tmp_path)
+    component_key = "vehicle_fixed_cost_jpy"
+    source_key = "vehicle_cost"
+
+    executed_path = tmp_path / "rolling_hourly_chain" / "executed_day_accounting.json"
+    executed = json.loads(executed_path.read_text())
+    executed["cost_breakdown"][source_key] = 0.0
+    _write_json(executed_path, executed)
+
+    ledger_path = tmp_path / "graph" / "canonical_cost_ledger.json"
+    ledger = json.loads(ledger_path.read_text())
+    ledger["components"][component_key] = 0.0
+    ledger["component_status"][component_key].update(
+        {"enabled": False, "status": "SKIPPED", "value_jpy": 0.0}
+    )
+    _write_json(ledger_path, ledger)
+
+    summary_path = tmp_path / "summary.json"
+    summary = json.loads(summary_path.read_text())
+    summary["canonical_cost_components_jpy"][component_key] = 0.0
+    _write_json(summary_path, summary)
+
+    report_path = tmp_path / "experiment_report.json"
+    report = json.loads(report_path.read_text())
+    report["results"]["canonical_cost_components_jpy"][component_key] = 100.0
+    _write_json(report_path, report)
+
+    detail_path = tmp_path / "cost_breakdown_detail.csv"
+    rows = list(csv.DictReader(detail_path.read_text(encoding="utf-8").splitlines()))
+    for row in rows:
+        if row["key"] == source_key:
+            row["value"] = "0.0"
+    with detail_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=("key", "value", "unit"))
+        writer.writeheader()
+        writer.writerows(rows)
+
+    workbook = load_workbook(tmp_path / "results.xlsx")
+    try:
+        for row in workbook["cost_breakdown"].iter_rows(min_row=2):
+            if row[0].value == source_key:
+                row[1].value = 0.0
+        workbook.save(tmp_path / "results.xlsx")
+    finally:
+        workbook.close()
+
+    optimization_result["cost_breakdown"][source_key] = 0.0
+    with pytest.raises(RuntimeError, match=component_key):
         _assert_final_cost_artifact_consistency(
             run_dir=tmp_path,
             optimization_result=optimization_result,

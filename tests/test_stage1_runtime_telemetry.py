@@ -127,6 +127,35 @@ def test_teacher_release_preserves_vehicle_inventory_blocker() -> None:
     assert claim_scope["research_submission_ready"] is False
 
 
+def test_single_run_stays_blocked_until_counterfactual_pair_is_verified() -> None:
+    """A completed operational run alone is not a teacher-ready release."""
+
+    claim_scope = _research_claim_scope_payload(
+        optimization_result={
+            "run_profile": "day_ahead_and_hourly_rolling",
+            "solver_metadata": {
+                "research_run": True,
+                "research_run_accepted": True,
+                "research_submission_git_provenance_eligible": True,
+                "research_acceptance_checks": {},
+            },
+            "solution_validity": {"validated_feasible": True},
+        },
+        solver_settings={"mip_gap_target_met": True},
+        weather_policy={"enabled": False},
+        rolling_execution={
+            "status": "executed_and_accepted",
+            "rolling_execution_minutes": 60,
+        },
+    )
+
+    assert claim_scope["teacher_release_status"] == "BLOCKED"
+    assert claim_scope["research_submission_ready"] is False
+    assert "controlled_counterfactual_pair_not_verified" in claim_scope[
+        "teacher_release_failed_checks"
+    ]
+
+
 def test_interactive_run_defaults_and_provenance_record_server_enforcement() -> None:
     request = RunOptimizationBody()
     assert request.stage1_best_obj_stop_enabled is False

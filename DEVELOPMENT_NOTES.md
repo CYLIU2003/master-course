@@ -53,6 +53,39 @@
   report-format repair only: it does not alter the ledger, cost reconciliation
   inputs, SOC, dispatch, charging, or independent physical validation. A new
   frozen clean-commit frontend run is required.
+- The next frozen diagnostic run, `run_20260728_1949`, again accepted all 24
+  Rolling steps, produced eligible executed-day accounting, and passed the
+  corrected independent physical validation (`VALID`, 264 served/assigned,
+  zero required physical violations). It then exposed reporting-boundary
+  defects: a `null` demand charge caused raw `float()` conversion to abort
+  reconciliation, explicit `0.0` components could be mistaken for fallback
+  values, and a finalization failure could leave inconsistent release labels.
+  That run remains `DIAGNOSTIC` and is not reusable evidence.
+- Final reporting now preserves explicit zeros, writes vehicle-use and
+  canonical-component fields at the report's top-level schema, and treats a
+  missing/invalid/non-finite required component as `null` in the reconciliation
+  observation and residual (with an `ERROR` gate), never as a fabricated zero.
+  Direct report fields and canonical-component-map observations are persisted
+  separately, so a valid map cannot overwrite missing direct evidence.
+  `summary.energy_cost_jpy` remains electricity-only; the separately named
+  `propulsion_energy_cost_jpy` carries the electricity-plus-fuel aggregate.
+- The outer frontend failure path now best-effort scrubs scope, summary,
+  result/audit copies, Markdown, Excel, and manifest releases to
+  `BLOCKED`/`DIAGNOSTIC` with the failure reasons. In addition, an isolated
+  frontend run cannot claim teacher release without the independently verified
+  controlled counterfactual pair. The pair builder may discharge only that
+  one pending-pair blocker; both cases still require accepted artifact
+  completeness and a terminal rolling-manifest state of `complete`. A terminal
+  post-finalization error downgrades an already-written completeness audit to
+  `ERROR`/`accepted=false` before all release surfaces are scrubbed. These are
+  reporting/provenance gates, not relaxations of physical validation, SOC,
+  solver, or Rolling acceptance.
+- Regression coverage includes canonical payload provenance, report schema and
+  explicit-zero handling, `null` accounting diagnostics, disabled-component
+  cross-artifact reconciliation, Excel serialization, claim-scope scrubbing,
+  and positive/negative controlled-PV pair gates. The local suite passed
+  `1025` tests; `compileall` and `git diff --check` also passed before the
+  pending clean-commit normal frontend rerun.
 
 ## 2026-07-28 Stage 2 charger-assignment numeric consistency fix
 

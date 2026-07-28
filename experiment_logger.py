@@ -109,6 +109,11 @@ class SimulationResults:
     mip_gap_pct: float | None          # 求解後の実績 Gap
     # 詳細（あれば）
     charging_schedule: dict | None = None
+    vehicle_usage_cost_jpy: float | None = None
+    canonical_cost_components_jpy: dict[str, float] = field(default_factory=dict)
+    canonical_cost_component_status: dict[str, dict[str, Any]] = field(
+        default_factory=dict
+    )
     extra: dict = field(default_factory=dict)
 
 
@@ -234,6 +239,10 @@ class ExperimentReport:
             lines.append(f"    軽油代    : {r.diesel_cost_jpy:,.2f} JPY")
         if r.demand_charge_jpy is not None:
             lines.append(f"    デマンド  : {r.demand_charge_jpy:,.2f} JPY")
+        if r.vehicle_usage_cost_jpy is not None:
+            lines.append(
+                f"    Vehicle usage cost: {r.vehicle_usage_cost_jpy:,.2f} JPY"
+            )
         if r.co2_kg is not None:
             lines.append(f"  CO₂排出量  : {r.co2_kg:,.4f} kg")
         if r.co2_cost_jpy is not None:
@@ -366,6 +375,7 @@ class ExperimentReport:
         _add("　電気代", r.electricity_cost_jpy, "{:,.2f} JPY")
         _add("　軽油代", r.diesel_cost_jpy, "{:,.2f} JPY")
         _add("　デマンド料金", r.demand_charge_jpy, "{:,.2f} JPY")
+        _add("Vehicle usage cost", r.vehicle_usage_cost_jpy, "{:,.2f} JPY")
         _add("　車両使用費", r.vehicle_fixed_cost_jpy, "{:,.2f} JPY")
         _add("CO₂排出量", r.co2_kg, "{:,.4f} kg")
         _add("CO₂費用", r.co2_cost_jpy, "{:,.2f} JPY")
@@ -592,80 +602,123 @@ class ExperimentLogger:
         キー名は実際の実装に合わせて調整してください。
         """
         # ネストされた可能性のあるキーを安全に取得
-        def get(*keys, default=None):
-            d = r
-            for k in keys:
-                if not isinstance(d, dict):
-                    return default
-                d = d.get(k, default)
-                if d is None:
-                    return default
-            return d
-
         # コスト内訳（フラット or ネスト両対応）
         cost_breakdown = r.get("cost_breakdown", {})
 
+        def first_not_none(*values: Any) -> Any:
+            return next((value for value in values if value is not None), None)
+
+        # Explicit zero cost/quantity values are valid accounting evidence;
+        # only an actual None may select a legacy fallback.
+        cost_breakdown = (
+            dict(cost_breakdown) if isinstance(cost_breakdown, dict) else {}
+        )
+        raw_trips = r.get("trips")
+        trips = dict(raw_trips) if isinstance(raw_trips, dict) else {}
+        raw_charging = r.get("charging")
+        charging = dict(raw_charging) if isinstance(raw_charging, dict) else {}
+        bev_trips = first_not_none(r.get("bev_trips"), trips.get("bev"))
+        ice_trips = first_not_none(r.get("ice_trips"), trips.get("ice"))
+        canonical_components = r.get("canonical_cost_components_jpy")
+        canonical_status = r.get("canonical_cost_component_status")
+        if canonical_components is not None and not isinstance(
+            canonical_components, dict
+        ):
+            raise TypeError("canonical_cost_components_jpy must be a mapping")
+        if canonical_status is not None and not isinstance(canonical_status, dict):
+            raise TypeError("canonical_cost_component_status must be a mapping")
+
         return SimulationResults(
             status=r.get("status", "UNKNOWN"),
-            objective_value=r.get("objective_value") or r.get("obj_value"),
-            total_cost_jpy=(
-                r.get("total_cost_jpy")
-                or r.get("total_cost")
-                or cost_breakdown.get("total")
+            objective_value=first_not_none(
+                r.get("objective_value"), r.get("obj_value")
             ),
-            electricity_cost_jpy=(
-                r.get("electricity_cost_jpy")
-                or cost_breakdown.get("electricity")
+            total_cost_jpy=first_not_none(
+                r.get("total_cost_jpy"),
+                r.get("total_cost"),
+                cost_breakdown.get("total"),
             ),
-            diesel_cost_jpy=(
-                r.get("diesel_cost_jpy")
-                or cost_breakdown.get("diesel")
+            electricity_cost_jpy=first_not_none(
+                r.get("electricity_cost_jpy"), cost_breakdown.get("electricity")
             ),
-            demand_charge_jpy=(
-                r.get("demand_charge_jpy")
-                or cost_breakdown.get("demand")
+            diesel_cost_jpy=first_not_none(
+                r.get("diesel_cost_jpy"), cost_breakdown.get("diesel")
             ),
-            vehicle_fixed_cost_jpy=(
-                r.get("vehicle_fixed_cost_jpy")
-                or cost_breakdown.get("vehicle_fixed")
+            demand_charge_jpy=first_not_none(
+                r.get("demand_charge_jpy"), cost_breakdown.get("demand")
             ),
-            co2_kg=r.get("co2_kg") or r.get("co2"),
-            co2_cost_jpy=(
-                r.get("co2_cost_jpy")
-                if r.get("co2_cost_jpy") is not None
-                else cost_breakdown.get("co2_cost")
+            vehicle_fixed_cost_jpy=first_not_none(
+                r.get("vehicle_fixed_cost_jpy"),
+                cost_breakdown.get("vehicle_fixed"),
             ),
-            bev_trips=r.get("bev_trips") or r.get("trips", {}).get("bev"),
-            ice_trips=r.get("ice_trips") or r.get("trips", {}).get("ice"),
-            total_trips=(
-                r.get("total_trips")
-                or r.get("trips", {}).get("total")
-                or (
-                    (r.get("bev_trips", 0) or 0) + (r.get("ice_trips", 0) or 0)
-                    if r.get("bev_trips") is not None or r.get("ice_trips") is not None
+            co2_kg=first_not_none(r.get("co2_kg"), r.get("co2")),
+            co2_cost_jpy=first_not_none(
+                r.get("co2_cost_jpy"), cost_breakdown.get("co2_cost")
+            ),
+            bev_trips=bev_trips,
+            ice_trips=ice_trips,
+            total_trips=first_not_none(
+                r.get("total_trips"),
+                trips.get("total"),
+                (
+                    (bev_trips or 0) + (ice_trips or 0)
+                    if bev_trips is not None or ice_trips is not None
                     else None
-                )
+                ),
             ),
-            total_charging_kwh=(
-                r.get("total_charging_kwh")
-                or r.get("charging", {}).get("total_kwh")
+            total_charging_kwh=first_not_none(
+                r.get("total_charging_kwh"), charging.get("total_kwh")
             ),
-            peak_charging_kw=(
-                r.get("peak_charging_kw")
-                or r.get("charging", {}).get("peak_kw")
+            peak_charging_kw=first_not_none(
+                r.get("peak_charging_kw"), charging.get("peak_kw")
             ),
-            solve_time_sec=r.get("solve_time_sec") or r.get("solve_time"),
-            mip_gap_pct=r.get("mip_gap_pct") or r.get("mip_gap"),
+            solve_time_sec=first_not_none(
+                r.get("solve_time_sec"), r.get("solve_time")
+            ),
+            mip_gap_pct=first_not_none(r.get("mip_gap_pct"), r.get("mip_gap")),
             charging_schedule=r.get("charging_schedule"),
-            extra={k: v for k, v in r.items() if k not in {
-                "status", "objective_value", "obj_value", "total_cost_jpy",
-                "total_cost", "cost_breakdown", "electricity_cost_jpy",
-                "diesel_cost_jpy", "demand_charge_jpy", "vehicle_fixed_cost_jpy",
-                "co2_kg", "co2", "co2_cost_jpy", "bev_trips", "ice_trips", "total_trips", "trips",
-                "total_charging_kwh", "peak_charging_kw", "charging",
-                "solve_time_sec", "solve_time", "mip_gap_pct", "mip_gap",
-                "charging_schedule",
-            }},
+            vehicle_usage_cost_jpy=first_not_none(
+                r.get("vehicle_usage_cost_jpy"),
+                cost_breakdown.get("vehicle_usage_cost"),
+                cost_breakdown.get("vehicle_usage"),
+            ),
+            canonical_cost_components_jpy=dict(canonical_components or {}),
+            canonical_cost_component_status=dict(canonical_status or {}),
+            extra={
+                key: value
+                for key, value in r.items()
+                if key
+                not in {
+                    "status",
+                    "objective_value",
+                    "obj_value",
+                    "total_cost_jpy",
+                    "total_cost",
+                    "cost_breakdown",
+                    "electricity_cost_jpy",
+                    "diesel_cost_jpy",
+                    "demand_charge_jpy",
+                    "vehicle_fixed_cost_jpy",
+                    "vehicle_usage_cost_jpy",
+                    "canonical_cost_components_jpy",
+                    "canonical_cost_component_status",
+                    "co2_kg",
+                    "co2",
+                    "co2_cost_jpy",
+                    "bev_trips",
+                    "ice_trips",
+                    "total_trips",
+                    "trips",
+                    "total_charging_kwh",
+                    "peak_charging_kw",
+                    "charging",
+                    "solve_time_sec",
+                    "solve_time",
+                    "mip_gap_pct",
+                    "mip_gap",
+                    "charging_schedule",
+                }
+            },
         )
 
     def _save_json(self, report: ExperimentReport, exp_id: str) -> Path:

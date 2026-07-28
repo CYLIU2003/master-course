@@ -569,13 +569,15 @@ def _optimization_result_payload(
     accounting_total_cost = accounting_summary.get(
         "accounting_total_cost_jpy", accounting_summary.get("total_cost_jpy")
     )
-    accounting_electricity_cost = electricity_cost_final
-    if accounting_summary.get("energy_cost_jpy") is not None:
-        # Use the canonical aggregate directly when it exists. Re-adding its
-        # components can introduce a binary floating-point representation
-        # change even when the monetary value is identical.
-        accounting_electricity_cost = accounting_summary["energy_cost_jpy"]
-    elif (
+    accounting_electricity_cost = accounting_summary.get("electricity_cost_jpy")
+    if accounting_electricity_cost is None:
+        # The established summary contract names the electricity component
+        # ``energy_cost_jpy``.  Prefer it before reconstructing from flows so
+        # a persisted canonical number is not changed by floating arithmetic.
+        accounting_electricity_cost = accounting_summary.get("energy_cost_jpy")
+    if accounting_electricity_cost is None:
+        accounting_electricity_cost = electricity_cost_final
+    if accounting_electricity_cost is None and (
         accounting_summary.get("grid_purchase_cost_jpy") is not None
         or accounting_summary.get("bess_total_flow_cost_jpy") is not None
     ):

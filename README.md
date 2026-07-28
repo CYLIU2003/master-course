@@ -165,7 +165,19 @@ simulation artifact, not an automatically accepted research result.
   Mapping/list/tuple cost provenance or diagnostic metadata is preserved there
   as deterministic compact JSON text, because an Excel cell cannot represent
   those structures directly; this serialization never changes the accounting
-  inputs or their validation, and unsupported types fail closed.
+  inputs or their validation, and unsupported types fail closed. Missing,
+  invalid, or non-finite monetary evidence is never coerced to zero: the
+  reconciliation artifact retains `null` for its observation/residual and
+  fails the job. `summary.energy_cost_jpy` remains the electricity component;
+  the explicit `propulsion_energy_cost_jpy` field is the electricity-plus-fuel
+  aggregate. If any final reporting or artifact gate fails, every persisted
+  release surface is scrubbed to `BLOCKED` and `DIAGNOSTIC` rather than leaving
+  a torn `READY` claim. A single ordinary frontend run also remains blocked
+  from teacher release until the required controlled counterfactual pair has
+  been independently verified. The pair builder may discharge only that
+  pending-pair blocker; each case must independently have an accepted artifact
+  contract and a terminal `manifest.json` state of `complete`, as well as the
+  fixed-control, physical, and accounting evidence.
 - A successfully completed ordinary frontend job must also pass
   `frontend_run_artifacts_v1`. The BFF writes
   `artifact_completeness.json` only after final reporting, checks the complete

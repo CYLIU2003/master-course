@@ -1,8 +1,9 @@
 # Current research release blockers
 
 Status date: 2026-07-28
-Code status: 1014 local regression tests plus exact-data dirty probes passed;
-no post-fix clean successfully completed 264-trip ordinary frontend run yet
+Code status: `1025` local regression tests, `compileall`, and diff hygiene
+passed for the P0 physical-payload and final-reporting repairs; a new post-fix
+clean 264-trip ordinary frontend run remains required
 Teacher release status: **BLOCKED**
 
 This file is the single current blocker register. Older rolling remediation
@@ -68,6 +69,20 @@ as JSON text while retaining numeric cost values for reconciliation and
 rejecting unknown object types; another frozen clean-commit normal frontend
 run remains mandatory.
 
+The next diagnostic run, `run_20260728_1949`, also passed the corrected P0
+physical gate and accepted Rolling/accounting, but stopped during final cost
+reconciliation when the report carried `demand_charge_jpy=null`. Its earlier
+finalization path also demonstrated that a failed job could leave torn `READY`
+labels in some human-facing artifacts. Both conditions are now fail-closed:
+missing/invalid/non-finite monetary evidence persists as `null` rather than a
+fabricated zero and causes reconciliation `ERROR`; the outer failure path
+scrubs every release surface to `BLOCKED` / `DIAGNOSTIC`. The canonical summary
+continues to define `energy_cost_jpy` as electricity only, with the distinct
+`propulsion_energy_cost_jpy` aggregate when needed. This repair does not
+weaken physical validation, SOC limits, Rolling acceptance, or accounting.
+`run_20260728_1949` remains diagnostic; it has no successful final
+reconciliation or artifact-completeness result.
+
 ## Closed in the current working tree, pending clean-run confirmation
 
 1. Physical-schedule validation is separated from research acceptance. A
@@ -103,7 +118,10 @@ run remains mandatory.
    feedback iterations share one global wall-clock deadline.
 8. Each run emits a counterfactual-case manifest. A separate pair builder
    verifies the fixed-control hash, PV hashes/difference, physical validation,
-   rolling cost source, and comparison table.
+   rolling cost source, final artifact-completeness acceptance, terminal
+   `manifest.json` state, and comparison table. The builder can discharge only
+   `controlled_counterfactual_pair_not_verified`; any other case-level release
+   failure rejects the pair.
 9. An explicit policy-sensitivity checkbox can require every available BEV to
    serve at least one trip. It is not the unconstrained baseline.
 10. Results that pass physical gates but miss the predeclared gap are labelled

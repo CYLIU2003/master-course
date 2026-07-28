@@ -9,6 +9,9 @@ from pathlib import Path
 from typing import Any, Mapping
 
 
+_PAIR_PENDING_RELEASE_CHECK = "controlled_counterfactual_pair_not_verified"
+
+
 def _load_object(path: Path) -> dict[str, Any]:
     if not path.is_file():
         raise FileNotFoundError(f"Required comparison artifact is missing: {path}")
@@ -72,6 +75,8 @@ def _case(run_dir: Path) -> dict[str, Any]:
     case_manifest = _load_object(run_dir / "comparison_case_manifest.json")
     physical = _load_object(run_dir / "physical_schedule_validation.json")
     reconciliation = _load_object(run_dir / "final_cost_reconciliation.json")
+    artifact_completeness = _load_object(run_dir / "artifact_completeness.json")
+    rolling_manifest = _load_object(run_dir / "manifest.json")
     claim_scope = _load_object(run_dir / "research_claim_scope.json")
     ledger = _load_object(run_dir / "graph" / "canonical_cost_ledger.json")
     summary = _load_object(run_dir / "summary.json")
@@ -80,6 +85,8 @@ def _case(run_dir: Path) -> dict[str, Any]:
         "case_manifest": case_manifest,
         "physical_validation": physical,
         "final_cost_reconciliation": reconciliation,
+        "artifact_completeness": artifact_completeness,
+        "rolling_manifest": rolling_manifest,
         "research_claim_scope": claim_scope,
         "canonical_cost_ledger": ledger,
         "summary": summary,
@@ -123,6 +130,37 @@ def _comparison_rows(
             }
         )
     return rows
+
+
+def _case_base_release_gate_passes(claim_scope: Mapping[str, Any]) -> bool:
+    """Return whether a case is eligible to become ready through a valid pair.
+
+    A standalone frontend case is intentionally blocked until its controlled
+    counterpart has been verified. That single pending-pair check must not be
+    circularly required to disappear before this builder can create the pair
+    evidence. Any other release failure, or a diagnostic run, remains a hard
+    rejection.
+    """
+
+    if claim_scope.get("diagnostic_only") is True:
+        return False
+    raw_failed_checks = claim_scope.get("teacher_release_failed_checks")
+    if raw_failed_checks is None:
+        raw_failed_checks = ()
+    if not isinstance(raw_failed_checks, (list, tuple, set)):
+        return False
+    failed_checks = {
+        str(check) for check in raw_failed_checks
+    }
+    if claim_scope.get("research_submission_ready") is True:
+        return (
+            claim_scope.get("teacher_release_status") == "READY"
+            and not failed_checks
+        )
+    return (
+        claim_scope.get("teacher_release_status") == "BLOCKED"
+        and failed_checks == {_PAIR_PENDING_RELEASE_CHECK}
+    )
 
 
 def build_frontend_pv_pair_artifacts(
@@ -193,10 +231,32 @@ def build_frontend_pv_pair_artifacts(
             dict(counterfactual["final_cost_reconciliation"]).get("status")
             == "OK"
         ),
+        "baseline_artifact_contract_accepted": (
+            dict(baseline["artifact_completeness"]).get("status") == "OK"
+            and dict(baseline["artifact_completeness"]).get("accepted") is True
+        ),
+        "counterfactual_artifact_contract_accepted": (
+            dict(counterfactual["artifact_completeness"]).get("status") == "OK"
+            and dict(counterfactual["artifact_completeness"]).get("accepted")
+            is True
+        ),
+        "baseline_terminal_run_complete": (
+            dict(baseline["rolling_manifest"]).get("run_state") == "complete"
+        ),
+        "counterfactual_terminal_run_complete": (
+            dict(counterfactual["rolling_manifest"]).get("run_state")
+            == "complete"
+        ),
         "both_cost_ledgers_use_executed_rolling_day": all(
             dict(case["canonical_cost_ledger"]).get("source")
             == "rolling_hourly_chain/executed_day_accounting.json"
             for case in (baseline, counterfactual)
+        ),
+        "baseline_case_base_release_gate_passes": _case_base_release_gate_passes(
+            dict(baseline["research_claim_scope"])
+        ),
+        "counterfactual_case_base_release_gate_passes": _case_base_release_gate_passes(
+            dict(counterfactual["research_claim_scope"])
         ),
     }
     failed_checks = sorted(
@@ -206,17 +266,19 @@ def build_frontend_pv_pair_artifacts(
         baseline["pv_profile"], counterfactual["pv_profile"]
     )
     rows = _comparison_rows(baseline, counterfactual)
-    both_teacher_ready = all(
-        dict(case["research_claim_scope"]).get("research_submission_ready")
-        is True
-        for case in (baseline, counterfactual)
+    both_case_base_release_gates_pass = all(
+        checks[name]
+        for name in (
+            "baseline_case_base_release_gate_passes",
+            "counterfactual_case_base_release_gate_passes",
+        )
     )
     accepted = not failed_checks
     payload = {
         "schema_version": "frontend_pv_pair_manifest_v1",
         "accepted_for_controlled_pv_sensitivity_comparison": accepted,
         "formal_research_submission_ready": bool(
-            accepted and both_teacher_ready
+            accepted and both_case_base_release_gates_pass
         ),
         "checks": checks,
         "failed_checks": failed_checks,
