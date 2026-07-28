@@ -1,5 +1,51 @@
 # Development Notes
 
+## 2026-07-28 Stage 2 charger-assignment numeric consistency fix
+
+- Manual frontend run `output/2026-07-28/run_20260728_1755` passed Prepare,
+  canonical problem construction, the day-ahead two-stage MILP, and Rolling
+  steps 00:00 through 10:00. At 11:00 it stopped with
+  `Positive Stage 2 charging power has no selected physical charger`; the
+  later `Executed-day accounting is not eligible` message was secondary and
+  obscured that primary error.
+- Reproduction with the exact 10:00 handoff state showed
+  `charge_kw=1.9536944368644223e-06`, `charge_on=5.458586278950696e-08`,
+  and the same `5.458495369859787e-08` assignment residue on
+  `depot-fast-tsurumaki-001`. This is approximately `0.00195 W`, not a
+  physical charging session. Stage 2 already used
+  `FeasibilityTol=1e-9`, but Gurobi's default `IntFeasTol=1e-5` allowed the
+  binary assignment residue to count as zero while the linked continuous
+  charging-power variable remained above the reporting threshold.
+- Stage 2 now sets and records
+  `stage2_gurobi_integrality_tol=1e-9`. The fix acts inside the MILP numeric
+  contract: it does not invent a charger assignment, rescale energy, relax a
+  physical limit, or perform post-solve repair. If positive material charging
+  power still has no binary-selected physical charger, extraction continues to
+  fail and now includes charge, assignment, physical-power, feasibility, and
+  integrality diagnostics.
+- The frontend finalizer now runs canonical cost/report reconciliation only
+  when Rolling has no technical failure. A failed chain is still persisted
+  fail-closed, but the original step failure is raised instead of being
+  replaced by the inevitable incomplete-day accounting error. Direct calls to
+  the accounting validator now include its recorded rejection reason.
+- Exact-data diagnostic verification using the archived 17:55 day-ahead
+  artifacts:
+  - the formerly failing 11:00 step is feasible, Stage 2 is `optimal`,
+    264/264 trips are served, and the assignment hash matches;
+  - 11:00 through 23:00 completes 13/13 feasible steps with no runtime error;
+  - a complete 00:00 through 23:00 probe completes 24/24 feasible steps,
+    preserves the assignment hash, and produces eligible executed-day
+    accounting; maximum BEV terminal target shortfall is
+    `3.808509063674137e-12 kWh`;
+  - the probe is deliberately not research evidence because it ran from a
+    dirty working tree and therefore has `chain_accepted=false` solely for
+    `rolling_runner_git_clean`.
+- Focused numeric/reporting/Rolling regression tests passed (`45 passed`);
+  the full suite passed (`997 passed`), together with `compileall` and
+  `git diff --check`. A fresh ordinary frontend run must be made from the final
+  clean commit; the failed 17:55 run and dirty diagnostic probes remain
+  `NOT USED FOR RESEARCH CONCLUSIONS`.
+
 ## 2026-07-28 frontend Rolling fleet-contract handoff fix
 
 - Manual frontend run `output/2026-07-28/run_20260728_1737` completed its

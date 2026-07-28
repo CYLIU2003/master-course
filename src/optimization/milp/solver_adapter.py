@@ -222,6 +222,28 @@ def _configured_gurobi_feasibility_tol(
     return tolerance
 
 
+def _configured_gurobi_integrality_tol(
+    config: OptimizationConfig,
+    *,
+    stage: int,
+) -> float:
+    """Return and validate the effective Gurobi integer feasibility tolerance."""
+
+    if stage != 2:
+        raise ValueError(f"stage must be 2, got {stage!r}")
+    field_name = "stage2_gurobi_integrality_tol"
+    default = 1.0e-9
+    try:
+        tolerance = float(getattr(config, field_name, default))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"{field_name} must be within [1e-9, 1e-1]"
+        ) from exc
+    if not 1.0e-9 <= tolerance <= 1.0e-1:
+        raise ValueError(f"{field_name} must be within [1e-9, 1e-1]")
+    return tolerance
+
+
 def _safe_nonnegative_float_metadata(
     metadata: Mapping[str, Any],
     key: str,
@@ -4092,6 +4114,9 @@ class GurobiMILPAdapter:
                         "stage2_gurobi_feasibility_tol": (
                             _configured_gurobi_feasibility_tol(config, stage=2)
                         ),
+                        "stage2_gurobi_integrality_tol": (
+                            _configured_gurobi_integrality_tol(config, stage=2)
+                        ),
                         "stage1_mip_gap_ratio": None,
                         "stage1_runtime_seconds": None,
                         "stage2_solver_status": "not_run_gurobi_unavailable",
@@ -4862,6 +4887,9 @@ class GurobiMILPAdapter:
                     "stage2_gurobi_feasibility_tol": (
                         _configured_gurobi_feasibility_tol(config, stage=2)
                     ),
+                    "stage2_gurobi_integrality_tol": (
+                        _configured_gurobi_integrality_tol(config, stage=2)
+                    ),
                     "stage1_numeric_diagnostics": stage1_numeric_diagnostics,
                     "stage1_mip_gap_ratio": stage1_gap,
                     "stage1_runtime_seconds": float(time.perf_counter() - total_started),
@@ -5051,6 +5079,9 @@ class GurobiMILPAdapter:
                 "stage1_gurobi_feasibility_tol": stage1_feasibility_tol,
                 "stage2_gurobi_feasibility_tol": (
                     _configured_gurobi_feasibility_tol(config, stage=2)
+                ),
+                "stage2_gurobi_integrality_tol": (
+                    _configured_gurobi_integrality_tol(config, stage=2)
                 ),
                 "stage1_numeric_diagnostics": stage1_numeric_diagnostics,
                 "stage1_mip_gap_ratio": stage1_gap,
@@ -5395,7 +5426,11 @@ class GurobiMILPAdapter:
         stage2_feasibility_tol = _configured_gurobi_feasibility_tol(
             config, stage=2
         )
+        stage2_integrality_tol = _configured_gurobi_integrality_tol(
+            config, stage=2
+        )
         stage2.Params.FeasibilityTol = stage2_feasibility_tol
+        stage2.Params.IntFeasTol = stage2_integrality_tol
         configured_threads = _configured_gurobi_threads(config)
         if configured_threads is not None:
             stage2.Params.Threads = configured_threads
@@ -6290,6 +6325,7 @@ class GurobiMILPAdapter:
                     else _configured_gurobi_feasibility_tol(config, stage=1)
                 ),
                 "stage2_gurobi_feasibility_tol": stage2_feasibility_tol,
+                "stage2_gurobi_integrality_tol": stage2_integrality_tol,
                 "stage2_numeric_diagnostics": stage2_numeric_diagnostics,
                 "stage1_time_limit_sec_effective": (
                     0
@@ -6514,9 +6550,35 @@ class GurobiMILPAdapter:
                 None,
             )
             if selected_charger_id is None:
+                assignment_values = {
+                    charger_id: _var_val(assignment)
+                    for (
+                        candidate_vehicle_id,
+                        charger_id,
+                        candidate_slot_idx,
+                    ), assignment in physical_charger_assignment_var.items()
+                    if candidate_vehicle_id == vehicle_id
+                    and candidate_slot_idx == slot_idx
+                }
+                physical_power_values = {
+                    charger_id: _var_val(power)
+                    for (
+                        candidate_vehicle_id,
+                        charger_id,
+                        candidate_slot_idx,
+                    ), power in physical_charger_power_var.items()
+                    if candidate_vehicle_id == vehicle_id
+                    and candidate_slot_idx == slot_idx
+                }
                 raise RuntimeError(
                     "Positive Stage 2 charging power has no selected physical charger: "
-                    f"vehicle={vehicle_id}, slot={slot_idx}"
+                    f"vehicle={vehicle_id}, slot={slot_idx}, "
+                    f"charge_kw={charge_kw!r}, "
+                    f"charge_on={_var_val(charge_on_var.get((vehicle_id, slot_idx)))!r}, "
+                    f"assignment_values={assignment_values!r}, "
+                    f"physical_power_kw={physical_power_values!r}, "
+                    f"feasibility_tol={stage2_feasibility_tol!r}, "
+                    f"integrality_tol={stage2_integrality_tol!r}"
                 )
             vehicle_key = (vehicle_id, slot_idx)
             for source, source_var in (
@@ -6581,6 +6643,7 @@ class GurobiMILPAdapter:
                 else _configured_gurobi_feasibility_tol(config, stage=1)
             ),
             "stage2_gurobi_feasibility_tol": stage2_feasibility_tol,
+            "stage2_gurobi_integrality_tol": stage2_integrality_tol,
             "stage2_numeric_diagnostics": stage2_numeric_diagnostics,
             "stage1_time_limit_sec_effective": (
                 0

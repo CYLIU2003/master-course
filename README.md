@@ -79,10 +79,12 @@ simulation artifact, not an automatically accepted research result.
   `return_to_initial`, the first depot deadhead is part of the daily energy
   balance. Fixed BESS terminal targets are equalities; the solver feasibility
   tolerance is stage-specific: Stage 1 defaults to `1e-6`, while Stage 2 uses
-  `1e-9`; BEV terminal SOC separately declares its scientific tolerance
-  (default `1e-6 kWh`).
-  Effective tolerances and Gurobi violation/scaling diagnostics are persisted
-  in `solver_settings.json`.
+  `1e-9`. Stage 2 also fixes `IntFeasTol=1e-9` so a binary physical-charger
+  assignment cannot be treated as zero while linked continuous charging power
+  remains reportable. BEV terminal SOC separately declares its scientific
+  tolerance (default `1e-6 kWh`). Effective primal/integrality tolerances and
+  Gurobi violation/scaling diagnostics are persisted in
+  `solver_settings.json`.
   The Phase 3 terminal-SOC contract records the raw deviation, scientific
   tolerance, Gurobi-derived numeric margin, acceptance limit, and reason; the
   MILP uses the scientific tolerance and post-solve adds only that narrow
@@ -148,6 +150,8 @@ simulation artifact, not an automatically accepted research result.
   raw versus certified Stage 1 gap, the requested gap, and cost/objective
   semantics. Any infeasible/truncated/state-handoff-failed rolling step fails
   the frontend job while preserving the day-ahead and rolling diagnostics.
+  When Rolling fails, final executed-day reconciliation is not invoked on the
+  incomplete prefix; the original step error remains the surfaced job error.
 - A successfully completed ordinary frontend job must also pass
   `frontend_run_artifacts_v1`. The BFF writes
   `artifact_completeness.json` only after final reporting, checks the complete

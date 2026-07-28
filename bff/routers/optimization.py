@@ -4005,6 +4005,19 @@ def _finalized_accounting_summary_for_experiment_report(run_dir: Path) -> Dict[s
     return canonical
 
 
+def _should_finalize_reporting_after_rolling(
+    rolling_technical_failure: Optional[BaseException],
+) -> bool:
+    """Return whether canonical reports have a complete rolling cost source.
+
+    A failed rolling chain must surface its primary step error. Running the
+    final accounting reconciler on an incomplete executed day would replace
+    that actionable error with a secondary ``accounting not eligible`` error.
+    """
+
+    return rolling_technical_failure is None
+
+
 def _assert_final_cost_artifact_consistency(
     *,
     run_dir: Path,
@@ -4035,7 +4048,11 @@ def _assert_final_cost_artifact_consistency(
 
     executed = _json_object(executed_path)
     if executed.get("eligible") is not True:
-        raise RuntimeError("Executed-day accounting is not eligible")
+        raise RuntimeError(
+            "Executed-day accounting is not eligible: "
+            f"reason={executed.get('reason')!r}, "
+            f"rejection_reasons={list(executed.get('rejection_reasons') or ())!r}"
+        )
     executed_total = float(
         dict(executed.get("cost_breakdown") or {})["total_cost"]
     )
@@ -7891,6 +7908,9 @@ def _solver_settings_payload(
         "stage2_gurobi_feasibility_tol": _float_or_none(
             metadata.get("stage2_gurobi_feasibility_tol")
         ),
+        "stage2_gurobi_integrality_tol": _float_or_none(
+            metadata.get("stage2_gurobi_integrality_tol")
+        ),
         "stage1_numeric_diagnostics": dict(
             metadata.get("stage1_numeric_diagnostics") or {}
         ),
@@ -9200,7 +9220,12 @@ def _run_optimization(
             graph_source_dir=Path(output_dir) / "graph",
             charging_summary=charging_summary_payload,
             charging_flow_payload=charging_flow_payload,
-            finalize_reporting=True,
+            # Preserve the primary rolling failure. Final reporting requires a
+            # complete eligible executed day and would otherwise replace the
+            # actionable step error with a secondary accounting exception.
+            finalize_reporting=_should_finalize_reporting_after_rolling(
+                rolling_technical_failure
+            ),
         )
         if (Path(output_dir) / "input_audit.json").is_file():
             refresh_frontend_rolling_manifest(

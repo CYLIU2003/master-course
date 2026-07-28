@@ -1,8 +1,8 @@
 # Current research release blockers
 
 Status date: 2026-07-28
-Code status: 994 local regression tests passed; no post-fix 264-trip
-ordinary frontend run yet
+Code status: 997 local regression tests plus exact-data dirty probes passed;
+no post-fix clean 264-trip ordinary frontend run yet
 Teacher release status: **BLOCKED**
 
 This file is the single current blocker register. Older rolling remediation
@@ -83,6 +83,14 @@ optimality remain separate decisions.
     catalog and hashes. These expose executed vehicle/SOC/charger/energy/cost/
     CO2 evidence without copying paper graphics or fabricating multi-run
     sensitivity results.
+13. The 17:55 frontend run exposed a Stage 2 numeric mismatch at Rolling 11:00:
+    `1.9536944368644223e-06 kW` of linked continuous power remained while the
+    charger-assignment binary was only `5.458495369859787e-08` and therefore
+    treated as zero by Gurobi's default `IntFeasTol=1e-5`. Stage 2 now fixes
+    and records `IntFeasTol=1e-9`. The exact failing handoff then passed, the
+    remaining 13 steps passed, and a dirty full-chain probe completed 24/24
+    with eligible executed-day accounting. Reporting no longer replaces a
+    primary Rolling step failure with a secondary incomplete-accounting error.
 
 ## Open blockers
 
@@ -99,6 +107,12 @@ Rolling preflight stopped before step 1 because the canonical problem omitted
 the already-resolved fleet-contract payload. The handoff is corrected in code,
 but this does not become execution evidence until a fresh clean-commit run
 completes.
+The 17:55 run is also diagnostic only. It progressed to Rolling step 11 and
+identified the now-corrected Stage 2 integrality-tolerance mismatch. A
+post-patch full-chain probe using its exact archived input completed 24/24
+steps and eligible accounting, but the working tree was intentionally dirty
+during diagnosis. It proves that the reproduced technical failure is closed;
+it does not replace a fresh clean-commit ordinary frontend run.
 It must also contain a `READY` (generation status only)
 `graph/literature_figures/manifest.json` with all declared PNG/SVG/source/raw
 CSV files. Its manifest hashes and canonical-source hashes must revalidate

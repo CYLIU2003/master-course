@@ -10,6 +10,7 @@ from openpyxl import Workbook
 from bff.routers.optimization import (
     _apply_result_claim_classification,
     _assert_final_cost_artifact_consistency,
+    _should_finalize_reporting_after_rolling,
 )
 from bff.services.optimization_run.cost_breakdown import (
     CANONICAL_LEDGER_COMPONENT_SOURCES,
@@ -160,6 +161,35 @@ def test_final_cost_artifacts_must_equal_executed_rolling_accounting(
 
     assert reconciliation["status"] == "OK"
     assert reconciliation["failed_artifacts"] == {}
+
+
+def test_rolling_failure_prevents_secondary_final_reporting() -> None:
+    primary_failure = RuntimeError(
+        "Positive Stage 2 charging power has no selected physical charger"
+    )
+
+    assert _should_finalize_reporting_after_rolling(None) is True
+    assert _should_finalize_reporting_after_rolling(primary_failure) is False
+
+
+def test_ineligible_executed_accounting_reports_its_reason(tmp_path: Path) -> None:
+    _write_json(
+        tmp_path / "rolling_hourly_chain" / "executed_day_accounting.json",
+        {
+            "eligible": False,
+            "reason": "executed_slot_coverage_incomplete",
+            "rejection_reasons": ["missing_slots:11-23"],
+        },
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="executed_slot_coverage_incomplete.*missing_slots:11-23",
+    ):
+        _assert_final_cost_artifact_consistency(
+            run_dir=tmp_path,
+            optimization_result={},
+        )
 
 
 def test_final_cost_mismatch_fails_job_above_one_micro_yen(

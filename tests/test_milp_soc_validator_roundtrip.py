@@ -150,6 +150,9 @@ def test_gurobi_plan_with_startup_deadhead_roundtrips_through_validator() -> Non
     assert result.solver_metadata[
         "stage2_gurobi_feasibility_tol"
     ] == pytest.approx(1.0e-9)
+    assert result.solver_metadata[
+        "stage2_gurobi_integrality_tol"
+    ] == pytest.approx(1.0e-9)
     assert "maximum_constraint_violation" in result.solver_metadata[
         "stage1_numeric_diagnostics"
     ]

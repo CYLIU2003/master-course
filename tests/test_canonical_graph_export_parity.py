@@ -1378,6 +1378,7 @@ def test_solver_settings_payload_reports_gap_ratio_and_percent() -> None:
             "supports_exact_milp": True,
             "stage1_gurobi_feasibility_tol": 1.0e-6,
             "stage2_gurobi_feasibility_tol": 1.0e-9,
+            "stage2_gurobi_integrality_tol": 1.0e-9,
             "stage1_numeric_diagnostics": {
                 "maximum_constraint_violation": 5.0e-7,
             },
@@ -1392,6 +1393,7 @@ def test_solver_settings_payload_reports_gap_ratio_and_percent() -> None:
     assert payload["mip_gap_achieved_percent"] == 0.25
     assert payload["stage1_gurobi_feasibility_tol"] == pytest.approx(1.0e-6)
     assert payload["stage2_gurobi_feasibility_tol"] == pytest.approx(1.0e-9)
+    assert payload["stage2_gurobi_integrality_tol"] == pytest.approx(1.0e-9)
     assert payload["stage1_numeric_diagnostics"][
         "maximum_constraint_violation"
     ] == pytest.approx(5.0e-7)

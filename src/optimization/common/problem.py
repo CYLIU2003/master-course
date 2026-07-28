@@ -360,11 +360,15 @@ class OptimizationConfig:
     # that compare solve time should set this explicitly and record it.
     gurobi_threads: Optional[int] = None
     # Stage 1 is the runtime-dominant assignment MILP and uses Gurobi's
-    # documented default.  Stage 2 uses a stricter tolerance because its
-    # terminal SOC equality is independently audited at 1e-6 kWh.  Both
-    # effective values are persisted in solver_settings.json.
+    # documented default.  Stage 2 uses stricter primal and integrality
+    # tolerances because its terminal SOC equality and physical charger
+    # selection are independently audited.  In particular, a loose integer
+    # tolerance can otherwise classify a tiny positive charger-assignment
+    # value as binary zero while leaving a linked continuous charging-power
+    # residue.  Effective values are persisted in solver_settings.json.
     stage1_gurobi_feasibility_tol: float = 1.0e-6
     stage2_gurobi_feasibility_tol: float = 1.0e-9
+    stage2_gurobi_integrality_tol: float = 1.0e-9
     mip_gap: float = 0.02
     random_seed: int = 42
     alns_iterations: int = 800  # Increased from 500

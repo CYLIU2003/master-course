@@ -16,6 +16,7 @@ from src.optimization.milp.engine import MILPOptimizer
 from src.optimization.milp.solver_adapter import (
     _best_objective_stop_from_certified_lower_bound,
     _configured_gurobi_feasibility_tol,
+    _configured_gurobi_integrality_tol,
     _configured_gurobi_threads,
     _has_exact_mip_optimality_certificate,
     _single_path_flow_implies_temporal_exclusivity,
@@ -113,6 +114,24 @@ def test_gurobi_feasibility_tolerances_are_stage_specific_and_validated() -> Non
         _configured_gurobi_feasibility_tol(
             OptimizationConfig(stage2_gurobi_feasibility_tol=1.0e-10),
             stage=2,
+        )
+
+
+def test_stage2_gurobi_integrality_tolerance_is_strict_and_validated() -> None:
+    assert _configured_gurobi_integrality_tol(
+        OptimizationConfig(),
+        stage=2,
+    ) == pytest.approx(1.0e-9)
+
+    with pytest.raises(ValueError, match=r"\[1e-9, 1e-1\]"):
+        _configured_gurobi_integrality_tol(
+            OptimizationConfig(stage2_gurobi_integrality_tol=1.0e-10),
+            stage=2,
+        )
+    with pytest.raises(ValueError, match="stage must be 2"):
+        _configured_gurobi_integrality_tol(
+            OptimizationConfig(),
+            stage=1,
         )
 
 

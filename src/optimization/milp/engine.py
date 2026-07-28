@@ -244,6 +244,9 @@ class MILPOptimizer:
                 "stage2_gurobi_feasibility_tol": (
                     plan.metadata or {}
                 ).get("stage2_gurobi_feasibility_tol"),
+                "stage2_gurobi_integrality_tol": (
+                    plan.metadata or {}
+                ).get("stage2_gurobi_integrality_tol"),
                 "stage1_numeric_diagnostics": dict(
                     (plan.metadata or {}).get("stage1_numeric_diagnostics") or {}
                 ),
