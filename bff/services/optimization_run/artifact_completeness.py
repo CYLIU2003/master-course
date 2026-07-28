@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from collections import Counter
+import csv
+from decimal import Decimal, InvalidOperation
 import hashlib
 import json
 from pathlib import Path
@@ -72,6 +74,7 @@ BASE_REQUIRED_ARTIFACTS = (
     "graph/canonical_cost_ledger.json",
     "graph/data_flow_validation.csv",
     "graph/manifest.json",
+    "graph/refuel_events.csv",
 )
 
 RESEARCH_PROVENANCE_ARTIFACTS = (
@@ -112,6 +115,21 @@ REQUIRED_WORKBOOK_SHEETS = (
     "summary",
     "cost_breakdown",
     "release_status",
+)
+
+_ROOT_REFUEL_EVENT_FIELDS = (
+    "vehicle_id",
+    "slot_index",
+    "time_hhmm",
+    "refuel_liters",
+    "unit",
+)
+_GRAPH_REFUEL_EVENT_FIELDS = (
+    "vehicle_id",
+    "slot_index",
+    "time_hhmm",
+    "refuel_liters",
+    "location_id",
 )
 
 
@@ -507,6 +525,161 @@ def _rolling_step_artifacts(
     return _normalized_paths(artifacts)
 
 
+def _normalize_refueling_row(
+    row: Any,
+    *,
+    context: str,
+    require_location: bool,
+) -> tuple[str, int, str, Decimal, str]:
+    """Return one refueling event in the canonical comparison representation."""
+
+    if not isinstance(row, dict):
+        raise ValueError(f"{context} must be an object")
+
+    vehicle_id = str(row.get("vehicle_id") or "").strip()
+    time_hhmm = str(row.get("time_hhmm") or "").strip()
+    if not vehicle_id:
+        raise ValueError(f"{context}.vehicle_id is empty")
+    if not time_hhmm:
+        raise ValueError(f"{context}.time_hhmm is empty")
+
+    raw_slot_index = row.get("slot_index")
+    if isinstance(raw_slot_index, bool):
+        raise ValueError(f"{context}.slot_index is not an integer")
+    try:
+        slot_index = int(str(raw_slot_index).strip())
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{context}.slot_index is not an integer") from exc
+    if slot_index < 0:
+        raise ValueError(f"{context}.slot_index is negative")
+
+    raw_liters = row.get("refuel_liters")
+    if isinstance(raw_liters, bool):
+        raise ValueError(f"{context}.refuel_liters is not finite")
+    try:
+        refuel_liters = Decimal(str(raw_liters).strip())
+    except (InvalidOperation, TypeError, ValueError) as exc:
+        raise ValueError(f"{context}.refuel_liters is not finite") from exc
+    if not refuel_liters.is_finite() or refuel_liters < Decimal("0"):
+        raise ValueError(f"{context}.refuel_liters is not finite or is negative")
+
+    location_id = str(row.get("location_id") or "").strip()
+    if require_location and not location_id:
+        raise ValueError(f"{context}.location_id is empty")
+    return vehicle_id, slot_index, time_hhmm, refuel_liters, location_id
+
+
+def _read_refueling_csv_rows(
+    *,
+    path: Path,
+    relative_path: str,
+    fieldnames: tuple[str, ...],
+    require_location: bool,
+    require_unit: bool,
+    content_errors: list[str],
+) -> list[tuple[str, int, str, Decimal, str]] | None:
+    """Read a refueling CSV strictly enough to compare it to canonical rows."""
+
+    try:
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            if tuple(reader.fieldnames or ()) != fieldnames:
+                content_errors.append(
+                    f"{relative_path}: CSV header does not match the required schema"
+                )
+                return None
+            normalized_rows: list[tuple[str, int, str, Decimal, str]] = []
+            for row_index, row in enumerate(reader, start=2):
+                if None in row or any(value is None for value in row.values()):
+                    content_errors.append(
+                        f"{relative_path}: row {row_index} has an unexpected column count"
+                    )
+                    return None
+                if require_unit and str(row.get("unit") or "").strip() != "L":
+                    content_errors.append(
+                        f"{relative_path}: row {row_index} unit is not 'L'"
+                    )
+                    return None
+                normalized_rows.append(
+                    _normalize_refueling_row(
+                        row,
+                        context=f"{relative_path} row {row_index}",
+                        require_location=require_location,
+                    )
+                )
+    except (OSError, UnicodeError, csv.Error, ValueError) as exc:
+        content_errors.append(f"{relative_path}: {exc}")
+        return None
+    return normalized_rows
+
+
+def _validate_refueling_event_exports(
+    *,
+    run_dir: Path,
+    canonical: dict[str, Any],
+    content_errors: list[str],
+) -> None:
+    """Bind both report refueling CSVs to canonical solver-native events."""
+
+    root_export_path = run_dir / "refuel_events.csv"
+    graph_export_path = run_dir / "graph" / "refuel_events.csv"
+    if not root_export_path.is_file() or not graph_export_path.is_file():
+        # Required-artifact checks report absent paths. Avoid duplicate errors
+        # here while retaining strict comparison whenever both sources exist.
+        return
+    if any(path.stat().st_size <= 0 for path in (root_export_path, graph_export_path)):
+        # Required-artifact checks report zero-byte paths.
+        return
+
+    raw_canonical_rows = canonical.get("refueling_schedule")
+    if not isinstance(raw_canonical_rows, list):
+        content_errors.append(
+            "canonical_solver_result.refueling_schedule must be a list"
+        )
+        return
+    try:
+        canonical_rows = [
+            _normalize_refueling_row(
+                row,
+                context=f"canonical_solver_result.refueling_schedule[{index}]",
+                require_location=True,
+            )
+            for index, row in enumerate(raw_canonical_rows)
+        ]
+    except ValueError as exc:
+        content_errors.append(str(exc))
+        return
+
+    root_rows = _read_refueling_csv_rows(
+        path=root_export_path,
+        relative_path="refuel_events.csv",
+        fieldnames=_ROOT_REFUEL_EVENT_FIELDS,
+        require_location=False,
+        require_unit=True,
+        content_errors=content_errors,
+    )
+    graph_rows = _read_refueling_csv_rows(
+        path=graph_export_path,
+        relative_path="graph/refuel_events.csv",
+        fieldnames=_GRAPH_REFUEL_EVENT_FIELDS,
+        require_location=True,
+        require_unit=False,
+        content_errors=content_errors,
+    )
+    if root_rows is not None and Counter(row[:4] for row in root_rows) != Counter(
+        row[:4] for row in canonical_rows
+    ):
+        content_errors.append(
+            "refuel_events.csv rows do not exactly match "
+            "canonical_solver_result.refueling_schedule"
+        )
+    if graph_rows is not None and Counter(graph_rows) != Counter(canonical_rows):
+        content_errors.append(
+            "graph/refuel_events.csv rows do not exactly match "
+            "canonical_solver_result.refueling_schedule"
+        )
+
+
 def _validate_rolling_content(
     *,
     run_dir: Path,
@@ -730,6 +903,11 @@ def _validate_rolling_content(
                         content_errors.append(
                             "canonical_solver_result unserved_trip_ids is not empty"
                         )
+                _validate_refueling_event_exports(
+                    run_dir=run_dir,
+                    canonical=canonical,
+                    content_errors=content_errors,
+                )
             counts: dict[str, int] = {}
             for key in (
                 "vehicle_path_count",

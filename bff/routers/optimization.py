@@ -7606,7 +7606,15 @@ def _persist_canonical_graph_exports(
     _write_csv(graph_dir / "vehicle_soc_timeseries.csv", vehicle_soc_timeseries_rows)
     _write_csv(graph_dir / "fuel_summary.csv", fuel_summary_rows)
     _write_csv(graph_dir / "trip_assignment.csv", trip_assignment_rows)
-    _write_csv(graph_dir / "refuel_events.csv", refuel_rows)
+    # A zero-refuel day is valid evidence.  Preserve its schema rather than
+    # emitting a zero-byte file, because the graph manifest declares this
+    # artifact and the final artifact audit must be able to distinguish an
+    # empty event set from a missing or truncated export.
+    _write_csv_rows(
+        graph_dir / "refuel_events.csv",
+        refuel_rows,
+        ["vehicle_id", "slot_index", "time_hhmm", "refuel_liters", "location_id"],
+    )
     deadhead_ratio_rows = _canonical_deadhead_ratio_by_band(timeline_rows)
     _write_csv(graph_dir / "deadhead_ratio_by_band.csv", deadhead_ratio_rows)
     (graph_dir / "deadhead_ratio_by_band.json").write_text(

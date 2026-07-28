@@ -84,7 +84,7 @@
   explicit-zero handling, `null` accounting diagnostics, disabled-component
   cross-artifact reconciliation, Excel serialization, claim-scope scrubbing,
   and positive/negative controlled-PV pair gates. The local suite passed
-  `1025` tests; `compileall` and `git diff --check` also passed before the
+  `1033` tests; `compileall` and `git diff --check` also passed before the
   pending clean-commit normal frontend rerun.
 - The first fresh run from `bfcfa41`, `run_20260728_2028`, reached 24/24
   accepted Rolling, eligible executed accounting, and `VALID` independent
@@ -97,6 +97,19 @@
   tolerance; missing, ambiguous, non-finite, or materially different values
   still fail closed. This run remains diagnostic and a new clean-commit rerun
   is required.
+- The subsequent frozen run, `run_20260728_2036`, passed the corrected
+  physical gate, final-cost reconciliation, 24/24 Rolling, and executed-day
+  accounting, but artifact completeness correctly rejected a zero-byte
+  `graph/refuel_events.csv`. The schedule had zero ICE refueling events; the
+  generic graph writer had represented that valid empty event set as an empty
+  file. The graph exporter now writes the declared CSV header even with zero
+  rows. The artifact audit binds both `refuel_events.csv` and
+  `graph/refuel_events.csv` to `canonical_solver_result.json`'s
+  `refueling_schedule`: the exact schema and refueling-event multiset must
+  match, and header-only exports are accepted only when the canonical schedule
+  is empty. A missing, zero-byte, schema-invalid, or row-mismatched export
+  still fails. This run remains
+  diagnostic and a new clean-commit rerun is required.
 
 ## 2026-07-28 Stage 2 charger-assignment numeric consistency fix
 

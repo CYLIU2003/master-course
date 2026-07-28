@@ -672,6 +672,16 @@ def test_canonical_graph_exports_write_legacy_graph_files_even_when_diagrams_dis
     assert (tmp_path / "graph" / "vehicle_soc_timeseries.csv").exists()
     assert (tmp_path / "graph" / "fuel_summary.csv").exists()
     assert (tmp_path / "graph" / "trip_assignment.csv").exists()
+    refuel_events_path = tmp_path / "graph" / "refuel_events.csv"
+    assert refuel_events_path.exists()
+    # The fixture has no ICE refueling.  A valid zero-event graph export still
+    # needs a CSV header so the manifest-backed artifact audit can distinguish
+    # it from a missing or truncated file.
+    with refuel_events_path.open(encoding="utf-8", newline="") as handle:
+        assert list(csv.DictReader(handle)) == []
+    assert refuel_events_path.read_text(encoding="utf-8").strip() == (
+        "vehicle_id,slot_index,time_hhmm,refuel_liters,location_id"
+    )
     assert (tmp_path / "graph" / "cost_breakdown.json").exists()
     assert (tmp_path / "graph" / "canonical_cost_ledger.json").exists()
     assert (tmp_path / "graph" / "kpi_summary.json").exists()

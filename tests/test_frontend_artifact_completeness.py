@@ -1,15 +1,33 @@
 from __future__ import annotations
 
+import csv
 import hashlib
 import json
 from pathlib import Path
 
 from openpyxl import Workbook
+import pytest
 
 from bff.routers import optimization
 from bff.services.optimization_run.artifact_completeness import (
     audit_frontend_run_artifacts,
     required_frontend_artifacts,
+)
+
+
+_ROOT_REFUEL_EVENT_FIELDS = (
+    "vehicle_id",
+    "slot_index",
+    "time_hhmm",
+    "refuel_liters",
+    "unit",
+)
+_GRAPH_REFUEL_EVENT_FIELDS = (
+    "vehicle_id",
+    "slot_index",
+    "time_hhmm",
+    "refuel_liters",
+    "location_id",
 )
 
 
@@ -27,6 +45,80 @@ def _write_artifact(path: Path) -> None:
         path.write_text("key,value\n", encoding="utf-8")
     else:
         path.write_text("artifact\n", encoding="utf-8")
+
+
+def _write_refuel_event_csv(
+    path: Path,
+    *,
+    fieldnames: tuple[str, ...],
+    rows: list[dict],
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(fieldnames))
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _write_refueling_exports(run_dir: Path, rows: list[dict]) -> None:
+    _write_refuel_event_csv(
+        run_dir / "refuel_events.csv",
+        fieldnames=_ROOT_REFUEL_EVENT_FIELDS,
+        rows=[
+            {
+                "vehicle_id": row["vehicle_id"],
+                "slot_index": row["slot_index"],
+                "time_hhmm": row["time_hhmm"],
+                "refuel_liters": row["refuel_liters"],
+                "unit": "L",
+            }
+            for row in rows
+        ],
+    )
+    _write_refuel_event_csv(
+        run_dir / "graph" / "refuel_events.csv",
+        fieldnames=_GRAPH_REFUEL_EVENT_FIELDS,
+        rows=rows,
+    )
+
+
+def _set_canonical_refueling_schedule(
+    run_dir: Path,
+    rows: list[dict],
+) -> None:
+    canonical_path = run_dir / "canonical_solver_result.json"
+    canonical = json.loads(canonical_path.read_text(encoding="utf-8"))
+    canonical["refueling_schedule"] = rows
+    canonical_path.write_text(json.dumps(canonical), encoding="utf-8")
+    canonical_sha256 = hashlib.sha256(canonical_path.read_bytes()).hexdigest()
+
+    rolling_summary_path = (
+        run_dir / "rolling_hourly_chain" / "rolling_chain_summary.json"
+    )
+    rolling_summary = json.loads(
+        rolling_summary_path.read_text(encoding="utf-8")
+    )
+    rolling_summary["day_ahead_result_sha256"] = canonical_sha256
+    rolling_summary_path.write_text(
+        json.dumps(rolling_summary), encoding="utf-8"
+    )
+
+    input_manifest_path = run_dir / "physical_validation_input_manifest.json"
+    input_manifest = json.loads(input_manifest_path.read_text(encoding="utf-8"))
+    input_manifest["canonical_solver_result_sha256"] = canonical_sha256
+    input_manifest_path.write_text(
+        json.dumps(input_manifest), encoding="utf-8"
+    )
+
+
+def _canonical_refueling_event() -> dict:
+    return {
+        "vehicle_id": "vehicle-1",
+        "slot_index": 1,
+        "time_hhmm": "00:30",
+        "refuel_liters": 12.5,
+        "location_id": "depot-1",
+    }
 
 
 def _artifact_record(path: Path, *, root: Path) -> dict:
@@ -49,7 +141,7 @@ def _complete_run(tmp_path: Path) -> Path:
         _write_artifact(run_dir / relative_path)
 
     graph_manifest = {
-        "files": ["declared_graph_artifact.csv"],
+        "files": ["declared_graph_artifact.csv", "refuel_events.csv"],
         "optional_exports": {},
     }
     (run_dir / "graph" / "manifest.json").write_text(
@@ -164,10 +256,12 @@ def _complete_run(tmp_path: Path) -> Path:
                 "unserved_trip_ids": [],
                 "trip_count_served": 2,
                 "trip_count_unserved": 0,
+                "refueling_schedule": [],
             }
         ),
         encoding="utf-8",
     )
+    _write_refueling_exports(run_dir, [])
     rolling_summary.update(
         {
             "day_ahead_result_sha256": hashlib.sha256(
@@ -267,6 +361,138 @@ def test_complete_frontend_run_artifact_contract_passes(
     assert (
         audit["required_artifact_count"]
         == audit["verified_artifact_count"]
+    )
+
+
+def test_artifact_contract_accepts_matching_canonical_refueling_exports(
+    tmp_path: Path,
+) -> None:
+    run_dir = _complete_run(tmp_path)
+    event = _canonical_refueling_event()
+    _set_canonical_refueling_schedule(run_dir, [event])
+    _write_refueling_exports(run_dir, [event])
+
+    audit = audit_frontend_run_artifacts(
+        run_dir,
+        research_run=True,
+        require_rolling=True,
+    )
+
+    assert audit["status"] == "OK"
+    assert audit["accepted"] is True
+
+
+def test_artifact_contract_rejects_header_only_refueling_exports_with_canonical_event(
+    tmp_path: Path,
+) -> None:
+    run_dir = _complete_run(tmp_path)
+    _set_canonical_refueling_schedule(run_dir, [_canonical_refueling_event()])
+
+    audit = audit_frontend_run_artifacts(
+        run_dir,
+        research_run=True,
+        require_rolling=True,
+    )
+
+    assert audit["status"] == "ERROR"
+    assert any(
+        "refuel_events.csv rows do not exactly match" in error
+        for error in audit["content_errors"]
+    )
+    assert any(
+        "graph/refuel_events.csv rows do not exactly match" in error
+        for error in audit["content_errors"]
+    )
+
+
+def test_artifact_contract_requires_graph_refuel_events_even_if_omitted_from_manifest(
+    tmp_path: Path,
+) -> None:
+    run_dir = _complete_run(tmp_path)
+    graph_manifest_path = run_dir / "graph" / "manifest.json"
+    graph_manifest = json.loads(graph_manifest_path.read_text(encoding="utf-8"))
+    graph_manifest["files"].remove("refuel_events.csv")
+    graph_manifest_path.write_text(json.dumps(graph_manifest), encoding="utf-8")
+    (run_dir / "graph" / "refuel_events.csv").unlink()
+
+    audit = audit_frontend_run_artifacts(
+        run_dir,
+        research_run=True,
+        require_rolling=True,
+    )
+
+    assert audit["status"] == "ERROR"
+    assert "graph/refuel_events.csv" in audit["missing_artifacts"]
+
+
+@pytest.mark.parametrize(
+    ("relative_path", "malformed_header"),
+    [
+        ("refuel_events.csv", "vehicle_id,slot_index,time_hhmm,refuel_liters\n"),
+        ("graph/refuel_events.csv", "vehicle_id,slot_index,time_hhmm,refuel_liters\n"),
+    ],
+)
+def test_artifact_contract_rejects_refueling_export_schema_mismatch(
+    tmp_path: Path,
+    relative_path: str,
+    malformed_header: str,
+) -> None:
+    run_dir = _complete_run(tmp_path)
+    (run_dir / relative_path).write_text(malformed_header, encoding="utf-8")
+
+    audit = audit_frontend_run_artifacts(
+        run_dir,
+        research_run=True,
+        require_rolling=True,
+    )
+
+    assert audit["status"] == "ERROR"
+    assert any(
+        error.startswith(f"{relative_path}: CSV header does not match")
+        for error in audit["content_errors"]
+    )
+
+
+@pytest.mark.parametrize("relative_path", ["refuel_events.csv", "graph/refuel_events.csv"])
+def test_artifact_contract_rejects_refueling_export_row_mismatch(
+    tmp_path: Path,
+    relative_path: str,
+) -> None:
+    run_dir = _complete_run(tmp_path)
+    event = _canonical_refueling_event()
+    _set_canonical_refueling_schedule(run_dir, [event])
+    _write_refueling_exports(run_dir, [event])
+    if relative_path == "refuel_events.csv":
+        _write_refuel_event_csv(
+            run_dir / relative_path,
+            fieldnames=_ROOT_REFUEL_EVENT_FIELDS,
+            rows=[
+                {
+                    "vehicle_id": event["vehicle_id"],
+                    "slot_index": event["slot_index"],
+                    "time_hhmm": event["time_hhmm"],
+                    "refuel_liters": 13.0,
+                    "unit": "L",
+                }
+            ],
+        )
+    else:
+        _write_refuel_event_csv(
+            run_dir / relative_path,
+            fieldnames=_GRAPH_REFUEL_EVENT_FIELDS,
+            rows=[{**event, "location_id": "other-depot"}],
+        )
+
+    audit = audit_frontend_run_artifacts(
+        run_dir,
+        research_run=True,
+        require_rolling=True,
+    )
+
+    assert audit["status"] == "ERROR"
+    assert any(
+        error.startswith(f"{relative_path} rows do not exactly match")
+        for error in audit["content_errors"]
     )
 
 

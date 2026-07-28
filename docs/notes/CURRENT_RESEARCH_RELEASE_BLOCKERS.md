@@ -1,7 +1,7 @@
 # Current research release blockers
 
 Status date: 2026-07-28
-Code status: `1025` local regression tests, `compileall`, and diff hygiene
+Code status: `1033` local regression tests, `compileall`, and diff hygiene
 passed for the P0 physical-payload and final-reporting repairs; a new post-fix
 clean 264-trip ordinary frontend run remains required
 Teacher release status: **BLOCKED**
@@ -94,6 +94,19 @@ the same canonical accounting total. The comparison is now a finite numeric
 check under the existing `1e-6 JPY` contract; missing, ambiguous, non-finite,
 or materially different markers remain `ERROR`. This run is diagnostic only;
 a further new clean-commit normal frontend run remains required.
+
+The subsequent fresh run, `run_20260728_2036`, passed 24/24 accepted Rolling,
+eligible executed accounting, independent physical validation, and final cost
+reconciliation. It correctly failed artifact completeness because the valid
+zero-ICE-refuel schedule had produced a zero-byte declared graph export,
+`graph/refuel_events.csv`. The graph exporter now writes the CSV schema header
+for zero-event refueling. The completeness audit now compares both
+`refuel_events.csv` and `graph/refuel_events.csv` against the canonical
+`refueling_schedule` with exact schemas and event multisets; header-only is
+allowed only when the canonical schedule is empty. Missing, zero-byte,
+schema-invalid, or row-mismatched exports fail. `run_20260728_2036` is
+diagnostic only, and another clean-commit normal frontend run remains
+required.
 
 ## Closed in the current working tree, pending clean-run confirmation
 

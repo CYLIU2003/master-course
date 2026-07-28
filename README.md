@@ -66,6 +66,10 @@ simulation artifact, not an automatically accepted research result.
   The Markdown canonical-total marker is parsed as finite numeric evidence and
   compared under that same `1e-6 JPY` contract; a byte-for-byte float rendering
   difference is not treated as a distinct monetary result.
+  `refuel_events.csv` and `graph/refuel_events.csv` retain their headers when
+  the canonical refueling schedule has zero events. Artifact completeness
+  accepts those header-only exports only in that case and otherwise requires
+  their exact schemas and event multisets to match the canonical result.
 - Non-service travel is canonicalized as one row per physical event in
   `graph/movement_event_ledger.(csv|json)`. The only event types are
   `startup`, `connection`, and `terminal_return`; a connection belongs to the
