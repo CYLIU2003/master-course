@@ -1,8 +1,8 @@
 # Current research release blockers
 
 Status date: 2026-07-28
-Code status: 1012 local regression tests plus exact-data dirty probes passed;
-no post-fix clean 264-trip ordinary frontend run yet
+Code status: 1014 local regression tests plus exact-data dirty probes passed;
+no post-fix clean successfully completed 264-trip ordinary frontend run yet
 Teacher release status: **BLOCKED**
 
 This file is the single current blocker register. Older rolling remediation
@@ -54,6 +54,19 @@ tolerance or excuse material energy imbalance.
 This code is not accepted evidence until the new frozen clean commit completes
 the normal 264-trip frontend execution and all physical, accounting, artifact,
 and provenance gates are measured from its new run directory.
+
+The first clean diagnostic run of this correction,
+`run_20260728_1938`, confirmed that the intended P0 boundary is now exercised:
+it accepted 24/24 Rolling steps, has eligible executed-day accounting, and
+reports physical validation `VALID` with 264 assigned/served trips and zero
+required physical violations. It then failed during `results.xlsx` generation
+because `cost_component_flags` is structured metadata and the previous writer
+passed the mapping directly to an Excel cell. No final cost reconciliation or
+artifact-completeness status exists for that failed job, so it is diagnostic
+only. The writer now serializes mapping/list/tuple metadata deterministically
+as JSON text while retaining numeric cost values for reconciliation and
+rejecting unknown object types; another frozen clean-commit normal frontend
+run remains mandatory.
 
 ## Closed in the current working tree, pending clean-run confirmation
 

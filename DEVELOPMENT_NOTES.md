@@ -39,6 +39,20 @@
   `rolling_chain_summary.json` and recomputes vehicle-path, assigned,
   served, unserved, and total-trip counts from `canonical_solver_result.json`.
   Negative regression cases cover count and assignment-hash tampering.
+- The first frozen diagnostic run of that correction,
+  `run_20260728_1938`, passed the corrected independent physical gate
+  (`VALID`, 264 assigned/served trips, zero physical metrics), accepted all
+  24 Rolling steps, and produced eligible executed-day accounting. It then
+  correctly failed finalization because `cost_component_flags` is a mapping
+  and the old workbook writer attempted to place that mapping directly into
+  an Excel cell. The run has no final cost-reconciliation or artifact-
+  completeness result and remains `DIAGNOSTIC`, not research evidence.
+- The workbook writer now preserves mapping/list/tuple report metadata as
+  deterministic JSON text while preserving scalar monetary components as
+  numeric Excel cells. Unknown object types fail closed. This is a
+  report-format repair only: it does not alter the ledger, cost reconciliation
+  inputs, SOC, dispatch, charging, or independent physical validation. A new
+  frozen clean-commit frontend run is required.
 
 ## 2026-07-28 Stage 2 charger-assignment numeric consistency fix
 

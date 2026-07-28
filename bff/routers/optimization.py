@@ -15,6 +15,7 @@ import math
 import shutil
 from dataclasses import is_dataclass, replace
 from collections import Counter, defaultdict
+from collections.abc import Mapping
 import threading
 import multiprocessing
 import os
@@ -2249,6 +2250,88 @@ def _rolling_execution_evidence(
     }
 
 
+def _results_workbook_cell_value(value: Any) -> Any:
+    """Return an openpyxl-safe cell value without changing numeric costs.
+
+    Cost breakdowns also carry structured provenance and diagnostic metadata.
+    Excel cells cannot represent mappings or sequences directly, so preserve
+    those values as deterministic JSON text while keeping scalar accounting
+    components numeric for the reconciliation contract.
+    """
+
+    if value is None or isinstance(value, (str, int, float, bool, date, datetime)):
+        return value
+    if isinstance(value, Mapping):
+        value = dict(value)
+    elif isinstance(value, tuple):
+        value = list(value)
+    if isinstance(value, (dict, list)):
+        return json.dumps(
+            value,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+            allow_nan=False,
+        )
+    raise TypeError(
+        "results.xlsx cannot serialize non-scalar report value "
+        f"of type {type(value).__name__}"
+    )
+
+
+def _write_results_workbook(
+    *,
+    run_dir: Path,
+    summary: Dict[str, Any],
+    cost_rows: List[Dict[str, Any]],
+) -> None:
+    """Write the standard workbook with scalar-safe report cells."""
+
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    summary_sheet = workbook.active
+    summary_sheet.title = "summary"
+    summary_sheet.append(["key", "value", "unit"])
+    summary_sheet.append(
+        ["objective_value", _results_workbook_cell_value(summary.get("objective_value")), "JPY"]
+    )
+    summary_sheet.append(
+        [
+            "solve_time_seconds",
+            _results_workbook_cell_value(summary.get("solve_time_seconds")),
+            "s",
+        ]
+    )
+    summary_sheet.append(
+        [
+            "trip_count_served",
+            _results_workbook_cell_value(summary.get("trip_count_served")),
+            "trips",
+        ]
+    )
+    summary_sheet.append(
+        [
+            "trip_count_unserved",
+            _results_workbook_cell_value(summary.get("trip_count_unserved")),
+            "trips",
+        ]
+    )
+
+    cost_sheet = workbook.create_sheet("cost_breakdown")
+    cost_sheet.append(["key", "value", "unit"])
+    for row in cost_rows:
+        cost_sheet.append(
+            [
+                _results_workbook_cell_value(row.get("key")),
+                _results_workbook_cell_value(row.get("value")),
+                _results_workbook_cell_value(row.get("unit")),
+            ]
+        )
+
+    workbook.save(run_dir / "results.xlsx")
+
+
 def _persist_rich_run_outputs(
     *,
     run_dir: Path,
@@ -3457,23 +3540,11 @@ def _persist_rich_run_outputs(
         )
 
     try:
-        from openpyxl import Workbook
-
-        wb = Workbook()
-        ws_summary = wb.active
-        ws_summary.title = "summary"
-        ws_summary.append(["key", "value", "unit"])
-        ws_summary.append(["objective_value", summary.get("objective_value"), "JPY"])
-        ws_summary.append(["solve_time_seconds", summary.get("solve_time_seconds"), "s"])
-        ws_summary.append(["trip_count_served", summary.get("trip_count_served"), "trips"])
-        ws_summary.append(["trip_count_unserved", summary.get("trip_count_unserved"), "trips"])
-
-        ws_cost = wb.create_sheet("cost_breakdown")
-        ws_cost.append(["key", "value", "unit"])
-        for row in cost_rows:
-            ws_cost.append([row.get("key"), row.get("value"), row.get("unit")])
-
-        wb.save(run_dir / "results.xlsx")
+        _write_results_workbook(
+            run_dir=run_dir,
+            summary=summary,
+            cost_rows=cost_rows,
+        )
     except Exception as exc:
         if finalize_reporting:
             raise RuntimeError(

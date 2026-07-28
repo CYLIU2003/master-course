@@ -161,6 +161,11 @@ simulation artifact, not an automatically accepted research result.
   the frontend job while preserving the day-ahead and rolling diagnostics.
   When Rolling fails, final executed-day reconciliation is not invoked on the
   incomplete prefix; the original step error remains the surfaced job error.
+  Monetary cost components remain numeric in the Excel reconciliation sheet.
+  Mapping/list/tuple cost provenance or diagnostic metadata is preserved there
+  as deterministic compact JSON text, because an Excel cell cannot represent
+  those structures directly; this serialization never changes the accounting
+  inputs or their validation, and unsupported types fail closed.
 - A successfully completed ordinary frontend job must also pass
   `frontend_run_artifacts_v1`. The BFF writes
   `artifact_completeness.json` only after final reporting, checks the complete
