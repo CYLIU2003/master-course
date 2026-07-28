@@ -1351,6 +1351,12 @@ def run(args: argparse.Namespace) -> int:
                 "allow_fixed_weekday_timetable_pv_counterfactual": True,
                 "calendar_policy": "fixed_weekday_timetable_pv_counterfactual",
                 "weather_profile_date": requested_service_date.isoformat(),
+                # Keep the prepared WEEKDAY timetable rows, but make the
+                # weather/service-date provenance explicit for the permitted
+                # Sunday PV counterfactual.  The calendar waiver below is the
+                # only reason a WEEKDAY service remains valid on this date.
+                "service_date": requested_service_date.isoformat(),
+                "service_dates": [requested_service_date.isoformat()],
             }
         )
         scenario["simulation_config"] = waiver_config
@@ -1362,9 +1368,15 @@ def run(args: argparse.Namespace) -> int:
         scenario,
         args.available_bev_count,
     )
+    # A formal frontend weather run must apply the persisted forecast even when
+    # a legacy prepared scenario has the old opt-out flag.  The effective flag
+    # is captured in the run provenance; this is not a solver fallback.
+    weather_config = dict(scenario.get("simulation_config") or {})
+    weather_config["enable_weather_operation_policy"] = True
+    scenario["simulation_config"] = weather_config
     scenario, weather_forecast, weather_profile = _prepare_weather_policy_for_scenario(
         scenario,
-        enable_weather_operation_policy=None,
+        enable_weather_operation_policy=True,
         weather_proxy_forecast_path=None,
     )
     bev_terminal_soc_policy = normalize_bev_terminal_soc_policy(

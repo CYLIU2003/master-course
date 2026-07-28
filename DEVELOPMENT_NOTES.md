@@ -18,6 +18,12 @@
   `fleet_state_materialization`. No distance, SOC, fuel consumption, or
   energy quantity is modified. The previous v2 run attempt is not reused;
   fresh v3 Prepare artifacts are required before the sunny/rain executions.
+- The formal frontend weather runner now explicitly enables the persisted
+  weather operation policy before `ProblemBuilder`. For the requested
+  2025-08-10 rain case it sets the weather/service date to 2025-08-10 while
+  retaining the prepared `WEEKDAY` timetable rows, and records the
+  `fixed_weekday_timetable_pv_counterfactual` waiver. This is intentional
+  weekday-difference suppression, not a Sunday timetable claim.
 
 ## 2026-07-28 scenario fleet contract v2 and independent release gates
 

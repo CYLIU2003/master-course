@@ -101,6 +101,12 @@ simulation artifact, not an automatically accepted research result.
   substitute a global fleet constant.
   Requiring all available BEVs to serve is a separate policy-sensitivity
   checkbox and constraint, not the unconstrained baseline.
+- The formal frontend weather runner explicitly enables the persisted weather
+  policy before building the Canonical problem. The Sunday/WEEKDAY case is
+  allowed only through the recorded
+  `fixed_weekday_timetable_pv_counterfactual` waiver; it is intentionally a
+  weekday timetable on the requested date, not a claim about the Sunday
+  timetable.
 - Hourly rolling execution is reported as `not_executed` unless an actual rolling
   chain was run and its log is attached. `executed_and_accepted` additionally
   requires a persisted full-horizon `rolling_chain_summary.json` whose every
