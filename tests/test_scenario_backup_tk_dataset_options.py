@@ -276,6 +276,35 @@ def test_build_optimization_run_payload_centralizes_fast_and_manual_execution() 
     }
 
 
+def test_job_snapshot_exposes_final_artifact_bundle_status() -> None:
+    snapshot = App._compact_job_snapshot(
+        {
+            "job_id": "job-1",
+            "status": "completed",
+            "metadata": {
+                "run_dir": "C:/master-course/output/2026-07-28/run_1",
+                "reporting_finalizer_status": "completed",
+                "artifact_completeness_status": "OK",
+                "artifact_completeness_artifact": (
+                    "artifact_completeness.json"
+                ),
+                "required_artifact_count": 190,
+                "verified_artifact_count": 190,
+            },
+        }
+    )
+
+    metadata = snapshot["metadata"]
+    assert metadata["run_dir"].endswith("run_1")
+    assert metadata["reporting_finalizer_status"] == "completed"
+    assert metadata["artifact_completeness_status"] == "OK"
+    assert metadata["artifact_completeness_artifact"] == (
+        "artifact_completeness.json"
+    )
+    assert metadata["required_artifact_count"] == 190
+    assert metadata["verified_artifact_count"] == 190
+
+
 def test_operation_time_window_payload_is_explicit_and_defaults_to_full_day() -> None:
     app = App.__new__(App)
     app.operation_time_window_enabled_var = DummyVar(False)

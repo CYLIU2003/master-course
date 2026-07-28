@@ -1299,3 +1299,35 @@ The frontend-equivalent Phase 3 finalizer now derives the human-readable
 24-step chain is an operational result; it cannot upgrade a run whose cost,
 optimality, provenance, or comparison gates remain blocked.  A regression test
 locks this distinction in place.
+
+# 2026-07-28 — Frontend run artifact completeness gate
+
+- The reference frontend output
+  `output/2026-07-27/run_20260727_1800` contains 182 files, while the
+  frontend-equivalent research CLI bundle used for the later diagnostic
+  rerun contains only 85. The CLI bundle is not relabelled as the ordinary
+  frontend reporting bundle.
+- The reachable ordinary path remains
+  `Tk -> POST /run-optimization -> day-ahead -> 24-step Rolling ->
+  independent physical validation -> executed-day accounting -> canonical
+  reporting`. Its finalization now enforces
+  `frontend_run_artifacts_v1` and writes
+  `artifact_completeness.json`.
+- The contract verifies the expected root/raw/graph files, research input
+  provenance, `results.xlsx` sheets, graph-manifest declarations, accepted
+  executed-day accounting, physical validation, final cost reconciliation,
+  and every Rolling step. `state_for_next_hour.json` is required for steps
+  0–22; step 23 has no successor handoff and therefore does not invent one.
+- Any required file that is missing, empty, malformed JSON, absent from
+  `run_manifest.files`, or semantically rejected makes the frontend job fail
+  while retaining the diagnostic directory. The job metadata and Tk monitor
+  show `run_dir`, `artifact_completeness_status`, and verified/required counts.
+- Saved runs can be rechecked without solving by running
+  `python scripts/verify_frontend_run_artifacts.py <RUN_DIR>
+  --research-run --require-rolling`. This verifier does not upgrade research
+  acceptance or global optimality.
+- Focused artifact, Rolling orchestration, canonical graph/report, accounting,
+  and Tk payload tests: `88 passed`. Full `tests/` regression:
+  `981 passed`. `compileall` and `git diff --check` also pass. A fresh
+  264-trip ordinary frontend run remains intentionally pending for the user's
+  manual execution.

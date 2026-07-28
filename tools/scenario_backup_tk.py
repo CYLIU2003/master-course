@@ -9323,6 +9323,17 @@ class App:
                 f"reason={solution_validity.get('status_reason')} "
                 f"blocking={solution_validity.get('blocking_reasons')}"
             )
+        artifact_completeness = dict(
+            result.get("artifact_completeness") or {}
+        )
+        if artifact_completeness:
+            self._optimization_console_log(
+                "optimization_result.artifacts: "
+                f"status={artifact_completeness.get('status')} "
+                f"verified={artifact_completeness.get('verified_artifact_count')}/"
+                f"{artifact_completeness.get('required_artifact_count')} "
+                f"artifact={artifact_completeness.get('artifact')}"
+            )
         weather_policy = dict(result.get("weather_policy") or {})
         if weather_policy.get("enabled"):
             forecast = dict(weather_policy.get("forecast") or {})
@@ -9440,6 +9451,22 @@ class App:
                 "prepared_input_id": prepared_input_id,
                 "requested_prepared_input_id": requested_prepared_input_id,
                 "prepared_input_path": prepared_input_path,
+                "run_dir": metadata.get("run_dir"),
+                "reporting_finalizer_status": metadata.get(
+                    "reporting_finalizer_status"
+                ),
+                "artifact_completeness_status": metadata.get(
+                    "artifact_completeness_status"
+                ),
+                "artifact_completeness_artifact": metadata.get(
+                    "artifact_completeness_artifact"
+                ),
+                "required_artifact_count": metadata.get(
+                    "required_artifact_count"
+                ),
+                "verified_artifact_count": metadata.get(
+                    "verified_artifact_count"
+                ),
             },
         }
 

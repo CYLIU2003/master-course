@@ -1,7 +1,8 @@
 # Current research release blockers
 
 Status date: 2026-07-28
-Code status: local regression passed; no post-change 264-trip formal run yet
+Code status: 981 local regression tests passed; no post-change 264-trip
+ordinary frontend run yet
 Teacher release status: **BLOCKED**
 
 This file is the single current blocker register. Older rolling remediation
@@ -70,15 +71,22 @@ optimality remain separate decisions.
    serve at least one trip. It is not the unconstrained baseline.
 10. Results that pass physical gates but miss the predeclared gap are labelled
     `FEASIBLE_CANDIDATE`, not an optimal solution.
+11. Ordinary frontend completion is fail-closed on
+    `artifact_completeness.json`. The required root/raw/graph/provenance,
+    24-step Rolling, physical-validation, accounting, Markdown, JSON, and
+    Excel bundle must be present and readable. Missing artifacts preserve the
+    diagnostic run directory but fail the job.
 
 ## Open blockers
 
 ### B1 — Fresh formal execution evidence is absent
 
-The model and accounting changes invalidate all older KPI claims. A frozen
-clean commit must be executed through the normal frontend for high-PV,
+The model, accounting, and artifact-contract changes invalidate all older KPI
+claims. A frozen clean commit must be executed through the normal frontend for high-PV,
 low-PV, and no-PV cases. All three require 24/24 rolling and the run acceptance
-table below.
+Each completed job must additionally show
+`artifact_completeness.status=OK`; otherwise it is an incomplete diagnostic
+bundle, irrespective of solver feasibility.
 
 ### B2 — Full-scale Stage 1 performance and gap are unmeasured
 

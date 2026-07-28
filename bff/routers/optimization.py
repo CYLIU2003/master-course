@@ -46,6 +46,9 @@ from bff.routers.graph import (
     _build_trips_payload,
 )
 from bff.services.experiment_reports import log_optimization_experiment
+from bff.services.optimization_run.artifact_completeness import (
+    persist_frontend_run_artifact_audit,
+)
 from bff.services.optimization_run.canonical_graph import (
     canonical_datetime_from_min as _canonical_datetime_from_min,
     canonical_deadhead_distance_km as _canonical_deadhead_distance_km,
@@ -3699,6 +3702,123 @@ def _persist_rich_run_outputs(
         json.dumps(run_manifest, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     return reporting_finalizer_result
+
+
+def _enforce_frontend_run_artifact_contract(
+    *,
+    run_dir: Path,
+    optimization_result: Dict[str, Any],
+    optimization_audit: Dict[str, Any],
+    reporting_finalizer_result: Optional[Dict[str, Any]],
+    research_run: bool,
+    require_rolling: bool,
+) -> Dict[str, Any]:
+    """Persist and enforce the final frontend output bundle contract.
+
+    This must run after every other run-directory finalizer, including the
+    Rolling manifest refresh. No run artifact may be changed after the second
+    audit because the audit stores hashes of the final files.
+    """
+
+    run_dir = Path(run_dir)
+    raw_dir = run_dir / "raw"
+    artifact_audit = persist_frontend_run_artifact_audit(
+        run_dir,
+        research_run=research_run,
+        require_rolling=require_rolling,
+    )
+    artifact_audit_summary = {
+        "status": artifact_audit.get("status"),
+        "accepted": artifact_audit.get("accepted"),
+        "artifact": "artifact_completeness.json",
+        "required_artifact_count": artifact_audit.get(
+            "required_artifact_count"
+        ),
+        "verified_artifact_count": artifact_audit.get(
+            "verified_artifact_count"
+        ),
+        "missing_artifacts": artifact_audit.get("missing_artifacts"),
+        "empty_artifacts": artifact_audit.get("empty_artifacts"),
+        "content_errors": artifact_audit.get("content_errors"),
+    }
+    optimization_result["artifact_completeness"] = artifact_audit_summary
+    optimization_audit["artifact_completeness"] = artifact_audit_summary
+    for path, payload in (
+        (run_dir / "optimization_result.json", optimization_result),
+        (run_dir / "optimization_audit.json", optimization_audit),
+        (raw_dir / "optimization_result.json", optimization_result),
+        (raw_dir / "optimization_audit.json", optimization_audit),
+    ):
+        path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+    reporting_result = dict(reporting_finalizer_result or {})
+    reporting_result.update(
+        {
+            "artifact_completeness_status": artifact_audit.get("status"),
+            "artifact_completeness_artifact": "artifact_completeness.json",
+            "required_artifact_count": artifact_audit.get(
+                "required_artifact_count"
+            ),
+            "verified_artifact_count": artifact_audit.get(
+                "verified_artifact_count"
+            ),
+        }
+    )
+    run_manifest_path = run_dir / "run_manifest.json"
+    run_manifest = json.loads(run_manifest_path.read_text(encoding="utf-8"))
+    if not isinstance(run_manifest, dict):
+        raise RuntimeError("run_manifest.json is not a JSON object")
+    run_manifest["artifact_completeness"] = artifact_audit_summary
+    graph_manifest = dict(run_manifest.get("graph") or {})
+    graph_manifest["reporting_finalizer"] = reporting_result
+    run_manifest["graph"] = graph_manifest
+    run_manifest["files"] = sorted(
+        path.relative_to(run_dir).as_posix()
+        for path in run_dir.rglob("*")
+        if path.is_file()
+    )
+    run_manifest_path.write_text(
+        json.dumps(run_manifest, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    # Re-audit after the result and run manifest record the gate. This second
+    # pass is the immutable hash snapshot used for retrospective verification.
+    artifact_audit = persist_frontend_run_artifact_audit(
+        run_dir,
+        research_run=research_run,
+        require_rolling=require_rolling,
+    )
+    if artifact_audit.get("accepted") is not True:
+        raise RuntimeError(
+            "Required frontend run artifacts are incomplete: "
+            + json.dumps(
+                {
+                    "missing_artifacts": artifact_audit.get(
+                        "missing_artifacts"
+                    ),
+                    "empty_artifacts": artifact_audit.get(
+                        "empty_artifacts"
+                    ),
+                    "invalid_json_artifacts": artifact_audit.get(
+                        "invalid_json_artifacts"
+                    ),
+                    "content_errors": artifact_audit.get("content_errors"),
+                    "workbook_errors": artifact_audit.get(
+                        "workbook_errors"
+                    ),
+                    "run_manifest_errors": artifact_audit.get(
+                        "run_manifest_errors"
+                    ),
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+    return reporting_result
 
 
 def _run_reporting_finalizer(run_dir: Path) -> Dict[str, Any]:
@@ -9051,16 +9171,20 @@ def _run_optimization(
                     else "rolling_execution_failed"
                 ),
             )
+        if rolling_technical_failure is None:
+            reporting_finalizer_result = (
+                _enforce_frontend_run_artifact_contract(
+                    run_dir=Path(output_dir),
+                    optimization_result=optimization_result,
+                    optimization_audit=optimization_audit,
+                    reporting_finalizer_result=reporting_finalizer_result,
+                    research_run=research_run,
+                    require_rolling=run_hourly_rolling,
+                )
+            )
         if reporting_finalizer_result is not None:
             store.set_field(scenario_id, "optimization_result", optimization_result)
             store.set_field(scenario_id, "optimization_audit", optimization_audit)
-            _persist_json_outputs(
-                output_dir,
-                {
-                    "optimization_result.json": optimization_result,
-                    "optimization_audit.json": optimization_audit,
-                },
-            )
         if rolling_technical_failure is not None:
             raise rolling_technical_failure
         is_fallback = bool(solution_validity.get("result_class") in {"baseline_fallback", "postsolve_infeasible", "postsolve_repaired", "repaired_heuristic", "debug_result"})
@@ -9109,6 +9233,18 @@ def _run_optimization(
                         (optimization_result.get("graph_artifacts") or {}).get("reporting_finalizer")
                         or {}
                     ).get("status"),
+                    "artifact_completeness_status": dict(
+                        reporting_finalizer_result or {}
+                    ).get("artifact_completeness_status"),
+                    "artifact_completeness_artifact": dict(
+                        reporting_finalizer_result or {}
+                    ).get("artifact_completeness_artifact"),
+                    "required_artifact_count": dict(
+                        reporting_finalizer_result or {}
+                    ).get("required_artifact_count"),
+                    "verified_artifact_count": dict(
+                        reporting_finalizer_result or {}
+                    ).get("verified_artifact_count"),
                 },
             ),
         )

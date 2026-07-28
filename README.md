@@ -144,6 +144,17 @@ simulation artifact, not an automatically accepted research result.
   raw versus certified Stage 1 gap, the requested gap, and cost/objective
   semantics. Any infeasible/truncated/state-handoff-failed rolling step fails
   the frontend job while preserving the day-ahead and rolling diagnostics.
+- A successfully completed ordinary frontend job must also pass
+  `frontend_run_artifacts_v1`. The BFF writes
+  `artifact_completeness.json` only after final reporting, checks the complete
+  root/raw/graph/research-provenance bundle, every Rolling step handoff,
+  independent physical-validation artifacts, the readable Excel sheets, and
+  the final cost reconciliation. A missing, empty, malformed, or undeclared
+  required artifact fails the job instead of returning a misleading
+  `completed` status. The Tk execution monitor shows the run directory and
+  verified/required artifact counts. Recheck a saved run with
+  `python scripts/verify_frontend_run_artifacts.py <RUN_DIR>
+  --research-run --require-rolling`.
 - Final experiment-report costs are sourced from
   `graph/canonical_cost_ledger.json`. `experiment_report.md` and
   `results.xlsx` are required final artifacts; generation failure fails the
