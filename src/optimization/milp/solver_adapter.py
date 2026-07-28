@@ -6135,11 +6135,15 @@ class GurobiMILPAdapter:
                         problem,
                         metadata=retry_metadata,
                     )
+                    # This helper is only reached from an enabled Stage 2
+                    # solve (the fixed-assignment Phase 1 path is excluded
+                    # above).  Do not capture _solve_thesis_two_stage's
+                    # local-only arguments here: they are not in this
+                    # helper's scope and previously made a proven-infeasible
+                    # handoff crash before the no-good retry could run.
                     return self._solve_thesis_two_stage(
                         retry_problem,
                         config,
-                        stage2_enabled=stage2_enabled,
-                        diagnostic_mode=diagnostic_mode,
                     )
             metadata = {
                 **dict(stage1_plan.metadata or {}),
