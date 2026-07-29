@@ -27,7 +27,9 @@ log = logging.getLogger("run_prep")
 # Bump this whenever the prepared payload changes in a way that affects the
 # canonical solver input.  The schema suffix is part of prepared_input_id, so
 # old prepared files cannot be silently reused after a fleet-contract change.
-PREPARED_INPUT_SCHEMA_VERSION = "v3_trip_stop_polyline_distance_explicit_fleet_state"
+PREPARED_INPUT_SCHEMA_VERSION = (
+    "v4_same_service_date_pv_counterfactual_explicit_fleet_state"
+)
 
 
 def _normalize_solver_mode(mode: Any) -> str:

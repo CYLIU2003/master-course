@@ -26,14 +26,22 @@ def _case(
     failed_checks: list[str] | None = None,
     artifact_contract_accepted: bool = True,
     terminal_run_state: str = "complete",
+    comparison_requested: bool = True,
 ) -> None:
+    service_date = "2025-08-05"
+    pv_source_date = (
+        service_date if role == "baseline" else "2025-08-10"
+    )
     _write_json(
         run_dir / "comparison_case_manifest.json",
         {
+            "comparison_requested": comparison_requested,
+            "comparison_type": "same_service_date_pv_counterfactual",
             "comparison_role": role,
             "comparison_control_hash": control_hash,
-            "comparison_control_payload": {"service_date": "2025-08-05"},
+            "comparison_control_payload": {"service_date": service_date},
             "pv_profile_hash": pv_hash,
+            "pv_source_date": pv_source_date,
             "assignment_hash": "assignment-1",
             "physical_schedule_validated": True,
             "rolling_chain_accepted": True,
@@ -274,3 +282,37 @@ def test_pair_manifest_rejects_control_hash_mismatch(tmp_path: Path) -> None:
         (output_dir / "pair_manifest.json").read_text(encoding="utf-8")
     )
     assert rejected["accepted_for_controlled_pv_sensitivity_comparison"] is False
+
+
+def test_pair_manifest_rejects_implicit_legacy_comparison(
+    tmp_path: Path,
+) -> None:
+    baseline = tmp_path / "baseline"
+    counterfactual = tmp_path / "counterfactual"
+    output_dir = tmp_path / "pair"
+    _case(
+        baseline,
+        role="baseline",
+        control_hash="fixed-controls",
+        pv_hash="high-pv",
+        pv_values=[1.0],
+        total_cost=100.0,
+        comparison_requested=False,
+    )
+    _case(
+        counterfactual,
+        role="pv_curve_counterfactual",
+        control_hash="fixed-controls",
+        pv_hash="low-pv",
+        pv_values=[0.1],
+        total_cost=120.0,
+    )
+
+    with pytest.raises(
+        ValueError, match="baseline_comparison_explicitly_requested"
+    ):
+        build_frontend_pv_pair_artifacts(
+            baseline_run_dir=baseline,
+            counterfactual_run_dir=counterfactual,
+            output_dir=output_dir,
+        )

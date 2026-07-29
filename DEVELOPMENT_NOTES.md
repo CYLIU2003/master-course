@@ -1,5 +1,64 @@
 # Development Notes
 
+## 2026-07-29 P0 slot-level weather/dispatch coupling and controlled HTTP pair
+
+- Root cause: Phase 3 Stage 1 used a whole-day PV-energy credit in its
+  assignment objective. That aggregate lower-bound proxy could offset charging
+  without matching PV generation to vehicle depot-presence windows, charger
+  capacity, SOC, BESS operation, TOU prices, or demand peaks. Stage 2 then fixed
+  the Stage 1 assignment, so different PV curves could change charging and
+  grid purchase without materially informing dispatch.
+- Stage 1 now contains an assignment-coupled, time-indexed continuous energy
+  recourse. It links per-vehicle charging to assignment-derived home-depot
+  windows and compatible charger ports/power; propagates BEV SOC with
+  service/deadhead energy; balances bus charging against per-slot grid, PV, and
+  BESS sources; enforces per-slot PV conservation, BESS power/capacity/terminal
+  SOC, grid import and contract overage, and peak demand; and prices TOU energy,
+  demand, fuel, CO2, vehicles, drivers, degradation, and other enabled
+  accounting terms. The former aggregate PV proxy is retained only as a
+  labelled diagnostic lower bound. No weather assignment bias is used.
+- Stage 2 remains the exact fixed-assignment binary charging/SOC/PV/BESS
+  validation. Formal research requests now ask Stage 1 for a systematic
+  time-bounded pool and pass at least ten distinct assignments through Stage 2
+  under one global deadline. Candidate feasibility, hashes, relaxed objective,
+  exact canonical cost, fleet mix, runtime, and IIS evidence are persisted in
+  `stage1_stage2_candidate_evaluation.json/.csv`; the selected result is the
+  feasible candidate with the lowest canonical actual cost. This does not claim
+  integrated global optimality.
+- Prepare schema
+  `v4_same_service_date_pv_counterfactual_explicit_fleet_state` requires the
+  service date and counterfactual PV source date to remain explicit and
+  separate. The rain role additionally requires the explicit fixed-weekday
+  counterfactual permission. Pair validation rejects implicit legacy weather
+  contracts and verifies the non-PV control hash independently of the PV hash.
+- `scripts/run_frontend_controlled_pv_pair.py` imports no optimization domain
+  code. It calls the normal BFF Prepare and run-optimization HTTP endpoints,
+  polls jobs sequentially, preserves unrounded request/response JSON, rejects
+  forbidden old prepared IDs, invokes the pair manifest and small Phase 4
+  oracle audits, produces assignment/solver/research comparisons with source
+  artifacts, and creates the requested evidence ZIP only after fail-closed
+  audits.
+- Focused tests cover the intentionally weather-sensitive assignment
+  counterexample, slot-local PV, depot-presence charging, charger ports and
+  power, BESS terminal SOC, demand charge, contract overage parity with Stage
+  2, deterministic replay, candidate selection by canonical cost, explicit
+  counterfactual Prepare controls, pair-manifest rejection, and the HTTP-only
+  runner boundary.
+- Verification before freezing: the requested focused regression plus the
+  HTTP/control tests passed (`85 passed`), the complete suite passed
+  (`1054 passed`), `compileall` passed for `src`, `bff`, `scripts`, and
+  `tools`, and `git diff --check` reported no whitespace error. A read-only
+  scenario comparison found one non-PV mismatch in the rain case (BESS
+  terminal policy); the existing alignment service was applied to the rain
+  scenario and a second audit confirmed zero remaining non-weather
+  simulation-config or overlay mismatches while preserving the
+  `tsurumaki_2025-08-10_60min` PV input.
+- Operational research evidence is still **BLOCKED**. The reviewed
+  implementation has a clean candidate commit, but both scenarios must still
+  finish fresh Prepare, day-ahead optimization, 24/24 hourly Rolling,
+  physical/accounting/artifact validation, controlled-pair acceptance, and
+  packaging from that same clean SHA.
+
 ## 2026-07-28 P0 physical-validation payload provenance fix
 
 - The clean baseline `1acfdff8095932c848bfe91fd79fd4e09f493ca5` produced

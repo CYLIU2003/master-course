@@ -221,7 +221,12 @@ def test_stage1_path_cover_lower_bound_reaches_vehicle_day_cost_bound() -> None:
         metadata={
             **dict(problem.metadata or {}),
             "vehicle_usage_cost_jpy_per_used_bus": 20_000.0,
-            "cost_component_flags": {"vehicle_usage_cost": True},
+            "cost_component_flags": {
+                "vehicle_usage_cost": True,
+                # Isolate the path-cover vehicle-day certificate. Phase 3 now
+                # includes enabled driver cost in the Stage 1 objective.
+                "driver_cost": False,
+            },
         },
     )
 
@@ -246,7 +251,8 @@ def test_stage1_path_cover_lower_bound_reaches_vehicle_day_cost_bound() -> None:
     assert result.solver_metadata[
         "stage1_analytical_objective_lower_bound_semantics"
     ] == (
-        "strict_path_cover_vehicle_day_count_times_nonnegative_vehicle_usage_cost"
+        "strict_path_cover_vehicle_day_count_times_nonnegative_"
+        "weighted_vehicle_usage_cost"
     )
 
 

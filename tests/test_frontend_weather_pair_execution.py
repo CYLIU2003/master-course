@@ -1,0 +1,199 @@
+from __future__ import annotations
+
+import ast
+import importlib.util
+import json
+from pathlib import Path
+from types import ModuleType
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+RUNNER_PATH = REPO_ROOT / "scripts" / "run_frontend_controlled_pv_pair.py"
+
+
+def _load_runner() -> ModuleType:
+    spec = importlib.util.spec_from_file_location(
+        "run_frontend_controlled_pv_pair",
+        RUNNER_PATH,
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_runner_has_no_optimization_domain_imports() -> None:
+    tree = ast.parse(RUNNER_PATH.read_text(encoding="utf-8"))
+    imported_roots: set[str] = set()
+    imported_symbols: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported_roots.update(
+                alias.name.split(".", maxsplit=1)[0]
+                for alias in node.names
+            )
+        elif isinstance(node, ast.ImportFrom):
+            if node.module:
+                imported_roots.add(node.module.split(".", maxsplit=1)[0])
+            imported_symbols.update(alias.name for alias in node.names)
+
+    assert imported_roots <= {
+        "__future__",
+        "argparse",
+        "csv",
+        "datetime",
+        "hashlib",
+        "json",
+        "os",
+        "pathlib",
+        "platform",
+        "shutil",
+        "subprocess",
+        "sys",
+        "time",
+        "typing",
+        "urllib",
+        "zipfile",
+    }
+    assert {
+        "OptimizationEngine",
+        "ProblemBuilder",
+        "GurobiMILPAdapter",
+        "run_research_phase3_frontend_weather",
+    }.isdisjoint(imported_symbols)
+
+
+def test_prepare_payload_separates_service_date_from_pv_source() -> None:
+    runner = _load_runner()
+    sunny = runner.build_prepare_payload(
+        depot_id="tsurumaki",
+        service_id="WEEKDAY",
+        service_date="2025-08-05",
+        pv_source_date="2025-08-05",
+        comparison_role="baseline",
+    )
+    rain = runner.build_prepare_payload(
+        depot_id="tsurumaki",
+        service_id="WEEKDAY",
+        service_date="2025-08-05",
+        pv_source_date="2025-08-10",
+        comparison_role="pv_curve_counterfactual",
+    )
+
+    assert sunny["service_date"] == rain["service_date"] == "2025-08-05"
+    assert sunny["day_type"] == rain["day_type"] == "WEEKDAY"
+    assert sunny["selected_depot_ids"] == rain["selected_depot_ids"] == [
+        "tsurumaki"
+    ]
+    sunny_settings = sunny["simulation_settings"]
+    rain_settings = rain["simulation_settings"]
+    assert (
+        sunny_settings["comparison_type"]
+        == rain_settings["comparison_type"]
+        == "same_service_date_pv_counterfactual"
+    )
+    assert sunny_settings["counterfactual_pv_source_date"] == "2025-08-05"
+    assert rain_settings["counterfactual_pv_source_date"] == "2025-08-10"
+    assert sunny_settings["pv_profile_id"] == (
+        "tsurumaki_2025-08-05_60min"
+    )
+    assert rain_settings["pv_profile_id"] == (
+        "tsurumaki_2025-08-10_60min"
+    )
+    assert sunny_settings["enable_weather_operation_policy"] is False
+    assert rain_settings["enable_weather_operation_policy"] is False
+
+
+def test_optimization_payloads_match_except_fresh_prepared_id() -> None:
+    runner = _load_runner()
+    sunny = runner.build_optimization_payload("prepared-sunny-fresh")
+    rain = runner.build_optimization_payload("prepared-rain-fresh")
+    sunny_without_id = {
+        key: value
+        for key, value in sunny.items()
+        if key != "prepared_input_id"
+    }
+    rain_without_id = {
+        key: value
+        for key, value in rain.items()
+        if key != "prepared_input_id"
+    }
+
+    assert sunny_without_id == rain_without_id
+    assert sunny["stage1_stage2_candidate_limit"] >= 21
+    assert sunny["stage1_best_obj_stop_enabled"] is False
+    assert sunny["enableWeatherOperationPolicy"] is False
+    assert sunny["run_hourly_rolling"] is True
+    assert sunny["rolling_execution_minutes"] == 60
+    assert sunny["mip_gap"] == 0.1
+
+
+def test_vehicle_trip_assignments_are_complete_and_chronological() -> None:
+    runner = _load_runner()
+    assignments = {
+        "trip-late": {
+            "trip_id": "trip-late",
+            "route": "r2",
+            "departure_time": "12:00",
+            "vehicle_id": "bev-1",
+            "powertrain": "BEV",
+        },
+        "trip-early": {
+            "trip_id": "trip-early",
+            "route": "r1",
+            "departure_time": "08:00",
+            "vehicle_id": "bev-1",
+            "powertrain": "BEV",
+        },
+    }
+
+    grouped = runner._vehicle_trip_assignments(assignments)
+
+    assert list(grouped) == ["bev-1"]
+    assert [row["trip_id"] for row in grouped["bev-1"]] == [
+        "trip-early",
+        "trip-late",
+    ]
+
+
+def test_bess_terminal_soc_reads_executed_day_terminal_record(
+    tmp_path: Path,
+) -> None:
+    runner = _load_runner()
+    rolling_dir = tmp_path / "rolling_hourly_chain"
+    rolling_dir.mkdir()
+    (rolling_dir / "executed_day_accounting.json").write_text(
+        json.dumps(
+            {
+                "bess_terminal_soc_by_depot": {
+                    "tsurumaki": {
+                        "policy": "fixed_target",
+                        "terminal_soc_kwh": 300.0,
+                        "balanced": True,
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert runner._bess_terminal_soc(tmp_path) == 300.0
+
+
+def test_zero_metric_gate_is_fail_closed_for_missing_or_invalid_values() -> None:
+    runner = _load_runner()
+
+    assert runner._is_present_zero_metric({"violations": 0}, "violations")
+    assert not runner._is_present_zero_metric({}, "violations")
+    assert not runner._is_present_zero_metric(
+        {"violations": None},
+        "violations",
+    )
+    assert not runner._is_present_zero_metric(
+        {"violations": "not-a-number"},
+        "violations",
+    )
+    assert not runner._is_present_zero_metric(
+        {"violations": 1},
+        "violations",
+    )

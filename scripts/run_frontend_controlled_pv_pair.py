@@ -1,0 +1,2516 @@
+"""Run a controlled same-service-date PV pair through the frontend BFF HTTP API.
+
+This runner deliberately has no optimization-domain imports.  It submits the
+same Prepare and run-optimization endpoints used by the frontend, polls the
+public job endpoint, preserves the exact HTTP JSON payloads, and builds a
+portable evidence bundle from the completed run directories.
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+from datetime import datetime, timezone
+import hashlib
+import json
+import os
+from pathlib import Path
+import platform
+import shutil
+import subprocess
+import sys
+import time
+from typing import Any, Iterable, Mapping
+from urllib import error, request
+import zipfile
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+TERMINAL_JOB_STATES = {"completed", "failed"}
+FORBIDDEN_PREPARED_INPUT_IDS = {
+    "prepared-a7dbfaef10f571d7-e6406a7fd75ec751-9dfce7cb",
+    "prepared-6bcba1be5c1141c8-0b337aa1f091e729-9dfce7cb",
+}
+EXPECTED_PV_KWH = {
+    "sunny": 614.709375,
+    "rain": 101.1143,
+}
+POWERTRAIN_ELECTRIC = {"BEV", "PHEV", "FCEV"}
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _write_json(path: Path, payload: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            indent=2,
+            allow_nan=False,
+        ),
+        encoding="utf-8",
+    )
+
+
+def _read_json(path: Path) -> dict[str, Any]:
+    loaded = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(loaded, dict):
+        raise ValueError(f"Expected a JSON object: {path}")
+    return dict(loaded)
+
+
+def _read_json_optional(path: Path) -> dict[str, Any]:
+    return _read_json(path) if path.is_file() else {}
+
+
+def _canonical_hash(value: Any) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            value,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def _git(*args: str) -> str:
+    return subprocess.check_output(
+        ["git", *args],
+        cwd=REPO_ROOT,
+        text=True,
+        encoding="utf-8",
+    ).strip()
+
+
+def _assert_clean_frozen_repository() -> str:
+    status = _git("status", "--porcelain")
+    if status:
+        raise RuntimeError(
+            "Formal pair execution requires a clean worktree; commit or "
+            "remove intentional changes first.\n" + status
+        )
+    sha = _git("rev-parse", "HEAD")
+    if not sha:
+        raise RuntimeError("Formal pair execution requires a non-empty Git SHA")
+    return sha
+
+
+def build_prepare_payload(
+    *,
+    depot_id: str,
+    service_id: str,
+    service_date: str,
+    pv_source_date: str,
+    comparison_role: str,
+) -> dict[str, Any]:
+    """Build the explicit frontend Prepare payload for one controlled case."""
+
+    if comparison_role not in {"baseline", "pv_curve_counterfactual"}:
+        raise ValueError(f"Unsupported comparison role: {comparison_role}")
+    return {
+        "selected_depot_ids": [depot_id],
+        # Empty means every route variant selected for this depot.  The BFF
+        # materializes the concrete route IDs and hashes the resulting trips.
+        "selected_route_ids": [],
+        "day_type": service_id,
+        "service_date": service_date,
+        "service_dates": [service_date],
+        "include_short_turn": True,
+        "include_depot_moves": True,
+        "include_deadhead": True,
+        "allow_intra_depot_route_swap": False,
+        "allow_inter_depot_swap": False,
+        "simulation_settings": {
+            "use_selected_depot_vehicle_inventory": True,
+            "use_selected_depot_charger_inventory": True,
+            "solver_mode": "mode_milp_only",
+            "objective_mode": "total_cost",
+            "fixed_route_band_mode": True,
+            "allow_partial_service": False,
+            "milp_max_successors_per_trip": None,
+            "time_limit_seconds": 1800,
+            "mip_gap": 0.1,
+            "include_deadhead": True,
+            "service_date": service_date,
+            "service_dates": [service_date],
+            "planning_days": 1,
+            "operation_time_window_enabled": False,
+            "start_time": "00:00",
+            "end_time": "23:59",
+            "planning_horizon_hours": 24.0,
+            "time_step_min": 60,
+            "timestep_min": 60,
+            "pv_profile_id": f"{depot_id}_{pv_source_date}_60min",
+            "weather_mode": "actual_date_profile",
+            "comparison_type": "same_service_date_pv_counterfactual",
+            "comparison_role": comparison_role,
+            "counterfactual_pv_source_date": pv_source_date,
+            "allow_fixed_weekday_timetable_pv_counterfactual": (
+                comparison_role == "pv_curve_counterfactual"
+            ),
+            "enable_weather_operation_policy": False,
+            "random_seed": 42,
+            "experiment_method": (
+                "same_service_date_pv_counterfactual_frontend_http"
+            ),
+            "experiment_notes": (
+                f"Same {service_date} weekday service controls; only the "
+                "separately fingerprinted PV curve may differ."
+            ),
+        },
+    }
+
+
+def build_optimization_payload(prepared_input_id: str) -> dict[str, Any]:
+    """Build the identical frontend optimization request for either case."""
+
+    return {
+        "mode": "mode_milp_only",
+        "research_run": True,
+        "time_step_min": 60,
+        "timestep_min": 60,
+        "time_limit_seconds": 1800,
+        "stage1_time_limit_seconds": 1500,
+        "stage2_time_limit_seconds": 300,
+        "stage1_best_obj_stop_enabled": False,
+        # One incumbent plus up to twenty alternatives supports the mandatory
+        # same-assignment audit without introducing a weather-specific bias.
+        "stage1_stage2_candidate_limit": 21,
+        "gurobi_threads": 1,
+        "run_profile": "day_ahead_and_hourly_rolling",
+        "run_hourly_rolling": True,
+        "rolling_execution_minutes": 60,
+        "mip_gap": 0.1,
+        "random_seed": 42,
+        "prepared_input_id": prepared_input_id,
+        "service_id": "WEEKDAY",
+        "depot_id": "tsurumaki",
+        "rebuild_dispatch": False,
+        "force_reprepare": False,
+        "use_existing_duties": False,
+        "alns_iterations": 500,
+        "no_improvement_limit": 100,
+        "destroy_fraction": 0.25,
+        "weatherProxyForecastPath": None,
+        "enableWeatherOperationPolicy": False,
+        "require_all_available_bevs": False,
+    }
+
+
+class HttpJsonClient:
+    """Minimal JSON client that retains the exact response body."""
+
+    def __init__(self, base_url: str) -> None:
+        self.base_url = base_url.rstrip("/")
+
+    def request_json(
+        self,
+        method: str,
+        path: str,
+        payload: Mapping[str, Any] | None = None,
+        *,
+        timeout_seconds: float = 120.0,
+    ) -> tuple[dict[str, Any], str]:
+        encoded = None
+        headers = {"Accept": "application/json"}
+        if payload is not None:
+            encoded = json.dumps(
+                payload,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                allow_nan=False,
+            ).encode("utf-8")
+            headers["Content-Type"] = "application/json"
+        http_request = request.Request(
+            f"{self.base_url}{path}",
+            data=encoded,
+            headers=headers,
+            method=method,
+        )
+        try:
+            with request.urlopen(
+                http_request,
+                timeout=timeout_seconds,
+            ) as response:
+                raw = response.read().decode("utf-8")
+        except error.HTTPError as exc:
+            raw = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(
+                f"{method} {path} returned HTTP {exc.code}: {raw}"
+            ) from exc
+        except error.URLError as exc:
+            raise RuntimeError(f"{method} {path} failed: {exc}") from exc
+        loaded = json.loads(raw)
+        if not isinstance(loaded, dict):
+            raise ValueError(f"{method} {path} did not return a JSON object")
+        return dict(loaded), raw
+
+
+def _write_raw_json_response(path: Path, raw: str) -> None:
+    # Validate before persisting while retaining the server's exact numeric
+    # tokens and response formatting.
+    json.loads(raw)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(raw, encoding="utf-8")
+
+
+def _poll_job(
+    *,
+    client: HttpJsonClient,
+    job_id: str,
+    timeout_seconds: float,
+    poll_interval_seconds: float,
+    log: list[dict[str, Any]],
+) -> tuple[dict[str, Any], str]:
+    started = time.monotonic()
+    previous_signature: tuple[Any, ...] | None = None
+    while True:
+        job, raw = client.request_json(
+            "GET",
+            f"/api/jobs/{job_id}",
+            timeout_seconds=120.0,
+        )
+        signature = (
+            job.get("status"),
+            job.get("progress"),
+            job.get("message"),
+            dict(job.get("metadata") or {}).get("stage"),
+        )
+        if signature != previous_signature:
+            event = {
+                "timestamp_utc": _utc_now(),
+                "event": "job_progress",
+                "job_id": job_id,
+                "status": job.get("status"),
+                "progress": job.get("progress"),
+                "stage": dict(job.get("metadata") or {}).get("stage"),
+                "message": job.get("message"),
+            }
+            log.append(event)
+            print(
+                "[job] "
+                f"{job_id} {event['status']} {event['progress']}% "
+                f"{event['stage']}: {event['message']}",
+                flush=True,
+            )
+            previous_signature = signature
+        if str(job.get("status") or "") in TERMINAL_JOB_STATES:
+            return job, raw
+        if time.monotonic() - started > timeout_seconds:
+            raise TimeoutError(
+                f"Job {job_id} did not reach a terminal state within "
+                f"{timeout_seconds} seconds"
+            )
+        time.sleep(max(poll_interval_seconds, 0.1))
+
+
+def _copy_run_contents(run_dir: Path, case_dir: Path) -> None:
+    if not run_dir.is_dir():
+        raise FileNotFoundError(f"Frontend run directory is missing: {run_dir}")
+    shutil.copytree(run_dir, case_dir, dirs_exist_ok=True)
+
+
+def _execute_case(
+    *,
+    name: str,
+    scenario_id: str,
+    prepare_payload: dict[str, Any],
+    client: HttpJsonClient,
+    output_dir: Path,
+    timeout_seconds: float,
+    poll_interval_seconds: float,
+    frozen_sha: str,
+    log: list[dict[str, Any]],
+) -> dict[str, Any]:
+    case_dir = output_dir / name
+    case_dir.mkdir(parents=True, exist_ok=False)
+    _write_json(case_dir / "frontend_prepare_request.json", prepare_payload)
+    prepare_response, prepare_raw = client.request_json(
+        "POST",
+        f"/api/scenarios/{scenario_id}/simulation/prepare",
+        prepare_payload,
+    )
+    _write_raw_json_response(
+        case_dir / "frontend_prepare_response.json",
+        prepare_raw,
+    )
+    if prepare_response.get("ready") is not True:
+        raise RuntimeError(
+            f"{name} Prepare was not ready: "
+            f"{json.dumps(prepare_response, ensure_ascii=False)}"
+        )
+    prepared_input_id = str(
+        prepare_response.get("preparedInputId") or ""
+    ).strip()
+    if not prepared_input_id:
+        raise RuntimeError(f"{name} Prepare returned an empty preparedInputId")
+    if prepared_input_id in FORBIDDEN_PREPARED_INPUT_IDS:
+        raise RuntimeError(
+            f"{name} Prepare reused forbidden old input {prepared_input_id}"
+        )
+
+    optimization_payload = build_optimization_payload(prepared_input_id)
+    optimization_payload["service_id"] = str(
+        prepare_payload.get("day_type") or "WEEKDAY"
+    )
+    optimization_payload["depot_id"] = str(
+        list(prepare_payload.get("selected_depot_ids") or [""])[0]
+    )
+    _write_json(
+        case_dir / "frontend_optimization_request.json",
+        optimization_payload,
+    )
+    started_utc = _utc_now()
+    started = time.monotonic()
+    submit_response, submit_raw = client.request_json(
+        "POST",
+        f"/api/scenarios/{scenario_id}/run-optimization",
+        optimization_payload,
+    )
+    _write_raw_json_response(
+        case_dir / "frontend_optimization_submit_response.json",
+        submit_raw,
+    )
+    job_id = str(
+        submit_response.get("job_id")
+        or submit_response.get("jobId")
+        or ""
+    ).strip()
+    if not job_id:
+        raise RuntimeError(
+            f"{name} optimization submit did not return a job ID"
+        )
+    terminal, terminal_raw = _poll_job(
+        client=client,
+        job_id=job_id,
+        timeout_seconds=timeout_seconds,
+        poll_interval_seconds=poll_interval_seconds,
+        log=log,
+    )
+    wall_time_sec = time.monotonic() - started
+    _write_raw_json_response(
+        case_dir / "frontend_job_terminal_response.json",
+        terminal_raw,
+    )
+    metadata = dict(terminal.get("metadata") or {})
+    run_dir_text = str(metadata.get("run_dir") or "").strip()
+    run_dir = Path(run_dir_text) if run_dir_text else None
+    if run_dir is not None and run_dir.is_dir():
+        _copy_run_contents(run_dir, case_dir)
+
+    result_response: dict[str, Any] | None = None
+    if terminal.get("status") == "completed":
+        result_response, result_raw = client.request_json(
+            "GET",
+            f"/api/scenarios/{scenario_id}/optimization",
+            timeout_seconds=120.0,
+        )
+        _write_raw_json_response(
+            case_dir / "frontend_optimization_result_response.json",
+            result_raw,
+        )
+    http_execution_path = [
+        f"POST /api/scenarios/{scenario_id}/simulation/prepare",
+        f"POST /api/scenarios/{scenario_id}/run-optimization",
+        f"GET /api/jobs/{job_id}",
+    ]
+    if result_response is not None:
+        http_execution_path.append(
+            f"GET /api/scenarios/{scenario_id}/optimization"
+        )
+    execution = {
+        "schema_version": "frontend_http_case_execution_v1",
+        "case": name,
+        "scenario_id": scenario_id,
+        "prepared_input_id": prepared_input_id,
+        "job_id": job_id,
+        "job_status": terminal.get("status"),
+        "job_error": terminal.get("error"),
+        "run_dir": str(run_dir.resolve()) if run_dir else None,
+        "started_at_utc": started_utc,
+        "completed_at_utc": _utc_now(),
+        "total_wall_time_sec": wall_time_sec,
+        "frozen_git_sha": frozen_sha,
+        "http_execution_path": http_execution_path,
+        "optimization_result_received": result_response is not None,
+    }
+    _write_json(case_dir / "case_execution_metadata.json", execution)
+    return {
+        **execution,
+        "case_dir": str(case_dir.resolve()),
+        "prepare_response": prepare_response,
+        "terminal_response": terminal,
+    }
+
+
+def _number(value: Any) -> float | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_present_zero_metric(
+    metrics: Mapping[str, Any],
+    metric_name: str,
+) -> bool:
+    """Require an explicit numeric zero; a missing counter never passes."""
+
+    return (
+        metric_name in metrics
+        and _number(metrics.get(metric_name)) == 0.0
+    )
+
+
+def _nested(mapping: Mapping[str, Any], *keys: str) -> Any:
+    current: Any = mapping
+    for key in keys:
+        if not isinstance(current, Mapping):
+            return None
+        current = current.get(key)
+    return current
+
+
+def _format_cell(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
+
+
+def _write_csv(
+    path: Path,
+    fieldnames: Iterable[str],
+    rows: Iterable[Mapping[str, Any]],
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    names = list(fieldnames)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=names, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _markdown_table(
+    headers: list[str],
+    rows: Iterable[Iterable[Any]],
+) -> list[str]:
+    rendered = [
+        "| " + " | ".join(headers) + " |",
+        "|" + "|".join("---" for _ in headers) + "|",
+    ]
+    rendered.extend(
+        "| " + " | ".join(_format_cell(value) for value in row) + " |"
+        for row in rows
+    )
+    return rendered
+
+
+def _service_assignments(case_dir: Path) -> dict[str, dict[str, str]]:
+    path = case_dir / "vehicle_timelines.csv"
+    assignments: dict[str, dict[str, str]] = {}
+    with path.open("r", encoding="utf-8-sig", newline="") as handle:
+        for row in csv.DictReader(handle):
+            if str(row.get("is_service") or "").strip().lower() != "true":
+                continue
+            trip_id = str(row.get("trip_id") or "").strip()
+            if not trip_id:
+                continue
+            candidate = {
+                "trip_id": trip_id,
+                "route": str(row.get("route_id") or ""),
+                "departure_time": str(row.get("start_time") or ""),
+                "vehicle_id": str(row.get("vehicle_id") or ""),
+                "powertrain": str(row.get("vehicle_type") or "").upper(),
+            }
+            previous = assignments.get(trip_id)
+            if previous is not None and previous != candidate:
+                raise ValueError(
+                    f"Trip {trip_id} has multiple service assignments in {path}"
+                )
+            assignments[trip_id] = candidate
+    return assignments
+
+
+def _assignment_mix(
+    assignments: Mapping[str, Mapping[str, str]],
+) -> dict[str, int]:
+    used_by_type: dict[str, set[str]] = {"BEV": set(), "ICE": set()}
+    trips = {"BEV": 0, "ICE": 0}
+    for row in assignments.values():
+        category = (
+            "BEV"
+            if str(row.get("powertrain") or "").upper()
+            in POWERTRAIN_ELECTRIC
+            else "ICE"
+        )
+        used_by_type[category].add(str(row.get("vehicle_id") or ""))
+        trips[category] += 1
+    return {
+        "used_bev": len(used_by_type["BEV"] - {""}),
+        "used_ice": len(used_by_type["ICE"] - {""}),
+        "bev_trips": trips["BEV"],
+        "ice_trips": trips["ICE"],
+    }
+
+
+def _vehicle_trip_assignments(
+    assignments: Mapping[str, Mapping[str, str]],
+) -> dict[str, list[dict[str, str]]]:
+    grouped: dict[str, list[dict[str, str]]] = {}
+    for row in assignments.values():
+        vehicle_id = str(row.get("vehicle_id") or "").strip()
+        if not vehicle_id:
+            continue
+        grouped.setdefault(vehicle_id, []).append(
+            {
+                "trip_id": str(row.get("trip_id") or ""),
+                "route": str(row.get("route") or ""),
+                "departure_time": str(row.get("departure_time") or ""),
+                "powertrain": str(row.get("powertrain") or ""),
+            }
+        )
+    return {
+        vehicle_id: sorted(
+            trips,
+            key=lambda item: (
+                item["departure_time"],
+                item["trip_id"],
+            ),
+        )
+        for vehicle_id, trips in sorted(grouped.items())
+    }
+
+
+def _build_assignment_difference(
+    *,
+    output_dir: Path,
+    sunny_dir: Path,
+    rain_dir: Path,
+) -> dict[str, Any]:
+    sunny = _service_assignments(sunny_dir)
+    rain = _service_assignments(rain_dir)
+    rows: list[dict[str, Any]] = []
+    for trip_id in sorted(set(sunny) | set(rain)):
+        sunny_row = sunny.get(trip_id, {})
+        rain_row = rain.get(trip_id, {})
+        sunny_vehicle = str(sunny_row.get("vehicle_id") or "")
+        rain_vehicle = str(rain_row.get("vehicle_id") or "")
+        sunny_type = str(sunny_row.get("powertrain") or "")
+        rain_type = str(rain_row.get("powertrain") or "")
+        changed = sunny_vehicle != rain_vehicle
+        if not sunny_row or not rain_row:
+            change_type = "missing_case_assignment"
+        elif not changed:
+            change_type = "unchanged"
+        elif sunny_type != rain_type:
+            change_type = "powertrain_changed"
+        else:
+            change_type = "vehicle_changed_same_powertrain"
+        rows.append(
+            {
+                "trip_id": trip_id,
+                "route": sunny_row.get("route") or rain_row.get("route"),
+                "departure_time": (
+                    sunny_row.get("departure_time")
+                    or rain_row.get("departure_time")
+                ),
+                "sunny_vehicle_id": sunny_vehicle,
+                "sunny_powertrain": sunny_type,
+                "rain_vehicle_id": rain_vehicle,
+                "rain_powertrain": rain_type,
+                "assignment_changed": changed,
+                "change_type": change_type,
+                # The solver does not expose an additive, solver-native
+                # trip-level Stage 2 cost.  Blank is more honest than a
+                # proportional allocation presented as provenance.
+                "sunny_stage2_cost_contribution": None,
+                "rain_stage2_cost_contribution": None,
+            }
+        )
+    fields = [
+        "trip_id",
+        "route",
+        "departure_time",
+        "sunny_vehicle_id",
+        "sunny_powertrain",
+        "rain_vehicle_id",
+        "rain_powertrain",
+        "assignment_changed",
+        "change_type",
+        "sunny_stage2_cost_contribution",
+        "rain_stage2_cost_contribution",
+    ]
+    _write_csv(output_dir / "assignment_difference.csv", fields, rows)
+    sunny_manifest = _read_json(
+        sunny_dir / "comparison_case_manifest.json"
+    )
+    rain_manifest = _read_json(rain_dir / "comparison_case_manifest.json")
+    payload = {
+        "schema_version": "frontend_assignment_difference_v1",
+        "sunny_assignment_hash": sunny_manifest.get("assignment_hash"),
+        "rain_assignment_hash": rain_manifest.get("assignment_hash"),
+        "assignment_hashes_equal": (
+            sunny_manifest.get("assignment_hash")
+            == rain_manifest.get("assignment_hash")
+        ),
+        "sunny_assignment_mix": _assignment_mix(sunny),
+        "rain_assignment_mix": _assignment_mix(rain),
+        "sunny_vehicle_trip_assignments": _vehicle_trip_assignments(sunny),
+        "rain_vehicle_trip_assignments": _vehicle_trip_assignments(rain),
+        "trip_count_union": len(rows),
+        "changed_trip_count": sum(
+            bool(row["assignment_changed"]) for row in rows
+        ),
+        "cost_contribution_semantics": (
+            "not_available_as_solver_native_additive_trip_cost"
+        ),
+        "source_artifacts": {
+            "sunny": "sunny/vehicle_timelines.csv",
+            "rain": "rain/vehicle_timelines.csv",
+        },
+        "rows": rows,
+    }
+    _write_json(output_dir / "assignment_difference.json", payload)
+    md = [
+        "# Assignment difference",
+        "",
+        f"- Sunny assignment hash: `{payload['sunny_assignment_hash']}`",
+        f"- Rain assignment hash: `{payload['rain_assignment_hash']}`",
+        (
+            "- Assignment hashes equal: "
+            f"`{str(payload['assignment_hashes_equal']).lower()}`"
+        ),
+        f"- Changed trips: `{payload['changed_trip_count']}`",
+        "",
+        (
+            "> Per-trip Stage 2 cost contribution is blank because no "
+            "solver-native additive trip-cost provenance exists."
+        ),
+        "",
+        *_markdown_table(
+            [
+                "Trip",
+                "Departure",
+                "Sunny vehicle",
+                "Sunny type",
+                "Rain vehicle",
+                "Rain type",
+                "Change",
+            ],
+            (
+                (
+                    row["trip_id"],
+                    row["departure_time"],
+                    row["sunny_vehicle_id"],
+                    row["sunny_powertrain"],
+                    row["rain_vehicle_id"],
+                    row["rain_powertrain"],
+                    row["change_type"],
+                )
+                for row in rows
+                if row["assignment_changed"]
+            ),
+        ),
+        "",
+        "## Sunny vehicle duties",
+        "",
+        *_markdown_table(
+            ["Vehicle", "Powertrain", "Trips"],
+            (
+                (
+                    vehicle_id,
+                    trips[0]["powertrain"] if trips else "",
+                    ", ".join(trip["trip_id"] for trip in trips),
+                )
+                for vehicle_id, trips in payload[
+                    "sunny_vehicle_trip_assignments"
+                ].items()
+            ),
+        ),
+        "",
+        "## Rain vehicle duties",
+        "",
+        *_markdown_table(
+            ["Vehicle", "Powertrain", "Trips"],
+            (
+                (
+                    vehicle_id,
+                    trips[0]["powertrain"] if trips else "",
+                    ", ".join(trip["trip_id"] for trip in trips),
+                )
+                for vehicle_id, trips in payload[
+                    "rain_vehicle_trip_assignments"
+                ].items()
+            ),
+        ),
+        "",
+    ]
+    (output_dir / "assignment_difference.md").write_text(
+        "\n".join(md),
+        encoding="utf-8",
+    )
+    return payload
+
+
+def _solver_row(case: str, case_dir: Path) -> dict[str, Any]:
+    settings = _read_json(case_dir / "solver_settings.json")
+    summary = _read_json(case_dir / "summary.json")
+    input_audit = _read_json(case_dir / "input_audit.json")
+    comparison = _read_json(case_dir / "comparison_case_manifest.json")
+    chain = _read_json(
+        case_dir
+        / "rolling_hourly_chain"
+        / "rolling_chain_summary.json"
+    )
+    execution = _read_json(case_dir / "case_execution_metadata.json")
+    telemetry = dict(settings.get("stage1_search_telemetry") or {})
+    telemetry_final = dict(telemetry.get("final") or {})
+    steps = list(chain.get("steps") or ())
+    rolling_solver_total = sum(
+        float(dict(step).get("stage2_runtime_seconds") or 0.0)
+        for step in steps
+        if isinstance(step, Mapping)
+    )
+    return {
+        "case": case,
+        "run_id": Path(
+            str(execution.get("run_dir") or case_dir.name)
+        ).name,
+        "git_sha": settings.get("git_sha"),
+        "prepared_input_id": input_audit.get("prepared_input_id"),
+        "total_wall_time_sec": execution.get("total_wall_time_sec"),
+        "day_ahead_total_sec": summary.get("solve_time_seconds"),
+        "stage1_runtime_sec": settings.get("stage1_runtime_seconds"),
+        "stage2_runtime_sec": settings.get("stage2_runtime_seconds"),
+        "first_incumbent_sec": telemetry.get(
+            "first_incumbent_runtime_sec"
+        ),
+        "rolling_solver_total_sec": rolling_solver_total,
+        "stage1_raw_best_bound": settings.get(
+            "stage1_gurobi_raw_best_bound"
+        ),
+        "stage1_raw_gap": settings.get(
+            "stage1_gurobi_raw_mip_gap_ratio"
+        ),
+        "stage1_certified_best_bound": settings.get(
+            "stage1_certified_best_bound"
+        ),
+        "stage1_certified_gap": settings.get(
+            "stage1_certified_mip_gap_ratio"
+        ),
+        "requested_gap": settings.get("mip_gap_requested_ratio"),
+        "termination_reason": settings.get("stage1_termination_reason"),
+        "node_count": telemetry_final.get("explored_node_count"),
+        "feedback_iteration_count": settings.get(
+            "stage2_feedback_iteration"
+        ),
+        "candidate_count": settings.get(
+            "stage1_stage2_candidate_count_evaluated"
+        ),
+        **_assignment_mix(_service_assignments(case_dir)),
+        "assignment_hash": comparison.get("assignment_hash"),
+    }
+
+
+def _build_solver_comparison(
+    output_dir: Path,
+    sunny_dir: Path,
+    rain_dir: Path,
+) -> list[dict[str, Any]]:
+    rows = [
+        _solver_row("sunny", sunny_dir),
+        _solver_row("rain", rain_dir),
+    ]
+    fields = list(rows[0])
+    _write_csv(output_dir / "solver_comparison.csv", fields, rows)
+    md = [
+        "# Solver comparison",
+        "",
+        (
+            "> Each case was executed once. These wall times are provenance "
+            "measurements, not evidence of a weather-caused runtime effect."
+        ),
+        "",
+        *_markdown_table(
+            ["Metric", "Sunny", "Rain"],
+            (
+                (field, rows[0].get(field), rows[1].get(field))
+                for field in fields
+                if field != "case"
+            ),
+        ),
+        "",
+    ]
+    (output_dir / "solver_comparison.md").write_text(
+        "\n".join(md),
+        encoding="utf-8",
+    )
+    return rows
+
+
+def _bess_initial_soc(case_dir: Path) -> float | None:
+    conditions = _read_json(case_dir / "simulation_conditions.json")
+    assets = conditions.get("depot_energy_assets")
+    if isinstance(assets, Mapping):
+        assets = [assets]
+    values = [
+        _number(dict(asset).get("bess_initial_soc_kwh"))
+        for asset in list(assets or ())
+        if isinstance(asset, Mapping)
+    ]
+    finite = [value for value in values if value is not None]
+    return sum(finite) if finite else None
+
+
+def _bess_terminal_soc(case_dir: Path) -> float | None:
+    executed = _read_json(
+        case_dir
+        / "rolling_hourly_chain"
+        / "executed_day_accounting.json"
+    )
+    raw = dict(executed.get("bess_terminal_soc_by_depot") or {})
+    values = [
+        _number(
+            dict(value).get("terminal_soc_kwh")
+            if isinstance(value, Mapping)
+            else value
+        )
+        for value in raw.values()
+    ]
+    finite = [value for value in values if value is not None]
+    return sum(finite) if finite else None
+
+
+def _research_values(
+    case_dir: Path,
+    solver_row: Mapping[str, Any],
+) -> dict[str, tuple[Any, str, str]]:
+    kpi = _read_json(case_dir / "kpi_summary.json")
+    executed = _read_json(
+        case_dir
+        / "rolling_hourly_chain"
+        / "executed_day_accounting.json"
+    )
+    cost = dict(executed.get("cost_breakdown") or {})
+    return {
+        "PV generation": (
+            cost.get("pv_generated_kwh"),
+            "kWh",
+            "rolling_hourly_chain/executed_day_accounting.json",
+        ),
+        "Grid import": (
+            cost.get("grid_import_kwh"),
+            "kWh",
+            "rolling_hourly_chain/executed_day_accounting.json",
+        ),
+        "PV to bus": (
+            cost.get("pv_to_bus_kwh"),
+            "kWh",
+            "rolling_hourly_chain/executed_day_accounting.json",
+        ),
+        "PV to BESS": (
+            cost.get("pv_to_bess_kwh"),
+            "kWh",
+            "rolling_hourly_chain/executed_day_accounting.json",
+        ),
+        "BESS to bus": (
+            cost.get("bess_to_bus_kwh"),
+            "kWh",
+            "rolling_hourly_chain/executed_day_accounting.json",
+        ),
+        "PV curtailed": (
+            cost.get("pv_curtailed_kwh"),
+            "kWh",
+            "rolling_hourly_chain/executed_day_accounting.json",
+        ),
+        "Peak grid import": (
+            cost.get("peak_grid_kw"),
+            "kW",
+            "rolling_hourly_chain/executed_day_accounting.json",
+        ),
+        "Bus charging": (
+            sum(
+                float(cost.get(key) or 0.0)
+                for key in (
+                    "grid_to_bus_kwh",
+                    "pv_to_bus_kwh",
+                    "bess_to_bus_kwh",
+                )
+            ),
+            "kWh",
+            "rolling_hourly_chain/executed_day_accounting.json",
+        ),
+        "BESS start SOC": (
+            _bess_initial_soc(case_dir),
+            "kWh",
+            "simulation_conditions.json",
+        ),
+        "BESS end SOC": (
+            _bess_terminal_soc(case_dir),
+            "kWh",
+            "rolling_hourly_chain/executed_day_accounting.json",
+        ),
+        "Used BEV": (
+            solver_row.get("used_bev"),
+            "vehicles",
+            "vehicle_timelines.csv",
+        ),
+        "Used ICE": (
+            solver_row.get("used_ice"),
+            "vehicles",
+            "vehicle_timelines.csv",
+        ),
+        "BEV trips": (
+            solver_row.get("bev_trips"),
+            "trips",
+            "vehicle_timelines.csv",
+        ),
+        "ICE trips": (
+            solver_row.get("ice_trips"),
+            "trips",
+            "vehicle_timelines.csv",
+        ),
+        "Fuel consumption": (
+            kpi.get("ice_fuel_consumed_l"),
+            "L",
+            "kpi_summary.json",
+        ),
+        "Electricity cost": (
+            cost.get("electricity_cost"),
+            "JPY",
+            "rolling_hourly_chain/executed_day_accounting.json",
+        ),
+        "Fuel cost": (
+            cost.get("fuel_cost"),
+            "JPY",
+            "rolling_hourly_chain/executed_day_accounting.json",
+        ),
+        "Demand charge": (
+            cost.get("demand_cost"),
+            "JPY",
+            "rolling_hourly_chain/executed_day_accounting.json",
+        ),
+        "Total cost": (
+            cost.get("total_cost"),
+            "JPY",
+            "rolling_hourly_chain/executed_day_accounting.json",
+        ),
+        "CO2": (
+            cost.get("total_co2_kg"),
+            "kgCO2",
+            "rolling_hourly_chain/executed_day_accounting.json",
+        ),
+        "Total wall time": (
+            solver_row.get("total_wall_time_sec"),
+            "s",
+            "case_execution_metadata.json",
+        ),
+        "Certified MILP gap": (
+            solver_row.get("stage1_certified_gap"),
+            "ratio",
+            "solver_settings.json",
+        ),
+    }
+
+
+def _difference(sunny: Any, rain: Any) -> float | None:
+    left = _number(sunny)
+    right = _number(rain)
+    return None if left is None or right is None else right - left
+
+
+def _build_research_comparison(
+    output_dir: Path,
+    sunny_dir: Path,
+    rain_dir: Path,
+    solver_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    sunny_values = _research_values(sunny_dir, solver_rows[0])
+    rain_values = _research_values(rain_dir, solver_rows[1])
+    rows: list[dict[str, Any]] = []
+    for metric in sunny_values:
+        sunny_value, unit, sunny_source = sunny_values[metric]
+        rain_value, rain_unit, rain_source = rain_values[metric]
+        if unit != rain_unit:
+            raise ValueError(f"Unit mismatch for research metric {metric}")
+        rows.append(
+            {
+                "metric": metric,
+                "unit": unit,
+                "sunny": sunny_value,
+                "rain": rain_value,
+                "rain_minus_sunny": _difference(
+                    sunny_value,
+                    rain_value,
+                ),
+                "sunny_source_artifact": f"sunny/{sunny_source}",
+                "rain_source_artifact": f"rain/{rain_source}",
+            }
+        )
+    fields = list(rows[0])
+    _write_csv(output_dir / "research_comparison.csv", fields, rows)
+    md = [
+        "# Controlled same-service-date PV supply sensitivity",
+        "",
+        (
+            "This is a high-PV/low-PV supply sensitivity under the same "
+            "2025-08-05 weekday service. It is not an observed sunny-day "
+            "versus rainy-day operations comparison."
+        ),
+        "",
+        *_markdown_table(
+            [
+                "Metric",
+                "Sunny",
+                "Rain",
+                "Rain - Sunny",
+                "Unit",
+                "Sources",
+            ],
+            (
+                (
+                    row["metric"],
+                    row["sunny"],
+                    row["rain"],
+                    row["rain_minus_sunny"],
+                    row["unit"],
+                    (
+                        f"{row['sunny_source_artifact']}; "
+                        f"{row['rain_source_artifact']}"
+                    ),
+                )
+                for row in rows
+            ),
+        ),
+        "",
+    ]
+    (output_dir / "research_comparison.md").write_text(
+        "\n".join(md),
+        encoding="utf-8",
+    )
+    return rows
+
+
+def _case_gate_audit(
+    *,
+    name: str,
+    case_dir: Path,
+    prepared_trip_count: int,
+    frozen_sha: str,
+) -> dict[str, Any]:
+    summary = _read_json(case_dir / "summary.json")
+    settings = _read_json(case_dir / "solver_settings.json")
+    physical = _read_json(
+        case_dir / "physical_schedule_validation.json"
+    )
+    physical_metrics = dict(physical.get("validation_metrics") or {})
+    solver_metrics = dict(physical.get("solver_validation_metrics") or {})
+    chain = _read_json(
+        case_dir
+        / "rolling_hourly_chain"
+        / "rolling_chain_summary.json"
+    )
+    executed = _read_json(
+        case_dir
+        / "rolling_hourly_chain"
+        / "executed_day_accounting.json"
+    )
+    reconciliation = _read_json(
+        case_dir / "final_cost_reconciliation.json"
+    )
+    completeness = _read_json(case_dir / "artifact_completeness.json")
+    acceptance = dict(settings.get("research_acceptance_checks") or {})
+    search_telemetry = dict(
+        settings.get("stage1_search_telemetry") or {}
+    )
+    final_search_telemetry = dict(
+        search_telemetry.get("final") or {}
+    )
+    input_audit = _read_json(case_dir / "input_audit.json")
+    prepare_response = _read_json(
+        case_dir / "frontend_prepare_response.json"
+    )
+    audited_prepared_input_id = str(
+        input_audit.get("prepared_input_id") or ""
+    ).strip()
+    response_prepared_input_id = str(
+        prepare_response.get("preparedInputId") or ""
+    ).strip()
+    certified_gap = _number(
+        settings.get("stage1_certified_mip_gap_ratio")
+    )
+    zero_metric_names = (
+        "unassigned_trip_count",
+        "duplicate_trip_count",
+        "unknown_vehicle_count",
+        "vehicle_time_overlap_count",
+        "infeasible_transition_count",
+        "location_discontinuity_count",
+        "unknown_operator_count",
+        "blank_charger_id_count",
+        "unknown_charger_id_count",
+        "charger_depot_mismatch_count",
+        "charging_location_violation_count",
+        "charger_compatibility_violation_count",
+        "charger_power_violation_count",
+        "charger_concurrency_violation_count",
+        "ev_soc_lower_violation_count",
+        "ev_soc_upper_violation_count",
+        "bev_terminal_soc_violation_count",
+        "refueling_location_violation_count",
+        "refueling_powertrain_violation_count",
+        "fuel_lower_violation_count",
+        "fuel_upper_violation_count",
+    )
+
+    checks: dict[str, bool] = {
+        "fresh_prepared_input": (
+            bool(audited_prepared_input_id)
+            and audited_prepared_input_id == response_prepared_input_id
+            and audited_prepared_input_id
+            not in FORBIDDEN_PREPARED_INPUT_IDS
+        ),
+        "git_sha_matches_frozen": (
+            settings.get("git_sha") == frozen_sha
+            and settings.get("git_sha_after_solve") == frozen_sha
+            and settings.get("git_state_unchanged_during_solve") is True
+            and chain.get("day_ahead_git_sha") == frozen_sha
+            and chain.get("rolling_runner_git_sha") == frozen_sha
+        ),
+        "git_clean": (
+            settings.get("git_state_available") is True
+            and settings.get("git_dirty") is False
+            and settings.get("git_dirty_after_solve") is False
+            and chain.get("rolling_runner_git_dirty") is False
+        ),
+        "prepared_scope_all_trips_served": (
+            int(prepared_trip_count) > 0
+            and int(summary.get("trip_count_served") or -1)
+            == int(prepared_trip_count)
+            and int(summary.get("trip_count_unserved") or -1) == 0
+        ),
+        "physical_schedule_accepted": physical.get("accepted") is True,
+        "physical_all_required_checks_passed": bool(
+            _nested(
+                physical,
+                "checks",
+                "all_required_hard_validation_checks_passed",
+            )
+        ),
+        "physical_zero_metrics": all(
+            _is_present_zero_metric(physical_metrics, metric)
+            for metric in zero_metric_names
+        ),
+        "grid_contract_zero": _is_present_zero_metric(
+            solver_metrics,
+            "contract_power_violation_count",
+        ),
+        "bess_soc_zero": all(
+            _is_present_zero_metric(solver_metrics, metric)
+            for metric in (
+                "bess_soc_lower_violation_count",
+                "bess_soc_upper_violation_count",
+                "bess_soc_violation_count",
+            )
+        ),
+        "bev_terminal_accepted": bool(
+            _nested(physical, "checks", "bev_terminal_energy_balanced")
+        ),
+        "bess_terminal_accepted": bool(
+            _nested(physical, "checks", "bess_terminal_energy_balanced")
+        ),
+        "no_fallback": (
+            settings.get("fallback_applied") is False
+            and acceptance.get("no_fallback") is True
+        ),
+        "no_postsolve_repair": (
+            acceptance.get("no_postsolve_modification") is True
+        ),
+        "rolling_24_of_24": (
+            int(chain.get("expected_step_count") or -1) == 24
+            and int(chain.get("step_count") or -1) == 24
+            and chain.get("chain_accepted") is True
+        ),
+        "rolling_assignment_constant": bool(
+            _nested(
+                chain,
+                "acceptance_checks",
+                "day_ahead_assignment_hash_constant",
+            )
+        ),
+        "executed_day_accounting_eligible": (
+            executed.get("eligible") is True
+        ),
+        "final_cost_reconciliation_ok": (
+            reconciliation.get("status") == "OK"
+        ),
+        "artifact_completeness_ok": (
+            completeness.get("status") == "OK"
+            and completeness.get("accepted") is True
+        ),
+        "certified_gap_at_most_requested_10_percent": (
+            certified_gap is not None and certified_gap <= 0.1 + 1.0e-12
+        ),
+        "solver_controls_match_formal_request": (
+            settings.get("time_limit_seconds_requested") == 1800
+            and settings.get("stage1_time_limit_seconds_requested") == 1500
+            and settings.get("stage2_time_limit_seconds_requested") == 300
+            and _number(settings.get("mip_gap_requested_ratio")) == 0.1
+            and settings.get("stage1_best_obj_stop_enabled") is False
+            and settings.get("gurobi_threads") == 1
+            and settings.get("random_seed") == 42
+            and int(
+                settings.get(
+                    "stage1_stage2_candidate_limit_requested"
+                )
+                or 0
+            )
+            >= 10
+        ),
+        "solver_telemetry_complete": (
+            all(
+                _number(value) is not None
+                for value in (
+                    settings.get("stage1_runtime_seconds"),
+                    settings.get("stage2_runtime_seconds"),
+                    settings.get("stage1_gurobi_raw_best_bound"),
+                    settings.get("stage1_gurobi_raw_mip_gap_ratio"),
+                    settings.get("stage1_certified_best_bound"),
+                    settings.get("stage1_certified_mip_gap_ratio"),
+                    search_telemetry.get(
+                        "first_incumbent_runtime_sec"
+                    ),
+                    final_search_telemetry.get(
+                        "explored_node_count"
+                    ),
+                )
+            )
+            and bool(
+                str(
+                    settings.get("stage1_termination_reason") or ""
+                ).strip()
+            )
+        ),
+        "candidate_evidence_present": (
+            (case_dir / "stage1_stage2_candidate_evaluation.json").is_file()
+            and (
+                case_dir / "stage1_stage2_candidate_evaluation.csv"
+            ).is_file()
+        ),
+        "candidate_selection_complete": (
+            int(settings.get("stage1_distinct_candidate_count") or 0) >= 2
+            and int(
+                settings.get(
+                    "stage1_stage2_candidate_count_evaluated"
+                )
+                or 0
+            )
+            >= 2
+            and int(
+                settings.get(
+                    "stage1_stage2_feasible_candidate_count"
+                )
+                or 0
+            )
+            >= 1
+            and int(
+                settings.get(
+                    "stage1_stage2_selected_candidate_index"
+                )
+                or 0
+            )
+            >= 1
+            and bool(
+                str(
+                    settings.get(
+                        "stage1_stage2_selected_candidate_hash"
+                    )
+                    or ""
+                ).strip()
+            )
+            and _number(
+                settings.get(
+                    "stage1_stage2_selected_canonical_actual_cost_jpy"
+                )
+            )
+            is not None
+        ),
+        "slot_energy_recourse_used": (
+            settings.get("stage1_energy_cost_proxy_used_in_objective")
+            is False
+            and _nested(
+                settings,
+                "stage1_time_indexed_energy_recourse_configuration",
+                "used_in_stage1_objective",
+            )
+            is True
+            and _nested(
+                settings,
+                "stage1_time_indexed_energy_recourse_configuration",
+                "arbitrary_weather_assignment_bias_used",
+            )
+            is False
+        ),
+    }
+    failed = sorted(key for key, passed in checks.items() if not passed)
+    return {
+        "case": name,
+        "accepted": not failed,
+        "checks": checks,
+        "failed_checks": failed,
+        "prepared_trip_count": prepared_trip_count,
+        "served_trip_count": summary.get("trip_count_served"),
+        "certified_gap": certified_gap,
+    }
+
+
+def _candidate_rows(case_dir: Path, case: str) -> list[dict[str, Any]]:
+    payload = _read_json_optional(
+        case_dir / "stage1_stage2_candidate_evaluation.json"
+    )
+    raw = payload.get("candidates")
+    if raw is None:
+        raw = payload.get("stage1_stage2_candidate_evaluation")
+    if raw is None and isinstance(payload.get("evaluations"), list):
+        raw = payload.get("evaluations")
+    rows: list[dict[str, Any]] = []
+    for candidate in list(raw or ()):
+        if not isinstance(candidate, Mapping):
+            continue
+        rows.append({"case": case, **dict(candidate)})
+    return rows
+
+
+def _build_same_assignment_investigation(
+    *,
+    output_dir: Path,
+    sunny_dir: Path,
+    rain_dir: Path,
+    assignment: Mapping[str, Any],
+) -> dict[str, Any]:
+    sunny_settings = _read_json(sunny_dir / "solver_settings.json")
+    rain_settings = _read_json(rain_dir / "solver_settings.json")
+    sunny_manifest = _read_json(
+        sunny_dir / "comparison_case_manifest.json"
+    )
+    rain_manifest = _read_json(rain_dir / "comparison_case_manifest.json")
+    candidate_payloads = {
+        "sunny": _read_json_optional(
+            sunny_dir / "stage1_stage2_candidate_evaluation.json"
+        ),
+        "rain": _read_json_optional(
+            rain_dir / "stage1_stage2_candidate_evaluation.json"
+        ),
+    }
+    candidates_by_case = {
+        "sunny": _candidate_rows(sunny_dir, "sunny"),
+        "rain": _candidate_rows(rain_dir, "rain"),
+    }
+    candidates = [
+        *candidates_by_case["sunny"],
+        *candidates_by_case["rain"],
+    ]
+    alternative_cost_fields = [
+        "case",
+        "candidate_index",
+        "stage1_pool_solution_index",
+        "candidate_hash",
+        "assignment_hash",
+        "stage1_relaxed_objective_jpy",
+        "stage1_recourse_objective_jpy",
+        "stage2_exact_objective_jpy",
+        "stage2_actual_canonical_cost_jpy",
+        "feasible",
+        "stage2_solver_status",
+        "used_bev",
+        "used_ice",
+        "bev_trips",
+        "ice_trips",
+        "runtime_sec",
+        "iis_hash",
+    ]
+    _write_csv(
+        output_dir / "same_assignment_alternative_costs.csv",
+        alternative_cost_fields,
+        candidates,
+    )
+    selected_hash_by_case = {
+        case: str(
+            payload.get("selected_candidate_hash") or ""
+        )
+        for case, payload in candidate_payloads.items()
+    }
+    alternatives_by_case: dict[str, set[str]] = {
+        "sunny": set(),
+        "rain": set(),
+    }
+    feasible_alternatives_by_case: dict[str, set[str]] = {
+        "sunny": set(),
+        "rain": set(),
+    }
+    for row in candidates:
+        case = str(row.get("case") or "")
+        candidate_hash = str(
+            row.get("assignment_hash") or row.get("candidate_hash") or ""
+        )
+        if (
+            case not in alternatives_by_case
+            or not candidate_hash
+            or candidate_hash == selected_hash_by_case.get(case)
+        ):
+            continue
+        alternatives_by_case[case].add(candidate_hash)
+        if row.get("feasible") is True:
+            feasible_alternatives_by_case[case].add(candidate_hash)
+
+    selected_candidate_by_case: dict[str, dict[str, Any]] = {}
+    selected_is_minimum_by_case: dict[str, bool] = {}
+    selected_recourse_objective_by_case: dict[str, float | None] = {}
+    exchange_rows: list[dict[str, Any]] = []
+    duty_overlap_rows: list[dict[str, Any]] = []
+    assignment_details_complete_by_case: dict[str, bool] = {}
+    selected_overlap_complete_by_case: dict[str, bool] = {}
+    exchange_candidate_count_by_case = {"sunny": 0, "rain": 0}
+    for case, case_candidates in candidates_by_case.items():
+        selected_hash = selected_hash_by_case[case]
+        selected = next(
+            (
+                row
+                for row in case_candidates
+                if str(
+                    row.get("assignment_hash")
+                    or row.get("candidate_hash")
+                    or ""
+                )
+                == selected_hash
+            ),
+            {},
+        )
+        selected_candidate_by_case[case] = selected
+        selected_cost = _number(
+            selected.get("stage2_actual_canonical_cost_jpy")
+        )
+        feasible_costs = [
+            value
+            for value in (
+                _number(
+                    row.get("stage2_actual_canonical_cost_jpy")
+                )
+                for row in case_candidates
+                if row.get("feasible") is True
+            )
+            if value is not None
+        ]
+        selected_is_minimum_by_case[case] = bool(
+            selected_cost is not None
+            and feasible_costs
+            and selected_cost <= min(feasible_costs) + 1.0e-6
+        )
+        selected_recourse_objective_by_case[case] = _number(
+            selected.get("stage1_recourse_objective_jpy")
+        )
+
+        assignment_details_complete_by_case[case] = bool(
+            case_candidates
+            and all(
+                isinstance(
+                    row.get("vehicle_trip_assignments"),
+                    list,
+                )
+                and bool(row.get("vehicle_trip_assignments"))
+                for row in case_candidates
+                if row.get("stage2_solver_status")
+                != "not_run_feedback_budget_reserved"
+            )
+        )
+        selected_assignments = {
+            str(item.get("trip_id") or ""): dict(item)
+            for item in list(
+                selected.get("vehicle_trip_assignments") or ()
+            )
+            if isinstance(item, Mapping)
+            and str(item.get("trip_id") or "")
+        }
+        for row in case_candidates:
+            candidate_hash = str(
+                row.get("assignment_hash")
+                or row.get("candidate_hash")
+                or ""
+            )
+            if not candidate_hash or candidate_hash == selected_hash:
+                continue
+            candidate_assignments = {
+                str(item.get("trip_id") or ""): dict(item)
+                for item in list(
+                    row.get("vehicle_trip_assignments") or ()
+                )
+                if isinstance(item, Mapping)
+                and str(item.get("trip_id") or "")
+            }
+            exchanged_trip_ids = sorted(
+                trip_id
+                for trip_id in set(selected_assignments)
+                & set(candidate_assignments)
+                if str(
+                    selected_assignments[trip_id].get(
+                        "powertrain"
+                    )
+                    or ""
+                )
+                != str(
+                    candidate_assignments[trip_id].get(
+                        "powertrain"
+                    )
+                    or ""
+                )
+            )
+            if exchanged_trip_ids:
+                exchange_candidate_count_by_case[case] += 1
+            exchange_rows.append(
+                {
+                    "case": case,
+                    "candidate_hash": candidate_hash,
+                    "feasible": row.get("feasible"),
+                    "stage2_actual_canonical_cost_jpy": row.get(
+                        "stage2_actual_canonical_cost_jpy"
+                    ),
+                    "powertrain_exchange_trip_count": len(
+                        exchanged_trip_ids
+                    ),
+                    "powertrain_exchange_trip_ids": json.dumps(
+                        exchanged_trip_ids,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    ),
+                }
+            )
+
+        overlap_records = [
+            dict(item)
+            for item in list(
+                selected.get("relaxed_pv_overlap_by_bev_duty") or ()
+            )
+            if isinstance(item, Mapping)
+        ]
+        selected_bev_ids = {
+            str(item.get("vehicle_id") or "")
+            for item in selected_assignments.values()
+            if str(item.get("powertrain") or "").upper()
+            in POWERTRAIN_ELECTRIC
+        }
+        overlap_vehicle_ids = {
+            str(item.get("vehicle_id") or "")
+            for item in overlap_records
+        }
+        selected_overlap_complete_by_case[case] = bool(
+            selected_bev_ids
+            and selected_bev_ids == overlap_vehicle_ids
+        )
+        for item in overlap_records:
+            duty_overlap_rows.append(
+                {
+                    "case": case,
+                    "vehicle_id": item.get("vehicle_id"),
+                    "duty_ids": json.dumps(
+                        list(item.get("duty_ids") or ()),
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    ),
+                    "home_depot_id": item.get("home_depot_id"),
+                    "relaxed_positive_charge_slots": json.dumps(
+                        list(
+                            item.get(
+                                "relaxed_positive_charge_slots"
+                            )
+                            or ()
+                        ),
+                        separators=(",", ":"),
+                    ),
+                    "relaxed_charge_input_kwh": item.get(
+                        "relaxed_charge_input_kwh"
+                    ),
+                    "pv_available_in_relaxed_charge_slots_kwh": (
+                        item.get(
+                            "pv_available_in_relaxed_charge_slots_kwh"
+                        )
+                    ),
+                    "semantics": item.get("semantics"),
+                }
+            )
+    _write_csv(
+        output_dir
+        / "same_assignment_bev_ice_exchange_candidates.csv",
+        [
+            "case",
+            "candidate_hash",
+            "feasible",
+            "stage2_actual_canonical_cost_jpy",
+            "powertrain_exchange_trip_count",
+            "powertrain_exchange_trip_ids",
+        ],
+        exchange_rows,
+    )
+    _write_csv(
+        output_dir / "same_assignment_bev_duty_pv_overlap.csv",
+        [
+            "case",
+            "vehicle_id",
+            "duty_ids",
+            "home_depot_id",
+            "relaxed_positive_charge_slots",
+            "relaxed_charge_input_kwh",
+            "pv_available_in_relaxed_charge_slots_kwh",
+            "semantics",
+        ],
+        duty_overlap_rows,
+    )
+
+    sunny_recourse_hash = _nested(
+        sunny_settings,
+        "stage1_time_indexed_energy_recourse_configuration",
+        "objective_coefficient_and_rhs_hash",
+    )
+    rain_recourse_hash = _nested(
+        rain_settings,
+        "stage1_time_indexed_energy_recourse_configuration",
+        "objective_coefficient_and_rhs_hash",
+    )
+    checks = {
+        "pv_profile_hashes_differ": (
+            sunny_manifest.get("pv_profile_hash")
+            != rain_manifest.get("pv_profile_hash")
+        ),
+        "stage1_recourse_hashes_differ": (
+            bool(sunny_recourse_hash)
+            and bool(rain_recourse_hash)
+            and sunny_recourse_hash != rain_recourse_hash
+        ),
+        "arbitrary_weather_bias_disabled": all(
+            _nested(
+                settings,
+                "stage1_time_indexed_energy_recourse_configuration",
+                "arbitrary_weather_assignment_bias_used",
+            )
+            is False
+            for settings in (sunny_settings, rain_settings)
+        ),
+        "stage1_selected_recourse_objectives_differ": (
+            selected_recourse_objective_by_case["sunny"] is not None
+            and selected_recourse_objective_by_case["rain"] is not None
+            and abs(
+                float(
+                    selected_recourse_objective_by_case["sunny"]
+                )
+                - float(
+                    selected_recourse_objective_by_case["rain"]
+                )
+            )
+            > 1.0e-9
+        ),
+        "sunny_twenty_alternatives_evaluated": (
+            len(alternatives_by_case["sunny"]) >= 20
+        ),
+        "rain_twenty_alternatives_evaluated": (
+            len(alternatives_by_case["rain"]) >= 20
+        ),
+        "sunny_twenty_feasible_alternatives_costed": (
+            len(feasible_alternatives_by_case["sunny"]) >= 20
+        ),
+        "rain_twenty_feasible_alternatives_costed": (
+            len(feasible_alternatives_by_case["rain"]) >= 20
+        ),
+        "sunny_selected_assignment_has_minimum_actual_cost": (
+            selected_is_minimum_by_case["sunny"]
+        ),
+        "rain_selected_assignment_has_minimum_actual_cost": (
+            selected_is_minimum_by_case["rain"]
+        ),
+        "sunny_candidate_assignments_recorded": (
+            assignment_details_complete_by_case["sunny"]
+        ),
+        "rain_candidate_assignments_recorded": (
+            assignment_details_complete_by_case["rain"]
+        ),
+        "sunny_bev_duty_pv_overlap_recorded": (
+            selected_overlap_complete_by_case["sunny"]
+        ),
+        "rain_bev_duty_pv_overlap_recorded": (
+            selected_overlap_complete_by_case["rain"]
+        ),
+        "sunny_bev_ice_exchange_candidates_enumerated": (
+            exchange_candidate_count_by_case["sunny"] > 0
+        ),
+        "rain_bev_ice_exchange_candidates_enumerated": (
+            exchange_candidate_count_by_case["rain"] > 0
+        ),
+    }
+    failed = sorted(key for key, passed in checks.items() if not passed)
+    payload = {
+        "schema_version": "same_assignment_investigation_v1",
+        "accepted": not failed,
+        "checks": checks,
+        "failed_checks": failed,
+        "sunny_pv_profile_hash": sunny_manifest.get("pv_profile_hash"),
+        "rain_pv_profile_hash": rain_manifest.get("pv_profile_hash"),
+        "sunny_stage1_recourse_hash": sunny_recourse_hash,
+        "rain_stage1_recourse_hash": rain_recourse_hash,
+        "sunny_selected_recourse_objective_jpy": (
+            selected_recourse_objective_by_case["sunny"]
+        ),
+        "rain_selected_recourse_objective_jpy": (
+            selected_recourse_objective_by_case["rain"]
+        ),
+        "sunny_selected_is_minimum_actual_cost": (
+            selected_is_minimum_by_case["sunny"]
+        ),
+        "rain_selected_is_minimum_actual_cost": (
+            selected_is_minimum_by_case["rain"]
+        ),
+        "sunny_bev_ice_exchange_candidate_count": (
+            exchange_candidate_count_by_case["sunny"]
+        ),
+        "rain_bev_ice_exchange_candidate_count": (
+            exchange_candidate_count_by_case["rain"]
+        ),
+        "sunny_alternative_assignment_count": len(
+            alternatives_by_case["sunny"]
+        ),
+        "rain_alternative_assignment_count": len(
+            alternatives_by_case["rain"]
+        ),
+        "sunny_feasible_alternative_count": len(
+            feasible_alternatives_by_case["sunny"]
+        ),
+        "rain_feasible_alternative_count": len(
+            feasible_alternatives_by_case["rain"]
+        ),
+        "conclusion": (
+            "same assignment audit satisfied"
+            if not failed
+            else "same assignment remains unresolved; formal completion blocked"
+        ),
+    }
+    _write_json(output_dir / "same_assignment_investigation.json", payload)
+    md = [
+        "# Same-assignment investigation",
+        "",
+        f"- Accepted: `{str(payload['accepted']).lower()}`",
+        f"- Sunny alternatives: `{payload['sunny_alternative_assignment_count']}`",
+        f"- Rain alternatives: `{payload['rain_alternative_assignment_count']}`",
+        (
+            "- Sunny feasible alternatives: "
+            f"`{payload['sunny_feasible_alternative_count']}`"
+        ),
+        (
+            "- Rain feasible alternatives: "
+            f"`{payload['rain_feasible_alternative_count']}`"
+        ),
+        "",
+        "## Checks",
+        "",
+        *[
+            f"- {name}: `{'PASS' if passed else 'FAIL'}`"
+            for name, passed in checks.items()
+        ],
+        "",
+    ]
+    (output_dir / "same_assignment_investigation.md").write_text(
+        "\n".join(md),
+        encoding="utf-8",
+    )
+    return payload
+
+
+def _build_pair_control_audit(
+    *,
+    sunny_dir: Path,
+    rain_dir: Path,
+    pair_manifest: Mapping[str, Any],
+    assignment: Mapping[str, Any],
+    same_assignment: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    sunny = _read_json(sunny_dir / "comparison_case_manifest.json")
+    rain = _read_json(rain_dir / "comparison_case_manifest.json")
+    sunny_control = dict(sunny.get("comparison_control_payload") or {})
+    rain_control = dict(rain.get("comparison_control_payload") or {})
+    sunny_kpi = _read_json(sunny_dir / "kpi_summary.json")
+    rain_kpi = _read_json(rain_dir / "kpi_summary.json")
+    required_controls = (
+        "service_date",
+        "service_id",
+        "trip_input_hash",
+        "scenario_fleet_contract_hash",
+        "active_vehicle_id_hash",
+        "vehicle_parameter_hash",
+        "initial_state_hash",
+        "initial_soc_input_hash",
+        "charger_configuration_hash",
+        "non_pv_depot_asset_hash",
+        "price_slot_hash",
+        "bev_terminal_soc_policy",
+        "bess_terminal_policy",
+        "timestep_min",
+        "day_ahead_solver_controls",
+        "rolling_solver_controls",
+        "git_sha",
+    )
+    controls = {
+        key: {
+            "sunny": sunny_control.get(key),
+            "rain": rain_control.get(key),
+            "match": (
+                sunny_control.get(key) == rain_control.get(key)
+                and sunny_control.get(key) is not None
+            ),
+        }
+        for key in required_controls
+    }
+    sunny_pv = _number(sunny_kpi.get("pv_generation_kwh"))
+    rain_pv = _number(rain_kpi.get("pv_generation_kwh"))
+    day_ahead_control_fields = (
+        "time_limit_seconds_effective",
+        "stage1_time_limit_seconds_requested",
+        "stage2_time_limit_seconds_requested",
+        "mip_gap_requested_ratio",
+        "stage1_best_obj_stop_enabled",
+        "gurobi_threads",
+        "stage1_stage2_candidate_limit",
+        "random_seed",
+    )
+    rolling_control_fields = (
+        "gurobi_threads",
+        "mip_gap",
+        "time_limit_sec",
+        "random_seed",
+        "execution_minutes",
+    )
+
+    def _control_section_complete(
+        control: Mapping[str, Any],
+        section_name: str,
+        required_fields: Iterable[str],
+    ) -> bool:
+        section = control.get(section_name)
+        return (
+            isinstance(section, Mapping)
+            and all(
+                field in section and section.get(field) is not None
+                for field in required_fields
+            )
+        )
+
+    assignment_resolved = (
+        assignment.get("assignment_hashes_equal") is False
+        or (
+            same_assignment is not None
+            and same_assignment.get("accepted") is True
+        )
+    )
+    checks = {
+        "all_required_controls_match": all(
+            item["match"] for item in controls.values()
+        ),
+        "day_ahead_solver_controls_complete": (
+            _control_section_complete(
+                sunny_control,
+                "day_ahead_solver_controls",
+                day_ahead_control_fields,
+            )
+            and _control_section_complete(
+                rain_control,
+                "day_ahead_solver_controls",
+                day_ahead_control_fields,
+            )
+        ),
+        "rolling_solver_controls_complete": (
+            _control_section_complete(
+                sunny_control,
+                "rolling_solver_controls",
+                rolling_control_fields,
+            )
+            and _control_section_complete(
+                rain_control,
+                "rolling_solver_controls",
+                rolling_control_fields,
+            )
+        ),
+        "comparison_control_hash_matches": (
+            sunny.get("comparison_control_hash")
+            == rain.get("comparison_control_hash")
+            and bool(sunny.get("comparison_control_hash"))
+        ),
+        "pv_profile_hashes_differ": (
+            sunny.get("pv_profile_hash") != rain.get("pv_profile_hash")
+            and bool(sunny.get("pv_profile_hash"))
+            and bool(rain.get("pv_profile_hash"))
+        ),
+        "sunny_expected_pv_total": (
+            sunny_pv is not None
+            and abs(sunny_pv - EXPECTED_PV_KWH["sunny"]) <= 1.0e-6
+        ),
+        "rain_expected_pv_total": (
+            rain_pv is not None
+            and abs(rain_pv - EXPECTED_PV_KWH["rain"]) <= 1.0e-6
+        ),
+        "pair_manifest_accepted": (
+            pair_manifest.get(
+                "accepted_for_controlled_pv_sensitivity_comparison"
+            )
+            is True
+        ),
+        "pair_formal_research_submission_ready": (
+            pair_manifest.get("formal_research_submission_ready") is True
+        ),
+        "assignment_difference_or_strict_audit": assignment_resolved,
+    }
+    failed = sorted(key for key, passed in checks.items() if not passed)
+    return {
+        "accepted": not failed,
+        "checks": checks,
+        "failed_checks": failed,
+        "controls": controls,
+        "sunny_pv_generation_kwh": sunny_pv,
+        "rain_pv_generation_kwh": rain_pv,
+        "sunny_pv_profile_hash": sunny.get("pv_profile_hash"),
+        "rain_pv_profile_hash": rain.get("pv_profile_hash"),
+        "comparison_control_hash": sunny.get("comparison_control_hash"),
+    }
+
+
+def _run_pair_builder(
+    *,
+    sunny_dir: Path,
+    rain_dir: Path,
+    pair_dir: Path,
+) -> dict[str, Any]:
+    command = [
+        sys.executable,
+        str(REPO_ROOT / "scripts" / "build_frontend_pv_pair_manifest.py"),
+        "--baseline-run",
+        str(sunny_dir),
+        "--counterfactual-run",
+        str(rain_dir),
+        "--output-dir",
+        str(pair_dir),
+    ]
+    completed = subprocess.run(
+        command,
+        cwd=REPO_ROOT,
+        text=True,
+        encoding="utf-8",
+        capture_output=True,
+        check=False,
+    )
+    execution = {
+        "command": command,
+        "returncode": completed.returncode,
+        "stdout": completed.stdout,
+        "stderr": completed.stderr,
+        "completed_at_utc": _utc_now(),
+    }
+    _write_json(pair_dir / "pair_builder_execution.json", execution)
+    return execution
+
+
+def _run_small_integrated_oracle(
+    *,
+    name: str,
+    scenario_id: str,
+    prepared_input_id: str,
+    case_dir: Path,
+    depot_id: str,
+    service_id: str,
+) -> dict[str, Any]:
+    """Run the repository's bounded Phase 3 versus Phase 4 oracle.
+
+    This subprocess is diagnostic only.  It never replaces the completed BFF
+    full-scale run, and its output carries the oracle script's explicit
+    small-subset scope warning.
+    """
+
+    output_path = case_dir / "small_integrated_oracle.json"
+    command = [
+        sys.executable,
+        str(REPO_ROOT / "scripts" / "audit_small_integrated_weather_milp.py"),
+        "--scenario-id",
+        scenario_id,
+        "--prepared-input-id",
+        prepared_input_id,
+        "--output",
+        str(output_path),
+        "--depot-id",
+        depot_id,
+        "--service-id",
+        service_id,
+        "--trip-count",
+        "10",
+        "--vehicles-per-type",
+        "5",
+        "--time-limit-sec",
+        "120",
+        "--random-seed",
+        "42",
+        "--skip-five-minute",
+    ]
+    started = time.monotonic()
+    completed = subprocess.run(
+        command,
+        cwd=REPO_ROOT,
+        text=True,
+        encoding="utf-8",
+        capture_output=True,
+        check=False,
+    )
+    payload = _read_json_optional(output_path)
+    primary = dict(payload.get("primary_comparison") or {})
+    checks = {
+        "process_completed": completed.returncode == 0,
+        "artifact_created": bool(payload),
+        "integrated_exact_oracle_eligible": (
+            primary.get("integrated_exact_oracle_eligible") is True
+        ),
+        "two_stage_comparison_available": (
+            primary.get("two_stage_comparison_available") is True
+        ),
+        "two_stage_matches_integrated_cost": (
+            primary.get("two_stage_matches_integrated_cost") is True
+        ),
+        "used_vehicle_type_mix_matches": (
+            primary.get("used_vehicle_type_mix_matches") is True
+        ),
+        "served_trip_type_mix_matches": (
+            primary.get("served_trip_type_mix_matches") is True
+        ),
+        "assignment_powertrain_hash_matches": (
+            primary.get("assignment_powertrain_hash_matches") is True
+        ),
+        "comparison_lower_bound_consistent": (
+            primary.get("comparison_lower_bound_consistent") is True
+        ),
+    }
+    audit = {
+        "schema_version": "small_integrated_oracle_execution_audit_v1",
+        "case": name,
+        "purpose": (
+            "bounded Phase 3 weather-coupled versus Phase 4 integrated oracle"
+        ),
+        "not_full_scale_evidence": True,
+        "command": command,
+        "returncode": completed.returncode,
+        "runtime_sec": time.monotonic() - started,
+        "stdout": completed.stdout,
+        "stderr": completed.stderr,
+        "checks": checks,
+        "failed_checks": sorted(
+            key for key, passed in checks.items() if not passed
+        ),
+        "primary_comparison": primary,
+        "output_path": str(output_path.resolve()),
+    }
+    _write_json(case_dir / "small_integrated_oracle_execution.json", audit)
+    return audit
+
+
+def _write_execution_log(
+    output_dir: Path,
+    events: list[dict[str, Any]],
+    completion: Mapping[str, Any],
+) -> None:
+    lines = [
+        "# Frontend controlled PV pair execution log",
+        "",
+        f"- Final status: `{completion.get('status')}`",
+        f"- Frozen Git SHA: `{completion.get('frozen_git_sha')}`",
+        "",
+        "## Events",
+        "",
+        *_markdown_table(
+            ["UTC", "Event", "Case/job", "Status", "Detail"],
+            (
+                (
+                    event.get("timestamp_utc"),
+                    event.get("event"),
+                    event.get("case") or event.get("job_id"),
+                    event.get("status"),
+                    event.get("message") or event.get("detail"),
+                )
+                for event in events
+            ),
+        ),
+        "",
+        "## Remaining blockers",
+        "",
+        *[
+            f"- {blocker}"
+            for blocker in list(completion.get("failed_checks") or ())
+        ],
+        "",
+    ]
+    (output_dir / "execution_log.md").write_text(
+        "\n".join(lines),
+        encoding="utf-8",
+    )
+
+
+def _zip_directory(output_dir: Path) -> Path:
+    zip_path = Path(f"{output_dir}.zip")
+    with zipfile.ZipFile(
+        zip_path,
+        "w",
+        compression=zipfile.ZIP_DEFLATED,
+        compresslevel=6,
+    ) as archive:
+        for path in sorted(output_dir.rglob("*")):
+            if path.is_file():
+                archive.write(
+                    path,
+                    arcname=(
+                        Path(output_dir.name)
+                        / path.relative_to(output_dir)
+                    ).as_posix(),
+                )
+    if not zip_path.is_file() or zip_path.stat().st_size <= 0:
+        raise RuntimeError(f"Failed to build evidence ZIP: {zip_path}")
+    with zipfile.ZipFile(zip_path, "r") as archive:
+        bad_member = archive.testzip()
+        if bad_member is not None:
+            raise RuntimeError(
+                f"Evidence ZIP CRC validation failed: {bad_member}"
+            )
+    return zip_path
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--base-url", required=True)
+    parser.add_argument("--sunny-scenario-id", required=True)
+    parser.add_argument("--rain-scenario-id", required=True)
+    parser.add_argument("--service-date", required=True)
+    parser.add_argument("--rain-pv-source-date", required=True)
+    parser.add_argument("--depot-id", required=True)
+    parser.add_argument("--service-id", required=True)
+    parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument(
+        "--job-timeout-seconds",
+        type=float,
+        default=14_400.0,
+    )
+    parser.add_argument(
+        "--poll-interval-seconds",
+        type=float,
+        default=5.0,
+    )
+    return parser
+
+
+def main() -> int:
+    args = _parser().parse_args()
+    output_dir = args.output_dir.resolve()
+    zip_path = Path(f"{output_dir}.zip")
+    if output_dir.exists() or zip_path.exists():
+        raise RuntimeError(
+            "Refusing to overwrite an existing experiment directory or ZIP: "
+            f"{output_dir}; {zip_path}"
+        )
+    frozen_sha = _assert_clean_frozen_repository()
+    output_dir.mkdir(parents=True)
+    events: list[dict[str, Any]] = []
+    (output_dir / "frozen_git_sha.txt").write_text(
+        frozen_sha + "\n",
+        encoding="utf-8",
+    )
+    client = HttpJsonClient(args.base_url)
+    health, health_raw = client.request_json("GET", "/health")
+    _write_raw_json_response(output_dir / "bff_health_response.json", health_raw)
+    if health.get("status") != "ok":
+        raise RuntimeError(f"BFF health check failed: {health}")
+    code_and_environment = {
+        "schema_version": "controlled_pv_pair_environment_v1",
+        "captured_at_utc": _utc_now(),
+        "repository_root": str(REPO_ROOT),
+        "frozen_git_sha": frozen_sha,
+        "git_status_porcelain": _git("status", "--porcelain"),
+        "python_executable": sys.executable,
+        "python_version": sys.version,
+        "platform": platform.platform(),
+        "base_url": args.base_url,
+        "bff_health": health,
+        "gurobi_license_file": os.environ.get("GRB_LICENSE_FILE"),
+        "mc_outputs_dir": os.environ.get("MC_OUTPUTS_DIR"),
+        "bff_opt_executor": os.environ.get("BFF_OPT_EXECUTOR"),
+        "comparison_name": (
+            "same-service-date high-PV/low-PV supply sensitivity"
+        ),
+        "runtime_comparison_repetitions_per_case": 1,
+        "runtime_claim_eligible": False,
+    }
+    _write_json(
+        output_dir / "code_and_environment.json",
+        code_and_environment,
+    )
+
+    cases = (
+        (
+            "sunny",
+            args.sunny_scenario_id,
+            build_prepare_payload(
+                depot_id=args.depot_id,
+                service_id=args.service_id,
+                service_date=args.service_date,
+                pv_source_date=args.service_date,
+                comparison_role="baseline",
+            ),
+        ),
+        (
+            "rain",
+            args.rain_scenario_id,
+            build_prepare_payload(
+                depot_id=args.depot_id,
+                service_id=args.service_id,
+                service_date=args.service_date,
+                pv_source_date=args.rain_pv_source_date,
+                comparison_role="pv_curve_counterfactual",
+            ),
+        ),
+    )
+    case_results: dict[str, dict[str, Any]] = {}
+    failed_checks: list[str] = []
+    for name, scenario_id, prepare_payload in cases:
+        events.append(
+            {
+                "timestamp_utc": _utc_now(),
+                "event": "case_started",
+                "case": name,
+                "status": "running",
+                "detail": scenario_id,
+            }
+        )
+        try:
+            result = _execute_case(
+                name=name,
+                scenario_id=scenario_id,
+                prepare_payload=prepare_payload,
+                client=client,
+                output_dir=output_dir,
+                timeout_seconds=args.job_timeout_seconds,
+                poll_interval_seconds=args.poll_interval_seconds,
+                frozen_sha=frozen_sha,
+                log=events,
+            )
+            case_results[name] = result
+            events.append(
+                {
+                    "timestamp_utc": _utc_now(),
+                    "event": "case_terminal",
+                    "case": name,
+                    "status": result.get("job_status"),
+                    "detail": result.get("run_dir"),
+                }
+            )
+            if result.get("job_status") != "completed":
+                failed_checks.append(
+                    f"{name}:frontend_job_not_completed"
+                )
+        except Exception as exc:
+            failed_checks.append(
+                f"{name}:execution_exception:{type(exc).__name__}:{exc}"
+            )
+            case_dir = output_dir / name
+            case_dir.mkdir(parents=True, exist_ok=True)
+            _write_json(
+                case_dir / "case_execution_failure.json",
+                {
+                    "case": name,
+                    "failed_at_utc": _utc_now(),
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                },
+            )
+            events.append(
+                {
+                    "timestamp_utc": _utc_now(),
+                    "event": "case_terminal",
+                    "case": name,
+                    "status": "failed",
+                    "detail": f"{type(exc).__name__}: {exc}",
+                }
+            )
+
+    pair_manifest: dict[str, Any] = {}
+    assignment: dict[str, Any] = {}
+    pair_control: dict[str, Any] = {}
+    same_assignment: dict[str, Any] | None = None
+    case_gate_audits: dict[str, Any] = {}
+    small_oracle_audits: dict[str, Any] = {}
+    both_completed = all(
+        case_results.get(name, {}).get("job_status") == "completed"
+        for name in ("sunny", "rain")
+    )
+    if both_completed:
+        sunny_dir = output_dir / "sunny"
+        rain_dir = output_dir / "rain"
+        pair_dir = output_dir / "pair"
+        scenario_id_by_case = {
+            "sunny": args.sunny_scenario_id,
+            "rain": args.rain_scenario_id,
+        }
+        for name, case_dir in (
+            ("sunny", sunny_dir),
+            ("rain", rain_dir),
+        ):
+            oracle_audit = _run_small_integrated_oracle(
+                name=name,
+                scenario_id=scenario_id_by_case[name],
+                prepared_input_id=str(
+                    case_results[name].get("prepared_input_id") or ""
+                ),
+                case_dir=case_dir,
+                depot_id=args.depot_id,
+                service_id=args.service_id,
+            )
+            small_oracle_audits[name] = oracle_audit
+            failed_checks.extend(
+                f"{name}:small_oracle:{check}"
+                for check in oracle_audit["failed_checks"]
+            )
+        pair_execution = _run_pair_builder(
+            sunny_dir=sunny_dir,
+            rain_dir=rain_dir,
+            pair_dir=pair_dir,
+        )
+        pair_manifest = _read_json_optional(
+            pair_dir / "pair_manifest.json"
+        )
+        if pair_execution["returncode"] != 0:
+            failed_checks.append(
+                "pair:builder_failed:"
+                + str(pair_execution.get("stderr") or "").strip()
+            )
+        assignment = _build_assignment_difference(
+            output_dir=output_dir,
+            sunny_dir=sunny_dir,
+            rain_dir=rain_dir,
+        )
+        solver_rows = _build_solver_comparison(
+            output_dir,
+            sunny_dir,
+            rain_dir,
+        )
+        _build_research_comparison(
+            output_dir,
+            sunny_dir,
+            rain_dir,
+            solver_rows,
+        )
+        if assignment.get("assignment_hashes_equal") is True:
+            same_assignment = _build_same_assignment_investigation(
+                output_dir=output_dir,
+                sunny_dir=sunny_dir,
+                rain_dir=rain_dir,
+                assignment=assignment,
+            )
+        for name, case_dir in (
+            ("sunny", sunny_dir),
+            ("rain", rain_dir),
+        ):
+            prepare_response = dict(
+                case_results[name].get("prepare_response") or {}
+            )
+            audit = _case_gate_audit(
+                name=name,
+                case_dir=case_dir,
+                prepared_trip_count=int(
+                    prepare_response.get("tripCount") or 0
+                ),
+                frozen_sha=frozen_sha,
+            )
+            case_gate_audits[name] = audit
+            failed_checks.extend(
+                f"{name}:{check}" for check in audit["failed_checks"]
+            )
+        pair_control = _build_pair_control_audit(
+            sunny_dir=sunny_dir,
+            rain_dir=rain_dir,
+            pair_manifest=pair_manifest,
+            assignment=assignment,
+            same_assignment=same_assignment,
+        )
+        _write_json(
+            output_dir / "pair" / "pair_control_audit.json",
+            pair_control,
+        )
+        failed_checks.extend(
+            f"pair:{check}" for check in pair_control["failed_checks"]
+        )
+    else:
+        failed_checks.append("pair:both_frontend_jobs_not_completed")
+
+    ending_sha = _git("rev-parse", "HEAD")
+    ending_status = _git("status", "--porcelain")
+    if ending_sha != frozen_sha:
+        failed_checks.append("repository:git_sha_changed_during_execution")
+    if ending_status:
+        failed_checks.append("repository:worktree_became_dirty_during_execution")
+
+    completion = {
+        "schema_version": "controlled_pv_pair_completion_audit_v1",
+        "status": "READY" if not failed_checks else "BLOCKED",
+        "frozen_git_sha": frozen_sha,
+        "ending_git_sha": ending_sha,
+        "ending_git_status_porcelain": ending_status,
+        "failed_checks": sorted(set(failed_checks)),
+        "case_gate_audits": case_gate_audits,
+        "small_integrated_oracle_audits": small_oracle_audits,
+        "pair_control_audit": pair_control,
+        "assignment_audit": {
+            key: assignment.get(key)
+            for key in (
+                "sunny_assignment_hash",
+                "rain_assignment_hash",
+                "assignment_hashes_equal",
+                "changed_trip_count",
+            )
+        },
+        "same_assignment_investigation": same_assignment,
+        "pair_manifest": {
+            "accepted_for_controlled_pv_sensitivity_comparison": (
+                pair_manifest.get(
+                    "accepted_for_controlled_pv_sensitivity_comparison"
+                )
+            ),
+            "formal_research_submission_ready": pair_manifest.get(
+                "formal_research_submission_ready"
+            ),
+            "failed_checks": pair_manifest.get("failed_checks"),
+        },
+        "zip_created": False,
+    }
+    _write_json(output_dir / "completion_audit.json", completion)
+    _write_execution_log(output_dir, events, completion)
+    zip_path = _zip_directory(output_dir)
+    completion["zip_created"] = True
+    completion["zip_path"] = str(zip_path.resolve())
+    completion["zip_size_bytes"] = zip_path.stat().st_size
+    _write_json(output_dir / "completion_audit.json", completion)
+    _write_execution_log(output_dir, events, completion)
+    # Rebuild so the archive includes the verified zip metadata and final log.
+    zip_path = _zip_directory(output_dir)
+    print(
+        f"[complete] {completion['status']} evidence={output_dir} "
+        f"zip={zip_path}",
+        flush=True,
+    )
+    return 0 if completion["status"] == "READY" else 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

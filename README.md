@@ -7,7 +7,7 @@
 ![Optimization](https://img.shields.io/badge/Optimization-MILP%2BALNS-FF6F00)
 ![Status](https://img.shields.io/badge/Status-Core%20Package%20%28Tkinter%2BFastAPI%29-0A66C2)
 
-## Research-evidence contract (updated 2026-07-28)
+## Research-evidence contract (updated 2026-07-29)
 
 The current release is **BLOCKED** pending fresh clean-commit formal runs.
 The authoritative open-item register and per-run acceptance table are
@@ -37,7 +37,7 @@ simulation artifact, not an automatically accepted research result.
   validation summary.
   Formal records must explicitly define initial SOC/fuel and availability;
   contradictory availability fields fail. Prepare schema
-  `v3_trip_stop_polyline_distance_explicit_fleet_state` materializes the
+  `v4_same_service_date_pv_counterfactual_explicit_fleet_state` materializes the
   effective initial ICE fuel (tank capacity × the configured initial/max
   percentage) and, when omitted by legacy records, the selected depot's full
   charger-ID set. The derivation rule and counts are persisted in
@@ -242,15 +242,28 @@ simulation artifact, not an automatically accepted research result.
   inventory carried out of the day. The requested and effective policy are
   recorded in `interactive_terminal_soc_controls`, and old fixed-target runs
   are not directly comparable on daily operating cost.
-- Formal Phase 3 frontend runs force the complete feasible successor network,
-  prohibit fallback/post-solve repair, and add a Stage 1 charging-reachability
-  relaxation shared across physical charger definitions, compatibility, port
-  count, charger power, depot charging windows, and an optimistic site supply
-  cap. Stage 2 remains the exact fixed-assignment charging/SOC check. Only a
-  Gurobi `INFEASIBLE` certificate may return the failed full assignment to
-  Stage 1 as a no-good cut; a `TIME_LIMIT` without an incumbent does not justify
-  a cut. This improves Stage 1→Stage 2 consistency but does not turn Phase 3
-  into an integrated global total-cost optimum.
+- Formal Phase 3 frontend runs force the complete feasible successor network
+  and prohibit fallback/post-solve repair. Stage 1 now couples assignment to a
+  slot-indexed continuous energy-recourse relaxation: depot-presence charging
+  windows, compatible charger ports and power, BEV SOC, per-slot PV allocation,
+  grid import and contract overage, peak demand, BESS operation and terminal
+  SOC, TOU electricity, fuel, CO2, vehicle, driver, degradation, demand, and
+  other enabled accounting terms. The former whole-day PV-credit proxy remains
+  diagnostic only and no weather-specific assignment bias is used.
+- Stage 2 remains the exact fixed-assignment binary charger/SOC/PV/BESS check.
+  Formal research requests evaluate at least ten distinct Stage 1 assignments
+  in Stage 2, persist every candidate, and select the feasible candidate with
+  the lowest canonical actual cost. Only a Gurobi `INFEASIBLE` certificate may
+  return a failed assignment to Stage 1 as a no-good cut; a `TIME_LIMIT`
+  without an incumbent does not justify a cut. This remains a bounded
+  two-stage method, not an integrated global total-cost optimum.
+- `scripts/run_frontend_controlled_pv_pair.py` is a standard-library HTTP-only
+  controller for same-service-date high/low-PV sensitivity runs. It performs a
+  fresh Prepare, submits and polls the ordinary BFF optimization endpoint,
+  records exact request/response payloads, runs the two cases sequentially,
+  checks the pair controls and artifacts, and packages the evidence. Any failed
+  run, pair, oracle, accounting, physical, Rolling, gap, or provenance gate
+  keeps the experiment blocked.
 - The Stage 2 infeasibility retry is covered by a real Gurobi/IIS regression:
   continuous Stage 1 charger sharing first produces infeasible all-BEV
   assignments, then full-assignment no-good cuts reach an independently

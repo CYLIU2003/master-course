@@ -150,6 +150,9 @@ class PrepareSimulationSettingsBody(BaseModel):
     depot_energy_assets: Optional[list[Dict[str, Any]]] = None
     pv_profile_id: Optional[str] = None
     weather_mode: Optional[str] = None
+    comparison_type: Optional[str] = None
+    comparison_role: Optional[str] = None
+    counterfactual_pv_source_date: Optional[str] = None
     allow_fixed_weekday_timetable_pv_counterfactual: Optional[bool] = None
     weather_factor_scalar: Optional[float] = None
     enable_weather_operation_policy: bool = False

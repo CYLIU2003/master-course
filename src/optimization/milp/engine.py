@@ -216,6 +216,12 @@ class MILPOptimizer:
                 "stage1_certified_mip_gap_semantics": (plan.metadata or {}).get(
                     "stage1_certified_mip_gap_semantics"
                 ),
+                "stage1_weather_aware_lower_bound": (
+                    plan.metadata or {}
+                ).get("stage1_weather_aware_lower_bound"),
+                "stage1_weather_aware_lower_bound_semantics": (
+                    plan.metadata or {}
+                ).get("stage1_weather_aware_lower_bound_semantics"),
                 "stage1_analytical_objective_lower_bound": (
                     plan.metadata or {}
                 ).get("stage1_analytical_objective_lower_bound"),
@@ -289,6 +295,86 @@ class MILPOptimizer:
                 "stage2_runtime_seconds": (plan.metadata or {}).get("stage2_runtime_seconds"),
                 "stage2_time_limit_sec_effective": (plan.metadata or {}).get(
                     "stage2_time_limit_sec_effective"
+                ),
+                "stage1_energy_cost_proxy_used_in_objective": bool(
+                    (plan.metadata or {}).get(
+                        "stage1_energy_cost_proxy_used_in_objective",
+                        False,
+                    )
+                ),
+                "stage1_time_indexed_energy_recourse_configuration": dict(
+                    (plan.metadata or {}).get(
+                        "stage1_time_indexed_energy_recourse_configuration"
+                    )
+                    or {}
+                ),
+                "stage1_time_indexed_energy_recourse_weather_input": dict(
+                    (plan.metadata or {}).get(
+                        "stage1_time_indexed_energy_recourse_weather_input"
+                    )
+                    or {}
+                ),
+                "stage1_time_indexed_energy_recourse_result": dict(
+                    (plan.metadata or {}).get(
+                        "stage1_time_indexed_energy_recourse_result"
+                    )
+                    or {}
+                ),
+                "stage1_accounting_objective_components": dict(
+                    (plan.metadata or {}).get(
+                        "stage1_accounting_objective_components"
+                    )
+                    or {}
+                ),
+                "stage1_driver_cost_constraint_count": (
+                    plan.metadata or {}
+                ).get("stage1_driver_cost_constraint_count"),
+                "stage1_degradation_cost_term_count": (
+                    plan.metadata or {}
+                ).get("stage1_degradation_cost_term_count"),
+                "stage1_switch_cost_term_count": (
+                    plan.metadata or {}
+                ).get("stage1_switch_cost_term_count"),
+                "stage1_stage2_candidate_limit_requested": (
+                    plan.metadata or {}
+                ).get("stage1_stage2_candidate_limit_requested"),
+                "stage1_pool_solution_count": (plan.metadata or {}).get(
+                    "stage1_pool_solution_count"
+                ),
+                "stage1_distinct_candidate_count": (
+                    plan.metadata or {}
+                ).get("stage1_distinct_candidate_count"),
+                "stage1_stage2_candidate_count_evaluated": (
+                    plan.metadata or {}
+                ).get("stage1_stage2_candidate_count_evaluated"),
+                "stage1_stage2_feasible_candidate_count": (
+                    plan.metadata or {}
+                ).get("stage1_stage2_feasible_candidate_count"),
+                "stage1_stage2_selected_candidate_index": (
+                    plan.metadata or {}
+                ).get("stage1_stage2_selected_candidate_index"),
+                "stage1_stage2_selected_candidate_hash": (
+                    plan.metadata or {}
+                ).get("stage1_stage2_selected_candidate_hash"),
+                "stage1_stage2_selected_canonical_actual_cost_jpy": (
+                    plan.metadata or {}
+                ).get(
+                    "stage1_stage2_selected_canonical_actual_cost_jpy"
+                ),
+                "stage1_stage2_candidate_selection_semantics": (
+                    plan.metadata or {}
+                ).get("stage1_stage2_candidate_selection_semantics"),
+                "stage1_stage2_candidate_global_optimality_claimed": bool(
+                    (plan.metadata or {}).get(
+                        "stage1_stage2_candidate_global_optimality_claimed",
+                        False,
+                    )
+                ),
+                "stage1_stage2_candidate_evaluation": list(
+                    (plan.metadata or {}).get(
+                        "stage1_stage2_candidate_evaluation"
+                    )
+                    or []
                 ),
                 "rolling_horizon_policy": (plan.metadata or {}).get(
                     "rolling_horizon_policy", ""

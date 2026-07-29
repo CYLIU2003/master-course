@@ -15,6 +15,7 @@ from src.dispatch.route_band import fragment_transition_diagnostic
 from src.gurobi_runtime import ensure_gurobi, is_gurobi_available
 from src.objective_modes import normalize_objective_mode
 from src.optimization.common.cost_components import normalize_cost_component_flags
+from src.optimization.common.evaluator import CostEvaluator
 from src.optimization.common.bess_terminal_policy import (
     resolve_bess_terminal_soc_target_kwh,
 )
@@ -603,6 +604,35 @@ class Stage1EnergyCostProxy:
     pv_to_bus_by_depot: Mapping[str, Any]
     grid_to_bus_by_depot: Mapping[str, Any]
     bess_initial_to_bus_by_depot: Mapping[str, Any]
+    configuration: Mapping[str, Any]
+    weather_input: Mapping[str, Any]
+
+
+@dataclass(frozen=True)
+class Stage1TimeIndexedEnergyRecourseRelaxation:
+    """Assignment-coupled, time-indexed continuous energy recourse.
+
+    Vehicle charging is limited to the Stage 1 home-depot residence windows
+    and continuous physical-charger assignment already used by the SOC
+    relaxation.  Depot source balance, PV availability, BESS dynamics, grid
+    import, and demand peaks are enforced per slot.  Charger selection and
+    BESS operating modes remain continuous relaxations; Stage 2 is still the
+    authoritative fixed-assignment physical MILP.
+    """
+
+    objective_expression: Any
+    charge_power_by_vehicle_slot: Mapping[Tuple[str, int], Any]
+    grid_to_bus_by_depot_slot: Mapping[Tuple[str, int], Any]
+    pv_to_bus_by_depot_slot: Mapping[Tuple[str, int], Any]
+    bess_to_bus_by_depot_slot: Mapping[Tuple[str, int], Any]
+    grid_to_bess_by_depot_slot: Mapping[Tuple[str, int], Any]
+    pv_to_bess_by_depot_slot: Mapping[Tuple[str, int], Any]
+    pv_curtailment_by_depot_slot: Mapping[Tuple[str, int], Any]
+    grid_import_by_depot_slot: Mapping[Tuple[str, int], Any]
+    contract_overage_by_depot_slot: Mapping[Tuple[str, int], Any]
+    bess_soc_by_depot_slot: Mapping[Tuple[str, int], Any]
+    on_peak_by_depot: Mapping[str, Any]
+    off_peak_by_depot: Mapping[str, Any]
     configuration: Mapping[str, Any]
     weather_input: Mapping[str, Any]
 
@@ -4081,6 +4111,29 @@ class GurobiMILPAdapter:
         configured_threads = _configured_gurobi_threads(config)
         if configured_threads is not None:
             stage1.Params.Threads = configured_threads
+        stage1_stage2_candidate_limit = min(
+            max(
+                int(
+                    getattr(
+                        config,
+                        "stage1_stage2_candidate_limit",
+                        1,
+                    )
+                    or 1
+                ),
+                1,
+            ),
+            50,
+        )
+        if stage2_enabled and stage1_stage2_candidate_limit > 1:
+            # PoolSearchMode=2 makes Gurobi search systematically for the
+            # requested number of distinct Stage 1 solutions.  The shared
+            # Stage 1/global deadline still governs the search, so a
+            # time-limited run can legitimately retain fewer candidates.
+            # This is a k-best Stage 1 pool only; it is not an integrated
+            # Stage 1+Stage 2 global-optimality certificate.
+            stage1.Params.PoolSolutions = stage1_stage2_candidate_limit
+            stage1.Params.PoolSearchMode = 2
 
         builder = MILPModelBuilder()
         trip_by_id = problem.trip_by_id()
@@ -4439,14 +4492,17 @@ class GurobiMILPAdapter:
         # The all-day energy envelope above deliberately ignores time order.
         # Add a cumulative, location-supported relaxation that carries SOC
         # across slots and shares physical charger/port/power upper bounds.
-        # Charger assignment stays continuous and site supply remains
-        # optimistic (grid + PV + BESS), so this is still a necessary
-        # condition rather than a duplicate of Stage 2's binary energy
-        # dispatch. It prevents Stage 1 from assigning an early sequence that
-        # depletes a low-SOC BEV before its first reachable recharge.
+        # Charger assignment and BESS operating modes stay continuous, so the
+        # model remains a relaxation of Stage 2's binary dispatch while its
+        # slot-level grid/PV/BESS balances are now explicit.
         stage1_time_indexed_soc_relaxation_enabled = bool(
-            problem.metadata.get("stage1_time_indexed_soc_relaxation_enabled", True)
+            getattr(config, "research_run", False)
+            or problem.metadata.get(
+                "stage1_time_indexed_soc_relaxation_enabled",
+                True,
+            )
         )
+        stage1_energy_recourse_state: Dict[str, Any] = {}
         (
             stage1_time_indexed_soc_relaxation_constraint_count,
             stage1_shared_charger_relaxation_metadata,
@@ -4467,6 +4523,7 @@ class GurobiMILPAdapter:
                 start_arc=start_arc,
                 end_arc=end_arc,
                 used_vehicle=used_vehicle,
+                state_out=stage1_energy_recourse_state,
             )
             if stage1_time_indexed_soc_relaxation_enabled
             else (
@@ -4481,6 +4538,31 @@ class GurobiMILPAdapter:
         component_flags = normalize_cost_component_flags(
             problem.metadata.get("cost_component_flags")
         )
+        fuel_weight = max(float(problem.objective_weights.fuel or 0.0), 0.0)
+        vehicle_weight = max(
+            float(problem.objective_weights.vehicle or 0.0),
+            0.0,
+        )
+        vehicle_usage_weight = max(
+            float(problem.objective_weights.vehicle_usage or 0.0),
+            0.0,
+        )
+        stage1_time_indexed_energy_recourse = (
+            self._add_stage1_time_indexed_energy_recourse_relaxation(
+                stage1,
+                gp=gp,
+                grb=GRB,
+                problem=problem,
+                recourse_state=stage1_energy_recourse_state,
+                component_flags=component_flags,
+            )
+        )
+        objective1 = gp.LinExpr(
+            stage1_time_indexed_energy_recourse.objective_expression
+        )
+        # Keep the historical aggregate proxy available only as an explicitly
+        # non-objective diagnostic for compatibility with older artifact
+        # readers.  It must not influence Stage 1 assignment selection.
         stage1_energy_cost_proxy = self._add_stage1_energy_cost_proxy(
             stage1,
             gp=gp,
@@ -4498,8 +4580,8 @@ class GurobiMILPAdapter:
             end_arc=end_arc,
             used_vehicle=used_vehicle,
             component_flags=component_flags,
+            objective_enabled=False,
         )
-        objective1 = gp.LinExpr(stage1_energy_cost_proxy.objective_expression)
         diesel_price = (
             max(problem.scenario.diesel_price_yen_per_l, 0.0)
             if component_flags.get("fuel_cost", True)
@@ -4524,7 +4606,10 @@ class GurobiMILPAdapter:
                 )
                 if configured > 0.0:
                     co2_kg_per_l = configured
-            return diesel_price + co2_price * co2_kg_per_l
+            return (
+                fuel_weight * diesel_price
+                + co2_price * co2_kg_per_l
+            )
 
         if diesel_price > 0.0 or co2_price > 0.0:
             for (vehicle_id, trip_id), var in y.items():
@@ -4598,14 +4683,210 @@ class GurobiMILPAdapter:
                     )
         if component_flags.get("vehicle_fixed_cost", True):
             for vehicle in problem.vehicles:
-                objective1 += float(vehicle.fixed_use_cost_jpy or 0.0) * used_vehicle[vehicle.vehicle_id]
+                objective1 += (
+                    vehicle_weight
+                    * float(vehicle.fixed_use_cost_jpy or 0.0)
+                    * used_vehicle[vehicle.vehicle_id]
+                )
         vehicle_usage_unit_cost = self._safe_nonnegative_float(
             problem.metadata.get("vehicle_usage_cost_jpy_per_used_bus"),
             default=0.0,
         )
         if component_flags.get("vehicle_usage_cost", True) and vehicle_usage_unit_cost > 0.0:
             for var in used_vehicle_day.values():
-                objective1 += vehicle_usage_unit_cost * var
+                objective1 += (
+                    vehicle_usage_weight
+                    * vehicle_usage_unit_cost
+                    * var
+                )
+
+        stage1_driver_cost_constraint_count = 0
+        if component_flags.get("driver_cost", True):
+            regular_shift_minutes = _DRIVER_REGULAR_HOURS_PER_DAY * 60.0
+            driver_base_cost_per_minute = _DRIVER_WAGE_JPY_PER_H / 60.0
+            driver_overtime_surcharge_per_minute = (
+                _DRIVER_WAGE_JPY_PER_H
+                * (_DRIVER_OVERTIME_FACTOR - 1.0)
+                / 60.0
+            )
+            for vehicle in problem.vehicles:
+                vehicle_id = str(vehicle.vehicle_id)
+                for day_idx in day_indices:
+                    day_trip_ids = [
+                        trip_id
+                        for trip_id in assignment_trip_ids_by_vehicle.get(
+                            vehicle_id, []
+                        )
+                        if int(
+                            trip_day_index_by_trip_id.get(trip_id, 0)
+                        )
+                        == day_idx
+                    ]
+                    if not day_trip_ids:
+                        continue
+                    day_start_expr = gp.quicksum(
+                        trip_by_id[trip_id].departure_min
+                        * start_arc[(vehicle_id, trip_id)]
+                        for trip_id in day_trip_ids
+                        if (vehicle_id, trip_id) in start_arc
+                    )
+                    day_end_expr = gp.quicksum(
+                        trip_by_id[trip_id].arrival_min
+                        * end_arc[(vehicle_id, trip_id)]
+                        for trip_id in day_trip_ids
+                        if (vehicle_id, trip_id) in end_arc
+                    )
+                    day_start_count = gp.quicksum(
+                        start_arc[(vehicle_id, trip_id)]
+                        for trip_id in day_trip_ids
+                        if (vehicle_id, trip_id) in start_arc
+                    )
+                    day_overtime_min = stage1.addVar(
+                        lb=0.0,
+                        vtype=GRB.CONTINUOUS,
+                        name=(
+                            "stage1_driver_overtime_min__"
+                            f"{vehicle_id}__{day_idx}"
+                        ),
+                    )
+                    stage1.addConstr(
+                        day_overtime_min
+                        >= day_end_expr
+                        - day_start_expr
+                        + _DRIVER_PREP_TIME_MIN * day_start_count
+                        - regular_shift_minutes * day_start_count,
+                        name=(
+                            "stage1_driver_overtime_lb__"
+                            f"{vehicle_id}__{day_idx}"
+                        ),
+                    )
+                    stage1_driver_cost_constraint_count += 1
+                    objective1 += driver_base_cost_per_minute * (
+                        day_end_expr
+                        - day_start_expr
+                        + _DRIVER_PREP_TIME_MIN * day_start_count
+                    )
+                    objective1 += (
+                        driver_overtime_surcharge_per_minute
+                        * day_overtime_min
+                    )
+
+        stage1_degradation_cost_term_count = 0
+        degradation_weight = max(
+            float(problem.objective_weights.degradation or 0.0),
+            0.0,
+        )
+        if (
+            component_flags.get("battery_degradation_cost", True)
+            and degradation_weight > 0.0
+        ):
+            timestep_h = max(
+                float(
+                    stage1_energy_recourse_state.get(
+                        "timestep_h",
+                        max(problem.scenario.timestep_min, 1) / 60.0,
+                    )
+                    or 0.0
+                ),
+                1.0e-9,
+            )
+            charge_power_by_vehicle_slot = dict(
+                stage1_energy_recourse_state.get(
+                    "charge_power_by_vehicle_slot",
+                    {},
+                )
+                or {}
+            )
+            for vehicle in problem.vehicles:
+                vehicle_id = str(vehicle.vehicle_id)
+                capacity_kwh = max(
+                    float(vehicle.battery_capacity_kwh or 0.0),
+                    1.0,
+                )
+                coefficient = (
+                    degradation_weight
+                    * 50.0
+                    * timestep_h
+                    / capacity_kwh
+                )
+                for (
+                    candidate_vehicle_id,
+                    _slot_idx,
+                ), charge_power_var in (
+                    charge_power_by_vehicle_slot.items()
+                ):
+                    if str(candidate_vehicle_id) != vehicle_id:
+                        continue
+                    objective1 += coefficient * charge_power_var
+                    stage1_degradation_cost_term_count += 1
+
+        stage1_switch_cost_term_count = 0
+        switch_weight = max(
+            float(problem.objective_weights.switch or 0.0),
+            0.0,
+        )
+        if (
+            component_flags.get("switch_cost", True)
+            and switch_weight > 0.0
+            and problem.baseline_plan is not None
+        ):
+            baseline_vehicle_type_by_trip = {
+                str(trip_id): str(duty.vehicle_type)
+                for duty in problem.baseline_plan.duties
+                for trip_id in duty.trip_ids
+            }
+            for (vehicle_id, trip_id), assignment_var in y.items():
+                baseline_vehicle_type = baseline_vehicle_type_by_trip.get(
+                    str(trip_id)
+                )
+                vehicle = vehicle_by_id.get(str(vehicle_id))
+                if (
+                    baseline_vehicle_type is None
+                    or vehicle is None
+                    or baseline_vehicle_type
+                    == str(vehicle.vehicle_type)
+                ):
+                    continue
+                objective1 += switch_weight * assignment_var
+                stage1_switch_cost_term_count += 1
+
+        stage1_accounting_objective_components = {
+            "electricity_cost": bool(
+                component_flags.get("electricity_cost", True)
+            ),
+            "fuel_cost": bool(component_flags.get("fuel_cost", True)),
+            "demand_charge_cost": bool(
+                component_flags.get("demand_charge_cost", True)
+            ),
+            "contract_overage_penalty": bool(
+                component_flags.get("contract_overage_penalty", True)
+            ),
+            "vehicle_fixed_cost": bool(
+                component_flags.get("vehicle_fixed_cost", True)
+            ),
+            "vehicle_usage_cost": bool(
+                component_flags.get("vehicle_usage_cost", True)
+            ),
+            "driver_cost": bool(
+                component_flags.get("driver_cost", True)
+            ),
+            "battery_degradation_cost": bool(
+                component_flags.get("battery_degradation_cost", True)
+                and degradation_weight > 0.0
+            ),
+            "switch_cost": bool(
+                component_flags.get("switch_cost", True)
+                and switch_weight > 0.0
+                and problem.baseline_plan is not None
+            ),
+            "co2_cost": bool(component_flags.get("co2_cost", True)),
+            "unserved_penalty": False,
+            "deviation_cost": False,
+            "unserved_and_deviation_semantics": (
+                "strict_coverage_fixes_all_trips_served_so_both_terms_are_zero"
+            ),
+            "arbitrary_weather_assignment_bias": False,
+        }
         # The strict path-cover precheck certifies a minimum number of vehicle
         # days.  When every remaining objective coefficient is nonnegative,
         # multiplying that count by the vehicle-day usage cost is also a valid
@@ -4617,7 +4898,9 @@ class GurobiMILPAdapter:
             for vehicle in problem.vehicles
         )
         stage1_analytical_objective_lower_bound = (
-            float(stage1_vehicle_count_lower_bound) * vehicle_usage_unit_cost
+            float(stage1_vehicle_count_lower_bound)
+            * vehicle_usage_weight
+            * vehicle_usage_unit_cost
             if (
                 stage1_vehicle_count_lower_bound > 0
                 and component_flags.get("vehicle_usage_cost", True)
@@ -4760,6 +5043,13 @@ class GurobiMILPAdapter:
             if stage1.SolCount > 0
             else {}
         )
+        stage1_time_indexed_energy_recourse_result = (
+            self._stage1_time_indexed_energy_recourse_result(
+                stage1_time_indexed_energy_recourse
+            )
+            if stage1.SolCount > 0
+            else {}
+        )
         if stage1.SolCount <= 0:
             empty = AssignmentPlan(
                 duties=(),
@@ -4792,15 +5082,20 @@ class GurobiMILPAdapter:
                     "stage1_certified_best_bound": stage1_bound,
                     "stage1_certified_mip_gap_ratio": stage1_gap,
                     "stage1_certified_mip_gap_semantics": (
-                        "maximum_of_gurobi_objbound_and_analytical_path_cover_"
-                        "lower_bound"
+                        "maximum_of_weather_aware_gurobi_objbound_and_"
+                        "analytical_path_cover_lower_bound"
+                    ),
+                    "stage1_weather_aware_lower_bound": stage1_solver_bound,
+                    "stage1_weather_aware_lower_bound_semantics": (
+                        "gurobi_objbound_for_slot_level_assignment_coupled_"
+                        "pv_grid_bess_charging_recourse_objective"
                     ),
                     "stage1_analytical_objective_lower_bound": (
                         stage1_analytical_objective_lower_bound
                     ),
                     "stage1_analytical_objective_lower_bound_semantics": (
                         "strict_path_cover_vehicle_day_count_times_nonnegative_"
-                        "vehicle_usage_cost"
+                        "weighted_vehicle_usage_cost"
                     ),
                     "stage1_certified_gap_stop_threshold": (
                         stage1_certified_gap_stop_threshold
@@ -4904,11 +5199,31 @@ class GurobiMILPAdapter:
                     ),
                     "stage1_time_indexed_soc_relaxation_semantics": (
                         "location_aware_cumulative_soc_with_shared_physical_"
-                        "charger_and_optimistic_site_supply_necessary_condition"
+                        "charger_and_slot_level_energy_recourse_relaxation"
                     ),
                     "stage1_energy_cost_proxy_configuration": dict(
                         stage1_energy_cost_proxy.configuration
                     ),
+                    "stage1_energy_cost_proxy_used_in_objective": False,
+                    "stage1_time_indexed_energy_recourse_configuration": dict(
+                        stage1_time_indexed_energy_recourse.configuration
+                    ),
+                    "stage1_accounting_objective_components": dict(
+                        stage1_accounting_objective_components
+                    ),
+                    "stage1_driver_cost_constraint_count": (
+                        stage1_driver_cost_constraint_count
+                    ),
+                    "stage1_degradation_cost_term_count": (
+                        stage1_degradation_cost_term_count
+                    ),
+                    "stage1_switch_cost_term_count": (
+                        stage1_switch_cost_term_count
+                    ),
+                    "stage1_time_indexed_energy_recourse_weather_input": dict(
+                        stage1_time_indexed_energy_recourse.weather_input
+                    ),
+                    "stage1_time_indexed_energy_recourse_result": {},
                     "stage1_ice_boundary_fuel_cost_terms_enabled": True,
                     "stage1_ice_boundary_fuel_cost_semantics": (
                         "startup_and_terminal_return_deadhead_fuel_and_co2"
@@ -4985,15 +5300,20 @@ class GurobiMILPAdapter:
                 "stage1_certified_best_bound": stage1_bound,
                 "stage1_certified_mip_gap_ratio": stage1_gap,
                 "stage1_certified_mip_gap_semantics": (
-                    "maximum_of_gurobi_objbound_and_analytical_path_cover_"
-                    "lower_bound"
+                    "maximum_of_weather_aware_gurobi_objbound_and_"
+                    "analytical_path_cover_lower_bound"
+                ),
+                "stage1_weather_aware_lower_bound": stage1_solver_bound,
+                "stage1_weather_aware_lower_bound_semantics": (
+                    "gurobi_objbound_for_slot_level_assignment_coupled_"
+                    "pv_grid_bess_charging_recourse_objective"
                 ),
                 "stage1_analytical_objective_lower_bound": (
                     stage1_analytical_objective_lower_bound
                 ),
                 "stage1_analytical_objective_lower_bound_semantics": (
                     "strict_path_cover_vehicle_day_count_times_nonnegative_"
-                    "vehicle_usage_cost"
+                    "weighted_vehicle_usage_cost"
                 ),
                 "stage1_certified_gap_stop_threshold": (
                     stage1_certified_gap_stop_threshold
@@ -5093,10 +5413,32 @@ class GurobiMILPAdapter:
                 ),
                 "stage1_time_indexed_soc_relaxation_semantics": (
                     "location_aware_cumulative_soc_with_shared_physical_"
-                    "charger_and_optimistic_site_supply_necessary_condition"
+                    "charger_and_slot_level_energy_recourse_relaxation"
                 ),
                 "stage1_energy_cost_proxy_configuration": dict(
                     stage1_energy_cost_proxy.configuration
+                ),
+                "stage1_energy_cost_proxy_used_in_objective": False,
+                "stage1_time_indexed_energy_recourse_configuration": dict(
+                    stage1_time_indexed_energy_recourse.configuration
+                ),
+                "stage1_accounting_objective_components": dict(
+                    stage1_accounting_objective_components
+                ),
+                "stage1_driver_cost_constraint_count": (
+                    stage1_driver_cost_constraint_count
+                ),
+                "stage1_degradation_cost_term_count": (
+                    stage1_degradation_cost_term_count
+                ),
+                "stage1_switch_cost_term_count": (
+                    stage1_switch_cost_term_count
+                ),
+                "stage1_time_indexed_energy_recourse_weather_input": dict(
+                    stage1_time_indexed_energy_recourse.weather_input
+                ),
+                "stage1_time_indexed_energy_recourse_result": (
+                    stage1_time_indexed_energy_recourse_result
                 ),
                 "stage1_ice_boundary_fuel_cost_terms_enabled": True,
                 "stage1_ice_boundary_fuel_cost_semantics": (
@@ -5129,18 +5471,631 @@ class GurobiMILPAdapter:
             )
             return stage1_outcome, stage1_plan
 
-        stage2_outcome, final_plan = self._solve_thesis_stage2_charging_dispatch(
-            problem,
-            config,
-            stage1_plan,
-            stage1_status=stage1_status,
-            stage1_gap=stage1_gap,
-            stage1_bound=stage1_bound,
-            stage1_objective_value=stage1_objective_value,
-            stage1_runtime_sec=float(getattr(stage1, "Runtime", 0.0) or 0.0),
-            slots_per_day=slots_per_day,
+        if stage1_stage2_candidate_limit <= 1:
+            return self._solve_thesis_stage2_charging_dispatch(
+                problem,
+                config,
+                stage1_plan,
+                stage1_status=stage1_status,
+                stage1_gap=stage1_gap,
+                stage1_bound=stage1_bound,
+                stage1_objective_value=stage1_objective_value,
+                stage1_runtime_sec=float(
+                    getattr(stage1, "Runtime", 0.0) or 0.0
+                ),
+                slots_per_day=slots_per_day,
+            )
+
+        def _assignment_pairs_for_plan(
+            plan: AssignmentPlan,
+        ) -> Tuple[Tuple[str, str], ...]:
+            return tuple(
+                sorted(
+                    (
+                        str(plan.vehicle_id_for_duty(duty.duty_id)),
+                        str(leg.trip.trip_id),
+                    )
+                    for duty in plan.duties
+                    for leg in duty.legs
+                )
+            )
+
+        def _candidate_hash(
+            pairs: Tuple[Tuple[str, str], ...],
+        ) -> str:
+            return hashlib.sha256(
+                json.dumps(
+                    pairs,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest()
+
+        def _candidate_assignment_details(
+            plan: AssignmentPlan,
+        ) -> List[Dict[str, str]]:
+            powertrain_by_vehicle = {
+                str(vehicle.vehicle_id): str(
+                    vehicle.vehicle_type
+                ).upper()
+                for vehicle in problem.vehicles
+            }
+            details: List[Dict[str, str]] = []
+            for duty in plan.duties:
+                vehicle_id = str(
+                    plan.vehicle_id_for_duty(duty.duty_id)
+                )
+                for leg in duty.legs:
+                    details.append(
+                        {
+                            "duty_id": str(duty.duty_id),
+                            "trip_id": str(leg.trip.trip_id),
+                            "vehicle_id": vehicle_id,
+                            "powertrain": powertrain_by_vehicle.get(
+                                vehicle_id,
+                                "",
+                            ),
+                        }
+                    )
+            return sorted(
+                details,
+                key=lambda item: (
+                    item["trip_id"],
+                    item["vehicle_id"],
+                    item["duty_id"],
+                ),
+            )
+
+        def _candidate_relaxed_pv_overlap(
+            plan: AssignmentPlan,
+        ) -> List[Dict[str, Any]]:
+            recourse_result = dict(
+                (plan.metadata or {}).get(
+                    "stage1_time_indexed_energy_recourse_result"
+                )
+                or {}
+            )
+            charge_by_vehicle = dict(
+                recourse_result.get(
+                    "charge_power_kw_by_vehicle_slot"
+                )
+                or {}
+            )
+            pv_by_depot = dict(
+                stage1_time_indexed_energy_recourse.weather_input.get(
+                    "pv_generation_kwh_by_depot_slot"
+                )
+                or {}
+            )
+            timestep_h = max(
+                float(
+                    stage1_time_indexed_energy_recourse.configuration.get(
+                        "timestep_h",
+                        0.0,
+                    )
+                    or 0.0
+                ),
+                0.0,
+            )
+            vehicle_by_id = {
+                str(vehicle.vehicle_id): vehicle
+                for vehicle in problem.vehicles
+            }
+            duty_ids_by_vehicle: Dict[str, List[str]] = {}
+            for duty in plan.duties:
+                vehicle_id = str(
+                    plan.vehicle_id_for_duty(duty.duty_id)
+                )
+                duty_ids_by_vehicle.setdefault(vehicle_id, []).append(
+                    str(duty.duty_id)
+                )
+            overlap_rows: List[Dict[str, Any]] = []
+            for vehicle_id in sorted(duty_ids_by_vehicle):
+                vehicle = vehicle_by_id.get(vehicle_id)
+                if (
+                    vehicle is None
+                    or str(vehicle.vehicle_type).upper()
+                    not in {"BEV", "PHEV", "FCEV"}
+                ):
+                    continue
+                depot_id = str(
+                    getattr(vehicle, "home_depot_id", "")
+                    or "depot_default"
+                )
+                slot_power = dict(
+                    charge_by_vehicle.get(vehicle_id) or {}
+                )
+                positive_slots = sorted(
+                    int(slot_idx)
+                    for slot_idx, power_kw in slot_power.items()
+                    if float(power_kw or 0.0) > 1.0e-9
+                )
+                depot_pv = dict(pv_by_depot.get(depot_id) or {})
+                overlap_rows.append(
+                    {
+                        "vehicle_id": vehicle_id,
+                        "duty_ids": sorted(
+                            duty_ids_by_vehicle[vehicle_id]
+                        ),
+                        "home_depot_id": depot_id,
+                        "relaxed_positive_charge_slots": positive_slots,
+                        "relaxed_charge_input_kwh": sum(
+                            max(float(power_kw or 0.0), 0.0)
+                            for power_kw in slot_power.values()
+                        )
+                        * timestep_h,
+                        "pv_available_in_relaxed_charge_slots_kwh": sum(
+                            max(
+                                float(
+                                    depot_pv.get(str(slot_idx), 0.0)
+                                    or 0.0
+                                ),
+                                0.0,
+                            )
+                            for slot_idx in positive_slots
+                        ),
+                        "semantics": (
+                            "vehicle_local_pv_availability_during_"
+                            "positive_stage1_relaxed_charge_slots_not_"
+                            "solver_native_vehicle_source_allocation"
+                        ),
+                    }
+                )
+            return overlap_rows
+
+        # Record exactly which distinct assignments the time-bounded
+        # PoolSearchMode=2 search retained and which Stage 2 subsequently
+        # evaluated.  No integrated global-optimality claim is made.
+        stage1_candidates: List[
+            Tuple[int, float, str, AssignmentPlan]
+        ] = []
+        seen_candidate_hashes: Set[str] = set()
+        pool_solution_count = min(
+            int(getattr(stage1, "SolCount", 0) or 0),
+            stage1_stage2_candidate_limit,
         )
-        return stage2_outcome, final_plan
+        for pool_index in range(pool_solution_count):
+            try:
+                stage1.Params.SolutionNumber = pool_index
+                pool_objective = float(stage1.PoolObjVal)
+            except Exception:
+                pool_objective = float(stage1_objective_value or 0.0)
+            if pool_index == 0:
+                candidate_plan = stage1_plan
+            else:
+                (
+                    candidate_duties,
+                    candidate_served_trip_ids,
+                    candidate_duty_vehicle_map,
+                ) = self._build_vehicle_duties_from_solution(
+                    problem=problem,
+                    trip_by_id=trip_by_id,
+                    dispatch_trip_by_id=dispatch_trip_by_id,
+                    y=y,
+                    x=x,
+                    start_arc=start_arc,
+                    use_pool_solution=True,
+                )
+                candidate_served = set(candidate_served_trip_ids)
+                candidate_plan = AssignmentPlan(
+                    duties=tuple(candidate_duties),
+                    served_trip_ids=tuple(sorted(candidate_served)),
+                    unserved_trip_ids=tuple(
+                        sorted(
+                            trip.trip_id
+                            for trip in problem.trips
+                            if trip.trip_id not in candidate_served
+                        )
+                    ),
+                    metadata={
+                        **dict(stage1_plan.metadata or {}),
+                        "duty_vehicle_map": candidate_duty_vehicle_map,
+                        "stage1_objective": pool_objective,
+                        "stage1_pool_solution_index": pool_index,
+                        "stage1_time_indexed_energy_recourse_result": (
+                            self._stage1_time_indexed_energy_recourse_result(
+                                stage1_time_indexed_energy_recourse,
+                                use_pool_solution=True,
+                            )
+                        ),
+                    },
+                )
+            assignment_pairs = _assignment_pairs_for_plan(candidate_plan)
+            assignment_hash = _candidate_hash(assignment_pairs)
+            if assignment_hash in seen_candidate_hashes:
+                continue
+            seen_candidate_hashes.add(assignment_hash)
+            stage1_candidates.append(
+                (
+                    pool_index,
+                    pool_objective,
+                    assignment_hash,
+                    replace(
+                        candidate_plan,
+                        metadata={
+                            **dict(candidate_plan.metadata or {}),
+                            "stage1_pool_solution_index": pool_index,
+                            "stage1_candidate_assignment_hash": (
+                                assignment_hash
+                            ),
+                        },
+                    ),
+                )
+            )
+
+        candidate_evaluations: List[Dict[str, Any]] = []
+        feasible_candidate_results: List[
+            Tuple[
+                float,
+                int,
+                MILPSolverOutcome,
+                AssignmentPlan,
+            ]
+        ] = []
+        diagnostics_root = str(
+            (problem.metadata or {}).get("phase3_diagnostics_dir") or ""
+        ).strip()
+        evaluator = CostEvaluator()
+        candidate_evaluation_initial_budget_sec = (
+            _remaining_stage_budget_sec(
+                deadline_monotonic=feedback_global_deadline,
+                requested_sec=feedback_global_limit_sec,
+            )
+        )
+        feedback_reserve_target_sec = min(
+            float(_resolved_stage_time_limit_sec(config, stage=2)),
+            max(
+                min(
+                    candidate_evaluation_initial_budget_sec * 0.2,
+                    60.0,
+                ),
+                min(candidate_evaluation_initial_budget_sec, 30.0),
+            ),
+        )
+        for evaluation_index, (
+            pool_index,
+            relaxed_objective,
+            assignment_hash,
+            candidate_plan,
+        ) in enumerate(stage1_candidates, start=1):
+            remaining_candidates = max(
+                len(stage1_candidates) - evaluation_index + 1,
+                1,
+            )
+            remaining_budget = _remaining_stage_budget_sec(
+                deadline_monotonic=feedback_global_deadline,
+                requested_sec=feedback_global_limit_sec,
+            )
+            feedback_reserve_sec = min(
+                feedback_reserve_target_sec,
+                max(remaining_budget - 1.0, 0.0),
+            )
+            candidate_budget = max(
+                remaining_budget - feedback_reserve_sec,
+                0.0,
+            )
+            if candidate_budget < 1.0:
+                candidate_evaluations.append(
+                    {
+                        "candidate_index": evaluation_index,
+                        "stage1_pool_solution_index": pool_index,
+                        "candidate_hash": assignment_hash,
+                        "assignment_hash": assignment_hash,
+                        "stage1_relaxed_objective_jpy": relaxed_objective,
+                        "stage2_solver_status": (
+                            "not_run_feedback_budget_reserved"
+                        ),
+                        "stage2_exact_objective_jpy": None,
+                        "stage2_actual_canonical_cost_jpy": None,
+                        "feasible": False,
+                        "runtime_sec": 0.0,
+                        "iis_hash": "",
+                    }
+                )
+                continue
+            allocated_stage2_seconds = max(
+                min(
+                    int(candidate_budget / remaining_candidates),
+                    _resolved_stage_time_limit_sec(config, stage=2),
+                ),
+                1,
+            )
+            candidate_config = replace(
+                config,
+                stage2_time_limit_sec=allocated_stage2_seconds,
+            )
+            candidate_metadata = dict(problem.metadata or {})
+            candidate_metadata["stage2_feedback_max_iterations"] = 0
+            candidate_metadata["stage1_stage2_candidate_index"] = (
+                evaluation_index
+            )
+            if diagnostics_root:
+                candidate_metadata["phase3_diagnostics_dir"] = str(
+                    Path(diagnostics_root)
+                    / f"candidate_{evaluation_index:02d}"
+                )
+            candidate_problem = replace(
+                problem,
+                metadata=candidate_metadata,
+            )
+            candidate_started = time.perf_counter()
+            candidate_outcome, candidate_final_plan = (
+                self._solve_thesis_stage2_charging_dispatch(
+                    candidate_problem,
+                    candidate_config,
+                    candidate_plan,
+                    stage1_status=stage1_status,
+                    stage1_gap=stage1_gap,
+                    stage1_bound=stage1_bound,
+                    stage1_objective_value=relaxed_objective,
+                    stage1_runtime_sec=float(
+                        getattr(stage1, "Runtime", 0.0) or 0.0
+                    ),
+                    slots_per_day=slots_per_day,
+                )
+            )
+            candidate_runtime = float(
+                time.perf_counter() - candidate_started
+            )
+            candidate_plan_metadata = dict(
+                candidate_final_plan.metadata or {}
+            )
+            stage1_recourse_result = dict(
+                (candidate_plan.metadata or {}).get(
+                    "stage1_time_indexed_energy_recourse_result"
+                )
+                or {}
+            )
+            candidate_feasible = bool(
+                candidate_outcome.has_feasible_incumbent
+                and candidate_plan_metadata.get(
+                    "stage2_has_feasible_incumbent",
+                    candidate_plan_metadata.get("stage2_feasible", False),
+                )
+            )
+            canonical_cost: Optional[float] = None
+            evaluation_feasible = False
+            if candidate_feasible:
+                breakdown = evaluator.evaluate(
+                    candidate_problem,
+                    candidate_final_plan,
+                )
+                evaluation_feasible = bool(breakdown.evaluation_feasible)
+                if evaluation_feasible:
+                    canonical_cost = float(breakdown.total_cost)
+            assigned_vehicle_ids = {
+                str(
+                    candidate_final_plan.vehicle_id_for_duty(
+                        duty.duty_id
+                    )
+                )
+                for duty in candidate_final_plan.duties
+                if duty.legs
+            }
+            powertrain_by_vehicle = {
+                str(vehicle.vehicle_id): str(
+                    vehicle.vehicle_type
+                ).upper()
+                for vehicle in problem.vehicles
+            }
+            used_bev = sum(
+                powertrain_by_vehicle.get(vehicle_id, "")
+                in {"BEV", "PHEV", "FCEV"}
+                for vehicle_id in assigned_vehicle_ids
+            )
+            used_ice = sum(
+                powertrain_by_vehicle.get(vehicle_id, "")
+                not in {"BEV", "PHEV", "FCEV"}
+                for vehicle_id in assigned_vehicle_ids
+            )
+            bev_trips = sum(
+                powertrain_by_vehicle.get(
+                    str(
+                        candidate_final_plan.vehicle_id_for_duty(
+                            duty.duty_id
+                        )
+                    ),
+                    "",
+                )
+                in {"BEV", "PHEV", "FCEV"}
+                for duty in candidate_final_plan.duties
+                for _leg in duty.legs
+            )
+            ice_trips = sum(
+                powertrain_by_vehicle.get(
+                    str(
+                        candidate_final_plan.vehicle_id_for_duty(
+                            duty.duty_id
+                        )
+                    ),
+                    "",
+                )
+                not in {"BEV", "PHEV", "FCEV"}
+                for duty in candidate_final_plan.duties
+                for _leg in duty.legs
+            )
+            iis_names = tuple(
+                sorted(
+                    str(name)
+                    for name in (
+                        candidate_plan_metadata.get(
+                            "stage2_iis_constraint_names"
+                        )
+                        or ()
+                    )
+                )
+            )
+            iis_hash = (
+                hashlib.sha256(
+                    json.dumps(
+                        iis_names,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    ).encode("utf-8")
+                ).hexdigest()
+                if iis_names
+                else ""
+            )
+            candidate_evaluations.append(
+                {
+                    "candidate_index": evaluation_index,
+                    "stage1_pool_solution_index": pool_index,
+                    "candidate_hash": assignment_hash,
+                    "assignment_hash": assignment_hash,
+                    "stage1_relaxed_objective_jpy": relaxed_objective,
+                    "stage2_solver_status": str(
+                        candidate_plan_metadata.get(
+                            "stage2_solver_status",
+                            candidate_outcome.solver_status,
+                        )
+                    ),
+                    "stage2_exact_objective_jpy": (
+                        candidate_plan_metadata.get("stage2_objective")
+                    ),
+                    "stage2_actual_canonical_cost_jpy": canonical_cost,
+                    "feasible": bool(
+                        candidate_feasible and evaluation_feasible
+                    ),
+                    "stage2_feasible": candidate_feasible,
+                    "canonical_evaluation_feasible": (
+                        evaluation_feasible
+                    ),
+                    "iis_hash": iis_hash,
+                    "used_bev": used_bev,
+                    "used_ice": used_ice,
+                    "bev_trips": bev_trips,
+                    "ice_trips": ice_trips,
+                    "runtime_sec": candidate_runtime,
+                    "stage2_runtime_sec": candidate_plan_metadata.get(
+                        "stage2_runtime_seconds"
+                    ),
+                    "stage2_time_limit_sec_effective": (
+                        allocated_stage2_seconds
+                    ),
+                    "vehicle_trip_assignments": (
+                        _candidate_assignment_details(
+                            candidate_final_plan
+                        )
+                    ),
+                    "relaxed_pv_overlap_by_bev_duty": (
+                        _candidate_relaxed_pv_overlap(candidate_plan)
+                    ),
+                    "stage1_recourse_objective_jpy": (
+                        stage1_recourse_result.get("objective_jpy")
+                    ),
+                    "stage1_recourse_result_hash": (
+                        hashlib.sha256(
+                            json.dumps(
+                                stage1_recourse_result,
+                                ensure_ascii=False,
+                                sort_keys=True,
+                                separators=(",", ":"),
+                                default=str,
+                            ).encode("utf-8")
+                        ).hexdigest()
+                        if stage1_recourse_result
+                        else ""
+                    ),
+                }
+            )
+            if (
+                candidate_feasible
+                and evaluation_feasible
+                and canonical_cost is not None
+            ):
+                feasible_candidate_results.append(
+                    (
+                        canonical_cost,
+                        evaluation_index,
+                        candidate_outcome,
+                        candidate_final_plan,
+                    )
+                )
+
+        candidate_selection_metadata = {
+            "stage1_stage2_candidate_limit_requested": (
+                stage1_stage2_candidate_limit
+            ),
+            "stage1_pool_solution_count": int(
+                getattr(stage1, "SolCount", 0) or 0
+            ),
+            "stage1_distinct_candidate_count": len(stage1_candidates),
+            "stage1_stage2_candidate_count_evaluated": len(
+                candidate_evaluations
+            ),
+            "stage1_stage2_feasible_candidate_count": len(
+                feasible_candidate_results
+            ),
+            "stage1_stage2_candidate_selection_semantics": (
+                "minimum_canonical_actual_cost_among_stage2_feasible_"
+                "time_bounded_systematic_stage1_solution_pool_candidates"
+            ),
+            "stage1_stage2_candidate_global_optimality_claimed": False,
+            "stage1_stage2_candidate_evaluation": candidate_evaluations,
+            "stage1_stage2_candidate_evaluation_initial_budget_sec": (
+                candidate_evaluation_initial_budget_sec
+            ),
+            "stage1_stage2_feedback_reserve_target_sec": (
+                feedback_reserve_target_sec
+            ),
+        }
+        if feasible_candidate_results:
+            (
+                _selected_cost,
+                selected_candidate_index,
+                selected_outcome,
+                selected_plan,
+            ) = min(
+                feasible_candidate_results,
+                key=lambda item: (item[0], item[1]),
+            )
+            selected_metadata = {
+                **dict(selected_plan.metadata or {}),
+                **candidate_selection_metadata,
+                "stage1_stage2_selected_candidate_index": (
+                    selected_candidate_index
+                ),
+                "stage1_stage2_selected_candidate_hash": (
+                    candidate_evaluations[
+                        selected_candidate_index - 1
+                    ]["candidate_hash"]
+                ),
+                "stage1_stage2_selected_canonical_actual_cost_jpy": (
+                    _selected_cost
+                ),
+            }
+            return (
+                selected_outcome,
+                replace(selected_plan, metadata=selected_metadata),
+            )
+
+        # Preserve the existing IIS-backed Stage 1 no-good feedback when every
+        # retained pool candidate is infeasible or unevaluable.
+        stage2_outcome, final_plan = (
+            self._solve_thesis_stage2_charging_dispatch(
+                problem,
+                config,
+                stage1_plan,
+                stage1_status=stage1_status,
+                stage1_gap=stage1_gap,
+                stage1_bound=stage1_bound,
+                stage1_objective_value=stage1_objective_value,
+                stage1_runtime_sec=float(
+                    getattr(stage1, "Runtime", 0.0) or 0.0
+                ),
+                slots_per_day=slots_per_day,
+            )
+        )
+        return (
+            stage2_outcome,
+            replace(
+                final_plan,
+                metadata={
+                    **dict(final_plan.metadata or {}),
+                    **candidate_selection_metadata,
+                },
+            ),
+        )
 
     def _build_stage1_outcome(
         self,
@@ -5382,6 +6337,7 @@ class GurobiMILPAdapter:
         bess2bus_var: Dict[Tuple[str, int], Any] = {}
         pv_curt_var: Dict[Tuple[str, int], Any] = {}
         grid_import_var: Dict[Tuple[str, int], Any] = {}
+        contract_over_limit_var: Dict[Tuple[str, int], Any] = {}
         p_avg_depot_var: Dict[Tuple[str, int], Any] = {}
         bess_soc_var: Dict[Tuple[str, int], Any] = {}
         bess_charge_mode_var: Dict[Tuple[str, int], Any] = {}
@@ -5871,6 +6827,15 @@ class GurobiMILPAdapter:
         if not depot_energy_assets:
             default_depot = next(iter(depot_by_id.keys()), "depot_default")
             depot_energy_assets[default_depot] = DepotEnergyAsset(depot_id=default_depot, pv_enabled=False, bess_enabled=False)
+        enable_contract_overage_penalty = bool(
+            problem.metadata.get("enable_contract_overage_penalty", True)
+        )
+        contract_overage_penalty = self._safe_nonnegative_float(
+            problem.metadata.get(
+                "contract_overage_penalty_yen_per_kwh"
+            ),
+            default=500.0,
+        )
         on_peak_slots, off_peak_slots = self._classify_peak_slots(problem)
         price_by_slot = {slot.slot_index: slot.grid_buy_yen_per_kwh for slot in problem.price_slots}
         for depot_id, asset in depot_energy_assets.items():
@@ -5946,10 +6911,23 @@ class GurobiMILPAdapter:
                 pv_gen_kwh = _pv_generation_kwh_at_slot(asset, slot_idx)
                 stage2.addConstr(pv2bus_var[key] + pv2bess_var[key] + pv_curt_var[key] == pv_gen_kwh)
                 stage2.addConstr(grid_import_var[key] == g2bus_var[key] + g2bess_var[key])
-                stage2.addConstr(
-                    grid_import_var[key] <= contract_limit_kw * timestep_h,
-                    name=f"grid_limit__{depot_id}__slot_{slot_idx}",
-                )
+                if enable_contract_overage_penalty:
+                    contract_over_limit_var[key] = stage2.addVar(
+                        lb=0.0,
+                        vtype=GRB.CONTINUOUS,
+                        name=f"grid_over_kwh_{depot_id}_{slot_idx}",
+                    )
+                    stage2.addConstr(
+                        grid_import_var[key]
+                        <= contract_limit_kw * timestep_h
+                        + contract_over_limit_var[key],
+                        name=f"grid_limit_soft__{depot_id}__slot_{slot_idx}",
+                    )
+                else:
+                    stage2.addConstr(
+                        grid_import_var[key] <= contract_limit_kw * timestep_h,
+                        name=f"grid_limit__{depot_id}__slot_{slot_idx}",
+                    )
                 stage2.addConstr(p_avg_depot_var[key] == grid_import_var[key] / timestep_h)
                 if slot_idx in on_peak_slots:
                     stage2.addConstr(w_on_depot_var[depot_id] >= p_avg_depot_var[key])
@@ -5957,6 +6935,28 @@ class GurobiMILPAdapter:
                     stage2.addConstr(w_off_depot_var[depot_id] >= p_avg_depot_var[key])
                 if not asset.allow_grid_to_bess:
                     stage2.addConstr(g2bess_var[key] == 0.0)
+                else:
+                    allowed_slots = {
+                        int(value)
+                        for value in (
+                            asset.grid_to_bess_allowed_slot_indices or ()
+                        )
+                    }
+                    threshold = max(
+                        float(
+                            asset.grid_to_bess_price_threshold_yen_per_kwh
+                            or 0.0
+                        ),
+                        0.0,
+                    )
+                    if allowed_slots and slot_idx not in allowed_slots:
+                        stage2.addConstr(g2bess_var[key] == 0.0)
+                    if (
+                        threshold > 0.0
+                        and float(price_by_slot.get(slot_idx, 0.0) or 0.0)
+                        > threshold
+                    ):
+                        stage2.addConstr(g2bess_var[key] == 0.0)
                 if not getattr(asset, "allow_pv_to_bess", True):
                     stage2.addConstr(pv2bess_var[key] == 0.0)
                 if not getattr(asset, "allow_bess_to_bus", True):
@@ -6041,6 +7041,9 @@ class GurobiMILPAdapter:
                 objective2 += pv_marginal_charge_cost * var
             for var in pv_curt_var.values():
                 objective2 += pv_curtail_penalty * var
+        if component_flags.get("contract_overage_penalty", True):
+            for var in contract_over_limit_var.values():
+                objective2 += contract_overage_penalty * var
         if (
             component_flags.get("demand_charge_cost", True)
             and w_on_var is not None
@@ -6333,6 +7336,7 @@ class GurobiMILPAdapter:
         grid_to_bess: Dict[str, Dict[int, float]] = {}
         pv_to_bess: Dict[str, Dict[int, float]] = {}
         pv_curtail: Dict[str, Dict[int, float]] = {}
+        contract_over_limit: Dict[str, Dict[int, float]] = {}
         bess_soc: Dict[str, Dict[int, float]] = {}
         bess_soc_start: Dict[str, Dict[int, float]] = {}
         bess_soc_end: Dict[str, Dict[int, float]] = {}
@@ -6379,6 +7383,12 @@ class GurobiMILPAdapter:
             value = max(_var_val(var), 0.0)
             if value > 1.0e-9:
                 pv_curtail.setdefault(depot_id, {})[slot_idx] = value
+        for (depot_id, slot_idx), var in contract_over_limit_var.items():
+            value = max(_var_val(var), 0.0)
+            if value > 1.0e-9:
+                contract_over_limit.setdefault(depot_id, {})[
+                    slot_idx
+                ] = value
         for (depot_id, slot_idx), var in bess_soc_var.items():
             asset = depot_energy_assets.get(depot_id)
             eta_ch = max(float(getattr(asset, "bess_charge_efficiency", 0.95) or 0.95), 1.0e-6)
@@ -6574,6 +7584,20 @@ class GurobiMILPAdapter:
             "stage2_gurobi_feasibility_tol": stage2_feasibility_tol,
             "stage2_gurobi_integrality_tol": stage2_integrality_tol,
             "stage2_numeric_diagnostics": stage2_numeric_diagnostics,
+            "stage2_contract_overage_enabled": (
+                enable_contract_overage_penalty
+            ),
+            "stage2_contract_overage_penalty_yen_per_kwh": (
+                contract_overage_penalty
+            ),
+            "stage2_contract_overage_kwh_by_depot_slot": (
+                contract_over_limit
+            ),
+            "stage2_contract_overage_kwh": sum(
+                value
+                for values in contract_over_limit.values()
+                for value in values.values()
+            ),
             "stage1_time_limit_sec_effective": (
                 0
                 if stage1_status == "phase1_fixed_assignment"
@@ -6729,7 +7753,9 @@ class GurobiMILPAdapter:
                 "bess_soc_kwh_by_depot_slot": bess_soc,
                 "bess_soc_start_kwh_by_depot_slot": bess_soc_start,
                 "bess_soc_end_kwh_by_depot_slot": bess_soc_end or bess_soc,
-                "contract_over_limit_kwh_by_depot_slot": {},
+                "contract_over_limit_kwh_by_depot_slot": (
+                    contract_over_limit
+                ),
                 "source_provenance_exact": True,
                 "derived_source_split": False,
             },
@@ -6744,7 +7770,7 @@ class GurobiMILPAdapter:
             grid_to_bess_kwh_by_depot_slot=grid_to_bess,
             pv_curtail_kwh_by_depot_slot=pv_curtail,
             bess_soc_kwh_by_depot_slot=bess_soc,
-            contract_over_limit_kwh_by_depot_slot={},
+            contract_over_limit_kwh_by_depot_slot=contract_over_limit,
             vehicle_soc_kwh_by_vehicle_slot=vehicle_soc,
             metadata=metadata,
         )
@@ -7535,6 +8561,851 @@ class GurobiMILPAdapter:
                 constraint_count += 1
         return constraint_count
 
+    def _add_stage1_time_indexed_energy_recourse_relaxation(
+        self,
+        model: Any,
+        *,
+        gp: Any,
+        grb: Any,
+        problem: CanonicalOptimizationProblem,
+        recourse_state: Mapping[str, Any],
+        component_flags: Mapping[str, bool],
+    ) -> Stage1TimeIndexedEnergyRecourseRelaxation:
+        """Connect assignment-dependent charging to slot-level depot energy.
+
+        The charging variables and home-depot availability windows are created
+        by :meth:`_add_stage1_time_indexed_soc_relaxation`.  This method gives
+        those variables a physically meaningful source dispatch and cost.  All
+        source quantities are energy in kWh for one slot; peak variables are
+        average kW.  BESS charge/discharge modes are continuous in [0, 1], so
+        the result is a valid relaxation of Stage 2 rather than a replacement
+        for its binary dispatch.
+        """
+
+        slot_indices = tuple(
+            int(value) for value in recourse_state.get("slot_indices", ())
+        )
+        charge_power_by_vehicle_slot = dict(
+            recourse_state.get("charge_power_by_vehicle_slot", {}) or {}
+        )
+        electric_vehicle_by_id = dict(
+            recourse_state.get("electric_vehicle_by_id", {}) or {}
+        )
+        timestep_h = max(
+            float(recourse_state.get("timestep_h", 0.0) or 0.0),
+            1.0e-9,
+        )
+        objective = gp.LinExpr()
+        empty_configuration = {
+            "enabled": False,
+            "semantics": (
+                "slot_level_assignment_coupled_continuous_energy_recourse"
+            ),
+            "reason": (
+                "no_stage1_charging_variables"
+                if not charge_power_by_vehicle_slot
+                else "no_energy_slots"
+            ),
+            "used_in_stage1_objective": False,
+            "arbitrary_weather_assignment_bias_used": False,
+        }
+        if not slot_indices or not charge_power_by_vehicle_slot:
+            return Stage1TimeIndexedEnergyRecourseRelaxation(
+                objective_expression=objective,
+                charge_power_by_vehicle_slot=charge_power_by_vehicle_slot,
+                grid_to_bus_by_depot_slot={},
+                pv_to_bus_by_depot_slot={},
+                bess_to_bus_by_depot_slot={},
+                grid_to_bess_by_depot_slot={},
+                pv_to_bess_by_depot_slot={},
+                pv_curtailment_by_depot_slot={},
+                grid_import_by_depot_slot={},
+                contract_overage_by_depot_slot={},
+                bess_soc_by_depot_slot={},
+                on_peak_by_depot={},
+                off_peak_by_depot={},
+                configuration=empty_configuration,
+                weather_input={"pv_generation_kwh_by_depot_slot": {}},
+            )
+
+        depot_by_id = {
+            str(depot.depot_id): depot for depot in problem.depots
+        }
+        assets_by_depot: Dict[str, DepotEnergyAsset] = {
+            str(depot_id): asset
+            for depot_id, asset in (problem.depot_energy_assets or {}).items()
+        }
+        vehicle_ids_by_depot: Dict[str, List[str]] = {}
+        for vehicle_id, vehicle in electric_vehicle_by_id.items():
+            depot_id = str(
+                getattr(vehicle, "home_depot_id", "") or "depot_default"
+            )
+            vehicle_ids_by_depot.setdefault(depot_id, []).append(
+                str(vehicle_id)
+            )
+        global_pv_by_slot = {
+            int(slot.slot_index): max(
+                float(slot.pv_available_kw or 0.0), 0.0
+            )
+            * timestep_h
+            for slot in problem.pv_slots
+        }
+        for depot_id in vehicle_ids_by_depot:
+            if depot_id in assets_by_depot:
+                continue
+            pv_series_length = max(slot_indices, default=-1) + 1
+            assets_by_depot[depot_id] = DepotEnergyAsset(
+                depot_id=depot_id,
+                pv_enabled=bool(global_pv_by_slot),
+                pv_generation_kwh_by_slot=tuple(
+                    global_pv_by_slot.get(slot_idx, 0.0)
+                    for slot_idx in range(pv_series_length)
+                ),
+                bess_enabled=False,
+            )
+
+        grid_to_bus: Dict[Tuple[str, int], Any] = {}
+        pv_to_bus: Dict[Tuple[str, int], Any] = {}
+        bess_to_bus: Dict[Tuple[str, int], Any] = {}
+        grid_to_bess: Dict[Tuple[str, int], Any] = {}
+        pv_to_bess: Dict[Tuple[str, int], Any] = {}
+        pv_curtailment: Dict[Tuple[str, int], Any] = {}
+        grid_import: Dict[Tuple[str, int], Any] = {}
+        contract_overage: Dict[Tuple[str, int], Any] = {}
+        bess_soc: Dict[Tuple[str, int], Any] = {}
+        bess_charge_mode: Dict[Tuple[str, int], Any] = {}
+        bess_discharge_mode: Dict[Tuple[str, int], Any] = {}
+        on_peak_by_depot: Dict[str, Any] = {}
+        off_peak_by_depot: Dict[str, Any] = {}
+
+        electricity_cost_enabled = bool(
+            component_flags.get("electricity_cost", True)
+        )
+        demand_cost_enabled = bool(
+            component_flags.get("demand_charge_cost", True)
+        )
+        co2_cost_enabled = bool(component_flags.get("co2_cost", True))
+        energy_weight = max(
+            float(problem.objective_weights.energy or 0.0),
+            0.0,
+        )
+        demand_weight = max(
+            float(problem.objective_weights.demand or 0.0),
+            0.0,
+        )
+        co2_price = (
+            max(float(problem.scenario.co2_price_per_kg or 0.0), 0.0)
+            if co2_cost_enabled
+            else 0.0
+        )
+        price_by_slot = {
+            int(slot.slot_index): max(
+                float(slot.grid_buy_yen_per_kwh or 0.0), 0.0
+            )
+            for slot in problem.price_slots
+        }
+        co2_by_slot = {
+            int(slot.slot_index): max(float(slot.co2_factor or 0.0), 0.0)
+            for slot in problem.price_slots
+        }
+        on_peak_slots, off_peak_slots = self._classify_peak_slots(problem)
+        pv_marginal_charge_cost = (
+            self._safe_nonnegative_float(
+                problem.metadata.get(
+                    "pv_marginal_charge_cost_yen_per_kwh"
+                ),
+                default=0.0,
+            )
+            if electricity_cost_enabled
+            else 0.0
+        )
+        pv_curtail_penalty = (
+            self._safe_nonnegative_float(
+                problem.metadata.get(
+                    "pv_curtail_penalty_yen_per_kwh"
+                ),
+                default=0.0,
+            )
+            if electricity_cost_enabled
+            else 0.0
+        )
+        contract_overage_penalty = self._safe_nonnegative_float(
+            problem.metadata.get(
+                "contract_overage_penalty_yen_per_kwh"
+            ),
+            default=500.0,
+        )
+        contract_overage_allowed = bool(
+            problem.metadata.get("enable_contract_overage_penalty", True)
+        )
+
+        pv_input_by_depot_slot: Dict[str, Dict[str, float]] = {}
+        constraint_count = 0
+        for depot_id in sorted(vehicle_ids_by_depot):
+            asset = assets_by_depot[depot_id]
+            on_peak_by_depot[depot_id] = model.addVar(
+                lb=0.0,
+                vtype=grb.CONTINUOUS,
+                name=f"stage1_recourse_peak_on_kw__{depot_id}",
+            )
+            off_peak_by_depot[depot_id] = model.addVar(
+                lb=0.0,
+                vtype=grb.CONTINUOUS,
+                name=f"stage1_recourse_peak_off_kw__{depot_id}",
+            )
+            configured_import_limit_kw = max(
+                float(
+                    getattr(
+                        depot_by_id.get(depot_id),
+                        "import_limit_kw",
+                        0.0,
+                    )
+                    or 0.0
+                ),
+                0.0,
+            )
+            finite_import_limit = (
+                configured_import_limit_kw
+                if configured_import_limit_kw > 0.0
+                else None
+            )
+            pv_input_by_depot_slot[depot_id] = {}
+
+            for slot_idx in slot_indices:
+                key = (depot_id, slot_idx)
+                grid_to_bus[key] = model.addVar(
+                    lb=0.0,
+                    vtype=grb.CONTINUOUS,
+                    name=f"stage1_recourse_grid_bus_kwh__{depot_id}__{slot_idx}",
+                )
+                pv_to_bus[key] = model.addVar(
+                    lb=0.0,
+                    vtype=grb.CONTINUOUS,
+                    name=f"stage1_recourse_pv_bus_kwh__{depot_id}__{slot_idx}",
+                )
+                bess_to_bus[key] = model.addVar(
+                    lb=0.0,
+                    vtype=grb.CONTINUOUS,
+                    name=f"stage1_recourse_bess_bus_kwh__{depot_id}__{slot_idx}",
+                )
+                grid_to_bess[key] = model.addVar(
+                    lb=0.0,
+                    vtype=grb.CONTINUOUS,
+                    name=f"stage1_recourse_grid_bess_kwh__{depot_id}__{slot_idx}",
+                )
+                pv_to_bess[key] = model.addVar(
+                    lb=0.0,
+                    vtype=grb.CONTINUOUS,
+                    name=f"stage1_recourse_pv_bess_kwh__{depot_id}__{slot_idx}",
+                )
+                pv_curtailment[key] = model.addVar(
+                    lb=0.0,
+                    vtype=grb.CONTINUOUS,
+                    name=f"stage1_recourse_pv_curt_kwh__{depot_id}__{slot_idx}",
+                )
+                grid_import[key] = model.addVar(
+                    lb=0.0,
+                    vtype=grb.CONTINUOUS,
+                    name=f"stage1_recourse_grid_import_kwh__{depot_id}__{slot_idx}",
+                )
+
+                charge_energy = gp.quicksum(
+                    charge_power_by_vehicle_slot[(vehicle_id, slot_idx)]
+                    * timestep_h
+                    for vehicle_id in vehicle_ids_by_depot[depot_id]
+                    if (vehicle_id, slot_idx)
+                    in charge_power_by_vehicle_slot
+                )
+                model.addConstr(
+                    charge_energy
+                    == grid_to_bus[key]
+                    + pv_to_bus[key]
+                    + bess_to_bus[key],
+                    name=(
+                        "stage1_recourse_bus_charge_balance__"
+                        f"{depot_id}__{slot_idx}"
+                    ),
+                )
+                constraint_count += 1
+
+                pv_generation_kwh = _pv_generation_kwh_at_slot(
+                    asset, slot_idx
+                )
+                pv_input_by_depot_slot[depot_id][str(slot_idx)] = (
+                    pv_generation_kwh
+                )
+                model.addConstr(
+                    pv_to_bus[key]
+                    + pv_to_bess[key]
+                    + pv_curtailment[key]
+                    == pv_generation_kwh,
+                    name=(
+                        "stage1_recourse_pv_balance__"
+                        f"{depot_id}__{slot_idx}"
+                    ),
+                )
+                model.addConstr(
+                    grid_import[key]
+                    == grid_to_bus[key] + grid_to_bess[key],
+                    name=(
+                        "stage1_recourse_grid_balance__"
+                        f"{depot_id}__{slot_idx}"
+                    ),
+                )
+                constraint_count += 2
+
+                if finite_import_limit is not None:
+                    if contract_overage_allowed:
+                        contract_overage[key] = model.addVar(
+                            lb=0.0,
+                            vtype=grb.CONTINUOUS,
+                            name=(
+                                "stage1_recourse_contract_over_kwh__"
+                                f"{depot_id}__{slot_idx}"
+                            ),
+                        )
+                        model.addConstr(
+                            grid_import[key]
+                            <= finite_import_limit * timestep_h
+                            + contract_overage[key],
+                            name=(
+                                "stage1_recourse_grid_limit_soft__"
+                                f"{depot_id}__{slot_idx}"
+                            ),
+                        )
+                    else:
+                        model.addConstr(
+                            grid_import[key]
+                            <= finite_import_limit * timestep_h,
+                            name=(
+                                "stage1_recourse_grid_limit__"
+                                f"{depot_id}__{slot_idx}"
+                            ),
+                        )
+                    constraint_count += 1
+
+                average_import_kw = grid_import[key] / timestep_h
+                if slot_idx in on_peak_slots:
+                    model.addConstr(
+                        on_peak_by_depot[depot_id] >= average_import_kw,
+                        name=(
+                            "stage1_recourse_peak_on__"
+                            f"{depot_id}__{slot_idx}"
+                        ),
+                    )
+                    constraint_count += 1
+                if slot_idx in off_peak_slots:
+                    model.addConstr(
+                        off_peak_by_depot[depot_id] >= average_import_kw,
+                        name=(
+                            "stage1_recourse_peak_off__"
+                            f"{depot_id}__{slot_idx}"
+                        ),
+                    )
+                    constraint_count += 1
+
+                if not bool(getattr(asset, "allow_grid_to_bess", False)):
+                    model.addConstr(grid_to_bess[key] == 0.0)
+                    constraint_count += 1
+                else:
+                    allowed_slots = {
+                        int(value)
+                        for value in (
+                            getattr(
+                                asset,
+                                "grid_to_bess_allowed_slot_indices",
+                                (),
+                            )
+                            or ()
+                        )
+                    }
+                    threshold = max(
+                        float(
+                            getattr(
+                                asset,
+                                "grid_to_bess_price_threshold_yen_per_kwh",
+                                0.0,
+                            )
+                            or 0.0
+                        ),
+                        0.0,
+                    )
+                    if allowed_slots and slot_idx not in allowed_slots:
+                        model.addConstr(grid_to_bess[key] == 0.0)
+                        constraint_count += 1
+                    if (
+                        threshold > 0.0
+                        and price_by_slot.get(slot_idx, 0.0) > threshold
+                    ):
+                        model.addConstr(grid_to_bess[key] == 0.0)
+                        constraint_count += 1
+                if not bool(getattr(asset, "allow_pv_to_bess", True)):
+                    model.addConstr(pv_to_bess[key] == 0.0)
+                    constraint_count += 1
+                if not bool(getattr(asset, "allow_bess_to_bus", True)):
+                    model.addConstr(bess_to_bus[key] == 0.0)
+                    constraint_count += 1
+                if not bool(getattr(asset, "bess_enabled", False)):
+                    model.addConstr(pv_to_bess[key] == 0.0)
+                    model.addConstr(grid_to_bess[key] == 0.0)
+                    model.addConstr(bess_to_bus[key] == 0.0)
+                    constraint_count += 3
+
+                grid_unit_cost = energy_weight * (
+                    price_by_slot.get(slot_idx, 0.0)
+                    if electricity_cost_enabled
+                    else 0.0
+                )
+                grid_unit_cost += co2_price * co2_by_slot.get(
+                    slot_idx, 0.0
+                )
+                objective += grid_unit_cost * grid_to_bus[key]
+                objective += grid_unit_cost * grid_to_bess[key]
+                objective += (
+                    energy_weight
+                    * pv_marginal_charge_cost
+                    * pv_to_bus[key]
+                )
+                objective += (
+                    energy_weight
+                    * pv_marginal_charge_cost
+                    * pv_to_bess[key]
+                )
+                objective += (
+                    energy_weight
+                    * pv_curtail_penalty
+                    * pv_curtailment[key]
+                )
+                if key in contract_overage:
+                    if component_flags.get(
+                        "contract_overage_penalty",
+                        True,
+                    ):
+                        objective += (
+                            contract_overage_penalty
+                            * contract_overage[key]
+                        )
+                if electricity_cost_enabled:
+                    objective += (
+                        energy_weight
+                        * max(
+                            float(
+                                getattr(
+                                    asset,
+                                    "bess_cycle_cost_yen_per_kwh",
+                                    0.0,
+                                )
+                                or 0.0
+                            ),
+                            0.0,
+                        )
+                        * bess_to_bus[key]
+                    )
+
+            if bool(getattr(asset, "bess_enabled", False)):
+                soc_floor = max(
+                    float(getattr(asset, "bess_soc_min_kwh", 0.0) or 0.0),
+                    0.0,
+                )
+                soc_ceiling = max(_bess_soc_max_kwh(asset), soc_floor)
+                charge_efficiency = min(
+                    max(
+                        float(
+                            getattr(
+                                asset,
+                                "bess_charge_efficiency",
+                                0.95,
+                            )
+                            or 0.95
+                        ),
+                        1.0e-6,
+                    ),
+                    1.0,
+                )
+                discharge_efficiency = min(
+                    max(
+                        float(
+                            getattr(
+                                asset,
+                                "bess_discharge_efficiency",
+                                0.95,
+                            )
+                            or 0.95
+                        ),
+                        1.0e-6,
+                    ),
+                    1.0,
+                )
+                power_limit_kwh = max(
+                    float(getattr(asset, "bess_power_kw", 0.0) or 0.0),
+                    0.0,
+                ) * timestep_h
+                for slot_idx in slot_indices:
+                    key = (depot_id, slot_idx)
+                    bess_soc[key] = model.addVar(
+                        lb=soc_floor,
+                        ub=soc_ceiling,
+                        vtype=grb.CONTINUOUS,
+                        name=(
+                            "stage1_recourse_bess_soc_kwh__"
+                            f"{depot_id}__{slot_idx}"
+                        ),
+                    )
+                    bess_charge_mode[key] = model.addVar(
+                        lb=0.0,
+                        ub=1.0,
+                        vtype=grb.CONTINUOUS,
+                        name=(
+                            "stage1_recourse_bess_charge_mode__"
+                            f"{depot_id}__{slot_idx}"
+                        ),
+                    )
+                    bess_discharge_mode[key] = model.addVar(
+                        lb=0.0,
+                        ub=1.0,
+                        vtype=grb.CONTINUOUS,
+                        name=(
+                            "stage1_recourse_bess_discharge_mode__"
+                            f"{depot_id}__{slot_idx}"
+                        ),
+                    )
+                    model.addConstr(
+                        pv_to_bess[key] + grid_to_bess[key]
+                        <= power_limit_kwh * bess_charge_mode[key]
+                    )
+                    model.addConstr(
+                        bess_to_bus[key]
+                        <= power_limit_kwh * bess_discharge_mode[key]
+                    )
+                    model.addConstr(
+                        bess_charge_mode[key]
+                        + bess_discharge_mode[key]
+                        <= 1.0
+                    )
+                    constraint_count += 3
+                first_key = (depot_id, slot_indices[0])
+                model.addConstr(
+                    bess_soc[first_key]
+                    == float(
+                        getattr(asset, "bess_initial_soc_kwh", 0.0)
+                        or 0.0
+                    )
+                )
+                constraint_count += 1
+                for position in range(len(slot_indices) - 1):
+                    current_key = (depot_id, slot_indices[position])
+                    next_key = (depot_id, slot_indices[position + 1])
+                    model.addConstr(
+                        bess_soc[next_key]
+                        == bess_soc[current_key]
+                        + charge_efficiency
+                        * (
+                            pv_to_bess[current_key]
+                            + grid_to_bess[current_key]
+                        )
+                        - (
+                            bess_to_bus[current_key]
+                            / discharge_efficiency
+                        )
+                    )
+                    constraint_count += 1
+                last_key = (depot_id, slot_indices[-1])
+                terminal_soc = (
+                    bess_soc[last_key]
+                    + charge_efficiency
+                    * (
+                        pv_to_bess[last_key]
+                        + grid_to_bess[last_key]
+                    )
+                    - bess_to_bus[last_key] / discharge_efficiency
+                )
+                terminal_floor = max(
+                    float(
+                        getattr(
+                            asset,
+                            "bess_terminal_soc_min_kwh",
+                            0.0,
+                        )
+                        or 0.0
+                    ),
+                    soc_floor,
+                )
+                model.addConstr(terminal_soc >= terminal_floor)
+                model.addConstr(terminal_soc <= soc_ceiling)
+                constraint_count += 2
+                terminal_target = _bess_terminal_soc_target_kwh(
+                    asset,
+                    terminal_soc_floor=terminal_floor,
+                )
+                if terminal_target is not None:
+                    model.addConstr(terminal_soc == terminal_target)
+                    constraint_count += 1
+
+        global_on_peak = None
+        global_off_peak = None
+        if on_peak_by_depot:
+            global_on_peak = model.addVar(
+                lb=0.0,
+                vtype=grb.CONTINUOUS,
+                name="stage1_recourse_peak_on_global_kw",
+            )
+            global_off_peak = model.addVar(
+                lb=0.0,
+                vtype=grb.CONTINUOUS,
+                name="stage1_recourse_peak_off_global_kw",
+            )
+            for depot_id in on_peak_by_depot:
+                model.addConstr(
+                    global_on_peak >= on_peak_by_depot[depot_id]
+                )
+                model.addConstr(
+                    global_off_peak >= off_peak_by_depot[depot_id]
+                )
+                constraint_count += 2
+            if demand_cost_enabled:
+                objective += (
+                    demand_weight
+                    * problem.scenario
+                    .demand_charge_on_peak_horizon_yen_per_kw
+                    * global_on_peak
+                )
+                objective += (
+                    demand_weight
+                    * problem.scenario
+                    .demand_charge_off_peak_horizon_yen_per_kw
+                    * global_off_peak
+                )
+
+        recourse_input_payload = {
+            "timestep_min": int(problem.scenario.timestep_min),
+            "slot_indices": list(slot_indices),
+            "price_yen_per_kwh_by_slot": {
+                str(key): value
+                for key, value in sorted(price_by_slot.items())
+            },
+            "grid_co2_kg_per_kwh_by_slot": {
+                str(key): value
+                for key, value in sorted(co2_by_slot.items())
+            },
+            "pv_generation_kwh_by_depot_slot": pv_input_by_depot_slot,
+            "component_flags": {
+                str(key): bool(value)
+                for key, value in sorted(component_flags.items())
+            },
+            "co2_price_yen_per_kg": co2_price,
+            "objective_weights": {
+                "energy": energy_weight,
+                "demand": demand_weight,
+            },
+            "demand_charge_on_peak_horizon_yen_per_kw": (
+                problem.scenario
+                .demand_charge_on_peak_horizon_yen_per_kw
+            ),
+            "demand_charge_off_peak_horizon_yen_per_kw": (
+                problem.scenario
+                .demand_charge_off_peak_horizon_yen_per_kw
+            ),
+            "contract_overage_penalty_yen_per_kwh": (
+                contract_overage_penalty
+            ),
+            "assets": {
+                depot_id: {
+                    "bess_enabled": bool(asset.bess_enabled),
+                    "bess_energy_kwh": float(asset.bess_energy_kwh or 0.0),
+                    "bess_power_kw": float(asset.bess_power_kw or 0.0),
+                    "bess_initial_soc_kwh": float(
+                        asset.bess_initial_soc_kwh or 0.0
+                    ),
+                    "bess_terminal_soc_policy": str(
+                        asset.bess_terminal_soc_policy or ""
+                    ),
+                    "bess_terminal_soc_target_kwh": float(
+                        asset.bess_terminal_soc_target_kwh or 0.0
+                    ),
+                    "allow_pv_to_bess": bool(asset.allow_pv_to_bess),
+                    "allow_grid_to_bess": bool(asset.allow_grid_to_bess),
+                    "allow_bess_to_bus": bool(asset.allow_bess_to_bus),
+                }
+                for depot_id, asset in sorted(assets_by_depot.items())
+                if depot_id in vehicle_ids_by_depot
+            },
+        }
+        recourse_input_hash = hashlib.sha256(
+            json.dumps(
+                recourse_input_payload,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        configuration = {
+            "enabled": True,
+            "used_in_stage1_objective": True,
+            "semantics": (
+                "slot_level_assignment_coupled_continuous_energy_recourse"
+            ),
+            "relaxation_scope": (
+                "continuous_physical_charger_assignment_and_continuous_"
+                "bess_charge_discharge_modes"
+            ),
+            "stage2_authority": (
+                "fixed_assignment_binary_charger_and_exact_energy_dispatch"
+            ),
+            "units": {
+                "source_flows": "kWh_per_slot",
+                "charge_power": "kW",
+                "peak_import": "kW",
+                "cost": "JPY",
+            },
+            "constraint_count": constraint_count,
+            "timestep_h": timestep_h,
+            "contract_overage_allowed": contract_overage_allowed,
+            "contract_overage_cost_enabled": bool(
+                component_flags.get("contract_overage_penalty", True)
+            ),
+            "contract_overage_penalty_yen_per_kwh": (
+                contract_overage_penalty
+            ),
+            "recourse_input_hash": recourse_input_hash,
+            "objective_coefficient_and_rhs_hash": recourse_input_hash,
+            "arbitrary_weather_assignment_bias_used": False,
+        }
+        weather_input = {
+            "pv_generation_kwh_by_depot_slot": pv_input_by_depot_slot,
+            "pv_available_kwh_by_depot": {
+                depot_id: sum(values.values())
+                for depot_id, values in pv_input_by_depot_slot.items()
+            },
+            "pv_profile_hash": str(
+                problem.metadata.get("pv_profile_hash") or ""
+            ),
+            "recourse_input_hash": recourse_input_hash,
+        }
+        return Stage1TimeIndexedEnergyRecourseRelaxation(
+            objective_expression=objective,
+            charge_power_by_vehicle_slot=charge_power_by_vehicle_slot,
+            grid_to_bus_by_depot_slot=grid_to_bus,
+            pv_to_bus_by_depot_slot=pv_to_bus,
+            bess_to_bus_by_depot_slot=bess_to_bus,
+            grid_to_bess_by_depot_slot=grid_to_bess,
+            pv_to_bess_by_depot_slot=pv_to_bess,
+            pv_curtailment_by_depot_slot=pv_curtailment,
+            grid_import_by_depot_slot=grid_import,
+            contract_overage_by_depot_slot=contract_overage,
+            bess_soc_by_depot_slot=bess_soc,
+            on_peak_by_depot=on_peak_by_depot,
+            off_peak_by_depot=off_peak_by_depot,
+            configuration=configuration,
+            weather_input=weather_input,
+        )
+
+    @staticmethod
+    def _stage1_time_indexed_energy_recourse_result(
+        recourse: Stage1TimeIndexedEnergyRecourseRelaxation,
+        *,
+        use_pool_solution: bool = False,
+    ) -> Dict[str, Any]:
+        """Extract the solved Stage 1 recourse without rounding."""
+
+        def _value(item: Any) -> float:
+            try:
+                attribute = "Xn" if use_pool_solution else "X"
+                value = float(getattr(item, attribute))
+            except Exception:
+                try:
+                    getter = getattr(item, "getValue", None)
+                    value = float(getter() if callable(getter) else item)
+                except Exception:
+                    return 0.0
+            return value if math.isfinite(value) else 0.0
+
+        def _slot_values(
+            values: Mapping[Tuple[str, int], Any],
+        ) -> Dict[str, Dict[str, float]]:
+            result: Dict[str, Dict[str, float]] = {}
+            for (depot_id, slot_idx), variable in sorted(values.items()):
+                result.setdefault(str(depot_id), {})[str(slot_idx)] = max(
+                    _value(variable), 0.0
+                )
+            return result
+
+        timestep_h = max(
+            float(
+                recourse.configuration.get("timestep_h", 0.0) or 0.0
+            ),
+            0.0,
+        )
+        charge_by_vehicle_slot: Dict[str, Dict[str, float]] = {}
+        for (vehicle_id, slot_idx), variable in sorted(
+            recourse.charge_power_by_vehicle_slot.items()
+        ):
+            charge_by_vehicle_slot.setdefault(str(vehicle_id), {})[
+                str(slot_idx)
+            ] = max(_value(variable), 0.0)
+        flow_groups = {
+            "grid_to_bus_kwh_by_depot_slot": (
+                recourse.grid_to_bus_by_depot_slot
+            ),
+            "pv_to_bus_kwh_by_depot_slot": recourse.pv_to_bus_by_depot_slot,
+            "bess_to_bus_kwh_by_depot_slot": (
+                recourse.bess_to_bus_by_depot_slot
+            ),
+            "grid_to_bess_kwh_by_depot_slot": (
+                recourse.grid_to_bess_by_depot_slot
+            ),
+            "pv_to_bess_kwh_by_depot_slot": (
+                recourse.pv_to_bess_by_depot_slot
+            ),
+            "pv_curtailment_kwh_by_depot_slot": (
+                recourse.pv_curtailment_by_depot_slot
+            ),
+            "grid_import_kwh_by_depot_slot": (
+                recourse.grid_import_by_depot_slot
+            ),
+            "contract_overage_kwh_by_depot_slot": (
+                recourse.contract_overage_by_depot_slot
+            ),
+        }
+        result: Dict[str, Any] = {
+            "enabled": bool(recourse.configuration.get("enabled", False)),
+            "objective_jpy": _value(recourse.objective_expression),
+            "charge_power_kw_by_vehicle_slot": charge_by_vehicle_slot,
+            "charge_input_kwh": sum(
+                value
+                for slots in charge_by_vehicle_slot.values()
+                for value in slots.values()
+            )
+            * timestep_h,
+            "peak_on_kw_by_depot": {
+                depot_id: max(_value(variable), 0.0)
+                for depot_id, variable in sorted(
+                    recourse.on_peak_by_depot.items()
+                )
+            },
+            "peak_off_kw_by_depot": {
+                depot_id: max(_value(variable), 0.0)
+                for depot_id, variable in sorted(
+                    recourse.off_peak_by_depot.items()
+                )
+            },
+            "bess_soc_kwh_by_depot_slot": _slot_values(
+                recourse.bess_soc_by_depot_slot
+            ),
+            "recourse_input_hash": str(
+                recourse.configuration.get("recourse_input_hash") or ""
+            ),
+        }
+        for name, values in flow_groups.items():
+            by_slot = _slot_values(values)
+            result[name] = by_slot
+            aggregate_name = name.replace("_by_depot_slot", "")
+            result[aggregate_name] = sum(
+                value
+                for slots in by_slot.values()
+                for value in slots.values()
+            )
+        return result
+
     def _add_stage1_energy_cost_proxy(
         self,
         model: Any,
@@ -7554,20 +9425,21 @@ class GurobiMILPAdapter:
         end_arc: Mapping[Tuple[str, str], Any],
         used_vehicle: Mapping[str, Any],
         component_flags: Mapping[str, bool],
+        objective_enabled: bool = True,
     ) -> Stage1EnergyCostProxy:
-        """Price an optimistic aggregate BEV source-energy requirement.
+        """Retain the historical aggregate BEV source-energy diagnostic.
 
-        Stage 1 does not decide charging time.  For each electric vehicle this
-        proxy therefore computes only the nonnegative net replenishment needed
-        to finish at the hard terminal SOC requirement.  The resulting charger
-        input is pooled by home depot and may use all configured PV generation,
-        usable initial BESS surplus, and then grid energy at the minimum
-        time-of-use plus CO2 unit cost.
+        This proxy computes only the nonnegative net replenishment needed to
+        finish at the hard terminal SOC requirement.  Its charger input is
+        pooled by home depot and may use whole-day PV, usable initial BESS
+        surplus, and then grid energy at the minimum time-of-use plus CO2 unit
+        cost.
 
-        This is a lower-bound cost surrogate: it deliberately ignores source
-        timing, charger contention, grid limits, demand charges, PV/BESS timing,
-        and conversion losses inside the BESS.  Stage 2 remains authoritative
-        for charging feasibility and realized accounting cost.
+        It deliberately ignores source timing and demand charges and therefore
+        must not select Stage 1 assignments.  The caller sets
+        ``objective_enabled=False`` for the weather-coupled model and uses the
+        slot-level recourse instead.  The variables remain only to preserve an
+        explicitly labelled lower-bound diagnostic for artifact readers.
         """
         charge_efficiency = 0.95
         electric_vehicle_types = {"BEV", "PHEV", "FCEV"}
@@ -7838,6 +9710,7 @@ class GurobiMILPAdapter:
 
         configuration = {
             "enabled": True,
+            "used_in_stage1_objective": bool(objective_enabled),
             "semantics": (
                 "aggregate_home_depot_source_energy_lower_bound_"
                 "without_charging_time_or_demand_charge"
@@ -8314,6 +10187,7 @@ class GurobiMILPAdapter:
         start_arc: Mapping[Tuple[str, str], Any],
         end_arc: Mapping[Tuple[str, str], Any],
         used_vehicle: Mapping[str, Any],
+        state_out: Optional[Dict[str, Any]] = None,
     ) -> Tuple[int, Dict[str, Any]]:
         """Add cumulative, location-aware SOC necessary conditions.
 
@@ -8322,14 +10196,17 @@ class GurobiMILPAdapter:
         charge deliverable in path-supported home-depot windows.  Charging
         windows come only from a selected start arc, a selected connection
         with verified home-depot residence, or a selected end/return arc.
-        Each vehicle is capped at one charge opportunity per slot.  Shared
-        charger, grid, PV, and BESS limits remain relaxed, so this is still a
-        necessary Stage-2 condition rather than a charging dispatch.
+        Each vehicle is capped at one charge opportunity per slot and shares
+        the continuous physical-charger relaxation.  The caller then connects
+        these variables to the slot-level grid/PV/BESS recourse.  Binary
+        charger assignment and binary BESS modes remain deferred to Stage 2.
         """
         slot_indices = tuple(
             sorted({slot.slot_index for slot in problem.price_slots})
         )
         if not slot_indices:
+            if state_out is not None:
+                state_out.clear()
             return 0, {
                 "enabled": False,
                 "reason": "no_energy_price_slots",
@@ -8399,10 +10276,6 @@ class GurobiMILPAdapter:
                 )
             )
             initial_soc_kwh = min(max(initial_soc_kwh, 0.0), capacity_kwh)
-            usable_initial_energy = (
-                initial_soc_kwh - minimum_soc_kwh
-            ) * used_vehicle[vehicle_id]
-
             charge_max_kw = self._charge_power_max_kw(
                 problem, str(vehicle.vehicle_type)
             )
@@ -8617,31 +10490,100 @@ class GurobiMILPAdapter:
 
             cumulative_load = 0.0
             cumulative_charge_energy = 0.0
+            initial_energy = initial_soc_kwh * used_vehicle[vehicle_id]
+            maximum_energy = capacity_kwh * used_vehicle[vehicle_id]
             for slot_idx in slot_indices:
-                model.addConstr(
-                    cumulative_load
-                    <= usable_initial_energy
-                    + cumulative_charge_energy,
-                    name=(
-                        "stage1_soc_relax_cumulative__"
-                        f"{vehicle_id}__slot_{slot_idx}"
-                    ),
-                )
-                constraint_count += 1
                 cumulative_load += sum(load_terms_by_slot[slot_idx])
                 cumulative_charge_energy += (
                     stage1_charge_power_var[(vehicle_id, slot_idx)]
                     * timestep_h
                     * charge_efficiency
                 )
+                slot_end_soc = (
+                    initial_energy
+                    + cumulative_charge_energy
+                    - cumulative_load
+                )
+                model.addConstr(
+                    slot_end_soc
+                    >= minimum_soc_kwh * used_vehicle[vehicle_id],
+                    name=(
+                        "stage1_soc_relax_cumulative__"
+                        f"{vehicle_id}__slot_{slot_idx}"
+                    ),
+                )
+                model.addConstr(
+                    slot_end_soc <= maximum_energy,
+                    name=(
+                        "stage1_soc_relax_capacity__"
+                        f"{vehicle_id}__slot_{slot_idx}"
+                    ),
+                )
+                constraint_count += 2
             cumulative_load += sum(terminal_load_terms)
+            terminal_requirement_kwh = max(
+                minimum_soc_kwh,
+                final_soc_floor_kwh(
+                    problem,
+                    vehicle,
+                    cap_kwh=capacity_kwh,
+                ),
+                float(
+                    effective_final_soc_target_kwh(
+                        problem,
+                        vehicle,
+                        cap_kwh=capacity_kwh,
+                    )
+                    or 0.0
+                ),
+            )
+            terminal_soc = (
+                initial_energy
+                + cumulative_charge_energy
+                - cumulative_load
+            )
             model.addConstr(
-                cumulative_load
-                <= usable_initial_energy
-                + cumulative_charge_energy,
+                terminal_soc
+                >= terminal_requirement_kwh * used_vehicle[vehicle_id],
                 name=f"stage1_soc_relax_cumulative_terminal__{vehicle_id}",
             )
-            constraint_count += 1
+            terminal_policy = normalize_bev_terminal_soc_policy(
+                problem.metadata.get("bev_terminal_soc_policy"),
+                has_explicit_target=(
+                    problem.metadata.get("final_soc_target_percent")
+                    is not None
+                ),
+            )
+            if (
+                terminal_policy
+                is BevTerminalSocPolicy.RETURN_TO_INITIAL
+            ):
+                terminal_contract = bev_terminal_numeric_acceptance_contract(
+                    problem.metadata,
+                    gurobi_feasibility_tol=None,
+                )
+                model.addConstr(
+                    terminal_soc
+                    <= (
+                        terminal_requirement_kwh
+                        + float(
+                            terminal_contract[
+                                "scientific_tolerance_kwh"
+                            ]
+                        )
+                    )
+                    * used_vehicle[vehicle_id],
+                    name=(
+                        "stage1_soc_relax_return_to_initial_upper__"
+                        f"{vehicle_id}"
+                    ),
+                )
+                constraint_count += 1
+            model.addConstr(
+                terminal_soc <= maximum_energy,
+                name=f"stage1_soc_relax_terminal_capacity__{vehicle_id}",
+            )
+            constraint_count += 2
 
         shared_charger_metadata: Dict[str, Any] = {
             "enabled": bool(stage1_charge_power_var),
@@ -8673,96 +10615,33 @@ class GurobiMILPAdapter:
             )
             shared_charger_metadata.update(physical_metadata)
 
-            depot_by_id = {
-                str(depot.depot_id): depot for depot in problem.depots
-            }
-            assets_by_depot = {
-                str(depot_id): asset
-                for depot_id, asset in (
-                    problem.depot_energy_assets or {}
-                ).items()
-            }
-            global_pv_kw_by_slot = {
-                int(slot.slot_index): max(
-                    float(slot.pv_available_kw or 0.0), 0.0
-                )
-                for slot in problem.pv_slots
-            }
-            site_supply_constraint_count = 0
-            for depot_id, depot in depot_by_id.items():
-                vehicle_ids_at_depot = tuple(
-                    vehicle_id
-                    for vehicle_id, vehicle in electric_vehicle_by_id.items()
-                    if str(
-                        getattr(vehicle, "home_depot_id", "")
-                        or "depot_default"
-                    )
-                    == depot_id
-                )
-                if not vehicle_ids_at_depot:
-                    continue
-                asset = assets_by_depot.get(depot_id)
-                configured_import_limit_kw = float(
-                    getattr(depot, "import_limit_kw", 0.0) or 0.0
-                )
-                # Match both Stage 2 and the independent feasibility checker:
-                # a non-positive contract value means that no finite import
-                # limit was supplied. Treating it as zero would make this
-                # necessary-condition relaxation stricter than the exact
-                # charging model and can falsely reject a feasible assignment.
-                import_limit_kw = (
-                    configured_import_limit_kw
-                    if configured_import_limit_kw > 0.0
-                    else None
-                )
-                for slot_idx in slot_indices:
-                    pv_kw = global_pv_kw_by_slot.get(slot_idx, 0.0)
-                    bess_discharge_kw = 0.0
-                    if asset is not None:
-                        pv_kw = (
-                            _pv_generation_kwh_at_slot(asset, slot_idx)
-                            / timestep_h
-                        )
-                        if bool(getattr(asset, "bess_enabled", False)) and bool(
-                            getattr(asset, "allow_bess_to_bus", True)
-                        ):
-                            bess_discharge_kw = max(
-                                float(
-                                    getattr(asset, "bess_power_kw", 0.0)
-                                    or 0.0
-                                ),
-                                0.0,
-                            )
-                    if import_limit_kw is None:
-                        # The physical charger capacity remains enforced
-                        # above. No artificial site-supply cap is valid
-                        # without an explicit contract import limit.
-                        continue
-                    optimistic_supply_cap_kw = (
-                        import_limit_kw + pv_kw + bess_discharge_kw
-                    )
-                    model.addConstr(
-                        gp.quicksum(
-                            stage1_charge_power_var[(vehicle_id, slot_idx)]
-                            for vehicle_id in vehicle_ids_at_depot
-                            if (vehicle_id, slot_idx)
-                            in stage1_charge_power_var
-                        )
-                        <= optimistic_supply_cap_kw,
-                        name=(
-                            "stage1_site_supply_relax__"
-                            f"{depot_id}__slot_{slot_idx}"
-                        ),
-                    )
-                    constraint_count += 1
-                    site_supply_constraint_count += 1
-            shared_charger_metadata["site_supply_constraint_count"] = (
-                site_supply_constraint_count
+            # Site supply is deliberately not bounded here.  The immediately
+            # following Stage1TimeIndexedEnergyRecourseRelaxation owns the
+            # slot-level PV/grid/BESS balances, contract import limit, and
+            # optional overage variable.  Retaining this older hard optimistic
+            # cap would make Stage 1 stricter than Stage 2 whenever penalized
+            # contract overage is enabled.
+            shared_charger_metadata["site_supply_constraint_count"] = 0
+            shared_charger_metadata["site_supply_semantics"] = (
+                "enforced_by_stage1_time_indexed_energy_recourse_with_"
+                "stage2_matched_contract_overage_policy"
             )
             shared_charger_metadata[
                 "physical_charger_constraint_count_included"
             ] = constraint_count - constraint_count_before_chargers
 
+        if state_out is not None:
+            state_out.clear()
+            state_out.update(
+                {
+                    "slot_indices": slot_indices,
+                    "timestep_h": timestep_h,
+                    "charge_efficiency": charge_efficiency,
+                    "charge_power_by_vehicle_slot": stage1_charge_power_var,
+                    "charge_on_by_vehicle_slot": stage1_charge_on_var,
+                    "electric_vehicle_by_id": electric_vehicle_by_id,
+                }
+            )
         return constraint_count, shared_charger_metadata
 
     def _repaired_baseline_plan_for_warm_start(
@@ -8957,6 +10836,7 @@ class GurobiMILPAdapter:
         y: Dict[Tuple[str, str], Any],
         x: Dict[Tuple[str, str, str], Any],
         start_arc: Dict[Tuple[str, str], Any],
+        use_pool_solution: bool = False,
     ) -> Tuple[List[VehicleDuty], List[str], Dict[str, str]]:
         duties: List[VehicleDuty] = []
         served_trip_ids: List[str] = []
@@ -8967,7 +10847,11 @@ class GurobiMILPAdapter:
             assigned_trip_ids = {
                 trip.trip_id
                 for trip in problem.trips
-                if (vehicle_id, trip.trip_id) in y and self._binary_value(y[(vehicle_id, trip.trip_id)])
+                if (vehicle_id, trip.trip_id) in y
+                and self._binary_value(
+                    y[(vehicle_id, trip.trip_id)],
+                    use_pool_solution=use_pool_solution,
+                )
             }
             if not assigned_trip_ids:
                 continue
@@ -8975,7 +10859,10 @@ class GurobiMILPAdapter:
             successor_by_trip: Dict[str, str] = {}
             predecessor_by_trip: Dict[str, str] = {}
             for v_id, from_trip_id, to_trip_id in x:
-                if v_id != vehicle_id or not self._binary_value(x[(v_id, from_trip_id, to_trip_id)]):
+                if v_id != vehicle_id or not self._binary_value(
+                    x[(v_id, from_trip_id, to_trip_id)],
+                    use_pool_solution=use_pool_solution,
+                ):
                     continue
                 if from_trip_id not in assigned_trip_ids or to_trip_id not in assigned_trip_ids:
                     continue
@@ -8985,7 +10872,11 @@ class GurobiMILPAdapter:
             start_trip_ids = [
                 trip_id
                 for trip_id in assigned_trip_ids
-                if (vehicle_id, trip_id) in start_arc and self._binary_value(start_arc[(vehicle_id, trip_id)])
+                if (vehicle_id, trip_id) in start_arc
+                and self._binary_value(
+                    start_arc[(vehicle_id, trip_id)],
+                    use_pool_solution=use_pool_solution,
+                )
             ]
             if not start_trip_ids:
                 start_trip_ids = [
@@ -9289,9 +11180,15 @@ class GurobiMILPAdapter:
             return horizon_start - 24 * 60
         return horizon_start
 
-    def _binary_value(self, var: Any) -> bool:
+    def _binary_value(
+        self,
+        var: Any,
+        *,
+        use_pool_solution: bool = False,
+    ) -> bool:
         try:
-            return float(var.X) > 0.5
+            attribute = "Xn" if use_pool_solution else "X"
+            return float(getattr(var, attribute)) > 0.5
         except Exception:
             return False
 

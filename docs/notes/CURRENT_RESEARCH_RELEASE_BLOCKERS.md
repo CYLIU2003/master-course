@@ -1,9 +1,13 @@
 # Current research release blockers
 
-Status date: 2026-07-28
-Code status: `1033` local regression tests, `compileall`, and diff hygiene
-passed for the P0 physical-payload and final-reporting repairs; a new post-fix
-clean 264-trip ordinary frontend run remains required
+Status date: 2026-07-29
+Code status: slot-indexed Stage 1 energy recourse, multi-candidate Stage 2
+evaluation, explicit same-service-date PV controls, and an HTTP-only frontend
+pair runner are implemented. Focused regression (`85 passed`), full regression
+(`1054 passed`), compileall, and diff validation pass. The rain scenario's
+single non-PV BESS-terminal-policy mismatch was aligned and a repeat audit
+found zero remaining non-weather control mismatches. A clean implementation
+commit exists; fresh high/low-PV executions from its frozen SHA remain required.
 Teacher release status: **BLOCKED**
 
 This file is the single current blocker register. Older rolling remediation
@@ -33,6 +37,33 @@ Tk frontend
 Rolling orchestration itself is no longer a blocker. Physical feasibility,
 research acceptance, accounting eligibility, comparison validity, and
 optimality remain separate decisions.
+
+## P0 weather/dispatch coupling correction, pending full validation and runs
+
+The previous Stage 1 assignment objective used a whole-day PV-energy credit.
+It did not match PV generation slots to assignment-derived depot-presence
+windows, charger capacity, BEV SOC, BESS operation, TOU grid prices, or demand
+peaks. Because Stage 2 fixed that assignment, the old sunny/rain assignment
+hash equality could not be treated as evidence that weather had no dispatch
+effect.
+
+The current working tree replaces that decision term with slot-indexed
+continuous energy recourse tied to assignment, physical charging windows,
+compatible charger ports and power, BEV SOC, per-slot PV/grid/BESS balance,
+BESS terminal SOC, import limits and overage, peak demand, and enabled
+accounting terms. The aggregate whole-day proxy is diagnostic only. Formal
+requests evaluate multiple distinct Stage 1 assignments in exact Stage 2 and
+select the feasible candidate with minimum canonical actual cost. This remains
+a bounded two-stage method and does not establish an integrated global optimum.
+
+Prepare now records the common 2025-08-05 service date separately from each PV
+source date. The new HTTP-only runner must use fresh prepared inputs and the
+ordinary BFF endpoints, preserve exact payloads, run cases sequentially, and
+fail closed on every run, pair, oracle, gap, physical, accounting, provenance,
+or artifact gate. These changes are verified code facts only until the fresh
+frozen-commit high/low-PV pair completes successfully. Passing
+unit/regression tests does not substitute for the full prepared-scope physical
+run or formal pair acceptance.
 
 ## P0 physical-validation provenance correction, pending fresh evidence
 
@@ -131,11 +162,12 @@ required.
    handed unchanged to Rolling; a count-only validation summary is not accepted.
 5. Formal Phase 3 frontend runs force the complete successor network and
    prohibit fallback/post-solve repair.
-6. Stage 1 now shares charge reachability across physical charger definitions,
-   compatibility, ports, power, depot location, charging windows, and an
-   optimistic site supply cap when a finite import contract is configured. A
-   non-positive contract means no finite cap, consistently with Stage 2. This
-   remains a necessary relaxation; Stage 2 is the exact charging/SOC check.
+6. Stage 1 now couples assignment to slot-level charge reachability, compatible
+   charger ports and power, depot-presence windows, BEV SOC, per-slot PV/grid/
+   BESS balance, BESS terminal SOC, contract overage, peak demand, and enabled
+   accounting costs. Contract-overage feasibility and penalty match Stage 2;
+   the previous hard optimistic site cap is not used. Stage 2 remains the exact
+   binary charger and charging/SOC check.
 7. If and only if Stage 2 returns a Gurobi `INFEASIBLE` certificate, the full
    failed vehicle-trip assignment is returned to Stage 1 as a no-good cut and
    re-solved (maximum two feedback iterations in a formal frontend run).
@@ -182,9 +214,9 @@ required.
 ### B1 — Fresh formal execution evidence is absent
 
 The model, accounting, and artifact-contract changes invalidate all older KPI
-claims. A frozen clean commit must be executed through the normal frontend for high-PV,
-low-PV, and no-PV cases. All three require 24/24 rolling and accepted run
-contracts. Each completed job must additionally show
+claims. A frozen clean commit must be executed through the normal frontend for
+the predeclared same-service-date high-PV and low-PV pair. Both require 24/24
+Rolling and accepted run contracts. Each completed job must additionally show
 `artifact_completeness.status=OK`; otherwise it is an incomplete diagnostic
 bundle, irrespective of solver feasibility.
 The 2026-07-28 17:37 manual run is diagnostic only: day-ahead completed, but
@@ -207,22 +239,23 @@ This figure-bundle status does not override research-release blockers.
 
 ### B2 — Full-scale Stage 1 performance and gap are unmeasured
 
-The shared-charger relaxation and Stage 2 feedback cuts change Stage 1 size and
-mathematical strength. No 264-trip runtime, raw Gurobi gap, certified gap,
-node count, numeric-scaling diagnostic, or feedback-iteration count has yet
-been measured. Until a run reaches the predeclared gap, it is a feasible
-candidate only.
+The slot-indexed recourse, systematic solution pool, and multi-candidate Stage
+2 evaluation change Stage 1 size, lower-bound strength, and total runtime. No
+prepared-scope full run has yet measured runtime, raw Gurobi gap, certified
+gap, node count, first incumbent, candidate count, numeric scaling, or feedback
+iterations. Until a run reaches the predeclared gap, it is a feasible candidate
+only.
 
 ### B3 — Stage 1/Stage 2 decomposition is not an integrated global optimum
 
-Phase 3 remains a two-stage method. Stage 1 creates a dispatch candidate and
-Stage 2 optimizes energy operation for that fixed assignment. The new
-reachability relaxation/cuts reduce infeasible handoffs but do not prove a
-single globally minimum accounting cost. The real Gurobi regression covers an
-IIS-backed Stage 2 rejection, two full-assignment no-good retries, and a final
-independently feasible schedule; it does not prove that the bounded feedback
-loop exhausts every full-scale infeasible assignment. Small integrated-MILP
-comparison remains required to quantify decomposition loss.
+Phase 3 remains a two-stage method. Stage 1 creates dispatch candidates and
+Stage 2 optimizes exact energy operation for each fixed assignment. The
+slot-indexed recourse, candidate pool, and IIS-backed cuts reduce decomposition
+loss but do not prove a single globally minimum accounting cost. The HTTP pair
+runner now invokes the small integrated-MILP oracle and requires feasibility,
+cost, vehicle mix, and powertrain-assignment agreement, but that audit has not
+yet been executed from the new frozen prepared inputs. It cannot replace the
+full-scale run.
 
 ### B4 — All-available-BEV policy sensitivity has not been executed
 
@@ -234,7 +267,7 @@ without these outputs.
 
 ### B5 — Counterfactual pair is not yet assembled from new runs
 
-High/low/no-PV runs must share the same service date, trip-content hash, fleet
+High/low-PV runs must share the same service date, trip-content hash, fleet
 contract, initial-state hash, charger/BESS/tariff inputs, seed, thread count,
 time limits, and solver controls. Only the PV curve hash may differ. The
 Tsurumaki experiment spec may separately assert 264 trips. Build and archive

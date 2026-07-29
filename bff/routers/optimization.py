@@ -691,6 +691,7 @@ class RunOptimizationBody(BaseModel):
     # older client cannot restore the early stop or a machine-dependent thread
     # count through a request body.
     stage1_best_obj_stop_enabled: bool = INTERACTIVE_STAGE1_BEST_OBJ_STOP_ENABLED
+    stage1_stage2_candidate_limit: int = Field(default=1, ge=1, le=50)
     gurobi_threads: Optional[int] = Field(
         default=INTERACTIVE_GUROBI_THREADS,
         ge=1,
@@ -8346,6 +8347,9 @@ def _solver_settings_payload(
     time_limit_seconds_requested: Any,
     mip_gap_requested: Any,
     solver_metadata: Dict[str, Any],
+    random_seed_requested: Any = None,
+    stage1_time_limit_seconds_requested: Any = None,
+    stage2_time_limit_seconds_requested: Any = None,
 ) -> Dict[str, Any]:
     def _float_or_none(value: Any) -> Optional[float]:
         if value is None or value == "":
@@ -8361,6 +8365,9 @@ def _solver_settings_payload(
 
     metadata = dict(solver_metadata or {})
     effective_limits = dict(metadata.get("effective_limits") or {})
+    random_seed = _int_or_none(metadata.get("random_seed"))
+    if random_seed is None:
+        random_seed = _int_or_none(random_seed_requested)
     requested_gap = _float_or_none(mip_gap_requested)
     has_feasible_incumbent = bool(metadata.get("has_feasible_incumbent", False))
     achieved_gap = (
@@ -8383,6 +8390,12 @@ def _solver_settings_payload(
     return {
         "time_limit_seconds_requested": _int_or_none(time_limit_seconds_requested),
         "time_limit_seconds_effective": effective_time_limit,
+        "stage1_time_limit_seconds_requested": _int_or_none(
+            stage1_time_limit_seconds_requested
+        ),
+        "stage2_time_limit_seconds_requested": _int_or_none(
+            stage2_time_limit_seconds_requested
+        ),
         "mip_gap_requested_ratio": requested_gap,
         "mip_gap_requested_percent": None if requested_gap is None else requested_gap * 100.0,
         "mip_gap_achieved_ratio": achieved_gap,
@@ -8406,6 +8419,11 @@ def _solver_settings_payload(
         "research_cost_kpi_eligible": bool(metadata.get("research_cost_kpi_eligible", False)),
         "git_sha": metadata.get("git_sha"),
         "git_dirty": metadata.get("git_dirty"),
+        "git_sha_after_solve": metadata.get("git_sha_after_solve"),
+        "git_dirty_after_solve": metadata.get("git_dirty_after_solve"),
+        "git_state_unchanged_during_solve": metadata.get(
+            "git_state_unchanged_during_solve"
+        ),
         "git_state_available": bool(metadata.get("git_state_available", False)),
         "git_state_error": metadata.get("git_state_error"),
         "research_submission_git_provenance_eligible": bool(
@@ -8459,6 +8477,97 @@ def _solver_settings_payload(
         "stage1_certified_mip_gap_semantics": metadata.get(
             "stage1_certified_mip_gap_semantics"
         ),
+        "stage1_weather_aware_lower_bound": _float_or_none(
+            metadata.get("stage1_weather_aware_lower_bound")
+        ),
+        "stage1_weather_aware_lower_bound_semantics": metadata.get(
+            "stage1_weather_aware_lower_bound_semantics"
+        ),
+        "stage1_runtime_seconds": _float_or_none(
+            metadata.get("stage1_runtime_seconds")
+        ),
+        "stage1_time_limit_seconds_effective": _int_or_none(
+            metadata.get("stage1_time_limit_sec_effective")
+        ),
+        "stage2_runtime_seconds": _float_or_none(
+            metadata.get("stage2_runtime_seconds")
+        ),
+        "stage2_time_limit_seconds_effective": _int_or_none(
+            metadata.get("stage2_time_limit_sec_effective")
+        ),
+        "stage1_search_telemetry": dict(
+            metadata.get("stage1_search_telemetry") or {}
+        ),
+        "stage1_model_variable_count": _int_or_none(
+            metadata.get("stage1_model_variable_count")
+        ),
+        "stage1_model_constraint_count": _int_or_none(
+            metadata.get("stage1_model_constraint_count")
+        ),
+        "stage1_energy_cost_proxy_used_in_objective": bool(
+            metadata.get("stage1_energy_cost_proxy_used_in_objective", False)
+        ),
+        "stage1_time_indexed_energy_recourse_configuration": dict(
+            metadata.get(
+                "stage1_time_indexed_energy_recourse_configuration"
+            )
+            or {}
+        ),
+        "stage1_time_indexed_energy_recourse_weather_input": dict(
+            metadata.get(
+                "stage1_time_indexed_energy_recourse_weather_input"
+            )
+            or {}
+        ),
+        "stage1_time_indexed_energy_recourse_result": dict(
+            metadata.get("stage1_time_indexed_energy_recourse_result")
+            or {}
+        ),
+        "stage1_accounting_objective_components": dict(
+            metadata.get("stage1_accounting_objective_components")
+            or {}
+        ),
+        "stage1_driver_cost_constraint_count": _int_or_none(
+            metadata.get("stage1_driver_cost_constraint_count")
+        ),
+        "stage1_degradation_cost_term_count": _int_or_none(
+            metadata.get("stage1_degradation_cost_term_count")
+        ),
+        "stage1_switch_cost_term_count": _int_or_none(
+            metadata.get("stage1_switch_cost_term_count")
+        ),
+        "stage1_stage2_candidate_limit_requested": _int_or_none(
+            metadata.get("stage1_stage2_candidate_limit_requested")
+        ),
+        "stage1_pool_solution_count": _int_or_none(
+            metadata.get("stage1_pool_solution_count")
+        ),
+        "stage1_distinct_candidate_count": _int_or_none(
+            metadata.get("stage1_distinct_candidate_count")
+        ),
+        "stage1_stage2_candidate_count_evaluated": _int_or_none(
+            metadata.get("stage1_stage2_candidate_count_evaluated")
+        ),
+        "stage1_stage2_feasible_candidate_count": _int_or_none(
+            metadata.get("stage1_stage2_feasible_candidate_count")
+        ),
+        "stage1_stage2_selected_candidate_index": _int_or_none(
+            metadata.get("stage1_stage2_selected_candidate_index")
+        ),
+        "stage1_stage2_selected_candidate_hash": metadata.get(
+            "stage1_stage2_selected_candidate_hash"
+        ),
+        "stage1_stage2_selected_canonical_actual_cost_jpy": _float_or_none(
+            metadata.get(
+                "stage1_stage2_selected_canonical_actual_cost_jpy"
+            )
+        ),
+        "stage2_feedback_iteration": _int_or_none(
+            metadata.get("stage2_feedback_iteration")
+        ),
+        "stage2_feedback_history": list(
+            metadata.get("stage2_feedback_history") or ()
+        ),
         # A single frontend run is never a runtime comparison. Matched solver
         # controls and repeated executions are a separate experiment contract.
         "runtime_comparison_eligible": False,
@@ -8470,6 +8579,7 @@ def _solver_settings_payload(
             "before any wall-clock comparison claim."
         ),
         "gurobi_threads": _int_or_none(metadata.get("gurobi_threads")),
+        "random_seed": random_seed,
         "stage1_gurobi_feasibility_tol": _float_or_none(
             metadata.get("stage1_gurobi_feasibility_tol")
         ),
@@ -8531,6 +8641,7 @@ def _run_optimization(
     run_hourly_rolling: bool = True,
     rolling_execution_minutes: int = 60,
     frontend_request_payload: Optional[Dict[str, Any]] = None,
+    stage1_stage2_candidate_limit: int = 1,
 ) -> None:
     output_dir: Optional[str] = None
     raw_frontend_request_payload = dict(frontend_request_payload or {})
@@ -8725,6 +8836,11 @@ def _run_optimization(
                 stage1_time_limit_sec=stage1_time_limit_seconds,
                 stage2_time_limit_sec=stage2_time_limit_seconds,
                 stage1_best_obj_stop_enabled=bool(stage1_best_obj_stop_enabled),
+                stage1_stage2_candidate_limit=(
+                    max(int(stage1_stage2_candidate_limit), 10)
+                    if bool(research_run)
+                    else max(int(stage1_stage2_candidate_limit), 1)
+                ),
                 gurobi_threads=gurobi_threads,
                 mip_gap=mip_gap,
                 random_seed=random_seed,
@@ -8812,6 +8928,9 @@ def _run_optimization(
                     "stage2_time_limit_seconds": stage2_time_limit_seconds,
                     "stage1_best_obj_stop_enabled": bool(
                         stage1_best_obj_stop_enabled
+                    ),
+                    "stage1_stage2_candidate_limit": (
+                        opt_config.stage1_stage2_candidate_limit
                     ),
                     "gurobi_threads": gurobi_threads,
                     "run_profile": run_profile,
@@ -8935,6 +9054,102 @@ def _run_optimization(
                 )
             else:
                 engine_result.solver_metadata = engine_solver_metadata
+            candidate_rows = list(
+                engine_solver_metadata.get(
+                    "stage1_stage2_candidate_evaluation"
+                )
+                or []
+            )
+            if candidate_rows:
+                candidate_payload = {
+                    "selection_semantics": engine_solver_metadata.get(
+                        "stage1_stage2_candidate_selection_semantics"
+                    ),
+                    "integrated_global_optimality_claimed": bool(
+                        engine_solver_metadata.get(
+                            "stage1_stage2_candidate_global_optimality_claimed",
+                            False,
+                        )
+                    ),
+                    "requested_candidate_limit": (
+                        engine_solver_metadata.get(
+                            "stage1_stage2_candidate_limit_requested"
+                        )
+                    ),
+                    "pool_solution_count": engine_solver_metadata.get(
+                        "stage1_pool_solution_count"
+                    ),
+                    "distinct_candidate_count": engine_solver_metadata.get(
+                        "stage1_distinct_candidate_count"
+                    ),
+                    "candidate_count_evaluated": (
+                        engine_solver_metadata.get(
+                            "stage1_stage2_candidate_count_evaluated"
+                        )
+                    ),
+                    "feasible_candidate_count": (
+                        engine_solver_metadata.get(
+                            "stage1_stage2_feasible_candidate_count"
+                        )
+                    ),
+                    "selected_candidate_index": (
+                        engine_solver_metadata.get(
+                            "stage1_stage2_selected_candidate_index"
+                        )
+                    ),
+                    "selected_candidate_hash": (
+                        engine_solver_metadata.get(
+                            "stage1_stage2_selected_candidate_hash"
+                        )
+                    ),
+                    "selected_canonical_actual_cost_jpy": (
+                        engine_solver_metadata.get(
+                            "stage1_stage2_selected_canonical_actual_cost_jpy"
+                        )
+                    ),
+                    "candidates": candidate_rows,
+                }
+                candidate_json_path = (
+                    Path(output_dir)
+                    / "stage1_stage2_candidate_evaluation.json"
+                )
+                candidate_json_path.write_text(
+                    json.dumps(
+                        candidate_payload,
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
+                    encoding="utf-8",
+                )
+                candidate_csv_path = (
+                    Path(output_dir)
+                    / "stage1_stage2_candidate_evaluation.csv"
+                )
+                _write_csv_rows(
+                    candidate_csv_path,
+                    candidate_rows,
+                    [
+                        "candidate_index",
+                        "stage1_pool_solution_index",
+                        "candidate_hash",
+                        "assignment_hash",
+                        "stage1_relaxed_objective_jpy",
+                        "stage2_exact_objective_jpy",
+                        "stage2_actual_canonical_cost_jpy",
+                        "feasible",
+                        "stage2_feasible",
+                        "canonical_evaluation_feasible",
+                        "iis_hash",
+                        "used_bev",
+                        "used_ice",
+                        "bev_trips",
+                        "ice_trips",
+                        "runtime_sec",
+                        "stage2_runtime_sec",
+                        "stage2_time_limit_sec_effective",
+                        "stage2_solver_status",
+                    ],
+                )
             graph_artifacts = _persist_canonical_graph_exports(
                 scenario=scenario,
                 problem=problem,
@@ -9268,6 +9483,13 @@ def _run_optimization(
             time_limit_seconds_requested=time_limit_seconds,
             mip_gap_requested=mip_gap,
             solver_metadata=solver_metadata,
+            random_seed_requested=random_seed,
+            stage1_time_limit_seconds_requested=(
+                stage1_time_limit_seconds
+            ),
+            stage2_time_limit_seconds_requested=(
+                stage2_time_limit_seconds
+            ),
         )
         result_cost_breakdown = _cost_breakdown(result_payload, sim_payload)
         accounting_summary_for_result = dict((graph_artifacts or {}).get("accounting_summary") or {})
@@ -10380,6 +10602,7 @@ def run_optimization(
                 "rolling_execution_minutes": effective_rolling_execution_minutes,
                 "rolling_controls_server_enforced": bool(rolling_required),
             },
+            request.stage1_stage2_candidate_limit,
         ),
         job_id=job.job_id,
         scenario_id=scenario_id,

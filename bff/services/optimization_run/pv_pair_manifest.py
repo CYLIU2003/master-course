@@ -185,6 +185,16 @@ def build_frontend_pv_pair_artifacts(
         counterfactual_manifest.get("comparison_control_payload") or {}
     )
     checks = {
+        "baseline_comparison_explicitly_requested": (
+            baseline_manifest.get("comparison_requested") is True
+            and baseline_manifest.get("comparison_type")
+            == "same_service_date_pv_counterfactual"
+        ),
+        "counterfactual_comparison_explicitly_requested": (
+            counterfactual_manifest.get("comparison_requested") is True
+            and counterfactual_manifest.get("comparison_type")
+            == "same_service_date_pv_counterfactual"
+        ),
         "baseline_role_declared": (
             baseline_manifest.get("comparison_role") == "baseline"
         ),
@@ -206,6 +216,16 @@ def build_frontend_pv_pair_artifacts(
         "same_service_date": (
             baseline_control.get("service_date")
             == counterfactual_control.get("service_date")
+        ),
+        "baseline_pv_source_matches_service_date": (
+            bool(baseline_manifest.get("pv_source_date"))
+            and baseline_manifest.get("pv_source_date")
+            == baseline_control.get("service_date")
+        ),
+        "counterfactual_pv_source_differs_from_service_date": (
+            bool(counterfactual_manifest.get("pv_source_date"))
+            and counterfactual_manifest.get("pv_source_date")
+            != counterfactual_control.get("service_date")
         ),
         "pv_profile_hashes_present": all(
             bool(str(item or "").strip())

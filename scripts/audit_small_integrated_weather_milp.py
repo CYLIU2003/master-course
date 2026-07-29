@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 from copy import deepcopy
 from dataclasses import replace
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -378,6 +379,46 @@ def _run_case(
                 )
             ),
         }
+    assignment_rows = sorted(
+        (
+            {
+                "trip_id": str(leg.trip.trip_id),
+                "vehicle_id": str(
+                    result.plan.vehicle_id_for_duty(duty.duty_id)
+                ),
+                "vehicle_type": str(duty.vehicle_type).upper(),
+            }
+            for duty in result.plan.duties
+            for leg in duty.legs
+        ),
+        key=lambda row: (
+            row["trip_id"],
+            row["vehicle_id"],
+            row["vehicle_type"],
+        ),
+    )
+    assignment_hash = hashlib.sha256(
+        json.dumps(
+            assignment_rows,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    assignment_powertrain_hash = hashlib.sha256(
+        json.dumps(
+            [
+                {
+                    "trip_id": row["trip_id"],
+                    "vehicle_type": row["vehicle_type"],
+                }
+                for row in assignment_rows
+            ],
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
     return {
         "analysis_label": str(
             problem.metadata.get("sensitivity_analysis_label") or "primary"
@@ -441,6 +482,9 @@ def _run_case(
             metadata.get("research_acceptance_checks") or {}
         ),
         "used_vehicle_trace": used_vehicle_trace,
+        "assignment_rows": assignment_rows,
+        "assignment_hash": assignment_hash,
+        "assignment_powertrain_hash": assignment_powertrain_hash,
     }
 
 
@@ -511,6 +555,26 @@ def _primary_oracle_comparison(cases: list[dict[str, Any]]) -> dict[str, Any]:
                 two_stage.get("served_trip_count_by_vehicle_type") or {}
             )
             == dict(integrated.get("served_trip_count_by_vehicle_type") or {}),
+            "assignment_hash_matches": str(
+                two_stage.get("assignment_hash") or ""
+            )
+            == str(integrated.get("assignment_hash") or ""),
+            "two_stage_assignment_hash": two_stage.get("assignment_hash"),
+            "integrated_assignment_hash": integrated.get(
+                "assignment_hash"
+            ),
+            "assignment_powertrain_hash_matches": str(
+                two_stage.get("assignment_powertrain_hash") or ""
+            )
+            == str(
+                integrated.get("assignment_powertrain_hash") or ""
+            ),
+            "two_stage_assignment_powertrain_hash": two_stage.get(
+                "assignment_powertrain_hash"
+            ),
+            "integrated_assignment_powertrain_hash": integrated.get(
+                "assignment_powertrain_hash"
+            ),
             "comparison_lower_bound_consistent": cost_delta >= -1.0e-5,
         }
     )

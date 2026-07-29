@@ -19,6 +19,9 @@ def test_solver_settings_separate_raw_gap_from_certified_gap_and_stop_rule() -> 
     settings = _solver_settings_payload(
         time_limit_seconds_requested=1_500,
         mip_gap_requested=0.10,
+        random_seed_requested=42,
+        stage1_time_limit_seconds_requested=1_200,
+        stage2_time_limit_seconds_requested=300,
         solver_metadata={
             "has_feasible_incumbent": True,
             "achieved_mip_gap": 0.092,
@@ -33,6 +36,11 @@ def test_solver_settings_separate_raw_gap_from_certified_gap_and_stop_rule() -> 
             "stage1_certified_best_bound": 640_000.0,
             "stage1_certified_mip_gap_ratio": 0.092,
             "gurobi_threads": 1,
+            "git_sha": "abc123",
+            "git_dirty": False,
+            "git_sha_after_solve": "abc123",
+            "git_dirty_after_solve": False,
+            "git_state_unchanged_during_solve": True,
         },
     )
 
@@ -41,6 +49,12 @@ def test_solver_settings_separate_raw_gap_from_certified_gap_and_stop_rule() -> 
     assert settings["stage1_certified_mip_gap_ratio"] == 0.092
     assert settings["runtime_comparison_eligible"] is False
     assert settings["gurobi_threads"] == 1
+    assert settings["random_seed"] == 42
+    assert settings["stage1_time_limit_seconds_requested"] == 1_200
+    assert settings["stage2_time_limit_seconds_requested"] == 300
+    assert settings["git_sha_after_solve"] == "abc123"
+    assert settings["git_dirty_after_solve"] is False
+    assert settings["git_state_unchanged_during_solve"] is True
 
 
 def test_manual_pv_only_claim_scope_rejects_weather_dispatch_and_runtime_claims() -> None:

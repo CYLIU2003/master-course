@@ -3,6 +3,8 @@ from __future__ import annotations
 import copy
 from unittest import mock
 
+import pytest
+
 from bff.routers.simulation import PrepareSimulationBody, PrepareSimulationSettingsBody
 from bff.services import simulation_builder
 
@@ -227,6 +229,239 @@ def test_apply_builder_configuration_persists_fixed_weekday_pv_policy() -> None:
         simulation_config["comparison_type"]
         == "fixed_weekday_timetable_pv_counterfactual"
     )
+
+
+def test_apply_builder_configuration_separates_service_and_pv_source_dates() -> None:
+    scenario_doc = {
+        "meta": {},
+        "depots": [{"id": "dep1", "name": "Depot 1"}],
+        "routes": [
+            {"id": "route-a", "depotId": "dep1", "routeCode": "A-1"}
+        ],
+        "vehicles": [
+            {
+                "id": "veh-1",
+                "depotId": "dep1",
+                "type": "BEV",
+                "enabled": True,
+            }
+        ],
+        "chargers": [
+            {"id": "chg-1", "siteId": "dep1", "powerKw": 90}
+        ],
+        "vehicle_templates": [],
+        "scenario_overlay": {},
+        "simulation_config": {},
+        "dispatch_scope": {},
+        "calendar": [{"service_id": "WEEKDAY"}],
+    }
+    scenario_meta = {
+        "datasetId": "tokyu_full",
+        "datasetVersion": "v1",
+        "operatorId": "tokyu",
+        "randomSeed": 42,
+    }
+    body = PrepareSimulationBody(
+        selected_depot_ids=["dep1"],
+        selected_route_ids=["route-a"],
+        day_type="WEEKDAY",
+        service_date="2025-08-05",
+        simulation_settings=PrepareSimulationSettingsBody(
+            service_date="2025-08-05",
+            service_dates=["2025-08-05"],
+            pv_profile_id="dep1_2025-08-10_60min",
+            comparison_type="same_service_date_pv_counterfactual",
+            comparison_role="pv_curve_counterfactual",
+            counterfactual_pv_source_date="2025-08-10",
+            allow_fixed_weekday_timetable_pv_counterfactual=True,
+        ),
+    )
+
+    with (
+        mock.patch.object(
+            simulation_builder.store,
+            "get_scenario_document_shallow",
+            return_value=copy.deepcopy(scenario_doc),
+        ),
+        mock.patch.object(
+            simulation_builder.store,
+            "get_scenario",
+            return_value=scenario_meta,
+        ),
+        mock.patch.object(
+            simulation_builder.store,
+            "route_ids_for_selected_depots",
+            return_value=["route-a"],
+        ),
+        mock.patch.object(
+            simulation_builder.store,
+            "_invalidate_dispatch_artifacts",
+        ),
+        mock.patch.object(simulation_builder.store, "_save"),
+        mock.patch.object(
+            simulation_builder.store,
+            "_now_iso",
+            return_value="2026-07-29T00:00:00Z",
+        ),
+    ):
+        updated = simulation_builder.apply_builder_configuration(
+            "scenario-1",
+            body,
+        )
+
+    simulation_config = updated["simulation_config"]
+    assert simulation_config["service_date"] == "2025-08-05"
+    assert simulation_config["comparison_type"] == (
+        "same_service_date_pv_counterfactual"
+    )
+    assert simulation_config["comparison_role"] == "pv_curve_counterfactual"
+    assert simulation_config["counterfactual_pv_source_date"] == "2025-08-10"
+    assert simulation_config["weather_observation_date"] == "2025-08-10"
+    assert simulation_config["weather_profile_source"] == (
+        "dep1_2025-08-10_60min"
+    )
+
+
+def test_counterfactual_prepare_requires_explicit_fixed_timetable_permission() -> None:
+    body = PrepareSimulationBody(
+        selected_depot_ids=["dep1"],
+        selected_route_ids=["route-a"],
+        day_type="WEEKDAY",
+        service_date="2025-08-05",
+        simulation_settings=PrepareSimulationSettingsBody(
+            service_date="2025-08-05",
+            service_dates=["2025-08-05"],
+            comparison_type="same_service_date_pv_counterfactual",
+            comparison_role="pv_curve_counterfactual",
+            counterfactual_pv_source_date="2025-08-10",
+            allow_fixed_weekday_timetable_pv_counterfactual=False,
+        ),
+    )
+    scenario_doc = {
+        "meta": {},
+        "depots": [{"id": "dep1", "name": "Depot 1"}],
+        "routes": [
+            {"id": "route-a", "depotId": "dep1", "routeCode": "A-1"}
+        ],
+        "vehicles": [
+            {
+                "id": "veh-1",
+                "depotId": "dep1",
+                "type": "BEV",
+                "enabled": True,
+            }
+        ],
+        "chargers": [
+            {"id": "chg-1", "siteId": "dep1", "powerKw": 90}
+        ],
+        "vehicle_templates": [],
+        "scenario_overlay": {},
+        "simulation_config": {},
+        "dispatch_scope": {},
+        "calendar": [{"service_id": "WEEKDAY"}],
+    }
+
+    with (
+        mock.patch.object(
+            simulation_builder.store,
+            "get_scenario_document_shallow",
+            return_value=scenario_doc,
+        ),
+        mock.patch.object(
+            simulation_builder.store,
+            "get_scenario",
+            return_value={
+                "datasetId": "tokyu_full",
+                "datasetVersion": "v1",
+                "operatorId": "tokyu",
+                "randomSeed": 42,
+            },
+        ),
+        mock.patch.object(
+            simulation_builder.store,
+            "route_ids_for_selected_depots",
+            return_value=["route-a"],
+        ),
+    ):
+        with pytest.raises(
+            ValueError,
+            match="allow_fixed_weekday_timetable_pv_counterfactual=true",
+        ):
+            simulation_builder.apply_builder_configuration(
+                "scenario-1",
+                body,
+            )
+
+
+def test_counterfactual_prepare_rejects_truncated_source_datetime() -> None:
+    body = PrepareSimulationBody(
+        selected_depot_ids=["dep1"],
+        selected_route_ids=["route-a"],
+        day_type="WEEKDAY",
+        service_date="2025-08-05",
+        simulation_settings=PrepareSimulationSettingsBody(
+            service_date="2025-08-05",
+            service_dates=["2025-08-05"],
+            comparison_type="same_service_date_pv_counterfactual",
+            comparison_role="pv_curve_counterfactual",
+            counterfactual_pv_source_date="2025-08-10T12:00:00",
+            allow_fixed_weekday_timetable_pv_counterfactual=True,
+        ),
+    )
+    scenario_doc = {
+        "meta": {},
+        "depots": [{"id": "dep1", "name": "Depot 1"}],
+        "routes": [
+            {"id": "route-a", "depotId": "dep1", "routeCode": "A-1"}
+        ],
+        "vehicles": [
+            {
+                "id": "veh-1",
+                "depotId": "dep1",
+                "type": "BEV",
+                "enabled": True,
+            }
+        ],
+        "chargers": [
+            {"id": "chg-1", "siteId": "dep1", "powerKw": 90}
+        ],
+        "vehicle_templates": [],
+        "scenario_overlay": {},
+        "simulation_config": {},
+        "dispatch_scope": {},
+        "calendar": [{"service_id": "WEEKDAY"}],
+    }
+
+    with (
+        mock.patch.object(
+            simulation_builder.store,
+            "get_scenario_document_shallow",
+            return_value=scenario_doc,
+        ),
+        mock.patch.object(
+            simulation_builder.store,
+            "get_scenario",
+            return_value={
+                "datasetId": "tokyu_full",
+                "datasetVersion": "v1",
+                "operatorId": "tokyu",
+                "randomSeed": 42,
+            },
+        ),
+        mock.patch.object(
+            simulation_builder.store,
+            "route_ids_for_selected_depots",
+            return_value=["route-a"],
+        ),
+    ):
+        with pytest.raises(
+            ValueError,
+            match="counterfactual_pv_source_date must be YYYY-MM-DD",
+        ):
+            simulation_builder.apply_builder_configuration(
+                "scenario-1",
+                body,
+            )
 
 
 def test_apply_builder_configuration_preserves_explicit_vehicle_initial_soc() -> None:

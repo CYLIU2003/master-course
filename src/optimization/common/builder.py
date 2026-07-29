@@ -1195,6 +1195,34 @@ class ProblemBuilder:
                         "comparison_type",
                         "actual_service_day",
                     ),
+                    **(
+                        {
+                            "requested_comparison_type": dict(
+                                metadata_source.get("simulation_config")
+                                or {}
+                            ).get("comparison_type"),
+                            "comparison_role": dict(
+                                metadata_source.get("simulation_config")
+                                or {}
+                            ).get("comparison_role"),
+                            "counterfactual_pv_source_date": dict(
+                                metadata_source.get("simulation_config")
+                                or {}
+                            ).get("counterfactual_pv_source_date"),
+                        }
+                        if any(
+                            dict(
+                                metadata_source.get("simulation_config")
+                                or {}
+                            ).get(key)
+                            for key in (
+                                "comparison_type",
+                                "comparison_role",
+                                "counterfactual_pv_source_date",
+                            )
+                        )
+                        else {}
+                    ),
                     "calendar_policy": service_calendar_validation.get(
                         "calendar_policy"
                     ),

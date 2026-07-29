@@ -686,6 +686,79 @@ def apply_builder_configuration(
             )
         )
     )
+    comparison_type = str(
+        getattr(settings, "comparison_type", None)
+        or current_simulation_config.get("comparison_type")
+        or ""
+    ).strip()
+    comparison_role = str(
+        getattr(settings, "comparison_role", None)
+        or current_simulation_config.get("comparison_role")
+        or ""
+    ).strip()
+    counterfactual_pv_source_date = str(
+        getattr(settings, "counterfactual_pv_source_date", None)
+        or current_simulation_config.get("counterfactual_pv_source_date")
+        or ""
+    ).strip()
+    if comparison_type:
+        if comparison_type != "same_service_date_pv_counterfactual":
+            raise ValueError(
+                "comparison_type must be "
+                "'same_service_date_pv_counterfactual' when provided"
+            )
+        if comparison_role not in {
+            "baseline",
+            "pv_curve_counterfactual",
+        }:
+            raise ValueError(
+                "comparison_role must be 'baseline' or "
+                "'pv_curve_counterfactual'"
+            )
+        if not counterfactual_pv_source_date:
+            raise ValueError(
+                "counterfactual_pv_source_date is required for a "
+                "same-service-date PV counterfactual"
+            )
+        try:
+            parsed_counterfactual_source_date = datetime.strptime(
+                counterfactual_pv_source_date,
+                "%Y-%m-%d",
+            ).date()
+        except ValueError as exc:
+            raise ValueError(
+                "counterfactual_pv_source_date must be YYYY-MM-DD"
+            ) from exc
+        if parsed_counterfactual_source_date.isoformat() != (
+            counterfactual_pv_source_date
+        ):
+            raise ValueError(
+                "counterfactual_pv_source_date must be YYYY-MM-DD"
+            )
+        if (
+            comparison_role == "baseline"
+            and counterfactual_pv_source_date != str(service_date)[:10]
+        ):
+            raise ValueError(
+                "baseline counterfactual_pv_source_date must equal "
+                "service_date"
+            )
+        if (
+            comparison_role == "pv_curve_counterfactual"
+            and counterfactual_pv_source_date == str(service_date)[:10]
+        ):
+            raise ValueError(
+                "pv_curve_counterfactual source date must differ from "
+                "service_date"
+            )
+        if (
+            comparison_role == "pv_curve_counterfactual"
+            and not allow_fixed_weekday_timetable_pv_counterfactual
+        ):
+            raise ValueError(
+                "pv_curve_counterfactual requires "
+                "allow_fixed_weekday_timetable_pv_counterfactual=true"
+            )
     operation_time_window_enabled = bool(
         getattr(body.simulation_settings, "operation_time_window_enabled", False)
     )
@@ -748,6 +821,17 @@ def apply_builder_configuration(
         "day_type": selected_day_type,
         "allow_fixed_weekday_timetable_pv_counterfactual": (
             allow_fixed_weekday_timetable_pv_counterfactual
+        ),
+        "comparison_type": comparison_type or None,
+        "comparison_role": comparison_role or None,
+        "counterfactual_pv_source_date": (
+            counterfactual_pv_source_date or None
+        ),
+        "weather_observation_date": (
+            counterfactual_pv_source_date or service_date
+        ),
+        "weather_profile_source": (
+            str(body.simulation_settings.pv_profile_id or "") or None
         ),
         "initial_soc": body.simulation_settings.initial_soc,
         "initial_soc_percent": _first_defined(
@@ -842,7 +926,10 @@ def apply_builder_configuration(
         doc["simulation_config"].update(
             {
                 "calendar_policy": FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL,
-                "comparison_type": FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL,
+                "comparison_type": (
+                    comparison_type
+                    or FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL
+                ),
             }
         )
     if overlay_depot_energy_assets is not None:

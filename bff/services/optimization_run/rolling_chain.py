@@ -621,12 +621,64 @@ def _price_slot_hash(problem: Any) -> str:
 
 
 def _non_pv_depot_asset_hash(problem: Any) -> str:
-    from scripts.run_research_phase3_frontend_weather import _asset_snapshot
-
     fixed = {
         depot_id: {
             key: value
-            for key, value in dict(asset).items()
+            for key, value in {
+                "pv_enabled": bool(asset.pv_enabled),
+                "pv_case_id": str(
+                    getattr(asset, "pv_case_id", "") or ""
+                ),
+                "pv_capacity_kw": float(asset.pv_capacity_kw),
+                "pv_generation_kwh": float(
+                    sum(asset.pv_generation_kwh_by_slot)
+                ),
+                "pv_generation_hash": _canonical_hash(
+                    list(asset.pv_generation_kwh_by_slot)
+                ),
+                "bess_enabled": bool(asset.bess_enabled),
+                "bess_energy_kwh": float(asset.bess_energy_kwh),
+                "bess_power_kw": float(asset.bess_power_kw),
+                "bess_cycle_cost_yen_per_kwh": float(
+                    asset.bess_cycle_cost_yen_per_kwh
+                ),
+                "bess_charge_efficiency": float(
+                    asset.bess_charge_efficiency
+                ),
+                "bess_discharge_efficiency": float(
+                    asset.bess_discharge_efficiency
+                ),
+                "bess_initial_soc_kwh": float(
+                    asset.bess_initial_soc_kwh
+                ),
+                "bess_soc_min_kwh": float(asset.bess_soc_min_kwh),
+                "bess_soc_max_kwh": float(asset.bess_soc_max_kwh),
+                "allow_pv_to_bess": bool(asset.allow_pv_to_bess),
+                "allow_grid_to_bess": bool(asset.allow_grid_to_bess),
+                "allow_bess_to_bus": bool(asset.allow_bess_to_bus),
+                "grid_to_bess_price_mode": str(
+                    asset.grid_to_bess_price_mode
+                ),
+                "grid_to_bess_price_threshold_yen_per_kwh": float(
+                    asset.grid_to_bess_price_threshold_yen_per_kwh
+                ),
+                "grid_to_bess_allowed_slot_indices": list(
+                    asset.grid_to_bess_allowed_slot_indices
+                ),
+                "bess_priority_mode": str(asset.bess_priority_mode),
+                "bess_terminal_soc_min_kwh": float(
+                    asset.bess_terminal_soc_min_kwh
+                ),
+                "bess_terminal_soc_policy": str(
+                    asset.bess_terminal_soc_policy or ""
+                ),
+                "bess_terminal_soc_target_kwh": float(
+                    asset.bess_terminal_soc_target_kwh
+                ),
+                "bess_terminal_soc_deviation_penalty_yen_per_kwh": float(
+                    asset.bess_terminal_soc_deviation_penalty_yen_per_kwh
+                ),
+            }.items()
             if key
             not in {
                 "pv_case_id",
@@ -634,7 +686,9 @@ def _non_pv_depot_asset_hash(problem: Any) -> str:
                 "pv_generation_hash",
             }
         }
-        for depot_id, asset in sorted(_asset_snapshot(problem).items())
+        for depot_id, asset in sorted(
+            (problem.depot_energy_assets or {}).items()
+        )
     }
     return _canonical_hash(fixed)
 
@@ -701,8 +755,11 @@ def _comparison_case_manifest(
             "time_limit_seconds_effective": solver_settings.get(
                 "time_limit_seconds_effective"
             ),
-            "stage2_time_limit_seconds_effective": solver_settings.get(
-                "stage2_time_limit_seconds_effective"
+            "stage1_time_limit_seconds_requested": solver_settings.get(
+                "stage1_time_limit_seconds_requested"
+            ),
+            "stage2_time_limit_seconds_requested": solver_settings.get(
+                "stage2_time_limit_seconds_requested"
             ),
             "mip_gap_requested_ratio": solver_settings.get(
                 "mip_gap_requested_ratio"
@@ -711,9 +768,10 @@ def _comparison_case_manifest(
                 "stage1_best_obj_stop_enabled"
             ),
             "gurobi_threads": solver_settings.get("gurobi_threads"),
-            "random_seed": dict(
-                optimization_result.get("solver_metadata") or {}
-            ).get("random_seed"),
+            "stage1_stage2_candidate_limit": solver_settings.get(
+                "stage1_stage2_candidate_limit_requested"
+            ),
+            "random_seed": solver_settings.get("random_seed"),
         },
         "rolling_solver_controls": {
             "gurobi_threads": chain.get("gurobi_threads"),

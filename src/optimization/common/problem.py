@@ -369,6 +369,11 @@ class OptimizationConfig:
     stage1_gurobi_feasibility_tol: float = 1.0e-6
     stage2_gurobi_feasibility_tol: float = 1.0e-9
     stage2_gurobi_integrality_tol: float = 1.0e-9
+    # Phase 3 may retain several distinct Stage 1 assignments and run the
+    # fixed-assignment Stage 2 dispatch for each one.  The selected plan is the
+    # feasible candidate with the lowest canonical evaluated cost; this remains
+    # a two-stage heuristic and is not an integrated global-optimality claim.
+    stage1_stage2_candidate_limit: int = 1
     mip_gap: float = 0.02
     random_seed: int = 42
     alns_iterations: int = 800  # Increased from 500
