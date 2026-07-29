@@ -8,8 +8,10 @@ the fourth HTTP attempt is corrected, and candidate selection now requires an
 independent physical check in addition to Stage 2 feasibility. The fifth HTTP
 attempt exposed and the current tree corrects a result-claim message that
 conflated integrated-optimality scope with certified-gap status. The corrected
-focused regression passes (`77 passed`) and the complete suite passes
-(`1063 passed`); compileall and `git diff --check` are required before freeze.
+completion audit also rejects a contradiction between solver settings,
+persisted claim classification, and terminal response. The corrected focused
+regression passes (`89 passed`) and the complete suite passes
+(`1066 passed`); compileall and `git diff --check` are required before freeze.
 
 Teacher release status is fail-closed: **BLOCKED** unless
 `output/formal_pair_20260730/completion_audit.json` records `status=READY`,

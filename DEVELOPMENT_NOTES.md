@@ -155,12 +155,15 @@
 - Result-claim classification now persists `mip_gap_target_met` explicitly.
   A feasible two-stage candidate that meets the certified Stage 1 target is
   reported as passing that gap gate while still stating that integrated global
-  optimality is unestablished; a real gap miss remains fail-closed. Focused
-  regression including both branches passes (`77 passed`) and the complete
-  suite passes (`1063 passed`). A new clean commit and a complete two-case HTTP
-  rerun are still required. The release blocker is discharged only by a
-  same-SHA `completion_audit.json` with `status=READY`, zero failed checks, and
-  a completed evidence ZIP; no repository file is changed during that run.
+  optimality is unestablished; a real gap miss remains fail-closed. The HTTP
+  completion audit now rejects any contradiction between solver settings,
+  persisted claim classification, and terminal response. Focused regression
+  including the pass, miss, and old contradictory response branches passes
+  (`89 passed`) and the complete suite passes (`1066 passed`). A new clean
+  commit and a complete two-case HTTP rerun are still required. The release
+  blocker is discharged only by a same-SHA `completion_audit.json` with
+  `status=READY`, zero failed checks, and a completed evidence ZIP; no
+  repository file is changed during that run.
 
 ## 2026-07-28 P0 physical-validation payload provenance fix
 

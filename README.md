@@ -89,7 +89,9 @@ simulation artifact, not an automatically accepted research result.
   two-stage feasible candidate may satisfy the certified Stage 1 gap target
   while still lacking integrated global-optimality proof. The BFF job message
   reports each gate independently; it must not state that the requested gap is
-  unestablished when `mip_gap_target_met=true`.
+  unestablished when `mip_gap_target_met=true`. The controlled-pair completion
+  audit rejects any contradiction between solver settings, persisted claim
+  classification, and the terminal job response.
 - Startup, inter-trip, and return deadhead SOC events use the same canonical
   energy functions in the solver and independent validator. For
   `return_to_initial`, the first depot deadhead is part of the daily energy

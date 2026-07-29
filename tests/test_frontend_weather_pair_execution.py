@@ -344,3 +344,92 @@ def test_integer_gate_conversion_preserves_valid_zero() -> None:
     assert runner._integer_preserving_zero(0, default=-1) == 0
     assert runner._integer_preserving_zero("0", default=-1) == 0
     assert runner._integer_preserving_zero(None, default=-1) == -1
+
+
+def test_claim_artifact_gate_accepts_certified_gap_pass_with_scope_blocker() -> None:
+    runner = _load_runner()
+    classification = {
+        "label": "feasible_candidate",
+        "mip_gap_target_met": True,
+        "certified_mip_gap": 0.03284,
+        "optimality_blocking_reasons": [
+            "not_an_integrated_global_assignment_and_charging_milp"
+        ],
+        "interpretation": (
+            "A physically feasible incumbent meeting the certified Stage 1 "
+            "MIP gap target; integrated global-optimum claims remain blocked."
+        ),
+    }
+
+    assert runner._claim_artifacts_consistent(
+        settings={"mip_gap_target_met": True},
+        optimization_result={"result_claim_classification": classification},
+        terminal_response={
+            "status": "completed",
+            "message": (
+                "Feasible candidate complete; physical checks and the "
+                "certified Stage 1 MIP gap target passed, but integrated "
+                "global optimality is not established."
+            ),
+        },
+    )
+
+
+def test_claim_artifact_gate_accepts_real_gap_miss() -> None:
+    runner = _load_runner()
+    classification = {
+        "label": "feasible_candidate",
+        "mip_gap_target_met": False,
+        "certified_mip_gap": 0.12,
+        "optimality_blocking_reasons": [
+            "requested_mip_gap_not_met",
+            "not_an_integrated_global_assignment_and_charging_milp",
+        ],
+        "interpretation": (
+            "A physically feasible incumbent; do not describe it as meeting "
+            "the requested MIP gap."
+        ),
+    }
+
+    assert runner._claim_artifacts_consistent(
+        settings={"mip_gap_target_met": False},
+        optimization_result={"result_claim_classification": classification},
+        terminal_response={
+            "status": "completed",
+            "message": (
+                "Feasible candidate complete; physical checks passed, but "
+                "the requested MIP gap and integrated global optimality are "
+                "not established."
+            ),
+        },
+    )
+
+
+def test_claim_artifact_gate_rejects_gap_pass_reported_as_gap_miss() -> None:
+    runner = _load_runner()
+
+    assert not runner._claim_artifacts_consistent(
+        settings={"mip_gap_target_met": True},
+        optimization_result={
+            "result_claim_classification": {
+                "label": "feasible_candidate",
+                "mip_gap_target_met": True,
+                "certified_mip_gap": 0.03284,
+                "optimality_blocking_reasons": [
+                    "not_an_integrated_global_assignment_and_charging_milp"
+                ],
+                "interpretation": (
+                    "A physically feasible incumbent; do not describe it as "
+                    "meeting the requested MIP gap."
+                ),
+            }
+        },
+        terminal_response={
+            "status": "completed",
+            "message": (
+                "Feasible candidate complete; physical checks passed, but "
+                "global optimality or the requested MIP gap is not "
+                "established."
+            ),
+        },
+    )

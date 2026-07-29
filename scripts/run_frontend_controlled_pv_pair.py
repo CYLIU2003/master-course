@@ -1195,6 +1195,67 @@ def _build_research_comparison(
     return rows
 
 
+def _claim_artifacts_consistent(
+    *,
+    settings: Mapping[str, Any],
+    optimization_result: Mapping[str, Any],
+    terminal_response: Mapping[str, Any],
+) -> bool:
+    """Fail closed when terminal prose contradicts persisted claim gates."""
+
+    classification = dict(
+        optimization_result.get("result_claim_classification") or {}
+    )
+    if (
+        classification.get("label") != "feasible_candidate"
+        or terminal_response.get("status") != "completed"
+    ):
+        return False
+
+    settings_gap_met = settings.get("mip_gap_target_met") is True
+    if classification.get("mip_gap_target_met") is not settings_gap_met:
+        return False
+
+    blockers = set(classification.get("optimality_blocking_reasons") or [])
+    message = str(terminal_response.get("message") or "")
+    interpretation = str(classification.get("interpretation") or "")
+    mentions_gap_failure = (
+        "requested MIP gap" in message and "not established" in message
+    )
+    certified_gap = _number(classification.get("certified_mip_gap"))
+
+    if settings_gap_met:
+        gap_phrase = (
+            "certified Stage 1 MIP gap target passed"
+            if certified_gap is not None
+            else "requested MIP gap target passed"
+        )
+        gap_semantics_match = (
+            gap_phrase in message
+            and not mentions_gap_failure
+            and "meeting the" in interpretation
+            and "MIP gap target" in interpretation
+        )
+    else:
+        gap_semantics_match = (
+            mentions_gap_failure
+            and "meeting the certified Stage 1 MIP gap target"
+            not in interpretation
+            and "meeting the requested MIP gap target"
+            not in interpretation
+        )
+
+    integrated_scope_match = (
+        "not_an_integrated_global_assignment_and_charging_milp"
+        not in blockers
+        or (
+            "integrated global optimality" in message
+            and "not established" in message
+        )
+    )
+    return gap_semantics_match and integrated_scope_match
+
+
 def _case_gate_audit(
     *,
     name: str,
@@ -1233,6 +1294,12 @@ def _case_gate_audit(
     input_audit = _read_json(case_dir / "input_audit.json")
     prepare_response = _read_json(
         case_dir / "frontend_prepare_response.json"
+    )
+    optimization_result_response = _read_json(
+        case_dir / "frontend_optimization_result_response.json"
+    )
+    terminal_response = _read_json(
+        case_dir / "frontend_job_terminal_response.json"
     )
     audited_prepared_input_id = str(
         input_audit.get("prepared_input_id") or ""
@@ -1461,6 +1528,11 @@ def _case_gate_audit(
                 "arbitrary_weather_assignment_bias_used",
             )
             is False
+        ),
+        "terminal_claim_message_consistent": _claim_artifacts_consistent(
+            settings=settings,
+            optimization_result=optimization_result_response,
+            terminal_response=terminal_response,
         ),
     }
     failed = sorted(key for key, passed in checks.items() if not passed)
