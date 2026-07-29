@@ -159,11 +159,27 @@
   completion audit now rejects any contradiction between solver settings,
   persisted claim classification, and terminal response. Focused regression
   including the pass, miss, and old contradictory response branches passes
-  (`89 passed`) and the complete suite passes (`1066 passed`). A new clean
+  (`90 passed`) and the complete suite passes (`1067 passed`). A new clean
   commit and a complete two-case HTTP rerun are still required. The release
   blocker is discharged only by a same-SHA `completion_audit.json` with
   `status=READY`, zero failed checks, and a completed evidence ZIP; no
   repository file is changed during that run.
+- The sixth frozen HTTP attempt at
+  `e63224fc2f627197fc6edde2264739eb4f440dc6` is preserved under
+  `output/formal_pair_20260730_diagnostic_attempt6` (and the matching ZIP).
+  Both runs again passed all solver, 24/24 Rolling, physical, accounting,
+  artifact, pair, oracle, and terminal-claim gates. Packaging then exposed a
+  25-byte metadata contradiction: `completion_audit.zip_size_bytes` described
+  the first archive, after which the runner rewrote the audit/log and rebuilt
+  a larger final archive. The field was therefore self-referential and could
+  not truthfully describe the archive containing it.
+- Packaging now finalizes the completion audit and execution log first, writes
+  one temporary ZIP, validates CRCs, and atomically promotes it only when the
+  destination is absent. The audit records creation intent/path but no
+  self-referential size; ZIP failure rewrites the source-tree audit as
+  `BLOCKED`. A byte-equality regression verifies that the archived and source
+  completion audits are identical. Attempt 6 remains diagnostic, and a fresh
+  same-SHA pair is required for final evidence.
 
 ## 2026-07-28 P0 physical-validation payload provenance fix
 

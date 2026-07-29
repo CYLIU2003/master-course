@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import importlib.util
 import json
+import zipfile
 from pathlib import Path
 from types import ModuleType
 
@@ -433,3 +434,39 @@ def test_claim_artifact_gate_rejects_gap_pass_reported_as_gap_miss() -> None:
             ),
         },
     )
+
+
+def test_zip_directory_preserves_final_completion_audit_bytes(
+    tmp_path: Path,
+) -> None:
+    runner = _load_runner()
+    output_dir = tmp_path / "formal_pair"
+    output_dir.mkdir()
+    completion_path = output_dir / "completion_audit.json"
+    completion_path.write_text(
+        json.dumps(
+            {
+                "status": "READY",
+                "zip_created": True,
+                "zip_path": str(Path(f"{output_dir}.zip").resolve()),
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (output_dir / "execution_log.md").write_text(
+        "# Complete\n",
+        encoding="utf-8",
+    )
+
+    zip_path = runner._zip_directory(output_dir)
+
+    with zipfile.ZipFile(zip_path, "r") as archive:
+        archived_completion = archive.read(
+            f"{output_dir.name}/completion_audit.json"
+        )
+        assert archive.testzip() is None
+    assert archived_completion == completion_path.read_bytes()
+    assert not Path(f"{zip_path}.tmp").exists()
+    assert "zip_size_bytes" not in RUNNER_PATH.read_text(encoding="utf-8")

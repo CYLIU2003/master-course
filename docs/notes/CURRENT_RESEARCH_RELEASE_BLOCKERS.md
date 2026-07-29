@@ -10,8 +10,8 @@ attempt exposed and the current tree corrects a result-claim message that
 conflated integrated-optimality scope with certified-gap status. The corrected
 completion audit also rejects a contradiction between solver settings,
 persisted claim classification, and terminal response. The corrected focused
-regression passes (`89 passed`) and the complete suite passes
-(`1066 passed`); compileall and `git diff --check` are required before freeze.
+regression passes (`90 passed`) and the complete suite passes
+(`1067 passed`); compileall and `git diff --check` are required before freeze.
 
 Teacher release status is fail-closed: **BLOCKED** unless
 `output/formal_pair_20260730/completion_audit.json` records `status=READY`,
@@ -77,6 +77,18 @@ despite `mip_gap_target_met=true`. Claim classification and job messaging now
 report the passed certified-gap gate separately from the still-unestablished
 integrated global-optimality claim. A fresh same-SHA HTTP pair is required to
 validate the corrected response artifacts.
+
+The sixth frozen attempt at
+`e63224fc2f627197fc6edde2264739eb4f440dc6` is retained under
+`output/formal_pair_20260730_diagnostic_attempt6`. Both cases passed the
+solver, 24/24 Rolling, independent physical, terminal SOC, accounting,
+artifact, controlled-pair, small-oracle, and corrected terminal-claim gates.
+It remains diagnostic because the completion audit recorded the size of an
+initial ZIP and the runner then rewrote two embedded files and rebuilt a final
+ZIP 25 bytes larger. Packaging now finalizes the audit/log before one
+temporary CRC-validated archive is atomically promoted, and it no longer
+claims a self-referential archive size. A fresh same-SHA HTTP pair is required
+to validate the corrected final package.
 
 This file is the single current blocker register. Older rolling remediation
 documents are historical specifications and are marked resolved/superseded.

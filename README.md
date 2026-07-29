@@ -92,6 +92,10 @@ simulation artifact, not an automatically accepted research result.
   unestablished when `mip_gap_target_met=true`. The controlled-pair completion
   audit rejects any contradiction between solver settings, persisted claim
   classification, and the terminal job response.
+- The evidence ZIP is written once to a validated temporary archive and then
+  atomically promoted. `completion_audit.json` is finalized before packaging,
+  so its bytes inside the ZIP equal the source-tree artifact. It does not claim
+  a self-referential archive size that would change when the audit is embedded.
 - Startup, inter-trip, and return deadhead SOC events use the same canonical
   energy functions in the solver and independent validator. For
   `return_to_initial`, the first depot deadhead is part of the daily energy

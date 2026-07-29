@@ -2337,29 +2337,46 @@ def _write_execution_log(
 
 def _zip_directory(output_dir: Path) -> Path:
     zip_path = Path(f"{output_dir}.zip")
-    with zipfile.ZipFile(
-        zip_path,
-        "w",
-        compression=zipfile.ZIP_DEFLATED,
-        compresslevel=6,
-    ) as archive:
-        for path in sorted(output_dir.rglob("*")):
-            if path.is_file():
-                archive.write(
-                    path,
-                    arcname=(
-                        Path(output_dir.name)
-                        / path.relative_to(output_dir)
-                    ).as_posix(),
-                )
-    if not zip_path.is_file() or zip_path.stat().st_size <= 0:
-        raise RuntimeError(f"Failed to build evidence ZIP: {zip_path}")
-    with zipfile.ZipFile(zip_path, "r") as archive:
-        bad_member = archive.testzip()
-        if bad_member is not None:
+    temporary_zip_path = zip_path.with_suffix(f"{zip_path.suffix}.tmp")
+    if zip_path.exists():
+        raise RuntimeError(f"Evidence ZIP already exists: {zip_path}")
+    if temporary_zip_path.exists():
+        raise RuntimeError(
+            f"Temporary evidence ZIP already exists: {temporary_zip_path}"
+        )
+    try:
+        with zipfile.ZipFile(
+            temporary_zip_path,
+            "w",
+            compression=zipfile.ZIP_DEFLATED,
+            compresslevel=6,
+        ) as archive:
+            for path in sorted(output_dir.rglob("*")):
+                if path.is_file():
+                    archive.write(
+                        path,
+                        arcname=(
+                            Path(output_dir.name)
+                            / path.relative_to(output_dir)
+                        ).as_posix(),
+                    )
+        if (
+            not temporary_zip_path.is_file()
+            or temporary_zip_path.stat().st_size <= 0
+        ):
             raise RuntimeError(
-                f"Evidence ZIP CRC validation failed: {bad_member}"
+                f"Failed to build evidence ZIP: {temporary_zip_path}"
             )
+        with zipfile.ZipFile(temporary_zip_path, "r") as archive:
+            bad_member = archive.testzip()
+            if bad_member is not None:
+                raise RuntimeError(
+                    f"Evidence ZIP CRC validation failed: {bad_member}"
+                )
+        temporary_zip_path.replace(zip_path)
+    except Exception:
+        temporary_zip_path.unlink(missing_ok=True)
+        raise
     return zip_path
 
 
@@ -2666,18 +2683,29 @@ def main() -> int:
             ),
             "failed_checks": pair_manifest.get("failed_checks"),
         },
-        "zip_created": False,
+        "zip_created": True,
+        "zip_path": str(Path(f"{output_dir}.zip").resolve()),
     }
     _write_json(output_dir / "completion_audit.json", completion)
     _write_execution_log(output_dir, events, completion)
-    zip_path = _zip_directory(output_dir)
-    completion["zip_created"] = True
-    completion["zip_path"] = str(zip_path.resolve())
-    completion["zip_size_bytes"] = zip_path.stat().st_size
-    _write_json(output_dir / "completion_audit.json", completion)
-    _write_execution_log(output_dir, events, completion)
-    # Rebuild so the archive includes the verified zip metadata and final log.
-    zip_path = _zip_directory(output_dir)
+    try:
+        zip_path = _zip_directory(output_dir)
+    except Exception as exc:
+        completion["zip_created"] = False
+        completion["status"] = "BLOCKED"
+        completion["failed_checks"] = sorted(
+            {
+                *list(completion.get("failed_checks") or ()),
+                f"package:evidence_zip_failed:{type(exc).__name__}:{exc}",
+            }
+        )
+        _write_json(output_dir / "completion_audit.json", completion)
+        _write_execution_log(output_dir, events, completion)
+        print(
+            f"[complete] BLOCKED evidence={output_dir} zip_error={exc}",
+            flush=True,
+        )
+        return 2
     print(
         f"[complete] {completion['status']} evidence={output_dir} "
         f"zip={zip_path}",
