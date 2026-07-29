@@ -135,14 +135,32 @@
   feasibility, canonical cost evaluability, and independent physical
   feasibility simultaneously. JSON/CSV candidate evidence records the
   physical status, error count, and error hash.
-- Operational research evidence is still **BLOCKED**. The reviewed
-  implementation passes the corrected focused regression (`75 passed`) and
-  complete suite (`1062 passed`); compileall and `git diff --check` also pass.
-  It must still be committed and frozen again, and then both scenarios must
-  finish fresh
-  Prepare, day-ahead optimization, 24/24 hourly Rolling,
-  physical/accounting/artifact validation, controlled-pair acceptance, and
-  packaging from that same clean SHA.
+- The fifth frozen HTTP attempt at
+  `448d52a0e876335a3df63776039a393db6ab4029` is preserved under
+  `output/formal_pair_20260730_diagnostic_attempt5` (and the matching ZIP).
+  Sunny job `7ba14751-51d5-4f7b-9108-e15f8285783a` and rain job
+  `a6acab0c-630d-4b9f-ae3b-f5c190991b88` both completed 264/264 trips,
+  21/21 exact-Stage-2 and independently physical candidates, 24/24 Rolling,
+  terminal SOC, executed-day accounting, final reconciliation, and 229/229
+  artifact checks. The controlled pair matched every non-PV control, used
+  614.709375/101.1143 kWh PV, and changed the powertrain assignment of 37
+  trips. Raw/certified Stage 1 gaps were 9.5801%/3.4503% (sunny) and
+  100%/3.2840% (rain).
+- Attempt 5 nevertheless remains diagnostic because both terminal job
+  responses said the requested gap was unestablished even though their
+  persisted `mip_gap_target_met` fields were true. The classification was
+  correctly limited by the two-stage method's lack of integrated
+  global-optimality proof, but its fixed interpretation and job-message text
+  incorrectly conflated that scope blocker with gap failure.
+- Result-claim classification now persists `mip_gap_target_met` explicitly.
+  A feasible two-stage candidate that meets the certified Stage 1 target is
+  reported as passing that gap gate while still stating that integrated global
+  optimality is unestablished; a real gap miss remains fail-closed. Focused
+  regression including both branches passes (`77 passed`) and the complete
+  suite passes (`1063 passed`). A new clean commit and a complete two-case HTTP
+  rerun are still required. The release blocker is discharged only by a
+  same-SHA `completion_audit.json` with `status=READY`, zero failed checks, and
+  a completed evidence ZIP; no repository file is changed during that run.
 
 ## 2026-07-28 P0 physical-validation payload provenance fix
 

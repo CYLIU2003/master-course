@@ -7,10 +7,14 @@
 ![Optimization](https://img.shields.io/badge/Optimization-MILP%2BALNS-FF6F00)
 ![Status](https://img.shields.io/badge/Status-Core%20Package%20%28Tkinter%2BFastAPI%29-0A66C2)
 
-## Research-evidence contract (updated 2026-07-29)
+## Research-evidence contract (updated 2026-07-30)
 
-The current release is **BLOCKED** pending fresh clean-commit formal runs.
-The authoritative open-item register and per-run acceptance table are
+Release status is fail-closed and artifact-driven. It is **BLOCKED** unless
+`output/formal_pair_20260730/completion_audit.json` records `status=READY`,
+zero failed checks, the exact current frozen Git SHA at both start and end,
+and a completed ZIP. This conditional gate lets the repository remain
+untouched while a formal experiment is running. The authoritative open-item
+register and per-run acceptance table are
 [`docs/notes/CURRENT_RESEARCH_RELEASE_BLOCKERS.md`](docs/notes/CURRENT_RESEARCH_RELEASE_BLOCKERS.md).
 
 Manual frontend runs now preserve the input, Prepare output, code provenance, and
@@ -81,6 +85,11 @@ simulation artifact, not an automatically accepted research result.
   exact match; CO2/balanced/utilization and two-stage proxy objectives use
   `SKIPPED` and are reported as `solver_objective_score`. Accounting cost is
   independently validated by the canonical ledger residual.
+- Result-claim messaging keeps proof scope separate from gap status. A
+  two-stage feasible candidate may satisfy the certified Stage 1 gap target
+  while still lacking integrated global-optimality proof. The BFF job message
+  reports each gate independently; it must not state that the requested gap is
+  unestablished when `mip_gap_target_met=true`.
 - Startup, inter-trip, and return deadhead SOC events use the same canonical
   energy functions in the solver and independent validator. For
   `return_to_initial`, the first depot deadhead is part of the daily energy

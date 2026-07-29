@@ -8283,6 +8283,45 @@ def _apply_invalid_result_kpi_gate(
         charging_summary["depots"] = gated_depots
 
 
+def _feasible_candidate_job_message(
+    classification: Dict[str, Any],
+) -> str:
+    """Describe passed and unresolved gates without conflating gap and scope."""
+
+    blockers = set(classification.get("optimality_blocking_reasons") or [])
+    gap_target_met = classification.get("mip_gap_target_met") is True
+    passed_gates = ["physical checks"]
+    if gap_target_met:
+        gap_gate = (
+            "the certified Stage 1 MIP gap target"
+            if classification.get("certified_mip_gap") is not None
+            else "the requested MIP gap target"
+        )
+        passed_gates.append(gap_gate)
+
+    unresolved_claims: List[str] = []
+    if "requested_mip_gap_not_met" in blockers:
+        unresolved_claims.append("the requested MIP gap")
+    if "not_an_integrated_global_assignment_and_charging_milp" in blockers:
+        unresolved_claims.append("integrated global optimality")
+    if not unresolved_claims:
+        unresolved_claims.append("the remaining optimality claim")
+
+    if len(unresolved_claims) == 1:
+        unresolved_text = unresolved_claims[0]
+        verb = "is"
+    else:
+        unresolved_text = (
+            ", ".join(unresolved_claims[:-1])
+            + f" and {unresolved_claims[-1]}"
+        )
+        verb = "are"
+    return (
+        f"Feasible candidate complete; {' and '.join(passed_gates)} passed, "
+        f"but {unresolved_text} {verb} not established."
+    )
+
+
 def _apply_result_claim_classification(
     optimization_result: Dict[str, Any],
 ) -> Dict[str, Any]:
@@ -8313,6 +8352,26 @@ def _apply_result_claim_classification(
     else:
         label = "invalid_or_infeasible_result"
         display_name = "Invalid or infeasible result"
+    mip_gap_target_met = settings.get("mip_gap_target_met") is True
+    certified_mip_gap = settings.get("stage1_certified_mip_gap_ratio")
+    if label == "feasible_candidate" and mip_gap_target_met:
+        interpretation = (
+            "A physically feasible incumbent meeting the certified Stage 1 "
+            "MIP gap target; remaining optimality blockers are listed "
+            "separately and still forbid an integrated global-optimum claim."
+            if certified_mip_gap is not None
+            else "A physically feasible incumbent meeting the requested MIP "
+            "gap target; remaining optimality blockers are listed separately."
+        )
+    elif label == "feasible_candidate":
+        interpretation = (
+            "A physically feasible incumbent; do not describe it as a global "
+            "optimum or as meeting the requested MIP gap."
+        )
+    else:
+        interpretation = (
+            "See physical and research acceptance artifacts for scope."
+        )
     payload = {
         "schema_version": "result_claim_classification_v1",
         "label": label,
@@ -8321,18 +8380,12 @@ def _apply_result_claim_classification(
         "optimality_claim_eligible": optimality_claim_eligible,
         "optimality_blocking_reasons": optimality_blockers,
         "requested_mip_gap": settings.get("mip_gap_requested_ratio"),
-        "certified_mip_gap": settings.get(
-            "stage1_certified_mip_gap_ratio"
-        ),
+        "mip_gap_target_met": mip_gap_target_met,
+        "certified_mip_gap": certified_mip_gap,
         "gurobi_raw_mip_gap": settings.get(
             "stage1_gurobi_raw_mip_gap_ratio"
         ),
-        "interpretation": (
-            "A physically feasible incumbent; do not describe it as a global "
-            "optimum or as meeting the requested MIP gap."
-            if label == "feasible_candidate"
-            else "See physical and research acceptance artifacts for scope."
-        ),
+        "interpretation": interpretation,
     }
     optimization_result["result_claim_classification"] = payload
     summary = optimization_result.get("summary")
@@ -10156,9 +10209,11 @@ def _run_optimization(
         )
         store.update_scenario(scenario_id, status=final_status)
         if is_feasible_candidate:
-            job_message = (
-                "Feasible candidate complete; physical checks passed, but "
-                "global optimality or the requested MIP gap is not established."
+            job_message = _feasible_candidate_job_message(
+                dict(
+                    optimization_result.get("result_claim_classification")
+                    or {}
+                )
             )
         elif not is_fallback:
             job_message = "Optimization complete."

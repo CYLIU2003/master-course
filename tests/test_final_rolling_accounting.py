@@ -10,6 +10,7 @@ from openpyxl import Workbook, load_workbook
 from bff.routers.optimization import (
     _apply_result_claim_classification,
     _assert_final_cost_artifact_consistency,
+    _feasible_candidate_job_message,
     _should_finalize_reporting_after_rolling,
     _synchronize_finalized_accounting_summary,
 )
@@ -551,3 +552,41 @@ def test_gap_miss_is_labeled_feasible_candidate() -> None:
         "requested_mip_gap_not_met",
         "not_an_integrated_global_assignment_and_charging_milp",
     }
+    assert classification["mip_gap_target_met"] is False
+    assert "meeting the requested MIP gap" in classification["interpretation"]
+    assert _feasible_candidate_job_message(classification) == (
+        "Feasible candidate complete; physical checks passed, but the "
+        "requested MIP gap and integrated global optimality are not "
+        "established."
+    )
+
+
+def test_gap_hit_two_stage_candidate_does_not_report_gap_miss() -> None:
+    result = {
+        "solution_validity": {"validated_feasible": True},
+        "solver_settings": {
+            "mip_gap_requested_ratio": 0.1,
+            "mip_gap_target_met": True,
+            "stage1_certified_mip_gap_ratio": 0.03284,
+            "stage1_gurobi_raw_mip_gap_ratio": 1.0,
+        },
+        "solver_metadata": {"supports_integrated_exact_milp": False},
+        "summary": {},
+    }
+
+    classification = _apply_result_claim_classification(result)
+
+    assert classification["label"] == "feasible_candidate"
+    assert classification["mip_gap_target_met"] is True
+    assert classification["optimality_blocking_reasons"] == [
+        "not_an_integrated_global_assignment_and_charging_milp"
+    ]
+    assert "meeting the certified Stage 1 MIP gap target" in classification[
+        "interpretation"
+    ]
+    assert "do not describe it" not in classification["interpretation"]
+    assert _feasible_candidate_job_message(classification) == (
+        "Feasible candidate complete; physical checks and the certified Stage "
+        "1 MIP gap target passed, but integrated global optimality is not "
+        "established."
+    )

@@ -5,11 +5,17 @@ Code status: slot-indexed Stage 1 energy recourse, multi-candidate Stage 2
 evaluation, explicit same-service-date PV controls, and an HTTP-only frontend
 pair runner are implemented. A final-slot return-boundary defect exposed by
 the fourth HTTP attempt is corrected, and candidate selection now requires an
-independent physical check in addition to Stage 2 feasibility. The corrected
-focused regression passes (`75 passed`) and the complete suite passes
-(`1062 passed`); compileall and `git diff --check` also pass. A new clean
-commit and fresh high/low-PV executions from that frozen SHA remain required.
-Teacher release status: **BLOCKED**
+independent physical check in addition to Stage 2 feasibility. The fifth HTTP
+attempt exposed and the current tree corrects a result-claim message that
+conflated integrated-optimality scope with certified-gap status. The corrected
+focused regression passes (`77 passed`) and the complete suite passes
+(`1063 passed`); compileall and `git diff --check` are required before freeze.
+
+Teacher release status is fail-closed: **BLOCKED** unless
+`output/formal_pair_20260730/completion_audit.json` records `status=READY`,
+zero failed checks, the exact frozen Git SHA at start and end, and a completed
+ZIP. When that artifact exists for the current frozen SHA, this blocker is
+discharged without modifying the repository during the experiment.
 
 The first frozen attempt at
 `d95e0e049a254bb3f3e560aa86e986ec4a773b7f` is retained at
@@ -53,6 +59,22 @@ exactly. The replay now advances through the return-completion boundary without
 borrowing next-day charging, and candidate selection independently rejects any
 physically invalid Stage 2 incumbent. This fix still requires a fresh clean
 commit and complete two-case HTTP rerun; attempt 4 remains diagnostic.
+
+The fifth frozen attempt at
+`448d52a0e876335a3df63776039a393db6ab4029` is retained under
+`output/formal_pair_20260730_diagnostic_attempt5`. Sunny job
+`7ba14751-51d5-4f7b-9108-e15f8285783a` and rain job
+`a6acab0c-630d-4b9f-ae3b-f5c190991b88` both passed 264/264 trips, 21/21
+candidate Stage 2 and independent physical checks, 24/24 Rolling, terminal
+SOC, accounting reconciliation, and 229/229 artifact checks. The pair matched
+all non-PV controls, used 614.709375/101.1143 kWh PV, and changed 37 trip
+powertrain assignments. Its raw/certified Stage 1 gaps were
+9.5801%/3.4503% (sunny) and 100%/3.2840% (rain). It is diagnostic because the
+terminal BFF responses incorrectly said the requested gap was unestablished
+despite `mip_gap_target_met=true`. Claim classification and job messaging now
+report the passed certified-gap gate separately from the still-unestablished
+integrated global-optimality claim. A fresh same-SHA HTTP pair is required to
+validate the corrected response artifacts.
 
 This file is the single current blocker register. Older rolling remediation
 documents are historical specifications and are marked resolved/superseded.
