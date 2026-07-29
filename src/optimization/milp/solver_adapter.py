@@ -7,7 +7,7 @@ import math
 import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Protocol, Sequence, Set, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Protocol, Sequence, Set, Tuple
 
 from src.dispatch.feasibility import evaluate_startup_feasibility
 from src.dispatch.models import DutyLeg, VehicleDuty
@@ -966,6 +966,19 @@ class GurobiMILPAdapter:
         model.Params.TimeLimit = max(1, int(config.time_limit_sec))
         model.Params.MIPGap = max(float(config.mip_gap), 0.0)
         model.Params.Seed = int(config.random_seed)
+        integrated_feasibility_tol = _configured_gurobi_feasibility_tol(
+            config,
+            stage=2,
+        )
+        integrated_integrality_tol = _configured_gurobi_integrality_tol(
+            config,
+            stage=2,
+        )
+        model.Params.FeasibilityTol = integrated_feasibility_tol
+        model.Params.IntFeasTol = integrated_integrality_tol
+        # Reuse the exact physical Stage 2 numeric contract because Phase 4
+        # contains the same binary charger and terminal-SOC constraints.
+        model._mc_stage_feasibility_tol_kwh = integrated_feasibility_tol
         configured_threads = _configured_gurobi_threads(config)
         if configured_threads is not None:
             model.Params.Threads = configured_threads
@@ -1783,6 +1796,20 @@ class GurobiMILPAdapter:
                     charge_session_start_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(vtype=GRB.BINARY)
                     c_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(lb=0.0, ub=charge_max_kw, vtype=GRB.CONTINUOUS)
                     d_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(lb=0.0, ub=discharge_max_kw, vtype=GRB.CONTINUOUS)
+                    # Vehicle-to-grid discharge is not represented in the
+                    # depot source-flow ledger or AssignmentPlan artifacts.
+                    # Leaving this variable free creates an unaccounted energy
+                    # sink that can satisfy a return-to-initial terminal upper
+                    # bound while the independently replayed plan remains
+                    # overcharged.  Until V2G has solver-native flow,
+                    # accounting, and artifact provenance, it is forbidden.
+                    model.addConstr(
+                        d_var[(vehicle.vehicle_id, slot_idx)] == 0.0,
+                        name=(
+                            "integrated_unmodeled_vehicle_discharge_forbidden__"
+                            f"{vehicle.vehicle_id}__{slot_idx}"
+                        ),
+                    )
                     if soc_violation_slack_enabled:
                         # Diagnostic mode only: production research runs must not buy SOC violations with cost.
                         s_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(lb=0.0, ub=cap * 1.2, vtype=GRB.CONTINUOUS)
@@ -3465,7 +3492,7 @@ class GurobiMILPAdapter:
                     if var is None:
                         continue
                     vehicle_kw = max(_var_val(var), 0.0)
-                    if vehicle_kw <= 0.0:
+                    if vehicle_kw <= 1.0e-6:
                         continue
                     vehicle = vehicle_by_id.get(vehicle_id)
                     depot_id = str(getattr(vehicle, "home_depot_id", "") or "depot_default")
@@ -3480,9 +3507,37 @@ class GurobiMILPAdapter:
                         None,
                     )
                     if selected_charger_id is None:
+                        assignment_values = {
+                            charger_id: _var_val(assignment)
+                            for (
+                                candidate_vehicle_id,
+                                charger_id,
+                                candidate_slot_idx,
+                            ), assignment in (
+                                physical_charger_assignment_var.items()
+                            )
+                            if candidate_vehicle_id == vehicle_id
+                            and candidate_slot_idx == slot_idx
+                        }
+                        physical_power_values = {
+                            charger_id: _var_val(power)
+                            for (
+                                candidate_vehicle_id,
+                                charger_id,
+                                candidate_slot_idx,
+                            ), power in physical_charger_power_var.items()
+                            if candidate_vehicle_id == vehicle_id
+                            and candidate_slot_idx == slot_idx
+                        }
                         raise RuntimeError(
                             "Positive charging power has no selected physical charger: "
-                            f"vehicle={vehicle_id}, slot={slot_idx}"
+                            f"vehicle={vehicle_id}, slot={slot_idx}, "
+                            f"charge_kw={vehicle_kw!r}, "
+                            f"charge_on={_var_val(charge_on_var.get((vehicle_id, slot_idx)))!r}, "
+                            f"assignment_values={assignment_values!r}, "
+                            f"physical_power_kw={physical_power_values!r}, "
+                            f"feasibility_tol={integrated_feasibility_tol!r}, "
+                            f"integrality_tol={integrated_integrality_tol!r}"
                         )
                     vehicle_key = (vehicle_id, slot_idx)
                     bess_kwh = max(_var_val(bess2vehicle_var.get(vehicle_key)), 0.0)
@@ -3621,6 +3676,17 @@ class GurobiMILPAdapter:
                 "status": solver_status,
                 "objective_value": float(model.ObjVal),
                 "duty_vehicle_map": duty_vehicle_map,
+                "integrated_unmodeled_vehicle_discharge_forbidden": True,
+                "integrated_vehicle_discharge_semantics": (
+                    "fixed_zero_until_v2g_has_solver_native_depot_flow_"
+                    "accounting_and_artifact_provenance"
+                ),
+                "integrated_gurobi_feasibility_tol": (
+                    integrated_feasibility_tol
+                ),
+                "integrated_gurobi_integrality_tol": (
+                    integrated_integrality_tol
+                ),
                 "horizon_start": str(problem.scenario.horizon_start or "00:00"),
                 "timestep_min": int(problem.scenario.timestep_min),
                 "enable_contract_overage_penalty": bool(problem.metadata.get("enable_contract_overage_penalty", True)),
@@ -4125,15 +4191,32 @@ class GurobiMILPAdapter:
             ),
             50,
         )
+        stage1_candidate_enumeration_reserve_sec = 0.0
+        stage1_primary_search_time_limit_sec = float(stage_time_limit)
         if stage2_enabled and stage1_stage2_candidate_limit > 1:
-            # PoolSearchMode=2 makes Gurobi search systematically for the
-            # requested number of distinct Stage 1 solutions.  The shared
-            # Stage 1/global deadline still governs the search, so a
-            # time-limited run can legitimately retain fewer candidates.
-            # This is a k-best Stage 1 pool only; it is not an integrated
-            # Stage 1+Stage 2 global-optimality certificate.
+            # Preserve most of Stage 1 for the primary weather-aware MIP, then
+            # reserve a bounded slice for explicit powertrain-pattern
+            # alternatives.  Normal pool retention remains useful, but
+            # PoolSearchMode=2 can spend the entire budget distinguishing
+            # vehicle-path symmetries while retaining no new BEV/ICE pattern.
+            stage1_candidate_enumeration_reserve_sec = min(
+                max(
+                    float(stage1_stage2_candidate_limit - 1) * 5.0,
+                    30.0,
+                ),
+                max(float(stage_time_limit) * 0.2, 0.0),
+                100.0,
+                max(float(stage_time_limit) - 1.0, 0.0),
+            )
+            stage1_primary_search_time_limit_sec = max(
+                float(stage_time_limit)
+                - stage1_candidate_enumeration_reserve_sec,
+                1.0,
+            )
+            stage1.Params.TimeLimit = (
+                stage1_primary_search_time_limit_sec
+            )
             stage1.Params.PoolSolutions = stage1_stage2_candidate_limit
-            stage1.Params.PoolSearchMode = 2
 
         builder = MILPModelBuilder()
         trip_by_id = problem.trip_by_id()
@@ -4887,17 +4970,17 @@ class GurobiMILPAdapter:
             ),
             "arbitrary_weather_assignment_bias": False,
         }
-        # The strict path-cover precheck certifies a minimum number of vehicle
-        # days.  When every remaining objective coefficient is nonnegative,
-        # multiplying that count by the vehicle-day usage cost is also a valid
-        # objective lower bound even if Gurobi does not finish the root
-        # relaxation within the time limit.  Keep this analytical certificate
-        # separate from Gurobi's own ObjBound telemetry below.
+        # Keep independently reproducible analytical certificates separate
+        # from Gurobi's own ObjBound telemetry.  The path-cover precheck
+        # certifies the vehicle-day usage component.  The second certificate
+        # independently relaxes every trip's powertrain choice and pools all
+        # free PV/BESS/initial-SOC energy, so it remains an optimistic floor on
+        # the disjoint direct service-energy/fuel component.
         fixed_use_costs_are_nonnegative = all(
             float(vehicle.fixed_use_cost_jpy or 0.0) >= 0.0
             for vehicle in problem.vehicles
         )
-        stage1_analytical_objective_lower_bound = (
+        stage1_vehicle_usage_analytical_lower_bound = (
             float(stage1_vehicle_count_lower_bound)
             * vehicle_usage_weight
             * vehicle_usage_unit_cost
@@ -4905,8 +4988,58 @@ class GurobiMILPAdapter:
                 stage1_vehicle_count_lower_bound > 0
                 and component_flags.get("vehicle_usage_cost", True)
                 and vehicle_usage_unit_cost > 0.0
-                and fixed_use_costs_are_nonnegative
             )
+            else None
+        )
+        stage1_weather_energy_fuel_lower_bound_details = (
+            self._stage1_analytical_weather_energy_fuel_lower_bound(
+                problem=problem,
+                assignment_vehicle_ids_by_trip=(
+                    assignment_vehicle_ids_by_trip
+                ),
+                vehicle_by_id=vehicle_by_id,
+                component_flags=component_flags,
+            )
+        )
+        stage1_weather_energy_fuel_lower_bound = (
+            float(
+                stage1_weather_energy_fuel_lower_bound_details[
+                    "lower_bound_jpy"
+                ]
+            )
+            if stage1_weather_energy_fuel_lower_bound_details.get("valid")
+            is True
+            else None
+        )
+        # Every objective term omitted by the two analytical components must
+        # be known nonnegative before their sum can certify the *total*
+        # Stage 1 objective.  Most terms are constructed from nonnegative
+        # weights, durations, and slacks above; per-vehicle fixed costs are the
+        # one externally supplied coefficient that is not clamped.  Fail
+        # closed if a scenario supplies a negative value.
+        stage1_analytical_total_objective_certificate_eligible = bool(
+            fixed_use_costs_are_nonnegative
+        )
+        stage1_analytical_total_objective_certificate_blockers = (
+            ()
+            if stage1_analytical_total_objective_certificate_eligible
+            else ("negative_vehicle_fixed_use_cost",)
+        )
+        analytical_lower_bound_components = (
+            [
+                float(value)
+                for value in (
+                    stage1_vehicle_usage_analytical_lower_bound,
+                    stage1_weather_energy_fuel_lower_bound,
+                )
+                if value is not None and math.isfinite(float(value))
+            ]
+            if stage1_analytical_total_objective_certificate_eligible
+            else []
+        )
+        stage1_analytical_objective_lower_bound = (
+            sum(analytical_lower_bound_components)
+            if analytical_lower_bound_components
             else None
         )
         stage1_certified_gap_stop_threshold = (
@@ -4972,6 +5105,13 @@ class GurobiMILPAdapter:
 
         stage1.optimize(_stage1_search_callback)
 
+        stage1_primary_runtime_sec = float(
+            getattr(stage1, "Runtime", 0.0) or 0.0
+        )
+        stage1_total_solver_runtime_sec = stage1_primary_runtime_sec
+        stage1_primary_pool_solution_count = int(
+            getattr(stage1, "SolCount", 0) or 0
+        )
         stage1_status = self._status_name(GRB, stage1.Status)
         stage1_numeric_diagnostics = _gurobi_numeric_diagnostics(stage1)
         stage1_model_variable_count = int(getattr(stage1, "NumVars", 0) or 0)
@@ -4997,7 +5137,7 @@ class GurobiMILPAdapter:
             else None
         )
         stage1_search_telemetry_result = stage1_search_telemetry.to_dict(
-            final_runtime_sec=getattr(stage1, "Runtime", None),
+            final_runtime_sec=stage1_primary_runtime_sec,
             final_incumbent_objective=stage1_objective_value,
             final_best_bound=stage1_solver_bound,
             final_node_count=getattr(stage1, "NodeCount", None),
@@ -5082,8 +5222,10 @@ class GurobiMILPAdapter:
                     "stage1_certified_best_bound": stage1_bound,
                     "stage1_certified_mip_gap_ratio": stage1_gap,
                     "stage1_certified_mip_gap_semantics": (
-                        "maximum_of_weather_aware_gurobi_objbound_and_"
-                        "analytical_path_cover_lower_bound"
+                        "primary_stage1_incumbent_gap_against_maximum_of_"
+                        "weather_aware_gurobi_objbound_and_"
+                        "analytical_vehicle_usage_plus_weather_energy_fuel_"
+                        "lower_bound"
                     ),
                     "stage1_weather_aware_lower_bound": stage1_solver_bound,
                     "stage1_weather_aware_lower_bound_semantics": (
@@ -5093,9 +5235,24 @@ class GurobiMILPAdapter:
                     "stage1_analytical_objective_lower_bound": (
                         stage1_analytical_objective_lower_bound
                     ),
+                    "stage1_analytical_total_objective_certificate_eligible": (
+                        stage1_analytical_total_objective_certificate_eligible
+                    ),
+                    "stage1_analytical_total_objective_certificate_blockers": (
+                        stage1_analytical_total_objective_certificate_blockers
+                    ),
                     "stage1_analytical_objective_lower_bound_semantics": (
-                        "strict_path_cover_vehicle_day_count_times_nonnegative_"
-                        "weighted_vehicle_usage_cost"
+                        "sum_of_strict_path_cover_vehicle_usage_cost_floor_"
+                        "and_optimistic_weather_energy_fuel_cost_floor"
+                    ),
+                    "stage1_vehicle_usage_analytical_lower_bound": (
+                        stage1_vehicle_usage_analytical_lower_bound
+                    ),
+                    "stage1_analytical_weather_energy_fuel_lower_bound": (
+                        stage1_weather_energy_fuel_lower_bound
+                    ),
+                    "stage1_analytical_weather_energy_fuel_lower_bound_details": (
+                        stage1_weather_energy_fuel_lower_bound_details
                     ),
                     "stage1_certified_gap_stop_threshold": (
                         stage1_certified_gap_stop_threshold
@@ -5300,8 +5457,10 @@ class GurobiMILPAdapter:
                 "stage1_certified_best_bound": stage1_bound,
                 "stage1_certified_mip_gap_ratio": stage1_gap,
                 "stage1_certified_mip_gap_semantics": (
-                    "maximum_of_weather_aware_gurobi_objbound_and_"
-                    "analytical_path_cover_lower_bound"
+                    "primary_stage1_incumbent_gap_against_maximum_of_"
+                    "weather_aware_gurobi_objbound_and_"
+                    "analytical_vehicle_usage_plus_weather_energy_fuel_"
+                    "lower_bound"
                 ),
                 "stage1_weather_aware_lower_bound": stage1_solver_bound,
                 "stage1_weather_aware_lower_bound_semantics": (
@@ -5311,9 +5470,24 @@ class GurobiMILPAdapter:
                 "stage1_analytical_objective_lower_bound": (
                     stage1_analytical_objective_lower_bound
                 ),
+                "stage1_analytical_total_objective_certificate_eligible": (
+                    stage1_analytical_total_objective_certificate_eligible
+                ),
+                "stage1_analytical_total_objective_certificate_blockers": (
+                    stage1_analytical_total_objective_certificate_blockers
+                ),
                 "stage1_analytical_objective_lower_bound_semantics": (
-                    "strict_path_cover_vehicle_day_count_times_nonnegative_"
-                    "weighted_vehicle_usage_cost"
+                    "sum_of_strict_path_cover_vehicle_usage_cost_floor_"
+                    "and_optimistic_weather_energy_fuel_cost_floor"
+                ),
+                "stage1_vehicle_usage_analytical_lower_bound": (
+                    stage1_vehicle_usage_analytical_lower_bound
+                ),
+                "stage1_analytical_weather_energy_fuel_lower_bound": (
+                    stage1_weather_energy_fuel_lower_bound
+                ),
+                "stage1_analytical_weather_energy_fuel_lower_bound_details": (
+                    stage1_weather_energy_fuel_lower_bound_details
                 ),
                 "stage1_certified_gap_stop_threshold": (
                     stage1_certified_gap_stop_threshold
@@ -5546,6 +5720,298 @@ class GurobiMILPAdapter:
                 ),
             )
 
+        def _powertrain_group(vehicle_id: str) -> str:
+            vehicle = vehicle_by_id.get(str(vehicle_id))
+            return (
+                "ELECTRIC"
+                if vehicle is not None
+                and str(vehicle.vehicle_type).upper()
+                in {"BEV", "PHEV", "FCEV"}
+                else "COMBUSTION"
+            )
+
+        def _candidate_powertrain_pattern(
+            plan: AssignmentPlan,
+        ) -> Tuple[Tuple[str, str], ...]:
+            return tuple(
+                sorted(
+                    (
+                        str(leg.trip.trip_id),
+                        _powertrain_group(
+                            str(
+                                plan.vehicle_id_for_duty(
+                                    duty.duty_id
+                                )
+                            )
+                        ),
+                    )
+                    for duty in plan.duties
+                    for leg in duty.legs
+                )
+            )
+
+        def _add_powertrain_pattern_no_good(
+            pattern: Tuple[Tuple[str, str], ...],
+            *,
+            cut_index: int,
+        ) -> bool:
+            if len(pattern) != len(problem.trips):
+                return False
+            matching_terms: List[Any] = []
+            for trip_id, selected_group in pattern:
+                trip_terms = [
+                    y[(str(vehicle_id), str(trip_id))]
+                    for vehicle_id in assignment_vehicle_ids_by_trip.get(
+                        str(trip_id), ()
+                    )
+                    if (str(vehicle_id), str(trip_id)) in y
+                    and _powertrain_group(str(vehicle_id))
+                    == selected_group
+                ]
+                if not trip_terms:
+                    return False
+                matching_terms.extend(trip_terms)
+            stage1.addConstr(
+                gp.quicksum(matching_terms) <= len(pattern) - 1,
+                name=(
+                    "stage1_candidate_powertrain_pattern_no_good__"
+                    f"{cut_index}"
+                ),
+            )
+            return True
+
+        def _powertrain_swap_mip_starts(
+            plan: AssignmentPlan,
+        ) -> List[Dict[str, Any]]:
+            """Build deterministic partial MIP starts from opposite-type duties.
+
+            These starts do not become candidates directly.  They only help
+            Gurobi find an incumbent after the current powertrain pattern has
+            been excluded; the complete Stage 1 model still accepts or rejects
+            each start under the unchanged weather, SOC, path, and recourse
+            constraints.
+            """
+
+            duties_by_vehicle: Dict[str, List[Any]] = {}
+            for duty in plan.duties:
+                assigned_vehicle_id = str(
+                    plan.vehicle_id_for_duty(duty.duty_id)
+                )
+                if duty.legs:
+                    duties_by_vehicle.setdefault(
+                        assigned_vehicle_id, []
+                    ).append(duty)
+            electric_vehicle_ids = sorted(
+                vehicle_id
+                for vehicle_id in duties_by_vehicle
+                if _powertrain_group(vehicle_id) == "ELECTRIC"
+            )
+            combustion_vehicle_ids = sorted(
+                vehicle_id
+                for vehicle_id in duties_by_vehicle
+                if _powertrain_group(vehicle_id) == "COMBUSTION"
+            )
+
+            def _service_energy_for_duties(
+                vehicle_id: str,
+                duties: Iterable[Any],
+            ) -> float:
+                vehicle = vehicle_by_id.get(str(vehicle_id))
+                if vehicle is None:
+                    return math.inf
+                return sum(
+                    max(
+                        self._trip_energy_kwh(
+                            problem,
+                            vehicle,
+                            str(leg.trip.trip_id),
+                        ),
+                        0.0,
+                    )
+                    for duty in duties
+                    for leg in duty.legs
+                )
+
+            starts: List[Dict[str, Any]] = []
+            seen_patterns: Set[Tuple[Tuple[str, str], ...]] = set()
+            for electric_vehicle_id in electric_vehicle_ids:
+                for combustion_vehicle_id in combustion_vehicle_ids:
+                    selected_y: Set[Tuple[str, str]] = set()
+                    selected_x: Set[Tuple[str, str, str]] = set()
+                    selected_start: Set[Tuple[str, str]] = set()
+                    selected_end: Set[Tuple[str, str]] = set()
+                    selected_used: Set[str] = set()
+                    selected_used_day: Set[Tuple[str, int]] = set()
+                    pattern: List[Tuple[str, str]] = []
+                    valid = True
+                    for original_vehicle_id, duties in (
+                        duties_by_vehicle.items()
+                    ):
+                        if original_vehicle_id == electric_vehicle_id:
+                            target_vehicle_id = combustion_vehicle_id
+                        elif original_vehicle_id == combustion_vehicle_id:
+                            target_vehicle_id = electric_vehicle_id
+                        else:
+                            target_vehicle_id = original_vehicle_id
+                        selected_used.add(target_vehicle_id)
+                        target_group = _powertrain_group(
+                            target_vehicle_id
+                        )
+                        for duty in duties:
+                            trip_ids = [
+                                str(leg.trip.trip_id)
+                                for leg in duty.legs
+                            ]
+                            if not trip_ids:
+                                continue
+                            for trip_id in trip_ids:
+                                assignment_key = (
+                                    target_vehicle_id,
+                                    trip_id,
+                                )
+                                if assignment_key not in y:
+                                    valid = False
+                                    break
+                                selected_y.add(assignment_key)
+                                selected_used_day.add(
+                                    (
+                                        target_vehicle_id,
+                                        int(
+                                            trip_day_index_by_trip_id.get(
+                                                trip_id,
+                                                0,
+                                            )
+                                        ),
+                                    )
+                                )
+                                pattern.append(
+                                    (trip_id, target_group)
+                                )
+                            if not valid:
+                                break
+                            start_key = (
+                                target_vehicle_id,
+                                trip_ids[0],
+                            )
+                            end_key = (
+                                target_vehicle_id,
+                                trip_ids[-1],
+                            )
+                            if (
+                                start_key not in start_arc
+                                or end_key not in end_arc
+                            ):
+                                valid = False
+                                break
+                            selected_start.add(start_key)
+                            selected_end.add(end_key)
+                            for from_trip_id, to_trip_id in zip(
+                                trip_ids,
+                                trip_ids[1:],
+                            ):
+                                arc_key = (
+                                    target_vehicle_id,
+                                    from_trip_id,
+                                    to_trip_id,
+                                )
+                                if arc_key not in x:
+                                    valid = False
+                                    break
+                                selected_x.add(arc_key)
+                            if not valid:
+                                break
+                        if not valid:
+                            break
+                    normalized_pattern = tuple(sorted(pattern))
+                    if (
+                        not valid
+                        or len(normalized_pattern) != len(problem.trips)
+                        or normalized_pattern in seen_patterns
+                    ):
+                        continue
+                    seen_patterns.add(normalized_pattern)
+                    starts.append(
+                        {
+                            "electric_vehicle_id": electric_vehicle_id,
+                            "combustion_vehicle_id": (
+                                combustion_vehicle_id
+                            ),
+                            "powertrain_pattern": normalized_pattern,
+                            "powertrain_pattern_hash": hashlib.sha256(
+                                json.dumps(
+                                    normalized_pattern,
+                                    ensure_ascii=False,
+                                    separators=(",", ":"),
+                                ).encode("utf-8")
+                            ).hexdigest(),
+                            "selected_y": selected_y,
+                            "selected_x": selected_x,
+                            "selected_start": selected_start,
+                            "selected_end": selected_end,
+                            "selected_used": selected_used,
+                            "selected_used_day": selected_used_day,
+                            "warm_start_priority_score": abs(
+                                _service_energy_for_duties(
+                                    electric_vehicle_id,
+                                    duties_by_vehicle[
+                                        electric_vehicle_id
+                                    ],
+                                )
+                                - _service_energy_for_duties(
+                                    electric_vehicle_id,
+                                    duties_by_vehicle[
+                                        combustion_vehicle_id
+                                    ],
+                                )
+                            ),
+                        }
+                    )
+            return sorted(
+                starts,
+                key=lambda item: (
+                    float(item["warm_start_priority_score"]),
+                    str(item["electric_vehicle_id"]),
+                    str(item["combustion_vehicle_id"]),
+                ),
+            )
+
+        def _apply_partial_assignment_mip_start(
+            start: Mapping[str, Any],
+        ) -> None:
+            def _set_start_values(
+                variables: Mapping[Any, Any],
+                selected: Set[Any],
+            ) -> None:
+                model_variables = list(variables.values())
+                stage1.setAttr(
+                    "Start",
+                    model_variables,
+                    [
+                        1.0 if key in selected else 0.0
+                        for key in variables
+                    ],
+                )
+
+            _set_start_values(y, set(start.get("selected_y") or ()))
+            _set_start_values(x, set(start.get("selected_x") or ()))
+            _set_start_values(
+                start_arc,
+                set(start.get("selected_start") or ()),
+            )
+            _set_start_values(
+                end_arc,
+                set(start.get("selected_end") or ()),
+            )
+            _set_start_values(
+                used_vehicle,
+                set(start.get("selected_used") or ()),
+            )
+            _set_start_values(
+                used_vehicle_day,
+                set(start.get("selected_used_day") or ()),
+            )
+            stage1.update()
+
         def _candidate_relaxed_pv_overlap(
             plan: AssignmentPlan,
         ) -> List[Dict[str, Any]]:
@@ -5643,15 +6109,17 @@ class GurobiMILPAdapter:
                 )
             return overlap_rows
 
-        # Record exactly which distinct assignments the time-bounded
-        # PoolSearchMode=2 search retained and which Stage 2 subsequently
-        # evaluated.  No integrated global-optimality claim is made.
+        # Record exactly which distinct assignments the time-bounded primary
+        # pool and explicit powertrain-pattern no-good enumeration retained,
+        # and which Stage 2 subsequently evaluated.  The original incumbent is
+        # never excluded from final selection and no integrated global-
+        # optimality claim is made.
         stage1_candidates: List[
-            Tuple[int, float, str, AssignmentPlan]
+            Tuple[int, float, str, str, AssignmentPlan]
         ] = []
         seen_candidate_hashes: Set[str] = set()
         pool_solution_count = min(
-            int(getattr(stage1, "SolCount", 0) or 0),
+            stage1_primary_pool_solution_count,
             stage1_stage2_candidate_limit,
         )
         for pool_index in range(pool_solution_count):
@@ -5710,11 +6178,15 @@ class GurobiMILPAdapter:
                     pool_index,
                     pool_objective,
                     assignment_hash,
+                    "primary_solution_pool",
                     replace(
                         candidate_plan,
                         metadata={
                             **dict(candidate_plan.metadata or {}),
                             "stage1_pool_solution_index": pool_index,
+                            "stage1_candidate_source": (
+                                "primary_solution_pool"
+                            ),
                             "stage1_candidate_assignment_hash": (
                                 assignment_hash
                             ),
@@ -5722,6 +6194,248 @@ class GurobiMILPAdapter:
                     ),
                 )
             )
+
+        enumeration_events: List[Dict[str, Any]] = []
+        enumerated_powertrain_patterns: Set[
+            Tuple[Tuple[str, str], ...]
+        ] = set()
+        no_good_cut_count = 0
+        for _pool_index, _objective, _hash, _source, plan in (
+            stage1_candidates
+        ):
+            pattern = _candidate_powertrain_pattern(plan)
+            if not pattern or pattern in enumerated_powertrain_patterns:
+                continue
+            if not _add_powertrain_pattern_no_good(
+                pattern,
+                cut_index=no_good_cut_count + 1,
+            ):
+                continue
+            enumerated_powertrain_patterns.add(pattern)
+            no_good_cut_count += 1
+
+        powertrain_swap_mip_starts = _powertrain_swap_mip_starts(
+            stage1_plan
+        )
+        powertrain_swap_mip_start_index = 0
+        while (
+            len(stage1_candidates) < stage1_stage2_candidate_limit
+            and no_good_cut_count > 0
+        ):
+            enumeration_budget_remaining = max(
+                stage1_candidate_enumeration_reserve_sec
+                - (
+                    stage1_total_solver_runtime_sec
+                    - stage1_primary_runtime_sec
+                ),
+                0.0,
+            )
+            if enumeration_budget_remaining < 0.25:
+                break
+            enumeration_time_limit_sec = min(
+                4.5,
+                max(enumeration_budget_remaining, 0.25),
+            )
+            enumeration_mip_start: Optional[Dict[str, Any]] = None
+            while (
+                powertrain_swap_mip_start_index
+                < len(powertrain_swap_mip_starts)
+            ):
+                candidate_start = powertrain_swap_mip_starts[
+                    powertrain_swap_mip_start_index
+                ]
+                powertrain_swap_mip_start_index += 1
+                if (
+                    candidate_start["powertrain_pattern"]
+                    in enumerated_powertrain_patterns
+                ):
+                    continue
+                enumeration_mip_start = candidate_start
+                _apply_partial_assignment_mip_start(
+                    enumeration_mip_start
+                )
+                break
+            stage1.Params.TimeLimit = enumeration_time_limit_sec
+            stage1.Params.PoolSearchMode = 0
+            stage1.Params.PoolSolutions = 1
+            enumeration_started = time.perf_counter()
+            stage1.optimize()
+            enumeration_wall_time_sec = float(
+                time.perf_counter() - enumeration_started
+            )
+            enumeration_solver_runtime_sec = float(
+                getattr(stage1, "Runtime", 0.0) or 0.0
+            )
+            stage1_total_solver_runtime_sec += (
+                enumeration_solver_runtime_sec
+            )
+            enumeration_status = self._status_name(
+                GRB,
+                stage1.Status,
+            )
+            enumeration_event: Dict[str, Any] = {
+                "enumeration_iteration": len(enumeration_events) + 1,
+                "solver_status": enumeration_status,
+                "solver_runtime_sec": enumeration_solver_runtime_sec,
+                "wall_time_sec": enumeration_wall_time_sec,
+                "time_limit_sec": enumeration_time_limit_sec,
+                "solution_count": int(
+                    getattr(stage1, "SolCount", 0) or 0
+                ),
+                "best_bound": self._model_bound(stage1),
+                "mip_gap_ratio": self._model_gap(stage1),
+                "partial_mip_start_applied": (
+                    enumeration_mip_start is not None
+                ),
+                "partial_mip_start_semantics": (
+                    "opposite_powertrain_whole_duty_swap_search_hint_"
+                    "validated_by_unchanged_stage1_model"
+                    if enumeration_mip_start is not None
+                    else "none"
+                ),
+            }
+            if enumeration_mip_start is not None:
+                enumeration_event.update(
+                    {
+                        "partial_mip_start_electric_vehicle_id": (
+                            enumeration_mip_start[
+                                "electric_vehicle_id"
+                            ]
+                        ),
+                        "partial_mip_start_combustion_vehicle_id": (
+                            enumeration_mip_start[
+                                "combustion_vehicle_id"
+                            ]
+                        ),
+                        "partial_mip_start_powertrain_pattern_hash": (
+                            enumeration_mip_start[
+                                "powertrain_pattern_hash"
+                            ]
+                        ),
+                        "partial_mip_start_priority_score": (
+                            enumeration_mip_start[
+                                "warm_start_priority_score"
+                            ]
+                        ),
+                    }
+                )
+            if int(getattr(stage1, "SolCount", 0) or 0) <= 0:
+                enumeration_events.append(enumeration_event)
+                if (
+                    powertrain_swap_mip_start_index
+                    < len(powertrain_swap_mip_starts)
+                ):
+                    continue
+                break
+
+            (
+                enumerated_duties,
+                enumerated_served_trip_ids,
+                enumerated_duty_vehicle_map,
+            ) = self._build_vehicle_duties_from_solution(
+                problem=problem,
+                trip_by_id=trip_by_id,
+                dispatch_trip_by_id=dispatch_trip_by_id,
+                y=y,
+                x=x,
+                start_arc=start_arc,
+            )
+            enumerated_served = set(enumerated_served_trip_ids)
+            enumerated_objective = float(
+                getattr(stage1, "ObjVal", 0.0) or 0.0
+            )
+            enumerated_plan = AssignmentPlan(
+                duties=tuple(enumerated_duties),
+                served_trip_ids=tuple(sorted(enumerated_served)),
+                unserved_trip_ids=tuple(
+                    sorted(
+                        trip.trip_id
+                        for trip in problem.trips
+                        if trip.trip_id not in enumerated_served
+                    )
+                ),
+                metadata={
+                    **dict(stage1_plan.metadata or {}),
+                    "duty_vehicle_map": enumerated_duty_vehicle_map,
+                    "stage1_objective": enumerated_objective,
+                    "stage1_candidate_source": (
+                        "powertrain_pattern_no_good_enumeration"
+                    ),
+                    "stage1_candidate_enumeration_iteration": (
+                        len(enumeration_events) + 1
+                    ),
+                    "stage1_candidate_enumeration_solver_status": (
+                        enumeration_status
+                    ),
+                    "stage1_candidate_enumeration_best_bound": (
+                        enumeration_event["best_bound"]
+                    ),
+                    "stage1_candidate_enumeration_mip_gap_ratio": (
+                        enumeration_event["mip_gap_ratio"]
+                    ),
+                    "stage1_time_indexed_energy_recourse_result": (
+                        self._stage1_time_indexed_energy_recourse_result(
+                            stage1_time_indexed_energy_recourse
+                        )
+                    ),
+                },
+            )
+            assignment_pairs = _assignment_pairs_for_plan(enumerated_plan)
+            assignment_hash = _candidate_hash(assignment_pairs)
+            pattern = _candidate_powertrain_pattern(enumerated_plan)
+            enumeration_event["candidate_hash"] = assignment_hash
+            enumeration_event["powertrain_pattern_hash"] = hashlib.sha256(
+                json.dumps(
+                    pattern,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest()
+            if (
+                assignment_hash in seen_candidate_hashes
+                or not pattern
+                or pattern in enumerated_powertrain_patterns
+            ):
+                enumeration_event["accepted_as_distinct_candidate"] = False
+                enumeration_events.append(enumeration_event)
+                if (
+                    powertrain_swap_mip_start_index
+                    < len(powertrain_swap_mip_starts)
+                ):
+                    continue
+                break
+
+            enumeration_event["accepted_as_distinct_candidate"] = True
+            enumeration_events.append(enumeration_event)
+            seen_candidate_hashes.add(assignment_hash)
+            candidate_sequence_index = len(stage1_candidates)
+            stage1_candidates.append(
+                (
+                    candidate_sequence_index,
+                    enumerated_objective,
+                    assignment_hash,
+                    "powertrain_pattern_no_good_enumeration",
+                    replace(
+                        enumerated_plan,
+                        metadata={
+                            **dict(enumerated_plan.metadata or {}),
+                            "stage1_pool_solution_index": (
+                                candidate_sequence_index
+                            ),
+                            "stage1_candidate_assignment_hash": (
+                                assignment_hash
+                            ),
+                        },
+                    ),
+                )
+            )
+            if not _add_powertrain_pattern_no_good(
+                pattern,
+                cut_index=no_good_cut_count + 1,
+            ):
+                break
+            enumerated_powertrain_patterns.add(pattern)
+            no_good_cut_count += 1
 
         candidate_evaluations: List[Dict[str, Any]] = []
         feasible_candidate_results: List[
@@ -5756,6 +6470,7 @@ class GurobiMILPAdapter:
             pool_index,
             relaxed_objective,
             assignment_hash,
+            candidate_source,
             candidate_plan,
         ) in enumerate(stage1_candidates, start=1):
             remaining_candidates = max(
@@ -5779,6 +6494,7 @@ class GurobiMILPAdapter:
                     {
                         "candidate_index": evaluation_index,
                         "stage1_pool_solution_index": pool_index,
+                        "stage1_candidate_source": candidate_source,
                         "candidate_hash": assignment_hash,
                         "assignment_hash": assignment_hash,
                         "stage1_relaxed_objective_jpy": relaxed_objective,
@@ -5828,9 +6544,7 @@ class GurobiMILPAdapter:
                     stage1_gap=stage1_gap,
                     stage1_bound=stage1_bound,
                     stage1_objective_value=relaxed_objective,
-                    stage1_runtime_sec=float(
-                        getattr(stage1, "Runtime", 0.0) or 0.0
-                    ),
+                    stage1_runtime_sec=stage1_total_solver_runtime_sec,
                     slots_per_day=slots_per_day,
                 )
             )
@@ -5940,6 +6654,7 @@ class GurobiMILPAdapter:
                 {
                     "candidate_index": evaluation_index,
                     "stage1_pool_solution_index": pool_index,
+                    "stage1_candidate_source": candidate_source,
                     "candidate_hash": assignment_hash,
                     "assignment_hash": assignment_hash,
                     "stage1_relaxed_objective_jpy": relaxed_objective,
@@ -6016,8 +6731,8 @@ class GurobiMILPAdapter:
             "stage1_stage2_candidate_limit_requested": (
                 stage1_stage2_candidate_limit
             ),
-            "stage1_pool_solution_count": int(
-                getattr(stage1, "SolCount", 0) or 0
+            "stage1_pool_solution_count": (
+                stage1_primary_pool_solution_count
             ),
             "stage1_distinct_candidate_count": len(stage1_candidates),
             "stage1_stage2_candidate_count_evaluated": len(
@@ -6028,10 +6743,31 @@ class GurobiMILPAdapter:
             ),
             "stage1_stage2_candidate_selection_semantics": (
                 "minimum_canonical_actual_cost_among_stage2_feasible_"
-                "time_bounded_systematic_stage1_solution_pool_candidates"
+                "time_bounded_primary_pool_and_powertrain_pattern_no_good_"
+                "enumeration_candidates"
             ),
             "stage1_stage2_candidate_global_optimality_claimed": False,
             "stage1_stage2_candidate_evaluation": candidate_evaluations,
+            "stage1_primary_incumbent_objective_jpy": (
+                stage1_objective_value
+            ),
+            "stage1_runtime_seconds": stage1_total_solver_runtime_sec,
+            "stage1_primary_runtime_seconds": stage1_primary_runtime_sec,
+            "stage1_primary_search_time_limit_seconds": (
+                stage1_primary_search_time_limit_sec
+            ),
+            "stage1_candidate_enumeration_reserve_seconds": (
+                stage1_candidate_enumeration_reserve_sec
+            ),
+            "stage1_candidate_enumeration_runtime_seconds": max(
+                stage1_total_solver_runtime_sec
+                - stage1_primary_runtime_sec,
+                0.0,
+            ),
+            "stage1_candidate_enumeration_events": enumeration_events,
+            "stage1_candidate_powertrain_pattern_no_good_cut_count": (
+                no_good_cut_count
+            ),
             "stage1_stage2_candidate_evaluation_initial_budget_sec": (
                 candidate_evaluation_initial_budget_sec
             ),
@@ -6052,6 +6788,17 @@ class GurobiMILPAdapter:
             selected_metadata = {
                 **dict(selected_plan.metadata or {}),
                 **candidate_selection_metadata,
+                # Raw/certified Stage 1 gap and bound telemetry describe the
+                # primary weather-aware incumbent before alternative
+                # enumeration.  Keep that numerator aligned even when exact
+                # Stage 2 accounting selects another candidate.
+                "stage1_objective": stage1_objective_value,
+                "stage1_objective_value": stage1_objective_value,
+                "stage1_selected_candidate_relaxed_objective_jpy": (
+                    candidate_evaluations[
+                        selected_candidate_index - 1
+                    ]["stage1_relaxed_objective_jpy"]
+                ),
                 "stage1_stage2_selected_candidate_index": (
                     selected_candidate_index
                 ),
@@ -6080,9 +6827,7 @@ class GurobiMILPAdapter:
                 stage1_gap=stage1_gap,
                 stage1_bound=stage1_bound,
                 stage1_objective_value=stage1_objective_value,
-                stage1_runtime_sec=float(
-                    getattr(stage1, "Runtime", 0.0) or 0.0
-                ),
+                stage1_runtime_sec=stage1_total_solver_runtime_sec,
                 slots_per_day=slots_per_day,
             )
         )
@@ -9405,6 +10150,360 @@ class GurobiMILPAdapter:
                 for value in slots.values()
             )
         return result
+
+    def _stage1_analytical_weather_energy_fuel_lower_bound(
+        self,
+        *,
+        problem: CanonicalOptimizationProblem,
+        assignment_vehicle_ids_by_trip: Mapping[str, List[str]],
+        vehicle_by_id: Mapping[str, Any],
+        component_flags: Mapping[str, bool],
+    ) -> Dict[str, Any]:
+        """Certify an optimistic weather-aware service-energy cost floor.
+
+        Each trip independently chooses its cheapest compatible direct-service
+        option: ICE fuel plus CO2, or BEV charger-input energy at the cheapest
+        grid slot.  All PV, usable initial BESS inventory, and every available
+        BEV's permissible initial-SOC drawdown are then pooled as free charger
+        input.  Ignoring paths, deadheads, timing, charger contention, demand,
+        degradation, and depot boundaries can only reduce cost, so the result
+        is a lower bound rather than a dispatch estimate.
+        """
+
+        electric_types = {"BEV", "PHEV", "FCEV"}
+        charge_efficiency = 0.95
+        electricity_cost_enabled = bool(
+            component_flags.get("electricity_cost", True)
+        )
+        co2_cost_enabled = bool(component_flags.get("co2_cost", True))
+        fuel_cost_enabled = bool(component_flags.get("fuel_cost", True))
+        energy_weight = max(
+            float(problem.objective_weights.energy or 0.0),
+            0.0,
+        )
+        fuel_weight = max(
+            float(problem.objective_weights.fuel or 0.0),
+            0.0,
+        )
+        co2_price = (
+            max(float(problem.scenario.co2_price_per_kg or 0.0), 0.0)
+            if co2_cost_enabled
+            else 0.0
+        )
+        grid_unit_cost_candidates = [
+            energy_weight
+            * (
+                max(float(slot.grid_buy_yen_per_kwh or 0.0), 0.0)
+                if electricity_cost_enabled
+                else 0.0
+            )
+            + co2_price * max(float(slot.co2_factor or 0.0), 0.0)
+            for slot in problem.price_slots
+        ]
+        minimum_grid_unit_cost = min(
+            grid_unit_cost_candidates,
+            default=0.0,
+        )
+        vehicle_type_by_id = {
+            str(item.vehicle_type_id): item for item in problem.vehicle_types
+        }
+
+        def _ice_unit_cost(vehicle: Any) -> float:
+            vehicle_type = vehicle_type_by_id.get(
+                str(getattr(vehicle, "vehicle_type", "") or "")
+            )
+            co2_kg_per_l = max(
+                float(problem.scenario.ice_co2_kg_per_l or 0.0),
+                0.0,
+            )
+            if vehicle_type is not None:
+                configured = max(
+                    float(vehicle_type.co2_emission_kg_per_l or 0.0),
+                    0.0,
+                )
+                if configured > 0.0:
+                    co2_kg_per_l = configured
+            return (
+                fuel_weight
+                * (
+                    max(
+                        float(
+                            problem.scenario.diesel_price_yen_per_l or 0.0
+                        ),
+                        0.0,
+                    )
+                    if fuel_cost_enabled
+                    else 0.0
+                )
+                + co2_price * co2_kg_per_l
+            )
+
+        per_trip_minimum_costs: Dict[str, float] = {}
+        trip_without_compatible_assignment: List[str] = []
+        electric_option_trip_count = 0
+        combustion_option_trip_count = 0
+        for trip in problem.trips:
+            option_costs: List[float] = []
+            has_electric_option = False
+            has_combustion_option = False
+            for vehicle_id in assignment_vehicle_ids_by_trip.get(
+                str(trip.trip_id), ()
+            ):
+                vehicle = vehicle_by_id.get(str(vehicle_id))
+                if vehicle is None:
+                    continue
+                powertrain = str(
+                    getattr(vehicle, "vehicle_type", "") or ""
+                ).upper()
+                if powertrain in electric_types:
+                    has_electric_option = True
+                    source_energy_kwh = max(
+                        self._trip_energy_kwh(
+                            problem,
+                            vehicle,
+                            str(trip.trip_id),
+                        ),
+                        0.0,
+                    ) / charge_efficiency
+                    option_costs.append(
+                        minimum_grid_unit_cost * source_energy_kwh
+                    )
+                else:
+                    has_combustion_option = True
+                    option_costs.append(
+                        _ice_unit_cost(vehicle)
+                        * max(
+                            self._trip_fuel_l(
+                                problem,
+                                vehicle,
+                                str(trip.trip_id),
+                            ),
+                            0.0,
+                        )
+                    )
+            if has_electric_option:
+                electric_option_trip_count += 1
+            if has_combustion_option:
+                combustion_option_trip_count += 1
+            if not option_costs:
+                trip_without_compatible_assignment.append(str(trip.trip_id))
+                continue
+            per_trip_minimum_costs[str(trip.trip_id)] = min(option_costs)
+
+        pooled_asset_pv_kwh = sum(
+            max(float(value or 0.0), 0.0)
+            for asset in problem.depot_energy_assets.values()
+            if bool(getattr(asset, "pv_enabled", False))
+            for value in (
+                getattr(asset, "pv_generation_kwh_by_slot", ()) or ()
+            )
+        )
+        electric_home_depot_ids = {
+            str(
+                getattr(vehicle, "home_depot_id", "")
+                or "depot_default"
+            )
+            for vehicle in problem.vehicles
+            if bool(getattr(vehicle, "available", True))
+            and str(
+                getattr(vehicle, "vehicle_type", "") or ""
+            ).upper()
+            in electric_types
+        }
+        global_pv_fallback_depot_ids = sorted(
+            depot_id
+            for depot_id in electric_home_depot_ids
+            if depot_id not in problem.depot_energy_assets
+        )
+        timestep_h = max(
+            float(problem.scenario.timestep_min or 0.0) / 60.0,
+            1.0e-9,
+        )
+        global_pv_fallback_kwh_per_depot = sum(
+            max(float(slot.pv_available_kw or 0.0), 0.0)
+            * timestep_h
+            for slot in problem.pv_slots
+        )
+        pooled_global_pv_fallback_kwh = (
+            global_pv_fallback_kwh_per_depot
+            * len(global_pv_fallback_depot_ids)
+        )
+        pooled_pv_kwh = (
+            pooled_asset_pv_kwh
+            + pooled_global_pv_fallback_kwh
+        )
+        pooled_initial_bess_delivery_kwh = 0.0
+        for asset in problem.depot_energy_assets.values():
+            if (
+                not bool(getattr(asset, "bess_enabled", False))
+                or not bool(getattr(asset, "allow_bess_to_bus", True))
+            ):
+                continue
+            terminal_floor_kwh = max(
+                float(getattr(asset, "bess_soc_min_kwh", 0.0) or 0.0),
+                0.0,
+            )
+            terminal_target_kwh = _bess_terminal_soc_target_kwh(
+                asset,
+                terminal_soc_floor=terminal_floor_kwh,
+            )
+            terminal_requirement_kwh = (
+                terminal_target_kwh
+                if terminal_target_kwh is not None
+                else terminal_floor_kwh
+            )
+            discharge_efficiency = min(
+                max(
+                    float(
+                        getattr(
+                            asset,
+                            "bess_discharge_efficiency",
+                            0.95,
+                        )
+                        or 0.95
+                    ),
+                    1.0e-6,
+                ),
+                1.0,
+            )
+            pooled_initial_bess_delivery_kwh += max(
+                float(
+                    getattr(asset, "bess_initial_soc_kwh", 0.0) or 0.0
+                )
+                - float(terminal_requirement_kwh),
+                0.0,
+            ) * discharge_efficiency
+
+        pooled_vehicle_drawdown_source_kwh = 0.0
+        for vehicle in problem.vehicles:
+            if (
+                not bool(getattr(vehicle, "available", True))
+                or str(
+                    getattr(vehicle, "vehicle_type", "") or ""
+                ).upper()
+                not in electric_types
+            ):
+                continue
+            capacity_kwh = max(
+                float(
+                    getattr(vehicle, "battery_capacity_kwh", 0.0) or 0.0
+                ),
+                1.0,
+            )
+            initial_soc_kwh = vehicle_initial_soc_kwh(
+                problem,
+                vehicle,
+                cap_kwh=capacity_kwh,
+            )
+            terminal_requirement_kwh = max(
+                final_soc_floor_kwh(
+                    problem,
+                    vehicle,
+                    cap_kwh=capacity_kwh,
+                ),
+                float(
+                    effective_final_soc_target_kwh(
+                        problem,
+                        vehicle,
+                        cap_kwh=capacity_kwh,
+                    )
+                    or 0.0
+                ),
+            )
+            pooled_vehicle_drawdown_source_kwh += max(
+                initial_soc_kwh - terminal_requirement_kwh,
+                0.0,
+            ) / charge_efficiency
+
+        trip_option_cost_floor = sum(per_trip_minimum_costs.values())
+        pooled_free_source_kwh = (
+            pooled_pv_kwh
+            + pooled_initial_bess_delivery_kwh
+            + pooled_vehicle_drawdown_source_kwh
+        )
+        maximum_free_source_credit_jpy = (
+            minimum_grid_unit_cost * pooled_free_source_kwh
+        )
+        lower_bound_jpy = max(
+            trip_option_cost_floor - maximum_free_source_credit_jpy,
+            0.0,
+        )
+        certificate_input = {
+            "charge_efficiency": charge_efficiency,
+            "minimum_grid_unit_cost_yen_per_kwh": minimum_grid_unit_cost,
+            "per_trip_minimum_cost_jpy": dict(
+                sorted(per_trip_minimum_costs.items())
+            ),
+            "pooled_pv_kwh": pooled_pv_kwh,
+            "pooled_asset_pv_kwh": pooled_asset_pv_kwh,
+            "pooled_global_pv_fallback_kwh": (
+                pooled_global_pv_fallback_kwh
+            ),
+            "global_pv_fallback_depot_ids": (
+                global_pv_fallback_depot_ids
+            ),
+            "pooled_initial_bess_delivery_kwh": (
+                pooled_initial_bess_delivery_kwh
+            ),
+            "pooled_vehicle_drawdown_source_kwh": (
+                pooled_vehicle_drawdown_source_kwh
+            ),
+            "component_flags": {
+                str(key): bool(value)
+                for key, value in sorted(component_flags.items())
+            },
+        }
+        certificate_hash = hashlib.sha256(
+            json.dumps(
+                certificate_input,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        return {
+            "valid": not trip_without_compatible_assignment,
+            "lower_bound_jpy": lower_bound_jpy,
+            "trip_option_cost_floor_before_free_source_credit_jpy": (
+                trip_option_cost_floor
+            ),
+            "maximum_free_source_credit_jpy": (
+                maximum_free_source_credit_jpy
+            ),
+            "minimum_grid_unit_cost_yen_per_kwh": minimum_grid_unit_cost,
+            "pooled_pv_kwh": pooled_pv_kwh,
+            "pooled_asset_pv_kwh": pooled_asset_pv_kwh,
+            "pooled_global_pv_fallback_kwh": (
+                pooled_global_pv_fallback_kwh
+            ),
+            "global_pv_fallback_depot_ids": (
+                global_pv_fallback_depot_ids
+            ),
+            "pooled_initial_bess_delivery_kwh": (
+                pooled_initial_bess_delivery_kwh
+            ),
+            "pooled_vehicle_drawdown_source_kwh": (
+                pooled_vehicle_drawdown_source_kwh
+            ),
+            "electric_option_trip_count": electric_option_trip_count,
+            "combustion_option_trip_count": combustion_option_trip_count,
+            "trip_without_compatible_assignment_count": len(
+                trip_without_compatible_assignment
+            ),
+            "trip_without_compatible_assignment_ids": (
+                trip_without_compatible_assignment
+            ),
+            "certificate_input_hash": certificate_hash,
+            "semantics": (
+                "independent_trip_minimum_of_direct_ice_fuel_plus_co2_or_"
+                "bev_service_energy_at_minimum_grid_unit_cost_minus_"
+                "optimistically_pooled_pv_bess_and_vehicle_soc_credit"
+            ),
+            "omitted_nonnegative_costs": (
+                "vehicle_paths_deadheads_timing_chargers_demand_contract_"
+                "overage_degradation_driver_switch_and_fixed_vehicle_cost"
+            ),
+        }
 
     def _add_stage1_energy_cost_proxy(
         self,

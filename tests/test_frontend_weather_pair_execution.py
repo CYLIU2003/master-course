@@ -336,3 +336,11 @@ def test_zero_metric_gate_is_fail_closed_for_missing_or_invalid_values() -> None
         {"violations": 1},
         "violations",
     )
+
+
+def test_integer_gate_conversion_preserves_valid_zero() -> None:
+    runner = _load_runner()
+
+    assert runner._integer_preserving_zero(0, default=-1) == 0
+    assert runner._integer_preserving_zero("0", default=-1) == 0
+    assert runner._integer_preserving_zero(None, default=-1) == -1

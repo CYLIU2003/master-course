@@ -73,9 +73,51 @@
   and cost-component controls that generated the earlier explicit fleet-state
   contract, and rejects any Prepare route-count drift. The trip count remains
   materialized data and is not hard-coded.
+- The third frozen attempt at
+  `92c4f36e934ac10a4b12dd7b45aae6068ac6483f` is preserved under
+  `output/formal_pair_20260730_diagnostic_attempt3` and remains diagnostic.
+  Its fresh prepared inputs materialized the intended common 16-route scope,
+  264 trips, 60 selected-scope vehicles, and 10 chargers. Sunny job
+  `169e2fe4-8591-437d-8783-bf89b867a7c3` and rain job
+  `d04bac53-de83-4235-940c-cc73d1cf7ead` both completed 24/24 Rolling,
+  independent physical validation, terminal SOC, executed-day accounting,
+  final reconciliation, and 229/229 artifact checks. The pair was nevertheless
+  correctly blocked: only one distinct Stage 1 assignment was evaluated; the
+  runner incorrectly treated a present zero unserved count as missing; the
+  small integrated oracle exposed an unaccounted vehicle-discharge sink; the
+  rain certified gap was 10.666%; and the unchanged assignment lacked the
+  required alternative-cost audit.
+- The follow-up correction preserves numeric zero in the run gate. Integrated
+  Phase 4 now fixes vehicle discharge to zero until V2G has solver-native depot
+  flow, accounting, and artifact provenance, and uses the Stage 2
+  `FeasibilityTol=IntFeasTol=1e-9` physical numeric contract. Re-running the
+  ten-trip sunny and rain integrated oracles against the archived inputs
+  produced eligible, physically valid, accounting-matched results in both
+  cases; these remain diagnostic checks rather than full-run evidence.
+- Stage 1 now records a weather-sensitive analytical cost floor in addition to
+  Gurobi's raw bound. It combines the strict path-cover vehicle-use floor with
+  an optimistic independent-trip service-energy/fuel floor after maximally
+  pooling PV, usable BESS inventory, and permissible initial BEV SOC. The
+  certificate changes neither objective nor assignment and fails closed for a
+  negative external vehicle fixed-use cost. On the archived 264-trip inputs it
+  implied 3.4503% sunny and 3.2840% rain gaps against the prior incumbents,
+  while retaining the raw Gurobi bound and gap separately.
+- Candidate enumeration no longer spends the primary budget on continuous-flow
+  solution-pool symmetries. It reserves a bounded post-primary interval,
+  excludes previously evaluated trip-level BEV/ICE patterns, and supplies
+  deterministic opposite-powertrain whole-duty swaps only as partial MIP
+  starts. The unchanged Stage 1 model must still accept each candidate, and
+  exact Stage 2 plus canonical accounting still determine feasibility and
+  final selection. A full-scope diagnostic using the archived sunny prepared
+  input found seven alternative BEV/ICE patterns in a 36-second enumeration
+  reserve; all eight total candidates were Stage 2 optimal and canonically
+  evaluable. This preflight used an old prepared input solely to validate
+  enumeration mechanics and is not frontend or formal comparison evidence.
 - Operational research evidence is still **BLOCKED**. The reviewed
-  implementation has a clean candidate commit, but both scenarios must still
-  finish fresh Prepare, day-ahead optimization, 24/24 hourly Rolling,
+  implementation passes the corrected focused regression (`103 passed`) and
+  complete suite (`1061 passed`). It must still pass final compile/diff review,
+  be committed and frozen again, and then both scenarios must finish fresh
+  Prepare, day-ahead optimization, 24/24 hourly Rolling,
   physical/accounting/artifact validation, controlled-pair acceptance, and
   packaging from that same clean SHA.
 
@@ -414,10 +456,11 @@
   part of the clean gate instead of being reported without affecting release
   validity.
 - The frontend selector now preserves the common 5/15/30/60-minute time-axis
-  values. The formal Phase 3 experiment spec remains 15-minute internal slots
-  with 60-minute Rolling updates. `--available-bev-count` is now restricted to
-  blocked day-ahead exploratory runs because a formal run may not mutate the
-  prepared active fleet.
+  values. This 2026-07-28 change used a 15-minute internal-slot specification;
+  the later 2026-07-30 controlled-PV instruction supersedes that experiment
+  setting with common 60-minute internal slots and 60-minute Rolling updates.
+  `--available-bev-count` is restricted to blocked day-ahead exploratory runs
+  because a formal run may not mutate the prepared active fleet.
 - Removed tracked `.tmp_*` / `tmp_*` one-off scripts and added
   `.github/workflows/research-validation.yml`. The workflow compiles sources,
   runs focused research-contract tests, and runs the full suite without a

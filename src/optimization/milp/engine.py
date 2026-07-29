@@ -225,6 +225,32 @@ class MILPOptimizer:
                 "stage1_analytical_objective_lower_bound": (
                     plan.metadata or {}
                 ).get("stage1_analytical_objective_lower_bound"),
+                "stage1_vehicle_usage_analytical_lower_bound": (
+                    plan.metadata or {}
+                ).get("stage1_vehicle_usage_analytical_lower_bound"),
+                "stage1_analytical_weather_energy_fuel_lower_bound": (
+                    plan.metadata or {}
+                ).get(
+                    "stage1_analytical_weather_energy_fuel_lower_bound"
+                ),
+                "stage1_analytical_weather_energy_fuel_lower_bound_details": dict(
+                    (plan.metadata or {}).get(
+                        "stage1_analytical_weather_energy_fuel_lower_bound_details"
+                    )
+                    or {}
+                ),
+                "stage1_analytical_total_objective_certificate_eligible": bool(
+                    (plan.metadata or {}).get(
+                        "stage1_analytical_total_objective_certificate_eligible",
+                        False,
+                    )
+                ),
+                "stage1_analytical_total_objective_certificate_blockers": list(
+                    (plan.metadata or {}).get(
+                        "stage1_analytical_total_objective_certificate_blockers"
+                    )
+                    or []
+                ),
                 "stage1_analytical_objective_lower_bound_semantics": (
                     plan.metadata or {}
                 ).get("stage1_analytical_objective_lower_bound_semantics"),
@@ -361,6 +387,14 @@ class MILPOptimizer:
                 ).get(
                     "stage1_stage2_selected_canonical_actual_cost_jpy"
                 ),
+                "stage1_primary_incumbent_objective_jpy": (
+                    plan.metadata or {}
+                ).get("stage1_primary_incumbent_objective_jpy"),
+                "stage1_selected_candidate_relaxed_objective_jpy": (
+                    plan.metadata or {}
+                ).get(
+                    "stage1_selected_candidate_relaxed_objective_jpy"
+                ),
                 "stage1_stage2_candidate_selection_semantics": (
                     plan.metadata or {}
                 ).get("stage1_stage2_candidate_selection_semantics"),
@@ -375,6 +409,29 @@ class MILPOptimizer:
                         "stage1_stage2_candidate_evaluation"
                     )
                     or []
+                ),
+                "stage1_primary_runtime_seconds": (
+                    plan.metadata or {}
+                ).get("stage1_primary_runtime_seconds"),
+                "stage1_primary_search_time_limit_seconds": (
+                    plan.metadata or {}
+                ).get("stage1_primary_search_time_limit_seconds"),
+                "stage1_candidate_enumeration_reserve_seconds": (
+                    plan.metadata or {}
+                ).get("stage1_candidate_enumeration_reserve_seconds"),
+                "stage1_candidate_enumeration_runtime_seconds": (
+                    plan.metadata or {}
+                ).get("stage1_candidate_enumeration_runtime_seconds"),
+                "stage1_candidate_enumeration_events": list(
+                    (plan.metadata or {}).get(
+                        "stage1_candidate_enumeration_events"
+                    )
+                    or []
+                ),
+                "stage1_candidate_powertrain_pattern_no_good_cut_count": (
+                    plan.metadata or {}
+                ).get(
+                    "stage1_candidate_powertrain_pattern_no_good_cut_count"
                 ),
                 "rolling_horizon_policy": (plan.metadata or {}).get(
                     "rolling_horizon_policy", ""

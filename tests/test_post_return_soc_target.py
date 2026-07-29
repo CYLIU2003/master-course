@@ -12,6 +12,8 @@ from src.optimization.common.problem import (
     ChargerDefinition,
     ChargingSlot,
     EnergyPriceSlot,
+    OptimizationConfig,
+    OptimizationMode,
     OptimizationScenario,
     ProblemDepot,
     ProblemTrip,
@@ -19,6 +21,7 @@ from src.optimization.common.problem import (
     ProblemVehicleType,
     CanonicalOptimizationProblem,
 )
+from src.optimization.milp.engine import MILPOptimizer
 
 
 def _dispatch_context() -> DispatchContext:
@@ -180,6 +183,114 @@ def test_postsolve_adds_return_home_target_charge_and_costs_it() -> None:
     assert breakdown.realized_ev_charge_cost > 0.0
     assert breakdown.grid_to_bus_kwh > 0.0
     assert breakdown.demand_cost > 0.0
+
+
+def test_integrated_milp_cannot_dump_unaccounted_vehicle_energy() -> None:
+    context = _dispatch_context()
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="s_integrated_no_unaccounted_v2g",
+            horizon_start="05:00",
+            horizon_end="05:00",
+            timestep_min=60,
+        ),
+        dispatch_context=context,
+        trips=(
+            ProblemTrip(
+                trip_id="t1",
+                route_id="r1",
+                origin="DEPOT",
+                destination="B",
+                departure_min=480,
+                arrival_min=540,
+                distance_km=10.0,
+                allowed_vehicle_types=("BEV",),
+                energy_kwh=10.0,
+            ),
+        ),
+        vehicles=(
+            ProblemVehicle(
+                vehicle_id="bev-1",
+                vehicle_type="BEV",
+                home_depot_id="DEPOT",
+                initial_soc=80.0,
+                battery_capacity_kwh=100.0,
+                reserve_soc=20.0,
+                energy_consumption_kwh_per_km=1.0,
+            ),
+        ),
+        vehicle_types=(
+            ProblemVehicleType(
+                vehicle_type_id="BEV",
+                powertrain_type="BEV",
+                battery_capacity_kwh=100.0,
+                reserve_soc=20.0,
+                energy_consumption_kwh_per_km=1.0,
+            ),
+        ),
+        depots=(
+            ProblemDepot(
+                depot_id="DEPOT",
+                name="Depot",
+                charger_ids=("chg-1",),
+                import_limit_kw=100.0,
+            ),
+        ),
+        chargers=(ChargerDefinition("chg-1", "DEPOT", 60.0),),
+        price_slots=tuple(
+            EnergyPriceSlot(
+                slot_index=slot_index,
+                grid_buy_yen_per_kwh=0.0,
+            )
+            for slot_index in range(24)
+        ),
+        metadata={
+            "bev_terminal_soc_policy": "return_to_initial",
+            "final_soc_floor_percent": 20.0,
+            "operation_end_time": "23:00",
+            "charge_upper_buffer_ratio": 0.9,
+            "opportunistic_topup_deficit_penalty_yen_per_kwh": 1000.0,
+            "cost_component_flags": {
+                "electricity_cost": True,
+                "fuel_cost": True,
+                "demand_charge_cost": False,
+                "vehicle_fixed_cost": True,
+                "vehicle_usage_cost": True,
+                "driver_cost": True,
+                "battery_degradation_cost": True,
+                "co2_cost": False,
+                "contract_overage_penalty": False,
+                "opportunistic_topup_deficit_penalty": True,
+            },
+        },
+    )
+
+    result = MILPOptimizer().solve(
+        problem,
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            phase="phase4_integrated",
+            research_run=True,
+            time_limit_sec=30,
+            mip_gap=0.0,
+            random_seed=42,
+            warm_start=False,
+            allow_postsolve_repair=False,
+        ),
+    )
+    report = FeasibilityChecker().evaluate(problem, result.plan)
+
+    assert result.feasible, result.infeasibility_reasons
+    assert report.feasible, report.errors
+    assert not any(
+        "exceeds return-to-initial" in error for error in report.errors
+    )
+    assert (
+        result.plan.metadata[
+            "integrated_unmodeled_vehicle_discharge_forbidden"
+        ]
+        is True
+    )
 
 
 def test_initial_deadhead_is_counted_with_return_to_initial_soc() -> None:

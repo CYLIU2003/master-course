@@ -35,6 +35,22 @@ def test_solver_settings_separate_raw_gap_from_certified_gap_and_stop_rule() -> 
             "stage1_gurobi_raw_mip_gap_ratio": 1.0,
             "stage1_certified_best_bound": 640_000.0,
             "stage1_certified_mip_gap_ratio": 0.092,
+            "stage1_analytical_objective_lower_bound": 640_000.0,
+            "stage1_analytical_total_objective_certificate_eligible": True,
+            "stage1_analytical_total_objective_certificate_blockers": [],
+            "stage1_primary_runtime_seconds": 1_100.0,
+            "stage1_primary_search_time_limit_seconds": 1_100.0,
+            "stage1_candidate_enumeration_reserve_seconds": 100.0,
+            "stage1_candidate_enumeration_runtime_seconds": 95.0,
+            "stage1_candidate_powertrain_pattern_no_good_cut_count": 20,
+            "stage1_primary_incumbent_objective_jpy": 704_845.8,
+            "stage1_selected_candidate_relaxed_objective_jpy": 705_100.0,
+            "stage1_candidate_enumeration_events": [
+                {
+                    "enumeration_iteration": 1,
+                    "accepted_as_distinct_candidate": True,
+                }
+            ],
             "gurobi_threads": 1,
             "git_sha": "abc123",
             "git_dirty": False,
@@ -47,6 +63,26 @@ def test_solver_settings_separate_raw_gap_from_certified_gap_and_stop_rule() -> 
     assert settings["stage1_termination_reason"] == "best_obj_stop"
     assert settings["stage1_gurobi_raw_mip_gap_ratio"] == 1.0
     assert settings["stage1_certified_mip_gap_ratio"] == 0.092
+    assert settings["stage1_analytical_objective_lower_bound"] == 640_000.0
+    assert (
+        settings[
+            "stage1_analytical_total_objective_certificate_eligible"
+        ]
+        is True
+    )
+    assert settings["stage1_primary_runtime_seconds"] == 1_100.0
+    assert settings["stage1_candidate_enumeration_runtime_seconds"] == 95.0
+    assert (
+        settings["stage1_candidate_powertrain_pattern_no_good_cut_count"]
+        == 20
+    )
+    assert settings[
+        "stage1_primary_incumbent_objective_jpy"
+    ] == pytest.approx(704_845.8)
+    assert settings[
+        "stage1_selected_candidate_relaxed_objective_jpy"
+    ] == pytest.approx(705_100.0)
+    assert len(settings["stage1_candidate_enumeration_events"]) == 1
     assert settings["runtime_comparison_eligible"] is False
     assert settings["gurobi_threads"] == 1
     assert settings["random_seed"] == 42

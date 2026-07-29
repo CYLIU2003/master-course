@@ -19,6 +19,7 @@ from src.optimization.common.problem import (
     OptimizationConfig,
     OptimizationMode,
     OptimizationScenario,
+    PVSlot,
     ProblemDepot,
     ProblemTrip,
     ProblemVehicle,
@@ -472,10 +473,186 @@ def test_phase3_selects_lowest_canonical_cost_from_exact_stage2_candidates() -> 
     assert metadata[
         "stage1_stage2_selected_canonical_actual_cost_jpy"
     ] == pytest.approx(min(feasible_costs))
+    selected_index = int(
+        metadata["stage1_stage2_selected_candidate_index"]
+    )
+    assert metadata["stage1_objective"] == pytest.approx(
+        metadata["stage1_primary_incumbent_objective_jpy"]
+    )
+    assert metadata[
+        "stage1_selected_candidate_relaxed_objective_jpy"
+    ] == pytest.approx(
+        candidates[selected_index - 1][
+            "stage1_relaxed_objective_jpy"
+        ]
+    )
     assert (
         metadata["stage1_stage2_candidate_global_optimality_claimed"]
         is False
     )
+
+
+def test_candidate_audit_enumerates_distinct_powertrain_patterns() -> None:
+    _assignment, metadata = _solve_full_phase3_assignment(
+        sunny_midday_pv_kwh=25.0,
+        candidate_limit=3,
+    )
+    candidates = list(metadata["stage1_stage2_candidate_evaluation"])
+    powertrain_patterns = {
+        tuple(
+            sorted(
+                (
+                    str(item["trip_id"]),
+                    str(item["powertrain"]),
+                )
+                for item in candidate["vehicle_trip_assignments"]
+            )
+        )
+        for candidate in candidates
+    }
+
+    # This fixture owns only one BEV and one ICE, so its two overlapping trips
+    # admit exactly the two opposite powertrain patterns.
+    assert len(candidates) == 2
+    assert len(powertrain_patterns) == 2
+    assert all(candidate["feasible"] for candidate in candidates)
+    assert (
+        metadata[
+            "stage1_candidate_powertrain_pattern_no_good_cut_count"
+        ]
+        >= 1
+    )
+    assert metadata["stage1_candidate_enumeration_events"][0][
+        "partial_mip_start_applied"
+    ] is True
+    assert (
+        metadata["stage1_candidate_enumeration_events"][0][
+            "partial_mip_start_semantics"
+        ]
+        == "opposite_powertrain_whole_duty_swap_search_hint_"
+        "validated_by_unchanged_stage1_model"
+    )
+    assert metadata["stage1_candidate_enumeration_events"][-1][
+        "solver_status"
+    ] == "infeasible"
+    assert metadata["stage1_runtime_seconds"] == pytest.approx(
+        metadata["stage1_primary_runtime_seconds"]
+        + metadata["stage1_candidate_enumeration_runtime_seconds"]
+    )
+
+
+def test_weather_energy_fuel_certificate_is_a_pv_sensitive_lower_bound() -> None:
+    adapter = GurobiMILPAdapter()
+
+    def _certificate_for_problem(
+        problem: CanonicalOptimizationProblem,
+    ) -> dict[str, object]:
+        vehicle_by_id = {
+            str(vehicle.vehicle_id): vehicle
+            for vehicle in problem.vehicles
+        }
+        compatible_by_trip = {
+            str(trip.trip_id): [
+                str(vehicle.vehicle_id)
+                for vehicle in problem.vehicles
+                if str(vehicle.vehicle_type)
+                in set(trip.allowed_vehicle_types)
+            ]
+            for trip in problem.trips
+        }
+        return adapter._stage1_analytical_weather_energy_fuel_lower_bound(
+            problem=problem,
+            assignment_vehicle_ids_by_trip=compatible_by_trip,
+            vehicle_by_id=vehicle_by_id,
+            component_flags=normalize_cost_component_flags(
+                problem.metadata["cost_component_flags"]
+            ),
+        )
+
+    def _certificate(pv_kwh: float) -> dict[str, object]:
+        return _certificate_for_problem(
+            _full_phase3_counterexample(
+                sunny_midday_pv_kwh=pv_kwh
+            )
+        )
+
+    sunny = _certificate(25.0)
+    rain = _certificate(0.0)
+    global_fallback = _certificate_for_problem(
+        replace(
+            _full_phase3_counterexample(
+                sunny_midday_pv_kwh=0.0
+            ),
+            depot_energy_assets={},
+            pv_slots=(
+                PVSlot(slot_index=1, pv_available_kw=25.0),
+            ),
+        )
+    )
+
+    assert sunny["valid"] is True
+    assert rain["valid"] is True
+    assert float(sunny["lower_bound_jpy"]) >= 0.0
+    assert float(rain["lower_bound_jpy"]) > float(
+        sunny["lower_bound_jpy"]
+    )
+    assert sunny["certificate_input_hash"] != rain[
+        "certificate_input_hash"
+    ]
+    assert global_fallback["pooled_asset_pv_kwh"] == pytest.approx(0.0)
+    assert global_fallback[
+        "pooled_global_pv_fallback_kwh"
+    ] == pytest.approx(25.0)
+    assert global_fallback["global_pv_fallback_depot_ids"] == ["DEPOT"]
+    assert global_fallback["lower_bound_jpy"] == pytest.approx(
+        sunny["lower_bound_jpy"]
+    )
+
+
+def test_total_analytical_bound_fails_closed_for_negative_fixed_cost() -> None:
+    problem = _full_phase3_counterexample(
+        sunny_midday_pv_kwh=25.0
+    )
+    problem = replace(
+        problem,
+        vehicles=tuple(
+            replace(vehicle, fixed_use_cost_jpy=-1.0)
+            if index == 0
+            else vehicle
+            for index, vehicle in enumerate(problem.vehicles)
+        ),
+    )
+
+    result = MILPOptimizer().solve(
+        problem,
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            thesis_mode=True,
+            phase="phase3_two_stage",
+            research_run=True,
+            time_limit_sec=30,
+            stage1_time_limit_sec=20,
+            stage2_time_limit_sec=10,
+            mip_gap=0.0,
+            random_seed=42,
+            warm_start=False,
+            stage1_best_obj_stop_enabled=False,
+            stage1_stage2_candidate_limit=1,
+            gurobi_threads=1,
+        ),
+    )
+
+    metadata = dict(result.plan.metadata or {})
+    assert (
+        metadata[
+            "stage1_analytical_total_objective_certificate_eligible"
+        ]
+        is False
+    )
+    assert metadata[
+        "stage1_analytical_total_objective_certificate_blockers"
+    ] == ("negative_vehicle_fixed_use_cost",)
+    assert metadata["stage1_analytical_objective_lower_bound"] is None
 
 
 def test_slot_level_pv_changes_the_economic_assignment_without_weather_bias() -> None:

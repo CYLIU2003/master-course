@@ -151,9 +151,10 @@ simulation artifact, not an automatically accepted research result.
   prepared-problem trip coverage does not match; it never validates the
   lossy BFF reporting wrapper as a substitute for the canonical schedule.
 - The Tk/BFF time-axis selector preserves `5`, `15`, `30`, and `60` minute
-  values. The current formal experiment specification is 15-minute internal
-  slots plus 60-minute Rolling updates; other widths must be declared as
-  sensitivities.
+  values. The 2026-07-30 controlled-PV experiment specification uses
+  60-minute internal slots and 60-minute Rolling updates in both cases; other
+  widths must be declared as separate sensitivities and require fresh Prepare
+  and execution.
 - The ordinary Tk frontend optimization action now sends
   `run_profile=day_ahead_and_hourly_rolling`, `research_run=true`,
   `run_hourly_rolling=true`, and `rolling_execution_minutes=60`. The BFF
@@ -252,11 +253,30 @@ simulation artifact, not an automatically accepted research result.
   diagnostic only and no weather-specific assignment bias is used.
 - Stage 2 remains the exact fixed-assignment binary charger/SOC/PV/BESS check.
   Formal research requests evaluate at least ten distinct Stage 1 assignments
-  in Stage 2, persist every candidate, and select the feasible candidate with
-  the lowest canonical actual cost. Only a Gurobi `INFEASIBLE` certificate may
-  return a failed assignment to Stage 1 as a no-good cut; a `TIME_LIMIT`
-  without an incumbent does not justify a cut. This remains a bounded
-  two-stage method, not an integrated global total-cost optimum.
+  in Stage 2; the controlled-PV runner requests one incumbent plus twenty
+  alternatives. Stage 1 retains its primary solution pool, then explicitly
+  excludes already evaluated BEV/ICE trip patterns. Opposite-powertrain
+  whole-duty swaps are supplied only as partial MIP starts to accelerate that
+  unchanged weather-aware model; they are never accepted directly and add no
+  objective bias or physical exemption. Every retained assignment is persisted
+  and the feasible candidate with the lowest canonical actual cost is selected.
+  Only a Gurobi `INFEASIBLE` certificate may return a failed assignment to
+  Stage 1 as an IIS-backed no-good cut; a `TIME_LIMIT` without an incumbent
+  does not justify such a feasibility cut. This remains a bounded two-stage
+  method, not an integrated global total-cost optimum.
+- The certified Stage 1 reporting bound keeps Gurobi's raw bound separate from
+  a reproducible analytical floor. That floor adds the strict path-cover
+  vehicle-use minimum to an optimistic direct service-energy/fuel minimum,
+  after pooling all PV, usable BESS inventory, and permissible initial BEV SOC
+  as free energy. It omits only nonnegative costs and fails closed if an
+  externally supplied vehicle fixed-use cost is negative; it never changes the
+  solver objective or Gurobi's native certificate.
+- Integrated Phase 4 forbids vehicle discharge until V2G has an explicit
+  depot-flow ledger, accounting treatment, and artifact provenance. The former
+  free discharge variable was an unaccounted energy sink under
+  `return_to_initial`. Phase 4 now uses the same `1e-9` feasibility and
+  integrality numeric contract as physical Stage 2 and rejects positive
+  charging without a selected compatible charger.
 - `scripts/run_frontend_controlled_pv_pair.py` is a standard-library HTTP-only
   controller for same-service-date high/low-PV sensitivity runs. It performs a
   fresh Prepare, submits and polls the ordinary BFF optimization endpoint,

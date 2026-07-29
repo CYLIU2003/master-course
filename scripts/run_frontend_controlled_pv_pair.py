@@ -546,6 +546,12 @@ def _number(value: Any) -> float | None:
         return None
 
 
+def _integer_preserving_zero(value: Any, *, default: int) -> int:
+    """Convert a present value without treating valid zero as absent."""
+
+    return int(value) if value is not None else int(default)
+
+
 def _is_present_zero_metric(
     metrics: Mapping[str, Any],
     metric_name: str,
@@ -1283,9 +1289,16 @@ def _case_gate_audit(
         ),
         "prepared_scope_all_trips_served": (
             int(prepared_trip_count) > 0
-            and int(summary.get("trip_count_served") or -1)
+            and _integer_preserving_zero(
+                summary.get("trip_count_served"),
+                default=-1,
+            )
             == int(prepared_trip_count)
-            and int(summary.get("trip_count_unserved") or -1) == 0
+            and _integer_preserving_zero(
+                summary.get("trip_count_unserved"),
+                default=-1,
+            )
+            == 0
         ),
         "physical_schedule_accepted": physical.get("accepted") is True,
         "physical_all_required_checks_passed": bool(
@@ -1396,14 +1409,14 @@ def _case_gate_audit(
             ).is_file()
         ),
         "candidate_selection_complete": (
-            int(settings.get("stage1_distinct_candidate_count") or 0) >= 2
+            int(settings.get("stage1_distinct_candidate_count") or 0) >= 10
             and int(
                 settings.get(
                     "stage1_stage2_candidate_count_evaluated"
                 )
                 or 0
             )
-            >= 2
+            >= 10
             and int(
                 settings.get(
                     "stage1_stage2_feasible_candidate_count"

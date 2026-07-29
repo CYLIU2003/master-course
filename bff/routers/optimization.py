@@ -8483,8 +8483,62 @@ def _solver_settings_payload(
         "stage1_weather_aware_lower_bound_semantics": metadata.get(
             "stage1_weather_aware_lower_bound_semantics"
         ),
+        "stage1_analytical_objective_lower_bound": _float_or_none(
+            metadata.get("stage1_analytical_objective_lower_bound")
+        ),
+        "stage1_vehicle_usage_analytical_lower_bound": _float_or_none(
+            metadata.get(
+                "stage1_vehicle_usage_analytical_lower_bound"
+            )
+        ),
+        "stage1_analytical_weather_energy_fuel_lower_bound": _float_or_none(
+            metadata.get(
+                "stage1_analytical_weather_energy_fuel_lower_bound"
+            )
+        ),
+        "stage1_analytical_weather_energy_fuel_lower_bound_details": dict(
+            metadata.get(
+                "stage1_analytical_weather_energy_fuel_lower_bound_details"
+            )
+            or {}
+        ),
+        "stage1_analytical_total_objective_certificate_eligible": bool(
+            metadata.get(
+                "stage1_analytical_total_objective_certificate_eligible",
+                False,
+            )
+        ),
+        "stage1_analytical_total_objective_certificate_blockers": list(
+            metadata.get(
+                "stage1_analytical_total_objective_certificate_blockers"
+            )
+            or []
+        ),
+        "stage1_analytical_objective_lower_bound_semantics": metadata.get(
+            "stage1_analytical_objective_lower_bound_semantics"
+        ),
         "stage1_runtime_seconds": _float_or_none(
             metadata.get("stage1_runtime_seconds")
+        ),
+        "stage1_primary_runtime_seconds": _float_or_none(
+            metadata.get("stage1_primary_runtime_seconds")
+        ),
+        "stage1_primary_search_time_limit_seconds": _float_or_none(
+            metadata.get("stage1_primary_search_time_limit_seconds")
+        ),
+        "stage1_candidate_enumeration_reserve_seconds": _float_or_none(
+            metadata.get("stage1_candidate_enumeration_reserve_seconds")
+        ),
+        "stage1_candidate_enumeration_runtime_seconds": _float_or_none(
+            metadata.get("stage1_candidate_enumeration_runtime_seconds")
+        ),
+        "stage1_candidate_powertrain_pattern_no_good_cut_count": _int_or_none(
+            metadata.get(
+                "stage1_candidate_powertrain_pattern_no_good_cut_count"
+            )
+        ),
+        "stage1_candidate_enumeration_events": list(
+            metadata.get("stage1_candidate_enumeration_events") or []
         ),
         "stage1_time_limit_seconds_effective": _int_or_none(
             metadata.get("stage1_time_limit_sec_effective")
@@ -8560,6 +8614,14 @@ def _solver_settings_payload(
         "stage1_stage2_selected_canonical_actual_cost_jpy": _float_or_none(
             metadata.get(
                 "stage1_stage2_selected_canonical_actual_cost_jpy"
+            )
+        ),
+        "stage1_primary_incumbent_objective_jpy": _float_or_none(
+            metadata.get("stage1_primary_incumbent_objective_jpy")
+        ),
+        "stage1_selected_candidate_relaxed_objective_jpy": _float_or_none(
+            metadata.get(
+                "stage1_selected_candidate_relaxed_objective_jpy"
             )
         ),
         "stage2_feedback_iteration": _int_or_none(
@@ -9106,6 +9168,41 @@ def _run_optimization(
                         engine_solver_metadata.get(
                             "stage1_stage2_selected_canonical_actual_cost_jpy"
                         )
+                    ),
+                    "primary_incumbent_objective_jpy": (
+                        engine_solver_metadata.get(
+                            "stage1_primary_incumbent_objective_jpy"
+                        )
+                    ),
+                    "selected_candidate_relaxed_objective_jpy": (
+                        engine_solver_metadata.get(
+                            "stage1_selected_candidate_relaxed_objective_jpy"
+                        )
+                    ),
+                    "primary_runtime_seconds": engine_solver_metadata.get(
+                        "stage1_primary_runtime_seconds"
+                    ),
+                    "primary_search_time_limit_seconds": (
+                        engine_solver_metadata.get(
+                            "stage1_primary_search_time_limit_seconds"
+                        )
+                    ),
+                    "enumeration_reserve_seconds": engine_solver_metadata.get(
+                        "stage1_candidate_enumeration_reserve_seconds"
+                    ),
+                    "enumeration_runtime_seconds": engine_solver_metadata.get(
+                        "stage1_candidate_enumeration_runtime_seconds"
+                    ),
+                    "powertrain_pattern_no_good_cut_count": (
+                        engine_solver_metadata.get(
+                            "stage1_candidate_powertrain_pattern_no_good_cut_count"
+                        )
+                    ),
+                    "enumeration_events": list(
+                        engine_solver_metadata.get(
+                            "stage1_candidate_enumeration_events"
+                        )
+                        or []
                     ),
                     "candidates": candidate_rows,
                 }

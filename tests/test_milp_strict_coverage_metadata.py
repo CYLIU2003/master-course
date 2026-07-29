@@ -251,8 +251,20 @@ def test_stage1_path_cover_lower_bound_reaches_vehicle_day_cost_bound() -> None:
     assert result.solver_metadata[
         "stage1_analytical_objective_lower_bound_semantics"
     ] == (
-        "strict_path_cover_vehicle_day_count_times_nonnegative_"
-        "weighted_vehicle_usage_cost"
+        "sum_of_strict_path_cover_vehicle_usage_cost_floor_"
+        "and_optimistic_weather_energy_fuel_cost_floor"
+    )
+    assert result.solver_metadata[
+        "stage1_vehicle_usage_analytical_lower_bound"
+    ] == pytest.approx(40_000.0)
+    assert result.solver_metadata[
+        "stage1_analytical_weather_energy_fuel_lower_bound"
+    ] == pytest.approx(0.0)
+    assert (
+        result.solver_metadata[
+            "stage1_analytical_total_objective_certificate_eligible"
+        ]
+        is True
     )
 
 

@@ -3,11 +3,10 @@
 Status date: 2026-07-29
 Code status: slot-indexed Stage 1 energy recourse, multi-candidate Stage 2
 evaluation, explicit same-service-date PV controls, and an HTTP-only frontend
-pair runner are implemented. Focused regression (`85 passed`), full regression
-(`1056 passed`), compileall, and diff validation pass. The rain scenario's
-single non-PV BESS-terminal-policy mismatch was aligned and a repeat audit
-found zero remaining non-weather control mismatches. A clean implementation
-commit exists; fresh high/low-PV executions from its frozen SHA remain required.
+pair runner are implemented. The current follow-up focused regression passes
+(`103 passed`) and the complete suite passes (`1061 passed`). Final
+compile/diff validation, a new clean commit, and fresh high/low-PV executions
+from that frozen SHA remain required.
 Teacher release status: **BLOCKED**
 
 The first frozen attempt at
@@ -28,6 +27,16 @@ IDs in both diagnostic prepared inputs and materializes 264 trips; 264 is not a
 code constant. The runner now sends those 16 IDs plus the shared explicit
 SOC/terminal/ICE-fuel and cost-component controls and rejects route-count drift
 immediately.
+
+The third frozen attempt at
+`92c4f36e934ac10a4b12dd7b45aae6068ac6483f` is retained under
+`output/formal_pair_20260730_diagnostic_attempt3`. Both fresh 264-trip cases
+completed 24/24 Rolling, physical validation, terminal SOC, executed-day
+accounting, final reconciliation, and 229/229 artifact checks. It is still
+diagnostic and blocked because only one assignment candidate was evaluated,
+the run gate mishandled a valid zero-unserved counter, Phase 4 contained an
+unaccounted vehicle-discharge sink, the rain certified gap was 10.666%, and an
+unchanged assignment had no twenty-alternative cost audit.
 
 This file is the single current blocker register. Older rolling remediation
 documents are historical specifications and are marked resolved/superseded.
@@ -72,8 +81,25 @@ compatible charger ports and power, BEV SOC, per-slot PV/grid/BESS balance,
 BESS terminal SOC, import limits and overage, peak demand, and enabled
 accounting terms. The aggregate whole-day proxy is diagnostic only. Formal
 requests evaluate multiple distinct Stage 1 assignments in exact Stage 2 and
-select the feasible candidate with minimum canonical actual cost. This remains
-a bounded two-stage method and does not establish an integrated global optimum.
+select the feasible candidate with minimum canonical actual cost. Explicit
+trip-level powertrain-pattern no-good cuts prevent candidate collection from
+degenerating into same-type vehicle-label symmetries. Opposite-powertrain
+whole-duty swaps are partial MIP starts only: the unchanged Stage 1 model must
+accept them, and they add no weather bias, cost term, or physical exemption.
+A 264-trip diagnostic found seven such alternatives in a 36-second reserve and
+all eight total candidates passed exact Stage 2, but the archived prepared
+input and dirty diagnostic context make that mechanics evidence only. This
+remains a bounded two-stage method and does not establish an integrated global
+optimum.
+
+The follow-up also separates Gurobi's raw bound from a weather-sensitive
+analytical floor combining strict path-cover vehicle usage and an optimistic
+direct service-energy/fuel floor. It changes no model coefficient and fails
+closed if omitted objective costs are not known nonnegative. Integrated Phase
+4 now forbids unaccounted vehicle discharge and uses the same `1e-9` physical
+numeric contract as Stage 2. Sunny and rain small integrated-oracle reruns are
+now physically valid and accounting matched; they do not replace the required
+fresh full-scope HTTP runs.
 
 Prepare now records the common 2025-08-05 service date separately from each PV
 source date. The new HTTP-only runner must use fresh prepared inputs and the
@@ -256,14 +282,15 @@ without size or SHA-256 mismatch. The charger evidence must preserve concurrent
 port count and aggregate power rather than only the maximum vehicle power.
 This figure-bundle status does not override research-release blockers.
 
-### B2 — Full-scale Stage 1 performance and gap are unmeasured
+### B2 — Corrected full-scale Stage 1 performance and gap are unmeasured
 
-The slot-indexed recourse, systematic solution pool, and multi-candidate Stage
-2 evaluation change Stage 1 size, lower-bound strength, and total runtime. No
-prepared-scope full run has yet measured runtime, raw Gurobi gap, certified
-gap, node count, first incumbent, candidate count, numeric scaling, or feedback
-iterations. Until a run reaches the predeclared gap, it is a feasible candidate
-only.
+The slot-indexed recourse, analytical certificate, powertrain-pattern
+enumeration, and multi-candidate Stage 2 evaluation change lower-bound
+strength and total runtime. The archived diagnostic preflight measured only
+candidate mechanics. No fresh clean-commit HTTP pair has yet measured the
+corrected runtime, raw Gurobi gap, certified gap, node count, first incumbent,
+candidate count, numeric scaling, or feedback iterations. Until a formal run
+reaches the predeclared gap, it is a feasible candidate only.
 
 ### B3 — Stage 1/Stage 2 decomposition is not an integrated global optimum
 
