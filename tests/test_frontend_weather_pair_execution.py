@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from types import ModuleType
 
+import pytest
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RUNNER_PATH = REPO_ROOT / "scripts" / "run_frontend_controlled_pv_pair.py"
@@ -85,6 +87,12 @@ def test_prepare_payload_separates_service_date_from_pv_source() -> None:
     assert sunny["selected_depot_ids"] == rain["selected_depot_ids"] == [
         "tsurumaki"
     ]
+    assert (
+        sunny["selected_route_ids"]
+        == rain["selected_route_ids"]
+        == list(runner.TARGET_ROUTE_IDS_BY_DEPOT["tsurumaki"])
+    )
+    assert len(sunny["selected_route_ids"]) == 16
     sunny_settings = sunny["simulation_settings"]
     rain_settings = rain["simulation_settings"]
     assert (
@@ -102,6 +110,20 @@ def test_prepare_payload_separates_service_date_from_pv_source() -> None:
     )
     assert sunny_settings["enable_weather_operation_policy"] is False
     assert rain_settings["enable_weather_operation_policy"] is False
+    for field, expected in (
+        ("initial_ice_fuel_percent", 100.0),
+        ("min_ice_fuel_percent", 10.0),
+        ("max_ice_fuel_percent", 90.0),
+        ("final_soc_floor_percent", 20.0),
+        ("final_soc_target_percent", 80.0),
+        ("final_soc_target_tolerance_percent", 20.0),
+    ):
+        assert sunny_settings[field] == rain_settings[field] == expected
+    assert (
+        sunny_settings["cost_component_flags"]
+        == rain_settings["cost_component_flags"]
+        == runner.CONTROLLED_COST_COMPONENT_FLAGS
+    )
 
 
 def test_optimization_payloads_match_except_fresh_prepared_id() -> None:
@@ -151,6 +173,8 @@ def test_case_execution_uses_formal_timeout_for_synchronous_prepare(
                 response = {
                     "ready": True,
                     "preparedInputId": "prepared-fresh-timeout-test",
+                    "routeCount": 16,
+                    "tripCount": 264,
                 }
             elif path.endswith("/run-optimization"):
                 response = {"job_id": "job-timeout-test"}
@@ -194,6 +218,53 @@ def test_case_execution_uses_formal_timeout_for_synchronous_prepare(
         "/api/scenarios/scenario-timeout-test/run-optimization",
         987.0,
     )
+
+
+def test_case_execution_fails_closed_on_materialized_route_scope_drift(
+    tmp_path: Path,
+) -> None:
+    runner = _load_runner()
+
+    class DriftedPrepareClient:
+        def request_json(
+            self,
+            method: str,
+            path: str,
+            payload: dict | None = None,
+            *,
+            timeout_seconds: float = 120.0,
+        ) -> tuple[dict, str]:
+            del method, payload, timeout_seconds
+            assert path.endswith("/simulation/prepare")
+            response = {
+                "ready": True,
+                "preparedInputId": "prepared-drifted-scope",
+                "routeCount": 56,
+                "tripCount": 974,
+            }
+            return response, json.dumps(response)
+
+    with pytest.raises(
+        RuntimeError,
+        match="Prepare route scope mismatch: requested 16, materialized 56",
+    ):
+        runner._execute_case(
+            name="sunny",
+            scenario_id="scenario-scope-drift-test",
+            prepare_payload=runner.build_prepare_payload(
+                depot_id="tsurumaki",
+                service_id="WEEKDAY",
+                service_date="2025-08-05",
+                pv_source_date="2025-08-05",
+                comparison_role="baseline",
+            ),
+            client=DriftedPrepareClient(),
+            output_dir=tmp_path,
+            timeout_seconds=987.0,
+            poll_interval_seconds=0.0,
+            frozen_sha="a" * 40,
+            log=[],
+        )
 
 
 def test_vehicle_trip_assignments_are_complete_and_chronological() -> None:

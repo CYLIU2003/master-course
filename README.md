@@ -262,6 +262,8 @@ simulation artifact, not an automatically accepted research result.
   fresh Prepare, submits and polls the ordinary BFF optimization endpoint,
   records exact request/response payloads, runs the two cases sequentially,
   applies the formal job timeout to the synchronous Prepare/submit requests,
+  sends the audited 16-route Tsurumaki scope and common explicit SOC/ICE-fuel
+  fleet controls, and rejects any materialized route-count drift immediately,
   checks the pair controls and artifacts, and packages the evidence. Any failed
   run, pair, oracle, accounting, physical, Rolling, gap, or provenance gate
   keeps the experiment blocked.

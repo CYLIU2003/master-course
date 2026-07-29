@@ -4,7 +4,7 @@ Status date: 2026-07-29
 Code status: slot-indexed Stage 1 energy recourse, multi-candidate Stage 2
 evaluation, explicit same-service-date PV controls, and an HTTP-only frontend
 pair runner are implemented. Focused regression (`85 passed`), full regression
-(`1055 passed`), compileall, and diff validation pass. The rain scenario's
+(`1056 passed`), compileall, and diff validation pass. The rain scenario's
 single non-PV BESS-terminal-policy mismatch was aligned and a repeat audit
 found zero remaining non-weather control mismatches. A clean implementation
 commit exists; fresh high/low-PV executions from its frozen SHA remain required.
@@ -17,6 +17,17 @@ Prepare exceeded the HTTP client's former 120-second default in both cases, so
 no optimization job ran. The runner now uses the declared formal job timeout
 for Prepare and submit; a new clean commit and untouched output directory are
 required for the next attempt.
+
+The second frozen attempt at
+`3ee1c2f46a7d3bbbfa1244baf61fd7b5319188f5` is retained at the same
+requested experiment name until archival before retry. It failed before the
+solver because an empty route selection expanded to 56 routes/974 trips and
+the Prepare payload omitted the explicit ICE initial-fuel controls required by
+the selected-depot fleet contract. The instructed scope is the same 16 route
+IDs in both diagnostic prepared inputs and materializes 264 trips; 264 is not a
+code constant. The runner now sends those 16 IDs plus the shared explicit
+SOC/terminal/ICE-fuel and cost-component controls and rejects route-count drift
+immediately.
 
 This file is the single current blocker register. Older rolling remediation
 documents are historical specifications and are marked resolved/superseded.

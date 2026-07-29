@@ -36,6 +36,51 @@ EXPECTED_PV_KWH = {
     "rain": 101.1143,
 }
 POWERTRAIN_ELECTRIC = {"BEV", "PHEV", "FCEV"}
+TARGET_ROUTE_IDS_BY_DEPOT = {
+    # Canonical 16-variant Tsurumaki scope recovered identically from both
+    # diagnostic prepared inputs named in the execution instruction.  The
+    # inputs themselves are never executed or copied into formal evidence.
+    "tsurumaki": (
+        "odpt-route-0b2ab9e74da1",
+        "odpt-route-206aa2ef5f3a",
+        "odpt-route-3da308a5063b",
+        "odpt-route-4109a31659bc",
+        "odpt-route-495b9472e61b",
+        "odpt-route-5274690b4073",
+        "odpt-route-599baa9cb2fb",
+        "odpt-route-733dcb7dff82",
+        "odpt-route-844516ff5c40",
+        "odpt-route-a66f2ed85ff9",
+        "odpt-route-a6b5e7bf98f7",
+        "odpt-route-af678f3a3006",
+        "odpt-route-d398fae40154",
+        "odpt-route-e046125fefb1",
+        "odpt-route-e3a3088fd8ba",
+        "odpt-route-fb12ae43f5b0",
+    ),
+}
+CONTROLLED_COST_COMPONENT_FLAGS = {
+    "vehicle_fixed_cost": False,
+    "vehicle_usage_cost": True,
+    "driver_cost": False,
+    "electricity_cost": True,
+    "fuel_cost": True,
+    "demand_charge_cost": True,
+    "co2_cost": True,
+    "unserved_penalty": True,
+    "switch_cost": True,
+    "battery_degradation_cost": True,
+    "deviation_cost": False,
+    "contract_overage_penalty": True,
+    "charge_session_start_penalty": False,
+    "slot_concurrency_penalty": False,
+    "early_charge_penalty": False,
+    "soc_upper_buffer_penalty": False,
+    "final_soc_target_penalty": False,
+    "opportunistic_topup_deficit_penalty": False,
+    "grid_to_bus_priority_penalty": True,
+    "grid_to_bess_priority_penalty": True,
+}
 
 
 def _utc_now() -> str:
@@ -112,11 +157,14 @@ def build_prepare_payload(
 
     if comparison_role not in {"baseline", "pv_curve_counterfactual"}:
         raise ValueError(f"Unsupported comparison role: {comparison_role}")
+    route_ids = TARGET_ROUTE_IDS_BY_DEPOT.get(depot_id)
+    if not route_ids:
+        raise ValueError(
+            f"No controlled route-scope contract exists for depot {depot_id}"
+        )
     return {
         "selected_depot_ids": [depot_id],
-        # Empty means every route variant selected for this depot.  The BFF
-        # materializes the concrete route IDs and hashes the resulting trips.
-        "selected_route_ids": [],
+        "selected_route_ids": list(route_ids),
         "day_type": service_id,
         "service_date": service_date,
         "service_dates": [service_date],
@@ -128,6 +176,28 @@ def build_prepare_payload(
         "simulation_settings": {
             "use_selected_depot_vehicle_inventory": True,
             "use_selected_depot_charger_inventory": True,
+            # These non-PV controls reproduce the explicitly materialized
+            # selected-depot fleet state shared by the two diagnostic inputs.
+            # Per-vehicle inventory SOC remains authoritative; the percentages
+            # below define common bounds/terminal and ICE initialization only.
+            "initial_soc": 0.8,
+            "initial_soc_percent": 0.8,
+            "soc_min": 0.2,
+            "soc_max": 0.9,
+            "final_soc_floor_percent": 20.0,
+            "final_soc_target_percent": 80.0,
+            "final_soc_target_tolerance_percent": 20.0,
+            "initial_ice_fuel_percent": 100.0,
+            "min_ice_fuel_percent": 10.0,
+            "max_ice_fuel_percent": 90.0,
+            "default_ice_tank_capacity_l": 300.0,
+            "disable_vehicle_acquisition_cost": True,
+            "enable_vehicle_cost": False,
+            "enable_driver_cost": False,
+            "enable_other_cost": False,
+            "cost_component_flags": dict(
+                CONTROLLED_COST_COMPONENT_FLAGS
+            ),
             "solver_mode": "mode_milp_only",
             "objective_mode": "total_cost",
             "fixed_route_band_mode": True,
@@ -154,6 +224,8 @@ def build_prepare_payload(
                 comparison_role == "pv_curve_counterfactual"
             ),
             "enable_weather_operation_policy": False,
+            "co2_price_source": "manual",
+            "solcast_typical_weather_class": "auto",
             "random_seed": 42,
             "experiment_method": (
                 "same_service_date_pv_counterfactual_frontend_http"
@@ -345,6 +417,21 @@ def _execute_case(
             f"{name} Prepare was not ready: "
             f"{json.dumps(prepare_response, ensure_ascii=False)}"
         )
+    requested_route_count = len(
+        list(prepare_payload.get("selected_route_ids") or ())
+    )
+    if (
+        requested_route_count <= 0
+        or int(prepare_response.get("routeCount") or 0)
+        != requested_route_count
+    ):
+        raise RuntimeError(
+            f"{name} Prepare route scope mismatch: requested "
+            f"{requested_route_count}, materialized "
+            f"{prepare_response.get('routeCount')}"
+        )
+    if int(prepare_response.get("tripCount") or 0) <= 0:
+        raise RuntimeError(f"{name} Prepare materialized no trips")
     prepared_input_id = str(
         prepare_response.get("preparedInputId") or ""
     ).strip()

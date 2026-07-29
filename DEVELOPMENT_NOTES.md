@@ -46,7 +46,7 @@
   runner boundary.
 - Verification before freezing: the requested focused regression plus the
   HTTP/control tests passed (`85 passed`), the complete suite passed
-  (`1055 passed`), `compileall` passed for `src`, `bff`, `scripts`, and
+  (`1056 passed`), `compileall` passed for `src`, `bff`, `scripts`, and
   `tools`, and `git diff --check` reported no whitespace error. A read-only
   scenario comparison found one non-PV mismatch in the rain case (BESS
   terminal policy); the existing alignment service was applied to the rain
@@ -61,6 +61,18 @@
   `BLOCKED`. The runner now applies its explicit formal job timeout to Prepare
   and submit as well as polling, preventing a timed-out Prepare from advancing
   to the next case.
+- The second frozen attempt at
+  `3ee1c2f46a7d3bbbfa1244baf61fd7b5319188f5` is also preserved as
+  diagnostic evidence. It exposed two independent Prepare-contract defects:
+  an empty `selected_route_ids` expanded to all 56 depot routes and 974 trips
+  instead of retaining the instructed common 16-route/264-trip scope, and
+  omitted ICE initialization fields produced no explicit `initialFuelL` for
+  the 25 selected-depot ICE vehicles. Both jobs therefore failed closed in the
+  fleet contract before solving. The HTTP runner now sends the identical
+  audited 16 route IDs in both cases, sends the common SOC/terminal/ICE-fuel
+  and cost-component controls that generated the earlier explicit fleet-state
+  contract, and rejects any Prepare route-count drift. The trip count remains
+  materialized data and is not hard-coded.
 - Operational research evidence is still **BLOCKED**. The reviewed
   implementation has a clean candidate commit, but both scenarios must still
   finish fresh Prepare, day-ahead optimization, 24/24 hourly Rolling,
