@@ -753,13 +753,21 @@ class FeasibilityChecker:
                             vehicle,
                             last_problem_trip,
                         )
-                        target_slot_idx = post_return_target_slot_index(problem, day_idx)
+                        target_slot_idx = post_return_target_slot_index(
+                            problem,
+                            day_idx,
+                        )
                         first_slot = min(first_slot, return_event_slot_idx)
-                        last_slot = max(last_slot, target_slot_idx)
+                        last_slot = max(
+                            last_slot,
+                            target_slot_idx,
+                            return_event_slot_idx,
+                        )
                 else:
                     target_kwh = None
 
             soc_at_target_slot = None
+            soc_after_return_event = None
             for slot_idx in range(first_slot, last_slot + 1):
                 if (
                     return_event_slot_idx is not None
@@ -768,6 +776,12 @@ class FeasibilityChecker:
                 ):
                     soc -= return_event_energy_kwh
                     return_event_applied = True
+                    # Capture the state before any charging in the boundary
+                    # slot.  A return completed within the final modeled slot
+                    # has a ceil boundary one past the final slot index; the
+                    # day-end target must include that return energy without
+                    # borrowing charging from the following day.
+                    soc_after_return_event = soc
                     floor_kwh = final_soc_floor_kwh(problem, vehicle, cap_kwh=capacity)
                     if soc + 1.0e-6 < floor_kwh:
                         errors.append(
@@ -860,7 +874,19 @@ class FeasibilityChecker:
                     soc_at_target_slot = soc
 
             if target_kwh is not None:
-                checked_soc = soc if soc_at_target_slot is None else soc_at_target_slot
+                if (
+                    return_event_slot_idx is not None
+                    and target_slot_idx is not None
+                    and return_event_slot_idx > target_slot_idx
+                    and soc_after_return_event is not None
+                ):
+                    checked_soc = soc_after_return_event
+                else:
+                    checked_soc = (
+                        soc
+                        if soc_at_target_slot is None
+                        else soc_at_target_slot
+                    )
                 if checked_soc + 1.0e-6 < target_kwh:
                     errors.append(
                         f"[SOC_TARGET] duty={duty.duty_id} vehicle={vehicle_id} post-return target SOC {checked_soc:.2f} < required {target_kwh:.2f}"

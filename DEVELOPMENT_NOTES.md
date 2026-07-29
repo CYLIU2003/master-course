@@ -113,10 +113,33 @@
   reserve; all eight total candidates were Stage 2 optimal and canonically
   evaluable. This preflight used an old prepared input solely to validate
   enumeration mechanics and is not frontend or formal comparison evidence.
+- The fourth frozen HTTP attempt at
+  `19644e4449ec4a6fc7314d067cfba9dad944da03` is preserved under
+  `output/formal_pair_20260730_diagnostic_attempt4` (and the matching ZIP).
+  Sunny job `070606f1-89fb-4f1d-880e-1a0d374746b6` completed 264/264
+  trips, 21/21 feasible candidates, 24/24 Rolling, independent physical
+  validation, terminal SOC, executed-day reconciliation, and 229/229 artifact
+  checks; its raw/certified gaps were 9.5801%/3.4503%. Rain job
+  `4e06bb9c-c296-45f6-abed-32d9fd0d754d` generated 21/21 Stage 2-feasible
+  candidates but failed before Rolling. The selected candidate's Stage 2
+  terminal SOC was 218.14836 kWh, while the independent replay incorrectly
+  checked the pre-return final-slot state of 219.72756 kWh. Its 23:14 trip
+  arrival plus four-minute return completed at 23:18; the missing 1.5792 kWh
+  was exactly the canonical terminal-return energy.
+- The independent SOC replay now extends through the ceil boundary at which a
+  final return completes and, when that boundary is beyond the nominal final
+  slot index, evaluates the post-return state captured before any following-day
+  charging. This aligns the replay with Stage 2's transition-ending-at-event
+  convention without widening any SOC tolerance. Candidate selection now also
+  runs `FeasibilityChecker` for every Stage 2 incumbent and requires Stage 2
+  feasibility, canonical cost evaluability, and independent physical
+  feasibility simultaneously. JSON/CSV candidate evidence records the
+  physical status, error count, and error hash.
 - Operational research evidence is still **BLOCKED**. The reviewed
-  implementation passes the corrected focused regression (`103 passed`) and
-  complete suite (`1061 passed`). It must still pass final compile/diff review,
-  be committed and frozen again, and then both scenarios must finish fresh
+  implementation passes the corrected focused regression (`75 passed`) and
+  complete suite (`1062 passed`); compileall and `git diff --check` also pass.
+  It must still be committed and frozen again, and then both scenarios must
+  finish fresh
   Prepare, day-ahead optimization, 24/24 hourly Rolling,
   physical/accounting/artifact validation, controlled-pair acceptance, and
   packaging from that same clean SHA.

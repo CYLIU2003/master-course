@@ -1,12 +1,14 @@
 # Current research release blockers
 
-Status date: 2026-07-29
+Status date: 2026-07-30
 Code status: slot-indexed Stage 1 energy recourse, multi-candidate Stage 2
 evaluation, explicit same-service-date PV controls, and an HTTP-only frontend
-pair runner are implemented. The current follow-up focused regression passes
-(`103 passed`) and the complete suite passes (`1061 passed`). Final
-compile/diff validation, a new clean commit, and fresh high/low-PV executions
-from that frozen SHA remain required.
+pair runner are implemented. A final-slot return-boundary defect exposed by
+the fourth HTTP attempt is corrected, and candidate selection now requires an
+independent physical check in addition to Stage 2 feasibility. The corrected
+focused regression passes (`75 passed`) and the complete suite passes
+(`1062 passed`); compileall and `git diff --check` also pass. A new clean
+commit and fresh high/low-PV executions from that frozen SHA remain required.
 Teacher release status: **BLOCKED**
 
 The first frozen attempt at
@@ -37,6 +39,20 @@ diagnostic and blocked because only one assignment candidate was evaluated,
 the run gate mishandled a valid zero-unserved counter, Phase 4 contained an
 unaccounted vehicle-discharge sink, the rain certified gap was 10.666%, and an
 unchanged assignment had no twenty-alternative cost audit.
+
+The fourth frozen attempt at
+`19644e4449ec4a6fc7314d067cfba9dad944da03` is retained under
+`output/formal_pair_20260730_diagnostic_attempt4`. Sunny completed 264/264
+trips, 21/21 feasible candidates, 24/24 Rolling, physical validation,
+accounting reconciliation, and 229/229 artifacts with raw/certified Stage 1
+gaps of 9.5801%/3.4503%. Rain evaluated 21/21 Stage 2-feasible candidates but
+failed before Rolling because the independent SOC replay checked a 23:14
+trip's pre-return final-slot SOC instead of the state after its four-minute
+terminal return. The 1.5792 kWh discrepancy equals that return movement
+exactly. The replay now advances through the return-completion boundary without
+borrowing next-day charging, and candidate selection independently rejects any
+physically invalid Stage 2 incumbent. This fix still requires a fresh clean
+commit and complete two-case HTTP rerun; attempt 4 remains diagnostic.
 
 This file is the single current blocker register. Older rolling remediation
 documents are historical specifications and are marked resolved/superseded.
@@ -81,7 +97,9 @@ compatible charger ports and power, BEV SOC, per-slot PV/grid/BESS balance,
 BESS terminal SOC, import limits and overage, peak demand, and enabled
 accounting terms. The aggregate whole-day proxy is diagnostic only. Formal
 requests evaluate multiple distinct Stage 1 assignments in exact Stage 2 and
-select the feasible candidate with minimum canonical actual cost. Explicit
+select the minimum-canonical-cost candidate only when exact Stage 2,
+canonical-cost evaluation, and the independent physical validator all pass.
+Candidate JSON/CSV records the physical result and error hash. Explicit
 trip-level powertrain-pattern no-good cuts prevent candidate collection from
 degenerating into same-type vehicle-label symmetries. Opposite-powertrain
 whole-duty swaps are partial MIP starts only: the unchanged Stage 1 model must

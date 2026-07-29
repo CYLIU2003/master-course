@@ -84,7 +84,11 @@ simulation artifact, not an automatically accepted research result.
 - Startup, inter-trip, and return deadhead SOC events use the same canonical
   energy functions in the solver and independent validator. For
   `return_to_initial`, the first depot deadhead is part of the daily energy
-  balance. Fixed BESS terminal targets are equalities; the solver feasibility
+  balance. If a final return completes inside the last modeled slot, the
+  independent replay advances through the return-completion boundary and
+  checks the SOC immediately after that return; it neither checks the
+  pre-return slot state nor borrows charging from the following day. Fixed BESS
+  terminal targets are equalities; the solver feasibility
   tolerance is stage-specific: Stage 1 defaults to `1e-6`, while Stage 2 uses
   `1e-9`. Stage 2 also fixes `IntFeasTol=1e-9` so a binary physical-charger
   assignment cannot be treated as zero while linked continuous charging power
@@ -258,8 +262,11 @@ simulation artifact, not an automatically accepted research result.
   excludes already evaluated BEV/ICE trip patterns. Opposite-powertrain
   whole-duty swaps are supplied only as partial MIP starts to accelerate that
   unchanged weather-aware model; they are never accepted directly and add no
-  objective bias or physical exemption. Every retained assignment is persisted
-  and the feasible candidate with the lowest canonical actual cost is selected.
+  objective bias or physical exemption. Every retained assignment is persisted,
+  and the candidate with the lowest canonical actual cost is selected only
+  after both Stage 2 and the independent canonical physical validator accept
+  it. Candidate artifacts persist the independent validation status, error
+  count, and error hash; a Stage 2 incumbent alone is not selectable.
   Only a Gurobi `INFEASIBLE` certificate may return a failed assignment to
   Stage 1 as an IIS-backed no-good cut; a `TIME_LIMIT` without an incumbent
   does not justify such a feasibility cut. This remains a bounded two-stage

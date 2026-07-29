@@ -516,6 +516,14 @@ def test_candidate_audit_enumerates_distinct_powertrain_patterns() -> None:
     assert len(candidates) == 2
     assert len(powertrain_patterns) == 2
     assert all(candidate["feasible"] for candidate in candidates)
+    assert all(
+        candidate["physical_validation_feasible"]
+        for candidate in candidates
+    )
+    assert all(
+        candidate["physical_validation_error_count"] == 0
+        for candidate in candidates
+    )
     assert (
         metadata[
             "stage1_candidate_powertrain_pattern_no_good_cut_count"

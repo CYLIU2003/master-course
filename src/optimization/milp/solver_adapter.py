@@ -16,6 +16,7 @@ from src.gurobi_runtime import ensure_gurobi, is_gurobi_available
 from src.objective_modes import normalize_objective_mode
 from src.optimization.common.cost_components import normalize_cost_component_flags
 from src.optimization.common.evaluator import CostEvaluator
+from src.optimization.common.feasibility import FeasibilityChecker
 from src.optimization.common.bess_terminal_policy import (
     resolve_bess_terminal_soc_target_kwh,
 )
@@ -6450,6 +6451,7 @@ class GurobiMILPAdapter:
             (problem.metadata or {}).get("phase3_diagnostics_dir") or ""
         ).strip()
         evaluator = CostEvaluator()
+        physical_checker = FeasibilityChecker()
         candidate_evaluation_initial_budget_sec = (
             _remaining_stage_budget_sec(
                 deadline_monotonic=feedback_global_deadline,
@@ -6569,7 +6571,17 @@ class GurobiMILPAdapter:
             )
             canonical_cost: Optional[float] = None
             evaluation_feasible = False
+            physical_validation_feasible = False
+            physical_validation_errors: Tuple[str, ...] = ()
             if candidate_feasible:
+                physical_report = physical_checker.evaluate(
+                    candidate_problem,
+                    candidate_final_plan,
+                )
+                physical_validation_feasible = bool(physical_report.feasible)
+                physical_validation_errors = tuple(
+                    str(error) for error in physical_report.errors
+                )
                 breakdown = evaluator.evaluate(
                     candidate_problem,
                     candidate_final_plan,
@@ -6669,11 +6681,33 @@ class GurobiMILPAdapter:
                     ),
                     "stage2_actual_canonical_cost_jpy": canonical_cost,
                     "feasible": bool(
-                        candidate_feasible and evaluation_feasible
+                        candidate_feasible
+                        and evaluation_feasible
+                        and physical_validation_feasible
                     ),
                     "stage2_feasible": candidate_feasible,
                     "canonical_evaluation_feasible": (
                         evaluation_feasible
+                    ),
+                    "physical_validation_feasible": (
+                        physical_validation_feasible
+                    ),
+                    "physical_validation_error_count": len(
+                        physical_validation_errors
+                    ),
+                    "physical_validation_error_hash": (
+                        hashlib.sha256(
+                            json.dumps(
+                                physical_validation_errors,
+                                ensure_ascii=False,
+                                separators=(",", ":"),
+                            ).encode("utf-8")
+                        ).hexdigest()
+                        if physical_validation_errors
+                        else ""
+                    ),
+                    "physical_validation_errors": list(
+                        physical_validation_errors
                     ),
                     "iis_hash": iis_hash,
                     "used_bev": used_bev,
@@ -6716,6 +6750,7 @@ class GurobiMILPAdapter:
             if (
                 candidate_feasible
                 and evaluation_feasible
+                and physical_validation_feasible
                 and canonical_cost is not None
             ):
                 feasible_candidate_results.append(
@@ -6743,6 +6778,7 @@ class GurobiMILPAdapter:
             ),
             "stage1_stage2_candidate_selection_semantics": (
                 "minimum_canonical_actual_cost_among_stage2_feasible_"
+                "independently_physically_valid_"
                 "time_bounded_primary_pool_and_powertrain_pattern_no_good_"
                 "enumeration_candidates"
             ),

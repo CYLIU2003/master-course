@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from bff.services.optimization_run.vehicle_timeline import vehicle_ids_with_timeline_activity
 from src.dispatch.models import DeadheadRule, DispatchContext, DutyLeg, Trip, VehicleDuty, VehicleProfile
 from src.optimization.alns.operators_repair import _with_recomputed_charging
@@ -414,6 +416,157 @@ def test_initial_deadhead_is_counted_with_return_to_initial_soc() -> None:
 
     assert report.feasible, report.errors
     assert not any("exceeds return-to-initial" in error for error in report.errors)
+
+def test_final_slot_return_is_included_in_post_return_target_state() -> None:
+    context = DispatchContext(
+        service_date="2026-04-24",
+        trips=[
+            Trip(
+                trip_id="late-return",
+                route_id="r1",
+                origin="Depot",
+                destination="Terminal",
+                departure_time="22:50",
+                arrival_time="23:14",
+                distance_km=10.0,
+                allowed_vehicle_types=("BEV",),
+                origin_stop_id="DEPOT",
+                destination_stop_id="B",
+            )
+        ],
+        turnaround_rules={},
+        deadhead_rules={
+            ("DEPOT", "Depot"): DeadheadRule("DEPOT", "Depot", 0),
+            ("B", "DEPOT"): DeadheadRule("B", "DEPOT", 4),
+        },
+        vehicle_profiles={
+            "BEV": VehicleProfile(
+                vehicle_type="BEV",
+                battery_capacity_kwh=100.0,
+                energy_consumption_kwh_per_km=1.0,
+            )
+        },
+        location_aliases={"Depot": ("DEPOT",)},
+    )
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="s_final_slot_return",
+            horizon_start="00:00",
+            horizon_end="00:00",
+            timestep_min=60,
+        ),
+        dispatch_context=context,
+        trips=(
+            ProblemTrip(
+                trip_id="late-return",
+                route_id="r1",
+                origin="DEPOT",
+                destination="B",
+                departure_min=22 * 60 + 50,
+                arrival_min=23 * 60 + 14,
+                distance_km=10.0,
+                allowed_vehicle_types=("BEV",),
+                energy_kwh=10.0,
+            ),
+        ),
+        vehicles=(
+            ProblemVehicle(
+                vehicle_id="bev-1",
+                vehicle_type="BEV",
+                home_depot_id="DEPOT",
+                initial_soc=80.0,
+                battery_capacity_kwh=100.0,
+                reserve_soc=20.0,
+                energy_consumption_kwh_per_km=1.0,
+            ),
+        ),
+        vehicle_types=(
+            ProblemVehicleType(
+                vehicle_type_id="BEV",
+                powertrain_type="BEV",
+                battery_capacity_kwh=100.0,
+                reserve_soc=20.0,
+                energy_consumption_kwh_per_km=1.0,
+            ),
+        ),
+        depots=(
+            ProblemDepot(
+                depot_id="DEPOT",
+                name="Depot",
+                charger_ids=("chg-1",),
+                import_limit_kw=100.0,
+            ),
+        ),
+        chargers=(ChargerDefinition("chg-1", "DEPOT", 60.0),),
+        price_slots=tuple(
+            EnergyPriceSlot(slot_index=idx, grid_buy_yen_per_kwh=10.0)
+            for idx in range(24)
+        ),
+        metadata={
+            "bev_terminal_soc_policy": "return_to_initial",
+            "final_soc_floor_percent": 20.0,
+            "deadhead_speed_kmh": 18.0,
+        },
+    )
+    plan = AssignmentPlan(
+        duties=(
+            VehicleDuty(
+                duty_id="duty-1",
+                vehicle_type="BEV",
+                legs=(
+                    DutyLeg(
+                        trip=context.trips[0],
+                        deadhead_from_prev_min=0,
+                    ),
+                ),
+            ),
+        ),
+        charging_slots=(
+            # Service 10 + final return 1.2 = 11.2 kWh.  The return
+            # completes at 23:18, whose SOC boundary is slot 24.
+            ChargingSlot(
+                vehicle_id="bev-1",
+                slot_index=0,
+                charger_id="chg-1",
+                charge_kw=11.2 / 0.95,
+            ),
+        ),
+        served_trip_ids=("late-return",),
+        metadata={"duty_vehicle_map": {"duty-1": "bev-1"}},
+    )
+
+    report = FeasibilityChecker().evaluate(problem, plan)
+
+    assert report.feasible, report.errors
+    assert not any("exceeds return-to-initial" in error for error in report.errors)
+
+    borrowed_next_day_charge = replace(
+        plan,
+        charging_slots=(
+            ChargingSlot(
+                vehicle_id="bev-1",
+                slot_index=0,
+                charger_id="chg-1",
+                charge_kw=10.0 / 0.95,
+            ),
+            ChargingSlot(
+                vehicle_id="bev-1",
+                slot_index=24,
+                charger_id="chg-1",
+                charge_kw=1.2 / 0.95,
+            ),
+        ),
+    )
+    borrowed_report = FeasibilityChecker().evaluate(
+        problem,
+        borrowed_next_day_charge,
+    )
+
+    assert not borrowed_report.feasible
+    assert any(
+        "post-return target SOC 78.80 < required 80.00" in error
+        for error in borrowed_report.errors
+    )
 
 
 def test_post_return_target_violation_is_reported_when_overnight_charge_is_blocked() -> None:
