@@ -1190,6 +1190,26 @@ class ProblemBuilder:
                     "comparison_type",
                     "actual_service_day",
                 ),
+                "weather_comparison_contract": {
+                    "comparison_type": service_calendar_validation.get(
+                        "comparison_type",
+                        "actual_service_day",
+                    ),
+                    "calendar_policy": service_calendar_validation.get(
+                        "calendar_policy"
+                    ),
+                    "calendar_validation_status": service_calendar_validation.get(
+                        "calendar_validation_status",
+                        "matched",
+                    ),
+                    "weather_observation_date": service_calendar_validation.get(
+                        "weather_observation_date",
+                        context.service_date,
+                    ),
+                    "weather_profile_source": service_calendar_validation.get(
+                        "weather_profile_source"
+                    ),
+                },
                 "weather_observation_date": service_calendar_validation.get(
                     "weather_observation_date",
                     context.service_date,

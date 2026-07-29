@@ -169,6 +169,13 @@ required.
     remaining 13 steps passed, and a dirty full-chain probe completed 24/24
     with eligible executed-day accounting. Reporting no longer replaces a
     primary Rolling step failure with a secondary incomplete-accounting error.
+14. Tk Quick Setup and Prepare now persist the existing
+    `fixed_weekday_timetable_pv_counterfactual` declaration for the exact user
+    selection of one Sunday date, `WEEKDAY`, and `actual_date_profile`. The
+    declaration leaves the date, selected timetable rows, route scope, and PV
+    curve unchanged, and `ProblemBuilder` supplies it to Rolling's calendar
+    audit. A fresh prepared input and normal run are still required before this
+    path becomes execution evidence.
 
 ## Open blockers
 

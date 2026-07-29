@@ -156,6 +156,79 @@ def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -
     ]
 
 
+def test_apply_builder_configuration_persists_fixed_weekday_pv_policy() -> None:
+    scenario_doc = {
+        "meta": {},
+        "depots": [{"id": "dep1", "name": "Depot 1"}],
+        "routes": [{"id": "route-a", "depotId": "dep1", "routeCode": "A-1"}],
+        "vehicles": [
+            {"id": "veh-1", "depotId": "dep1", "type": "BEV", "enabled": True}
+        ],
+        "chargers": [{"id": "chg-1", "siteId": "dep1", "powerKw": 90}],
+        "vehicle_templates": [],
+        "scenario_overlay": {},
+        "simulation_config": {},
+        "dispatch_scope": {},
+        "calendar": [{"service_id": "WEEKDAY"}],
+    }
+    scenario_meta = {
+        "datasetId": "tokyu_full",
+        "datasetVersion": "v1",
+        "operatorId": "tokyu",
+        "randomSeed": 42,
+    }
+    body = PrepareSimulationBody(
+        selected_depot_ids=["dep1"],
+        selected_route_ids=["route-a"],
+        day_type="WEEKDAY",
+        simulation_settings=PrepareSimulationSettingsBody(
+            service_date="2025-08-10",
+            service_dates=["2025-08-10"],
+            weather_mode="actual_date_profile",
+            allow_fixed_weekday_timetable_pv_counterfactual=True,
+        ),
+    )
+
+    with (
+        mock.patch.object(
+            simulation_builder.store,
+            "get_scenario_document_shallow",
+            return_value=copy.deepcopy(scenario_doc),
+        ),
+        mock.patch.object(
+            simulation_builder.store,
+            "get_scenario",
+            return_value=scenario_meta,
+        ),
+        mock.patch.object(
+            simulation_builder.store,
+            "route_ids_for_selected_depots",
+            return_value=["route-a"],
+        ),
+        mock.patch.object(simulation_builder.store, "_invalidate_dispatch_artifacts"),
+        mock.patch.object(simulation_builder.store, "_save"),
+        mock.patch.object(
+            simulation_builder.store,
+            "_now_iso",
+            return_value="2026-03-22T00:00:00Z",
+        ),
+    ):
+        updated = simulation_builder.apply_builder_configuration("scenario-1", body)
+
+    simulation_config = updated["simulation_config"]
+    assert simulation_config["service_date"] == "2025-08-10"
+    assert simulation_config["service_dates"] == ["2025-08-10"]
+    assert simulation_config["allow_fixed_weekday_timetable_pv_counterfactual"] is True
+    assert (
+        simulation_config["calendar_policy"]
+        == "fixed_weekday_timetable_pv_counterfactual"
+    )
+    assert (
+        simulation_config["comparison_type"]
+        == "fixed_weekday_timetable_pv_counterfactual"
+    )
+
+
 def test_apply_builder_configuration_preserves_explicit_vehicle_initial_soc() -> None:
     scenario_doc = {
         "meta": {},

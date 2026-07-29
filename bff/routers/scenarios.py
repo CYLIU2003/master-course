@@ -59,6 +59,9 @@ from src.optimization.common.bess_terminal_policy import (
     normalize_bess_terminal_policy,
 )
 from src.optimization.common.time_axis import normalize_timestep_min
+from src.optimization.common.service_calendar import (
+    FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL,
+)
 from src.route_family_runtime import (
     normalize_direction,
     normalize_variant_type,
@@ -834,6 +837,7 @@ class UpdateQuickSetupBody(BaseModel):
     objectivePreset: Optional[str] = None
     pvProfileId: Optional[str] = None
     weatherMode: Optional[str] = None
+    allowFixedWeekdayTimetablePvCounterfactual: Optional[bool] = None
     weatherFactorScalar: Optional[float] = None
     enableWeatherOperationPolicy: Optional[bool] = None
     weatherProxyForecastPath: Optional[str] = None
@@ -1816,6 +1820,12 @@ def _builder_defaults(
         "deadheadSpeedKmh": simulation_config.get("deadhead_speed_kmh", 18.0),
         "pvProfileId": simulation_config.get("pv_profile_id"),
         "weatherMode": simulation_config.get("weather_mode") or "actual_date_profile",
+        "allowFixedWeekdayTimetablePvCounterfactual": bool(
+            simulation_config.get(
+                "allow_fixed_weekday_timetable_pv_counterfactual",
+                False,
+            )
+        ),
         "weatherFactorScalar": simulation_config.get("weather_factor_scalar"),
         "enableWeatherOperationPolicy": bool(
             simulation_config.get(
@@ -2336,6 +2346,12 @@ def _build_quick_setup_payload(
             "deadheadSpeedKmh": builder_defaults.get("deadheadSpeedKmh"),
             "pvProfileId": builder_defaults.get("pvProfileId"),
             "weatherMode": builder_defaults.get("weatherMode") or "actual_date_profile",
+            "allowFixedWeekdayTimetablePvCounterfactual": bool(
+                builder_defaults.get(
+                    "allowFixedWeekdayTimetablePvCounterfactual",
+                    False,
+                )
+            ),
             "weatherFactorScalar": builder_defaults.get("weatherFactorScalar"),
             "enableWeatherOperationPolicy": bool(
                 builder_defaults.get("enableWeatherOperationPolicy", False)
@@ -2944,6 +2960,30 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             )
         if body.weatherMode is not None:
             simulation_config["weather_mode"] = str(body.weatherMode)
+        if body.allowFixedWeekdayTimetablePvCounterfactual is not None:
+            allow_fixed_weekday_timetable = bool(
+                body.allowFixedWeekdayTimetablePvCounterfactual
+            )
+            simulation_config[
+                "allow_fixed_weekday_timetable_pv_counterfactual"
+            ] = allow_fixed_weekday_timetable
+            if allow_fixed_weekday_timetable:
+                simulation_config["calendar_policy"] = (
+                    FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL
+                )
+                simulation_config["comparison_type"] = (
+                    FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL
+                )
+            elif (
+                simulation_config.get("calendar_policy")
+                == FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL
+            ):
+                simulation_config.pop("calendar_policy", None)
+                if (
+                    simulation_config.get("comparison_type")
+                    == FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL
+                ):
+                    simulation_config.pop("comparison_type", None)
         if body.weatherFactorScalar is not None:
             simulation_config["weather_factor_scalar"] = float(body.weatherFactorScalar)
         if body.enableWeatherOperationPolicy is not None:

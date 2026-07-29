@@ -64,6 +64,7 @@ def test_build_quick_setup_payload_includes_saved_objective_weights() -> None:
             },
             "operation_time_window_enabled": False,
             "enable_weather_operation_policy": True,
+            "allow_fixed_weekday_timetable_pv_counterfactual": True,
             "weather_proxy_forecast_path": "data/weather/proxy_forecasts/old.json",
             "weather_proxy_daily_csv_path": "data/weather/processed/tokyo.csv",
             "weather_proxy_station_id": "44132",
@@ -112,6 +113,10 @@ def test_build_quick_setup_payload_includes_saved_objective_weights() -> None:
     assert payload["simulationSettings"]["costComponentFlags"]["fuel_cost"] is True
     assert payload["simulationSettings"]["operationTimeWindowEnabled"] is False
     assert payload["simulationSettings"]["enableWeatherOperationPolicy"] is True
+    assert (
+        payload["simulationSettings"]["allowFixedWeekdayTimetablePvCounterfactual"]
+        is True
+    )
     assert payload["simulationSettings"]["weatherProxyForecastPath"] == "data/weather/proxy_forecasts/old.json"
     assert payload["simulationSettings"]["weatherProxyDailyCsvPath"] == "data/weather/processed/tokyo.csv"
     assert payload["simulationSettings"]["weatherProxyStationId"] == "44132"
@@ -242,6 +247,7 @@ def test_update_quick_setup_persists_weather_proxy_state_without_validation() ->
         selectedRouteIds=["route-a"],
         dayType="WEEKDAY",
         serviceDate="2025-08-10",
+        allowFixedWeekdayTimetablePvCounterfactual=True,
         enableWeatherOperationPolicy=True,
         weatherProxyForecastPath="data/weather/proxy_forecasts/2025-08-05.json",
         weatherProxyDailyCsvPath="data/weather/processed/tokyo.csv",
@@ -270,6 +276,9 @@ def test_update_quick_setup_persists_weather_proxy_state_without_validation() ->
     simulation_config = captured["simulation_config"]
     assert isinstance(simulation_config, dict)
     assert simulation_config["service_date"] == "2025-08-10"
+    assert simulation_config["allow_fixed_weekday_timetable_pv_counterfactual"] is True
+    assert simulation_config["calendar_policy"] == "fixed_weekday_timetable_pv_counterfactual"
+    assert simulation_config["comparison_type"] == "fixed_weekday_timetable_pv_counterfactual"
     assert simulation_config["enable_weather_operation_policy"] is True
     assert simulation_config["weather_proxy_forecast_path"] == "data/weather/proxy_forecasts/2025-08-05.json"
     assert simulation_config["weather_proxy_daily_csv_path"] == "data/weather/processed/tokyo.csv"

@@ -14,6 +14,9 @@ from src.optimization.common.cost_components import (
     normalize_cost_component_flags,
 )
 from src.optimization.common.time_axis import normalize_timestep_min
+from src.optimization.common.service_calendar import (
+    FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL,
+)
 from src.scenario_overlay import TimeOfUseBand, default_scenario_overlay
 
 
@@ -365,6 +368,7 @@ def apply_builder_configuration(
         selected_route_ids = list(candidate_route_ids)
 
     settings = body.simulation_settings
+    current_simulation_config = dict(doc.get("simulation_config") or {})
     use_selected_vehicle_inventory = bool(
         getattr(settings, "use_selected_depot_vehicle_inventory", True)
     )
@@ -667,6 +671,21 @@ def apply_builder_configuration(
     )
     if service_dates and not service_date:
         service_date = service_dates[0]
+    requested_fixed_weekday_timetable_pv_counterfactual = getattr(
+        settings,
+        "allow_fixed_weekday_timetable_pv_counterfactual",
+        None,
+    )
+    allow_fixed_weekday_timetable_pv_counterfactual = (
+        bool(requested_fixed_weekday_timetable_pv_counterfactual)
+        if requested_fixed_weekday_timetable_pv_counterfactual is not None
+        else bool(
+            current_simulation_config.get(
+                "allow_fixed_weekday_timetable_pv_counterfactual",
+                False,
+            )
+        )
+    )
     operation_time_window_enabled = bool(
         getattr(body.simulation_settings, "operation_time_window_enabled", False)
     )
@@ -727,6 +746,9 @@ def apply_builder_configuration(
         "service_dates": list(service_dates),
         "planning_days": planning_days,
         "day_type": selected_day_type,
+        "allow_fixed_weekday_timetable_pv_counterfactual": (
+            allow_fixed_weekday_timetable_pv_counterfactual
+        ),
         "initial_soc": body.simulation_settings.initial_soc,
         "initial_soc_percent": _first_defined(
             getattr(body.simulation_settings, "initial_soc_percent", None),
@@ -816,6 +838,13 @@ def apply_builder_configuration(
         "experiment_method": body.simulation_settings.experiment_method,
         "experiment_notes": body.simulation_settings.experiment_notes,
     }
+    if allow_fixed_weekday_timetable_pv_counterfactual:
+        doc["simulation_config"].update(
+            {
+                "calendar_policy": FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL,
+                "comparison_type": FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL,
+            }
+        )
     if overlay_depot_energy_assets is not None:
         doc["simulation_config"]["depot_energy_assets"] = [
             dict(item)

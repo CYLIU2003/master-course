@@ -274,6 +274,12 @@
   retaining the prepared `WEEKDAY` timetable rows, and records the
   `fixed_weekday_timetable_pv_counterfactual` waiver. This is intentional
   weekday-difference suppression, not a Sunday timetable claim.
+- Tk Quick Setup and Prepare now derive the same declaration from the user's
+  exact single-date selection (`Sunday` + `WEEKDAY` + `actual_date_profile`) and
+  persist it to the prepared input. This fixes the prior UI-only failure before
+  the solver; it does not alter the selected service date, timetable rows,
+  route scope, or actual-date PV curve. `ProblemBuilder` propagates the
+  verified declaration to the Rolling calendar audit.
 - A first v3 sunny solve exposed a day-ahead/Rolling asset-hash definition
   mismatch: day-ahead included `pv_case_id` while Rolling correctly treated it
   as part of the PV-only curve. The day-ahead fixed hash now excludes

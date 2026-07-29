@@ -13,6 +13,11 @@ _DAY_TOKEN = re.compile(
 )
 
 
+FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL = (
+    "fixed_weekday_timetable_pv_counterfactual"
+)
+
+
 def _normalize_day_type(value: Any) -> str | None:
     text = str(value or "").strip().lower().replace("-", "").replace("_", "")
     if not text:
@@ -92,6 +97,8 @@ def _comparison_type(simulation_config: Mapping[str, Any]) -> str:
         or simulation_config.get("comparison_design")
         or ""
     ).strip().lower()
+    if raw == FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL:
+        return FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL
     if raw in {
         "counterfactual_weather_profile",
         "same_service_date_pv_counterfactual",
@@ -123,13 +130,13 @@ def _fixed_weekday_timetable_pv_counterfactual_waiver(
     )
     if (
         not enabled
-        or policy != "fixed_weekday_timetable_pv_counterfactual"
+        or policy != FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL
         or service_date.weekday() != 6
         or set(observed_types) != {"weekday"}
     ):
         return None
     return {
-        "calendar_policy": policy,
+        "calendar_policy": FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL,
         "calendar_validation_status": "WAIVED_BY_EXPERIMENT_POLICY",
         "scope": "weekday_timetable_on_sunday_for_pv_only_counterfactual",
         "rationale": (
@@ -190,6 +197,11 @@ def validate_service_calendar_contract(
         observed_types=observed_types,
         simulation_config=simulation_config,
     )
+    effective_comparison_type = (
+        FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL
+        if waiver is not None
+        else comparison_type
+    )
     if not observed_types:
         errors.append("timetable_service_day_type_unverifiable")
     elif any(
@@ -202,7 +214,7 @@ def validate_service_calendar_contract(
     ) and waiver is None:
         errors.append("service_date_timetable_day_type_mismatch")
     if (
-        comparison_type == "actual_service_day"
+        effective_comparison_type == "actual_service_day"
         and weather_observation_date != service_date.isoformat()
     ):
         errors.append("actual_weather_date_differs_from_service_date")
@@ -224,14 +236,14 @@ def validate_service_calendar_contract(
         "expected_service_day_type": expected_type,
         "observed_timetable_day_types": observed_types,
         "timetable_row_count": len(timetable_rows),
-        "comparison_type": comparison_type,
+        "comparison_type": effective_comparison_type,
         "weather_observation_date": weather_observation_date,
         "weather_profile_source": weather_profile_source or None,
         "service_date_weather_date_equal": (
             weather_observation_date == service_date.isoformat()
         ),
         "service_date_forecast_claim": (
-            comparison_type == "actual_service_day"
+            effective_comparison_type == "actual_service_day"
             and weather_observation_date == service_date.isoformat()
         ),
         "errors": errors,

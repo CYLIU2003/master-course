@@ -5,6 +5,7 @@ import pytest
 from src.dispatch.models import DispatchContext, Trip, VehicleProfile
 from src.optimization import OptimizationConfig, ProblemBuilder
 from src.optimization.common.service_calendar import (
+    FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL,
     validate_service_calendar_contract,
 )
 
@@ -52,7 +53,9 @@ def test_explicit_fixed_weekday_pv_counterfactual_waives_only_sunday_mismatch() 
     )
 
     assert result["status"] == "WAIVED_BY_EXPERIMENT_POLICY"
+    assert result["comparison_type"] == FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL
     assert result["calendar_validation_status"] == "WAIVED_BY_EXPERIMENT_POLICY"
+    assert result["service_date_forecast_claim"] is False
     assert result["waiver"]["scope"] == (
         "weekday_timetable_on_sunday_for_pv_only_counterfactual"
     )
@@ -149,7 +152,7 @@ def test_builder_persists_verified_service_calendar_contract() -> None:
         allowed_vehicle_types=("ICE",),
     )
     context = DispatchContext(
-        service_date="2025-08-05",
+        service_date="2025-08-10",
         trips=[trip],
         turnaround_rules={},
         deadhead_rules={},
@@ -165,7 +168,9 @@ def test_builder_persists_verified_service_calendar_contract() -> None:
         scenario_id="calendar-contract",
         scenario_metadata={
             "simulation_config": {
-                "service_date": "2025-08-05",
+                "service_date": "2025-08-10",
+                "allow_fixed_weekday_timetable_pv_counterfactual": True,
+                "calendar_policy": FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL,
             },
             "timetable_rows": [_weekday_row()],
         },
@@ -174,9 +179,16 @@ def test_builder_persists_verified_service_calendar_contract() -> None:
     )
 
     validation = problem.metadata["service_calendar_validation"]
-    assert validation["status"] == "OK"
-    assert validation["expected_service_day_type"] == "weekday"
+    assert validation["status"] == "WAIVED_BY_EXPERIMENT_POLICY"
+    assert validation["expected_service_day_type"] == "sunday_or_holiday"
     assert validation["observed_timetable_day_types"] == ["weekday"]
+    assert problem.metadata["weather_comparison_contract"] == {
+        "comparison_type": FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL,
+        "calendar_policy": FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL,
+        "calendar_validation_status": "WAIVED_BY_EXPERIMENT_POLICY",
+        "weather_observation_date": "2025-08-10",
+        "weather_profile_source": None,
+    }
 
 
 def test_research_builder_rejects_declared_fleet_inventory_mismatch() -> None:

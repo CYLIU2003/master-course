@@ -4732,6 +4732,22 @@ class App:
             "対象日: " + _format_service_dates_summary(service_dates)
         )
 
+    def _allows_fixed_weekday_timetable_pv_counterfactual(
+        self,
+        service_dates: list[str],
+    ) -> bool:
+        """Keep an explicitly selected Sunday PV profile with WEEKDAY trips."""
+        if len(service_dates) != 1:
+            return False
+        selected_date = _parse_iso_date_or_none(service_dates[0])
+        return bool(
+            selected_date is not None
+            and selected_date.weekday() == 6
+            and self.day_type_var.get().strip().upper() == "WEEKDAY"
+            and self.weather_mode_var.get().strip()
+            == _ACTUAL_DATE_PV_PROFILE_ID
+        )
+
     def _sync_pv_assets_for_selected_depots(
         self,
         *,
@@ -6925,6 +6941,9 @@ class App:
             messagebox.showwarning("入力不足", "Quick Setup 保存前に運行日を入力してください")
             return
         planning_days = self._planning_days_value()
+        allow_fixed_weekday_timetable_pv_counterfactual = (
+            self._allows_fixed_weekday_timetable_pv_counterfactual(service_dates)
+        )
         if (
             self.apply_initial_soc_percent_to_selected_bevs_var.get()
             and not self._selected_depot_ids()
@@ -7014,6 +7033,9 @@ class App:
             "deadheadSpeedKmh": self._parse_float(self.deadhead_speed_kmh_var.get(), 18.0),
             "pvProfileId": self.pv_profile_id_var.get().strip() or None,
             "weatherMode": self.weather_mode_var.get().strip() or _ACTUAL_DATE_PV_PROFILE_ID,
+            "allowFixedWeekdayTimetablePvCounterfactual": (
+                allow_fixed_weekday_timetable_pv_counterfactual
+            ),
             "weatherFactorScalar": self._parse_float(self.weather_factor_scalar_var.get(), 1.0),
             "objectiveWeights": objective_weights,
             "randomSeed": self._parse_int(self.random_seed_var.get(), 42),
@@ -8270,6 +8292,9 @@ class App:
         if not self._ensure_weather_proxy_ready_for_optimization():
             raise ValueError("invalid_weather_proxy")
         weather_proxy_payload = self._weather_proxy_prepare_payload()
+        allow_fixed_weekday_timetable_pv_counterfactual = (
+            self._allows_fixed_weekday_timetable_pv_counterfactual(service_dates)
+        )
 
         return {
             "selected_depot_ids": self._selected_depot_ids(),
@@ -8360,6 +8385,9 @@ class App:
                 "co2_reference_date": self.co2_reference_date_var.get().strip() or None,
                 "pv_profile_id": self.pv_profile_id_var.get().strip() or None,
                 "weather_mode": self.weather_mode_var.get().strip() or _ACTUAL_DATE_PV_PROFILE_ID,
+                "allow_fixed_weekday_timetable_pv_counterfactual": (
+                    allow_fixed_weekday_timetable_pv_counterfactual
+                ),
                 "weather_factor_scalar": self._parse_float(self.weather_factor_scalar_var.get(), 1.0),
                 "operation_time_window_enabled": operation_time_window[
                     "operationTimeWindowEnabled"

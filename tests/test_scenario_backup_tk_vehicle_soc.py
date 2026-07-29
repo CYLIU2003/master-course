@@ -52,3 +52,20 @@ def test_build_vehicle_payload_includes_initial_soc_for_bev_and_clears_for_ice()
     assert ice_payload["type"] == "ICE"
     assert ice_payload["initialSoc"] is None
     assert ice_payload["batteryKwh"] is None
+
+
+def test_fixed_weekday_pv_policy_is_limited_to_the_selected_sunday_case() -> None:
+    app = App.__new__(App)
+    app.day_type_var = DummyVar("WEEKDAY")
+    app.weather_mode_var = DummyVar("actual_date_profile")
+
+    assert App._allows_fixed_weekday_timetable_pv_counterfactual(
+        app,
+        ["2025-08-10"],
+    )
+
+    app.weather_mode_var.set("solcast_avg_2025_08_60min")
+    assert not App._allows_fixed_weekday_timetable_pv_counterfactual(
+        app,
+        ["2025-08-10"],
+    )
