@@ -46,13 +46,21 @@
   runner boundary.
 - Verification before freezing: the requested focused regression plus the
   HTTP/control tests passed (`85 passed`), the complete suite passed
-  (`1054 passed`), `compileall` passed for `src`, `bff`, `scripts`, and
+  (`1055 passed`), `compileall` passed for `src`, `bff`, `scripts`, and
   `tools`, and `git diff --check` reported no whitespace error. A read-only
   scenario comparison found one non-PV mismatch in the rain case (BESS
   terminal policy); the existing alignment service was applied to the rain
   scenario and a second audit confirmed zero remaining non-weather
   simulation-config or overlay mismatches while preserving the
   `tsurumaki_2025-08-10_60min` PV input.
+- The first frozen HTTP attempt at
+  `d95e0e049a254bb3f3e560aa86e986ec4a773b7f` is preserved under
+  `output/formal_pair_20260730` as diagnostic evidence. Both synchronous
+  Prepare requests exceeded the runner's former 120-second HTTP default, so
+  neither optimization job was submitted and the runner correctly returned
+  `BLOCKED`. The runner now applies its explicit formal job timeout to Prepare
+  and submit as well as polling, preventing a timed-out Prepare from advancing
+  to the next case.
 - Operational research evidence is still **BLOCKED**. The reviewed
   implementation has a clean candidate commit, but both scenarios must still
   finish fresh Prepare, day-ahead optimization, 24/24 hourly Rolling,

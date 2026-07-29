@@ -334,6 +334,7 @@ def _execute_case(
         "POST",
         f"/api/scenarios/{scenario_id}/simulation/prepare",
         prepare_payload,
+        timeout_seconds=timeout_seconds,
     )
     _write_raw_json_response(
         case_dir / "frontend_prepare_response.json",
@@ -371,6 +372,7 @@ def _execute_case(
         "POST",
         f"/api/scenarios/{scenario_id}/run-optimization",
         optimization_payload,
+        timeout_seconds=timeout_seconds,
     )
     _write_raw_json_response(
         case_dir / "frontend_optimization_submit_response.json",

@@ -4,11 +4,19 @@ Status date: 2026-07-29
 Code status: slot-indexed Stage 1 energy recourse, multi-candidate Stage 2
 evaluation, explicit same-service-date PV controls, and an HTTP-only frontend
 pair runner are implemented. Focused regression (`85 passed`), full regression
-(`1054 passed`), compileall, and diff validation pass. The rain scenario's
+(`1055 passed`), compileall, and diff validation pass. The rain scenario's
 single non-PV BESS-terminal-policy mismatch was aligned and a repeat audit
 found zero remaining non-weather control mismatches. A clean implementation
 commit exists; fresh high/low-PV executions from its frozen SHA remain required.
 Teacher release status: **BLOCKED**
+
+The first frozen attempt at
+`d95e0e049a254bb3f3e560aa86e986ec4a773b7f` is retained at
+`output/formal_pair_20260730` and is diagnostic only. The full-scope synchronous
+Prepare exceeded the HTTP client's former 120-second default in both cases, so
+no optimization job ran. The runner now uses the declared formal job timeout
+for Prepare and submit; a new clean commit and untouched output directory are
+required for the next attempt.
 
 This file is the single current blocker register. Older rolling remediation
 documents are historical specifications and are marked resolved/superseded.

@@ -128,6 +128,74 @@ def test_optimization_payloads_match_except_fresh_prepared_id() -> None:
     assert sunny["mip_gap"] == 0.1
 
 
+def test_case_execution_uses_formal_timeout_for_synchronous_prepare(
+    tmp_path: Path,
+) -> None:
+    runner = _load_runner()
+
+    class RecordingClient:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str, float]] = []
+
+        def request_json(
+            self,
+            method: str,
+            path: str,
+            payload: dict | None = None,
+            *,
+            timeout_seconds: float = 120.0,
+        ) -> tuple[dict, str]:
+            del payload
+            self.calls.append((method, path, timeout_seconds))
+            if path.endswith("/simulation/prepare"):
+                response = {
+                    "ready": True,
+                    "preparedInputId": "prepared-fresh-timeout-test",
+                }
+            elif path.endswith("/run-optimization"):
+                response = {"job_id": "job-timeout-test"}
+            elif path == "/api/jobs/job-timeout-test":
+                response = {
+                    "status": "failed",
+                    "progress": 100,
+                    "message": "intentional terminal test state",
+                    "metadata": {},
+                }
+            else:  # pragma: no cover - fail loudly on an unexpected call
+                raise AssertionError(path)
+            return response, json.dumps(response)
+
+    client = RecordingClient()
+    runner._execute_case(
+        name="sunny",
+        scenario_id="scenario-timeout-test",
+        prepare_payload=runner.build_prepare_payload(
+            depot_id="tsurumaki",
+            service_id="WEEKDAY",
+            service_date="2025-08-05",
+            pv_source_date="2025-08-05",
+            comparison_role="baseline",
+        ),
+        client=client,
+        output_dir=tmp_path,
+        timeout_seconds=987.0,
+        poll_interval_seconds=0.0,
+        frozen_sha="a" * 40,
+        log=[],
+    )
+
+    assert client.calls[0] == (
+        "POST",
+        "/api/scenarios/scenario-timeout-test/simulation/prepare",
+        987.0,
+    )
+    assert client.calls[1] == (
+        "POST",
+        "/api/scenarios/scenario-timeout-test/run-optimization",
+        987.0,
+    )
+
+
 def test_vehicle_trip_assignments_are_complete_and_chronological() -> None:
     runner = _load_runner()
     assignments = {
