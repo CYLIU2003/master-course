@@ -2,6 +2,25 @@
 
 ## 2026-07-31 Controlled uniform-tariff sensitivity support
 
+- The first `30 JPY/kWh` / `0 JPY/kW` HTTP attempt is preserved as diagnostic
+  evidence at `output/formal_pair_20260731_flat30_no_demand`. Both individual
+  jobs completed their run gates and the canonical 24-slot tariff evidence was
+  correct, but the pair was rejected: the effective sunny and rain PV curves
+  were both `6056.25 kWh` with the same hash. Investigation showed that
+  Prepare had changed PV labels while retaining a stale frontend depot-asset
+  manual capacity/profile. Those numbers are not used for the tariff
+  sensitivity conclusion.
+- The HTTP-only controller now fetches the frontend's
+  `GET /api/scenarios/{id}/editor-bootstrap` settings immediately before each
+  fresh Prepare, preserves all non-PV depot-asset fields, and embeds a
+  date-specific PV replacement asset in the normal Prepare payload. The
+  replacement uses the selected depot's physical area, usable-area ratio, and
+  panel-power density together with the separately hashed derived PV
+  capacity-factor file; it replaces `pv_case_id`, dates, slot factors, slot
+  generation, and the manual PV capacity consistently. This is a settings
+  delivery repair, not a weather-specific objective bias or a prepared-input
+  reuse. The runner persists the bootstrap response, PV source hash, and
+  exact asset request for audit.
 - `scripts/run_frontend_controlled_pv_pair.py` now accepts an explicitly paired
   grid-energy price and demand-charge rate for a user-authorized scenario
   mutation through the ordinary BFF Prepare endpoint. The override writes

@@ -1585,3 +1585,14 @@ persists `tariff_condition.json` and accepts a case only when all 24 canonical
 rows in `simulation_conditions_tou_prices.csv` match the requested price and
 demand-charge rate. This is a separate tariff sensitivity, not a replacement
 for a PV-only comparison under the original tariff.
+
+The controller does not accept a `pv_profile_id` label as evidence that the
+curve changed. Before each Prepare it reads the normal frontend
+`editor-bootstrap` response, preserves its non-PV depot-asset fields, and
+attaches a one-date PV asset built from the selected depot's physical area,
+usable-area ratio, panel-power density, and the separately hashed
+`data/derived/pv_profiles/<depot>_<date>_<timestep>min.json` capacity-factor
+curve. It records the bootstrap response, source-profile hash, replacement
+asset, and exact Prepare request. A missing source, invalid slot series, or a
+source total that differs from the controlled expected PV total fails before
+Prepare; a date/profile label alone is never treated as a PV switch.

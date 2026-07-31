@@ -152,6 +152,119 @@ def test_prepare_payload_replaces_inherited_tou_with_uniform_tariff() -> None:
     ]
 
 
+def test_controlled_pv_asset_replaces_stale_capacity_and_preserves_bess() -> None:
+    runner = _load_runner()
+    profile, provenance = runner._load_derived_pv_profile(
+        depot_id="tsurumaki",
+        pv_source_date="2025-08-10",
+        timestep_min=60,
+    )
+    frontend_asset = {
+        "depot_id": "tsurumaki",
+        "depot_area_m2": 1450.0,
+        "usable_area_ratio": 0.35,
+        "panel_power_density_kw_m2": 0.2,
+        "pv_capacity_kw": 1000.0,
+        "pv_capacity_kw_manual_override": True,
+        "pv_case_id": "stale-profile",
+        "pv_generation_kwh_by_slot": [99.0] * 24,
+        "pv_capacity_factor_by_date": [
+            {
+                "date": "2025-08-05",
+                "slot_minutes": 60,
+                "capacity_factor_by_slot": [0.99] * 24,
+            }
+        ],
+        "bess_enabled": True,
+        "bess_energy_kwh": 6000.0,
+        "bess_power_kw": 900.0,
+        "bess_initial_soc_kwh": 3000.0,
+        "bess_terminal_soc_target_kwh": 3000.0,
+    }
+
+    asset, evidence = runner._build_controlled_pv_asset(
+        frontend_asset=frontend_asset,
+        profile=profile,
+        profile_provenance=provenance,
+    )
+
+    assert asset["pv_capacity_kw"] == 101.5
+    assert asset["pv_case_id"] == "tsurumaki_2025-08-10_60min"
+    assert asset["pv_profile_dates"] == ["2025-08-10"]
+    assert asset["pv_generation_kwh_by_date"] == [
+        {
+            "date": "2025-08-10",
+            "slot_minutes": 60,
+            "pv_generation_kwh_by_slot": asset["pv_generation_kwh_by_slot"],
+        }
+    ]
+    assert evidence["frontend_asset_pv_capacity_kw_before"] == 1000.0
+    assert evidence["pv_generation_kwh"] == pytest.approx(101.1143)
+    for field, expected in (
+        ("bess_enabled", True),
+        ("bess_energy_kwh", 6000.0),
+        ("bess_power_kw", 900.0),
+        ("bess_initial_soc_kwh", 3000.0),
+        ("bess_terminal_soc_target_kwh", 3000.0),
+    ):
+        assert asset[field] == expected
+
+
+def test_pv_asset_is_attached_from_the_frontend_bootstrap() -> None:
+    runner = _load_runner()
+
+    class BootstrapClient:
+        def request_json(
+            self,
+            method: str,
+            path: str,
+            payload: dict | None = None,
+            *,
+            timeout_seconds: float = 120.0,
+        ) -> tuple[dict, str]:
+            assert method == "GET"
+            assert path == "/api/scenarios/scenario-1/editor-bootstrap"
+            assert payload is None
+            assert timeout_seconds == 987.0
+            response = {
+                "builderDefaults": {
+                    "depotEnergyAssets": [
+                        {
+                            "depot_id": "tsurumaki",
+                            "depot_area_m2": 1450.0,
+                            "usable_area_ratio": 0.35,
+                            "panel_power_density_kw_m2": 0.2,
+                            "pv_capacity_kw": 1000.0,
+                            "bess_energy_kwh": 600.0,
+                        }
+                    ]
+                }
+            }
+            return response, json.dumps(response)
+
+    payload, context = runner._attach_controlled_pv_asset_to_prepare_payload(
+        client=BootstrapClient(),
+        scenario_id="scenario-1",
+        prepare_payload=runner.build_prepare_payload(
+            depot_id="tsurumaki",
+            service_id="WEEKDAY",
+            service_date="2025-08-05",
+            pv_source_date="2025-08-05",
+            comparison_role="baseline",
+        ),
+        expected_pv_kwh=614.709375,
+        timeout_seconds=987.0,
+    )
+
+    asset = payload["simulation_settings"]["depot_energy_assets"][0]
+    assert asset["pv_capacity_kw"] == 101.5
+    assert sum(asset["pv_generation_kwh_by_slot"]) == pytest.approx(614.709375)
+    assert asset["bess_energy_kwh"] == 600.0
+    assert context["pv_profile_source"]["pv_profile_id"] == (
+        "tsurumaki_2025-08-05_60min"
+    )
+
+
 def test_uniform_tariff_evidence_requires_every_canonical_slot(
     tmp_path: Path,
 ) -> None:

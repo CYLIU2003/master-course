@@ -27,6 +27,7 @@ import zipfile
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+DERIVED_PV_PROFILE_DIR = REPO_ROOT / "data" / "derived" / "pv_profiles"
 TERMINAL_JOB_STATES = {"completed", "failed"}
 FORBIDDEN_PREPARED_INPUT_IDS = {
     "prepared-a7dbfaef10f571d7-e6406a7fd75ec751-9dfce7cb",
@@ -419,6 +420,334 @@ class HttpJsonClient:
         return dict(loaded), raw
 
 
+def _required_positive_number(
+    payload: Mapping[str, Any],
+    *keys: str,
+    label: str,
+) -> float:
+    """Read one finite positive numeric field without silently defaulting it."""
+
+    for key in keys:
+        value = _number(payload.get(key))
+        if value is not None and math.isfinite(value) and value > 0.0:
+            return float(value)
+    joined = "/".join(keys)
+    raise ValueError(
+        f"Frontend depot asset has no finite positive {label} ({joined})."
+    )
+
+
+def _load_derived_pv_profile(
+    *,
+    depot_id: str,
+    pv_source_date: str,
+    timestep_min: int,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Load and validate the date-specific, scale-free PV source profile.
+
+    The profile's capacity factors come from the repository's generated
+    Solcast-derived source.  Installed capacity remains a scenario control and
+    is reconstructed from the frontend depot-area settings below; this avoids
+    borrowing the source profile generator's nominal capacity for a different
+    depot installation.
+    """
+
+    profile_path = (
+        DERIVED_PV_PROFILE_DIR
+        / f"{depot_id}_{pv_source_date}_{int(timestep_min)}min.json"
+    )
+    if not profile_path.is_file():
+        raise FileNotFoundError(
+            "Date-specific derived PV profile is missing: "
+            f"{profile_path}"
+        )
+    profile_bytes = profile_path.read_bytes()
+    profile = _read_json(profile_path)
+    if str(profile.get("depot_id") or "") != depot_id:
+        raise ValueError(
+            f"PV profile depot mismatch: expected {depot_id}, got "
+            f"{profile.get('depot_id')!r}"
+        )
+    if str(profile.get("date") or "") != pv_source_date:
+        raise ValueError(
+            f"PV profile date mismatch: expected {pv_source_date}, got "
+            f"{profile.get('date')!r}"
+        )
+    if int(profile.get("slot_minutes") or 0) != int(timestep_min):
+        raise ValueError(
+            "PV profile timestep mismatch: expected "
+            f"{timestep_min}, got {profile.get('slot_minutes')!r}"
+        )
+    expected_slot_count = (24 * 60) // int(timestep_min)
+    raw_factors = list(profile.get("capacity_factor_by_slot") or ())
+    if len(raw_factors) != expected_slot_count:
+        raise ValueError(
+            "PV profile slot count mismatch: expected "
+            f"{expected_slot_count}, got {len(raw_factors)}"
+        )
+    factors: list[float] = []
+    for slot_index, raw_factor in enumerate(raw_factors):
+        factor = _number(raw_factor)
+        if factor is None or not math.isfinite(factor) or not 0.0 <= factor <= 1.0:
+            raise ValueError(
+                "PV profile capacity factor must be finite within [0, 1]: "
+                f"slot {slot_index}={raw_factor!r}"
+            )
+        factors.append(float(factor))
+    normalized = dict(profile)
+    normalized["capacity_factor_by_slot"] = factors
+    provenance = {
+        "schema_version": "controlled_pv_profile_source_v1",
+        "profile_path": str(profile_path.resolve()),
+        "profile_sha256": hashlib.sha256(profile_bytes).hexdigest(),
+        "depot_id": depot_id,
+        "pv_source_date": pv_source_date,
+        "timestep_min": int(timestep_min),
+        "profile_nominal_capacity_kw": _number(profile.get("capacity_kw")),
+        "capacity_factor_by_slot": factors,
+    }
+    return normalized, provenance
+
+
+def _frontend_depot_asset(
+    bootstrap: Mapping[str, Any],
+    *,
+    depot_id: str,
+) -> dict[str, Any]:
+    """Extract exactly one existing depot asset from the frontend payload."""
+
+    defaults = bootstrap.get("builderDefaults")
+    if not isinstance(defaults, Mapping):
+        raise ValueError("Frontend editor-bootstrap omitted builderDefaults")
+    raw_assets = defaults.get("depotEnergyAssets")
+    if isinstance(raw_assets, Mapping):
+        iterable = [
+            dict(value, depot_id=str(key))
+            for key, value in raw_assets.items()
+            if isinstance(value, Mapping)
+        ]
+    else:
+        iterable = [
+            dict(value)
+            for value in list(raw_assets or ())
+            if isinstance(value, Mapping)
+        ]
+    matches = [
+        asset
+        for asset in iterable
+        if str(asset.get("depot_id") or asset.get("depotId") or "")
+        == depot_id
+    ]
+    if len(matches) != 1:
+        raise ValueError(
+            "Frontend editor-bootstrap must contain exactly one depot energy "
+            f"asset for {depot_id}; found {len(matches)}"
+        )
+    return dict(matches[0])
+
+
+def _build_controlled_pv_asset(
+    *,
+    frontend_asset: Mapping[str, Any],
+    profile: Mapping[str, Any],
+    profile_provenance: Mapping[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Replace only the selected PV curve in a frontend depot asset.
+
+    BESS and every other non-PV field are copied verbatim from the frontend
+    builder defaults.  The installed PV capacity is rebuilt from the selected
+    depot's physical area, usable-area ratio, and panel-power density so a
+    stale manual PV-capacity override cannot scale a date profile incorrectly.
+    """
+
+    depot_id = str(profile_provenance.get("depot_id") or "")
+    pv_source_date = str(profile_provenance.get("pv_source_date") or "")
+    timestep_min = int(profile_provenance.get("timestep_min") or 0)
+    if not depot_id or not pv_source_date or timestep_min <= 0:
+        raise ValueError("PV source provenance is incomplete")
+    asset_depot_id = str(
+        frontend_asset.get("depot_id") or frontend_asset.get("depotId") or ""
+    )
+    if asset_depot_id != depot_id:
+        raise ValueError(
+            f"Frontend asset depot mismatch: expected {depot_id}, got "
+            f"{asset_depot_id!r}"
+        )
+
+    depot_area_m2 = _required_positive_number(
+        frontend_asset,
+        "depot_area_m2",
+        "depotAreaM2",
+        label="depot area",
+    )
+    usable_area_ratio = _required_positive_number(
+        frontend_asset,
+        "usable_area_ratio",
+        "usableAreaRatio",
+        label="usable-area ratio",
+    )
+    panel_power_density_kw_m2 = _required_positive_number(
+        frontend_asset,
+        "panel_power_density_kw_m2",
+        "panelPowerDensityKwM2",
+        label="panel-power density",
+    )
+    installed_capacity_kw = round(
+        depot_area_m2 * usable_area_ratio * panel_power_density_kw_m2,
+        6,
+    )
+    if installed_capacity_kw <= 0.0:
+        raise ValueError("Area-derived installed PV capacity must be positive")
+
+    factors = list(profile.get("capacity_factor_by_slot") or ())
+    expected_slot_count = (24 * 60) // timestep_min
+    if len(factors) != expected_slot_count:
+        raise ValueError(
+            "PV profile factor count does not match the requested timestep"
+        )
+    slot_h = float(timestep_min) / 60.0
+    generation = [
+        round(installed_capacity_kw * float(factor) * slot_h, 6)
+        for factor in factors
+    ]
+    profile_id = f"{depot_id}_{pv_source_date}_{timestep_min}min"
+    asset = dict(frontend_asset)
+    asset.update(
+        {
+            "depot_id": depot_id,
+            "pv_enabled": True,
+            "pv_capacity_kw": installed_capacity_kw,
+            # The explicit value equals the physical area-derived capacity;
+            # this prevents any stale alternate field from changing the
+            # profile scale between the frontend and canonical builder.
+            "pv_capacity_kw_manual_override": True,
+            "pv_case_id": profile_id,
+            "pv_profile_source": "derived_daily",
+            "pv_source_type": "solcast_daily",
+            "pv_source_date": pv_source_date,
+            "pv_profile_dates": [pv_source_date],
+            "pv_slot_minutes": timestep_min,
+            "capacity_factor_by_slot": factors,
+            "pv_generation_kwh_by_slot": generation,
+            "pv_generation_kwh_by_date": [
+                {
+                    "date": pv_source_date,
+                    "slot_minutes": timestep_min,
+                    "pv_generation_kwh_by_slot": generation,
+                }
+            ],
+            "pv_capacity_factor_by_date": [
+                {
+                    "date": pv_source_date,
+                    "slot_minutes": timestep_min,
+                    "capacity_factor_by_slot": factors,
+                }
+            ],
+        }
+    )
+    evidence = {
+        "schema_version": "controlled_pv_asset_replacement_v1",
+        **dict(profile_provenance),
+        "frontend_asset_pv_capacity_kw_before": _number(
+            frontend_asset.get("pv_capacity_kw")
+            if "pv_capacity_kw" in frontend_asset
+            else frontend_asset.get("pvCapacityKw")
+        ),
+        "frontend_asset_pv_manual_override_before": bool(
+            frontend_asset.get(
+                "pv_capacity_kw_manual_override",
+                frontend_asset.get("pvCapacityKwManualOverride", False),
+            )
+        ),
+        "area_derived_installed_capacity_kw": installed_capacity_kw,
+        "pv_profile_id": profile_id,
+        "pv_generation_kwh": round(sum(generation), 6),
+        "pv_generation_kwh_by_slot": generation,
+        "non_pv_asset_hash_before": _canonical_hash(
+            {
+                key: value
+                for key, value in frontend_asset.items()
+                if not key.startswith("pv_")
+                and not key.startswith("pv")
+                and key
+                not in {
+                    "capacity_factor_by_slot",
+                    "capacityFactorBySlot",
+                }
+            }
+        ),
+    }
+    return asset, evidence
+
+
+def _attach_controlled_pv_asset_to_prepare_payload(
+    *,
+    client: HttpJsonClient,
+    scenario_id: str,
+    prepare_payload: Mapping[str, Any],
+    expected_pv_kwh: float | None,
+    timeout_seconds: float,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Fetch frontend asset controls and attach one explicit PV curve to Prepare."""
+
+    selected_depots = list(prepare_payload.get("selected_depot_ids") or ())
+    if len(selected_depots) != 1:
+        raise ValueError("Controlled PV Prepare requires exactly one depot")
+    depot_id = str(selected_depots[0])
+    settings = prepare_payload.get("simulation_settings")
+    if not isinstance(settings, Mapping):
+        raise ValueError("Prepare payload omitted simulation_settings")
+    pv_source_date = str(settings.get("counterfactual_pv_source_date") or "")
+    timestep_min = int(settings.get("time_step_min") or 0)
+    if not pv_source_date or timestep_min <= 0:
+        raise ValueError("Prepare payload has no PV source date/timestep")
+
+    bootstrap, bootstrap_raw = client.request_json(
+        "GET",
+        f"/api/scenarios/{scenario_id}/editor-bootstrap",
+        timeout_seconds=timeout_seconds,
+    )
+    frontend_asset = _frontend_depot_asset(bootstrap, depot_id=depot_id)
+    profile, profile_provenance = _load_derived_pv_profile(
+        depot_id=depot_id,
+        pv_source_date=pv_source_date,
+        timestep_min=timestep_min,
+    )
+    asset, evidence = _build_controlled_pv_asset(
+        frontend_asset=frontend_asset,
+        profile=profile,
+        profile_provenance=profile_provenance,
+    )
+    actual_pv_kwh = _number(evidence.get("pv_generation_kwh"))
+    if (
+        expected_pv_kwh is not None
+        and (
+            actual_pv_kwh is None
+            or not math.isclose(
+                actual_pv_kwh,
+                float(expected_pv_kwh),
+                rel_tol=0.0,
+                abs_tol=1.0e-6,
+            )
+        )
+    ):
+        raise RuntimeError(
+            "Selected PV source does not yield the controlled expected total: "
+            f"expected {expected_pv_kwh}, got {actual_pv_kwh}"
+        )
+
+    attached_payload = json.loads(
+        json.dumps(prepare_payload, ensure_ascii=False, allow_nan=False)
+    )
+    attached_payload["simulation_settings"]["depot_energy_assets"] = [asset]
+    context = {
+        "frontend_editor_bootstrap_response_raw": bootstrap_raw,
+        "pv_profile_source": evidence,
+        "frontend_depot_energy_asset_request": asset,
+    }
+    return attached_payload, context
+
+
 def _write_raw_json_response(path: Path, raw: str) -> None:
     # Validate before persisting while retaining the server's exact numeric
     # tokens and response formatting.
@@ -494,9 +823,32 @@ def _execute_case(
     poll_interval_seconds: float,
     frozen_sha: str,
     log: list[dict[str, Any]],
+    pv_asset_context: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     case_dir = output_dir / name
     case_dir.mkdir(parents=True, exist_ok=False)
+    if pv_asset_context is not None:
+        bootstrap_raw = str(
+            pv_asset_context.get("frontend_editor_bootstrap_response_raw")
+            or ""
+        )
+        if not bootstrap_raw:
+            raise ValueError("Controlled PV case lacks editor-bootstrap evidence")
+        _write_raw_json_response(
+            case_dir / "frontend_editor_bootstrap_response.json",
+            bootstrap_raw,
+        )
+        _write_json(
+            case_dir / "pv_profile_source.json",
+            dict(pv_asset_context.get("pv_profile_source") or {}),
+        )
+        _write_json(
+            case_dir / "frontend_depot_energy_asset_request.json",
+            dict(
+                pv_asset_context.get("frontend_depot_energy_asset_request")
+                or {}
+            ),
+        )
     _write_json(case_dir / "frontend_prepare_request.json", prepare_payload)
     prepare_response, prepare_raw = client.request_json(
         "POST",
@@ -599,11 +951,18 @@ def _execute_case(
             case_dir / "frontend_optimization_result_response.json",
             result_raw,
         )
-    http_execution_path = [
+    http_execution_path = []
+    if pv_asset_context is not None:
+        http_execution_path.append(
+            f"GET /api/scenarios/{scenario_id}/editor-bootstrap"
+        )
+    http_execution_path.extend(
+        [
         f"POST /api/scenarios/{scenario_id}/simulation/prepare",
         f"POST /api/scenarios/{scenario_id}/run-optimization",
         f"GET /api/jobs/{job_id}",
-    ]
+        ]
+    )
     if result_response is not None:
         http_execution_path.append(
             f"GET /api/scenarios/{scenario_id}/optimization"
@@ -2664,7 +3023,7 @@ def main() -> int:
             "demand-charge rate"
         )
     code_and_environment = {
-        "schema_version": "controlled_pv_pair_environment_v2",
+        "schema_version": "controlled_pv_pair_environment_v3",
         "captured_at_utc": _utc_now(),
         "repository_root": str(REPO_ROOT),
         "frozen_git_sha": frozen_sha,
@@ -2679,6 +3038,12 @@ def main() -> int:
         "bff_opt_executor": os.environ.get("BFF_OPT_EXECUTOR"),
         "comparison_name": comparison_name,
         "tariff_condition": tariff_condition,
+        "pv_curve_delivery": (
+            "Each Prepare request carries a date-specific, explicitly "
+            "materialized depot-energy asset generated from the frontend "
+            "asset's physical PV area and the repository's derived PV "
+            "capacity-factor profile."
+        ),
         "runtime_comparison_repetitions_per_case": 1,
         "runtime_claim_eligible": False,
     }
@@ -2692,6 +3057,7 @@ def main() -> int:
         (
             "sunny",
             args.sunny_scenario_id,
+            EXPECTED_PV_KWH["sunny"],
             build_prepare_payload(
                 depot_id=args.depot_id,
                 service_id=args.service_id,
@@ -2707,6 +3073,7 @@ def main() -> int:
         (
             "rain",
             args.rain_scenario_id,
+            EXPECTED_PV_KWH["rain"],
             build_prepare_payload(
                 depot_id=args.depot_id,
                 service_id=args.service_id,
@@ -2722,7 +3089,7 @@ def main() -> int:
     )
     case_results: dict[str, dict[str, Any]] = {}
     failed_checks: list[str] = []
-    for name, scenario_id, prepare_payload in cases:
+    for name, scenario_id, expected_pv_kwh, prepare_payload in cases:
         events.append(
             {
                 "timestamp_utc": _utc_now(),
@@ -2733,16 +3100,46 @@ def main() -> int:
             }
         )
         try:
+            attached_prepare_payload, pv_asset_context = (
+                _attach_controlled_pv_asset_to_prepare_payload(
+                    client=client,
+                    scenario_id=scenario_id,
+                    prepare_payload=prepare_payload,
+                    expected_pv_kwh=expected_pv_kwh,
+                    timeout_seconds=args.job_timeout_seconds,
+                )
+            )
+            events.append(
+                {
+                    "timestamp_utc": _utc_now(),
+                    "event": "pv_asset_materialized",
+                    "case": name,
+                    "status": "ready",
+                    "detail": {
+                        "pv_profile_id": _nested(
+                            pv_asset_context,
+                            "pv_profile_source",
+                            "pv_profile_id",
+                        ),
+                        "pv_generation_kwh": _nested(
+                            pv_asset_context,
+                            "pv_profile_source",
+                            "pv_generation_kwh",
+                        ),
+                    },
+                }
+            )
             result = _execute_case(
                 name=name,
                 scenario_id=scenario_id,
-                prepare_payload=prepare_payload,
+                prepare_payload=attached_prepare_payload,
                 client=client,
                 output_dir=output_dir,
                 timeout_seconds=args.job_timeout_seconds,
                 poll_interval_seconds=args.poll_interval_seconds,
                 frozen_sha=frozen_sha,
                 log=events,
+                pv_asset_context=pv_asset_context,
             )
             case_results[name] = result
             events.append(

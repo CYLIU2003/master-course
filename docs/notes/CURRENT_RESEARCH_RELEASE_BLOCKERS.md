@@ -34,6 +34,17 @@ and must be reported as blocked. This condition changes neither physical grid
 limits nor the fleet/PV/service controls, and it must be common to the two
 cases so the price-slot hash matches.
 
+The initial tariff attempt at
+`output/formal_pair_20260731_flat30_no_demand` is **DIAGNOSTIC ONLY**. Its
+canonical tariff rows were correct, but both effective PV profiles resolved to
+`6056.25 kWh` and the same profile hash despite distinct PV source labels.
+The comparison is therefore invalid and must not be summarized as a tariff or
+weather result. The HTTP runner now records the frontend bootstrap response
+and sends an explicit one-date PV asset in each normal Prepare request, built
+from the frontend depot's physical PV design controls and the separately
+hashed date-specific derived capacity-factor curve. A fresh clean-commit pair
+is required; the old diagnostic directory remains untouched.
+
 The first frozen attempt at
 `d95e0e049a254bb3f3e560aa86e986ec4a773b7f` is retained at
 `output/formal_pair_20260730` and is diagnostic only. The full-scope synchronous
