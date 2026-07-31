@@ -1,5 +1,27 @@
 # Development Notes
 
+## 2026-07-31 Controlled uniform-tariff sensitivity support
+
+- `scripts/run_frontend_controlled_pv_pair.py` now accepts an explicitly paired
+  grid-energy price and demand-charge rate for a user-authorized scenario
+  mutation through the ordinary BFF Prepare endpoint. The override writes
+  `grid_flat_price_per_kwh`, `demand_charge_cost_per_kw`, and one `00:00--24:00`
+  TOU band. Sending only a flat value would be incorrect because a persisted
+  multi-band TOU schedule has precedence in canonical price construction.
+- A rate of `30 JPY/kWh` and demand/basic-charge coefficient `0 JPY/kW` is
+  represented as 24 canonical price slots at 30 and 24 demand-charge weights
+  at zero. It does not alter import limits, chargers, BESS, fleet, SOC, trips,
+  PV, or solver controls. The same mutation must be included in both Prepare
+  requests, and the pair's price-slot hash must match.
+- Each case audit now reads the solver-produced
+  `simulation_conditions_tou_prices.csv`; missing rows, a nonuniform price,
+  or a nonzero requested-zero demand coefficient fail closed. The runner also
+  writes `tariff_condition.json` and embeds the condition in
+  `code_and_environment.json` and `completion_audit.json`.
+- This support creates a distinct controlled tariff sensitivity. It must use
+  fresh prepared inputs and a new output directory, and it cannot overwrite or
+  relabel the prior PV-only formal pair.
+
 ## 2026-07-29 P0 slot-level weather/dispatch coupling and controlled HTTP pair
 
 - Root cause: Phase 3 Stage 1 used a whole-day PV-energy credit in its

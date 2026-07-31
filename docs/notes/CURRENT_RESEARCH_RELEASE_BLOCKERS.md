@@ -19,6 +19,21 @@ zero failed checks, the exact frozen Git SHA at start and end, and a completed
 ZIP. When that artifact exists for the current frozen SHA, this blocker is
 discharged without modifying the repository during the experiment.
 
+## Separate controlled tariff sensitivity (2026-07-31)
+
+A user-authorized tariff mutation is a separate experiment from the frozen
+PV-only pair. For the requested condition, both scenarios must be freshly
+prepared through `POST /api/scenarios/{scenario_id}/simulation/prepare` with
+one `00:00--24:00` TOU band at `30 JPY/kWh`,
+`grid_flat_price_per_kwh=30`, and `demand_charge_cost_per_kw=0`. The one-band
+TOU replacement is required: merely changing the flat-rate field would leave
+the inherited TOU schedule effective. Both runs must show 24 canonical price
+slots at 30 and 24 demand-charge weights at zero in
+`simulation_conditions_tou_prices.csv`; otherwise the result is diagnostic
+and must be reported as blocked. This condition changes neither physical grid
+limits nor the fleet/PV/service controls, and it must be common to the two
+cases so the price-slot hash matches.
+
 The first frozen attempt at
 `d95e0e049a254bb3f3e560aa86e986ec4a773b7f` is retained at
 `output/formal_pair_20260730` and is diagnostic only. The full-scope synchronous

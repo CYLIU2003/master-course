@@ -13,6 +13,7 @@ import csv
 from datetime import datetime, timezone
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import platform
@@ -81,6 +82,85 @@ CONTROLLED_COST_COMPONENT_FLAGS = {
     "grid_to_bus_priority_penalty": True,
     "grid_to_bess_priority_penalty": True,
 }
+
+
+def _build_uniform_tariff_settings(
+    *,
+    grid_energy_price_yen_per_kwh: float | None,
+    demand_charge_yen_per_kw: float | None,
+) -> dict[str, Any]:
+    """Return an explicit all-day tariff override or no override.
+
+    A flat-price field alone is insufficient when a scenario already has TOU
+    bands, because canonical price construction gives those bands precedence.
+    The one 00:00--24:00 band therefore deliberately replaces any inherited
+    TOU schedule while retaining the flat-rate value as explicit provenance.
+    """
+
+    if (
+        grid_energy_price_yen_per_kwh is None
+        and demand_charge_yen_per_kw is None
+    ):
+        return {}
+    if (
+        grid_energy_price_yen_per_kwh is None
+        or demand_charge_yen_per_kw is None
+    ):
+        raise ValueError(
+            "A controlled tariff requires both grid energy price and "
+            "demand-charge rate."
+        )
+    grid_energy_price = float(grid_energy_price_yen_per_kwh)
+    demand_charge = float(demand_charge_yen_per_kw)
+    for label, value in (
+        ("grid energy price", grid_energy_price),
+        ("demand-charge rate", demand_charge),
+    ):
+        if not math.isfinite(value) or value < 0.0:
+            raise ValueError(
+                f"Controlled {label} must be a finite non-negative value."
+            )
+    return {
+        "grid_flat_price_per_kwh": grid_energy_price,
+        "demand_charge_cost_per_kw": demand_charge,
+        "tou_pricing": [
+            {
+                "start_hour": 0,
+                "end_hour": 24,
+                "price_per_kwh": grid_energy_price,
+            }
+        ],
+    }
+
+
+def _uniform_tariff_condition(
+    *,
+    grid_energy_price_yen_per_kwh: float | None,
+    demand_charge_yen_per_kw: float | None,
+) -> dict[str, Any]:
+    """Normalize the requested tariff condition for evidence artifacts."""
+
+    settings = _build_uniform_tariff_settings(
+        grid_energy_price_yen_per_kwh=grid_energy_price_yen_per_kwh,
+        demand_charge_yen_per_kw=demand_charge_yen_per_kw,
+    )
+    return {
+        "override_requested": bool(settings),
+        "grid_energy_price_yen_per_kwh": settings.get(
+            "grid_flat_price_per_kwh"
+        ),
+        "demand_charge_yen_per_kw": settings.get(
+            "demand_charge_cost_per_kw"
+        ),
+        "tou_pricing": settings.get("tou_pricing") or [],
+        "semantics": (
+            "The demand-charge rate is the model's basic/contract-power "
+            "charge coefficient; zero disables that cost term without "
+            "changing physical import limits."
+            if settings
+            else "Use the scenario's persisted tariff without an override."
+        ),
+    }
 
 
 def _utc_now() -> str:
@@ -152,6 +232,8 @@ def build_prepare_payload(
     service_date: str,
     pv_source_date: str,
     comparison_role: str,
+    grid_energy_price_yen_per_kwh: float | None = None,
+    demand_charge_yen_per_kw: float | None = None,
 ) -> dict[str, Any]:
     """Build the explicit frontend Prepare payload for one controlled case."""
 
@@ -161,6 +243,18 @@ def build_prepare_payload(
     if not route_ids:
         raise ValueError(
             f"No controlled route-scope contract exists for depot {depot_id}"
+        )
+    tariff_settings = _build_uniform_tariff_settings(
+        grid_energy_price_yen_per_kwh=grid_energy_price_yen_per_kwh,
+        demand_charge_yen_per_kw=demand_charge_yen_per_kw,
+    )
+    tariff_note = ""
+    if tariff_settings:
+        tariff_note = (
+            " Grid purchase is fixed at "
+            f"{tariff_settings['grid_flat_price_per_kwh']:g} JPY/kWh for "
+            "every clock slot and the demand-charge rate is "
+            f"{tariff_settings['demand_charge_cost_per_kw']:g} JPY/kW."
         )
     return {
         "selected_depot_ids": [depot_id],
@@ -198,6 +292,7 @@ def build_prepare_payload(
             "cost_component_flags": dict(
                 CONTROLLED_COST_COMPONENT_FLAGS
             ),
+            **tariff_settings,
             "solver_mode": "mode_milp_only",
             "objective_mode": "total_cost",
             "fixed_route_band_mode": True,
@@ -233,6 +328,7 @@ def build_prepare_payload(
             "experiment_notes": (
                 f"Same {service_date} weekday service controls; only the "
                 "separately fingerprinted PV curve may differ."
+                + tariff_note
             ),
         },
     }
@@ -544,6 +640,109 @@ def _number(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _uniform_tariff_evidence(
+    *,
+    case_dir: Path,
+    tariff_condition: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Verify a requested uniform tariff against canonical price-slot output."""
+
+    override_requested = bool(tariff_condition.get("override_requested"))
+    if not override_requested:
+        return {
+            "override_requested": False,
+            "accepted": True,
+            "reason": "no_uniform_tariff_override_requested",
+        }
+
+    expected_price = _number(
+        tariff_condition.get("grid_energy_price_yen_per_kwh")
+    )
+    expected_demand_charge = _number(
+        tariff_condition.get("demand_charge_yen_per_kw")
+    )
+    if expected_price is None or expected_demand_charge is None:
+        return {
+            "override_requested": True,
+            "accepted": False,
+            "reason": "invalid_uniform_tariff_condition",
+        }
+
+    source_path = case_dir / "simulation_conditions_tou_prices.csv"
+    if not source_path.is_file():
+        return {
+            "override_requested": True,
+            "accepted": False,
+            "reason": "canonical_tou_price_artifact_missing",
+            "source_artifact": source_path.name,
+        }
+    try:
+        with source_path.open("r", encoding="utf-8-sig", newline="") as handle:
+            rows = list(csv.DictReader(handle))
+    except (OSError, csv.Error) as exc:
+        return {
+            "override_requested": True,
+            "accepted": False,
+            "reason": f"canonical_tou_price_artifact_unreadable:{exc}",
+            "source_artifact": source_path.name,
+        }
+
+    time_indices: set[int] = set()
+    grid_prices: list[float | None] = []
+    demand_charge_weights: list[float | None] = []
+    malformed_time_index = False
+    for row in rows:
+        try:
+            time_indices.add(int(str(row.get("time_idx") or "")))
+        except ValueError:
+            malformed_time_index = True
+        grid_prices.append(
+            _number(row.get("grid_energy_price_yen_per_kwh"))
+        )
+        demand_charge_weights.append(
+            _number(row.get("demand_charge_weight"))
+        )
+    numeric_values_present = all(
+        value is not None
+        for value in (*grid_prices, *demand_charge_weights)
+    )
+    actual_grid_prices = [
+        value for value in grid_prices if value is not None
+    ]
+    actual_demand_charge_weights = [
+        value for value in demand_charge_weights if value is not None
+    ]
+    accepted = (
+        len(rows) == 24
+        and not malformed_time_index
+        and time_indices == set(range(24))
+        and numeric_values_present
+        and all(
+            abs(value - expected_price) <= 1.0e-9
+            for value in actual_grid_prices
+        )
+        and all(
+            abs(value - expected_demand_charge) <= 1.0e-9
+            for value in actual_demand_charge_weights
+        )
+    )
+    return {
+        "override_requested": True,
+        "accepted": accepted,
+        "source_artifact": source_path.name,
+        "expected_grid_energy_price_yen_per_kwh": expected_price,
+        "expected_demand_charge_yen_per_kw": expected_demand_charge,
+        "observed_row_count": len(rows),
+        "observed_time_indices": sorted(time_indices),
+        "observed_grid_energy_prices_yen_per_kwh": sorted(
+            set(actual_grid_prices)
+        ),
+        "observed_demand_charge_weights_yen_per_kw": sorted(
+            set(actual_demand_charge_weights)
+        ),
+    }
 
 
 def _integer_preserving_zero(value: Any, *, default: int) -> int:
@@ -1262,6 +1461,7 @@ def _case_gate_audit(
     case_dir: Path,
     prepared_trip_count: int,
     frozen_sha: str,
+    tariff_condition: Mapping[str, Any],
 ) -> dict[str, Any]:
     summary = _read_json(case_dir / "summary.json")
     settings = _read_json(case_dir / "solver_settings.json")
@@ -1292,6 +1492,10 @@ def _case_gate_audit(
         search_telemetry.get("final") or {}
     )
     input_audit = _read_json(case_dir / "input_audit.json")
+    tariff_evidence = _uniform_tariff_evidence(
+        case_dir=case_dir,
+        tariff_condition=tariff_condition,
+    )
     prepare_response = _read_json(
         case_dir / "frontend_prepare_response.json"
     )
@@ -1445,6 +1649,9 @@ def _case_gate_audit(
             )
             >= 10
         ),
+        "tariff_condition_verified_from_canonical_slots": (
+            tariff_evidence.get("accepted") is True
+        ),
         "solver_telemetry_complete": (
             all(
                 _number(value) is not None
@@ -1544,6 +1751,7 @@ def _case_gate_audit(
         "prepared_trip_count": prepared_trip_count,
         "served_trip_count": summary.get("trip_count_served"),
         "certified_gap": certified_gap,
+        "tariff_evidence": tariff_evidence,
     }
 
 
@@ -2391,6 +2599,24 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--service-id", required=True)
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument(
+        "--grid-energy-price-yen-per-kwh",
+        type=float,
+        default=None,
+        help=(
+            "Apply one explicit 00:00--24:00 grid-energy price to both "
+            "cases. Must be supplied together with --demand-charge-yen-per-kw."
+        ),
+    )
+    parser.add_argument(
+        "--demand-charge-yen-per-kw",
+        type=float,
+        default=None,
+        help=(
+            "Apply the same demand/basic-charge coefficient to both cases. "
+            "Use 0 to remove the model demand-charge cost term."
+        ),
+    )
+    parser.add_argument(
         "--job-timeout-seconds",
         type=float,
         default=14_400.0,
@@ -2405,6 +2631,10 @@ def _parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = _parser().parse_args()
+    tariff_condition = _uniform_tariff_condition(
+        grid_energy_price_yen_per_kwh=args.grid_energy_price_yen_per_kwh,
+        demand_charge_yen_per_kw=args.demand_charge_yen_per_kw,
+    )
     output_dir = args.output_dir.resolve()
     zip_path = Path(f"{output_dir}.zip")
     if output_dir.exists() or zip_path.exists():
@@ -2424,8 +2654,17 @@ def main() -> int:
     _write_raw_json_response(output_dir / "bff_health_response.json", health_raw)
     if health.get("status") != "ok":
         raise RuntimeError(f"BFF health check failed: {health}")
+    comparison_name = "same-service-date high-PV/low-PV supply sensitivity"
+    if tariff_condition["override_requested"]:
+        comparison_name += (
+            " under a uniform "
+            f"{tariff_condition['grid_energy_price_yen_per_kwh']:g} "
+            "JPY/kWh grid tariff and "
+            f"{tariff_condition['demand_charge_yen_per_kw']:g} JPY/kW "
+            "demand-charge rate"
+        )
     code_and_environment = {
-        "schema_version": "controlled_pv_pair_environment_v1",
+        "schema_version": "controlled_pv_pair_environment_v2",
         "captured_at_utc": _utc_now(),
         "repository_root": str(REPO_ROOT),
         "frozen_git_sha": frozen_sha,
@@ -2438,9 +2677,8 @@ def main() -> int:
         "gurobi_license_file": os.environ.get("GRB_LICENSE_FILE"),
         "mc_outputs_dir": os.environ.get("MC_OUTPUTS_DIR"),
         "bff_opt_executor": os.environ.get("BFF_OPT_EXECUTOR"),
-        "comparison_name": (
-            "same-service-date high-PV/low-PV supply sensitivity"
-        ),
+        "comparison_name": comparison_name,
+        "tariff_condition": tariff_condition,
         "runtime_comparison_repetitions_per_case": 1,
         "runtime_claim_eligible": False,
     }
@@ -2448,6 +2686,7 @@ def main() -> int:
         output_dir / "code_and_environment.json",
         code_and_environment,
     )
+    _write_json(output_dir / "tariff_condition.json", tariff_condition)
 
     cases = (
         (
@@ -2459,6 +2698,10 @@ def main() -> int:
                 service_date=args.service_date,
                 pv_source_date=args.service_date,
                 comparison_role="baseline",
+                grid_energy_price_yen_per_kwh=(
+                    args.grid_energy_price_yen_per_kwh
+                ),
+                demand_charge_yen_per_kw=args.demand_charge_yen_per_kw,
             ),
         ),
         (
@@ -2470,6 +2713,10 @@ def main() -> int:
                 service_date=args.service_date,
                 pv_source_date=args.rain_pv_source_date,
                 comparison_role="pv_curve_counterfactual",
+                grid_energy_price_yen_per_kwh=(
+                    args.grid_energy_price_yen_per_kwh
+                ),
+                demand_charge_yen_per_kw=args.demand_charge_yen_per_kw,
             ),
         ),
     )
@@ -2623,6 +2870,7 @@ def main() -> int:
                     prepare_response.get("tripCount") or 0
                 ),
                 frozen_sha=frozen_sha,
+                tariff_condition=tariff_condition,
             )
             case_gate_audits[name] = audit
             failed_checks.extend(
@@ -2672,6 +2920,7 @@ def main() -> int:
             )
         },
         "same_assignment_investigation": same_assignment,
+        "tariff_condition": tariff_condition,
         "pair_manifest": {
             "accepted_for_controlled_pv_sensitivity_comparison": (
                 pair_manifest.get(

@@ -47,6 +47,7 @@ def test_runner_has_no_optimization_domain_imports() -> None:
         "datetime",
         "hashlib",
         "json",
+        "math",
         "os",
         "pathlib",
         "platform",
@@ -125,6 +126,68 @@ def test_prepare_payload_separates_service_date_from_pv_source() -> None:
         == rain_settings["cost_component_flags"]
         == runner.CONTROLLED_COST_COMPONENT_FLAGS
     )
+
+
+def test_prepare_payload_replaces_inherited_tou_with_uniform_tariff() -> None:
+    runner = _load_runner()
+
+    payload = runner.build_prepare_payload(
+        depot_id="tsurumaki",
+        service_id="WEEKDAY",
+        service_date="2025-08-05",
+        pv_source_date="2025-08-05",
+        comparison_role="baseline",
+        grid_energy_price_yen_per_kwh=30.0,
+        demand_charge_yen_per_kw=0.0,
+    )
+
+    settings = payload["simulation_settings"]
+    assert settings["grid_flat_price_per_kwh"] == 30.0
+    assert settings["demand_charge_cost_per_kw"] == 0.0
+    assert settings["tou_pricing"] == [
+        {"start_hour": 0, "end_hour": 24, "price_per_kwh": 30.0}
+    ]
+    assert "fixed at 30 JPY/kWh for every clock slot" in settings[
+        "experiment_notes"
+    ]
+
+
+def test_uniform_tariff_evidence_requires_every_canonical_slot(
+    tmp_path: Path,
+) -> None:
+    runner = _load_runner()
+    rows = "\n".join(
+        f"{time_idx},30.0,0.0" for time_idx in range(24)
+    )
+    (tmp_path / "simulation_conditions_tou_prices.csv").write_text(
+        "time_idx,grid_energy_price_yen_per_kwh,demand_charge_weight\n"
+        f"{rows}\n",
+        encoding="utf-8",
+    )
+    condition = runner._uniform_tariff_condition(
+        grid_energy_price_yen_per_kwh=30.0,
+        demand_charge_yen_per_kw=0.0,
+    )
+
+    accepted = runner._uniform_tariff_evidence(
+        case_dir=tmp_path,
+        tariff_condition=condition,
+    )
+
+    assert accepted["accepted"] is True
+    assert accepted["observed_grid_energy_prices_yen_per_kwh"] == [30.0]
+    assert accepted["observed_demand_charge_weights_yen_per_kw"] == [0.0]
+
+    (tmp_path / "simulation_conditions_tou_prices.csv").write_text(
+        "time_idx,grid_energy_price_yen_per_kwh,demand_charge_weight\n"
+        f"{rows.replace('12,30.0,0.0', '12,29.0,0.0')}\n",
+        encoding="utf-8",
+    )
+    rejected = runner._uniform_tariff_evidence(
+        case_dir=tmp_path,
+        tariff_condition=condition,
+    )
+    assert rejected["accepted"] is False
 
 
 def test_optimization_payloads_match_except_fresh_prepared_id() -> None:

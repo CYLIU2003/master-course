@@ -1570,3 +1570,18 @@ The frontend-equivalent Phase 3 runner keeps the release decision in
 chain records operational acceptance but must not promote a run that is still
 blocked by research-cost, optimality, provenance, or comparison checks.  The
 generated `experiment_report.md` mirrors that gate.
+
+### Controlled flat-tariff sensitivity
+
+`scripts/run_frontend_controlled_pv_pair.py` can deliberately apply the same
+uniform tariff to both freshly prepared cases with
+`--grid-energy-price-yen-per-kwh <JPY>` and
+`--demand-charge-yen-per-kw <JPY>`. It sends both the flat-price field and a
+single `00:00--24:00` TOU band, because an inherited multi-band TOU schedule
+would otherwise take precedence over the flat value. For a zero basic/demand
+charge, pass `--demand-charge-yen-per-kw 0`; this leaves physical grid limits
+unchanged while zeroing the model's demand-charge coefficient. The runner
+persists `tariff_condition.json` and accepts a case only when all 24 canonical
+rows in `simulation_conditions_tou_prices.csv` match the requested price and
+demand-charge rate. This is a separate tariff sensitivity, not a replacement
+for a PV-only comparison under the original tariff.
