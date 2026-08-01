@@ -4,6 +4,7 @@ import csv
 import hashlib
 import json
 import math
+import tempfile
 import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -4192,6 +4193,25 @@ class GurobiMILPAdapter:
             ),
             50,
         )
+        stage1_composition_search_radius = min(
+            max(
+                int(
+                    getattr(
+                        config,
+                        "stage1_composition_search_radius",
+                        0,
+                    )
+                    or 0
+                ),
+                0,
+            ),
+            5,
+        )
+        stage1_composition_search_enabled = bool(
+            stage2_enabled
+            and stage1_stage2_candidate_limit > 1
+            and stage1_composition_search_radius > 0
+        )
         stage1_candidate_enumeration_reserve_sec = 0.0
         stage1_primary_search_time_limit_sec = float(stage_time_limit)
         if stage2_enabled and stage1_stage2_candidate_limit > 1:
@@ -4217,7 +4237,16 @@ class GurobiMILPAdapter:
             stage1.Params.TimeLimit = (
                 stage1_primary_search_time_limit_sec
             )
-            stage1.Params.PoolSolutions = stage1_stage2_candidate_limit
+            # A primary solution pool can be filled with vehicle-path
+            # symmetries before the requested used-powertrain neighborhoods
+            # are examined.  When explicit composition search is enabled,
+            # retain the incumbent only and reserve the remaining candidate
+            # capacity for those exact count-constrained re-solves.
+            stage1.Params.PoolSolutions = (
+                1
+                if stage1_composition_search_enabled
+                else stage1_stage2_candidate_limit
+            )
 
         builder = MILPModelBuilder()
         trip_by_id = problem.trip_by_id()
@@ -5686,6 +5715,48 @@ class GurobiMILPAdapter:
                 ).encode("utf-8")
             ).hexdigest()
 
+        def _stage1_infeasibility_model_evidence() -> Dict[str, Any]:
+            """Hash the exact temporary Stage 1 LP used for an IIS claim.
+
+            A solver status alone is not a reproducible composition
+            certificate. The LP hash is captured while the target-count
+            constraints are still present, alongside separately recorded
+            solver controls and the time-indexed recourse input hash.
+            """
+
+            lp_path: Optional[Path] = None
+            try:
+                with tempfile.NamedTemporaryFile(
+                    suffix=".lp",
+                    delete=False,
+                ) as handle:
+                    lp_path = Path(handle.name)
+                stage1.write(str(lp_path))
+                lp_bytes = lp_path.read_bytes()
+                try:
+                    model_fingerprint: Optional[int] = int(stage1.Fingerprint)
+                except Exception:
+                    model_fingerprint = None
+                return {
+                    "stage1_model_lp_sha256": hashlib.sha256(
+                        lp_bytes
+                    ).hexdigest(),
+                    "stage1_model_fingerprint": model_fingerprint,
+                    "stage1_model_num_variables": int(stage1.NumVars),
+                    "stage1_model_num_constraints": int(stage1.NumConstrs),
+                }
+            except Exception as exc:
+                return {
+                    "stage1_model_lp_sha256": "",
+                    "stage1_model_evidence_error": str(exc),
+                }
+            finally:
+                if lp_path is not None:
+                    try:
+                        lp_path.unlink(missing_ok=True)
+                    except OSError:
+                        pass
+
         def _candidate_assignment_details(
             plan: AssignmentPlan,
         ) -> List[Dict[str, str]]:
@@ -5749,6 +5820,77 @@ class GurobiMILPAdapter:
                     for duty in plan.duties
                     for leg in duty.legs
                 )
+            )
+
+        def _candidate_used_powertrain_composition(
+            plan: AssignmentPlan,
+        ) -> Tuple[int, int]:
+            """Return the actual activated electric/combustion bus counts.
+
+            The candidate table historically calls the electric count
+            ``used_bev`` even though the canonical electric group also covers
+            PHEV/FCEV.  Preserve that external field name while keeping the
+            grouping identical to the Stage 1 used-vehicle expressions.
+            """
+
+            assigned_vehicle_ids = {
+                str(plan.vehicle_id_for_duty(duty.duty_id))
+                for duty in plan.duties
+                if duty.legs
+            }
+            used_electric = sum(
+                _powertrain_group(vehicle_id) == "ELECTRIC"
+                for vehicle_id in assigned_vehicle_ids
+            )
+            return (
+                int(used_electric),
+                int(len(assigned_vehicle_ids) - used_electric),
+            )
+
+        def _current_stage1_plan(
+            *,
+            candidate_source: str,
+            metadata: Optional[Mapping[str, Any]] = None,
+        ) -> AssignmentPlan:
+            """Extract the current Stage 1 incumbent after a bounded re-solve."""
+
+            (
+                candidate_duties,
+                candidate_served_trip_ids,
+                candidate_duty_vehicle_map,
+            ) = self._build_vehicle_duties_from_solution(
+                problem=problem,
+                trip_by_id=trip_by_id,
+                dispatch_trip_by_id=dispatch_trip_by_id,
+                y=y,
+                x=x,
+                start_arc=start_arc,
+            )
+            candidate_served = set(candidate_served_trip_ids)
+            return AssignmentPlan(
+                duties=tuple(candidate_duties),
+                served_trip_ids=tuple(sorted(candidate_served)),
+                unserved_trip_ids=tuple(
+                    sorted(
+                        trip.trip_id
+                        for trip in problem.trips
+                        if trip.trip_id not in candidate_served
+                    )
+                ),
+                metadata={
+                    **dict(stage1_plan.metadata or {}),
+                    "duty_vehicle_map": candidate_duty_vehicle_map,
+                    "stage1_objective": float(
+                        getattr(stage1, "ObjVal", 0.0) or 0.0
+                    ),
+                    "stage1_candidate_source": candidate_source,
+                    "stage1_time_indexed_energy_recourse_result": (
+                        self._stage1_time_indexed_energy_recourse_result(
+                            stage1_time_indexed_energy_recourse
+                        )
+                    ),
+                    **dict(metadata or {}),
+                },
             )
 
         def _add_powertrain_pattern_no_good(
@@ -6196,6 +6338,398 @@ class GurobiMILPAdapter:
                 )
             )
 
+        primary_used_bev, primary_used_ice = (
+            _candidate_used_powertrain_composition(stage1_plan)
+        )
+        available_electric_vehicle_ids = tuple(
+            sorted(
+                str(vehicle.vehicle_id)
+                for vehicle in problem.vehicles
+                if bool(getattr(vehicle, "available", True))
+                and _powertrain_group(str(vehicle.vehicle_id)) == "ELECTRIC"
+            )
+        )
+        available_combustion_vehicle_ids = tuple(
+            sorted(
+                str(vehicle.vehicle_id)
+                for vehicle in problem.vehicles
+                if bool(getattr(vehicle, "available", True))
+                and _powertrain_group(str(vehicle.vehicle_id)) == "COMBUSTION"
+            )
+        )
+        composition_target_records: List[Dict[str, Any]] = []
+        composition_search_events: List[Dict[str, Any]] = []
+        composition_search_runtime_sec = 0.0
+        composition_certificate_evidence_wall_time_sec = 0.0
+        if stage1_composition_search_enabled:
+            # Search adjacent *activated-vehicle* compositions explicitly.
+            # This is not a weather or BEV-use policy: both count equalities
+            # are temporary constraints on the unchanged Stage 1 objective and
+            # recourse model.  It can therefore activate a previously unused
+            # BEV while retiring an ICE, unlike the legacy whole-duty swap
+            # MIP starts.
+            seen_target_compositions: Set[Tuple[int, int]] = set()
+            for distance in range(1, stage1_composition_search_radius + 1):
+                for bev_delta in (distance, -distance):
+                    target = (
+                        int(primary_used_bev + bev_delta),
+                        int(primary_used_ice - bev_delta),
+                    )
+                    if target in seen_target_compositions:
+                        continue
+                    seen_target_compositions.add(target)
+                    target_record: Dict[str, Any] = {
+                        "target_used_bev": target[0],
+                        "target_used_ice": target[1],
+                        "delta_used_bev_from_primary": int(bev_delta),
+                        "delta_used_ice_from_primary": int(-bev_delta),
+                        "target_total_used_vehicle_count": int(sum(target)),
+                        "target_semantics": (
+                            "exact_stage1_used_vehicle_count_constraint; "
+                            "used_bev means the canonical electric group "
+                            "BEV/PHEV/FCEV"
+                        ),
+                        "target_within_selected_inventory": bool(
+                            0 <= target[0] <= len(available_electric_vehicle_ids)
+                            and 0
+                            <= target[1]
+                            <= len(available_combustion_vehicle_ids)
+                        ),
+                    }
+                    if not target_record["target_within_selected_inventory"]:
+                        target_record["search_status"] = (
+                            "outside_selected_inventory"
+                        )
+                    composition_target_records.append(target_record)
+
+            valid_target_count = sum(
+                record["target_within_selected_inventory"]
+                for record in composition_target_records
+            )
+            attempted_valid_targets = 0
+            for target_record in composition_target_records:
+                if not target_record["target_within_selected_inventory"]:
+                    composition_search_events.append(dict(target_record))
+                    continue
+                attempted_valid_targets += 1
+                remaining_valid_targets = max(
+                    valid_target_count - attempted_valid_targets + 1,
+                    1,
+                )
+                if len(stage1_candidates) >= stage1_stage2_candidate_limit:
+                    target_record.update(
+                        {
+                            "search_status": (
+                                "not_attempted_candidate_limit_exhausted"
+                            ),
+                            "certificate_eligible": False,
+                        }
+                    )
+                    composition_search_events.append(dict(target_record))
+                    continue
+                composition_budget_remaining = max(
+                    stage1_candidate_enumeration_reserve_sec
+                    - (
+                        stage1_total_solver_runtime_sec
+                        - stage1_primary_runtime_sec
+                    ),
+                    0.0,
+                )
+                if composition_budget_remaining < 0.25:
+                    target_record.update(
+                        {
+                            "search_status": "not_attempted_budget_exhausted",
+                            "certificate_eligible": False,
+                        }
+                    )
+                    composition_search_events.append(dict(target_record))
+                    continue
+
+                target_used_bev = int(target_record["target_used_bev"])
+                target_used_ice = int(target_record["target_used_ice"])
+                target_index = len(composition_search_events) + 1
+                electric_constraint = stage1.addConstr(
+                    gp.quicksum(
+                        used_vehicle[vehicle_id]
+                        for vehicle_id in available_electric_vehicle_ids
+                    )
+                    == target_used_bev,
+                    name=(
+                        "stage1_composition_used_electric_target__"
+                        f"{target_index}"
+                    ),
+                )
+                combustion_constraint = stage1.addConstr(
+                    gp.quicksum(
+                        used_vehicle[vehicle_id]
+                        for vehicle_id in available_combustion_vehicle_ids
+                    )
+                    == target_used_ice,
+                    name=(
+                        "stage1_composition_used_combustion_target__"
+                        f"{target_index}"
+                    ),
+                )
+                stage1.update()
+                composition_time_limit_sec = min(
+                    4.5,
+                    max(
+                        composition_budget_remaining / remaining_valid_targets,
+                        0.25,
+                    ),
+                )
+                stage1.Params.TimeLimit = composition_time_limit_sec
+                stage1.Params.PoolSearchMode = 0
+                stage1.Params.PoolSolutions = 1
+                composition_started = time.perf_counter()
+                try:
+                    stage1.optimize()
+                    composition_wall_time_sec = float(
+                        time.perf_counter() - composition_started
+                    )
+                    composition_solver_runtime_sec = float(
+                        getattr(stage1, "Runtime", 0.0) or 0.0
+                    )
+                    composition_search_runtime_sec += (
+                        composition_solver_runtime_sec
+                    )
+                    stage1_total_solver_runtime_sec += (
+                        composition_solver_runtime_sec
+                    )
+                    composition_status = self._status_name(GRB, stage1.Status)
+                    target_record.update(
+                        {
+                            "search_status": composition_status,
+                            "solver_status": composition_status,
+                            "solver_runtime_sec": composition_solver_runtime_sec,
+                            "wall_time_sec": composition_wall_time_sec,
+                            "time_limit_sec": composition_time_limit_sec,
+                            "solution_count": int(
+                                getattr(stage1, "SolCount", 0) or 0
+                            ),
+                            "best_bound": self._model_bound(stage1),
+                            "mip_gap_ratio": self._model_gap(stage1),
+                            "certificate_eligible": (
+                                composition_status == "infeasible"
+                            ),
+                        }
+                    )
+                    if composition_status == "infeasible":
+                        iis_constraint_names: List[str] = []
+                        iis_error = ""
+                        target_count_constraint_names = sorted(
+                            {
+                                str(electric_constraint.ConstrName),
+                                str(combustion_constraint.ConstrName),
+                            }
+                        )
+                        iis_started = time.perf_counter()
+                        try:
+                            stage1.computeIIS()
+                            iis_constraint_names = sorted(
+                                str(constraint.ConstrName)
+                                for constraint in stage1.getConstrs()
+                                if int(
+                                    getattr(constraint, "IISConstr", 0) or 0
+                                )
+                                == 1
+                            )
+                        except Exception as exc:
+                            iis_error = str(exc)
+                        iis_wall_time_sec = float(
+                            time.perf_counter() - iis_started
+                        )
+                        iis_generated = bool(
+                            not iis_error and iis_constraint_names
+                        )
+                        target_count_constraint_in_iis = bool(
+                            set(target_count_constraint_names).intersection(
+                                iis_constraint_names
+                            )
+                        )
+                        model_evidence_started = time.perf_counter()
+                        model_evidence = _stage1_infeasibility_model_evidence()
+                        model_evidence_wall_time_sec = float(
+                            time.perf_counter() - model_evidence_started
+                        )
+                        certificate_evidence_wall_time_sec = (
+                            iis_wall_time_sec
+                            + model_evidence_wall_time_sec
+                        )
+                        composition_certificate_evidence_wall_time_sec += (
+                            certificate_evidence_wall_time_sec
+                        )
+                        solver_controls = {
+                            "random_seed": int(config.random_seed),
+                            "mip_gap_ratio": float(config.mip_gap),
+                            "feasibility_tolerance": stage1_feasibility_tol,
+                            "gurobi_threads": configured_threads,
+                            "composition_time_limit_sec": (
+                                composition_time_limit_sec
+                            ),
+                            "target_used_bev": target_used_bev,
+                            "target_used_ice": target_used_ice,
+                            "recourse_input_hash": str(
+                                stage1_time_indexed_energy_recourse.configuration.get(
+                                    "recourse_input_hash"
+                                )
+                                or ""
+                            ),
+                        }
+                        solver_controls_hash = hashlib.sha256(
+                            json.dumps(
+                                solver_controls,
+                                ensure_ascii=False,
+                                sort_keys=True,
+                                separators=(",", ":"),
+                                default=str,
+                            ).encode("utf-8")
+                        ).hexdigest()
+                        certificate_failure_reasons: List[str] = []
+                        if not iis_generated:
+                            certificate_failure_reasons.append(
+                                "iis_not_successfully_generated"
+                            )
+                        if not target_count_constraint_in_iis:
+                            certificate_failure_reasons.append(
+                                "iis_missing_target_count_constraint"
+                            )
+                        if not model_evidence.get("stage1_model_lp_sha256"):
+                            certificate_failure_reasons.append(
+                                "stage1_lp_model_hash_unavailable"
+                            )
+                        certificate_accepted = not certificate_failure_reasons
+                        certificate_payload = {
+                            "kind": (
+                                "gurobi_stage1_infeasible_used_powertrain_"
+                                "composition"
+                            ),
+                            "target_used_bev": target_used_bev,
+                            "target_used_ice": target_used_ice,
+                            "solver_status": composition_status,
+                            "iis_generated": iis_generated,
+                            "iis_wall_time_sec": iis_wall_time_sec,
+                            "iis_constraint_names": iis_constraint_names,
+                            "iis_constraint_hash": hashlib.sha256(
+                                json.dumps(
+                                    iis_constraint_names,
+                                    ensure_ascii=False,
+                                    separators=(",", ":"),
+                                ).encode("utf-8")
+                            ).hexdigest(),
+                            "target_count_constraint_names": (
+                                target_count_constraint_names
+                            ),
+                            "target_count_constraint_in_iis": (
+                                target_count_constraint_in_iis
+                            ),
+                            "solver_controls": solver_controls,
+                            "solver_controls_hash": solver_controls_hash,
+                            "model_evidence_wall_time_sec": (
+                                model_evidence_wall_time_sec
+                            ),
+                            "certificate_evidence_wall_time_sec": (
+                                certificate_evidence_wall_time_sec
+                            ),
+                            **model_evidence,
+                            "iis_error": iis_error,
+                            "accepted_for_formal_composition_evidence": (
+                                certificate_accepted
+                            ),
+                            "failure_reasons": certificate_failure_reasons,
+                        }
+                        target_record.update(
+                            {
+                                "certificate_eligible": certificate_accepted,
+                                "infeasibility_certificate": (
+                                    certificate_payload
+                                ),
+                            }
+                        )
+                    elif int(getattr(stage1, "SolCount", 0) or 0) > 0:
+                        composition_plan = _current_stage1_plan(
+                            candidate_source=(
+                                "used_powertrain_composition_neighborhood"
+                            ),
+                            metadata={
+                                "stage1_composition_target_used_bev": (
+                                    target_used_bev
+                                ),
+                                "stage1_composition_target_used_ice": (
+                                    target_used_ice
+                                ),
+                                "stage1_composition_target_delta_used_bev": (
+                                    target_record[
+                                        "delta_used_bev_from_primary"
+                                    ]
+                                ),
+                                "stage1_composition_search_solver_status": (
+                                    composition_status
+                                ),
+                            },
+                        )
+                        assignment_pairs = _assignment_pairs_for_plan(
+                            composition_plan
+                        )
+                        assignment_hash = _candidate_hash(assignment_pairs)
+                        actual_used_bev, actual_used_ice = (
+                            _candidate_used_powertrain_composition(
+                                composition_plan
+                            )
+                        )
+                        target_record.update(
+                            {
+                                "candidate_hash": assignment_hash,
+                                "actual_used_bev": actual_used_bev,
+                                "actual_used_ice": actual_used_ice,
+                                "target_constraint_satisfied_by_extracted_plan": (
+                                    actual_used_bev == target_used_bev
+                                    and actual_used_ice == target_used_ice
+                                ),
+                            }
+                        )
+                        if assignment_hash in seen_candidate_hashes:
+                            target_record[
+                                "candidate_accepted_for_stage2_evaluation"
+                            ] = False
+                            target_record["candidate_rejection_reason"] = (
+                                "duplicate_assignment_hash"
+                            )
+                        else:
+                            seen_candidate_hashes.add(assignment_hash)
+                            target_record[
+                                "candidate_accepted_for_stage2_evaluation"
+                            ] = True
+                            stage1_candidates.append(
+                                (
+                                    len(stage1_candidates),
+                                    float(
+                                        getattr(stage1, "ObjVal", 0.0)
+                                        or 0.0
+                                    ),
+                                    assignment_hash,
+                                    "used_powertrain_composition_neighborhood",
+                                    replace(
+                                        composition_plan,
+                                        metadata={
+                                            **dict(
+                                                composition_plan.metadata or {}
+                                            ),
+                                            "stage1_pool_solution_index": (
+                                                len(stage1_candidates)
+                                            ),
+                                            "stage1_candidate_assignment_hash": (
+                                                assignment_hash
+                                            ),
+                                        },
+                                    ),
+                                )
+                            )
+                finally:
+                    stage1.remove([electric_constraint, combustion_constraint])
+                    stage1.update()
+                composition_search_events.append(dict(target_record))
+
         enumeration_events: List[Dict[str, Any]] = []
         enumerated_powertrain_patterns: Set[
             Tuple[Tuple[str, str], ...]
@@ -6497,6 +7031,16 @@ class GurobiMILPAdapter:
                         "candidate_index": evaluation_index,
                         "stage1_pool_solution_index": pool_index,
                         "stage1_candidate_source": candidate_source,
+                        "stage1_composition_target_used_bev": (
+                            (candidate_plan.metadata or {}).get(
+                                "stage1_composition_target_used_bev"
+                            )
+                        ),
+                        "stage1_composition_target_used_ice": (
+                            (candidate_plan.metadata or {}).get(
+                                "stage1_composition_target_used_ice"
+                            )
+                        ),
                         "candidate_hash": assignment_hash,
                         "assignment_hash": assignment_hash,
                         "stage1_relaxed_objective_jpy": relaxed_objective,
@@ -6667,6 +7211,16 @@ class GurobiMILPAdapter:
                     "candidate_index": evaluation_index,
                     "stage1_pool_solution_index": pool_index,
                     "stage1_candidate_source": candidate_source,
+                    "stage1_composition_target_used_bev": (
+                        (candidate_plan.metadata or {}).get(
+                            "stage1_composition_target_used_bev"
+                        )
+                    ),
+                    "stage1_composition_target_used_ice": (
+                        (candidate_plan.metadata or {}).get(
+                            "stage1_composition_target_used_ice"
+                        )
+                    ),
                     "candidate_hash": assignment_hash,
                     "assignment_hash": assignment_hash,
                     "stage1_relaxed_objective_jpy": relaxed_objective,
@@ -6762,6 +7316,165 @@ class GurobiMILPAdapter:
                     )
                 )
 
+        feasible_composition_pairs = sorted(
+            {
+                (
+                    int(candidate.get("used_bev") or 0),
+                    int(candidate.get("used_ice") or 0),
+                )
+                for candidate in candidate_evaluations
+                if candidate.get("feasible") is True
+            }
+        )
+        feasible_composition_pair_payload = [
+            {"used_bev": used_bev, "used_ice": used_ice}
+            for used_bev, used_ice in feasible_composition_pairs
+        ]
+        physically_feasible_targets = {
+            (
+                int(candidate.get("used_bev") or 0),
+                int(candidate.get("used_ice") or 0),
+            )
+            for candidate in candidate_evaluations
+            if candidate.get("feasible") is True
+        }
+        unresolved_composition_targets: List[Dict[str, Any]] = []
+        for event in composition_search_events:
+            if event.get("target_within_selected_inventory") is not True:
+                continue
+            target = (
+                int(event.get("target_used_bev") or 0),
+                int(event.get("target_used_ice") or 0),
+            )
+            if target in physically_feasible_targets:
+                event["final_disposition"] = (
+                    "physically_feasible_stage2_candidate"
+                )
+            elif (
+                event.get("solver_status") == "infeasible"
+                and isinstance(
+                    event.get("infeasibility_certificate"), Mapping
+                )
+                and dict(event["infeasibility_certificate"]).get(
+                    "accepted_for_formal_composition_evidence"
+                )
+                is True
+            ):
+                event["final_disposition"] = (
+                    "stage1_infeasibility_certificate"
+                )
+            else:
+                event["final_disposition"] = "unresolved"
+                unresolved_composition_targets.append(
+                    {
+                        "target_used_bev": target[0],
+                        "target_used_ice": target[1],
+                        "search_status": event.get("search_status"),
+                        "solver_status": event.get("solver_status"),
+                    }
+                )
+
+        valid_composition_events = [
+            event
+            for event in composition_search_events
+            if event.get("target_within_selected_inventory") is True
+        ]
+        multiple_feasible_compositions_found = (
+            len(feasible_composition_pairs) >= 2
+        )
+        all_adjacent_targets_certified_infeasible = bool(
+            stage1_composition_search_enabled
+            and valid_composition_events
+            and all(
+                event.get("final_disposition")
+                == "stage1_infeasibility_certificate"
+                for event in valid_composition_events
+            )
+        )
+        inventory_has_no_adjacent_composition = bool(
+            stage1_composition_search_enabled
+            and composition_target_records
+            and not valid_composition_events
+            and all(
+                event.get("target_within_selected_inventory") is False
+                for event in composition_target_records
+            )
+        )
+        composition_search_accepted = bool(
+            multiple_feasible_compositions_found
+            or all_adjacent_targets_certified_infeasible
+            or inventory_has_no_adjacent_composition
+        )
+        composition_search_blockers: List[str] = []
+        if not stage1_composition_search_enabled:
+            composition_search_blockers.append("composition_search_disabled")
+        if not multiple_feasible_compositions_found:
+            composition_search_blockers.append(
+                "only_one_or_zero_physically_feasible_used_powertrain_composition"
+            )
+        if unresolved_composition_targets:
+            composition_search_blockers.append(
+                "adjacent_used_powertrain_composition_unresolved"
+            )
+        if (
+            not all_adjacent_targets_certified_infeasible
+            and not inventory_has_no_adjacent_composition
+            and not multiple_feasible_compositions_found
+        ):
+            composition_search_blockers.append(
+                "no_complete_adjacent_composition_infeasibility_certificate"
+            )
+        if composition_search_accepted:
+            composition_search_blockers = []
+        composition_search_certificate = {
+            "schema_version": "stage1_used_powertrain_composition_search_v1",
+            "enabled": stage1_composition_search_enabled,
+            "radius_requested": stage1_composition_search_radius,
+            "primary_used_powertrain_composition": {
+                "used_bev": primary_used_bev,
+                "used_ice": primary_used_ice,
+            },
+            "selected_inventory": {
+                "available_electric_vehicle_count": len(
+                    available_electric_vehicle_ids
+                ),
+                "available_combustion_vehicle_count": len(
+                    available_combustion_vehicle_ids
+                ),
+                "electric_vehicle_ids": list(available_electric_vehicle_ids),
+                "combustion_vehicle_ids": list(
+                    available_combustion_vehicle_ids
+                ),
+            },
+            "target_records": composition_search_events,
+            "feasible_used_powertrain_compositions": (
+                feasible_composition_pair_payload
+            ),
+            "multiple_feasible_compositions_found": (
+                multiple_feasible_compositions_found
+            ),
+            "all_adjacent_targets_certified_infeasible": (
+                all_adjacent_targets_certified_infeasible
+            ),
+            "inventory_has_no_adjacent_composition": (
+                inventory_has_no_adjacent_composition
+            ),
+            "unresolved_targets": unresolved_composition_targets,
+            "accepted_for_formal_composition_evidence": (
+                composition_search_accepted
+            ),
+            "blocking_reasons": composition_search_blockers,
+            "semantics": (
+                "A time limit, missing incumbent, Stage 2 failure, or physical "
+                "validation failure is unresolved and is never an infeasibility "
+                "certificate. A Stage 1 certificate additionally requires a "
+                "successful nonempty IIS containing a temporary target-count "
+                "constraint and a hash of the exact temporary Stage 1 LP. It "
+                "proves only the declared used-powertrain-count neighborhood "
+                "under this two-stage model."
+            ),
+        }
+
         candidate_selection_metadata = {
             "stage1_stage2_candidate_limit_requested": (
                 stage1_stage2_candidate_limit
@@ -6779,8 +7492,9 @@ class GurobiMILPAdapter:
             "stage1_stage2_candidate_selection_semantics": (
                 "minimum_canonical_actual_cost_among_stage2_feasible_"
                 "independently_physically_valid_"
-                "time_bounded_primary_pool_and_powertrain_pattern_no_good_"
-                "enumeration_candidates"
+                "time_bounded_primary_pool_used_powertrain_composition_"
+                "neighborhood_and_powertrain_pattern_no_good_enumeration_"
+                "candidates"
             ),
             "stage1_stage2_candidate_global_optimality_claimed": False,
             "stage1_stage2_candidate_evaluation": candidate_evaluations,
@@ -6801,6 +7515,21 @@ class GurobiMILPAdapter:
                 0.0,
             ),
             "stage1_candidate_enumeration_events": enumeration_events,
+            "stage1_composition_search_radius_requested": (
+                stage1_composition_search_radius
+            ),
+            "stage1_composition_search_runtime_seconds": (
+                composition_search_runtime_sec
+            ),
+            "stage1_composition_search_certificate_evidence_wall_seconds": (
+                composition_certificate_evidence_wall_time_sec
+            ),
+            "stage1_used_powertrain_composition_search": (
+                composition_search_certificate
+            ),
+            "stage1_used_powertrain_composition_search_accepted": (
+                composition_search_accepted
+            ),
             "stage1_candidate_powertrain_pattern_no_good_cut_count": (
                 no_good_cut_count
             ),

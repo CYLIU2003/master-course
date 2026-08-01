@@ -1,6 +1,6 @@
 # Current research release blockers
 
-Status date: 2026-07-30
+Status date: 2026-08-01
 Code status: slot-indexed Stage 1 energy recourse, multi-candidate Stage 2
 evaluation, explicit same-service-date PV controls, and an HTTP-only frontend
 pair runner are implemented. A final-slot return-boundary defect exposed by
@@ -18,6 +18,50 @@ Teacher release status is fail-closed: **BLOCKED** unless
 zero failed checks, the exact frozen Git SHA at start and end, and a completed
 ZIP. When that artifact exists for the current frozen SHA, this blocker is
 discharged without modifying the repository during the experiment.
+
+## 2026-08-01 flat-30 pair: composition and accounting blockers
+
+`output/2026-07-31/run_20260731_1201` (sunny) and
+`output/2026-07-31/run_20260731_1210` (rain) are retained as **DIAGNOSTIC
+RESULTS — NOT USED FOR RESEARCH CONCLUSIONS**. They share the controlled
+non-PV hash and have distinct PV totals (614.709375 / 101.1143 kWh), but all
+21 retained Stage-1/Stage-2 candidates in each case use the single activated
+composition `(used_bev, used_ice)=(13,19)`. The selected BEV trip counts are
+43 / 44. Existing trip-pattern alternatives do not prove that adjacent fleet
+compositions are infeasible, so this is not evidence that the common
+composition is cost-optimal.
+
+The current source already uses a slot-level assignment-coupled continuous
+PV/grid/BESS recourse in Stage 1; it is not correct to repair this result by
+reintroducing a whole-day `min(grid_price)` or unlimited zero-price grid proxy.
+The actual missing evidence was an explicit activated-BEV/ICE neighborhood and
+certificate. The current tree adds that search and rejects a formal release
+unless it finds more than one physically valid composition or proves every
+in-inventory adjacent target infeasible. A formal infeasibility certificate
+requires a successful nonempty IIS containing the temporary count constraint,
+the exact temporary Stage 1 LP SHA-256, and the recorded solver controls;
+`TIME_LIMIT`, an empty/failed IIS, or a missing model hash is unresolved, not
+a certificate.
+
+The rain artifact additionally has
+`solver_objective_matches_accounting_total=false`: Stage-1 solver objective
+`720352.6732800236 JPY` and canonical executed-day accounting
+`720374.9661326109 JPY` differ by `22.2928525873 JPY`. Its
+`final_cost_reconciliation.json=OK` reconciles reporting artifacts to the
+executed-day ledger only; it does not reconcile the solver objective. The
+formal pair builder now blocks this condition using a numeric
+`solver_objective_accounting_reconciliation.json` evidence artifact rather
+than a Boolean flag or relabelling it as a total-cost optimum. A clean frozen
+SHA must rerun both cases and preserve the new composition certificate plus
+`assignment_economic_audit.json/.csv`.
+
+For interpretation, 30 JPY/kWh grid energy gives approximately
+`1.316 / 0.95 * 30 = 41.56 JPY/km` at the charger-input contract, whereas ICE
+fuel is `0.2212389 * 150 = 33.19 JPY/km`; the corresponding energy-only grid
+break-even is about `23.96 JPY/kWh`. This supports neither a hidden BEV
+preference nor an assertion that sunny PV must always increase BEV use: any
+remaining equal-composition result requires the persisted binding/certificate
+evidence before research interpretation.
 
 ## Separate controlled tariff sensitivity (2026-07-31)
 

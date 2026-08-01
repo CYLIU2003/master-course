@@ -8,6 +8,13 @@ import json
 from pathlib import Path
 from typing import Any, Mapping
 
+from bff.services.optimization_run.artifact_completeness import (
+    SOLVER_OBJECTIVE_ACCOUNTING_RECONCILIATION_FILE,
+    STAGE1_USED_POWERTRAIN_COMPOSITION_SEARCH_FILE,
+    validate_solver_objective_accounting_reconciliation,
+    validate_stage1_used_powertrain_composition_search,
+)
+
 
 _PAIR_PENDING_RELEASE_CHECK = "controlled_counterfactual_pair_not_verified"
 
@@ -19,6 +26,15 @@ def _load_object(path: Path) -> dict[str, Any]:
     if not isinstance(loaded, dict):
         raise ValueError(f"Expected a JSON object: {path}")
     return dict(loaded)
+
+
+def _load_optional_object(path: Path) -> dict[str, Any]:
+    """Load optional release evidence so a rejected pair can still be written."""
+
+    try:
+        return _load_object(path)
+    except (OSError, ValueError, json.JSONDecodeError):
+        return {}
 
 
 def _canonical_hash(value: Any) -> str:
@@ -90,6 +106,12 @@ def _case(run_dir: Path) -> dict[str, Any]:
         "research_claim_scope": claim_scope,
         "canonical_cost_ledger": ledger,
         "summary": summary,
+        "solver_objective_accounting_reconciliation": _load_optional_object(
+            run_dir / SOLVER_OBJECTIVE_ACCOUNTING_RECONCILIATION_FILE
+        ),
+        "composition_search_certificate": _load_optional_object(
+            run_dir / STAGE1_USED_POWERTRAIN_COMPOSITION_SEARCH_FILE
+        ),
         "pv_profile": _pv_profile(run_dir),
     }
 
@@ -184,6 +206,30 @@ def build_frontend_pv_pair_artifacts(
     counterfactual_control = dict(
         counterfactual_manifest.get("comparison_control_payload") or {}
     )
+    baseline_objective_accounting_errors = (
+        validate_solver_objective_accounting_reconciliation(
+            baseline["solver_objective_accounting_reconciliation"],
+            require_match=True,
+        )
+    )
+    counterfactual_objective_accounting_errors = (
+        validate_solver_objective_accounting_reconciliation(
+            counterfactual["solver_objective_accounting_reconciliation"],
+            require_match=True,
+        )
+    )
+    baseline_composition_certificate_errors = (
+        validate_stage1_used_powertrain_composition_search(
+            baseline["composition_search_certificate"],
+            require_accepted=True,
+        )
+    )
+    counterfactual_composition_certificate_errors = (
+        validate_stage1_used_powertrain_composition_search(
+            counterfactual["composition_search_certificate"],
+            require_accepted=True,
+        )
+    )
     checks = {
         "baseline_comparison_explicitly_requested": (
             baseline_manifest.get("comparison_requested") is True
@@ -251,6 +297,18 @@ def build_frontend_pv_pair_artifacts(
             dict(counterfactual["final_cost_reconciliation"]).get("status")
             == "OK"
         ),
+        "baseline_solver_objective_matches_canonical_accounting": (
+            not baseline_objective_accounting_errors
+        ),
+        "counterfactual_solver_objective_matches_canonical_accounting": (
+            not counterfactual_objective_accounting_errors
+        ),
+        "baseline_used_powertrain_composition_search_certified": (
+            not baseline_composition_certificate_errors
+        ),
+        "counterfactual_used_powertrain_composition_search_certified": (
+            not counterfactual_composition_certificate_errors
+        ),
         "baseline_artifact_contract_accepted": (
             dict(baseline["artifact_completeness"]).get("status") == "OK"
             and dict(baseline["artifact_completeness"]).get("accepted") is True
@@ -302,6 +360,24 @@ def build_frontend_pv_pair_artifacts(
         ),
         "checks": checks,
         "failed_checks": failed_checks,
+        "release_evidence_errors": {
+            "baseline": {
+                "solver_objective_accounting": (
+                    baseline_objective_accounting_errors
+                ),
+                "used_powertrain_composition_search": (
+                    baseline_composition_certificate_errors
+                ),
+            },
+            "counterfactual": {
+                "solver_objective_accounting": (
+                    counterfactual_objective_accounting_errors
+                ),
+                "used_powertrain_composition_search": (
+                    counterfactual_composition_certificate_errors
+                ),
+            },
+        },
         "comparison_control_hash": baseline_manifest.get(
             "comparison_control_hash"
         )

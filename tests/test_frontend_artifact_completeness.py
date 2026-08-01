@@ -12,6 +12,7 @@ from bff.routers import optimization
 from bff.services.optimization_run.artifact_completeness import (
     audit_frontend_run_artifacts,
     required_frontend_artifacts,
+    validate_stage1_used_powertrain_composition_search,
 )
 
 
@@ -129,6 +130,96 @@ def _artifact_record(path: Path, *, root: Path) -> dict:
     }
 
 
+def _solver_accounting_reconciliation() -> dict:
+    return {
+        "schema_version": "solver_objective_accounting_reconciliation_v1",
+        "solver_objective_value_jpy": 100.0,
+        "solver_objective_source": "optimization_result.objective_value",
+        "canonical_accounting_total_jpy": 100.0,
+        "canonical_accounting_source": "rolling_hourly_chain/executed_day_accounting.json",
+        "difference_jpy": 0.0,
+        "absolute_difference_jpy": 0.0,
+        "tolerance_jpy": 1.0e-6,
+        "numeric_values_available": True,
+        "numeric_residual_within_tolerance": True,
+        "objective_is_actual_cost": True,
+        "matches_canonical_accounting_total": True,
+        "objective_semantics": "actual_cost",
+    }
+
+
+def _composition_search_certificate() -> dict:
+    return {
+        "schema_version": "stage1_used_powertrain_composition_search_v1",
+        "enabled": True,
+        "radius_requested": 2,
+        "primary_used_powertrain_composition": {"used_bev": 1, "used_ice": 1},
+        "selected_inventory": {
+            "available_electric_vehicle_count": 2,
+            "available_combustion_vehicle_count": 2,
+            "electric_vehicle_ids": ["bev-1", "bev-2"],
+            "combustion_vehicle_ids": ["ice-1", "ice-2"],
+        },
+        "target_records": [
+            {
+                "target_used_bev": 2,
+                "target_used_ice": 0,
+                "target_within_selected_inventory": True,
+                "search_status": "optimal",
+                "solver_status": "optimal",
+                "final_disposition": "physically_feasible_stage2_candidate",
+            }
+        ],
+        "feasible_used_powertrain_compositions": [
+            {"used_bev": 1, "used_ice": 1},
+            {"used_bev": 2, "used_ice": 0},
+        ],
+        "multiple_feasible_compositions_found": True,
+        "all_adjacent_targets_certified_infeasible": False,
+        "inventory_has_no_adjacent_composition": False,
+        "unresolved_targets": [],
+        "accepted_for_formal_composition_evidence": True,
+        "blocking_reasons": [],
+        "semantics": "fixture composition search evidence",
+    }
+
+
+def _write_composition_search_csv(path: Path) -> None:
+    fieldnames = (
+        "target_used_bev",
+        "target_used_ice",
+        "delta_used_bev_from_primary",
+        "delta_used_ice_from_primary",
+        "target_total_used_vehicle_count",
+        "target_within_selected_inventory",
+        "search_status",
+        "solver_status",
+        "solution_count",
+        "best_bound",
+        "mip_gap_ratio",
+        "time_limit_sec",
+        "solver_runtime_sec",
+        "candidate_hash",
+        "actual_used_bev",
+        "actual_used_ice",
+        "candidate_accepted_for_stage2_evaluation",
+        "final_disposition",
+    )
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(fieldnames))
+        writer.writeheader()
+        writer.writerow(
+            {
+                "target_used_bev": 2,
+                "target_used_ice": 0,
+                "target_within_selected_inventory": True,
+                "search_status": "optimal",
+                "solver_status": "optimal",
+                "final_disposition": "physically_feasible_stage2_candidate",
+            }
+        )
+
+
 def _complete_run(tmp_path: Path) -> Path:
     run_dir = tmp_path / "run"
     required = required_frontend_artifacts(
@@ -139,6 +230,56 @@ def _complete_run(tmp_path: Path) -> Path:
         if relative_path == "run_manifest.json":
             continue
         _write_artifact(run_dir / relative_path)
+
+    assignment_economic_audit = {
+        "schema_version": "assignment_economic_audit_v1",
+        "bev_grid_marginal_cost_jpy_per_km": 41.5578947368421,
+        "ice_marginal_cost_jpy_per_km": 33.18584,
+        "renewable_budget_kwh": 0.0,
+        "renewable_energy_allocated_in_stage1_kwh": 0.0,
+        "grid_energy_allocated_in_stage1_kwh": 10.0,
+        "stage1_bev_trip_count": 1,
+        "stage2_bev_trip_count": 1,
+        "assignment_energy_coupling_mode": (
+            "slot_level_assignment_coupled_continuous_energy_recourse"
+        ),
+        "weather_response_expected": "no_directional_policy",
+        "weather_response_observed": "not_assessable_from_single_case",
+    }
+    (run_dir / "assignment_economic_audit.json").write_text(
+        json.dumps(assignment_economic_audit), encoding="utf-8"
+    )
+    with (run_dir / "assignment_economic_audit.csv").open(
+        "w", encoding="utf-8", newline=""
+    ) as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=list(
+                (
+                    "bev_grid_marginal_cost_jpy_per_km",
+                    "ice_marginal_cost_jpy_per_km",
+                    "renewable_budget_kwh",
+                    "renewable_energy_allocated_in_stage1_kwh",
+                    "grid_energy_allocated_in_stage1_kwh",
+                    "stage1_bev_trip_count",
+                    "stage2_bev_trip_count",
+                    "assignment_energy_coupling_mode",
+                    "weather_response_expected",
+                    "weather_response_observed",
+                )
+            ),
+        )
+        writer.writeheader()
+        writer.writerow(
+            {
+                key: assignment_economic_audit[key]
+                for key in writer.fieldnames or ()
+            }
+        )
+    (run_dir / "solver_objective_accounting_reconciliation.json").write_text(
+        json.dumps(_solver_accounting_reconciliation()),
+        encoding="utf-8",
+    )
 
     graph_manifest = {
         "files": ["declared_graph_artifact.csv", "refuel_events.csv"],
@@ -362,6 +503,88 @@ def test_complete_frontend_run_artifact_contract_passes(
         audit["required_artifact_count"]
         == audit["verified_artifact_count"]
     )
+
+
+def test_two_stage_formal_contract_requires_valid_composition_certificate(
+    tmp_path: Path,
+) -> None:
+    run_dir = _complete_run(tmp_path)
+
+    missing_certificate = audit_frontend_run_artifacts(
+        run_dir,
+        research_run=True,
+        require_rolling=True,
+        require_two_stage_composition_certificate=True,
+    )
+    assert missing_certificate["accepted"] is False
+    assert "stage1_used_powertrain_composition_search.json" in (
+        missing_certificate["missing_artifacts"]
+    )
+
+    certificate_path = run_dir / "stage1_used_powertrain_composition_search.json"
+    certificate_path.write_text(
+        json.dumps(_composition_search_certificate()),
+        encoding="utf-8",
+    )
+    _write_composition_search_csv(
+        run_dir / "stage1_used_powertrain_composition_search.csv"
+    )
+    manifest_path = run_dir / "run_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["files"] = sorted(
+        path.relative_to(run_dir).as_posix()
+        for path in run_dir.rglob("*")
+        if path.is_file()
+    )
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    audit = audit_frontend_run_artifacts(
+        run_dir,
+        research_run=True,
+        require_rolling=True,
+        require_two_stage_composition_certificate=True,
+    )
+
+    assert audit["status"] == "OK"
+    assert audit["accepted"] is True
+
+
+def test_composition_certificate_rejects_status_only_infeasibility() -> None:
+    """A true-looking summary cannot replace a target-bound IIS artifact."""
+
+    certificate = _composition_search_certificate()
+    certificate.update(
+        {
+            "feasible_used_powertrain_compositions": [
+                {"used_bev": 1, "used_ice": 1}
+            ],
+            "multiple_feasible_compositions_found": False,
+            "all_adjacent_targets_certified_infeasible": True,
+        }
+    )
+    certificate["target_records"] = [
+        {
+            "target_used_bev": 2,
+            "target_used_ice": 0,
+            "target_within_selected_inventory": True,
+            "search_status": "infeasible",
+            "solver_status": "infeasible",
+            "final_disposition": "stage1_infeasibility_certificate",
+            # Deliberately omits successful-IIS and exact-LP-hash evidence.
+            "infeasibility_certificate": {
+                "solver_status": "infeasible",
+                "accepted_for_formal_composition_evidence": True,
+            },
+        }
+    ]
+
+    errors = validate_stage1_used_powertrain_composition_search(
+        certificate,
+        require_accepted=True,
+    )
+
+    assert any("successful IIS" in error for error in errors)
+    assert any("Stage 1 LP SHA-256" in error for error in errors)
 
 
 def test_artifact_contract_accepts_matching_canonical_refueling_exports(

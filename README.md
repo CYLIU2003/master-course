@@ -7,7 +7,7 @@
 ![Optimization](https://img.shields.io/badge/Optimization-MILP%2BALNS-FF6F00)
 ![Status](https://img.shields.io/badge/Status-Core%20Package%20%28Tkinter%2BFastAPI%29-0A66C2)
 
-## Research-evidence contract (updated 2026-07-30)
+## Research-evidence contract (updated 2026-08-01)
 
 Release status is fail-closed and artifact-driven. It is **BLOCKED** unless
 `output/formal_pair_20260730/completion_audit.json` records `status=READY`,
@@ -84,7 +84,11 @@ simulation artifact, not an automatically accepted research result.
   reporting rule. `objective_accounting_equality_required=true` requires an
   exact match; CO2/balanced/utilization and two-stage proxy objectives use
   `SKIPPED` and are reported as `solver_objective_score`. Accounting cost is
-  independently validated by the canonical ledger residual.
+  independently validated by the canonical ledger residual. A **formal
+  two-stage total-cost pair** is stricter: if
+  `solver_objective_matches_accounting_total=false`, its teacher/research
+  release is `BLOCKED`; a reporting reconciliation alone cannot substitute for
+  an objective/accounting match.
 - Result-claim messaging keeps proof scope separate from gap status. A
   two-stage feasible candidate may satisfy the certified Stage 1 gap target
   while still lacking integrated global-optimality proof. The BFF job message
@@ -282,6 +286,24 @@ simulation artifact, not an automatically accepted research result.
   after both Stage 2 and the independent canonical physical validator accept
   it. Candidate artifacts persist the independent validation status, error
   count, and error hash; a Stage 2 incumbent alone is not selectable.
+  Formal requests additionally resolve the primary used-powertrain composition
+  at adjacent `(used BEV + d, used ICE - d)` and reciprocal counts for
+  `d=1,2`. These temporary count equalities reuse the existing `used_vehicle`
+  activation variables, so they can activate an unused BEV and retire an ICE;
+  they are not a BEV policy or weather bias. The resulting
+  `stage1_used_powertrain_composition_search.json/.csv` is evidence only when
+  it finds multiple physically feasible compositions or carries, for every
+  in-inventory adjacent target, a Gurobi `INFEASIBLE` result with a successful
+  nonempty IIS containing the target-count constraint and an SHA-256 of the
+  exact temporary Stage 1 LP. `TIME_LIMIT`, missing incumbents, IIS/model-hash
+  failures, Stage 2 failures, and physical-validation failures remain
+  unresolved and block formal release.
+  `assignment_economic_audit.json/.csv` records the Stage 1 slot-level
+  PV/grid/BESS coupling mode, marginal-cost assumptions, gross PV input-side
+  diagnostics, and candidate trip counts. It does not invent a daily
+  renewable-energy budget where the solver has slot-level PV/BESS/terminal-SOC
+  constraints; it reports solver-native depot-slot source flows and never
+  presents inferred vehicle-level PV/BESS allocation as solver-native.
   Only a Gurobi `INFEASIBLE` certificate may return a failed assignment to
   Stage 1 as an IIS-backed no-good cut; a `TIME_LIMIT` without an incumbent
   does not justify such a feasibility cut. This remains a bounded two-stage

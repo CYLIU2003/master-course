@@ -374,6 +374,17 @@ class OptimizationConfig:
     # feasible candidate with the lowest canonical evaluated cost; this remains
     # a two-stage heuristic and is not an integrated global-optimality claim.
     stage1_stage2_candidate_limit: int = 1
+    # Optional local search over *used vehicle* powertrain compositions around
+    # the primary Stage 1 incumbent.  A positive radius explicitly resolves
+    # (BEV + d, ICE - d) and (BEV - d, ICE + d) for d=1..radius before the
+    # existing per-trip powertrain-pattern enumeration.  This is deliberately
+    # separate from a policy minimum-BEV constraint: it broadens the candidate
+    # evidence and never adds a BEV preference to the objective.
+    #
+    # ``0`` preserves the legacy candidate search for non-formal callers.
+    # Formal frontend research runs enforce a radius of at least two at the
+    # BFF boundary and fail release when that evidence is unresolved.
+    stage1_composition_search_radius: int = 0
     mip_gap: float = 0.02
     random_seed: int = 42
     alns_iterations: int = 800  # Increased from 500

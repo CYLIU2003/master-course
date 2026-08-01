@@ -364,6 +364,29 @@ class MILPOptimizer:
                 "stage1_stage2_candidate_limit_requested": (
                     plan.metadata or {}
                 ).get("stage1_stage2_candidate_limit_requested"),
+                "stage1_composition_search_radius_requested": (
+                    plan.metadata or {}
+                ).get("stage1_composition_search_radius_requested"),
+                "stage1_composition_search_runtime_seconds": (
+                    plan.metadata or {}
+                ).get("stage1_composition_search_runtime_seconds"),
+                "stage1_composition_search_certificate_evidence_wall_seconds": (
+                    plan.metadata or {}
+                ).get(
+                    "stage1_composition_search_certificate_evidence_wall_seconds"
+                ),
+                "stage1_used_powertrain_composition_search": dict(
+                    (plan.metadata or {}).get(
+                        "stage1_used_powertrain_composition_search"
+                    )
+                    or {}
+                ),
+                "stage1_used_powertrain_composition_search_accepted": bool(
+                    (plan.metadata or {}).get(
+                        "stage1_used_powertrain_composition_search_accepted",
+                        False,
+                    )
+                ),
                 "stage1_pool_solution_count": (plan.metadata or {}).get(
                     "stage1_pool_solution_count"
                 ),

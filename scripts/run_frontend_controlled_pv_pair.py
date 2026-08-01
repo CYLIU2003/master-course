@@ -348,8 +348,10 @@ def build_optimization_payload(prepared_input_id: str) -> dict[str, Any]:
         "stage2_time_limit_seconds": 300,
         "stage1_best_obj_stop_enabled": False,
         # One incumbent plus up to twenty alternatives supports the mandatory
-        # same-assignment audit without introducing a weather-specific bias.
+        # composition and same-assignment audit without introducing a
+        # weather-specific bias.
         "stage1_stage2_candidate_limit": 21,
+        "stage1_composition_search_radius": 2,
         "gurobi_threads": 1,
         "run_profile": "day_ahead_and_hourly_rolling",
         "run_hourly_rolling": True,
@@ -1843,6 +1845,12 @@ def _case_gate_audit(
         case_dir / "final_cost_reconciliation.json"
     )
     completeness = _read_json(case_dir / "artifact_completeness.json")
+    assignment_economic_audit = _read_json(
+        case_dir / "assignment_economic_audit.json"
+    )
+    composition_search = _read_json_optional(
+        case_dir / "stage1_used_powertrain_composition_search.json"
+    )
     acceptance = dict(settings.get("research_acceptance_checks") or {})
     search_telemetry = dict(
         settings.get("stage1_search_telemetry") or {}
@@ -2007,6 +2015,10 @@ def _case_gate_audit(
                 or 0
             )
             >= 10
+            and int(
+                settings.get("stage1_composition_search_radius_requested")
+                or 0
+            ) >= 2
         ),
         "tariff_condition_verified_from_canonical_slots": (
             tariff_evidence.get("accepted") is True
@@ -2040,6 +2052,42 @@ def _case_gate_audit(
             and (
                 case_dir / "stage1_stage2_candidate_evaluation.csv"
             ).is_file()
+        ),
+        "assignment_economic_audit_present": (
+            (case_dir / "assignment_economic_audit.json").is_file()
+            and (case_dir / "assignment_economic_audit.csv").is_file()
+            and assignment_economic_audit.get("schema_version")
+            == "assignment_economic_audit_v1"
+            and all(
+                key in assignment_economic_audit
+                for key in (
+                    "bev_grid_marginal_cost_jpy_per_km",
+                    "ice_marginal_cost_jpy_per_km",
+                    "renewable_budget_kwh",
+                    "renewable_energy_allocated_in_stage1_kwh",
+                    "grid_energy_allocated_in_stage1_kwh",
+                    "stage1_bev_trip_count",
+                    "stage2_bev_trip_count",
+                    "assignment_energy_coupling_mode",
+                    "weather_response_expected",
+                    "weather_response_observed",
+                )
+            )
+        ),
+        "used_powertrain_composition_search_certified": (
+            composition_search.get("schema_version")
+            == "stage1_used_powertrain_composition_search_v1"
+            and composition_search.get(
+                "accepted_for_formal_composition_evidence"
+            )
+            is True
+            and settings.get(
+                "stage1_used_powertrain_composition_search_accepted"
+            )
+            is True
+        ),
+        "solver_objective_matches_canonical_accounting": (
+            summary.get("solver_objective_matches_accounting_total") is True
         ),
         "candidate_selection_complete": (
             int(settings.get("stage1_distinct_candidate_count") or 0) >= 10
@@ -2625,6 +2673,7 @@ def _build_pair_control_audit(
         "stage1_best_obj_stop_enabled",
         "gurobi_threads",
         "stage1_stage2_candidate_limit",
+        "stage1_composition_search_radius",
         "random_seed",
     )
     rolling_control_fields = (

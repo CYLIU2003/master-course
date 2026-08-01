@@ -1,5 +1,58 @@
 # Development Notes
 
+## 2026-08-01 Phase 3 composition evidence and formal cost-release guard
+
+- Review of the reachable Phase 3 path corrected an outdated diagnosis: the
+  current Stage 1 objective already contains a slot-indexed, assignment-coupled
+  continuous PV/grid/BESS recourse, with PV supply limits, charge windows,
+  BESS losses/terminal SOC, and slot-specific grid prices. The historical
+  `min(grid_price)` aggregate calculation remains a labelled lower-bound
+  diagnostic and is not reintroduced into the objective. Stage 2 remains the
+  fixed-assignment binary charging/physical-dispatch authority.
+- `used_vehicle` and `used_vehicle_day` activation binaries and one-time
+  vehicle-day cost were already linked to assignments. The missing evidence was
+  a search over different activated powertrain counts: the old alternatives
+  excluded trip-level BEV/ICE patterns and used only already-active whole-duty
+  swap starts, so 21 candidates could all retain one `(used_bev, used_ice)`
+  pair without proving alternatives infeasible.
+- `OptimizationConfig.stage1_composition_search_radius` now requests exact
+  temporary Stage 1 count constraints around the primary composition:
+  `(BEV+d, ICE-d)` and `(BEV-d, ICE+d)` for `d=1..radius`. Formal frontend
+  research runs force radius `>=2`; normal callers retain the legacy behavior
+  only when they explicitly leave it at zero. Each target records target and
+  observed counts, status, bound, gap, runtime, candidate hash, and an IIS
+  hash/list if Gurobi proves `INFEASIBLE`. An accepted IIS certificate must be
+  nonempty, contain a temporary target-count constraint, and carry the
+  SHA-256 of the exact temporary Stage 1 LP plus solver controls; otherwise it
+  is diagnostic only. A time limit, no incumbent, failed Stage 2, failed
+  physical validation, failed IIS, or missing LP hash is explicitly
+  `unresolved`, never an infeasibility certificate.
+- `stage1_used_powertrain_composition_search.json/.csv` and the enriched
+  candidate audit persist this evidence. Formal composition evidence is
+  accepted only when two or more physically valid used-powertrain pairs were
+  evaluated, every in-inventory adjacent target is exactly certified
+  infeasible, or the selected inventory itself has no adjacent composition.
+  The formal claim gate otherwise adds
+  `used_powertrain_composition_search_not_certified`.
+- Every rich frontend result now writes
+  `assignment_economic_audit.json/.csv`. The audit distinguishes Stage 1
+  continuous recourse from Stage 2/rolling authority; gives scalar grid BEV,
+  ICE, and break-even marginal costs only for uniform selected-scope
+  coefficients; reports gross PV only as an input-side diagnostic instead of
+  inventing a scalar renewable budget under slot/terminal constraints; excludes
+  initial BESS inventory from a free-renewable credit; and keeps depot-slot
+  source flows separate from non-solver-native vehicle-source attribution.
+- Formal two-stage pair construction now rejects a case when
+  `solver_objective_matches_accounting_total` is false or composition evidence
+  is unaccepted. This is a release-scope guard, not a false conversion of a
+  Phase 3 Stage 1 score into canonical rolling cost. Current historical
+  2026-07-31 outputs remain diagnostic and require a fresh clean-commit rerun.
+- Focused regression added: interchangeable BEV/ICE duties produce multiple
+  used-powertrain candidates; pair construction rejects objective/accounting
+  and composition failures; the economic audit verifies 30 JPY/kWh grid BEV
+  charging at `1.316/0.95*30` JPY/km, ICE at
+  `0.2212389*150` JPY/km, and zero free initial BESS credit.
+
 ## 2026-07-31 Controlled uniform-tariff sensitivity support
 
 - The first `30 JPY/kWh` / `0 JPY/kW` HTTP attempt is preserved as diagnostic

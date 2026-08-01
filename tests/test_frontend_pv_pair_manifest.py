@@ -15,6 +15,42 @@ def _write_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
+def _valid_composition_certificate() -> dict:
+    return {
+        "schema_version": "stage1_used_powertrain_composition_search_v1",
+        "enabled": True,
+        "radius_requested": 2,
+        "primary_used_powertrain_composition": {"used_bev": 13, "used_ice": 19},
+        "selected_inventory": {
+            "available_electric_vehicle_count": 35,
+            "available_combustion_vehicle_count": 26,
+            "electric_vehicle_ids": ["bev-1"],
+            "combustion_vehicle_ids": ["ice-1"],
+        },
+        "target_records": [
+            {
+                "target_used_bev": 14,
+                "target_used_ice": 18,
+                "target_within_selected_inventory": True,
+                "search_status": "optimal",
+                "solver_status": "optimal",
+                "final_disposition": "physically_feasible_stage2_candidate",
+            }
+        ],
+        "feasible_used_powertrain_compositions": [
+            {"used_bev": 13, "used_ice": 19},
+            {"used_bev": 14, "used_ice": 18},
+        ],
+        "multiple_feasible_compositions_found": True,
+        "all_adjacent_targets_certified_infeasible": False,
+        "inventory_has_no_adjacent_composition": False,
+        "unresolved_targets": [],
+        "accepted_for_formal_composition_evidence": True,
+        "blocking_reasons": [],
+        "semantics": "fixture composition search evidence",
+    }
+
+
 def _case(
     run_dir: Path,
     *,
@@ -86,7 +122,36 @@ def _case(
             "accounting_total_cost_jpy": total_cost,
         },
     )
-    _write_json(run_dir / "summary.json", {"trip_count_served": 264})
+    _write_json(
+        run_dir / "summary.json",
+        {
+            "trip_count_served": 264,
+            "solver_objective_matches_accounting_total": True,
+            "used_powertrain_composition_search_accepted": True,
+        },
+    )
+    _write_json(
+        run_dir / "solver_objective_accounting_reconciliation.json",
+        {
+            "schema_version": "solver_objective_accounting_reconciliation_v1",
+            "solver_objective_value_jpy": total_cost,
+            "solver_objective_source": "optimization_result.objective_value",
+            "canonical_accounting_total_jpy": total_cost,
+            "canonical_accounting_source": "rolling_hourly_chain/executed_day_accounting.json",
+            "difference_jpy": 0.0,
+            "absolute_difference_jpy": 0.0,
+            "tolerance_jpy": 1.0e-6,
+            "numeric_values_available": True,
+            "numeric_residual_within_tolerance": True,
+            "objective_is_actual_cost": True,
+            "matches_canonical_accounting_total": True,
+            "objective_semantics": "actual_cost",
+        },
+    )
+    _write_json(
+        run_dir / "stage1_used_powertrain_composition_search.json",
+        _valid_composition_certificate(),
+    )
     _write_json(
         run_dir / "effective_pv_profiles.json",
         {"forecast_by_depot": {"dep-1": pv_values}},
@@ -172,6 +237,127 @@ def test_pair_manifest_rejects_case_with_a_non_pair_release_blocker(
 
     manifest = json.loads((output_dir / "pair_manifest.json").read_text())
     assert manifest["formal_research_submission_ready"] is False
+
+
+def test_pair_manifest_rejects_objective_accounting_or_composition_failure(
+    tmp_path: Path,
+) -> None:
+    baseline = tmp_path / "baseline"
+    counterfactual = tmp_path / "counterfactual"
+    output_dir = tmp_path / "pair"
+    _case(
+        baseline,
+        role="baseline",
+        control_hash="fixed-controls",
+        pv_hash="high-pv",
+        pv_values=[1.0, 2.0],
+        total_cost=100.0,
+    )
+    _case(
+        counterfactual,
+        role="pv_curve_counterfactual",
+        control_hash="fixed-controls",
+        pv_hash="low-pv",
+        pv_values=[0.2, 0.3],
+        total_cost=120.0,
+    )
+    reconciliation = json.loads(
+        (
+            counterfactual
+            / "solver_objective_accounting_reconciliation.json"
+        ).read_text()
+    )
+    reconciliation.update(
+        {
+            "solver_objective_value_jpy": 100.0,
+            "difference_jpy": -20.0,
+            "absolute_difference_jpy": 20.0,
+            "numeric_residual_within_tolerance": False,
+            "matches_canonical_accounting_total": False,
+        }
+    )
+    _write_json(
+        counterfactual / "solver_objective_accounting_reconciliation.json",
+        reconciliation,
+    )
+    certificate = _valid_composition_certificate()
+    certificate.update(
+        {
+            "feasible_used_powertrain_compositions": [
+                {"used_bev": 13, "used_ice": 19}
+            ],
+            "multiple_feasible_compositions_found": False,
+            "accepted_for_formal_composition_evidence": False,
+            "blocking_reasons": [
+                "only_one_or_zero_physically_feasible_used_powertrain_composition"
+            ],
+        }
+    )
+    _write_json(
+        counterfactual / "stage1_used_powertrain_composition_search.json",
+        certificate,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="counterfactual_solver_objective_matches_canonical_accounting",
+    ):
+        build_frontend_pv_pair_artifacts(
+            baseline_run_dir=baseline,
+            counterfactual_run_dir=counterfactual,
+            output_dir=output_dir,
+        )
+
+    manifest = json.loads((output_dir / "pair_manifest.json").read_text())
+    assert manifest["checks"][
+        "counterfactual_used_powertrain_composition_search_certified"
+    ] is False
+
+
+def test_pair_manifest_rejects_true_summary_flags_without_evidence_artifacts(
+    tmp_path: Path,
+) -> None:
+    """Summary booleans cannot substitute for numeric/certificate evidence."""
+
+    baseline = tmp_path / "baseline"
+    counterfactual = tmp_path / "counterfactual"
+    output_dir = tmp_path / "pair"
+    _case(
+        baseline,
+        role="baseline",
+        control_hash="fixed-controls",
+        pv_hash="high-pv",
+        pv_values=[1.0, 2.0],
+        total_cost=100.0,
+    )
+    _case(
+        counterfactual,
+        role="pv_curve_counterfactual",
+        control_hash="fixed-controls",
+        pv_hash="low-pv",
+        pv_values=[0.2, 0.3],
+        total_cost=120.0,
+    )
+    (counterfactual / "solver_objective_accounting_reconciliation.json").unlink()
+    (counterfactual / "stage1_used_powertrain_composition_search.json").unlink()
+
+    with pytest.raises(
+        ValueError,
+        match="counterfactual_solver_objective_matches_canonical_accounting",
+    ):
+        build_frontend_pv_pair_artifacts(
+            baseline_run_dir=baseline,
+            counterfactual_run_dir=counterfactual,
+            output_dir=output_dir,
+        )
+
+    manifest = json.loads((output_dir / "pair_manifest.json").read_text())
+    assert manifest["checks"][
+        "counterfactual_used_powertrain_composition_search_certified"
+    ] is False
+    assert manifest["release_evidence_errors"]["counterfactual"][
+        "solver_objective_accounting"
+    ]
 
 
 def test_pair_manifest_rejects_case_without_accepted_artifact_contract(

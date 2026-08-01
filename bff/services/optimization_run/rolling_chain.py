@@ -771,6 +771,9 @@ def _comparison_case_manifest(
             "stage1_stage2_candidate_limit": solver_settings.get(
                 "stage1_stage2_candidate_limit_requested"
             ),
+            "stage1_composition_search_radius": solver_settings.get(
+                "stage1_composition_search_radius_requested"
+            ),
             "random_seed": solver_settings.get("random_seed"),
         },
         "rolling_solver_controls": {

@@ -48,7 +48,12 @@ from bff.routers.graph import (
 )
 from bff.services.experiment_reports import log_optimization_experiment
 from bff.services.optimization_run.artifact_completeness import (
+    SOLVER_OBJECTIVE_ACCOUNTING_RECONCILIATION_FILE,
+    SOLVER_OBJECTIVE_ACCOUNTING_RECONCILIATION_SCHEMA_VERSION,
+    STAGE1_USED_POWERTRAIN_COMPOSITION_SEARCH_FILE,
     persist_frontend_run_artifact_audit,
+    validate_solver_objective_accounting_reconciliation,
+    validate_stage1_used_powertrain_composition_search,
 )
 from bff.services.optimization_run.canonical_graph import (
     canonical_datetime_from_min as _canonical_datetime_from_min,
@@ -692,6 +697,7 @@ class RunOptimizationBody(BaseModel):
     # count through a request body.
     stage1_best_obj_stop_enabled: bool = INTERACTIVE_STAGE1_BEST_OBJ_STOP_ENABLED
     stage1_stage2_candidate_limit: int = Field(default=1, ge=1, le=50)
+    stage1_composition_search_radius: int = Field(default=0, ge=0, le=5)
     gurobi_threads: Optional[int] = Field(
         default=INTERACTIVE_GUROBI_THREADS,
         ge=1,
@@ -2333,6 +2339,267 @@ def _write_results_workbook(
     workbook.save(run_dir / "results.xlsx")
 
 
+def _assignment_economic_audit_payload(
+    *,
+    canonical_problem: Optional[Any],
+    optimization_result: Mapping[str, Any],
+) -> Dict[str, Any]:
+    """Expose Stage 1 energy semantics without inventing vehicle-source flows.
+
+    The two-stage model has solver-native depot/slot source flows, not a
+    solver-native attribution of PV or BESS energy to an individual bus.  This
+    audit intentionally reports those two evidence levels separately so a
+    teacher-facing report cannot turn a proportional allocation into source
+    provenance.
+    """
+
+    solver_metadata = dict(optimization_result.get("solver_metadata") or {})
+    result_summary = dict(optimization_result.get("summary") or {})
+    recourse_configuration = dict(
+        solver_metadata.get("stage1_time_indexed_energy_recourse_configuration")
+        or {}
+    )
+    recourse_weather = dict(
+        solver_metadata.get("stage1_time_indexed_energy_recourse_weather_input")
+        or {}
+    )
+    recourse_result = dict(
+        solver_metadata.get("stage1_time_indexed_energy_recourse_result")
+        or {}
+    )
+
+    def _finite_nonnegative(value: Any) -> Optional[float]:
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return None
+        return parsed if math.isfinite(parsed) and parsed >= 0.0 else None
+
+    def _sum_numbers(value: Any) -> float:
+        if isinstance(value, Mapping):
+            return sum(_sum_numbers(item) for item in value.values())
+        if isinstance(value, (list, tuple)):
+            return sum(_sum_numbers(item) for item in value)
+        parsed = _finite_nonnegative(value)
+        return float(parsed or 0.0)
+
+    def _single_value(values: list[float]) -> Optional[float]:
+        normalized = sorted({round(value, 12) for value in values})
+        return normalized[0] if len(normalized) == 1 else None
+
+    electric_types = {"BEV", "PHEV", "FCEV"}
+    price_values: list[float] = []
+    electric_energy_rates: list[float] = []
+    combustion_fuel_rates: list[float] = []
+    diesel_price: Optional[float] = None
+    if canonical_problem is not None:
+        price_values = [
+            value
+            for slot in tuple(
+                getattr(canonical_problem, "price_slots", ()) or ()
+            )
+            if (
+                value := _finite_nonnegative(
+                    getattr(slot, "grid_buy_yen_per_kwh", None)
+                )
+            )
+            is not None
+        ]
+        vehicle_types = {
+            str(getattr(vehicle_type, "vehicle_type_id", "") or ""): vehicle_type
+            for vehicle_type in tuple(
+                getattr(canonical_problem, "vehicle_types", ()) or ()
+            )
+        }
+        for vehicle in tuple(
+            getattr(canonical_problem, "vehicles", ()) or ()
+        ):
+            vehicle_type = vehicle_types.get(
+                str(getattr(vehicle, "vehicle_type", "") or "")
+            )
+            # A vehicle's ``vehicle_type`` is a canonical type *identifier*,
+            # not necessarily a powertrain label (for example, ``BYD_K8``).
+            # Prefer the mapped canonical powertrain and retain the direct
+            # label fallback for small test/diagnostic problems that omit a
+            # vehicle-type table.
+            powertrain_type = str(
+                getattr(vehicle_type, "powertrain_type", "")
+                or getattr(vehicle, "vehicle_type", "")
+                or ""
+            ).upper()
+            is_electric = powertrain_type in electric_types
+            for source in (vehicle, vehicle_type):
+                if source is None:
+                    continue
+                if is_electric:
+                    rate = _finite_nonnegative(
+                        getattr(source, "energy_consumption_kwh_per_km", None)
+                    )
+                    if rate is not None and rate > 0.0:
+                        electric_energy_rates.append(rate)
+                        break
+                else:
+                    rate = _finite_nonnegative(
+                        getattr(source, "fuel_consumption_l_per_km", None)
+                    )
+                    if rate is not None and rate > 0.0:
+                        combustion_fuel_rates.append(rate)
+                        break
+        diesel_price = _finite_nonnegative(
+            getattr(
+                getattr(canonical_problem, "scenario", None),
+                "diesel_price_yen_per_l",
+                None,
+            )
+        )
+
+    uniform_grid_price = _single_value(price_values)
+    uniform_electric_energy_rate = _single_value(electric_energy_rates)
+    uniform_combustion_fuel_rate = _single_value(combustion_fuel_rates)
+    charge_efficiency = 0.95
+    bev_grid_marginal_cost = (
+        uniform_electric_energy_rate
+        / charge_efficiency
+        * uniform_grid_price
+        if uniform_electric_energy_rate is not None
+        and uniform_grid_price is not None
+        else None
+    )
+    ice_marginal_cost = (
+        uniform_combustion_fuel_rate * diesel_price
+        if uniform_combustion_fuel_rate is not None and diesel_price is not None
+        else None
+    )
+    grid_break_even = (
+        ice_marginal_cost
+        * charge_efficiency
+        / uniform_electric_energy_rate
+        if ice_marginal_cost is not None
+        and uniform_electric_energy_rate is not None
+        and uniform_electric_energy_rate > 0.0
+        else None
+    )
+
+    gross_pv_available = _sum_numbers(
+        recourse_weather.get("pv_available_kwh_by_depot")
+    )
+    if gross_pv_available <= 0.0:
+        gross_pv_available = _sum_numbers(
+            recourse_weather.get("pv_generation_kwh_by_depot_slot")
+        )
+    pv_to_bus = _finite_nonnegative(recourse_result.get("pv_to_bus_kwh")) or 0.0
+    pv_to_bess = _finite_nonnegative(recourse_result.get("pv_to_bess_kwh")) or 0.0
+    bess_to_bus = _finite_nonnegative(recourse_result.get("bess_to_bus_kwh")) or 0.0
+    grid_to_bus = _finite_nonnegative(recourse_result.get("grid_to_bus_kwh")) or 0.0
+    grid_to_bess = _finite_nonnegative(recourse_result.get("grid_to_bess_kwh")) or 0.0
+
+    candidate_rows = list(
+        solver_metadata.get("stage1_stage2_candidate_evaluation") or []
+    )
+    selected_candidate_index = solver_metadata.get(
+        "stage1_stage2_selected_candidate_index"
+    )
+    selected_candidate: Mapping[str, Any] = {}
+    try:
+        candidate_index = int(selected_candidate_index)
+    except (TypeError, ValueError):
+        candidate_index = 0
+    if 1 <= candidate_index <= len(candidate_rows):
+        raw_selected_candidate = candidate_rows[candidate_index - 1]
+        if isinstance(raw_selected_candidate, Mapping):
+            selected_candidate = raw_selected_candidate
+    stage1_bev_trip_count = selected_candidate.get("bev_trips")
+    trip_count_by_type = dict(result_summary.get("trip_count_by_type") or {})
+    stage2_bev_trip_count = sum(
+        int(value or 0)
+        for vehicle_type, value in trip_count_by_type.items()
+        if str(vehicle_type).upper() in electric_types
+    )
+    composition_certificate = dict(
+        solver_metadata.get("stage1_used_powertrain_composition_search") or {}
+    )
+
+    return {
+        "schema_version": "assignment_economic_audit_v1",
+        "assignment_energy_coupling_mode": str(
+            recourse_configuration.get("semantics")
+            or "not_available_from_solver_metadata"
+        ),
+        "assignment_energy_coupling_stage2_authority": str(
+            recourse_configuration.get("stage2_authority") or "not_recorded"
+        ),
+        "bev_grid_marginal_cost_jpy_per_km": bev_grid_marginal_cost,
+        "ice_marginal_cost_jpy_per_km": ice_marginal_cost,
+        "grid_energy_break_even_jpy_per_kwh": grid_break_even,
+        "marginal_cost_assumptions": {
+            "uniform_grid_price_jpy_per_kwh": uniform_grid_price,
+            "electric_drive_energy_kwh_per_km": uniform_electric_energy_rate,
+            "combustion_fuel_l_per_km": uniform_combustion_fuel_rate,
+            "diesel_price_jpy_per_l": diesel_price,
+            "charge_efficiency": charge_efficiency,
+            "semantics": (
+                "Grid BEV marginal cost is charger-input energy after the "
+                "Stage 1/2 0.95 charge-efficiency contract.  A scalar is "
+                "reported only when the selected scope has uniform price and "
+                "powertrain coefficients."
+            ),
+        },
+        # The Stage 1 model is slot-constrained, including PV availability,
+        # charge timing, BESS dynamics, and terminal SOC. A single daily
+        # renewable budget would overstate what can actually reach a BEV, so
+        # preserve the requested field without inventing a scalar value.
+        "renewable_budget_kwh": None,
+        "gross_pv_available_kwh": gross_pv_available,
+        "renewable_budget_semantics": (
+            "not a scalar in slot-level assignment-coupled recourse; use "
+            "gross_pv_available_kwh only as an input-side diagnostic, while "
+            "the solver enforces PV, BESS, charging-time, and terminal-SOC "
+            "constraints per slot. Initial BESS inventory is not credited as "
+            "free renewable energy"
+        ),
+        "initial_bess_inventory_counted_as_free_kwh": 0.0,
+        "renewable_energy_allocated_in_stage1_kwh": pv_to_bus + pv_to_bess,
+        "renewable_energy_allocated_in_stage1_semantics": (
+            "PV input allocated to bus charging or BESS charging; BESS output "
+            "is reported separately because vehicle-level source attribution is "
+            "not solver-native"
+        ),
+        "grid_energy_allocated_in_stage1_kwh": grid_to_bus + grid_to_bess,
+        "stage1_source_flows_kwh": {
+            "pv_to_bus_kwh": pv_to_bus,
+            "pv_to_bess_kwh": pv_to_bess,
+            "bess_to_bus_kwh": bess_to_bus,
+            "grid_to_bus_kwh": grid_to_bus,
+            "grid_to_bess_kwh": grid_to_bess,
+        },
+        "stage1_bev_trip_count": stage1_bev_trip_count,
+        "stage2_bev_trip_count": stage2_bev_trip_count,
+        "weather_response_expected": (
+            "slot-limited PV/grid/BESS recourse changes the Stage 1 economic "
+            "signal but imposes no directional BEV-use policy"
+        ),
+        "weather_response_observed": "not_assessable_from_single_case",
+        "used_powertrain_composition_search": composition_certificate,
+        "used_powertrain_composition_search_accepted": bool(
+            solver_metadata.get(
+                "stage1_used_powertrain_composition_search_accepted", False
+            )
+        ),
+        "solver_objective_matches_accounting_total": bool(
+            solver_metadata.get("solver_objective_matches_accounting_total", False)
+        ),
+        "vehicle_day_activation_semantics": (
+            "Stage 1 used_vehicle_day binaries are linked to assignments and "
+            "vehicle-day cost is charged once; canonical accounting remains "
+            "the cost authority after accepted rolling."
+        ),
+        "source_provenance_level": (
+            "depot_slot_solver_native_flows; no inferred vehicle-level PV/BESS "
+            "allocation is presented as solver-native"
+        ),
+    }
+
+
 def _persist_rich_run_outputs(
     *,
     run_dir: Path,
@@ -2483,6 +2750,16 @@ def _persist_rich_run_outputs(
                 "objective_is_actual_cost", False
             )
         ),
+        "solver_objective_matches_accounting_total": bool(
+            solver_metadata.get(
+                "solver_objective_matches_accounting_total", False
+            )
+        ),
+        "used_powertrain_composition_search_accepted": bool(
+            solver_metadata.get(
+                "stage1_used_powertrain_composition_search_accepted", False
+            )
+        ),
         "supports_exact_milp": bool((optimization_result.get("solver_metadata") or {}).get("supports_exact_milp", False)),
         "stage1_solver_status": solver_settings.get("stage1_solver_status"),
         "stage1_termination_reason": solver_settings.get(
@@ -2560,6 +2837,73 @@ def _persist_rich_run_outputs(
     )
     (run_dir / "solver_settings.json").write_text(
         json.dumps(solver_settings, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    assignment_economic_audit = _assignment_economic_audit_payload(
+        canonical_problem=canonical_problem,
+        optimization_result=optimization_result,
+    )
+    (run_dir / "assignment_economic_audit.json").write_text(
+        json.dumps(assignment_economic_audit, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    _write_csv_rows(
+        run_dir / "assignment_economic_audit.csv",
+        [
+            {
+                "bev_grid_marginal_cost_jpy_per_km": (
+                    assignment_economic_audit.get(
+                        "bev_grid_marginal_cost_jpy_per_km"
+                    )
+                ),
+                "ice_marginal_cost_jpy_per_km": (
+                    assignment_economic_audit.get(
+                        "ice_marginal_cost_jpy_per_km"
+                    )
+                ),
+                "renewable_budget_kwh": assignment_economic_audit.get(
+                    "renewable_budget_kwh"
+                ),
+                "renewable_energy_allocated_in_stage1_kwh": (
+                    assignment_economic_audit.get(
+                        "renewable_energy_allocated_in_stage1_kwh"
+                    )
+                ),
+                "grid_energy_allocated_in_stage1_kwh": (
+                    assignment_economic_audit.get(
+                        "grid_energy_allocated_in_stage1_kwh"
+                    )
+                ),
+                "stage1_bev_trip_count": assignment_economic_audit.get(
+                    "stage1_bev_trip_count"
+                ),
+                "stage2_bev_trip_count": assignment_economic_audit.get(
+                    "stage2_bev_trip_count"
+                ),
+                "assignment_energy_coupling_mode": (
+                    assignment_economic_audit.get(
+                        "assignment_energy_coupling_mode"
+                    )
+                ),
+                "weather_response_expected": assignment_economic_audit.get(
+                    "weather_response_expected"
+                ),
+                "weather_response_observed": assignment_economic_audit.get(
+                    "weather_response_observed"
+                ),
+            }
+        ],
+        [
+            "bev_grid_marginal_cost_jpy_per_km",
+            "ice_marginal_cost_jpy_per_km",
+            "renewable_budget_kwh",
+            "renewable_energy_allocated_in_stage1_kwh",
+            "grid_energy_allocated_in_stage1_kwh",
+            "stage1_bev_trip_count",
+            "stage2_bev_trip_count",
+            "assignment_energy_coupling_mode",
+            "weather_response_expected",
+            "weather_response_observed",
+        ],
     )
 
     cost_breakdown = dict(optimization_result.get("cost_breakdown") or {})
@@ -3583,11 +3927,30 @@ def _persist_rich_run_outputs(
         run_dir=run_dir,
         solver_metadata=solver_metadata,
     )
+    objective_accounting_reconciliation = (
+        _solver_objective_accounting_reconciliation_payload(
+            run_dir=run_dir,
+            optimization_result=optimization_result,
+        )
+    )
+    (run_dir / SOLVER_OBJECTIVE_ACCOUNTING_RECONCILIATION_FILE).write_text(
+        json.dumps(
+            objective_accounting_reconciliation,
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    composition_search_certificate = _read_optional_json_mapping(
+        run_dir / STAGE1_USED_POWERTRAIN_COMPOSITION_SEARCH_FILE
+    )
     research_claim_scope = _research_claim_scope_payload(
         optimization_result=optimization_result,
         solver_settings=solver_settings,
         weather_policy=weather_policy,
         rolling_execution=rolling_execution,
+        objective_accounting_reconciliation=objective_accounting_reconciliation,
+        composition_search_certificate=composition_search_certificate,
     )
     optimization_result["research_claim_scope"] = research_claim_scope
     optimization_audit["research_claim_scope"] = research_claim_scope
@@ -3839,10 +4202,19 @@ def _enforce_frontend_run_artifact_contract(
 
     run_dir = Path(run_dir)
     raw_dir = run_dir / "raw"
+    solver_metadata = dict(optimization_result.get("solver_metadata") or {})
+    require_two_stage_composition_certificate = bool(
+        research_run
+        and str(solver_metadata.get("optimization_structure") or "").lower()
+        == "two_stage"
+    )
     artifact_audit = persist_frontend_run_artifact_audit(
         run_dir,
         research_run=research_run,
         require_rolling=require_rolling,
+        require_two_stage_composition_certificate=(
+            require_two_stage_composition_certificate
+        ),
     )
     artifact_audit_summary = {
         "status": artifact_audit.get("status"),
@@ -3908,6 +4280,9 @@ def _enforce_frontend_run_artifact_contract(
         run_dir,
         research_run=research_run,
         require_rolling=require_rolling,
+        require_two_stage_composition_certificate=(
+            require_two_stage_composition_certificate
+        ),
     )
     if artifact_audit.get("accepted") is not True:
         raise RuntimeError(
@@ -5090,12 +5465,127 @@ def _mark_frontend_run_claims_failed(
         )
 
 
+def _read_optional_json_mapping(path: Path) -> Dict[str, Any]:
+    """Load a local JSON object without turning diagnostic persistence into a crash."""
+
+    if not path.is_file():
+        return {}
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError):
+        return {}
+    return dict(loaded) if isinstance(loaded, Mapping) else {}
+
+
+def _finite_release_currency(value: Any) -> Optional[float]:
+    """Return a finite numeric currency value without accepting booleans."""
+
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    numeric = float(value)
+    return numeric if math.isfinite(numeric) else None
+
+
+def _solver_objective_accounting_reconciliation_payload(
+    *,
+    run_dir: Path,
+    optimization_result: Mapping[str, Any],
+) -> Dict[str, Any]:
+    """Persist auditable solver-objective versus final-accounting evidence.
+
+    The final rolling ledger is authoritative for cost.  This artifact compares
+    it numerically with the solver objective while preserving the distinct
+    two-stage semantics; matching numbers do not by themselves upgrade a proxy
+    objective into an actual-cost objective.
+    """
+
+    ledger = _read_optional_json_mapping(
+        Path(run_dir) / "graph" / "canonical_cost_ledger.json"
+    )
+    solver_metadata = dict(optimization_result.get("solver_metadata") or {})
+    solver_value = _finite_release_currency(
+        optimization_result.get("objective_value")
+    )
+    solver_source = "optimization_result.objective_value"
+    if solver_value is None:
+        solver_value = _finite_release_currency(
+            ledger.get("solver_objective_value")
+        )
+        solver_source = (
+            "graph/canonical_cost_ledger.json.solver_objective_value"
+            if solver_value is not None
+            else "unavailable"
+        )
+    accounting_total = _finite_release_currency(
+        ledger.get("accounting_total_cost_jpy")
+    )
+    accounting_source = str(ledger.get("source") or "unavailable")
+    tolerance = _finite_release_currency(
+        ledger.get("accounting_residual_tolerance_jpy")
+    )
+    if tolerance is None or tolerance < 0.0:
+        tolerance = 1.0e-6
+    numeric_values_available = (
+        solver_value is not None and accounting_total is not None
+    )
+    difference = (
+        float(solver_value - accounting_total)
+        if numeric_values_available
+        else None
+    )
+    absolute_difference = abs(difference) if difference is not None else None
+    residual_within_tolerance = bool(
+        absolute_difference is not None and absolute_difference <= tolerance
+    )
+    objective_is_actual_cost = ledger.get("objective_is_actual_cost") is True
+    matches_canonical_accounting_total = bool(
+        numeric_values_available
+        and residual_within_tolerance
+        and objective_is_actual_cost
+        and accounting_source
+        == "rolling_hourly_chain/executed_day_accounting.json"
+    )
+    return {
+        "schema_version": SOLVER_OBJECTIVE_ACCOUNTING_RECONCILIATION_SCHEMA_VERSION,
+        "solver_objective_value_jpy": solver_value,
+        "solver_objective_source": solver_source,
+        "canonical_accounting_total_jpy": accounting_total,
+        "canonical_accounting_source": accounting_source,
+        "canonical_accounting_artifact": "graph/canonical_cost_ledger.json",
+        "difference_jpy": difference,
+        "absolute_difference_jpy": absolute_difference,
+        "tolerance_jpy": tolerance,
+        "numeric_values_available": numeric_values_available,
+        "numeric_residual_within_tolerance": residual_within_tolerance,
+        "objective_is_actual_cost": objective_is_actual_cost,
+        "matches_canonical_accounting_total": (
+            matches_canonical_accounting_total
+        ),
+        "legacy_solver_metadata_matches_accounting_total": (
+            solver_metadata.get("solver_objective_matches_accounting_total")
+        ),
+        "objective_semantics": str(
+            solver_metadata.get("objective_semantics")
+            or ledger.get("objective_mode")
+            or "unavailable"
+        ),
+        "semantics": (
+            "Numeric comparison of the solver objective with the canonical "
+            "accounting total. A formal match additionally requires an "
+            "actual-cost objective and the accepted executed-day accounting "
+            "source; it never follows from a legacy boolean alone."
+        ),
+    }
+
+
 def _research_claim_scope_payload(
     *,
     optimization_result: Dict[str, Any],
     solver_settings: Dict[str, Any],
     weather_policy: Dict[str, Any],
     rolling_execution: Dict[str, Any],
+    objective_accounting_reconciliation: Mapping[str, Any] | None = None,
+    composition_search_certificate: Mapping[str, Any] | None = None,
 ) -> Dict[str, Any]:
     """State what a manual frontend run may, and may not, support.
 
@@ -5163,6 +5653,36 @@ def _research_claim_scope_payload(
         teacher_release_failed_checks.append("git_provenance_not_research_eligible")
     if run_profile == DAY_AHEAD_EXPLORATORY_PROFILE:
         teacher_release_failed_checks.append("day_ahead_only_exploratory_profile")
+    is_two_stage = (
+        str(metadata.get("optimization_structure") or "").lower()
+        == "two_stage"
+    )
+    objective_accounting_evidence_errors: list[str] = []
+    composition_certificate_evidence_errors: list[str] = []
+    if is_two_stage and bool(metadata.get("research_run", False)):
+        # Do not substitute a summary/metadata boolean for proof. The
+        # reconciliation must carry the numeric residual and the certificate
+        # must carry the actual composition search result.
+        objective_accounting_evidence_errors = (
+            validate_solver_objective_accounting_reconciliation(
+                objective_accounting_reconciliation,
+                require_match=True,
+            )
+        )
+        if objective_accounting_evidence_errors:
+            teacher_release_failed_checks.append(
+                "solver_objective_canonical_accounting_mismatch"
+            )
+        composition_certificate_evidence_errors = (
+            validate_stage1_used_powertrain_composition_search(
+                composition_search_certificate,
+                require_accepted=True,
+            )
+        )
+        if composition_certificate_evidence_errors:
+            teacher_release_failed_checks.append(
+                "used_powertrain_composition_search_not_certified"
+            )
     # A single frontend run cannot establish the required same-service-date,
     # fixed-control counterfactual evidence. Keep release claims blocked until
     # the separately verified pair manifest exists; this also prevents an
@@ -5238,6 +5758,24 @@ def _research_claim_scope_payload(
             "research_run": bool(metadata.get("research_run", False)),
             "research_run_accepted": bool(
                 metadata.get("research_run_accepted", False)
+            ),
+            "solver_objective_matches_accounting_total": metadata.get(
+                "solver_objective_matches_accounting_total"
+            ),
+            "used_powertrain_composition_search_accepted": metadata.get(
+                "stage1_used_powertrain_composition_search_accepted"
+            ),
+            "solver_objective_accounting_reconciliation_artifact": (
+                SOLVER_OBJECTIVE_ACCOUNTING_RECONCILIATION_FILE
+            ),
+            "solver_objective_accounting_reconciliation_errors": (
+                objective_accounting_evidence_errors
+            ),
+            "stage1_used_powertrain_composition_search_artifact": (
+                STAGE1_USED_POWERTRAIN_COMPOSITION_SEARCH_FILE
+            ),
+            "stage1_used_powertrain_composition_search_errors": (
+                composition_certificate_evidence_errors
             ),
             "optimization_structure": metadata.get("optimization_structure"),
             "supports_integrated_exact_milp": is_integrated_exact,
@@ -8385,6 +8923,14 @@ def _apply_result_claim_classification(
         "gurobi_raw_mip_gap": settings.get(
             "stage1_gurobi_raw_mip_gap_ratio"
         ),
+        "solver_objective_matches_accounting_total": bool(
+            metadata.get("solver_objective_matches_accounting_total", False)
+        ),
+        "used_powertrain_composition_search_accepted": bool(
+            metadata.get(
+                "stage1_used_powertrain_composition_search_accepted", False
+            )
+        ),
         "interpretation": interpretation,
     }
     optimization_result["result_claim_classification"] = payload
@@ -8646,6 +9192,27 @@ def _solver_settings_payload(
         "stage1_stage2_candidate_limit_requested": _int_or_none(
             metadata.get("stage1_stage2_candidate_limit_requested")
         ),
+        "stage1_composition_search_radius_requested": _int_or_none(
+            metadata.get("stage1_composition_search_radius_requested")
+        ),
+        "stage1_composition_search_runtime_seconds": _float_or_none(
+            metadata.get("stage1_composition_search_runtime_seconds")
+        ),
+        "stage1_composition_search_certificate_evidence_wall_seconds": (
+            _float_or_none(
+                metadata.get(
+                    "stage1_composition_search_certificate_evidence_wall_seconds"
+                )
+            )
+        ),
+        "stage1_used_powertrain_composition_search": dict(
+            metadata.get("stage1_used_powertrain_composition_search") or {}
+        ),
+        "stage1_used_powertrain_composition_search_accepted": bool(
+            metadata.get(
+                "stage1_used_powertrain_composition_search_accepted", False
+            )
+        ),
         "stage1_pool_solution_count": _int_or_none(
             metadata.get("stage1_pool_solution_count")
         ),
@@ -8757,6 +9324,7 @@ def _run_optimization(
     rolling_execution_minutes: int = 60,
     frontend_request_payload: Optional[Dict[str, Any]] = None,
     stage1_stage2_candidate_limit: int = 1,
+    stage1_composition_search_radius: int = 0,
 ) -> None:
     output_dir: Optional[str] = None
     raw_frontend_request_payload = dict(frontend_request_payload or {})
@@ -8956,6 +9524,11 @@ def _run_optimization(
                     if bool(research_run)
                     else max(int(stage1_stage2_candidate_limit), 1)
                 ),
+                stage1_composition_search_radius=(
+                    max(int(stage1_composition_search_radius), 2)
+                    if bool(research_run)
+                    else max(int(stage1_composition_search_radius), 0)
+                ),
                 gurobi_threads=gurobi_threads,
                 mip_gap=mip_gap,
                 random_seed=random_seed,
@@ -9046,6 +9619,9 @@ def _run_optimization(
                     ),
                     "stage1_stage2_candidate_limit": (
                         opt_config.stage1_stage2_candidate_limit
+                    ),
+                    "stage1_composition_search_radius": (
+                        opt_config.stage1_composition_search_radius
                     ),
                     "gurobi_threads": gurobi_threads,
                     "run_profile": run_profile,
@@ -9191,6 +9767,22 @@ def _run_optimization(
                             "stage1_stage2_candidate_limit_requested"
                         )
                     ),
+                    "composition_search_radius_requested": (
+                        engine_solver_metadata.get(
+                            "stage1_composition_search_radius_requested"
+                        )
+                    ),
+                    "composition_search_runtime_seconds": (
+                        engine_solver_metadata.get(
+                            "stage1_composition_search_runtime_seconds"
+                        )
+                    ),
+                    "used_powertrain_composition_search": dict(
+                        engine_solver_metadata.get(
+                            "stage1_used_powertrain_composition_search"
+                        )
+                        or {}
+                    ),
                     "pool_solution_count": engine_solver_metadata.get(
                         "stage1_pool_solution_count"
                     ),
@@ -9281,6 +9873,9 @@ def _run_optimization(
                     [
                         "candidate_index",
                         "stage1_pool_solution_index",
+                        "stage1_candidate_source",
+                        "stage1_composition_target_used_bev",
+                        "stage1_composition_target_used_ice",
                         "candidate_hash",
                         "assignment_hash",
                         "stage1_relaxed_objective_jpy",
@@ -9301,6 +9896,52 @@ def _run_optimization(
                         "stage2_runtime_sec",
                         "stage2_time_limit_sec_effective",
                         "stage2_solver_status",
+                    ],
+                )
+            composition_search_payload = dict(
+                engine_solver_metadata.get(
+                    "stage1_used_powertrain_composition_search"
+                )
+                or {}
+            )
+            if composition_search_payload:
+                composition_search_json_path = (
+                    Path(output_dir)
+                    / "stage1_used_powertrain_composition_search.json"
+                )
+                composition_search_json_path.write_text(
+                    json.dumps(
+                        composition_search_payload,
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
+                    encoding="utf-8",
+                )
+                _write_csv_rows(
+                    Path(output_dir)
+                    / "stage1_used_powertrain_composition_search.csv",
+                    list(
+                        composition_search_payload.get("target_records") or []
+                    ),
+                    [
+                        "target_used_bev",
+                        "target_used_ice",
+                        "delta_used_bev_from_primary",
+                        "delta_used_ice_from_primary",
+                        "target_total_used_vehicle_count",
+                        "target_within_selected_inventory",
+                        "search_status",
+                        "solver_status",
+                        "solution_count",
+                        "best_bound",
+                        "mip_gap_ratio",
+                        "time_limit_sec",
+                        "solver_runtime_sec",
+                        "candidate_hash",
+                        "actual_used_bev",
+                        "actual_used_ice",
+                        "candidate_accepted_for_stage2_evaluation",
+                        "final_disposition",
                     ],
                 )
             graph_artifacts = _persist_canonical_graph_exports(
@@ -10758,6 +11399,7 @@ def run_optimization(
                 "rolling_controls_server_enforced": bool(rolling_required),
             },
             request.stage1_stage2_candidate_limit,
+            request.stage1_composition_search_radius,
         ),
         job_id=job.job_id,
         scenario_id=scenario_id,
