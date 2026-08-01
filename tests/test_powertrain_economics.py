@@ -29,7 +29,7 @@ def test_flat_30_yen_tariff_is_not_bev_advantage_with_current_bus_inputs() -> No
     )
 
 
-def test_explicit_carbon_price_can_make_bev_marginally_cheaper() -> None:
+def test_explicit_carbon_price_can_make_bev_marginally_cheaper_for_clean_grid() -> None:
     audit = audit_powertrain_marginal_costs(
         electricity_price_jpy_per_kwh=30.0,
         bev_energy_kwh_per_km=1.316,
@@ -43,6 +43,26 @@ def test_explicit_carbon_price_can_make_bev_marginally_cheaper() -> None:
 
     assert audit.bev_is_marginally_cheaper is True
     assert audit.bev_minus_ice_jpy_per_km < 0.0
+    assert audit.nonnegative_co2_price_can_make_bev_break_even is True
+
+
+def test_current_grid_factor_has_no_nonnegative_carbon_break_even() -> None:
+    audit = audit_powertrain_marginal_costs(
+        electricity_price_jpy_per_kwh=30.0,
+        bev_energy_kwh_per_km=1.316,
+        bev_charge_efficiency=0.95,
+        diesel_price_jpy_per_litre=150.0,
+        ice_fuel_litre_per_km=1.0 / 4.52,
+        ice_co2_kg_per_litre=2.585895,
+        grid_co2_kg_per_kwh=0.5,
+        co2_price_jpy_per_kg=1.0,
+    )
+
+    assert audit.bev_grid_co2_kg_per_km == pytest.approx(0.692631579)
+    assert audit.ice_co2_kg_per_km == pytest.approx(0.572100664)
+    assert audit.required_co2_price_for_bev_break_even_jpy_per_kg is None
+    assert audit.nonnegative_co2_price_can_make_bev_break_even is False
+    assert audit.bev_is_marginally_cheaper is False
 
 
 def test_candidate_diversity_detects_frozen_fleet_composition() -> None:
