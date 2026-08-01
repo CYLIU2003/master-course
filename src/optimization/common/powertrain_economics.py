@@ -27,6 +27,8 @@ class PowertrainMarginalCostAudit:
     co2_price_jpy_per_kg: float
     bev_grid_energy_cost_jpy_per_km: float
     ice_fuel_cost_jpy_per_km: float
+    bev_grid_co2_kg_per_km: float
+    ice_co2_kg_per_km: float
     bev_grid_co2_cost_jpy_per_km: float
     ice_co2_cost_jpy_per_km: float
     bev_total_marginal_cost_jpy_per_km: float
@@ -34,6 +36,7 @@ class PowertrainMarginalCostAudit:
     bev_minus_ice_jpy_per_km: float
     break_even_electricity_price_jpy_per_kwh: float
     required_co2_price_for_bev_break_even_jpy_per_kg: float | None
+    nonnegative_co2_price_can_make_bev_break_even: bool
     bev_is_marginally_cheaper: bool
 
     def to_dict(self) -> dict[str, Any]:
@@ -79,8 +82,10 @@ def audit_powertrain_marginal_costs(
 
     bev_grid_energy_cost = electricity_price * bev_energy / efficiency
     ice_fuel_cost = diesel_price * ice_fuel
-    bev_grid_co2_cost = grid_co2 * bev_energy / efficiency * co2_price
-    ice_co2_cost = ice_co2 * ice_fuel * co2_price
+    bev_grid_co2_per_km = grid_co2 * bev_energy / efficiency
+    ice_co2_per_km = ice_co2 * ice_fuel
+    bev_grid_co2_cost = bev_grid_co2_per_km * co2_price
+    ice_co2_cost = ice_co2_per_km * co2_price
     bev_total = bev_grid_energy_cost + bev_grid_co2_cost
     ice_total = ice_fuel_cost + ice_co2_cost
 
@@ -90,17 +95,18 @@ def audit_powertrain_marginal_costs(
     )
 
     # Solve the same equality for CO2 price at the supplied electricity price.
-    co2_denominator = (
-        ice_co2 * ice_fuel - grid_co2 * bev_energy / efficiency
-    )
+    # A negative solution means that no nonnegative carbon price can reverse
+    # the ordering; this occurs when grid-powered BEV operation is both more
+    # expensive and more carbon intensive per kilometre than ICE operation.
+    co2_denominator = ice_co2_per_km - bev_grid_co2_per_km
+    required_co2_price: float | None
     if abs(co2_denominator) <= _EPS:
         required_co2_price = None
     else:
-        required_co2_price = (
+        candidate = (
             bev_grid_energy_cost - ice_fuel_cost
         ) / co2_denominator
-        if required_co2_price < 0.0:
-            required_co2_price = 0.0
+        required_co2_price = candidate if candidate >= 0.0 else None
 
     return PowertrainMarginalCostAudit(
         electricity_price_jpy_per_kwh=electricity_price,
@@ -113,6 +119,8 @@ def audit_powertrain_marginal_costs(
         co2_price_jpy_per_kg=co2_price,
         bev_grid_energy_cost_jpy_per_km=bev_grid_energy_cost,
         ice_fuel_cost_jpy_per_km=ice_fuel_cost,
+        bev_grid_co2_kg_per_km=bev_grid_co2_per_km,
+        ice_co2_kg_per_km=ice_co2_per_km,
         bev_grid_co2_cost_jpy_per_km=bev_grid_co2_cost,
         ice_co2_cost_jpy_per_km=ice_co2_cost,
         bev_total_marginal_cost_jpy_per_km=bev_total,
@@ -120,6 +128,9 @@ def audit_powertrain_marginal_costs(
         bev_minus_ice_jpy_per_km=bev_total - ice_total,
         break_even_electricity_price_jpy_per_kwh=break_even_price,
         required_co2_price_for_bev_break_even_jpy_per_kg=required_co2_price,
+        nonnegative_co2_price_can_make_bev_break_even=(
+            required_co2_price is not None
+        ),
         bev_is_marginally_cheaper=bev_total <= ice_total + 1.0e-9,
     )
 
