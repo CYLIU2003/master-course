@@ -6118,6 +6118,225 @@ class GurobiMILPAdapter:
                 ),
             )
 
+        def _powertrain_activation_replacement_mip_starts(
+            plan: AssignmentPlan,
+        ) -> Dict[int, List[Dict[str, Any]]]:
+            """Build partial starts that change the activated fleet mix.
+
+            The ordinary whole-duty swap starts exchange an already-used BEV
+            and ICE and therefore preserve the activated composition.  These
+            starts instead move every duty of one active source vehicle to an
+            unused opposite-powertrain vehicle, allowing the exact temporary
+            ``used_vehicle`` count constraints to receive a plausible
+            incumbent without changing the Stage 1 objective or recourse
+            constraints.  Gurobi still validates the complete start.
+            """
+
+            duties_by_vehicle: Dict[str, List[Any]] = {}
+            for duty in plan.duties:
+                vehicle_id = str(plan.vehicle_id_for_duty(duty.duty_id))
+                if duty.legs:
+                    duties_by_vehicle.setdefault(vehicle_id, []).append(duty)
+            active_vehicle_ids = set(duties_by_vehicle)
+            available_by_group = {
+                "ELECTRIC": sorted(
+                    str(vehicle.vehicle_id)
+                    for vehicle in problem.vehicles
+                    if bool(getattr(vehicle, "available", True))
+                    and _powertrain_group(str(vehicle.vehicle_id))
+                    == "ELECTRIC"
+                ),
+                "COMBUSTION": sorted(
+                    str(vehicle.vehicle_id)
+                    for vehicle in problem.vehicles
+                    if bool(getattr(vehicle, "available", True))
+                    and _powertrain_group(str(vehicle.vehicle_id))
+                    == "COMBUSTION"
+                ),
+            }
+            active_by_group = {
+                group: sorted(
+                    vehicle_id
+                    for vehicle_id in active_vehicle_ids
+                    if _powertrain_group(vehicle_id) == group
+                )
+                for group in ("ELECTRIC", "COMBUSTION")
+            }
+
+            def _service_energy_for_vehicle(vehicle_id: str) -> float:
+                vehicle = vehicle_by_id.get(vehicle_id)
+                if vehicle is None:
+                    return math.inf
+                return sum(
+                    max(
+                        self._trip_energy_kwh(
+                            problem,
+                            vehicle,
+                            str(leg.trip.trip_id),
+                        ),
+                        0.0,
+                    )
+                    for duty in duties_by_vehicle.get(vehicle_id, ())
+                    for leg in duty.legs
+                )
+
+            starts_by_delta: Dict[int, List[Dict[str, Any]]] = {
+                1: [],
+                -1: [],
+            }
+            for source_group, target_group, bev_delta in (
+                ("COMBUSTION", "ELECTRIC", 1),
+                ("ELECTRIC", "COMBUSTION", -1),
+            ):
+                unused_target_ids = [
+                    vehicle_id
+                    for vehicle_id in available_by_group[target_group]
+                    if vehicle_id not in active_vehicle_ids
+                ]
+                for source_vehicle_id in active_by_group[source_group]:
+                    for target_vehicle_id in unused_target_ids:
+                        selected_y: Set[Tuple[str, str]] = set()
+                        selected_x: Set[Tuple[str, str, str]] = set()
+                        selected_start: Set[Tuple[str, str]] = set()
+                        selected_end: Set[Tuple[str, str]] = set()
+                        selected_used = set(active_vehicle_ids)
+                        selected_used.discard(source_vehicle_id)
+                        selected_used.add(target_vehicle_id)
+                        selected_used_day: Set[Tuple[str, int]] = set()
+                        pattern: List[Tuple[str, str]] = []
+                        valid = True
+                        for original_vehicle_id, duties in duties_by_vehicle.items():
+                            replacement_vehicle_id = (
+                                target_vehicle_id
+                                if original_vehicle_id == source_vehicle_id
+                                else original_vehicle_id
+                            )
+                            for duty in duties:
+                                trip_ids = [
+                                    str(leg.trip.trip_id)
+                                    for leg in duty.legs
+                                ]
+                                if not trip_ids:
+                                    continue
+                                for trip_id in trip_ids:
+                                    assignment_key = (
+                                        replacement_vehicle_id,
+                                        trip_id,
+                                    )
+                                    if assignment_key not in y:
+                                        valid = False
+                                        break
+                                    selected_y.add(assignment_key)
+                                    selected_used_day.add(
+                                        (
+                                            replacement_vehicle_id,
+                                            int(
+                                                trip_day_index_by_trip_id.get(
+                                                    trip_id,
+                                                    0,
+                                                )
+                                            ),
+                                        )
+                                    )
+                                    pattern.append(
+                                        (
+                                            trip_id,
+                                            _powertrain_group(
+                                                replacement_vehicle_id
+                                            ),
+                                        )
+                                    )
+                                if not valid:
+                                    break
+                                start_key = (
+                                    replacement_vehicle_id,
+                                    trip_ids[0],
+                                )
+                                end_key = (
+                                    replacement_vehicle_id,
+                                    trip_ids[-1],
+                                )
+                                if (
+                                    start_key not in start_arc
+                                    or end_key not in end_arc
+                                ):
+                                    valid = False
+                                    break
+                                selected_start.add(start_key)
+                                selected_end.add(end_key)
+                                for from_trip_id, to_trip_id in zip(
+                                    trip_ids,
+                                    trip_ids[1:],
+                                ):
+                                    arc_key = (
+                                        replacement_vehicle_id,
+                                        from_trip_id,
+                                        to_trip_id,
+                                    )
+                                    if arc_key not in x:
+                                        valid = False
+                                        break
+                                    selected_x.add(arc_key)
+                                if not valid:
+                                    break
+                            if not valid:
+                                break
+                        normalized_pattern = tuple(sorted(pattern))
+                        if (
+                            not valid
+                            or len(normalized_pattern) != len(problem.trips)
+                        ):
+                            continue
+                        starts_by_delta[bev_delta].append(
+                            {
+                                "source_vehicle_id": source_vehicle_id,
+                                "target_vehicle_id": target_vehicle_id,
+                                "composition_delta_used_bev": bev_delta,
+                                "powertrain_pattern": normalized_pattern,
+                                "powertrain_pattern_hash": hashlib.sha256(
+                                    json.dumps(
+                                        normalized_pattern,
+                                        ensure_ascii=False,
+                                        separators=(",", ":"),
+                                    ).encode("utf-8")
+                                ).hexdigest(),
+                                "selected_y": selected_y,
+                                "selected_x": selected_x,
+                                "selected_start": selected_start,
+                                "selected_end": selected_end,
+                                "selected_used": selected_used,
+                                "selected_used_day": selected_used_day,
+                                "warm_start_priority_score": abs(
+                                    _service_energy_for_vehicle(
+                                        source_vehicle_id
+                                    )
+                                    - sum(
+                                        max(
+                                            self._trip_energy_kwh(
+                                                problem,
+                                                vehicle_by_id[target_vehicle_id],
+                                                str(leg.trip.trip_id),
+                                            ),
+                                            0.0,
+                                        )
+                                        for duty in duties_by_vehicle[
+                                            source_vehicle_id
+                                        ]
+                                        for leg in duty.legs
+                                    )
+                                ),
+                            }
+                        )
+            for delta in starts_by_delta:
+                starts_by_delta[delta].sort(
+                    key=lambda item: (
+                        float(item["warm_start_priority_score"]),
+                        str(item["source_vehicle_id"]),
+                        str(item["target_vehicle_id"]),
+                    )
+                )
+            return starts_by_delta
+
         def _apply_partial_assignment_mip_start(
             start: Mapping[str, Any],
         ) -> None:
@@ -6372,6 +6591,11 @@ class GurobiMILPAdapter:
             ),
             0.25,
         )
+        composition_activation_mip_starts = (
+            _powertrain_activation_replacement_mip_starts(stage1_plan)
+            if stage1_composition_search_enabled
+            else {}
+        )
         if stage1_composition_search_enabled:
             # Search adjacent *activated-vehicle* compositions explicitly.
             # This is not a weather or BEV-use policy: both count equalities
@@ -6489,6 +6713,16 @@ class GurobiMILPAdapter:
                         0.25,
                     ),
                 )
+                composition_mip_start: Optional[Dict[str, Any]] = None
+                delta_starts = composition_activation_mip_starts.get(
+                    int(target_record["delta_used_bev_from_primary"]),
+                    [],
+                )
+                if delta_starts:
+                    composition_mip_start = delta_starts[0]
+                    _apply_partial_assignment_mip_start(
+                        composition_mip_start
+                    )
                 stage1.Params.TimeLimit = composition_time_limit_sec
                 stage1.Params.PoolSearchMode = 0
                 stage1.Params.PoolSolutions = 1
@@ -6523,8 +6757,42 @@ class GurobiMILPAdapter:
                             "certificate_eligible": (
                                 composition_status == "infeasible"
                             ),
+                            "partial_mip_start_applied": (
+                                composition_mip_start is not None
+                            ),
+                            "partial_mip_start_semantics": (
+                                "unused_opposite_powertrain_activation_and_"
+                                "source_vehicle_retirement"
+                                if composition_mip_start is not None
+                                else "none"
+                            ),
                         }
                     )
+                    if composition_mip_start is not None:
+                        target_record.update(
+                            {
+                                "partial_mip_start_source_vehicle_id": (
+                                    composition_mip_start[
+                                        "source_vehicle_id"
+                                    ]
+                                ),
+                                "partial_mip_start_target_vehicle_id": (
+                                    composition_mip_start[
+                                        "target_vehicle_id"
+                                    ]
+                                ),
+                                "partial_mip_start_powertrain_pattern_hash": (
+                                    composition_mip_start[
+                                        "powertrain_pattern_hash"
+                                    ]
+                                ),
+                                "partial_mip_start_priority_score": (
+                                    composition_mip_start[
+                                        "warm_start_priority_score"
+                                    ]
+                                ),
+                            }
+                        )
                     if composition_status == "infeasible":
                         iis_constraint_names: List[str] = []
                         iis_error = ""
@@ -7531,6 +7799,14 @@ class GurobiMILPAdapter:
             ),
             "stage1_composition_target_time_limit_cap_seconds": (
                 composition_target_time_limit_cap_sec
+            ),
+            "stage1_composition_activation_mip_start_counts": {
+                str(delta): len(starts)
+                for delta, starts in composition_activation_mip_starts.items()
+            },
+            "stage1_composition_activation_mip_start_semantics": (
+                "unused_opposite_powertrain_activation_and_source_vehicle_"
+                "retirement_partial_solver_hint"
             ),
             "stage1_composition_search_runtime_seconds": (
                 composition_search_runtime_sec

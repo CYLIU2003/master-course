@@ -76,6 +76,16 @@ and no cross-weather claim is allowed. The next frozen rerun uses the explicit
 `stage1_composition_target_time_limit_cap_seconds`, while preserving the same
 100-second bounded reserve and all scenario controls.
 
+The second fresh rerun from frozen SHA
+`a083919ec679fdec64907ef46ba94cbf2dffc8c3` is retained at
+`output/formal_pair_20260802_flat30_composition_search_r3` as **DIAGNOSTIC
+ONLY**. The 25-second cap still left all four in-inventory adjacent targets
+at `TIME_LIMIT` with zero incumbents in both weather cases. The next attempt
+adds partial MIP starts that activate an unused opposite-powertrain vehicle
+and retire the source vehicle while leaving all objective, recourse, and
+weather controls unchanged. These starts are hints rather than accepted
+assignments; unresolved targets continue to block formal release.
+
 ## Separate controlled tariff sensitivity (2026-07-31)
 
 A user-authorized tariff mutation is a separate experiment from the frozen

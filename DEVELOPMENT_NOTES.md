@@ -15,6 +15,14 @@
   solver-budget correction, not a BEV preference or weather strategy.  The
   effective cap is persisted in the candidate-selection metadata so a fresh
   frozen rerun can be audited.
+- The second fresh rerun from `a083919ec679fdec64907ef46ba94cbf2dffc8c3`
+  still reached `TIME_LIMIT` with no incumbent for all four adjacent targets.
+  Exact-count targets now receive partial MIP starts that activate an unused
+  opposite-powertrain vehicle and retire the source vehicle's duties.  The
+  starts are hints only: the unchanged Stage 1 model, temporary count
+  equalities, Stage 2, and independent physical validation must accept the
+  resulting candidate.  This remains diagnostic until a fresh frozen pair
+  confirms composition evidence.
 
 ## 2026-08-01 Phase 3 composition evidence and formal cost-release guard
 

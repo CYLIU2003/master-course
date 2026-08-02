@@ -314,6 +314,11 @@ simulation artifact, not an automatically accepted research result.
   audit. A target that still reaches `TIME_LIMIT` without an incumbent stays
   unresolved and blocks formal release; this budget change adds no BEV or
   weather-direction preference.
+  Before each exact-count solve, the search may provide a partial MIP start
+  that moves all duties from an active vehicle to an unused vehicle of the
+  opposite powertrain, matching the requested activation/retirement delta.
+  This is only a solver hint; the full unchanged model must validate it, and
+  the applied vehicle IDs and pattern hash are persisted for audit.
 - The certified Stage 1 reporting bound keeps Gurobi's raw bound separate from
   a reproducible analytical floor. That floor adds the strict path-cover
   vehicle-use minimum to an optimistic direct service-energy/fuel minimum,
