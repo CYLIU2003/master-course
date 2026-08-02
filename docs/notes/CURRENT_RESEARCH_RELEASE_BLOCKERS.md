@@ -19,6 +19,17 @@ zero failed checks, the exact frozen Git SHA at start and end, and a completed
 ZIP. When that artifact exists for the current frozen SHA, this blocker is
 discharged without modifying the repository during the experiment.
 
+## 2026-08-02 interactive 2025-08-10 Prepare repair
+
+The interactive `2025-08-10` + `WEEKDAY` + actual-date-PV Prepare failure was
+caused by stale formal-pair metadata and a collision between calendar-policy
+and comparison-design fields. Quick Setup now invalidates the old pair
+type/role/source, while the Sunday/WEEKDAY exception remains explicitly stored
+as `calendar_policy=fixed_weekday_timetable_pv_counterfactual` with its allow
+flag. A narrowly scoped legacy migration unblocks already-saved scenarios.
+This changes no timetable, PV, fleet, tariff, or solver input and does not
+remove any formal research-release blocker; fresh Prepare is still required.
+
 ## 2026-08-02 PV rated-output model-input change
 
 PV capacity can now be selected directly with `pv_capacity_kw` and is carried

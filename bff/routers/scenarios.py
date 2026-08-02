@@ -2768,6 +2768,16 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
         simulation_config = store.get_field(scenario_id, "simulation_config") or {}
         if not isinstance(simulation_config, dict):
             simulation_config = {}
+        # Quick Setup is an interactive standalone scenario edit.  A formal
+        # paired-comparison contract must be supplied again by the dedicated
+        # runner after any such edit; retaining it here can combine a new
+        # service date with stale baseline/counterfactual provenance.
+        for comparison_key in (
+            "comparison_type",
+            "comparison_role",
+            "counterfactual_pv_source_date",
+        ):
+            simulation_config.pop(comparison_key, None)
         saved_weights = _coerce_float_mapping(simulation_config.get("objective_weights") or {})
         if not saved_weights:
             saved_weights = _coerce_float_mapping(solver_config.get("objective_weights") or {})
@@ -2971,19 +2981,11 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
                 simulation_config["calendar_policy"] = (
                     FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL
                 )
-                simulation_config["comparison_type"] = (
-                    FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL
-                )
             elif (
                 simulation_config.get("calendar_policy")
                 == FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL
             ):
                 simulation_config.pop("calendar_policy", None)
-                if (
-                    simulation_config.get("comparison_type")
-                    == FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL
-                ):
-                    simulation_config.pop("comparison_type", None)
         if body.weatherFactorScalar is not None:
             simulation_config["weather_factor_scalar"] = float(body.weatherFactorScalar)
         if body.enableWeatherOperationPolicy is not None:

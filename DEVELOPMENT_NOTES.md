@@ -1,5 +1,32 @@
 # Development Notes
 
+## 2026-08-02 interactive Sunday-PV Prepare provenance repair
+
+- Fixed the `HTTP 422: comparison_type must be
+  'same_service_date_pv_counterfactual'` failure when scenario
+  `b23fd26c-1233-4c73-bb9e-bdb8b1584760` is interactively prepared as
+  `2025-08-10` + `WEEKDAY` + `actual_date_profile`.
+- Root cause was a field collision: Quick Setup stored the calendar waiver
+  name `fixed_weekday_timetable_pv_counterfactual` in `comparison_type`, while
+  Prepare correctly reserves that field for the formal pair design
+  `same_service_date_pv_counterfactual`. The scenario also retained the prior
+  pair role/source after its service date was changed.
+- Quick Setup now keeps the waiver solely in `calendar_policy` and
+  `allow_fixed_weekday_timetable_pv_counterfactual`, and clears stale formal
+  comparison type/role/source metadata on an interactive save. Prepare accepts
+  and normalizes only the exact legacy Sunday/WEEKDAY/actual-profile shape so
+  already-saved scenarios are not stranded; other invalid comparison types
+  remain rejected.
+- This is a provenance repair only. It does not change the selected date,
+  weekday timetable rows, route/depot scope, fleet, PV curve, tariff, BESS, or
+  optimization semantics. The result must still be labelled a fixed-weekday
+  timetable PV counterfactual, not actual Sunday operation.
+- Validation: the focused Quick Setup/Prepare/calendar/Rolling/pair suite
+  passes (52 tests), the complete suite passes (1,089 tests), and the exact
+  persisted legacy shape from the affected scenario reaches builder
+  configuration with `comparison_type/role/source=None` while retaining the
+  explicit calendar waiver.
+
 ## 2026-08-02 PV rated-output input and reverse area estimate
 
 - The depot manager and detailed depot-energy editor now treat

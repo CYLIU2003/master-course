@@ -65,6 +65,9 @@ def test_build_quick_setup_payload_includes_saved_objective_weights() -> None:
             "operation_time_window_enabled": False,
             "enable_weather_operation_policy": True,
             "allow_fixed_weekday_timetable_pv_counterfactual": True,
+            "comparison_type": "fixed_weekday_timetable_pv_counterfactual",
+            "comparison_role": "pv_curve_counterfactual",
+            "counterfactual_pv_source_date": "2025-08-10",
             "weather_proxy_forecast_path": "data/weather/proxy_forecasts/old.json",
             "weather_proxy_daily_csv_path": "data/weather/processed/tokyo.csv",
             "weather_proxy_station_id": "44132",
@@ -278,7 +281,9 @@ def test_update_quick_setup_persists_weather_proxy_state_without_validation() ->
     assert simulation_config["service_date"] == "2025-08-10"
     assert simulation_config["allow_fixed_weekday_timetable_pv_counterfactual"] is True
     assert simulation_config["calendar_policy"] == "fixed_weekday_timetable_pv_counterfactual"
-    assert simulation_config["comparison_type"] == "fixed_weekday_timetable_pv_counterfactual"
+    assert "comparison_type" not in simulation_config
+    assert "comparison_role" not in simulation_config
+    assert "counterfactual_pv_source_date" not in simulation_config
     assert simulation_config["enable_weather_operation_policy"] is True
     assert simulation_config["weather_proxy_forecast_path"] == "data/weather/proxy_forecasts/2025-08-05.json"
     assert simulation_config["weather_proxy_daily_csv_path"] == "data/weather/processed/tokyo.csv"

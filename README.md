@@ -148,6 +148,10 @@ simulation artifact, not an automatically accepted research result.
   timetable.
   Tk Quick Setup and Prepare derive and persist that declaration only when the
   user has selected one Sunday date, `WEEKDAY`, and the actual-date PV profile.
+  The calendar exception is stored in `calendar_policy` plus its explicit
+  allow flag; `comparison_type` is reserved for the separate
+  `same_service_date_pv_counterfactual` pair contract. Saving Quick Setup
+  invalidates any older formal pair role/source metadata before Prepare.
   The declaration changes neither the selected date, timetable rows, route
   scope, nor the PV curve; it is carried into the prepared input and Rolling
   calendar audit as provenance.
