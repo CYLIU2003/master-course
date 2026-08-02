@@ -28,6 +28,27 @@
   `v5_pv_rated_output_authoritative`. All formal comparisons after this model
   change require fresh Prepare and fresh optimization artifacts; older runs
   remain diagnostic and must not be relabelled.
+- A fresh controlled pair was executed from frozen SHA
+  `bb6c7fc3e49067f178a1540e4061ad4b83c015e0` (tag
+  `research-pv-rated-1000kw-20260802`) with a common 1,000 kW rated output,
+  flat 30 JPY/kWh grid price, and zero demand-charge rate. Prepare and the
+  canonical scenario retained the measured 1,450 m2 depot area while recording
+  5,000 m2 required installable area and 14,285.714286 m2 estimated depot-area
+  equivalent. Sunny/rain PV totals were 6,056.25 / 996.2 kWh.
+- Both cases served 264/264 trips, passed independent physical checks and the
+  24/24 Rolling chain, and selected the same 14-BEV/18-ICE composition with
+  46/218 trips. Both had zero grid-to-bus energy. Rain still used only
+  575.541036 kWh of PV directly or through BESS and curtailed 420.658964 kWh;
+  1,000 kW therefore saturates even the rain case, so an equal assignment is
+  economically expected rather than evidence of a remaining capacity-input
+  bug. The pair is retained at
+  `output/formal_pair_20260802_flat30_pv1000_rated_output` as diagnostic only.
+- The pair remains `BLOCKED`: only three of 21 requested candidates were
+  evaluated; the same-assignment strict audit is incomplete; and Phase 3 still
+  declares `objective_is_actual_cost=false` even though the numeric solver to
+  canonical-accounting residual was only `1.164153e-10 JPY`. A smaller-capacity
+  sweep is required to locate the binding-PV range; this 1,000 kW pair must not
+  be used to claim that weather has no dispatch effect.
 
 ## 2026-08-02 Composition-target search budget correction
 

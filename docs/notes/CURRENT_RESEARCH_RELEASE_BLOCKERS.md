@@ -29,9 +29,27 @@ pre-change prepared payload and optimization artifact is stale for a new PV
 capacity experiment. The formal HTTP pair runner must receive the common value
 through `--pv-capacity-kw`; it no longer replaces that value with the
 area-derived 101.5 kW setting. No existing 2026-07-31 or 2026-08-02 pair is evidence for
-the new capacity setting. The release remains **BLOCKED** until both weather
-cases are freshly prepared and rerun from one clean frozen commit with the
-same non-PV controls and only the declared PV profile/capacity difference.
+the new capacity setting. A fresh same-commit rerun is required to discharge
+this capacity-input freshness blocker; all other release gates remain
+independent.
+
+That rerun now exists at
+`output/formal_pair_20260802_flat30_pv1000_rated_output`, frozen at
+`bb6c7fc3e49067f178a1540e4061ad4b83c015e0`. It verifies that 1,000 kW reaches
+Prepare and the canonical solver unchanged, with 5,000 m2 reverse-estimated PV
+installation area. Sunny/rain generation is 6,056.25 / 996.2 kWh, but both
+select the identical 14-BEV/18-ICE, 46/218-trip assignment and zero grid-to-bus
+energy. Rain still curtails 420.658964 kWh, so the chosen capacity has saturated
+both weather cases; this is a valid null weather response at that capacity.
+
+The new pair is still **DIAGNOSTIC ONLY**. It evaluates three rather than the
+requested 21 candidates, does not pass the same-assignment strict audit, and
+the Phase 3 objective remains a two-stage proxy (`objective_is_actual_cost`
+is false) even though its numeric residual against canonical accounting is
+only `1.164153e-10 JPY`. The pair manifest and teacher release therefore remain
+blocked. A fresh, predeclared rated-capacity sweep below 1,000 kW is needed to
+identify the range where rain PV becomes binding without changing any non-PV
+control.
 
 ## 2026-08-01 flat-30 pair: composition and accounting blockers
 
