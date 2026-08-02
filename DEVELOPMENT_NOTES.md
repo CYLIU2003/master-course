@@ -26,6 +26,13 @@
   persisted legacy shape from the affected scenario reaches builder
   configuration with `comparison_type/role/source=None` while retaining the
   explicit calendar waiver.
+- Live BFF verification from code commit `dd829a9` then completed Fresh Prepare
+  for the affected scenario without HTTP 422. Prepared input
+  `prepared-b8601506bd9b49e5-dbc36084d07b5fa8-9dd564c9` is `ready=true` with
+  service date `2025-08-10`, 1 depot, 16 routes, 264 trips, 60 vehicles, and 10
+  chargers. Its schema is `v5_pv_rated_output_authoritative`; comparison
+  type/role/source are null and the explicit fixed-weekday calendar policy is
+  retained.
 
 ## 2026-08-02 PV rated-output input and reverse area estimate
 

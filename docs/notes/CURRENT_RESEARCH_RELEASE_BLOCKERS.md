@@ -29,6 +29,10 @@ as `calendar_policy=fixed_weekday_timetable_pv_counterfactual` with its allow
 flag. A narrowly scoped legacy migration unblocks already-saved scenarios.
 This changes no timetable, PV, fleet, tariff, or solver input and does not
 remove any formal research-release blocker; fresh Prepare is still required.
+Fresh Prepare now succeeds through the live BFF for the affected scenario as
+`prepared-b8601506bd9b49e5-dbc36084d07b5fa8-9dd564c9` (`ready=true`, 264 trips,
+60 vehicles, 10 chargers). This proves the pre-solver HTTP 422 is resolved; it
+does not constitute an optimization run or discharge pair-level release gates.
 
 ## 2026-08-02 PV rated-output model-input change
 
