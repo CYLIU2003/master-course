@@ -385,6 +385,12 @@ class OptimizationConfig:
     # Formal frontend research runs enforce a radius of at least two at the
     # BFF boundary and fail release when that evidence is unresolved.
     stage1_composition_search_radius: int = 0
+    # Each exact used-powertrain target receives a bounded share of the
+    # Stage 1 candidate-enumeration reserve.  The cap must be long enough for
+    # the full-network count-constrained MIP to discover an incumbent; a
+    # shorter diagnostic slice can incorrectly leave every adjacent target
+    # unresolved without proving feasibility or infeasibility.
+    stage1_composition_target_time_limit_sec: float = 25.0
     mip_gap: float = 0.02
     random_seed: int = 42
     alns_iterations: int = 800  # Increased from 500

@@ -308,6 +308,12 @@ simulation artifact, not an automatically accepted research result.
   Stage 1 as an IIS-backed no-good cut; a `TIME_LIMIT` without an incumbent
   does not justify such a feasibility cut. This remains a bounded two-stage
   method, not an integrated global total-cost optimum.
+  Exact composition targets share a bounded Stage 1 reserve;
+  `OptimizationConfig.stage1_composition_target_time_limit_sec` defaults to
+  25 seconds per target and the effective cap is persisted in the candidate
+  audit. A target that still reaches `TIME_LIMIT` without an incumbent stays
+  unresolved and blocks formal release; this budget change adds no BEV or
+  weather-direction preference.
 - The certified Stage 1 reporting bound keeps Gurobi's raw bound separate from
   a reproducible analytical floor. That floor adds the strict path-cover
   vehicle-use minimum to an optimistic direct service-energy/fuel minimum,

@@ -1,5 +1,21 @@
 # Development Notes
 
+## 2026-08-02 Composition-target search budget correction
+
+- The first flat-30 rerun from `fc3f4ba41648d6138c81a59ef6a76a74e094bbff`
+  reached feasible 264/264-trip rolling artifacts in both cases, but all
+  four in-inventory adjacent used-powertrain targets were `TIME_LIMIT` with
+  zero incumbents.  The prior per-target 4.5-second cap therefore left the
+  composition evidence unresolved; it did not establish that `(13,19)` was
+  optimal.  The pair remains diagnostic at
+  `output/formal_pair_20260802_flat30_composition_search_r2`.
+- `OptimizationConfig.stage1_composition_target_time_limit_sec` now records
+  a 25-second per-target cap, bounded by the existing 100-second Stage 1
+  candidate reserve and divided across the remaining targets.  This is a
+  solver-budget correction, not a BEV preference or weather strategy.  The
+  effective cap is persisted in the candidate-selection metadata so a fresh
+  frozen rerun can be audited.
+
 ## 2026-08-01 Phase 3 composition evidence and formal cost-release guard
 
 - Review of the reachable Phase 3 path corrected an outdated diagnosis: the

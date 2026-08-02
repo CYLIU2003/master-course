@@ -601,6 +601,9 @@ def test_phase3_composition_search_activates_unused_powertrain_inventory() -> No
 
     assert certificate["enabled"] is True
     assert certificate["radius_requested"] == 1
+    assert metadata[
+        "stage1_composition_target_time_limit_cap_seconds"
+    ] == pytest.approx(25.0)
     assert len(feasible_compositions) >= 2
     assert certificate["multiple_feasible_compositions_found"] is True
     assert certificate["accepted_for_formal_composition_evidence"] is True

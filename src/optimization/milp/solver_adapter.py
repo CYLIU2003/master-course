@@ -6361,6 +6361,17 @@ class GurobiMILPAdapter:
         composition_search_events: List[Dict[str, Any]] = []
         composition_search_runtime_sec = 0.0
         composition_certificate_evidence_wall_time_sec = 0.0
+        composition_target_time_limit_cap_sec = max(
+            float(
+                getattr(
+                    config,
+                    "stage1_composition_target_time_limit_sec",
+                    25.0,
+                )
+                or 25.0
+            ),
+            0.25,
+        )
         if stage1_composition_search_enabled:
             # Search adjacent *activated-vehicle* compositions explicitly.
             # This is not a weather or BEV-use policy: both count equalities
@@ -6472,7 +6483,7 @@ class GurobiMILPAdapter:
                 )
                 stage1.update()
                 composition_time_limit_sec = min(
-                    4.5,
+                    composition_target_time_limit_cap_sec,
                     max(
                         composition_budget_remaining / remaining_valid_targets,
                         0.25,
@@ -7517,6 +7528,9 @@ class GurobiMILPAdapter:
             "stage1_candidate_enumeration_events": enumeration_events,
             "stage1_composition_search_radius_requested": (
                 stage1_composition_search_radius
+            ),
+            "stage1_composition_target_time_limit_cap_seconds": (
+                composition_target_time_limit_cap_sec
             ),
             "stage1_composition_search_runtime_seconds": (
                 composition_search_runtime_sec

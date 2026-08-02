@@ -1,6 +1,6 @@
 # Current research release blockers
 
-Status date: 2026-08-01
+Status date: 2026-08-02
 Code status: slot-indexed Stage 1 energy recourse, multi-candidate Stage 2
 evaluation, explicit same-service-date PV controls, and an HTTP-only frontend
 pair runner are implemented. A final-slot return-boundary defect exposed by
@@ -62,6 +62,19 @@ break-even is about `23.96 JPY/kWh`. This supports neither a hidden BEV
 preference nor an assertion that sunny PV must always increase BEV use: any
 remaining equal-composition result requires the persisted binding/certificate
 evidence before research interpretation.
+
+The first fresh rerun from frozen SHA
+`fc3f4ba41648d6138c81a59ef6a76a74e094bbff` is retained at
+`output/formal_pair_20260802_flat30_composition_search_r2` as **DIAGNOSTIC
+ONLY**. Both cases completed 264/264 trips, independent physical validation,
+24/24 rolling, and terminal BESS/SOC checks, but the four adjacent targets in
+each case were each limited to 4.5 seconds and returned `TIME_LIMIT` with no
+incumbent. Consequently the composition artifact remained unresolved and the
+BFF artifact contract correctly rejected finalization; the pair was not built
+and no cross-weather claim is allowed. The next frozen rerun uses the explicit
+25-second target cap recorded by
+`stage1_composition_target_time_limit_cap_seconds`, while preserving the same
+100-second bounded reserve and all scenario controls.
 
 ## Separate controlled tariff sensitivity (2026-07-31)
 
