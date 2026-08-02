@@ -23,6 +23,16 @@
   equalities, Stage 2, and independent physical validation must accept the
   resulting candidate.  This remains diagnostic until a fresh frozen pair
   confirms composition evidence.
+- The fresh pair from frozen SHA `b02859b826165c8a612a81c145eb1b06f24cb7e3`
+  used those activation/retirement starts successfully.  Both cases produced
+  three physically valid compositions `(12,20)`, `(13,19)`, and `(14,18)`;
+  the sunny selected candidate was `(14,18)` with 46 BEV trips, while rain
+  selected `(12,20)` with 42 BEV trips.  Both served 264/264 trips and passed
+  24/24 rolling and independent physical validation.  This is diagnostic
+  evidence only: the formal pair remains BLOCKED because only three of the
+  requested ten Stage 2 candidates were evaluated, the +/-2 targets remained
+  unresolved time limits, and the solver objective is still a two-stage proxy
+  rather than an actual-cost objective (rain residual: -19.214065 JPY).
 
 ## 2026-08-01 Phase 3 composition evidence and formal cost-release guard
 

@@ -86,6 +86,27 @@ and retire the source vehicle while leaving all objective, recourse, and
 weather controls unchanged. These starts are hints rather than accepted
 assignments; unresolved targets continue to block formal release.
 
+The next fresh pair from frozen SHA
+`b02859b826165c8a612a81c145eb1b06f24cb7e3` is retained at
+`output/formal_pair_20260802_flat30_composition_search_r4` and its ZIP. The
+activation/retirement starts produced physically feasible adjacent
+compositions `(12,20)`, `(13,19)`, and `(14,18)` in both cases. The selected
+sunny candidate is `(14,18)` with 46 BEV trips; the selected rain candidate is
+`(12,20)` with 42 BEV trips. Both cases served 264/264 trips, completed 24/24
+rolling steps, and passed independent physical validation. PV totals were
+614.709375 kWh (sunny) and 101.1143 kWh (rain); Stage 1 allocated
+586.4129614696021/101.1143 kWh of renewable energy and
+0/392.6302101003947 kWh of grid energy for BEV recourse, respectively.
+
+The pair remains **DIAGNOSTIC ONLY / BLOCKED**. Only three Stage 2 candidates
+were evaluated in each case (the formal controller requires at least ten),
+the +/-2 composition targets were still unresolved `TIME_LIMIT` results, and
+the Stage 1 objective is not an actual-cost objective. Sunny's numeric
+residual is approximately zero but fails the actual-cost semantic gate; rain's
+solver-minus-canonical residual is `-19.214065002277493` JPY. The observed
+sunny-versus-rain BEV difference is therefore a valid physical candidate
+observation, not a formal weather-optimality claim.
+
 ## Separate controlled tariff sensitivity (2026-07-31)
 
 A user-authorized tariff mutation is a separate experiment from the frozen
