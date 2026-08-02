@@ -152,7 +152,7 @@ def test_prepare_payload_replaces_inherited_tou_with_uniform_tariff() -> None:
     ]
 
 
-def test_controlled_pv_asset_replaces_stale_capacity_and_preserves_bess() -> None:
+def test_controlled_pv_asset_retains_rated_output_and_preserves_bess() -> None:
     runner = _load_runner()
     profile, provenance = runner._load_derived_pv_profile(
         depot_id="tsurumaki",
@@ -188,7 +188,11 @@ def test_controlled_pv_asset_replaces_stale_capacity_and_preserves_bess() -> Non
         profile_provenance=provenance,
     )
 
-    assert asset["pv_capacity_kw"] == 101.5
+    assert asset["pv_capacity_kw"] == 1000.0
+    assert asset["estimated_installable_area_m2"] == 5000.0
+    assert asset["estimated_depot_area_from_pv_capacity_m2"] == pytest.approx(
+        14285.714286
+    )
     assert asset["pv_case_id"] == "tsurumaki_2025-08-10_60min"
     assert asset["pv_profile_dates"] == ["2025-08-10"]
     assert asset["pv_generation_kwh_by_date"] == [
@@ -199,7 +203,8 @@ def test_controlled_pv_asset_replaces_stale_capacity_and_preserves_bess() -> Non
         }
     ]
     assert evidence["frontend_asset_pv_capacity_kw_before"] == 1000.0
-    assert evidence["pv_generation_kwh"] == pytest.approx(101.1143)
+    assert evidence["selected_pv_capacity_source"] == "frontend_rated_output"
+    assert evidence["pv_generation_kwh"] == pytest.approx(996.2)
     for field, expected in (
         ("bess_enabled", True),
         ("bess_energy_kwh", 6000.0),
@@ -235,6 +240,7 @@ def test_pv_asset_is_attached_from_the_frontend_bootstrap() -> None:
                             "usable_area_ratio": 0.35,
                             "panel_power_density_kw_m2": 0.2,
                             "pv_capacity_kw": 1000.0,
+                            "pv_capacity_kw_manual_override": True,
                             "bess_energy_kwh": 600.0,
                         }
                     ]
@@ -252,17 +258,45 @@ def test_pv_asset_is_attached_from_the_frontend_bootstrap() -> None:
             pv_source_date="2025-08-05",
             comparison_role="baseline",
         ),
-        expected_pv_kwh=614.709375,
+        expected_pv_kwh=6056.25,
         timeout_seconds=987.0,
     )
 
     asset = payload["simulation_settings"]["depot_energy_assets"][0]
-    assert asset["pv_capacity_kw"] == 101.5
-    assert sum(asset["pv_generation_kwh_by_slot"]) == pytest.approx(614.709375)
+    assert asset["pv_capacity_kw"] == 1000.0
+    assert sum(asset["pv_generation_kwh_by_slot"]) == pytest.approx(6056.25)
     assert asset["bess_energy_kwh"] == 600.0
     assert context["pv_profile_source"]["pv_profile_id"] == (
         "tsurumaki_2025-08-05_60min"
     )
+
+
+def test_runner_pv_capacity_argument_overrides_frontend_rated_output() -> None:
+    runner = _load_runner()
+    profile, provenance = runner._load_derived_pv_profile(
+        depot_id="tsurumaki",
+        pv_source_date="2025-08-10",
+        timestep_min=60,
+    )
+
+    asset, evidence = runner._build_controlled_pv_asset(
+        frontend_asset={
+            "depot_id": "tsurumaki",
+            "depot_area_m2": 1450.0,
+            "usable_area_ratio": 0.35,
+            "panel_power_density_kw_m2": 0.2,
+            "pv_capacity_kw": 1000.0,
+            "pv_capacity_kw_manual_override": True,
+        },
+        profile=profile,
+        profile_provenance=provenance,
+        pv_capacity_kw=750.0,
+    )
+
+    assert asset["pv_capacity_kw"] == 750.0
+    assert asset["estimated_installable_area_m2"] == 3750.0
+    assert evidence["selected_pv_capacity_source"] == "runner_argument"
+    assert evidence["pv_generation_kwh"] == pytest.approx(747.15)
 
 
 def test_uniform_tariff_evidence_requires_every_canonical_slot(

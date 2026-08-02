@@ -20,6 +20,10 @@
   the Tk editor, PV API, Prepare, and `ProblemBuilder`. Rows without the
   explicit override continue to use the legacy area-derived capacity for
   backward compatibility. An explicit rated output of zero disables PV.
+- The formal HTTP pair runner no longer replaces a frontend manual rated
+  output with `depot_area_m2 * usable_area_ratio * panel_power_density`. Its
+  new `--pv-capacity-kw` option fixes one declared rated output across both
+  cases and scales each independently hashed weather curve by that same value.
 - `PREPARED_INPUT_SCHEMA_VERSION` is now
   `v5_pv_rated_output_authoritative`. All formal comparisons after this model
   change require fresh Prepare and fresh optimization artifacts; older runs

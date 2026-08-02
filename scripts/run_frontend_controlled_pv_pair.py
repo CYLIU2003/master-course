@@ -37,6 +37,7 @@ EXPECTED_PV_KWH = {
     "sunny": 614.709375,
     "rain": 101.1143,
 }
+REFERENCE_PV_CAPACITY_KW = 101.5
 POWERTRAIN_ELECTRIC = {"BEV", "PHEV", "FCEV"}
 TARGET_ROUTE_IDS_BY_DEPOT = {
     # Canonical 16-variant Tsurumaki scope recovered identically from both
@@ -61,6 +62,17 @@ TARGET_ROUTE_IDS_BY_DEPOT = {
         "odpt-route-fb12ae43f5b0",
     ),
 }
+
+
+def _expected_pv_kwh_for_capacity(case_name: str, capacity_kw: float) -> float:
+    return round(
+        EXPECTED_PV_KWH[case_name]
+        * float(capacity_kw)
+        / REFERENCE_PV_CAPACITY_KW,
+        6,
+    )
+
+
 CONTROLLED_COST_COMPONENT_FLAGS = {
     "vehicle_fixed_cost": False,
     "vehicle_usage_cost": True,
@@ -553,13 +565,14 @@ def _build_controlled_pv_asset(
     frontend_asset: Mapping[str, Any],
     profile: Mapping[str, Any],
     profile_provenance: Mapping[str, Any],
+    pv_capacity_kw: float | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Replace only the selected PV curve in a frontend depot asset.
 
     BESS and every other non-PV field are copied verbatim from the frontend
-    builder defaults.  The installed PV capacity is rebuilt from the selected
-    depot's physical area, usable-area ratio, and panel-power density so a
-    stale manual PV-capacity override cannot scale a date profile incorrectly.
+    builder defaults.  An explicit rated output takes precedence; otherwise a
+    frontend manual override is retained, with area-derived capacity used only
+    for legacy assets that have no explicit rated-output contract.
     """
 
     depot_id = str(profile_provenance.get("depot_id") or "")
@@ -576,11 +589,10 @@ def _build_controlled_pv_asset(
             f"{asset_depot_id!r}"
         )
 
-    depot_area_m2 = _required_positive_number(
-        frontend_asset,
-        "depot_area_m2",
-        "depotAreaM2",
-        label="depot area",
+    depot_area_m2 = _number(
+        frontend_asset.get("depot_area_m2")
+        if "depot_area_m2" in frontend_asset
+        else frontend_asset.get("depotAreaM2")
     )
     usable_area_ratio = _required_positive_number(
         frontend_asset,
@@ -594,12 +606,50 @@ def _build_controlled_pv_asset(
         "panelPowerDensityKwM2",
         label="panel-power density",
     )
-    installed_capacity_kw = round(
-        depot_area_m2 * usable_area_ratio * panel_power_density_kw_m2,
+    area_derived_capacity_kw = (
+        round(
+            depot_area_m2 * usable_area_ratio * panel_power_density_kw_m2,
+            6,
+        )
+        if depot_area_m2 is not None and depot_area_m2 > 0.0
+        else None
+    )
+    frontend_capacity_kw = _number(
+        frontend_asset.get("pv_capacity_kw")
+        if "pv_capacity_kw" in frontend_asset
+        else frontend_asset.get("pvCapacityKw")
+    )
+    frontend_manual_override = bool(
+        frontend_asset.get(
+            "pv_capacity_kw_manual_override",
+            frontend_asset.get("pvCapacityKwManualOverride", False),
+        )
+    )
+    if pv_capacity_kw is not None:
+        selected_capacity_kw = float(pv_capacity_kw)
+        capacity_source = "runner_argument"
+    elif frontend_manual_override and frontend_capacity_kw is not None:
+        selected_capacity_kw = float(frontend_capacity_kw)
+        capacity_source = "frontend_rated_output"
+    elif area_derived_capacity_kw is not None:
+        selected_capacity_kw = float(area_derived_capacity_kw)
+        capacity_source = "legacy_depot_area_estimate"
+    else:
+        raise ValueError(
+            "Controlled PV asset requires an explicit rated output or a "
+            "positive legacy depot-area estimate"
+        )
+    if not math.isfinite(selected_capacity_kw) or selected_capacity_kw <= 0.0:
+        raise ValueError("PV rated output must be a positive finite kW value")
+    selected_capacity_kw = round(selected_capacity_kw, 6)
+    estimated_installable_area_m2 = round(
+        selected_capacity_kw / panel_power_density_kw_m2,
         6,
     )
-    if installed_capacity_kw <= 0.0:
-        raise ValueError("Area-derived installed PV capacity must be positive")
+    estimated_depot_area_m2 = round(
+        estimated_installable_area_m2 / usable_area_ratio,
+        6,
+    )
 
     factors = list(profile.get("capacity_factor_by_slot") or ())
     expected_slot_count = (24 * 60) // timestep_min
@@ -609,7 +659,7 @@ def _build_controlled_pv_asset(
         )
     slot_h = float(timestep_min) / 60.0
     generation = [
-        round(installed_capacity_kw * float(factor) * slot_h, 6)
+        round(selected_capacity_kw * float(factor) * slot_h, 6)
         for factor in factors
     ]
     profile_id = f"{depot_id}_{pv_source_date}_{timestep_min}min"
@@ -618,11 +668,12 @@ def _build_controlled_pv_asset(
         {
             "depot_id": depot_id,
             "pv_enabled": True,
-            "pv_capacity_kw": installed_capacity_kw,
-            # The explicit value equals the physical area-derived capacity;
-            # this prevents any stale alternate field from changing the
-            # profile scale between the frontend and canonical builder.
+            "pv_capacity_kw": selected_capacity_kw,
             "pv_capacity_kw_manual_override": True,
+            "pv_capacity_input_mode": "rated_output_manual",
+            "estimated_installable_area_m2": estimated_installable_area_m2,
+            "estimated_depot_area_from_pv_capacity_m2": estimated_depot_area_m2,
+            "derived_pv_capacity_kw": selected_capacity_kw,
             "pv_case_id": profile_id,
             "pv_profile_source": "derived_daily",
             "pv_source_type": "solcast_daily",
@@ -648,20 +699,19 @@ def _build_controlled_pv_asset(
         }
     )
     evidence = {
-        "schema_version": "controlled_pv_asset_replacement_v1",
+        "schema_version": "controlled_pv_asset_replacement_v2",
         **dict(profile_provenance),
         "frontend_asset_pv_capacity_kw_before": _number(
             frontend_asset.get("pv_capacity_kw")
             if "pv_capacity_kw" in frontend_asset
             else frontend_asset.get("pvCapacityKw")
         ),
-        "frontend_asset_pv_manual_override_before": bool(
-            frontend_asset.get(
-                "pv_capacity_kw_manual_override",
-                frontend_asset.get("pvCapacityKwManualOverride", False),
-            )
-        ),
-        "area_derived_installed_capacity_kw": installed_capacity_kw,
+        "frontend_asset_pv_manual_override_before": frontend_manual_override,
+        "selected_pv_capacity_kw": selected_capacity_kw,
+        "selected_pv_capacity_source": capacity_source,
+        "area_derived_installed_capacity_kw": area_derived_capacity_kw,
+        "estimated_installable_area_m2": estimated_installable_area_m2,
+        "estimated_depot_area_from_pv_capacity_m2": estimated_depot_area_m2,
         "pv_profile_id": profile_id,
         "pv_generation_kwh": round(sum(generation), 6),
         "pv_generation_kwh_by_slot": generation,
@@ -689,6 +739,7 @@ def _attach_controlled_pv_asset_to_prepare_payload(
     prepare_payload: Mapping[str, Any],
     expected_pv_kwh: float | None,
     timeout_seconds: float,
+    pv_capacity_kw: float | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Fetch frontend asset controls and attach one explicit PV curve to Prepare."""
 
@@ -719,6 +770,7 @@ def _attach_controlled_pv_asset_to_prepare_payload(
         frontend_asset=frontend_asset,
         profile=profile,
         profile_provenance=profile_provenance,
+        pv_capacity_kw=pv_capacity_kw,
     )
     actual_pv_kwh = _number(evidence.get("pv_generation_kwh"))
     if (
@@ -737,6 +789,11 @@ def _attach_controlled_pv_asset_to_prepare_payload(
             "Selected PV source does not yield the controlled expected total: "
             f"expected {expected_pv_kwh}, got {actual_pv_kwh}"
         )
+    evidence["expected_pv_generation_kwh"] = (
+        round(float(expected_pv_kwh), 6)
+        if expected_pv_kwh is not None
+        else actual_pv_kwh
+    )
 
     attached_payload = json.loads(
         json.dumps(prepare_payload, ensure_ascii=False, allow_nan=False)
@@ -2633,6 +2690,8 @@ def _build_pair_control_audit(
     rain_control = dict(rain.get("comparison_control_payload") or {})
     sunny_kpi = _read_json(sunny_dir / "kpi_summary.json")
     rain_kpi = _read_json(rain_dir / "kpi_summary.json")
+    sunny_pv_source = _read_json_optional(sunny_dir / "pv_profile_source.json") or {}
+    rain_pv_source = _read_json_optional(rain_dir / "pv_profile_source.json") or {}
     required_controls = (
         "service_date",
         "service_id",
@@ -2665,6 +2724,16 @@ def _build_pair_control_audit(
     }
     sunny_pv = _number(sunny_kpi.get("pv_generation_kwh"))
     rain_pv = _number(rain_kpi.get("pv_generation_kwh"))
+    sunny_expected_pv = _number(
+        sunny_pv_source.get("expected_pv_generation_kwh")
+    )
+    rain_expected_pv = _number(
+        rain_pv_source.get("expected_pv_generation_kwh")
+    )
+    if sunny_expected_pv is None:
+        sunny_expected_pv = EXPECTED_PV_KWH["sunny"]
+    if rain_expected_pv is None:
+        rain_expected_pv = EXPECTED_PV_KWH["rain"]
     day_ahead_control_fields = (
         "time_limit_seconds_effective",
         "stage1_time_limit_seconds_requested",
@@ -2745,11 +2814,11 @@ def _build_pair_control_audit(
         ),
         "sunny_expected_pv_total": (
             sunny_pv is not None
-            and abs(sunny_pv - EXPECTED_PV_KWH["sunny"]) <= 1.0e-6
+            and abs(sunny_pv - sunny_expected_pv) <= 1.0e-6
         ),
         "rain_expected_pv_total": (
             rain_pv is not None
-            and abs(rain_pv - EXPECTED_PV_KWH["rain"]) <= 1.0e-6
+            and abs(rain_pv - rain_expected_pv) <= 1.0e-6
         ),
         "pair_manifest_accepted": (
             pair_manifest.get(
@@ -2770,6 +2839,8 @@ def _build_pair_control_audit(
         "controls": controls,
         "sunny_pv_generation_kwh": sunny_pv,
         "rain_pv_generation_kwh": rain_pv,
+        "sunny_expected_pv_generation_kwh": sunny_expected_pv,
+        "rain_expected_pv_generation_kwh": rain_expected_pv,
         "sunny_pv_profile_hash": sunny.get("pv_profile_hash"),
         "rain_pv_profile_hash": rain.get("pv_profile_hash"),
         "comparison_control_hash": sunny.get("comparison_control_hash"),
@@ -3025,6 +3096,16 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--pv-capacity-kw",
+        type=float,
+        default=None,
+        help=(
+            "Apply one explicit positive PV rated output to both cases. "
+            "When omitted, each frontend asset's explicit rated output is "
+            "retained; legacy assets fall back to their area estimate."
+        ),
+    )
+    parser.add_argument(
         "--job-timeout-seconds",
         type=float,
         default=14_400.0,
@@ -3039,6 +3120,10 @@ def _parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = _parser().parse_args()
+    if args.pv_capacity_kw is not None and (
+        not math.isfinite(args.pv_capacity_kw) or args.pv_capacity_kw <= 0.0
+    ):
+        raise ValueError("--pv-capacity-kw must be a positive finite kW value")
     tariff_condition = _uniform_tariff_condition(
         grid_energy_price_yen_per_kwh=args.grid_energy_price_yen_per_kwh,
         demand_charge_yen_per_kw=args.demand_charge_yen_per_kw,
@@ -3087,11 +3172,12 @@ def main() -> int:
         "bff_opt_executor": os.environ.get("BFF_OPT_EXECUTOR"),
         "comparison_name": comparison_name,
         "tariff_condition": tariff_condition,
+        "pv_capacity_kw": args.pv_capacity_kw,
         "pv_curve_delivery": (
             "Each Prepare request carries a date-specific, explicitly "
             "materialized depot-energy asset generated from the frontend "
-            "asset's physical PV area and the repository's derived PV "
-            "capacity-factor profile."
+            "asset's selected PV rated output and the repository's derived "
+            "PV capacity-factor profile."
         ),
         "runtime_comparison_repetitions_per_case": 1,
         "runtime_claim_eligible": False,
@@ -3106,7 +3192,11 @@ def main() -> int:
         (
             "sunny",
             args.sunny_scenario_id,
-            EXPECTED_PV_KWH["sunny"],
+            (
+                _expected_pv_kwh_for_capacity("sunny", args.pv_capacity_kw)
+                if args.pv_capacity_kw is not None
+                else None
+            ),
             build_prepare_payload(
                 depot_id=args.depot_id,
                 service_id=args.service_id,
@@ -3122,7 +3212,11 @@ def main() -> int:
         (
             "rain",
             args.rain_scenario_id,
-            EXPECTED_PV_KWH["rain"],
+            (
+                _expected_pv_kwh_for_capacity("rain", args.pv_capacity_kw)
+                if args.pv_capacity_kw is not None
+                else None
+            ),
             build_prepare_payload(
                 depot_id=args.depot_id,
                 service_id=args.service_id,
@@ -3156,6 +3250,7 @@ def main() -> int:
                     prepare_payload=prepare_payload,
                     expected_pv_kwh=expected_pv_kwh,
                     timeout_seconds=args.job_timeout_seconds,
+                    pv_capacity_kw=args.pv_capacity_kw,
                 )
             )
             events.append(

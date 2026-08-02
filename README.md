@@ -337,6 +337,7 @@ simulation artifact, not an automatically accepted research result.
   controller for same-service-date high/low-PV sensitivity runs. It performs a
   fresh Prepare, submits and polls the ordinary BFF optimization endpoint,
   records exact request/response payloads, runs the two cases sequentially,
+  accepts `--pv-capacity-kw` as one explicit common rated output for both cases,
   applies the formal job timeout to the synchronous Prepare/submit requests,
   sends the audited 16-route Tsurumaki scope and common explicit SOC/ICE-fuel
   fleet controls, and rejects any materialized route-count drift immediately,
@@ -1612,7 +1613,10 @@ generated `experiment_report.md` mirrors that gate.
 `scripts/run_frontend_controlled_pv_pair.py` can deliberately apply the same
 uniform tariff to both freshly prepared cases with
 `--grid-energy-price-yen-per-kwh <JPY>` and
-`--demand-charge-yen-per-kw <JPY>`. It sends both the flat-price field and a
+`--demand-charge-yen-per-kw <JPY>`. The common PV rated output can likewise be
+fixed with `--pv-capacity-kw <kW>`; when omitted, an explicit frontend rated
+output is retained and only legacy rows fall back to an area-derived value. It
+sends both the flat-price field and a
 single `00:00--24:00` TOU band, because an inherited multi-band TOU schedule
 would otherwise take precedence over the flat value. For a zero basic/demand
 charge, pass `--demand-charge-yen-per-kw 0`; this leaves physical grid limits
@@ -1625,10 +1629,11 @@ for a PV-only comparison under the original tariff.
 The controller does not accept a `pv_profile_id` label as evidence that the
 curve changed. Before each Prepare it reads the normal frontend
 `editor-bootstrap` response, preserves its non-PV depot-asset fields, and
-attaches a one-date PV asset built from the selected depot's physical area,
-usable-area ratio, panel-power density, and the separately hashed
+attaches a one-date PV asset built from the selected rated output and the
+separately hashed
 `data/derived/pv_profiles/<depot>_<date>_<timestep>min.json` capacity-factor
-curve. It records the bootstrap response, source-profile hash, replacement
-asset, and exact Prepare request. A missing source, invalid slot series, or a
-source total that differs from the controlled expected PV total fails before
-Prepare; a date/profile label alone is never treated as a PV switch.
+curve. It records the bootstrap response, rated-output source, reverse area
+estimate, source-profile hash, replacement asset, and exact Prepare request. A
+missing source, invalid slot series, or a source total that differs from the
+declared-capacity expected PV total fails before Prepare; a date/profile label
+alone is never treated as a PV switch.
