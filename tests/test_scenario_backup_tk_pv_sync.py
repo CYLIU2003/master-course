@@ -136,6 +136,30 @@ def test_rebuild_pv_generation_for_row_recalculates_from_capacity_factor_metadat
     ]
 
 
+def test_rebuild_pv_generation_uses_rated_output_and_reverse_estimates_area() -> None:
+    rebuilt = _rebuild_pv_generation_for_row(
+        {
+            "depot_area_m2": 1000.0,
+            "pv_capacity_kw": 120.0,
+            "pv_capacity_kw_manual_override": True,
+            "pv_capacity_factor_by_date": [
+                {
+                    "date": "2025-08-01",
+                    "slot_minutes": 60,
+                    "capacity_factor_by_slot": [0.25, 0.5],
+                }
+            ],
+        }
+    )
+
+    assert rebuilt["depot_area_m2"] == 1000.0
+    assert rebuilt["pv_capacity_kw"] == 120.0
+    assert rebuilt["estimated_installable_area_m2"] == 600.0
+    assert rebuilt["estimated_depot_area_from_pv_capacity_m2"] == 1714.285714
+    assert rebuilt["pv_capacity_input_mode"] == "rated_output_manual"
+    assert rebuilt["pv_generation_kwh_by_slot"] == [30.0, 60.0]
+
+
 def test_merge_selected_depot_pv_assets_disables_pv_when_depot_area_missing(
     tmp_path: Path,
 ) -> None:
@@ -159,3 +183,35 @@ def test_merge_selected_depot_pv_assets_disables_pv_when_depot_area_missing(
     assert merged_rows[0]["pv_enabled"] is False
     assert merged_rows[0]["pv_capacity_kw"] == 0.0
     assert merged_rows[0]["pv_generation_kwh_by_slot"] == []
+
+
+def test_merge_selected_depot_pv_assets_uses_rated_output_without_depot_area(
+    tmp_path: Path,
+) -> None:
+    _write_profile(
+        tmp_path / "meguro_2025-08-01_60min.json",
+        depot_id="meguro",
+        day="2025-08-01",
+        slots=[20.0, 40.0],
+        capacity_kw=200.0,
+    )
+
+    merged_rows, synced_ids, missing_ids = _merge_selected_depot_pv_assets(
+        ["meguro"],
+        [
+            {
+                "depot_id": "meguro",
+                "pv_capacity_kw": 120.0,
+                "pv_capacity_kw_manual_override": True,
+            }
+        ],
+        ["2025-08-01"],
+        profile_root=tmp_path,
+    )
+
+    assert synced_ids == ["meguro"]
+    assert missing_ids == []
+    assert merged_rows[0]["depot_area_m2"] is None
+    assert merged_rows[0]["pv_capacity_kw"] == 120.0
+    assert merged_rows[0]["estimated_installable_area_m2"] == 600.0
+    assert merged_rows[0]["pv_generation_kwh_by_slot"] == [12.0, 24.0]

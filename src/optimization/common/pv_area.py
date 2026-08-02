@@ -18,6 +18,17 @@ class DepotPvAreaEstimate:
     capacity_kw: float
 
 
+@dataclass(frozen=True)
+class DepotPvCapacityEstimate:
+    """Physical-area requirements implied by a selected PV rated output."""
+
+    capacity_kw: float
+    usable_area_ratio: float
+    panel_power_density_kw_m2: float
+    required_installable_area_m2: float
+    estimated_depot_area_m2: float
+
+
 def safe_optional_float(value: Any) -> Optional[float]:
     if value is None or value == "":
         return None
@@ -64,4 +75,38 @@ def estimate_depot_pv_from_area(
         panel_power_density_kw_m2=panel_density,
         installable_area_m2=installable_area_m2,
         capacity_kw=capacity_kw,
+    )
+
+
+def estimate_depot_pv_area_from_capacity(
+    pv_capacity_kw: Any,
+    *,
+    usable_area_ratio: Any = None,
+    panel_power_density_kw_m2: Any = None,
+) -> DepotPvCapacityEstimate:
+    """Reverse the area-capacity assumptions for a selected rated output.
+
+    ``estimated_depot_area_m2`` is an engineering estimate, not a replacement
+    for measured depot master data.  Callers should persist it separately from
+    ``depot_area_m2``.
+    """
+
+    parsed_capacity_kw = safe_optional_float(pv_capacity_kw)
+    capacity_kw = max(float(parsed_capacity_kw or 0.0), 0.0)
+    usable_ratio = positive_ratio_or_default(
+        usable_area_ratio,
+        DEFAULT_USABLE_AREA_RATIO,
+    )
+    panel_density = positive_ratio_or_default(
+        panel_power_density_kw_m2,
+        DEFAULT_PANEL_POWER_DENSITY_KW_M2,
+    )
+    required_installable_area_m2 = capacity_kw / panel_density
+    estimated_depot_area_m2 = required_installable_area_m2 / usable_ratio
+    return DepotPvCapacityEstimate(
+        capacity_kw=capacity_kw,
+        usable_area_ratio=usable_ratio,
+        panel_power_density_kw_m2=panel_density,
+        required_installable_area_m2=required_installable_area_m2,
+        estimated_depot_area_m2=estimated_depot_area_m2,
     )

@@ -17,7 +17,9 @@ from bff.services.route_catalog_audit import audit_route_catalog_consistency
 from src.optimization.common.fleet_contract import canonical_powertrain
 from src.optimization.common.pv_area import (
     DEFAULT_PERFORMANCE_RATIO,
+    estimate_depot_pv_area_from_capacity,
     estimate_depot_pv_from_area,
+    safe_optional_float,
 )
 from src.value_normalization import normalize_for_python
 
@@ -28,7 +30,7 @@ log = logging.getLogger("run_prep")
 # canonical solver input.  The schema suffix is part of prepared_input_id, so
 # old prepared files cannot be silently reused after a fleet-contract change.
 PREPARED_INPUT_SCHEMA_VERSION = (
-    "v4_same_service_date_pv_counterfactual_explicit_fleet_state"
+    "v5_pv_rated_output_authoritative"
 )
 
 
@@ -834,7 +836,7 @@ def _prepare_depot_energy_assets(
         area_value = row.get("depot_area_m2", row.get("depotAreaM2"))
         if area_value is None:
             area_value = depot_area_by_id.get(depot_id)
-        estimate = estimate_depot_pv_from_area(
+        area_estimate = estimate_depot_pv_from_area(
             area_value,
             usable_area_ratio=row.get("usable_area_ratio", row.get("usableAreaRatio")),
             panel_power_density_kw_m2=row.get(
@@ -842,18 +844,55 @@ def _prepare_depot_energy_assets(
                 row.get("panelPowerDensityKwM2"),
             ),
         )
-        row["depot_area_m2"] = estimate.depot_area_m2
-        row["usable_area_ratio"] = estimate.usable_area_ratio
-        row["panel_power_density_kw_m2"] = estimate.panel_power_density_kw_m2
+        manual_capacity_kw: Optional[float] = None
+        if bool(
+            row.get(
+                "pv_capacity_kw_manual_override",
+                row.get("pvCapacityKwManualOverride", False),
+            )
+        ):
+            parsed_capacity_kw = safe_optional_float(legacy_capacity_kw)
+            manual_capacity_kw = max(float(parsed_capacity_kw or 0.0), 0.0)
+        capacity_estimate = estimate_depot_pv_area_from_capacity(
+            manual_capacity_kw if manual_capacity_kw is not None else area_estimate.capacity_kw,
+            usable_area_ratio=area_estimate.usable_area_ratio,
+            panel_power_density_kw_m2=area_estimate.panel_power_density_kw_m2,
+        )
+        row["depot_area_m2"] = area_estimate.depot_area_m2
+        row["usable_area_ratio"] = area_estimate.usable_area_ratio
+        row["panel_power_density_kw_m2"] = area_estimate.panel_power_density_kw_m2
         try:
             performance_ratio = float(row.get("performance_ratio") or DEFAULT_PERFORMANCE_RATIO)
         except (TypeError, ValueError):
             performance_ratio = DEFAULT_PERFORMANCE_RATIO
         row["performance_ratio"] = performance_ratio if performance_ratio > 0.0 else DEFAULT_PERFORMANCE_RATIO
-        row["estimated_installable_area_m2"] = round(estimate.installable_area_m2, 6)
-        row["pv_capacity_kw"] = round(estimate.capacity_kw, 6) if estimate.depot_area_m2 is not None else 0.0
-        row["derived_pv_capacity_kw"] = row["pv_capacity_kw"]
-        row["pv_enabled"] = estimate.depot_area_m2 is not None and estimate.capacity_kw > 0.0
+        row["estimated_installable_area_m2"] = round(
+            capacity_estimate.required_installable_area_m2,
+            6,
+        )
+        row["estimated_depot_area_from_pv_capacity_m2"] = round(
+            capacity_estimate.estimated_depot_area_m2,
+            6,
+        )
+        row["pv_capacity_kw"] = round(capacity_estimate.capacity_kw, 6)
+        row["derived_pv_capacity_kw"] = round(
+            capacity_estimate.required_installable_area_m2
+            * capacity_estimate.panel_power_density_kw_m2,
+            6,
+        )
+        row["pv_capacity_input_mode"] = (
+            "rated_output_manual"
+            if manual_capacity_kw is not None
+            else "depot_area_estimate"
+        )
+        if manual_capacity_kw is not None:
+            explicitly_enabled = row.get("pv_enabled", row.get("pvEnabled", True))
+            row["pv_enabled"] = bool(explicitly_enabled) and manual_capacity_kw > 0.0
+        else:
+            row["pv_enabled"] = (
+                area_estimate.depot_area_m2 is not None
+                and area_estimate.capacity_kw > 0.0
+            )
 
         factor_rows = list(row.get("pv_capacity_factor_by_date") or [])
         if (

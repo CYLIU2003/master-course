@@ -19,6 +19,18 @@ zero failed checks, the exact frozen Git SHA at start and end, and a completed
 ZIP. When that artifact exists for the current frozen SHA, this blocker is
 discharged without modifying the repository during the experiment.
 
+## 2026-08-02 PV rated-output model-input change
+
+PV capacity can now be selected directly with `pv_capacity_kw` and is carried
+through fresh Prepare into the canonical builder. Its inverse area estimates
+are audit metadata; they do not overwrite measured depot area. This changes
+the prepared-input schema to `v5_pv_rated_output_authoritative`, so every
+pre-change prepared payload and optimization artifact is stale for a new PV
+capacity experiment. No existing 2026-07-31 or 2026-08-02 pair is evidence for
+the new capacity setting. The release remains **BLOCKED** until both weather
+cases are freshly prepared and rerun from one clean frozen commit with the
+same non-PV controls and only the declared PV profile/capacity difference.
+
 ## 2026-08-01 flat-30 pair: composition and accounting blockers
 
 `output/2026-07-31/run_20260731_1201` (sunny) and

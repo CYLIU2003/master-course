@@ -1,5 +1,30 @@
 # Development Notes
 
+## 2026-08-02 PV rated-output input and reverse area estimate
+
+- The depot manager and detailed depot-energy editor now treat
+  `pv_capacity_kw` as the editable optimization input. Changing the rated
+  output rebuilds PV generation from the persisted capacity-factor shape;
+  grid price, weather policy, BESS state, and timetable semantics are not
+  modified.
+- The shared calculation now reports
+  `estimated_installable_area_m2 = pv_capacity_kw /
+  panel_power_density_kw_m2` and a separately named
+  `estimated_depot_area_from_pv_capacity_m2 =
+  estimated_installable_area_m2 / usable_area_ratio`. Measured
+  `depot_area_m2` remains master data and is never overwritten by this inverse
+  estimate. The round-trip `derived_pv_capacity_kw` is retained as an audit
+  value.
+- `pv_capacity_kw_manual_override=true` and
+  `pv_capacity_input_mode=rated_output_manual` carry the selection through
+  the Tk editor, PV API, Prepare, and `ProblemBuilder`. Rows without the
+  explicit override continue to use the legacy area-derived capacity for
+  backward compatibility. An explicit rated output of zero disables PV.
+- `PREPARED_INPUT_SCHEMA_VERSION` is now
+  `v5_pv_rated_output_authoritative`. All formal comparisons after this model
+  change require fresh Prepare and fresh optimization artifacts; older runs
+  remain diagnostic and must not be relabelled.
+
 ## 2026-08-02 Composition-target search budget correction
 
 - The first flat-30 rerun from `fc3f4ba41648d6138c81a59ef6a76a74e094bbff`
@@ -154,7 +179,7 @@
   feasible candidate with the lowest canonical actual cost. This does not claim
   integrated global optimality.
 - Prepare schema
-  `v4_same_service_date_pv_counterfactual_explicit_fleet_state` requires the
+  `v5_pv_rated_output_authoritative` retains the v4 requirement that the
   service date and counterfactual PV source date to remain explicit and
   separate. The rain role additionally requires the explicit fixed-weekday
   counterfactual permission. Pair validation rejects implicit legacy weather

@@ -68,6 +68,7 @@ from .problem import (
 )
 from .pv_area import (
     DEFAULT_PERFORMANCE_RATIO,
+    estimate_depot_pv_area_from_capacity,
     estimate_depot_pv_from_area,
     positive_ratio_or_default,
     safe_optional_float,
@@ -1500,7 +1501,7 @@ class ProblemBuilder:
                 "panel_power_density_kw_m2",
                 raw.get("panelPowerDensityKwM2"),
             )
-            estimate = estimate_depot_pv_from_area(
+            area_estimate = estimate_depot_pv_from_area(
                 depot_area_m2,
                 usable_area_ratio=usable_area_ratio,
                 panel_power_density_kw_m2=panel_power_density_kw_m2,
@@ -1531,10 +1532,16 @@ class ProblemBuilder:
             effective_pv_capacity_kw = (
                 float(manual_pv_capacity_kw)
                 if manual_pv_capacity_kw is not None
-                else float(estimate.capacity_kw)
+                else float(area_estimate.capacity_kw)
+            )
+            capacity_estimate = estimate_depot_pv_area_from_capacity(
+                effective_pv_capacity_kw,
+                usable_area_ratio=area_estimate.usable_area_ratio,
+                panel_power_density_kw_m2=area_estimate.panel_power_density_kw_m2,
             )
             pv_has_usable_capacity = effective_pv_capacity_kw > 0.0 and (
-                manual_pv_capacity_kw is not None or estimate.depot_area_m2 is not None
+                manual_pv_capacity_kw is not None
+                or area_estimate.depot_area_m2 is not None
             )
             explicit_pv_enabled = self._first_present(
                 raw.get("pv_enabled") if "pv_enabled" in raw else None,
@@ -1669,10 +1676,13 @@ class ProblemBuilder:
                 pv_om_jpy_per_kw_year=float(raw.get("pv_om_jpy_per_kw_year") or 0.0),
                 pv_life_years=int(raw.get("pv_life_years") or 25),
                 pv_capacity_kw=round(effective_pv_capacity_kw, 6) if pv_enabled else 0.0,
-                depot_area_m2=estimate.depot_area_m2,
-                pv_installable_area_m2=round(estimate.installable_area_m2, 6),
-                usable_area_ratio=estimate.usable_area_ratio,
-                panel_power_density_kw_m2=estimate.panel_power_density_kw_m2,
+                depot_area_m2=area_estimate.depot_area_m2,
+                pv_installable_area_m2=round(
+                    capacity_estimate.required_installable_area_m2,
+                    6,
+                ),
+                usable_area_ratio=capacity_estimate.usable_area_ratio,
+                panel_power_density_kw_m2=capacity_estimate.panel_power_density_kw_m2,
                 performance_ratio=performance_ratio,
                 bess_enabled=bess_enabled,
                 bess_energy_kwh=bess_energy_kwh,

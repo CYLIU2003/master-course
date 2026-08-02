@@ -27,6 +27,7 @@ from src.optimization.common.pv_area import (
     DEFAULT_PERFORMANCE_RATIO,
     DEFAULT_PANEL_POWER_DENSITY_KW_M2,
     DEFAULT_USABLE_AREA_RATIO,
+    estimate_depot_pv_area_from_capacity,
     estimate_depot_pv_from_area,
 )
 
@@ -45,6 +46,7 @@ class PvProfileGenerateRequest(BaseModel):
     depot_id: str
     target_date: str  # YYYY-MM-DD
     depot_area_m2: Optional[float] = Field(default=None, ge=0.0)
+    pv_capacity_kw: Optional[float] = Field(default=None, ge=0.0)
     slot_minutes: int = 15
     timezone_offset: str = "+09:00"
     performance_ratio: float = Field(default=DEFAULT_PERFORMANCE_RATIO, gt=0.0)
@@ -54,7 +56,7 @@ class DepotEnergyAssetUpdate(BaseModel):
     depot_id: str
     depot_area_m2: Optional[float] = Field(default=None, ge=0.0)
     pv_enabled: bool = False
-    pv_capacity_kw: float = 0.0
+    pv_capacity_kw: Optional[float] = Field(default=None, ge=0.0)
     pv_source_type: str = "solcast_daily"  # "solcast_daily" | "synthetic" | "uploaded"
     pv_source_date: Optional[str] = None
     pv_generation_kwh_by_slot: Optional[List[float]] = None
@@ -218,14 +220,20 @@ def generate_pv_profile(
             if request.depot_area_m2 is not None
             else _depot_area_from_scenario(scenario, request.depot_id)
         )
-        estimate = estimate_depot_pv_from_area(depot_area_m2)
+        area_estimate = estimate_depot_pv_from_area(depot_area_m2)
+        capacity_kw = (
+            float(request.pv_capacity_kw)
+            if request.pv_capacity_kw is not None
+            else float(area_estimate.capacity_kw)
+        )
+        capacity_estimate = estimate_depot_pv_area_from_capacity(capacity_kw)
 
         # Build daily profile
         profile = _build_daily_profile(
             records,
             target_date=request.target_date,
             slot_minutes=request.slot_minutes,
-            pv_capacity_kw=estimate.capacity_kw,
+            pv_capacity_kw=capacity_kw,
             performance_ratio=request.performance_ratio,
         )
         
@@ -236,9 +244,11 @@ def generate_pv_profile(
             scenario,
             request.depot_id,
             request.target_date,
-            estimate.depot_area_m2,
-            estimate.installable_area_m2,
-            estimate.capacity_kw,
+            area_estimate.depot_area_m2,
+            capacity_estimate.required_installable_area_m2,
+            capacity_estimate.estimated_depot_area_m2,
+            capacity_kw,
+            request.pv_capacity_kw is not None,
             request.performance_ratio,
             profile["capacity_factor_by_slot"],
             profile["pv_generation_kwh_by_slot"],
@@ -251,9 +261,21 @@ def generate_pv_profile(
             "scenario_id": scenario_id,
             "depot_id": request.depot_id,
             "target_date": request.target_date,
-            "depot_area_m2": estimate.depot_area_m2,
-            "estimated_installable_area_m2": round(estimate.installable_area_m2, 6),
-            "pv_capacity_kw": round(estimate.capacity_kw, 6),
+            "depot_area_m2": area_estimate.depot_area_m2,
+            "estimated_installable_area_m2": round(
+                capacity_estimate.required_installable_area_m2,
+                6,
+            ),
+            "estimated_depot_area_from_pv_capacity_m2": round(
+                capacity_estimate.estimated_depot_area_m2,
+                6,
+            ),
+            "pv_capacity_kw": round(capacity_kw, 6),
+            "pv_capacity_input_mode": (
+                "rated_output_manual"
+                if request.pv_capacity_kw is not None
+                else "depot_area_estimate"
+            ),
             "usable_area_ratio": DEFAULT_USABLE_AREA_RATIO,
             "panel_power_density_kw_m2": DEFAULT_PANEL_POWER_DENSITY_KW_M2,
             "performance_ratio": request.performance_ratio,
@@ -334,7 +356,9 @@ def _update_scenario_pv_profile(
     target_date: str,
     depot_area_m2: Optional[float],
     installable_area_m2: float,
+    estimated_depot_area_m2: float,
     pv_capacity_kw: float,
+    pv_capacity_kw_manual_override: bool,
     performance_ratio: float,
     capacity_factor_by_slot: List[float],
     pv_generation_kwh_by_slot: List[float],
@@ -364,8 +388,19 @@ def _update_scenario_pv_profile(
     depot_asset["panel_power_density_kw_m2"] = DEFAULT_PANEL_POWER_DENSITY_KW_M2
     depot_asset["performance_ratio"] = performance_ratio
     depot_asset["estimated_installable_area_m2"] = round(installable_area_m2, 6)
-    depot_asset["pv_enabled"] = bool(depot_area_m2 and depot_area_m2 > 0.0)
+    depot_asset["estimated_depot_area_from_pv_capacity_m2"] = round(
+        estimated_depot_area_m2,
+        6,
+    )
+    depot_asset["pv_enabled"] = pv_capacity_kw > 0.0
     depot_asset["pv_capacity_kw"] = pv_capacity_kw
+    depot_asset["derived_pv_capacity_kw"] = round(pv_capacity_kw, 6)
+    depot_asset["pv_capacity_kw_manual_override"] = pv_capacity_kw_manual_override
+    depot_asset["pv_capacity_input_mode"] = (
+        "rated_output_manual"
+        if pv_capacity_kw_manual_override
+        else "depot_area_estimate"
+    )
     depot_asset["pv_source_type"] = "solcast_daily"
     depot_asset["pv_source_date"] = target_date
     depot_asset["capacity_factor_by_slot"] = capacity_factor_by_slot
@@ -390,16 +425,39 @@ def _update_depot_asset(
         depot_asset = {"depot_id": asset_update.depot_id}
         sim_cfg["depot_energy_assets"].append(depot_asset)
     
-    estimate = estimate_depot_pv_from_area(asset_update.depot_area_m2)
+    area_estimate = estimate_depot_pv_from_area(asset_update.depot_area_m2)
+    is_manual_capacity = asset_update.pv_capacity_kw is not None
+    effective_capacity_kw = (
+        float(asset_update.pv_capacity_kw)
+        if is_manual_capacity
+        else float(area_estimate.capacity_kw)
+    )
+    capacity_estimate = estimate_depot_pv_area_from_capacity(
+        effective_capacity_kw,
+        usable_area_ratio=area_estimate.usable_area_ratio,
+        panel_power_density_kw_m2=area_estimate.panel_power_density_kw_m2,
+    )
 
     # Update PV settings
-    depot_asset["depot_area_m2"] = estimate.depot_area_m2
+    depot_asset["depot_area_m2"] = area_estimate.depot_area_m2
     depot_asset["usable_area_ratio"] = DEFAULT_USABLE_AREA_RATIO
     depot_asset["panel_power_density_kw_m2"] = DEFAULT_PANEL_POWER_DENSITY_KW_M2
     depot_asset["performance_ratio"] = DEFAULT_PERFORMANCE_RATIO
-    depot_asset["estimated_installable_area_m2"] = round(estimate.installable_area_m2, 6)
-    depot_asset["pv_enabled"] = estimate.depot_area_m2 is not None and estimate.capacity_kw > 0.0
-    depot_asset["pv_capacity_kw"] = round(estimate.capacity_kw, 6)
+    depot_asset["estimated_installable_area_m2"] = round(
+        capacity_estimate.required_installable_area_m2,
+        6,
+    )
+    depot_asset["estimated_depot_area_from_pv_capacity_m2"] = round(
+        capacity_estimate.estimated_depot_area_m2,
+        6,
+    )
+    depot_asset["pv_enabled"] = effective_capacity_kw > 0.0
+    depot_asset["pv_capacity_kw"] = round(effective_capacity_kw, 6)
+    depot_asset["derived_pv_capacity_kw"] = round(effective_capacity_kw, 6)
+    depot_asset["pv_capacity_kw_manual_override"] = is_manual_capacity
+    depot_asset["pv_capacity_input_mode"] = (
+        "rated_output_manual" if is_manual_capacity else "depot_area_estimate"
+    )
     depot_asset["pv_source_type"] = asset_update.pv_source_type
     
     if asset_update.pv_source_date:
