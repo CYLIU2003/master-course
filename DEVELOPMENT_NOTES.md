@@ -2,6 +2,15 @@
 
 ## 2026-08-03 BEV actual-cost and fleet-frontier correction
 
+- The clean v5 binding-PV run exposed one fail-closed metadata omission after
+  both weather cases had otherwise completed: the BEV frontier was active and
+  its `K=15..35` artifacts were complete, but `solver_settings.json` omitted
+  `stage1_bev_frontier_enabled`. The adapter, engine, and BFF settings export
+  now preserve that explicit control and focused tests cover both the solver
+  metadata path and final settings payload. This changes no variable,
+  constraint, objective coefficient, candidate, or acceptance threshold; a
+  fresh frozen pair is required because the completed v5 artifacts retain the
+  old missing field.
 - The first clean 264-trip Phase-4 HTTP pair at explicit 1,000 kW PV rating
   reached the 3,600-second limit with no incumbent in both cases. Both runs
   correctly failed before Rolling and the pair bundle is `BLOCKED`. This is a

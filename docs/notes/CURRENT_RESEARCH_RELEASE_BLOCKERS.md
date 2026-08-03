@@ -21,6 +21,18 @@ discharged without modifying the repository during the experiment.
 
 ## 2026-08-03 actual-cost and BEV-frontier implementation
 
+The clean v5 binding-PV pair completed both 264/264 schedules, independent
+physical validation, 24/24 Rolling, and all `K=15..35` frontier targets. It
+then correctly remained **BLOCKED**. In addition to the intended rain
+objective/accounting mismatch, the audit found a metadata-only defect:
+`solver_settings.json` omitted `stage1_bev_frontier_enabled` even though the
+frontier was active and its artifacts were complete. The current tree carries
+that flag through the solver adapter, MILP engine, and BFF settings export.
+This does not alter the solved model or retroactively validate v5; a new clean
+frozen pair is required. The rain 22.292853 JPY mismatch and unclassified
+20,000 JPY/used-bus-day coefficient remain independent research-release
+blockers.
+
 The clean Phase-4 HTTP pair at commit
 `0d4a68b783dd26f3a30b0030940e4a9b1e43799e`, common 1,000 kW rated PV,
 30 JPY/kWh grid energy, and zero demand charge is **BLOCKED**. Sunny and rainy

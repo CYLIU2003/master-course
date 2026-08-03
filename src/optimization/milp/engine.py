@@ -367,6 +367,12 @@ class MILPOptimizer:
                 "stage1_composition_search_radius_requested": (
                     plan.metadata or {}
                 ).get("stage1_composition_search_radius_requested"),
+                "stage1_bev_frontier_enabled": bool(
+                    (plan.metadata or {}).get(
+                        "stage1_bev_frontier_enabled",
+                        False,
+                    )
+                ),
                 "stage1_composition_search_runtime_seconds": (
                     plan.metadata or {}
                 ).get("stage1_composition_search_runtime_seconds"),

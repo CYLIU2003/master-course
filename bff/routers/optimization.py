@@ -9895,6 +9895,9 @@ def _solver_settings_payload(
         "stage1_composition_search_radius_requested": _int_or_none(
             metadata.get("stage1_composition_search_radius_requested")
         ),
+        "stage1_bev_frontier_enabled": bool(
+            metadata.get("stage1_bev_frontier_enabled", False)
+        ),
         "stage1_composition_search_runtime_seconds": _float_or_none(
             metadata.get("stage1_composition_search_runtime_seconds")
         ),

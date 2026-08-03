@@ -36,6 +36,8 @@ def test_bev_frontier_uses_only_minimum_bev_constraint() -> None:
     )
 
     assert result.feasible, result.infeasibility_reasons
+    assert result.plan.metadata["stage1_bev_frontier_enabled"] is True
+    assert result.solver_metadata["stage1_bev_frontier_enabled"] is True
     frontier = dict(result.plan.metadata["bev_cost_frontier"])
     rows = list(frontier["rows"])
     certificate = dict(

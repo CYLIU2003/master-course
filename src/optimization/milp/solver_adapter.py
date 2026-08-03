@@ -9302,6 +9302,7 @@ class GurobiMILPAdapter:
             "stage1_composition_search_radius_requested": (
                 stage1_composition_search_radius
             ),
+            "stage1_bev_frontier_enabled": stage1_bev_frontier_enabled,
             "stage1_composition_target_time_limit_cap_seconds": (
                 composition_target_time_limit_cap_sec
             ),

@@ -85,6 +85,18 @@ def test_solver_gap_is_null_without_incumbent_and_phase_is_explicit() -> None:
     assert payload["executed_phase"] == "phase3_two_stage"
 
 
+def test_solver_settings_preserves_enabled_bev_frontier_control() -> None:
+    payload = _solver_settings_payload(
+        time_limit_seconds_requested=3600,
+        mip_gap_requested=0.1,
+        solver_metadata={
+            "stage1_bev_frontier_enabled": True,
+        },
+    )
+
+    assert payload["stage1_bev_frontier_enabled"] is True
+
+
 def test_infeasible_accounting_has_distinct_cost_fields_and_null_validated_cost() -> None:
     summary = build_accounting_summary(
         vehicle_rows=(),

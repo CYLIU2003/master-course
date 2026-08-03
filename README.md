@@ -1681,6 +1681,11 @@ The ordinary HTTP pair runner has five explicit experiment cases:
 - `phase4_maximum_ev_utilization` minimizes solver-native ICE fuel liters first
   and canonical operating cost second, with no cost cap. It is an explicit
   policy frontier and never claims to be the unconstrained cost optimum.
+- `solver_settings.json` preserves `stage1_bev_frontier_enabled` end to end
+  from the optimization request through the solver adapter and MILP engine.
+  The controlled-pair audit uses this explicit flag, together with the
+  frontier artifacts, to distinguish an intentional full frontier from an
+  ordinary Phase-3 neighborhood search.
 - `phase4_cost_constrained_ev_utilization` uses the same lexicographic objective
   subject to an absolute canonical-cost bound derived from the separately
   evidenced cost optimum `C*`. Record epsilon as 0, 1, 3, 5, or 10 percent via
