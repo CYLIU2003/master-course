@@ -8,9 +8,23 @@
   `stage1_bev_frontier_enabled`. The adapter, engine, and BFF settings export
   now preserve that explicit control and focused tests cover both the solver
   metadata path and final settings payload. This changes no variable,
-  constraint, objective coefficient, candidate, or acceptance threshold; a
-  fresh frozen pair is required because the completed v5 artifacts retain the
-  old missing field.
+  constraint, objective coefficient, candidate, or acceptance threshold. The
+  completed v5 artifacts retain the old missing field and remain diagnostic.
+- The succeeding clean v6 pair at frozen SHA
+  `7ab9f194216b1b7fe0e0ef49041314528438f6d5` verified the metadata repair:
+  `stage1_bev_frontier_enabled=true` and
+  `solver_controls_match_formal_request=true` are present for both cases.
+  All 21 K targets resolved with zero frontier monotonicity violations;
+  sunny evaluated 22/22 physically feasible candidates and selected
+  17 BEV / 15 ICE with 54/210 trips, while rain evaluated 20/22 physically
+  feasible candidates and selected 13 BEV / 19 ICE with 44/220 trips. The
+  selected candidate hashes and all selected costs exactly match v5, showing
+  that the metadata-only correction did not change the optimization result.
+  Both cases served 264/264 trips and completed accepted 24/24 Rolling.
+  The pair remains correctly BLOCKED: Phase 3 is not an integrated actual-cost
+  objective, rain differs from executed-day canonical accounting by
+  22.292852588 JPY, and the positive 20,000 JPY used-bus-day coefficient is
+  still `unclassified`.
 - The first clean 264-trip Phase-4 HTTP pair at explicit 1,000 kW PV rating
   reached the 3,600-second limit with no incumbent in both cases. Both runs
   correctly failed before Rolling and the pair bundle is `BLOCKED`. This is a

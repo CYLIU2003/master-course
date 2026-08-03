@@ -28,10 +28,20 @@ objective/accounting mismatch, the audit found a metadata-only defect:
 `solver_settings.json` omitted `stage1_bev_frontier_enabled` even though the
 frontier was active and its artifacts were complete. The current tree carries
 that flag through the solver adapter, MILP engine, and BFF settings export.
-This does not alter the solved model or retroactively validate v5; a new clean
-frozen pair is required. The rain 22.292853 JPY mismatch and unclassified
-20,000 JPY/used-bus-day coefficient remain independent research-release
-blockers.
+This does not alter the solved model or retroactively validate v5.
+
+The clean v6 rerun at frozen SHA
+`7ab9f194216b1b7fe0e0ef49041314528438f6d5` verifies the correction. Both
+cases now pass `solver_controls_match_formal_request`, all 21 frontier targets
+resolve, all required controls match, and the assignment changes from sunny
+17 BEV / 15 ICE and 54 BEV trips to rain 13 BEV / 19 ICE and 44 BEV trips.
+Both serve 264/264 trips, pass independent physical validation, and complete
+accepted 24/24 Rolling. The selected candidates and costs are byte-for-value
+identical to v5, confirming the metadata fix did not change the solve. The
+pair is still **BLOCKED**, correctly, because Phase 3 is not an integrated
+actual-cost objective, the rain solver objective differs from executed-day
+canonical accounting by 22.292853 JPY, and the 20,000 JPY/used-bus-day
+coefficient remains `unclassified`.
 
 The clean Phase-4 HTTP pair at commit
 `0d4a68b783dd26f3a30b0030940e4a9b1e43799e`, common 1,000 kW rated PV,
