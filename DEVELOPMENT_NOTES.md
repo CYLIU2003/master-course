@@ -61,6 +61,11 @@
   physically feasible evaluated candidate-pool envelope for every K and records
   the direct target hash separately from the resolving witness hash/source.
   This does not repair either rejected schedule or assert global optimality.
+- The first v4 attempt was intentionally stopped after sunny finalization
+  exposed a strict CSV-header failure: the writer had the new nested-witness
+  fields but the artifact validator and test fixture still declared the prior
+  header. Those three definitions are now synchronized and covered by the
+  strict artifact-completeness regression before another formal rerun.
 - Added an explicit Phase-3 BEV lower-bound frontier for `K=15..35`. Each
   temporary model uses only `sum(used_electric_vehicle) >= K`; neither ICE
   count nor total used-fleet size is fixed. The previous K solution is used as

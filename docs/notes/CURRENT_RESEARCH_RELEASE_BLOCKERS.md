@@ -98,6 +98,13 @@ hashes. A fresh clean-commit pair is still required. The 22.292853 JPY rain
 Phase-3 objective/canonical difference and `objective_is_actual_cost=false`
 remain independent blockers to any integrated total-cost optimum claim.
 
+The first v4 attempt is not formal evidence. Sunny completed optimization and
+Rolling, then failed closed because the new composition-search CSV columns had
+not yet been added to the exact artifact-schema validator. Rain was stopped
+immediately to avoid a known-invalid long run. The writer, strict validator,
+and regression fixture now share one header; both weather cases must be rerun
+from the next clean SHA.
+
 An opt-in `phase4_integrated_actual_cost` case now removes policy/solver-only
 soft terms and uses the canonical accounting components as one integrated
 objective. `objective_is_actual_cost` remains false until a post-solve numeric

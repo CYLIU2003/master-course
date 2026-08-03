@@ -345,6 +345,8 @@ simulation artifact, not an automatically accepted research result.
   feasible evaluated candidate with `actual used BEV >= K`. The direct target
   candidate hash and the nested witness hash/source are both retained. This is
   a candidate-pool cost envelope, not a claim of integrated global optimality.
+  The same direct-target and witness fields are required in the formal
+  composition-search CSV schema, preventing JSON/CSV audit drift.
 - The certified Stage 1 reporting bound keeps Gurobi's raw bound separate from
   a reproducible analytical floor. That floor adds the strict path-cover
   vehicle-use minimum to an optimistic direct service-energy/fuel minimum,
