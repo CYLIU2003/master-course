@@ -308,7 +308,10 @@ simulation artifact, not an automatically accepted research result.
   diagnostics, and candidate trip counts. It does not invent a daily
   renewable-energy budget where the solver has slot-level PV/BESS/terminal-SOC
   constraints; it reports solver-native depot-slot source flows and never
-  presents inferred vehicle-level PV/BESS allocation as solver-native.
+  presents inferred vehicle-level PV/BESS allocation as solver-native. When a
+  Phase-4 solve ends without an incumbent, gross PV remains an input-side
+  diagnostic sourced from the canonical depot asset series; zero solved source
+  flow is not misreported as a zero-PV input day.
   Only a Gurobi `INFEASIBLE` certificate may return a failed assignment to
   Stage 1 as an IIS-backed no-good cut; a `TIME_LIMIT` without an incumbent
   does not justify such a feasibility cut. This remains a bounded two-stage

@@ -2,6 +2,14 @@
 
 ## 2026-08-03 BEV actual-cost and fleet-frontier correction
 
+- The first clean 264-trip Phase-4 HTTP pair at explicit 1,000 kW PV rating
+  reached the 3,600-second limit with no incumbent in both cases. Both runs
+  correctly failed before Rolling and the pair bundle is `BLOCKED`. This is a
+  computation/warm-start blocker, not evidence about the preferred BEV/ICE
+  composition. The failed-run economic audit now recovers gross PV directly
+  from canonical depot-asset input slots, so the absence of solved source
+  flows cannot turn 6,056.25 kWh (sunny) or 996.2 kWh (rain) into a reported
+  zero-PV input.
 - Added an explicit Phase-3 BEV lower-bound frontier for `K=15..35`. Each
   temporary model uses only `sum(used_electric_vehicle) >= K`; neither ICE
   count nor total used-fleet size is fixed. The previous K solution is used as

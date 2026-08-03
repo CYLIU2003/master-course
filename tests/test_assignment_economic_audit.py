@@ -121,3 +121,39 @@ def test_assignment_economic_audit_resolves_canonical_type_ids() -> None:
     assert audit["grid_energy_break_even_jpy_per_kwh"] == pytest.approx(
         (0.2212389 * 150.0) * 0.95 / 1.316
     )
+
+
+def test_assignment_economic_audit_keeps_pv_input_without_an_incumbent() -> None:
+    """A failed Phase-4 solve must not make the input PV curve look empty."""
+
+    problem = SimpleNamespace(
+        price_slots=(),
+        vehicles=(),
+        vehicle_types=(),
+        scenario=SimpleNamespace(diesel_price_yen_per_l=150.0),
+        depot_energy_assets={
+            "depot": SimpleNamespace(
+                pv_enabled=True,
+                pv_generation_kwh_by_slot=(0.0, 35.7, 155.55, 0.0),
+            ),
+            "disabled": SimpleNamespace(
+                pv_enabled=False,
+                pv_generation_kwh_by_slot=(999.0,),
+            ),
+        },
+    )
+
+    audit = _assignment_economic_audit_payload(
+        canonical_problem=problem,
+        optimization_result={
+            "solver_metadata": {
+                "has_feasible_incumbent": False,
+                "stage1_time_indexed_energy_recourse_weather_input": {},
+                "stage1_time_indexed_energy_recourse_result": {},
+            },
+        },
+    )
+
+    assert audit["gross_pv_available_kwh"] == pytest.approx(191.25)
+    assert audit["renewable_energy_allocated_in_stage1_kwh"] == 0.0
+    assert audit["grid_energy_allocated_in_stage1_kwh"] == 0.0

@@ -21,6 +21,19 @@ discharged without modifying the repository during the experiment.
 
 ## 2026-08-03 actual-cost and BEV-frontier implementation
 
+The clean Phase-4 HTTP pair at commit
+`0d4a68b783dd26f3a30b0030940e4a9b1e43799e`, common 1,000 kW rated PV,
+30 JPY/kWh grid energy, and zero demand charge is **BLOCKED**. Sunny and rainy
+each exhausted the 3,600-second solver limit with zero incumbents and only the
+root node processed, so all 264 trips remained uncovered and hourly Rolling
+was not started. The corresponding PV inputs were 6,056.25 kWh and 996.2 kWh;
+these are input diagnostics, not utilized energy from a feasible schedule.
+This attempt establishes a complete Phase-4 warm-start/computational blocker
+and provides no evidence for an optimal BEV/ICE composition. The next formal
+comparison must use the bounded Phase-3 frontier or first supply Phase 4 with a
+fully feasible assignment/charger/SOC/source-flow start; model relaxation and
+weather-direction bias are not acceptable substitutes.
+
 The current working tree replaces the narrow fixed-32 composition neighborhood
 for the requested diagnostic with a `used BEV >= K`, `K=15..35` frontier. ICE
 and total used-fleet counts are endogenous. Each K receives an explicit status;

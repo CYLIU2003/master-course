@@ -2509,6 +2509,20 @@ def _assignment_economic_audit_payload(
         gross_pv_available = _sum_numbers(
             recourse_weather.get("pv_generation_kwh_by_depot_slot")
         )
+    if gross_pv_available <= 0.0 and canonical_problem is not None:
+        # Phase 4 has no Stage-1 recourse-weather metadata, and a failed solve
+        # has no source-flow result to inspect.  The canonical depot assets are
+        # nevertheless the authoritative input-side PV series, so preserve
+        # that evidence instead of reporting a misleading zero-PV day.
+        gross_pv_available = sum(
+            _sum_numbers(
+                getattr(asset, "pv_generation_kwh_by_slot", ()) or ()
+            )
+            for asset in dict(
+                getattr(canonical_problem, "depot_energy_assets", {}) or {}
+            ).values()
+            if bool(getattr(asset, "pv_enabled", False))
+        )
     pv_to_bus = _finite_nonnegative(recourse_result.get("pv_to_bus_kwh")) or 0.0
     pv_to_bess = _finite_nonnegative(recourse_result.get("pv_to_bess_kwh")) or 0.0
     bess_to_bus = _finite_nonnegative(recourse_result.get("bess_to_bus_kwh")) or 0.0
