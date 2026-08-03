@@ -4,6 +4,9 @@ from src.dispatch.models import Trip
 from src.optimization import OptimizationMode
 from src.optimization.common.problem import OptimizationConfig, ProblemTrip
 from src.optimization.milp.engine import MILPOptimizer
+from src.optimization.milp.solver_adapter import (
+    select_bev_frontier_feasibility_witness,
+)
 from test_weather_coupled_assignment import (
     _full_phase3_composition_counterexample,
 )
@@ -55,6 +58,19 @@ def test_bev_frontier_uses_only_minimum_bev_constraint() -> None:
         for record in certificate["target_records"]
     )
     assert [row["minimum_used_bev_count"] for row in rows] == [1, 2]
+    assert all(
+        int(row["actual_used_bev"])
+        >= int(row["minimum_used_bev_count"])
+        for row in rows
+    )
+    assert all(
+        row["frontier_resolution_source"]
+        in {
+            "direct_target_candidate",
+            "nested_higher_used_bev_candidate",
+        }
+        for row in rows
+    )
     target_two = next(
         record
         for record in certificate["target_records"]
@@ -62,6 +78,11 @@ def test_bev_frontier_uses_only_minimum_bev_constraint() -> None:
     )
     assert target_two["partial_mip_start_applied"] is True
     assert target_two["partial_mip_start_replacement_count"] == 2
+    assert target_two["frontier_resolution_candidate_hash"]
+    assert (
+        int(target_two["frontier_resolution_actual_used_bev"])
+        >= int(target_two["minimum_used_bev_count"])
+    )
     assert len(target_two["partial_mip_start_source_vehicle_ids"]) == 2
     assert len(target_two["partial_mip_start_target_vehicle_ids"]) == 2
     assert (
@@ -192,3 +213,68 @@ def test_bev_frontier_can_increase_total_fleet_with_duty_splits() -> None:
     assert target["partial_mip_start_split_activation_count"] == 1
     assert target["partial_mip_start_activation_count"] == 1
     assert len(target["partial_mip_start_split_trip_ids"]) == 1
+
+
+def test_bev_frontier_uses_higher_k_physical_witness_for_nested_target() -> None:
+    """A feasible K+2 candidate also resolves lower-bound targets K and K+1."""
+
+    candidates = [
+        {
+            "candidate_hash": "target-k-physical-failure",
+            "used_bev": 26,
+            "used_ice": 6,
+            "stage2_actual_canonical_cost_jpy": 729_854.0,
+            "feasible": False,
+        },
+        {
+            "candidate_hash": "higher-k-physical-witness",
+            "used_bev": 28,
+            "used_ice": 19,
+            "stage2_actual_canonical_cost_jpy": 1_027_758.0,
+            "feasible": True,
+        },
+        {
+            "candidate_hash": "higher-k-more-expensive",
+            "used_bev": 29,
+            "used_ice": 19,
+            "stage2_actual_canonical_cost_jpy": 1_048_000.0,
+            "feasible": True,
+        },
+    ]
+
+    witness_k26 = select_bev_frontier_feasibility_witness(26, candidates)
+    witness_k27 = select_bev_frontier_feasibility_witness(27, candidates)
+    witness_k29 = select_bev_frontier_feasibility_witness(29, candidates)
+    no_witness_k30 = select_bev_frontier_feasibility_witness(30, candidates)
+
+    assert witness_k26 is not None
+    assert witness_k27 is not None
+    assert witness_k29 is not None
+    assert witness_k26["candidate_hash"] == "higher-k-physical-witness"
+    assert witness_k27["candidate_hash"] == "higher-k-physical-witness"
+    assert witness_k29["candidate_hash"] == "higher-k-more-expensive"
+    assert no_witness_k30 is None
+
+
+def test_bev_frontier_witness_forms_lowest_cost_candidate_pool_envelope() -> None:
+    """Nested rows select the lowest-cost feasible evaluated higher-K plan."""
+
+    candidates = [
+        {
+            "candidate_hash": "direct-k15",
+            "used_bev": 15,
+            "stage2_actual_canonical_cost_jpy": 706_897.0,
+            "feasible": True,
+        },
+        {
+            "candidate_hash": "higher-k17-cheaper",
+            "used_bev": 17,
+            "stage2_actual_canonical_cost_jpy": 706_175.0,
+            "feasible": True,
+        },
+    ]
+
+    witness = select_bev_frontier_feasibility_witness(15, candidates)
+
+    assert witness is not None
+    assert witness["candidate_hash"] == "higher-k17-cheaper"

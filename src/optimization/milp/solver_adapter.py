@@ -138,6 +138,41 @@ def audit_bev_frontier_monotonicity(
     return violations
 
 
+def select_bev_frontier_feasibility_witness(
+    target_minimum_used_bev_count: int,
+    candidate_evaluations: Sequence[Mapping[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    """Select the best evaluated witness for one nested ``used BEV >= K`` set.
+
+    A physically feasible candidate with more than ``K`` used BEVs also
+    satisfies every lower-bound target below it.  Selecting the lowest
+    canonical-cost qualifying candidate produces the evaluated candidate-pool
+    envelope without claiming that a time-limited Phase 3 row is globally
+    optimal.
+    """
+
+    target = max(int(target_minimum_used_bev_count), 0)
+    eligible: List[Tuple[float, int, str, Dict[str, Any]]] = []
+    for raw_candidate in candidate_evaluations:
+        candidate = dict(raw_candidate)
+        if candidate.get("feasible") is not True:
+            continue
+        used_bev = int(candidate.get("used_bev") or 0)
+        if used_bev < target:
+            continue
+        raw_cost = candidate.get("stage2_actual_canonical_cost_jpy")
+        if raw_cost is None:
+            continue
+        cost = float(raw_cost)
+        if not math.isfinite(cost):
+            continue
+        candidate_hash = str(candidate.get("candidate_hash") or "")
+        eligible.append((cost, used_bev, candidate_hash, candidate))
+    if not eligible:
+        return None
+    return min(eligible, key=lambda item: item[:3])[3]
+
+
 def _resolved_stage_time_limit_sec(
     config: OptimizationConfig,
     *,
@@ -8740,12 +8775,58 @@ class GurobiMILPAdapter:
                 ),
             )
             event_candidate_hash = str(event.get("candidate_hash") or "")
-            frontier_candidate_is_feasible = bool(
-                stage1_bev_frontier_enabled
-                and event_candidate_hash
-                and event_candidate_hash
-                in physically_feasible_candidate_hashes
+            frontier_witness = (
+                select_bev_frontier_feasibility_witness(
+                    target[0],
+                    candidate_evaluations,
+                )
+                if stage1_bev_frontier_enabled
+                else None
             )
+            frontier_witness_hash = str(
+                (frontier_witness or {}).get("candidate_hash") or ""
+            )
+            frontier_candidate_is_feasible = frontier_witness is not None
+            if stage1_bev_frontier_enabled:
+                event.update(
+                    {
+                        "frontier_target_candidate_physical_validation_feasible": (
+                            bool(
+                                event_candidate_hash
+                                and event_candidate_hash
+                                in physically_feasible_candidate_hashes
+                            )
+                        ),
+                        "frontier_resolution_source": (
+                            "direct_target_candidate"
+                            if frontier_witness_hash == event_candidate_hash
+                            else (
+                                "nested_higher_used_bev_candidate"
+                                if frontier_witness is not None
+                                else "none"
+                            )
+                        ),
+                        "frontier_resolution_candidate_hash": (
+                            frontier_witness_hash
+                        ),
+                        "frontier_resolution_actual_used_bev": (
+                            (frontier_witness or {}).get("used_bev")
+                        ),
+                        "frontier_resolution_actual_used_ice": (
+                            (frontier_witness or {}).get("used_ice")
+                        ),
+                        "frontier_resolution_canonical_cost_jpy": (
+                            (frontier_witness or {}).get(
+                                "stage2_actual_canonical_cost_jpy"
+                            )
+                        ),
+                        "frontier_resolution_candidate_source_target_used_bev": (
+                            (frontier_witness or {}).get(
+                                "stage1_composition_target_used_bev"
+                            )
+                        ),
+                    }
+                )
             exact_target_is_feasible = bool(
                 target[1] is not None
                 and (int(target[0]), int(target[1]))
@@ -8922,7 +9003,12 @@ class GurobiMILPAdapter:
             "semantics": (
                 "A time limit, missing incumbent, Stage 2 failure, or physical "
                 "validation failure is unresolved and is never an infeasibility "
-                "certificate. A Stage 1 certificate additionally requires a "
+                "certificate. For a minimum-used-BEV frontier, a physically "
+                "feasible evaluated candidate with actual used BEV >= K is a "
+                "valid nested-feasible-set witness for target K; its source "
+                "target, candidate hash, actual composition, and canonical "
+                "cost are retained. "
+                "A Stage 1 infeasibility certificate additionally requires a "
                 "successful nonempty IIS containing a temporary target-count "
                 "constraint and a hash of the exact temporary Stage 1 LP. It "
                 "proves only the declared used-powertrain-count neighborhood "
@@ -8938,10 +9024,31 @@ class GurobiMILPAdapter:
         bev_frontier_rows: List[Dict[str, Any]] = []
         if stage1_bev_frontier_enabled:
             for event in composition_search_events:
-                candidate_row = candidate_evaluation_by_hash.get(
-                    str(event.get("candidate_hash") or ""),
+                target_candidate_hash = str(
+                    event.get("candidate_hash") or ""
+                )
+                resolution_candidate_hash = str(
+                    event.get("frontier_resolution_candidate_hash")
+                    or target_candidate_hash
+                )
+                target_candidate_row = candidate_evaluation_by_hash.get(
+                    target_candidate_hash,
                     {},
                 )
+                candidate_row = candidate_evaluation_by_hash.get(
+                    resolution_candidate_hash,
+                    target_candidate_row,
+                )
+                resolved_actual_used_bev = candidate_row.get("used_bev")
+                resolved_actual_used_ice = candidate_row.get("used_ice")
+                if resolved_actual_used_bev is None:
+                    resolved_actual_used_bev = event.get(
+                        "actual_used_bev"
+                    )
+                if resolved_actual_used_ice is None:
+                    resolved_actual_used_ice = event.get(
+                        "actual_used_ice"
+                    )
                 bev_frontier_rows.append(
                     {
                         "minimum_used_bev_count": event.get(
@@ -8957,36 +9064,54 @@ class GurobiMILPAdapter:
                         "raw_solver_status": event.get("solver_status")
                         or event.get("search_status"),
                         "solution_count": event.get("solution_count"),
-                        "stage1_relaxed_objective_jpy": event.get(
+                        "target_stage1_relaxed_objective_jpy": event.get(
                             "stage1_relaxed_objective_jpy"
+                        ),
+                        "stage1_relaxed_objective_jpy": candidate_row.get(
+                            "stage1_relaxed_objective_jpy",
+                            event.get("stage1_relaxed_objective_jpy"),
                         ),
                         "stage2_actual_canonical_cost_jpy": (
                             candidate_row.get(
                                 "stage2_actual_canonical_cost_jpy"
                             )
                         ),
-                        "candidate_hash": event.get("candidate_hash"),
-                        "actual_used_bev": event.get("actual_used_bev"),
-                        "actual_used_ice": event.get("actual_used_ice"),
-                        "used_bev": event.get("actual_used_bev"),
-                        "used_ice": event.get("actual_used_ice"),
+                        "target_candidate_hash": target_candidate_hash,
+                        "candidate_hash": resolution_candidate_hash,
+                        "frontier_resolution_source": event.get(
+                            "frontier_resolution_source"
+                        ),
+                        "frontier_resolution_candidate_source_target_used_bev": (
+                            event.get(
+                                "frontier_resolution_candidate_source_target_used_bev"
+                            )
+                        ),
+                        "target_candidate_physical_validation_feasible": (
+                            target_candidate_row.get(
+                                "physical_validation_feasible"
+                            )
+                        ),
+                        "actual_used_bev": resolved_actual_used_bev,
+                        "actual_used_ice": resolved_actual_used_ice,
+                        "used_bev": resolved_actual_used_bev,
+                        "used_ice": resolved_actual_used_ice,
                         "actual_total_used_vehicle_count": (
                             (
-                                int(event.get("actual_used_bev") or 0)
-                                + int(event.get("actual_used_ice") or 0)
+                                int(resolved_actual_used_bev or 0)
+                                + int(resolved_actual_used_ice or 0)
                             )
-                            if event.get("actual_used_bev") is not None
-                            and event.get("actual_used_ice") is not None
+                            if resolved_actual_used_bev is not None
+                            and resolved_actual_used_ice is not None
                             else None
                         ),
                         "total_used_vehicle_count_fixed": False,
                         "total_used_vehicles": (
                             (
-                                int(event.get("actual_used_bev") or 0)
-                                + int(event.get("actual_used_ice") or 0)
+                                int(resolved_actual_used_bev or 0)
+                                + int(resolved_actual_used_ice or 0)
                             )
-                            if event.get("actual_used_bev") is not None
-                            and event.get("actual_used_ice") is not None
+                            if resolved_actual_used_bev is not None
+                            and resolved_actual_used_ice is not None
                             else None
                         ),
                         "stage2_feasible": candidate_row.get(
@@ -9096,6 +9221,12 @@ class GurobiMILPAdapter:
             "constraint_semantics": (
                 "sum(used_electric_vehicle) >= K; ICE and total used "
                 "vehicle counts are unconstrained and endogenous"
+            ),
+            "row_selection_semantics": (
+                "lowest canonical actual cost among physically feasible "
+                "evaluated candidates with actual used BEV >= K; this is a "
+                "candidate-pool envelope, not an integrated global-optimum "
+                "claim"
             ),
             "frontier_total_used_vehicle_count_fixed": False,
             "minimum_used_bev_count": stage1_bev_frontier_min_count,

@@ -83,6 +83,21 @@ path cover. A fresh clean-commit rerun must resolve every K target and all
 other gates; the unclassified positive vehicle-day cost remains an independent
 economic-claim blocker.
 
+The succeeding v3 run at frozen SHA
+`4d997be18c8507ac450001a27c32f6245b851b4e` generated Stage-1 incumbents
+through K=35 for both cases, proving the suffix-split start reaches the former
+high-K gap. Sunny resolved every target. Rain direct candidates at K=26 and
+K=27 were rejected, without repair, for one independently detected contract-
+power violation each; however, its physically feasible K=28 candidate is also
+a valid witness for the nested `used BEV >= 26` and `>= 27` constraints. The
+old finalizer failed to propagate that mathematical implication and therefore
+blocked the rain frontend job. The current correction selects, for each K, the
+lowest-cost physically feasible evaluated candidate satisfying `actual used
+BEV >= K`, while preserving both the failed direct target and resolving witness
+hashes. A fresh clean-commit pair is still required. The 22.292853 JPY rain
+Phase-3 objective/canonical difference and `objective_is_actual_cost=false`
+remain independent blockers to any integrated total-cost optimum claim.
+
 An opt-in `phase4_integrated_actual_cost` case now removes policy/solver-only
 soft terms and uses the canonical accounting components as one integrated
 objective. `objective_is_actual_cost` remains false until a post-solve numeric

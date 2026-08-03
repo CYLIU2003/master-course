@@ -49,6 +49,18 @@
   split-activation count, total activation count, and moved trip IDs. A focused
   Gurobi counterexample verifies an ICE-only prefix prevents whole-duty
   replacement while the split start reaches a larger feasible fleet.
+- A clean v3 run at SHA `4d997be18c8507ac450001a27c32f6245b851b4e`
+  confirmed that suffix-split starts produce incumbents through K=35 in both
+  weather cases. Sunny completed all K targets, 264/264 service, and 24/24
+  Rolling. Rain also produced an incumbent for every K, but direct K=26 and
+  K=27 candidates each failed independent physical validation because one
+  contract-power violation remained. Physically feasible K=28 already proves
+  feasibility of the nested `used BEV >= 26` and `>= 27` sets, but the old
+  finalizer did not propagate higher-K witnesses downward, so rain and the pair
+  correctly remained BLOCKED. The finalizer now constructs the lowest-cost
+  physically feasible evaluated candidate-pool envelope for every K and records
+  the direct target hash separately from the resolving witness hash/source.
+  This does not repair either rejected schedule or assert global optimality.
 - Added an explicit Phase-3 BEV lower-bound frontier for `K=15..35`. Each
   temporary model uses only `sum(used_electric_vehicle) >= K`; neither ICE
   count nor total used-fleet size is fixed. The previous K solution is used as

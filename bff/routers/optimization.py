@@ -10757,6 +10757,13 @@ def _run_optimization(
                         "time_limit_sec",
                         "solver_runtime_sec",
                         "candidate_hash",
+                        "frontier_target_candidate_physical_validation_feasible",
+                        "frontier_resolution_source",
+                        "frontier_resolution_candidate_hash",
+                        "frontier_resolution_actual_used_bev",
+                        "frontier_resolution_actual_used_ice",
+                        "frontier_resolution_canonical_cost_jpy",
+                        "frontier_resolution_candidate_source_target_used_bev",
                         "actual_used_bev",
                         "actual_used_ice",
                         "candidate_accepted_for_stage2_evaluation",
@@ -10788,9 +10795,14 @@ def _run_optimization(
                         "status",
                         "raw_solver_status",
                         "solution_count",
+                        "target_stage1_relaxed_objective_jpy",
                         "stage1_relaxed_objective_jpy",
                         "stage2_actual_canonical_cost_jpy",
+                        "target_candidate_hash",
                         "candidate_hash",
+                        "frontier_resolution_source",
+                        "frontier_resolution_candidate_source_target_used_bev",
+                        "target_candidate_physical_validation_feasible",
                         "actual_used_bev",
                         "actual_used_ice",
                         "used_bev",
@@ -10835,6 +10847,11 @@ def _run_optimization(
                     (
                         "Constraint: `sum(used electric vehicles) >= K`; "
                         "ICE and total fleet size remain endogenous."
+                    ),
+                    (
+                        "Rows use the lowest canonical-cost physically feasible "
+                        "evaluated candidate with actual used BEV >= K; this is "
+                        "a candidate-pool envelope, not a global-optimum claim."
                     ),
                     "",
                     "| K | status | used BEV | used ICE | actual cost JPY | physical |",

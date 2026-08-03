@@ -339,6 +339,12 @@ simulation artifact, not an automatically accepted research result.
   hash are persisted for audit. Artifact completeness validates the exact
   current CSV writer schemas, including vehicle-day semantics and BEV-frontier
   status columns.
+- Because the frontier constraint is `used BEV >= K`, every physically feasible
+  evaluated candidate is also a feasibility witness for all lower K values it
+  satisfies. Frontier rows therefore use the lowest canonical-cost physically
+  feasible evaluated candidate with `actual used BEV >= K`. The direct target
+  candidate hash and the nested witness hash/source are both retained. This is
+  a candidate-pool cost envelope, not a claim of integrated global optimality.
 - The certified Stage 1 reporting bound keeps Gurobi's raw bound separate from
   a reproducible analytical floor. That floor adds the strict path-cover
   vehicle-use minimum to an optimistic direct service-energy/fuel minimum,
