@@ -2052,6 +2052,9 @@ class App:
         self.diesel_price_var = tk.StringVar(value="145")
         self.demand_charge_var = tk.StringVar(value="1500")
         self.vehicle_usage_cost_var = tk.StringVar(value="0")
+        self.vehicle_usage_cost_semantics_var = tk.StringVar(
+            value="unclassified"
+        )
         self.depot_power_limit_var = tk.StringVar(value="500")
         self.pv_marginal_charge_cost_var = tk.StringVar(value="0")
         self.pv_curtail_penalty_var = tk.StringVar(value="0")
@@ -2284,6 +2287,40 @@ class App:
         _Tooltip(
             vehicle_usage_check,
             "OFF にすると金額を保存していても、最適化目的関数と cost breakdown のバス使用固定費を 0 として扱います。",
+        )
+        vehicle_usage_semantics_row = ttk.Frame(energy_grp)
+        vehicle_usage_semantics_row.pack(fill=tk.X, pady=1)
+        vehicle_usage_semantics_row.columnconfigure(1, weight=1)
+        vehicle_usage_semantics_label = ttk.Label(
+            vehicle_usage_semantics_row,
+            text="固定費の意味",
+            width=22,
+            anchor="w",
+        )
+        vehicle_usage_semantics_label.grid(row=0, column=0, sticky="w")
+        vehicle_usage_semantics_combo = ttk.Combobox(
+            vehicle_usage_semantics_row,
+            textvariable=self.vehicle_usage_cost_semantics_var,
+            values=(
+                "unclassified",
+                "fixed_vehicle_day_cost",
+                "driver_cost_proxy",
+                "provisional_sensitivity",
+            ),
+            state="readonly",
+        )
+        vehicle_usage_semantics_combo.grid(
+            row=0,
+            column=1,
+            columnspan=2,
+            sticky="ew",
+            padx=(2, 4),
+        )
+        _Tooltip(
+            vehicle_usage_semantics_label,
+            "20,000円/台・日などの係数の根拠を明示します。\n"
+            "unclassified の正の費用は研究上のEV/ICE経済性結論をBLOCKします。\n"
+            "provisional_sensitivity は探索感度であり正式な経済性主張には使いません。",
         )
         self._param_row2(
             energy_grp,
@@ -6862,6 +6899,12 @@ class App:
                     )
                 )
             )
+            self.vehicle_usage_cost_semantics_var.set(
+                str(
+                    sim.get("vehicleUsageCostSemantics")
+                    or "unclassified"
+                )
+            )
             self.co2_price_source_var.set(str(sim.get("co2PriceSource") or "manual"))
             self.co2_reference_date_var.set(str(sim.get("co2ReferenceDate") or ""))
             self.ice_co2_kg_per_l_var.set(str(sim.get("iceCo2KgPerL") or 2.64))
@@ -7085,6 +7128,10 @@ class App:
             "vehicleUsageCostJpyPerUsedBus": self._parse_float(
                 self.vehicle_usage_cost_var.get(),
                 0.0,
+            ),
+            "vehicleUsageCostSemantics": (
+                self.vehicle_usage_cost_semantics_var.get().strip()
+                or "unclassified"
             ),
             "pvMarginalChargeCostYenPerKwh": self._parse_float(
                 self.pv_marginal_charge_cost_var.get(),
@@ -8435,6 +8482,10 @@ class App:
                 "vehicle_usage_cost_jpy_per_used_bus": self._parse_float(
                     self.vehicle_usage_cost_var.get(),
                     0.0,
+                ),
+                "vehicle_usage_cost_semantics": (
+                    self.vehicle_usage_cost_semantics_var.get().strip()
+                    or "unclassified"
                 ),
                 "pv_marginal_charge_cost_yen_per_kwh": self._parse_float(
                     self.pv_marginal_charge_cost_var.get(),

@@ -24,7 +24,7 @@ from concurrent.futures import Executor, Future, ProcessPoolExecutor, ThreadPool
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -698,6 +698,28 @@ class RunOptimizationBody(BaseModel):
     stage1_best_obj_stop_enabled: bool = INTERACTIVE_STAGE1_BEST_OBJ_STOP_ENABLED
     stage1_stage2_candidate_limit: int = Field(default=1, ge=1, le=50)
     stage1_composition_search_radius: int = Field(default=0, ge=0, le=5)
+    stage1_bev_frontier_enabled: bool = False
+    stage1_bev_frontier_min_count: int = Field(default=15, ge=0, le=200)
+    stage1_bev_frontier_max_count: int = Field(default=35, ge=0, le=200)
+    stage1_bev_frontier_target_time_limit_seconds: int = Field(
+        default=120,
+        ge=1,
+        le=3600,
+    )
+    integrated_actual_cost_objective: bool = False
+    integrated_ev_utilization_mode: Literal[
+        "disabled",
+        "minimum_ice_fuel_lexicographic",
+    ] = "disabled"
+    integrated_actual_cost_upper_bound_jpy: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+    )
+    integrated_actual_cost_upper_bound_delta_ratio: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+    )
     gurobi_threads: Optional[int] = Field(
         default=INTERACTIVE_GUROBI_THREADS,
         ge=1,
@@ -2593,11 +2615,432 @@ def _assignment_economic_audit_payload(
             "vehicle-day cost is charged once; canonical accounting remains "
             "the cost authority after accepted rolling."
         ),
+        "vehicle_usage_cost_jpy_per_used_bus": (
+            (getattr(canonical_problem, "metadata", {}) or {}).get(
+                "vehicle_usage_cost_jpy_per_used_bus"
+            )
+            if canonical_problem is not None
+            else None
+        ),
+        "vehicle_usage_cost_semantics": (
+            (getattr(canonical_problem, "metadata", {}) or {}).get(
+                "vehicle_usage_cost_semantics", "unclassified"
+            )
+            if canonical_problem is not None
+            else "unclassified"
+        ),
+        "vehicle_usage_cost_semantics_classified": bool(
+            canonical_problem is not None
+            and (getattr(canonical_problem, "metadata", {}) or {}).get(
+                "vehicle_usage_cost_semantics_classified", False
+            )
+        ),
+        "vehicle_usage_cost_semantics_research_eligible": bool(
+            canonical_problem is not None
+            and (getattr(canonical_problem, "metadata", {}) or {}).get(
+                "vehicle_usage_cost_semantics_research_eligible", False
+            )
+        ),
+        "research_economic_claim_blocked_by_vehicle_usage_cost_semantics": bool(
+            canonical_problem is not None
+            and (getattr(canonical_problem, "metadata", {}) or {}).get(
+                "vehicle_usage_cost_jpy_per_used_bus", 0.0
+            )
+            and not (getattr(canonical_problem, "metadata", {}) or {}).get(
+                "vehicle_usage_cost_semantics_research_eligible", False
+            )
+        ),
         "source_provenance_level": (
             "depot_slot_solver_native_flows; no inferred vehicle-level PV/BESS "
             "allocation is presented as solver-native"
         ),
     }
+
+
+def _powertrain_marginal_cost_audit_payload(
+    canonical_problem: Optional[Any],
+) -> Dict[str, Any]:
+    """Compute source-specific marginal costs from canonical coefficients."""
+
+    def _nonnegative(value: Any) -> Optional[float]:
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return None
+        return parsed if math.isfinite(parsed) and parsed >= 0.0 else None
+
+    def _uniform(values: List[float]) -> Optional[float]:
+        distinct = sorted({round(float(value), 12) for value in values})
+        return distinct[0] if len(distinct) == 1 else None
+
+    if canonical_problem is None:
+        return {
+            "schema_version": "powertrain_marginal_cost_audit_v1",
+            "status": "UNAVAILABLE_CANONICAL_PROBLEM_MISSING",
+        }
+
+    vehicle_types = {
+        str(getattr(item, "vehicle_type_id", "") or ""): item
+        for item in tuple(
+            getattr(canonical_problem, "vehicle_types", ()) or ()
+        )
+    }
+    electric_rates: List[float] = []
+    combustion_rates: List[float] = []
+    combustion_co2_factors: List[float] = []
+    for vehicle in tuple(getattr(canonical_problem, "vehicles", ()) or ()):
+        vehicle_type = vehicle_types.get(
+            str(getattr(vehicle, "vehicle_type", "") or "")
+        )
+        powertrain = str(
+            getattr(vehicle_type, "powertrain_type", "")
+            or getattr(vehicle, "vehicle_type", "")
+            or ""
+        ).upper()
+        if powertrain in {"BEV", "PHEV", "FCEV"}:
+            rate = _nonnegative(
+                getattr(vehicle, "energy_consumption_kwh_per_km", None)
+            ) or _nonnegative(
+                getattr(
+                    vehicle_type,
+                    "energy_consumption_kwh_per_km",
+                    None,
+                )
+            )
+            if rate is not None and rate > 0.0:
+                electric_rates.append(rate)
+        else:
+            rate = _nonnegative(
+                getattr(vehicle, "fuel_consumption_l_per_km", None)
+            ) or _nonnegative(
+                getattr(vehicle_type, "fuel_consumption_l_per_km", None)
+            )
+            if rate is not None and rate > 0.0:
+                combustion_rates.append(rate)
+            factor = _nonnegative(
+                getattr(vehicle_type, "co2_emission_kg_per_l", None)
+            )
+            if factor is not None and factor > 0.0:
+                combustion_co2_factors.append(factor)
+
+    price_values = [
+        value
+        for slot in tuple(getattr(canonical_problem, "price_slots", ()) or ())
+        if (
+            value := _nonnegative(
+                getattr(slot, "grid_buy_yen_per_kwh", None)
+            )
+        )
+        is not None
+    ]
+    grid_co2_values = [
+        value
+        for slot in tuple(getattr(canonical_problem, "price_slots", ()) or ())
+        if (value := _nonnegative(getattr(slot, "co2_factor", None)))
+        is not None
+    ]
+    assets = [
+        asset
+        for asset in dict(
+            getattr(canonical_problem, "depot_energy_assets", {}) or {}
+        ).values()
+        if bool(getattr(asset, "bess_enabled", False))
+    ]
+    bess_charge_efficiencies = [
+        value
+        for asset in assets
+        if (
+            value := _nonnegative(
+                getattr(asset, "bess_charge_efficiency", None)
+            )
+        )
+        is not None
+        and value > 0.0
+    ]
+    bess_discharge_efficiencies = [
+        value
+        for asset in assets
+        if (
+            value := _nonnegative(
+                getattr(asset, "bess_discharge_efficiency", None)
+            )
+        )
+        is not None
+        and value > 0.0
+    ]
+    bess_cycle_costs = [
+        value
+        for asset in assets
+        if (
+            value := _nonnegative(
+                getattr(asset, "bess_cycle_cost_yen_per_kwh", None)
+            )
+        )
+        is not None
+    ]
+
+    bev_rate = _uniform(electric_rates)
+    ice_rate = _uniform(combustion_rates)
+    grid_price = _uniform(price_values)
+    grid_co2 = _uniform(grid_co2_values)
+    bess_charge_efficiency = (
+        _uniform(bess_charge_efficiencies) if assets else 0.95
+    )
+    bess_discharge_efficiency = (
+        _uniform(bess_discharge_efficiencies) if assets else 0.95
+    )
+    bess_cycle_cost = _uniform(bess_cycle_costs) if assets else 0.0
+    scenario = getattr(canonical_problem, "scenario", None)
+    diesel_price = _nonnegative(
+        getattr(scenario, "diesel_price_yen_per_l", None)
+    )
+    co2_price = _nonnegative(getattr(scenario, "co2_price_per_kg", None))
+    ice_co2_factor = _uniform(combustion_co2_factors) or _nonnegative(
+        getattr(scenario, "ice_co2_kg_per_l", None)
+    )
+    pv_marginal_cost = _nonnegative(
+        (getattr(canonical_problem, "metadata", {}) or {}).get(
+            "pv_marginal_charge_cost_yen_per_kwh"
+        )
+    )
+    if pv_marginal_cost is None:
+        pv_marginal_cost = 0.0
+    vehicle_charge_efficiency = 0.95
+
+    required_scalars = {
+        "bev_energy_consumption_kwh_per_km": bev_rate,
+        "ice_fuel_consumption_l_per_km": ice_rate,
+        "grid_price_jpy_per_kwh": grid_price,
+        "diesel_price_jpy_per_l": diesel_price,
+        "ice_co2_kg_per_l": ice_co2_factor,
+        "co2_price_jpy_per_kg": co2_price,
+        "bess_charge_efficiency": bess_charge_efficiency,
+        "bess_discharge_efficiency": bess_discharge_efficiency,
+        "bess_cycle_cost_jpy_per_kwh": bess_cycle_cost,
+    }
+    missing = [key for key, value in required_scalars.items() if value is None]
+    status = "OK" if not missing else "UNRESOLVED_NONUNIFORM_OR_MISSING_COEFFICIENTS"
+
+    bev_grid_cost = None
+    bev_pv_direct_cost = None
+    bev_pv_bess_cost = None
+    ice_fuel_cost = None
+    ice_co2_cost = None
+    ice_total_cost = None
+    grid_break_even = None
+    if not missing:
+        assert bev_rate is not None
+        assert ice_rate is not None
+        assert grid_price is not None
+        assert diesel_price is not None
+        assert ice_co2_factor is not None
+        assert co2_price is not None
+        assert bess_charge_efficiency is not None
+        assert bess_discharge_efficiency is not None
+        assert bess_cycle_cost is not None
+        bev_grid_cost = (
+            grid_price / vehicle_charge_efficiency * bev_rate
+        )
+        bev_pv_direct_cost = (
+            pv_marginal_cost / vehicle_charge_efficiency * bev_rate
+        )
+        bev_pv_bess_cost = (
+            (
+                pv_marginal_cost / bess_charge_efficiency
+                + bess_cycle_cost
+            )
+            / bess_discharge_efficiency
+            / vehicle_charge_efficiency
+            * bev_rate
+        )
+        ice_fuel_cost = ice_rate * diesel_price
+        ice_co2_cost = ice_rate * ice_co2_factor * co2_price
+        ice_total_cost = ice_fuel_cost + ice_co2_cost
+        grid_break_even = (
+            ice_total_cost * vehicle_charge_efficiency / bev_rate
+            if bev_rate > 0.0
+            else None
+        )
+
+    metadata = dict(getattr(canonical_problem, "metadata", {}) or {})
+    vehicle_usage_cost = _nonnegative(
+        metadata.get("vehicle_usage_cost_jpy_per_used_bus")
+    ) or 0.0
+    vehicle_usage_semantics = str(
+        metadata.get("vehicle_usage_cost_semantics") or "unclassified"
+    )
+    return {
+        "schema_version": "powertrain_marginal_cost_audit_v1",
+        "status": status,
+        "blocking_reasons": [
+            f"scalar_unavailable:{key}" for key in missing
+        ],
+        "coefficients": {
+            **required_scalars,
+            "pv_marginal_cost_jpy_per_kwh": pv_marginal_cost,
+            "vehicle_charge_efficiency": vehicle_charge_efficiency,
+            "grid_co2_kg_per_kwh": grid_co2,
+        },
+        "marginal_costs_jpy_per_km": {
+            "bev_grid": bev_grid_cost,
+            "bev_pv_direct": bev_pv_direct_cost,
+            "bev_pv_bess": bev_pv_bess_cost,
+            "ice_fuel": ice_fuel_cost,
+            "ice_co2": ice_co2_cost,
+            "ice_total": ice_total_cost,
+        },
+        "grid_break_even_price_jpy_per_kwh_including_ice_co2_cost": (
+            grid_break_even
+        ),
+        "grid_only_cheapest_powertrain": (
+            "BEV"
+            if bev_grid_cost is not None
+            and ice_total_cost is not None
+            and bev_grid_cost < ice_total_cost
+            else "ICE"
+            if bev_grid_cost is not None and ice_total_cost is not None
+            else "UNRESOLVED"
+        ),
+        "vehicle_usage_cost_jpy_per_used_bus": vehicle_usage_cost,
+        "vehicle_usage_cost_semantics": vehicle_usage_semantics,
+        "vehicle_usage_cost_semantics_classified": bool(
+            metadata.get("vehicle_usage_cost_semantics_classified", False)
+        ),
+        "vehicle_usage_cost_semantics_research_eligible": bool(
+            metadata.get(
+                "vehicle_usage_cost_semantics_research_eligible", False
+            )
+        ),
+        "economic_claim_blocked": bool(
+            vehicle_usage_cost > 0.0
+            and not metadata.get(
+                "vehicle_usage_cost_semantics_research_eligible", False
+            )
+        ),
+        "formula_semantics": {
+            "bev_grid": (
+                "grid_price / vehicle_charge_efficiency * "
+                "bev_energy_consumption"
+            ),
+            "bev_pv_direct": (
+                "pv_marginal_cost / vehicle_charge_efficiency * "
+                "bev_energy_consumption"
+            ),
+            "bev_pv_bess": (
+                "(pv_marginal_cost / bess_charge_efficiency + "
+                "bess_cycle_cost) / bess_discharge_efficiency / "
+                "vehicle_charge_efficiency * bev_energy_consumption"
+            ),
+            "ice": (
+                "ice_fuel_consumption * diesel_price + ice_co2_per_km * "
+                "co2_price"
+            ),
+        },
+    }
+
+
+def _trip_powertrain_cost_comparison_rows(
+    canonical_problem: Optional[Any],
+    marginal_audit: Mapping[str, Any],
+) -> List[Dict[str, Any]]:
+    if canonical_problem is None:
+        return []
+    marginal_costs = dict(
+        marginal_audit.get("marginal_costs_jpy_per_km") or {}
+    )
+    coefficients = dict(marginal_audit.get("coefficients") or {})
+    bev_rate = coefficients.get("bev_energy_consumption_kwh_per_km")
+    ice_rate = coefficients.get("ice_fuel_consumption_l_per_km")
+    diesel_price = coefficients.get("diesel_price_jpy_per_l")
+    ice_co2_factor = coefficients.get("ice_co2_kg_per_l")
+    co2_price = coefficients.get("co2_price_jpy_per_kg")
+
+    rows: List[Dict[str, Any]] = []
+    for trip in sorted(
+        tuple(getattr(canonical_problem, "trips", ()) or ()),
+        key=lambda item: (
+            int(getattr(item, "departure_min", 0) or 0),
+            str(getattr(item, "trip_id", "") or ""),
+        ),
+    ):
+        distance_km = max(float(getattr(trip, "distance_km", 0.0) or 0.0), 0.0)
+        departure_min = int(getattr(trip, "departure_min", 0) or 0)
+        hh, mm = divmod(departure_min % (24 * 60), 60)
+        ice_fuel_cost = (
+            distance_km * float(ice_rate) * float(diesel_price)
+            if ice_rate is not None and diesel_price is not None
+            else None
+        )
+        ice_co2_cost = (
+            distance_km
+            * float(ice_rate)
+            * float(ice_co2_factor)
+            * float(co2_price)
+            if ice_rate is not None
+            and ice_co2_factor is not None
+            and co2_price is not None
+            else None
+        )
+        ice_total_cost = (
+            float(ice_fuel_cost or 0.0) + float(ice_co2_cost or 0.0)
+            if ice_fuel_cost is not None and ice_co2_cost is not None
+            else None
+        )
+        bev_grid_cost = (
+            distance_km * float(marginal_costs["bev_grid"])
+            if marginal_costs.get("bev_grid") is not None
+            else None
+        )
+        bev_pv_direct_cost = (
+            distance_km * float(marginal_costs["bev_pv_direct"])
+            if marginal_costs.get("bev_pv_direct") is not None
+            else None
+        )
+        bev_pv_bess_cost = (
+            distance_km * float(marginal_costs["bev_pv_bess"])
+            if marginal_costs.get("bev_pv_bess") is not None
+            else None
+        )
+        cost_difference = (
+            float(bev_grid_cost) - float(ice_total_cost)
+            if bev_grid_cost is not None and ice_total_cost is not None
+            else None
+        )
+        rows.append(
+            {
+                "trip_id": str(getattr(trip, "trip_id", "") or ""),
+                "distance_km": round(distance_km, 9),
+                "departure_time": f"{hh:02d}:{mm:02d}",
+                "ice_fuel_cost_jpy": ice_fuel_cost,
+                "ice_co2_cost_jpy": ice_co2_cost,
+                "bev_energy_kwh": (
+                    distance_km * float(bev_rate)
+                    if bev_rate is not None
+                    else None
+                ),
+                "bev_grid_cost_jpy": bev_grid_cost,
+                "bev_pv_direct_cost_jpy": bev_pv_direct_cost,
+                "bev_pv_bess_cost_jpy": bev_pv_bess_cost,
+                "available_pv_bess_energy_at_relevant_slots": None,
+                "charging_feasible": (
+                    "UNRESOLVED_REQUIRES_DUTY_CHARGER_SOC_CONTEXT"
+                ),
+                "cheapest_powertrain": (
+                    "BEV_GRID_ONLY"
+                    if cost_difference is not None and cost_difference < 0.0
+                    else "ICE_GRID_ONLY"
+                    if cost_difference is not None
+                    else "UNRESOLVED"
+                ),
+                "cost_difference_jpy": cost_difference,
+                "comparison_semantics": (
+                    "Grid-only BEV versus ICE operating marginal cost. "
+                    "PV/BESS alternatives are conditional and are not "
+                    "claimed feasible without a solved duty/charger/SOC path."
+                ),
+            }
+        )
+    return rows
 
 
 def _persist_rich_run_outputs(
@@ -2890,6 +3333,26 @@ def _persist_rich_run_outputs(
                 "weather_response_observed": assignment_economic_audit.get(
                     "weather_response_observed"
                 ),
+                "vehicle_usage_cost_jpy_per_used_bus": (
+                    assignment_economic_audit.get(
+                        "vehicle_usage_cost_jpy_per_used_bus"
+                    )
+                ),
+                "vehicle_usage_cost_semantics": (
+                    assignment_economic_audit.get(
+                        "vehicle_usage_cost_semantics"
+                    )
+                ),
+                "vehicle_usage_cost_semantics_classified": (
+                    assignment_economic_audit.get(
+                        "vehicle_usage_cost_semantics_classified"
+                    )
+                ),
+                "vehicle_usage_cost_semantics_research_eligible": (
+                    assignment_economic_audit.get(
+                        "vehicle_usage_cost_semantics_research_eligible"
+                    )
+                ),
             }
         ],
         [
@@ -2903,10 +3366,232 @@ def _persist_rich_run_outputs(
             "assignment_energy_coupling_mode",
             "weather_response_expected",
             "weather_response_observed",
+            "vehicle_usage_cost_jpy_per_used_bus",
+            "vehicle_usage_cost_semantics",
+            "vehicle_usage_cost_semantics_classified",
+            "vehicle_usage_cost_semantics_research_eligible",
+        ],
+    )
+    powertrain_marginal_cost_audit = (
+        _powertrain_marginal_cost_audit_payload(canonical_problem)
+    )
+    (run_dir / "powertrain_marginal_cost_audit.json").write_text(
+        json.dumps(
+            powertrain_marginal_cost_audit,
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    marginal_costs = dict(
+        powertrain_marginal_cost_audit.get(
+            "marginal_costs_jpy_per_km"
+        )
+        or {}
+    )
+    _write_csv_rows(
+        run_dir / "powertrain_marginal_cost_audit.csv",
+        [
+            {
+                "status": powertrain_marginal_cost_audit.get("status"),
+                "bev_grid_marginal_cost_jpy_per_km": marginal_costs.get(
+                    "bev_grid"
+                ),
+                "bev_pv_direct_marginal_cost_jpy_per_km": (
+                    marginal_costs.get("bev_pv_direct")
+                ),
+                "bev_pv_bess_marginal_cost_jpy_per_km": (
+                    marginal_costs.get("bev_pv_bess")
+                ),
+                "ice_fuel_marginal_cost_jpy_per_km": marginal_costs.get(
+                    "ice_fuel"
+                ),
+                "ice_co2_marginal_cost_jpy_per_km": marginal_costs.get(
+                    "ice_co2"
+                ),
+                "ice_total_marginal_cost_jpy_per_km": marginal_costs.get(
+                    "ice_total"
+                ),
+                "grid_break_even_price_jpy_per_kwh": (
+                    powertrain_marginal_cost_audit.get(
+                        "grid_break_even_price_jpy_per_kwh_including_ice_co2_cost"
+                    )
+                ),
+                "vehicle_usage_cost_jpy_per_used_bus": (
+                    powertrain_marginal_cost_audit.get(
+                        "vehicle_usage_cost_jpy_per_used_bus"
+                    )
+                ),
+                "vehicle_usage_cost_semantics": (
+                    powertrain_marginal_cost_audit.get(
+                        "vehicle_usage_cost_semantics"
+                    )
+                ),
+                "vehicle_usage_cost_semantics_research_eligible": (
+                    powertrain_marginal_cost_audit.get(
+                        "vehicle_usage_cost_semantics_research_eligible"
+                    )
+                ),
+                "economic_claim_blocked": (
+                    powertrain_marginal_cost_audit.get(
+                        "economic_claim_blocked"
+                    )
+                ),
+            }
+        ],
+        [
+            "status",
+            "bev_grid_marginal_cost_jpy_per_km",
+            "bev_pv_direct_marginal_cost_jpy_per_km",
+            "bev_pv_bess_marginal_cost_jpy_per_km",
+            "ice_fuel_marginal_cost_jpy_per_km",
+            "ice_co2_marginal_cost_jpy_per_km",
+            "ice_total_marginal_cost_jpy_per_km",
+            "grid_break_even_price_jpy_per_kwh",
+            "vehicle_usage_cost_jpy_per_used_bus",
+            "vehicle_usage_cost_semantics",
+            "vehicle_usage_cost_semantics_research_eligible",
+            "economic_claim_blocked",
+        ],
+    )
+    trip_powertrain_rows = _trip_powertrain_cost_comparison_rows(
+        canonical_problem,
+        powertrain_marginal_cost_audit,
+    )
+    _write_csv_rows(
+        run_dir / "trip_powertrain_cost_comparison.csv",
+        trip_powertrain_rows,
+        [
+            "trip_id",
+            "distance_km",
+            "departure_time",
+            "ice_fuel_cost_jpy",
+            "ice_co2_cost_jpy",
+            "bev_energy_kwh",
+            "bev_grid_cost_jpy",
+            "bev_pv_direct_cost_jpy",
+            "bev_pv_bess_cost_jpy",
+            "available_pv_bess_energy_at_relevant_slots",
+            "charging_feasible",
+            "cheapest_powertrain",
+            "cost_difference_jpy",
+            "comparison_semantics",
+        ],
+    )
+    phase_name = str(solver_metadata.get("phase") or "")
+    integrated_actual_cost = None
+    if (
+        phase_name == "phase4_integrated"
+        and solver_metadata.get(
+            "actual_cost_objective_numeric_reconciliation_passed"
+        )
+        is True
+    ):
+        integrated_actual_cost = (
+            optimization_result.get("cost_breakdown") or {}
+        ).get("total_cost")
+    baseline_actual_cost = solver_metadata.get(
+        "paired_baseline_actual_cost_jpy"
+    )
+    baseline_comparison_ready = bool(
+        baseline_actual_cost is not None
+        and integrated_actual_cost is not None
+    )
+    _write_csv_rows(
+        run_dir / "baseline_vs_integrated_actual_cost.csv",
+        [
+            {
+                "status": (
+                    "READY"
+                    if baseline_comparison_ready
+                    else "UNAVAILABLE_REQUIRES_PAIRED_BASELINE_AND_PHASE4_RUN"
+                ),
+                "phase": phase_name,
+                "baseline_actual_cost_jpy": baseline_actual_cost,
+                "integrated_actual_cost_jpy": integrated_actual_cost,
+                "cost_difference_jpy": (
+                    float(integrated_actual_cost)
+                    - float(baseline_actual_cost)
+                    if baseline_comparison_ready
+                    else None
+                ),
+                "solver_objective_matches_accounting_total": (
+                    solver_metadata.get(
+                        "solver_objective_matches_accounting_total"
+                    )
+                ),
+                "semantics": (
+                    "No baseline value is inferred from a Phase 3 proxy. "
+                    "READY requires an explicitly paired canonical baseline "
+                    "and a numerically reconciled Phase 4 actual-cost run."
+                ),
+            }
+        ],
+        [
+            "status",
+            "phase",
+            "baseline_actual_cost_jpy",
+            "integrated_actual_cost_jpy",
+            "cost_difference_jpy",
+            "solver_objective_matches_accounting_total",
+            "semantics",
         ],
     )
 
     cost_breakdown = dict(optimization_result.get("cost_breakdown") or {})
+    operating_cost = cost_breakdown.get("total_cost")
+    operating_plus_modeled_assets = cost_breakdown.get(
+        "total_cost_with_assets"
+    )
+    modeled_asset_cost = sum(
+        float(cost_breakdown.get(key, 0.0) or 0.0)
+        for key in ("pv_asset_cost", "bess_asset_cost")
+    )
+    lifecycle_scope = {
+        "schema_version": "operating_and_lifecycle_cost_scope_v1",
+        "daily_operating_cost_jpy": operating_cost,
+        "daily_operating_cost_status": (
+            "AVAILABLE" if operating_cost is not None else "UNAVAILABLE"
+        ),
+        "daily_operating_cost_semantics": (
+            "Existing-asset dispatch cost: energy, fuel, demand, contract "
+            "overage, CO2, enabled vehicle-day/driver, degradation, and other "
+            "canonical operating components."
+        ),
+        "modeled_pv_bess_asset_cost_jpy_per_day": modeled_asset_cost,
+        "operating_plus_modeled_assets_jpy_per_day": (
+            operating_plus_modeled_assets
+        ),
+        "lifecycle_cost_status": "PARTIAL_MODEL_SCOPE",
+        "lifecycle_cost_missing_components": [
+            "charger_capex_and_maintenance",
+            "explicit_vehicle_type_replacement_plan_when_acquisition_disabled",
+            "financing_or_discount_rate_contract",
+        ],
+        "lifecycle_cost_semantics": (
+            "PV/BESS and enabled vehicle dailyized asset terms are reported "
+            "separately from operating cost. This is not a complete lifecycle "
+            "cost unless every listed missing component is explicitly supplied."
+        ),
+    }
+    (run_dir / "operating_and_lifecycle_cost_scope.json").write_text(
+        json.dumps(lifecycle_scope, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    _write_csv_rows(
+        run_dir / "operating_and_lifecycle_cost_scope.csv",
+        [lifecycle_scope],
+        [
+            "daily_operating_cost_jpy",
+            "daily_operating_cost_status",
+            "modeled_pv_bess_asset_cost_jpy_per_day",
+            "operating_plus_modeled_assets_jpy_per_day",
+            "lifecycle_cost_status",
+            "lifecycle_cost_missing_components",
+            "daily_operating_cost_semantics",
+            "lifecycle_cost_semantics",
+        ],
+    )
     cost_rows = [
         {
             "key": key,
@@ -8987,6 +9672,7 @@ def _solver_settings_payload(
         and gap_for_target <= requested_gap
     )
     return {
+        "solve_time_sec": _float_or_none(metadata.get("solve_time_sec")),
         "time_limit_seconds_requested": _int_or_none(time_limit_seconds_requested),
         "time_limit_seconds_effective": effective_time_limit,
         "stage1_time_limit_seconds_requested": _int_or_none(
@@ -9213,6 +9899,57 @@ def _solver_settings_payload(
                 "stage1_used_powertrain_composition_search_accepted", False
             )
         ),
+        "bev_cost_frontier": dict(
+            metadata.get("bev_cost_frontier") or {}
+        ),
+        "integrated_actual_cost_objective_requested": bool(
+            metadata.get(
+                "integrated_actual_cost_objective_requested", False
+            )
+        ),
+        "integrated_actual_cost_contract_applied": bool(
+            metadata.get("integrated_actual_cost_contract_applied", False)
+        ),
+        "integrated_primary_objective_kind": metadata.get(
+            "integrated_primary_objective_kind"
+        ),
+        "integrated_ev_utilization_mode": metadata.get(
+            "integrated_ev_utilization_mode", "disabled"
+        ),
+        "integrated_actual_cost_upper_bound_jpy": _float_or_none(
+            metadata.get("integrated_actual_cost_upper_bound_jpy")
+        ),
+        "integrated_actual_cost_upper_bound_delta_ratio": _float_or_none(
+            metadata.get(
+                "integrated_actual_cost_upper_bound_delta_ratio"
+            )
+        ),
+        "integrated_actual_cost_upper_bound_verified": bool(
+            metadata.get("integrated_actual_cost_upper_bound_verified", False)
+        ),
+        "integrated_primary_ice_fuel_l": _float_or_none(
+            metadata.get("integrated_primary_ice_fuel_l")
+        ),
+        "actual_cost_objective_structural_contract_passed": bool(
+            metadata.get(
+                "actual_cost_objective_structural_contract_passed", False
+            )
+        ),
+        "actual_cost_objective_numeric_reconciliation_passed": bool(
+            metadata.get(
+                "actual_cost_objective_numeric_reconciliation_passed",
+                False,
+            )
+        ),
+        "actual_cost_objective_residual_jpy": _float_or_none(
+            metadata.get("actual_cost_objective_residual_jpy")
+        ),
+        "vehicle_usage_cost_semantics": metadata.get(
+            "vehicle_usage_cost_semantics"
+        ),
+        "vehicle_usage_cost_semantics_classified": bool(
+            metadata.get("vehicle_usage_cost_semantics_classified", False)
+        ),
         "stage1_pool_solution_count": _int_or_none(
             metadata.get("stage1_pool_solution_count")
         ),
@@ -9325,6 +10062,14 @@ def _run_optimization(
     frontend_request_payload: Optional[Dict[str, Any]] = None,
     stage1_stage2_candidate_limit: int = 1,
     stage1_composition_search_radius: int = 0,
+    stage1_bev_frontier_enabled: bool = False,
+    stage1_bev_frontier_min_count: int = 15,
+    stage1_bev_frontier_max_count: int = 35,
+    stage1_bev_frontier_target_time_limit_seconds: int = 120,
+    integrated_actual_cost_objective: bool = False,
+    integrated_ev_utilization_mode: str = "disabled",
+    integrated_actual_cost_upper_bound_jpy: Optional[float] = None,
+    integrated_actual_cost_upper_bound_delta_ratio: Optional[float] = None,
 ) -> None:
     output_dir: Optional[str] = None
     raw_frontend_request_payload = dict(frontend_request_payload or {})
@@ -9529,6 +10274,39 @@ def _run_optimization(
                     if bool(research_run)
                     else max(int(stage1_composition_search_radius), 0)
                 ),
+                stage1_bev_frontier_enabled=bool(
+                    stage1_bev_frontier_enabled
+                ),
+                stage1_bev_frontier_min_count=max(
+                    int(stage1_bev_frontier_min_count),
+                    0,
+                ),
+                stage1_bev_frontier_max_count=max(
+                    int(stage1_bev_frontier_max_count),
+                    0,
+                ),
+                stage1_bev_frontier_target_time_limit_sec=max(
+                    float(stage1_bev_frontier_target_time_limit_seconds),
+                    1.0,
+                ),
+                integrated_actual_cost_objective=bool(
+                    integrated_actual_cost_objective
+                ),
+                integrated_ev_utilization_mode=str(
+                    integrated_ev_utilization_mode or "disabled"
+                ),
+                integrated_actual_cost_upper_bound_jpy=(
+                    None
+                    if integrated_actual_cost_upper_bound_jpy is None
+                    else float(integrated_actual_cost_upper_bound_jpy)
+                ),
+                integrated_actual_cost_upper_bound_delta_ratio=(
+                    None
+                    if integrated_actual_cost_upper_bound_delta_ratio is None
+                    else float(
+                        integrated_actual_cost_upper_bound_delta_ratio
+                    )
+                ),
                 gurobi_threads=gurobi_threads,
                 mip_gap=mip_gap,
                 random_seed=random_seed,
@@ -9622,6 +10400,21 @@ def _run_optimization(
                     ),
                     "stage1_composition_search_radius": (
                         opt_config.stage1_composition_search_radius
+                    ),
+                    "stage1_bev_frontier_enabled": (
+                        opt_config.stage1_bev_frontier_enabled
+                    ),
+                    "stage1_bev_frontier_min_count": (
+                        opt_config.stage1_bev_frontier_min_count
+                    ),
+                    "stage1_bev_frontier_max_count": (
+                        opt_config.stage1_bev_frontier_max_count
+                    ),
+                    "stage1_bev_frontier_target_time_limit_seconds": (
+                        opt_config.stage1_bev_frontier_target_time_limit_sec
+                    ),
+                    "integrated_actual_cost_objective": (
+                        opt_config.integrated_actual_cost_objective
                     ),
                     "gurobi_threads": gurobi_threads,
                     "run_profile": run_profile,
@@ -9876,6 +10669,7 @@ def _run_optimization(
                         "stage1_candidate_source",
                         "stage1_composition_target_used_bev",
                         "stage1_composition_target_used_ice",
+                        "minimum_used_bev_count",
                         "candidate_hash",
                         "assignment_hash",
                         "stage1_relaxed_objective_jpy",
@@ -9892,6 +10686,15 @@ def _run_optimization(
                         "used_ice",
                         "bev_trips",
                         "ice_trips",
+                        "bev_service_distance_km",
+                        "bev_deadhead_distance_km",
+                        "ice_service_distance_km",
+                        "ice_deadhead_distance_km",
+                        "bev_total_movement_distance_km",
+                        "ice_total_movement_distance_km",
+                        "total_movement_distance_km",
+                        "bev_movement_distance_share",
+                        "ice_fuel_l",
                         "runtime_sec",
                         "stage2_runtime_sec",
                         "stage2_time_limit_sec_effective",
@@ -9925,6 +10728,7 @@ def _run_optimization(
                     ),
                     [
                         "target_used_bev",
+                        "minimum_used_bev_count",
                         "target_used_ice",
                         "delta_used_bev_from_primary",
                         "delta_used_ice_from_primary",
@@ -9932,6 +10736,7 @@ def _run_optimization(
                         "target_within_selected_inventory",
                         "search_status",
                         "solver_status",
+                        "frontier_status",
                         "solution_count",
                         "best_bound",
                         "mip_gap_ratio",
@@ -9942,6 +10747,217 @@ def _run_optimization(
                         "actual_used_ice",
                         "candidate_accepted_for_stage2_evaluation",
                         "final_disposition",
+                    ],
+                )
+            bev_cost_frontier_payload = dict(
+                engine_solver_metadata.get("bev_cost_frontier") or {}
+            )
+            if bev_cost_frontier_payload:
+                frontier_rows = list(
+                    bev_cost_frontier_payload.get("rows") or []
+                )
+                (Path(output_dir) / "bev_cost_frontier.json").write_text(
+                    json.dumps(
+                        bev_cost_frontier_payload,
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
+                    encoding="utf-8",
+                )
+                _write_csv_rows(
+                    Path(output_dir) / "bev_cost_frontier.csv",
+                    frontier_rows,
+                    [
+                        "case",
+                        "minimum_bev_count",
+                        "minimum_used_bev_count",
+                        "status",
+                        "raw_solver_status",
+                        "solution_count",
+                        "stage1_relaxed_objective_jpy",
+                        "stage2_actual_canonical_cost_jpy",
+                        "candidate_hash",
+                        "actual_used_bev",
+                        "actual_used_ice",
+                        "used_bev",
+                        "used_ice",
+                        "actual_total_used_vehicle_count",
+                        "total_used_vehicles",
+                        "total_used_vehicle_count_fixed",
+                        "stage2_feasible",
+                        "canonical_evaluation_feasible",
+                        "physical_validation_feasible",
+                        "physical_validation",
+                        "final_disposition",
+                        "best_bound",
+                        "mip_gap_ratio",
+                        "mip_gap",
+                        "time_limit_sec",
+                        "solver_runtime_sec",
+                        "runtime_sec",
+                        "bev_trip_count",
+                        "bev_service_distance_km",
+                        "bev_deadhead_distance_km",
+                        "ice_service_distance_km",
+                        "ice_deadhead_distance_km",
+                        "bev_total_movement_distance_km",
+                        "ice_total_movement_distance_km",
+                        "bev_movement_distance_share",
+                        "bev_distance_share",
+                        "ice_fuel_l",
+                        "grid_import_kwh",
+                        "pv_to_bus_kwh",
+                        "pv_to_bess_kwh",
+                        "bess_to_bus_kwh",
+                        "total_cost_jpy",
+                        "cost_increase_percent",
+                        "objective_is_actual_cost",
+                        "rolling_24_of_24",
+                    ],
+                )
+                frontier_markdown_lines = [
+                    "# BEV cost frontier",
+                    "",
+                    (
+                        "Constraint: `sum(used electric vehicles) >= K`; "
+                        "ICE and total fleet size remain endogenous."
+                    ),
+                    "",
+                    "| K | status | used BEV | used ICE | actual cost JPY | physical |",
+                    "|---:|---|---:|---:|---:|---|",
+                ]
+                for row in frontier_rows:
+                    frontier_markdown_lines.append(
+                        "| {k} | {status} | {bev} | {ice} | {cost} | {physical} |".format(
+                            k=row.get("minimum_used_bev_count"),
+                            status=row.get("status"),
+                            bev=row.get("actual_used_bev"),
+                            ice=row.get("actual_used_ice"),
+                            cost=row.get("stage2_actual_canonical_cost_jpy"),
+                            physical=row.get("physical_validation_feasible"),
+                        )
+                    )
+                frontier_markdown_lines.extend(
+                    [
+                        "",
+                        "Monotonicity violations: "
+                        + str(
+                            bev_cost_frontier_payload.get(
+                                "monotonicity_violation_count", 0
+                            )
+                        ),
+                        "",
+                        str(
+                            bev_cost_frontier_payload.get(
+                                "monotonicity_semantics", ""
+                            )
+                        ),
+                    ]
+                )
+                (Path(output_dir) / "bev_cost_frontier.md").write_text(
+                    "\n".join(frontier_markdown_lines) + "\n",
+                    encoding="utf-8",
+                )
+                _write_csv_rows(
+                    Path(output_dir)
+                    / "maximum_bev_feasibility_search.csv",
+                    frontier_rows,
+                    [
+                        "minimum_used_bev_count",
+                        "status",
+                        "raw_solver_status",
+                        "actual_used_bev",
+                        "actual_used_ice",
+                        "physical_validation_feasible",
+                        "final_disposition",
+                        "time_limit_sec",
+                        "solver_runtime_sec",
+                        "best_bound",
+                        "mip_gap_ratio",
+                    ],
+                )
+            elif (
+                engine_solver_metadata.get("integrated_ev_utilization_mode")
+                == "minimum_ice_fuel_lexicographic"
+            ):
+                duty_vehicle_map = engine_result.plan.duty_vehicle_map()
+                used_vehicle_ids = set(duty_vehicle_map.values())
+                vehicle_type_by_id = {
+                    str(vehicle.vehicle_id): str(vehicle.vehicle_type).upper()
+                    for vehicle in problem.vehicles
+                }
+                used_bev_ids = {
+                    vehicle_id
+                    for vehicle_id in used_vehicle_ids
+                    if vehicle_type_by_id.get(vehicle_id)
+                    in {"BEV", "PHEV", "FCEV"}
+                }
+                policy_row = {
+                    "case": (
+                        "cost_constrained_maximum_ev_utilization"
+                        if engine_solver_metadata.get(
+                            "integrated_actual_cost_upper_bound_jpy"
+                        )
+                        is not None
+                        else "maximum_ev_utilization"
+                    ),
+                    "status": engine_result.solver_status,
+                    "actual_used_bev": len(used_bev_ids),
+                    "actual_used_ice": len(used_vehicle_ids - used_bev_ids),
+                    "actual_total_used_vehicle_count": len(used_vehicle_ids),
+                    "ice_fuel_l": engine_solver_metadata.get(
+                        "integrated_primary_ice_fuel_l"
+                    ),
+                    "total_cost_jpy": (
+                        engine_result.cost_breakdown or {}
+                    ).get("total_cost"),
+                    "actual_cost_upper_bound_jpy": (
+                        engine_solver_metadata.get(
+                            "integrated_actual_cost_upper_bound_jpy"
+                        )
+                    ),
+                    "actual_cost_upper_bound_delta_ratio": (
+                        engine_solver_metadata.get(
+                            "integrated_actual_cost_upper_bound_delta_ratio"
+                        )
+                    ),
+                    "actual_cost_upper_bound_verified": (
+                        engine_solver_metadata.get(
+                            "integrated_actual_cost_upper_bound_verified"
+                        )
+                    ),
+                    "objective_is_actual_cost": False,
+                    "primary_objective": "minimum_ice_fuel_l",
+                    "secondary_objective": "minimum_canonical_actual_cost",
+                    "physical_validation_feasible": engine_result.feasible,
+                    "mip_gap_ratio": engine_solver_metadata.get(
+                        "achieved_mip_gap"
+                    ),
+                    "solver_runtime_sec": engine_solver_metadata.get(
+                        "runtime_sec"
+                    ),
+                }
+                _write_csv_rows(
+                    Path(output_dir)
+                    / "maximum_bev_feasibility_search.csv",
+                    [policy_row],
+                    [
+                        "case",
+                        "status",
+                        "actual_used_bev",
+                        "actual_used_ice",
+                        "actual_total_used_vehicle_count",
+                        "ice_fuel_l",
+                        "total_cost_jpy",
+                        "actual_cost_upper_bound_jpy",
+                        "actual_cost_upper_bound_delta_ratio",
+                        "actual_cost_upper_bound_verified",
+                        "objective_is_actual_cost",
+                        "primary_objective",
+                        "secondary_objective",
+                        "physical_validation_feasible",
+                        "mip_gap_ratio",
+                        "solver_runtime_sec",
                     ],
                 )
             graph_artifacts = _persist_canonical_graph_exports(
@@ -11279,6 +12295,94 @@ def run_optimization(
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
     request = body or RunOptimizationBody()
+    if (
+        request.stage1_bev_frontier_enabled
+        and request.stage1_bev_frontier_min_count
+        > request.stage1_bev_frontier_max_count
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=make_error(
+                AppErrorCode.SCHEMA_VALIDATION_ERROR,
+                "stage1_bev_frontier_min_count must be <= "
+                "stage1_bev_frontier_max_count",
+                field="stage1_bev_frontier_min_count",
+            ),
+        )
+    normalized_requested_mode = _normalize_solver_mode(request.mode)
+    if request.stage1_bev_frontier_enabled and normalized_requested_mode != (
+        "phase3_two_stage"
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=make_error(
+                AppErrorCode.SCHEMA_VALIDATION_ERROR,
+                "stage1_bev_frontier_enabled requires phase3_two_stage",
+                field="stage1_bev_frontier_enabled",
+            ),
+        )
+    if request.integrated_actual_cost_objective and normalized_requested_mode != (
+        "phase4_integrated"
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=make_error(
+                AppErrorCode.SCHEMA_VALIDATION_ERROR,
+                "integrated_actual_cost_objective requires phase4_integrated",
+                field="integrated_actual_cost_objective",
+            ),
+        )
+    if (
+        request.integrated_actual_cost_objective
+        and request.integrated_ev_utilization_mode != "disabled"
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=make_error(
+                AppErrorCode.SCHEMA_VALIDATION_ERROR,
+                "integrated actual-cost minimization and EV-utilization "
+                "policy objectives are mutually exclusive",
+                field="integrated_ev_utilization_mode",
+            ),
+        )
+    if (
+        request.integrated_ev_utilization_mode != "disabled"
+        and normalized_requested_mode != "phase4_integrated"
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=make_error(
+                AppErrorCode.SCHEMA_VALIDATION_ERROR,
+                "integrated_ev_utilization_mode requires phase4_integrated",
+                field="integrated_ev_utilization_mode",
+            ),
+        )
+    if (
+        request.integrated_actual_cost_upper_bound_jpy is not None
+        and request.integrated_ev_utilization_mode == "disabled"
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=make_error(
+                AppErrorCode.SCHEMA_VALIDATION_ERROR,
+                "integrated_actual_cost_upper_bound_jpy requires an EV "
+                "utilization mode",
+                field="integrated_actual_cost_upper_bound_jpy",
+            ),
+        )
+    if (
+        request.integrated_actual_cost_upper_bound_delta_ratio is not None
+        and request.integrated_actual_cost_upper_bound_jpy is None
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=make_error(
+                AppErrorCode.SCHEMA_VALIDATION_ERROR,
+                "integrated_actual_cost_upper_bound_delta_ratio requires "
+                "the absolute cost upper bound",
+                field="integrated_actual_cost_upper_bound_delta_ratio",
+            ),
+        )
     try:
         run_profile = normalize_frontend_run_profile(request.run_profile)
     except ValueError as exc:
@@ -11400,6 +12504,14 @@ def run_optimization(
             },
             request.stage1_stage2_candidate_limit,
             request.stage1_composition_search_radius,
+            request.stage1_bev_frontier_enabled,
+            request.stage1_bev_frontier_min_count,
+            request.stage1_bev_frontier_max_count,
+            request.stage1_bev_frontier_target_time_limit_seconds,
+            request.integrated_actual_cost_objective,
+            request.integrated_ev_utilization_mode,
+            request.integrated_actual_cost_upper_bound_jpy,
+            request.integrated_actual_cost_upper_bound_delta_ratio,
         ),
         job_id=job.job_id,
         scenario_id=scenario_id,

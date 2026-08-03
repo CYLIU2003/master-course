@@ -1,6 +1,6 @@
 # Current research release blockers
 
-Status date: 2026-08-02
+Status date: 2026-08-03
 Code status: slot-indexed Stage 1 energy recourse, multi-candidate Stage 2
 evaluation, explicit same-service-date PV controls, and an HTTP-only frontend
 pair runner are implemented. A final-slot return-boundary defect exposed by
@@ -18,6 +18,49 @@ Teacher release status is fail-closed: **BLOCKED** unless
 zero failed checks, the exact frozen Git SHA at start and end, and a completed
 ZIP. When that artifact exists for the current frozen SHA, this blocker is
 discharged without modifying the repository during the experiment.
+
+## 2026-08-03 actual-cost and BEV-frontier implementation
+
+The current working tree replaces the narrow fixed-32 composition neighborhood
+for the requested diagnostic with a `used BEV >= K`, `K=15..35` frontier. ICE
+and total used-fleet counts are endogenous. Each K receives an explicit status;
+`TIME_LIMIT_NO_INCUMBENT` remains unresolved, and formal frontier evidence
+requires every in-inventory target to be either physically feasible after
+Stage 2 or covered by a valid Stage-1 IIS certificate. Phase 3 still remains a
+two-stage method and cannot claim an integrated global total-cost optimum.
+
+An opt-in `phase4_integrated_actual_cost` case now removes policy/solver-only
+soft terms and uses the canonical accounting components as one integrated
+objective. `objective_is_actual_cost` remains false until a post-solve numeric
+audit reconciles the raw solver objective and canonical accounting within
+`1e-6 JPY` without fallback or post-solve modification. This code path has unit
+and small integration coverage, but the requested 264-trip sunny/rain HTTP
+runs have not yet passed all Fresh Prepare, solver, 24/24 Rolling, physical,
+accounting, and pair gates; teacher release therefore remains **BLOCKED**.
+The current implementation has passed the complete 1,103-test regression suite;
+that code validation does not substitute for the still-pending long-running
+controlled runs.
+
+The distinct maximum-EV and epsilon-cost policy frontiers are also represented
+as different integrated MILPs: ICE fuel liters are the primary objective and
+canonical cost is the secondary objective, while epsilon cases additionally
+enforce an externally evidenced absolute `C* (1 + delta)` bound. These runs are
+policy sensitivities, not substitutes for the unconstrained actual-cost optimum,
+and cannot set `objective_is_actual_cost=true`.
+
+The 20,000 JPY/used-bus-day coefficient is no longer silently treated as a
+research-ready cost. Quick Setup/Prepare must classify it as a fixed vehicle-day
+cost, driver-cost proxy, provisional sensitivity, or unclassified. A positive
+provisional or unclassified value blocks the EV/ICE economic claim. The user
+has not yet supplied evidence selecting a research-eligible interpretation for
+the existing 20,000 JPY value, so the rerun must preserve this blocker unless
+that meaning is explicitly established.
+
+New required artifacts include the BEV frontier, source-specific marginal cost,
+trip replacement cost, baseline/integrated comparison, and an explicit split
+between daily operating cost and partial lifecycle scope. Trip-level PV/BESS
+availability and a complete lifecycle total are never inferred when charger/
+SOC or CAPEX/financing inputs are absent.
 
 ## 2026-08-02 interactive 2025-08-10 Prepare repair
 

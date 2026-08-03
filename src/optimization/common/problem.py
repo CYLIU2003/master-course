@@ -391,6 +391,26 @@ class OptimizationConfig:
     # shorter diagnostic slice can incorrectly leave every adjacent target
     # unresolved without proving feasibility or infeasibility.
     stage1_composition_target_time_limit_sec: float = 25.0
+    # Optional lower-bound frontier over the number of activated electric
+    # vehicles.  Unlike ``stage1_composition_search_radius``, each temporary
+    # solve adds only ``sum(used_electric) >= K``.  ICE activation and the
+    # total used fleet therefore remain endogenous to the unchanged economic
+    # objective.  This is an evidence-generating search, not a BEV preference.
+    stage1_bev_frontier_enabled: bool = False
+    stage1_bev_frontier_min_count: int = 15
+    stage1_bev_frontier_max_count: int = 35
+    stage1_bev_frontier_target_time_limit_sec: float = 120.0
+    # Phase 4 may be requested as an accounting-cost oracle only through this
+    # explicit contract.  The engine then removes every solver-only preference
+    # term and verifies the raw MILP objective against canonical accounting.
+    integrated_actual_cost_objective: bool = False
+    # Optional Phase 4 policy frontiers.  Both retain the same canonical-cost
+    # structural contract, but optimize ICE fuel first and total cost second.
+    # ``integrated_actual_cost_upper_bound_jpy`` turns the unconstrained
+    # maximum-EV case into a cost-constrained epsilon frontier point.
+    integrated_ev_utilization_mode: str = "disabled"
+    integrated_actual_cost_upper_bound_jpy: Optional[float] = None
+    integrated_actual_cost_upper_bound_delta_ratio: Optional[float] = None
     mip_gap: float = 0.02
     random_seed: int = 42
     alns_iterations: int = 800  # Increased from 500

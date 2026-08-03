@@ -97,6 +97,8 @@ def test_prepare_payload_separates_service_date_from_pv_source() -> None:
     assert len(sunny["selected_route_ids"]) == 16
     sunny_settings = sunny["simulation_settings"]
     rain_settings = rain["simulation_settings"]
+    assert sunny_settings["vehicle_usage_cost_semantics"] == "unclassified"
+    assert rain_settings["vehicle_usage_cost_semantics"] == "unclassified"
     assert (
         sunny_settings["comparison_type"]
         == rain_settings["comparison_type"]
@@ -359,6 +361,54 @@ def test_optimization_payloads_match_except_fresh_prepared_id() -> None:
     assert sunny["run_hourly_rolling"] is True
     assert sunny["rolling_execution_minutes"] == 60
     assert sunny["mip_gap"] == 0.1
+
+
+def test_optimization_payload_exposes_frontier_and_integrated_actual_cost() -> None:
+    runner = _load_runner()
+
+    frontier = runner.build_optimization_payload(
+        "prepared-frontier",
+        experiment_case="phase3_bev_frontier",
+    )
+    assert frontier["mode"] == "phase3_two_stage"
+    assert frontier["stage1_bev_frontier_enabled"] is True
+    assert frontier["stage1_bev_frontier_min_count"] == 15
+    assert frontier["stage1_bev_frontier_max_count"] == 35
+    assert frontier["stage1_stage2_candidate_limit"] >= 22
+
+    integrated = runner.build_optimization_payload(
+        "prepared-integrated",
+        experiment_case="phase4_integrated_actual_cost",
+    )
+    assert integrated["mode"] == "phase4_integrated"
+    assert integrated["integrated_actual_cost_objective"] is True
+    assert integrated["time_limit_seconds"] >= 3600
+
+    maximum_ev = runner.build_optimization_payload(
+        "prepared-maximum-ev",
+        experiment_case="phase4_maximum_ev_utilization",
+    )
+    assert maximum_ev["mode"] == "phase4_integrated"
+    assert maximum_ev["integrated_actual_cost_objective"] is False
+    assert maximum_ev["integrated_ev_utilization_mode"] == (
+        "minimum_ice_fuel_lexicographic"
+    )
+    assert maximum_ev["integrated_actual_cost_upper_bound_jpy"] is None
+
+    constrained = runner.build_optimization_payload(
+        "prepared-cost-constrained-ev",
+        experiment_case="phase4_cost_constrained_ev_utilization",
+        actual_cost_upper_bound_jpy=101_000.0,
+        actual_cost_upper_bound_delta_ratio=0.01,
+    )
+    assert constrained["integrated_actual_cost_upper_bound_jpy"] == 101_000.0
+    assert constrained["integrated_actual_cost_upper_bound_delta_ratio"] == 0.01
+
+    with pytest.raises(ValueError, match="upper bound"):
+        runner.build_optimization_payload(
+            "prepared-missing-cap",
+            experiment_case="phase4_cost_constrained_ev_utilization",
+        )
 
 
 def test_case_execution_uses_formal_timeout_for_synchronous_prepare(

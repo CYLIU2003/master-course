@@ -32,6 +32,9 @@ STAGE1_USED_POWERTRAIN_COMPOSITION_SEARCH_CSV_FILE = (
 STAGE1_USED_POWERTRAIN_COMPOSITION_SEARCH_SCHEMA_VERSION = (
     "stage1_used_powertrain_composition_search_v1"
 )
+STAGE1_USED_POWERTRAIN_COMPOSITION_SEARCH_SCHEMA_V2 = (
+    "stage1_used_powertrain_composition_search_v2"
+)
 
 # These artifacts are generated for every successfully finalized interactive
 # optimization run.  Optional visualizations are validated through
@@ -39,6 +42,7 @@ STAGE1_USED_POWERTRAIN_COMPOSITION_SEARCH_SCHEMA_VERSION = (
 BASE_REQUIRED_ARTIFACTS = (
     "assignment_economic_audit.csv",
     "assignment_economic_audit.json",
+    "baseline_vs_integrated_actual_cost.csv",
     "assignment_validation_diagnostics.json",
     "canonical_solver_result.json",
     "charging_schedule.csv",
@@ -56,8 +60,12 @@ BASE_REQUIRED_ARTIFACTS = (
     "kpi_summary.json",
     "objective_breakdown.csv",
     "objective_breakdown.json",
+    "operating_and_lifecycle_cost_scope.csv",
+    "operating_and_lifecycle_cost_scope.json",
     "optimization_audit.json",
     "optimization_result.json",
+    "powertrain_marginal_cost_audit.csv",
+    "powertrain_marginal_cost_audit.json",
     "raw/assignment.csv",
     "raw/canonical_solver_result.json",
     "raw/optimization_audit.json",
@@ -87,6 +95,7 @@ BASE_REQUIRED_ARTIFACTS = (
     "targeted_trips.json",
     "trip_type_counts.csv",
     "trip_type_counts.json",
+    "trip_powertrain_cost_comparison.csv",
     "vehicle_schedule.csv",
     "vehicle_timeline_gantt.csv",
     "vehicle_timelines.csv",
@@ -100,6 +109,13 @@ BASE_REQUIRED_ARTIFACTS = (
 TWO_STAGE_FORMAL_REQUIRED_ARTIFACTS = (
     STAGE1_USED_POWERTRAIN_COMPOSITION_SEARCH_FILE,
     STAGE1_USED_POWERTRAIN_COMPOSITION_SEARCH_CSV_FILE,
+)
+
+BEV_FRONTIER_REQUIRED_ARTIFACTS = (
+    "bev_cost_frontier.csv",
+    "bev_cost_frontier.json",
+    "bev_cost_frontier.md",
+    "maximum_bev_feasibility_search.csv",
 )
 
 RESEARCH_PROVENANCE_ARTIFACTS = (
@@ -357,11 +373,12 @@ def validate_stage1_used_powertrain_composition_search(
         return [f"{artifact} must be a JSON object"]
     payload = dict(payload)
     errors: list[str] = []
-    if (
-        payload.get("schema_version")
-        != STAGE1_USED_POWERTRAIN_COMPOSITION_SEARCH_SCHEMA_VERSION
-    ):
+    if payload.get("schema_version") not in {
+        STAGE1_USED_POWERTRAIN_COMPOSITION_SEARCH_SCHEMA_VERSION,
+        STAGE1_USED_POWERTRAIN_COMPOSITION_SEARCH_SCHEMA_V2,
+    }:
         errors.append(f"{artifact} has an invalid schema_version")
+    frontier_mode = payload.get("search_mode") == "minimum_used_bev_frontier"
 
     for key in (
         "enabled",
@@ -453,9 +470,25 @@ def validate_stage1_used_powertrain_composition_search(
         record = dict(record)
         target_bev = _nonnegative_integer(record.get("target_used_bev"))
         target_ice = _nonnegative_integer(record.get("target_used_ice"))
-        if target_bev is None or target_ice is None:
+        minimum_bev = _nonnegative_integer(
+            record.get("minimum_used_bev_count")
+        )
+        invalid_target = bool(
+            target_bev is None
+            or (
+                frontier_mode
+                and (
+                    minimum_bev is None
+                    or record.get("target_used_ice") is not None
+                    or record.get("target_total_used_vehicle_count")
+                    is not None
+                )
+            )
+            or (not frontier_mode and target_ice is None)
+        )
+        if invalid_target:
             errors.append(
-                f"{artifact}: target_records[{index}] must contain non-negative integer target counts"
+                f"{artifact}: target_records[{index}] has invalid target-count semantics"
             )
             continue
         if not isinstance(record.get("target_within_selected_inventory"), bool):
@@ -488,16 +521,25 @@ def validate_stage1_used_powertrain_composition_search(
     no_adjacent_inventory = (
         payload.get("inventory_has_no_adjacent_composition") is True
     )
+    frontier_all_resolved = (
+        payload.get("all_requested_targets_resolved") is True
+    )
     if multiple_feasible and len(feasible_pairs) < 2:
         errors.append(
             f"{artifact}: multiple_feasible_compositions_found requires two distinct feasible compositions"
         )
-    if all_infeasible:
+    if all_infeasible or frontier_mode:
         if not in_inventory_target_records:
             errors.append(
                 f"{artifact}: all_adjacent_targets_certified_infeasible requires in-inventory targets"
             )
         for index, record in enumerate(in_inventory_target_records):
+            if (
+                frontier_mode
+                and record.get("final_disposition")
+                == "physically_feasible_stage2_candidate"
+            ):
+                continue
             if record.get("final_disposition") != "stage1_infeasibility_certificate":
                 errors.append(
                     f"{artifact}: in-inventory target {index} lacks a stage1_infeasibility_certificate disposition"
@@ -580,7 +622,35 @@ def validate_stage1_used_powertrain_composition_search(
         errors.append(
             f"{artifact}: inventory_has_no_adjacent_composition conflicts with in-inventory targets"
         )
-    if not (multiple_feasible or all_infeasible or no_adjacent_inventory):
+    frontier_has_certificate = any(
+        record.get("final_disposition")
+        == "stage1_infeasibility_certificate"
+        for record in in_inventory_target_records
+    )
+    if frontier_mode:
+        if payload.get("frontier_total_used_vehicle_count_fixed") is not False:
+            errors.append(
+                f"{artifact}: BEV frontier must not fix total used vehicle count"
+            )
+        if not frontier_all_resolved:
+            errors.append(
+                f"{artifact}: formal BEV frontier requires all targets resolved"
+            )
+        if any(
+            record.get("final_disposition") not in {
+                "physically_feasible_stage2_candidate",
+                "stage1_infeasibility_certificate",
+            }
+            for record in in_inventory_target_records
+        ):
+            errors.append(
+                f"{artifact}: formal BEV frontier contains an unresolved target"
+            )
+        if not (multiple_feasible or frontier_has_certificate):
+            errors.append(
+                f"{artifact}: formal BEV frontier requires two feasible compositions or an infeasibility certificate"
+            )
+    elif not (multiple_feasible or all_infeasible or no_adjacent_inventory):
         errors.append(
             f"{artifact}: formal release requires feasible alternatives or a complete adjacent-composition certificate"
         )
@@ -1708,6 +1778,17 @@ def audit_frontend_run_artifacts(
             require_two_stage_composition_certificate
         ),
     )
+    composition_path = run_dir / STAGE1_USED_POWERTRAIN_COMPOSITION_SEARCH_FILE
+    if require_two_stage_composition_certificate and composition_path.is_file():
+        try:
+            composition_payload = _load_json_object(composition_path)
+        except (OSError, ValueError, json.JSONDecodeError):
+            composition_payload = {}
+        if (
+            composition_payload.get("search_mode")
+            == "minimum_used_bev_frontier"
+        ):
+            required.extend(BEV_FRONTIER_REQUIRED_ARTIFACTS)
     required.extend(
         _graph_manifest_artifacts(
             run_dir=run_dir,

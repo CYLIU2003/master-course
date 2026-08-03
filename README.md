@@ -1641,3 +1641,40 @@ estimate, source-profile hash, replacement asset, and exact Prepare request. A
 missing source, invalid slot series, or a source total that differs from the
 declared-capacity expected PV total fails before Prepare; a date/profile label
 alone is never treated as a PV switch.
+
+### BEV actual-cost and composition experiments
+
+The ordinary HTTP pair runner has five explicit experiment cases:
+
+- `phase3_baseline` preserves the established two-stage baseline.
+- `phase3_bev_frontier` solves `used BEV >= K` for every `K=15..35`. ICE and
+  total used-fleet counts remain endogenous; a time limit without an incumbent
+  is `UNRESOLVED`, never infeasible. Physically valid Stage-2 candidates are
+  compared by canonical accounting cost.
+- `phase4_integrated_actual_cost` jointly solves assignment, charging,
+  PV/BESS, and grid procurement under the accounting-cost contract. The run may
+  say `objective_is_actual_cost=true` only after the raw objective and canonical
+  ledger reconcile within `1e-6 JPY` with no post-solve repair.
+- `phase4_maximum_ev_utilization` minimizes solver-native ICE fuel liters first
+  and canonical operating cost second, with no cost cap. It is an explicit
+  policy frontier and never claims to be the unconstrained cost optimum.
+- `phase4_cost_constrained_ev_utilization` uses the same lexicographic objective
+  subject to an absolute canonical-cost bound derived from the separately
+  evidenced cost optimum `C*`. Record epsilon as 0, 1, 3, 5, or 10 percent via
+  `--actual-cost-upper-bound-delta-percent`; the solver receives the absolute
+  bound through `--actual-cost-upper-bound-jpy` and does not recompute or infer
+  `C*`.
+
+Use `--optimization-experiment-case <case>` with
+`scripts/run_frontend_controlled_pv_pair.py`. These cases never add a sunny/BEV
+bias, an ICE penalty, or a weather-dependent BEV floor. The frontend also
+requires the per-used-bus-day coefficient to be classified as
+`fixed_vehicle_day_cost`, `driver_cost_proxy`, `provisional_sensitivity`, or
+`unclassified`. A positive provisional or unclassified coefficient blocks a
+research economic claim even if the solver and ledger reconcile.
+
+Every finalized run exports the source-specific powertrain marginal-cost audit,
+trip replacement-cost audit, and operating-versus-lifecycle scope. Trip-level
+PV/BESS availability stays unresolved unless a solved duty/charger/SOC path
+supports it. Lifecycle cost remains explicitly partial when charger CAPEX,
+financing, or a replacement-plan input is absent.

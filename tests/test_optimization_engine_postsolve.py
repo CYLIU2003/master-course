@@ -344,9 +344,10 @@ def test_research_phase3_publishes_accounting_cost_only_when_ev_energy_is_restor
         "full_operational_validation": True,
         "source_provenance_exact": True,
         "bev_terminal_policy_return_to_initial": True,
-        "bev_terminal_soc_balance_satisfied": True,
-        "ev_energy_inventory_balanced": True,
-    }
+            "bev_terminal_soc_balance_satisfied": True,
+            "ev_energy_inventory_balanced": True,
+            "vehicle_usage_cost_semantics_classified_or_zero": True,
+        }
     assert any(
         "global total-cost optimality is not established" in warning
         for warning in result.warnings

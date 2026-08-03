@@ -47,6 +47,7 @@ def test_build_quick_setup_payload_includes_saved_objective_weights() -> None:
                 "pv_marginal_charge_cost_yen_per_kwh": 3.5,
                 "pv_curtail_penalty_yen_per_kwh": 6.5,
                 "vehicle_usage_cost_jpy_per_used_bus": 30000.0,
+                "vehicle_usage_cost_semantics": "fixed_vehicle_day_cost",
             },
         },
         "simulation_config": {
@@ -130,6 +131,9 @@ def test_build_quick_setup_payload_includes_saved_objective_weights() -> None:
     assert payload["simulationSettings"]["pvMarginalChargeCostYenPerKwh"] == 3.5
     assert payload["simulationSettings"]["pvCurtailPenaltyYenPerKwh"] == 6.5
     assert payload["simulationSettings"]["vehicleUsageCostJpyPerUsedBus"] == 30000.0
+    assert payload["simulationSettings"]["vehicleUsageCostSemantics"] == (
+        "fixed_vehicle_day_cost"
+    )
 
 
 def test_update_quick_setup_persists_cost_component_toggles() -> None:
@@ -179,6 +183,7 @@ def test_update_quick_setup_persists_cost_component_toggles() -> None:
         pvMarginalChargeCostYenPerKwh=4.25,
         pvCurtailPenaltyYenPerKwh=7.5,
         vehicleUsageCostJpyPerUsedBus=25000.0,
+        vehicleUsageCostSemantics="driver_cost_proxy",
         operationTimeWindowEnabled=False,
     )
 
@@ -208,8 +213,14 @@ def test_update_quick_setup_persists_cost_component_toggles() -> None:
     assert scenario_overlay["cost_coefficients"]["pv_marginal_charge_cost_yen_per_kwh"] == 4.25
     assert scenario_overlay["cost_coefficients"]["pv_curtail_penalty_yen_per_kwh"] == 7.5
     assert scenario_overlay["cost_coefficients"]["vehicle_usage_cost_jpy_per_used_bus"] == 25000.0
+    assert scenario_overlay["cost_coefficients"]["vehicle_usage_cost_semantics"] == (
+        "driver_cost_proxy"
+    )
     assert simulation_config["pv_curtail_penalty_yen_per_kwh"] == 7.5
     assert simulation_config["vehicle_usage_cost_jpy_per_used_bus"] == 25000.0
+    assert simulation_config["vehicle_usage_cost_semantics"] == (
+        "driver_cost_proxy"
+    )
     assert simulation_config["operation_time_window_enabled"] is False
     assert simulation_config["planning_horizon_hours"] == 24.0
 

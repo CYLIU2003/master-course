@@ -70,6 +70,74 @@ _FEEDBACK_GLOBAL_DEADLINE_KEY = "_stage2_feedback_global_deadline_monotonic"
 _FEEDBACK_GLOBAL_STARTED_KEY = "_stage2_feedback_global_started_monotonic"
 
 
+def classify_bev_frontier_status(
+    solver_status: str,
+    solution_count: int,
+    *,
+    certificate_accepted: bool = False,
+) -> str:
+    """Classify one count-constrained solve without overstating evidence."""
+
+    normalized = str(solver_status or "").strip().lower()
+    has_incumbent = int(solution_count or 0) > 0
+    if normalized == "time_limit":
+        return (
+            "TIME_LIMIT_WITH_INCUMBENT"
+            if has_incumbent
+            else "TIME_LIMIT_NO_INCUMBENT"
+        )
+    if normalized == "infeasible":
+        return "CERTIFIED_INFEASIBLE" if certificate_accepted else "ERROR"
+    if has_incumbent and normalized in {
+        "optimal",
+        "suboptimal",
+        "objective_limit",
+    }:
+        return "FEASIBLE"
+    return "ERROR"
+
+
+def audit_bev_frontier_monotonicity(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    tolerance_jpy: float = 1.0e-6,
+) -> List[Dict[str, Any]]:
+    """Return cost decreases without converting them into fake optima."""
+
+    comparable = sorted(
+        (
+            row
+            for row in rows
+            if row.get("physical_validation_feasible") is True
+            and row.get("stage2_actual_canonical_cost_jpy") is not None
+            and row.get("minimum_used_bev_count") is not None
+        ),
+        key=lambda row: int(row["minimum_used_bev_count"]),
+    )
+    violations: List[Dict[str, Any]] = []
+    for previous_row, current_row in zip(comparable, comparable[1:]):
+        previous_cost = float(
+            previous_row["stage2_actual_canonical_cost_jpy"]
+        )
+        current_cost = float(
+            current_row["stage2_actual_canonical_cost_jpy"]
+        )
+        if current_cost + float(tolerance_jpy) < previous_cost:
+            violations.append(
+                {
+                    "previous_minimum_used_bev_count": previous_row.get(
+                        "minimum_used_bev_count"
+                    ),
+                    "current_minimum_used_bev_count": current_row.get(
+                        "minimum_used_bev_count"
+                    ),
+                    "previous_cost_jpy": previous_cost,
+                    "current_cost_jpy": current_cost,
+                }
+            )
+    return violations
+
+
 def _resolved_stage_time_limit_sec(
     config: OptimizationConfig,
     *,
@@ -2653,6 +2721,7 @@ class GurobiMILPAdapter:
         )
 
         objective = gp.LinExpr()
+        ice_fuel_l_objective = gp.LinExpr()
         # O2: electricity cost based on actual charging source flows.
         price_by_slot = {slot.slot_index: slot.grid_buy_yen_per_kwh for slot in problem.price_slots}
         grid_to_bus_priority_penalty = self._safe_nonnegative_float(
@@ -2747,6 +2816,7 @@ class GurobiMILPAdapter:
                 if trip is None:
                     continue
                 fuel_l = self._trip_fuel_l(problem, vehicle, trip_id)
+                ice_fuel_l_objective += fuel_l * var
                 objective += fuel_weight * diesel_price * fuel_l * var
 
             for (vehicle_id, from_trip_id, to_trip_id), var in x.items():
@@ -2761,10 +2831,12 @@ class GurobiMILPAdapter:
                     trip_by_id[to_trip_id].origin,
                 )
                 deadhead_km = self._deadhead_distance_km(problem, deadhead_min)
+                ice_fuel_l_objective += deadhead_km * fuel_rate * var
                 objective += fuel_weight * diesel_price * deadhead_km * fuel_rate * var
             for assignment_key, fuel_l in (
                 ice_startup_fuel_l_by_assignment.items()
             ):
+                ice_fuel_l_objective += fuel_l * start_arc[assignment_key]
                 objective += (
                     fuel_weight
                     * diesel_price
@@ -2774,6 +2846,7 @@ class GurobiMILPAdapter:
             for assignment_key, fuel_l in (
                 ice_return_fuel_l_by_assignment.items()
             ):
+                ice_fuel_l_objective += fuel_l * end_arc[assignment_key]
                 objective += (
                     fuel_weight
                     * diesel_price
@@ -3159,11 +3232,85 @@ class GurobiMILPAdapter:
                     continue
                 var.Start = float(refuel_l)
 
+        integrated_ev_utilization_mode = str(
+            getattr(config, "integrated_ev_utilization_mode", "disabled")
+            or "disabled"
+        ).strip().lower()
+        if integrated_ev_utilization_mode not in {
+            "disabled",
+            "minimum_ice_fuel_lexicographic",
+        }:
+            raise ValueError(
+                "integrated_ev_utilization_mode must be 'disabled' or "
+                "'minimum_ice_fuel_lexicographic'"
+            )
+        actual_cost_upper_bound_jpy = getattr(
+            config,
+            "integrated_actual_cost_upper_bound_jpy",
+            None,
+        )
+        if actual_cost_upper_bound_jpy is not None:
+            actual_cost_upper_bound_jpy = float(
+                actual_cost_upper_bound_jpy
+            )
+            if actual_cost_upper_bound_jpy < 0.0:
+                raise ValueError(
+                    "integrated_actual_cost_upper_bound_jpy must be nonnegative"
+                )
+            model.addConstr(
+                objective <= actual_cost_upper_bound_jpy,
+                name="integrated_actual_cost_upper_bound",
+            )
+
         if allow_partial_service:
             coverage_objective = gp.quicksum(unserved[trip.trip_id] for trip in problem.trips)
             model.ModelSense = GRB.MINIMIZE
-            model.setObjectiveN(coverage_objective, index=0, priority=2, name="coverage")
-            model.setObjectiveN(objective, index=1, priority=1, name="secondary_cost")
+            if integrated_ev_utilization_mode != "disabled":
+                model.setObjectiveN(
+                    coverage_objective,
+                    index=0,
+                    priority=3,
+                    name="coverage",
+                )
+                model.setObjectiveN(
+                    ice_fuel_l_objective,
+                    index=1,
+                    priority=2,
+                    name="primary_ice_fuel_l",
+                )
+                model.setObjectiveN(
+                    objective,
+                    index=2,
+                    priority=1,
+                    name="secondary_canonical_cost",
+                )
+            else:
+                model.setObjectiveN(
+                    coverage_objective,
+                    index=0,
+                    priority=2,
+                    name="coverage",
+                )
+                model.setObjectiveN(
+                    objective,
+                    index=1,
+                    priority=1,
+                    name="secondary_cost",
+                )
+        elif integrated_ev_utilization_mode != "disabled":
+            model.ModelSense = GRB.MINIMIZE
+            model.setObjectiveN(
+                ice_fuel_l_objective,
+                index=0,
+                priority=2,
+                name="primary_ice_fuel_l",
+            )
+            model.setObjectiveN(
+                objective,
+                index=1,
+                priority=1,
+                name="secondary_canonical_cost",
+            )
         else:
             model.setObjective(objective, GRB.MINIMIZE)
         
@@ -3706,6 +3853,20 @@ class GurobiMILPAdapter:
                 "minimum_used_bev_count_policy_enabled": (
                     minimum_used_bev_count > 0
                 ),
+                "integrated_ev_utilization_mode": (
+                    integrated_ev_utilization_mode
+                ),
+                "integrated_actual_cost_upper_bound_jpy": (
+                    actual_cost_upper_bound_jpy
+                ),
+                "integrated_actual_cost_upper_bound_delta_ratio": getattr(
+                    config,
+                    "integrated_actual_cost_upper_bound_delta_ratio",
+                    None,
+                ),
+                "integrated_primary_ice_fuel_l": float(
+                    ice_fuel_l_objective.getValue()
+                ),
                 "pv_curtail_penalty_auto_defaulted": pv_curtail_penalty_auto_defaulted,
                 "charge_session_start_penalty_yen": charge_session_start_penalty,
                 "slot_concurrency_penalty_yen": slot_concurrency_penalty,
@@ -4212,6 +4373,41 @@ class GurobiMILPAdapter:
             and stage1_stage2_candidate_limit > 1
             and stage1_composition_search_radius > 0
         )
+        stage1_bev_frontier_requested = bool(
+            getattr(config, "stage1_bev_frontier_enabled", False)
+        )
+        stage1_bev_frontier_min_count = max(
+            int(getattr(config, "stage1_bev_frontier_min_count", 15) or 0),
+            0,
+        )
+        stage1_bev_frontier_max_count = max(
+            int(getattr(config, "stage1_bev_frontier_max_count", 35) or 0),
+            0,
+        )
+        stage1_bev_frontier_enabled = bool(
+            stage2_enabled
+            and stage1_bev_frontier_requested
+            and stage1_bev_frontier_max_count >= stage1_bev_frontier_min_count
+        )
+        stage1_bev_frontier_target_count = (
+            stage1_bev_frontier_max_count
+            - stage1_bev_frontier_min_count
+            + 1
+            if stage1_bev_frontier_enabled
+            else 0
+        )
+        if stage1_bev_frontier_enabled:
+            stage1_stage2_candidate_limit = min(
+                max(
+                    stage1_stage2_candidate_limit,
+                    stage1_bev_frontier_target_count + 1,
+                ),
+                50,
+            )
+        stage1_explicit_powertrain_search_enabled = bool(
+            stage1_composition_search_enabled
+            or stage1_bev_frontier_enabled
+        )
         stage1_candidate_enumeration_reserve_sec = 0.0
         stage1_primary_search_time_limit_sec = float(stage_time_limit)
         if stage2_enabled and stage1_stage2_candidate_limit > 1:
@@ -4229,6 +4425,24 @@ class GurobiMILPAdapter:
                 100.0,
                 max(float(stage_time_limit) - 1.0, 0.0),
             )
+            if stage1_bev_frontier_enabled:
+                frontier_target_time_limit_sec = max(
+                    float(
+                        getattr(
+                            config,
+                            "stage1_bev_frontier_target_time_limit_sec",
+                            120.0,
+                        )
+                        or 120.0
+                    ),
+                    1.0,
+                )
+                stage1_candidate_enumeration_reserve_sec = min(
+                    frontier_target_time_limit_sec
+                    * stage1_bev_frontier_target_count,
+                    max(float(stage_time_limit) * 0.8, 0.0),
+                    max(float(stage_time_limit) - 1.0, 0.0),
+                )
             stage1_primary_search_time_limit_sec = max(
                 float(stage_time_limit)
                 - stage1_candidate_enumeration_reserve_sec,
@@ -4244,7 +4458,7 @@ class GurobiMILPAdapter:
             # capacity for those exact count-constrained re-solves.
             stage1.Params.PoolSolutions = (
                 1
-                if stage1_composition_search_enabled
+                if stage1_explicit_powertrain_search_enabled
                 else stage1_stage2_candidate_limit
             )
 
@@ -6584,64 +6798,116 @@ class GurobiMILPAdapter:
             float(
                 getattr(
                     config,
-                    "stage1_composition_target_time_limit_sec",
-                    25.0,
+                    (
+                        "stage1_bev_frontier_target_time_limit_sec"
+                        if stage1_bev_frontier_enabled
+                        else "stage1_composition_target_time_limit_sec"
+                    ),
+                    120.0 if stage1_bev_frontier_enabled else 25.0,
                 )
-                or 25.0
+                or (120.0 if stage1_bev_frontier_enabled else 25.0)
             ),
             0.25,
         )
         composition_activation_mip_starts = (
             _powertrain_activation_replacement_mip_starts(stage1_plan)
             if stage1_composition_search_enabled
+            and not stage1_bev_frontier_enabled
             else {}
         )
-        if stage1_composition_search_enabled:
-            # Search adjacent *activated-vehicle* compositions explicitly.
-            # This is not a weather or BEV-use policy: both count equalities
-            # are temporary constraints on the unchanged Stage 1 objective and
-            # recourse model.  It can therefore activate a previously unused
-            # BEV while retiring an ICE, unlike the legacy whole-duty swap
-            # MIP starts.
-            seen_target_compositions: Set[Tuple[int, int]] = set()
-            for distance in range(1, stage1_composition_search_radius + 1):
-                for bev_delta in (distance, -distance):
-                    target = (
-                        int(primary_used_bev + bev_delta),
-                        int(primary_used_ice - bev_delta),
+        if stage1_explicit_powertrain_search_enabled:
+            # Search activated-vehicle compositions on the unchanged Stage 1
+            # objective and recourse model.  Adjacent mode uses exact BEV/ICE
+            # count equalities.  Frontier mode uses only used-BEV >= K, so ICE
+            # and total fleet size remain endogenous rather than being hidden
+            # policy constraints.
+            seen_target_compositions: Set[Tuple[int, Optional[int]]] = set()
+            if stage1_bev_frontier_enabled:
+                requested_targets = [
+                    (minimum_used_bev, None)
+                    for minimum_used_bev in range(
+                        stage1_bev_frontier_min_count,
+                        stage1_bev_frontier_max_count + 1,
                     )
-                    if target in seen_target_compositions:
-                        continue
-                    seen_target_compositions.add(target)
-                    target_record: Dict[str, Any] = {
-                        "target_used_bev": target[0],
-                        "target_used_ice": target[1],
-                        "delta_used_bev_from_primary": int(bev_delta),
-                        "delta_used_ice_from_primary": int(-bev_delta),
-                        "target_total_used_vehicle_count": int(sum(target)),
-                        "target_semantics": (
-                            "exact_stage1_used_vehicle_count_constraint; "
-                            "used_bev means the canonical electric group "
-                            "BEV/PHEV/FCEV"
-                        ),
-                        "target_within_selected_inventory": bool(
-                            0 <= target[0] <= len(available_electric_vehicle_ids)
-                            and 0
-                            <= target[1]
-                            <= len(available_combustion_vehicle_ids)
-                        ),
-                    }
-                    if not target_record["target_within_selected_inventory"]:
-                        target_record["search_status"] = (
-                            "outside_selected_inventory"
+                ]
+            else:
+                requested_targets = []
+                for distance in range(
+                    1,
+                    stage1_composition_search_radius + 1,
+                ):
+                    for bev_delta in (distance, -distance):
+                        requested_targets.append(
+                            (
+                                int(primary_used_bev + bev_delta),
+                                int(primary_used_ice - bev_delta),
+                            )
                         )
-                    composition_target_records.append(target_record)
+            for target in requested_targets:
+                if target in seen_target_compositions:
+                    continue
+                seen_target_compositions.add(target)
+                target_used_bev = int(target[0])
+                target_used_ice = (
+                    int(target[1]) if target[1] is not None else None
+                )
+                bev_delta = target_used_bev - int(primary_used_bev)
+                target_record: Dict[str, Any] = {
+                    "target_used_bev": target_used_bev,
+                    "minimum_used_bev_count": (
+                        target_used_bev
+                        if stage1_bev_frontier_enabled
+                        else None
+                    ),
+                    "target_used_ice": target_used_ice,
+                    "delta_used_bev_from_primary": int(bev_delta),
+                    "delta_used_ice_from_primary": (
+                        int(target_used_ice - primary_used_ice)
+                        if target_used_ice is not None
+                        else None
+                    ),
+                    "target_total_used_vehicle_count": (
+                        int(target_used_bev + target_used_ice)
+                        if target_used_ice is not None
+                        else None
+                    ),
+                    "target_semantics": (
+                        (
+                            "stage1_minimum_used_electric_count_constraint; "
+                            "ICE and total used vehicle counts remain "
+                            "endogenous; "
+                        )
+                        if stage1_bev_frontier_enabled
+                        else "exact_stage1_used_vehicle_count_constraint; "
+                    )
+                    + (
+                        "used_bev means the canonical electric group "
+                        "BEV/PHEV/FCEV"
+                    ),
+                    "target_within_selected_inventory": bool(
+                        0
+                        <= target_used_bev
+                        <= len(available_electric_vehicle_ids)
+                        and (
+                            target_used_ice is None
+                            or 0
+                            <= target_used_ice
+                            <= len(available_combustion_vehicle_ids)
+                        )
+                    ),
+                }
+                if not target_record["target_within_selected_inventory"]:
+                    target_record["search_status"] = (
+                        "outside_selected_inventory"
+                    )
+                composition_target_records.append(target_record)
 
             valid_target_count = sum(
                 record["target_within_selected_inventory"]
                 for record in composition_target_records
             )
             attempted_valid_targets = 0
+            previous_frontier_plan: Optional[AssignmentPlan] = stage1_plan
             for target_record in composition_target_records:
                 if not target_record["target_within_selected_inventory"]:
                     composition_search_events.append(dict(target_record))
@@ -6681,30 +6947,46 @@ class GurobiMILPAdapter:
                     continue
 
                 target_used_bev = int(target_record["target_used_bev"])
-                target_used_ice = int(target_record["target_used_ice"])
+                raw_target_used_ice = target_record.get("target_used_ice")
+                target_used_ice = (
+                    int(raw_target_used_ice)
+                    if raw_target_used_ice is not None
+                    else None
+                )
                 target_index = len(composition_search_events) + 1
+                electric_count_expr = gp.quicksum(
+                    used_vehicle[vehicle_id]
+                    for vehicle_id in available_electric_vehicle_ids
+                )
+                electric_target_expr = (
+                    electric_count_expr >= target_used_bev
+                    if stage1_bev_frontier_enabled
+                    else electric_count_expr == target_used_bev
+                )
                 electric_constraint = stage1.addConstr(
-                    gp.quicksum(
-                        used_vehicle[vehicle_id]
-                        for vehicle_id in available_electric_vehicle_ids
-                    )
-                    == target_used_bev,
+                    electric_target_expr,
                     name=(
-                        "stage1_composition_used_electric_target__"
-                        f"{target_index}"
+                        (
+                            "stage1_frontier_minimum_used_electric__"
+                            if stage1_bev_frontier_enabled
+                            else "stage1_composition_used_electric_target__"
+                        )
+                        + f"{target_index}"
                     ),
                 )
-                combustion_constraint = stage1.addConstr(
-                    gp.quicksum(
-                        used_vehicle[vehicle_id]
-                        for vehicle_id in available_combustion_vehicle_ids
+                combustion_constraint = None
+                if target_used_ice is not None:
+                    combustion_constraint = stage1.addConstr(
+                        gp.quicksum(
+                            used_vehicle[vehicle_id]
+                            for vehicle_id in available_combustion_vehicle_ids
+                        )
+                        == target_used_ice,
+                        name=(
+                            "stage1_composition_used_combustion_target__"
+                            f"{target_index}"
+                        ),
                     )
-                    == target_used_ice,
-                    name=(
-                        "stage1_composition_used_combustion_target__"
-                        f"{target_index}"
-                    ),
-                )
                 stage1.update()
                 composition_time_limit_sec = min(
                     composition_target_time_limit_cap_sec,
@@ -6714,6 +6996,26 @@ class GurobiMILPAdapter:
                     ),
                 )
                 composition_mip_start: Optional[Dict[str, Any]] = None
+                frontier_warm_start_applied = False
+                frontier_warm_start_source = ""
+                frontier_warm_start_reason = "not_frontier_search"
+                if stage1_bev_frontier_enabled:
+                    (
+                        frontier_warm_start_applied,
+                        frontier_warm_start_source,
+                        frontier_warm_start_reason,
+                    ) = self._apply_stage1_assignment_warm_start(
+                        problem,
+                        enabled=True,
+                        preferred_plan=previous_frontier_plan,
+                        y=y,
+                        x=x,
+                        start_arc=start_arc,
+                        end_arc=end_arc,
+                        used_vehicle=used_vehicle,
+                        used_vehicle_day=used_vehicle_day,
+                        trip_day_index_by_trip_id=trip_day_index_by_trip_id,
+                    )
                 delta_starts = composition_activation_mip_starts.get(
                     int(target_record["delta_used_bev_from_primary"]),
                     [],
@@ -6752,6 +7054,10 @@ class GurobiMILPAdapter:
                             "solution_count": int(
                                 getattr(stage1, "SolCount", 0) or 0
                             ),
+                            "frontier_status": classify_bev_frontier_status(
+                                composition_status,
+                                int(getattr(stage1, "SolCount", 0) or 0),
+                            ),
                             "best_bound": self._model_bound(stage1),
                             "mip_gap_ratio": self._model_gap(stage1),
                             "certificate_eligible": (
@@ -6765,6 +7071,15 @@ class GurobiMILPAdapter:
                                 "source_vehicle_retirement"
                                 if composition_mip_start is not None
                                 else "none"
+                            ),
+                            "frontier_warm_start_applied": (
+                                frontier_warm_start_applied
+                            ),
+                            "frontier_warm_start_source": (
+                                frontier_warm_start_source
+                            ),
+                            "frontier_warm_start_reason": (
+                                frontier_warm_start_reason
                             ),
                         }
                     )
@@ -6798,8 +7113,12 @@ class GurobiMILPAdapter:
                         iis_error = ""
                         target_count_constraint_names = sorted(
                             {
-                                str(electric_constraint.ConstrName),
-                                str(combustion_constraint.ConstrName),
+                                str(constraint.ConstrName)
+                                for constraint in (
+                                    electric_constraint,
+                                    combustion_constraint,
+                                )
+                                if constraint is not None
                             }
                         )
                         iis_started = time.perf_counter()
@@ -6920,6 +7239,18 @@ class GurobiMILPAdapter:
                         target_record.update(
                             {
                                 "certificate_eligible": certificate_accepted,
+                                "frontier_status": (
+                                    classify_bev_frontier_status(
+                                        composition_status,
+                                        int(
+                                            getattr(stage1, "SolCount", 0)
+                                            or 0
+                                        ),
+                                        certificate_accepted=(
+                                            certificate_accepted
+                                        ),
+                                    )
+                                ),
                                 "infeasibility_certificate": (
                                     certificate_payload
                                 ),
@@ -6928,7 +7259,9 @@ class GurobiMILPAdapter:
                     elif int(getattr(stage1, "SolCount", 0) or 0) > 0:
                         composition_plan = _current_stage1_plan(
                             candidate_source=(
-                                "used_powertrain_composition_neighborhood"
+                                "bev_minimum_frontier"
+                                if stage1_bev_frontier_enabled
+                                else "used_powertrain_composition_neighborhood"
                             ),
                             metadata={
                                 "stage1_composition_target_used_bev": (
@@ -6941,6 +7274,11 @@ class GurobiMILPAdapter:
                                     target_record[
                                         "delta_used_bev_from_primary"
                                     ]
+                                ),
+                                "stage1_frontier_minimum_used_bev_count": (
+                                    target_used_bev
+                                    if stage1_bev_frontier_enabled
+                                    else None
                                 ),
                                 "stage1_composition_search_solver_status": (
                                     composition_status
@@ -6959,14 +7297,24 @@ class GurobiMILPAdapter:
                         target_record.update(
                             {
                                 "candidate_hash": assignment_hash,
+                                "stage1_relaxed_objective_jpy": float(
+                                    getattr(stage1, "ObjVal", 0.0) or 0.0
+                                ),
                                 "actual_used_bev": actual_used_bev,
                                 "actual_used_ice": actual_used_ice,
                                 "target_constraint_satisfied_by_extracted_plan": (
-                                    actual_used_bev == target_used_bev
-                                    and actual_used_ice == target_used_ice
+                                    actual_used_bev >= target_used_bev
+                                    if stage1_bev_frontier_enabled
+                                    else (
+                                        actual_used_bev == target_used_bev
+                                        and actual_used_ice
+                                        == target_used_ice
+                                    )
                                 ),
                             }
                         )
+                        if stage1_bev_frontier_enabled:
+                            previous_frontier_plan = composition_plan
                         if assignment_hash in seen_candidate_hashes:
                             target_record[
                                 "candidate_accepted_for_stage2_evaluation"
@@ -6987,7 +7335,11 @@ class GurobiMILPAdapter:
                                         or 0.0
                                     ),
                                     assignment_hash,
-                                    "used_powertrain_composition_neighborhood",
+                                    (
+                                        "bev_minimum_frontier"
+                                        if stage1_bev_frontier_enabled
+                                        else "used_powertrain_composition_neighborhood"
+                                    ),
                                     replace(
                                         composition_plan,
                                         metadata={
@@ -7005,7 +7357,16 @@ class GurobiMILPAdapter:
                                 )
                             )
                 finally:
-                    stage1.remove([electric_constraint, combustion_constraint])
+                    stage1.remove(
+                        [
+                            constraint
+                            for constraint in (
+                                electric_constraint,
+                                combustion_constraint,
+                            )
+                            if constraint is not None
+                        ]
+                    )
                     stage1.update()
                 composition_search_events.append(dict(target_record))
 
@@ -7265,6 +7626,156 @@ class GurobiMILPAdapter:
         ).strip()
         evaluator = CostEvaluator()
         physical_checker = FeasibilityChecker()
+
+        def _candidate_powertrain_movement_kpis(
+            plan: AssignmentPlan,
+        ) -> Dict[str, float]:
+            kpis = {
+                "bev_service_distance_km": 0.0,
+                "bev_deadhead_distance_km": 0.0,
+                "ice_service_distance_km": 0.0,
+                "ice_deadhead_distance_km": 0.0,
+                "ice_fuel_l": 0.0,
+            }
+            canonical_trip_by_id = problem.trip_by_id()
+            for duty in plan.duties:
+                if not duty.legs:
+                    continue
+                vehicle_id = str(plan.vehicle_id_for_duty(duty.duty_id))
+                vehicle = vehicle_by_id.get(vehicle_id)
+                if vehicle is None:
+                    continue
+                group = _powertrain_group(vehicle_id)
+                prefix = "bev" if group == "ELECTRIC" else "ice"
+                service_distance_km = sum(
+                    max(
+                        float(
+                            getattr(
+                                canonical_trip_by_id.get(
+                                    str(leg.trip.trip_id)
+                                ),
+                                "distance_km",
+                                getattr(leg.trip, "distance_km", 0.0),
+                            )
+                            or 0.0
+                        ),
+                        0.0,
+                    )
+                    for leg in duty.legs
+                )
+                inter_trip_deadhead_min = sum(
+                    max(float(leg.deadhead_from_prev_min or 0.0), 0.0)
+                    for leg in duty.legs
+                )
+                first_trip = canonical_trip_by_id.get(
+                    str(duty.legs[0].trip.trip_id)
+                )
+                last_trip = canonical_trip_by_id.get(
+                    str(duty.legs[-1].trip.trip_id)
+                )
+                startup_deadhead_min = 0.0
+                terminal_deadhead_min = 0.0
+                if first_trip is not None:
+                    startup_deadhead_min = max(
+                        float(
+                            self._startup_energy_precheck(
+                                problem,
+                                vehicle,
+                                first_trip,
+                                dispatch_trip_by_id=dispatch_trip_by_id,
+                            ).startup_deadhead_min
+                            or 0.0
+                        ),
+                        0.0,
+                    )
+                if last_trip is not None:
+                    (
+                        return_deadhead_exists,
+                        return_deadhead_min,
+                    ) = return_deadhead_min_to_home(
+                        problem,
+                        vehicle,
+                        last_trip,
+                    )
+                    terminal_deadhead_min = max(
+                        float(
+                            return_deadhead_min
+                            if return_deadhead_exists
+                            else 0.0
+                            or 0.0
+                        ),
+                        0.0,
+                    )
+                deadhead_distance_km = self._deadhead_distance_km(
+                    problem,
+                    inter_trip_deadhead_min
+                    + startup_deadhead_min
+                    + terminal_deadhead_min,
+                )
+                kpis[f"{prefix}_service_distance_km"] += (
+                    service_distance_km
+                )
+                kpis[f"{prefix}_deadhead_distance_km"] += (
+                    deadhead_distance_km
+                )
+                if prefix == "ice":
+                    vehicle_type = vehicle_type_by_id.get(
+                        str(vehicle.vehicle_type)
+                    )
+                    fuel_rate = max(
+                        float(
+                            getattr(
+                                vehicle,
+                                "fuel_consumption_l_per_km",
+                                None,
+                            )
+                            or getattr(
+                                vehicle_type,
+                                "fuel_consumption_l_per_km",
+                                0.0,
+                            )
+                            or 0.0
+                        ),
+                        0.0,
+                    )
+                    kpis["ice_fuel_l"] += fuel_rate * (
+                        service_distance_km + deadhead_distance_km
+                    )
+            bev_total = (
+                kpis["bev_service_distance_km"]
+                + kpis["bev_deadhead_distance_km"]
+            )
+            ice_total = (
+                kpis["ice_service_distance_km"]
+                + kpis["ice_deadhead_distance_km"]
+            )
+            total = bev_total + ice_total
+            kpis.update(
+                {
+                    "bev_total_movement_distance_km": bev_total,
+                    "ice_total_movement_distance_km": ice_total,
+                    "total_movement_distance_km": total,
+                    "bev_movement_distance_share": (
+                        bev_total / total if total > 0.0 else 0.0
+                    ),
+                }
+            )
+            return {
+                key: round(float(value), 9)
+                for key, value in kpis.items()
+            }
+
+        def _sum_depot_slot_energy(
+            mapping: Mapping[str, Mapping[int, float]],
+        ) -> float:
+            return float(
+                sum(
+                    max(float(value or 0.0), 0.0)
+                    for by_slot in dict(mapping or {}).values()
+                    for value in dict(by_slot or {}).values()
+                )
+            )
+
         candidate_evaluation_initial_budget_sec = (
             _remaining_stage_budget_sec(
                 deadline_monotonic=feedback_global_deadline,
@@ -7318,6 +7829,11 @@ class GurobiMILPAdapter:
                         "stage1_composition_target_used_ice": (
                             (candidate_plan.metadata or {}).get(
                                 "stage1_composition_target_used_ice"
+                            )
+                        ),
+                        "minimum_used_bev_count": (
+                            (candidate_plan.metadata or {}).get(
+                                "stage1_frontier_minimum_used_bev_count"
                             )
                         ),
                         "candidate_hash": assignment_hash,
@@ -7463,6 +7979,9 @@ class GurobiMILPAdapter:
                 for duty in candidate_final_plan.duties
                 for _leg in duty.legs
             )
+            movement_kpis = _candidate_powertrain_movement_kpis(
+                candidate_final_plan
+            )
             iis_names = tuple(
                 sorted(
                     str(name)
@@ -7498,6 +8017,11 @@ class GurobiMILPAdapter:
                     "stage1_composition_target_used_ice": (
                         (candidate_plan.metadata or {}).get(
                             "stage1_composition_target_used_ice"
+                        )
+                    ),
+                    "minimum_used_bev_count": (
+                        (candidate_plan.metadata or {}).get(
+                            "stage1_frontier_minimum_used_bev_count"
                         )
                     ),
                     "candidate_hash": assignment_hash,
@@ -7547,6 +8071,22 @@ class GurobiMILPAdapter:
                     "used_ice": used_ice,
                     "bev_trips": bev_trips,
                     "ice_trips": ice_trips,
+                    "grid_import_kwh": _sum_depot_slot_energy(
+                        candidate_final_plan.grid_to_bus_kwh_by_depot_slot
+                    )
+                    + _sum_depot_slot_energy(
+                        candidate_final_plan.grid_to_bess_kwh_by_depot_slot
+                    ),
+                    "pv_to_bus_kwh": _sum_depot_slot_energy(
+                        candidate_final_plan.pv_to_bus_kwh_by_depot_slot
+                    ),
+                    "pv_to_bess_kwh": _sum_depot_slot_energy(
+                        candidate_final_plan.pv_to_bess_kwh_by_depot_slot
+                    ),
+                    "bess_to_bus_kwh": _sum_depot_slot_energy(
+                        candidate_final_plan.bess_to_bus_kwh_by_depot_slot
+                    ),
+                    **movement_kpis,
                     "runtime_sec": candidate_runtime,
                     "stage2_runtime_sec": candidate_plan_metadata.get(
                         "stage2_runtime_seconds"
@@ -7617,15 +8157,38 @@ class GurobiMILPAdapter:
             for candidate in candidate_evaluations
             if candidate.get("feasible") is True
         }
+        physically_feasible_candidate_hashes = {
+            str(candidate.get("candidate_hash") or "")
+            for candidate in candidate_evaluations
+            if candidate.get("feasible") is True
+            and str(candidate.get("candidate_hash") or "")
+        }
         unresolved_composition_targets: List[Dict[str, Any]] = []
         for event in composition_search_events:
             if event.get("target_within_selected_inventory") is not True:
                 continue
+            raw_event_target_ice = event.get("target_used_ice")
             target = (
                 int(event.get("target_used_bev") or 0),
-                int(event.get("target_used_ice") or 0),
+                (
+                    int(raw_event_target_ice)
+                    if raw_event_target_ice is not None
+                    else None
+                ),
             )
-            if target in physically_feasible_targets:
+            event_candidate_hash = str(event.get("candidate_hash") or "")
+            frontier_candidate_is_feasible = bool(
+                stage1_bev_frontier_enabled
+                and event_candidate_hash
+                and event_candidate_hash
+                in physically_feasible_candidate_hashes
+            )
+            exact_target_is_feasible = bool(
+                target[1] is not None
+                and (int(target[0]), int(target[1]))
+                in physically_feasible_targets
+            )
+            if frontier_candidate_is_feasible or exact_target_is_feasible:
                 event["final_disposition"] = (
                     "physically_feasible_stage2_candidate"
                 )
@@ -7646,6 +8209,16 @@ class GurobiMILPAdapter:
                 event["final_disposition"] = "unresolved"
                 unresolved_composition_targets.append(
                     {
+                        "case": (
+                            "minimum_used_bev_"
+                            + str(event.get("minimum_used_bev_count"))
+                        ),
+                        "minimum_used_bev_count": event.get(
+                            "minimum_used_bev_count"
+                        ),
+                        "minimum_bev_count": event.get(
+                            "minimum_used_bev_count"
+                        ),
                         "target_used_bev": target[0],
                         "target_used_ice": target[1],
                         "search_status": event.get("search_status"),
@@ -7661,8 +8234,16 @@ class GurobiMILPAdapter:
         multiple_feasible_compositions_found = (
             len(feasible_composition_pairs) >= 2
         )
+        all_requested_targets_resolved = bool(
+            stage1_explicit_powertrain_search_enabled
+            and valid_composition_events
+            and all(
+                event.get("final_disposition") != "unresolved"
+                for event in valid_composition_events
+            )
+        )
         all_adjacent_targets_certified_infeasible = bool(
-            stage1_composition_search_enabled
+            stage1_explicit_powertrain_search_enabled
             and valid_composition_events
             and all(
                 event.get("final_disposition")
@@ -7671,7 +8252,7 @@ class GurobiMILPAdapter:
             )
         )
         inventory_has_no_adjacent_composition = bool(
-            stage1_composition_search_enabled
+            stage1_explicit_powertrain_search_enabled
             and composition_target_records
             and not valid_composition_events
             and all(
@@ -7679,13 +8260,27 @@ class GurobiMILPAdapter:
                 for event in composition_target_records
             )
         )
-        composition_search_accepted = bool(
-            multiple_feasible_compositions_found
-            or all_adjacent_targets_certified_infeasible
-            or inventory_has_no_adjacent_composition
-        )
+        if stage1_bev_frontier_enabled:
+            has_frontier_certificate = any(
+                event.get("final_disposition")
+                == "stage1_infeasibility_certificate"
+                for event in valid_composition_events
+            )
+            composition_search_accepted = bool(
+                all_requested_targets_resolved
+                and (
+                    multiple_feasible_compositions_found
+                    or has_frontier_certificate
+                )
+            )
+        else:
+            composition_search_accepted = bool(
+                multiple_feasible_compositions_found
+                or all_adjacent_targets_certified_infeasible
+                or inventory_has_no_adjacent_composition
+            )
         composition_search_blockers: List[str] = []
-        if not stage1_composition_search_enabled:
+        if not stage1_explicit_powertrain_search_enabled:
             composition_search_blockers.append("composition_search_disabled")
         if not multiple_feasible_compositions_found:
             composition_search_blockers.append(
@@ -7693,7 +8288,11 @@ class GurobiMILPAdapter:
             )
         if unresolved_composition_targets:
             composition_search_blockers.append(
-                "adjacent_used_powertrain_composition_unresolved"
+                (
+                    "bev_frontier_target_unresolved"
+                    if stage1_bev_frontier_enabled
+                    else "adjacent_used_powertrain_composition_unresolved"
+                )
             )
         if (
             not all_adjacent_targets_certified_infeasible
@@ -7706,9 +8305,22 @@ class GurobiMILPAdapter:
         if composition_search_accepted:
             composition_search_blockers = []
         composition_search_certificate = {
-            "schema_version": "stage1_used_powertrain_composition_search_v1",
-            "enabled": stage1_composition_search_enabled,
+            "schema_version": "stage1_used_powertrain_composition_search_v2",
+            "enabled": stage1_explicit_powertrain_search_enabled,
+            "search_mode": (
+                "minimum_used_bev_frontier"
+                if stage1_bev_frontier_enabled
+                else "adjacent_exact_composition"
+            ),
             "radius_requested": stage1_composition_search_radius,
+            "frontier_enabled": stage1_bev_frontier_enabled,
+            "frontier_minimum_used_bev_count": (
+                stage1_bev_frontier_min_count
+            ),
+            "frontier_maximum_used_bev_count": (
+                stage1_bev_frontier_max_count
+            ),
+            "frontier_total_used_vehicle_count_fixed": False,
             "primary_used_powertrain_composition": {
                 "used_bev": primary_used_bev,
                 "used_ice": primary_used_ice,
@@ -7732,6 +8344,7 @@ class GurobiMILPAdapter:
             "multiple_feasible_compositions_found": (
                 multiple_feasible_compositions_found
             ),
+            "all_requested_targets_resolved": all_requested_targets_resolved,
             "all_adjacent_targets_certified_infeasible": (
                 all_adjacent_targets_certified_infeasible
             ),
@@ -7751,6 +8364,204 @@ class GurobiMILPAdapter:
                 "constraint and a hash of the exact temporary Stage 1 LP. It "
                 "proves only the declared used-powertrain-count neighborhood "
                 "under this two-stage model."
+            ),
+        }
+
+        candidate_evaluation_by_hash = {
+            str(row.get("candidate_hash") or ""): row
+            for row in candidate_evaluations
+            if str(row.get("candidate_hash") or "")
+        }
+        bev_frontier_rows: List[Dict[str, Any]] = []
+        if stage1_bev_frontier_enabled:
+            for event in composition_search_events:
+                candidate_row = candidate_evaluation_by_hash.get(
+                    str(event.get("candidate_hash") or ""),
+                    {},
+                )
+                bev_frontier_rows.append(
+                    {
+                        "minimum_used_bev_count": event.get(
+                            "minimum_used_bev_count"
+                        ),
+                        "status": event.get("frontier_status")
+                        or (
+                            "ERROR"
+                            if event.get("target_within_selected_inventory")
+                            is True
+                            else "OUTSIDE_SELECTED_INVENTORY"
+                        ),
+                        "raw_solver_status": event.get("solver_status")
+                        or event.get("search_status"),
+                        "solution_count": event.get("solution_count"),
+                        "stage1_relaxed_objective_jpy": event.get(
+                            "stage1_relaxed_objective_jpy"
+                        ),
+                        "stage2_actual_canonical_cost_jpy": (
+                            candidate_row.get(
+                                "stage2_actual_canonical_cost_jpy"
+                            )
+                        ),
+                        "candidate_hash": event.get("candidate_hash"),
+                        "actual_used_bev": event.get("actual_used_bev"),
+                        "actual_used_ice": event.get("actual_used_ice"),
+                        "used_bev": event.get("actual_used_bev"),
+                        "used_ice": event.get("actual_used_ice"),
+                        "actual_total_used_vehicle_count": (
+                            (
+                                int(event.get("actual_used_bev") or 0)
+                                + int(event.get("actual_used_ice") or 0)
+                            )
+                            if event.get("actual_used_bev") is not None
+                            and event.get("actual_used_ice") is not None
+                            else None
+                        ),
+                        "total_used_vehicle_count_fixed": False,
+                        "total_used_vehicles": (
+                            (
+                                int(event.get("actual_used_bev") or 0)
+                                + int(event.get("actual_used_ice") or 0)
+                            )
+                            if event.get("actual_used_bev") is not None
+                            and event.get("actual_used_ice") is not None
+                            else None
+                        ),
+                        "stage2_feasible": candidate_row.get(
+                            "stage2_feasible"
+                        ),
+                        "canonical_evaluation_feasible": candidate_row.get(
+                            "canonical_evaluation_feasible"
+                        ),
+                        "physical_validation_feasible": candidate_row.get(
+                            "physical_validation_feasible"
+                        ),
+                        "physical_validation": candidate_row.get(
+                            "physical_validation_feasible"
+                        ),
+                        "final_disposition": event.get(
+                            "final_disposition"
+                        ),
+                        "best_bound": event.get("best_bound"),
+                        "mip_gap_ratio": event.get("mip_gap_ratio"),
+                        "mip_gap": event.get("mip_gap_ratio"),
+                        "time_limit_sec": event.get("time_limit_sec"),
+                        "solver_runtime_sec": event.get(
+                            "solver_runtime_sec"
+                        ),
+                        "runtime_sec": event.get("solver_runtime_sec"),
+                        "bev_service_distance_km": candidate_row.get(
+                            "bev_service_distance_km"
+                        ),
+                        "bev_deadhead_distance_km": candidate_row.get(
+                            "bev_deadhead_distance_km"
+                        ),
+                        "ice_service_distance_km": candidate_row.get(
+                            "ice_service_distance_km"
+                        ),
+                        "ice_deadhead_distance_km": candidate_row.get(
+                            "ice_deadhead_distance_km"
+                        ),
+                        "bev_total_movement_distance_km": candidate_row.get(
+                            "bev_total_movement_distance_km"
+                        ),
+                        "ice_total_movement_distance_km": candidate_row.get(
+                            "ice_total_movement_distance_km"
+                        ),
+                        "bev_movement_distance_share": candidate_row.get(
+                            "bev_movement_distance_share"
+                        ),
+                        "bev_distance_share": candidate_row.get(
+                            "bev_movement_distance_share"
+                        ),
+                        "ice_fuel_l": candidate_row.get("ice_fuel_l"),
+                        "bev_trip_count": candidate_row.get("bev_trips"),
+                        "grid_import_kwh": candidate_row.get(
+                            "grid_import_kwh"
+                        ),
+                        "pv_to_bus_kwh": candidate_row.get("pv_to_bus_kwh"),
+                        "pv_to_bess_kwh": candidate_row.get(
+                            "pv_to_bess_kwh"
+                        ),
+                        "bess_to_bus_kwh": candidate_row.get(
+                            "bess_to_bus_kwh"
+                        ),
+                        # Phase 3 selects by Stage-2 canonical accounting cost,
+                        # but the Stage-1/Stage-2 decomposition is not one
+                        # integrated actual-cost objective.
+                        "objective_is_actual_cost": False,
+                        # Only the finally selected schedule enters the 24-step
+                        # Rolling chain.  Frontier candidates must not inherit
+                        # that selected-run evidence.
+                        "rolling_24_of_24": None,
+                        "total_cost_jpy": candidate_row.get(
+                            "stage2_actual_canonical_cost_jpy"
+                        ),
+                    }
+                )
+        comparable_frontier_rows = [
+            row
+            for row in bev_frontier_rows
+            if row.get("physical_validation_feasible") is True
+            and row.get("stage2_actual_canonical_cost_jpy") is not None
+        ]
+        monotonicity_violations = audit_bev_frontier_monotonicity(
+            comparable_frontier_rows
+        )
+        minimum_frontier_cost = min(
+            (
+                float(row["stage2_actual_canonical_cost_jpy"])
+                for row in comparable_frontier_rows
+            ),
+            default=None,
+        )
+        for row in bev_frontier_rows:
+            row["cost_increase_percent"] = (
+                (
+                    float(row["stage2_actual_canonical_cost_jpy"])
+                    / minimum_frontier_cost
+                    - 1.0
+                )
+                * 100.0
+                if minimum_frontier_cost is not None
+                and minimum_frontier_cost > 0.0
+                and row.get("stage2_actual_canonical_cost_jpy") is not None
+                else None
+            )
+        bev_cost_frontier = {
+            "schema_version": "bev_cost_frontier_v1",
+            "enabled": stage1_bev_frontier_enabled,
+            "constraint_semantics": (
+                "sum(used_electric_vehicle) >= K; ICE and total used "
+                "vehicle counts are unconstrained and endogenous"
+            ),
+            "frontier_total_used_vehicle_count_fixed": False,
+            "minimum_used_bev_count": stage1_bev_frontier_min_count,
+            "maximum_used_bev_count": stage1_bev_frontier_max_count,
+            "target_time_limit_sec": composition_target_time_limit_cap_sec,
+            "rows": bev_frontier_rows,
+            "maximum_physically_feasible_minimum_used_bev_count": max(
+                (
+                    int(row.get("minimum_used_bev_count") or 0)
+                    for row in comparable_frontier_rows
+                ),
+                default=None,
+            ),
+            "maximum_observed_used_bev_count": max(
+                (
+                    int(row.get("actual_used_bev") or 0)
+                    for row in comparable_frontier_rows
+                ),
+                default=None,
+            ),
+            "all_requested_targets_resolved": all_requested_targets_resolved,
+            "monotonicity_checked": len(comparable_frontier_rows) >= 2,
+            "monotonicity_violation_count": len(monotonicity_violations),
+            "monotonicity_violations": monotonicity_violations,
+            "monotonicity_semantics": (
+                "Nondecreasing actual cost is expected only for certified "
+                "optima of the nested >=K feasible sets under one identical "
+                "accounting-cost objective. Time-limited Phase 3 candidates "
+                "are reported, not silently repaired or declared monotone."
             ),
         }
 
@@ -7820,6 +8631,7 @@ class GurobiMILPAdapter:
             "stage1_used_powertrain_composition_search_accepted": (
                 composition_search_accepted
             ),
+            "bev_cost_frontier": bev_cost_frontier,
             "stage1_candidate_powertrain_pattern_no_good_cut_count": (
                 no_good_cut_count
             ),

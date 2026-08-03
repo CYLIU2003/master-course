@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import math
 
 from src.optimization.abc.engine import ABCOptimizer
 from src.optimization.alns.engine import ALNSOptimizer
@@ -9,6 +10,7 @@ from src.optimization.common.bess_terminal_policy import (
     resolve_bess_terminal_soc_target_kwh,
 )
 from src.optimization.common.evaluator import CostEvaluator
+from src.optimization.common.cost_components import normalize_cost_component_flags
 from src.optimization.common.feasibility import FeasibilityChecker
 from src.optimization.common.problem import (
     AssignmentPlan,
@@ -30,6 +32,28 @@ from src.optimization.common.time_axis import service_minute
 from src.optimization.ga.engine import GAOptimizer
 from src.optimization.hybrid.hybrid_engine import HybridOptimizer
 from src.optimization.milp.engine import MILPOptimizer
+
+
+def actual_cost_objective_reconciles(
+    *,
+    raw_objective_jpy: float,
+    accounting_total_jpy: float,
+    structural_contract_passed: bool,
+    feasible: bool,
+    solution_unmodified: bool,
+    tolerance_jpy: float = 1.0e-6,
+) -> bool:
+    """Fail closed unless structural and numeric objective evidence agree."""
+
+    return bool(
+        structural_contract_passed
+        and feasible
+        and solution_unmodified
+        and math.isfinite(float(raw_objective_jpy))
+        and math.isfinite(float(accounting_total_jpy))
+        and abs(float(raw_objective_jpy) - float(accounting_total_jpy))
+        <= float(tolerance_jpy)
+    )
 
 
 def _normalize_depot_slot_flow_mapping(raw: object) -> dict[str, dict[int, float]]:
@@ -742,6 +766,23 @@ class OptimizationEngine:
                 problem,
                 scenario=replace(problem.scenario, service_coverage_mode="strict"),
             )
+        integrated_ev_utilization_mode = str(
+            getattr(config, "integrated_ev_utilization_mode", "disabled")
+            or "disabled"
+        ).strip().lower()
+        if phase == "phase4_integrated" and (
+            bool(getattr(config, "integrated_actual_cost_objective", False))
+            or integrated_ev_utilization_mode != "disabled"
+        ):
+            problem = OptimizationEngine._apply_integrated_actual_cost_contract(
+                problem,
+                objective_kind=(
+                    "minimum_ice_fuel_lexicographic"
+                    if integrated_ev_utilization_mode != "disabled"
+                    else "canonical_actual_cost"
+                ),
+            )
+            metadata = dict(problem.metadata or {})
         if is_two_stage:
             # A two-stage decomposition has two solver objectives.  Its
             # accounting total is a KPI, not a globally minimized scalar cost.
@@ -756,6 +797,148 @@ class OptimizationEngine:
                 }
             )
         return replace(problem, metadata=metadata), config
+
+    @staticmethod
+    def _apply_integrated_actual_cost_contract(
+        problem: CanonicalOptimizationProblem,
+        *,
+        objective_kind: str = "canonical_actual_cost",
+    ) -> CanonicalOptimizationProblem:
+        """Make the integrated MILP objective structurally ledger-equivalent.
+
+        Numeric equality is checked again after solve.  This method establishes
+        the independent structural side of the contract: one weight for every
+        enabled accounting component, no policy reward, and no solver-only
+        preference penalty.
+        """
+
+        disabled_non_accounting_terms = (
+            "grid_to_bus_priority_penalty",
+            "grid_to_bess_priority_penalty",
+            "charge_session_start_penalty",
+            "slot_concurrency_penalty",
+            "early_charge_penalty",
+            "soc_upper_buffer_penalty",
+            "final_soc_target_penalty",
+            "opportunistic_topup_deficit_penalty",
+            "switch_cost",
+            "deviation_cost",
+            "unserved_penalty",
+        )
+        component_flags = normalize_cost_component_flags(
+            (problem.metadata or {}).get("cost_component_flags")
+        )
+        for key in disabled_non_accounting_terms:
+            component_flags[key] = False
+
+        aligned_assets = {
+            str(depot_id): replace(
+                asset,
+                bess_terminal_soc_policy="return_to_initial",
+                bess_terminal_soc_target_kwh=float(
+                    asset.bess_initial_soc_kwh
+                ),
+                bess_terminal_soc_min_kwh=max(
+                    float(asset.bess_terminal_soc_min_kwh or 0.0),
+                    float(asset.bess_initial_soc_kwh or 0.0),
+                ),
+                bess_terminal_soc_deviation_penalty_yen_per_kwh=0.0,
+            )
+            if bool(asset.bess_enabled)
+            else asset
+            for depot_id, asset in (problem.depot_energy_assets or {}).items()
+        }
+        usage_cost = max(
+            float(
+                (problem.metadata or {}).get(
+                    "vehicle_usage_cost_jpy_per_used_bus", 0.0
+                )
+                or 0.0
+            ),
+            0.0,
+        )
+        usage_semantics = str(
+            (problem.metadata or {}).get(
+                "vehicle_usage_cost_semantics", "unclassified"
+            )
+            or "unclassified"
+        ).strip().lower()
+        usage_semantics_classified = usage_semantics in {
+            "fixed_vehicle_day_cost",
+            "driver_cost_proxy",
+            "provisional_sensitivity",
+        }
+        usage_semantics_research_eligible = usage_semantics in {
+            "fixed_vehicle_day_cost",
+            "driver_cost_proxy",
+        }
+        metadata = {
+            **dict(problem.metadata or {}),
+            "cost_component_flags": component_flags,
+            # Curtailment is physically reported but is not a canonical cash
+            # outflow.  A positive legacy value would otherwise make the raw
+            # integrated objective differ from executed-day accounting.
+            "pv_curtail_penalty_yen_per_kwh": 0.0,
+            "weather_strategy_bias_base_jpy_per_trip": 0.0,
+            "bev_duty_bias": 1.0,
+            "ice_backup_bias": 1.0,
+            "bev_terminal_soc_policy": "return_to_initial",
+            "objective_actual_cost_mode": True,
+            "integrated_actual_cost_contract_applied": True,
+            "integrated_actual_cost_objective_requested": (
+                objective_kind == "canonical_actual_cost"
+            ),
+            "integrated_primary_objective_kind": objective_kind,
+            "actual_cost_objective_structural_contract_passed": True,
+            "actual_cost_objective_disabled_non_accounting_terms": (
+                disabled_non_accounting_terms
+            ),
+            # Set true only after the independent post-solve numeric audit.
+            "solver_objective_matches_accounting_total": False,
+            "objective_semantics": (
+                "phase4_integrated_accounting_cost_contract_pending_numeric_"
+                "reconciliation"
+                if objective_kind == "canonical_actual_cost"
+                else "phase4_integrated_minimum_ice_fuel_then_canonical_cost"
+            ),
+            "vehicle_usage_cost_semantics": usage_semantics,
+            "vehicle_usage_cost_semantics_classified": (
+                usage_semantics_classified
+            ),
+            "vehicle_usage_cost_semantics_research_eligible": (
+                usage_semantics_research_eligible
+            ),
+            "research_economic_claim_blocked_by_vehicle_usage_cost_semantics": (
+                usage_cost > 0.0 and not usage_semantics_research_eligible
+            ),
+        }
+        return replace(
+            problem,
+            scenario=replace(
+                problem.scenario,
+                objective_mode="total_cost",
+                service_coverage_mode="strict",
+            ),
+            objective_weights=replace(
+                problem.objective_weights,
+                energy=1.0,
+                fuel=1.0,
+                demand=1.0,
+                vehicle=1.0,
+                vehicle_usage=1.0,
+                unserved=0.0,
+                switch=0.0,
+                # Vehicle battery degradation is a canonical cost component
+                # when enabled; the integrated MILP and evaluator share the
+                # same charged-energy/capacity formulation.
+                degradation=1.0,
+                deviation=0.0,
+                utilization=0.0,
+                return_leg_bonus=0.0,
+            ),
+            depot_energy_assets=aligned_assets,
+            metadata=metadata,
+        )
 
     def _strict_precheck_infeasible_result(
         self,
@@ -887,6 +1070,75 @@ class OptimizationEngine:
         )
         report = self._feasibility.evaluate(problem, plan)
         breakdown = self._evaluator.evaluate(problem, plan)
+        actual_cost_contract_requested = bool(
+            (problem.metadata or {}).get(
+                "integrated_actual_cost_objective_requested", False
+            )
+        )
+        actual_cost_contract_structural = bool(
+            (problem.metadata or {}).get(
+                "actual_cost_objective_structural_contract_passed", False
+            )
+        )
+        actual_cost_contract_tolerance_jpy = 1.0e-6
+        raw_objective_value = float(result.objective_value)
+        accounting_total_before_contract = float(breakdown.total_cost)
+        actual_cost_upper_bound_jpy = (
+            getattr(config, "integrated_actual_cost_upper_bound_jpy", None)
+            if config is not None
+            else None
+        )
+        actual_cost_upper_bound_verified = bool(
+            actual_cost_upper_bound_jpy is None
+            or accounting_total_before_contract
+            <= float(actual_cost_upper_bound_jpy) + 1.0e-6
+        )
+        actual_cost_objective_residual_jpy = (
+            raw_objective_value - accounting_total_before_contract
+            if actual_cost_contract_requested
+            else None
+        )
+        actual_cost_contract_numeric = bool(
+            actual_cost_contract_requested
+            and actual_cost_objective_reconciles(
+                raw_objective_jpy=raw_objective_value,
+                accounting_total_jpy=accounting_total_before_contract,
+                structural_contract_passed=(
+                    actual_cost_contract_structural
+                ),
+                feasible=report.feasible,
+                solution_unmodified=not (
+                    assignment_rebuilt
+                    or charging_recomputed
+                    or soc_repaired
+                    or opportunistic_topup_applied
+                ),
+                tolerance_jpy=actual_cost_contract_tolerance_jpy,
+            )
+        )
+        if actual_cost_contract_requested:
+            reconciled_metadata = {
+                **dict(problem.metadata or {}),
+                "solver_objective_matches_accounting_total": (
+                    actual_cost_contract_numeric
+                ),
+                "objective_semantics": (
+                    "phase4_integrated_verified_accounting_total_cost"
+                    if actual_cost_contract_numeric
+                    else "phase4_integrated_accounting_cost_reconciliation_failed"
+                ),
+            }
+            problem = replace(problem, metadata=reconciled_metadata)
+            plan = replace(
+                plan,
+                metadata={
+                    **dict(plan.metadata or {}),
+                    "solver_objective_matches_accounting_total": (
+                        actual_cost_contract_numeric
+                    ),
+                },
+            )
+            breakdown = self._evaluator.evaluate(problem, plan)
         vehicle_ledger, daily_ledger = self._evaluator.build_plan_ledgers(problem, plan, breakdown)
         plan = replace(plan, vehicle_cost_ledger=vehicle_ledger, daily_cost_ledger=daily_ledger)
         costs = breakdown.to_dict()
@@ -895,6 +1147,70 @@ class OptimizationEngine:
         candidate_costs = costs
 
         solver_metadata = dict(result.solver_metadata or {})
+        solver_metadata.update(
+            {
+                "integrated_actual_cost_objective_requested": (
+                    actual_cost_contract_requested
+                ),
+                "integrated_actual_cost_contract_applied": bool(
+                    (problem.metadata or {}).get(
+                        "integrated_actual_cost_contract_applied", False
+                    )
+                ),
+                "integrated_primary_objective_kind": (
+                    (problem.metadata or {}).get(
+                        "integrated_primary_objective_kind"
+                    )
+                ),
+                "actual_cost_objective_structural_contract_passed": (
+                    actual_cost_contract_structural
+                ),
+                "actual_cost_objective_numeric_reconciliation_passed": (
+                    actual_cost_contract_numeric
+                ),
+                "actual_cost_objective_reconciliation_tolerance_jpy": (
+                    actual_cost_contract_tolerance_jpy
+                ),
+                "actual_cost_objective_residual_jpy": (
+                    actual_cost_objective_residual_jpy
+                ),
+                "integrated_actual_cost_upper_bound_jpy": (
+                    actual_cost_upper_bound_jpy
+                ),
+                "integrated_actual_cost_upper_bound_verified": (
+                    actual_cost_upper_bound_verified
+                ),
+                "solver_objective_matches_accounting_total": bool(
+                    actual_cost_contract_numeric
+                    if actual_cost_contract_requested
+                    else solver_metadata.get(
+                        "solver_objective_matches_accounting_total", False
+                    )
+                ),
+                "vehicle_usage_cost_semantics": (
+                    (problem.metadata or {}).get(
+                        "vehicle_usage_cost_semantics", "unclassified"
+                    )
+                ),
+                "vehicle_usage_cost_semantics_classified": bool(
+                    (problem.metadata or {}).get(
+                        "vehicle_usage_cost_semantics_classified", False
+                    )
+                ),
+                "vehicle_usage_cost_semantics_research_eligible": bool(
+                    (problem.metadata or {}).get(
+                        "vehicle_usage_cost_semantics_research_eligible",
+                        False,
+                    )
+                ),
+                "research_economic_claim_blocked_by_vehicle_usage_cost_semantics": bool(
+                    (problem.metadata or {}).get(
+                        "research_economic_claim_blocked_by_vehicle_usage_cost_semantics",
+                        False,
+                    )
+                ),
+            }
+        )
         final_solver_status = result.solver_status
         plan_metadata = dict(plan.metadata or {})
         for key in ("requested_phase_token", "requested_phase", "resolved_phase", "executed_phase"):
@@ -954,6 +1270,11 @@ class OptimizationEngine:
             "stage1_stage2_candidate_selection_semantics",
             "stage1_stage2_candidate_global_optimality_claimed",
             "stage1_stage2_candidate_evaluation",
+            "bev_cost_frontier",
+            "integrated_ev_utilization_mode",
+            "integrated_actual_cost_upper_bound_jpy",
+            "integrated_actual_cost_upper_bound_delta_ratio",
+            "integrated_primary_ice_fuel_l",
             "stage1_redundant_arc_link_constraints_omitted",
         ):
             if key in plan_metadata:
@@ -1295,6 +1616,12 @@ class OptimizationEngine:
                     solver_metadata.get("solver_objective_matches_accounting_total", False)
                 )
                 and bool(costs.get("objective_is_actual_cost", False))
+                and not bool(
+                    solver_metadata.get(
+                        "research_economic_claim_blocked_by_vehicle_usage_cost_semantics",
+                        False,
+                    )
+                )
             )
             terminal_policy = str(
                 solver_metadata.get("bev_terminal_soc_policy")
@@ -1315,6 +1642,18 @@ class OptimizationEngine:
                 ),
                 "ev_energy_inventory_balanced": bool(
                     costs.get("ev_energy_inventory_balanced", False)
+                ),
+                "vehicle_usage_cost_semantics_classified_or_zero": bool(
+                    float(
+                        (problem.metadata or {}).get(
+                            "vehicle_usage_cost_jpy_per_used_bus", 0.0
+                        )
+                        or 0.0
+                    )
+                    <= 0.0
+                    or solver_metadata.get(
+                        "vehicle_usage_cost_semantics_research_eligible", False
+                    )
                 ),
             }
             research_accounting_cost_eligible = bool(

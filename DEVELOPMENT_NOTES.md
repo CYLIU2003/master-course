@@ -1,5 +1,56 @@
 # Development Notes
 
+## 2026-08-03 BEV actual-cost and fleet-frontier correction
+
+- Added an explicit Phase-3 BEV lower-bound frontier for `K=15..35`. Each
+  temporary model uses only `sum(used_electric_vehicle) >= K`; neither ICE
+  count nor total used-fleet size is fixed. The previous K solution is used as
+  a warm start, every target records one of `FEASIBLE`,
+  `CERTIFIED_INFEASIBLE`, `TIME_LIMIT_WITH_INCUMBENT`,
+  `TIME_LIMIT_NO_INCUMBENT`, or `ERROR`, and a no-incumbent time limit remains
+  unresolved.
+- Stage-2 candidates are ranked by independently evaluated canonical cost only
+  after Stage-2 feasibility and physical validation. This improves the Phase-3
+  search but does not turn the two-stage method into an integrated global
+  total-cost optimum.
+- Added the explicit `phase4_integrated` actual-cost contract. It removes
+  weather/EV preference and solver-only soft terms, retains enabled canonical
+  battery degradation, fixes BEV/BESS terminal inventory to its initial level,
+  and sets `objective_is_actual_cost=true` only when the raw solver objective
+  reconciles to canonical accounting within `1e-6 JPY` without post-solve
+  modification.
+- Added two separate Phase-4 EV-utilization policy cases. The unconstrained
+  case lexicographically minimizes ICE fuel liters and then canonical cost. The
+  epsilon case adds the exact canonical-cost constraint
+  `C <= C* (1 + delta)` for externally evidenced `C*` and delta in
+  `{0%, 1%, 3%, 5%, 10%}`. Neither case reports
+  `objective_is_actual_cost=true`, because actual cost is respectively the
+  secondary objective or a constraint rather than the primary objective.
+- The positive per-used-bus-day coefficient now carries one of
+  `fixed_vehicle_day_cost`, `driver_cost_proxy`, `provisional_sensitivity`, or
+  `unclassified` through Quick Setup, Prepare, the canonical problem, and run
+  artifacts. A positive `unclassified` or `provisional_sensitivity` value
+  blocks a research economic claim. The UI no longer presents the coefficient
+  as self-explanatory.
+- Added `powertrain_marginal_cost_audit.*`,
+  `trip_powertrain_cost_comparison.csv`, `bev_cost_frontier.*`,
+  `maximum_bev_feasibility_search.csv`,
+  `baseline_vs_integrated_actual_cost.csv`, and the explicit
+  `operating_and_lifecycle_cost_scope.*`. Trip-level charging/PV feasibility is
+  deliberately unresolved unless a solved duty/charger/SOC path supports it;
+  incomplete charger/financing CAPEX likewise remains labelled partial rather
+  than fabricated.
+- The controlled HTTP pair runner now supports
+  `--optimization-experiment-case phase3_bev_frontier` and
+  `phase4_integrated_actual_cost`, plus the unconstrained and cost-constrained
+  Phase-4 EV-utilization policy cases, while retaining the existing baseline.
+  It also persists the chosen vehicle-day-cost semantics. No new formal result is
+  claimed until a clean frozen commit completes Fresh Prepare, day-ahead solve,
+  24/24 Rolling, physical validation, and accounting/pair gates.
+- Regression status before the clean freeze: 65 focused model/API/runner tests
+  and the complete 1,103-test suite passed. The two long-running controlled
+  cases remain pending at this note revision.
+
 ## 2026-08-02 interactive Sunday-PV Prepare provenance repair
 
 - Fixed the `HTTP 422: comparison_type must be

@@ -573,6 +573,26 @@ def apply_builder_configuration(
             float(body.simulation_settings.vehicle_usage_cost_jpy_per_used_bus),
             0.0,
         )
+    requested_vehicle_usage_semantics = str(
+        body.simulation_settings.vehicle_usage_cost_semantics
+        or overlay.cost_coefficients.vehicle_usage_cost_semantics
+        or "unclassified"
+    ).strip().lower()
+    allowed_vehicle_usage_semantics = {
+        "fixed_vehicle_day_cost",
+        "driver_cost_proxy",
+        "provisional_sensitivity",
+        "unclassified",
+    }
+    if requested_vehicle_usage_semantics not in allowed_vehicle_usage_semantics:
+        raise ValueError(
+            "vehicle_usage_cost_semantics must be one of "
+            "fixed_vehicle_day_cost, driver_cost_proxy, "
+            "provisional_sensitivity, unclassified"
+        )
+    overlay.cost_coefficients.vehicle_usage_cost_semantics = (
+        requested_vehicle_usage_semantics
+    )
     if body.simulation_settings.diesel_price_per_l is not None:
         overlay.cost_coefficients.diesel_price_per_l = (
             body.simulation_settings.diesel_price_per_l
@@ -926,6 +946,9 @@ def apply_builder_configuration(
         "deadhead_speed_kmh": body.simulation_settings.deadhead_speed_kmh,
         "vehicle_usage_cost_jpy_per_used_bus": (
             overlay.cost_coefficients.vehicle_usage_cost_jpy_per_used_bus
+        ),
+        "vehicle_usage_cost_semantics": (
+            overlay.cost_coefficients.vehicle_usage_cost_semantics
         ),
         "pv_marginal_charge_cost_yen_per_kwh": (
             overlay.cost_coefficients.pv_marginal_charge_cost_yen_per_kwh

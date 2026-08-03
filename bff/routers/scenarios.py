@@ -803,6 +803,14 @@ class UpdateQuickSetupBody(BaseModel):
     gridSellPricePerKwh: Optional[float] = None
     demandChargeCostPerKw: Optional[float] = None
     vehicleUsageCostJpyPerUsedBus: Optional[float] = None
+    vehicleUsageCostSemantics: Optional[
+        Literal[
+            "fixed_vehicle_day_cost",
+            "driver_cost_proxy",
+            "provisional_sensitivity",
+            "unclassified",
+        ]
+    ] = None
     dieselPricePerL: Optional[float] = None
     gridCo2KgPerKwh: Optional[float] = None
     co2PricePerKg: Optional[float] = None
@@ -1779,6 +1787,16 @@ def _builder_defaults(
             ),
             0.0,
         ),
+        "vehicleUsageCostSemantics": str(
+            overlay_cost.get(
+                "vehicle_usage_cost_semantics",
+                simulation_config.get(
+                    "vehicle_usage_cost_semantics",
+                    "unclassified",
+                ),
+            )
+            or "unclassified"
+        ),
         "dieselPricePerL": overlay_cost.get("diesel_price_per_l"),
         "gridCo2KgPerKwh": overlay_cost.get("grid_co2_kg_per_kwh"),
         "co2PricePerKg": overlay_cost.get("co2_price_per_kg"),
@@ -2312,6 +2330,9 @@ def _build_quick_setup_payload(
             "vehicleUsageCostJpyPerUsedBus": builder_defaults.get(
                 "vehicleUsageCostJpyPerUsedBus"
             ),
+            "vehicleUsageCostSemantics": builder_defaults.get(
+                "vehicleUsageCostSemantics", "unclassified"
+            ),
             "dieselPricePerL": builder_defaults.get("dieselPricePerL"),
             "gridCo2KgPerKwh": builder_defaults.get("gridCo2KgPerKwh"),
             "co2PricePerKg": builder_defaults.get("co2PricePerKg"),
@@ -2796,6 +2817,10 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
                 float(body.vehicleUsageCostJpyPerUsedBus),
                 0.0,
             )
+        if body.vehicleUsageCostSemantics is not None:
+            overlay_cost["vehicle_usage_cost_semantics"] = str(
+                body.vehicleUsageCostSemantics
+            )
         if body.dieselPricePerL is not None:
             overlay_cost["diesel_price_per_l"] = float(body.dieselPricePerL)
         if body.gridCo2KgPerKwh is not None:
@@ -2953,6 +2978,10 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             simulation_config["vehicle_usage_cost_jpy_per_used_bus"] = max(
                 float(body.vehicleUsageCostJpyPerUsedBus),
                 0.0,
+            )
+        if body.vehicleUsageCostSemantics is not None:
+            simulation_config["vehicle_usage_cost_semantics"] = str(
+                body.vehicleUsageCostSemantics
             )
         if body.objectivePreset is not None:
             simulation_config["objective_preset"] = str(body.objectivePreset)

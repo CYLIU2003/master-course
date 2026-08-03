@@ -387,6 +387,9 @@ class MILPOptimizer:
                         False,
                     )
                 ),
+                "bev_cost_frontier": dict(
+                    (plan.metadata or {}).get("bev_cost_frontier") or {}
+                ),
                 "stage1_pool_solution_count": (plan.metadata or {}).get(
                     "stage1_pool_solution_count"
                 ),
