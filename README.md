@@ -328,10 +328,17 @@ simulation artifact, not an automatically accepted research result.
   requested activation/retirement delta, even when `|K-primary| > 1`, whenever
   enough duty-compatible source/target replacements exist; otherwise the
   target remains dependent on the previous frontier incumbent and solver.
+  A second start family can instead move a nonempty duty suffix to an unused
+  BEV while retaining the source bus on the nonempty prefix. This increases
+  used BEV and total used-fleet count together, so high K is not restricted to
+  one-for-one replacement of the primary 32-bus path cover. Split starts prefer
+  existing BEV duties, minimizing additional electric service energy in the
+  feasibility hint; they do not constrain the optimized solution.
   This is only a solver hint; the full unchanged model must validate it, and
-  all applied vehicle IDs, replacement count, and pattern hash are persisted
-  for audit. Artifact completeness validates the exact current CSV writer
-  schemas, including vehicle-day semantics and BEV-frontier status columns.
+  all applied vehicle IDs, replacement/split counts, moved trip IDs, and pattern
+  hash are persisted for audit. Artifact completeness validates the exact
+  current CSV writer schemas, including vehicle-day semantics and BEV-frontier
+  status columns.
 - The certified Stage 1 reporting bound keeps Gurobi's raw bound separate from
   a reproducible analytical floor. That floor adds the strict path-cover
   vehicle-use minimum to an optimistic direct service-energy/fuel minimum,

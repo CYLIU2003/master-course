@@ -28,6 +28,27 @@
   audit persists the complete source/target ID lists and replacement count.
   Artifact completeness now matches the exact writer schemas for the four
   vehicle-day-semantics columns and the frontier minimum/status columns.
+- A binding-PV rerun from frozen SHA
+  `fe453df2f8a2ea0bb9c2240d42f2df5af9f12180` used the common 101.5 kW
+  rating, producing 614.709375 / 101.1143 kWh sunny/rain input. Both cases
+  completed 264/264 service and 24/24 Rolling but were correctly BLOCKED by
+  unresolved K=28..35 targets. K=15..27 were Stage-2 and independently
+  physically feasible in both cases. Within that resolved frontier, sunny
+  selected K=17 (17 BEV / 15 ICE, 54 BEV trips, 706,175.871233 JPY) while
+  rain selected K=15 (15 BEV / 17 ICE, 44 BEV trips, 720,637.777812 JPY).
+  Sunny used 614.709375 kWh renewable plus 19.011025 kWh grid in Stage 1;
+  rain used 101.1143 kWh renewable plus 411.374162 kWh grid. This is direct
+  weather-responsive diagnostic evidence, but not a formal optimum because the
+  high-K search remains incomplete and the 20,000 JPY coefficient is still
+  unclassified.
+- The high-K blocker occurs because whole-duty replacement preserves the
+  32-bus path-cover size and may create BEV duties that fail energy recourse.
+  The next correction adds a distinct suffix-split start: the source retains a
+  nonempty prefix and an unused BEV receives a nonempty suffix, increasing both
+  BEV count and total fleet size. It records start mode, replacement count,
+  split-activation count, total activation count, and moved trip IDs. A focused
+  Gurobi counterexample verifies an ICE-only prefix prevents whole-duty
+  replacement while the split start reaches a larger feasible fleet.
 - Added an explicit Phase-3 BEV lower-bound frontier for `K=15..35`. Each
   temporary model uses only `sum(used_electric_vehicle) >= K`; neither ICE
   count nor total used-fleet size is fixed. The previous K solution is used as

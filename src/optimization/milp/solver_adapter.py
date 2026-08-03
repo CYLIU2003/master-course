@@ -6520,11 +6520,28 @@ class GurobiMILPAdapter:
                     # Retain the single-value fields for existing adjacent
                     # search readers while exposing every replacement used by
                     # a multi-step frontier start.
-                    "source_vehicle_id": source_vehicle_ids[0],
-                    "target_vehicle_id": target_vehicle_ids[0],
+                    "source_vehicle_id": (
+                        source_vehicle_ids[0]
+                        if source_vehicle_ids
+                        else None
+                    ),
+                    "target_vehicle_id": (
+                        target_vehicle_ids[0]
+                        if target_vehicle_ids
+                        else None
+                    ),
                     "source_vehicle_ids": source_vehicle_ids,
                     "target_vehicle_ids": target_vehicle_ids,
                     "replacement_count": len(replacement_pairs),
+                    "split_activation_count": 0,
+                    "activation_count": len(replacement_pairs),
+                    "start_mode": (
+                        "unused_opposite_powertrain_whole_duty_replacement"
+                    ),
+                    "semantics": (
+                        "one_or_more_unused_opposite_powertrain_activations_"
+                        "and_source_vehicle_retirements"
+                    ),
                     "composition_delta_used_bev": bev_delta,
                     "powertrain_pattern": normalized_pattern,
                     "powertrain_pattern_hash": hashlib.sha256(
@@ -6549,6 +6566,252 @@ class GurobiMILPAdapter:
                         in replacement_pairs
                     ),
                 }
+
+            def _build_unused_bev_duty_split_starts(
+            ) -> Dict[int, List[Dict[str, Any]]]:
+                """Activate unused BEVs without retiring the source buses.
+
+                Whole-duty replacement preserves the total used-fleet count.
+                At high ``used BEV >= K`` targets that can leave no feasible
+                incumbent even though shorter BEV duties are possible.  This
+                start family moves one suffix from each of several existing
+                duties to a distinct unused BEV.  The source retains a
+                nonempty prefix, so each split increases both used BEV and
+                total used buses by exactly one.  It remains a solver hint;
+                the unchanged Stage 1 model validates all path, energy, and
+                activation constraints.
+                """
+
+                base_start = _build_replacement_start({}, bev_delta=0)
+                if base_start is None:
+                    return {}
+                selected_y = set(base_start["selected_y"])
+                selected_x = set(base_start["selected_x"])
+                selected_start = set(base_start["selected_start"])
+                selected_end = set(base_start["selected_end"])
+                selected_used = set(base_start["selected_used"])
+                selected_used_day = set(base_start["selected_used_day"])
+                unused_bev_ids = [
+                    vehicle_id
+                    for vehicle_id in available_by_group["ELECTRIC"]
+                    if vehicle_id not in active_vehicle_ids
+                ]
+                split_duty_keys: Set[Tuple[str, str]] = set()
+                source_vehicle_ids: List[str] = []
+                target_vehicle_ids: List[str] = []
+                split_trip_ids: List[str] = []
+                starts: Dict[int, List[Dict[str, Any]]] = {}
+
+                # Splitting an existing BEV duty first adds an activation
+                # without increasing electric service energy.  ICE duties are
+                # the deterministic fallback once those opportunities are
+                # exhausted.
+                ordered_source_vehicle_ids = sorted(
+                    duties_by_vehicle,
+                    key=lambda vehicle_id: (
+                        0
+                        if _powertrain_group(vehicle_id) == "ELECTRIC"
+                        else 1,
+                        vehicle_id,
+                    ),
+                )
+                for target_vehicle_id in unused_bev_ids:
+                    split_applied = False
+                    for original_vehicle_id in ordered_source_vehicle_ids:
+                        ordered_duties = sorted(
+                            duties_by_vehicle[original_vehicle_id],
+                            key=lambda duty: str(duty.duty_id),
+                        )
+                        for duty in ordered_duties:
+                            duty_key = (
+                                original_vehicle_id,
+                                str(duty.duty_id),
+                            )
+                            if duty_key in split_duty_keys:
+                                continue
+                            trip_ids = [
+                                str(leg.trip.trip_id)
+                                for leg in duty.legs
+                            ]
+                            if len(trip_ids) < 2:
+                                continue
+                            current_source_vehicle_ids = [
+                                vehicle_id
+                                for vehicle_id in sorted(selected_used)
+                                if all(
+                                    (vehicle_id, trip_id) in selected_y
+                                    for trip_id in trip_ids
+                                )
+                            ]
+                            if len(current_source_vehicle_ids) != 1:
+                                continue
+                            source_vehicle_id = (
+                                current_source_vehicle_ids[0]
+                            )
+                            for split_index in range(
+                                len(trip_ids) - 1,
+                                0,
+                                -1,
+                            ):
+                                prefix_last_trip_id = trip_ids[
+                                    split_index - 1
+                                ]
+                                suffix_trip_ids = trip_ids[split_index:]
+                                suffix_first_trip_id = suffix_trip_ids[0]
+                                suffix_last_trip_id = suffix_trip_ids[-1]
+                                source_cross_arc = (
+                                    source_vehicle_id,
+                                    prefix_last_trip_id,
+                                    suffix_first_trip_id,
+                                )
+                                source_end_key = (
+                                    source_vehicle_id,
+                                    suffix_last_trip_id,
+                                )
+                                source_prefix_end_key = (
+                                    source_vehicle_id,
+                                    prefix_last_trip_id,
+                                )
+                                target_start_key = (
+                                    target_vehicle_id,
+                                    suffix_first_trip_id,
+                                )
+                                target_end_key = (
+                                    target_vehicle_id,
+                                    suffix_last_trip_id,
+                                )
+                                target_assignment_keys = {
+                                    (target_vehicle_id, trip_id)
+                                    for trip_id in suffix_trip_ids
+                                }
+                                source_suffix_assignment_keys = {
+                                    (source_vehicle_id, trip_id)
+                                    for trip_id in suffix_trip_ids
+                                }
+                                source_suffix_arcs = {
+                                    (
+                                        source_vehicle_id,
+                                        from_trip_id,
+                                        to_trip_id,
+                                    )
+                                    for from_trip_id, to_trip_id in zip(
+                                        suffix_trip_ids,
+                                        suffix_trip_ids[1:],
+                                    )
+                                }
+                                target_suffix_arcs = {
+                                    (
+                                        target_vehicle_id,
+                                        from_trip_id,
+                                        to_trip_id,
+                                    )
+                                    for from_trip_id, to_trip_id in zip(
+                                        suffix_trip_ids,
+                                        suffix_trip_ids[1:],
+                                    )
+                                }
+                                if (
+                                    source_cross_arc not in selected_x
+                                    or source_end_key not in selected_end
+                                    or source_prefix_end_key not in end_arc
+                                    or target_start_key not in start_arc
+                                    or target_end_key not in end_arc
+                                    or not target_assignment_keys.issubset(y)
+                                    or not source_suffix_arcs.issubset(
+                                        selected_x
+                                    )
+                                    or not target_suffix_arcs.issubset(x)
+                                ):
+                                    continue
+
+                                selected_y.difference_update(
+                                    source_suffix_assignment_keys
+                                )
+                                selected_y.update(target_assignment_keys)
+                                selected_x.discard(source_cross_arc)
+                                selected_x.difference_update(
+                                    source_suffix_arcs
+                                )
+                                selected_x.update(target_suffix_arcs)
+                                selected_end.discard(source_end_key)
+                                selected_end.add(source_prefix_end_key)
+                                selected_start.add(target_start_key)
+                                selected_end.add(target_end_key)
+                                selected_used.add(target_vehicle_id)
+                                selected_used_day.update(
+                                    (
+                                        target_vehicle_id,
+                                        int(
+                                            trip_day_index_by_trip_id.get(
+                                                trip_id,
+                                                0,
+                                            )
+                                        ),
+                                    )
+                                    for trip_id in suffix_trip_ids
+                                )
+                                split_duty_keys.add(duty_key)
+                                source_vehicle_ids.append(
+                                    source_vehicle_id
+                                )
+                                target_vehicle_ids.append(
+                                    target_vehicle_id
+                                )
+                                split_trip_ids.extend(suffix_trip_ids)
+                                split_applied = True
+                                break
+                            if split_applied:
+                                break
+                        if split_applied:
+                            break
+                    if not split_applied:
+                        break
+
+                    bev_delta = len(target_vehicle_ids)
+                    normalized_pattern = tuple(
+                        sorted(
+                            (
+                                trip_id,
+                                _powertrain_group(vehicle_id),
+                            )
+                            for vehicle_id, trip_id in selected_y
+                        )
+                    )
+                    if len(normalized_pattern) != len(problem.trips):
+                        break
+                    start = {
+                        "source_vehicle_id": source_vehicle_ids[0],
+                        "target_vehicle_id": target_vehicle_ids[0],
+                        "source_vehicle_ids": tuple(source_vehicle_ids),
+                        "target_vehicle_ids": tuple(target_vehicle_ids),
+                        "replacement_count": 0,
+                        "split_activation_count": bev_delta,
+                        "activation_count": bev_delta,
+                        "start_mode": "unused_bev_duty_suffix_split_activation",
+                        "semantics": (
+                            "unused_bev_duty_suffix_split_activations_"
+                            "without_source_retirements"
+                        ),
+                        "composition_delta_used_bev": bev_delta,
+                        "split_trip_ids": tuple(split_trip_ids),
+                        "powertrain_pattern": normalized_pattern,
+                        "powertrain_pattern_hash": hashlib.sha256(
+                            json.dumps(
+                                normalized_pattern,
+                                ensure_ascii=False,
+                                separators=(",", ":"),
+                            ).encode("utf-8")
+                        ).hexdigest(),
+                        "selected_y": set(selected_y),
+                        "selected_x": set(selected_x),
+                        "selected_start": set(selected_start),
+                        "selected_end": set(selected_end),
+                        "selected_used": set(selected_used),
+                        "selected_used_day": set(selected_used_day),
+                        "warm_start_priority_score": float(bev_delta),
+                    }
+                    starts.setdefault(bev_delta, []).append(start)
+                return starts
 
             starts_by_delta: Dict[int, List[Dict[str, Any]]] = {}
             for source_group, target_group, bev_delta in (
@@ -6683,9 +6946,21 @@ class GurobiMILPAdapter:
                     used_target_ids.add(target_vehicle_id)
                     starts_by_delta.setdefault(delta, []).append(start)
 
+            for delta, split_starts in (
+                _build_unused_bev_duty_split_starts().items()
+            ):
+                starts_by_delta.setdefault(delta, []).extend(split_starts)
+
             for delta, starts in starts_by_delta.items():
                 starts.sort(
                     key=lambda item: (
+                        0
+                        if item.get("start_mode")
+                        == (
+                            "unused_opposite_powertrain_"
+                            "whole_duty_replacement"
+                        )
+                        else 1,
                         float(item["warm_start_priority_score"]),
                         tuple(item.get("source_vehicle_ids") or ()),
                         tuple(item.get("target_vehicle_ids") or ()),
@@ -6729,6 +7004,18 @@ class GurobiMILPAdapter:
                 set(start.get("selected_used_day") or ()),
             )
             stage1.update()
+
+        def _apply_partial_assignment_mip_starts(
+            starts: Sequence[Mapping[str, Any]],
+        ) -> None:
+            """Submit every distinct partial start to the reused Stage 1 MIP."""
+
+            stage1.NumStart = len(starts)
+            stage1.update()
+            for start_index, start in enumerate(starts):
+                stage1.Params.StartNumber = start_index
+                _apply_partial_assignment_mip_start(start)
+            stage1.Params.StartNumber = 0
 
         def _candidate_relaxed_pv_overlap(
             plan: AssignmentPlan,
@@ -7136,10 +7423,17 @@ class GurobiMILPAdapter:
                         0.25,
                     ),
                 )
+                composition_mip_starts: List[Dict[str, Any]] = []
                 composition_mip_start: Optional[Dict[str, Any]] = None
                 frontier_warm_start_applied = False
                 frontier_warm_start_source = ""
                 frontier_warm_start_reason = "not_frontier_search"
+                # Each target has a different temporary composition bound.
+                # Clear indexed starts from the preceding target before its
+                # own incumbent or activation starts are recorded/applied.
+                stage1.NumStart = 0
+                stage1.Params.StartNumber = 0
+                stage1.update()
                 if stage1_bev_frontier_enabled:
                     (
                         frontier_warm_start_applied,
@@ -7162,9 +7456,10 @@ class GurobiMILPAdapter:
                     [],
                 )
                 if delta_starts:
+                    composition_mip_starts = list(delta_starts)
                     composition_mip_start = delta_starts[0]
-                    _apply_partial_assignment_mip_start(
-                        composition_mip_start
+                    _apply_partial_assignment_mip_starts(
+                        composition_mip_starts
                     )
                 stage1.Params.TimeLimit = composition_time_limit_sec
                 stage1.Params.PoolSearchMode = 0
@@ -7205,13 +7500,34 @@ class GurobiMILPAdapter:
                                 composition_status == "infeasible"
                             ),
                             "partial_mip_start_applied": (
-                                composition_mip_start is not None
+                                bool(composition_mip_starts)
                             ),
+                            "partial_mip_start_count_applied": len(
+                                composition_mip_starts
+                            ),
+                            "partial_mip_start_modes_applied": [
+                                str(
+                                    start.get(
+                                        "start_mode",
+                                        "unspecified",
+                                    )
+                                )
+                                for start in composition_mip_starts
+                            ],
                             "partial_mip_start_semantics": (
-                                "one_or_more_unused_opposite_powertrain_"
-                                "activations_and_source_vehicle_retirements"
-                                if composition_mip_start is not None
-                                else "none"
+                                "multiple_partial_assignment_starts_"
+                                "submitted_without_incumbent_attribution"
+                                if len(composition_mip_starts) > 1
+                                else (
+                                    str(
+                                        composition_mip_start.get(
+                                            "semantics",
+                                            "partial_assignment_solver_hint",
+                                        )
+                                    )
+                                    if composition_mip_start is not None
+                                    else "none"
+                                )
                             ),
                             "frontier_warm_start_applied": (
                                 frontier_warm_start_applied
@@ -7227,6 +7543,65 @@ class GurobiMILPAdapter:
                     if composition_mip_start is not None:
                         target_record.update(
                             {
+                                "partial_mip_starts": [
+                                    {
+                                        "start_mode": str(
+                                            start.get(
+                                                "start_mode",
+                                                "unspecified",
+                                            )
+                                        ),
+                                        "source_vehicle_ids": list(
+                                            start.get(
+                                                "source_vehicle_ids"
+                                            )
+                                            or ()
+                                        ),
+                                        "target_vehicle_ids": list(
+                                            start.get(
+                                                "target_vehicle_ids"
+                                            )
+                                            or ()
+                                        ),
+                                        "replacement_count": int(
+                                            start.get(
+                                                "replacement_count",
+                                                0,
+                                            )
+                                            or 0
+                                        ),
+                                        "split_activation_count": int(
+                                            start.get(
+                                                "split_activation_count",
+                                                0,
+                                            )
+                                            or 0
+                                        ),
+                                        "activation_count": int(
+                                            start.get(
+                                                "activation_count",
+                                                0,
+                                            )
+                                            or 0
+                                        ),
+                                        "split_trip_ids": list(
+                                            start.get("split_trip_ids")
+                                            or ()
+                                        ),
+                                        "powertrain_pattern_hash": str(
+                                            start[
+                                                "powertrain_pattern_hash"
+                                            ]
+                                        ),
+                                    }
+                                    for start in composition_mip_starts
+                                ],
+                                "partial_mip_start_mode": str(
+                                    composition_mip_start.get(
+                                        "start_mode",
+                                        "unspecified",
+                                    )
+                                ),
                                 "partial_mip_start_source_vehicle_id": (
                                     composition_mip_start[
                                         "source_vehicle_id"
@@ -7252,9 +7627,29 @@ class GurobiMILPAdapter:
                                 "partial_mip_start_replacement_count": int(
                                     composition_mip_start.get(
                                         "replacement_count",
-                                        1,
+                                        0,
                                     )
-                                    or 1
+                                    or 0
+                                ),
+                                "partial_mip_start_split_activation_count": int(
+                                    composition_mip_start.get(
+                                        "split_activation_count",
+                                        0,
+                                    )
+                                    or 0
+                                ),
+                                "partial_mip_start_activation_count": int(
+                                    composition_mip_start.get(
+                                        "activation_count",
+                                        0,
+                                    )
+                                    or 0
+                                ),
+                                "partial_mip_start_split_trip_ids": list(
+                                    composition_mip_start.get(
+                                        "split_trip_ids"
+                                    )
+                                    or ()
                                 ),
                                 "partial_mip_start_powertrain_pattern_hash": (
                                     composition_mip_start[
@@ -7529,6 +7924,14 @@ class GurobiMILPAdapter:
                     )
                     stage1.update()
                 composition_search_events.append(dict(target_record))
+
+        if stage1_explicit_powertrain_search_enabled:
+            # Composition targets may submit several alternative starts.  Do
+            # not leak those indexed starts into the subsequent no-good-cut
+            # enumeration, which manages its own single partial start.
+            stage1.NumStart = 0
+            stage1.Params.StartNumber = 0
+            stage1.update()
 
         enumeration_events: List[Dict[str, Any]] = []
         enumerated_powertrain_patterns: Set[
@@ -8776,8 +9179,8 @@ class GurobiMILPAdapter:
                 for delta, starts in composition_activation_mip_starts.items()
             },
             "stage1_composition_activation_mip_start_semantics": (
-                "one_or_more_unused_opposite_powertrain_activations_and_"
-                "source_vehicle_retirements_partial_solver_hint"
+                "whole_duty_opposite_powertrain_replacement_or_unused_bev_"
+                "duty_suffix_split_activation_partial_solver_hint"
             ),
             "stage1_composition_search_runtime_seconds": (
                 composition_search_runtime_sec

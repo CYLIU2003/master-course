@@ -63,6 +63,26 @@ reconstructs approximately 614.709 / 101.114 kWh while holding non-PV controls
 fixed. Until its frontier, Rolling, physical, accounting, and pair gates pass,
 teacher release remains **BLOCKED**.
 
+The binding-PV v2 run now exists at
+`output/formal_pair_20260803_flat30_pv101p5_phase3_frontier_v2`, frozen at
+`fe453df2f8a2ea0bb9c2240d42f2df5af9f12180`. Its common 101.5 kW rating
+reproduced 614.709375 / 101.1143 kWh. Both cases served 264/264 trips and
+completed accepted 24/24 Rolling. K=15..27 produced Stage-2 and independently
+physically feasible candidates. The resolved-range minima differed as expected:
+sunny K=17 (17 BEV / 15 ICE, 54 BEV trips, 706,175.871233 JPY) versus rain
+K=15 (15 BEV / 17 ICE, 44 BEV trips, 720,637.777812 JPY). Stage-1 grid energy
+was 19.011025 / 411.374162 kWh. This demonstrates that PV availability now
+changes the selected resolved-frontier composition without a weather bias.
+
+The v2 pair is nevertheless **DIAGNOSTIC ONLY**. K=28..35 each reached
+`TIME_LIMIT_NO_INCUMBENT`, so the frontier gate and both frontend jobs failed
+closed. The current tree addresses that newly isolated blocker with a
+duty-suffix split start that activates an unused BEV without retiring the
+source bus, allowing total used-fleet size to grow above the 32-bus primary
+path cover. A fresh clean-commit rerun must resolve every K target and all
+other gates; the unclassified positive vehicle-day cost remains an independent
+economic-claim blocker.
+
 An opt-in `phase4_integrated_actual_cost` case now removes policy/solver-only
 soft terms and uses the canonical accounting components as one integrated
 objective. `objective_is_actual_cost` remains false until a post-solve numeric
