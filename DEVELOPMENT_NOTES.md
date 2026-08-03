@@ -10,6 +10,24 @@
   from canonical depot-asset input slots, so the absence of solved source
   flows cannot turn 6,056.25 kWh (sunny) or 996.2 kWh (rain) into a reported
   zero-PV input.
+- The first clean 264-trip Phase-3 `K=15..35` frontier pair at frozen SHA
+  `751762279adb28dac1039f4994f9538b83b6f928` produced physically valid
+  264/264-trip, 24/24 Rolling primary schedules in both weather cases. Both
+  selected 13 BEVs and 19 ICE buses with 44/220 trips and canonical operating
+  cost 707,808.660373 JPY. This is a diagnostic null response: at 1,000 kW,
+  even rain supplied 996.2 kWh against 565.86897 kWh of Stage-1 renewable BEV
+  allocation, so neither case purchased BEV grid energy. It is not evidence
+  that the composition is optimal because every K target timed out without an
+  incumbent and the pair remained BLOCKED.
+- The frontier failure was traced to its MIP-start contract: activation starts
+  were disabled for the frontier, and the old helper represented only a
+  one-vehicle delta although the first target was K=15 from a 13-BEV primary.
+  Frontier targets now receive deterministic non-conflicting multi-vehicle
+  activation/retirement starts for every reachable delta. The starts do not
+  change the objective, K constraint, Stage 2, or physical acceptance. The
+  audit persists the complete source/target ID lists and replacement count.
+  Artifact completeness now matches the exact writer schemas for the four
+  vehicle-day-semantics columns and the frontier minimum/status columns.
 - Added an explicit Phase-3 BEV lower-bound frontier for `K=15..35`. Each
   temporary model uses only `sum(used_electric_vehicle) >= K`; neither ICE
   count nor total used-fleet size is fixed. The previous K solution is used as
@@ -55,9 +73,9 @@
   It also persists the chosen vehicle-day-cost semantics. No new formal result is
   claimed until a clean frozen commit completes Fresh Prepare, day-ahead solve,
   24/24 Rolling, physical validation, and accounting/pair gates.
-- Regression status before the clean freeze: 65 focused model/API/runner tests
-  and the complete 1,103-test suite passed. The two long-running controlled
-  cases remain pending at this note revision.
+- Regression status before the next clean freeze: the focused frontier,
+  weather-coupling, and artifact-completeness suite passes (38 tests). The full
+  suite and a fresh binding-PV 101.5 kW controlled pair remain required.
 
 ## 2026-08-02 interactive Sunday-PV Prepare provenance repair
 

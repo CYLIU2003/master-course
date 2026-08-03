@@ -6394,10 +6394,163 @@ class GurobiMILPAdapter:
                     for leg in duty.legs
                 )
 
-            starts_by_delta: Dict[int, List[Dict[str, Any]]] = {
-                1: [],
-                -1: [],
-            }
+            def _replacement_score(
+                source_vehicle_id: str,
+                target_vehicle_id: str,
+            ) -> float:
+                target_vehicle = vehicle_by_id.get(target_vehicle_id)
+                if target_vehicle is None:
+                    return math.inf
+                target_service_energy = sum(
+                    max(
+                        self._trip_energy_kwh(
+                            problem,
+                            target_vehicle,
+                            str(leg.trip.trip_id),
+                        ),
+                        0.0,
+                    )
+                    for duty in duties_by_vehicle.get(source_vehicle_id, ())
+                    for leg in duty.legs
+                )
+                return abs(
+                    _service_energy_for_vehicle(source_vehicle_id)
+                    - target_service_energy
+                )
+
+            def _build_replacement_start(
+                replacements: Mapping[str, str],
+                *,
+                bev_delta: int,
+            ) -> Optional[Dict[str, Any]]:
+                selected_y: Set[Tuple[str, str]] = set()
+                selected_x: Set[Tuple[str, str, str]] = set()
+                selected_start: Set[Tuple[str, str]] = set()
+                selected_end: Set[Tuple[str, str]] = set()
+                selected_used = set(active_vehicle_ids)
+                selected_used.difference_update(replacements)
+                selected_used.update(replacements.values())
+                selected_used_day: Set[Tuple[str, int]] = set()
+                pattern: List[Tuple[str, str]] = []
+
+                for original_vehicle_id, duties in duties_by_vehicle.items():
+                    replacement_vehicle_id = str(
+                        replacements.get(
+                            original_vehicle_id,
+                            original_vehicle_id,
+                        )
+                    )
+                    for duty in duties:
+                        trip_ids = [
+                            str(leg.trip.trip_id)
+                            for leg in duty.legs
+                        ]
+                        if not trip_ids:
+                            continue
+                        for trip_id in trip_ids:
+                            assignment_key = (
+                                replacement_vehicle_id,
+                                trip_id,
+                            )
+                            if assignment_key not in y:
+                                return None
+                            selected_y.add(assignment_key)
+                            selected_used_day.add(
+                                (
+                                    replacement_vehicle_id,
+                                    int(
+                                        trip_day_index_by_trip_id.get(
+                                            trip_id,
+                                            0,
+                                        )
+                                    ),
+                                )
+                            )
+                            pattern.append(
+                                (
+                                    trip_id,
+                                    _powertrain_group(
+                                        replacement_vehicle_id
+                                    ),
+                                )
+                            )
+                        start_key = (
+                            replacement_vehicle_id,
+                            trip_ids[0],
+                        )
+                        end_key = (
+                            replacement_vehicle_id,
+                            trip_ids[-1],
+                        )
+                        if (
+                            start_key not in start_arc
+                            or end_key not in end_arc
+                        ):
+                            return None
+                        selected_start.add(start_key)
+                        selected_end.add(end_key)
+                        for from_trip_id, to_trip_id in zip(
+                            trip_ids,
+                            trip_ids[1:],
+                        ):
+                            arc_key = (
+                                replacement_vehicle_id,
+                                from_trip_id,
+                                to_trip_id,
+                            )
+                            if arc_key not in x:
+                                return None
+                            selected_x.add(arc_key)
+
+                normalized_pattern = tuple(sorted(pattern))
+                if len(normalized_pattern) != len(problem.trips):
+                    return None
+                replacement_pairs = tuple(sorted(replacements.items()))
+                source_vehicle_ids = tuple(
+                    source_vehicle_id
+                    for source_vehicle_id, _target_vehicle_id
+                    in replacement_pairs
+                )
+                target_vehicle_ids = tuple(
+                    target_vehicle_id
+                    for _source_vehicle_id, target_vehicle_id
+                    in replacement_pairs
+                )
+                return {
+                    # Retain the single-value fields for existing adjacent
+                    # search readers while exposing every replacement used by
+                    # a multi-step frontier start.
+                    "source_vehicle_id": source_vehicle_ids[0],
+                    "target_vehicle_id": target_vehicle_ids[0],
+                    "source_vehicle_ids": source_vehicle_ids,
+                    "target_vehicle_ids": target_vehicle_ids,
+                    "replacement_count": len(replacement_pairs),
+                    "composition_delta_used_bev": bev_delta,
+                    "powertrain_pattern": normalized_pattern,
+                    "powertrain_pattern_hash": hashlib.sha256(
+                        json.dumps(
+                            normalized_pattern,
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        ).encode("utf-8")
+                    ).hexdigest(),
+                    "selected_y": selected_y,
+                    "selected_x": selected_x,
+                    "selected_start": selected_start,
+                    "selected_end": selected_end,
+                    "selected_used": selected_used,
+                    "selected_used_day": selected_used_day,
+                    "warm_start_priority_score": sum(
+                        _replacement_score(
+                            source_vehicle_id,
+                            target_vehicle_id,
+                        )
+                        for source_vehicle_id, target_vehicle_id
+                        in replacement_pairs
+                    ),
+                }
+
+            starts_by_delta: Dict[int, List[Dict[str, Any]]] = {}
             for source_group, target_group, bev_delta in (
                 ("COMBUSTION", "ELECTRIC", 1),
                 ("ELECTRIC", "COMBUSTION", -1),
@@ -6407,146 +6560,135 @@ class GurobiMILPAdapter:
                     for vehicle_id in available_by_group[target_group]
                     if vehicle_id not in active_vehicle_ids
                 ]
+                compatible_targets_by_source: Dict[
+                    str,
+                    List[str],
+                ] = {}
+                replacement_score_by_pair: Dict[
+                    Tuple[str, str],
+                    float,
+                ] = {}
                 for source_vehicle_id in active_by_group[source_group]:
                     for target_vehicle_id in unused_target_ids:
-                        selected_y: Set[Tuple[str, str]] = set()
-                        selected_x: Set[Tuple[str, str, str]] = set()
-                        selected_start: Set[Tuple[str, str]] = set()
-                        selected_end: Set[Tuple[str, str]] = set()
-                        selected_used = set(active_vehicle_ids)
-                        selected_used.discard(source_vehicle_id)
-                        selected_used.add(target_vehicle_id)
-                        selected_used_day: Set[Tuple[str, int]] = set()
-                        pattern: List[Tuple[str, str]] = []
-                        valid = True
-                        for original_vehicle_id, duties in duties_by_vehicle.items():
-                            replacement_vehicle_id = (
-                                target_vehicle_id
-                                if original_vehicle_id == source_vehicle_id
-                                else original_vehicle_id
-                            )
-                            for duty in duties:
-                                trip_ids = [
-                                    str(leg.trip.trip_id)
-                                    for leg in duty.legs
-                                ]
-                                if not trip_ids:
-                                    continue
-                                for trip_id in trip_ids:
-                                    assignment_key = (
-                                        replacement_vehicle_id,
-                                        trip_id,
-                                    )
-                                    if assignment_key not in y:
-                                        valid = False
-                                        break
-                                    selected_y.add(assignment_key)
-                                    selected_used_day.add(
-                                        (
-                                            replacement_vehicle_id,
-                                            int(
-                                                trip_day_index_by_trip_id.get(
-                                                    trip_id,
-                                                    0,
-                                                )
-                                            ),
-                                        )
-                                    )
-                                    pattern.append(
-                                        (
-                                            trip_id,
-                                            _powertrain_group(
-                                                replacement_vehicle_id
-                                            ),
-                                        )
-                                    )
-                                if not valid:
-                                    break
-                                start_key = (
-                                    replacement_vehicle_id,
-                                    trip_ids[0],
-                                )
-                                end_key = (
-                                    replacement_vehicle_id,
-                                    trip_ids[-1],
-                                )
-                                if (
-                                    start_key not in start_arc
-                                    or end_key not in end_arc
-                                ):
-                                    valid = False
-                                    break
-                                selected_start.add(start_key)
-                                selected_end.add(end_key)
-                                for from_trip_id, to_trip_id in zip(
-                                    trip_ids,
-                                    trip_ids[1:],
-                                ):
-                                    arc_key = (
-                                        replacement_vehicle_id,
-                                        from_trip_id,
-                                        to_trip_id,
-                                    )
-                                    if arc_key not in x:
-                                        valid = False
-                                        break
-                                    selected_x.add(arc_key)
-                                if not valid:
-                                    break
-                            if not valid:
-                                break
-                        normalized_pattern = tuple(sorted(pattern))
-                        if (
-                            not valid
-                            or len(normalized_pattern) != len(problem.trips)
-                        ):
-                            continue
-                        starts_by_delta[bev_delta].append(
-                            {
-                                "source_vehicle_id": source_vehicle_id,
-                                "target_vehicle_id": target_vehicle_id,
-                                "composition_delta_used_bev": bev_delta,
-                                "powertrain_pattern": normalized_pattern,
-                                "powertrain_pattern_hash": hashlib.sha256(
-                                    json.dumps(
-                                        normalized_pattern,
-                                        ensure_ascii=False,
-                                        separators=(",", ":"),
-                                    ).encode("utf-8")
-                                ).hexdigest(),
-                                "selected_y": selected_y,
-                                "selected_x": selected_x,
-                                "selected_start": selected_start,
-                                "selected_end": selected_end,
-                                "selected_used": selected_used,
-                                "selected_used_day": selected_used_day,
-                                "warm_start_priority_score": abs(
-                                    _service_energy_for_vehicle(
-                                        source_vehicle_id
-                                    )
-                                    - sum(
-                                        max(
-                                            self._trip_energy_kwh(
-                                                problem,
-                                                vehicle_by_id[target_vehicle_id],
-                                                str(leg.trip.trip_id),
-                                            ),
-                                            0.0,
-                                        )
-                                        for duty in duties_by_vehicle[
-                                            source_vehicle_id
-                                        ]
-                                        for leg in duty.legs
-                                    )
-                                ),
-                            }
+                        single_start = _build_replacement_start(
+                            {source_vehicle_id: target_vehicle_id},
+                            bev_delta=bev_delta,
                         )
-            for delta in starts_by_delta:
-                starts_by_delta[delta].sort(
+                        if single_start is None:
+                            continue
+                        compatible_targets_by_source.setdefault(
+                            source_vehicle_id,
+                            [],
+                        ).append(target_vehicle_id)
+                        replacement_score_by_pair[
+                            (source_vehicle_id, target_vehicle_id)
+                        ] = float(
+                            single_start["warm_start_priority_score"]
+                        )
+
+                # Construct a maximum-cardinality matching before choosing
+                # prefixes. A score-greedy pairing can strand a source that
+                # has only one compatible target and incorrectly omit a
+                # reachable multi-vehicle delta.
+                target_to_source: Dict[str, str] = {}
+
+                def _augment_replacement_matching(
+                    source_vehicle_id: str,
+                    visited_target_ids: Set[str],
+                ) -> bool:
+                    compatible_target_ids = sorted(
+                        compatible_targets_by_source.get(
+                            source_vehicle_id,
+                            (),
+                        ),
+                        key=lambda target_vehicle_id: (
+                            replacement_score_by_pair[
+                                (source_vehicle_id, target_vehicle_id)
+                            ],
+                            target_vehicle_id,
+                        ),
+                    )
+                    for target_vehicle_id in compatible_target_ids:
+                        if target_vehicle_id in visited_target_ids:
+                            continue
+                        visited_target_ids.add(target_vehicle_id)
+                        matched_source_vehicle_id = target_to_source.get(
+                            target_vehicle_id
+                        )
+                        if (
+                            matched_source_vehicle_id is None
+                            or _augment_replacement_matching(
+                                matched_source_vehicle_id,
+                                visited_target_ids,
+                            )
+                        ):
+                            target_to_source[target_vehicle_id] = (
+                                source_vehicle_id
+                            )
+                            return True
+                    return False
+
+                for source_vehicle_id in sorted(
+                    compatible_targets_by_source,
+                    key=lambda item: (
+                        len(compatible_targets_by_source[item]),
+                        item,
+                    ),
+                ):
+                    _augment_replacement_matching(
+                        source_vehicle_id,
+                        set(),
+                    )
+
+                compatible_pairs = [
+                    (
+                        replacement_score_by_pair[
+                            (source_vehicle_id, target_vehicle_id)
+                        ],
+                        source_vehicle_id,
+                        target_vehicle_id,
+                    )
+                    for target_vehicle_id, source_vehicle_id
+                    in target_to_source.items()
+                ]
+
+                # One deterministic non-conflicting prefix supplies every
+                # reachable delta.  This is especially important for the BEV
+                # frontier: its first declared K may be more than one vehicle
+                # above the primary composition, so a one-replacement start
+                # cannot satisfy the temporary lower bound.
+                replacements: Dict[str, str] = {}
+                used_target_ids: Set[str] = set()
+                for _score, source_vehicle_id, target_vehicle_id in sorted(
+                    compatible_pairs,
+                    key=lambda item: (item[0], item[1], item[2]),
+                ):
+                    if (
+                        source_vehicle_id in replacements
+                        or target_vehicle_id in used_target_ids
+                    ):
+                        continue
+                    trial_replacements = {
+                        **replacements,
+                        source_vehicle_id: target_vehicle_id,
+                    }
+                    delta = bev_delta * len(trial_replacements)
+                    start = _build_replacement_start(
+                        trial_replacements,
+                        bev_delta=delta,
+                    )
+                    if start is None:
+                        continue
+                    replacements = trial_replacements
+                    used_target_ids.add(target_vehicle_id)
+                    starts_by_delta.setdefault(delta, []).append(start)
+
+            for delta, starts in starts_by_delta.items():
+                starts.sort(
                     key=lambda item: (
                         float(item["warm_start_priority_score"]),
-                        str(item["source_vehicle_id"]),
-                        str(item["target_vehicle_id"]),
+                        tuple(item.get("source_vehicle_ids") or ()),
+                        tuple(item.get("target_vehicle_ids") or ()),
                     )
                 )
             return starts_by_delta
@@ -6811,8 +6953,7 @@ class GurobiMILPAdapter:
         )
         composition_activation_mip_starts = (
             _powertrain_activation_replacement_mip_starts(stage1_plan)
-            if stage1_composition_search_enabled
-            and not stage1_bev_frontier_enabled
+            if stage1_explicit_powertrain_search_enabled
             else {}
         )
         if stage1_explicit_powertrain_search_enabled:
@@ -7067,8 +7208,8 @@ class GurobiMILPAdapter:
                                 composition_mip_start is not None
                             ),
                             "partial_mip_start_semantics": (
-                                "unused_opposite_powertrain_activation_and_"
-                                "source_vehicle_retirement"
+                                "one_or_more_unused_opposite_powertrain_"
+                                "activations_and_source_vehicle_retirements"
                                 if composition_mip_start is not None
                                 else "none"
                             ),
@@ -7095,6 +7236,25 @@ class GurobiMILPAdapter:
                                     composition_mip_start[
                                         "target_vehicle_id"
                                     ]
+                                ),
+                                "partial_mip_start_source_vehicle_ids": list(
+                                    composition_mip_start.get(
+                                        "source_vehicle_ids"
+                                    )
+                                    or ()
+                                ),
+                                "partial_mip_start_target_vehicle_ids": list(
+                                    composition_mip_start.get(
+                                        "target_vehicle_ids"
+                                    )
+                                    or ()
+                                ),
+                                "partial_mip_start_replacement_count": int(
+                                    composition_mip_start.get(
+                                        "replacement_count",
+                                        1,
+                                    )
+                                    or 1
                                 ),
                                 "partial_mip_start_powertrain_pattern_hash": (
                                     composition_mip_start[
@@ -8616,8 +8776,8 @@ class GurobiMILPAdapter:
                 for delta, starts in composition_activation_mip_starts.items()
             },
             "stage1_composition_activation_mip_start_semantics": (
-                "unused_opposite_powertrain_activation_and_source_vehicle_"
-                "retirement_partial_solver_hint"
+                "one_or_more_unused_opposite_powertrain_activations_and_"
+                "source_vehicle_retirements_partial_solver_hint"
             ),
             "stage1_composition_search_runtime_seconds": (
                 composition_search_runtime_sec

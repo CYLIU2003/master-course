@@ -187,6 +187,7 @@ def _composition_search_certificate() -> dict:
 def _write_composition_search_csv(path: Path) -> None:
     fieldnames = (
         "target_used_bev",
+        "minimum_used_bev_count",
         "target_used_ice",
         "delta_used_bev_from_primary",
         "delta_used_ice_from_primary",
@@ -194,6 +195,7 @@ def _write_composition_search_csv(path: Path) -> None:
         "target_within_selected_inventory",
         "search_status",
         "solver_status",
+        "frontier_status",
         "solution_count",
         "best_bound",
         "mip_gap_ratio",
@@ -211,10 +213,12 @@ def _write_composition_search_csv(path: Path) -> None:
         writer.writerow(
             {
                 "target_used_bev": 2,
+                "minimum_used_bev_count": 2,
                 "target_used_ice": 0,
                 "target_within_selected_inventory": True,
                 "search_status": "optimal",
                 "solver_status": "optimal",
+                "frontier_status": "FEASIBLE_INCUMBENT",
                 "final_disposition": "physically_feasible_stage2_candidate",
             }
         )
@@ -245,6 +249,10 @@ def _complete_run(tmp_path: Path) -> Path:
         ),
         "weather_response_expected": "no_directional_policy",
         "weather_response_observed": "not_assessable_from_single_case",
+        "vehicle_usage_cost_jpy_per_used_bus": 20_000.0,
+        "vehicle_usage_cost_semantics": "operator_incremental_vehicle_day_cost",
+        "vehicle_usage_cost_semantics_classified": True,
+        "vehicle_usage_cost_semantics_research_eligible": True,
     }
     (run_dir / "assignment_economic_audit.json").write_text(
         json.dumps(assignment_economic_audit), encoding="utf-8"
@@ -266,6 +274,10 @@ def _complete_run(tmp_path: Path) -> Path:
                     "assignment_energy_coupling_mode",
                     "weather_response_expected",
                     "weather_response_observed",
+                    "vehicle_usage_cost_jpy_per_used_bus",
+                    "vehicle_usage_cost_semantics",
+                    "vehicle_usage_cost_semantics_classified",
+                    "vehicle_usage_cost_semantics_research_eligible",
                 )
             ),
         )

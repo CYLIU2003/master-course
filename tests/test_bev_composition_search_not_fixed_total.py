@@ -43,6 +43,26 @@ def test_bev_frontier_uses_only_minimum_bev_constraint() -> None:
     )
     assert frontier["frontier_total_used_vehicle_count_fixed"] is False
     assert certificate["frontier_total_used_vehicle_count_fixed"] is False
-    assert all(record["target_used_ice"] is None for record in certificate["target_records"])
-    assert all(record["target_total_used_vehicle_count"] is None for record in certificate["target_records"])
+    assert all(
+        record["target_used_ice"] is None
+        for record in certificate["target_records"]
+    )
+    assert all(
+        record["target_total_used_vehicle_count"] is None
+        for record in certificate["target_records"]
+    )
     assert [row["minimum_used_bev_count"] for row in rows] == [1, 2]
+    target_two = next(
+        record
+        for record in certificate["target_records"]
+        if record["target_used_bev"] == 2
+    )
+    assert target_two["partial_mip_start_applied"] is True
+    assert target_two["partial_mip_start_replacement_count"] == 2
+    assert len(target_two["partial_mip_start_source_vehicle_ids"]) == 2
+    assert len(target_two["partial_mip_start_target_vehicle_ids"]) == 2
+    assert (
+        target_two["partial_mip_start_semantics"]
+        == "one_or_more_unused_opposite_powertrain_activations_and_"
+        "source_vehicle_retirements"
+    )

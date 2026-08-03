@@ -903,6 +903,10 @@ def _validate_assignment_economic_audit(
         "assignment_energy_coupling_mode",
         "weather_response_expected",
         "weather_response_observed",
+        "vehicle_usage_cost_jpy_per_used_bus",
+        "vehicle_usage_cost_semantics",
+        "vehicle_usage_cost_semantics_classified",
+        "vehicle_usage_cost_semantics_research_eligible",
     }
     if json_path.is_file():
         try:
@@ -932,6 +936,10 @@ def _validate_assignment_economic_audit(
             "assignment_energy_coupling_mode",
             "weather_response_expected",
             "weather_response_observed",
+            "vehicle_usage_cost_jpy_per_used_bus",
+            "vehicle_usage_cost_semantics",
+            "vehicle_usage_cost_semantics_classified",
+            "vehicle_usage_cost_semantics_research_eligible",
         )
         try:
             with csv_path.open("r", encoding="utf-8", newline="") as handle:
@@ -995,6 +1003,7 @@ def _validate_release_evidence_artifacts(
     csv_path = run_dir / STAGE1_USED_POWERTRAIN_COMPOSITION_SEARCH_CSV_FILE
     expected_header = (
         "target_used_bev",
+        "minimum_used_bev_count",
         "target_used_ice",
         "delta_used_bev_from_primary",
         "delta_used_ice_from_primary",
@@ -1002,6 +1011,7 @@ def _validate_release_evidence_artifacts(
         "target_within_selected_inventory",
         "search_status",
         "solver_status",
+        "frontier_status",
         "solution_count",
         "best_bound",
         "mip_gap_ratio",

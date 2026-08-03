@@ -42,6 +42,27 @@ requires every in-inventory target to be either physically feasible after
 Stage 2 or covered by a valid Stage-1 IIS certificate. Phase 3 still remains a
 two-stage method and cannot claim an integrated global total-cost optimum.
 
+The first clean Phase-3 frontier execution from
+`751762279adb28dac1039f4994f9538b83b6f928` is also **BLOCKED**. Both primary
+schedules served 264/264 trips, passed independent physical validation and
+24/24 Rolling, and selected 13 BEVs / 19 ICE buses with 44 / 220 trips and
+707,808.660373 JPY canonical operating cost. All 21 K targets nevertheless
+reached `TIME_LIMIT_NO_INCUMBENT`. The old helper was disabled for frontier
+search and represented only one activation/retirement, while the first target
+required two additional BEVs. The current tree supplies complete multi-vehicle
+starts and records their full IDs and count without weakening any acceptance
+gate. It also corrects two fail-closed CSV schema checks that had lagged their
+writers. A fresh clean-commit run is required; code changes alone do not resolve
+the composition-search blocker.
+
+The 1,000 kW pair is not a binding-PV weather test. Rain supplied 996.2 kWh and
+the selected schedule allocated only 565.86897 kWh of renewable energy in
+Stage 1, so both cases legitimately had zero BEV grid purchase. The next
+weather-response test must use the predeclared common 101.5 kW rating, which
+reconstructs approximately 614.709 / 101.114 kWh while holding non-PV controls
+fixed. Until its frontier, Rolling, physical, accounting, and pair gates pass,
+teacher release remains **BLOCKED**.
+
 An opt-in `phase4_integrated_actual_cost` case now removes policy/solver-only
 soft terms and uses the canonical accounting components as one integrated
 objective. `objective_is_actual_cost` remains false until a post-solve numeric
