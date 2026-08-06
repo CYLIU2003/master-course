@@ -301,6 +301,25 @@ def test_runner_pv_capacity_argument_overrides_frontend_rated_output() -> None:
     assert evidence["pv_generation_kwh"] == pytest.approx(747.15)
 
 
+def test_cli_requires_explicit_consent_to_override_frontend_pv_capacity() -> None:
+    runner = _load_runner()
+
+    with pytest.raises(ValueError, match="replaces the frontend PV rated output"):
+        runner._validate_pv_capacity_override_request(
+            pv_capacity_kw=101.5,
+            allow_frontend_pv_capacity_override=False,
+        )
+
+    runner._validate_pv_capacity_override_request(
+        pv_capacity_kw=1000.0,
+        allow_frontend_pv_capacity_override=True,
+    )
+    runner._validate_pv_capacity_override_request(
+        pv_capacity_kw=None,
+        allow_frontend_pv_capacity_override=False,
+    )
+
+
 def test_uniform_tariff_evidence_requires_every_canonical_slot(
     tmp_path: Path,
 ) -> None:

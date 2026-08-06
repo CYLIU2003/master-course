@@ -364,7 +364,9 @@ simulation artifact, not an automatically accepted research result.
   controller for same-service-date high/low-PV sensitivity runs. It performs a
   fresh Prepare, submits and polls the ordinary BFF optimization endpoint,
   records exact request/response payloads, runs the two cases sequentially,
-  accepts `--pv-capacity-kw` as one explicit common rated output for both cases,
+  keeps each frontend scenario's explicit rated output by default. The optional
+  `--pv-capacity-kw` sensitivity override is accepted only together with
+  `--allow-frontend-pv-capacity-override`,
   applies the formal job timeout to the synchronous Prepare/submit requests,
   sends the audited 16-route Tsurumaki scope and common explicit SOC/ICE-fuel
   fleet controls, and rejects any materialized route-count drift immediately,
@@ -1641,8 +1643,11 @@ generated `experiment_report.md` mirrors that gate.
 uniform tariff to both freshly prepared cases with
 `--grid-energy-price-yen-per-kwh <JPY>` and
 `--demand-charge-yen-per-kw <JPY>`. The common PV rated output can likewise be
-fixed with `--pv-capacity-kw <kW>`; when omitted, an explicit frontend rated
-output is retained and only legacy rows fall back to an area-derived value. It
+fixed with `--pv-capacity-kw <kW>` only when the explicit acknowledgement
+`--allow-frontend-pv-capacity-override` is also supplied. Without both options,
+an explicit frontend rated output is retained and only legacy rows fall back to
+an area-derived value. This prevents an experiment command from silently
+replacing a value selected in the frontend. It
 sends both the flat-price field and a
 single `00:00--24:00` TOU band, because an inherited multi-band TOU schedule
 would otherwise take precedence over the flat value. For a zero basic/demand

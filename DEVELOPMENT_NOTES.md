@@ -1,5 +1,25 @@
 # Development Notes
 
+## 2026-08-05 Frontend PV rated-output authority guard
+
+- The current sunny/rain frontend scenarios are restored to the user's common
+  1,000 kW rated output. Their date-specific capacity-factor curves therefore
+  materialize 6,056.25 / 996.2 kWh, with 5,000 m2 required installable area and
+  14,285.714286 m2 reverse-estimated depot-area equivalent. The measured
+  1,450 m2 depot-area field remains unchanged. No Prepare or optimization was
+  run as part of this correction.
+- The latest 101.5 kW pair was not evidence of the saved frontend selection:
+  its controller environment explicitly supplied `pv_capacity_kw=101.5`.
+  The HTTP pair runner now rejects `--pv-capacity-kw` unless
+  `--allow-frontend-pv-capacity-override` is supplied as a separate deliberate
+  acknowledgement. Omitting both options keeps the frontend rated output
+  authoritative.
+- Date-specific PV generation now updates the direct slot series, capacity
+  factors, date-indexed series, profile identifiers, and overlay summary in one
+  operation. This prevents a generated 1,000 kW direct curve from coexisting
+  with stale 101.5 kW date-indexed rows. Focused PV/frontend tests pass; all
+  pre-correction prepared inputs remain stale.
+
 ## 2026-08-03 BEV actual-cost and fleet-frontier correction
 
 - The clean v5 binding-PV run exposed one fail-closed metadata omission after

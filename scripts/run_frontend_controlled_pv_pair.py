@@ -73,6 +73,26 @@ def _expected_pv_kwh_for_capacity(case_name: str, capacity_kw: float) -> float:
     )
 
 
+def _validate_pv_capacity_override_request(
+    *,
+    pv_capacity_kw: float | None,
+    allow_frontend_pv_capacity_override: bool,
+) -> None:
+    """Reject accidental replacement of a frontend rated-output selection."""
+
+    if pv_capacity_kw is None:
+        return
+    if not math.isfinite(pv_capacity_kw) or pv_capacity_kw <= 0.0:
+        raise ValueError("--pv-capacity-kw must be a positive finite kW value")
+    if not allow_frontend_pv_capacity_override:
+        raise ValueError(
+            "--pv-capacity-kw replaces the frontend PV rated output. Omit it "
+            "to use the saved frontend value, or add "
+            "--allow-frontend-pv-capacity-override for an intentional "
+            "capacity sensitivity."
+        )
+
+
 CONTROLLED_COST_COMPONENT_FLAGS = {
     "vehicle_fixed_cost": False,
     "vehicle_usage_cost": True,
@@ -3334,6 +3354,15 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--allow-frontend-pv-capacity-override",
+        action="store_true",
+        help=(
+            "Acknowledge that --pv-capacity-kw intentionally replaces the "
+            "rated output saved in each frontend scenario. Omit both options "
+            "to keep the frontend value authoritative."
+        ),
+    )
+    parser.add_argument(
         "--optimization-experiment-case",
         choices=(
             "phase3_baseline",
@@ -3398,10 +3427,12 @@ def _parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = _parser().parse_args()
-    if args.pv_capacity_kw is not None and (
-        not math.isfinite(args.pv_capacity_kw) or args.pv_capacity_kw <= 0.0
-    ):
-        raise ValueError("--pv-capacity-kw must be a positive finite kW value")
+    _validate_pv_capacity_override_request(
+        pv_capacity_kw=args.pv_capacity_kw,
+        allow_frontend_pv_capacity_override=(
+            args.allow_frontend_pv_capacity_override
+        ),
+    )
     if args.optimization_experiment_case == (
         "phase4_cost_constrained_ev_utilization"
     ):
@@ -3474,6 +3505,9 @@ def main() -> int:
         "comparison_name": comparison_name,
         "tariff_condition": tariff_condition,
         "pv_capacity_kw": args.pv_capacity_kw,
+        "allow_frontend_pv_capacity_override": (
+            args.allow_frontend_pv_capacity_override
+        ),
         "optimization_experiment_case": (
             args.optimization_experiment_case
         ),

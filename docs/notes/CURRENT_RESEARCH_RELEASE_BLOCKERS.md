@@ -1,6 +1,6 @@
 # Current research release blockers
 
-Status date: 2026-08-03
+Status date: 2026-08-05
 Code status: slot-indexed Stage 1 energy recourse, multi-candidate Stage 2
 evaluation, explicit same-service-date PV controls, and an HTTP-only frontend
 pair runner are implemented. A final-slot return-boundary defect exposed by
@@ -12,6 +12,24 @@ completion audit also rejects a contradiction between solver settings,
 persisted claim classification, and terminal response. The corrected focused
 regression passes (`90 passed`) and the complete suite passes
 (`1067 passed`); compileall and `git diff --check` are required before freeze.
+
+## 2026-08-05 frontend 1,000 kW setting restoration
+
+The two current frontend scenarios declare a common 1,000 kW PV rated output.
+The prior 101.5 kW v6 controller environment explicitly overrode that frontend
+field, so it must not be described as a run of the user's 1,000 kW scenario.
+The runner now requires the separate
+`--allow-frontend-pv-capacity-override` acknowledgement before accepting
+`--pv-capacity-kw`; omitting both keeps the frontend value authoritative.
+
+The restored 1,000 kW setting implies 6,056.25 / 996.2 kWh sunny/rain input,
+5,000 m2 required installable area, and 14,285.714286 m2 reverse-estimated
+depot-area equivalent. This correction does not make either old run current:
+fresh Prepare is required, and no optimization was run during the restoration.
+The existing 1,000 kW evidence indicates that even rain can saturate the BEV
+renewable demand, so a null weather response at this capacity remains possible
+and must not be hidden. A 101.5 kW run is a separate binding-PV sensitivity,
+not the saved frontend baseline.
 
 Teacher release status is fail-closed: **BLOCKED** unless
 `output/formal_pair_20260730/completion_audit.json` records `status=READY`,
@@ -79,11 +97,13 @@ the composition-search blocker.
 
 The 1,000 kW pair is not a binding-PV weather test. Rain supplied 996.2 kWh and
 the selected schedule allocated only 565.86897 kWh of renewable energy in
-Stage 1, so both cases legitimately had zero BEV grid purchase. The next
-weather-response test must use the predeclared common 101.5 kW rating, which
-reconstructs approximately 614.709 / 101.114 kWh while holding non-PV controls
-fixed. Until its frontier, Rolling, physical, accounting, and pair gates pass,
-teacher release remains **BLOCKED**.
+Stage 1, so both cases legitimately had zero BEV grid purchase. A separate
+binding-PV weather-response sensitivity may use the predeclared common
+101.5 kW rating, which reconstructs approximately 614.709 / 101.114 kWh while
+holding non-PV controls fixed. Until its frontier, Rolling, physical,
+accounting, and pair gates pass, teacher release remains **BLOCKED**. That
+sensitivity must not overwrite or be mislabelled as the frontend scenarios'
+current 1,000 kW rated output.
 
 The binding-PV v2 run now exists at
 `output/formal_pair_20260803_flat30_pv101p5_phase3_frontier_v2`, frozen at

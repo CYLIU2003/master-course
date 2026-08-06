@@ -35,8 +35,8 @@ router = APIRouter(tags=["pv_management"])
 
 # Default Solcast CSV paths by depot
 _SOLCAST_CSV_PATHS = {
-    "tsurumaki": Path("data/pv/tsurumaki_solcast.csv"),
-    "meguro": Path("data/pv/meguro_solcast.csv"),
+    "tsurumaki": Path("data/external/solcast_raw/tsurumaki_2025_08_60min.csv"),
+    "meguro": Path("data/external/solcast_raw/meguro_2025_08_60min.csv"),
 }
 
 _DEFAULT_TIMEZONE = "+09:00"  # JST
@@ -81,7 +81,7 @@ def _find_solcast_csv(depot_id: str) -> Path:
         raise HTTPException(
             status_code=404,
             detail=make_error(
-                AppErrorCode.RESOURCE_NOT_FOUND,
+                AppErrorCode.MISSING_ARTIFACT,
                 f"Solcast CSV not found for depot '{depot_id}'",
             ),
         )
@@ -191,12 +191,12 @@ def generate_pv_profile(
     """
     # Verify scenario exists
     try:
-        scenario = store.get_scenario(scenario_id)
+        scenario = store.get_scenario_document_shallow(scenario_id)
     except KeyError:
         raise HTTPException(
             status_code=404,
             detail=make_error(
-                AppErrorCode.RESOURCE_NOT_FOUND,
+                AppErrorCode.SCENARIO_NOT_FOUND,
                 f"Scenario '{scenario_id}' not found",
             ),
         )
@@ -250,12 +250,17 @@ def generate_pv_profile(
             capacity_kw,
             request.pv_capacity_kw is not None,
             request.performance_ratio,
+            request.slot_minutes,
             profile["capacity_factor_by_slot"],
             profile["pv_generation_kwh_by_slot"],
         )
         
         # Save scenario
-        store.save_scenario_document(scenario_id, scenario)
+        store.replace_scenario_experiment_configuration(
+            scenario_id,
+            simulation_config=dict(scenario.get("simulation_config") or {}),
+            scenario_overlay=scenario.get("scenario_overlay"),
+        )
         
         return {
             "scenario_id": scenario_id,
@@ -319,12 +324,12 @@ def update_depot_energy_assets(
     """
     # Verify scenario exists
     try:
-        scenario = store.get_scenario(scenario_id)
+        scenario = store.get_scenario_document_shallow(scenario_id)
     except KeyError:
         raise HTTPException(
             status_code=404,
             detail=make_error(
-                AppErrorCode.RESOURCE_NOT_FOUND,
+                AppErrorCode.SCENARIO_NOT_FOUND,
                 f"Scenario '{scenario_id}' not found",
             ),
         )
@@ -341,7 +346,11 @@ def update_depot_energy_assets(
         _update_depot_asset(scenario, asset_update)
     
     # Save scenario
-    store.save_scenario_document(scenario_id, scenario)
+    store.replace_scenario_experiment_configuration(
+        scenario_id,
+        simulation_config=dict(scenario.get("simulation_config") or {}),
+        scenario_overlay=scenario.get("scenario_overlay"),
+    )
     
     return {
         "scenario_id": scenario_id,
@@ -360,6 +369,7 @@ def _update_scenario_pv_profile(
     pv_capacity_kw: float,
     pv_capacity_kw_manual_override: bool,
     performance_ratio: float,
+    slot_minutes: int,
     capacity_factor_by_slot: List[float],
     pv_generation_kwh_by_slot: List[float],
 ) -> None:
@@ -382,7 +392,11 @@ def _update_scenario_pv_profile(
         depot_asset = {"depot_id": depot_id}
         sim_cfg["depot_energy_assets"].append(depot_asset)
     
-    # Update PV settings
+    profile_id = f"{depot_id}_{target_date}_{slot_minutes}min"
+
+    # Keep every persisted representation of the selected daily profile in
+    # sync. Prepare may consume the date-indexed capacity-factor rows, while
+    # the frontend summary reads the direct slot series.
     depot_asset["depot_area_m2"] = depot_area_m2
     depot_asset["usable_area_ratio"] = DEFAULT_USABLE_AREA_RATIO
     depot_asset["panel_power_density_kw_m2"] = DEFAULT_PANEL_POWER_DENSITY_KW_M2
@@ -403,8 +417,29 @@ def _update_scenario_pv_profile(
     )
     depot_asset["pv_source_type"] = "solcast_daily"
     depot_asset["pv_source_date"] = target_date
+    depot_asset["pv_case_id"] = profile_id
+    depot_asset["pv_profile_source"] = "derived_daily"
+    depot_asset["pv_profile_dates"] = [target_date]
+    depot_asset["pv_slot_minutes"] = slot_minutes
     depot_asset["capacity_factor_by_slot"] = capacity_factor_by_slot
     depot_asset["pv_generation_kwh_by_slot"] = pv_generation_kwh_by_slot
+    depot_asset["pv_capacity_factor_by_date"] = [
+        {
+            "date": target_date,
+            "slot_minutes": slot_minutes,
+            "capacity_factor_by_slot": list(capacity_factor_by_slot),
+        }
+    ]
+    depot_asset["pv_generation_kwh_by_date"] = [
+        {
+            "date": target_date,
+            "slot_minutes": slot_minutes,
+            "pv_generation_kwh_by_slot": list(pv_generation_kwh_by_slot),
+        }
+    ]
+    sim_cfg["pv_profile_id"] = profile_id
+    sim_cfg["weather_observation_date"] = target_date
+    sim_cfg["weather_profile_source"] = profile_id
     _sync_scenario_overlay_depot_energy_assets(scenario)
 
 
