@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 import src.optimization.engine as optimization_engine_module
-from src.dispatch.models import DispatchContext, Trip, VehicleProfile
+from src.dispatch.models import DeadheadRule, DispatchContext, Trip, VehicleProfile
 from src.optimization.common.problem import (
     CanonicalOptimizationProblem,
     DepotEnergyAsset,
@@ -24,7 +24,10 @@ from src.optimization.engine import (
     actual_cost_objective_reconciles,
 )
 from src.gurobi_runtime import ensure_gurobi
-from src.optimization.milp.solver_adapter import GurobiMILPAdapter
+from src.optimization.milp.solver_adapter import (
+    GurobiMILPAdapter,
+    _actual_bess_terminal_soc_deviation_by_depot,
+)
 from test_post_return_soc_target import _dispatch_context
 
 
@@ -110,6 +113,74 @@ def _same_slot_back_to_back_problem(
             for slot_index in range(24)
         ),
         vehicle_usage_cost_jpy_per_used_bus=0.0,
+    )
+
+
+def _late_final_slot_problem() -> CanonicalOptimizationProblem:
+    """Build one BEV trip spanning the final two hourly SOC slots."""
+
+    dispatch_context = DispatchContext(
+        service_date="2025-08-05",
+        trips=[
+            Trip(
+                trip_id="late-final-trip",
+                route_id="late-route",
+                origin="Depot",
+                destination="Terminal",
+                departure_time="22:50",
+                arrival_time="23:14",
+                distance_km=10.0,
+                allowed_vehicle_types=("BEV",),
+                origin_stop_id="DEPOT",
+                destination_stop_id="B",
+                operator_id="tokyu",
+            )
+        ],
+        turnaround_rules={},
+        deadhead_rules={
+            ("DEPOT", "Depot"): DeadheadRule("DEPOT", "Depot", 0),
+            ("B", "DEPOT"): DeadheadRule("B", "DEPOT", 4),
+        },
+        vehicle_profiles={
+            "BEV": VehicleProfile(
+                vehicle_type="BEV",
+                battery_capacity_kwh=100.0,
+                energy_consumption_kwh_per_km=1.0,
+            )
+        },
+        location_aliases={"Depot": ("DEPOT",)},
+    )
+    problem = ProblemBuilder().build_from_dispatch(
+        dispatch_context,
+        scenario_id="late-final-slot-integrated",
+        vehicle_counts={"BEV": 1},
+        chargers=(ChargerDefinition("chg-1", "DEPOT", 60.0),),
+        canonical_depot_id="DEPOT",
+        timestep_min=60,
+        operation_start_time="00:00",
+        operation_end_time="23:59",
+        final_soc_floor_percent=20.0,
+        final_soc_target_percent=80.0,
+        final_soc_target_tolerance_percent=0.0,
+        price_slots=tuple(
+            EnergyPriceSlot(
+                slot_index=slot_index,
+                # Make the active final slot uniquely cheapest.  A missing
+                # C12 row would deterministically attract illegal charging.
+                grid_buy_yen_per_kwh=(0.0 if slot_index == 23 else 10.0),
+            )
+            for slot_index in range(24)
+        ),
+        vehicle_usage_cost_jpy_per_used_bus=0.0,
+    )
+    # Keep enough headroom to charge the late trip's energy before departure;
+    # the actual-cost contract changes the terminal policy to return-to-initial.
+    return replace(
+        problem,
+        vehicles=tuple(
+            replace(vehicle, initial_soc=80.0)
+            for vehicle in problem.vehicles
+        ),
     )
 
 
@@ -295,6 +366,70 @@ def test_phase4_solver_reconciles_integrated_actual_cost_on_full_day() -> None:
         assert terminal_values[vehicle_id] == pytest.approx(
             target_kwh,
             abs=accepted_deviation_kwh,
+        )
+
+
+def test_phase4_final_slot_trip_has_one_energy_debit_and_no_trip_charge() -> None:
+    problem = _late_final_slot_problem()
+
+    result = OptimizationEngine().solve(
+        problem,
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            phase="phase4_integrated",
+            integrated_actual_cost_objective=True,
+            time_limit_sec=30,
+            mip_gap=0.0,
+            random_seed=42,
+            warm_start=False,
+            allow_postsolve_repair=False,
+        ),
+    )
+
+    assert result.feasible, result.infeasibility_reasons
+    assert result.solver_metadata["bev_terminal_soc_balance_satisfied"] is True
+    assert all(
+        slot.slot_index != 23
+        for slot in result.plan.charging_slots
+    )
+    assert not any(
+        "charging occurs during active trip slot 23" in reason
+        or "exceeds return-to-initial" in reason
+        for reason in result.infeasibility_reasons
+    )
+    terminal_values = result.solver_metadata[
+        "vehicle_terminal_soc_kwh_by_vehicle"
+    ]
+    terminal_targets = result.solver_metadata[
+        "vehicle_terminal_soc_target_kwh_by_vehicle"
+    ]
+    assert terminal_values.keys() == terminal_targets.keys()
+    for vehicle_id, target_kwh in terminal_targets.items():
+        assert terminal_values[vehicle_id] == pytest.approx(
+            target_kwh,
+            abs=1.0e-6,
+        )
+
+
+def test_bess_terminal_deviation_uses_physical_soc_trace() -> None:
+    deviations = _actual_bess_terminal_soc_deviation_by_depot(
+        bess_soc_end_kwh_by_depot_slot={
+            "DEPOT": {0: 49.0, 23: 50.0},
+        },
+        bess_terminal_soc_target_kwh_by_depot={"DEPOT": 50.0},
+    )
+
+    assert deviations == {"DEPOT": 0.0}
+
+
+def test_bess_terminal_deviation_fails_without_physical_soc_trace() -> None:
+    with pytest.raises(
+        RuntimeError,
+        match="BESS terminal target has no solved end-of-slot SOC trace",
+    ):
+        _actual_bess_terminal_soc_deviation_by_depot(
+            bess_soc_end_kwh_by_depot_slot={},
+            bess_terminal_soc_target_kwh_by_depot={"DEPOT": 50.0},
         )
 
 

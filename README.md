@@ -1,5 +1,39 @@
 # master-course
 
+## 2026-08-08 Phase 4 final-slot and composition-resolution correction
+
+- A fresh clean-commit diagnostic at
+  `output/formal_pair_20260808_flat30_pv1000_bess6000_phase4_fullscope_223c9f1`
+  used 264 trips, flat 30 JPY/kWh grid energy, zero demand charge,
+  1,000 kW PV and a 6,000 kWh BESS. Rain produced a physically valid
+  15-BEV / 17-ICE day-ahead incumbent and accepted 24/24 Rolling, but its raw
+  gap was 100%. Sunny reacted strongly to PV and reached 25 BEVs / 7 ICE buses,
+  but failed postsolve validation; neither value is an accepted optimum.
+- Sunny exposed two final-slot defects. Charging eligibility was emitted only
+  for SOC-transition slots 0--22, so slot 23 could charge during a trip. The
+  terminal SOC expression also subtracted a whole trip after prior hourly
+  shares had already been consumed. For the three late BEVs, the false surplus
+  exactly matched the duplicated 22:00--23:00 shares: 3.127139, 5.003422 and
+  7.192420 kWh.
+- Charging eligibility now covers every slot, while SOC transitions retain
+  their correct one-shorter range. Terminal/day-end SOC uses the same
+  slot-overlap energy expression as the transition rows, so each trip-energy
+  share is debited exactly once. Return-to-initial and no-charge-during-trip
+  contracts are preserved, not relaxed.
+- BESS terminal deviation evidence is now computed from the solved final SOC
+  and configured target. The unpenalized auxiliary absolute-deviation variable
+  is no longer treated as physical evidence.
+- The formal Phase 4 actual-cost pair now requests a 0.1% MIP gap. At the
+  observed approximately 673,000 JPY objective scale, the former 5% target
+  allowed about 33,000 JPY of uncertainty--roughly the entire sunny ICE fuel
+  term--and therefore could terminate before resolving the powertrain mix.
+  A time limit that misses 0.1% remains a feasible candidate only and is never
+  reported as an optimum.
+- Focused final-slot, BESS, actual-cost and frontend-runner tests pass; the
+  complete repository suite passes `1212 passed`, and compileall/diff-check
+  pass. A new clean commit and fresh sunny/rain Prepare/run are still required
+  before this correction can discharge the research blocker.
+
 ## 2026-08-08 Phase 4 full-scope diagnostic correction
 
 - A non-formal 264-trip HTTP diagnostic at

@@ -38,6 +38,8 @@ EXPECTED_PV_KWH = {
     "rain": 101.1143,
 }
 REFERENCE_PV_CAPACITY_KW = 101.5
+PHASE4_ACTUAL_COST_MIP_GAP = 0.001
+PHASE4_POLICY_MIP_GAP = 0.05
 POWERTRAIN_ELECTRIC = {"BEV", "PHEV", "FCEV"}
 TARGET_ROUTE_IDS_BY_DEPOT = {
     # Canonical 16-variant Tsurumaki scope recovered identically from both
@@ -435,10 +437,12 @@ def build_optimization_payload(
                 "stage2_time_limit_seconds": None,
                 "stage1_stage2_candidate_limit": 1,
                 "stage1_composition_search_radius": 0,
-                # Five percent prevents a merely feasible Phase 3 seed near
-                # the 640,000 JPY vehicle-day lower bound from terminating the
-                # integrated solve immediately at the former 10% threshold.
-                "mip_gap": 0.05,
+                # The fixed 640,000 JPY vehicle-day term dominates this pair's
+                # objective.  A 5% relative gap leaves roughly 33,000 JPY
+                # unresolved, which is large enough to hide the entire ICE/BEV
+                # energy-cost decision.  The actual-cost pair therefore uses a
+                # composition-resolving 0.1% target.
+                "mip_gap": PHASE4_ACTUAL_COST_MIP_GAP,
                 "integrated_actual_cost_objective": True,
             }
         )
@@ -462,7 +466,7 @@ def build_optimization_payload(
                 "stage2_time_limit_seconds": None,
                 "stage1_stage2_candidate_limit": 1,
                 "stage1_composition_search_radius": 0,
-                "mip_gap": 0.05,
+                "mip_gap": PHASE4_POLICY_MIP_GAP,
                 "integrated_actual_cost_objective": False,
                 "integrated_ev_utilization_mode": (
                     "minimum_ice_fuel_lexicographic"
@@ -2134,7 +2138,13 @@ def _case_gate_audit(
         "phase4_cost_constrained_ev_utilization",
     }
     phase4_integrated = phase4_actual_cost or phase4_policy
-    requested_gap_ratio = 0.05 if phase4_integrated else 0.1
+    requested_gap_ratio = (
+        PHASE4_ACTUAL_COST_MIP_GAP
+        if phase4_actual_cost
+        else PHASE4_POLICY_MIP_GAP
+        if phase4_policy
+        else 0.1
+    )
     phase4_policy_cost_cap_valid = bool(
         not phase4_policy
         or (

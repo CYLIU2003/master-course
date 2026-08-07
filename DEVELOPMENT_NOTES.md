@@ -1,5 +1,44 @@
 # Development Notes
 
+## 2026-08-08 Phase 4 late-service SOC and MIP-gap correction
+
+- Executed a clean fresh-Prepare pair at commit
+  `223c9f1302f9a45264e1e1732bb5fb5d41219e76` through the frontend HTTP/BFF
+  path. Both cases held the 264-trip scope, 60-vehicle selected-depot fleet,
+  10 chargers, flat 30 JPY/kWh grid price, zero demand charge, 1,000 kW PV
+  rating, and 6,000 kWh / 900 kW / 3,000->3,000 kWh BESS controls fixed.
+- Rain completed with 15 BEVs / 17 ICE buses and 48 / 216 trips, exact trip
+  coverage, physical day-ahead acceptance and 24/24 accepted Rolling. It was a
+  3,600-second incumbent with raw gap 100% and best bound zero, so it is not an
+  optimality result. Sunny improved the incumbent to 25 BEVs / 7 ICE buses and
+  164 / 100 trips, demonstrating that integrated PV value does affect dispatch,
+  but day-ahead postsolve validation rejected the solution and Rolling did not
+  start. The pair correctly ended `BLOCKED`.
+- Sunny's three late Shibu21 duties ended after 23:00. The transition rows had
+  already debited the share driven before 23:00, while `_slot_end_soc_expr`
+  debited the full trip again. The independent replay surplus matched the
+  duplicate shares exactly: 3.127139, 5.003422 and 7.192420 kWh. A separate
+  loop-bound defect omitted C12 charging eligibility and charge-power linkage
+  for slot 23, allowing one BEV to charge while its 22:37--23:01 trip was active.
+- `_trip_energy_in_slot_expr` is now shared by SOC transitions and terminal
+  expressions. Charging eligibility, at-home/away implications, charge-power
+  linkage and session-start rows iterate over all price slots. The BESS
+  terminal deviation audit reads the final solved end-of-slot SOC trace and
+  target, failing closed if that trace is absent; it does not read a zero-cost
+  auxiliary deviation variable.
+- The formal integrated actual-cost request and its case-gate audit now use a
+  0.1% relative gap. The failed sunny run stopped at 4.772850% with objective
+  672,565.367369 JPY and bound 640,464.829587 JPY. Its 32,100.54 JPY absolute
+  uncertainty was almost identical to its 31,700.89 JPY ICE fuel term, proving
+  that the old 5% threshold could not resolve the powertrain composition.
+  Policy-oriented Phase 4 cases retain their distinct 5% setting.
+- Focused regression coverage verifies a trip spanning 22:50--23:14, no slot-23
+  trip charging, exact return-to-initial SOC, physical BESS deviation semantics,
+  fail-closed missing BESS trace handling, and frontend 0.1% request parity.
+  The focused set passes 48 tests; the complete repository suite passes 1,212
+  tests in 74.52 seconds; compileall and `git diff --check` pass. A clean
+  commit and fresh formal pair remain required.
+
 ## 2026-08-08 Phase 4 coarse-slot and terminal-SOC diagnostic closure
 
 - Replayed the 264-trip sunny canonical input through the frontend HTTP/BFF

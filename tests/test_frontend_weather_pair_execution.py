@@ -402,7 +402,7 @@ def test_optimization_payload_exposes_frontier_and_integrated_actual_cost() -> N
     assert integrated["mode"] == "phase4_integrated"
     assert integrated["integrated_actual_cost_objective"] is True
     assert integrated["time_limit_seconds"] >= 3600
-    assert integrated["mip_gap"] == pytest.approx(0.05)
+    assert integrated["mip_gap"] == pytest.approx(0.001)
     assert integrated.get("stage1_bev_frontier_enabled", False) is False
 
     maximum_ev = runner.build_optimization_payload(

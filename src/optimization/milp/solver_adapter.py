@@ -73,6 +73,38 @@ _FEEDBACK_GLOBAL_DEADLINE_KEY = "_stage2_feedback_global_deadline_monotonic"
 _FEEDBACK_GLOBAL_STARTED_KEY = "_stage2_feedback_global_started_monotonic"
 
 
+def _actual_bess_terminal_soc_deviation_by_depot(
+    *,
+    bess_soc_end_kwh_by_depot_slot: Mapping[str, Mapping[int, float]],
+    bess_terminal_soc_target_kwh_by_depot: Mapping[str, float],
+) -> Dict[str, float]:
+    """Return physical BESS terminal deviations from the solved SOC trace.
+
+    The MILP keeps an auxiliary absolute-deviation variable for objective
+    compatibility.  When its penalty is zero, that variable is not uniquely
+    minimized and therefore is not physical evidence.  The authoritative
+    deviation is the absolute difference between the final solved SOC and the
+    configured terminal target.
+    """
+
+    deviations: Dict[str, float] = {}
+    for raw_depot_id, raw_target_kwh in (
+        bess_terminal_soc_target_kwh_by_depot.items()
+    ):
+        depot_id = str(raw_depot_id)
+        slot_trace = bess_soc_end_kwh_by_depot_slot.get(depot_id)
+        if not slot_trace:
+            raise RuntimeError(
+                "BESS terminal target has no solved end-of-slot SOC trace: "
+                f"depot={depot_id}"
+            )
+        terminal_slot = max(int(slot_idx) for slot_idx in slot_trace)
+        terminal_soc_kwh = float(slot_trace[terminal_slot])
+        target_kwh = float(raw_target_kwh)
+        deviations[depot_id] = abs(terminal_soc_kwh - target_kwh)
+    return deviations
+
+
 def classify_bev_frontier_status(
     solver_status: str,
     solution_count: int,
@@ -1955,14 +1987,36 @@ class GurobiMILPAdapter:
                 first_slot = slot_indices[0]
                 model.addConstr(s_var[(vehicle.vehicle_id, first_slot)] == initial_kwh)
 
-                def _slot_end_soc_expr(slot_idx: int, day_idx: int) -> Any:
-                    trip_load = gp.quicksum(
-                        energy_kwh * y[assignment_key]
-                        for energy_kwh, assignment_key in electric_trip_kwh_by_slot.get(
-                            slot_idx, []
+                def _trip_energy_in_slot_expr(slot_idx: int) -> Any:
+                    """Return only the trip-energy share consumed in one slot.
+
+                    ``s_var[v, slot]`` is the SOC at the beginning of the slot.
+                    Earlier shares of a trip spanning multiple slots have
+                    already been consumed by the preceding transition rows, so
+                    a day-end expression must not subtract the whole trip again.
+                    """
+
+                    return gp.quicksum(
+                        self._trip_energy_kwh(problem, vehicle, trip.trip_id)
+                        * self._trip_slot_energy_fraction(
+                            problem,
+                            trip.departure_min,
+                            trip.arrival_min,
+                            slot_idx,
                         )
-                        if assignment_key[0] == vehicle.vehicle_id
+                        * y[(vehicle.vehicle_id, trip.trip_id)]
+                        for trip in problem.trips
+                        if (vehicle.vehicle_id, trip.trip_id) in y
+                        and self._trip_active_in_slot(
+                            problem,
+                            trip.departure_min,
+                            trip.arrival_min,
+                            slot_idx,
+                        )
                     )
+
+                def _slot_end_soc_expr(slot_idx: int, day_idx: int) -> Any:
+                    trip_load = _trip_energy_in_slot_expr(slot_idx)
                     startup_load = gp.quicksum(
                         energy_kwh * start_arc[start_key]
                         for energy_kwh, start_key in (
@@ -2172,24 +2226,7 @@ class GurobiMILPAdapter:
                     # For a trip spanning multiple slots, each slot contributes:
                     #   trip_energy * (overlap_duration / trip_duration)
                     # This ensures mid-trip SOC is checked, not just end-trip SOC.
-                    trip_energy_expr = gp.quicksum(
-                        self._trip_energy_kwh(problem, vehicle, trip.trip_id)
-                        * self._trip_slot_energy_fraction(
-                            problem,
-                            trip.departure_min,
-                            trip.arrival_min,
-                            slot_idx,
-                        )
-                        * y[(vehicle.vehicle_id, trip.trip_id)]
-                        for trip in problem.trips
-                        if (vehicle.vehicle_id, trip.trip_id) in y
-                        and self._trip_active_in_slot(
-                            problem,
-                            trip.departure_min,
-                            trip.arrival_min,
-                            slot_idx,
-                        )
-                    )
+                    trip_energy_expr = _trip_energy_in_slot_expr(slot_idx)
                     # C8: deadhead energy consumption linked with selected connection arcs.
                     deadhead_energy_expr = gp.quicksum(
                         self._deadhead_energy_kwh(problem, vehicle, from_trip_id, to_trip_id)
@@ -2226,6 +2263,12 @@ class GurobiMILPAdapter:
                         - return_deadhead_energy_expr
                     )
 
+                # Charging eligibility applies to every modeled slot, including
+                # the final slot.  SOC transitions intentionally stop one slot
+                # earlier because the final state is represented by
+                # ``_slot_end_soc_expr``; charging constraints must not inherit
+                # that shorter loop bound.
+                for pos, slot_idx in enumerate(slot_indices):
                     # C12: no charging while the vehicle is operating a trip.
                     # A coarse energy slot may contain multiple sequential,
                     # non-overlapping trips.  ``charge_on <= 1 - sum(y)``
@@ -3706,10 +3749,6 @@ class GurobiMILPAdapter:
         for (vehicle_id, slot_idx), var in s_var.items():
             vehicle_soc_kwh_by_vehicle_slot.setdefault(vehicle_id, {})[slot_idx] = max(_var_val(var), 0.0)
 
-        bess_terminal_soc_deviation_kwh_by_depot = {
-            str(depot_id): max(_var_val(var), 0.0)
-            for depot_id, var in bess_terminal_soc_deviation_var.items()
-        }
         bess_terminal_soc_target_kwh_by_depot = {
             str(depot_id): target
             for depot_id, asset in effective_depot_energy_assets.items()
@@ -3725,6 +3764,16 @@ class GurobiMILPAdapter:
             )
             if target is not None
         }
+        bess_terminal_soc_deviation_kwh_by_depot = (
+            _actual_bess_terminal_soc_deviation_by_depot(
+                bess_soc_end_kwh_by_depot_slot=(
+                    bess_soc_end_kwh_by_depot_slot
+                ),
+                bess_terminal_soc_target_kwh_by_depot=(
+                    bess_terminal_soc_target_kwh_by_depot
+                ),
+            )
+        )
 
         opportunistic_topup_deficit_kwh_by_vehicle_day: Dict[Tuple[str, int], float] = {}
         for (vehicle_id, day_idx), var in opportunistic_topup_deficit_var.items():
@@ -4078,6 +4127,9 @@ class GurobiMILPAdapter:
                 "bess_terminal_soc_target_kwh_by_depot": bess_terminal_soc_target_kwh_by_depot,
                 "bess_terminal_soc_deviation_kwh_by_depot": bess_terminal_soc_deviation_kwh_by_depot,
                 "bess_terminal_soc_deviation_kwh": round(sum(bess_terminal_soc_deviation_kwh_by_depot.values()), 6),
+                "bess_terminal_soc_deviation_semantics": (
+                    "actual_abs_terminal_soc_minus_target_not_auxiliary_var"
+                ),
                 "bess_soc_start_kwh_by_depot_slot": bess_soc_start_kwh_by_depot_slot,
                 "bess_soc_end_kwh_by_depot_slot": bess_soc_end_kwh_by_depot_slot,
                 "bev_terminal_soc_policy": str(

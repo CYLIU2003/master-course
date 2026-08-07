@@ -1,7 +1,53 @@
 # Current research release blockers
 
 Status date: 2026-08-08
-Code status: the clean `e071446` pair proved that submitted Phase 3 `Start`
+Code status: a fresh clean diagnostic at `223c9f1` proved that the integrated
+objective reacts to high PV (sunny reached 25 BEVs versus rain's 15), but also
+exposed a final-slot charging omission, duplicated terminal trip-energy debit,
+and an unphysical BESS auxiliary-deviation read. The current working tree
+corrects those defects and tightens formal Phase 4 actual-cost resolution from
+5% to 0.1%; focused tests pass (`48 passed`), the full suite passes
+(`1212 passed`), and compileall/diff-check pass. This is not yet clean-commit
+formal evidence. Release remains blocked pending a new frozen commit, fresh
+Prepare, both completed frontend jobs, accepted physical/Rolling gates,
+accounting reconciliation, and honestly reported achieved gaps.
+
+## 2026-08-08 final-slot and composition-resolution blocker
+
+The clean frontend pair at
+`output/formal_pair_20260808_flat30_pv1000_bess6000_phase4_fullscope_223c9f1`
+is diagnostic failure evidence, not an accepted weather pair. Sunny found a
+25-BEV / 7-ICE, 164 / 100-trip incumbent with zero grid import, 6,056.25 kWh
+PV, 1,923.93 kWh BESS-to-bus energy and 3,851.51 kWh curtailment. It then
+failed canonical postsolve validation: slot 23 lacked charging eligibility
+rows and the terminal expression double-debited the pre-23:00 share of three
+late trips. Rolling correctly did not start. Rain retained a 15-BEV / 17-ICE,
+48 / 216-trip incumbent, passed physical validation and 24/24 Rolling, but
+finished at time limit with raw gap 100% and no useful lower bound.
+
+The current correction covers the final slot with the same no-charge-during-
+trip, at-home, charger-power and session-start constraints as all earlier
+slots. Terminal SOC now debits only the trip-energy fraction belonging to the
+terminal slot. BESS terminal deviation evidence comes from the solved terminal
+SOC trace. None of these changes weakens turnaround, trip coverage, SOC,
+charger or return-to-initial requirements.
+
+The old 5% integrated gap admitted approximately 32,101 JPY of sunny objective
+uncertainty, roughly the whole 31,701 JPY ICE fuel component. It therefore
+could not answer how many additional BEVs were cost-minimizing even after the
+PV signal increased BEV use. The formal actual-cost runner and its audit now
+request 0.1%. A time-limit incumbent that misses that target remains useful as
+a physical candidate but cannot close the optimality or teacher-release gate.
+
+This blocker closes only after the corrected clean SHA produces fresh sunny
+and rain inputs and artifacts with 264/264 coverage, physical terminal BEV/BESS
+balance, accepted 24/24 Rolling, exact source provenance, solver/accounting
+reconciliation, unchanged Git state, and either the requested 0.1% certificate
+or an explicit non-optimal candidate classification.
+
+## 2026-08-08 Phase 4 feasible-incumbent remediation status
+
+The clean `e071446` pair proved that submitted Phase 3 `Start`
 values were not an integrated-feasibility certificate. A later non-formal
 264-trip diagnostic (`output/2026-08-08/run_20260808_0601`) now reaches a
 feasible integrated fixed-dispatch recourse and complete 776,752-variable
@@ -13,8 +59,6 @@ focused tests pass (`79 passed`), the complete repository suite passes
 dirty tree, a reused prepared input, `research_run=false`, and a one-second
 unrestricted solve, so it is **not** research evidence. A fresh Prepare from a
 clean frozen commit and its sunny/rain per-run/pair gates remain authoritative.
-
-## 2026-08-08 Phase 4 feasible-incumbent remediation status
 
 The clean frontend pair at commit
 `e071446cb346092719a3103e81026bcb02d82a21`, stored under
