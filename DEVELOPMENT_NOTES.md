@@ -1,5 +1,22 @@
 # Development Notes
 
+## 2026-08-07 Branch integration validation
+
+- Local `main` now contains both the Phase 3 composition/PV-rated-output
+  lineage and the powertrain-sensitive dispatch-audit lineage. The integration
+  preserves the explicit-zero Quick Setup repair and the formal-run Git
+  preflight that were already present on `main`.
+- Conflict resolution kept the saved `pv_capacity_kw` value authoritative,
+  retained reverse area/capacity estimates as audit outputs, and aligned
+  `vehicle_usage_cost_semantics` validation across Quick Setup and Prepare.
+- Focused persistence, PV, cost, composition, formal-contract, and README
+  regressions pass (`177 passed`). The complete repository suite passes
+  (`1163 passed`), `compileall` passes, and `git diff --check` passes.
+- No Prepare or optimization run was performed during branch integration.
+  Existing prepared inputs and outputs are not relabelled as evidence for the
+  integrated commit; teacher release remains fail-closed until a fresh formal
+  pair is run from a clean frozen commit.
+
 ## 2026-08-07 Quick Setup の明示的な 0 を保存・再読込・Prepare まで保持
 
 - 原因は Tk の `load_quick_setup()` にあった `saved_value or default` である。BFF とシナリオストアには `demand_charge_cost_per_kw=0.0` が正しく保存されていても、保存直後の自動再読込で画面が `1500` に戻り、その後の Prepare が誤った値を再送していた。

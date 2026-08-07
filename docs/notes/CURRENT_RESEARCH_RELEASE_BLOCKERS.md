@@ -10,8 +10,19 @@ attempt exposed and the current tree corrects a result-claim message that
 conflated integrated-optimality scope with certified-gap status. The corrected
 completion audit also rejects a contradiction between solver settings,
 persisted claim classification, and terminal response. The current
-explicit-zero regression passes (`133 passed`) and the complete suite passes
-(`1116 passed`); compileall and `git diff --check` also pass.
+integrated focused regression passes (`177 passed`) and the complete suite
+passes (`1163 passed`); compileall and `git diff --check` also pass. These code
+checks do not replace a fresh clean-commit formal run.
+
+## 2026-08-07 branch integration status
+
+Local `main` now contains the Phase 3 composition/PV-rated-output lineage and
+the powertrain-sensitive dispatch-audit lineage. Conflict resolution preserved
+the explicit-zero Quick Setup fix and the pre-solve formal Git gate. Saved
+`pv_capacity_kw` remains the authoritative optimization input; reverse
+area/capacity values remain derived audit fields. No Prepare or optimization
+run was performed during integration, so no older artifact is promoted to
+evidence for this tree and teacher release remains **BLOCKED**.
 
 ## 2026-08-05 frontend 1,000 kW setting restoration
 
