@@ -80,6 +80,41 @@ def test_problem_builder_maps_grid_to_bess_controls_into_assets() -> None:
     assert asset.bess_terminal_soc_deviation_penalty_yen_per_kwh == 20.0
 
 
+def test_problem_builder_preserves_explicit_zero_cost_and_limit_controls() -> None:
+    scenario = _scenario()
+    scenario.pop("energy_price_profiles")
+    scenario["simulation_config"]["unserved_penalty"] = 0.0
+    scenario["scenario_overlay"]["solver_config"] = {
+        "unserved_penalty": 999.0,
+    }
+    scenario["scenario_overlay"]["cost_coefficients"] = {
+        "grid_flat_price_per_kwh": 0.0,
+        "grid_sell_price_per_kwh": 0.0,
+        "demand_charge_cost_per_kw": 0.0,
+        "diesel_price_per_l": 0.0,
+        "ice_co2_kg_per_l": 0.0,
+        "grid_co2_kg_per_kwh": 0.0,
+    }
+    scenario["scenario_overlay"]["charging_constraints"] = {
+        "depot_power_limit_kw": 0.0,
+    }
+
+    problem = ProblemBuilder().build_from_scenario(
+        scenario,
+        depot_id="dep-1",
+        service_id="WEEKDAY",
+    )
+
+    assert problem.scenario.diesel_price_yen_per_l == 0.0
+    assert problem.scenario.demand_charge_on_peak_yen_per_kw == 0.0
+    assert problem.scenario.demand_charge_off_peak_yen_per_kw == 0.0
+    assert problem.scenario.ice_co2_kg_per_l == 0.0
+    assert problem.objective_weights.unserved == 0.0
+    assert problem.depots[0].import_limit_kw == 0.0
+    assert all(slot.grid_buy_yen_per_kwh == 0.0 for slot in problem.price_slots)
+    assert all(slot.demand_charge_weight == 0.0 for slot in problem.price_slots)
+
+
 def test_problem_builder_prefers_overlay_depot_energy_asset_dict() -> None:
     scenario = _scenario()
     scenario["simulation_config"]["depot_energy_assets"][0]["bess_initial_soc_kwh"] = 20.0

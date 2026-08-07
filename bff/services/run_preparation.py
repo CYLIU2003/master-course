@@ -364,15 +364,21 @@ def _random_seed(scenario: dict) -> int:
         "simulationConfig",
         default={},
     ) or {}
-    raw = (
-        scenario.get("randomSeed")
-        or scenario.get("random_seed")
-        or meta.get("randomSeed")
-        or overlay.get("random_seed")
-        or overlay.get("randomSeed")
-        or simulation_config.get("random_seed")
-        or simulation_config.get("randomSeed")
-        or 42
+    raw = next(
+        (
+            value
+            for value in (
+                scenario.get("randomSeed"),
+                scenario.get("random_seed"),
+                meta.get("randomSeed"),
+                overlay.get("random_seed"),
+                overlay.get("randomSeed"),
+                simulation_config.get("random_seed"),
+                simulation_config.get("randomSeed"),
+            )
+            if value is not None
+        ),
+        42,
     )
     try:
         return int(raw)

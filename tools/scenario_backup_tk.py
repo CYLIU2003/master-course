@@ -3653,6 +3653,17 @@ class App:
         return default
 
     @staticmethod
+    def _setting_text(
+        settings: dict[str, Any],
+        key: str,
+        *,
+        default: Any,
+    ) -> str:
+        """Format a saved setting without treating numeric zero as missing."""
+
+        return str(App._first_present_value(settings.get(key), default=default))
+
+    @staticmethod
     def _repo_relative_path(path: Path) -> str:
         try:
             return path.resolve().relative_to(_REPO_ROOT).as_posix()
@@ -6750,7 +6761,9 @@ class App:
             if planning_days is None:
                 service_dates = list(sim.get("serviceDates") or [])
                 planning_days = len(service_dates) if service_dates else 1
-            self.planning_days_var.set(str(planning_days or 1))
+            self.planning_days_var.set(
+                str(self._first_present_value(planning_days, default=1))
+            )
             self.operation_time_window_enabled_var.set(
                 bool(sim.get("operationTimeWindowEnabled", False))
             )
@@ -6768,15 +6781,35 @@ class App:
             self.objective_mode_var.set(
                 normalize_objective_mode(solver.get("objectiveMode") or "total_cost")
             )
-            self.time_limit_var.set(str(solver.get("timeLimitSeconds") or 300))
+            self.time_limit_var.set(
+                self._setting_text(solver, "timeLimitSeconds", default=300)
+            )
             self.mip_gap_var.set(str(solver.get("mipGap") if solver.get("mipGap") is not None else 0.01))
-            self.alns_iter_var.set(str(solver.get("alnsIterations") or 500))
-            self.no_improvement_limit_var.set(str(solver.get("noImprovementLimit") or 100))
+            self.alns_iter_var.set(
+                self._setting_text(solver, "alnsIterations", default=500)
+            )
+            self.no_improvement_limit_var.set(
+                self._setting_text(solver, "noImprovementLimit", default=100)
+            )
             self.destroy_fraction_var.set(str(solver.get("destroyFraction") if solver.get("destroyFraction") is not None else 0.25))
-            self.random_seed_var.set(str(solver.get("randomSeed") or 42))
+            self.random_seed_var.set(
+                self._setting_text(solver, "randomSeed", default=42)
+            )
             self.objective_preset_var.set(str(solver.get("objectivePreset") or sim.get("objectivePreset") or "cost"))
-            self.max_start_fragments_var.set(str(solver.get("maxStartFragmentsPerVehicle") or 100))
-            self.max_end_fragments_var.set(str(solver.get("maxEndFragmentsPerVehicle") or 100))
+            self.max_start_fragments_var.set(
+                self._setting_text(
+                    solver,
+                    "maxStartFragmentsPerVehicle",
+                    default=100,
+                )
+            )
+            self.max_end_fragments_var.set(
+                self._setting_text(
+                    solver,
+                    "maxEndFragmentsPerVehicle",
+                    default=100,
+                )
+            )
             self.milp_max_successors_var.set(
                 ""
                 if solver.get("milpMaxSuccessorsPerTrip") is None
@@ -6784,15 +6817,41 @@ class App:
             )
             self.enable_vehicle_diagram_output_var.set(bool(solver.get("enableVehicleDiagramOutput", True)))
             self.allow_partial_service_var.set(bool(sim.get("allowPartialService", False)))
-            self.unserved_penalty_var.set(str(sim.get("unservedPenalty") or 10000))
-            self.grid_flat_price_var.set(str(sim.get("gridFlatPricePerKwh") or 30))
-            self.grid_sell_price_var.set(str(sim.get("gridSellPricePerKwh") or 0))
-            self.demand_charge_var.set(str(sim.get("demandChargeCostPerKw") or 1500))
-            self.pv_marginal_charge_cost_var.set(str(sim.get("pvMarginalChargeCostYenPerKwh") or 0))
-            self.pv_curtail_penalty_var.set(str(sim.get("pvCurtailPenaltyYenPerKwh") or 0))
-            self.diesel_price_var.set(str(sim.get("dieselPricePerL") or 145))
-            self.grid_co2_var.set(str(sim.get("gridCo2KgPerKwh") or 0))
-            self.co2_price_var.set(str(sim.get("co2PricePerKg") or 0))
+            self.unserved_penalty_var.set(
+                self._setting_text(sim, "unservedPenalty", default=10000)
+            )
+            self.grid_flat_price_var.set(
+                self._setting_text(sim, "gridFlatPricePerKwh", default=30)
+            )
+            self.grid_sell_price_var.set(
+                self._setting_text(sim, "gridSellPricePerKwh", default=0)
+            )
+            self.demand_charge_var.set(
+                self._setting_text(sim, "demandChargeCostPerKw", default=1500)
+            )
+            self.pv_marginal_charge_cost_var.set(
+                self._setting_text(
+                    sim,
+                    "pvMarginalChargeCostYenPerKwh",
+                    default=0,
+                )
+            )
+            self.pv_curtail_penalty_var.set(
+                self._setting_text(
+                    sim,
+                    "pvCurtailPenaltyYenPerKwh",
+                    default=0,
+                )
+            )
+            self.diesel_price_var.set(
+                self._setting_text(sim, "dieselPricePerL", default=145)
+            )
+            self.grid_co2_var.set(
+                self._setting_text(sim, "gridCo2KgPerKwh", default=0)
+            )
+            self.co2_price_var.set(
+                self._setting_text(sim, "co2PricePerKg", default=0)
+            )
             self.vehicle_usage_cost_var.set(
                 str(
                     self._first_present_value(
@@ -6804,9 +6863,15 @@ class App:
             )
             self.co2_price_source_var.set(str(sim.get("co2PriceSource") or "manual"))
             self.co2_reference_date_var.set(str(sim.get("co2ReferenceDate") or ""))
-            self.ice_co2_kg_per_l_var.set(str(sim.get("iceCo2KgPerL") or 2.64))
-            self.degradation_weight_var.set(str(sim.get("degradationWeight") or 0))
-            self.depot_power_limit_var.set(str(sim.get("depotPowerLimitKw") or 500))
+            self.ice_co2_kg_per_l_var.set(
+                self._setting_text(sim, "iceCo2KgPerL", default=2.64)
+            )
+            self.degradation_weight_var.set(
+                self._setting_text(sim, "degradationWeight", default=0)
+            )
+            self.depot_power_limit_var.set(
+                self._setting_text(sim, "depotPowerLimitKw", default=500)
+            )
             initial_soc_default = (
                 self._first_present_value(
                     sim.get("initialSocPercent"),
@@ -6845,11 +6910,25 @@ class App:
                     0.0,
                 )
             )
-            self.initial_ice_fuel_percent_var.set(str(sim.get("initialIceFuelPercent") or 100.0))
-            self.min_ice_fuel_percent_var.set(str(sim.get("minIceFuelPercent") or 10.0))
-            self.default_ice_tank_capacity_l_var.set(str(sim.get("defaultIceTankCapacityL") or 300.0))
-            self.max_ice_fuel_percent_var.set(str(sim.get("maxIceFuelPercent") or 90.0))
-            self.deadhead_speed_kmh_var.set(str(sim.get("deadheadSpeedKmh") or 18.0))
+            self.initial_ice_fuel_percent_var.set(
+                self._setting_text(sim, "initialIceFuelPercent", default=100.0)
+            )
+            self.min_ice_fuel_percent_var.set(
+                self._setting_text(sim, "minIceFuelPercent", default=10.0)
+            )
+            self.default_ice_tank_capacity_l_var.set(
+                self._setting_text(
+                    sim,
+                    "defaultIceTankCapacityL",
+                    default=300.0,
+                )
+            )
+            self.max_ice_fuel_percent_var.set(
+                self._setting_text(sim, "maxIceFuelPercent", default=90.0)
+            )
+            self.deadhead_speed_kmh_var.set(
+                self._setting_text(sim, "deadheadSpeedKmh", default=18.0)
+            )
             self.pv_profile_id_var.set(str(sim.get("pvProfileId") or ""))
             weather_mode = str(sim.get("weatherMode") or _ACTUAL_DATE_PV_PROFILE_ID)
             if weather_mode and weather_mode not in self.weather_mode_options:
@@ -6889,7 +6968,13 @@ class App:
                     if not isinstance(asset, dict):
                         continue
                     if asset.get("bess_cycle_cost_yen_per_kwh") is not None:
-                        self.bess_discharge_cost_var.set(str(asset.get("bess_cycle_cost_yen_per_kwh") or 0))
+                        self.bess_discharge_cost_var.set(
+                            self._setting_text(
+                                asset,
+                                "bess_cycle_cost_yen_per_kwh",
+                                default=0,
+                            )
+                        )
                         break
             else:
                 self.depot_energy_assets_json_var.set("")

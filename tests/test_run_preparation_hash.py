@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from bff.services.run_preparation import _scenario_hash
+from bff.services.run_preparation import _random_seed, _scenario_hash
 
 
 def _base_scenario() -> dict:
@@ -79,3 +79,10 @@ def test_scenario_hash_ignores_heavy_runtime_artifacts() -> None:
     }
 
     assert _scenario_hash(shallow_doc) == _scenario_hash(full_doc)
+
+
+def test_random_seed_preserves_explicit_zero() -> None:
+    scenario = _base_scenario()
+    scenario["scenario_overlay"]["random_seed"] = 0
+
+    assert _random_seed(scenario) == 0

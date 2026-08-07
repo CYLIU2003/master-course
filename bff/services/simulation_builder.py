@@ -528,15 +528,13 @@ def apply_builder_configuration(
     )
     overlay.solver_config.mip_gap = body.simulation_settings.mip_gap
     overlay.solver_config.alns_iterations = int(
-        body.simulation_settings.alns_iterations or overlay.solver_config.alns_iterations
+        body.simulation_settings.alns_iterations
     )
     overlay.solver_config.no_improvement_limit = int(
         body.simulation_settings.no_improvement_limit
-        or overlay.solver_config.no_improvement_limit
     )
     overlay.solver_config.destroy_fraction = float(
         body.simulation_settings.destroy_fraction
-        or overlay.solver_config.destroy_fraction
     )
     if body.simulation_settings.max_start_fragments_per_vehicle is not None:
         overlay.solver_config.max_start_fragments_per_vehicle = int(

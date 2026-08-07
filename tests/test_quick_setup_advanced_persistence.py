@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from unittest import mock
 
+import pytest
+from pydantic import ValidationError
+
 from bff.routers import scenarios
+from bff.routers.simulation import PrepareSimulationSettingsBody
 from tools.scenario_backup_tk import (
     _compose_saved_objective_weights,
     _split_saved_objective_weights,
@@ -23,7 +27,7 @@ def test_objective_weight_helpers_roundtrip_frontend_fields() -> None:
     assert degradation_weight == 0.25
 
 
-def test_build_quick_setup_payload_includes_saved_objective_weights() -> None:
+def test_build_quick_setup_payload_includes_saved_controls_and_zeroes() -> None:
     doc = {
         "depots": [{"id": "dep1", "name": "Depot 1"}],
         "routes": [
@@ -42,15 +46,33 @@ def test_build_quick_setup_payload_includes_saved_objective_weights() -> None:
         "chargers": [],
         "vehicle_templates": [],
         "scenario_overlay": {
-            "solver_config": {"objective_weights": {"battery_degradation_cost": 0.25}},
+            "solver_config": {
+                "objective_weights": {"battery_degradation_cost": 0.25},
+                "mip_gap": 0.0,
+            },
             "cost_coefficients": {
+                "grid_flat_price_per_kwh": 0.0,
+                "grid_sell_price_per_kwh": 0.0,
+                "demand_charge_cost_per_kw": 0.0,
+                "diesel_price_per_l": 0.0,
+                "grid_co2_kg_per_kwh": 0.0,
+                "co2_price_per_kg": 0.0,
+                "ice_co2_kg_per_l": 0.0,
                 "pv_marginal_charge_cost_yen_per_kwh": 3.5,
                 "pv_curtail_penalty_yen_per_kwh": 6.5,
                 "vehicle_usage_cost_jpy_per_used_bus": 30000.0,
             },
+            "charging_constraints": {"depot_power_limit_kw": 0.0},
         },
         "simulation_config": {
             "service_date": "2025-08-10",
+            "random_seed": 0,
+            "unserved_penalty": 0.0,
+            "initial_ice_fuel_percent": 0.0,
+            "min_ice_fuel_percent": 0.0,
+            "max_ice_fuel_percent": 0.0,
+            "default_ice_tank_capacity_l": 0.0,
+            "deadhead_speed_kmh": 18.0,
             "objective_weights": {
                 "switch_cost": 2.5,
                 "slack_penalty": 123456.0,
@@ -127,6 +149,67 @@ def test_build_quick_setup_payload_includes_saved_objective_weights() -> None:
     assert payload["simulationSettings"]["pvMarginalChargeCostYenPerKwh"] == 3.5
     assert payload["simulationSettings"]["pvCurtailPenaltyYenPerKwh"] == 6.5
     assert payload["simulationSettings"]["vehicleUsageCostJpyPerUsedBus"] == 30000.0
+    assert payload["solverSettings"]["mipGap"] == 0.0
+    assert payload["solverSettings"]["randomSeed"] == 0
+    assert payload["simulationSettings"]["unservedPenalty"] == 0.0
+    assert payload["simulationSettings"]["gridFlatPricePerKwh"] == 0.0
+    assert payload["simulationSettings"]["gridSellPricePerKwh"] == 0.0
+    assert payload["simulationSettings"]["demandChargeCostPerKw"] == 0.0
+    assert payload["simulationSettings"]["dieselPricePerL"] == 0.0
+    assert payload["simulationSettings"]["gridCo2KgPerKwh"] == 0.0
+    assert payload["simulationSettings"]["co2PricePerKg"] == 0.0
+    assert payload["simulationSettings"]["iceCo2KgPerL"] == 0.0
+    assert payload["simulationSettings"]["depotPowerLimitKw"] == 0.0
+    assert payload["simulationSettings"]["initialIceFuelPercent"] == 0.0
+    assert payload["simulationSettings"]["minIceFuelPercent"] == 0.0
+    assert payload["simulationSettings"]["maxIceFuelPercent"] == 0.0
+    assert payload["simulationSettings"]["defaultIceTankCapacityL"] == 0.0
+    assert payload["simulationSettings"]["deadheadSpeedKmh"] == 18.0
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("planningDays", 0),
+        ("timeStepMin", 0),
+        ("timeLimitSeconds", 0),
+        ("alnsIterations", 0),
+        ("noImprovementLimit", 0),
+        ("destroyFraction", 0.0),
+        ("maxStartFragmentsPerVehicle", 0),
+        ("maxEndFragmentsPerVehicle", 0),
+        ("deadheadSpeedKmh", 0.0),
+    ],
+)
+def test_quick_setup_rejects_zero_for_strictly_positive_controls(
+    field: str,
+    value: int | float,
+) -> None:
+    with pytest.raises(ValidationError):
+        scenarios.UpdateQuickSetupBody(**{field: value})
+
+
+def test_prepare_settings_preserve_valid_zeroes_and_reject_invalid_zeroes() -> None:
+    settings = PrepareSimulationSettingsBody(
+        grid_flat_price_per_kwh=0.0,
+        demand_charge_cost_per_kw=0.0,
+        unserved_penalty=0.0,
+        depot_power_limit_kw=0.0,
+        mip_gap=0.0,
+        random_seed=0,
+    )
+
+    assert settings.grid_flat_price_per_kwh == 0.0
+    assert settings.demand_charge_cost_per_kw == 0.0
+    assert settings.unserved_penalty == 0.0
+    assert settings.depot_power_limit_kw == 0.0
+    assert settings.mip_gap == 0.0
+    assert settings.random_seed == 0
+
+    with pytest.raises(ValidationError):
+        PrepareSimulationSettingsBody(time_limit_seconds=0)
+    with pytest.raises(ValidationError):
+        PrepareSimulationSettingsBody(deadhead_speed_kmh=0.0)
 
 
 def test_update_quick_setup_persists_cost_component_toggles() -> None:
@@ -176,6 +259,21 @@ def test_update_quick_setup_persists_cost_component_toggles() -> None:
         pvMarginalChargeCostYenPerKwh=4.25,
         pvCurtailPenaltyYenPerKwh=7.5,
         vehicleUsageCostJpyPerUsedBus=25000.0,
+        gridFlatPricePerKwh=0.0,
+        gridSellPricePerKwh=0.0,
+        demandChargeCostPerKw=0.0,
+        dieselPricePerL=0.0,
+        gridCo2KgPerKwh=0.0,
+        co2PricePerKg=0.0,
+        iceCo2KgPerL=0.0,
+        depotPowerLimitKw=0.0,
+        unservedPenalty=0.0,
+        randomSeed=0,
+        initialIceFuelPercent=0.0,
+        minIceFuelPercent=0.0,
+        maxIceFuelPercent=0.0,
+        defaultIceTankCapacityL=0.0,
+        deadheadSpeedKmh=18.0,
         operationTimeWindowEnabled=False,
     )
 
@@ -205,8 +303,23 @@ def test_update_quick_setup_persists_cost_component_toggles() -> None:
     assert scenario_overlay["cost_coefficients"]["pv_marginal_charge_cost_yen_per_kwh"] == 4.25
     assert scenario_overlay["cost_coefficients"]["pv_curtail_penalty_yen_per_kwh"] == 7.5
     assert scenario_overlay["cost_coefficients"]["vehicle_usage_cost_jpy_per_used_bus"] == 25000.0
+    assert scenario_overlay["cost_coefficients"]["grid_flat_price_per_kwh"] == 0.0
+    assert scenario_overlay["cost_coefficients"]["grid_sell_price_per_kwh"] == 0.0
+    assert scenario_overlay["cost_coefficients"]["demand_charge_cost_per_kw"] == 0.0
+    assert scenario_overlay["cost_coefficients"]["diesel_price_per_l"] == 0.0
+    assert scenario_overlay["cost_coefficients"]["grid_co2_kg_per_kwh"] == 0.0
+    assert scenario_overlay["cost_coefficients"]["co2_price_per_kg"] == 0.0
+    assert scenario_overlay["cost_coefficients"]["ice_co2_kg_per_l"] == 0.0
+    assert scenario_overlay["charging_constraints"]["depot_power_limit_kw"] == 0.0
     assert simulation_config["pv_curtail_penalty_yen_per_kwh"] == 7.5
     assert simulation_config["vehicle_usage_cost_jpy_per_used_bus"] == 25000.0
+    assert simulation_config["unserved_penalty"] == 0.0
+    assert simulation_config["random_seed"] == 0
+    assert simulation_config["initial_ice_fuel_percent"] == 0.0
+    assert simulation_config["min_ice_fuel_percent"] == 0.0
+    assert simulation_config["max_ice_fuel_percent"] == 0.0
+    assert simulation_config["default_ice_tank_capacity_l"] == 0.0
+    assert simulation_config["deadhead_speed_kmh"] == 18.0
     assert simulation_config["operation_time_window_enabled"] is False
     assert simulation_config["planning_horizon_hours"] == 24.0
 

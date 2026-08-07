@@ -1,5 +1,14 @@
 # Development Notes
 
+## 2026-08-07 Quick Setup の明示的な 0 を保存・再読込・Prepare まで保持
+
+- 原因は Tk の `load_quick_setup()` にあった `saved_value or default` である。BFF とシナリオストアには `demand_charge_cost_per_kw=0.0` が正しく保存されていても、保存直後の自動再読込で画面が `1500` に戻り、その後の Prepare が誤った値を再送していた。
+- Tk の全数値設定を `None` のときだけ既定値へフォールバックする共通処理へ統一した。対象には系統買電・売電単価、基本料金、PV 費用、軽油・CO2・車両使用費、営業所電力上限、燃料条件、BESS サイクル費、およびソルバー数値設定を含む。
+- BFF の Quick Setup 応答、bootstrap、更新時の未担当便ペナルティ、Prepare の乱数 seed も同じ欠損判定へ統一した。これにより、保存値 `0` は画面再読込と materialization の両方で保持される。
+- API 入力は canonical overlay と同じ数値範囲へ揃えた。料金・排出係数・営業所電力上限・未担当便ペナルティ・mip gap・seed では `0` を受理する一方、実行時間、反復回数、destroy fraction、fragment 上限、回送速度など正値必須の項目は保存・Prepare 前に拒否し、既定値へ黙って戻さない。
+- `ProblemBuilder` では、明示的な flat 買電単価 `0` を有効な料金設定として認識し、既存の時刻別料金へ黙って戻さないようにした。基本料金、軽油単価、ICE 排出係数、営業所電力上限、未担当便ペナルティでも `0` を欠損扱いしない。
+- 回帰テストは、保存 API、Quick Setup 応答、Tk 表示値、Prepare seed、ProblemBuilder の canonical price slots を個別に検証し、対象回帰 `133 passed`、全体 `1116 passed` を確認した。最適化計算や保存済みシナリオの変更はこの修正では行っていない。アプリ再起動後、対象シナリオを再読込し、必ず fresh Prepare してから次の計算を行う。
+
 ## 2026-08-07 README の利用者導線を再設計
 
 - GitHub 上の入口を、約 1,600 行の契約・履歴・数式の混在した構成から、目的別の短い導線へ再構成した。現在の実装、数理モデル、受理条件は変更していない。

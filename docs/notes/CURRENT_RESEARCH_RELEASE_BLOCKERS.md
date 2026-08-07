@@ -1,6 +1,6 @@
 # Current research release blockers
 
-Status date: 2026-08-06
+Status date: 2026-08-07
 Code status: slot-indexed Stage 1 energy recourse, multi-candidate Stage 2
 evaluation, explicit same-service-date PV controls, and an HTTP-only frontend
 pair runner are implemented. A final-slot return-boundary defect exposed by
@@ -9,15 +9,34 @@ independent physical check in addition to Stage 2 feasibility. The fifth HTTP
 attempt exposed and the current tree corrects a result-claim message that
 conflated integrated-optimality scope with certified-gap status. The corrected
 completion audit also rejects a contradiction between solver settings,
-persisted claim classification, and terminal response. The current focused
-formal-run preflight regression passes (`98 passed`) and the complete suite
-passes (`1077 passed`); compileall and `git diff --check` also pass.
+persisted claim classification, and terminal response. The current
+explicit-zero regression passes (`133 passed`) and the complete suite passes
+(`1116 passed`); compileall and `git diff --check` also pass.
 
 Teacher release status is fail-closed: **BLOCKED** unless
 `output/formal_pair_20260730/completion_audit.json` records `status=READY`,
 zero failed checks, the exact frozen Git SHA at start and end, and a completed
 ZIP. When that artifact exists for the current frozen SHA, this blocker is
 discharged without modifying the repository during the experiment.
+
+## Quick Setup explicit-zero persistence repair (2026-08-07)
+
+The affected scenarios retained `demand_charge_cost_per_kw=0.0` in the
+scenario store. The defect was in the Tk reload path: Python falsey fallback
+converted the saved zero to the UI default `1500`, and a later Prepare could
+therefore materialize the wrong tariff despite the earlier save succeeding.
+
+The current tree preserves explicit numeric zero through Quick Setup save,
+BFF reload, Tk field restoration, Prepare controls, and `ProblemBuilder`.
+Defaults now apply only when a value is absent or `null`. Explicit flat grid
+price zero is also treated as a real tariff declaration rather than a reason
+to reuse inherited price slots.
+
+This repair does not validate either weather scenario and does not make an
+older prepared input comparable. Tk/BFF must be restarted and each scenario
+must be freshly Prepared from the reviewed clean commit. Any output produced
+from the pre-repair reload/Prepare path remains diagnostic, and teacher
+release remains **BLOCKED** until all existing formal gates pass.
 
 ## Formal-run dirty-worktree UX (2026-08-06)
 

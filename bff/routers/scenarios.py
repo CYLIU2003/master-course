@@ -106,6 +106,15 @@ def _first_present_from_mapping(row: Dict[str, Any], *keys: str) -> Any:
     return None
 
 
+def _first_present_value(*values: Any, default: Any = None) -> Any:
+    """Return the first non-None value while preserving valid zeroes."""
+
+    for value in values:
+        if value is not None:
+            return value
+    return default
+
+
 def _coerce_non_negative_float(value: Any, field_name: str) -> float:
     try:
         parsed = float(value if value not in (None, "") else 0.0)
@@ -781,7 +790,7 @@ class UpdateQuickSetupBody(BaseModel):
     dayType: Optional[str] = None
     serviceDate: Optional[str] = None
     serviceDates: Optional[List[str]] = None
-    planningDays: Optional[int] = None
+    planningDays: Optional[int] = Field(default=None, ge=1)
     operationTimeWindowEnabled: Optional[bool] = None
     includeShortTurn: Optional[bool] = None
     includeDepotMoves: Optional[bool] = None
@@ -790,55 +799,55 @@ class UpdateQuickSetupBody(BaseModel):
     allowInterDepotSwap: Optional[bool] = None
     solverMode: Optional[str] = None
     objectiveMode: Optional[str] = None
-    timeStepMin: Optional[int] = None
-    timestepMin: Optional[int] = None
-    timeLimitSeconds: Optional[int] = None
-    mipGap: Optional[float] = None
-    alnsIterations: Optional[int] = None
-    noImprovementLimit: Optional[int] = None
-    destroyFraction: Optional[float] = None
+    timeStepMin: Optional[Literal[5, 15, 30, 60]] = None
+    timestepMin: Optional[Literal[5, 15, 30, 60]] = None
+    timeLimitSeconds: Optional[int] = Field(default=None, ge=1)
+    mipGap: Optional[float] = Field(default=None, ge=0.0)
+    alnsIterations: Optional[int] = Field(default=None, ge=1)
+    noImprovementLimit: Optional[int] = Field(default=None, ge=1)
+    destroyFraction: Optional[float] = Field(default=None, gt=0.0, le=1.0)
     allowPartialService: Optional[bool] = None
-    unservedPenalty: Optional[float] = None
-    gridFlatPricePerKwh: Optional[float] = None
-    gridSellPricePerKwh: Optional[float] = None
-    demandChargeCostPerKw: Optional[float] = None
-    vehicleUsageCostJpyPerUsedBus: Optional[float] = None
-    dieselPricePerL: Optional[float] = None
-    gridCo2KgPerKwh: Optional[float] = None
-    co2PricePerKg: Optional[float] = None
-    pvMarginalChargeCostYenPerKwh: Optional[float] = None
-    pvCurtailPenaltyYenPerKwh: Optional[float] = None
-    iceCo2KgPerL: Optional[float] = None
-    depotPowerLimitKw: Optional[float] = None
-    degradationWeight: Optional[float] = None
+    unservedPenalty: Optional[float] = Field(default=None, ge=0.0)
+    gridFlatPricePerKwh: Optional[float] = Field(default=None, ge=0.0)
+    gridSellPricePerKwh: Optional[float] = Field(default=None, ge=0.0)
+    demandChargeCostPerKw: Optional[float] = Field(default=None, ge=0.0)
+    vehicleUsageCostJpyPerUsedBus: Optional[float] = Field(default=None, ge=0.0)
+    dieselPricePerL: Optional[float] = Field(default=None, ge=0.0)
+    gridCo2KgPerKwh: Optional[float] = Field(default=None, ge=0.0)
+    co2PricePerKg: Optional[float] = Field(default=None, ge=0.0)
+    pvMarginalChargeCostYenPerKwh: Optional[float] = Field(default=None, ge=0.0)
+    pvCurtailPenaltyYenPerKwh: Optional[float] = Field(default=None, ge=0.0)
+    iceCo2KgPerL: Optional[float] = Field(default=None, ge=0.0)
+    depotPowerLimitKw: Optional[float] = Field(default=None, ge=0.0)
+    degradationWeight: Optional[float] = Field(default=None, ge=0.0)
     objectiveWeights: Optional[Dict[str, Any]] = None
     fixedRouteBandMode: Optional[bool] = None
-    maxStartFragmentsPerVehicle: Optional[int] = None
-    maxEndFragmentsPerVehicle: Optional[int] = None
+    maxStartFragmentsPerVehicle: Optional[int] = Field(default=None, ge=1)
+    maxEndFragmentsPerVehicle: Optional[int] = Field(default=None, ge=1)
     milpMaxSuccessorsPerTrip: Optional[int] = Field(default=None, ge=1)
-    initialSocPercent: Optional[float] = None
-    finalSocFloorPercent: Optional[float] = None
-    finalSocTargetPercent: Optional[float] = None
-    finalSocTargetTolerancePercent: Optional[float] = None
-    initialIceFuelPercent: Optional[float] = None
-    minIceFuelPercent: Optional[float] = None
-    maxIceFuelPercent: Optional[float] = None
-    defaultIceTankCapacityL: Optional[float] = None
-    initialSoc: Optional[float] = None
-    socMin: Optional[float] = None
-    socMax: Optional[float] = None
+    initialSocPercent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    finalSocFloorPercent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    finalSocTargetPercent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    finalSocTargetTolerancePercent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    initialIceFuelPercent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    minIceFuelPercent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    maxIceFuelPercent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    defaultIceTankCapacityL: Optional[float] = Field(default=None, ge=0.0)
+    initialSoc: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    socMin: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    socMax: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     disableVehicleAcquisitionCost: Optional[bool] = None
     enableVehicleCost: Optional[bool] = None
     enableDriverCost: Optional[bool] = None
     enableOtherCost: Optional[bool] = None
     costComponentFlags: Optional[Dict[str, bool]] = None
     touPricing: Optional[List[Dict[str, Any]]] = None
-    deadheadSpeedKmh: Optional[float] = None
+    deadheadSpeedKmh: Optional[float] = Field(default=None, gt=0.0)
     objectivePreset: Optional[str] = None
     pvProfileId: Optional[str] = None
     weatherMode: Optional[str] = None
     allowFixedWeekdayTimetablePvCounterfactual: Optional[bool] = None
-    weatherFactorScalar: Optional[float] = None
+    weatherFactorScalar: Optional[float] = Field(default=None, ge=0.0)
     enableWeatherOperationPolicy: Optional[bool] = None
     weatherProxyForecastPath: Optional[str] = None
     weatherProxyDailyCsvPath: Optional[str] = None
@@ -854,7 +863,7 @@ class UpdateQuickSetupBody(BaseModel):
     randomSeed: Optional[int] = None
     startTime: Optional[str] = None
     endTime: Optional[str] = None
-    planningHorizonHours: Optional[float] = None
+    planningHorizonHours: Optional[float] = Field(default=None, gt=0.0)
     experimentMethod: Optional[str] = None
     experimentNotes: Optional[str] = None
 
@@ -1719,14 +1728,18 @@ def _builder_defaults(
             or 8
         ),
         "maxStartFragmentsPerVehicle": int(
-            simulation_config.get("max_start_fragments_per_vehicle")
-            or overlay_solver.get("max_start_fragments_per_vehicle")
-            or 100
+            _first_present_value(
+                simulation_config.get("max_start_fragments_per_vehicle"),
+                overlay_solver.get("max_start_fragments_per_vehicle"),
+                default=100,
+            )
         ),
         "maxEndFragmentsPerVehicle": int(
-            simulation_config.get("max_end_fragments_per_vehicle")
-            or overlay_solver.get("max_end_fragments_per_vehicle")
-            or 100
+            _first_present_value(
+                simulation_config.get("max_end_fragments_per_vehicle"),
+                overlay_solver.get("max_end_fragments_per_vehicle"),
+                default=100,
+            )
         ),
         "enableVehicleDiagramOutput": bool(
             simulation_config.get(
@@ -1879,22 +1892,38 @@ def _builder_defaults(
         ),
         "touPricing": list(overlay_cost.get("tou_pricing") or []),
         "fleetTemplates": fleet_templates,
-        "timeLimitSeconds": int(overlay_solver.get("time_limit_seconds") or 300),
-        "mipGap": float(overlay_solver.get("mip_gap") or 0.01),
+        "timeLimitSeconds": int(
+            _first_present_value(
+                overlay_solver.get("time_limit_seconds"),
+                default=300,
+            )
+        ),
+        "mipGap": float(
+            _first_present_value(
+                overlay_solver.get("mip_gap"),
+                default=0.01,
+            )
+        ),
         "alnsIterations": int(
-            overlay_solver.get("alns_iterations")
-            or simulation_config.get("alns_iterations")
-            or 500
+            _first_present_value(
+                overlay_solver.get("alns_iterations"),
+                simulation_config.get("alns_iterations"),
+                default=500,
+            )
         ),
         "noImprovementLimit": int(
-            overlay_solver.get("no_improvement_limit")
-            or simulation_config.get("no_improvement_limit")
-            or 100
+            _first_present_value(
+                overlay_solver.get("no_improvement_limit"),
+                simulation_config.get("no_improvement_limit"),
+                default=100,
+            )
         ),
         "destroyFraction": float(
-            overlay_solver.get("destroy_fraction")
-            or simulation_config.get("destroy_fraction")
-            or 0.25
+            _first_present_value(
+                overlay_solver.get("destroy_fraction"),
+                simulation_config.get("destroy_fraction"),
+                default=0.25,
+            )
         ),
         "randomSeed": next(
             (
@@ -2264,11 +2293,36 @@ def _build_quick_setup_payload(
             "objectivePreset": builder_defaults.get("objectivePreset") or "cost",
             "timeStepMin": int(builder_defaults.get("timeStepMin") or 30),
             "timestepMin": int(builder_defaults.get("timestepMin") or builder_defaults.get("timeStepMin") or 30),
-            "timeLimitSeconds": int(builder_defaults.get("timeLimitSeconds") or 300),
-            "mipGap": float(builder_defaults.get("mipGap") or 0.01),
-            "alnsIterations": int(builder_defaults.get("alnsIterations") or 500),
-            "noImprovementLimit": int(builder_defaults.get("noImprovementLimit") or 100),
-            "destroyFraction": float(builder_defaults.get("destroyFraction") or 0.25),
+            "timeLimitSeconds": int(
+                _first_present_value(
+                    builder_defaults.get("timeLimitSeconds"),
+                    default=300,
+                )
+            ),
+            "mipGap": float(
+                _first_present_value(
+                    builder_defaults.get("mipGap"),
+                    default=0.01,
+                )
+            ),
+            "alnsIterations": int(
+                _first_present_value(
+                    builder_defaults.get("alnsIterations"),
+                    default=500,
+                )
+            ),
+            "noImprovementLimit": int(
+                _first_present_value(
+                    builder_defaults.get("noImprovementLimit"),
+                    default=100,
+                )
+            ),
+            "destroyFraction": float(
+                _first_present_value(
+                    builder_defaults.get("destroyFraction"),
+                    default=0.25,
+                )
+            ),
             "fixedRouteBandMode": bool(builder_defaults.get("fixedRouteBandMode", True)),
             "milpMaxSuccessorsPerTrip": int(
                 builder_defaults.get("milpMaxSuccessorsPerTrip")
@@ -2276,15 +2330,26 @@ def _build_quick_setup_payload(
                 or 8
             ),
             "maxStartFragmentsPerVehicle": int(
-                builder_defaults.get("maxStartFragmentsPerVehicle") or 100
+                _first_present_value(
+                    builder_defaults.get("maxStartFragmentsPerVehicle"),
+                    default=100,
+                )
             ),
             "maxEndFragmentsPerVehicle": int(
-                builder_defaults.get("maxEndFragmentsPerVehicle") or 100
+                _first_present_value(
+                    builder_defaults.get("maxEndFragmentsPerVehicle"),
+                    default=100,
+                )
             ),
             "enableVehicleDiagramOutput": bool(
                 builder_defaults.get("enableVehicleDiagramOutput", True)
             ),
-            "randomSeed": int(builder_defaults.get("randomSeed") or 42),
+            "randomSeed": int(
+                _first_present_value(
+                    builder_defaults.get("randomSeed"),
+                    default=42,
+                )
+            ),
             "operationTimeWindowEnabled": bool(
                 builder_defaults.get("operationTimeWindowEnabled", False)
             ),
@@ -2372,7 +2437,12 @@ def _build_quick_setup_payload(
                 if str(builder_defaults.get("service_coverage_mode") or "").strip()
                 else bool(builder_defaults.get("allowPartialService", False))
             ),
-            "unservedPenalty": float(builder_defaults.get("unservedPenalty") or 10000.0),
+            "unservedPenalty": float(
+                _first_present_value(
+                    builder_defaults.get("unservedPenalty"),
+                    default=10000.0,
+                )
+            ),
             "operationTimeWindowEnabled": bool(
                 builder_defaults.get("operationTimeWindowEnabled", False)
             ),
@@ -2482,10 +2552,12 @@ def _ensure_scenario_bootstrap_persisted(scenario_id: str) -> Dict[str, Any]:
         or research_catalog.default_dataset_id()
     )
     random_seed = int(
-        overlay.get("random_seed")
-        or overlay.get("randomSeed")
-        or meta.get("randomSeed")
-        or 42
+        _first_present_value(
+            overlay.get("random_seed"),
+            overlay.get("randomSeed"),
+            meta.get("randomSeed"),
+            default=42,
+        )
     )
     bootstrap = research_catalog.bootstrap_scenario(
         scenario_id=scenario_id,
@@ -2763,7 +2835,10 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             solver_config.get("objective_mode") or "total_cost"
         )
         current_unserved_penalty = float(
-            solver_config.get("unserved_penalty") or 10000.0
+            _first_present_value(
+                solver_config.get("unserved_penalty"),
+                default=10000.0,
+            )
         )
         simulation_config = store.get_field(scenario_id, "simulation_config") or {}
         if not isinstance(simulation_config, dict):

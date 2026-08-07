@@ -492,18 +492,35 @@ class ProblemBuilder:
         selected_depot_record = self._find_selected_depot_record(scenario, depot_id)
         depot_coordinates_by_id = self._depot_coordinates_by_id(scenario)
         depot_import_limit_kw = self._safe_float(
-            charging_cfg.get("depot_power_limit_kw")
-            or charging_cfg.get("depotPowerLimitKw")
-            or cost_cfg.get("depot_power_limit_kw")
-            or cost_cfg.get("depotPowerLimitKw")
+            self._first_present(
+                charging_cfg.get("depot_power_limit_kw"),
+                charging_cfg.get("depotPowerLimitKw"),
+                cost_cfg.get("depot_power_limit_kw"),
+                cost_cfg.get("depotPowerLimitKw"),
+            )
         )
-        demand_charge = float(cost_cfg.get("demand_charge_cost_per_kw") or 0.0)
-        diesel_price = float(cost_cfg.get("diesel_price_per_l") or 0.0)
+        demand_charge = float(
+            self._first_present(
+                cost_cfg.get("demand_charge_cost_per_kw"),
+                0.0,
+            )
+        )
+        diesel_price = float(
+            self._first_present(
+                cost_cfg.get("diesel_price_per_l"),
+                0.0,
+            )
+        )
         co2_price_per_kg = effective_co2_price_per_kg(
             objective_mode,
             cost_cfg.get("co2_price_per_kg"),
         )
-        ice_co2_kg_per_l = float(cost_cfg.get("ice_co2_kg_per_l") or 2.64)
+        ice_co2_kg_per_l = float(
+            self._first_present(
+                cost_cfg.get("ice_co2_kg_per_l"),
+                2.64,
+            )
+        )
         weather_strategy_metadata = {}
         return self.build_from_dispatch(
             context,
@@ -3905,6 +3922,17 @@ class ProblemBuilder:
             default_sell = float(overlay_costs.get("grid_sell_price_per_kwh") or 0.0)
             default_co2 = float(overlay_costs.get("grid_co2_kg_per_kwh") or 0.0)
             demand_weight = float(overlay_costs.get("demand_charge_cost_per_kw") or 0.0)
+            has_explicit_flat_buy_price = (
+                "grid_flat_price_per_kwh" in overlay_costs
+                and overlay_costs.get("grid_flat_price_per_kwh") is not None
+            )
+            has_explicit_tariff_controls = (
+                bool(tou_bands)
+                or has_explicit_flat_buy_price
+                or default_sell > 0.0
+                or default_co2 > 0.0
+                or demand_weight > 0.0
+            )
             generated_slots = list(
                 self._build_time_slot_prices(
                     context,
@@ -3914,7 +3942,7 @@ class ProblemBuilder:
                     slots_per_day=slots_per_day,
                 )
             )
-            if tou_bands or default_buy > 0.0 or default_sell > 0.0 or default_co2 > 0.0 or demand_weight > 0.0:
+            if has_explicit_tariff_controls:
                 start_min = self._hhmm_to_min(start_time) if start_time else min(
                     (trip.departure_min for trip in context.trips),
                     default=0,
@@ -4123,9 +4151,11 @@ class ProblemBuilder:
         objective_weights = canonical_objective_weights_for_mode(
             objective_mode=objective_mode,
             unserved_penalty=float(
-                simulation_config.get("unserved_penalty")
-                or overlay_solver.get("unserved_penalty")
-                or 10000.0
+                self._first_present(
+                    simulation_config.get("unserved_penalty"),
+                    overlay_solver.get("unserved_penalty"),
+                    10000.0,
+                )
             ),
             explicit_weights=explicit_weights if isinstance(explicit_weights, dict) else {},
         )

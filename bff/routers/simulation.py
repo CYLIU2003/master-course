@@ -17,7 +17,7 @@ import threading
 from concurrent.futures import Executor, Future, ProcessPoolExecutor, ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, model_validator
@@ -94,15 +94,15 @@ class PrepareFleetTemplateBody(BaseModel):
 
 class PrepareSimulationSettingsBody(BaseModel):
     vehicle_template_id: Optional[str] = None
-    vehicle_count: int = 10
-    initial_soc: float = 0.8
-    initial_soc_percent: Optional[float] = None
-    soc_min: Optional[float] = None
-    soc_max: Optional[float] = None
-    battery_kwh: Optional[float] = None
+    vehicle_count: int = Field(default=10, ge=0)
+    initial_soc: float = Field(default=0.8, ge=0.0, le=1.0)
+    initial_soc_percent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    soc_min: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    soc_max: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    battery_kwh: Optional[float] = Field(default=None, ge=0.0)
     fleet_templates: list[PrepareFleetTemplateBody] = Field(default_factory=list)
-    charger_count: int = 4
-    charger_power_kw: float = 90.0
+    charger_count: int = Field(default=4, ge=0)
+    charger_power_kw: float = Field(default=90.0, ge=0.0)
     use_selected_depot_vehicle_inventory: bool = True
     use_selected_depot_charger_inventory: bool = True
     disable_vehicle_acquisition_cost: bool = False
@@ -117,36 +117,36 @@ class PrepareSimulationSettingsBody(BaseModel):
     fixed_route_band_mode: bool = False
     enable_vehicle_diagram_output: bool = True
     allow_partial_service: bool = False
-    unserved_penalty: float = 10000.0
+    unserved_penalty: float = Field(default=10000.0, ge=0.0)
     milp_max_successors_per_trip: Optional[int] = Field(default=None, ge=1)
-    time_limit_seconds: int = 300
-    mip_gap: float = 0.01
+    time_limit_seconds: int = Field(default=300, ge=1)
+    mip_gap: float = Field(default=0.01, ge=0.0)
     include_deadhead: bool = True
-    deadhead_speed_kmh: float = 18.0
-    grid_flat_price_per_kwh: Optional[float] = None
-    grid_sell_price_per_kwh: Optional[float] = None
-    demand_charge_cost_per_kw: Optional[float] = None
-    vehicle_usage_cost_jpy_per_used_bus: Optional[float] = None
-    diesel_price_per_l: Optional[float] = None
-    ice_co2_kg_per_l: Optional[float] = None
-    grid_co2_kg_per_kwh: Optional[float] = None
-    co2_price_per_kg: Optional[float] = None
-    pv_marginal_charge_cost_yen_per_kwh: Optional[float] = None
-    pv_curtail_penalty_yen_per_kwh: Optional[float] = None
-    depot_power_limit_kw: Optional[float] = None
+    deadhead_speed_kmh: float = Field(default=18.0, gt=0.0)
+    grid_flat_price_per_kwh: Optional[float] = Field(default=None, ge=0.0)
+    grid_sell_price_per_kwh: Optional[float] = Field(default=None, ge=0.0)
+    demand_charge_cost_per_kw: Optional[float] = Field(default=None, ge=0.0)
+    vehicle_usage_cost_jpy_per_used_bus: Optional[float] = Field(default=None, ge=0.0)
+    diesel_price_per_l: Optional[float] = Field(default=None, ge=0.0)
+    ice_co2_kg_per_l: Optional[float] = Field(default=None, ge=0.0)
+    grid_co2_kg_per_kwh: Optional[float] = Field(default=None, ge=0.0)
+    co2_price_per_kg: Optional[float] = Field(default=None, ge=0.0)
+    pv_marginal_charge_cost_yen_per_kwh: Optional[float] = Field(default=None, ge=0.0)
+    pv_curtail_penalty_yen_per_kwh: Optional[float] = Field(default=None, ge=0.0)
+    depot_power_limit_kw: Optional[float] = Field(default=None, ge=0.0)
     tou_pricing: list[PrepareTimeOfUseBandBody] = Field(default_factory=list)
     service_date: Optional[str] = None
     service_dates: list[str] = Field(default_factory=list)
-    planning_days: int = 1
+    planning_days: int = Field(default=1, ge=1)
     # The paired clock values are binding only when this explicit flag is on.
     # Interactive Prepare defaults to a complete calendar day; older callers
     # can still opt into a scoped horizon by setting the flag to true.
     operation_time_window_enabled: bool = False
     start_time: str = "00:00"
     end_time: str = "23:59"
-    planning_horizon_hours: float = 24.0
-    time_step_min: Optional[int] = None
-    timestep_min: Optional[int] = None
+    planning_horizon_hours: float = Field(default=24.0, gt=0.0)
+    time_step_min: Optional[Literal[5, 15, 30, 60]] = None
+    timestep_min: Optional[Literal[5, 15, 30, 60]] = None
     depot_energy_assets: Optional[list[Dict[str, Any]]] = None
     pv_profile_id: Optional[str] = None
     weather_mode: Optional[str] = None
@@ -154,27 +154,27 @@ class PrepareSimulationSettingsBody(BaseModel):
     comparison_role: Optional[str] = None
     counterfactual_pv_source_date: Optional[str] = None
     allow_fixed_weekday_timetable_pv_counterfactual: Optional[bool] = None
-    weather_factor_scalar: Optional[float] = None
+    weather_factor_scalar: Optional[float] = Field(default=None, ge=0.0)
     enable_weather_operation_policy: bool = False
     weather_proxy_forecast_path: Optional[str] = None
     weather_proxy_daily_csv_path: Optional[str] = None
     weather_proxy_station_id: Optional[str] = None
     weather_proxy_station_name: Optional[str] = None
-    alns_iterations: int = 500
-    no_improvement_limit: int = 100
-    destroy_fraction: float = 0.25
+    alns_iterations: int = Field(default=500, ge=1)
+    no_improvement_limit: int = Field(default=100, ge=1)
+    destroy_fraction: float = Field(default=0.25, gt=0.0, le=1.0)
     objective_weights: Dict[str, float] = Field(default_factory=dict)
-    final_soc_floor_percent: Optional[float] = None
-    final_soc_target_percent: Optional[float] = None
-    final_soc_target_tolerance_percent: Optional[float] = None
-    initial_ice_fuel_percent: Optional[float] = None
-    min_ice_fuel_percent: Optional[float] = None
-    max_ice_fuel_percent: Optional[float] = None
-    default_ice_tank_capacity_l: Optional[float] = None
+    final_soc_floor_percent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    final_soc_target_percent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    final_soc_target_tolerance_percent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    initial_ice_fuel_percent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    min_ice_fuel_percent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    max_ice_fuel_percent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    default_ice_tank_capacity_l: Optional[float] = Field(default=None, ge=0.0)
     co2_price_source: Optional[str] = None
     co2_reference_date: Optional[str] = None
-    max_start_fragments_per_vehicle: Optional[int] = None
-    max_end_fragments_per_vehicle: Optional[int] = None
+    max_start_fragments_per_vehicle: Optional[int] = Field(default=None, ge=1)
+    max_end_fragments_per_vehicle: Optional[int] = Field(default=None, ge=1)
     solcast_proxy_issue_date: Optional[str] = None
     solcast_typical_curve_path: Optional[str] = None
     solcast_typical_weather_class: Optional[str] = None

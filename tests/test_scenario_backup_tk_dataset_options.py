@@ -33,6 +33,79 @@ class DummyVar:
         self._value = value
 
 
+@pytest.mark.parametrize(
+    ("field", "default"),
+    [
+        ("timeLimitSeconds", 300),
+        ("alnsIterations", 500),
+        ("noImprovementLimit", 100),
+        ("randomSeed", 42),
+        ("maxStartFragmentsPerVehicle", 100),
+        ("maxEndFragmentsPerVehicle", 100),
+        ("unservedPenalty", 10000),
+        ("gridFlatPricePerKwh", 30),
+        ("gridSellPricePerKwh", 0),
+        ("demandChargeCostPerKw", 1500),
+        ("pvMarginalChargeCostYenPerKwh", 0),
+        ("pvCurtailPenaltyYenPerKwh", 0),
+        ("dieselPricePerL", 145),
+        ("gridCo2KgPerKwh", 0),
+        ("co2PricePerKg", 0),
+        ("iceCo2KgPerL", 2.64),
+        ("degradationWeight", 0),
+        ("depotPowerLimitKw", 500),
+        ("initialIceFuelPercent", 100.0),
+        ("minIceFuelPercent", 10.0),
+        ("maxIceFuelPercent", 90.0),
+        ("defaultIceTankCapacityL", 300.0),
+        ("deadheadSpeedKmh", 18.0),
+    ],
+)
+def test_quick_setup_setting_text_preserves_explicit_zero(
+    field: str,
+    default: float,
+) -> None:
+    app = App.__new__(App)
+
+    loaded = App._setting_text({field: 0.0}, field, default=default)
+
+    assert loaded == "0.0"
+    assert App._parse_float(app, loaded, default) == 0.0
+    assert App._setting_text({}, field, default=default) == str(default)
+
+
+def test_quick_setup_reload_has_no_falsey_numeric_fallbacks() -> None:
+    source = inspect.getsource(App.load_quick_setup)
+    zero_sensitive_fields = (
+        "timeLimitSeconds",
+        "alnsIterations",
+        "noImprovementLimit",
+        "randomSeed",
+        "maxStartFragmentsPerVehicle",
+        "maxEndFragmentsPerVehicle",
+        "unservedPenalty",
+        "gridFlatPricePerKwh",
+        "gridSellPricePerKwh",
+        "demandChargeCostPerKw",
+        "pvMarginalChargeCostYenPerKwh",
+        "pvCurtailPenaltyYenPerKwh",
+        "dieselPricePerL",
+        "gridCo2KgPerKwh",
+        "co2PricePerKg",
+        "iceCo2KgPerL",
+        "degradationWeight",
+        "depotPowerLimitKw",
+        "initialIceFuelPercent",
+        "minIceFuelPercent",
+        "maxIceFuelPercent",
+        "defaultIceTankCapacityL",
+        "deadheadSpeedKmh",
+    )
+
+    for field in zero_sensitive_fields:
+        assert f'get("{field}") or' not in source
+
+
 def _weather_forecast() -> WeatherProxyForecast:
     return WeatherProxyForecast(
         version="historical_analog_v1",
