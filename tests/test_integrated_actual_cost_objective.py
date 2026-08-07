@@ -20,6 +20,8 @@ from src.optimization.engine import (
     OptimizationEngine,
     actual_cost_objective_reconciles,
 )
+from src.gurobi_runtime import ensure_gurobi
+from src.optimization.milp.solver_adapter import GurobiMILPAdapter
 from test_post_return_soc_target import _dispatch_context
 
 
@@ -289,6 +291,17 @@ def test_phase4_uses_verified_same_problem_phase3_plan_as_complete_mip_start() -
     assert audit["complete_bess_mode_binary_start"] is True
     assert audit["bess_mode_binary_start_count"] > 0
     assert audit["physical_energy_trace_start"] is True
+    assert audit["dispatch_fixed_recourse_requested"] is True
+    assert audit["integrated_dispatch_fixed_recourse_feasible"] is True
+    assert audit["integrated_feasible_start_applied"] is True
+    assert audit["complete_integrated_solution_start"] is True
+    assert audit["integrated_solution_start_count"] > 0
+    assert len(audit["integrated_solution_start_fingerprint"]) == 64
+    assert audit["dispatch_fixed_recourse_runtime_sec"] >= 0.0
+    assert result.solver_metadata["first_feasible_sec"] == 0.0
+    assert result.solver_metadata["phase4_phase3_seed_audit"][
+        "seed_runtime_sec"
+    ] > 0.0
     assert result.solver_metadata[
         "actual_cost_objective_numeric_reconciliation_passed"
     ] is True
@@ -339,6 +352,39 @@ def test_phase4_formal_gate_rejects_failed_declared_seed(monkeypatch) -> None:
         "phase4_declared_seed_handoff_satisfied"
     ] is False
     assert result.solver_metadata["research_run_accepted"] is False
+
+
+def test_integrated_seed_recourse_preflight_restores_bounds_and_exports_iis() -> None:
+    gp, GRB = ensure_gurobi()
+    model = gp.Model("phase4_seed_recourse_negative_contract")
+    model.Params.OutputFlag = 0
+    dispatch = model.addVar(vtype=GRB.BINARY, name="dispatch_seed")
+    model.addConstr(dispatch == 0.0, name="integrated_only_conflict")
+    model.setObjective(0.0, GRB.MINIMIZE)
+    model.update()
+    dispatch.Start = 1.0
+
+    audit = GurobiMILPAdapter._certify_integrated_dispatch_fixed_recourse(
+        model,
+        config=OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            phase="phase4_integrated",
+            phase4_integrated_seed_recourse_preflight_enabled=True,
+            phase4_integrated_seed_recourse_time_limit_sec=10,
+        ),
+        GRB=GRB,
+        integrated_warm_start_audit={"applied": True},
+        dispatch_variable_maps=({"dispatch": dispatch},),
+    )
+
+    assert audit["dispatch_fixed_recourse_status"] == "infeasible"
+    assert audit["integrated_dispatch_fixed_recourse_feasible"] is False
+    assert audit["dispatch_fixed_recourse_iis_generated"] is True
+    assert audit["dispatch_fixed_recourse_iis_constraint_count"] >= 1
+    assert audit["dispatch_fixed_recourse_iis_variable_bound_count"] >= 1
+    assert len(audit["dispatch_fixed_recourse_iis_fingerprint"]) == 64
+    assert dispatch.LB == 0.0
+    assert dispatch.UB == 1.0
 
 
 def test_phase4_rejects_incomplete_bess_soc_seed_trace() -> None:

@@ -1,6 +1,13 @@
 # master-course
 
-## 2026-08-08 Phase 4 verified warm start
+## 2026-08-08 Phase 4 integrated-recourse-certified warm start
+
+- The first clean implementation run at commit
+  `e071446cb346092719a3103e81026bcb02d82a21` exposed a stricter defect: both
+  264-trip cases accepted the Phase 3 seed and wrote every advertised `Start`
+  value, but the integrated model rejected that vector and reached 3,600
+  seconds with zero incumbents. Therefore `Start` assignment is no longer
+  treated as proof of an integrated feasible warm start.
 
 - Frontend `phase4_integrated` runs now build a Phase 3 two-stage plan on the
   same in-memory canonical problem before starting the full integrated MILP.
@@ -15,19 +22,23 @@
   weather or BEV-direction preference. The frontend Phase 4 request uses a
   5% gap target so the first 13/19 seed cannot terminate immediately at the
   former 10% threshold.
-- The MIP start includes all assignment/path/vehicle-use binaries, all
-  charging and physical-charger binaries, BESS charge/discharge modes, vehicle
-  and BESS SOC, and the PV/BESS/grid source-flow trace. A dispatch-only or
-  stale prior-run baseline is rejected. The plan itself is fingerprinted;
-  optional candidate-pool metadata is not used as proof of the hand-off.
+- After the Phase 3 plan is checked, Phase 4 temporarily fixes only its
+  assignment/path/vehicle-use decisions and solves charging, physical-charger
+  occupancy, vehicle/BESS SOC, PV, BESS and grid recourse in the integrated
+  model itself. Only a feasible result is promoted to a complete all-variable
+  MIP start; original dispatch bounds are then restored before the unrestricted
+  actual-cost search. An infeasible fixed-dispatch recourse exports IIS names,
+  counts and a fingerprint and fails the formal hand-off gate.
 - The formal solver-control record declares the 600-second seed budget, its
-  480/120-second Stage 1/2 split, the 3,600-second integrated budget, and the
-  4,200-second total maximum. These controls are included in the sunny/rain
-  comparison hash.
+  480/120-second Stage 1/2 split, a 300-second integrated fixed-dispatch
+  recourse preflight, the 3,600-second unrestricted integrated budget, and the
+  4,500-second total maximum. These controls are included in the sunny/rain
+  comparison hash; each case gate separately requires a feasible preflight.
 - Formal evidence still requires a fresh Prepare and a clean frozen commit.
   A feasible incumbent is distinct from meeting the requested MIP gap; any
   time-limit result must publish its achieved gap without claiming global
-  optimality.
+  optimality. The recourse correction has focused-test evidence only until the
+  next clean 264-trip HTTP pair completes.
 
 ## 2026-08-07 PV/BESS and optimization-control contract
 

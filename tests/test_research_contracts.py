@@ -113,8 +113,14 @@ def test_solver_settings_persists_phase4_seed_and_total_time_budget() -> None:
                     "primary_plus_symmetric_adjacent_compositions"
                 ),
                 "seed_bev_frontier_enabled": False,
-                "total_solver_time_budget_sec": 4200,
-            }
+                "integrated_seed_recourse_preflight_enabled": True,
+                "integrated_seed_recourse_time_limit_sec": 300,
+                "total_solver_time_budget_sec": 4500,
+            },
+            "integrated_warm_start_audit": {
+                "dispatch_fixed_recourse_requested": True,
+                "integrated_dispatch_fixed_recourse_feasible": True,
+            },
         },
     )
 
@@ -125,7 +131,17 @@ def test_solver_settings_persists_phase4_seed_and_total_time_budget() -> None:
     assert payload["phase4_phase3_seed_candidate_limit"] == 10
     assert payload["phase4_phase3_seed_composition_search_radius"] == 2
     assert payload["phase4_phase3_seed_bev_frontier_enabled"] is False
-    assert payload["phase4_total_solver_time_budget_sec"] == 4200
+    assert payload[
+        "phase4_integrated_seed_recourse_preflight_enabled"
+    ] is True
+    assert payload["phase4_integrated_seed_recourse_time_limit_sec"] == 300
+    assert payload[
+        "phase4_integrated_seed_recourse_preflight_requested"
+    ] is True
+    assert payload[
+        "phase4_integrated_seed_recourse_preflight_feasible"
+    ] is True
+    assert payload["phase4_total_solver_time_budget_sec"] == 4500
 
 
 def test_infeasible_accounting_has_distinct_cost_fields_and_null_validated_cost() -> None:

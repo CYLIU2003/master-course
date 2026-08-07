@@ -9748,6 +9748,9 @@ def _solver_settings_payload(
     phase4_seed_audit = dict(
         metadata.get("phase4_phase3_seed_audit") or {}
     )
+    integrated_start_audit = dict(
+        metadata.get("integrated_warm_start_audit") or {}
+    )
     random_seed = _int_or_none(metadata.get("random_seed"))
     if random_seed is None:
         random_seed = _int_or_none(random_seed_requested)
@@ -10048,12 +10051,33 @@ def _solver_settings_payload(
         "phase4_phase3_seed_bev_frontier_enabled": bool(
             phase4_seed_audit.get("seed_bev_frontier_enabled", False)
         ),
+        "phase4_integrated_seed_recourse_preflight_enabled": bool(
+            phase4_seed_audit.get(
+                "integrated_seed_recourse_preflight_enabled",
+                False,
+            )
+        ),
+        "phase4_integrated_seed_recourse_time_limit_sec": _int_or_none(
+            phase4_seed_audit.get(
+                "integrated_seed_recourse_time_limit_sec"
+            )
+        ),
+        "phase4_integrated_seed_recourse_preflight_requested": bool(
+            integrated_start_audit.get(
+                "dispatch_fixed_recourse_requested",
+                False,
+            )
+        ),
+        "phase4_integrated_seed_recourse_preflight_feasible": bool(
+            integrated_start_audit.get(
+                "integrated_dispatch_fixed_recourse_feasible",
+                False,
+            )
+        ),
         "phase4_total_solver_time_budget_sec": _int_or_none(
             phase4_seed_audit.get("total_solver_time_budget_sec")
         ),
-        "integrated_warm_start_audit": dict(
-            metadata.get("integrated_warm_start_audit") or {}
-        ),
+        "integrated_warm_start_audit": integrated_start_audit,
         "integrated_primary_objective_kind": metadata.get(
             "integrated_primary_objective_kind"
         ),
@@ -10468,6 +10492,17 @@ def _run_optimization(
                 # time limit.  Explicit frontier sensitivities remain Phase 3
                 # experiments and are never injected here.
                 phase4_phase3_seed_bev_frontier_enabled=False,
+                phase4_integrated_seed_recourse_preflight_enabled=(
+                    phase_token == "phase4_integrated"
+                ),
+                phase4_integrated_seed_recourse_time_limit_sec=(
+                    min(
+                        max(int(time_limit_seconds) // 12, 60),
+                        300,
+                    )
+                    if phase_token == "phase4_integrated"
+                    else 300
+                ),
                 gurobi_threads=gurobi_threads,
                 mip_gap=mip_gap,
                 random_seed=random_seed,

@@ -2000,6 +2000,17 @@ def _phase4_warm_start_evidence_valid(
             for character in seed_fingerprint
         )
     )
+    integrated_solution_fingerprint = str(
+        integrated_start_audit.get("integrated_solution_start_fingerprint")
+        or ""
+    )
+    valid_integrated_solution_fingerprint = bool(
+        len(integrated_solution_fingerprint) == 64
+        and all(
+            character in "0123456789abcdef"
+            for character in integrated_solution_fingerprint
+        )
+    )
     return bool(
         seed_audit.get("accepted") is True
         and seed_audit.get("same_canonical_problem") is True
@@ -2026,6 +2037,27 @@ def _phase4_warm_start_evidence_valid(
         and integrated_start_audit.get("complete_bess_soc_start") is True
         and integrated_start_audit.get("physical_energy_trace_start")
         is True
+        and integrated_start_audit.get(
+            "dispatch_fixed_recourse_requested"
+        )
+        is True
+        and integrated_start_audit.get(
+            "integrated_dispatch_fixed_recourse_feasible"
+        )
+        is True
+        and integrated_start_audit.get(
+            "integrated_feasible_start_applied"
+        )
+        is True
+        and integrated_start_audit.get(
+            "complete_integrated_solution_start"
+        )
+        is True
+        and (_number(
+            integrated_start_audit.get("integrated_solution_start_count")
+        ) or 0.0)
+        > 0.0
+        and valid_integrated_solution_fingerprint
         and start_fingerprint == seed_fingerprint
     )
 
@@ -2401,8 +2433,24 @@ def _case_gate_audit(
                     "phase4_phase3_seed_bev_frontier_enabled"
                 )
                 is False
+                and settings.get(
+                    "phase4_integrated_seed_recourse_preflight_enabled"
+                )
+                is True
+                and settings.get(
+                    "phase4_integrated_seed_recourse_time_limit_sec"
+                )
+                == 300
+                and settings.get(
+                    "phase4_integrated_seed_recourse_preflight_requested"
+                )
+                is True
+                and settings.get(
+                    "phase4_integrated_seed_recourse_preflight_feasible"
+                )
+                is True
                 and settings.get("phase4_total_solver_time_budget_sec")
-                == 4200
+                == 4500
             )
             and (
                 not phase4_policy
@@ -3106,6 +3154,8 @@ def _build_pair_control_audit(
             "phase4_phase3_seed_composition_search_radius",
             "phase4_phase3_seed_search_directionality",
             "phase4_phase3_seed_bev_frontier_enabled",
+            "phase4_integrated_seed_recourse_preflight_enabled",
+            "phase4_integrated_seed_recourse_time_limit_sec",
             "phase4_total_solver_time_budget_sec",
         )
     rolling_control_fields = (

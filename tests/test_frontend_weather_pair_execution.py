@@ -453,6 +453,12 @@ def test_phase4_formal_gate_requires_verified_same_problem_full_warm_start() -> 
         "complete_bess_mode_binary_start": True,
         "physical_energy_trace_start": True,
         "seed_plan_fingerprint": seed_fingerprint,
+        "dispatch_fixed_recourse_requested": True,
+        "integrated_dispatch_fixed_recourse_feasible": True,
+        "integrated_feasible_start_applied": True,
+        "complete_integrated_solution_start": True,
+        "integrated_solution_start_count": 100,
+        "integrated_solution_start_fingerprint": "b" * 64,
     }
 
     assert runner._phase4_warm_start_evidence_valid(

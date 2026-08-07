@@ -1,21 +1,25 @@
 # Current research release blockers
 
 Status date: 2026-08-08
-Code status: slot-indexed Stage 1 energy recourse, multi-candidate Stage 2
-evaluation, explicit same-service-date PV controls, and an HTTP-only frontend
-pair runner are implemented. A final-slot return-boundary defect exposed by
-the fourth HTTP attempt is corrected, and candidate selection now requires an
-independent physical check in addition to Stage 2 feasibility. The fifth HTTP
-attempt exposed and the current tree corrects a result-claim message that
-conflated integrated-optimality scope with certified-gap status. The corrected
-completion audit also rejects a contradiction between solver settings,
-persisted claim classification, and terminal response. The current
-integrated focused regression passes (`62 passed`) and the complete suite
-passes (`1203 passed`); compileall and `git diff --check` also pass. These code
-checks alone do not establish release; the subsequent clean-run evidence and
-its remaining blockers are recorded below.
+Code status: the clean `e071446` Phase 4 pair proved that assigning a complete
+Phase 3 `Start` vector was still not an integrated-feasibility certificate:
+both cases reached the 3,600-second limit with zero incumbents. The current
+tree adds an integrated fixed-dispatch recourse preflight, complete-solution
+promotion, IIS evidence and fail-closed release gates. The relevant focused
+set passes `182` tests and the complete repository suite passes `1204` tests;
+`compileall` and `git diff --check` pass. These code checks alone do not
+establish release. A fresh clean-run pair and its per-run gates remain
+authoritative.
 
 ## 2026-08-08 Phase 4 feasible-incumbent remediation status
+
+The clean frontend pair at commit
+`e071446cb346092719a3103e81026bcb02d82a21`, stored under
+`output/formal_pair_20260808_flat30_pv1000_bess6000_phase4_neutral_seed_e071446`,
+did **not** produce a Phase 4 result. Sunny and rain each had an accepted,
+physically valid Phase 3 seed but `NO_VALID_INCUMBENT`, 0/264 served trips and
+zero integrated incumbents. Those diagnostics must not be interpreted as
+equal EV use or as an optimized weather comparison.
 
 The current working tree addresses the no-incumbent mechanism seen in the
 clean 2026-08-03 Phase 4 pair. A frontend Phase 4 request now performs a
@@ -24,15 +28,18 @@ full-trip, Stage-2-feasible, independently physically valid plan is eligible.
 No prior-run JSON, stale prepared input, fallback plan, post-solve repair, or
 weather-direction preference enters the hand-off.
 
-The integrated solver receives complete assignment/path, charger-selection,
-and BESS-mode binary starts plus the Stage 2 SOC and PV/BESS/grid energy trace.
-Dispatch-only baselines are rejected rather than being labelled as applied
-warm starts. Two explicit audits record the seed acceptance and MIP-start
-coverage in solver settings and result metadata.
+The corrected integrated solver first receives the dispatch decisions, fixes
+them only for a bounded recourse solve, and rebuilds charger selection, SOC and
+PV/BESS/grid flows under the exact integrated constraints. A feasible recourse
+is promoted to a complete all-variable start; the dispatch bounds are restored
+before unrestricted optimization. A proven infeasible recourse records IIS
+constraint and variable-bound evidence. Submitted Stage 2 values alone are no
+longer reported as an applied integrated warm start.
 
 The formal actual-cost frontend path now uses a 600-second neutral seed
-(480 seconds Stage 1, 120 seconds Stage 2), followed by a 3,600-second
-integrated solve. The complete 4,200-second maximum and all seed controls are
+(480 seconds Stage 1, 120 seconds Stage 2), a 300-second integrated recourse
+preflight, and then a 3,600-second unrestricted integrated solve. The complete
+4,500-second maximum and all seed/preflight controls are
 persisted in the comparison-control hash. Automatic `used BEV >= K` frontier
 injection is disabled: under a time limit it would be a directed incumbent,
 even though it does not change the final objective. The seed uses only the
@@ -48,7 +55,8 @@ declared seed that is not loaded into the integrated model now fail the core
 per-run research gate as well as the pair runner.
 
 This implementation does **not** yet discharge the release blocker. Focused
-tests prove the small-model hand-off and actual-cost reconciliation, but the
+tests prove the small-model hand-off, bound restoration, IIS audit and
+actual-cost reconciliation, but the
 264-trip full-network model must be run from a fresh Prepare and clean frozen
 commit. Release remains **BLOCKED** until that run has a physically valid
 incumbent, exact source provenance, terminal energy balance, solver/accounting

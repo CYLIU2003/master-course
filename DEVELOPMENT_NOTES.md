@@ -1,5 +1,44 @@
 # Development Notes
 
+## 2026-08-08 Phase 4 integrated fixed-dispatch recourse correction
+
+- Clean commit `e071446cb346092719a3103e81026bcb02d82a21` was exercised through
+  the frontend HTTP path at
+  `output/formal_pair_20260808_flat30_pv1000_bess6000_phase4_neutral_seed_e071446`.
+  The Phase 3 seed passed Stage 1, Stage 2, exact 264-trip coverage and the
+  independent physical validator in both weather cases. The adapter reported
+  complete assignment, charger, SOC, BESS-mode and source-flow `Start` values,
+  but Gurobi produced zero integrated incumbents in 3,600 seconds for both
+  cases. The prior `applied=true` evidence proved attribute assignment only and
+  was insufficient.
+- Phase 4 now performs an exact integrated recourse preflight before the main
+  search. It temporarily fixes only `y`, path arcs, boundary arcs, unserved and
+  vehicle/day activation binaries from the verified Phase 3 seed. Charging,
+  physical charger selection, refueling, vehicle SOC, PV/grid/BESS routing,
+  BESS modes and SOC remain endogenous to the integrated model.
+- When fixed-dispatch recourse has an incumbent, all integrated variable values
+  are fingerprinted and installed as a complete MIP start, the temporary
+  dispatch bounds are restored, and the 3,600-second canonical-cost model is
+  solved without a composition or weather bias. If recourse is proven
+  infeasible, the audit records IIS constraint/bound names, counts and SHA-256;
+  a time limit without an incumbent remains unresolved. In every failure path
+  the provisional Stage 2 start is cleared.
+- `warm_start_applied` and the formal seed gate now require an integrated-
+  feasible complete start, not merely submitted values. The v2 audit and
+  solver settings include the preflight outcome; the sunny/rain control hash
+  includes its enabled flag and 300-second limit. The declared maximum is now
+  600 + 300 + 3,600 = 4,500 seconds per case.
+- The Phase 3 seed runtime audit now reads the canonical `runtime_sec` solver
+  metadata key. The seed budget is clamped to at least 120 seconds so its
+  Stage 1/Stage 2 split cannot silently exceed the declared total in small
+  direct-call tests.
+- Focused tests cover a successful integrated recourse promotion and a proven
+  infeasible recourse with IIS plus bound restoration. A fresh clean-commit
+  264-trip pair remains required before this correction can be considered
+  research-release evidence. The Phase 4/BFF/Rolling focused set passes `182`
+  tests; the complete repository suite passes `1204` tests. `compileall` and
+  `git diff --check` also pass.
+
 ## 2026-08-08 Phase 4 same-problem feasible-incumbent hand-off
 
 - Root cause of the 2026-08-03 full Phase 4 failure was not the absence of a
@@ -13,8 +52,9 @@
   BESS, and objective controls cannot drift through an external artifact.
   Fallback and post-solve repair are disabled for the seed.
 - Formal actual-cost Phase 4 reserves 600 seconds for a neutral seed
-  (480 seconds Stage 1 and 120 seconds Stage 2) and 3,600 seconds for the
-  integrated solve. The 4,200-second total maximum and every seed control are
+  (480 seconds Stage 1 and 120 seconds Stage 2), 300 seconds for integrated
+  fixed-dispatch recourse, and 3,600 seconds for the unrestricted integrated
+  solve. The 4,500-second total maximum and every seed control are
   exported and included in the pair control hash. The automatic one-sided
   `used BEV >= K` frontier was removed because a time-limited integrated solve
   could retain that directed incumbent. The seed now uses the primary plan
@@ -33,7 +73,7 @@
   vehicle source split, depot PV/BESS/grid flows, curtailment, grid import,
   demand peaks, and refueling starts. Unverified dispatch baselines are no
   longer reported as applied integrated warm starts.
-- `phase4_phase3_seed_audit_v1` and `integrated_mip_start_audit_v1` are carried
+- `phase4_phase3_seed_audit_v1` and `integrated_mip_start_audit_v2` are carried
   into solver metadata and `solver_settings.json`. They expose acceptance,
   same-problem provenance, a plan-native SHA-256 fingerprint, complete vehicle
   and BESS SOC traces, full-coverage checks, failure reasons, and variable
@@ -42,8 +82,9 @@
 - Focused regression covers acceptance of a same-problem Phase 3 plan with a
   physical charger and BESS, rejection of an unverified dispatch baseline,
   actual-cost reconciliation, and existing Stage 1/strict-coverage behavior.
-  The final focused set passes `62` tests and the complete repository suite
-  passes `1203` tests; `compileall` and `git diff --check` also pass.
+  The superseding recourse-focused set passes `182` tests and the complete
+  repository suite passes `1204` tests; `compileall` and `git diff --check`
+  also pass.
   A fresh clean-commit 264-trip HTTP run is still required; passing unit tests
   alone do not resolve the research blocker.
 

@@ -421,6 +421,14 @@ class OptimizationConfig:
     phase4_phase3_seed_enabled: bool = False
     phase4_phase3_seed_time_limit_sec: int = 600
     phase4_phase3_seed_bev_frontier_enabled: bool = False
+    # A Phase 3 plan is physically valid under the decomposed Stage 2 model,
+    # but that alone does not prove it satisfies every Phase 4 constraint.
+    # Before the unrestricted integrated search, temporarily fix only the
+    # seed's dispatch binaries and let the integrated model rebuild charging,
+    # charger occupancy, SOC, PV and BESS recourse.  A feasible recourse is
+    # then promoted to a complete integrated MIP start.
+    phase4_integrated_seed_recourse_preflight_enabled: bool = True
+    phase4_integrated_seed_recourse_time_limit_sec: int = 300
     mip_gap: float = 0.02
     random_seed: int = 42
     alns_iterations: int = 800  # Increased from 500

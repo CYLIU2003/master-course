@@ -808,6 +808,16 @@ def _comparison_case_manifest(
                     "phase4_phase3_seed_bev_frontier_enabled"
                 )
             ),
+            "phase4_integrated_seed_recourse_preflight_enabled": (
+                solver_settings.get(
+                    "phase4_integrated_seed_recourse_preflight_enabled"
+                )
+            ),
+            "phase4_integrated_seed_recourse_time_limit_sec": (
+                solver_settings.get(
+                    "phase4_integrated_seed_recourse_time_limit_sec"
+                )
+            ),
             "phase4_total_solver_time_budget_sec": solver_settings.get(
                 "phase4_total_solver_time_budget_sec"
             ),

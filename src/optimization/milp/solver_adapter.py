@@ -3314,6 +3314,24 @@ class GurobiMILPAdapter:
             )
         else:
             model.setObjective(objective, GRB.MINIMIZE)
+
+        integrated_warm_start_audit = (
+            self._certify_integrated_dispatch_fixed_recourse(
+                model,
+                config=config,
+                GRB=GRB,
+                integrated_warm_start_audit=integrated_warm_start_audit,
+                dispatch_variable_maps=(
+                    y,
+                    x,
+                    start_arc,
+                    end_arc,
+                    unserved,
+                    used_vehicle,
+                    used_vehicle_day,
+                ),
+            )
+        )
         
         # Define status_map early for diagnostics
         status_map = {
@@ -3349,7 +3367,14 @@ class GurobiMILPAdapter:
                 json.dump(pre_stats, f, indent=2)
         
         optimize_started_at = time.perf_counter()
-        first_feasible_sec: Optional[float] = None
+        first_feasible_sec: Optional[float] = (
+            0.0
+            if integrated_warm_start_audit.get(
+                "integrated_feasible_start_applied",
+                False,
+            )
+            else None
+        )
 
         def _capture_first_feasible(_model: Any, where: Any) -> None:
             nonlocal first_feasible_sec
@@ -3432,7 +3457,10 @@ class GurobiMILPAdapter:
             except Exception:
                 nodes_explored = None
         warm_start_applied = bool(
-            integrated_warm_start_audit.get("applied", False)
+            integrated_warm_start_audit.get(
+                "integrated_feasible_start_applied",
+                False,
+            )
         )
         warm_start_source = str(
             integrated_warm_start_audit.get("source") or ""
@@ -11755,7 +11783,7 @@ class GurobiMILPAdapter:
             (baseline.metadata or {}).get("source") or ""
         ) if baseline is not None else ""
         audit: Dict[str, Any] = {
-            "schema_version": "integrated_mip_start_audit_v1",
+            "schema_version": "integrated_mip_start_audit_v2",
             "requested": bool(enabled),
             "applied": False,
             "source": source,
@@ -12190,6 +12218,328 @@ class GurobiMILPAdapter:
                 ),
             }
         )
+        return audit
+
+    @staticmethod
+    def _certify_integrated_dispatch_fixed_recourse(
+        model: Any,
+        *,
+        config: OptimizationConfig,
+        GRB: Any,
+        integrated_warm_start_audit: Mapping[str, Any],
+        dispatch_variable_maps: Sequence[Mapping[Any, Any]],
+    ) -> Dict[str, Any]:
+        """Promote a decomposed seed only after integrated recourse succeeds.
+
+        Phase 3 Stage 2 and Phase 4 share physical concepts but are different
+        mathematical formulations.  Writing a Stage 2 trace into ``Start``
+        therefore proves only that values were submitted, not that Gurobi can
+        accept them as an integrated incumbent.  This preflight temporarily
+        fixes the seed's dispatch decisions and lets the *integrated* model
+        choose every charging, charger, SOC, PV and BESS decision itself.
+
+        The original bounds and main-search parameters are restored in every
+        path.  On success, the resulting value of every model variable becomes
+        the unrestricted solve's complete MIP start; the dispatch bounds are
+        not retained.  On failure, the invalid provisional start is cleared
+        and evidence (including an IIS when proven infeasible) is retained.
+        """
+
+        audit = dict(integrated_warm_start_audit or {})
+        configured = bool(
+            getattr(
+                config,
+                "phase4_integrated_seed_recourse_preflight_enabled",
+                True,
+            )
+        )
+        provisional_start_applied = audit.get("applied") is True
+        requested = bool(configured and provisional_start_applied)
+        time_limit_sec = max(
+            int(
+                getattr(
+                    config,
+                    "phase4_integrated_seed_recourse_time_limit_sec",
+                    300,
+                )
+                or 300
+            ),
+            1,
+        )
+        audit.update(
+            {
+                "schema_version": "integrated_mip_start_audit_v2",
+                "dispatch_fixed_recourse_configured": configured,
+                "dispatch_fixed_recourse_requested": requested,
+                "dispatch_fixed_recourse_time_limit_sec": time_limit_sec,
+                "dispatch_fixed_recourse_status": "not_run",
+                "dispatch_fixed_recourse_reason": "",
+                "dispatch_fixed_recourse_runtime_sec": 0.0,
+                "dispatch_fixed_variable_count": 0,
+                "integrated_dispatch_fixed_recourse_feasible": False,
+                "integrated_feasible_start_applied": False,
+                "integrated_solution_start_count": 0,
+                "complete_integrated_solution_start": False,
+                "integrated_solution_start_fingerprint": "",
+                "dispatch_fixed_recourse_objective_value": None,
+                "dispatch_fixed_recourse_iis_generated": False,
+                "dispatch_fixed_recourse_iis_constraint_count": 0,
+                "dispatch_fixed_recourse_iis_variable_bound_count": 0,
+                "dispatch_fixed_recourse_iis_constraint_sample": [],
+                "dispatch_fixed_recourse_iis_variable_bound_sample": [],
+                "dispatch_fixed_recourse_iis_fingerprint": "",
+            }
+        )
+        if not configured:
+            audit["dispatch_fixed_recourse_reason"] = "disabled_by_config"
+            return audit
+        if not provisional_start_applied:
+            audit["dispatch_fixed_recourse_reason"] = (
+                "complete_phase3_seed_start_not_applied"
+            )
+            return audit
+
+        model.update()
+        dispatch_vars: List[Any] = []
+        seen_variable_ids: Set[int] = set()
+        for variable_map in dispatch_variable_maps:
+            for variable in variable_map.values():
+                identity = id(variable)
+                if identity in seen_variable_ids:
+                    continue
+                seen_variable_ids.add(identity)
+                dispatch_vars.append(variable)
+
+        fixed_bounds: List[Tuple[Any, float, float, float]] = []
+        for variable in dispatch_vars:
+            try:
+                raw_start = float(variable.Start)
+                lower_bound = float(variable.LB)
+                upper_bound = float(variable.UB)
+            except Exception as exc:
+                audit["dispatch_fixed_recourse_status"] = "start_read_failed"
+                audit["dispatch_fixed_recourse_reason"] = (
+                    f"dispatch_start_read_failed:{type(exc).__name__}:{variable.VarName}"
+                )
+                return audit
+            if (
+                not math.isfinite(raw_start)
+                or abs(raw_start) >= float(GRB.INFINITY) * 0.5
+            ):
+                audit["dispatch_fixed_recourse_status"] = "start_incomplete"
+                audit["dispatch_fixed_recourse_reason"] = (
+                    f"dispatch_start_missing:{variable.VarName}"
+                )
+                return audit
+            rounded_start = float(round(raw_start))
+            if (
+                abs(raw_start - rounded_start) > 1.0e-6
+                or rounded_start < lower_bound - 1.0e-9
+                or rounded_start > upper_bound + 1.0e-9
+            ):
+                audit["dispatch_fixed_recourse_status"] = "start_invalid"
+                audit["dispatch_fixed_recourse_reason"] = (
+                    f"dispatch_start_out_of_domain:{variable.VarName}:{raw_start}"
+                )
+                return audit
+            fixed_bounds.append(
+                (variable, lower_bound, upper_bound, rounded_start)
+            )
+
+        audit["dispatch_fixed_variable_count"] = len(fixed_bounds)
+        if not fixed_bounds:
+            audit["dispatch_fixed_recourse_status"] = "start_empty"
+            audit["dispatch_fixed_recourse_reason"] = (
+                "dispatch_start_contains_no_variables"
+            )
+            return audit
+
+        saved_parameters = {
+            "TimeLimit": float(model.Params.TimeLimit),
+            "MIPGap": float(model.Params.MIPGap),
+            "MIPFocus": int(model.Params.MIPFocus),
+            "SolutionLimit": int(model.Params.SolutionLimit),
+        }
+        integrated_solution_variables: List[Any] = []
+        integrated_solution_values: List[float] = []
+        preflight_started_at = time.perf_counter()
+        try:
+            for variable, _, _, seed_value in fixed_bounds:
+                variable.LB = seed_value
+                variable.UB = seed_value
+            model.update()
+            model.Params.TimeLimit = time_limit_sec
+            model.Params.MIPGap = 1.0
+            model.Params.MIPFocus = 1
+            model.Params.SolutionLimit = 1
+            model.optimize()
+            audit["dispatch_fixed_recourse_runtime_sec"] = float(
+                getattr(model, "Runtime", 0.0) or 0.0
+            )
+            status_names = {
+                GRB.OPTIMAL: "optimal",
+                GRB.TIME_LIMIT: "time_limit",
+                GRB.INFEASIBLE: "infeasible",
+                GRB.INF_OR_UNBD: "inf_or_unbd",
+                GRB.UNBOUNDED: "unbounded",
+                GRB.SUBOPTIMAL: "suboptimal",
+                GRB.SOLUTION_LIMIT: "solution_limit",
+            }
+            audit["dispatch_fixed_recourse_status"] = status_names.get(
+                model.Status,
+                f"status_{model.Status}",
+            )
+            if int(getattr(model, "SolCount", 0) or 0) > 0:
+                integrated_solution_variables = list(model.getVars())
+                integrated_solution_values = [
+                    float(value)
+                    for value in model.getAttr(
+                        "X",
+                        integrated_solution_variables,
+                    )
+                ]
+                if not all(
+                    math.isfinite(value)
+                    for value in integrated_solution_values
+                ):
+                    integrated_solution_variables = []
+                    integrated_solution_values = []
+                    audit["dispatch_fixed_recourse_status"] = (
+                        "nonfinite_solution"
+                    )
+                    audit["dispatch_fixed_recourse_reason"] = (
+                        "integrated_recourse_returned_nonfinite_values"
+                    )
+                else:
+                    complete_integrated_solution = bool(
+                        len(integrated_solution_variables)
+                        == int(model.NumVars)
+                        and len(integrated_solution_values)
+                        == int(model.NumVars)
+                    )
+                    # ``getVars`` is the model's deterministic column order.
+                    # Hash incrementally: materializing and sorting a second
+                    # million-variable text vector would add avoidable memory
+                    # pressure exactly where the full-network model is largest.
+                    solution_hasher = hashlib.sha256()
+                    for variable, value in zip(
+                        integrated_solution_variables,
+                        integrated_solution_values,
+                    ):
+                        solution_hasher.update(
+                            str(variable.VarName).encode("utf-8")
+                        )
+                        solution_hasher.update(b"\0")
+                        solution_hasher.update(
+                            f"{value:.17g}\n".encode("ascii")
+                        )
+                    audit.update(
+                        {
+                            "integrated_dispatch_fixed_recourse_feasible": True,
+                            "integrated_feasible_start_applied": (
+                                complete_integrated_solution
+                            ),
+                            "dispatch_fixed_recourse_reason": "",
+                            "dispatch_fixed_recourse_objective_value": float(
+                                model.ObjVal
+                            ),
+                            "integrated_solution_start_count": len(
+                                integrated_solution_values
+                            ),
+                            "complete_integrated_solution_start": (
+                                complete_integrated_solution
+                            ),
+                            "integrated_solution_start_fingerprint": (
+                                solution_hasher.hexdigest()
+                            ),
+                        }
+                    )
+            elif model.Status == GRB.INFEASIBLE:
+                try:
+                    model.computeIIS()
+                    iis_constraints = sorted(
+                        str(constraint.ConstrName)
+                        for constraint in model.getConstrs()
+                        if bool(constraint.IISConstr)
+                    )
+                    iis_bounds: List[str] = []
+                    for variable in model.getVars():
+                        if bool(variable.IISLB):
+                            iis_bounds.append(f"LB:{variable.VarName}")
+                        if bool(variable.IISUB):
+                            iis_bounds.append(f"UB:{variable.VarName}")
+                    iis_bounds.sort()
+                    iis_payload = "\n".join(
+                        [
+                            *(f"CONSTR:{name}" for name in iis_constraints),
+                            *iis_bounds,
+                        ]
+                    )
+                    audit.update(
+                        {
+                            "dispatch_fixed_recourse_iis_generated": True,
+                            "dispatch_fixed_recourse_iis_constraint_count": len(
+                                iis_constraints
+                            ),
+                            "dispatch_fixed_recourse_iis_variable_bound_count": len(
+                                iis_bounds
+                            ),
+                            "dispatch_fixed_recourse_iis_constraint_sample": (
+                                iis_constraints[:100]
+                            ),
+                            "dispatch_fixed_recourse_iis_variable_bound_sample": (
+                                iis_bounds[:100]
+                            ),
+                            "dispatch_fixed_recourse_iis_fingerprint": (
+                                hashlib.sha256(
+                                    iis_payload.encode("utf-8")
+                                ).hexdigest()
+                                if iis_payload
+                                else ""
+                            ),
+                        }
+                    )
+                except Exception as exc:
+                    audit["dispatch_fixed_recourse_reason"] = (
+                        "integrated_recourse_iis_failed:"
+                        f"{type(exc).__name__}:{exc}"
+                    )
+            if not integrated_solution_values and not audit[
+                "dispatch_fixed_recourse_reason"
+            ]:
+                audit["dispatch_fixed_recourse_reason"] = (
+                    "integrated_dispatch_fixed_recourse_has_no_incumbent"
+                )
+        except Exception as exc:
+            audit["dispatch_fixed_recourse_runtime_sec"] = float(
+                time.perf_counter() - preflight_started_at
+            )
+            audit["dispatch_fixed_recourse_status"] = "error"
+            audit["dispatch_fixed_recourse_reason"] = (
+                f"integrated_recourse_error:{type(exc).__name__}:{exc}"
+            )
+            integrated_solution_variables = []
+            integrated_solution_values = []
+        finally:
+            for variable, lower_bound, upper_bound, _ in fixed_bounds:
+                variable.LB = lower_bound
+                variable.UB = upper_bound
+            model.Params.TimeLimit = saved_parameters["TimeLimit"]
+            model.Params.MIPGap = saved_parameters["MIPGap"]
+            model.Params.MIPFocus = saved_parameters["MIPFocus"]
+            model.Params.SolutionLimit = saved_parameters["SolutionLimit"]
+            model.update()
+            model.reset()
+            if integrated_solution_values:
+                for variable, value in zip(
+                    integrated_solution_variables,
+                    integrated_solution_values,
+                ):
+                    variable.Start = value
+            else:
+                for variable in model.getVars():
+                    variable.Start = GRB.UNDEFINED
+
         return audit
 
     def _add_fragment_pairwise_depot_reset_cuts(
