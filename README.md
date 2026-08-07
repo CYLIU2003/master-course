@@ -1,5 +1,28 @@
 # master-course
 
+## 2026-08-07 PV/BESS and optimization-control contract
+
+- Solcast records are resampled by source/target interval overlap. Converting
+  a 60-minute irradiance interval to 5/15/30-minute slots now preserves daily
+  kWh instead of assigning the whole interval to only one shorter slot.
+- `POST /api/scenarios/{scenario_id}/depot-assets/update` is a patch API.
+  Omitted PV/BESS fields retain their saved values; explicit `pv_enabled=false`
+  and `pv_generation_kwh_by_slot=[]` are honored. Changing rated PV output
+  also updates the reverse area estimates and rescales a derived curve.
+- PV dates, slot lengths, performance ratio, PV generation, BESS ratings, SOC
+  bounds, and charge/discharge efficiencies are validated before Prepare or
+  optimization. Invalid physical inputs are not replaced by hidden defaults.
+- Demand charge is billed per depot meter. The objective and canonical
+  accounting both use the sum of the on/off-peak demand maxima for each depot.
+- The Tk solver settings expose `phase3_two_stage`, `phase4_integrated`, Stage
+  1 composition/frontier controls, and the Phase 4 canonical actual-cost and
+  EV-utilization controls. Quick Setup persists and reloads the same fields.
+
+These corrections invalidate prepared inputs and optimization outputs created
+before this change. Restart Tk/BFF and run a fresh Prepare. A passing code test
+suite does not make a research result READY; formal runs still require a clean
+frozen commit and every per-run/pair acceptance gate.
+
 > 東急バスの BEV／ICE 混成車両を対象に、便割当、充電、PV、BESS、系統電力を一貫して評価する研究用最適化システムです。
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)

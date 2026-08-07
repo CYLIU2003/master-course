@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from enum import Enum
+import math
 import re
 from typing import Any, Dict, List, Mapping, Optional, Set, Tuple
 
@@ -704,6 +705,26 @@ class CanonicalOptimizationProblem:
         for depot_id, asset in self.depot_energy_assets.items():
             if not isinstance(asset, DepotEnergyAsset):
                 raise ValueError(f"depot_energy_assets[{depot_id}] must be DepotEnergyAsset")
+            pv_capacity_kw = float(asset.pv_capacity_kw or 0.0)
+            if not math.isfinite(pv_capacity_kw) or pv_capacity_kw < 0.0:
+                raise ValueError(
+                    f"Depot {depot_id} PV capacity must be finite and non-negative"
+                )
+            if any(
+                not math.isfinite(float(value)) or float(value) < 0.0
+                for value in asset.pv_generation_kwh_by_slot
+            ):
+                raise ValueError(
+                    f"Depot {depot_id} PV generation must be finite and non-negative"
+                )
+            if any(
+                not math.isfinite(float(value))
+                or not (0.0 <= float(value) <= 1.0)
+                for value in asset.capacity_factor_by_slot
+            ):
+                raise ValueError(
+                    f"Depot {depot_id} PV capacity factors must be finite and within [0, 1]"
+                )
             if asset.pv_enabled and asset.pv_generation_kwh_by_slot:
                 if slot_count > 0 and len(asset.pv_generation_kwh_by_slot) != slot_count:
                     raise ValueError(
@@ -716,7 +737,45 @@ class CanonicalOptimizationProblem:
                         f"Depot {depot_id} capacity_factor_by_slot length ({len(asset.capacity_factor_by_slot)}) "
                         f"must match price slot count ({slot_count})"
                     )
+            bess_energy_kwh = float(asset.bess_energy_kwh or 0.0)
+            bess_power_kw = float(asset.bess_power_kw or 0.0)
+            bess_soc_values = (
+                float(asset.bess_initial_soc_kwh or 0.0),
+                float(asset.bess_soc_min_kwh or 0.0),
+                float(asset.bess_soc_max_kwh or 0.0),
+                float(asset.bess_terminal_soc_min_kwh or 0.0),
+                float(asset.bess_terminal_soc_target_kwh or 0.0),
+            )
+            if (
+                not math.isfinite(bess_energy_kwh)
+                or not math.isfinite(bess_power_kw)
+                or bess_energy_kwh < 0.0
+                or bess_power_kw < 0.0
+            ):
+                raise ValueError(
+                    f"Depot {depot_id} BESS energy and power must be finite and non-negative"
+                )
+            if not (0.0 < float(asset.bess_charge_efficiency) <= 1.0):
+                raise ValueError(
+                    f"Depot {depot_id} BESS charge efficiency must be within (0, 1]"
+                )
+            if not (0.0 < float(asset.bess_discharge_efficiency) <= 1.0):
+                raise ValueError(
+                    f"Depot {depot_id} BESS discharge efficiency must be within (0, 1]"
+                )
+            if any(not math.isfinite(value) or value < 0.0 for value in bess_soc_values):
+                raise ValueError(
+                    f"Depot {depot_id} BESS SOC values must be finite and non-negative"
+                )
+            if asset.bess_soc_max_kwh > bess_energy_kwh:
+                raise ValueError(
+                    f"Depot {depot_id} BESS maximum SOC exceeds energy capacity"
+                )
             if asset.bess_enabled:
+                if bess_energy_kwh <= 0.0:
+                    raise ValueError(
+                        f"Depot {depot_id} enabled BESS requires positive energy capacity"
+                    )
                 if asset.bess_soc_min_kwh > asset.bess_soc_max_kwh:
                     raise ValueError(f"Depot {depot_id} has invalid BESS bounds: min > max")
                 if not (asset.bess_soc_min_kwh <= asset.bess_initial_soc_kwh <= asset.bess_soc_max_kwh):

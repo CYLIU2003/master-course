@@ -2745,6 +2745,16 @@ class App:
         self.timestep_min_var = tk.StringVar(value="30")
         self.time_limit_var = tk.StringVar(value="300")
         self.mip_gap_var = tk.StringVar(value="0.01")
+        self.stage1_candidate_limit_var = tk.StringVar(value="1")
+        self.stage1_composition_radius_var = tk.StringVar(value="0")
+        self.stage1_bev_frontier_enabled_var = tk.BooleanVar(value=False)
+        self.stage1_bev_frontier_min_var = tk.StringVar(value="15")
+        self.stage1_bev_frontier_max_var = tk.StringVar(value="35")
+        self.stage1_bev_frontier_time_limit_var = tk.StringVar(value="120")
+        self.integrated_actual_cost_objective_var = tk.BooleanVar(value=False)
+        self.integrated_ev_utilization_mode_var = tk.StringVar(value="disabled")
+        self.integrated_actual_cost_upper_bound_var = tk.StringVar(value="")
+        self.integrated_actual_cost_upper_bound_delta_var = tk.StringVar(value="")
         self.alns_iter_var = tk.StringVar(value="500")
         self.no_improvement_limit_var = tk.StringVar(value="100")
         self.destroy_fraction_var = tk.StringVar(value="0.25")
@@ -3692,13 +3702,17 @@ class App:
     def _selected_route_ids(self) -> list[str]:
         return sorted(self.scope_selected_route_ids)
 
-    def _parse_int(self, value: str, default: int = 0) -> int:
+    def _parse_int(self, value: str, default: int | None = 0) -> int | None:
         try:
             return int(value.strip())
         except Exception:
             return default
 
-    def _parse_float(self, value: str, default: float = 0.0) -> float:
+    def _parse_float(
+        self,
+        value: str,
+        default: float | None = 0.0,
+    ) -> float | None:
         try:
             return float(value.strip())
         except Exception:
@@ -6915,6 +6929,57 @@ class App:
                 self._setting_text(solver, "timeLimitSeconds", default=300)
             )
             self.mip_gap_var.set(str(solver.get("mipGap") if solver.get("mipGap") is not None else 0.01))
+            self.stage1_candidate_limit_var.set(
+                str(
+                    solver.get("stage1Stage2CandidateLimit")
+                    if solver.get("stage1Stage2CandidateLimit") is not None
+                    else 1
+                )
+            )
+            self.stage1_composition_radius_var.set(
+                str(
+                    solver.get("stage1CompositionSearchRadius")
+                    if solver.get("stage1CompositionSearchRadius") is not None
+                    else 0
+                )
+            )
+            self.stage1_bev_frontier_enabled_var.set(
+                bool(solver.get("stage1BevFrontierEnabled", False))
+            )
+            self.stage1_bev_frontier_min_var.set(
+                str(solver.get("stage1BevFrontierMinCount", 15))
+            )
+            self.stage1_bev_frontier_max_var.set(
+                str(solver.get("stage1BevFrontierMaxCount", 35))
+            )
+            self.stage1_bev_frontier_time_limit_var.set(
+                str(
+                    solver.get(
+                        "stage1BevFrontierTargetTimeLimitSeconds",
+                        120,
+                    )
+                )
+            )
+            self.integrated_actual_cost_objective_var.set(
+                bool(solver.get("integratedActualCostObjective", False))
+            )
+            self.integrated_ev_utilization_mode_var.set(
+                str(solver.get("integratedEvUtilizationMode") or "disabled")
+            )
+            integrated_upper_bound = solver.get(
+                "integratedActualCostUpperBoundJpy"
+            )
+            self.integrated_actual_cost_upper_bound_var.set(
+                "" if integrated_upper_bound is None else str(integrated_upper_bound)
+            )
+            integrated_upper_bound_delta = solver.get(
+                "integratedActualCostUpperBoundDeltaRatio"
+            )
+            self.integrated_actual_cost_upper_bound_delta_var.set(
+                ""
+                if integrated_upper_bound_delta is None
+                else str(integrated_upper_bound_delta)
+            )
             self.alns_iter_var.set(
                 self._setting_text(solver, "alnsIterations", default=500)
             )
@@ -7207,6 +7272,25 @@ class App:
                 "初期SOC比を一斉反映するには営業所を選択してください",
             )
             return
+        solver_mode = self.solver_mode_var.get().strip()
+        is_phase3 = solver_mode == "phase3_two_stage"
+        is_phase4 = solver_mode == "phase4_integrated"
+        integrated_actual_cost = bool(
+            is_phase4 and self.integrated_actual_cost_objective_var.get()
+        )
+        integrated_utilization_mode = (
+            self.integrated_ev_utilization_mode_var.get().strip()
+            if is_phase4 and not integrated_actual_cost
+            else "disabled"
+        ) or "disabled"
+        integrated_cost_upper_bound = (
+            self._parse_float(
+                self.integrated_actual_cost_upper_bound_var.get(),
+                None,
+            )
+            if integrated_utilization_mode != "disabled"
+            else None
+        )
         payload = {
             "selectedDepotIds": self._selected_depot_ids(),
             "selectedRouteIds": self._selected_route_ids(),
@@ -7220,13 +7304,52 @@ class App:
             "allowIntraDepotRouteSwap": allow_intra_depot_swap,
             "allowInterDepotSwap": self.allow_inter_var.get(),
             "fixedRouteBandMode": fixed_route_band_mode,
-            "solverMode": self.solver_mode_var.get().strip(),
+            "solverMode": solver_mode,
             "objectiveMode": self.objective_mode_var.get().strip(),
             "objectivePreset": self.objective_preset_var.get().strip() or "cost",
             "timeStepMin": self._timestep_min_value(),
             "timestepMin": self._timestep_min_value(),
             "timeLimitSeconds": self._parse_int(self.time_limit_var.get(), 300),
             "mipGap": self._parse_float(self.mip_gap_var.get(), 0.01),
+            "stage1Stage2CandidateLimit": max(
+                self._parse_int(self.stage1_candidate_limit_var.get(), 1),
+                1,
+            ),
+            "stage1CompositionSearchRadius": max(
+                self._parse_int(self.stage1_composition_radius_var.get(), 0),
+                0,
+            ),
+            "stage1BevFrontierEnabled": bool(
+                is_phase3 and self.stage1_bev_frontier_enabled_var.get()
+            ),
+            "stage1BevFrontierMinCount": max(
+                self._parse_int(self.stage1_bev_frontier_min_var.get(), 15),
+                0,
+            ),
+            "stage1BevFrontierMaxCount": max(
+                self._parse_int(self.stage1_bev_frontier_max_var.get(), 35),
+                0,
+            ),
+            "stage1BevFrontierTargetTimeLimitSeconds": max(
+                self._parse_int(
+                    self.stage1_bev_frontier_time_limit_var.get(),
+                    120,
+                ),
+                1,
+            ),
+            "integratedActualCostObjective": bool(
+                integrated_actual_cost
+            ),
+            "integratedEvUtilizationMode": integrated_utilization_mode,
+            "integratedActualCostUpperBoundJpy": integrated_cost_upper_bound,
+            "integratedActualCostUpperBoundDeltaRatio": (
+                self._parse_float(
+                    self.integrated_actual_cost_upper_bound_delta_var.get(),
+                    None,
+                )
+                if integrated_cost_upper_bound is not None
+                else None
+            ),
             "alnsIterations": self._parse_int(self.alns_iter_var.get(), 500),
             "noImprovementLimit": self._parse_int(self.no_improvement_limit_var.get(), 100),
             "destroyFraction": self._parse_float(self.destroy_fraction_var.get(), 0.25),
@@ -8995,14 +9118,81 @@ class App:
 
     def _build_optimization_run_payload(self, prepared_input_id: str | None = None) -> dict[str, Any]:
         depots = self._selected_depot_ids()
+        mode = self.solver_mode_var.get().strip()
+        is_phase3 = mode == "phase3_two_stage"
+        is_phase4 = mode == "phase4_integrated"
+        integrated_actual_cost = bool(
+            is_phase4 and self.integrated_actual_cost_objective_var.get()
+        )
+        integrated_utilization_mode = (
+            self.integrated_ev_utilization_mode_var.get().strip()
+            if is_phase4 and not integrated_actual_cost
+            else "disabled"
+        ) or "disabled"
+        integrated_cost_upper_bound = (
+            self._parse_float(
+                self.integrated_actual_cost_upper_bound_var.get(),
+                None,
+            )
+            if integrated_utilization_mode != "disabled"
+            else None
+        )
         payload = {
-            "mode": self.solver_mode_var.get().strip(),
+            "mode": mode,
             "research_run": self._research_run_requested(),
             "prepared_input_id": prepared_input_id or self.prepared_input_id,
             "time_step_min": self._timestep_min_value(),
             "timestep_min": self._timestep_min_value(),
             "time_limit_seconds": self._effective_optimization_time_limit_seconds(),
             "stage1_best_obj_stop_enabled": _INTERACTIVE_STAGE1_BEST_OBJ_STOP_ENABLED,
+            "stage1_stage2_candidate_limit": max(
+                int(self._parse_int(self.stage1_candidate_limit_var.get(), 1) or 1),
+                1,
+            ),
+            "stage1_composition_search_radius": max(
+                int(
+                    self._parse_int(
+                        self.stage1_composition_radius_var.get(),
+                        0,
+                    )
+                    or 0
+                ),
+                0,
+            ),
+            "stage1_bev_frontier_enabled": bool(
+                is_phase3 and self.stage1_bev_frontier_enabled_var.get()
+            ),
+            "stage1_bev_frontier_min_count": max(
+                int(self._parse_int(self.stage1_bev_frontier_min_var.get(), 15) or 0),
+                0,
+            ),
+            "stage1_bev_frontier_max_count": max(
+                int(self._parse_int(self.stage1_bev_frontier_max_var.get(), 35) or 0),
+                0,
+            ),
+            "stage1_bev_frontier_target_time_limit_seconds": max(
+                int(
+                    self._parse_int(
+                        self.stage1_bev_frontier_time_limit_var.get(),
+                        120,
+                    )
+                    or 1
+                ),
+                1,
+            ),
+            "integrated_actual_cost_objective": bool(
+                integrated_actual_cost
+            ),
+            "integrated_ev_utilization_mode": integrated_utilization_mode,
+            "integrated_actual_cost_upper_bound_jpy": integrated_cost_upper_bound,
+            "integrated_actual_cost_upper_bound_delta_ratio": (
+                self._parse_float(
+                    self.integrated_actual_cost_upper_bound_delta_var.get(),
+                    None,
+                )
+                if integrated_cost_upper_bound is not None
+                else None
+            ),
             "gurobi_threads": _INTERACTIVE_GUROBI_THREADS,
             "run_profile": "day_ahead_and_hourly_rolling",
             "run_hourly_rolling": True,
@@ -10237,7 +10427,7 @@ class App:
     def open_solver_settings_window(self) -> None:
         win = tk.Toplevel(self.root)
         win.title("詳細設定 / ソルバー設定")
-        win.geometry("620x520")
+        win.geometry("700x780")
 
         ttk.Label(
             win,
@@ -10250,7 +10440,15 @@ class App:
             win,
             state="readonly",
             textvariable=self.solver_mode_var,
-            values=["mode_milp_only", "mode_alns_only", "mode_hybrid", "mode_ga_only", "mode_abc_only"],
+            values=[
+                "mode_milp_only",
+                "phase3_two_stage",
+                "phase4_integrated",
+                "mode_alns_only",
+                "mode_hybrid",
+                "mode_ga_only",
+                "mode_abc_only",
+            ],
         )
         solver_combo.pack(fill=tk.X, padx=10)
         _Tooltip(
@@ -10362,6 +10560,101 @@ class App:
         )
         ttk.Entry(row_gap, textvariable=self.mip_gap_var).pack(side=tk.LEFT, fill=tk.X, expand=True)
 
+        row_stage1_candidates = ttk.Frame(solver_box)
+        row_stage1_candidates.pack(fill=tk.X, pady=3)
+        ttk.Label(
+            row_stage1_candidates,
+            text="Stage 1/2 candidate limit",
+            width=32,
+        ).pack(side=tk.LEFT)
+        ttk.Entry(
+            row_stage1_candidates,
+            textvariable=self.stage1_candidate_limit_var,
+            width=10,
+        ).pack(side=tk.LEFT)
+
+        row_stage1_radius = ttk.Frame(solver_box)
+        row_stage1_radius.pack(fill=tk.X, pady=3)
+        ttk.Label(
+            row_stage1_radius,
+            text="Used-BEV composition radius",
+            width=32,
+        ).pack(side=tk.LEFT)
+        ttk.Entry(
+            row_stage1_radius,
+            textvariable=self.stage1_composition_radius_var,
+            width=10,
+        ).pack(side=tk.LEFT)
+
+        row_stage1_frontier = ttk.Frame(solver_box)
+        row_stage1_frontier.pack(fill=tk.X, pady=3)
+        ttk.Checkbutton(
+            row_stage1_frontier,
+            text="Enable Stage-1 BEV frontier",
+            variable=self.stage1_bev_frontier_enabled_var,
+        ).pack(side=tk.LEFT)
+        ttk.Label(row_stage1_frontier, text="min").pack(side=tk.LEFT, padx=(10, 2))
+        ttk.Entry(
+            row_stage1_frontier,
+            textvariable=self.stage1_bev_frontier_min_var,
+            width=5,
+        ).pack(side=tk.LEFT)
+        ttk.Label(row_stage1_frontier, text="max").pack(side=tk.LEFT, padx=(6, 2))
+        ttk.Entry(
+            row_stage1_frontier,
+            textvariable=self.stage1_bev_frontier_max_var,
+            width=5,
+        ).pack(side=tk.LEFT)
+        ttk.Label(row_stage1_frontier, text="sec/target").pack(
+            side=tk.LEFT,
+            padx=(6, 2),
+        )
+        ttk.Entry(
+            row_stage1_frontier,
+            textvariable=self.stage1_bev_frontier_time_limit_var,
+            width=7,
+        ).pack(side=tk.LEFT)
+
+        row_integrated_actual_cost = ttk.Frame(solver_box)
+        row_integrated_actual_cost.pack(fill=tk.X, pady=3)
+        ttk.Checkbutton(
+            row_integrated_actual_cost,
+            text="Phase 4: canonical actual-cost objective",
+            variable=self.integrated_actual_cost_objective_var,
+        ).pack(side=tk.LEFT)
+
+        row_integrated_utilization = ttk.Frame(solver_box)
+        row_integrated_utilization.pack(fill=tk.X, pady=3)
+        ttk.Label(
+            row_integrated_utilization,
+            text="Phase 4 EV-utilization mode",
+            width=32,
+        ).pack(side=tk.LEFT)
+        ttk.Combobox(
+            row_integrated_utilization,
+            textvariable=self.integrated_ev_utilization_mode_var,
+            state="readonly",
+            values=["disabled", "minimum_ice_fuel_lexicographic"],
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        row_integrated_cost_cap = ttk.Frame(solver_box)
+        row_integrated_cost_cap.pack(fill=tk.X, pady=3)
+        ttk.Label(
+            row_integrated_cost_cap,
+            text="Actual-cost cap JPY / delta ratio",
+            width=32,
+        ).pack(side=tk.LEFT)
+        ttk.Entry(
+            row_integrated_cost_cap,
+            textvariable=self.integrated_actual_cost_upper_bound_var,
+            width=12,
+        ).pack(side=tk.LEFT)
+        ttk.Entry(
+            row_integrated_cost_cap,
+            textvariable=self.integrated_actual_cost_upper_bound_delta_var,
+            width=10,
+        ).pack(side=tk.LEFT, padx=(6, 0))
+
         row_successors = ttk.Frame(solver_box)
         row_successors.pack(fill=tk.X, pady=3)
         lbl_successors = ttk.Label(row_successors, text="MILP後継便上限", width=24)
@@ -10407,9 +10700,19 @@ class App:
 
         def refresh_visibility(_event=None) -> None:
             mode = self.solver_mode_var.get().strip().lower()
-            is_milp_like = mode in {"mode_milp_only", "mode_hybrid", "mode_alns_milp", "hybrid", "milp"}
+            is_milp_like = mode in {
+                "mode_milp_only",
+                "mode_hybrid",
+                "mode_alns_milp",
+                "hybrid",
+                "milp",
+                "phase3_two_stage",
+                "phase4_integrated",
+            }
             is_meta_like = mode in {"mode_alns_only", "mode_ga_only", "mode_abc_only", "ga", "abc", "alns"}
             uses_alns = is_meta_like or mode in {"mode_hybrid", "mode_alns_milp", "hybrid"}
+            is_phase3 = mode == "phase3_two_stage"
+            is_phase4 = mode == "phase4_integrated"
 
             if is_milp_like:
                 row_gap.pack(fill=tk.X, pady=3)
@@ -10417,6 +10720,24 @@ class App:
             else:
                 row_gap.pack_forget()
                 row_successors.pack_forget()
+
+            if is_phase3:
+                row_stage1_candidates.pack(fill=tk.X, pady=3)
+                row_stage1_radius.pack(fill=tk.X, pady=3)
+                row_stage1_frontier.pack(fill=tk.X, pady=3)
+            else:
+                row_stage1_candidates.pack_forget()
+                row_stage1_radius.pack_forget()
+                row_stage1_frontier.pack_forget()
+
+            if is_phase4:
+                row_integrated_actual_cost.pack(fill=tk.X, pady=3)
+                row_integrated_utilization.pack(fill=tk.X, pady=3)
+                row_integrated_cost_cap.pack(fill=tk.X, pady=3)
+            else:
+                row_integrated_actual_cost.pack_forget()
+                row_integrated_utilization.pack_forget()
+                row_integrated_cost_cap.pack_forget()
 
             if uses_alns:
                 row_iter.pack(fill=tk.X, pady=3)

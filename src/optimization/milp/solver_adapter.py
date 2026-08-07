@@ -2720,9 +2720,15 @@ class GurobiMILPAdapter:
             if w_on_depot_var:
                 w_on_var = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
                 w_off_var = model.addVar(lb=0.0, vtype=GRB.CONTINUOUS)
-                for depot_id in w_on_depot_var:
-                    model.addConstr(w_on_var >= w_on_depot_var[depot_id])
-                    model.addConstr(w_off_var >= w_off_depot_var[depot_id])
+                # Each depot has its own utility meter. The billed demand is
+                # therefore the sum of per-depot peaks, not the maximum peak
+                # among depots.
+                model.addConstr(
+                    w_on_var == gp.quicksum(w_on_depot_var.values())
+                )
+                model.addConstr(
+                    w_off_var == gp.quicksum(w_off_depot_var.values())
+                )
 
         component_flags = normalize_cost_component_flags(
             problem.metadata.get("cost_component_flags")
@@ -10304,9 +10310,12 @@ class GurobiMILPAdapter:
         if w_on_depot_var:
             w_on_var = stage2.addVar(lb=0.0, vtype=GRB.CONTINUOUS, name="w_on")
             w_off_var = stage2.addVar(lb=0.0, vtype=GRB.CONTINUOUS, name="w_off")
-            for depot_id in w_on_depot_var:
-                stage2.addConstr(w_on_var >= w_on_depot_var[depot_id])
-                stage2.addConstr(w_off_var >= w_off_depot_var[depot_id])
+            stage2.addConstr(
+                w_on_var == gp.quicksum(w_on_depot_var.values())
+            )
+            stage2.addConstr(
+                w_off_var == gp.quicksum(w_off_depot_var.values())
+            )
 
         objective2 = gp.LinExpr()
         electricity_cost_enabled = component_flags.get("electricity_cost", True)
@@ -12461,14 +12470,15 @@ class GurobiMILPAdapter:
                 vtype=grb.CONTINUOUS,
                 name="stage1_recourse_peak_off_global_kw",
             )
-            for depot_id in on_peak_by_depot:
-                model.addConstr(
-                    global_on_peak >= on_peak_by_depot[depot_id]
-                )
-                model.addConstr(
-                    global_off_peak >= off_peak_by_depot[depot_id]
-                )
-                constraint_count += 2
+            model.addConstr(
+                global_on_peak
+                == gp.quicksum(on_peak_by_depot.values())
+            )
+            model.addConstr(
+                global_off_peak
+                == gp.quicksum(off_peak_by_depot.values())
+            )
+            constraint_count += 2
             if demand_cost_enabled:
                 objective += (
                     demand_weight

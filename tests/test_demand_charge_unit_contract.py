@@ -5,6 +5,7 @@ horizon-normalized rate across all code paths.
 """
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 # Add project root to Python path
 project_root = Path(__file__).parent.parent
@@ -12,7 +13,13 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 import pytest
-from src.optimization.common.problem import OptimizationScenario
+from src.optimization.common.evaluator import CostEvaluator
+from src.optimization.common.problem import (
+    AssignmentPlan,
+    CanonicalOptimizationProblem,
+    EnergyPriceSlot,
+    OptimizationScenario,
+)
 
 
 class TestDemandChargeUnitContract:
@@ -113,6 +120,39 @@ class TestDemandChargeEvaluatorConsistency:
         # This is verified in integration tests with actual optimization runs
         # Here we just document the requirement
         pass
+
+    def test_multi_depot_demand_charge_sums_each_meter_peak(self):
+        problem = CanonicalOptimizationProblem(
+            scenario=OptimizationScenario(
+                scenario_id="multi-depot-demand",
+                timestep_min=60,
+                planning_days=1,
+                demand_charge_on_peak_yen_per_kw=3000.0,
+                demand_charge_off_peak_yen_per_kw=0.0,
+            ),
+            dispatch_context=SimpleNamespace(),
+            trips=(),
+            vehicles=(),
+            price_slots=(
+                EnergyPriceSlot(slot_index=0, demand_charge_weight=1.0),
+                EnergyPriceSlot(slot_index=1, demand_charge_weight=1.0),
+            ),
+        )
+        plan = AssignmentPlan(
+            grid_to_bus_kwh_by_depot_slot={
+                "depot-a": {0: 100.0},
+                "depot-b": {1: 100.0},
+            },
+            metadata={"source_provenance_exact": True},
+        )
+
+        breakdown = CostEvaluator().evaluate(problem, plan)
+
+        # 3000 JPY/kW/month -> 100 JPY/kW for one day. Each depot
+        # has a separate 100 kW billed peak, even though they occur in
+        # different slots.
+        assert breakdown.demand_cost == pytest.approx(20_000.0)
+        assert breakdown.peak_grid_kw == pytest.approx(100.0)
 
 
 if __name__ == "__main__":

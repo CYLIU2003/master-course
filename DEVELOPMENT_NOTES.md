@@ -1,5 +1,39 @@
 # Development Notes
 
+## 2026-08-07 PV/BESS, demand-charge, and frontend closure
+
+- Replaced the Solcast period-end anchor approximation with interval-overlap
+  resampling. A source interval contributes capacity-factor-hours to every
+  target slot it overlaps, so 60-minute input preserves its kWh at
+  5/15/30/60-minute output. Invalid slot lengths, performance ratios, dates,
+  and dates absent from the source artifact now fail closed.
+- Changed `depot-assets/update` to true patch semantics using Pydantic's
+  explicitly supplied field set. BESS-only edits no longer reset PV area,
+  rated output, enable state, or curve. Explicit false and empty arrays are
+  meaningful. Rated-output changes refresh reverse area estimates and either
+  rebuild generation from capacity factors or proportionally rescale the
+  stored curve; direct curve replacement removes stale date-indexed variants.
+- Added API and canonical validation for non-negative finite PV/BESS values,
+  SOC ordering/capacity bounds, and efficiencies in `(0, 1]`. `ProblemBuilder`
+  no longer converts an explicitly supplied zero efficiency to `0.95` through
+  truthiness fallback.
+- Defined demand charge as per-depot-meter billing. Integrated MILP, Stage 2,
+  Stage 1 energy recourse, and `CostEvaluator` now all charge the sum of each
+  depot's on/off-peak maximum rather than mixing maximum-of-depots with an
+  aggregate simultaneous peak.
+- Exposed explicit Phase 3 and Phase 4 modes in Tk. Candidate count,
+  composition radius, BEV frontier, canonical actual-cost objective,
+  utilization mode, and cost-cap controls persist through Quick Setup and are
+  included in the exact submitted payload. Incompatible controls are disabled
+  in the payload and rejected by BFF validation.
+- Removed the duplicate `planningDays` dictionary key and replaced silent
+  vehicle-timeline JSON conversion suppression with a traceback-bearing
+  warning. Artifact completeness remains the fail-closed release gate.
+- Validation: focused regression `131 passed`, follow-up solver/persistence
+  regression `126 passed`, final full suite `1196 passed`; `compileall` and
+  `git diff --check` pass. No Prepare or optimization run was performed, so
+  existing outputs remain non-current and teacher release remains BLOCKED.
+
 ## 2026-08-07 Branch integration validation
 
 - Local `main` now contains both the Phase 3 composition/PV-rated-output

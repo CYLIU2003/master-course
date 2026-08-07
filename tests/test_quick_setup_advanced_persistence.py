@@ -27,6 +27,39 @@ def test_objective_weight_helpers_roundtrip_frontend_fields() -> None:
     assert degradation_weight == 0.25
 
 
+def test_quick_setup_partial_solver_controls_use_effective_saved_state() -> None:
+    # A cap-only PATCH is valid when the already-saved utilization mode is
+    # active; request-local validation must not pretend the missing mode is
+    # "disabled".
+    body = scenarios.UpdateQuickSetupBody(
+        integratedActualCostUpperBoundJpy=100_000.0,
+    )
+    assert body.integratedActualCostUpperBoundJpy == 100_000.0
+    scenarios._validate_effective_quick_setup_solver_controls(
+        {
+            "integrated_ev_utilization_mode": "minimum_ice_fuel_lexicographic",
+            "integrated_actual_cost_upper_bound_jpy": 100_000.0,
+        }
+    )
+
+
+def test_quick_setup_effective_solver_controls_reject_saved_contradiction() -> None:
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        scenarios._validate_effective_quick_setup_solver_controls(
+            {
+                "integrated_actual_cost_objective": True,
+                "integrated_ev_utilization_mode": (
+                    "minimum_ice_fuel_lexicographic"
+                ),
+            }
+        )
+
+
+def test_quick_setup_rejects_nonfinite_numeric_input() -> None:
+    with pytest.raises(ValidationError):
+        scenarios.UpdateQuickSetupBody(gridFlatPricePerKwh=float("inf"))
+
+
 def test_build_quick_setup_payload_includes_saved_controls_and_zeroes() -> None:
     doc = {
         "depots": [{"id": "dep1", "name": "Depot 1"}],
@@ -49,6 +82,14 @@ def test_build_quick_setup_payload_includes_saved_controls_and_zeroes() -> None:
             "solver_config": {
                 "objective_weights": {"battery_degradation_cost": 0.25},
                 "mip_gap": 0.0,
+                "stage1_stage2_candidate_limit": 12,
+                "stage1_composition_search_radius": 2,
+                "stage1_bev_frontier_enabled": True,
+                "stage1_bev_frontier_min_count": 10,
+                "stage1_bev_frontier_max_count": 30,
+                "stage1_bev_frontier_target_time_limit_seconds": 90,
+                "integrated_actual_cost_objective": True,
+                "integrated_ev_utilization_mode": "disabled",
             },
             "cost_coefficients": {
                 "grid_flat_price_per_kwh": 0.0,
@@ -154,6 +195,17 @@ def test_build_quick_setup_payload_includes_saved_controls_and_zeroes() -> None:
     assert payload["simulationSettings"]["pvCurtailPenaltyYenPerKwh"] == 6.5
     assert payload["simulationSettings"]["vehicleUsageCostJpyPerUsedBus"] == 30000.0
     assert payload["solverSettings"]["mipGap"] == 0.0
+    assert payload["solverSettings"]["stage1Stage2CandidateLimit"] == 12
+    assert payload["solverSettings"]["stage1CompositionSearchRadius"] == 2
+    assert payload["solverSettings"]["stage1BevFrontierEnabled"] is True
+    assert payload["solverSettings"]["stage1BevFrontierMinCount"] == 10
+    assert payload["solverSettings"]["stage1BevFrontierMaxCount"] == 30
+    assert (
+        payload["solverSettings"]["stage1BevFrontierTargetTimeLimitSeconds"]
+        == 90
+    )
+    assert payload["solverSettings"]["integratedActualCostObjective"] is True
+    assert payload["solverSettings"]["integratedEvUtilizationMode"] == "disabled"
     assert payload["solverSettings"]["randomSeed"] == 0
     assert payload["simulationSettings"]["unservedPenalty"] == 0.0
     assert payload["simulationSettings"]["gridFlatPricePerKwh"] == 0.0
@@ -287,6 +339,14 @@ def test_update_quick_setup_persists_cost_component_toggles() -> None:
         defaultIceTankCapacityL=0.0,
         deadheadSpeedKmh=18.0,
         operationTimeWindowEnabled=False,
+        stage1Stage2CandidateLimit=12,
+        stage1CompositionSearchRadius=2,
+        stage1BevFrontierEnabled=True,
+        stage1BevFrontierMinCount=10,
+        stage1BevFrontierMaxCount=30,
+        stage1BevFrontierTargetTimeLimitSeconds=90,
+        integratedActualCostObjective=True,
+        integratedEvUtilizationMode="disabled",
     )
 
     with (
@@ -312,6 +372,19 @@ def test_update_quick_setup_persists_cost_component_toggles() -> None:
     assert simulation_config["cost_component_flags"]["fuel_cost"] is False
     scenario_overlay = captured["scenario_overlay"]
     assert isinstance(scenario_overlay, dict)
+    assert scenario_overlay["solver_config"]["stage1_stage2_candidate_limit"] == 12
+    assert scenario_overlay["solver_config"]["stage1_composition_search_radius"] == 2
+    assert scenario_overlay["solver_config"]["stage1_bev_frontier_enabled"] is True
+    assert scenario_overlay["solver_config"]["stage1_bev_frontier_min_count"] == 10
+    assert scenario_overlay["solver_config"]["stage1_bev_frontier_max_count"] == 30
+    assert (
+        scenario_overlay["solver_config"][
+            "stage1_bev_frontier_target_time_limit_seconds"
+        ]
+        == 90
+    )
+    assert scenario_overlay["solver_config"]["integrated_actual_cost_objective"] is True
+    assert scenario_overlay["solver_config"]["integrated_ev_utilization_mode"] == "disabled"
     assert scenario_overlay["cost_coefficients"]["pv_marginal_charge_cost_yen_per_kwh"] == 4.25
     assert scenario_overlay["cost_coefficients"]["pv_curtail_penalty_yen_per_kwh"] == 7.5
     assert scenario_overlay["cost_coefficients"]["vehicle_usage_cost_jpy_per_used_bus"] == 25000.0

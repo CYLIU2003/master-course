@@ -24,6 +24,31 @@ area/capacity values remain derived audit fields. No Prepare or optimization
 run was performed during integration, so no older artifact is promoted to
 evidence for this tree and teacher release remains **BLOCKED**.
 
+## 2026-08-07 PV/BESS and optimization-control bug closure
+
+The current tree closes the defects found in the saved-scenario-to-solver path:
+Solcast profiles now conserve daily energy when resampled from 60-minute data;
+depot energy-asset updates preserve omitted fields while honoring explicit
+`false`, zero, and empty-curve values; PV rated-output changes rebuild the
+derived curve and reverse area/capacity audit fields; invalid PV/BESS values no
+longer enter the canonical problem through silent coercion; and demand charges
+are consistently billed as the sum of per-depot meter peaks in the integrated
+model, the two-stage recourse model, and canonical accounting.
+
+Quick Setup now round-trips the Stage 1 candidate/composition/frontier controls
+and the Phase 4 actual-cost/utilization controls exposed by the backend. The Tk
+payload normalizes mutually exclusive settings instead of sending contradictory
+states, and vehicle-timeline export failures are logged rather than silently
+discarded. Focused regressions cover the repaired contracts, and the complete
+suite passes (`1196 passed`).
+
+This is code-validation evidence only. No Prepare or optimization run was
+performed while the tree was dirty, and no pre-change prepared input or output
+is valid evidence for this implementation. Tk/BFF must be restarted and both
+weather scenarios must be freshly Prepared and executed from the frozen clean
+commit. Teacher release therefore remains **BLOCKED** until all per-run and
+pair-level formal gates pass.
+
 ## 2026-08-05 frontend 1,000 kW setting restoration
 
 The two current frontend scenarios declare a common 1,000 kW PV rated output.

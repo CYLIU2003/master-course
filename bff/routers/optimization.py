@@ -11,6 +11,7 @@ from __future__ import annotations
 import traceback
 import json
 import csv
+import logging
 import math
 import shutil
 from dataclasses import is_dataclass, replace
@@ -137,6 +138,7 @@ from src.optimization.common.soc_helpers import (
     return_deadhead_min_to_home,
     vehicle_energy_rate_kwh_per_km,
 )
+
 from src.optimization.rolling.reoptimizer import (
     RollingReoptimizer,
     assignment_plan_from_serialized_result,
@@ -149,6 +151,7 @@ from src.preprocess.weather.operation_policy import apply_weather_policy_to_prob
 from src.run_output_layout import allocate_run_dir
 from src.pipeline.solve import solve_problem_data
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["optimization"])
 _OPTIMIZATION_EXECUTOR: Optional[Executor] = None
 
@@ -4008,8 +4011,13 @@ def _persist_rich_run_outputs(
                 json.dumps(_canonical_vehicle_timelines_payload(timeline_rows), ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
-        except Exception:
-            pass
+        except (OSError, csv.Error, TypeError, ValueError) as exc:
+            logger.warning(
+                "Failed to build vehicle_timelines.json from %s: %s",
+                copied_timeline_src,
+                exc,
+                exc_info=True,
+            )
 
     refuel_rows = []
     charging_rows = []

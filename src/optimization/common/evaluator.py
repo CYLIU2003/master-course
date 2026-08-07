@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any, Dict, List, Mapping, Set, Tuple
 
 from src.objective_modes import objective_value_for_mode
 from src.optimization.common.cost_components import normalize_cost_component_flags
@@ -294,9 +294,22 @@ class CostEvaluator:
 
         energy_cost_components = self._evaluate_electricity_with_overwrite(problem, plan, operating_slot_totals)
         fuel_cost_components = self._evaluate_liquid_fuel_with_overwrite(problem, plan)
-        grid_import_by_slot = self._grid_import_kwh_by_slot_from_plan(plan)
-        if not grid_import_by_slot and not self._source_provenance_is_exact(plan):
-            grid_import_by_slot = self._grid_import_kwh_by_slot_from_charging_slots(problem, plan)
+        grid_import_by_depot_slot = (
+            self._grid_import_kwh_by_depot_slot_from_plan(plan)
+        )
+        if (
+            not grid_import_by_depot_slot
+            and not self._source_provenance_is_exact(plan)
+        ):
+            grid_import_by_depot_slot = (
+                self._grid_import_kwh_by_depot_slot_from_charging_slots(
+                    problem,
+                    plan,
+                )
+            )
+        grid_import_by_slot = self._merge_depot_slot_energy(
+            grid_import_by_depot_slot
+        )
         has_realized_energy_flow = any(
             max(float(energy_cost_components.get(key, 0.0) or 0.0), 0.0) > 0.0
             for key in (
@@ -310,7 +323,10 @@ class CostEvaluator:
         pv_generated_kwh = self._total_pv_generated_kwh(problem)
         pv_used_direct_kwh = max(float(energy_cost_components.get("pv_to_bus_kwh", 0.0) or 0.0), 0.0)
         if grid_import_by_slot:
-            demand_cost = self._operating_demand_charge_cost(problem, grid_import_by_slot)
+            demand_cost = self._operating_demand_charge_cost_by_depot(
+                problem,
+                grid_import_by_depot_slot,
+            )
             timestep_h = max(problem.scenario.timestep_min, 1) / 60.0
             grid_import_kwh = sum(max(float(v or 0.0), 0.0) for v in grid_import_by_slot.values())
             peak_grid_kw = (
@@ -456,6 +472,7 @@ class CostEvaluator:
             grid_import_kwh = 0.0
             peak_grid_kw = 0.0
             grid_import_by_slot = {}
+            grid_import_by_depot_slot = {}
 
         if not component_flags.get("fuel_cost", True):
             fuel_cost_final = 0.0
@@ -469,7 +486,10 @@ class CostEvaluator:
         demand_cost = 0.0
         if component_flags.get("demand_charge_cost", True):
             if grid_import_by_slot:
-                demand_cost = self._operating_demand_charge_cost(problem, grid_import_by_slot)
+                demand_cost = self._operating_demand_charge_cost_by_depot(
+                    problem,
+                    grid_import_by_depot_slot,
+                )
             elif has_realized_energy_flow:
                 demand_cost = 0.0
         if not component_flags.get("unserved_penalty", True):
@@ -1690,25 +1710,60 @@ class CostEvaluator:
         life = max(int(life_years or 1), 1)
         return (cap * capex) / (365.0 * life) + (cap * om) / 365.0
 
-    def _grid_import_kwh_by_slot_from_plan(self, plan: AssignmentPlan) -> Dict[int, float]:
+    def _grid_import_kwh_by_depot_slot_from_plan(
+        self,
+        plan: AssignmentPlan,
+    ) -> Dict[str, Dict[int, float]]:
+        by_depot: Dict[str, Dict[int, float]] = {}
+        for source_mapping in (
+            plan.grid_to_bus_kwh_by_depot_slot or {},
+            plan.grid_to_bess_kwh_by_depot_slot or {},
+        ):
+            for depot_id, by_slot in source_mapping.items():
+                depot_values = by_depot.setdefault(str(depot_id), {})
+                for slot_idx, value in by_slot.items():
+                    normalized_slot = int(slot_idx)
+                    depot_values[normalized_slot] = depot_values.get(
+                        normalized_slot,
+                        0.0,
+                    ) + max(float(value or 0.0), 0.0)
+        return {
+            depot_id: by_slot
+            for depot_id, by_slot in by_depot.items()
+            if any(value > 0.0 for value in by_slot.values())
+        }
+
+    def _merge_depot_slot_energy(
+        self,
+        values_by_depot_slot: Mapping[str, Mapping[int, float]],
+    ) -> Dict[int, float]:
         merged: Dict[int, float] = {}
-        for by_slot in (plan.grid_to_bus_kwh_by_depot_slot or {}).values():
+        for by_slot in values_by_depot_slot.values():
             for slot_idx, value in by_slot.items():
-                merged[int(slot_idx)] = merged.get(int(slot_idx), 0.0) + max(float(value or 0.0), 0.0)
-        for by_slot in (plan.grid_to_bess_kwh_by_depot_slot or {}).values():
-            for slot_idx, value in by_slot.items():
-                merged[int(slot_idx)] = merged.get(int(slot_idx), 0.0) + max(float(value or 0.0), 0.0)
+                normalized_slot = int(slot_idx)
+                merged[normalized_slot] = merged.get(
+                    normalized_slot,
+                    0.0,
+                ) + max(float(value or 0.0), 0.0)
         return merged
 
-    def _grid_import_kwh_by_slot_from_charging_slots(
+    def _grid_import_kwh_by_slot_from_plan(
+        self,
+        plan: AssignmentPlan,
+    ) -> Dict[int, float]:
+        return self._merge_depot_slot_energy(
+            self._grid_import_kwh_by_depot_slot_from_plan(plan)
+        )
+
+    def _grid_import_kwh_by_depot_slot_from_charging_slots(
         self,
         problem: CanonicalOptimizationProblem,
         plan: AssignmentPlan,
-    ) -> Dict[int, float]:
+    ) -> Dict[str, Dict[int, float]]:
         timestep_h = max(problem.scenario.timestep_min, 1) / 60.0
-        merged: Dict[int, float] = {}
+        by_depot: Dict[str, Dict[int, float]] = {}
         for slot in plan.charging_slots:
-            source, _depot_id = self._charging_source_and_depot(
+            source, depot_id = self._charging_source_and_depot(
                 slot.charger_id,
                 "depot_default",
                 getattr(slot, "energy_source", None),
@@ -1718,8 +1773,22 @@ class CostEvaluator:
             charge_kwh = max(float(slot.charge_kw or 0.0) - max(float(slot.discharge_kw or 0.0), 0.0), 0.0) * timestep_h
             if charge_kwh <= 0.0:
                 continue
-            merged[int(slot.slot_index)] = merged.get(int(slot.slot_index), 0.0) + charge_kwh
-        return merged
+            depot_values = by_depot.setdefault(str(depot_id), {})
+            slot_index = int(slot.slot_index)
+            depot_values[slot_index] = depot_values.get(slot_index, 0.0) + charge_kwh
+        return by_depot
+
+    def _grid_import_kwh_by_slot_from_charging_slots(
+        self,
+        problem: CanonicalOptimizationProblem,
+        plan: AssignmentPlan,
+    ) -> Dict[int, float]:
+        return self._merge_depot_slot_energy(
+            self._grid_import_kwh_by_depot_slot_from_charging_slots(
+                problem,
+                plan,
+            )
+        )
 
     def _mapping_has_positive_flow(self, mapping: Dict[str, Dict[int, float]]) -> bool:
         return any(max(float(value or 0.0), 0.0) > 0.0 for by_slot in mapping.values() for value in by_slot.values())
@@ -1935,6 +2004,20 @@ class CostEvaluator:
         off_rate = problem.scenario.demand_charge_off_peak_horizon_yen_per_kw
         
         return on_rate * w_on + off_rate * w_off
+
+    def _operating_demand_charge_cost_by_depot(
+        self,
+        problem: CanonicalOptimizationProblem,
+        slot_totals_by_depot_kwh: Mapping[str, Mapping[int, float]],
+    ) -> float:
+        """Return the sum of the demand charges from each depot meter."""
+        return sum(
+            self._operating_demand_charge_cost(
+                problem,
+                {int(key): float(value) for key, value in by_slot.items()},
+            )
+            for by_slot in slot_totals_by_depot_kwh.values()
+        )
 
     def _classify_peak_slots(self, problem: CanonicalOptimizationProblem) -> Tuple[Set[int], Set[int]]:
         return classify_peak_slots(problem.price_slots)

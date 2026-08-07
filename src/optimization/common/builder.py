@@ -1614,7 +1614,9 @@ class ProblemBuilder:
                 capacity_factor_series = tuple(0.0 for _ in range(slot_count))
                 pv_series = tuple(0.0 for _ in range(slot_count))
             bess_enabled = bool(raw.get("bess_enabled", False))
-            bess_energy_kwh = max(float(raw.get("bess_energy_kwh") or 0.0), 0.0)
+            bess_energy_kwh = float(
+                self._first_present(raw.get("bess_energy_kwh"), 0.0)
+            )
 
             def _ratio_from_raw(*keys: str) -> Optional[float]:
                 for key in keys:
@@ -1718,6 +1720,16 @@ class ProblemBuilder:
             )
             if bess_terminal_soc_deviation_penalty_yen_per_kwh is None:
                 bess_terminal_soc_deviation_penalty_yen_per_kwh = 20.0
+            bess_charge_efficiency = self._safe_float(
+                raw.get("bess_charge_efficiency")
+            )
+            if bess_charge_efficiency is None:
+                bess_charge_efficiency = 0.95
+            bess_discharge_efficiency = self._safe_float(
+                raw.get("bess_discharge_efficiency")
+            )
+            if bess_discharge_efficiency is None:
+                bess_discharge_efficiency = 0.95
 
             asset = DepotEnergyAsset(
                 depot_id=depot.depot_id,
@@ -1739,12 +1751,14 @@ class ProblemBuilder:
                 performance_ratio=performance_ratio,
                 bess_enabled=bess_enabled,
                 bess_energy_kwh=bess_energy_kwh,
-                bess_power_kw=float(raw.get("bess_power_kw") or 0.0),
+                bess_power_kw=float(
+                    self._first_present(raw.get("bess_power_kw"), 0.0)
+                ),
                 bess_initial_soc_kwh=bess_initial_soc_kwh,
                 bess_soc_min_kwh=bess_soc_min_kwh,
                 bess_soc_max_kwh=bess_soc_max_kwh,
-                bess_charge_efficiency=float(raw.get("bess_charge_efficiency") or 0.95),
-                bess_discharge_efficiency=float(raw.get("bess_discharge_efficiency") or 0.95),
+                bess_charge_efficiency=float(bess_charge_efficiency),
+                bess_discharge_efficiency=float(bess_discharge_efficiency),
                 bess_cycle_cost_yen_per_kwh=float(raw.get("bess_cycle_cost_yen_per_kwh") or 0.0),
                 bess_capex_jpy_per_kwh=float(raw.get("bess_capex_jpy_per_kwh") or 0.0),
                 bess_om_jpy_per_kwh_year=float(raw.get("bess_om_jpy_per_kwh_year") or 0.0),

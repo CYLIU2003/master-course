@@ -56,11 +56,77 @@ def test_depot_energy_asset_rejects_invalid_initial_soc_bounds() -> None:
                 "dep-1": DepotEnergyAsset(
                     depot_id="dep-1",
                     bess_enabled=True,
+                    bess_energy_kwh=200.0,
+                    bess_power_kw=50.0,
                     bess_soc_min_kwh=20.0,
                     bess_soc_max_kwh=100.0,
                     bess_initial_soc_kwh=120.0,
                 )
             },
+        )
+
+
+@pytest.mark.parametrize(
+    "asset, message",
+    [
+        (
+            DepotEnergyAsset(
+                depot_id="dep-1",
+                bess_enabled=True,
+                bess_energy_kwh=100.0,
+                bess_power_kw=20.0,
+                bess_soc_max_kwh=100.0,
+                bess_charge_efficiency=0.0,
+            ),
+            "charge efficiency",
+        ),
+        (
+            DepotEnergyAsset(
+                depot_id="dep-1",
+                bess_enabled=True,
+                bess_energy_kwh=100.0,
+                bess_power_kw=20.0,
+                bess_soc_max_kwh=100.0,
+                bess_discharge_efficiency=1.1,
+            ),
+            "discharge efficiency",
+        ),
+        (
+            DepotEnergyAsset(
+                depot_id="dep-1",
+                bess_enabled=True,
+                bess_energy_kwh=-1.0,
+                bess_power_kw=20.0,
+            ),
+            "energy and power",
+        ),
+        (
+            DepotEnergyAsset(
+                depot_id="dep-1",
+                pv_capacity_kw=float("inf"),
+            ),
+            "PV capacity",
+        ),
+        (
+            DepotEnergyAsset(
+                depot_id="dep-1",
+                capacity_factor_by_slot=(float("nan"),),
+            ),
+            "capacity factors",
+        ),
+    ],
+)
+def test_depot_energy_asset_rejects_nonphysical_bess_inputs(
+    asset: DepotEnergyAsset,
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        CanonicalOptimizationProblem(
+            scenario=_scenario(),
+            dispatch_context=None,
+            trips=(),
+            vehicles=(),
+            depot_energy_assets={"dep-1": asset},
         )
 
 

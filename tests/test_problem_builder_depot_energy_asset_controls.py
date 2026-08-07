@@ -80,6 +80,30 @@ def test_problem_builder_maps_grid_to_bess_controls_into_assets() -> None:
     assert asset.bess_terminal_soc_deviation_penalty_yen_per_kwh == 20.0
 
 
+@pytest.mark.parametrize(
+    "field, value, message",
+    [
+        ("bess_charge_efficiency", 0.0, "charge efficiency"),
+        ("bess_discharge_efficiency", 1.1, "discharge efficiency"),
+        ("bess_energy_kwh", -1.0, "energy and power"),
+    ],
+)
+def test_problem_builder_rejects_nonphysical_bess_values_without_defaulting(
+    field: str,
+    value: float,
+    message: str,
+) -> None:
+    scenario = _scenario()
+    scenario["simulation_config"]["depot_energy_assets"][0][field] = value
+
+    with pytest.raises(ValueError, match=message):
+        ProblemBuilder().build_from_scenario(
+            scenario,
+            depot_id="dep-1",
+            service_id="WEEKDAY",
+        )
+
+
 def test_problem_builder_preserves_explicit_zero_cost_and_limit_controls() -> None:
     scenario = _scenario()
     scenario.pop("energy_price_profiles")

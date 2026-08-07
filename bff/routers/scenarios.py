@@ -27,13 +27,14 @@ from __future__ import annotations
 
 import csv
 import io
+import math
 import re
 from threading import Lock
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from bff.services import research_catalog
 from bff.services.runtime_route_family import (
@@ -785,6 +786,8 @@ class UpdateDispatchScopeBody(BaseModel):
 
 
 class UpdateQuickSetupBody(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
+
     selectedDepotIds: Optional[List[str]] = None
     selectedRouteIds: Optional[List[str]] = None
     dayType: Optional[str] = None
@@ -803,6 +806,45 @@ class UpdateQuickSetupBody(BaseModel):
     timestepMin: Optional[Literal[5, 15, 30, 60]] = None
     timeLimitSeconds: Optional[int] = Field(default=None, ge=1)
     mipGap: Optional[float] = Field(default=None, ge=0.0)
+    stage1Stage2CandidateLimit: Optional[int] = Field(
+        default=None,
+        ge=1,
+        le=50,
+    )
+    stage1CompositionSearchRadius: Optional[int] = Field(
+        default=None,
+        ge=0,
+        le=5,
+    )
+    stage1BevFrontierEnabled: Optional[bool] = None
+    stage1BevFrontierMinCount: Optional[int] = Field(
+        default=None,
+        ge=0,
+        le=200,
+    )
+    stage1BevFrontierMaxCount: Optional[int] = Field(
+        default=None,
+        ge=0,
+        le=200,
+    )
+    stage1BevFrontierTargetTimeLimitSeconds: Optional[int] = Field(
+        default=None,
+        ge=1,
+        le=3600,
+    )
+    integratedActualCostObjective: Optional[bool] = None
+    integratedEvUtilizationMode: Optional[
+        Literal["disabled", "minimum_ice_fuel_lexicographic"]
+    ] = None
+    integratedActualCostUpperBoundJpy: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+    )
+    integratedActualCostUpperBoundDeltaRatio: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+    )
     alnsIterations: Optional[int] = Field(default=None, ge=1)
     noImprovementLimit: Optional[int] = Field(default=None, ge=1)
     destroyFraction: Optional[float] = Field(default=None, gt=0.0, le=1.0)
@@ -874,6 +916,111 @@ class UpdateQuickSetupBody(BaseModel):
     planningHorizonHours: Optional[float] = Field(default=None, gt=0.0)
     experimentMethod: Optional[str] = None
     experimentNotes: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _validate_integrated_solver_controls(self) -> "UpdateQuickSetupBody":
+        fields_set = self.model_fields_set
+        if (
+            "stage1BevFrontierMinCount" in fields_set
+            and "stage1BevFrontierMaxCount" in fields_set
+            and self.stage1BevFrontierMinCount is not None
+            and self.stage1BevFrontierMaxCount is not None
+            and self.stage1BevFrontierMinCount
+            > self.stage1BevFrontierMaxCount
+        ):
+            raise ValueError(
+                "stage1BevFrontierMinCount must be <= stage1BevFrontierMaxCount"
+            )
+        if (
+            "integratedActualCostObjective" in fields_set
+            and "integratedEvUtilizationMode" in fields_set
+            and self.integratedActualCostObjective
+            and self.integratedEvUtilizationMode != "disabled"
+        ):
+            raise ValueError(
+                "integrated actual-cost and EV-utilization objectives are mutually exclusive"
+            )
+        if (
+            "integratedActualCostUpperBoundJpy" in fields_set
+            and "integratedEvUtilizationMode" in fields_set
+            and self.integratedActualCostUpperBoundJpy is not None
+            and self.integratedEvUtilizationMode == "disabled"
+        ):
+            raise ValueError(
+                "integratedActualCostUpperBoundJpy requires an EV-utilization mode"
+            )
+        if (
+            "integratedActualCostUpperBoundDeltaRatio" in fields_set
+            and "integratedActualCostUpperBoundJpy" in fields_set
+            and self.integratedActualCostUpperBoundDeltaRatio is not None
+            and self.integratedActualCostUpperBoundJpy is None
+        ):
+            raise ValueError(
+                "integratedActualCostUpperBoundDeltaRatio requires an actual-cost cap"
+            )
+        return self
+
+
+def _validate_effective_quick_setup_solver_controls(
+    solver_config: Dict[str, Any],
+) -> None:
+    frontier_min = int(
+        _first_present_value(
+            solver_config.get("stage1_bev_frontier_min_count"),
+            default=15,
+        )
+    )
+    frontier_max = int(
+        _first_present_value(
+            solver_config.get("stage1_bev_frontier_max_count"),
+            default=35,
+        )
+    )
+    if frontier_min > frontier_max:
+        raise ValueError(
+            "stage1BevFrontierMinCount must be <= stage1BevFrontierMaxCount"
+        )
+
+    actual_cost = bool(
+        solver_config.get("integrated_actual_cost_objective", False)
+    )
+    utilization_mode = str(
+        solver_config.get("integrated_ev_utilization_mode") or "disabled"
+    )
+    if utilization_mode not in {
+        "disabled",
+        "minimum_ice_fuel_lexicographic",
+    }:
+        raise ValueError("integratedEvUtilizationMode is not supported")
+    upper_bound = solver_config.get("integrated_actual_cost_upper_bound_jpy")
+    delta_ratio = solver_config.get(
+        "integrated_actual_cost_upper_bound_delta_ratio"
+    )
+    if upper_bound is not None and (
+        not math.isfinite(float(upper_bound)) or float(upper_bound) < 0.0
+    ):
+        raise ValueError(
+            "integratedActualCostUpperBoundJpy must be finite and non-negative"
+        )
+    if delta_ratio is not None and (
+        not math.isfinite(float(delta_ratio))
+        or not (0.0 <= float(delta_ratio) <= 1.0)
+    ):
+        raise ValueError(
+            "integratedActualCostUpperBoundDeltaRatio must be within [0, 1]"
+        )
+    if actual_cost and utilization_mode != "disabled":
+        raise ValueError(
+            "integrated actual-cost and EV-utilization objectives are mutually exclusive"
+        )
+    if upper_bound is not None and utilization_mode == "disabled":
+        raise ValueError(
+            "integratedActualCostUpperBoundJpy requires an EV-utilization mode"
+        )
+    if delta_ratio is not None and upper_bound is None:
+        raise ValueError(
+            "integratedActualCostUpperBoundDeltaRatio requires an actual-cost cap"
+        )
 
 
 class TimetableRowBody(BaseModel):
@@ -1715,6 +1862,53 @@ def _builder_defaults(
             or 90
         ),
         "solverMode": overlay_solver.get("mode") or "mode_milp_only",
+        "stage1Stage2CandidateLimit": int(
+            _first_present_value(
+                overlay_solver.get("stage1_stage2_candidate_limit"),
+                default=1,
+            )
+        ),
+        "stage1CompositionSearchRadius": int(
+            _first_present_value(
+                overlay_solver.get("stage1_composition_search_radius"),
+                default=0,
+            )
+        ),
+        "stage1BevFrontierEnabled": bool(
+            overlay_solver.get("stage1_bev_frontier_enabled", False)
+        ),
+        "stage1BevFrontierMinCount": int(
+            _first_present_value(
+                overlay_solver.get("stage1_bev_frontier_min_count"),
+                default=15,
+            )
+        ),
+        "stage1BevFrontierMaxCount": int(
+            _first_present_value(
+                overlay_solver.get("stage1_bev_frontier_max_count"),
+                default=35,
+            )
+        ),
+        "stage1BevFrontierTargetTimeLimitSeconds": int(
+            _first_present_value(
+                overlay_solver.get(
+                    "stage1_bev_frontier_target_time_limit_seconds"
+                ),
+                default=120,
+            )
+        ),
+        "integratedActualCostObjective": bool(
+            overlay_solver.get("integrated_actual_cost_objective", False)
+        ),
+        "integratedEvUtilizationMode": str(
+            overlay_solver.get("integrated_ev_utilization_mode") or "disabled"
+        ),
+        "integratedActualCostUpperBoundJpy": overlay_solver.get(
+            "integrated_actual_cost_upper_bound_jpy"
+        ),
+        "integratedActualCostUpperBoundDeltaRatio": overlay_solver.get(
+            "integrated_actual_cost_upper_bound_delta_ratio"
+        ),
         "objectiveMode": normalize_objective_mode(
             overlay_solver.get("objective_mode")
             or simulation_config.get("objective_mode")
@@ -1969,7 +2163,6 @@ def _builder_defaults(
         "planningHorizonHours": float(
             simulation_config.get("planning_horizon_hours") or 24.0
         ),
-        "planningDays": int(simulation_config.get("planning_days") or 1),
     }
 
 
@@ -2305,6 +2498,51 @@ def _build_quick_setup_payload(
         "dayTypeSummaries": day_type_summaries,
         "solverSettings": {
             "solverMode": builder_defaults.get("solverMode") or "mode_milp_only",
+            "stage1Stage2CandidateLimit": int(
+                builder_defaults.get("stage1Stage2CandidateLimit") or 1
+            ),
+            "stage1CompositionSearchRadius": int(
+                _first_present_value(
+                    builder_defaults.get("stage1CompositionSearchRadius"),
+                    default=0,
+                )
+            ),
+            "stage1BevFrontierEnabled": bool(
+                builder_defaults.get("stage1BevFrontierEnabled", False)
+            ),
+            "stage1BevFrontierMinCount": int(
+                _first_present_value(
+                    builder_defaults.get("stage1BevFrontierMinCount"),
+                    default=15,
+                )
+            ),
+            "stage1BevFrontierMaxCount": int(
+                _first_present_value(
+                    builder_defaults.get("stage1BevFrontierMaxCount"),
+                    default=35,
+                )
+            ),
+            "stage1BevFrontierTargetTimeLimitSeconds": int(
+                _first_present_value(
+                    builder_defaults.get(
+                        "stage1BevFrontierTargetTimeLimitSeconds"
+                    ),
+                    default=120,
+                )
+            ),
+            "integratedActualCostObjective": bool(
+                builder_defaults.get("integratedActualCostObjective", False)
+            ),
+            "integratedEvUtilizationMode": str(
+                builder_defaults.get("integratedEvUtilizationMode")
+                or "disabled"
+            ),
+            "integratedActualCostUpperBoundJpy": builder_defaults.get(
+                "integratedActualCostUpperBoundJpy"
+            ),
+            "integratedActualCostUpperBoundDeltaRatio": builder_defaults.get(
+                "integratedActualCostUpperBoundDeltaRatio"
+            ),
             "objectiveMode": normalize_objective_mode(
                 builder_defaults.get("objectiveMode") or "total_cost"
             ),
@@ -2817,8 +3055,6 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
         patch["allowInterDepotSwap"] = bool(body.allowInterDepotSwap)
 
     try:
-        normalized_scope = store.set_dispatch_scope(scenario_id, patch)
-
         overlay = store.get_scenario_overlay(scenario_id) or {}
         solver_config = dict(overlay.get("solver_config") or {})
         if body.solverMode is not None:
@@ -2829,6 +3065,52 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             solver_config["time_limit_seconds"] = int(body.timeLimitSeconds)
         if body.mipGap is not None:
             solver_config["mip_gap"] = float(body.mipGap)
+        if body.stage1Stage2CandidateLimit is not None:
+            solver_config["stage1_stage2_candidate_limit"] = int(
+                body.stage1Stage2CandidateLimit
+            )
+        if body.stage1CompositionSearchRadius is not None:
+            solver_config["stage1_composition_search_radius"] = int(
+                body.stage1CompositionSearchRadius
+            )
+        if body.stage1BevFrontierEnabled is not None:
+            solver_config["stage1_bev_frontier_enabled"] = bool(
+                body.stage1BevFrontierEnabled
+            )
+        if body.stage1BevFrontierMinCount is not None:
+            solver_config["stage1_bev_frontier_min_count"] = int(
+                body.stage1BevFrontierMinCount
+            )
+        if body.stage1BevFrontierMaxCount is not None:
+            solver_config["stage1_bev_frontier_max_count"] = int(
+                body.stage1BevFrontierMaxCount
+            )
+        if body.stage1BevFrontierTargetTimeLimitSeconds is not None:
+            solver_config[
+                "stage1_bev_frontier_target_time_limit_seconds"
+            ] = int(body.stage1BevFrontierTargetTimeLimitSeconds)
+        if body.integratedActualCostObjective is not None:
+            solver_config["integrated_actual_cost_objective"] = bool(
+                body.integratedActualCostObjective
+            )
+        if body.integratedEvUtilizationMode is not None:
+            solver_config["integrated_ev_utilization_mode"] = str(
+                body.integratedEvUtilizationMode
+            )
+        if "integratedActualCostUpperBoundJpy" in body.model_fields_set:
+            solver_config["integrated_actual_cost_upper_bound_jpy"] = (
+                float(body.integratedActualCostUpperBoundJpy)
+                if body.integratedActualCostUpperBoundJpy is not None
+                else None
+            )
+        if "integratedActualCostUpperBoundDeltaRatio" in body.model_fields_set:
+            solver_config[
+                "integrated_actual_cost_upper_bound_delta_ratio"
+            ] = (
+                float(body.integratedActualCostUpperBoundDeltaRatio)
+                if body.integratedActualCostUpperBoundDeltaRatio is not None
+                else None
+            )
         if body.alnsIterations is not None:
             solver_config["alns_iterations"] = int(body.alnsIterations)
         if body.noImprovementLimit is not None:
@@ -2852,6 +3134,17 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             solver_config["milp_max_successors_per_trip"] = int(body.milpMaxSuccessorsPerTrip)
         if body.objectivePreset is not None:
             solver_config["objective_preset"] = str(body.objectivePreset)
+        try:
+            _validate_effective_quick_setup_solver_controls(solver_config)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "INVALID_SOLVER_CONTROLS",
+                    "message": str(exc),
+                },
+            ) from exc
+        normalized_scope = store.set_dispatch_scope(scenario_id, patch)
         current_objective_mode = normalize_objective_mode(
             solver_config.get("objective_mode") or "total_cost"
         )

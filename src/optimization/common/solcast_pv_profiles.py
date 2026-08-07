@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -147,11 +148,6 @@ def export_depot_coordinates(master_path: Path, output_path: Path) -> Dict[str, 
     return payload
 
 
-def _floor_to_slot(dt: datetime, slot_minutes: int) -> datetime:
-    minute = (dt.minute // slot_minutes) * slot_minutes
-    return dt.replace(minute=minute, second=0, microsecond=0)
-
-
 def _read_solcast_records(
     csv_path: Path,
     *,
@@ -247,6 +243,15 @@ def _build_daily_profile(
     pv_capacity_kw: float,
     performance_ratio: float = DEFAULT_PERFORMANCE_RATIO,
 ) -> Dict[str, List[float]]:
+    if slot_minutes <= 0 or (24 * 60) % slot_minutes != 0:
+        raise ValueError(
+            "slot_minutes must be a positive divisor of 1440 minutes"
+        )
+    if not (0.0 < float(performance_ratio) <= 1.0):
+        raise ValueError("performance_ratio must be within (0, 1]")
+    if not math.isfinite(float(pv_capacity_kw)) or float(pv_capacity_kw) < 0.0:
+        raise ValueError("pv_capacity_kw must be finite and non-negative")
+
     date_start = datetime.fromisoformat(f"{target_date}T00:00:00")
     if date_start.tzinfo is None:
         # records are already converted to local timezone; borrow tz from first record.
@@ -255,33 +260,56 @@ def _build_daily_profile(
     date_end = date_start + timedelta(days=1)
 
     slot_count = int(24 * 60 / slot_minutes)
-    weighted_cf = [0.0] * slot_count
-    slot_hours = [0.0] * slot_count
+    capacity_factor_hours = [0.0] * slot_count
+    covered_hours = 0.0
 
     for dt_end, irradiance_wm2, period_min in records:
         if period_min <= 0:
             continue
-        period_h = period_min / 60.0
-        # Solcast period_end belongs to the preceding interval.
-        interval_anchor = dt_end - timedelta(seconds=1)
-        slot_start = _floor_to_slot(interval_anchor, slot_minutes)
-        if slot_start < date_start or slot_start >= date_end:
+        if not math.isfinite(float(irradiance_wm2)):
+            raise ValueError("Solcast irradiance values must be finite")
+        interval_start = dt_end - timedelta(minutes=period_min)
+        overlap_start = max(interval_start, date_start)
+        overlap_end = min(dt_end, date_end)
+        if overlap_end <= overlap_start:
             continue
-        index = int((slot_start - date_start).total_seconds() // (slot_minutes * 60))
-        if index < 0 or index >= slot_count:
-            continue
-        cf = max(0.0, min((irradiance_wm2 / 1000.0) * max(float(performance_ratio), 0.0), 1.0))
-        weighted_cf[index] += cf * period_h
-        slot_hours[index] += period_h
+        cf = max(
+            0.0,
+            min(
+                (irradiance_wm2 / 1000.0) * float(performance_ratio),
+                1.0,
+            ),
+        )
+
+        # A Solcast period_end value represents the average irradiance over
+        # the preceding interval. Distribute that interval over every target
+        # slot it overlaps so changing the output resolution preserves kWh.
+        cursor = overlap_start
+        while cursor < overlap_end:
+            seconds_from_day_start = (cursor - date_start).total_seconds()
+            index = int(seconds_from_day_start // (slot_minutes * 60))
+            if index < 0 or index >= slot_count:
+                break
+            target_slot_end = date_start + timedelta(
+                minutes=(index + 1) * slot_minutes
+            )
+            segment_end = min(overlap_end, target_slot_end)
+            segment_hours = (segment_end - cursor).total_seconds() / 3600.0
+            capacity_factor_hours[index] += cf * segment_hours
+            covered_hours += segment_hours
+            cursor = segment_end
+
+    if covered_hours <= 0.0:
+        raise ValueError(f"no Solcast records overlap target_date={target_date}")
 
     capacity_factor_by_slot: List[float] = []
     pv_generation_kwh_by_slot: List[float] = []
+    duration_h = slot_minutes / 60.0
     for idx in range(slot_count):
-        if slot_hours[idx] > 0:
-            cf = weighted_cf[idx] / slot_hours[idx]
-        else:
-            cf = 0.0
-        duration_h = slot_minutes / 60.0
+        cf = max(
+            0.0,
+            min(capacity_factor_hours[idx] / duration_h, 1.0),
+        )
         capacity_factor_by_slot.append(round(cf, 6))
         pv_generation_kwh_by_slot.append(round(max(pv_capacity_kw, 0.0) * cf * duration_h, 6))
 

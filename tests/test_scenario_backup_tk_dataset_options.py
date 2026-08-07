@@ -314,6 +314,18 @@ def test_build_optimization_run_payload_centralizes_fast_and_manual_execution() 
     app = App.__new__(App)
     app.solver_mode_var = DummyVar("mode_alns_only")
     app.mip_gap_var = DummyVar("0.02")
+    app.stage1_candidate_limit_var = DummyVar("7")
+    app.stage1_composition_radius_var = DummyVar("2")
+    app.stage1_bev_frontier_enabled_var = DummyVar(True)
+    app.stage1_bev_frontier_min_var = DummyVar("10")
+    app.stage1_bev_frontier_max_var = DummyVar("20")
+    app.stage1_bev_frontier_time_limit_var = DummyVar("90")
+    app.integrated_actual_cost_objective_var = DummyVar(True)
+    app.integrated_ev_utilization_mode_var = DummyVar(
+        "minimum_ice_fuel_lexicographic"
+    )
+    app.integrated_actual_cost_upper_bound_var = DummyVar("100000")
+    app.integrated_actual_cost_upper_bound_delta_var = DummyVar("0.01")
     app.alns_iter_var = DummyVar("750")
     app.no_improvement_limit_var = DummyVar("120")
     app.destroy_fraction_var = DummyVar("0.3")
@@ -337,6 +349,16 @@ def test_build_optimization_run_payload_centralizes_fast_and_manual_execution() 
         "timestep_min": 30,
         "time_limit_seconds": 180,
         "stage1_best_obj_stop_enabled": False,
+        "stage1_stage2_candidate_limit": 7,
+        "stage1_composition_search_radius": 2,
+        "stage1_bev_frontier_enabled": False,
+        "stage1_bev_frontier_min_count": 10,
+        "stage1_bev_frontier_max_count": 20,
+        "stage1_bev_frontier_target_time_limit_seconds": 90,
+        "integrated_actual_cost_objective": False,
+        "integrated_ev_utilization_mode": "disabled",
+        "integrated_actual_cost_upper_bound_jpy": None,
+        "integrated_actual_cost_upper_bound_delta_ratio": None,
         "gurobi_threads": 1,
         "run_profile": "day_ahead_and_hourly_rolling",
         "run_hourly_rolling": True,
@@ -356,6 +378,24 @@ def test_build_optimization_run_payload_centralizes_fast_and_manual_execution() 
     assert App._build_optimization_run_payload(
         app, "prepared-trial"
     )["research_run"] is False
+
+    app.solver_mode_var.set("phase4_integrated")
+    phase4_payload = App._build_optimization_run_payload(app, "prepared-phase4")
+    assert phase4_payload["integrated_actual_cost_objective"] is True
+    assert phase4_payload["integrated_ev_utilization_mode"] == "disabled"
+    assert phase4_payload["integrated_actual_cost_upper_bound_jpy"] is None
+
+    app.integrated_actual_cost_objective_var.set(False)
+    phase4_utilization_payload = App._build_optimization_run_payload(
+        app,
+        "prepared-phase4-utilization",
+    )
+    assert phase4_utilization_payload["integrated_ev_utilization_mode"] == (
+        "minimum_ice_fuel_lexicographic"
+    )
+    assert phase4_utilization_payload[
+        "integrated_actual_cost_upper_bound_jpy"
+    ] == 100000.0
 
 
 def test_run_panel_exposes_separate_trial_and_formal_execution_choices() -> None:
