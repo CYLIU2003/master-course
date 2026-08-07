@@ -48,6 +48,43 @@ def test_solved_feasible_with_zero_unserved_is_validated_no_cancellation() -> No
     assert payload["research_kpi_eligible"] is False
 
 
+def test_time_limit_incumbent_can_be_physically_valid_without_optimality_claim() -> None:
+    payload = _solution_validity_payload(
+        solver_status="time_limit",
+        feasible=True,
+        trip_count_unserved=0,
+        infeasibility_reasons=[],
+        solver_metadata={
+            "has_feasible_incumbent": True,
+            "supports_exact_milp": True,
+            "bev_terminal_soc_policy": "return_to_initial",
+            "bev_terminal_soc_balance_satisfied": True,
+        },
+    )
+
+    assert payload["validated_no_cancellation"] is True
+    assert payload["validated_feasible"] is True
+    assert payload["status_reason"] == "validated_feasible_limit_incumbent"
+    assert payload["result_class"] == "validated_non_exact"
+    assert payload["blocking_reasons"] == []
+    assert payload["physical_validation_status"] == "VALID"
+    assert payload["research_kpi_eligible"] is False
+
+
+def test_time_limit_without_incumbent_is_not_physically_valid() -> None:
+    payload = _solution_validity_payload(
+        solver_status="time_limit",
+        feasible=False,
+        trip_count_unserved=0,
+        infeasibility_reasons=[],
+        solver_metadata={"has_feasible_incumbent": False},
+    )
+
+    assert payload["validated_feasible"] is False
+    assert payload["physical_validation_status"] == "INVALID"
+    assert "postsolve_infeasible" in payload["blocking_reasons"]
+
+
 def test_gurobi_unavailable_baseline_is_classified_as_fallback() -> None:
     payload = _solution_validity_payload(
         solver_status="gurobi_unavailable_baseline",

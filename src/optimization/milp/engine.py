@@ -311,6 +311,9 @@ class MILPOptimizer:
                 "stage1_redundant_arc_link_constraints_omitted": (
                     plan.metadata or {}
                 ).get("stage1_redundant_arc_link_constraints_omitted"),
+                "integrated_redundant_arc_link_constraints_omitted": (
+                    plan.metadata or {}
+                ).get("integrated_redundant_arc_link_constraints_omitted"),
                 "stage1_time_limit_sec_effective": (plan.metadata or {}).get(
                     "stage1_time_limit_sec_effective"
                 ),

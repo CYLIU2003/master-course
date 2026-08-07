@@ -1312,10 +1312,13 @@ class GurobiMILPAdapter:
         for (vehicle_id, from_trip_id, to_trip_id), var in x.items():
             outgoing_by_node.setdefault((vehicle_id, from_trip_id), []).append(var)
             incoming_by_node.setdefault((vehicle_id, to_trip_id), []).append(var)
-            if (vehicle_id, from_trip_id) in y:
-                model.addConstr(var <= y[(vehicle_id, from_trip_id)])
-            if (vehicle_id, to_trip_id) in y:
-                model.addConstr(var <= y[(vehicle_id, to_trip_id)])
+        # The node-flow equalities below imply both x[v,i,j] <= y[v,i] and
+        # x[v,i,j] <= y[v,j]: every binary arc is a nonnegative member of an
+        # outgoing/incoming sum equal to y minus a nonnegative boundary arc.
+        # Keep the integrated formulation aligned with Stage 1 and omit the
+        # 2 * |x| redundant rows.  On the full 264-trip case this removes more
+        # than 1.3 million constraints without changing the feasible region.
+        integrated_redundant_arc_link_constraints_omitted = 2 * len(x)
         for key, var in start_arc.items():
             if not startup_feasible_by_assignment.get(key, True):
                 model.addConstr(var == 0)
@@ -1622,6 +1625,13 @@ class GurobiMILPAdapter:
         d_var: Dict[Tuple[str, int], Any] = {}
         charge_on_var: Dict[Tuple[str, int], Any] = {}
         s_var: Dict[Tuple[str, int], Any] = {}
+        # Preserve the exact solver expressions used for the final BEV SOC
+        # constraints.  The integrated extractor must report these values;
+        # otherwise the engine sees empty terminal-SOC maps and fails closed
+        # even though the MILP incumbent satisfies the constraints.
+        integrated_vehicle_initial_soc_kwh: Dict[str, float] = {}
+        integrated_vehicle_terminal_soc_expr: Dict[str, Any] = {}
+        integrated_vehicle_terminal_soc_target_kwh: Dict[str, float] = {}
         fuel_l_var: Dict[Tuple[str, int], Any] = {}
         refuel_l_var: Dict[Tuple[str, int], Any] = {}
         g_var: Dict[int, Any] = {}
@@ -1939,6 +1949,9 @@ class GurobiMILPAdapter:
                     cap_kwh=cap,
                 )
                 initial_kwh = min(max(initial_kwh, soc_min), cap)
+                integrated_vehicle_initial_soc_kwh[vehicle.vehicle_id] = float(
+                    initial_kwh
+                )
                 first_slot = slot_indices[0]
                 model.addConstr(s_var[(vehicle.vehicle_id, first_slot)] == initial_kwh)
 
@@ -2000,6 +2013,9 @@ class GurobiMILPAdapter:
                     last_slot,
                     final_day_idx,
                 )
+                integrated_vehicle_terminal_soc_expr[
+                    vehicle.vehicle_id
+                ] = final_slot_end_soc
                 model.addConstr(
                     final_slot_end_soc
                     >= final_soc_floor_kwh * used_vehicle[vehicle.vehicle_id]
@@ -2034,10 +2050,21 @@ class GurobiMILPAdapter:
                             cap_kwh=cap,
                         )
                         if hard_target_kwh is not None and target_soc_key in s_var:
+                            target_soc_expr = _slot_end_soc_expr(
+                                target_slot_idx,
+                                day_idx,
+                            )
                             model.addConstr(
-                                _slot_end_soc_expr(target_slot_idx, day_idx)
+                                target_soc_expr
                                 >= hard_target_kwh * day_use_var
                             )
+                            if day_idx == final_day_idx:
+                                integrated_vehicle_terminal_soc_expr[
+                                    vehicle.vehicle_id
+                                ] = target_soc_expr
+                                integrated_vehicle_terminal_soc_target_kwh[
+                                    vehicle.vehicle_id
+                                ] = float(hard_target_kwh)
                             terminal_policy = normalize_bev_terminal_soc_policy(
                                 problem.metadata.get("bev_terminal_soc_policy"),
                                 has_explicit_target=(
@@ -2056,7 +2083,7 @@ class GurobiMILPAdapter:
                                     terminal_contract["scientific_tolerance_kwh"]
                                 )
                                 model.addConstr(
-                                    _slot_end_soc_expr(target_slot_idx, day_idx)
+                                    target_soc_expr
                                     <= hard_target_kwh
                                     + tolerance_kwh
                                     + cap * (1 - day_use_var)
@@ -2199,14 +2226,23 @@ class GurobiMILPAdapter:
                         - return_deadhead_energy_expr
                     )
 
-                    # C12: no charging while vehicle is operating a trip in this slot.
-                    running_expr = gp.quicksum(
+                    # C12: no charging while the vehicle is operating a trip.
+                    # A coarse energy slot may contain multiple sequential,
+                    # non-overlapping trips.  ``charge_on <= 1 - sum(y)``
+                    # would therefore make a valid back-to-back duty
+                    # infeasible even when charge_on is zero.  Encode the
+                    # logical implication separately for every active trip.
+                    running_assignment_vars = tuple(
                         y[(vehicle.vehicle_id, trip.trip_id)]
                         for trip in problem.trips
                         if (vehicle.vehicle_id, trip.trip_id) in y
                         and self._trip_active_in_slot(problem, trip.departure_min, trip.arrival_min, slot_idx)
                     )
-                    model.addConstr(charge_on_var[(vehicle.vehicle_id, slot_idx)] <= 1 - running_expr)
+                    for running_assignment_var in running_assignment_vars:
+                        model.addConstr(
+                            charge_on_var[(vehicle.vehicle_id, slot_idx)]
+                            <= 1 - running_assignment_var
+                        )
                     away_terms = away_from_home_slot_terms.get(
                         (vehicle.vehicle_id, slot_idx), []
                     )
@@ -2406,7 +2442,11 @@ class GurobiMILPAdapter:
                     )
 
                 for slot_idx in slot_indices:
-                    running_expr = gp.quicksum(
+                    # Refuelling uses the same per-trip implication as BEV
+                    # charging.  Summing all trips active anywhere in a coarse
+                    # slot would incorrectly forbid two sequential trips that
+                    # happen to share that slot.
+                    running_assignment_vars = tuple(
                         y[(vehicle.vehicle_id, trip.trip_id)]
                         for trip in problem.trips
                         if (vehicle.vehicle_id, trip.trip_id) in y
@@ -2417,10 +2457,12 @@ class GurobiMILPAdapter:
                             slot_idx,
                         )
                     )
-                    model.addConstr(
-                        refuel_l_var[(vehicle.vehicle_id, slot_idx)]
-                        <= max(refuel_per_slot_l, 0.0) * (1 - running_expr)
-                    )
+                    for running_assignment_var in running_assignment_vars:
+                        model.addConstr(
+                            refuel_l_var[(vehicle.vehicle_id, slot_idx)]
+                            <= max(refuel_per_slot_l, 0.0)
+                            * (1 - running_assignment_var)
+                        )
                     proxy_terms = home_depot_slot_proxy_terms.get((vehicle.vehicle_id, slot_idx), [])
                     if proxy_terms:
                         model.addConstr(
@@ -3322,13 +3364,13 @@ class GurobiMILPAdapter:
                 GRB=GRB,
                 integrated_warm_start_audit=integrated_warm_start_audit,
                 dispatch_variable_maps=(
-                    y,
-                    x,
-                    start_arc,
-                    end_arc,
-                    unserved,
-                    used_vehicle,
-                    used_vehicle_day,
+                    ("assignment", y),
+                    ("connection", x),
+                    ("start_arc", start_arc),
+                    ("end_arc", end_arc),
+                    ("unserved", unserved),
+                    ("used_vehicle", used_vehicle),
+                    ("used_vehicle_day", used_vehicle_day),
                 ),
             )
         )
@@ -3349,7 +3391,8 @@ class GurobiMILPAdapter:
             "num_constrs": model.NumConstrs,
             "num_binary_vars": model.NumBinVars,
             "num_integer_vars": model.NumIntVars,
-            "num_continuous_vars": model.NumVars - model.NumBinVars - model.NumIntVars,
+            # Gurobi's NumIntVars already includes binary variables.
+            "num_continuous_vars": model.NumVars - model.NumIntVars,
             "num_assignment_pairs": len(assignment_pairs),
             "num_arc_pairs": len(arc_pairs),
             "arc_pruning_summary": arc_pruning_summary,
@@ -3497,7 +3540,19 @@ class GurobiMILPAdapter:
                     relaxed_partial_service=True,
                 )
                 if baseline_fallback is not None:
-                    return baseline_fallback
+                    fallback_outcome, fallback_plan = baseline_fallback
+                    return (
+                        fallback_outcome,
+                        replace(
+                            fallback_plan,
+                            metadata={
+                                **dict(fallback_plan.metadata or {}),
+                                "integrated_warm_start_audit": (
+                                    integrated_warm_start_audit
+                                ),
+                            },
+                        ),
+                    )
 
         if model.SolCount <= 0:
             if model.Status == GRB.TIME_LIMIT and not bool(getattr(config, "research_run", False)):
@@ -3509,7 +3564,22 @@ class GurobiMILPAdapter:
                     relaxed_partial_service=bool(relaxed_partial_service),
                 )
                 if baseline_fallback is not None:
-                    return baseline_fallback
+                    fallback_outcome, fallback_plan = baseline_fallback
+                    return (
+                        fallback_outcome,
+                        replace(
+                            fallback_plan,
+                            metadata={
+                                **dict(fallback_plan.metadata or {}),
+                                "integrated_warm_start_audit": (
+                                    integrated_warm_start_audit
+                                ),
+                                "integrated_redundant_arc_link_constraints_omitted": (
+                                    integrated_redundant_arc_link_constraints_omitted
+                                ),
+                            },
+                        ),
+                    )
             reported_status = solver_status
             if bool(getattr(config, "research_run", False)):
                 if model.Status == GRB.TIME_LIMIT:
@@ -3583,6 +3653,18 @@ class GurobiMILPAdapter:
                 return float(var.X)
             except Exception:
                 return 0.0
+
+        def _solution_expr_value(expr: Any) -> float:
+            """Read a solved Gurobi variable or linear expression exactly."""
+            try:
+                getter = getattr(expr, "getValue", None)
+                if callable(getter):
+                    return float(getter())
+                return float(expr.X)
+            except Exception as exc:
+                raise RuntimeError(
+                    "Failed to extract an integrated terminal-SOC expression"
+                ) from exc
 
         grid_to_bus_kwh_by_depot_slot: Dict[str, Dict[int, float]] = {}
         pv_to_bus_kwh_by_depot_slot: Dict[str, Dict[int, float]] = {}
@@ -3780,6 +3862,121 @@ class GurobiMILPAdapter:
             start_arc=start_arc,
         )
 
+        vehicle_initial_soc_kwh_by_vehicle: Dict[str, float] = {}
+        vehicle_terminal_soc_kwh_by_vehicle: Dict[str, float] = {}
+        vehicle_terminal_soc_target_kwh_by_vehicle: Dict[str, float] = {}
+        vehicle_terminal_soc_drawdown_kwh_by_vehicle: Dict[str, float] = {}
+        vehicle_terminal_soc_target_shortfall_kwh_by_vehicle: Dict[str, float] = {}
+        vehicle_terminal_soc_target_surplus_kwh_by_vehicle: Dict[str, float] = {}
+        integrated_vehicle_by_id = {
+            str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles
+        }
+        for vehicle_id in sorted(bev_ids):
+            used_var = used_vehicle.get(vehicle_id)
+            if used_var is None or _var_val(used_var) <= 0.5:
+                continue
+            terminal_expr = integrated_vehicle_terminal_soc_expr.get(vehicle_id)
+            if terminal_expr is None:
+                raise RuntimeError(
+                    "Used BEV has no integrated terminal-SOC expression: "
+                    f"vehicle={vehicle_id}"
+                )
+            vehicle = integrated_vehicle_by_id.get(vehicle_id)
+            if vehicle is None:
+                raise RuntimeError(
+                    "Used BEV is missing from the canonical vehicle inventory: "
+                    f"vehicle={vehicle_id}"
+                )
+            if vehicle_id not in integrated_vehicle_initial_soc_kwh:
+                raise RuntimeError(
+                    "Used BEV has no integrated initial-SOC value: "
+                    f"vehicle={vehicle_id}"
+                )
+            initial_kwh = float(integrated_vehicle_initial_soc_kwh[vehicle_id])
+            terminal_kwh = max(
+                _solution_expr_value(terminal_expr),
+                0.0,
+            )
+            capacity_kwh = max(
+                float(getattr(vehicle, "battery_capacity_kwh", 0.0) or 0.0),
+                0.0,
+            )
+            effective_target_kwh = effective_final_soc_target_kwh(
+                problem,
+                vehicle,
+                cap_kwh=capacity_kwh,
+            )
+            target_kwh = integrated_vehicle_terminal_soc_target_kwh.get(vehicle_id)
+            if (
+                final_target_enabled
+                and effective_target_kwh is not None
+                and target_kwh is None
+            ):
+                raise RuntimeError(
+                    "Used BEV has no integrated final-day target-SOC constraint: "
+                    f"vehicle={vehicle_id}"
+                )
+            if target_kwh is None:
+                target_kwh = effective_target_kwh
+
+            vehicle_initial_soc_kwh_by_vehicle[vehicle_id] = initial_kwh
+            vehicle_terminal_soc_kwh_by_vehicle[vehicle_id] = terminal_kwh
+            vehicle_terminal_soc_drawdown_kwh_by_vehicle[vehicle_id] = max(
+                initial_kwh - terminal_kwh,
+                0.0,
+            )
+            if target_kwh is not None:
+                target_value = float(target_kwh)
+                vehicle_terminal_soc_target_kwh_by_vehicle[
+                    vehicle_id
+                ] = target_value
+                vehicle_terminal_soc_target_shortfall_kwh_by_vehicle[
+                    vehicle_id
+                ] = max(target_value - terminal_kwh, 0.0)
+                vehicle_terminal_soc_target_surplus_kwh_by_vehicle[
+                    vehicle_id
+                ] = max(terminal_kwh - target_value, 0.0)
+
+        terminal_acceptance_contract_for_metadata = (
+            bev_terminal_numeric_acceptance_contract(
+                problem.metadata,
+                gurobi_feasibility_tol=integrated_feasibility_tol,
+            )
+        )
+        bev_terminal_soc_balance_satisfied = bool(
+            vehicle_terminal_soc_target_kwh_by_vehicle
+            and _bev_terminal_balance_satisfied(
+                target_by_vehicle=vehicle_terminal_soc_target_kwh_by_vehicle,
+                shortfall_by_vehicle=(
+                    vehicle_terminal_soc_target_shortfall_kwh_by_vehicle
+                ),
+                surplus_by_vehicle=(
+                    vehicle_terminal_soc_target_surplus_kwh_by_vehicle
+                ),
+                scientific_tolerance_kwh=terminal_acceptance_contract_for_metadata[
+                    "scientific_tolerance_kwh"
+                ],
+                numeric_margin_kwh=terminal_acceptance_contract_for_metadata[
+                    "numeric_comparison_margin_kwh"
+                ],
+            )
+        )
+        bev_terminal_soc_acceptance_reason = _bev_terminal_acceptance_reason(
+            target_by_vehicle=vehicle_terminal_soc_target_kwh_by_vehicle,
+            shortfall_by_vehicle=(
+                vehicle_terminal_soc_target_shortfall_kwh_by_vehicle
+            ),
+            surplus_by_vehicle=(
+                vehicle_terminal_soc_target_surplus_kwh_by_vehicle
+            ),
+            scientific_tolerance_kwh=terminal_acceptance_contract_for_metadata[
+                "scientific_tolerance_kwh"
+            ],
+            numeric_margin_kwh=terminal_acceptance_contract_for_metadata[
+                "numeric_comparison_margin_kwh"
+            ],
+        )
+
         served_set = set(served_trip_ids)
         unserved_trip_ids = sorted(trip.trip_id for trip in problem.trips if trip.trip_id not in served_set)
         diagnostic_slack_summary = {
@@ -3883,6 +4080,68 @@ class GurobiMILPAdapter:
                 "bess_terminal_soc_deviation_kwh": round(sum(bess_terminal_soc_deviation_kwh_by_depot.values()), 6),
                 "bess_soc_start_kwh_by_depot_slot": bess_soc_start_kwh_by_depot_slot,
                 "bess_soc_end_kwh_by_depot_slot": bess_soc_end_kwh_by_depot_slot,
+                "bev_terminal_soc_policy": str(
+                    (problem.metadata or {}).get("bev_terminal_soc_policy")
+                    or "minimum_only"
+                ),
+                "vehicle_initial_soc_kwh_by_vehicle": (
+                    vehicle_initial_soc_kwh_by_vehicle
+                ),
+                "vehicle_terminal_soc_kwh_by_vehicle": (
+                    vehicle_terminal_soc_kwh_by_vehicle
+                ),
+                "vehicle_terminal_soc_target_kwh_by_vehicle": (
+                    vehicle_terminal_soc_target_kwh_by_vehicle
+                ),
+                "vehicle_terminal_soc_drawdown_kwh_by_vehicle": (
+                    vehicle_terminal_soc_drawdown_kwh_by_vehicle
+                ),
+                "vehicle_terminal_soc_target_shortfall_kwh_by_vehicle": (
+                    vehicle_terminal_soc_target_shortfall_kwh_by_vehicle
+                ),
+                "vehicle_terminal_soc_target_surplus_kwh_by_vehicle": (
+                    vehicle_terminal_soc_target_surplus_kwh_by_vehicle
+                ),
+                "bev_terminal_soc_total_drawdown_kwh": float(
+                    sum(vehicle_terminal_soc_drawdown_kwh_by_vehicle.values())
+                ),
+                "bev_terminal_soc_total_target_shortfall_kwh": float(
+                    sum(
+                        vehicle_terminal_soc_target_shortfall_kwh_by_vehicle.values()
+                    )
+                ),
+                "bev_terminal_soc_total_target_surplus_kwh": float(
+                    sum(
+                        vehicle_terminal_soc_target_surplus_kwh_by_vehicle.values()
+                    )
+                ),
+                "bev_terminal_soc_max_abs_target_deviation_kwh": float(
+                    max(
+                        (
+                            max(
+                                vehicle_terminal_soc_target_shortfall_kwh_by_vehicle.get(
+                                    vehicle_id, 0.0
+                                ),
+                                vehicle_terminal_soc_target_surplus_kwh_by_vehicle.get(
+                                    vehicle_id, 0.0
+                                ),
+                            )
+                            for vehicle_id in (
+                                vehicle_terminal_soc_target_kwh_by_vehicle
+                            )
+                        ),
+                        default=0.0,
+                    )
+                ),
+                "bev_terminal_soc_numeric_acceptance_contract": (
+                    terminal_acceptance_contract_for_metadata
+                ),
+                "bev_terminal_soc_balance_satisfied": (
+                    bev_terminal_soc_balance_satisfied
+                ),
+                "bev_terminal_soc_acceptance_reason": (
+                    bev_terminal_soc_acceptance_reason
+                ),
                 "vehicle_usage_cost_jpy_per_used_bus": vehicle_usage_unit_cost,
                 "minimum_used_bev_count": minimum_used_bev_count,
                 "minimum_used_bev_count_policy_enabled": (
@@ -3926,6 +4185,9 @@ class GurobiMILPAdapter:
                 "arc_pruning_summary": arc_pruning_summary,
                 "integrated_single_path_redundancy_elimination_applied": (
                     integrated_single_path_redundancy_elimination_applied
+                ),
+                "integrated_redundant_arc_link_constraints_omitted": (
+                    integrated_redundant_arc_link_constraints_omitted
                 ),
                 "integrated_fragment_pairwise_constraint_count": (
                     integrated_fragment_pairwise_constraint_count
@@ -12227,7 +12489,7 @@ class GurobiMILPAdapter:
         config: OptimizationConfig,
         GRB: Any,
         integrated_warm_start_audit: Mapping[str, Any],
-        dispatch_variable_maps: Sequence[Mapping[Any, Any]],
+        dispatch_variable_maps: Sequence[Any],
     ) -> Dict[str, Any]:
         """Promote a decomposed seed only after integrated recourse succeeds.
 
@@ -12272,6 +12534,8 @@ class GurobiMILPAdapter:
                 "dispatch_fixed_recourse_configured": configured,
                 "dispatch_fixed_recourse_requested": requested,
                 "dispatch_fixed_recourse_time_limit_sec": time_limit_sec,
+                "dispatch_fixed_recourse_model_variable_count": 0,
+                "dispatch_fixed_recourse_model_constraint_count": 0,
                 "dispatch_fixed_recourse_status": "not_run",
                 "dispatch_fixed_recourse_reason": "",
                 "dispatch_fixed_recourse_runtime_sec": 0.0,
@@ -12287,6 +12551,8 @@ class GurobiMILPAdapter:
                 "dispatch_fixed_recourse_iis_variable_bound_count": 0,
                 "dispatch_fixed_recourse_iis_constraint_sample": [],
                 "dispatch_fixed_recourse_iis_variable_bound_sample": [],
+                "dispatch_fixed_recourse_iis_constraint_semantic_sample": [],
+                "dispatch_fixed_recourse_iis_variable_bound_semantic_sample": [],
                 "dispatch_fixed_recourse_iis_fingerprint": "",
             }
         )
@@ -12300,10 +12566,41 @@ class GurobiMILPAdapter:
             return audit
 
         model.update()
+        audit["dispatch_fixed_recourse_model_variable_count"] = int(
+            model.NumVars
+        )
+        audit["dispatch_fixed_recourse_model_constraint_count"] = int(
+            model.NumConstrs
+        )
         dispatch_vars: List[Any] = []
         seen_variable_ids: Set[int] = set()
-        for variable_map in dispatch_variable_maps:
-            for variable in variable_map.values():
+        semantic_label_by_variable_name: Dict[str, str] = {}
+
+        def _semantic_key(raw_key: Any) -> str:
+            if isinstance(raw_key, tuple):
+                return "|".join(str(part) for part in raw_key)
+            return str(raw_key)
+
+        for variable_map_entry in dispatch_variable_maps:
+            family = "dispatch"
+            variable_map = variable_map_entry
+            if (
+                isinstance(variable_map_entry, tuple)
+                and len(variable_map_entry) == 2
+                and isinstance(variable_map_entry[1], Mapping)
+            ):
+                family = str(variable_map_entry[0] or "dispatch")
+                variable_map = variable_map_entry[1]
+            if not isinstance(variable_map, Mapping):
+                raise TypeError(
+                    "dispatch_variable_maps entries must be mappings or "
+                    "(family, mapping) pairs"
+                )
+            for key, variable in variable_map.items():
+                variable_name = str(variable.VarName)
+                semantic_label_by_variable_name[variable_name] = (
+                    f"{family}[{_semantic_key(key)}]"
+                )
                 identity = id(variable)
                 if identity in seen_variable_ids:
                     continue
@@ -12463,12 +12760,60 @@ class GurobiMILPAdapter:
                         if bool(constraint.IISConstr)
                     )
                     iis_bounds: List[str] = []
+                    semantic_iis_bounds: List[str] = []
                     for variable in model.getVars():
+                        variable_name = str(variable.VarName)
+                        semantic_label = semantic_label_by_variable_name.get(
+                            variable_name,
+                            variable_name,
+                        )
                         if bool(variable.IISLB):
-                            iis_bounds.append(f"LB:{variable.VarName}")
+                            iis_bounds.append(f"LB:{variable_name}")
+                            semantic_iis_bounds.append(f"LB:{semantic_label}")
                         if bool(variable.IISUB):
-                            iis_bounds.append(f"UB:{variable.VarName}")
+                            iis_bounds.append(f"UB:{variable_name}")
+                            semantic_iis_bounds.append(f"UB:{semantic_label}")
                     iis_bounds.sort()
+                    semantic_iis_bounds.sort()
+                    semantic_iis_constraints: List[Dict[str, Any]] = []
+                    for constraint in model.getConstrs():
+                        if not bool(constraint.IISConstr):
+                            continue
+                        row = model.getRow(constraint)
+                        term_count = int(row.size())
+                        terms: List[Dict[str, Any]] = []
+                        for term_index in range(min(term_count, 20)):
+                            variable = row.getVar(term_index)
+                            variable_name = str(variable.VarName)
+                            terms.append(
+                                {
+                                    "coefficient": float(
+                                        row.getCoeff(term_index)
+                                    ),
+                                    "variable": (
+                                        semantic_label_by_variable_name.get(
+                                            variable_name,
+                                            variable_name,
+                                        )
+                                    ),
+                                    "raw_variable_name": variable_name,
+                                }
+                            )
+                        semantic_iis_constraints.append(
+                            {
+                                "constraint_name": str(
+                                    constraint.ConstrName
+                                ),
+                                "sense": str(constraint.Sense),
+                                "rhs": float(constraint.RHS),
+                                "term_count": term_count,
+                                "terms": terms,
+                                "terms_truncated": term_count > len(terms),
+                            }
+                        )
+                    semantic_iis_constraints.sort(
+                        key=lambda item: str(item["constraint_name"])
+                    )
                     iis_payload = "\n".join(
                         [
                             *(f"CONSTR:{name}" for name in iis_constraints),
@@ -12489,6 +12834,12 @@ class GurobiMILPAdapter:
                             ),
                             "dispatch_fixed_recourse_iis_variable_bound_sample": (
                                 iis_bounds[:100]
+                            ),
+                            "dispatch_fixed_recourse_iis_constraint_semantic_sample": (
+                                semantic_iis_constraints[:100]
+                            ),
+                            "dispatch_fixed_recourse_iis_variable_bound_semantic_sample": (
+                                semantic_iis_bounds[:100]
                             ),
                             "dispatch_fixed_recourse_iis_fingerprint": (
                                 hashlib.sha256(

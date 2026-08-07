@@ -1,7 +1,10 @@
 from dataclasses import replace
 from types import SimpleNamespace
 
+import pytest
+
 import src.optimization.engine as optimization_engine_module
+from src.dispatch.models import DispatchContext, Trip, VehicleProfile
 from src.optimization.common.problem import (
     CanonicalOptimizationProblem,
     DepotEnergyAsset,
@@ -23,6 +26,91 @@ from src.optimization.engine import (
 from src.gurobi_runtime import ensure_gurobi
 from src.optimization.milp.solver_adapter import GurobiMILPAdapter
 from test_post_return_soc_target import _dispatch_context
+
+
+def _same_slot_back_to_back_problem(
+    vehicle_type: str,
+) -> CanonicalOptimizationProblem:
+    """Build two feasible trips that share one coarse energy slot.
+
+    The first trip plus the canonical ten-minute turnaround ends exactly when
+    the second trip departs.  Both trips intersect the 07:00--08:00 energy
+    slot, but they never overlap in physical time.
+    """
+    dispatch_context = DispatchContext(
+        service_date="2025-08-05",
+        trips=[
+            Trip(
+                trip_id="trip-0703",
+                route_id="route-a-b",
+                origin="DEPOT",
+                destination="B",
+                departure_time="07:03",
+                arrival_time="07:47",
+                distance_km=5.0,
+                allowed_vehicle_types=(vehicle_type,),
+                origin_stop_id="DEPOT",
+                destination_stop_id="B",
+                operator_id="tokyu",
+            ),
+            Trip(
+                trip_id="trip-0757",
+                route_id="route-b-depot",
+                origin="B",
+                destination="DEPOT",
+                departure_time="07:57",
+                arrival_time="08:48",
+                distance_km=5.0,
+                allowed_vehicle_types=(vehicle_type,),
+                origin_stop_id="B",
+                destination_stop_id="DEPOT",
+                operator_id="tokyu",
+            ),
+        ],
+        turnaround_rules={},
+        deadhead_rules={},
+        vehicle_profiles={
+            vehicle_type: VehicleProfile(
+                vehicle_type=vehicle_type,
+                battery_capacity_kwh=(
+                    100.0 if vehicle_type == "BEV" else None
+                ),
+                energy_consumption_kwh_per_km=(
+                    1.0 if vehicle_type == "BEV" else None
+                ),
+                fuel_tank_capacity_l=(
+                    100.0 if vehicle_type == "ICE" else None
+                ),
+                fuel_consumption_l_per_km=(
+                    0.1 if vehicle_type == "ICE" else None
+                ),
+            )
+        },
+        default_turnaround_min=10,
+    )
+    return ProblemBuilder().build_from_dispatch(
+        dispatch_context,
+        scenario_id="same-slot-back-to-back",
+        vehicle_counts={vehicle_type: 1},
+        chargers=(
+            (ChargerDefinition("chg-1", "DEPOT", 60.0),)
+            if vehicle_type == "BEV"
+            else ()
+        ),
+        canonical_depot_id="DEPOT",
+        timestep_min=60,
+        operation_start_time="05:00",
+        operation_end_time="23:00",
+        final_soc_floor_percent=20.0,
+        price_slots=tuple(
+            EnergyPriceSlot(
+                slot_index=slot_index,
+                grid_buy_yen_per_kwh=30.0,
+            )
+            for slot_index in range(24)
+        ),
+        vehicle_usage_cost_jpy_per_used_bus=0.0,
+    )
 
 
 def _problem() -> CanonicalOptimizationProblem:
@@ -185,6 +273,65 @@ def test_phase4_solver_reconciles_integrated_actual_cost_on_full_day() -> None:
         "solver_objective_matches_accounting_total"
     ] is True
     assert result.cost_breakdown["objective_is_actual_cost"] is True
+    terminal_targets = result.solver_metadata[
+        "vehicle_terminal_soc_target_kwh_by_vehicle"
+    ]
+    terminal_values = result.solver_metadata[
+        "vehicle_terminal_soc_kwh_by_vehicle"
+    ]
+    terminal_contract = result.plan.metadata[
+        "bev_terminal_soc_numeric_acceptance_contract"
+    ]
+    accepted_deviation_kwh = (
+        terminal_contract["scientific_tolerance_kwh"]
+        + terminal_contract["numeric_comparison_margin_kwh"]
+    )
+
+    assert result.solver_metadata["bev_terminal_soc_balance_satisfied"] is True
+    assert terminal_targets
+    assert terminal_values.keys() == terminal_targets.keys()
+    assert result.plan.metadata["bev_terminal_soc_balance_satisfied"] is True
+    for vehicle_id, target_kwh in terminal_targets.items():
+        assert terminal_values[vehicle_id] == pytest.approx(
+            target_kwh,
+            abs=accepted_deviation_kwh,
+        )
+
+
+@pytest.mark.parametrize("vehicle_type", ["BEV", "ICE"])
+def test_phase4_allows_back_to_back_trips_inside_one_energy_slot(
+    vehicle_type: str,
+) -> None:
+    problem = _same_slot_back_to_back_problem(vehicle_type)
+    first_trip, second_trip = problem.trips
+
+    assert first_trip.arrival_min + problem.dispatch_context.default_turnaround_min == (
+        second_trip.departure_min
+    )
+    assert GurobiMILPAdapter()._slot_index(
+        problem, first_trip.departure_min
+    ) == GurobiMILPAdapter()._slot_index(
+        problem, second_trip.departure_min
+    )
+
+    outcome, plan = GurobiMILPAdapter().solve(
+        problem,
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            phase="phase4_integrated",
+            integrated_actual_cost_objective=True,
+            time_limit_sec=30,
+            mip_gap=0.0,
+            random_seed=42,
+            warm_start=False,
+            allow_postsolve_repair=False,
+            research_run=True,
+        ),
+    )
+
+    assert outcome.has_feasible_incumbent, outcome.solver_status
+    assert set(plan.served_trip_ids) == {"trip-0703", "trip-0757"}
+    assert plan.unserved_trip_ids == ()
 
 
 def _phase4_seed_problem(
@@ -374,15 +521,34 @@ def test_integrated_seed_recourse_preflight_restores_bounds_and_exports_iis() ->
         ),
         GRB=GRB,
         integrated_warm_start_audit={"applied": True},
-        dispatch_variable_maps=({"dispatch": dispatch},),
+        dispatch_variable_maps=(("assignment", {"vehicle-a|trip-a": dispatch}),),
     )
 
     assert audit["dispatch_fixed_recourse_status"] == "infeasible"
     assert audit["integrated_dispatch_fixed_recourse_feasible"] is False
     assert audit["dispatch_fixed_recourse_iis_generated"] is True
+    assert audit["dispatch_fixed_recourse_model_variable_count"] == 1
+    assert audit["dispatch_fixed_recourse_model_constraint_count"] == 1
     assert audit["dispatch_fixed_recourse_iis_constraint_count"] >= 1
     assert audit["dispatch_fixed_recourse_iis_variable_bound_count"] >= 1
     assert len(audit["dispatch_fixed_recourse_iis_fingerprint"]) == 64
+    assert audit[
+        "dispatch_fixed_recourse_iis_variable_bound_semantic_sample"
+    ] == ["LB:assignment[vehicle-a|trip-a]"]
+    semantic_constraints = audit[
+        "dispatch_fixed_recourse_iis_constraint_semantic_sample"
+    ]
+    assert len(semantic_constraints) == 1
+    assert semantic_constraints[0]["constraint_name"] == (
+        "integrated_only_conflict"
+    )
+    assert semantic_constraints[0]["terms"] == [
+        {
+            "coefficient": 1.0,
+            "variable": "assignment[vehicle-a|trip-a]",
+            "raw_variable_name": "dispatch_seed",
+        }
+    ]
     assert dispatch.LB == 0.0
     assert dispatch.UB == 1.0
 

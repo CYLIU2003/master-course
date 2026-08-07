@@ -337,3 +337,59 @@ def test_stage1_omits_arc_links_implied_by_node_flow_equalities() -> None:
     assert result.solver_metadata["assignment_global_optimality_scope"] == (
         "full_candidate_network_stage1_assignment_objective"
     )
+
+
+@pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
+def test_integrated_omits_arc_links_implied_by_node_flow_equalities() -> None:
+    context = DispatchContext(
+        service_date="2026-04-10",
+        trips=[
+            Trip(
+                trip_id="t1",
+                route_id="r1",
+                origin="DEPOT",
+                destination="A",
+                departure_time="08:00",
+                arrival_time="08:10",
+                distance_km=1.0,
+                allowed_vehicle_types=("ICE",),
+            ),
+            Trip(
+                trip_id="t2",
+                route_id="r1",
+                origin="A",
+                destination="DEPOT",
+                departure_time="08:20",
+                arrival_time="08:30",
+                distance_km=1.0,
+                allowed_vehicle_types=("ICE",),
+            ),
+        ],
+        turnaround_rules={"A": TurnaroundRule(stop_id="A", min_turnaround_min=0)},
+        deadhead_rules={},
+        vehicle_profiles={"ICE": VehicleProfile(vehicle_type="ICE")},
+    )
+    problem = ProblemBuilder().build_from_dispatch(
+        context,
+        scenario_id="integrated-redundant-arc-links",
+        vehicle_counts={"ICE": 1},
+        canonical_depot_id="DEPOT",
+        service_coverage_mode="strict",
+    )
+
+    result = OptimizationEngine().solve(
+        problem,
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            phase="phase4_integrated",
+            time_limit_sec=10,
+            mip_gap=0.0,
+            warm_start=False,
+        ),
+    )
+
+    assert result.feasible is True
+    assert set(result.plan.served_trip_ids) == {"t1", "t2"}
+    assert result.solver_metadata[
+        "integrated_redundant_arc_link_constraints_omitted"
+    ] == 2

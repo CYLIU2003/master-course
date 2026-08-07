@@ -1,5 +1,47 @@
 # Development Notes
 
+## 2026-08-08 Phase 4 coarse-slot and terminal-SOC diagnostic closure
+
+- Replayed the 264-trip sunny canonical input through the frontend HTTP/BFF
+  path after adding semantic fixed-recourse IIS evidence. The old IIS involved
+  two sequential duties on the same BEV: `07:03--07:47` and `07:57--08:48`.
+  Their exact ten-minute turnaround is feasible; they merely intersect the
+  same 60-minute energy slot.
+- Root cause was the integrated replenishment implication
+  `charge_on[v,t] <= 1 - sum_r y[v,r]` (and the analogous refueling row).
+  When two non-overlapping trips touched slot `t`, `sum_r y[v,r]=2`, making a
+  valid duty infeasible even with `charge_on=0`. The model now emits
+  `charge_on[v,t] <= 1-y[v,r]` and
+  `refuel[v,t] <= M(1-y[v,r])` for each active assignment. This changes only
+  the erroneous coarse-slot aggregation; trip overlap, turnaround, deadhead,
+  charger occupancy, SOC and source-flow equations are not relaxed.
+- The corrected fixed-dispatch integrated recourse in
+  `output/2026-08-08/run_20260808_0601` has 776,752 variables and 1,926,978
+  constraints, returns `solution_limit` with an incumbent in about 0.8 seconds,
+  and supplies a complete all-variable Phase 4 start. The unrestricted
+  diagnostic then retains a 264/264 incumbent under its intentionally tiny
+  one-second budget.
+- A second reporting defect was exposed: the integrated extractor exported
+  per-slot SOC but omitted initial, final and target BEV SOC maps. The engine
+  therefore defaulted `bev_terminal_soc_balance_satisfied` to false even when
+  the model satisfied its hard target. The extractor now evaluates the exact
+  final-day solver expressions, exports per-vehicle deviations, and fails
+  closed if a used BEV lacks an initial value, terminal expression, or required
+  target constraint. The full-scope diagnostic reports 15/15 maps, terminal
+  balance accepted, maximum absolute deviation about `1e-6 kWh`, BESS terminal
+  deviation zero, and all independent physical counters zero.
+- BFF physical validity now accepts a `TIME_LIMIT`, `OBJECTIVE_LIMIT`, or
+  `SOLUTION_LIMIT` result only when the core reports a feasible incumbent and
+  all existing physical gates pass. Such a result is explicitly
+  `validated_non_exact`; no optimality or research-ready status follows. A
+  limit result without an incumbent still fails.
+- Relevant Phase 4, strict-coverage, validity, accounting and reporting tests
+  pass (`79 passed`); the focused terminal-SOC/coarse-slot subset passes
+  `39 passed`; the complete repository suite passes `1209 passed`;
+  `compileall` and `git diff --check` pass. This diagnostic was non-formal and
+  dirty, so it cannot discharge the release blocker. A clean commit, fresh
+  Prepare, and a new controlled sunny/rain run remain required.
+
 ## 2026-08-08 Phase 4 integrated fixed-dispatch recourse correction
 
 - Clean commit `e071446cb346092719a3103e81026bcb02d82a21` was exercised through

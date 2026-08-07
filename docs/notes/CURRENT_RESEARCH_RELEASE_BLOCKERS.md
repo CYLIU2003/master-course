@@ -1,15 +1,18 @@
 # Current research release blockers
 
 Status date: 2026-08-08
-Code status: the clean `e071446` Phase 4 pair proved that assigning a complete
-Phase 3 `Start` vector was still not an integrated-feasibility certificate:
-both cases reached the 3,600-second limit with zero incumbents. The current
-tree adds an integrated fixed-dispatch recourse preflight, complete-solution
-promotion, IIS evidence and fail-closed release gates. The relevant focused
-set passes `182` tests and the complete repository suite passes `1204` tests;
-`compileall` and `git diff --check` pass. These code checks alone do not
-establish release. A fresh clean-run pair and its per-run gates remain
-authoritative.
+Code status: the clean `e071446` pair proved that submitted Phase 3 `Start`
+values were not an integrated-feasibility certificate. A later non-formal
+264-trip diagnostic (`output/2026-08-08/run_20260808_0601`) now reaches a
+feasible integrated fixed-dispatch recourse and complete 776,752-variable
+warm start after correcting a false coarse-slot charging/refueling conflict.
+It also closes an integrated terminal-SOC metadata omission and distinguishes
+a physically valid time-limit incumbent from an optimality result. Relevant
+focused tests pass (`79 passed`), the complete repository suite passes
+`1209 passed`, and `compileall`/`git diff --check` pass. The diagnostic used a
+dirty tree, a reused prepared input, `research_run=false`, and a one-second
+unrestricted solve, so it is **not** research evidence. A fresh Prepare from a
+clean frozen commit and its sunny/rain per-run/pair gates remain authoritative.
 
 ## 2026-08-08 Phase 4 feasible-incumbent remediation status
 
@@ -63,6 +66,15 @@ incumbent, exact source provenance, terminal energy balance, solver/accounting
 agreement, accepted Rolling chain, unchanged Git state, and an honestly
 reported achieved gap. A time-limit incumbent remains a feasible candidate,
 not a global-optimality result.
+
+The latest full-scope diagnostic narrows that blocker. Fixed-dispatch recourse
+is now feasible in about 0.8 seconds; all 264 trips are served; independent
+trip, transition, SOC-bound, BESS, contract and charger-concurrency counters
+are zero; 15 used BEVs have explicit initial/target/terminal SOC records; and
+the canonical objective residual is numerically zero. The remaining release
+work is a clean formal pair, adequate unrestricted search, accepted Rolling,
+and pair-level controlled-counterfactual verification. None of those gates is
+waived by the diagnostic.
 
 ## 2026-08-07 clean high-PV BEV-frontier result
 

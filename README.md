@@ -1,5 +1,31 @@
 # master-course
 
+## 2026-08-08 Phase 4 full-scope diagnostic correction
+
+- A non-formal 264-trip HTTP diagnostic at
+  `output/2026-08-08/run_20260808_0601` now proves that the verified Phase 3
+  dispatch has feasible recourse in the integrated model. The fixed-dispatch
+  solve returned an incumbent in about 0.8 seconds and promoted all 776,752
+  integrated variable values as a complete warm start.
+- The prior recourse IIS was caused by a false coarse-slot conflict. Charging
+  and refueling used `on <= 1 - sum(y)` across every trip touching a one-hour
+  energy slot. Two sequential, non-overlapping trips in the same slot made the
+  right-hand side negative even when no charging/refueling occurred. Phase 4
+  now applies the no-replenishment implication separately to each assignment;
+  physical trip-overlap and turnaround constraints remain unchanged.
+- The integrated extractor now publishes the exact solver expressions used by
+  the final-day BEV SOC constraints. Missing initial SOC, target constraints,
+  or terminal expressions fail closed. The 264-trip diagnostic reports all 15
+  used BEVs, return-to-initial acceptance, a maximum deviation of approximately
+  `1e-6 kWh`, and zero independent physical violations.
+- A time-limit result with a verified incumbent is classified as a physically
+  valid, non-exact candidate. It is never relabeled optimal. A time limit
+  without an incumbent remains invalid.
+- This diagnostic used a dirty, non-formal tree and a one-second unrestricted
+  Phase 4 budget. It is implementation evidence only. A fresh Prepare and
+  clean frozen sunny/rain pair remain mandatory before any research result or
+  weather comparison is accepted.
+
 ## 2026-08-08 Phase 4 integrated-recourse-certified warm start
 
 - The first clean implementation run at commit
@@ -89,7 +115,7 @@ frozen commit and every per-run/pair acceptance gate.
 - BEV の SOC、充電器、PV、BESS、系統電力、料金を制約として充電計画を評価する。
 - 日初の計画に加え、1 時間ごとの Rolling 再最適化、物理スケジュール検証、実行日会計を成果物として残す。
 
-現行の研究実装は **Phase 3 の二段階最適化**です。便割当とエネルギー運用を一つの目的関数で同時に解いた大域的総費用最適解ではありません。主張できる範囲は、必ず成果物ごとの受理ゲートに従ってください。
+現行ソルバには、二段階の **Phase 3** と、配車・充電・PV・BESS・系統購入を結合する **Phase 4** があります。Phase 3は大域的総費用最適解ではなく、Phase 4も現時点ではclean formal pairが未受理です。どちらも、成果物ごとの物理・会計・最適性・研究受理ゲートを越えて主張範囲を広げないでください。
 
 ## 現在の構成と扱い
 

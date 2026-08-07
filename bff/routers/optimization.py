@@ -9280,10 +9280,34 @@ def _solution_validity_payload(
     research_blocking_reasons = sorted(set(research_blocking_reasons))
     supports_exact = bool(meta.get("supports_exact_milp", False))
     fallback_applied = bool(meta.get("fallback_applied", False) or meta.get("fallback_reason"))
+    ordinary_feasible_status = status_upper in {
+        "SOLVED_FEASIBLE",
+        "OPTIMAL",
+        "FEASIBLE",
+    }
+    incumbent_limit_status = status_upper in {
+        "TIME_LIMIT",
+        "OBJECTIVE_LIMIT",
+        "SOLUTION_LIMIT",
+    }
+    has_validated_incumbent_status = bool(
+        ordinary_feasible_status
+        or (
+            incumbent_limit_status
+            and bool(meta.get("has_feasible_incumbent", False))
+        )
+    )
     result_class: str
     status_reason: str
-    if not blocking_reasons and status_upper in {"SOLVED_FEASIBLE", "OPTIMAL", "FEASIBLE"}:
-        if supports_exact and not fallback_applied:
+    if not blocking_reasons and has_validated_incumbent_status:
+        if incumbent_limit_status:
+            # A time/objective/solution-limit incumbent can be physically
+            # valid without being an optimality result.  Keep those claims
+            # separate instead of mislabelling an empty-error result as
+            # infeasible.
+            status_reason = "validated_feasible_limit_incumbent"
+            result_class = "validated_non_exact"
+        elif supports_exact and not fallback_applied:
             status_reason = "validated_feasible_no_cancellation" if unserved == 0 else "validated_feasible"
             result_class = "exact_or_validated"
         else:
@@ -9322,7 +9346,9 @@ def _solution_validity_payload(
     else:
         status_reason = "infeasibility_reasons_present"
         result_class = "postsolve_infeasible"
-    validated_feasible = not blocking_reasons and status_upper in {"SOLVED_FEASIBLE", "OPTIMAL", "FEASIBLE"}
+    validated_feasible = bool(
+        not blocking_reasons and has_validated_incumbent_status
+    )
     validated_no_cancellation = bool(validated_feasible and unserved == 0)
     research_assignment_eligible = bool(
         str(meta.get("phase") or "") == "phase2_assignment_only"
