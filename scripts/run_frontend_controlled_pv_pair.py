@@ -435,6 +435,10 @@ def build_optimization_payload(
                 "stage2_time_limit_seconds": None,
                 "stage1_stage2_candidate_limit": 1,
                 "stage1_composition_search_radius": 0,
+                # Five percent prevents a merely feasible Phase 3 seed near
+                # the 640,000 JPY vehicle-day lower bound from terminating the
+                # integrated solve immediately at the former 10% threshold.
+                "mip_gap": 0.05,
                 "integrated_actual_cost_objective": True,
             }
         )
@@ -458,6 +462,7 @@ def build_optimization_payload(
                 "stage2_time_limit_seconds": None,
                 "stage1_stage2_candidate_limit": 1,
                 "stage1_composition_search_radius": 0,
+                "mip_gap": 0.05,
                 "integrated_actual_cost_objective": False,
                 "integrated_ev_utilization_mode": (
                     "minimum_ice_fuel_lexicographic"
@@ -1975,6 +1980,56 @@ def _claim_artifacts_consistent(
     return gap_semantics_match and integrated_scope_match
 
 
+def _phase4_warm_start_evidence_valid(
+    *,
+    seed_audit: Mapping[str, Any],
+    integrated_start_audit: Mapping[str, Any],
+) -> bool:
+    """Require a same-problem, physical Stage 2 seed and full discrete start."""
+
+    seed_fingerprint = str(
+        seed_audit.get("seed_plan_fingerprint") or ""
+    )
+    start_fingerprint = str(
+        integrated_start_audit.get("seed_plan_fingerprint") or ""
+    )
+    valid_fingerprint = bool(
+        len(seed_fingerprint) == 64
+        and all(
+            character in "0123456789abcdef"
+            for character in seed_fingerprint
+        )
+    )
+    return bool(
+        seed_audit.get("accepted") is True
+        and seed_audit.get("same_canonical_problem") is True
+        and seed_audit.get("seed_exact_trip_set_match") is True
+        and seed_audit.get("seed_stage2_feasible") is True
+        and seed_audit.get("seed_independent_physical_feasible") is True
+        and valid_fingerprint
+        and integrated_start_audit.get("applied") is True
+        and integrated_start_audit.get("same_canonical_problem") is True
+        and integrated_start_audit.get(
+            "complete_assignment_binary_start"
+        )
+        is True
+        and integrated_start_audit.get(
+            "complete_charger_binary_start"
+        )
+        is True
+        and integrated_start_audit.get(
+            "complete_bess_mode_binary_start"
+        )
+        is True
+        and integrated_start_audit.get("complete_vehicle_soc_start")
+        is True
+        and integrated_start_audit.get("complete_bess_soc_start") is True
+        and integrated_start_audit.get("physical_energy_trace_start")
+        is True
+        and start_fingerprint == seed_fingerprint
+    )
+
+
 def _case_gate_audit(
     *,
     name: str,
@@ -2047,6 +2102,7 @@ def _case_gate_audit(
         "phase4_cost_constrained_ev_utilization",
     }
     phase4_integrated = phase4_actual_cost or phase4_policy
+    requested_gap_ratio = 0.05 if phase4_integrated else 0.1
     phase4_policy_cost_cap_valid = bool(
         not phase4_policy
         or (
@@ -2074,9 +2130,19 @@ def _case_gate_audit(
         composition_search.get("target_records") or []
     )
     expected_frontier_target_count = 35 - 15 + 1
+    phase4_phase3_seed_audit = dict(
+        settings.get("phase4_phase3_seed_audit") or {}
+    )
+    integrated_warm_start_audit = dict(
+        settings.get("integrated_warm_start_audit") or {}
+    )
     phase4_telemetry_complete = bool(
         _number(settings.get("solve_time_sec")) is not None
         and bool(str(settings.get("solver_termination_reason") or "").strip())
+        and settings.get("has_feasible_incumbent") is True
+        and int(settings.get("incumbent_count") or 0) >= 1
+        and _number(settings.get("first_feasible_sec")) is not None
+        and _number(settings.get("nodes_explored")) is not None
     )
     phase3_telemetry_complete = bool(
         all(
@@ -2268,8 +2334,9 @@ def _case_gate_audit(
             completeness.get("status") == "OK"
             and completeness.get("accepted") is True
         ),
-        "certified_gap_at_most_requested_10_percent": (
-            certified_gap is not None and certified_gap <= 0.1 + 1.0e-12
+        "certified_gap_at_most_requested": (
+            certified_gap is not None
+            and certified_gap <= requested_gap_ratio + 1.0e-12
         ),
         "solver_controls_match_formal_request": (
             settings.get("time_limit_seconds_requested")
@@ -2284,7 +2351,8 @@ def _case_gate_audit(
                 or settings.get("stage2_time_limit_seconds_requested")
                 == (600 if phase3_frontier else 300)
             )
-            and _number(settings.get("mip_gap_requested_ratio")) == 0.1
+            and _number(settings.get("mip_gap_requested_ratio"))
+            == requested_gap_ratio
             and settings.get("stage1_best_obj_stop_enabled") is False
             and settings.get("gurobi_threads") == 1
             and settings.get("random_seed") == 42
@@ -2309,6 +2377,34 @@ def _case_gate_audit(
                 is True
             )
             and (
+                not phase4_integrated
+                or settings.get("phase4_phase3_seed_enabled") is True
+                and settings.get("phase4_phase3_seed_time_limit_sec") == 600
+                and settings.get(
+                    "phase4_phase3_seed_stage1_time_limit_sec"
+                )
+                == 480
+                and settings.get(
+                    "phase4_phase3_seed_stage2_time_limit_sec"
+                )
+                == 120
+                and settings.get("phase4_phase3_seed_candidate_limit") == 10
+                and settings.get(
+                    "phase4_phase3_seed_composition_search_radius"
+                )
+                == 2
+                and settings.get(
+                    "phase4_phase3_seed_search_directionality"
+                )
+                == "primary_plus_symmetric_adjacent_compositions"
+                and settings.get(
+                    "phase4_phase3_seed_bev_frontier_enabled"
+                )
+                is False
+                and settings.get("phase4_total_solver_time_budget_sec")
+                == 4200
+            )
+            and (
                 not phase4_policy
                 or settings.get("integrated_actual_cost_contract_applied")
                 is True
@@ -2324,6 +2420,13 @@ def _case_gate_audit(
             phase4_telemetry_complete
             if phase4_integrated
             else phase3_telemetry_complete
+        ),
+        "phase4_verified_same_problem_warm_start": (
+            not phase4_integrated
+            or _phase4_warm_start_evidence_valid(
+                seed_audit=phase4_phase3_seed_audit,
+                integrated_start_audit=integrated_warm_start_audit,
+            )
         ),
         "candidate_evidence_present": (
             phase4_integrated
@@ -2992,6 +3095,18 @@ def _build_pair_control_audit(
         day_ahead_control_fields += (
             "stage1_time_limit_seconds_requested",
             "stage2_time_limit_seconds_requested",
+        )
+    else:
+        day_ahead_control_fields += (
+            "phase4_phase3_seed_enabled",
+            "phase4_phase3_seed_time_limit_sec",
+            "phase4_phase3_seed_stage1_time_limit_sec",
+            "phase4_phase3_seed_stage2_time_limit_sec",
+            "phase4_phase3_seed_candidate_limit",
+            "phase4_phase3_seed_composition_search_radius",
+            "phase4_phase3_seed_search_directionality",
+            "phase4_phase3_seed_bev_frontier_enabled",
+            "phase4_total_solver_time_budget_sec",
         )
     rolling_control_fields = (
         "gurobi_threads",

@@ -1,6 +1,6 @@
 # Current research release blockers
 
-Status date: 2026-08-07
+Status date: 2026-08-08
 Code status: slot-indexed Stage 1 energy recourse, multi-candidate Stage 2
 evaluation, explicit same-service-date PV controls, and an HTTP-only frontend
 pair runner are implemented. A final-slot return-boundary defect exposed by
@@ -10,10 +10,51 @@ attempt exposed and the current tree corrects a result-claim message that
 conflated integrated-optimality scope with certified-gap status. The corrected
 completion audit also rejects a contradiction between solver settings,
 persisted claim classification, and terminal response. The current
-integrated focused regression passes (`177 passed`) and the complete suite
-passes (`1163 passed`); compileall and `git diff --check` also pass. These code
+integrated focused regression passes (`62 passed`) and the complete suite
+passes (`1203 passed`); compileall and `git diff --check` also pass. These code
 checks alone do not establish release; the subsequent clean-run evidence and
 its remaining blockers are recorded below.
+
+## 2026-08-08 Phase 4 feasible-incumbent remediation status
+
+The current working tree addresses the no-incumbent mechanism seen in the
+clean 2026-08-03 Phase 4 pair. A frontend Phase 4 request now performs a
+bounded Phase 3 seed solve on the same canonical problem. Only an exact
+full-trip, Stage-2-feasible, independently physically valid plan is eligible.
+No prior-run JSON, stale prepared input, fallback plan, post-solve repair, or
+weather-direction preference enters the hand-off.
+
+The integrated solver receives complete assignment/path, charger-selection,
+and BESS-mode binary starts plus the Stage 2 SOC and PV/BESS/grid energy trace.
+Dispatch-only baselines are rejected rather than being labelled as applied
+warm starts. Two explicit audits record the seed acceptance and MIP-start
+coverage in solver settings and result metadata.
+
+The formal actual-cost frontend path now uses a 600-second neutral seed
+(480 seconds Stage 1, 120 seconds Stage 2), followed by a 3,600-second
+integrated solve. The complete 4,200-second maximum and all seed controls are
+persisted in the comparison-control hash. Automatic `used BEV >= K` frontier
+injection is disabled: under a time limit it would be a directed incumbent,
+even though it does not change the final objective. The seed uses only the
+primary candidate and symmetric adjacent-composition search. The formal
+integrated MIP gap target is reduced from 10% to 5%, preventing the first
+13-BEV seed from satisfying the stopping rule solely because its cost is
+within about 9.5% of the 640,000 JPY vehicle-day lower bound.
+
+Seed provenance no longer depends on optional candidate-pool metadata. The
+actual assignment, charger/source decisions, vehicle SOC, depot flows, and
+BESS trace are fingerprinted with SHA-256. Missing vehicle/BESS SOC slots or a
+declared seed that is not loaded into the integrated model now fail the core
+per-run research gate as well as the pair runner.
+
+This implementation does **not** yet discharge the release blocker. Focused
+tests prove the small-model hand-off and actual-cost reconciliation, but the
+264-trip full-network model must be run from a fresh Prepare and clean frozen
+commit. Release remains **BLOCKED** until that run has a physically valid
+incumbent, exact source provenance, terminal energy balance, solver/accounting
+agreement, accepted Rolling chain, unchanged Git state, and an honestly
+reported achieved gap. A time-limit incumbent remains a feasible candidate,
+not a global-optimality result.
 
 ## 2026-08-07 clean high-PV BEV-frontier result
 

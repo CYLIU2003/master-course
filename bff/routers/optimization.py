@@ -9745,6 +9745,9 @@ def _solver_settings_payload(
 
     metadata = dict(solver_metadata or {})
     effective_limits = dict(metadata.get("effective_limits") or {})
+    phase4_seed_audit = dict(
+        metadata.get("phase4_phase3_seed_audit") or {}
+    )
     random_seed = _int_or_none(metadata.get("random_seed"))
     if random_seed is None:
         random_seed = _int_or_none(random_seed_requested)
@@ -9783,6 +9786,15 @@ def _solver_settings_payload(
         "mip_gap_achieved_percent": None if achieved_gap is None else achieved_gap * 100.0,
         "gurobi_mip_gap_is_ratio": True,
         "has_feasible_incumbent": has_feasible_incumbent,
+        "incumbent_count": _int_or_none(
+            metadata.get("incumbent_count")
+        ),
+        "first_feasible_sec": _float_or_none(
+            metadata.get("first_feasible_sec")
+        ),
+        "nodes_explored": _int_or_none(
+            metadata.get("nodes_explored")
+        ),
         "solver_termination_reason": metadata.get("termination_reason"),
         "supports_exact_milp": bool(metadata.get("supports_exact_milp", False)),
         "fallback_applied": bool(metadata.get("fallback_applied", False)),
@@ -10008,6 +10020,39 @@ def _solver_settings_payload(
         ),
         "integrated_actual_cost_contract_applied": bool(
             metadata.get("integrated_actual_cost_contract_applied", False)
+        ),
+        "phase4_phase3_seed_audit": phase4_seed_audit,
+        "phase4_phase3_seed_enabled": bool(
+            phase4_seed_audit.get("requested", False)
+        ),
+        "phase4_phase3_seed_time_limit_sec": _int_or_none(
+            phase4_seed_audit.get("seed_time_limit_sec")
+        ),
+        "phase4_phase3_seed_stage1_time_limit_sec": _int_or_none(
+            phase4_seed_audit.get("seed_stage1_time_limit_sec")
+        ),
+        "phase4_phase3_seed_stage2_time_limit_sec": _int_or_none(
+            phase4_seed_audit.get("seed_stage2_time_limit_sec")
+        ),
+        "phase4_phase3_seed_candidate_limit": _int_or_none(
+            phase4_seed_audit.get("seed_stage1_stage2_candidate_limit")
+        ),
+        "phase4_phase3_seed_composition_search_radius": _int_or_none(
+            phase4_seed_audit.get(
+                "seed_stage1_composition_search_radius"
+            )
+        ),
+        "phase4_phase3_seed_search_directionality": (
+            phase4_seed_audit.get("seed_search_directionality")
+        ),
+        "phase4_phase3_seed_bev_frontier_enabled": bool(
+            phase4_seed_audit.get("seed_bev_frontier_enabled", False)
+        ),
+        "phase4_total_solver_time_budget_sec": _int_or_none(
+            phase4_seed_audit.get("total_solver_time_budget_sec")
+        ),
+        "integrated_warm_start_audit": dict(
+            metadata.get("integrated_warm_start_audit") or {}
         ),
         "integrated_primary_objective_kind": metadata.get(
             "integrated_primary_objective_kind"
@@ -10406,6 +10451,23 @@ def _run_optimization(
                         integrated_actual_cost_upper_bound_delta_ratio
                     )
                 ),
+                phase4_phase3_seed_enabled=(
+                    phase_token == "phase4_integrated"
+                ),
+                phase4_phase3_seed_time_limit_sec=(
+                    min(
+                        max(int(time_limit_seconds) // 6, 60),
+                        600,
+                    )
+                    if phase_token == "phase4_integrated"
+                    else 600
+                ),
+                # Formal actual-cost Phase 4 uses a neutral feasible start.
+                # A one-sided ``used BEV >= K`` frontier would be a directed
+                # search policy and could survive as the final incumbent at a
+                # time limit.  Explicit frontier sensitivities remain Phase 3
+                # experiments and are never injected here.
+                phase4_phase3_seed_bev_frontier_enabled=False,
                 gurobi_threads=gurobi_threads,
                 mip_gap=mip_gap,
                 random_seed=random_seed,

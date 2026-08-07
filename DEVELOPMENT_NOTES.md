@@ -1,5 +1,52 @@
 # Development Notes
 
+## 2026-08-08 Phase 4 same-problem feasible-incumbent hand-off
+
+- Root cause of the 2026-08-03 full Phase 4 failure was not the absence of a
+  `Start` vector. The old dispatch path-cover baseline supplied only selected
+  assignment/charging values, left most path and charger binaries undefined,
+  and had no verified Stage 2 SOC/source-flow trace. The 678,600-arc model
+  consequently reached 3,600 seconds with no valid incumbent.
+- `OptimizationEngine` can now run Phase 3 as an in-process seed solve for a
+  frontend Phase 4 request. It uses the already materialized Phase 4 canonical
+  problem, so timetable, selected fleet, initial SOC, chargers, PV, tariff,
+  BESS, and objective controls cannot drift through an external artifact.
+  Fallback and post-solve repair are disabled for the seed.
+- Formal actual-cost Phase 4 reserves 600 seconds for a neutral seed
+  (480 seconds Stage 1 and 120 seconds Stage 2) and 3,600 seconds for the
+  integrated solve. The 4,200-second total maximum and every seed control are
+  exported and included in the pair control hash. The automatic one-sided
+  `used BEV >= K` frontier was removed because a time-limited integrated solve
+  could retain that directed incumbent. The seed now uses the primary plan
+  plus symmetric adjacent-composition candidates only.
+- The frontend formal Phase 4 gap target is 5%, not 10%. A 13/19 seed near
+  707,000 JPY is already within roughly 9.5% of the 640,000 JPY vehicle-day
+  lower bound, so the former target could stop before the integrated model
+  searched for a weather-responsive lower-cost incumbent.
+- Seed acceptance fails closed unless the exact eligible-trip set is served,
+  Stage 1 and Stage 2 are feasible, and `FeasibilityChecker` independently
+  accepts the plan. Accepted metadata identifies the plan as
+  `mip_start_only`; it is not a Phase 4 result or optimality certificate.
+- The integrated adapter now submits explicit zero/one starts for every
+  assignment, connection, boundary, vehicle-use, charging, physical-charger,
+  and BESS-mode binary. It also supplies charger power, vehicle/BESS SOC,
+  vehicle source split, depot PV/BESS/grid flows, curtailment, grid import,
+  demand peaks, and refueling starts. Unverified dispatch baselines are no
+  longer reported as applied integrated warm starts.
+- `phase4_phase3_seed_audit_v1` and `integrated_mip_start_audit_v1` are carried
+  into solver metadata and `solver_settings.json`. They expose acceptance,
+  same-problem provenance, a plan-native SHA-256 fingerprint, complete vehicle
+  and BESS SOC traces, full-coverage checks, failure reasons, and variable
+  coverage counts. A declared but failed seed hand-off blocks per-run research
+  acceptance in the core engine, not only in the pair wrapper.
+- Focused regression covers acceptance of a same-problem Phase 3 plan with a
+  physical charger and BESS, rejection of an unverified dispatch baseline,
+  actual-cost reconciliation, and existing Stage 1/strict-coverage behavior.
+  The final focused set passes `62` tests and the complete repository suite
+  passes `1203` tests; `compileall` and `git diff --check` also pass.
+  A fresh clean-commit 264-trip HTTP run is still required; passing unit tests
+  alone do not resolve the research blocker.
+
 ## 2026-08-07 clean 1,000 kW PV BEV-frontier evidence
 
 - Executed a fresh frontend HTTP pair from clean frozen commit

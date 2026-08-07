@@ -774,6 +774,43 @@ def _comparison_case_manifest(
             "stage1_composition_search_radius": solver_settings.get(
                 "stage1_composition_search_radius_requested"
             ),
+            "phase4_phase3_seed_enabled": solver_settings.get(
+                "phase4_phase3_seed_enabled"
+            ),
+            "phase4_phase3_seed_time_limit_sec": solver_settings.get(
+                "phase4_phase3_seed_time_limit_sec"
+            ),
+            "phase4_phase3_seed_stage1_time_limit_sec": (
+                solver_settings.get(
+                    "phase4_phase3_seed_stage1_time_limit_sec"
+                )
+            ),
+            "phase4_phase3_seed_stage2_time_limit_sec": (
+                solver_settings.get(
+                    "phase4_phase3_seed_stage2_time_limit_sec"
+                )
+            ),
+            "phase4_phase3_seed_candidate_limit": solver_settings.get(
+                "phase4_phase3_seed_candidate_limit"
+            ),
+            "phase4_phase3_seed_composition_search_radius": (
+                solver_settings.get(
+                    "phase4_phase3_seed_composition_search_radius"
+                )
+            ),
+            "phase4_phase3_seed_search_directionality": (
+                solver_settings.get(
+                    "phase4_phase3_seed_search_directionality"
+                )
+            ),
+            "phase4_phase3_seed_bev_frontier_enabled": (
+                solver_settings.get(
+                    "phase4_phase3_seed_bev_frontier_enabled"
+                )
+            ),
+            "phase4_total_solver_time_budget_sec": solver_settings.get(
+                "phase4_total_solver_time_budget_sec"
+            ),
             "random_seed": solver_settings.get("random_seed"),
         },
         "rolling_solver_controls": {

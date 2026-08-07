@@ -1,6 +1,7 @@
 from dataclasses import replace
 from types import SimpleNamespace
 
+import src.optimization.engine as optimization_engine_module
 from src.optimization.common.problem import (
     CanonicalOptimizationProblem,
     DepotEnergyAsset,
@@ -12,6 +13,9 @@ from src.optimization.common.problem import (
     EnergyPriceSlot,
 )
 from src.optimization.common.builder import ProblemBuilder
+from src.optimization.common.seed_fingerprint import (
+    phase4_seed_plan_fingerprint,
+)
 from src.optimization.engine import (
     OptimizationEngine,
     actual_cost_objective_reconciles,
@@ -179,6 +183,305 @@ def test_phase4_solver_reconciles_integrated_actual_cost_on_full_day() -> None:
         "solver_objective_matches_accounting_total"
     ] is True
     assert result.cost_breakdown["objective_is_actual_cost"] is True
+
+
+def _phase4_seed_problem(
+    scenario_id: str = "actual-cost-verified-phase3-seed",
+) -> CanonicalOptimizationProblem:
+    dispatch_context = _dispatch_context()
+    dispatch_context = replace(
+        dispatch_context,
+        trips=tuple(
+            replace(trip, operator_id="tokyu")
+            for trip in dispatch_context.trips
+        ),
+    )
+    problem = ProblemBuilder().build_from_dispatch(
+        dispatch_context,
+        scenario_id=scenario_id,
+        vehicle_counts={"BEV": 1},
+        chargers=(ChargerDefinition("chg-1", "DEPOT", 60.0),),
+        canonical_depot_id="DEPOT",
+        timestep_min=60,
+        operation_start_time="05:00",
+        operation_end_time="23:00",
+        final_soc_floor_percent=20.0,
+        final_soc_target_percent=80.0,
+        final_soc_target_tolerance_percent=0.0,
+        price_slots=tuple(
+            EnergyPriceSlot(
+                slot_index=slot_index,
+                grid_buy_yen_per_kwh=10.0,
+            )
+            for slot_index in range(24)
+        ),
+        vehicle_usage_cost_jpy_per_used_bus=0.0,
+    )
+    return replace(
+        problem,
+        depot_energy_assets={
+            "DEPOT": DepotEnergyAsset(
+                depot_id="DEPOT",
+                bess_enabled=True,
+                bess_energy_kwh=200.0,
+                bess_power_kw=60.0,
+                bess_initial_soc_kwh=100.0,
+                bess_soc_min_kwh=20.0,
+                bess_soc_max_kwh=180.0,
+                bess_terminal_soc_min_kwh=20.0,
+            )
+        },
+        metadata={
+            **dict(problem.metadata or {}),
+            "research_fleet_validation": {"status": "OK"},
+            "service_calendar_validation": {"status": "OK"},
+        },
+    )
+
+
+def test_phase4_uses_verified_same_problem_phase3_plan_as_complete_mip_start() -> None:
+    problem = _phase4_seed_problem()
+    result = OptimizationEngine().solve(
+        problem,
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            phase="phase4_integrated",
+            integrated_actual_cost_objective=True,
+            phase4_phase3_seed_enabled=True,
+            phase4_phase3_seed_time_limit_sec=60,
+            stage1_stage2_candidate_limit=1,
+            time_limit_sec=30,
+            mip_gap=0.0,
+            random_seed=42,
+            warm_start=True,
+            allow_postsolve_repair=False,
+            research_run=True,
+            requested_phase_token="phase4_integrated",
+            requested_phase="phase4_integrated",
+            resolved_phase="phase4_integrated",
+            executed_phase="phase4_integrated",
+        ),
+    )
+
+    assert result.feasible, result.infeasibility_reasons
+    assert result.solver_metadata["warm_start_applied"] is True
+    assert result.solver_metadata["warm_start_source"] == (
+        "verified_phase3_two_stage_phase4_mip_start"
+    )
+    assert result.solver_metadata["phase4_phase3_seed_audit"][
+        "accepted"
+    ] is True
+    assert result.solver_metadata["phase4_phase3_seed_audit"][
+        "seed_stage1_stage2_candidate_limit"
+    ] == 10
+    assert len(
+        result.solver_metadata["phase4_phase3_seed_audit"][
+            "seed_plan_fingerprint"
+        ]
+    ) == 64
+    audit = result.plan.metadata["integrated_warm_start_audit"]
+    assert audit["applied"] is True
+    assert audit["same_canonical_problem"] is True
+    assert audit["complete_assignment_binary_start"] is True
+    assert audit["complete_charger_binary_start"] is True
+    assert audit["complete_vehicle_soc_start"] is True
+    assert audit["complete_bess_soc_start"] is True
+    assert audit["complete_bess_mode_binary_start"] is True
+    assert audit["bess_mode_binary_start_count"] > 0
+    assert audit["physical_energy_trace_start"] is True
+    assert result.solver_metadata[
+        "actual_cost_objective_numeric_reconciliation_passed"
+    ] is True
+    assert result.solver_metadata["research_run_accepted"] is True
+    assert result.solver_metadata["research_acceptance_checks"][
+        "phase4_declared_seed_handoff_satisfied"
+    ] is True
+    assert result.solver_metadata["research_acceptance_checks"][
+        "phase4_no_hidden_bev_directed_seed"
+    ] is True
+
+
+def test_phase4_formal_gate_rejects_failed_declared_seed(monkeypatch) -> None:
+    problem = _phase4_seed_problem("actual-cost-rejected-formal-seed")
+    monkeypatch.setattr(
+        optimization_engine_module,
+        "phase4_seed_plan_fingerprint",
+        lambda _plan: "",
+    )
+
+    result = OptimizationEngine().solve(
+        problem,
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            phase="phase4_integrated",
+            integrated_actual_cost_objective=True,
+            phase4_phase3_seed_enabled=True,
+            phase4_phase3_seed_time_limit_sec=60,
+            stage1_stage2_candidate_limit=1,
+            time_limit_sec=30,
+            mip_gap=0.0,
+            random_seed=42,
+            warm_start=True,
+            allow_postsolve_repair=False,
+            research_run=True,
+            requested_phase_token="phase4_integrated",
+            requested_phase="phase4_integrated",
+            resolved_phase="phase4_integrated",
+            executed_phase="phase4_integrated",
+        ),
+    )
+
+    assert result.feasible, result.infeasibility_reasons
+    assert result.solver_metadata["phase4_phase3_seed_audit"][
+        "accepted"
+    ] is False
+    assert result.solver_metadata["research_acceptance_checks"][
+        "phase4_declared_seed_handoff_satisfied"
+    ] is False
+    assert result.solver_metadata["research_run_accepted"] is False
+
+
+def test_phase4_rejects_incomplete_bess_soc_seed_trace() -> None:
+    engine = OptimizationEngine()
+    problem = _phase4_seed_problem("actual-cost-incomplete-bess-seed")
+    config = OptimizationConfig(
+        mode=OptimizationMode.MILP,
+        phase="phase4_integrated",
+        integrated_actual_cost_objective=True,
+        phase4_phase3_seed_enabled=True,
+        phase4_phase3_seed_time_limit_sec=60,
+        stage1_stage2_candidate_limit=1,
+        time_limit_sec=30,
+        mip_gap=0.0,
+        random_seed=42,
+        warm_start=True,
+        allow_postsolve_repair=False,
+    )
+    seeded_problem = engine._with_verified_phase4_phase3_seed(
+        problem,
+        config,
+    )
+    assert seeded_problem.baseline_plan is not None
+    baseline_metadata = dict(seeded_problem.baseline_plan.metadata or {})
+    baseline_metadata.pop("bess_soc_start_kwh_by_depot_slot", None)
+    incomplete_plan_without_updated_hash = replace(
+        seeded_problem.baseline_plan,
+        metadata=baseline_metadata,
+    )
+    incomplete_fingerprint = phase4_seed_plan_fingerprint(
+        incomplete_plan_without_updated_hash
+    )
+    seed_audit = dict(
+        baseline_metadata.get("phase4_phase3_seed_audit") or {}
+    )
+    seed_audit["seed_plan_fingerprint"] = incomplete_fingerprint
+    baseline_metadata["phase4_phase3_seed_audit"] = seed_audit
+    baseline_metadata[
+        "phase4_seed_plan_fingerprint"
+    ] = incomplete_fingerprint
+    incomplete_plan = replace(
+        incomplete_plan_without_updated_hash,
+        metadata=baseline_metadata,
+    )
+    incomplete_problem = replace(
+        seeded_problem,
+        baseline_plan=incomplete_plan,
+    )
+
+    result = engine.solve(
+        incomplete_problem,
+        replace(config, phase4_phase3_seed_enabled=False),
+    )
+
+    assert result.feasible, result.infeasibility_reasons
+    assert result.solver_metadata["warm_start_applied"] is False
+    assert result.solver_metadata["integrated_warm_start_audit"][
+        "reason"
+    ] == "seed_bess_start_soc_trace_missing"
+
+
+def test_phase4_rejects_seed_plan_changed_after_fingerprinting() -> None:
+    engine = OptimizationEngine()
+    problem = _phase4_seed_problem("actual-cost-tampered-seed")
+    config = OptimizationConfig(
+        mode=OptimizationMode.MILP,
+        phase="phase4_integrated",
+        integrated_actual_cost_objective=True,
+        phase4_phase3_seed_enabled=True,
+        phase4_phase3_seed_time_limit_sec=60,
+        stage1_stage2_candidate_limit=1,
+        time_limit_sec=30,
+        mip_gap=0.0,
+        random_seed=42,
+        warm_start=True,
+        allow_postsolve_repair=False,
+    )
+    seeded_problem = engine._with_verified_phase4_phase3_seed(
+        problem,
+        config,
+    )
+    assert seeded_problem.baseline_plan is not None
+    tampered_plan = replace(
+        seeded_problem.baseline_plan,
+        vehicle_soc_kwh_by_vehicle_slot={},
+    )
+
+    result = engine.solve(
+        replace(seeded_problem, baseline_plan=tampered_plan),
+        replace(config, phase4_phase3_seed_enabled=False),
+    )
+
+    assert result.feasible, result.infeasibility_reasons
+    assert result.solver_metadata["warm_start_applied"] is False
+    assert result.solver_metadata["integrated_warm_start_audit"][
+        "reason"
+    ] == "seed_plan_fingerprint_mismatch"
+
+
+def test_phase4_rejects_unverified_dispatch_baseline_as_integrated_mip_start() -> None:
+    problem = ProblemBuilder().build_from_dispatch(
+        _dispatch_context(),
+        scenario_id="actual-cost-reject-unverified-seed",
+        vehicle_counts={"BEV": 1},
+        chargers=(ChargerDefinition("chg-1", "DEPOT", 60.0),),
+        canonical_depot_id="DEPOT",
+        timestep_min=60,
+        operation_start_time="05:00",
+        operation_end_time="23:00",
+        final_soc_floor_percent=20.0,
+        final_soc_target_percent=80.0,
+        final_soc_target_tolerance_percent=0.0,
+        price_slots=tuple(
+            EnergyPriceSlot(
+                slot_index=slot_index,
+                grid_buy_yen_per_kwh=10.0,
+            )
+            for slot_index in range(24)
+        ),
+        vehicle_usage_cost_jpy_per_used_bus=0.0,
+    )
+    assert problem.baseline_plan is not None
+
+    result = OptimizationEngine().solve(
+        problem,
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            phase="phase4_integrated",
+            integrated_actual_cost_objective=True,
+            phase4_phase3_seed_enabled=False,
+            time_limit_sec=30,
+            mip_gap=0.0,
+            random_seed=42,
+            warm_start=True,
+            allow_postsolve_repair=False,
+        ),
+    )
+
+    assert result.feasible, result.infeasibility_reasons
+    assert result.solver_metadata["warm_start_applied"] is False
+    assert result.solver_metadata["integrated_warm_start_audit"][
+        "reason"
+    ] == "baseline_is_not_verified_phase3_seed"
 
 
 def test_phase4_ev_utilization_enforces_canonical_cost_cap() -> None:

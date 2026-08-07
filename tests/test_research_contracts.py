@@ -97,6 +97,37 @@ def test_solver_settings_preserves_enabled_bev_frontier_control() -> None:
     assert payload["stage1_bev_frontier_enabled"] is True
 
 
+def test_solver_settings_persists_phase4_seed_and_total_time_budget() -> None:
+    payload = _solver_settings_payload(
+        time_limit_seconds_requested=3600,
+        mip_gap_requested=0.05,
+        solver_metadata={
+            "phase4_phase3_seed_audit": {
+                "requested": True,
+                "seed_time_limit_sec": 600,
+                "seed_stage1_time_limit_sec": 480,
+                "seed_stage2_time_limit_sec": 120,
+                "seed_stage1_stage2_candidate_limit": 10,
+                "seed_stage1_composition_search_radius": 2,
+                "seed_search_directionality": (
+                    "primary_plus_symmetric_adjacent_compositions"
+                ),
+                "seed_bev_frontier_enabled": False,
+                "total_solver_time_budget_sec": 4200,
+            }
+        },
+    )
+
+    assert payload["phase4_phase3_seed_enabled"] is True
+    assert payload["phase4_phase3_seed_time_limit_sec"] == 600
+    assert payload["phase4_phase3_seed_stage1_time_limit_sec"] == 480
+    assert payload["phase4_phase3_seed_stage2_time_limit_sec"] == 120
+    assert payload["phase4_phase3_seed_candidate_limit"] == 10
+    assert payload["phase4_phase3_seed_composition_search_radius"] == 2
+    assert payload["phase4_phase3_seed_bev_frontier_enabled"] is False
+    assert payload["phase4_total_solver_time_budget_sec"] == 4200
+
+
 def test_infeasible_accounting_has_distinct_cost_fields_and_null_validated_cost() -> None:
     summary = build_accounting_summary(
         vehicle_rows=(),

@@ -402,6 +402,8 @@ def test_optimization_payload_exposes_frontier_and_integrated_actual_cost() -> N
     assert integrated["mode"] == "phase4_integrated"
     assert integrated["integrated_actual_cost_objective"] is True
     assert integrated["time_limit_seconds"] >= 3600
+    assert integrated["mip_gap"] == pytest.approx(0.05)
+    assert integrated.get("stage1_bev_frontier_enabled", False) is False
 
     maximum_ev = runner.build_optimization_payload(
         "prepared-maximum-ev",
@@ -427,6 +429,49 @@ def test_optimization_payload_exposes_frontier_and_integrated_actual_cost() -> N
         runner.build_optimization_payload(
             "prepared-missing-cap",
             experiment_case="phase4_cost_constrained_ev_utilization",
+        )
+
+
+def test_phase4_formal_gate_requires_verified_same_problem_full_warm_start() -> None:
+    runner = _load_runner()
+    seed_fingerprint = "a" * 64
+    seed_audit = {
+        "accepted": True,
+        "same_canonical_problem": True,
+        "seed_exact_trip_set_match": True,
+        "seed_stage2_feasible": True,
+        "seed_independent_physical_feasible": True,
+        "seed_plan_fingerprint": seed_fingerprint,
+    }
+    start_audit = {
+        "applied": True,
+        "same_canonical_problem": True,
+        "complete_assignment_binary_start": True,
+        "complete_charger_binary_start": True,
+        "complete_vehicle_soc_start": True,
+        "complete_bess_soc_start": True,
+        "complete_bess_mode_binary_start": True,
+        "physical_energy_trace_start": True,
+        "seed_plan_fingerprint": seed_fingerprint,
+    }
+
+    assert runner._phase4_warm_start_evidence_valid(
+        seed_audit=seed_audit,
+        integrated_start_audit=start_audit,
+    )
+    for key in tuple(seed_audit):
+        broken = dict(seed_audit)
+        broken[key] = False
+        assert not runner._phase4_warm_start_evidence_valid(
+            seed_audit=broken,
+            integrated_start_audit=start_audit,
+        )
+    for key in tuple(start_audit):
+        broken = dict(start_audit)
+        broken[key] = False
+        assert not runner._phase4_warm_start_evidence_valid(
+            seed_audit=seed_audit,
+            integrated_start_audit=broken,
         )
 
 

@@ -18,6 +18,9 @@ from src.objective_modes import normalize_objective_mode
 from src.optimization.common.cost_components import normalize_cost_component_flags
 from src.optimization.common.evaluator import CostEvaluator
 from src.optimization.common.feasibility import FeasibilityChecker
+from src.optimization.common.seed_fingerprint import (
+    phase4_seed_plan_fingerprint,
+)
 from src.optimization.common.bess_terminal_policy import (
     resolve_bess_terminal_soc_target_kwh,
 )
@@ -3185,93 +3188,50 @@ class GurobiMILPAdapter:
                 if bonus > 0.0:
                     objective -= _return_leg_bonus_weight * bonus * var
 
-        if getattr(config, "warm_start", True) and problem.baseline_plan is not None:
-            baseline_plan = self._repaired_baseline_plan_for_warm_start(problem)
-            baseline_duty_vehicle_map = baseline_plan.duty_vehicle_map()
-            baseline_served_trip_ids: Set[str] = set()
-            baseline_used_vehicle_ids: Set[str] = set()
-            baseline_used_vehicle_days: Set[Tuple[str, int]] = set()
-            baseline_charge_kw_by_key: Dict[Tuple[str, int], float] = {}
-            baseline_refuel_l_by_key: Dict[Tuple[str, int], float] = {}
-
-            for slot in baseline_plan.charging_slots:
-                key = (str(slot.vehicle_id), int(slot.slot_index))
-                baseline_charge_kw_by_key[key] = baseline_charge_kw_by_key.get(key, 0.0) + max(
-                    float(slot.charge_kw or 0.0),
-                    0.0,
-                )
-            for slot in baseline_plan.refuel_slots:
-                key = (str(slot.vehicle_id), int(slot.slot_index))
-                baseline_refuel_l_by_key[key] = baseline_refuel_l_by_key.get(key, 0.0) + max(
-                    float(slot.refuel_liters or 0.0),
-                    0.0,
-                )
-
-            for duty in baseline_plan.duties:
-                vehicle_id = baseline_duty_vehicle_map.get(duty.duty_id, duty.duty_id)
-                if vehicle_id not in used_vehicle:
-                    continue
-                baseline_used_vehicle_ids.add(vehicle_id)
-                previous_trip_id: Optional[str] = None
-                for leg in duty.legs:
-                    trip_id = leg.trip.trip_id
-                    baseline_served_trip_ids.add(trip_id)
-                    trip_var = y.get((vehicle_id, trip_id))
-                    if trip_var is not None:
-                        trip_var.Start = 1.0
-                    unserved_var = unserved.get(trip_id)
-                    if unserved_var is not None:
-                        unserved_var.Start = 0.0
-                    day_idx = int(trip_day_index_by_trip_id.get(trip_id, 0))
-                    baseline_used_vehicle_days.add((vehicle_id, day_idx))
-                    if previous_trip_id is not None:
-                        arc_var = x.get((vehicle_id, previous_trip_id, trip_id))
-                        if arc_var is not None:
-                            arc_var.Start = 1.0
-                    previous_trip_id = trip_id
-
-                if duty.legs:
-                    first_trip_id = duty.legs[0].trip.trip_id
-                    last_trip_id = duty.legs[-1].trip.trip_id
-                    start_var = start_arc.get((vehicle_id, first_trip_id))
-                    if start_var is not None:
-                        start_var.Start = 1.0
-                    end_var = end_arc.get((vehicle_id, last_trip_id))
-                    if end_var is not None:
-                        end_var.Start = 1.0
-
-            for trip in problem.trips:
-                if trip.trip_id in baseline_served_trip_ids:
-                    continue
-                unserved_var = unserved.get(trip.trip_id)
-                if unserved_var is not None:
-                    unserved_var.Start = 1.0
-
-            for vehicle in problem.vehicles:
-                vehicle_id = vehicle.vehicle_id
-                used_vehicle_var = used_vehicle.get(vehicle_id)
-                if used_vehicle_var is not None:
-                    used_vehicle_var.Start = 1.0 if vehicle_id in baseline_used_vehicle_ids else 0.0
-                for day_idx in day_indices:
-                    day_var = used_vehicle_day.get((vehicle_id, day_idx))
-                    if day_var is not None:
-                        day_var.Start = 1.0 if (vehicle_id, day_idx) in baseline_used_vehicle_days else 0.0
-
-            for (vehicle_id, slot_idx), var in charge_on_var.items():
-                charge_kw = baseline_charge_kw_by_key.get((vehicle_id, slot_idx))
-                if charge_kw is None:
-                    continue
-                var.Start = 1.0 if charge_kw > 0.0 else 0.0
-            for (vehicle_id, slot_idx), var in c_var.items():
-                charge_kw = baseline_charge_kw_by_key.get((vehicle_id, slot_idx))
-                if charge_kw is None:
-                    continue
-                var.Start = float(charge_kw)
-            for (vehicle_id, slot_idx), var in refuel_l_var.items():
-                refuel_l = baseline_refuel_l_by_key.get((vehicle_id, slot_idx))
-                if refuel_l is None:
-                    continue
-                var.Start = float(refuel_l)
+        integrated_warm_start_audit = self._apply_integrated_plan_warm_start(
+            problem,
+            enabled=bool(getattr(config, "warm_start", True)),
+            y=y,
+            x=x,
+            start_arc=start_arc,
+            end_arc=end_arc,
+            unserved=unserved,
+            used_vehicle=used_vehicle,
+            used_vehicle_day=used_vehicle_day,
+            trip_day_index_by_trip_id=trip_day_index_by_trip_id,
+            slot_indices=slot_indices,
+            timestep_h=timestep_h,
+            charge_on_var=charge_on_var,
+            charge_session_start_var=charge_session_start_var,
+            charge_power_var=c_var,
+            discharge_power_var=d_var,
+            vehicle_soc_var=s_var,
+            refuel_l_var=refuel_l_var,
+            physical_charger_assignment_var=(
+                physical_charger_assignment_var
+            ),
+            physical_charger_power_var=physical_charger_power_var,
+            grid_to_vehicle_var=g2vehicle_var,
+            pv_to_vehicle_var=pv2vehicle_var,
+            bess_to_vehicle_var=bess2vehicle_var,
+            grid_to_bus_var=g2bus_var,
+            pv_to_bus_var=pv2bus_var,
+            grid_to_bess_var=g2bess_var,
+            pv_to_bess_var=pv2bess_var,
+            bess_to_bus_var=bess2bus_var,
+            pv_curtailment_var=pv_curt_var,
+            bess_soc_var=bess_soc_var,
+            grid_import_var=grid_import_var,
+            contract_over_limit_var=contract_over_limit_var,
+            average_power_var=p_avg_depot_var,
+            on_peak_power_var=w_on_depot_var,
+            off_peak_power_var=w_off_depot_var,
+            bess_charge_mode_var=bess_charge_mode_var,
+            bess_discharge_mode_var=bess_discharge_mode_var,
+            bess_terminal_soc_deviation_var=(
+                bess_terminal_soc_deviation_var
+            ),
+        )
 
         integrated_ev_utilization_mode = str(
             getattr(config, "integrated_ev_utilization_mode", "disabled")
@@ -3471,11 +3431,11 @@ class GurobiMILPAdapter:
                 nodes_explored = int(model.NodeCount)
             except Exception:
                 nodes_explored = None
-        warm_start_applied = bool(getattr(config, "warm_start", True) and problem.baseline_plan is not None)
-        warm_start_source = (
-            str((problem.baseline_plan.metadata or {}).get("source") or "")
-            if problem.baseline_plan is not None
-            else ""
+        warm_start_applied = bool(
+            integrated_warm_start_audit.get("applied", False)
+        )
+        warm_start_source = str(
+            integrated_warm_start_audit.get("source") or ""
         )
         common_outcome_kwargs = {
             "has_feasible_incumbent": has_feasible_incumbent,
@@ -3548,6 +3508,9 @@ class GurobiMILPAdapter:
                     "strict_coverage_enforced": service_coverage_mode == "strict",
                     "startup_infeasible_assignment_count": len(startup_infeasible_trip_ids),
                     "startup_infeasible_trip_ids": tuple(sorted(startup_infeasible_trip_ids)),
+                    "integrated_warm_start_audit": (
+                        integrated_warm_start_audit
+                    ),
                     "startup_infeasible_vehicle_ids": tuple(sorted(startup_infeasible_vehicle_ids)),
                     "arc_pruning_summary": arc_pruning_summary,
                     "successor_pruning_enabled": bool(arc_pruning_summary.get("successor_pruning_enabled", False)),
@@ -3876,6 +3839,9 @@ class GurobiMILPAdapter:
                 ),
                 "integrated_gurobi_integrality_tol": (
                     integrated_integrality_tol
+                ),
+                "integrated_warm_start_audit": (
+                    integrated_warm_start_audit
                 ),
                 "horizon_start": str(problem.scenario.horizon_start or "00:00"),
                 "timestep_min": int(problem.scenario.timestep_min),
@@ -11727,6 +11693,504 @@ class GurobiMILPAdapter:
         for key, var in used_vehicle_day.items():
             var.Start = 1.0 if key in selected_used_vehicle_day else 0.0
         return True, source, ""
+
+    def _apply_integrated_plan_warm_start(
+        self,
+        problem: CanonicalOptimizationProblem,
+        *,
+        enabled: bool,
+        y: Mapping[Tuple[str, str], Any],
+        x: Mapping[Tuple[str, str, str], Any],
+        start_arc: Mapping[Tuple[str, str], Any],
+        end_arc: Mapping[Tuple[str, str], Any],
+        unserved: Mapping[str, Any],
+        used_vehicle: Mapping[str, Any],
+        used_vehicle_day: Mapping[Tuple[str, int], Any],
+        trip_day_index_by_trip_id: Mapping[str, int],
+        slot_indices: Sequence[int],
+        timestep_h: float,
+        charge_on_var: Mapping[Tuple[str, int], Any],
+        charge_session_start_var: Mapping[Tuple[str, int], Any],
+        charge_power_var: Mapping[Tuple[str, int], Any],
+        discharge_power_var: Mapping[Tuple[str, int], Any],
+        vehicle_soc_var: Mapping[Tuple[str, int], Any],
+        refuel_l_var: Mapping[Tuple[str, int], Any],
+        physical_charger_assignment_var: Mapping[
+            Tuple[str, str, int], Any
+        ],
+        physical_charger_power_var: Mapping[
+            Tuple[str, str, int], Any
+        ],
+        grid_to_vehicle_var: Mapping[Tuple[str, int], Any],
+        pv_to_vehicle_var: Mapping[Tuple[str, int], Any],
+        bess_to_vehicle_var: Mapping[Tuple[str, int], Any],
+        grid_to_bus_var: Mapping[Tuple[str, int], Any],
+        pv_to_bus_var: Mapping[Tuple[str, int], Any],
+        grid_to_bess_var: Mapping[Tuple[str, int], Any],
+        pv_to_bess_var: Mapping[Tuple[str, int], Any],
+        bess_to_bus_var: Mapping[Tuple[str, int], Any],
+        pv_curtailment_var: Mapping[Tuple[str, int], Any],
+        bess_soc_var: Mapping[Tuple[str, int], Any],
+        grid_import_var: Mapping[Tuple[str, int], Any],
+        contract_over_limit_var: Mapping[Tuple[str, int], Any],
+        average_power_var: Mapping[Tuple[str, int], Any],
+        on_peak_power_var: Mapping[str, Any],
+        off_peak_power_var: Mapping[str, Any],
+        bess_charge_mode_var: Mapping[Tuple[str, int], Any],
+        bess_discharge_mode_var: Mapping[Tuple[str, int], Any],
+        bess_terminal_soc_deviation_var: Mapping[str, Any],
+    ) -> Dict[str, Any]:
+        """Submit every integrated binary and the physical energy trace.
+
+        Gurobi can complete unspecified continuous values, but a large model
+        cannot reliably repair hundreds of thousands of unspecified path and
+        charger binaries.  This routine therefore accepts only an in-process,
+        independently verified Phase 3 Stage 2 plan and fixes the full MIP
+        start vector (zeros included).  The solver remains free to move away
+        from the start immediately after accepting it.
+        """
+
+        baseline = problem.baseline_plan
+        source = str(
+            (baseline.metadata or {}).get("source") or ""
+        ) if baseline is not None else ""
+        audit: Dict[str, Any] = {
+            "schema_version": "integrated_mip_start_audit_v1",
+            "requested": bool(enabled),
+            "applied": False,
+            "source": source,
+            "reason": "",
+            "verified_phase3_seed_required": True,
+            "same_canonical_problem": False,
+            "complete_assignment_binary_start": False,
+            "complete_charger_binary_start": False,
+            "complete_vehicle_soc_start": False,
+            "complete_bess_soc_start": False,
+            "complete_bess_mode_binary_start": False,
+            "physical_energy_trace_start": False,
+            "seed_plan_fingerprint": "",
+        }
+        if not enabled:
+            audit["reason"] = "disabled_by_config"
+            return audit
+        if baseline is None:
+            audit["reason"] = "baseline_missing"
+            return audit
+        baseline_metadata = dict(baseline.metadata or {})
+        if not bool(baseline_metadata.get("phase4_seed_verified", False)):
+            audit["reason"] = "baseline_is_not_verified_phase3_seed"
+            return audit
+        if not bool(
+            baseline_metadata.get(
+                "phase4_seed_same_canonical_problem",
+                False,
+            )
+        ):
+            audit["reason"] = "seed_canonical_problem_not_verified"
+            return audit
+        audit["same_canonical_problem"] = True
+        seed_plan_fingerprint = str(
+            baseline_metadata.get("phase4_seed_plan_fingerprint") or ""
+        )
+        seed_audit = dict(
+            baseline_metadata.get("phase4_phase3_seed_audit") or {}
+        )
+        if (
+            len(seed_plan_fingerprint) != 64
+            or any(
+                character not in "0123456789abcdef"
+                for character in seed_plan_fingerprint
+            )
+            or str(seed_audit.get("seed_plan_fingerprint") or "")
+            != seed_plan_fingerprint
+        ):
+            audit["reason"] = "seed_plan_fingerprint_not_verified"
+            return audit
+        try:
+            actual_seed_plan_fingerprint = phase4_seed_plan_fingerprint(
+                baseline
+            )
+        except (TypeError, ValueError, OverflowError):
+            audit["reason"] = "seed_plan_fingerprint_recompute_failed"
+            return audit
+        if actual_seed_plan_fingerprint != seed_plan_fingerprint:
+            audit["reason"] = "seed_plan_fingerprint_mismatch"
+            return audit
+        audit["seed_plan_fingerprint"] = seed_plan_fingerprint
+
+        expected_trip_ids = set(problem.eligible_trip_ids())
+        if (
+            set(baseline.served_trip_ids) != expected_trip_ids
+            or baseline.unserved_trip_ids
+        ):
+            audit["reason"] = "seed_does_not_cover_exact_trip_set"
+            return audit
+
+        charge_kw_by_key: Dict[Tuple[str, int], float] = {}
+        charge_kwh_by_source_key: Dict[
+            Tuple[str, int, str], float
+        ] = {}
+        charger_id_by_key: Dict[Tuple[str, int], str] = {}
+        for slot in baseline.charging_slots:
+            vehicle_id = str(slot.vehicle_id)
+            slot_idx = int(slot.slot_index)
+            key = (vehicle_id, slot_idx)
+            charge_kw = max(float(slot.charge_kw or 0.0), 0.0)
+            if charge_kw <= 1.0e-9:
+                continue
+            if key not in charge_power_var or key not in charge_on_var:
+                audit["reason"] = (
+                    "seed_charge_not_representable:"
+                    f"{vehicle_id}:{slot_idx}"
+                )
+                return audit
+            charger_id = str(slot.charger_id or "").strip()
+            charger_key = (vehicle_id, charger_id, slot_idx)
+            if not charger_id or charger_key not in (
+                physical_charger_assignment_var
+            ):
+                audit["reason"] = (
+                    "seed_physical_charger_not_representable:"
+                    f"{vehicle_id}:{slot_idx}:{charger_id or 'missing'}"
+                )
+                return audit
+            previous_charger_id = charger_id_by_key.get(key)
+            if (
+                previous_charger_id is not None
+                and previous_charger_id != charger_id
+            ):
+                audit["reason"] = (
+                    "seed_uses_multiple_chargers_in_one_vehicle_slot:"
+                    f"{vehicle_id}:{slot_idx}"
+                )
+                return audit
+            charger_id_by_key[key] = charger_id
+            raw_source = str(slot.energy_source or "").strip().lower()
+            source_token = raw_source.split(":", 1)[0]
+            if source_token not in {"grid", "pv", "bess"}:
+                audit["reason"] = (
+                    "seed_energy_source_missing_or_unknown:"
+                    f"{vehicle_id}:{slot_idx}:{raw_source or 'missing'}"
+                )
+                return audit
+            charge_kw_by_key[key] = (
+                charge_kw_by_key.get(key, 0.0) + charge_kw
+            )
+            source_key = (vehicle_id, slot_idx, source_token)
+            charge_kwh_by_source_key[source_key] = (
+                charge_kwh_by_source_key.get(source_key, 0.0)
+                + charge_kw * max(float(timestep_h), 1.0e-9)
+            )
+
+        raw_bess_soc_start = baseline_metadata.get(
+            "bess_soc_start_kwh_by_depot_slot"
+        )
+        if bess_soc_var and not isinstance(raw_bess_soc_start, Mapping):
+            audit["reason"] = "seed_bess_start_soc_trace_missing"
+            return audit
+        for depot_id, slot_idx in bess_soc_var:
+            depot_map = raw_bess_soc_start.get(
+                str(depot_id), {}
+            ) if isinstance(raw_bess_soc_start, Mapping) else {}
+            if not isinstance(depot_map, Mapping) or (
+                int(slot_idx) not in depot_map
+                and str(int(slot_idx)) not in depot_map
+            ):
+                audit["reason"] = (
+                    "seed_bess_start_soc_trace_incomplete:"
+                    f"{depot_id}:{slot_idx}"
+                )
+                return audit
+        audit["complete_bess_soc_start"] = True
+
+        assignment_applied, assignment_source, assignment_reason = (
+            self._apply_stage1_assignment_warm_start(
+                problem,
+                enabled=True,
+                preferred_plan=baseline,
+                y=y,
+                x=x,
+                start_arc=start_arc,
+                end_arc=end_arc,
+                used_vehicle=used_vehicle,
+                used_vehicle_day=used_vehicle_day,
+                trip_day_index_by_trip_id=(
+                    trip_day_index_by_trip_id
+                ),
+            )
+        )
+        audit["source"] = assignment_source or source
+        if not assignment_applied:
+            audit["reason"] = assignment_reason
+            return audit
+        audit["complete_assignment_binary_start"] = True
+        for var in unserved.values():
+            var.Start = 0.0
+
+        for key, var in charge_on_var.items():
+            var.Start = 1.0 if charge_kw_by_key.get(key, 0.0) > 1.0e-9 else 0.0
+        for key, var in charge_power_var.items():
+            var.Start = float(charge_kw_by_key.get(key, 0.0))
+        for var in discharge_power_var.values():
+            var.Start = 0.0
+
+        slot_order = tuple(sorted(int(slot_idx) for slot_idx in slot_indices))
+        previous_slot_by_slot = {
+            slot_idx: (slot_order[pos - 1] if pos > 0 else None)
+            for pos, slot_idx in enumerate(slot_order)
+        }
+        for (vehicle_id, slot_idx), var in charge_session_start_var.items():
+            is_on = charge_kw_by_key.get((vehicle_id, slot_idx), 0.0) > 1.0e-9
+            previous_slot = previous_slot_by_slot.get(int(slot_idx))
+            was_on = bool(
+                previous_slot is not None
+                and charge_kw_by_key.get(
+                    (vehicle_id, previous_slot), 0.0
+                )
+                > 1.0e-9
+            )
+            var.Start = 1.0 if is_on and not was_on else 0.0
+
+        for key, var in physical_charger_assignment_var.items():
+            vehicle_id, charger_id, slot_idx = key
+            var.Start = 1.0 if (
+                charger_id_by_key.get((vehicle_id, slot_idx))
+                == charger_id
+                and charge_kw_by_key.get((vehicle_id, slot_idx), 0.0)
+                > 1.0e-9
+            ) else 0.0
+        for key, var in physical_charger_power_var.items():
+            vehicle_id, charger_id, slot_idx = key
+            var.Start = (
+                float(charge_kw_by_key.get((vehicle_id, slot_idx), 0.0))
+                if charger_id_by_key.get((vehicle_id, slot_idx))
+                == charger_id
+                else 0.0
+            )
+        audit["complete_charger_binary_start"] = True
+
+        source_variable_maps = {
+            "grid": grid_to_vehicle_var,
+            "pv": pv_to_vehicle_var,
+            "bess": bess_to_vehicle_var,
+        }
+        for source_token, variable_map in source_variable_maps.items():
+            for (vehicle_id, slot_idx), var in variable_map.items():
+                var.Start = float(
+                    charge_kwh_by_source_key.get(
+                        (vehicle_id, slot_idx, source_token),
+                        0.0,
+                    )
+                )
+
+        vehicle_by_id = {
+            str(vehicle.vehicle_id): vehicle
+            for vehicle in problem.vehicles
+        }
+        vehicle_soc_trace = baseline.vehicle_soc_kwh_by_vehicle_slot or {}
+        used_vehicle_ids = set(baseline.duties_by_vehicle())
+        for (vehicle_id, slot_idx), var in vehicle_soc_var.items():
+            slot_map = vehicle_soc_trace.get(vehicle_id, {})
+            value = slot_map.get(
+                slot_idx,
+                slot_map.get(str(slot_idx)) if isinstance(slot_map, Mapping) else None,
+            ) if isinstance(slot_map, Mapping) else None
+            if value is None:
+                vehicle = vehicle_by_id.get(str(vehicle_id))
+                if vehicle is None:
+                    audit["reason"] = f"seed_soc_vehicle_missing:{vehicle_id}"
+                    return audit
+                if str(vehicle_id) in used_vehicle_ids:
+                    audit["reason"] = (
+                        "seed_vehicle_soc_trace_incomplete:"
+                        f"{vehicle_id}:{slot_idx}"
+                    )
+                    return audit
+                capacity_kwh = max(
+                    float(vehicle.battery_capacity_kwh or 300.0),
+                    1.0,
+                )
+                value = vehicle_initial_soc_kwh(
+                    problem,
+                    vehicle,
+                    cap_kwh=capacity_kwh,
+                )
+            var.Start = float(value)
+        audit["complete_vehicle_soc_start"] = True
+
+        refuel_l_by_key: Dict[Tuple[str, int], float] = {}
+        for slot in baseline.refuel_slots:
+            key = (str(slot.vehicle_id), int(slot.slot_index))
+            refuel_l_by_key[key] = (
+                refuel_l_by_key.get(key, 0.0)
+                + max(float(slot.refuel_liters or 0.0), 0.0)
+            )
+        for key, var in refuel_l_var.items():
+            var.Start = float(refuel_l_by_key.get(key, 0.0))
+
+        def _slot_value(
+            mapping: Mapping[str, Mapping[int, float]],
+            depot_id: str,
+            slot_idx: int,
+        ) -> float:
+            depot_map = mapping.get(depot_id, {})
+            if not isinstance(depot_map, Mapping):
+                return 0.0
+            raw_value = depot_map.get(
+                slot_idx,
+                depot_map.get(str(slot_idx), 0.0),
+            )
+            return max(float(raw_value or 0.0), 0.0)
+
+        depot_flow_starts = (
+            (grid_to_bus_var, baseline.grid_to_bus_kwh_by_depot_slot),
+            (pv_to_bus_var, baseline.pv_to_bus_kwh_by_depot_slot),
+            (grid_to_bess_var, baseline.grid_to_bess_kwh_by_depot_slot),
+            (pv_to_bess_var, baseline.pv_to_bess_kwh_by_depot_slot),
+            (bess_to_bus_var, baseline.bess_to_bus_kwh_by_depot_slot),
+            (pv_curtailment_var, baseline.pv_curtail_kwh_by_depot_slot),
+            (
+                contract_over_limit_var,
+                baseline.contract_over_limit_kwh_by_depot_slot,
+            ),
+        )
+        for variable_map, plan_mapping in depot_flow_starts:
+            for (depot_id, slot_idx), var in variable_map.items():
+                var.Start = _slot_value(
+                    plan_mapping,
+                    str(depot_id),
+                    int(slot_idx),
+                )
+
+        grid_import_start: Dict[Tuple[str, int], float] = {}
+        for key, var in grid_import_var.items():
+            depot_id, slot_idx = key
+            value = _slot_value(
+                baseline.grid_to_bus_kwh_by_depot_slot,
+                str(depot_id),
+                int(slot_idx),
+            ) + _slot_value(
+                baseline.grid_to_bess_kwh_by_depot_slot,
+                str(depot_id),
+                int(slot_idx),
+            )
+            grid_import_start[(str(depot_id), int(slot_idx))] = value
+            var.Start = value
+        safe_timestep_h = max(float(timestep_h), 1.0e-9)
+        for (depot_id, slot_idx), var in average_power_var.items():
+            var.Start = grid_import_start.get(
+                (str(depot_id), int(slot_idx)), 0.0
+            ) / safe_timestep_h
+
+        for (depot_id, slot_idx), var in bess_soc_var.items():
+            var.Start = _slot_value(
+                raw_bess_soc_start,
+                str(depot_id),
+                int(slot_idx),
+            )
+        for key, var in bess_charge_mode_var.items():
+            depot_id, slot_idx = key
+            charge_kwh = _slot_value(
+                baseline.pv_to_bess_kwh_by_depot_slot,
+                str(depot_id),
+                int(slot_idx),
+            ) + _slot_value(
+                baseline.grid_to_bess_kwh_by_depot_slot,
+                str(depot_id),
+                int(slot_idx),
+            )
+            var.Start = 1.0 if charge_kwh > 1.0e-9 else 0.0
+        for key, var in bess_discharge_mode_var.items():
+            depot_id, slot_idx = key
+            discharge_kwh = _slot_value(
+                baseline.bess_to_bus_kwh_by_depot_slot,
+                str(depot_id),
+                int(slot_idx),
+            )
+            var.Start = 1.0 if discharge_kwh > 1.0e-9 else 0.0
+        terminal_deviation_by_depot = dict(
+            baseline_metadata.get(
+                "bess_terminal_soc_deviation_kwh_by_depot"
+            )
+            or {}
+        )
+        for depot_id, var in bess_terminal_soc_deviation_var.items():
+            var.Start = abs(
+                float(
+                    terminal_deviation_by_depot.get(str(depot_id), 0.0)
+                    or 0.0
+                )
+            )
+        audit["complete_bess_mode_binary_start"] = True
+
+        on_peak_slots, off_peak_slots = self._classify_peak_slots(problem)
+        for depot_id, var in on_peak_power_var.items():
+            var.Start = max(
+                (
+                    grid_import_start.get((str(depot_id), int(slot_idx)), 0.0)
+                    / safe_timestep_h
+                    for slot_idx in on_peak_slots
+                ),
+                default=0.0,
+            )
+        for depot_id, var in off_peak_power_var.items():
+            var.Start = max(
+                (
+                    grid_import_start.get((str(depot_id), int(slot_idx)), 0.0)
+                    / safe_timestep_h
+                    for slot_idx in off_peak_slots
+                ),
+                default=0.0,
+            )
+
+        audit.update(
+            {
+                "applied": True,
+                "reason": "",
+                "physical_energy_trace_start": True,
+                "served_trip_count": len(expected_trip_ids),
+                "duty_count": len(baseline.duties),
+                "positive_charging_vehicle_slot_count": len(
+                    charge_kw_by_key
+                ),
+                "assignment_binary_start_count": (
+                    len(y)
+                    + len(x)
+                    + len(start_arc)
+                    + len(end_arc)
+                    + len(unserved)
+                    + len(used_vehicle)
+                    + len(used_vehicle_day)
+                ),
+                "charger_binary_start_count": (
+                    len(charge_on_var)
+                    + len(charge_session_start_var)
+                    + len(physical_charger_assignment_var)
+                ),
+                "bess_mode_binary_start_count": (
+                    len(bess_charge_mode_var)
+                    + len(bess_discharge_mode_var)
+                ),
+                "continuous_energy_start_count": (
+                    len(charge_power_var)
+                    + len(discharge_power_var)
+                    + len(vehicle_soc_var)
+                    + len(physical_charger_power_var)
+                    + len(grid_to_vehicle_var)
+                    + len(pv_to_vehicle_var)
+                    + len(bess_to_vehicle_var)
+                    + len(grid_to_bus_var)
+                    + len(pv_to_bus_var)
+                    + len(grid_to_bess_var)
+                    + len(pv_to_bess_var)
+                    + len(bess_to_bus_var)
+                    + len(pv_curtailment_var)
+                    + len(bess_soc_var)
+                    + len(grid_import_var)
+                ),
+            }
+        )
+        return audit
 
     def _add_fragment_pairwise_depot_reset_cuts(
         self,

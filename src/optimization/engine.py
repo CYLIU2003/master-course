@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import replace
 import math
 
@@ -27,6 +28,9 @@ from src.optimization.common.strict_precheck import (
     StrictCoveragePrecheckResult,
     evaluate_strict_coverage_precheck,
 )
+from src.optimization.common.seed_fingerprint import (
+    phase4_seed_plan_fingerprint,
+)
 from src.optimization.common.vehicle_assignment import assign_duty_fragments_to_vehicles
 from src.optimization.common.time_axis import service_minute
 from src.optimization.ga.engine import GAOptimizer
@@ -53,6 +57,45 @@ def actual_cost_objective_reconciles(
         and math.isfinite(float(accounting_total_jpy))
         and abs(float(raw_objective_jpy) - float(accounting_total_jpy))
         <= float(tolerance_jpy)
+    )
+
+
+def _phase4_seed_start_evidence_valid(
+    *,
+    seed_audit: Mapping[str, object],
+    integrated_start_audit: Mapping[str, object],
+) -> bool:
+    """Return whether a requested Phase 4 seed was fully handed off."""
+
+    seed_fingerprint = str(
+        seed_audit.get("seed_plan_fingerprint") or ""
+    )
+    start_fingerprint = str(
+        integrated_start_audit.get("seed_plan_fingerprint") or ""
+    )
+    valid_sha256 = bool(
+        len(seed_fingerprint) == 64
+        and all(character in "0123456789abcdef" for character in seed_fingerprint)
+    )
+    return bool(
+        seed_audit.get("accepted") is True
+        and seed_audit.get("same_canonical_problem") is True
+        and seed_audit.get("seed_exact_trip_set_match") is True
+        and seed_audit.get("seed_stage2_feasible") is True
+        and seed_audit.get("seed_independent_physical_feasible") is True
+        and valid_sha256
+        and integrated_start_audit.get("applied") is True
+        and integrated_start_audit.get("same_canonical_problem") is True
+        and integrated_start_audit.get("complete_assignment_binary_start")
+        is True
+        and integrated_start_audit.get("complete_charger_binary_start")
+        is True
+        and integrated_start_audit.get("complete_vehicle_soc_start") is True
+        and integrated_start_audit.get("complete_bess_soc_start") is True
+        and integrated_start_audit.get("complete_bess_mode_binary_start")
+        is True
+        and integrated_start_audit.get("physical_energy_trace_start") is True
+        and start_fingerprint == seed_fingerprint
     )
 
 
@@ -655,6 +698,20 @@ class OptimizationEngine:
             },
         )
 
+        if (
+            config.mode == OptimizationMode.MILP
+            and str(getattr(config, "phase", "") or "")
+            == "phase4_integrated"
+            and bool(getattr(config, "warm_start", True))
+            and bool(
+                getattr(config, "phase4_phase3_seed_enabled", False)
+            )
+        ):
+            problem = self._with_verified_phase4_phase3_seed(
+                problem,
+                config,
+            )
+
         if config.mode == OptimizationMode.MILP:
             result = self._milp.solve(problem, config)
         elif config.mode == OptimizationMode.ALNS:
@@ -666,6 +723,224 @@ class OptimizationEngine:
         else:
             result = self._hybrid.solve(problem, config)
         return self._finalize_result(problem, result, config)
+
+    def _with_verified_phase4_phase3_seed(
+        self,
+        problem: CanonicalOptimizationProblem,
+        config: OptimizationConfig,
+    ) -> CanonicalOptimizationProblem:
+        """Build a physical Phase 3 incumbent for the same Phase 4 problem.
+
+        This is intentionally an in-process hand-off.  Loading an arbitrary
+        prior run would permit stale timetable, fleet, PV, tariff, or SOC
+        state to cross the formal-run boundary.  The seed solve shares the
+        already materialized canonical problem and therefore cannot change
+        those controls.
+        """
+
+        seed_limit_sec = max(
+            int(
+                getattr(
+                    config,
+                    "phase4_phase3_seed_time_limit_sec",
+                    600,
+                )
+                or 600
+            ),
+            60,
+        )
+        stage2_limit_sec = min(max(seed_limit_sec // 5, 60), 180)
+        stage1_limit_sec = max(seed_limit_sec - stage2_limit_sec, 60)
+        seed_config = replace(
+            config,
+            phase="phase3_two_stage",
+            requested_phase="phase3_two_stage_phase4_seed",
+            resolved_phase="phase3_two_stage",
+            executed_phase="phase3_two_stage",
+            thesis_mode=True,
+            integrated_actual_cost_objective=False,
+            integrated_ev_utilization_mode="disabled",
+            integrated_actual_cost_upper_bound_jpy=None,
+            integrated_actual_cost_upper_bound_delta_ratio=None,
+            phase4_phase3_seed_enabled=False,
+            phase4_phase3_seed_bev_frontier_enabled=False,
+            time_limit_sec=seed_limit_sec,
+            stage1_time_limit_sec=stage1_limit_sec,
+            stage2_time_limit_sec=stage2_limit_sec,
+            # The outer Phase 4 request intentionally has no Stage 1 pool and
+            # therefore commonly carries candidate_limit=1.  Reusing that
+            # value here would silently collapse the Phase 3 seed search to
+            # its primary composition.  Keep the seed budget explicit and
+            # stable across frontend callers.
+            stage1_stage2_candidate_limit=10,
+            stage1_composition_search_radius=max(
+                int(config.stage1_composition_search_radius),
+                2,
+            ),
+            stage1_bev_frontier_enabled=bool(
+                getattr(
+                    config,
+                    "phase4_phase3_seed_bev_frontier_enabled",
+                    False,
+                )
+            ),
+            # The seed must never use fallback or post-solve repair.  The
+            # physical Stage 2 solver decision trace is the only admissible
+            # hand-off to the integrated model.
+            research_run=True,
+            allow_postsolve_repair=False,
+            warm_start=True,
+        )
+        seed_problem = replace(
+            problem,
+            metadata={
+                **dict(problem.metadata or {}),
+                "phase": "phase3_two_stage",
+                "requested_phase": "phase3_two_stage_phase4_seed",
+                "resolved_phase": "phase3_two_stage",
+                "executed_phase": "phase3_two_stage",
+                "phase4_phase3_seed_role": "mip_start_only",
+            },
+        )
+        seed_result = self._milp.solve(seed_problem, seed_config)
+        seed_plan = seed_result.plan
+        expected_trip_ids = set(problem.eligible_trip_ids())
+        seed_trip_ids = set(seed_plan.served_trip_ids)
+        seed_metadata = dict(seed_plan.metadata or {})
+        independent_report = self._feasibility.evaluate(problem, seed_plan)
+        seed_fingerprint_error = ""
+        try:
+            seed_plan_fingerprint = phase4_seed_plan_fingerprint(seed_plan)
+        except (TypeError, ValueError, OverflowError) as exc:
+            seed_plan_fingerprint = ""
+            seed_fingerprint_error = (
+                "seed_plan_fingerprint_failed:" + str(exc)
+            )
+        acceptance = {
+            "schema_version": "phase4_phase3_seed_audit_v1",
+            "requested": True,
+            "accepted": False,
+            "role": "mip_start_only",
+            "same_canonical_problem": True,
+            "seed_time_limit_sec": seed_limit_sec,
+            "seed_stage1_time_limit_sec": stage1_limit_sec,
+            "seed_stage2_time_limit_sec": stage2_limit_sec,
+            "total_solver_time_budget_sec": (
+                seed_limit_sec + max(int(config.time_limit_sec), 0)
+            ),
+            "seed_stage1_stage2_candidate_limit": int(
+                seed_config.stage1_stage2_candidate_limit
+            ),
+            "seed_stage1_composition_search_radius": int(
+                seed_config.stage1_composition_search_radius
+            ),
+            "seed_search_directionality": (
+                "explicit_minimum_bev_frontier_sensitivity"
+                if seed_config.stage1_bev_frontier_enabled
+                else "primary_plus_symmetric_adjacent_compositions"
+            ),
+            "seed_bev_frontier_enabled": bool(
+                seed_config.stage1_bev_frontier_enabled
+            ),
+            "seed_bev_frontier_min_count": int(
+                seed_config.stage1_bev_frontier_min_count
+            ),
+            "seed_bev_frontier_max_count": int(
+                seed_config.stage1_bev_frontier_max_count
+            ),
+            "seed_solver_status": str(seed_result.solver_status or ""),
+            "seed_runtime_sec": float(
+                seed_result.solver_metadata.get("solve_time_sec", 0.0)
+                or 0.0
+            ),
+            "seed_result_feasible": bool(seed_result.feasible),
+            "seed_stage1_feasible": bool(
+                seed_metadata.get("stage1_feasible", False)
+            ),
+            "seed_stage2_feasible": bool(
+                seed_metadata.get("stage2_feasible", False)
+            ),
+            "seed_independent_physical_feasible": bool(
+                independent_report.feasible
+            ),
+            "seed_expected_trip_count": len(expected_trip_ids),
+            "seed_served_trip_count": len(seed_trip_ids),
+            "seed_unserved_trip_count": len(seed_plan.unserved_trip_ids),
+            "seed_exact_trip_set_match": seed_trip_ids
+            == expected_trip_ids,
+            "seed_original_source": str(
+                seed_metadata.get("source") or ""
+            ),
+            "seed_candidate_hash": str(
+                seed_metadata.get(
+                    "stage1_stage2_selected_candidate_hash"
+                )
+                or seed_metadata.get("selected_candidate_hash")
+                or seed_metadata.get("candidate_hash")
+                or ""
+            ),
+            "seed_plan_fingerprint": seed_plan_fingerprint,
+            "seed_cost_jpy": float(
+                seed_result.cost_breakdown.get("total_cost", 0.0) or 0.0
+            ),
+            "seed_failure_reasons": tuple(
+                str(reason)
+                for reason in (
+                    tuple(seed_result.infeasibility_reasons)
+                    + tuple(independent_report.errors)
+                    + (
+                        (seed_fingerprint_error,)
+                        if seed_fingerprint_error
+                        else ()
+                    )
+                )
+            ),
+        }
+        acceptance["seed_candidate_hash_present"] = bool(
+            acceptance["seed_candidate_hash"]
+        )
+        accepted = bool(
+            seed_result.feasible
+            and seed_metadata.get("stage1_feasible") is True
+            and seed_metadata.get("stage2_feasible") is True
+            and independent_report.feasible
+            and seed_trip_ids == expected_trip_ids
+            and not seed_plan.unserved_trip_ids
+            and bool(seed_plan_fingerprint)
+        )
+        acceptance["accepted"] = accepted
+        if not accepted:
+            return replace(
+                problem,
+                metadata={
+                    **dict(problem.metadata or {}),
+                    "phase4_phase3_seed_audit": acceptance,
+                },
+            )
+
+        verified_seed = replace(
+            seed_plan,
+            metadata={
+                **seed_metadata,
+                "source": "verified_phase3_two_stage_phase4_mip_start",
+                "phase4_seed_verified": True,
+                "phase4_seed_role": "mip_start_only",
+                "phase4_seed_same_canonical_problem": True,
+                "phase4_seed_plan_fingerprint": seed_plan_fingerprint,
+                "phase4_seed_original_source": str(
+                    seed_metadata.get("source") or ""
+                ),
+                "phase4_phase3_seed_audit": acceptance,
+            },
+        )
+        return replace(
+            problem,
+            baseline_plan=verified_seed,
+            metadata={
+                **dict(problem.metadata or {}),
+                "phase4_phase3_seed_audit": acceptance,
+            },
+        )
 
     @staticmethod
     def _apply_phase_contract(
@@ -1573,6 +1848,44 @@ class OptimizationEngine:
                 )
                 acceptance_checks["source_provenance_exact"] = bool(
                     solver_metadata.get("source_provenance_exact", False)
+                )
+                phase4_seed_requested = bool(
+                    getattr(config, "phase4_phase3_seed_enabled", False)
+                )
+                phase4_seed_audit = dict(
+                    solver_metadata.get("phase4_phase3_seed_audit") or {}
+                )
+                integrated_start_audit = dict(
+                    solver_metadata.get("integrated_warm_start_audit") or {}
+                )
+                acceptance_checks[
+                    "phase4_declared_seed_handoff_satisfied"
+                ] = bool(
+                    not phase4_seed_requested
+                    or _phase4_seed_start_evidence_valid(
+                        seed_audit=phase4_seed_audit,
+                        integrated_start_audit=integrated_start_audit,
+                    )
+                )
+                unconstrained_actual_cost = bool(
+                    getattr(config, "integrated_actual_cost_objective", False)
+                    and str(
+                        getattr(
+                            config,
+                            "integrated_ev_utilization_mode",
+                            "disabled",
+                        )
+                        or "disabled"
+                    )
+                    == "disabled"
+                )
+                acceptance_checks[
+                    "phase4_no_hidden_bev_directed_seed"
+                ] = bool(
+                    not phase4_seed_requested
+                    or not unconstrained_actual_cost
+                    or phase4_seed_audit.get("seed_bev_frontier_enabled")
+                    is False
                 )
             calendar_validation = dict(
                 (problem.metadata or {}).get("service_calendar_validation") or {}

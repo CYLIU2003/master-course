@@ -615,6 +615,18 @@ class MILPOptimizer:
                     if problem.baseline_plan
                     else None
                 ),
+                "phase4_phase3_seed_audit": dict(
+                    (problem.metadata or {}).get(
+                        "phase4_phase3_seed_audit"
+                    )
+                    or {}
+                ),
+                "integrated_warm_start_audit": dict(
+                    (plan.metadata or {}).get(
+                        "integrated_warm_start_audit"
+                    )
+                    or {}
+                ),
                 "best_bound": outcome.best_bound,
                 # A gap is meaningful only when the returned solver outcome
                 # has an incumbent.  Infeasible/no-incumbent runs must not

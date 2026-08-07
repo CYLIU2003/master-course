@@ -1,5 +1,34 @@
 # master-course
 
+## 2026-08-08 Phase 4 verified warm start
+
+- Frontend `phase4_integrated` runs now build a Phase 3 two-stage plan on the
+  same in-memory canonical problem before starting the full integrated MILP.
+  The plan is accepted only when it covers the exact trip set, Stage 2 is
+  feasible, and the independent physical validator passes.
+- The accepted plan is only a Phase 4 MIP start and upper bound. Phase 3 cost,
+  gap, or composition is never returned as a Phase 4 result and never implies
+  integrated optimality.
+- Formal actual-cost Phase 4 does not inject the one-sided `used BEV >= K`
+  frontier. Its seed uses the primary Phase 3 candidate plus symmetric
+  adjacent-composition candidates; the final objective contains no hidden
+  weather or BEV-direction preference. The frontend Phase 4 request uses a
+  5% gap target so the first 13/19 seed cannot terminate immediately at the
+  former 10% threshold.
+- The MIP start includes all assignment/path/vehicle-use binaries, all
+  charging and physical-charger binaries, BESS charge/discharge modes, vehicle
+  and BESS SOC, and the PV/BESS/grid source-flow trace. A dispatch-only or
+  stale prior-run baseline is rejected. The plan itself is fingerprinted;
+  optional candidate-pool metadata is not used as proof of the hand-off.
+- The formal solver-control record declares the 600-second seed budget, its
+  480/120-second Stage 1/2 split, the 3,600-second integrated budget, and the
+  4,200-second total maximum. These controls are included in the sunny/rain
+  comparison hash.
+- Formal evidence still requires a fresh Prepare and a clean frozen commit.
+  A feasible incumbent is distinct from meeting the requested MIP gap; any
+  time-limit result must publish its achieved gap without claiming global
+  optimality.
+
 ## 2026-08-07 PV/BESS and optimization-control contract
 
 - Solcast records are resampled by source/target interval overlap. Converting

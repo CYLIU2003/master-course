@@ -412,6 +412,15 @@ class OptimizationConfig:
     integrated_ev_utilization_mode: str = "disabled"
     integrated_actual_cost_upper_bound_jpy: Optional[float] = None
     integrated_actual_cost_upper_bound_delta_ratio: Optional[float] = None
+    # A full-network Phase 4 model is substantially harder than the Phase 3
+    # decomposition.  When enabled, the engine first solves Phase 3 on the
+    # *same in-memory canonical problem* and accepts its plan only after full
+    # coverage, Stage 2, and independent physical-feasibility checks pass.
+    # The accepted plan is a MIP start/upper bound only; it is never returned
+    # as a Phase 4 result or treated as integrated optimality evidence.
+    phase4_phase3_seed_enabled: bool = False
+    phase4_phase3_seed_time_limit_sec: int = 600
+    phase4_phase3_seed_bev_frontier_enabled: bool = False
     mip_gap: float = 0.02
     random_seed: int = 42
     alns_iterations: int = 800  # Increased from 500
