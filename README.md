@@ -7,7 +7,7 @@
 ![Optimization](https://img.shields.io/badge/Optimization-MILP%2BALNS-FF6F00)
 ![Status](https://img.shields.io/badge/Status-Core%20Package%20%28Tkinter%2BFastAPI%29-0A66C2)
 
-## Research-evidence contract (updated 2026-07-30)
+## Research-evidence contract (updated 2026-08-06)
 
 Release status is fail-closed and artifact-driven. It is **BLOCKED** unless
 `output/formal_pair_20260730/completion_audit.json` records `status=READY`,
@@ -24,8 +24,9 @@ simulation artifact, not an automatically accepted research result.
 - `code_provenance.json` records the Git SHA, dirty state, tracked-patch hash,
   untracked-file hashes, repository root, Python/Gurobi environment, and any
   capture failure before the solve begins. A formal `research_run=true` request
-  now fails before solving unless the worktree is clean and a non-empty SHA is
-  available. Dirty diagnostics remain possible only as explicitly non-research
+  now fails before job creation unless the worktree is clean and a non-empty
+  SHA is available; the worker repeats the same guard immediately before the
+  solve. Dirty diagnostics remain possible only as explicitly non-research
   runs. A source change during the solve is a hard failure.
 - `run_input_provenance/` records the scenario snapshot, Prepare audit, effective
   optimization parameters, hashes, and validation result.
@@ -174,8 +175,20 @@ simulation artifact, not an automatically accepted research result.
   60-minute internal slots and 60-minute Rolling updates in both cases; other
   widths must be declared as separate sensitivities and require fresh Prepare
   and execution.
-- The ordinary Tk frontend optimization action now sends
-  `run_profile=day_ahead_and_hourly_rolling`, `research_run=true`,
+- The Tk frontend separates `試行計算（研究提出不可）` from
+  `正式研究実行（clean Git必須）`; trial execution is the safe default. Both
+  use the same payload object for logging and submission, and the log always
+  includes `research_run`. Formal execution calls
+  `GET /api/research/git-preflight` before submission and lists the exact
+  `git status --porcelain` rows when blocked. The BFF repeats the check before
+  job creation and retains the worker-side final guard, closing the UI/API
+  bypass and source-change race without weakening research acceptance.
+  A trial sends `research_run=false`; its result, audit, summary, run manifest,
+  and claim-scope artifacts are marked `diagnostic_only=true`,
+  `research_submission_ready=false`, `teacher_release_status=BLOCKED`, and
+  `blocking_reason=dirty_or_nonformal_run`.
+- Both Tk optimization classifications send
+  `run_profile=day_ahead_and_hourly_rolling`,
   `run_hourly_rolling=true`, and `rolling_execution_minutes=60`. The BFF
   enforces the 60-minute full-chain policy for that profile, persists the exact
   canonical day-ahead problem/result/input hashes, and invokes
@@ -1258,6 +1271,7 @@ React frontend、テスト、一時検証スクリプト、`__pycache__`、ロ�
 | `GET/PUT /api/scenarios/{id}/quick-setup` | Quick Setup の読込・保存 |
 | `POST /api/scenarios/{id}/simulation/prepare` | 最適化入力の生成（Prepare） |
 | `POST /api/scenarios/{id}/simulation/run` | Prepared input を使って simulation job を開始 |
+| `GET /api/research/git-preflight` | 正式研究実行前のGit SHA・dirty状態・未commit変更一覧の確認 |
 | `POST /api/scenarios/{id}/run-optimization` | 最適化ジョブの開始 |
 | `GET /api/jobs/{job_id}` | ジョブ状態の確認 |
 

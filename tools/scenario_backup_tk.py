@@ -81,6 +81,12 @@ _ACTUAL_DATE_PV_PROFILE_ID = "actual_date_profile"
 # console and run provenance without asking the user to set them every time.
 _INTERACTIVE_STAGE1_BEST_OBJ_STOP_ENABLED = False
 _INTERACTIVE_GUROBI_THREADS = 1
+_TRIAL_RUN_LABEL = "試行計算（研究提出不可）"
+_FORMAL_RESEARCH_RUN_LABEL = "正式研究実行（clean Git必須）"
+_RESEARCH_EXECUTION_OPTIONS = (
+    _TRIAL_RUN_LABEL,
+    _FORMAL_RESEARCH_RUN_LABEL,
+)
 _WEATHER_MODE_OPTIONS = (
     _ACTUAL_DATE_PV_PROFILE_ID,
     "solcast_typical_sunny",
@@ -1447,6 +1453,9 @@ class BFFClient:
     def run_optimization(self, scenario_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         return self._request("POST", f"/scenarios/{scenario_id}/run-optimization", payload, timeout_seconds=180.0)
 
+    def get_research_git_preflight(self) -> dict[str, Any]:
+        return self._request("GET", "/research/git-preflight")
+
     def reoptimize(self, scenario_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         return self._request("POST", f"/scenarios/{scenario_id}/reoptimize", payload, timeout_seconds=180.0)
 
@@ -1933,6 +1942,30 @@ class App:
         status_card.pack(fill=tk.X, pady=(0, 6))
         ttk.Label(status_card, textvariable=self.workflow_status_var, foreground="#117a65", font=("TkDefaultFont", 10, "bold")).pack(anchor="w")
         ttk.Label(status_card, textvariable=self.workflow_hint_var, foreground="#555").pack(anchor="w", pady=(2, 0))
+
+        run_classification_row = ttk.Frame(action_bar)
+        run_classification_row.pack(fill=tk.X, pady=(0, 6))
+        ttk.Label(
+            run_classification_row,
+            text="実行区分",
+            font=("TkDefaultFont", 9, "bold"),
+        ).pack(side=tk.LEFT, padx=(0, 4))
+        self.research_execution_mode_var = tk.StringVar(value=_TRIAL_RUN_LABEL)
+        ttk.Combobox(
+            run_classification_row,
+            state="readonly",
+            textvariable=self.research_execution_mode_var,
+            values=list(_RESEARCH_EXECUTION_OPTIONS),
+            width=31,
+        ).pack(side=tk.LEFT)
+        ttk.Label(
+            run_classification_row,
+            text=(
+                "試行計算はdirty Gitでも実行できますが、成果物は必ず"
+                "DIAGNOSTIC / teacher release BLOCKEDです。"
+            ),
+            foreground="#8a4b08",
+        ).pack(side=tk.LEFT, padx=(10, 0))
 
         btn_row = ttk.Frame(action_bar)
         btn_row.pack(fill=tk.X)
@@ -8680,11 +8713,62 @@ class App:
 
         self.run_bg(request_action, done)
 
+    def _research_run_requested(self) -> bool:
+        mode_var = getattr(self, "research_execution_mode_var", None)
+        if mode_var is None:
+            return False
+        return str(mode_var.get() or "").strip() == _FORMAL_RESEARCH_RUN_LABEL
+
+    @staticmethod
+    def _format_research_git_preflight_failure(
+        preflight: dict[str, Any],
+    ) -> str:
+        changes = [
+            str(value)
+            for value in list(preflight.get("uncommitted_changes") or ())
+            if str(value).strip()
+        ]
+        if changes:
+            change_text = "\n".join(changes)
+        else:
+            error = str(preflight.get("git_state_error") or "").strip()
+            change_text = error or "Git状態または未commit変更一覧を取得できませんでした。"
+        return (
+            "正式研究実行を開始できません。\n"
+            "未commit変更:\n"
+            f"{change_text}\n\n"
+            "変更をcommitまたはstashし、アプリを再起動してください。"
+        )
+
+    def _preflight_research_run_selection(self) -> bool:
+        """Stop a formal run in the UI before any optimization job is created."""
+
+        if not self._research_run_requested():
+            return True
+        try:
+            preflight = self.client.get_research_git_preflight()
+        except Exception as exc:
+            preflight = {
+                "formal_research_ready": False,
+                "git_state_error": str(exc),
+                "uncommitted_changes": [],
+            }
+        if bool(preflight.get("formal_research_ready", False)):
+            self.log_line(
+                "正式研究実行 Git preflight: clean "
+                f"sha={preflight.get('git_sha') or '-'}"
+            )
+            return True
+        message = self._format_research_git_preflight_failure(preflight)
+        self.log_line(message.replace("\n", " | "))
+        messagebox.showerror("正式研究実行 Git preflight", message)
+        return False
+
     def _build_optimization_run_payload(self, prepared_input_id: str | None = None) -> dict[str, Any]:
         depots = self._selected_depot_ids()
         payload = {
             "mode": self.solver_mode_var.get().strip(),
-            "research_run": True,
+            "research_run": self._research_run_requested(),
             "prepared_input_id": prepared_input_id or self.prepared_input_id,
             "time_step_min": self._timestep_min_value(),
             "timestep_min": self._timestep_min_value(),
@@ -8727,6 +8811,8 @@ class App:
         scenario_id = self._selected_scenario_id()
         if not scenario_id:
             messagebox.showwarning("入力不足", "先にシナリオを選択してください")
+            return
+        if not self._preflight_research_run_selection():
             return
         try:
             prepare_payload = self._prepare_payload()
@@ -8849,6 +8935,11 @@ class App:
 
     def run_selected_execution(self) -> None:
         action_kind = self._execution_mode_kind()
+        if (
+            action_kind == "optimization"
+            and not self._preflight_research_run_selection()
+        ):
+            return
         if action_kind == "prepared_simulation":
             scenario_id = self._ensure_prepared_before_execution("Preparedシミュレーション")
             if not scenario_id:
@@ -9289,6 +9380,7 @@ class App:
             return ""
         preview_keys = (
             "mode",
+            "research_run",
             "prepared_input_id",
             "service_id",
             "depot_id",

@@ -11,6 +11,7 @@ from bff.routers.jobs import get_job
 from bff.routers.optimization import (
     ReoptimizeBody,
     RunOptimizationBody,
+    get_research_git_preflight,
     reoptimize,
     run_optimization,
 )
@@ -27,13 +28,20 @@ _RUN_PREPARED_SIM_RE = re.compile(r"^/scenarios/(?P<scenario_id>[^/]+)/simulatio
 _RUN_OPT_RE = re.compile(r"^/scenarios/(?P<scenario_id>[^/]+)/run-optimization$")
 _REOPT_RE = re.compile(r"^/scenarios/(?P<scenario_id>[^/]+)/reoptimize$")
 _JOB_RE = re.compile(r"^/jobs/(?P<job_id>[^/]+)$")
+_RESEARCH_GIT_PREFLIGHT_PATH = "/research/git-preflight"
 
 
 def is_direct_supported(method: str, path: str) -> bool:
     m = method.upper()
     return bool(
         (m == "POST" and (_PREPARE_RE.match(path) or _RUN_PREPARED_SIM_RE.match(path) or _RUN_OPT_RE.match(path) or _REOPT_RE.match(path)))
-        or (m == "GET" and _JOB_RE.match(path))
+        or (
+            m == "GET"
+            and (
+                _JOB_RE.match(path)
+                or path == _RESEARCH_GIT_PREFLIGHT_PATH
+            )
+        )
     )
 
 
@@ -102,6 +110,9 @@ def call_direct(method: str, path: str, body: Dict[str, Any] | None = None) -> D
         m = _JOB_RE.match(path)
         if method_upper == "GET" and m:
             return get_job(m.group("job_id"))
+
+        if method_upper == "GET" and path == _RESEARCH_GIT_PREFLIGHT_PATH:
+            return get_research_git_preflight()
 
         raise RuntimeError(f"Direct runtime not supported for {method_upper} {path}")
     except ValidationError as exc:

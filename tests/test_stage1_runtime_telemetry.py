@@ -119,6 +119,10 @@ def test_manual_pv_only_claim_scope_rejects_weather_dispatch_and_runtime_claims(
         "exploratory_pv_supply_sensitivity_not_weather_adaptive_dispatch"
     )
     assert claim_scope["weather_adaptive_dispatch_claim_eligible"] is False
+    assert claim_scope["diagnostic_only"] is True
+    assert claim_scope["research_submission_ready"] is False
+    assert claim_scope["teacher_release_status"] == "BLOCKED"
+    assert claim_scope["blocking_reason"] == "dirty_or_nonformal_run"
     assert "wall_clock_runtime_comparison" in claim_scope["disallowed_claims"]
     assert "weather_adaptive_dispatch_or_charging_policy" in claim_scope[
         "disallowed_claims"
@@ -175,6 +179,8 @@ def test_teacher_release_preserves_vehicle_inventory_blocker() -> None:
         "teacher_release_failed_checks"
     ]
     assert claim_scope["research_submission_ready"] is False
+    assert "diagnostic_only" not in claim_scope
+    assert "blocking_reason" not in claim_scope
 
 
 def test_single_run_stays_blocked_until_counterfactual_pair_is_verified() -> None:

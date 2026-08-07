@@ -185,7 +185,7 @@ def collect_git_state(*, repo_root: Path | None = None) -> dict[str, Any]:
             [git_executable, "status", "--porcelain"],
             cwd=root,
             text=True,
-        ).strip()
+        ).rstrip("\r\n")
         git_dirty = bool(status_porcelain)
         tracked_patch = subprocess.check_output(
             [git_executable, "diff", "--binary", "HEAD", "--"],
@@ -250,6 +250,7 @@ def collect_git_state(*, repo_root: Path | None = None) -> dict[str, Any]:
         "worktree_patch_sha256": (
             hashlib.sha256(patch_bytes).hexdigest() if git_dirty else None
         ),
+        "status_porcelain": status_porcelain.splitlines(),
         **patch_identity,
         "git_state_available": True,
         "git_state_error": None,

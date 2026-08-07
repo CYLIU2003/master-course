@@ -806,6 +806,18 @@ def test_bess_soc_start_end_stay_within_configured_bounds_across_artifacts(tmp_p
         charging_flow_payload=charging_payload,
     )
     assert_bess_bounds(list(csv.DictReader((run_dir / "depot_energy_flows.csv").open(encoding="utf-8"))))
+    for filename in (
+        "optimization_result.json",
+        "optimization_audit.json",
+        "summary.json",
+        "run_manifest.json",
+        "research_claim_scope.json",
+    ):
+        payload = json.loads((run_dir / filename).read_text(encoding="utf-8"))
+        assert payload["diagnostic_only"] is True
+        assert payload["research_submission_ready"] is False
+        assert payload["teacher_release_status"] == "BLOCKED"
+        assert payload["blocking_reason"] == "dirty_or_nonformal_run"
 
 
 def test_rich_run_outputs_restore_charging_schedule_and_vehicle_timelines_json(tmp_path: Path) -> None:

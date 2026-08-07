@@ -1,6 +1,6 @@
 # Current research release blockers
 
-Status date: 2026-07-30
+Status date: 2026-08-06
 Code status: slot-indexed Stage 1 energy recourse, multi-candidate Stage 2
 evaluation, explicit same-service-date PV controls, and an HTTP-only frontend
 pair runner are implemented. A final-slot return-boundary defect exposed by
@@ -9,15 +9,34 @@ independent physical check in addition to Stage 2 feasibility. The fifth HTTP
 attempt exposed and the current tree corrects a result-claim message that
 conflated integrated-optimality scope with certified-gap status. The corrected
 completion audit also rejects a contradiction between solver settings,
-persisted claim classification, and terminal response. The corrected focused
-regression passes (`90 passed`) and the complete suite passes
-(`1067 passed`); compileall and `git diff --check` are required before freeze.
+persisted claim classification, and terminal response. The current focused
+formal-run preflight regression passes (`98 passed`) and the complete suite
+passes (`1077 passed`); compileall and `git diff --check` also pass.
 
 Teacher release status is fail-closed: **BLOCKED** unless
 `output/formal_pair_20260730/completion_audit.json` records `status=READY`,
 zero failed checks, the exact frozen Git SHA at start and end, and a completed
 ZIP. When that artifact exists for the current frozen SHA, this blocker is
 discharged without modifying the repository during the experiment.
+
+## Formal-run dirty-worktree UX (2026-08-06)
+
+Remote `main` at the start of this repair was
+`da26b06c617256f27b08b4123a46169e185a833a`. The rejected user run did not
+reach `ProblemBuilder` or Gurobi: its prepared scope and distance audits were
+not the blocker; the request declared `research_run=true` while the BFF
+observed `git_state_available=true`, a non-empty SHA, and `git_dirty=true`.
+
+The UI now separates trial and formal execution. Trial mode is allowed on a
+dirty tree but is permanently labelled diagnostic and teacher-release
+`BLOCKED`. Formal mode performs a canonical Git preflight before submission,
+the BFF repeats it before creating a job, and the unchanged worker guard checks
+again before solving. The solve-end SHA/patch check remains mandatory.
+
+This code change is not itself formal run evidence. The branch must be reviewed,
+committed, and frozen; Tk/BFF must then be restarted and both cases freshly
+Prepared. Until fresh artifacts from that clean commit pass every per-run and
+pair gate, teacher release remains **BLOCKED**.
 
 ## Separate controlled tariff sensitivity (2026-07-31)
 

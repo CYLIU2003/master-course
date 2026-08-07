@@ -1,5 +1,32 @@
 # Development Notes
 
+## 2026-08-06 Formal-run Git preflight and explicit trial mode
+
+- Root cause: Tk `_build_optimization_run_payload()` hard-coded
+  `research_run=true` for the ordinary optimization action. A dirty worktree
+  was therefore correctly rejected by the BFF worker before `ProblemBuilder`
+  or the solver ran, but only after a job had been created.
+- The Tk run panel now defaults visibly to `試行計算（研究提出不可）` and
+  offers a separate `正式研究実行（clean Git必須）` choice. The exact payload
+  object is logged and submitted, and compact payload logging includes the
+  boolean `research_run` for both true and false.
+- `GET /api/research/git-preflight` exposes the canonical Git collector's SHA,
+  dirty state, error, and `git status --porcelain` rows. Formal Tk submission
+  stops with those rows before job creation. The BFF independently repeats the
+  same check synchronously before job creation and preserves
+  `_require_clean_research_git_state()` in the worker immediately before the
+  solve; the existing post-solve SHA/patch identity check is unchanged.
+- Nonformal optimization artifacts are fail-closed with
+  `diagnostic_only=true`, `research_submission_ready=false`,
+  `teacher_release_status=BLOCKED`, and
+  `blocking_reason=dirty_or_nonformal_run` in the result, audit, summary, run
+  manifest, and research claim scope. This changes claim metadata only; it
+  does not weaken feasibility, accounting, physical validation, or solver
+  constraints.
+- Formal evidence still requires committing this implementation, restarting
+  Tk/BFF from that clean frozen commit, and running fresh Prepare. No solver run
+  was performed as part of this UX correction.
+
 ## 2026-07-31 Controlled uniform-tariff sensitivity support
 
 - The first `30 JPY/kWh` / `0 JPY/kW` HTTP attempt is preserved as diagnostic

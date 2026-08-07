@@ -168,6 +168,33 @@ FORMAL_RESEARCH_MAX_SUCCESSORS_PER_TRIP = 0
 FORMAL_RESEARCH_SUCCESSOR_POLICY = "full_network"
 
 
+def _research_git_state_is_ready(git_state: Dict[str, Any]) -> bool:
+    """Return whether a Git record satisfies the formal-run start contract."""
+
+    return bool(
+        bool(git_state.get("git_state_available", False))
+        and str(git_state.get("git_sha") or "").strip()
+        and git_state.get("git_dirty") is False
+    )
+
+
+def _research_git_preflight_payload(
+    git_state: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Build the user-facing preflight from the canonical provenance collector."""
+
+    state = dict(git_state or collect_git_state())
+    return {
+        "formal_research_ready": _research_git_state_is_ready(state),
+        "git_state_available": bool(state.get("git_state_available", False)),
+        "git_sha": state.get("git_sha"),
+        "git_dirty": state.get("git_dirty"),
+        "git_state_error": state.get("git_state_error"),
+        "uncommitted_changes": list(state.get("status_porcelain") or ()),
+        "repository_root": state.get("repository_root"),
+    }
+
+
 def _require_clean_research_git_state(
     *, research_run: bool, git_state: Dict[str, Any]
 ) -> None:
@@ -175,11 +202,7 @@ def _require_clean_research_git_state(
 
     if not research_run:
         return
-    if (
-        bool(git_state.get("git_state_available", False))
-        and bool(str(git_state.get("git_sha") or "").strip())
-        and not bool(git_state.get("git_dirty", True))
-    ):
+    if _research_git_state_is_ready(git_state):
         return
     raise ValueError(
         "formal research run requires a clean Git worktree with an available "
@@ -187,6 +210,32 @@ def _require_clean_research_git_state(
         f"git_dirty={git_state.get('git_dirty')}, "
         f"git_state_error={git_state.get('git_state_error')!r}"
     )
+
+
+def _require_research_git_preflight_before_job_creation(
+    *, research_run: bool
+) -> Optional[Dict[str, Any]]:
+    """Reject a formal request synchronously, while retaining the worker guard."""
+
+    if not research_run:
+        return None
+    git_state = collect_git_state()
+    try:
+        _require_clean_research_git_state(
+            research_run=True,
+            git_state=git_state,
+        )
+    except ValueError as exc:
+        preflight = _research_git_preflight_payload(git_state)
+        raise HTTPException(
+            status_code=409,
+            detail=make_error(
+                AppErrorCode.RESEARCH_GIT_STATE_INVALID,
+                str(exc),
+                **preflight,
+            ),
+        ) from exc
+    return git_state
 
 
 def _available_inventory_for_selected_depot(
@@ -3589,41 +3638,59 @@ def _persist_rich_run_outputs(
         weather_policy=weather_policy,
         rolling_execution=rolling_execution,
     )
+    claim_status = {
+        "research_submission_ready": research_claim_scope.get(
+            "research_submission_ready"
+        ),
+        "teacher_release_status": research_claim_scope.get(
+            "teacher_release_status"
+        ),
+    }
+    for key in ("diagnostic_only", "blocking_reason"):
+        if key in research_claim_scope:
+            claim_status[key] = research_claim_scope[key]
+    optimization_result.update(claim_status)
+    optimization_audit.update(claim_status)
     optimization_result["research_claim_scope"] = research_claim_scope
     optimization_audit["research_claim_scope"] = research_claim_scope
     (run_dir / "research_claim_scope.json").write_text(
         json.dumps(research_claim_scope, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    if finalize_reporting:
-        summary_path = run_dir / "summary.json"
-        if summary_path.is_file():
-            finalized_summary = json.loads(
-                summary_path.read_text(encoding="utf-8")
+    summary_path = run_dir / "summary.json"
+    if summary_path.is_file():
+        finalized_summary = json.loads(
+            summary_path.read_text(encoding="utf-8")
+        )
+        if isinstance(finalized_summary, dict):
+            finalized_summary.update(
+                {
+                    "run_profile": research_claim_scope.get("run_profile"),
+                    "rolling_execution": rolling_execution,
+                    "research_submission_ready": research_claim_scope.get(
+                        "research_submission_ready"
+                    ),
+                    "teacher_release_status": research_claim_scope.get(
+                        "teacher_release_status"
+                    ),
+                    "teacher_release_failed_checks": research_claim_scope.get(
+                        "teacher_release_failed_checks"
+                    ),
+                    "mip_gap_target_met": solver_settings.get(
+                        "mip_gap_target_met"
+                    ),
+                    **{
+                        key: research_claim_scope[key]
+                        for key in ("diagnostic_only", "blocking_reason")
+                        if key in research_claim_scope
+                    },
+                }
             )
-            if isinstance(finalized_summary, dict):
-                finalized_summary.update(
-                    {
-                        "run_profile": research_claim_scope.get("run_profile"),
-                        "rolling_execution": rolling_execution,
-                        "research_submission_ready": research_claim_scope.get(
-                            "research_submission_ready"
-                        ),
-                        "teacher_release_status": research_claim_scope.get(
-                            "teacher_release_status"
-                        ),
-                        "teacher_release_failed_checks": research_claim_scope.get(
-                            "teacher_release_failed_checks"
-                        ),
-                        "mip_gap_target_met": solver_settings.get(
-                            "mip_gap_target_met"
-                        ),
-                    }
-                )
-                summary_path.write_text(
-                    json.dumps(finalized_summary, ensure_ascii=False, indent=2),
-                    encoding="utf-8",
-                )
+            summary_path.write_text(
+                json.dumps(finalized_summary, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+    if finalize_reporting:
         _prepend_experiment_release_header(
             run_dir=run_dir,
             research_claim_scope=research_claim_scope,
@@ -3773,9 +3840,7 @@ def _persist_rich_run_outputs(
         },
         "rolling_execution": rolling_execution,
         "research_claim_scope": research_claim_scope,
-        "teacher_release_status": research_claim_scope.get(
-            "teacher_release_status"
-        ),
+        **claim_status,
         "teacher_release_failed_checks": research_claim_scope.get(
             "teacher_release_failed_checks"
         ),
@@ -5207,6 +5272,14 @@ def _research_claim_scope_payload(
     # the way, but it cannot itself establish a runtime comparison.  That also
     # needs matched cross-case controls and repeated measurements.
     disallowed_claims.append("wall_clock_runtime_comparison")
+    nonformal_markers = (
+        {
+            "diagnostic_only": True,
+            "blocking_reason": "dirty_or_nonformal_run",
+        }
+        if not bool(metadata.get("research_run", False))
+        else {}
+    )
 
     return {
         "schema_version": "research_claim_scope_v1",
@@ -5231,6 +5304,7 @@ def _research_claim_scope_payload(
             "planning_horizon_allocation_proxy_not_actual_monthly_bill_savings"
         ),
         "asset_economics_claim_eligible": False,
+        **nonformal_markers,
         "bev_utilization_policy": bev_utilization_policy,
         "allowed_claims": allowed_claims,
         "disallowed_claims": sorted(set(disallowed_claims)),
@@ -10630,6 +10704,13 @@ def get_optimization_capabilities(scenario_id: str) -> Dict[str, Any]:
     return _optimization_capabilities()
 
 
+@router.get("/research/git-preflight")
+def get_research_git_preflight() -> Dict[str, Any]:
+    """Expose the same Git contract used by formal worker-side validation."""
+
+    return _research_git_preflight_payload()
+
+
 @router.post("/scenarios/{scenario_id}/run-optimization")
 def run_optimization(
     scenario_id: str,
@@ -10638,6 +10719,9 @@ def run_optimization(
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
     request = body or RunOptimizationBody()
+    _require_research_git_preflight_before_job_creation(
+        research_run=bool(request.research_run)
+    )
     try:
         run_profile = normalize_frontend_run_profile(request.run_profile)
     except ValueError as exc:
@@ -10791,6 +10875,9 @@ def reoptimize(
     _app_state: dict = Depends(require_built),
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
+    _require_research_git_preflight_before_job_creation(
+        research_run=bool(body.research_run)
+    )
     timestep_min = _request_timestep_min(body.timestep_min, body.time_step_min)
     scenario = store.get_scenario_document_shallow(scenario_id)
     if timestep_min is not None and not body.prepared_input_id:

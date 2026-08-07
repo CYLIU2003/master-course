@@ -4,7 +4,11 @@ from types import SimpleNamespace
 from pathlib import Path
 from unittest import mock
 
+import pytest
+from fastapi import HTTPException
+
 from bff.routers import optimization
+from bff.services.direct_runtime import is_direct_supported
 from src.optimization.common.problem import OptimizationMode
 
 
@@ -421,6 +425,16 @@ def test_run_optimization_endpoint_submits_current_prepared_input_job() -> None:
 
     with (
         mock.patch.object(optimization, "_require_scenario"),
+        mock.patch.object(
+            optimization,
+            "collect_git_state",
+            return_value={
+                "git_state_available": True,
+                "git_sha": "clean-commit",
+                "git_dirty": False,
+                "status_porcelain": [],
+            },
+        ),
         mock.patch.object(optimization.store, "get_scenario_document_shallow", return_value={}),
         mock.patch.object(optimization, "get_or_build_run_preparation", return_value=prep),
         mock.patch.object(
@@ -439,7 +453,10 @@ def test_run_optimization_endpoint_submits_current_prepared_input_job() -> None:
     ):
         result = optimization.run_optimization(
             "scenario-1",
-            optimization.RunOptimizationBody(mode="mode_milp_only"),
+            optimization.RunOptimizationBody(
+                mode="mode_milp_only",
+                research_run=True,
+            ),
             {"built_ready": True, "built_dir": "data/built/tokyu_full", "routes_df": None},
         )
 
@@ -447,6 +464,7 @@ def test_run_optimization_endpoint_submits_current_prepared_input_job() -> None:
     submitted_args = submit_job.call_args.kwargs["args"]
     assert submitted_args[2] == "prepared-current"
     assert submitted_args[4] == "mode_milp_only"
+    assert submitted_args[18] is True
     assert submitted_args[23] == "day_ahead_and_hourly_rolling"
     assert submitted_args[24] is True
     assert submitted_args[25] == 60
@@ -473,6 +491,16 @@ def test_run_optimization_endpoint_only_allows_day_ahead_with_explicit_profile()
 
     with (
         mock.patch.object(optimization, "_require_scenario"),
+        mock.patch.object(
+            optimization,
+            "collect_git_state",
+            return_value={
+                "git_state_available": True,
+                "git_sha": "dirty-commit",
+                "git_dirty": True,
+                "status_porcelain": [" M README.md"],
+            },
+        ) as collect_git_state,
         mock.patch.object(
             optimization.store,
             "get_scenario_document_shallow",
@@ -515,6 +543,94 @@ def test_run_optimization_endpoint_only_allows_day_ahead_with_explicit_profile()
         )
 
     submitted_args = submit_job.call_args.kwargs["args"]
+    collect_git_state.assert_not_called()
+    assert submitted_args[18] is False
     assert submitted_args[23] == "day_ahead_exploratory"
     assert submitted_args[24] is False
     assert submitted_args[25] == 60
+
+
+def test_formal_dirty_request_is_rejected_before_job_creation() -> None:
+    create_job = mock.Mock()
+    dirty_state = {
+        "git_state_available": True,
+        "git_sha": "dirty-commit",
+        "git_dirty": True,
+        "git_state_error": None,
+        "status_porcelain": [
+            " M src/optimization/model.py",
+            "?? tests/test_model.py",
+        ],
+    }
+
+    with (
+        mock.patch.object(optimization, "_require_scenario"),
+        mock.patch.object(
+            optimization,
+            "collect_git_state",
+            return_value=dirty_state,
+        ),
+        mock.patch.object(
+            optimization.job_store,
+            "create_job",
+            create_job,
+        ),
+        pytest.raises(HTTPException) as exc_info,
+    ):
+        optimization.run_optimization(
+            "scenario-1",
+            optimization.RunOptimizationBody(research_run=True),
+            {
+                "built_ready": True,
+                "built_dir": "data/built/tokyu_full",
+                "routes_df": None,
+            },
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail["error"] == (
+        "RESEARCH_GIT_STATE_INVALID"
+    )
+    assert exc_info.value.detail["uncommitted_changes"] == (
+        dirty_state["status_porcelain"]
+    )
+    create_job.assert_not_called()
+
+
+def test_research_git_preflight_reports_clean_and_dirty_states() -> None:
+    with mock.patch.object(
+        optimization,
+        "collect_git_state",
+        return_value={
+            "git_state_available": True,
+            "git_sha": "clean-commit",
+            "git_dirty": False,
+            "git_state_error": None,
+            "status_porcelain": [],
+            "repository_root": "C:/master-course",
+        },
+    ):
+        clean = optimization.get_research_git_preflight()
+
+    assert clean["formal_research_ready"] is True
+    assert clean["uncommitted_changes"] == []
+
+    with mock.patch.object(
+        optimization,
+        "collect_git_state",
+        return_value={
+            "git_state_available": True,
+            "git_sha": "dirty-commit",
+            "git_dirty": True,
+            "git_state_error": None,
+            "status_porcelain": [" M README.md"],
+        },
+    ):
+        dirty = optimization.get_research_git_preflight()
+
+    assert dirty["formal_research_ready"] is False
+    assert dirty["uncommitted_changes"] == [" M README.md"]
+
+
+def test_research_git_preflight_is_available_in_direct_runtime() -> None:
+    assert is_direct_supported("GET", "/research/git-preflight") is True

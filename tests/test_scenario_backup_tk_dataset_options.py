@@ -6,7 +6,10 @@ import pytest
 
 from tools.scenario_backup_tk import (
     App,
+    _FORMAL_RESEARCH_RUN_LABEL,
+    _RESEARCH_EXECUTION_OPTIONS,
     _RUN_PARAMETER_TAB_LABELS,
+    _TRIAL_RUN_LABEL,
     _choose_dataset_options,
     _ordered_cost_breakdown_items,
     _expand_selected_routes_to_family_members,
@@ -244,6 +247,7 @@ def test_build_optimization_run_payload_centralizes_fast_and_manual_execution() 
     app.day_type_var = DummyVar("WEEKDAY")
     app.rebuild_dispatch_before_opt_var = DummyVar(False)
     app.require_all_available_bevs_var = DummyVar(True)
+    app.research_execution_mode_var = DummyVar(_FORMAL_RESEARCH_RUN_LABEL)
     app.prepared_input_id = "prepared-old"
     app._selected_depot_ids = lambda: ["dep-1"]
     app._timestep_min_value = lambda: 30
@@ -274,6 +278,71 @@ def test_build_optimization_run_payload_centralizes_fast_and_manual_execution() 
         "rebuild_dispatch": False,
         "enableWeatherOperationPolicy": False,
     }
+
+    app.research_execution_mode_var.set(_TRIAL_RUN_LABEL)
+    assert App._build_optimization_run_payload(
+        app, "prepared-trial"
+    )["research_run"] is False
+
+
+def test_run_panel_exposes_separate_trial_and_formal_execution_choices() -> None:
+    source = inspect.getsource(App._build_run_panel)
+
+    assert "_TRIAL_RUN_LABEL" in source
+    assert "_RESEARCH_EXECUTION_OPTIONS" in source
+    assert _RESEARCH_EXECUTION_OPTIONS == (
+        _TRIAL_RUN_LABEL,
+        _FORMAL_RESEARCH_RUN_LABEL,
+    )
+    assert "DIAGNOSTIC / teacher release BLOCKED" in source
+
+
+def test_formal_git_preflight_rejects_dirty_worktree_before_submit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Client:
+        def get_research_git_preflight(self):
+            return {
+                "formal_research_ready": False,
+                "git_dirty": True,
+                "uncommitted_changes": [
+                    " M src/optimization/model.py",
+                    "?? tests/test_model.py",
+                ],
+            }
+
+    app = App.__new__(App)
+    app.client = Client()
+    app.research_execution_mode_var = DummyVar(_FORMAL_RESEARCH_RUN_LABEL)
+    logged: list[str] = []
+    shown: list[tuple[str, str]] = []
+    app.log_line = logged.append
+    monkeypatch.setattr(
+        "tools.scenario_backup_tk.messagebox.showerror",
+        lambda title, message: shown.append((title, message)),
+    )
+
+    assert App._preflight_research_run_selection(app) is False
+    assert shown
+    assert "正式研究実行を開始できません" in shown[0][1]
+    assert " M src/optimization/model.py" in shown[0][1]
+    assert "?? tests/test_model.py" in shown[0][1]
+    assert logged
+
+
+def test_trial_run_skips_formal_git_preflight_and_payload_log_keeps_flag() -> None:
+    class Client:
+        def get_research_git_preflight(self):
+            raise AssertionError("trial runs must not invoke formal Git preflight")
+
+    app = App.__new__(App)
+    app.client = Client()
+    app.research_execution_mode_var = DummyVar(_TRIAL_RUN_LABEL)
+
+    assert App._preflight_research_run_selection(app) is True
+    assert App._compact_execution_payload(
+        {"mode": "mode_milp_only", "research_run": False}
+    ) == '{"mode": "mode_milp_only", "research_run": false}'
 
 
 def test_job_snapshot_exposes_final_artifact_bundle_status() -> None:
