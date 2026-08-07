@@ -403,6 +403,22 @@ def _solve_full_phase3_assignment(
     return assignment, dict(result.plan.metadata)
 
 
+def _full_phase3_composition_counterexample() -> CanonicalOptimizationProblem:
+    """Return two interchangeable BEVs and ICE buses for count search tests."""
+
+    base = _full_phase3_counterexample(sunny_midday_pv_kwh=0.0)
+    bev, ice = base.vehicles
+    return replace(
+        base,
+        vehicles=(
+            replace(bev, vehicle_id="bev-weather-1"),
+            replace(bev, vehicle_id="bev-weather-2"),
+            replace(ice, vehicle_id="ice-weather-1"),
+            replace(ice, vehicle_id="ice-weather-2"),
+        ),
+    )
+
+
 def test_full_phase3_assignment_changes_from_physical_pv_timing() -> None:
     sunny_assignment, sunny_metadata = _solve_full_phase3_assignment(
         sunny_midday_pv_kwh=25.0
@@ -546,6 +562,148 @@ def test_candidate_audit_enumerates_distinct_powertrain_patterns() -> None:
     assert metadata["stage1_runtime_seconds"] == pytest.approx(
         metadata["stage1_primary_runtime_seconds"]
         + metadata["stage1_candidate_enumeration_runtime_seconds"]
+    )
+
+
+def test_phase3_composition_search_activates_unused_powertrain_inventory() -> None:
+    """Adjacent used-count candidates are not limited to duty swaps."""
+
+    result = MILPOptimizer().solve(
+        _full_phase3_composition_counterexample(),
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            thesis_mode=True,
+            phase="phase3_two_stage",
+            research_run=True,
+            time_limit_sec=60,
+            stage1_time_limit_sec=40,
+            stage2_time_limit_sec=20,
+            mip_gap=0.0,
+            random_seed=42,
+            warm_start=False,
+            stage1_best_obj_stop_enabled=False,
+            stage1_stage2_candidate_limit=3,
+            stage1_composition_search_radius=1,
+            gurobi_threads=1,
+        ),
+    )
+    assert result.feasible, result.infeasibility_reasons
+    metadata = dict(result.plan.metadata)
+    certificate = dict(
+        metadata["stage1_used_powertrain_composition_search"]
+    )
+    candidate_rows = list(metadata["stage1_stage2_candidate_evaluation"])
+    feasible_compositions = {
+        (int(row["used_bev"]), int(row["used_ice"]))
+        for row in candidate_rows
+        if row["feasible"] is True
+    }
+
+    assert certificate["enabled"] is True
+    assert certificate["radius_requested"] == 1
+    assert metadata[
+        "stage1_composition_target_time_limit_cap_seconds"
+    ] == pytest.approx(25.0)
+    assert len(feasible_compositions) >= 2
+    assert certificate["multiple_feasible_compositions_found"] is True
+    assert certificate["accepted_for_formal_composition_evidence"] is True
+    assert any(
+        row["stage1_candidate_source"]
+        == "used_powertrain_composition_neighborhood"
+        for row in candidate_rows
+    )
+    assert any(
+        row.get("final_disposition")
+        == "physically_feasible_stage2_candidate"
+        for row in certificate["target_records"]
+    )
+    assert all(
+        row.get("final_disposition") != "stage1_infeasibility_certificate"
+        or row.get("solver_status") == "infeasible"
+        for row in certificate["target_records"]
+    )
+
+
+def test_phase3_composition_infeasibility_certificate_requires_iis_and_lp_hash() -> None:
+    """Count-neighborhood infeasibility is formal evidence only with an IIS."""
+
+    base = _full_phase3_composition_counterexample()
+    allowed_types_by_trip = {
+        "midday-return": ("BEV",),
+        "away-through-midday": ("ICE",),
+    }
+    problem = replace(
+        base,
+        trips=tuple(
+            replace(
+                trip,
+                allowed_vehicle_types=allowed_types_by_trip[trip.trip_id],
+            )
+            for trip in base.trips
+        ),
+        dispatch_context=replace(
+            base.dispatch_context,
+            trips=[
+                replace(
+                    trip,
+                    allowed_vehicle_types=allowed_types_by_trip[trip.trip_id],
+                )
+                for trip in base.dispatch_context.trips
+            ],
+        ),
+    )
+    result = MILPOptimizer().solve(
+        problem,
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            thesis_mode=True,
+            phase="phase3_two_stage",
+            research_run=True,
+            time_limit_sec=60,
+            stage1_time_limit_sec=40,
+            stage2_time_limit_sec=20,
+            mip_gap=0.0,
+            random_seed=42,
+            warm_start=False,
+            stage1_best_obj_stop_enabled=False,
+            stage1_stage2_candidate_limit=3,
+            stage1_composition_search_radius=1,
+            gurobi_threads=1,
+        ),
+    )
+
+    assert result.feasible, result.infeasibility_reasons
+    certificate = dict(
+        result.plan.metadata["stage1_used_powertrain_composition_search"]
+    )
+    target_records = list(certificate["target_records"])
+    infeasibility_certificates = [
+        dict(record["infeasibility_certificate"])
+        for record in target_records
+        if record.get("final_disposition")
+        == "stage1_infeasibility_certificate"
+    ]
+
+    assert certificate["multiple_feasible_compositions_found"] is False
+    assert certificate["all_adjacent_targets_certified_infeasible"] is True
+    assert certificate["accepted_for_formal_composition_evidence"] is True
+    assert len(infeasibility_certificates) == 2
+    assert all(item["iis_generated"] is True for item in infeasibility_certificates)
+    assert all(
+        item["target_count_constraint_in_iis"] is True
+        for item in infeasibility_certificates
+    )
+    assert all(
+        len(item["stage1_model_lp_sha256"]) == 64
+        for item in infeasibility_certificates
+    )
+    assert all(
+        len(item["solver_controls_hash"]) == 64
+        for item in infeasibility_certificates
+    )
+    assert all(
+        item["accepted_for_formal_composition_evidence"] is True
+        for item in infeasibility_certificates
     )
 
 

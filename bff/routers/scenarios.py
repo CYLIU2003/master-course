@@ -812,6 +812,14 @@ class UpdateQuickSetupBody(BaseModel):
     gridSellPricePerKwh: Optional[float] = Field(default=None, ge=0.0)
     demandChargeCostPerKw: Optional[float] = Field(default=None, ge=0.0)
     vehicleUsageCostJpyPerUsedBus: Optional[float] = Field(default=None, ge=0.0)
+    vehicleUsageCostSemantics: Optional[
+        Literal[
+            "fixed_vehicle_day_cost",
+            "driver_cost_proxy",
+            "provisional_sensitivity",
+            "unclassified",
+        ]
+    ] = None
     dieselPricePerL: Optional[float] = Field(default=None, ge=0.0)
     gridCo2KgPerKwh: Optional[float] = Field(default=None, ge=0.0)
     co2PricePerKg: Optional[float] = Field(default=None, ge=0.0)
@@ -1792,6 +1800,16 @@ def _builder_defaults(
             ),
             0.0,
         ),
+        "vehicleUsageCostSemantics": str(
+            overlay_cost.get(
+                "vehicle_usage_cost_semantics",
+                simulation_config.get(
+                    "vehicle_usage_cost_semantics",
+                    "unclassified",
+                ),
+            )
+            or "unclassified"
+        ),
         "dieselPricePerL": overlay_cost.get("diesel_price_per_l"),
         "gridCo2KgPerKwh": overlay_cost.get("grid_co2_kg_per_kwh"),
         "co2PricePerKg": overlay_cost.get("co2_price_per_kg"),
@@ -2377,6 +2395,9 @@ def _build_quick_setup_payload(
             "vehicleUsageCostJpyPerUsedBus": builder_defaults.get(
                 "vehicleUsageCostJpyPerUsedBus"
             ),
+            "vehicleUsageCostSemantics": builder_defaults.get(
+                "vehicleUsageCostSemantics", "unclassified"
+            ),
             "dieselPricePerL": builder_defaults.get("dieselPricePerL"),
             "gridCo2KgPerKwh": builder_defaults.get("gridCo2KgPerKwh"),
             "co2PricePerKg": builder_defaults.get("co2PricePerKg"),
@@ -2843,6 +2864,16 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
         simulation_config = store.get_field(scenario_id, "simulation_config") or {}
         if not isinstance(simulation_config, dict):
             simulation_config = {}
+        # Quick Setup is an interactive standalone scenario edit.  A formal
+        # paired-comparison contract must be supplied again by the dedicated
+        # runner after any such edit; retaining it here can combine a new
+        # service date with stale baseline/counterfactual provenance.
+        for comparison_key in (
+            "comparison_type",
+            "comparison_role",
+            "counterfactual_pv_source_date",
+        ):
+            simulation_config.pop(comparison_key, None)
         saved_weights = _coerce_float_mapping(simulation_config.get("objective_weights") or {})
         if not saved_weights:
             saved_weights = _coerce_float_mapping(solver_config.get("objective_weights") or {})
@@ -2860,6 +2891,10 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             overlay_cost["vehicle_usage_cost_jpy_per_used_bus"] = max(
                 float(body.vehicleUsageCostJpyPerUsedBus),
                 0.0,
+            )
+        if body.vehicleUsageCostSemantics is not None:
+            overlay_cost["vehicle_usage_cost_semantics"] = str(
+                body.vehicleUsageCostSemantics
             )
         if body.dieselPricePerL is not None:
             overlay_cost["diesel_price_per_l"] = float(body.dieselPricePerL)
@@ -3019,6 +3054,10 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
                 float(body.vehicleUsageCostJpyPerUsedBus),
                 0.0,
             )
+        if body.vehicleUsageCostSemantics is not None:
+            simulation_config["vehicle_usage_cost_semantics"] = str(
+                body.vehicleUsageCostSemantics
+            )
         if body.objectivePreset is not None:
             simulation_config["objective_preset"] = str(body.objectivePreset)
         if body.pvProfileId is not None:
@@ -3046,19 +3085,11 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
                 simulation_config["calendar_policy"] = (
                     FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL
                 )
-                simulation_config["comparison_type"] = (
-                    FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL
-                )
             elif (
                 simulation_config.get("calendar_policy")
                 == FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL
             ):
                 simulation_config.pop("calendar_policy", None)
-                if (
-                    simulation_config.get("comparison_type")
-                    == FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL
-                ):
-                    simulation_config.pop("comparison_type", None)
         if body.weatherFactorScalar is not None:
             simulation_config["weather_factor_scalar"] = float(body.weatherFactorScalar)
         if body.enableWeatherOperationPolicy is not None:

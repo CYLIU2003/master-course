@@ -4,6 +4,7 @@ import csv
 import hashlib
 import json
 import math
+import tempfile
 import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -67,6 +68,109 @@ _DRIVER_OVERTIME_FACTOR = 1.25
 ROLLING_REMAINING_DAY_FIXED_ASSIGNMENT = "remaining_day_fixed_assignment"
 _FEEDBACK_GLOBAL_DEADLINE_KEY = "_stage2_feedback_global_deadline_monotonic"
 _FEEDBACK_GLOBAL_STARTED_KEY = "_stage2_feedback_global_started_monotonic"
+
+
+def classify_bev_frontier_status(
+    solver_status: str,
+    solution_count: int,
+    *,
+    certificate_accepted: bool = False,
+) -> str:
+    """Classify one count-constrained solve without overstating evidence."""
+
+    normalized = str(solver_status or "").strip().lower()
+    has_incumbent = int(solution_count or 0) > 0
+    if normalized == "time_limit":
+        return (
+            "TIME_LIMIT_WITH_INCUMBENT"
+            if has_incumbent
+            else "TIME_LIMIT_NO_INCUMBENT"
+        )
+    if normalized == "infeasible":
+        return "CERTIFIED_INFEASIBLE" if certificate_accepted else "ERROR"
+    if has_incumbent and normalized in {
+        "optimal",
+        "suboptimal",
+        "objective_limit",
+    }:
+        return "FEASIBLE"
+    return "ERROR"
+
+
+def audit_bev_frontier_monotonicity(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    tolerance_jpy: float = 1.0e-6,
+) -> List[Dict[str, Any]]:
+    """Return cost decreases without converting them into fake optima."""
+
+    comparable = sorted(
+        (
+            row
+            for row in rows
+            if row.get("physical_validation_feasible") is True
+            and row.get("stage2_actual_canonical_cost_jpy") is not None
+            and row.get("minimum_used_bev_count") is not None
+        ),
+        key=lambda row: int(row["minimum_used_bev_count"]),
+    )
+    violations: List[Dict[str, Any]] = []
+    for previous_row, current_row in zip(comparable, comparable[1:]):
+        previous_cost = float(
+            previous_row["stage2_actual_canonical_cost_jpy"]
+        )
+        current_cost = float(
+            current_row["stage2_actual_canonical_cost_jpy"]
+        )
+        if current_cost + float(tolerance_jpy) < previous_cost:
+            violations.append(
+                {
+                    "previous_minimum_used_bev_count": previous_row.get(
+                        "minimum_used_bev_count"
+                    ),
+                    "current_minimum_used_bev_count": current_row.get(
+                        "minimum_used_bev_count"
+                    ),
+                    "previous_cost_jpy": previous_cost,
+                    "current_cost_jpy": current_cost,
+                }
+            )
+    return violations
+
+
+def select_bev_frontier_feasibility_witness(
+    target_minimum_used_bev_count: int,
+    candidate_evaluations: Sequence[Mapping[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    """Select the best evaluated witness for one nested ``used BEV >= K`` set.
+
+    A physically feasible candidate with more than ``K`` used BEVs also
+    satisfies every lower-bound target below it.  Selecting the lowest
+    canonical-cost qualifying candidate produces the evaluated candidate-pool
+    envelope without claiming that a time-limited Phase 3 row is globally
+    optimal.
+    """
+
+    target = max(int(target_minimum_used_bev_count), 0)
+    eligible: List[Tuple[float, int, str, Dict[str, Any]]] = []
+    for raw_candidate in candidate_evaluations:
+        candidate = dict(raw_candidate)
+        if candidate.get("feasible") is not True:
+            continue
+        used_bev = int(candidate.get("used_bev") or 0)
+        if used_bev < target:
+            continue
+        raw_cost = candidate.get("stage2_actual_canonical_cost_jpy")
+        if raw_cost is None:
+            continue
+        cost = float(raw_cost)
+        if not math.isfinite(cost):
+            continue
+        candidate_hash = str(candidate.get("candidate_hash") or "")
+        eligible.append((cost, used_bev, candidate_hash, candidate))
+    if not eligible:
+        return None
+    return min(eligible, key=lambda item: item[:3])[3]
 
 
 def _resolved_stage_time_limit_sec(
@@ -2652,6 +2756,7 @@ class GurobiMILPAdapter:
         )
 
         objective = gp.LinExpr()
+        ice_fuel_l_objective = gp.LinExpr()
         # O2: electricity cost based on actual charging source flows.
         price_by_slot = {slot.slot_index: slot.grid_buy_yen_per_kwh for slot in problem.price_slots}
         grid_to_bus_priority_penalty = self._safe_nonnegative_float(
@@ -2746,6 +2851,7 @@ class GurobiMILPAdapter:
                 if trip is None:
                     continue
                 fuel_l = self._trip_fuel_l(problem, vehicle, trip_id)
+                ice_fuel_l_objective += fuel_l * var
                 objective += fuel_weight * diesel_price * fuel_l * var
 
             for (vehicle_id, from_trip_id, to_trip_id), var in x.items():
@@ -2760,10 +2866,12 @@ class GurobiMILPAdapter:
                     trip_by_id[to_trip_id].origin,
                 )
                 deadhead_km = self._deadhead_distance_km(problem, deadhead_min)
+                ice_fuel_l_objective += deadhead_km * fuel_rate * var
                 objective += fuel_weight * diesel_price * deadhead_km * fuel_rate * var
             for assignment_key, fuel_l in (
                 ice_startup_fuel_l_by_assignment.items()
             ):
+                ice_fuel_l_objective += fuel_l * start_arc[assignment_key]
                 objective += (
                     fuel_weight
                     * diesel_price
@@ -2773,6 +2881,7 @@ class GurobiMILPAdapter:
             for assignment_key, fuel_l in (
                 ice_return_fuel_l_by_assignment.items()
             ):
+                ice_fuel_l_objective += fuel_l * end_arc[assignment_key]
                 objective += (
                     fuel_weight
                     * diesel_price
@@ -3158,11 +3267,85 @@ class GurobiMILPAdapter:
                     continue
                 var.Start = float(refuel_l)
 
+        integrated_ev_utilization_mode = str(
+            getattr(config, "integrated_ev_utilization_mode", "disabled")
+            or "disabled"
+        ).strip().lower()
+        if integrated_ev_utilization_mode not in {
+            "disabled",
+            "minimum_ice_fuel_lexicographic",
+        }:
+            raise ValueError(
+                "integrated_ev_utilization_mode must be 'disabled' or "
+                "'minimum_ice_fuel_lexicographic'"
+            )
+        actual_cost_upper_bound_jpy = getattr(
+            config,
+            "integrated_actual_cost_upper_bound_jpy",
+            None,
+        )
+        if actual_cost_upper_bound_jpy is not None:
+            actual_cost_upper_bound_jpy = float(
+                actual_cost_upper_bound_jpy
+            )
+            if actual_cost_upper_bound_jpy < 0.0:
+                raise ValueError(
+                    "integrated_actual_cost_upper_bound_jpy must be nonnegative"
+                )
+            model.addConstr(
+                objective <= actual_cost_upper_bound_jpy,
+                name="integrated_actual_cost_upper_bound",
+            )
+
         if allow_partial_service:
             coverage_objective = gp.quicksum(unserved[trip.trip_id] for trip in problem.trips)
             model.ModelSense = GRB.MINIMIZE
-            model.setObjectiveN(coverage_objective, index=0, priority=2, name="coverage")
-            model.setObjectiveN(objective, index=1, priority=1, name="secondary_cost")
+            if integrated_ev_utilization_mode != "disabled":
+                model.setObjectiveN(
+                    coverage_objective,
+                    index=0,
+                    priority=3,
+                    name="coverage",
+                )
+                model.setObjectiveN(
+                    ice_fuel_l_objective,
+                    index=1,
+                    priority=2,
+                    name="primary_ice_fuel_l",
+                )
+                model.setObjectiveN(
+                    objective,
+                    index=2,
+                    priority=1,
+                    name="secondary_canonical_cost",
+                )
+            else:
+                model.setObjectiveN(
+                    coverage_objective,
+                    index=0,
+                    priority=2,
+                    name="coverage",
+                )
+                model.setObjectiveN(
+                    objective,
+                    index=1,
+                    priority=1,
+                    name="secondary_cost",
+                )
+        elif integrated_ev_utilization_mode != "disabled":
+            model.ModelSense = GRB.MINIMIZE
+            model.setObjectiveN(
+                ice_fuel_l_objective,
+                index=0,
+                priority=2,
+                name="primary_ice_fuel_l",
+            )
+            model.setObjectiveN(
+                objective,
+                index=1,
+                priority=1,
+                name="secondary_canonical_cost",
+            )
         else:
             model.setObjective(objective, GRB.MINIMIZE)
         
@@ -3705,6 +3888,20 @@ class GurobiMILPAdapter:
                 "minimum_used_bev_count_policy_enabled": (
                     minimum_used_bev_count > 0
                 ),
+                "integrated_ev_utilization_mode": (
+                    integrated_ev_utilization_mode
+                ),
+                "integrated_actual_cost_upper_bound_jpy": (
+                    actual_cost_upper_bound_jpy
+                ),
+                "integrated_actual_cost_upper_bound_delta_ratio": getattr(
+                    config,
+                    "integrated_actual_cost_upper_bound_delta_ratio",
+                    None,
+                ),
+                "integrated_primary_ice_fuel_l": float(
+                    ice_fuel_l_objective.getValue()
+                ),
                 "pv_curtail_penalty_auto_defaulted": pv_curtail_penalty_auto_defaulted,
                 "charge_session_start_penalty_yen": charge_session_start_penalty,
                 "slot_concurrency_penalty_yen": slot_concurrency_penalty,
@@ -4192,6 +4389,60 @@ class GurobiMILPAdapter:
             ),
             50,
         )
+        stage1_composition_search_radius = min(
+            max(
+                int(
+                    getattr(
+                        config,
+                        "stage1_composition_search_radius",
+                        0,
+                    )
+                    or 0
+                ),
+                0,
+            ),
+            5,
+        )
+        stage1_composition_search_enabled = bool(
+            stage2_enabled
+            and stage1_stage2_candidate_limit > 1
+            and stage1_composition_search_radius > 0
+        )
+        stage1_bev_frontier_requested = bool(
+            getattr(config, "stage1_bev_frontier_enabled", False)
+        )
+        stage1_bev_frontier_min_count = max(
+            int(getattr(config, "stage1_bev_frontier_min_count", 15) or 0),
+            0,
+        )
+        stage1_bev_frontier_max_count = max(
+            int(getattr(config, "stage1_bev_frontier_max_count", 35) or 0),
+            0,
+        )
+        stage1_bev_frontier_enabled = bool(
+            stage2_enabled
+            and stage1_bev_frontier_requested
+            and stage1_bev_frontier_max_count >= stage1_bev_frontier_min_count
+        )
+        stage1_bev_frontier_target_count = (
+            stage1_bev_frontier_max_count
+            - stage1_bev_frontier_min_count
+            + 1
+            if stage1_bev_frontier_enabled
+            else 0
+        )
+        if stage1_bev_frontier_enabled:
+            stage1_stage2_candidate_limit = min(
+                max(
+                    stage1_stage2_candidate_limit,
+                    stage1_bev_frontier_target_count + 1,
+                ),
+                50,
+            )
+        stage1_explicit_powertrain_search_enabled = bool(
+            stage1_composition_search_enabled
+            or stage1_bev_frontier_enabled
+        )
         stage1_candidate_enumeration_reserve_sec = 0.0
         stage1_primary_search_time_limit_sec = float(stage_time_limit)
         if stage2_enabled and stage1_stage2_candidate_limit > 1:
@@ -4209,6 +4460,24 @@ class GurobiMILPAdapter:
                 100.0,
                 max(float(stage_time_limit) - 1.0, 0.0),
             )
+            if stage1_bev_frontier_enabled:
+                frontier_target_time_limit_sec = max(
+                    float(
+                        getattr(
+                            config,
+                            "stage1_bev_frontier_target_time_limit_sec",
+                            120.0,
+                        )
+                        or 120.0
+                    ),
+                    1.0,
+                )
+                stage1_candidate_enumeration_reserve_sec = min(
+                    frontier_target_time_limit_sec
+                    * stage1_bev_frontier_target_count,
+                    max(float(stage_time_limit) * 0.8, 0.0),
+                    max(float(stage_time_limit) - 1.0, 0.0),
+                )
             stage1_primary_search_time_limit_sec = max(
                 float(stage_time_limit)
                 - stage1_candidate_enumeration_reserve_sec,
@@ -4217,7 +4486,16 @@ class GurobiMILPAdapter:
             stage1.Params.TimeLimit = (
                 stage1_primary_search_time_limit_sec
             )
-            stage1.Params.PoolSolutions = stage1_stage2_candidate_limit
+            # A primary solution pool can be filled with vehicle-path
+            # symmetries before the requested used-powertrain neighborhoods
+            # are examined.  When explicit composition search is enabled,
+            # retain the incumbent only and reserve the remaining candidate
+            # capacity for those exact count-constrained re-solves.
+            stage1.Params.PoolSolutions = (
+                1
+                if stage1_explicit_powertrain_search_enabled
+                else stage1_stage2_candidate_limit
+            )
 
         builder = MILPModelBuilder()
         trip_by_id = problem.trip_by_id()
@@ -5686,6 +5964,48 @@ class GurobiMILPAdapter:
                 ).encode("utf-8")
             ).hexdigest()
 
+        def _stage1_infeasibility_model_evidence() -> Dict[str, Any]:
+            """Hash the exact temporary Stage 1 LP used for an IIS claim.
+
+            A solver status alone is not a reproducible composition
+            certificate. The LP hash is captured while the target-count
+            constraints are still present, alongside separately recorded
+            solver controls and the time-indexed recourse input hash.
+            """
+
+            lp_path: Optional[Path] = None
+            try:
+                with tempfile.NamedTemporaryFile(
+                    suffix=".lp",
+                    delete=False,
+                ) as handle:
+                    lp_path = Path(handle.name)
+                stage1.write(str(lp_path))
+                lp_bytes = lp_path.read_bytes()
+                try:
+                    model_fingerprint: Optional[int] = int(stage1.Fingerprint)
+                except Exception:
+                    model_fingerprint = None
+                return {
+                    "stage1_model_lp_sha256": hashlib.sha256(
+                        lp_bytes
+                    ).hexdigest(),
+                    "stage1_model_fingerprint": model_fingerprint,
+                    "stage1_model_num_variables": int(stage1.NumVars),
+                    "stage1_model_num_constraints": int(stage1.NumConstrs),
+                }
+            except Exception as exc:
+                return {
+                    "stage1_model_lp_sha256": "",
+                    "stage1_model_evidence_error": str(exc),
+                }
+            finally:
+                if lp_path is not None:
+                    try:
+                        lp_path.unlink(missing_ok=True)
+                    except OSError:
+                        pass
+
         def _candidate_assignment_details(
             plan: AssignmentPlan,
         ) -> List[Dict[str, str]]:
@@ -5749,6 +6069,77 @@ class GurobiMILPAdapter:
                     for duty in plan.duties
                     for leg in duty.legs
                 )
+            )
+
+        def _candidate_used_powertrain_composition(
+            plan: AssignmentPlan,
+        ) -> Tuple[int, int]:
+            """Return the actual activated electric/combustion bus counts.
+
+            The candidate table historically calls the electric count
+            ``used_bev`` even though the canonical electric group also covers
+            PHEV/FCEV.  Preserve that external field name while keeping the
+            grouping identical to the Stage 1 used-vehicle expressions.
+            """
+
+            assigned_vehicle_ids = {
+                str(plan.vehicle_id_for_duty(duty.duty_id))
+                for duty in plan.duties
+                if duty.legs
+            }
+            used_electric = sum(
+                _powertrain_group(vehicle_id) == "ELECTRIC"
+                for vehicle_id in assigned_vehicle_ids
+            )
+            return (
+                int(used_electric),
+                int(len(assigned_vehicle_ids) - used_electric),
+            )
+
+        def _current_stage1_plan(
+            *,
+            candidate_source: str,
+            metadata: Optional[Mapping[str, Any]] = None,
+        ) -> AssignmentPlan:
+            """Extract the current Stage 1 incumbent after a bounded re-solve."""
+
+            (
+                candidate_duties,
+                candidate_served_trip_ids,
+                candidate_duty_vehicle_map,
+            ) = self._build_vehicle_duties_from_solution(
+                problem=problem,
+                trip_by_id=trip_by_id,
+                dispatch_trip_by_id=dispatch_trip_by_id,
+                y=y,
+                x=x,
+                start_arc=start_arc,
+            )
+            candidate_served = set(candidate_served_trip_ids)
+            return AssignmentPlan(
+                duties=tuple(candidate_duties),
+                served_trip_ids=tuple(sorted(candidate_served)),
+                unserved_trip_ids=tuple(
+                    sorted(
+                        trip.trip_id
+                        for trip in problem.trips
+                        if trip.trip_id not in candidate_served
+                    )
+                ),
+                metadata={
+                    **dict(stage1_plan.metadata or {}),
+                    "duty_vehicle_map": candidate_duty_vehicle_map,
+                    "stage1_objective": float(
+                        getattr(stage1, "ObjVal", 0.0) or 0.0
+                    ),
+                    "stage1_candidate_source": candidate_source,
+                    "stage1_time_indexed_energy_recourse_result": (
+                        self._stage1_time_indexed_energy_recourse_result(
+                            stage1_time_indexed_energy_recourse
+                        )
+                    ),
+                    **dict(metadata or {}),
+                },
             )
 
         def _add_powertrain_pattern_no_good(
@@ -5976,6 +6367,642 @@ class GurobiMILPAdapter:
                 ),
             )
 
+        def _powertrain_activation_replacement_mip_starts(
+            plan: AssignmentPlan,
+        ) -> Dict[int, List[Dict[str, Any]]]:
+            """Build partial starts that change the activated fleet mix.
+
+            The ordinary whole-duty swap starts exchange an already-used BEV
+            and ICE and therefore preserve the activated composition.  These
+            starts instead move every duty of one active source vehicle to an
+            unused opposite-powertrain vehicle, allowing the exact temporary
+            ``used_vehicle`` count constraints to receive a plausible
+            incumbent without changing the Stage 1 objective or recourse
+            constraints.  Gurobi still validates the complete start.
+            """
+
+            duties_by_vehicle: Dict[str, List[Any]] = {}
+            for duty in plan.duties:
+                vehicle_id = str(plan.vehicle_id_for_duty(duty.duty_id))
+                if duty.legs:
+                    duties_by_vehicle.setdefault(vehicle_id, []).append(duty)
+            active_vehicle_ids = set(duties_by_vehicle)
+            available_by_group = {
+                "ELECTRIC": sorted(
+                    str(vehicle.vehicle_id)
+                    for vehicle in problem.vehicles
+                    if bool(getattr(vehicle, "available", True))
+                    and _powertrain_group(str(vehicle.vehicle_id))
+                    == "ELECTRIC"
+                ),
+                "COMBUSTION": sorted(
+                    str(vehicle.vehicle_id)
+                    for vehicle in problem.vehicles
+                    if bool(getattr(vehicle, "available", True))
+                    and _powertrain_group(str(vehicle.vehicle_id))
+                    == "COMBUSTION"
+                ),
+            }
+            active_by_group = {
+                group: sorted(
+                    vehicle_id
+                    for vehicle_id in active_vehicle_ids
+                    if _powertrain_group(vehicle_id) == group
+                )
+                for group in ("ELECTRIC", "COMBUSTION")
+            }
+
+            def _service_energy_for_vehicle(vehicle_id: str) -> float:
+                vehicle = vehicle_by_id.get(vehicle_id)
+                if vehicle is None:
+                    return math.inf
+                return sum(
+                    max(
+                        self._trip_energy_kwh(
+                            problem,
+                            vehicle,
+                            str(leg.trip.trip_id),
+                        ),
+                        0.0,
+                    )
+                    for duty in duties_by_vehicle.get(vehicle_id, ())
+                    for leg in duty.legs
+                )
+
+            def _replacement_score(
+                source_vehicle_id: str,
+                target_vehicle_id: str,
+            ) -> float:
+                target_vehicle = vehicle_by_id.get(target_vehicle_id)
+                if target_vehicle is None:
+                    return math.inf
+                target_service_energy = sum(
+                    max(
+                        self._trip_energy_kwh(
+                            problem,
+                            target_vehicle,
+                            str(leg.trip.trip_id),
+                        ),
+                        0.0,
+                    )
+                    for duty in duties_by_vehicle.get(source_vehicle_id, ())
+                    for leg in duty.legs
+                )
+                return abs(
+                    _service_energy_for_vehicle(source_vehicle_id)
+                    - target_service_energy
+                )
+
+            def _build_replacement_start(
+                replacements: Mapping[str, str],
+                *,
+                bev_delta: int,
+            ) -> Optional[Dict[str, Any]]:
+                selected_y: Set[Tuple[str, str]] = set()
+                selected_x: Set[Tuple[str, str, str]] = set()
+                selected_start: Set[Tuple[str, str]] = set()
+                selected_end: Set[Tuple[str, str]] = set()
+                selected_used = set(active_vehicle_ids)
+                selected_used.difference_update(replacements)
+                selected_used.update(replacements.values())
+                selected_used_day: Set[Tuple[str, int]] = set()
+                pattern: List[Tuple[str, str]] = []
+
+                for original_vehicle_id, duties in duties_by_vehicle.items():
+                    replacement_vehicle_id = str(
+                        replacements.get(
+                            original_vehicle_id,
+                            original_vehicle_id,
+                        )
+                    )
+                    for duty in duties:
+                        trip_ids = [
+                            str(leg.trip.trip_id)
+                            for leg in duty.legs
+                        ]
+                        if not trip_ids:
+                            continue
+                        for trip_id in trip_ids:
+                            assignment_key = (
+                                replacement_vehicle_id,
+                                trip_id,
+                            )
+                            if assignment_key not in y:
+                                return None
+                            selected_y.add(assignment_key)
+                            selected_used_day.add(
+                                (
+                                    replacement_vehicle_id,
+                                    int(
+                                        trip_day_index_by_trip_id.get(
+                                            trip_id,
+                                            0,
+                                        )
+                                    ),
+                                )
+                            )
+                            pattern.append(
+                                (
+                                    trip_id,
+                                    _powertrain_group(
+                                        replacement_vehicle_id
+                                    ),
+                                )
+                            )
+                        start_key = (
+                            replacement_vehicle_id,
+                            trip_ids[0],
+                        )
+                        end_key = (
+                            replacement_vehicle_id,
+                            trip_ids[-1],
+                        )
+                        if (
+                            start_key not in start_arc
+                            or end_key not in end_arc
+                        ):
+                            return None
+                        selected_start.add(start_key)
+                        selected_end.add(end_key)
+                        for from_trip_id, to_trip_id in zip(
+                            trip_ids,
+                            trip_ids[1:],
+                        ):
+                            arc_key = (
+                                replacement_vehicle_id,
+                                from_trip_id,
+                                to_trip_id,
+                            )
+                            if arc_key not in x:
+                                return None
+                            selected_x.add(arc_key)
+
+                normalized_pattern = tuple(sorted(pattern))
+                if len(normalized_pattern) != len(problem.trips):
+                    return None
+                replacement_pairs = tuple(sorted(replacements.items()))
+                source_vehicle_ids = tuple(
+                    source_vehicle_id
+                    for source_vehicle_id, _target_vehicle_id
+                    in replacement_pairs
+                )
+                target_vehicle_ids = tuple(
+                    target_vehicle_id
+                    for _source_vehicle_id, target_vehicle_id
+                    in replacement_pairs
+                )
+                return {
+                    # Retain the single-value fields for existing adjacent
+                    # search readers while exposing every replacement used by
+                    # a multi-step frontier start.
+                    "source_vehicle_id": (
+                        source_vehicle_ids[0]
+                        if source_vehicle_ids
+                        else None
+                    ),
+                    "target_vehicle_id": (
+                        target_vehicle_ids[0]
+                        if target_vehicle_ids
+                        else None
+                    ),
+                    "source_vehicle_ids": source_vehicle_ids,
+                    "target_vehicle_ids": target_vehicle_ids,
+                    "replacement_count": len(replacement_pairs),
+                    "split_activation_count": 0,
+                    "activation_count": len(replacement_pairs),
+                    "start_mode": (
+                        "unused_opposite_powertrain_whole_duty_replacement"
+                    ),
+                    "semantics": (
+                        "one_or_more_unused_opposite_powertrain_activations_"
+                        "and_source_vehicle_retirements"
+                    ),
+                    "composition_delta_used_bev": bev_delta,
+                    "powertrain_pattern": normalized_pattern,
+                    "powertrain_pattern_hash": hashlib.sha256(
+                        json.dumps(
+                            normalized_pattern,
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        ).encode("utf-8")
+                    ).hexdigest(),
+                    "selected_y": selected_y,
+                    "selected_x": selected_x,
+                    "selected_start": selected_start,
+                    "selected_end": selected_end,
+                    "selected_used": selected_used,
+                    "selected_used_day": selected_used_day,
+                    "warm_start_priority_score": sum(
+                        _replacement_score(
+                            source_vehicle_id,
+                            target_vehicle_id,
+                        )
+                        for source_vehicle_id, target_vehicle_id
+                        in replacement_pairs
+                    ),
+                }
+
+            def _build_unused_bev_duty_split_starts(
+            ) -> Dict[int, List[Dict[str, Any]]]:
+                """Activate unused BEVs without retiring the source buses.
+
+                Whole-duty replacement preserves the total used-fleet count.
+                At high ``used BEV >= K`` targets that can leave no feasible
+                incumbent even though shorter BEV duties are possible.  This
+                start family moves one suffix from each of several existing
+                duties to a distinct unused BEV.  The source retains a
+                nonempty prefix, so each split increases both used BEV and
+                total used buses by exactly one.  It remains a solver hint;
+                the unchanged Stage 1 model validates all path, energy, and
+                activation constraints.
+                """
+
+                base_start = _build_replacement_start({}, bev_delta=0)
+                if base_start is None:
+                    return {}
+                selected_y = set(base_start["selected_y"])
+                selected_x = set(base_start["selected_x"])
+                selected_start = set(base_start["selected_start"])
+                selected_end = set(base_start["selected_end"])
+                selected_used = set(base_start["selected_used"])
+                selected_used_day = set(base_start["selected_used_day"])
+                unused_bev_ids = [
+                    vehicle_id
+                    for vehicle_id in available_by_group["ELECTRIC"]
+                    if vehicle_id not in active_vehicle_ids
+                ]
+                split_duty_keys: Set[Tuple[str, str]] = set()
+                source_vehicle_ids: List[str] = []
+                target_vehicle_ids: List[str] = []
+                split_trip_ids: List[str] = []
+                starts: Dict[int, List[Dict[str, Any]]] = {}
+
+                # Splitting an existing BEV duty first adds an activation
+                # without increasing electric service energy.  ICE duties are
+                # the deterministic fallback once those opportunities are
+                # exhausted.
+                ordered_source_vehicle_ids = sorted(
+                    duties_by_vehicle,
+                    key=lambda vehicle_id: (
+                        0
+                        if _powertrain_group(vehicle_id) == "ELECTRIC"
+                        else 1,
+                        vehicle_id,
+                    ),
+                )
+                for target_vehicle_id in unused_bev_ids:
+                    split_applied = False
+                    for original_vehicle_id in ordered_source_vehicle_ids:
+                        ordered_duties = sorted(
+                            duties_by_vehicle[original_vehicle_id],
+                            key=lambda duty: str(duty.duty_id),
+                        )
+                        for duty in ordered_duties:
+                            duty_key = (
+                                original_vehicle_id,
+                                str(duty.duty_id),
+                            )
+                            if duty_key in split_duty_keys:
+                                continue
+                            trip_ids = [
+                                str(leg.trip.trip_id)
+                                for leg in duty.legs
+                            ]
+                            if len(trip_ids) < 2:
+                                continue
+                            current_source_vehicle_ids = [
+                                vehicle_id
+                                for vehicle_id in sorted(selected_used)
+                                if all(
+                                    (vehicle_id, trip_id) in selected_y
+                                    for trip_id in trip_ids
+                                )
+                            ]
+                            if len(current_source_vehicle_ids) != 1:
+                                continue
+                            source_vehicle_id = (
+                                current_source_vehicle_ids[0]
+                            )
+                            for split_index in range(
+                                len(trip_ids) - 1,
+                                0,
+                                -1,
+                            ):
+                                prefix_last_trip_id = trip_ids[
+                                    split_index - 1
+                                ]
+                                suffix_trip_ids = trip_ids[split_index:]
+                                suffix_first_trip_id = suffix_trip_ids[0]
+                                suffix_last_trip_id = suffix_trip_ids[-1]
+                                source_cross_arc = (
+                                    source_vehicle_id,
+                                    prefix_last_trip_id,
+                                    suffix_first_trip_id,
+                                )
+                                source_end_key = (
+                                    source_vehicle_id,
+                                    suffix_last_trip_id,
+                                )
+                                source_prefix_end_key = (
+                                    source_vehicle_id,
+                                    prefix_last_trip_id,
+                                )
+                                target_start_key = (
+                                    target_vehicle_id,
+                                    suffix_first_trip_id,
+                                )
+                                target_end_key = (
+                                    target_vehicle_id,
+                                    suffix_last_trip_id,
+                                )
+                                target_assignment_keys = {
+                                    (target_vehicle_id, trip_id)
+                                    for trip_id in suffix_trip_ids
+                                }
+                                source_suffix_assignment_keys = {
+                                    (source_vehicle_id, trip_id)
+                                    for trip_id in suffix_trip_ids
+                                }
+                                source_suffix_arcs = {
+                                    (
+                                        source_vehicle_id,
+                                        from_trip_id,
+                                        to_trip_id,
+                                    )
+                                    for from_trip_id, to_trip_id in zip(
+                                        suffix_trip_ids,
+                                        suffix_trip_ids[1:],
+                                    )
+                                }
+                                target_suffix_arcs = {
+                                    (
+                                        target_vehicle_id,
+                                        from_trip_id,
+                                        to_trip_id,
+                                    )
+                                    for from_trip_id, to_trip_id in zip(
+                                        suffix_trip_ids,
+                                        suffix_trip_ids[1:],
+                                    )
+                                }
+                                if (
+                                    source_cross_arc not in selected_x
+                                    or source_end_key not in selected_end
+                                    or source_prefix_end_key not in end_arc
+                                    or target_start_key not in start_arc
+                                    or target_end_key not in end_arc
+                                    or not target_assignment_keys.issubset(y)
+                                    or not source_suffix_arcs.issubset(
+                                        selected_x
+                                    )
+                                    or not target_suffix_arcs.issubset(x)
+                                ):
+                                    continue
+
+                                selected_y.difference_update(
+                                    source_suffix_assignment_keys
+                                )
+                                selected_y.update(target_assignment_keys)
+                                selected_x.discard(source_cross_arc)
+                                selected_x.difference_update(
+                                    source_suffix_arcs
+                                )
+                                selected_x.update(target_suffix_arcs)
+                                selected_end.discard(source_end_key)
+                                selected_end.add(source_prefix_end_key)
+                                selected_start.add(target_start_key)
+                                selected_end.add(target_end_key)
+                                selected_used.add(target_vehicle_id)
+                                selected_used_day.update(
+                                    (
+                                        target_vehicle_id,
+                                        int(
+                                            trip_day_index_by_trip_id.get(
+                                                trip_id,
+                                                0,
+                                            )
+                                        ),
+                                    )
+                                    for trip_id in suffix_trip_ids
+                                )
+                                split_duty_keys.add(duty_key)
+                                source_vehicle_ids.append(
+                                    source_vehicle_id
+                                )
+                                target_vehicle_ids.append(
+                                    target_vehicle_id
+                                )
+                                split_trip_ids.extend(suffix_trip_ids)
+                                split_applied = True
+                                break
+                            if split_applied:
+                                break
+                        if split_applied:
+                            break
+                    if not split_applied:
+                        break
+
+                    bev_delta = len(target_vehicle_ids)
+                    normalized_pattern = tuple(
+                        sorted(
+                            (
+                                trip_id,
+                                _powertrain_group(vehicle_id),
+                            )
+                            for vehicle_id, trip_id in selected_y
+                        )
+                    )
+                    if len(normalized_pattern) != len(problem.trips):
+                        break
+                    start = {
+                        "source_vehicle_id": source_vehicle_ids[0],
+                        "target_vehicle_id": target_vehicle_ids[0],
+                        "source_vehicle_ids": tuple(source_vehicle_ids),
+                        "target_vehicle_ids": tuple(target_vehicle_ids),
+                        "replacement_count": 0,
+                        "split_activation_count": bev_delta,
+                        "activation_count": bev_delta,
+                        "start_mode": "unused_bev_duty_suffix_split_activation",
+                        "semantics": (
+                            "unused_bev_duty_suffix_split_activations_"
+                            "without_source_retirements"
+                        ),
+                        "composition_delta_used_bev": bev_delta,
+                        "split_trip_ids": tuple(split_trip_ids),
+                        "powertrain_pattern": normalized_pattern,
+                        "powertrain_pattern_hash": hashlib.sha256(
+                            json.dumps(
+                                normalized_pattern,
+                                ensure_ascii=False,
+                                separators=(",", ":"),
+                            ).encode("utf-8")
+                        ).hexdigest(),
+                        "selected_y": set(selected_y),
+                        "selected_x": set(selected_x),
+                        "selected_start": set(selected_start),
+                        "selected_end": set(selected_end),
+                        "selected_used": set(selected_used),
+                        "selected_used_day": set(selected_used_day),
+                        "warm_start_priority_score": float(bev_delta),
+                    }
+                    starts.setdefault(bev_delta, []).append(start)
+                return starts
+
+            starts_by_delta: Dict[int, List[Dict[str, Any]]] = {}
+            for source_group, target_group, bev_delta in (
+                ("COMBUSTION", "ELECTRIC", 1),
+                ("ELECTRIC", "COMBUSTION", -1),
+            ):
+                unused_target_ids = [
+                    vehicle_id
+                    for vehicle_id in available_by_group[target_group]
+                    if vehicle_id not in active_vehicle_ids
+                ]
+                compatible_targets_by_source: Dict[
+                    str,
+                    List[str],
+                ] = {}
+                replacement_score_by_pair: Dict[
+                    Tuple[str, str],
+                    float,
+                ] = {}
+                for source_vehicle_id in active_by_group[source_group]:
+                    for target_vehicle_id in unused_target_ids:
+                        single_start = _build_replacement_start(
+                            {source_vehicle_id: target_vehicle_id},
+                            bev_delta=bev_delta,
+                        )
+                        if single_start is None:
+                            continue
+                        compatible_targets_by_source.setdefault(
+                            source_vehicle_id,
+                            [],
+                        ).append(target_vehicle_id)
+                        replacement_score_by_pair[
+                            (source_vehicle_id, target_vehicle_id)
+                        ] = float(
+                            single_start["warm_start_priority_score"]
+                        )
+
+                # Construct a maximum-cardinality matching before choosing
+                # prefixes. A score-greedy pairing can strand a source that
+                # has only one compatible target and incorrectly omit a
+                # reachable multi-vehicle delta.
+                target_to_source: Dict[str, str] = {}
+
+                def _augment_replacement_matching(
+                    source_vehicle_id: str,
+                    visited_target_ids: Set[str],
+                ) -> bool:
+                    compatible_target_ids = sorted(
+                        compatible_targets_by_source.get(
+                            source_vehicle_id,
+                            (),
+                        ),
+                        key=lambda target_vehicle_id: (
+                            replacement_score_by_pair[
+                                (source_vehicle_id, target_vehicle_id)
+                            ],
+                            target_vehicle_id,
+                        ),
+                    )
+                    for target_vehicle_id in compatible_target_ids:
+                        if target_vehicle_id in visited_target_ids:
+                            continue
+                        visited_target_ids.add(target_vehicle_id)
+                        matched_source_vehicle_id = target_to_source.get(
+                            target_vehicle_id
+                        )
+                        if (
+                            matched_source_vehicle_id is None
+                            or _augment_replacement_matching(
+                                matched_source_vehicle_id,
+                                visited_target_ids,
+                            )
+                        ):
+                            target_to_source[target_vehicle_id] = (
+                                source_vehicle_id
+                            )
+                            return True
+                    return False
+
+                for source_vehicle_id in sorted(
+                    compatible_targets_by_source,
+                    key=lambda item: (
+                        len(compatible_targets_by_source[item]),
+                        item,
+                    ),
+                ):
+                    _augment_replacement_matching(
+                        source_vehicle_id,
+                        set(),
+                    )
+
+                compatible_pairs = [
+                    (
+                        replacement_score_by_pair[
+                            (source_vehicle_id, target_vehicle_id)
+                        ],
+                        source_vehicle_id,
+                        target_vehicle_id,
+                    )
+                    for target_vehicle_id, source_vehicle_id
+                    in target_to_source.items()
+                ]
+
+                # One deterministic non-conflicting prefix supplies every
+                # reachable delta.  This is especially important for the BEV
+                # frontier: its first declared K may be more than one vehicle
+                # above the primary composition, so a one-replacement start
+                # cannot satisfy the temporary lower bound.
+                replacements: Dict[str, str] = {}
+                used_target_ids: Set[str] = set()
+                for _score, source_vehicle_id, target_vehicle_id in sorted(
+                    compatible_pairs,
+                    key=lambda item: (item[0], item[1], item[2]),
+                ):
+                    if (
+                        source_vehicle_id in replacements
+                        or target_vehicle_id in used_target_ids
+                    ):
+                        continue
+                    trial_replacements = {
+                        **replacements,
+                        source_vehicle_id: target_vehicle_id,
+                    }
+                    delta = bev_delta * len(trial_replacements)
+                    start = _build_replacement_start(
+                        trial_replacements,
+                        bev_delta=delta,
+                    )
+                    if start is None:
+                        continue
+                    replacements = trial_replacements
+                    used_target_ids.add(target_vehicle_id)
+                    starts_by_delta.setdefault(delta, []).append(start)
+
+            for delta, split_starts in (
+                _build_unused_bev_duty_split_starts().items()
+            ):
+                starts_by_delta.setdefault(delta, []).extend(split_starts)
+
+            for delta, starts in starts_by_delta.items():
+                starts.sort(
+                    key=lambda item: (
+                        0
+                        if item.get("start_mode")
+                        == (
+                            "unused_opposite_powertrain_"
+                            "whole_duty_replacement"
+                        )
+                        else 1,
+                        float(item["warm_start_priority_score"]),
+                        tuple(item.get("source_vehicle_ids") or ()),
+                        tuple(item.get("target_vehicle_ids") or ()),
+                    )
+                )
+            return starts_by_delta
+
         def _apply_partial_assignment_mip_start(
             start: Mapping[str, Any],
         ) -> None:
@@ -6012,6 +7039,18 @@ class GurobiMILPAdapter:
                 set(start.get("selected_used_day") or ()),
             )
             stage1.update()
+
+        def _apply_partial_assignment_mip_starts(
+            starts: Sequence[Mapping[str, Any]],
+        ) -> None:
+            """Submit every distinct partial start to the reused Stage 1 MIP."""
+
+            stage1.NumStart = len(starts)
+            stage1.update()
+            for start_index, start in enumerate(starts):
+                stage1.Params.StartNumber = start_index
+                _apply_partial_assignment_mip_start(start)
+            stage1.Params.StartNumber = 0
 
         def _candidate_relaxed_pv_overlap(
             plan: AssignmentPlan,
@@ -6195,6 +7234,739 @@ class GurobiMILPAdapter:
                     ),
                 )
             )
+
+        primary_used_bev, primary_used_ice = (
+            _candidate_used_powertrain_composition(stage1_plan)
+        )
+        available_electric_vehicle_ids = tuple(
+            sorted(
+                str(vehicle.vehicle_id)
+                for vehicle in problem.vehicles
+                if bool(getattr(vehicle, "available", True))
+                and _powertrain_group(str(vehicle.vehicle_id)) == "ELECTRIC"
+            )
+        )
+        available_combustion_vehicle_ids = tuple(
+            sorted(
+                str(vehicle.vehicle_id)
+                for vehicle in problem.vehicles
+                if bool(getattr(vehicle, "available", True))
+                and _powertrain_group(str(vehicle.vehicle_id)) == "COMBUSTION"
+            )
+        )
+        composition_target_records: List[Dict[str, Any]] = []
+        composition_search_events: List[Dict[str, Any]] = []
+        composition_search_runtime_sec = 0.0
+        composition_certificate_evidence_wall_time_sec = 0.0
+        composition_target_time_limit_cap_sec = max(
+            float(
+                getattr(
+                    config,
+                    (
+                        "stage1_bev_frontier_target_time_limit_sec"
+                        if stage1_bev_frontier_enabled
+                        else "stage1_composition_target_time_limit_sec"
+                    ),
+                    120.0 if stage1_bev_frontier_enabled else 25.0,
+                )
+                or (120.0 if stage1_bev_frontier_enabled else 25.0)
+            ),
+            0.25,
+        )
+        composition_activation_mip_starts = (
+            _powertrain_activation_replacement_mip_starts(stage1_plan)
+            if stage1_explicit_powertrain_search_enabled
+            else {}
+        )
+        if stage1_explicit_powertrain_search_enabled:
+            # Search activated-vehicle compositions on the unchanged Stage 1
+            # objective and recourse model.  Adjacent mode uses exact BEV/ICE
+            # count equalities.  Frontier mode uses only used-BEV >= K, so ICE
+            # and total fleet size remain endogenous rather than being hidden
+            # policy constraints.
+            seen_target_compositions: Set[Tuple[int, Optional[int]]] = set()
+            if stage1_bev_frontier_enabled:
+                requested_targets = [
+                    (minimum_used_bev, None)
+                    for minimum_used_bev in range(
+                        stage1_bev_frontier_min_count,
+                        stage1_bev_frontier_max_count + 1,
+                    )
+                ]
+            else:
+                requested_targets = []
+                for distance in range(
+                    1,
+                    stage1_composition_search_radius + 1,
+                ):
+                    for bev_delta in (distance, -distance):
+                        requested_targets.append(
+                            (
+                                int(primary_used_bev + bev_delta),
+                                int(primary_used_ice - bev_delta),
+                            )
+                        )
+            for target in requested_targets:
+                if target in seen_target_compositions:
+                    continue
+                seen_target_compositions.add(target)
+                target_used_bev = int(target[0])
+                target_used_ice = (
+                    int(target[1]) if target[1] is not None else None
+                )
+                bev_delta = target_used_bev - int(primary_used_bev)
+                target_record: Dict[str, Any] = {
+                    "target_used_bev": target_used_bev,
+                    "minimum_used_bev_count": (
+                        target_used_bev
+                        if stage1_bev_frontier_enabled
+                        else None
+                    ),
+                    "target_used_ice": target_used_ice,
+                    "delta_used_bev_from_primary": int(bev_delta),
+                    "delta_used_ice_from_primary": (
+                        int(target_used_ice - primary_used_ice)
+                        if target_used_ice is not None
+                        else None
+                    ),
+                    "target_total_used_vehicle_count": (
+                        int(target_used_bev + target_used_ice)
+                        if target_used_ice is not None
+                        else None
+                    ),
+                    "target_semantics": (
+                        (
+                            "stage1_minimum_used_electric_count_constraint; "
+                            "ICE and total used vehicle counts remain "
+                            "endogenous; "
+                        )
+                        if stage1_bev_frontier_enabled
+                        else "exact_stage1_used_vehicle_count_constraint; "
+                    )
+                    + (
+                        "used_bev means the canonical electric group "
+                        "BEV/PHEV/FCEV"
+                    ),
+                    "target_within_selected_inventory": bool(
+                        0
+                        <= target_used_bev
+                        <= len(available_electric_vehicle_ids)
+                        and (
+                            target_used_ice is None
+                            or 0
+                            <= target_used_ice
+                            <= len(available_combustion_vehicle_ids)
+                        )
+                    ),
+                }
+                if not target_record["target_within_selected_inventory"]:
+                    target_record["search_status"] = (
+                        "outside_selected_inventory"
+                    )
+                composition_target_records.append(target_record)
+
+            valid_target_count = sum(
+                record["target_within_selected_inventory"]
+                for record in composition_target_records
+            )
+            attempted_valid_targets = 0
+            previous_frontier_plan: Optional[AssignmentPlan] = stage1_plan
+            for target_record in composition_target_records:
+                if not target_record["target_within_selected_inventory"]:
+                    composition_search_events.append(dict(target_record))
+                    continue
+                attempted_valid_targets += 1
+                remaining_valid_targets = max(
+                    valid_target_count - attempted_valid_targets + 1,
+                    1,
+                )
+                if len(stage1_candidates) >= stage1_stage2_candidate_limit:
+                    target_record.update(
+                        {
+                            "search_status": (
+                                "not_attempted_candidate_limit_exhausted"
+                            ),
+                            "certificate_eligible": False,
+                        }
+                    )
+                    composition_search_events.append(dict(target_record))
+                    continue
+                composition_budget_remaining = max(
+                    stage1_candidate_enumeration_reserve_sec
+                    - (
+                        stage1_total_solver_runtime_sec
+                        - stage1_primary_runtime_sec
+                    ),
+                    0.0,
+                )
+                if composition_budget_remaining < 0.25:
+                    target_record.update(
+                        {
+                            "search_status": "not_attempted_budget_exhausted",
+                            "certificate_eligible": False,
+                        }
+                    )
+                    composition_search_events.append(dict(target_record))
+                    continue
+
+                target_used_bev = int(target_record["target_used_bev"])
+                raw_target_used_ice = target_record.get("target_used_ice")
+                target_used_ice = (
+                    int(raw_target_used_ice)
+                    if raw_target_used_ice is not None
+                    else None
+                )
+                target_index = len(composition_search_events) + 1
+                electric_count_expr = gp.quicksum(
+                    used_vehicle[vehicle_id]
+                    for vehicle_id in available_electric_vehicle_ids
+                )
+                electric_target_expr = (
+                    electric_count_expr >= target_used_bev
+                    if stage1_bev_frontier_enabled
+                    else electric_count_expr == target_used_bev
+                )
+                electric_constraint = stage1.addConstr(
+                    electric_target_expr,
+                    name=(
+                        (
+                            "stage1_frontier_minimum_used_electric__"
+                            if stage1_bev_frontier_enabled
+                            else "stage1_composition_used_electric_target__"
+                        )
+                        + f"{target_index}"
+                    ),
+                )
+                combustion_constraint = None
+                if target_used_ice is not None:
+                    combustion_constraint = stage1.addConstr(
+                        gp.quicksum(
+                            used_vehicle[vehicle_id]
+                            for vehicle_id in available_combustion_vehicle_ids
+                        )
+                        == target_used_ice,
+                        name=(
+                            "stage1_composition_used_combustion_target__"
+                            f"{target_index}"
+                        ),
+                    )
+                stage1.update()
+                composition_time_limit_sec = min(
+                    composition_target_time_limit_cap_sec,
+                    max(
+                        composition_budget_remaining / remaining_valid_targets,
+                        0.25,
+                    ),
+                )
+                composition_mip_starts: List[Dict[str, Any]] = []
+                composition_mip_start: Optional[Dict[str, Any]] = None
+                frontier_warm_start_applied = False
+                frontier_warm_start_source = ""
+                frontier_warm_start_reason = "not_frontier_search"
+                # Each target has a different temporary composition bound.
+                # Clear indexed starts from the preceding target before its
+                # own incumbent or activation starts are recorded/applied.
+                stage1.NumStart = 0
+                stage1.Params.StartNumber = 0
+                stage1.update()
+                if stage1_bev_frontier_enabled:
+                    (
+                        frontier_warm_start_applied,
+                        frontier_warm_start_source,
+                        frontier_warm_start_reason,
+                    ) = self._apply_stage1_assignment_warm_start(
+                        problem,
+                        enabled=True,
+                        preferred_plan=previous_frontier_plan,
+                        y=y,
+                        x=x,
+                        start_arc=start_arc,
+                        end_arc=end_arc,
+                        used_vehicle=used_vehicle,
+                        used_vehicle_day=used_vehicle_day,
+                        trip_day_index_by_trip_id=trip_day_index_by_trip_id,
+                    )
+                delta_starts = composition_activation_mip_starts.get(
+                    int(target_record["delta_used_bev_from_primary"]),
+                    [],
+                )
+                if delta_starts:
+                    composition_mip_starts = list(delta_starts)
+                    composition_mip_start = delta_starts[0]
+                    _apply_partial_assignment_mip_starts(
+                        composition_mip_starts
+                    )
+                stage1.Params.TimeLimit = composition_time_limit_sec
+                stage1.Params.PoolSearchMode = 0
+                stage1.Params.PoolSolutions = 1
+                composition_started = time.perf_counter()
+                try:
+                    stage1.optimize()
+                    composition_wall_time_sec = float(
+                        time.perf_counter() - composition_started
+                    )
+                    composition_solver_runtime_sec = float(
+                        getattr(stage1, "Runtime", 0.0) or 0.0
+                    )
+                    composition_search_runtime_sec += (
+                        composition_solver_runtime_sec
+                    )
+                    stage1_total_solver_runtime_sec += (
+                        composition_solver_runtime_sec
+                    )
+                    composition_status = self._status_name(GRB, stage1.Status)
+                    target_record.update(
+                        {
+                            "search_status": composition_status,
+                            "solver_status": composition_status,
+                            "solver_runtime_sec": composition_solver_runtime_sec,
+                            "wall_time_sec": composition_wall_time_sec,
+                            "time_limit_sec": composition_time_limit_sec,
+                            "solution_count": int(
+                                getattr(stage1, "SolCount", 0) or 0
+                            ),
+                            "frontier_status": classify_bev_frontier_status(
+                                composition_status,
+                                int(getattr(stage1, "SolCount", 0) or 0),
+                            ),
+                            "best_bound": self._model_bound(stage1),
+                            "mip_gap_ratio": self._model_gap(stage1),
+                            "certificate_eligible": (
+                                composition_status == "infeasible"
+                            ),
+                            "partial_mip_start_applied": (
+                                bool(composition_mip_starts)
+                            ),
+                            "partial_mip_start_count_applied": len(
+                                composition_mip_starts
+                            ),
+                            "partial_mip_start_modes_applied": [
+                                str(
+                                    start.get(
+                                        "start_mode",
+                                        "unspecified",
+                                    )
+                                )
+                                for start in composition_mip_starts
+                            ],
+                            "partial_mip_start_semantics": (
+                                "multiple_partial_assignment_starts_"
+                                "submitted_without_incumbent_attribution"
+                                if len(composition_mip_starts) > 1
+                                else (
+                                    str(
+                                        composition_mip_start.get(
+                                            "semantics",
+                                            "partial_assignment_solver_hint",
+                                        )
+                                    )
+                                    if composition_mip_start is not None
+                                    else "none"
+                                )
+                            ),
+                            "frontier_warm_start_applied": (
+                                frontier_warm_start_applied
+                            ),
+                            "frontier_warm_start_source": (
+                                frontier_warm_start_source
+                            ),
+                            "frontier_warm_start_reason": (
+                                frontier_warm_start_reason
+                            ),
+                        }
+                    )
+                    if composition_mip_start is not None:
+                        target_record.update(
+                            {
+                                "partial_mip_starts": [
+                                    {
+                                        "start_mode": str(
+                                            start.get(
+                                                "start_mode",
+                                                "unspecified",
+                                            )
+                                        ),
+                                        "source_vehicle_ids": list(
+                                            start.get(
+                                                "source_vehicle_ids"
+                                            )
+                                            or ()
+                                        ),
+                                        "target_vehicle_ids": list(
+                                            start.get(
+                                                "target_vehicle_ids"
+                                            )
+                                            or ()
+                                        ),
+                                        "replacement_count": int(
+                                            start.get(
+                                                "replacement_count",
+                                                0,
+                                            )
+                                            or 0
+                                        ),
+                                        "split_activation_count": int(
+                                            start.get(
+                                                "split_activation_count",
+                                                0,
+                                            )
+                                            or 0
+                                        ),
+                                        "activation_count": int(
+                                            start.get(
+                                                "activation_count",
+                                                0,
+                                            )
+                                            or 0
+                                        ),
+                                        "split_trip_ids": list(
+                                            start.get("split_trip_ids")
+                                            or ()
+                                        ),
+                                        "powertrain_pattern_hash": str(
+                                            start[
+                                                "powertrain_pattern_hash"
+                                            ]
+                                        ),
+                                    }
+                                    for start in composition_mip_starts
+                                ],
+                                "partial_mip_start_mode": str(
+                                    composition_mip_start.get(
+                                        "start_mode",
+                                        "unspecified",
+                                    )
+                                ),
+                                "partial_mip_start_source_vehicle_id": (
+                                    composition_mip_start[
+                                        "source_vehicle_id"
+                                    ]
+                                ),
+                                "partial_mip_start_target_vehicle_id": (
+                                    composition_mip_start[
+                                        "target_vehicle_id"
+                                    ]
+                                ),
+                                "partial_mip_start_source_vehicle_ids": list(
+                                    composition_mip_start.get(
+                                        "source_vehicle_ids"
+                                    )
+                                    or ()
+                                ),
+                                "partial_mip_start_target_vehicle_ids": list(
+                                    composition_mip_start.get(
+                                        "target_vehicle_ids"
+                                    )
+                                    or ()
+                                ),
+                                "partial_mip_start_replacement_count": int(
+                                    composition_mip_start.get(
+                                        "replacement_count",
+                                        0,
+                                    )
+                                    or 0
+                                ),
+                                "partial_mip_start_split_activation_count": int(
+                                    composition_mip_start.get(
+                                        "split_activation_count",
+                                        0,
+                                    )
+                                    or 0
+                                ),
+                                "partial_mip_start_activation_count": int(
+                                    composition_mip_start.get(
+                                        "activation_count",
+                                        0,
+                                    )
+                                    or 0
+                                ),
+                                "partial_mip_start_split_trip_ids": list(
+                                    composition_mip_start.get(
+                                        "split_trip_ids"
+                                    )
+                                    or ()
+                                ),
+                                "partial_mip_start_powertrain_pattern_hash": (
+                                    composition_mip_start[
+                                        "powertrain_pattern_hash"
+                                    ]
+                                ),
+                                "partial_mip_start_priority_score": (
+                                    composition_mip_start[
+                                        "warm_start_priority_score"
+                                    ]
+                                ),
+                            }
+                        )
+                    if composition_status == "infeasible":
+                        iis_constraint_names: List[str] = []
+                        iis_error = ""
+                        target_count_constraint_names = sorted(
+                            {
+                                str(constraint.ConstrName)
+                                for constraint in (
+                                    electric_constraint,
+                                    combustion_constraint,
+                                )
+                                if constraint is not None
+                            }
+                        )
+                        iis_started = time.perf_counter()
+                        try:
+                            stage1.computeIIS()
+                            iis_constraint_names = sorted(
+                                str(constraint.ConstrName)
+                                for constraint in stage1.getConstrs()
+                                if int(
+                                    getattr(constraint, "IISConstr", 0) or 0
+                                )
+                                == 1
+                            )
+                        except Exception as exc:
+                            iis_error = str(exc)
+                        iis_wall_time_sec = float(
+                            time.perf_counter() - iis_started
+                        )
+                        iis_generated = bool(
+                            not iis_error and iis_constraint_names
+                        )
+                        target_count_constraint_in_iis = bool(
+                            set(target_count_constraint_names).intersection(
+                                iis_constraint_names
+                            )
+                        )
+                        model_evidence_started = time.perf_counter()
+                        model_evidence = _stage1_infeasibility_model_evidence()
+                        model_evidence_wall_time_sec = float(
+                            time.perf_counter() - model_evidence_started
+                        )
+                        certificate_evidence_wall_time_sec = (
+                            iis_wall_time_sec
+                            + model_evidence_wall_time_sec
+                        )
+                        composition_certificate_evidence_wall_time_sec += (
+                            certificate_evidence_wall_time_sec
+                        )
+                        solver_controls = {
+                            "random_seed": int(config.random_seed),
+                            "mip_gap_ratio": float(config.mip_gap),
+                            "feasibility_tolerance": stage1_feasibility_tol,
+                            "gurobi_threads": configured_threads,
+                            "composition_time_limit_sec": (
+                                composition_time_limit_sec
+                            ),
+                            "target_used_bev": target_used_bev,
+                            "target_used_ice": target_used_ice,
+                            "recourse_input_hash": str(
+                                stage1_time_indexed_energy_recourse.configuration.get(
+                                    "recourse_input_hash"
+                                )
+                                or ""
+                            ),
+                        }
+                        solver_controls_hash = hashlib.sha256(
+                            json.dumps(
+                                solver_controls,
+                                ensure_ascii=False,
+                                sort_keys=True,
+                                separators=(",", ":"),
+                                default=str,
+                            ).encode("utf-8")
+                        ).hexdigest()
+                        certificate_failure_reasons: List[str] = []
+                        if not iis_generated:
+                            certificate_failure_reasons.append(
+                                "iis_not_successfully_generated"
+                            )
+                        if not target_count_constraint_in_iis:
+                            certificate_failure_reasons.append(
+                                "iis_missing_target_count_constraint"
+                            )
+                        if not model_evidence.get("stage1_model_lp_sha256"):
+                            certificate_failure_reasons.append(
+                                "stage1_lp_model_hash_unavailable"
+                            )
+                        certificate_accepted = not certificate_failure_reasons
+                        certificate_payload = {
+                            "kind": (
+                                "gurobi_stage1_infeasible_used_powertrain_"
+                                "composition"
+                            ),
+                            "target_used_bev": target_used_bev,
+                            "target_used_ice": target_used_ice,
+                            "solver_status": composition_status,
+                            "iis_generated": iis_generated,
+                            "iis_wall_time_sec": iis_wall_time_sec,
+                            "iis_constraint_names": iis_constraint_names,
+                            "iis_constraint_hash": hashlib.sha256(
+                                json.dumps(
+                                    iis_constraint_names,
+                                    ensure_ascii=False,
+                                    separators=(",", ":"),
+                                ).encode("utf-8")
+                            ).hexdigest(),
+                            "target_count_constraint_names": (
+                                target_count_constraint_names
+                            ),
+                            "target_count_constraint_in_iis": (
+                                target_count_constraint_in_iis
+                            ),
+                            "solver_controls": solver_controls,
+                            "solver_controls_hash": solver_controls_hash,
+                            "model_evidence_wall_time_sec": (
+                                model_evidence_wall_time_sec
+                            ),
+                            "certificate_evidence_wall_time_sec": (
+                                certificate_evidence_wall_time_sec
+                            ),
+                            **model_evidence,
+                            "iis_error": iis_error,
+                            "accepted_for_formal_composition_evidence": (
+                                certificate_accepted
+                            ),
+                            "failure_reasons": certificate_failure_reasons,
+                        }
+                        target_record.update(
+                            {
+                                "certificate_eligible": certificate_accepted,
+                                "frontier_status": (
+                                    classify_bev_frontier_status(
+                                        composition_status,
+                                        int(
+                                            getattr(stage1, "SolCount", 0)
+                                            or 0
+                                        ),
+                                        certificate_accepted=(
+                                            certificate_accepted
+                                        ),
+                                    )
+                                ),
+                                "infeasibility_certificate": (
+                                    certificate_payload
+                                ),
+                            }
+                        )
+                    elif int(getattr(stage1, "SolCount", 0) or 0) > 0:
+                        composition_plan = _current_stage1_plan(
+                            candidate_source=(
+                                "bev_minimum_frontier"
+                                if stage1_bev_frontier_enabled
+                                else "used_powertrain_composition_neighborhood"
+                            ),
+                            metadata={
+                                "stage1_composition_target_used_bev": (
+                                    target_used_bev
+                                ),
+                                "stage1_composition_target_used_ice": (
+                                    target_used_ice
+                                ),
+                                "stage1_composition_target_delta_used_bev": (
+                                    target_record[
+                                        "delta_used_bev_from_primary"
+                                    ]
+                                ),
+                                "stage1_frontier_minimum_used_bev_count": (
+                                    target_used_bev
+                                    if stage1_bev_frontier_enabled
+                                    else None
+                                ),
+                                "stage1_composition_search_solver_status": (
+                                    composition_status
+                                ),
+                            },
+                        )
+                        assignment_pairs = _assignment_pairs_for_plan(
+                            composition_plan
+                        )
+                        assignment_hash = _candidate_hash(assignment_pairs)
+                        actual_used_bev, actual_used_ice = (
+                            _candidate_used_powertrain_composition(
+                                composition_plan
+                            )
+                        )
+                        target_record.update(
+                            {
+                                "candidate_hash": assignment_hash,
+                                "stage1_relaxed_objective_jpy": float(
+                                    getattr(stage1, "ObjVal", 0.0) or 0.0
+                                ),
+                                "actual_used_bev": actual_used_bev,
+                                "actual_used_ice": actual_used_ice,
+                                "target_constraint_satisfied_by_extracted_plan": (
+                                    actual_used_bev >= target_used_bev
+                                    if stage1_bev_frontier_enabled
+                                    else (
+                                        actual_used_bev == target_used_bev
+                                        and actual_used_ice
+                                        == target_used_ice
+                                    )
+                                ),
+                            }
+                        )
+                        if stage1_bev_frontier_enabled:
+                            previous_frontier_plan = composition_plan
+                        if assignment_hash in seen_candidate_hashes:
+                            target_record[
+                                "candidate_accepted_for_stage2_evaluation"
+                            ] = False
+                            target_record["candidate_rejection_reason"] = (
+                                "duplicate_assignment_hash"
+                            )
+                        else:
+                            seen_candidate_hashes.add(assignment_hash)
+                            target_record[
+                                "candidate_accepted_for_stage2_evaluation"
+                            ] = True
+                            stage1_candidates.append(
+                                (
+                                    len(stage1_candidates),
+                                    float(
+                                        getattr(stage1, "ObjVal", 0.0)
+                                        or 0.0
+                                    ),
+                                    assignment_hash,
+                                    (
+                                        "bev_minimum_frontier"
+                                        if stage1_bev_frontier_enabled
+                                        else "used_powertrain_composition_neighborhood"
+                                    ),
+                                    replace(
+                                        composition_plan,
+                                        metadata={
+                                            **dict(
+                                                composition_plan.metadata or {}
+                                            ),
+                                            "stage1_pool_solution_index": (
+                                                len(stage1_candidates)
+                                            ),
+                                            "stage1_candidate_assignment_hash": (
+                                                assignment_hash
+                                            ),
+                                        },
+                                    ),
+                                )
+                            )
+                finally:
+                    stage1.remove(
+                        [
+                            constraint
+                            for constraint in (
+                                electric_constraint,
+                                combustion_constraint,
+                            )
+                            if constraint is not None
+                        ]
+                    )
+                    stage1.update()
+                composition_search_events.append(dict(target_record))
+
+        if stage1_explicit_powertrain_search_enabled:
+            # Composition targets may submit several alternative starts.  Do
+            # not leak those indexed starts into the subsequent no-good-cut
+            # enumeration, which manages its own single partial start.
+            stage1.NumStart = 0
+            stage1.Params.StartNumber = 0
+            stage1.update()
 
         enumeration_events: List[Dict[str, Any]] = []
         enumerated_powertrain_patterns: Set[
@@ -6452,6 +8224,156 @@ class GurobiMILPAdapter:
         ).strip()
         evaluator = CostEvaluator()
         physical_checker = FeasibilityChecker()
+
+        def _candidate_powertrain_movement_kpis(
+            plan: AssignmentPlan,
+        ) -> Dict[str, float]:
+            kpis = {
+                "bev_service_distance_km": 0.0,
+                "bev_deadhead_distance_km": 0.0,
+                "ice_service_distance_km": 0.0,
+                "ice_deadhead_distance_km": 0.0,
+                "ice_fuel_l": 0.0,
+            }
+            canonical_trip_by_id = problem.trip_by_id()
+            for duty in plan.duties:
+                if not duty.legs:
+                    continue
+                vehicle_id = str(plan.vehicle_id_for_duty(duty.duty_id))
+                vehicle = vehicle_by_id.get(vehicle_id)
+                if vehicle is None:
+                    continue
+                group = _powertrain_group(vehicle_id)
+                prefix = "bev" if group == "ELECTRIC" else "ice"
+                service_distance_km = sum(
+                    max(
+                        float(
+                            getattr(
+                                canonical_trip_by_id.get(
+                                    str(leg.trip.trip_id)
+                                ),
+                                "distance_km",
+                                getattr(leg.trip, "distance_km", 0.0),
+                            )
+                            or 0.0
+                        ),
+                        0.0,
+                    )
+                    for leg in duty.legs
+                )
+                inter_trip_deadhead_min = sum(
+                    max(float(leg.deadhead_from_prev_min or 0.0), 0.0)
+                    for leg in duty.legs
+                )
+                first_trip = canonical_trip_by_id.get(
+                    str(duty.legs[0].trip.trip_id)
+                )
+                last_trip = canonical_trip_by_id.get(
+                    str(duty.legs[-1].trip.trip_id)
+                )
+                startup_deadhead_min = 0.0
+                terminal_deadhead_min = 0.0
+                if first_trip is not None:
+                    startup_deadhead_min = max(
+                        float(
+                            self._startup_energy_precheck(
+                                problem,
+                                vehicle,
+                                first_trip,
+                                dispatch_trip_by_id=dispatch_trip_by_id,
+                            ).startup_deadhead_min
+                            or 0.0
+                        ),
+                        0.0,
+                    )
+                if last_trip is not None:
+                    (
+                        return_deadhead_exists,
+                        return_deadhead_min,
+                    ) = return_deadhead_min_to_home(
+                        problem,
+                        vehicle,
+                        last_trip,
+                    )
+                    terminal_deadhead_min = max(
+                        float(
+                            return_deadhead_min
+                            if return_deadhead_exists
+                            else 0.0
+                            or 0.0
+                        ),
+                        0.0,
+                    )
+                deadhead_distance_km = self._deadhead_distance_km(
+                    problem,
+                    inter_trip_deadhead_min
+                    + startup_deadhead_min
+                    + terminal_deadhead_min,
+                )
+                kpis[f"{prefix}_service_distance_km"] += (
+                    service_distance_km
+                )
+                kpis[f"{prefix}_deadhead_distance_km"] += (
+                    deadhead_distance_km
+                )
+                if prefix == "ice":
+                    vehicle_type = vehicle_type_by_id.get(
+                        str(vehicle.vehicle_type)
+                    )
+                    fuel_rate = max(
+                        float(
+                            getattr(
+                                vehicle,
+                                "fuel_consumption_l_per_km",
+                                None,
+                            )
+                            or getattr(
+                                vehicle_type,
+                                "fuel_consumption_l_per_km",
+                                0.0,
+                            )
+                            or 0.0
+                        ),
+                        0.0,
+                    )
+                    kpis["ice_fuel_l"] += fuel_rate * (
+                        service_distance_km + deadhead_distance_km
+                    )
+            bev_total = (
+                kpis["bev_service_distance_km"]
+                + kpis["bev_deadhead_distance_km"]
+            )
+            ice_total = (
+                kpis["ice_service_distance_km"]
+                + kpis["ice_deadhead_distance_km"]
+            )
+            total = bev_total + ice_total
+            kpis.update(
+                {
+                    "bev_total_movement_distance_km": bev_total,
+                    "ice_total_movement_distance_km": ice_total,
+                    "total_movement_distance_km": total,
+                    "bev_movement_distance_share": (
+                        bev_total / total if total > 0.0 else 0.0
+                    ),
+                }
+            )
+            return {
+                key: round(float(value), 9)
+                for key, value in kpis.items()
+            }
+
+        def _sum_depot_slot_energy(
+            mapping: Mapping[str, Mapping[int, float]],
+        ) -> float:
+            return float(
+                sum(
+                    max(float(value or 0.0), 0.0)
+                    for by_slot in dict(mapping or {}).values()
+                    for value in dict(by_slot or {}).values()
+                )
+            )
+
         candidate_evaluation_initial_budget_sec = (
             _remaining_stage_budget_sec(
                 deadline_monotonic=feedback_global_deadline,
@@ -6497,6 +8419,21 @@ class GurobiMILPAdapter:
                         "candidate_index": evaluation_index,
                         "stage1_pool_solution_index": pool_index,
                         "stage1_candidate_source": candidate_source,
+                        "stage1_composition_target_used_bev": (
+                            (candidate_plan.metadata or {}).get(
+                                "stage1_composition_target_used_bev"
+                            )
+                        ),
+                        "stage1_composition_target_used_ice": (
+                            (candidate_plan.metadata or {}).get(
+                                "stage1_composition_target_used_ice"
+                            )
+                        ),
+                        "minimum_used_bev_count": (
+                            (candidate_plan.metadata or {}).get(
+                                "stage1_frontier_minimum_used_bev_count"
+                            )
+                        ),
                         "candidate_hash": assignment_hash,
                         "assignment_hash": assignment_hash,
                         "stage1_relaxed_objective_jpy": relaxed_objective,
@@ -6640,6 +8577,9 @@ class GurobiMILPAdapter:
                 for duty in candidate_final_plan.duties
                 for _leg in duty.legs
             )
+            movement_kpis = _candidate_powertrain_movement_kpis(
+                candidate_final_plan
+            )
             iis_names = tuple(
                 sorted(
                     str(name)
@@ -6667,6 +8607,21 @@ class GurobiMILPAdapter:
                     "candidate_index": evaluation_index,
                     "stage1_pool_solution_index": pool_index,
                     "stage1_candidate_source": candidate_source,
+                    "stage1_composition_target_used_bev": (
+                        (candidate_plan.metadata or {}).get(
+                            "stage1_composition_target_used_bev"
+                        )
+                    ),
+                    "stage1_composition_target_used_ice": (
+                        (candidate_plan.metadata or {}).get(
+                            "stage1_composition_target_used_ice"
+                        )
+                    ),
+                    "minimum_used_bev_count": (
+                        (candidate_plan.metadata or {}).get(
+                            "stage1_frontier_minimum_used_bev_count"
+                        )
+                    ),
                     "candidate_hash": assignment_hash,
                     "assignment_hash": assignment_hash,
                     "stage1_relaxed_objective_jpy": relaxed_objective,
@@ -6714,6 +8669,22 @@ class GurobiMILPAdapter:
                     "used_ice": used_ice,
                     "bev_trips": bev_trips,
                     "ice_trips": ice_trips,
+                    "grid_import_kwh": _sum_depot_slot_energy(
+                        candidate_final_plan.grid_to_bus_kwh_by_depot_slot
+                    )
+                    + _sum_depot_slot_energy(
+                        candidate_final_plan.grid_to_bess_kwh_by_depot_slot
+                    ),
+                    "pv_to_bus_kwh": _sum_depot_slot_energy(
+                        candidate_final_plan.pv_to_bus_kwh_by_depot_slot
+                    ),
+                    "pv_to_bess_kwh": _sum_depot_slot_energy(
+                        candidate_final_plan.pv_to_bess_kwh_by_depot_slot
+                    ),
+                    "bess_to_bus_kwh": _sum_depot_slot_energy(
+                        candidate_final_plan.bess_to_bus_kwh_by_depot_slot
+                    ),
+                    **movement_kpis,
                     "runtime_sec": candidate_runtime,
                     "stage2_runtime_sec": candidate_plan_metadata.get(
                         "stage2_runtime_seconds"
@@ -6762,6 +8733,532 @@ class GurobiMILPAdapter:
                     )
                 )
 
+        feasible_composition_pairs = sorted(
+            {
+                (
+                    int(candidate.get("used_bev") or 0),
+                    int(candidate.get("used_ice") or 0),
+                )
+                for candidate in candidate_evaluations
+                if candidate.get("feasible") is True
+            }
+        )
+        feasible_composition_pair_payload = [
+            {"used_bev": used_bev, "used_ice": used_ice}
+            for used_bev, used_ice in feasible_composition_pairs
+        ]
+        physically_feasible_targets = {
+            (
+                int(candidate.get("used_bev") or 0),
+                int(candidate.get("used_ice") or 0),
+            )
+            for candidate in candidate_evaluations
+            if candidate.get("feasible") is True
+        }
+        physically_feasible_candidate_hashes = {
+            str(candidate.get("candidate_hash") or "")
+            for candidate in candidate_evaluations
+            if candidate.get("feasible") is True
+            and str(candidate.get("candidate_hash") or "")
+        }
+        unresolved_composition_targets: List[Dict[str, Any]] = []
+        for event in composition_search_events:
+            if event.get("target_within_selected_inventory") is not True:
+                continue
+            raw_event_target_ice = event.get("target_used_ice")
+            target = (
+                int(event.get("target_used_bev") or 0),
+                (
+                    int(raw_event_target_ice)
+                    if raw_event_target_ice is not None
+                    else None
+                ),
+            )
+            event_candidate_hash = str(event.get("candidate_hash") or "")
+            frontier_witness = (
+                select_bev_frontier_feasibility_witness(
+                    target[0],
+                    candidate_evaluations,
+                )
+                if stage1_bev_frontier_enabled
+                else None
+            )
+            frontier_witness_hash = str(
+                (frontier_witness or {}).get("candidate_hash") or ""
+            )
+            frontier_candidate_is_feasible = frontier_witness is not None
+            if stage1_bev_frontier_enabled:
+                event.update(
+                    {
+                        "frontier_target_candidate_physical_validation_feasible": (
+                            bool(
+                                event_candidate_hash
+                                and event_candidate_hash
+                                in physically_feasible_candidate_hashes
+                            )
+                        ),
+                        "frontier_resolution_source": (
+                            "direct_target_candidate"
+                            if frontier_witness_hash == event_candidate_hash
+                            else (
+                                "nested_higher_used_bev_candidate"
+                                if frontier_witness is not None
+                                else "none"
+                            )
+                        ),
+                        "frontier_resolution_candidate_hash": (
+                            frontier_witness_hash
+                        ),
+                        "frontier_resolution_actual_used_bev": (
+                            (frontier_witness or {}).get("used_bev")
+                        ),
+                        "frontier_resolution_actual_used_ice": (
+                            (frontier_witness or {}).get("used_ice")
+                        ),
+                        "frontier_resolution_canonical_cost_jpy": (
+                            (frontier_witness or {}).get(
+                                "stage2_actual_canonical_cost_jpy"
+                            )
+                        ),
+                        "frontier_resolution_candidate_source_target_used_bev": (
+                            (frontier_witness or {}).get(
+                                "stage1_composition_target_used_bev"
+                            )
+                        ),
+                    }
+                )
+            exact_target_is_feasible = bool(
+                target[1] is not None
+                and (int(target[0]), int(target[1]))
+                in physically_feasible_targets
+            )
+            if frontier_candidate_is_feasible or exact_target_is_feasible:
+                event["final_disposition"] = (
+                    "physically_feasible_stage2_candidate"
+                )
+            elif (
+                event.get("solver_status") == "infeasible"
+                and isinstance(
+                    event.get("infeasibility_certificate"), Mapping
+                )
+                and dict(event["infeasibility_certificate"]).get(
+                    "accepted_for_formal_composition_evidence"
+                )
+                is True
+            ):
+                event["final_disposition"] = (
+                    "stage1_infeasibility_certificate"
+                )
+            else:
+                event["final_disposition"] = "unresolved"
+                unresolved_composition_targets.append(
+                    {
+                        "case": (
+                            "minimum_used_bev_"
+                            + str(event.get("minimum_used_bev_count"))
+                        ),
+                        "minimum_used_bev_count": event.get(
+                            "minimum_used_bev_count"
+                        ),
+                        "minimum_bev_count": event.get(
+                            "minimum_used_bev_count"
+                        ),
+                        "target_used_bev": target[0],
+                        "target_used_ice": target[1],
+                        "search_status": event.get("search_status"),
+                        "solver_status": event.get("solver_status"),
+                    }
+                )
+
+        valid_composition_events = [
+            event
+            for event in composition_search_events
+            if event.get("target_within_selected_inventory") is True
+        ]
+        multiple_feasible_compositions_found = (
+            len(feasible_composition_pairs) >= 2
+        )
+        all_requested_targets_resolved = bool(
+            stage1_explicit_powertrain_search_enabled
+            and valid_composition_events
+            and all(
+                event.get("final_disposition") != "unresolved"
+                for event in valid_composition_events
+            )
+        )
+        all_adjacent_targets_certified_infeasible = bool(
+            stage1_explicit_powertrain_search_enabled
+            and valid_composition_events
+            and all(
+                event.get("final_disposition")
+                == "stage1_infeasibility_certificate"
+                for event in valid_composition_events
+            )
+        )
+        inventory_has_no_adjacent_composition = bool(
+            stage1_explicit_powertrain_search_enabled
+            and composition_target_records
+            and not valid_composition_events
+            and all(
+                event.get("target_within_selected_inventory") is False
+                for event in composition_target_records
+            )
+        )
+        if stage1_bev_frontier_enabled:
+            has_frontier_certificate = any(
+                event.get("final_disposition")
+                == "stage1_infeasibility_certificate"
+                for event in valid_composition_events
+            )
+            composition_search_accepted = bool(
+                all_requested_targets_resolved
+                and (
+                    multiple_feasible_compositions_found
+                    or has_frontier_certificate
+                )
+            )
+        else:
+            composition_search_accepted = bool(
+                multiple_feasible_compositions_found
+                or all_adjacent_targets_certified_infeasible
+                or inventory_has_no_adjacent_composition
+            )
+        composition_search_blockers: List[str] = []
+        if not stage1_explicit_powertrain_search_enabled:
+            composition_search_blockers.append("composition_search_disabled")
+        if not multiple_feasible_compositions_found:
+            composition_search_blockers.append(
+                "only_one_or_zero_physically_feasible_used_powertrain_composition"
+            )
+        if unresolved_composition_targets:
+            composition_search_blockers.append(
+                (
+                    "bev_frontier_target_unresolved"
+                    if stage1_bev_frontier_enabled
+                    else "adjacent_used_powertrain_composition_unresolved"
+                )
+            )
+        if (
+            not all_adjacent_targets_certified_infeasible
+            and not inventory_has_no_adjacent_composition
+            and not multiple_feasible_compositions_found
+        ):
+            composition_search_blockers.append(
+                "no_complete_adjacent_composition_infeasibility_certificate"
+            )
+        if composition_search_accepted:
+            composition_search_blockers = []
+        composition_search_certificate = {
+            "schema_version": "stage1_used_powertrain_composition_search_v2",
+            "enabled": stage1_explicit_powertrain_search_enabled,
+            "search_mode": (
+                "minimum_used_bev_frontier"
+                if stage1_bev_frontier_enabled
+                else "adjacent_exact_composition"
+            ),
+            "radius_requested": stage1_composition_search_radius,
+            "frontier_enabled": stage1_bev_frontier_enabled,
+            "frontier_minimum_used_bev_count": (
+                stage1_bev_frontier_min_count
+            ),
+            "frontier_maximum_used_bev_count": (
+                stage1_bev_frontier_max_count
+            ),
+            "frontier_total_used_vehicle_count_fixed": False,
+            "primary_used_powertrain_composition": {
+                "used_bev": primary_used_bev,
+                "used_ice": primary_used_ice,
+            },
+            "selected_inventory": {
+                "available_electric_vehicle_count": len(
+                    available_electric_vehicle_ids
+                ),
+                "available_combustion_vehicle_count": len(
+                    available_combustion_vehicle_ids
+                ),
+                "electric_vehicle_ids": list(available_electric_vehicle_ids),
+                "combustion_vehicle_ids": list(
+                    available_combustion_vehicle_ids
+                ),
+            },
+            "target_records": composition_search_events,
+            "feasible_used_powertrain_compositions": (
+                feasible_composition_pair_payload
+            ),
+            "multiple_feasible_compositions_found": (
+                multiple_feasible_compositions_found
+            ),
+            "all_requested_targets_resolved": all_requested_targets_resolved,
+            "all_adjacent_targets_certified_infeasible": (
+                all_adjacent_targets_certified_infeasible
+            ),
+            "inventory_has_no_adjacent_composition": (
+                inventory_has_no_adjacent_composition
+            ),
+            "unresolved_targets": unresolved_composition_targets,
+            "accepted_for_formal_composition_evidence": (
+                composition_search_accepted
+            ),
+            "blocking_reasons": composition_search_blockers,
+            "semantics": (
+                "A time limit, missing incumbent, Stage 2 failure, or physical "
+                "validation failure is unresolved and is never an infeasibility "
+                "certificate. For a minimum-used-BEV frontier, a physically "
+                "feasible evaluated candidate with actual used BEV >= K is a "
+                "valid nested-feasible-set witness for target K; its source "
+                "target, candidate hash, actual composition, and canonical "
+                "cost are retained. "
+                "A Stage 1 infeasibility certificate additionally requires a "
+                "successful nonempty IIS containing a temporary target-count "
+                "constraint and a hash of the exact temporary Stage 1 LP. It "
+                "proves only the declared used-powertrain-count neighborhood "
+                "under this two-stage model."
+            ),
+        }
+
+        candidate_evaluation_by_hash = {
+            str(row.get("candidate_hash") or ""): row
+            for row in candidate_evaluations
+            if str(row.get("candidate_hash") or "")
+        }
+        bev_frontier_rows: List[Dict[str, Any]] = []
+        if stage1_bev_frontier_enabled:
+            for event in composition_search_events:
+                target_candidate_hash = str(
+                    event.get("candidate_hash") or ""
+                )
+                resolution_candidate_hash = str(
+                    event.get("frontier_resolution_candidate_hash")
+                    or target_candidate_hash
+                )
+                target_candidate_row = candidate_evaluation_by_hash.get(
+                    target_candidate_hash,
+                    {},
+                )
+                candidate_row = candidate_evaluation_by_hash.get(
+                    resolution_candidate_hash,
+                    target_candidate_row,
+                )
+                resolved_actual_used_bev = candidate_row.get("used_bev")
+                resolved_actual_used_ice = candidate_row.get("used_ice")
+                if resolved_actual_used_bev is None:
+                    resolved_actual_used_bev = event.get(
+                        "actual_used_bev"
+                    )
+                if resolved_actual_used_ice is None:
+                    resolved_actual_used_ice = event.get(
+                        "actual_used_ice"
+                    )
+                bev_frontier_rows.append(
+                    {
+                        "minimum_used_bev_count": event.get(
+                            "minimum_used_bev_count"
+                        ),
+                        "status": event.get("frontier_status")
+                        or (
+                            "ERROR"
+                            if event.get("target_within_selected_inventory")
+                            is True
+                            else "OUTSIDE_SELECTED_INVENTORY"
+                        ),
+                        "raw_solver_status": event.get("solver_status")
+                        or event.get("search_status"),
+                        "solution_count": event.get("solution_count"),
+                        "target_stage1_relaxed_objective_jpy": event.get(
+                            "stage1_relaxed_objective_jpy"
+                        ),
+                        "stage1_relaxed_objective_jpy": candidate_row.get(
+                            "stage1_relaxed_objective_jpy",
+                            event.get("stage1_relaxed_objective_jpy"),
+                        ),
+                        "stage2_actual_canonical_cost_jpy": (
+                            candidate_row.get(
+                                "stage2_actual_canonical_cost_jpy"
+                            )
+                        ),
+                        "target_candidate_hash": target_candidate_hash,
+                        "candidate_hash": resolution_candidate_hash,
+                        "frontier_resolution_source": event.get(
+                            "frontier_resolution_source"
+                        ),
+                        "frontier_resolution_candidate_source_target_used_bev": (
+                            event.get(
+                                "frontier_resolution_candidate_source_target_used_bev"
+                            )
+                        ),
+                        "target_candidate_physical_validation_feasible": (
+                            target_candidate_row.get(
+                                "physical_validation_feasible"
+                            )
+                        ),
+                        "actual_used_bev": resolved_actual_used_bev,
+                        "actual_used_ice": resolved_actual_used_ice,
+                        "used_bev": resolved_actual_used_bev,
+                        "used_ice": resolved_actual_used_ice,
+                        "actual_total_used_vehicle_count": (
+                            (
+                                int(resolved_actual_used_bev or 0)
+                                + int(resolved_actual_used_ice or 0)
+                            )
+                            if resolved_actual_used_bev is not None
+                            and resolved_actual_used_ice is not None
+                            else None
+                        ),
+                        "total_used_vehicle_count_fixed": False,
+                        "total_used_vehicles": (
+                            (
+                                int(resolved_actual_used_bev or 0)
+                                + int(resolved_actual_used_ice or 0)
+                            )
+                            if resolved_actual_used_bev is not None
+                            and resolved_actual_used_ice is not None
+                            else None
+                        ),
+                        "stage2_feasible": candidate_row.get(
+                            "stage2_feasible"
+                        ),
+                        "canonical_evaluation_feasible": candidate_row.get(
+                            "canonical_evaluation_feasible"
+                        ),
+                        "physical_validation_feasible": candidate_row.get(
+                            "physical_validation_feasible"
+                        ),
+                        "physical_validation": candidate_row.get(
+                            "physical_validation_feasible"
+                        ),
+                        "final_disposition": event.get(
+                            "final_disposition"
+                        ),
+                        "best_bound": event.get("best_bound"),
+                        "mip_gap_ratio": event.get("mip_gap_ratio"),
+                        "mip_gap": event.get("mip_gap_ratio"),
+                        "time_limit_sec": event.get("time_limit_sec"),
+                        "solver_runtime_sec": event.get(
+                            "solver_runtime_sec"
+                        ),
+                        "runtime_sec": event.get("solver_runtime_sec"),
+                        "bev_service_distance_km": candidate_row.get(
+                            "bev_service_distance_km"
+                        ),
+                        "bev_deadhead_distance_km": candidate_row.get(
+                            "bev_deadhead_distance_km"
+                        ),
+                        "ice_service_distance_km": candidate_row.get(
+                            "ice_service_distance_km"
+                        ),
+                        "ice_deadhead_distance_km": candidate_row.get(
+                            "ice_deadhead_distance_km"
+                        ),
+                        "bev_total_movement_distance_km": candidate_row.get(
+                            "bev_total_movement_distance_km"
+                        ),
+                        "ice_total_movement_distance_km": candidate_row.get(
+                            "ice_total_movement_distance_km"
+                        ),
+                        "bev_movement_distance_share": candidate_row.get(
+                            "bev_movement_distance_share"
+                        ),
+                        "bev_distance_share": candidate_row.get(
+                            "bev_movement_distance_share"
+                        ),
+                        "ice_fuel_l": candidate_row.get("ice_fuel_l"),
+                        "bev_trip_count": candidate_row.get("bev_trips"),
+                        "grid_import_kwh": candidate_row.get(
+                            "grid_import_kwh"
+                        ),
+                        "pv_to_bus_kwh": candidate_row.get("pv_to_bus_kwh"),
+                        "pv_to_bess_kwh": candidate_row.get(
+                            "pv_to_bess_kwh"
+                        ),
+                        "bess_to_bus_kwh": candidate_row.get(
+                            "bess_to_bus_kwh"
+                        ),
+                        # Phase 3 selects by Stage-2 canonical accounting cost,
+                        # but the Stage-1/Stage-2 decomposition is not one
+                        # integrated actual-cost objective.
+                        "objective_is_actual_cost": False,
+                        # Only the finally selected schedule enters the 24-step
+                        # Rolling chain.  Frontier candidates must not inherit
+                        # that selected-run evidence.
+                        "rolling_24_of_24": None,
+                        "total_cost_jpy": candidate_row.get(
+                            "stage2_actual_canonical_cost_jpy"
+                        ),
+                    }
+                )
+        comparable_frontier_rows = [
+            row
+            for row in bev_frontier_rows
+            if row.get("physical_validation_feasible") is True
+            and row.get("stage2_actual_canonical_cost_jpy") is not None
+        ]
+        monotonicity_violations = audit_bev_frontier_monotonicity(
+            comparable_frontier_rows
+        )
+        minimum_frontier_cost = min(
+            (
+                float(row["stage2_actual_canonical_cost_jpy"])
+                for row in comparable_frontier_rows
+            ),
+            default=None,
+        )
+        for row in bev_frontier_rows:
+            row["cost_increase_percent"] = (
+                (
+                    float(row["stage2_actual_canonical_cost_jpy"])
+                    / minimum_frontier_cost
+                    - 1.0
+                )
+                * 100.0
+                if minimum_frontier_cost is not None
+                and minimum_frontier_cost > 0.0
+                and row.get("stage2_actual_canonical_cost_jpy") is not None
+                else None
+            )
+        bev_cost_frontier = {
+            "schema_version": "bev_cost_frontier_v1",
+            "enabled": stage1_bev_frontier_enabled,
+            "constraint_semantics": (
+                "sum(used_electric_vehicle) >= K; ICE and total used "
+                "vehicle counts are unconstrained and endogenous"
+            ),
+            "row_selection_semantics": (
+                "lowest canonical actual cost among physically feasible "
+                "evaluated candidates with actual used BEV >= K; this is a "
+                "candidate-pool envelope, not an integrated global-optimum "
+                "claim"
+            ),
+            "frontier_total_used_vehicle_count_fixed": False,
+            "minimum_used_bev_count": stage1_bev_frontier_min_count,
+            "maximum_used_bev_count": stage1_bev_frontier_max_count,
+            "target_time_limit_sec": composition_target_time_limit_cap_sec,
+            "rows": bev_frontier_rows,
+            "maximum_physically_feasible_minimum_used_bev_count": max(
+                (
+                    int(row.get("minimum_used_bev_count") or 0)
+                    for row in comparable_frontier_rows
+                ),
+                default=None,
+            ),
+            "maximum_observed_used_bev_count": max(
+                (
+                    int(row.get("actual_used_bev") or 0)
+                    for row in comparable_frontier_rows
+                ),
+                default=None,
+            ),
+            "all_requested_targets_resolved": all_requested_targets_resolved,
+            "monotonicity_checked": len(comparable_frontier_rows) >= 2,
+            "monotonicity_violation_count": len(monotonicity_violations),
+            "monotonicity_violations": monotonicity_violations,
+            "monotonicity_semantics": (
+                "Nondecreasing actual cost is expected only for certified "
+                "optima of the nested >=K feasible sets under one identical "
+                "accounting-cost objective. Time-limited Phase 3 candidates "
+                "are reported, not silently repaired or declared monotone."
+            ),
+        }
+
         candidate_selection_metadata = {
             "stage1_stage2_candidate_limit_requested": (
                 stage1_stage2_candidate_limit
@@ -6779,8 +9276,9 @@ class GurobiMILPAdapter:
             "stage1_stage2_candidate_selection_semantics": (
                 "minimum_canonical_actual_cost_among_stage2_feasible_"
                 "independently_physically_valid_"
-                "time_bounded_primary_pool_and_powertrain_pattern_no_good_"
-                "enumeration_candidates"
+                "time_bounded_primary_pool_used_powertrain_composition_"
+                "neighborhood_and_powertrain_pattern_no_good_enumeration_"
+                "candidates"
             ),
             "stage1_stage2_candidate_global_optimality_claimed": False,
             "stage1_stage2_candidate_evaluation": candidate_evaluations,
@@ -6801,6 +9299,34 @@ class GurobiMILPAdapter:
                 0.0,
             ),
             "stage1_candidate_enumeration_events": enumeration_events,
+            "stage1_composition_search_radius_requested": (
+                stage1_composition_search_radius
+            ),
+            "stage1_bev_frontier_enabled": stage1_bev_frontier_enabled,
+            "stage1_composition_target_time_limit_cap_seconds": (
+                composition_target_time_limit_cap_sec
+            ),
+            "stage1_composition_activation_mip_start_counts": {
+                str(delta): len(starts)
+                for delta, starts in composition_activation_mip_starts.items()
+            },
+            "stage1_composition_activation_mip_start_semantics": (
+                "whole_duty_opposite_powertrain_replacement_or_unused_bev_"
+                "duty_suffix_split_activation_partial_solver_hint"
+            ),
+            "stage1_composition_search_runtime_seconds": (
+                composition_search_runtime_sec
+            ),
+            "stage1_composition_search_certificate_evidence_wall_seconds": (
+                composition_certificate_evidence_wall_time_sec
+            ),
+            "stage1_used_powertrain_composition_search": (
+                composition_search_certificate
+            ),
+            "stage1_used_powertrain_composition_search_accepted": (
+                composition_search_accepted
+            ),
+            "bev_cost_frontier": bev_cost_frontier,
             "stage1_candidate_powertrain_pattern_no_good_cut_count": (
                 no_good_cut_count
             ),

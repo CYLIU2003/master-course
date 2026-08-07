@@ -68,6 +68,7 @@ from .problem import (
 )
 from .pv_area import (
     DEFAULT_PERFORMANCE_RATIO,
+    estimate_depot_pv_area_from_capacity,
     estimate_depot_pv_from_area,
     positive_ratio_or_default,
     safe_optional_float,
@@ -482,6 +483,21 @@ class ProblemBuilder:
         )
         if vehicle_usage_cost_jpy_per_used_bus is None:
             vehicle_usage_cost_jpy_per_used_bus = 0.0
+        vehicle_usage_cost_semantics = str(
+            self._first_present(
+                cost_cfg.get("vehicle_usage_cost_semantics"),
+                simulation_cfg.get("vehicle_usage_cost_semantics"),
+                "unclassified",
+            )
+            or "unclassified"
+        ).strip().lower()
+        if vehicle_usage_cost_semantics not in {
+            "fixed_vehicle_day_cost",
+            "driver_cost_proxy",
+            "provisional_sensitivity",
+            "unclassified",
+        }:
+            vehicle_usage_cost_semantics = "unclassified"
         allow_synthetic_pv_fallback = bool(
             self._first_present(
                 simulation_cfg.get("allow_synthetic_pv_fallback"),
@@ -586,6 +602,7 @@ class ProblemBuilder:
             pv_marginal_charge_cost_yen_per_kwh=pv_marginal_charge_cost_yen_per_kwh,
             pv_curtail_penalty_yen_per_kwh=pv_curtail_penalty_yen_per_kwh,
             vehicle_usage_cost_jpy_per_used_bus=vehicle_usage_cost_jpy_per_used_bus,
+            vehicle_usage_cost_semantics=vehicle_usage_cost_semantics,
             selected_depot_record=selected_depot_record,
             depot_coordinates_by_id=depot_coordinates_by_id,
             canonical_depot_id=str(depot_id or "depot_default"),
@@ -662,6 +679,7 @@ class ProblemBuilder:
         pv_marginal_charge_cost_yen_per_kwh: float = 0.0,
         pv_curtail_penalty_yen_per_kwh: float = 0.0,
         vehicle_usage_cost_jpy_per_used_bus: float = 0.0,
+        vehicle_usage_cost_semantics: str = "unclassified",
         selected_depot_record: Optional[Dict[str, Any]] = None,
         depot_coordinates_by_id: Optional[Dict[str, Dict[str, Optional[float]]]] = None,
         canonical_depot_id: str = "depot_default",
@@ -747,6 +765,9 @@ class ProblemBuilder:
             float(vehicle_usage_cost_jpy_per_used_bus or 0.0),
             0.0,
         )
+        vehicle_usage_cost_semantics = str(
+            vehicle_usage_cost_semantics or "unclassified"
+        ).strip().lower()
         if home_depot_charge_pre_window_min is None:
             home_depot_charge_pre_window_min = float(timestep_min)
         if home_depot_charge_post_window_min is None:
@@ -1405,6 +1426,22 @@ class ProblemBuilder:
                 "pv_marginal_charge_cost_yen_per_kwh": float(pv_marginal_charge_cost_yen_per_kwh),
                 "pv_curtail_penalty_yen_per_kwh": float(pv_curtail_penalty_yen_per_kwh),
                 "vehicle_usage_cost_jpy_per_used_bus": float(vehicle_usage_cost_jpy_per_used_bus),
+                "vehicle_usage_cost_semantics": vehicle_usage_cost_semantics,
+                "vehicle_usage_cost_semantics_classified": (
+                    vehicle_usage_cost_semantics
+                    in {
+                        "fixed_vehicle_day_cost",
+                        "driver_cost_proxy",
+                        "provisional_sensitivity",
+                    }
+                ),
+                "vehicle_usage_cost_semantics_research_eligible": (
+                    vehicle_usage_cost_semantics
+                    in {
+                        "fixed_vehicle_day_cost",
+                        "driver_cost_proxy",
+                    }
+                ),
                 "synthetic_pv_fallback_allowed": bool(allow_synthetic_pv_fallback),
                 "synthetic_pv_fallback_applied": bool(synthetic_pv_fallback_applied),
                 "cost_component_flags": dict(normalized_cost_component_flags),
@@ -1517,7 +1554,7 @@ class ProblemBuilder:
                 "panel_power_density_kw_m2",
                 raw.get("panelPowerDensityKwM2"),
             )
-            estimate = estimate_depot_pv_from_area(
+            area_estimate = estimate_depot_pv_from_area(
                 depot_area_m2,
                 usable_area_ratio=usable_area_ratio,
                 panel_power_density_kw_m2=panel_power_density_kw_m2,
@@ -1548,10 +1585,16 @@ class ProblemBuilder:
             effective_pv_capacity_kw = (
                 float(manual_pv_capacity_kw)
                 if manual_pv_capacity_kw is not None
-                else float(estimate.capacity_kw)
+                else float(area_estimate.capacity_kw)
+            )
+            capacity_estimate = estimate_depot_pv_area_from_capacity(
+                effective_pv_capacity_kw,
+                usable_area_ratio=area_estimate.usable_area_ratio,
+                panel_power_density_kw_m2=area_estimate.panel_power_density_kw_m2,
             )
             pv_has_usable_capacity = effective_pv_capacity_kw > 0.0 and (
-                manual_pv_capacity_kw is not None or estimate.depot_area_m2 is not None
+                manual_pv_capacity_kw is not None
+                or area_estimate.depot_area_m2 is not None
             )
             explicit_pv_enabled = self._first_present(
                 raw.get("pv_enabled") if "pv_enabled" in raw else None,
@@ -1686,10 +1729,13 @@ class ProblemBuilder:
                 pv_om_jpy_per_kw_year=float(raw.get("pv_om_jpy_per_kw_year") or 0.0),
                 pv_life_years=int(raw.get("pv_life_years") or 25),
                 pv_capacity_kw=round(effective_pv_capacity_kw, 6) if pv_enabled else 0.0,
-                depot_area_m2=estimate.depot_area_m2,
-                pv_installable_area_m2=round(estimate.installable_area_m2, 6),
-                usable_area_ratio=estimate.usable_area_ratio,
-                panel_power_density_kw_m2=estimate.panel_power_density_kw_m2,
+                depot_area_m2=area_estimate.depot_area_m2,
+                pv_installable_area_m2=round(
+                    capacity_estimate.required_installable_area_m2,
+                    6,
+                ),
+                usable_area_ratio=capacity_estimate.usable_area_ratio,
+                panel_power_density_kw_m2=capacity_estimate.panel_power_density_kw_m2,
                 performance_ratio=performance_ratio,
                 bess_enabled=bess_enabled,
                 bess_energy_kwh=bess_energy_kwh,

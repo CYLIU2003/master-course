@@ -51,6 +51,61 @@ def test_prepare_depot_energy_assets_disables_pv_without_area() -> None:
     assert rows[0]["pv_generation_kwh_by_slot"] == []
 
 
+def test_prepare_depot_energy_assets_uses_rated_output_and_reverse_area_estimate() -> None:
+    rows = _prepare_depot_energy_assets(
+        {
+            "depot_energy_assets": [
+                {
+                    "depot_id": "dep-1",
+                    "pv_enabled": True,
+                    "pv_capacity_kw": 120.0,
+                    "pv_capacity_kw_manual_override": True,
+                    "pv_capacity_factor_by_date": [
+                        {
+                            "date": "2025-08-01",
+                            "slot_minutes": 60,
+                            "capacity_factor_by_slot": [0.0, 0.5],
+                        }
+                    ],
+                }
+            ]
+        },
+        [{"id": "dep-1"}],
+    )
+
+    assert rows[0]["depot_area_m2"] is None
+    assert rows[0]["pv_capacity_kw"] == 120.0
+    assert rows[0]["derived_pv_capacity_kw"] == 120.0
+    assert rows[0]["estimated_installable_area_m2"] == 600.0
+    assert rows[0]["estimated_depot_area_from_pv_capacity_m2"] == 1714.285714
+    assert rows[0]["pv_capacity_input_mode"] == "rated_output_manual"
+    assert rows[0]["pv_generation_kwh_by_slot"] == [0.0, 60.0]
+
+
+def test_prepare_depot_energy_assets_explicit_zero_rated_output_disables_pv() -> None:
+    rows = _prepare_depot_energy_assets(
+        {
+            "depot_energy_assets": [
+                {
+                    "depot_id": "dep-1",
+                    "depot_area_m2": 1000.0,
+                    "pv_enabled": True,
+                    "pv_capacity_kw": 0.0,
+                    "pv_capacity_kw_manual_override": True,
+                    "pv_generation_kwh_by_slot": [10.0],
+                }
+            ]
+        },
+        [{"id": "dep-1", "depotAreaM2": 1000.0}],
+    )
+
+    assert rows[0]["depot_area_m2"] == 1000.0
+    assert rows[0]["pv_capacity_kw"] == 0.0
+    assert rows[0]["estimated_installable_area_m2"] == 0.0
+    assert rows[0]["pv_enabled"] is False
+    assert rows[0]["pv_generation_kwh_by_slot"] == []
+
+
 def test_prepare_depot_energy_assets_rescales_legacy_generation_shape() -> None:
     rows = _prepare_depot_energy_assets(
         {

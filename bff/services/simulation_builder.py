@@ -571,6 +571,26 @@ def apply_builder_configuration(
             float(body.simulation_settings.vehicle_usage_cost_jpy_per_used_bus),
             0.0,
         )
+    requested_vehicle_usage_semantics = str(
+        body.simulation_settings.vehicle_usage_cost_semantics
+        or overlay.cost_coefficients.vehicle_usage_cost_semantics
+        or "unclassified"
+    ).strip().lower()
+    allowed_vehicle_usage_semantics = {
+        "fixed_vehicle_day_cost",
+        "driver_cost_proxy",
+        "provisional_sensitivity",
+        "unclassified",
+    }
+    if requested_vehicle_usage_semantics not in allowed_vehicle_usage_semantics:
+        raise ValueError(
+            "vehicle_usage_cost_semantics must be one of "
+            "fixed_vehicle_day_cost, driver_cost_proxy, "
+            "provisional_sensitivity, unclassified"
+        )
+    overlay.cost_coefficients.vehicle_usage_cost_semantics = (
+        requested_vehicle_usage_semantics
+    )
     if body.simulation_settings.diesel_price_per_l is not None:
         overlay.cost_coefficients.diesel_price_per_l = (
             body.simulation_settings.diesel_price_per_l
@@ -699,6 +719,43 @@ def apply_builder_configuration(
         or current_simulation_config.get("counterfactual_pv_source_date")
         or ""
     ).strip()
+    legacy_fixed_weekday_marker = False
+    if (
+        not str(getattr(settings, "comparison_type", None) or "").strip()
+        and comparison_type == FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL
+        and allow_fixed_weekday_timetable_pv_counterfactual
+        and str(
+            current_simulation_config.get("calendar_policy") or ""
+        ).strip()
+        == FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL
+        and selected_day_type == "WEEKDAY"
+        and len(service_dates) == 1
+        and str(getattr(settings, "weather_mode", None) or "").strip()
+        == "actual_date_profile"
+    ):
+        try:
+            legacy_service_date = datetime.strptime(
+                str(service_dates[0])[:10],
+                "%Y-%m-%d",
+            ).date()
+        except ValueError:
+            legacy_service_date = None
+        legacy_fixed_weekday_marker = bool(
+            legacy_service_date is not None
+            and legacy_service_date.weekday() == 6
+            and (
+                not counterfactual_pv_source_date
+                or counterfactual_pv_source_date
+                == legacy_service_date.isoformat()
+            )
+        )
+    if legacy_fixed_weekday_marker:
+        # Older Quick Setup versions stored the calendar waiver name in the
+        # paired-comparison field.  Treat only the exact Sunday/WEEKDAY/actual
+        # profile shape as that legacy marker and discard its stale pair role.
+        comparison_type = ""
+        comparison_role = ""
+        counterfactual_pv_source_date = ""
     if comparison_type:
         if comparison_type != "same_service_date_pv_counterfactual":
             raise ValueError(
@@ -888,6 +945,9 @@ def apply_builder_configuration(
         "vehicle_usage_cost_jpy_per_used_bus": (
             overlay.cost_coefficients.vehicle_usage_cost_jpy_per_used_bus
         ),
+        "vehicle_usage_cost_semantics": (
+            overlay.cost_coefficients.vehicle_usage_cost_semantics
+        ),
         "pv_marginal_charge_cost_yen_per_kwh": (
             overlay.cost_coefficients.pv_marginal_charge_cost_yen_per_kwh
         ),
@@ -921,14 +981,8 @@ def apply_builder_configuration(
         "experiment_notes": body.simulation_settings.experiment_notes,
     }
     if allow_fixed_weekday_timetable_pv_counterfactual:
-        doc["simulation_config"].update(
-            {
-                "calendar_policy": FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL,
-                "comparison_type": (
-                    comparison_type
-                    or FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL
-                ),
-            }
+        doc["simulation_config"]["calendar_policy"] = (
+            FIXED_WEEKDAY_TIMETABLE_PV_COUNTERFACTUAL
         )
     if overlay_depot_energy_assets is not None:
         doc["simulation_config"]["depot_energy_assets"] = [

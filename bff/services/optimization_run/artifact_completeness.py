@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Mapping
 import csv
 from decimal import Decimal, InvalidOperation
 import hashlib
 import json
+import math
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -15,11 +17,32 @@ ARTIFACT_CONTRACT_VERSION = "frontend_run_artifacts_v1"
 PHYSICAL_VALIDATION_INPUT_MANIFEST_SCHEMA_VERSION = (
     "physical_validation_input_manifest_v1"
 )
+SOLVER_OBJECTIVE_ACCOUNTING_RECONCILIATION_FILE = (
+    "solver_objective_accounting_reconciliation.json"
+)
+SOLVER_OBJECTIVE_ACCOUNTING_RECONCILIATION_SCHEMA_VERSION = (
+    "solver_objective_accounting_reconciliation_v1"
+)
+STAGE1_USED_POWERTRAIN_COMPOSITION_SEARCH_FILE = (
+    "stage1_used_powertrain_composition_search.json"
+)
+STAGE1_USED_POWERTRAIN_COMPOSITION_SEARCH_CSV_FILE = (
+    "stage1_used_powertrain_composition_search.csv"
+)
+STAGE1_USED_POWERTRAIN_COMPOSITION_SEARCH_SCHEMA_VERSION = (
+    "stage1_used_powertrain_composition_search_v1"
+)
+STAGE1_USED_POWERTRAIN_COMPOSITION_SEARCH_SCHEMA_V2 = (
+    "stage1_used_powertrain_composition_search_v2"
+)
 
 # These artifacts are generated for every successfully finalized interactive
 # optimization run.  Optional visualizations are validated through
 # graph/manifest.json instead of being hard-coded here.
 BASE_REQUIRED_ARTIFACTS = (
+    "assignment_economic_audit.csv",
+    "assignment_economic_audit.json",
+    "baseline_vs_integrated_actual_cost.csv",
     "assignment_validation_diagnostics.json",
     "canonical_solver_result.json",
     "charging_schedule.csv",
@@ -37,8 +60,12 @@ BASE_REQUIRED_ARTIFACTS = (
     "kpi_summary.json",
     "objective_breakdown.csv",
     "objective_breakdown.json",
+    "operating_and_lifecycle_cost_scope.csv",
+    "operating_and_lifecycle_cost_scope.json",
     "optimization_audit.json",
     "optimization_result.json",
+    "powertrain_marginal_cost_audit.csv",
+    "powertrain_marginal_cost_audit.json",
     "raw/assignment.csv",
     "raw/canonical_solver_result.json",
     "raw/optimization_audit.json",
@@ -56,6 +83,7 @@ BASE_REQUIRED_ARTIFACTS = (
     "simulation_conditions_tou_prices.csv",
     "simulation_conditions_vehicle_costs.csv",
     "site_power_balance.csv",
+    SOLVER_OBJECTIVE_ACCOUNTING_RECONCILIATION_FILE,
     "solver_result.json",
     "solver_settings.json",
     "strict_reconciliation.csv",
@@ -67,6 +95,7 @@ BASE_REQUIRED_ARTIFACTS = (
     "targeted_trips.json",
     "trip_type_counts.csv",
     "trip_type_counts.json",
+    "trip_powertrain_cost_comparison.csv",
     "vehicle_schedule.csv",
     "vehicle_timeline_gantt.csv",
     "vehicle_timelines.csv",
@@ -75,6 +104,18 @@ BASE_REQUIRED_ARTIFACTS = (
     "graph/data_flow_validation.csv",
     "graph/manifest.json",
     "graph/refuel_events.csv",
+)
+
+TWO_STAGE_FORMAL_REQUIRED_ARTIFACTS = (
+    STAGE1_USED_POWERTRAIN_COMPOSITION_SEARCH_FILE,
+    STAGE1_USED_POWERTRAIN_COMPOSITION_SEARCH_CSV_FILE,
+)
+
+BEV_FRONTIER_REQUIRED_ARTIFACTS = (
+    "bev_cost_frontier.csv",
+    "bev_cost_frontier.json",
+    "bev_cost_frontier.md",
+    "maximum_bev_feasibility_search.csv",
 )
 
 RESEARCH_PROVENANCE_ARTIFACTS = (
@@ -138,6 +179,482 @@ def _load_json_object(path: Path) -> dict[str, Any]:
     if not isinstance(loaded, dict):
         raise ValueError("expected a JSON object")
     return dict(loaded)
+
+
+def _finite_json_number(value: Any) -> float | None:
+    """Return a JSON numeric value only when it is finite.
+
+    Booleans are deliberately excluded even though Python treats them as ints.
+    A release artifact must not turn a truth value into a currency amount.
+    """
+
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    numeric = float(value)
+    return numeric if math.isfinite(numeric) else None
+
+
+def _nonnegative_integer(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return int(value)
+
+
+def _sha256_hex(value: Any) -> bool:
+    """Return whether ``value`` is a lower/upper-case SHA-256 hex digest."""
+
+    return bool(
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdefABCDEF" for character in value)
+    )
+
+
+def validate_solver_objective_accounting_reconciliation(
+    payload: Mapping[str, Any] | None,
+    *,
+    require_match: bool,
+) -> list[str]:
+    """Validate numeric solver-to-accounting reconciliation evidence.
+
+    The legacy ``solver_objective_matches_accounting_total`` flag is useful
+    telemetry, but it is not evidence by itself.  Formal release gates require
+    the two finite values, a derived residual, an explicit tolerance, and an
+    accounting source that is authoritative for the accepted rolling day.
+    """
+
+    artifact = SOLVER_OBJECTIVE_ACCOUNTING_RECONCILIATION_FILE
+    if not isinstance(payload, Mapping):
+        return [f"{artifact} must be a JSON object"]
+    payload = dict(payload)
+    errors: list[str] = []
+    if (
+        payload.get("schema_version")
+        != SOLVER_OBJECTIVE_ACCOUNTING_RECONCILIATION_SCHEMA_VERSION
+    ):
+        errors.append(f"{artifact} has an invalid schema_version")
+
+    for key in (
+        "solver_objective_source",
+        "canonical_accounting_source",
+        "objective_semantics",
+    ):
+        if not str(payload.get(key) or "").strip():
+            errors.append(f"{artifact}: {key} must be a non-empty string")
+
+    boolean_keys = (
+        "numeric_values_available",
+        "numeric_residual_within_tolerance",
+        "objective_is_actual_cost",
+        "matches_canonical_accounting_total",
+    )
+    for key in boolean_keys:
+        if not isinstance(payload.get(key), bool):
+            errors.append(f"{artifact}: {key} must be a boolean")
+
+    tolerance = _finite_json_number(payload.get("tolerance_jpy"))
+    if tolerance is None or tolerance < 0.0:
+        errors.append(f"{artifact}: tolerance_jpy must be a finite non-negative number")
+
+    numeric_values_available = payload.get("numeric_values_available") is True
+    if numeric_values_available:
+        solver_value = _finite_json_number(payload.get("solver_objective_value_jpy"))
+        accounting_total = _finite_json_number(
+            payload.get("canonical_accounting_total_jpy")
+        )
+        difference = _finite_json_number(payload.get("difference_jpy"))
+        absolute_difference = _finite_json_number(
+            payload.get("absolute_difference_jpy")
+        )
+        if solver_value is None:
+            errors.append(
+                f"{artifact}: solver_objective_value_jpy must be finite when numeric_values_available"
+            )
+        if accounting_total is None:
+            errors.append(
+                f"{artifact}: canonical_accounting_total_jpy must be finite when numeric_values_available"
+            )
+        if difference is None:
+            errors.append(
+                f"{artifact}: difference_jpy must be finite when numeric_values_available"
+            )
+        if absolute_difference is None or absolute_difference < 0.0:
+            errors.append(
+                f"{artifact}: absolute_difference_jpy must be finite and non-negative when numeric_values_available"
+            )
+        if (
+            solver_value is not None
+            and accounting_total is not None
+            and difference is not None
+            and absolute_difference is not None
+        ):
+            expected_difference = solver_value - accounting_total
+            if not math.isclose(
+                difference,
+                expected_difference,
+                rel_tol=1.0e-12,
+                abs_tol=1.0e-9,
+            ):
+                errors.append(
+                    f"{artifact}: difference_jpy is not solver_objective_value_jpy minus canonical_accounting_total_jpy"
+                )
+            if not math.isclose(
+                absolute_difference,
+                abs(expected_difference),
+                rel_tol=1.0e-12,
+                abs_tol=1.0e-9,
+            ):
+                errors.append(
+                    f"{artifact}: absolute_difference_jpy is inconsistent with difference_jpy"
+                )
+            if tolerance is not None:
+                residual_within_tolerance = (
+                    abs(expected_difference) <= tolerance
+                )
+                if (
+                    payload.get("numeric_residual_within_tolerance")
+                    is not residual_within_tolerance
+                ):
+                    errors.append(
+                        f"{artifact}: numeric_residual_within_tolerance is not derived from the numeric residual"
+                    )
+    else:
+        if payload.get("numeric_residual_within_tolerance") is True:
+            errors.append(
+                f"{artifact}: numeric_residual_within_tolerance cannot be true without numeric values"
+            )
+        if payload.get("matches_canonical_accounting_total") is True:
+            errors.append(
+                f"{artifact}: matches_canonical_accounting_total cannot be true without numeric values"
+            )
+
+    if not require_match:
+        return errors
+
+    if not numeric_values_available:
+        errors.append(f"{artifact}: formal release requires finite numeric values")
+    if payload.get("numeric_residual_within_tolerance") is not True:
+        errors.append(
+            f"{artifact}: formal release requires residual within tolerance"
+        )
+    if payload.get("objective_is_actual_cost") is not True:
+        errors.append(
+            f"{artifact}: formal release requires an actual-cost solver objective"
+        )
+    if (
+        payload.get("canonical_accounting_source")
+        != "rolling_hourly_chain/executed_day_accounting.json"
+    ):
+        errors.append(
+            f"{artifact}: formal release requires the executed-day accounting source"
+        )
+    if payload.get("matches_canonical_accounting_total") is not True:
+        errors.append(
+            f"{artifact}: formal release requires a derived accounting match"
+        )
+    return errors
+
+
+def validate_stage1_used_powertrain_composition_search(
+    payload: Mapping[str, Any] | None,
+    *,
+    require_accepted: bool,
+) -> list[str]:
+    """Validate the persisted Stage-1 used-powertrain search certificate.
+
+    A formal two-stage release cannot treat a summary boolean as a certificate.
+    It needs a versioned search artifact that records either multiple physically
+    feasible activated compositions, every in-inventory adjacent target as
+    certified infeasible, or the explicit no-adjacent-inventory boundary.
+    """
+
+    artifact = STAGE1_USED_POWERTRAIN_COMPOSITION_SEARCH_FILE
+    if not isinstance(payload, Mapping):
+        return [f"{artifact} must be a JSON object"]
+    payload = dict(payload)
+    errors: list[str] = []
+    if payload.get("schema_version") not in {
+        STAGE1_USED_POWERTRAIN_COMPOSITION_SEARCH_SCHEMA_VERSION,
+        STAGE1_USED_POWERTRAIN_COMPOSITION_SEARCH_SCHEMA_V2,
+    }:
+        errors.append(f"{artifact} has an invalid schema_version")
+    frontier_mode = payload.get("search_mode") == "minimum_used_bev_frontier"
+
+    for key in (
+        "enabled",
+        "multiple_feasible_compositions_found",
+        "all_adjacent_targets_certified_infeasible",
+        "inventory_has_no_adjacent_composition",
+        "accepted_for_formal_composition_evidence",
+    ):
+        if not isinstance(payload.get(key), bool):
+            errors.append(f"{artifact}: {key} must be a boolean")
+
+    if _nonnegative_integer(payload.get("radius_requested")) is None:
+        errors.append(f"{artifact}: radius_requested must be a non-negative integer")
+
+    def _validate_pair(value: Any, *, label: str) -> tuple[int, int] | None:
+        if not isinstance(value, Mapping):
+            errors.append(f"{artifact}: {label} must be an object")
+            return None
+        used_bev = _nonnegative_integer(value.get("used_bev"))
+        used_ice = _nonnegative_integer(value.get("used_ice"))
+        if used_bev is None or used_ice is None:
+            errors.append(
+                f"{artifact}: {label} must contain non-negative integer used_bev and used_ice"
+            )
+            return None
+        return used_bev, used_ice
+
+    _validate_pair(
+        payload.get("primary_used_powertrain_composition"),
+        label="primary_used_powertrain_composition",
+    )
+    inventory = payload.get("selected_inventory")
+    if not isinstance(inventory, Mapping):
+        errors.append(f"{artifact}: selected_inventory must be an object")
+    else:
+        for key in (
+            "available_electric_vehicle_count",
+            "available_combustion_vehicle_count",
+        ):
+            if _nonnegative_integer(inventory.get(key)) is None:
+                errors.append(
+                    f"{artifact}: selected_inventory.{key} must be a non-negative integer"
+                )
+        for key in ("electric_vehicle_ids", "combustion_vehicle_ids"):
+            if not isinstance(inventory.get(key), list):
+                errors.append(
+                    f"{artifact}: selected_inventory.{key} must be a list"
+                )
+
+    target_records = payload.get("target_records")
+    if not isinstance(target_records, list):
+        errors.append(f"{artifact}: target_records must be a list")
+        target_records = []
+    feasible_pairs_payload = payload.get("feasible_used_powertrain_compositions")
+    if not isinstance(feasible_pairs_payload, list):
+        errors.append(
+            f"{artifact}: feasible_used_powertrain_compositions must be a list"
+        )
+        feasible_pairs_payload = []
+    unresolved_targets = payload.get("unresolved_targets")
+    if not isinstance(unresolved_targets, list):
+        errors.append(f"{artifact}: unresolved_targets must be a list")
+        unresolved_targets = []
+    blocking_reasons = payload.get("blocking_reasons")
+    if not isinstance(blocking_reasons, list) or any(
+        not isinstance(reason, str) or not reason.strip()
+        for reason in (blocking_reasons or [])
+    ):
+        errors.append(f"{artifact}: blocking_reasons must be a list of non-empty strings")
+        blocking_reasons = []
+    if not str(payload.get("semantics") or "").strip():
+        errors.append(f"{artifact}: semantics must be a non-empty string")
+
+    feasible_pairs: set[tuple[int, int]] = set()
+    for index, pair in enumerate(feasible_pairs_payload):
+        parsed = _validate_pair(
+            pair,
+            label=f"feasible_used_powertrain_compositions[{index}]",
+        )
+        if parsed is not None:
+            feasible_pairs.add(parsed)
+
+    valid_target_records: list[dict[str, Any]] = []
+    in_inventory_target_records: list[dict[str, Any]] = []
+    for index, record in enumerate(target_records):
+        if not isinstance(record, Mapping):
+            errors.append(f"{artifact}: target_records[{index}] must be an object")
+            continue
+        record = dict(record)
+        target_bev = _nonnegative_integer(record.get("target_used_bev"))
+        target_ice = _nonnegative_integer(record.get("target_used_ice"))
+        minimum_bev = _nonnegative_integer(
+            record.get("minimum_used_bev_count")
+        )
+        invalid_target = bool(
+            target_bev is None
+            or (
+                frontier_mode
+                and (
+                    minimum_bev is None
+                    or record.get("target_used_ice") is not None
+                    or record.get("target_total_used_vehicle_count")
+                    is not None
+                )
+            )
+            or (not frontier_mode and target_ice is None)
+        )
+        if invalid_target:
+            errors.append(
+                f"{artifact}: target_records[{index}] has invalid target-count semantics"
+            )
+            continue
+        if not isinstance(record.get("target_within_selected_inventory"), bool):
+            errors.append(
+                f"{artifact}: target_records[{index}].target_within_selected_inventory must be a boolean"
+            )
+            continue
+        valid_target_records.append(record)
+        if record["target_within_selected_inventory"] is True:
+            in_inventory_target_records.append(record)
+
+    if not require_accepted:
+        return errors
+
+    if payload.get("enabled") is not True:
+        errors.append(f"{artifact}: formal release requires enabled=true")
+    if not valid_target_records:
+        errors.append(f"{artifact}: formal release requires target records")
+    if payload.get("accepted_for_formal_composition_evidence") is not True:
+        errors.append(
+            f"{artifact}: formal release requires accepted_for_formal_composition_evidence=true"
+        )
+    if blocking_reasons:
+        errors.append(f"{artifact}: accepted evidence cannot retain blocking_reasons")
+
+    multiple_feasible = payload.get("multiple_feasible_compositions_found") is True
+    all_infeasible = (
+        payload.get("all_adjacent_targets_certified_infeasible") is True
+    )
+    no_adjacent_inventory = (
+        payload.get("inventory_has_no_adjacent_composition") is True
+    )
+    frontier_all_resolved = (
+        payload.get("all_requested_targets_resolved") is True
+    )
+    if multiple_feasible and len(feasible_pairs) < 2:
+        errors.append(
+            f"{artifact}: multiple_feasible_compositions_found requires two distinct feasible compositions"
+        )
+    if all_infeasible or frontier_mode:
+        if not in_inventory_target_records:
+            errors.append(
+                f"{artifact}: all_adjacent_targets_certified_infeasible requires in-inventory targets"
+            )
+        for index, record in enumerate(in_inventory_target_records):
+            if (
+                frontier_mode
+                and record.get("final_disposition")
+                == "physically_feasible_stage2_candidate"
+            ):
+                continue
+            if record.get("final_disposition") != "stage1_infeasibility_certificate":
+                errors.append(
+                    f"{artifact}: in-inventory target {index} lacks a stage1_infeasibility_certificate disposition"
+                )
+                continue
+            certificate = record.get("infeasibility_certificate")
+            if not isinstance(certificate, Mapping):
+                errors.append(
+                    f"{artifact}: in-inventory target {index} lacks an infeasibility certificate object"
+                )
+                continue
+            certificate = dict(certificate)
+            if (
+                certificate.get("accepted_for_formal_composition_evidence")
+                is not True
+            ):
+                errors.append(
+                    f"{artifact}: in-inventory target {index} lacks an accepted infeasibility certificate"
+                )
+            if certificate.get("solver_status") != "infeasible":
+                errors.append(
+                    f"{artifact}: in-inventory target {index} certificate solver_status must be infeasible"
+                )
+            if certificate.get("iis_generated") is not True:
+                errors.append(
+                    f"{artifact}: in-inventory target {index} certificate must record a successful IIS"
+                )
+            iis_constraint_names = certificate.get("iis_constraint_names")
+            target_constraint_names = certificate.get(
+                "target_count_constraint_names"
+            )
+            if (
+                not isinstance(iis_constraint_names, list)
+                or not iis_constraint_names
+                or any(
+                    not isinstance(name, str) or not name.strip()
+                    for name in iis_constraint_names
+                )
+            ):
+                errors.append(
+                    f"{artifact}: in-inventory target {index} certificate IIS must be a non-empty string list"
+                )
+            if (
+                not isinstance(target_constraint_names, list)
+                or not target_constraint_names
+                or any(
+                    not isinstance(name, str) or not name.strip()
+                    for name in target_constraint_names
+                )
+            ):
+                errors.append(
+                    f"{artifact}: in-inventory target {index} certificate target-count names must be a non-empty string list"
+                )
+            elif not set(target_constraint_names).intersection(
+                iis_constraint_names
+                if isinstance(iis_constraint_names, list)
+                else []
+            ):
+                errors.append(
+                    f"{artifact}: in-inventory target {index} certificate IIS omits the target-count constraint"
+                )
+            if certificate.get("target_count_constraint_in_iis") is not True:
+                errors.append(
+                    f"{artifact}: in-inventory target {index} certificate must flag target_count_constraint_in_iis"
+                )
+            if not _sha256_hex(certificate.get("stage1_model_lp_sha256")):
+                errors.append(
+                    f"{artifact}: in-inventory target {index} certificate needs a Stage 1 LP SHA-256"
+                )
+            if not _sha256_hex(certificate.get("solver_controls_hash")):
+                errors.append(
+                    f"{artifact}: in-inventory target {index} certificate needs a solver-controls SHA-256"
+                )
+            failure_reasons = certificate.get("failure_reasons")
+            if not isinstance(failure_reasons, list) or failure_reasons:
+                errors.append(
+                    f"{artifact}: accepted in-inventory target {index} certificate cannot retain failure_reasons"
+                )
+    if no_adjacent_inventory and in_inventory_target_records:
+        errors.append(
+            f"{artifact}: inventory_has_no_adjacent_composition conflicts with in-inventory targets"
+        )
+    frontier_has_certificate = any(
+        record.get("final_disposition")
+        == "stage1_infeasibility_certificate"
+        for record in in_inventory_target_records
+    )
+    if frontier_mode:
+        if payload.get("frontier_total_used_vehicle_count_fixed") is not False:
+            errors.append(
+                f"{artifact}: BEV frontier must not fix total used vehicle count"
+            )
+        if not frontier_all_resolved:
+            errors.append(
+                f"{artifact}: formal BEV frontier requires all targets resolved"
+            )
+        if any(
+            record.get("final_disposition") not in {
+                "physically_feasible_stage2_candidate",
+                "stage1_infeasibility_certificate",
+            }
+            for record in in_inventory_target_records
+        ):
+            errors.append(
+                f"{artifact}: formal BEV frontier contains an unresolved target"
+            )
+        if not (multiple_feasible or frontier_has_certificate):
+            errors.append(
+                f"{artifact}: formal BEV frontier requires two feasible compositions or an infeasibility certificate"
+            )
+    elif not (multiple_feasible or all_infeasible or no_adjacent_inventory):
+        errors.append(
+            f"{artifact}: formal release requires feasible alternatives or a complete adjacent-composition certificate"
+        )
+    return errors
 
 
 def _sha256(path: Path) -> str:
@@ -351,6 +868,7 @@ def required_frontend_artifacts(
     *,
     research_run: bool,
     require_rolling: bool,
+    require_two_stage_composition_certificate: bool = False,
 ) -> list[str]:
     """Return the semantic artifact contract for one finalized frontend run."""
 
@@ -359,7 +877,173 @@ def required_frontend_artifacts(
         paths.extend(RESEARCH_PROVENANCE_ARTIFACTS)
     if require_rolling:
         paths.extend(ROLLING_REQUIRED_ARTIFACTS)
+    if require_two_stage_composition_certificate:
+        paths.extend(TWO_STAGE_FORMAL_REQUIRED_ARTIFACTS)
     return _normalized_paths(paths)
+
+
+def _validate_assignment_economic_audit(
+    *,
+    run_dir: Path,
+    content_errors: list[str],
+) -> None:
+    """Check the mandatory audit's schema without asserting its conclusions."""
+
+    json_path = run_dir / "assignment_economic_audit.json"
+    csv_path = run_dir / "assignment_economic_audit.csv"
+    required_keys = {
+        "schema_version",
+        "bev_grid_marginal_cost_jpy_per_km",
+        "ice_marginal_cost_jpy_per_km",
+        "renewable_budget_kwh",
+        "renewable_energy_allocated_in_stage1_kwh",
+        "grid_energy_allocated_in_stage1_kwh",
+        "stage1_bev_trip_count",
+        "stage2_bev_trip_count",
+        "assignment_energy_coupling_mode",
+        "weather_response_expected",
+        "weather_response_observed",
+        "vehicle_usage_cost_jpy_per_used_bus",
+        "vehicle_usage_cost_semantics",
+        "vehicle_usage_cost_semantics_classified",
+        "vehicle_usage_cost_semantics_research_eligible",
+    }
+    if json_path.is_file():
+        try:
+            payload = _load_json_object(json_path)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            content_errors.append(f"assignment_economic_audit.json: {exc}")
+        else:
+            if payload.get("schema_version") != "assignment_economic_audit_v1":
+                content_errors.append(
+                    "assignment_economic_audit.json has an invalid schema_version"
+                )
+            missing_keys = sorted(required_keys.difference(payload))
+            if missing_keys:
+                content_errors.append(
+                    "assignment_economic_audit.json is missing required keys: "
+                    + ", ".join(missing_keys)
+                )
+    if csv_path.is_file():
+        expected_header = (
+            "bev_grid_marginal_cost_jpy_per_km",
+            "ice_marginal_cost_jpy_per_km",
+            "renewable_budget_kwh",
+            "renewable_energy_allocated_in_stage1_kwh",
+            "grid_energy_allocated_in_stage1_kwh",
+            "stage1_bev_trip_count",
+            "stage2_bev_trip_count",
+            "assignment_energy_coupling_mode",
+            "weather_response_expected",
+            "weather_response_observed",
+            "vehicle_usage_cost_jpy_per_used_bus",
+            "vehicle_usage_cost_semantics",
+            "vehicle_usage_cost_semantics_classified",
+            "vehicle_usage_cost_semantics_research_eligible",
+        )
+        try:
+            with csv_path.open("r", encoding="utf-8", newline="") as handle:
+                reader = csv.DictReader(handle)
+                if tuple(reader.fieldnames or ()) != expected_header:
+                    content_errors.append(
+                        "assignment_economic_audit.csv header does not match "
+                        "the required schema"
+                    )
+                elif len(list(reader)) != 1:
+                    content_errors.append(
+                        "assignment_economic_audit.csv must contain one audit row"
+                    )
+        except (OSError, UnicodeError, csv.Error) as exc:
+            content_errors.append(f"assignment_economic_audit.csv: {exc}")
+
+
+def _validate_release_evidence_artifacts(
+    *,
+    run_dir: Path,
+    require_two_stage_composition_certificate: bool,
+    content_errors: list[str],
+) -> None:
+    """Validate the persisted evidence relied on by formal release gates."""
+
+    reconciliation_path = run_dir / SOLVER_OBJECTIVE_ACCOUNTING_RECONCILIATION_FILE
+    if reconciliation_path.is_file():
+        try:
+            reconciliation = _load_json_object(reconciliation_path)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            content_errors.append(
+                f"{SOLVER_OBJECTIVE_ACCOUNTING_RECONCILIATION_FILE}: {exc}"
+            )
+        else:
+            content_errors.extend(
+                validate_solver_objective_accounting_reconciliation(
+                    reconciliation,
+                    require_match=False,
+                )
+            )
+
+    if not require_two_stage_composition_certificate:
+        return
+
+    certificate_path = run_dir / STAGE1_USED_POWERTRAIN_COMPOSITION_SEARCH_FILE
+    if certificate_path.is_file():
+        try:
+            certificate = _load_json_object(certificate_path)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            content_errors.append(
+                f"{STAGE1_USED_POWERTRAIN_COMPOSITION_SEARCH_FILE}: {exc}"
+            )
+        else:
+            content_errors.extend(
+                validate_stage1_used_powertrain_composition_search(
+                    certificate,
+                    require_accepted=True,
+                )
+            )
+
+    csv_path = run_dir / STAGE1_USED_POWERTRAIN_COMPOSITION_SEARCH_CSV_FILE
+    expected_header = (
+        "target_used_bev",
+        "minimum_used_bev_count",
+        "target_used_ice",
+        "delta_used_bev_from_primary",
+        "delta_used_ice_from_primary",
+        "target_total_used_vehicle_count",
+        "target_within_selected_inventory",
+        "search_status",
+        "solver_status",
+        "frontier_status",
+        "solution_count",
+        "best_bound",
+        "mip_gap_ratio",
+        "time_limit_sec",
+        "solver_runtime_sec",
+        "candidate_hash",
+        "frontier_target_candidate_physical_validation_feasible",
+        "frontier_resolution_source",
+        "frontier_resolution_candidate_hash",
+        "frontier_resolution_actual_used_bev",
+        "frontier_resolution_actual_used_ice",
+        "frontier_resolution_canonical_cost_jpy",
+        "frontier_resolution_candidate_source_target_used_bev",
+        "actual_used_bev",
+        "actual_used_ice",
+        "candidate_accepted_for_stage2_evaluation",
+        "final_disposition",
+    )
+    if csv_path.is_file():
+        try:
+            with csv_path.open("r", encoding="utf-8", newline="") as handle:
+                reader = csv.DictReader(handle)
+                if tuple(reader.fieldnames or ()) != expected_header:
+                    content_errors.append(
+                        "stage1_used_powertrain_composition_search.csv header "
+                        "does not match the required schema"
+                    )
+        except (OSError, UnicodeError, csv.Error) as exc:
+            content_errors.append(
+                "stage1_used_powertrain_composition_search.csv: "
+                f"{exc}"
+            )
 
 
 def _graph_manifest_artifacts(
@@ -1087,15 +1771,41 @@ def audit_frontend_run_artifacts(
     *,
     research_run: bool,
     require_rolling: bool,
+    require_two_stage_composition_certificate: bool = False,
 ) -> dict[str, Any]:
     """Audit files and essential content without changing solver results."""
 
     run_dir = Path(run_dir).resolve()
     content_errors: list[str] = []
+    _validate_assignment_economic_audit(
+        run_dir=run_dir,
+        content_errors=content_errors,
+    )
+    _validate_release_evidence_artifacts(
+        run_dir=run_dir,
+        require_two_stage_composition_certificate=(
+            require_two_stage_composition_certificate
+        ),
+        content_errors=content_errors,
+    )
     required = required_frontend_artifacts(
         research_run=research_run,
         require_rolling=require_rolling,
+        require_two_stage_composition_certificate=(
+            require_two_stage_composition_certificate
+        ),
     )
+    composition_path = run_dir / STAGE1_USED_POWERTRAIN_COMPOSITION_SEARCH_FILE
+    if require_two_stage_composition_certificate and composition_path.is_file():
+        try:
+            composition_payload = _load_json_object(composition_path)
+        except (OSError, ValueError, json.JSONDecodeError):
+            composition_payload = {}
+        if (
+            composition_payload.get("search_mode")
+            == "minimum_used_bev_frontier"
+        ):
+            required.extend(BEV_FRONTIER_REQUIRED_ARTIFACTS)
     required.extend(
         _graph_manifest_artifacts(
             run_dir=run_dir,
@@ -1205,6 +1915,9 @@ def audit_frontend_run_artifacts(
         "run_dir": str(run_dir),
         "research_run": bool(research_run),
         "rolling_required": bool(require_rolling),
+        "two_stage_composition_certificate_required": bool(
+            require_two_stage_composition_certificate
+        ),
         "required_artifact_count": len(required),
         "verified_artifact_count": len(artifacts),
         "total_file_count": sum(
@@ -1231,6 +1944,7 @@ def persist_frontend_run_artifact_audit(
     *,
     research_run: bool,
     require_rolling: bool,
+    require_two_stage_composition_certificate: bool = False,
 ) -> dict[str, Any]:
     """Audit and persist ``artifact_completeness.json`` in the run root."""
 
@@ -1238,6 +1952,9 @@ def persist_frontend_run_artifact_audit(
         run_dir,
         research_run=research_run,
         require_rolling=require_rolling,
+        require_two_stage_composition_certificate=(
+            require_two_stage_composition_certificate
+        ),
     )
     (Path(run_dir) / "artifact_completeness.json").write_text(
         json.dumps(audit, ensure_ascii=False, indent=2),

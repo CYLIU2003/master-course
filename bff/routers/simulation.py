@@ -127,6 +127,14 @@ class PrepareSimulationSettingsBody(BaseModel):
     grid_sell_price_per_kwh: Optional[float] = Field(default=None, ge=0.0)
     demand_charge_cost_per_kw: Optional[float] = Field(default=None, ge=0.0)
     vehicle_usage_cost_jpy_per_used_bus: Optional[float] = Field(default=None, ge=0.0)
+    vehicle_usage_cost_semantics: Optional[
+        Literal[
+            "fixed_vehicle_day_cost",
+            "driver_cost_proxy",
+            "provisional_sensitivity",
+            "unclassified",
+        ]
+    ] = None
     diesel_price_per_l: Optional[float] = Field(default=None, ge=0.0)
     ice_co2_kg_per_l: Optional[float] = Field(default=None, ge=0.0)
     grid_co2_kg_per_kwh: Optional[float] = Field(default=None, ge=0.0)

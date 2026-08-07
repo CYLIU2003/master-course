@@ -42,6 +42,334 @@
 - Formal evidence still requires committing this implementation, restarting
   Tk/BFF from that clean frozen commit, and running fresh Prepare. No solver run
   was performed as part of this UX correction.
+## 2026-08-05 Frontend PV rated-output authority guard
+
+- The current sunny/rain frontend scenarios are restored to the user's common
+  1,000 kW rated output. Their date-specific capacity-factor curves therefore
+  materialize 6,056.25 / 996.2 kWh, with 5,000 m2 required installable area and
+  14,285.714286 m2 reverse-estimated depot-area equivalent. The measured
+  1,450 m2 depot-area field remains unchanged. No Prepare or optimization was
+  run as part of this correction.
+- The latest 101.5 kW pair was not evidence of the saved frontend selection:
+  its controller environment explicitly supplied `pv_capacity_kw=101.5`.
+  The HTTP pair runner now rejects `--pv-capacity-kw` unless
+  `--allow-frontend-pv-capacity-override` is supplied as a separate deliberate
+  acknowledgement. Omitting both options keeps the frontend rated output
+  authoritative.
+- Date-specific PV generation now updates the direct slot series, capacity
+  factors, date-indexed series, profile identifiers, and overlay summary in one
+  operation. This prevents a generated 1,000 kW direct curve from coexisting
+  with stale 101.5 kW date-indexed rows. Focused PV/frontend tests pass; all
+  pre-correction prepared inputs remain stale.
+
+## 2026-08-03 BEV actual-cost and fleet-frontier correction
+
+- The clean v5 binding-PV run exposed one fail-closed metadata omission after
+  both weather cases had otherwise completed: the BEV frontier was active and
+  its `K=15..35` artifacts were complete, but `solver_settings.json` omitted
+  `stage1_bev_frontier_enabled`. The adapter, engine, and BFF settings export
+  now preserve that explicit control and focused tests cover both the solver
+  metadata path and final settings payload. This changes no variable,
+  constraint, objective coefficient, candidate, or acceptance threshold. The
+  completed v5 artifacts retain the old missing field and remain diagnostic.
+- The succeeding clean v6 pair at frozen SHA
+  `7ab9f194216b1b7fe0e0ef49041314528438f6d5` verified the metadata repair:
+  `stage1_bev_frontier_enabled=true` and
+  `solver_controls_match_formal_request=true` are present for both cases.
+  All 21 K targets resolved with zero frontier monotonicity violations;
+  sunny evaluated 22/22 physically feasible candidates and selected
+  17 BEV / 15 ICE with 54/210 trips, while rain evaluated 20/22 physically
+  feasible candidates and selected 13 BEV / 19 ICE with 44/220 trips. The
+  selected candidate hashes and all selected costs exactly match v5, showing
+  that the metadata-only correction did not change the optimization result.
+  Both cases served 264/264 trips and completed accepted 24/24 Rolling.
+  The pair remains correctly BLOCKED: Phase 3 is not an integrated actual-cost
+  objective, rain differs from executed-day canonical accounting by
+  22.292852588 JPY, and the positive 20,000 JPY used-bus-day coefficient is
+  still `unclassified`.
+- The first clean 264-trip Phase-4 HTTP pair at explicit 1,000 kW PV rating
+  reached the 3,600-second limit with no incumbent in both cases. Both runs
+  correctly failed before Rolling and the pair bundle is `BLOCKED`. This is a
+  computation/warm-start blocker, not evidence about the preferred BEV/ICE
+  composition. The failed-run economic audit now recovers gross PV directly
+  from canonical depot-asset input slots, so the absence of solved source
+  flows cannot turn 6,056.25 kWh (sunny) or 996.2 kWh (rain) into a reported
+  zero-PV input.
+- The first clean 264-trip Phase-3 `K=15..35` frontier pair at frozen SHA
+  `751762279adb28dac1039f4994f9538b83b6f928` produced physically valid
+  264/264-trip, 24/24 Rolling primary schedules in both weather cases. Both
+  selected 13 BEVs and 19 ICE buses with 44/220 trips and canonical operating
+  cost 707,808.660373 JPY. This is a diagnostic null response: at 1,000 kW,
+  even rain supplied 996.2 kWh against 565.86897 kWh of Stage-1 renewable BEV
+  allocation, so neither case purchased BEV grid energy. It is not evidence
+  that the composition is optimal because every K target timed out without an
+  incumbent and the pair remained BLOCKED.
+- The frontier failure was traced to its MIP-start contract: activation starts
+  were disabled for the frontier, and the old helper represented only a
+  one-vehicle delta although the first target was K=15 from a 13-BEV primary.
+  Frontier targets now receive deterministic non-conflicting multi-vehicle
+  activation/retirement starts for every reachable delta. The starts do not
+  change the objective, K constraint, Stage 2, or physical acceptance. The
+  audit persists the complete source/target ID lists and replacement count.
+  Artifact completeness now matches the exact writer schemas for the four
+  vehicle-day-semantics columns and the frontier minimum/status columns.
+- A binding-PV rerun from frozen SHA
+  `fe453df2f8a2ea0bb9c2240d42f2df5af9f12180` used the common 101.5 kW
+  rating, producing 614.709375 / 101.1143 kWh sunny/rain input. Both cases
+  completed 264/264 service and 24/24 Rolling but were correctly BLOCKED by
+  unresolved K=28..35 targets. K=15..27 were Stage-2 and independently
+  physically feasible in both cases. Within that resolved frontier, sunny
+  selected K=17 (17 BEV / 15 ICE, 54 BEV trips, 706,175.871233 JPY) while
+  rain selected K=15 (15 BEV / 17 ICE, 44 BEV trips, 720,637.777812 JPY).
+  Sunny used 614.709375 kWh renewable plus 19.011025 kWh grid in Stage 1;
+  rain used 101.1143 kWh renewable plus 411.374162 kWh grid. This is direct
+  weather-responsive diagnostic evidence, but not a formal optimum because the
+  high-K search remains incomplete and the 20,000 JPY coefficient is still
+  unclassified.
+- The high-K blocker occurs because whole-duty replacement preserves the
+  32-bus path-cover size and may create BEV duties that fail energy recourse.
+  The next correction adds a distinct suffix-split start: the source retains a
+  nonempty prefix and an unused BEV receives a nonempty suffix, increasing both
+  BEV count and total fleet size. It records start mode, replacement count,
+  split-activation count, total activation count, and moved trip IDs. A focused
+  Gurobi counterexample verifies an ICE-only prefix prevents whole-duty
+  replacement while the split start reaches a larger feasible fleet.
+- A clean v3 run at SHA `4d997be18c8507ac450001a27c32f6245b851b4e`
+  confirmed that suffix-split starts produce incumbents through K=35 in both
+  weather cases. Sunny completed all K targets, 264/264 service, and 24/24
+  Rolling. Rain also produced an incumbent for every K, but direct K=26 and
+  K=27 candidates each failed independent physical validation because one
+  contract-power violation remained. Physically feasible K=28 already proves
+  feasibility of the nested `used BEV >= 26` and `>= 27` sets, but the old
+  finalizer did not propagate higher-K witnesses downward, so rain and the pair
+  correctly remained BLOCKED. The finalizer now constructs the lowest-cost
+  physically feasible evaluated candidate-pool envelope for every K and records
+  the direct target hash separately from the resolving witness hash/source.
+  This does not repair either rejected schedule or assert global optimality.
+- The first v4 attempt was intentionally stopped after sunny finalization
+  exposed a strict CSV-header failure: the writer had the new nested-witness
+  fields but the artifact validator and test fixture still declared the prior
+  header. Those three definitions are now synchronized and covered by the
+  strict artifact-completeness regression before another formal rerun.
+- Added an explicit Phase-3 BEV lower-bound frontier for `K=15..35`. Each
+  temporary model uses only `sum(used_electric_vehicle) >= K`; neither ICE
+  count nor total used-fleet size is fixed. The previous K solution is used as
+  a warm start, every target records one of `FEASIBLE`,
+  `CERTIFIED_INFEASIBLE`, `TIME_LIMIT_WITH_INCUMBENT`,
+  `TIME_LIMIT_NO_INCUMBENT`, or `ERROR`, and a no-incumbent time limit remains
+  unresolved.
+- Stage-2 candidates are ranked by independently evaluated canonical cost only
+  after Stage-2 feasibility and physical validation. This improves the Phase-3
+  search but does not turn the two-stage method into an integrated global
+  total-cost optimum.
+- Added the explicit `phase4_integrated` actual-cost contract. It removes
+  weather/EV preference and solver-only soft terms, retains enabled canonical
+  battery degradation, fixes BEV/BESS terminal inventory to its initial level,
+  and sets `objective_is_actual_cost=true` only when the raw solver objective
+  reconciles to canonical accounting within `1e-6 JPY` without post-solve
+  modification.
+- Added two separate Phase-4 EV-utilization policy cases. The unconstrained
+  case lexicographically minimizes ICE fuel liters and then canonical cost. The
+  epsilon case adds the exact canonical-cost constraint
+  `C <= C* (1 + delta)` for externally evidenced `C*` and delta in
+  `{0%, 1%, 3%, 5%, 10%}`. Neither case reports
+  `objective_is_actual_cost=true`, because actual cost is respectively the
+  secondary objective or a constraint rather than the primary objective.
+- The positive per-used-bus-day coefficient now carries one of
+  `fixed_vehicle_day_cost`, `driver_cost_proxy`, `provisional_sensitivity`, or
+  `unclassified` through Quick Setup, Prepare, the canonical problem, and run
+  artifacts. A positive `unclassified` or `provisional_sensitivity` value
+  blocks a research economic claim. The UI no longer presents the coefficient
+  as self-explanatory.
+- Added `powertrain_marginal_cost_audit.*`,
+  `trip_powertrain_cost_comparison.csv`, `bev_cost_frontier.*`,
+  `maximum_bev_feasibility_search.csv`,
+  `baseline_vs_integrated_actual_cost.csv`, and the explicit
+  `operating_and_lifecycle_cost_scope.*`. Trip-level charging/PV feasibility is
+  deliberately unresolved unless a solved duty/charger/SOC path supports it;
+  incomplete charger/financing CAPEX likewise remains labelled partial rather
+  than fabricated.
+- The controlled HTTP pair runner now supports
+  `--optimization-experiment-case phase3_bev_frontier` and
+  `phase4_integrated_actual_cost`, plus the unconstrained and cost-constrained
+  Phase-4 EV-utilization policy cases, while retaining the existing baseline.
+  It also persists the chosen vehicle-day-cost semantics. No new formal result is
+  claimed until a clean frozen commit completes Fresh Prepare, day-ahead solve,
+  24/24 Rolling, physical validation, and accounting/pair gates.
+- Regression status before the next clean freeze: the focused frontier,
+  weather-coupling, and artifact-completeness suite passes (38 tests). The full
+  suite and a fresh binding-PV 101.5 kW controlled pair remain required.
+
+## 2026-08-02 interactive Sunday-PV Prepare provenance repair
+
+- Fixed the `HTTP 422: comparison_type must be
+  'same_service_date_pv_counterfactual'` failure when scenario
+  `b23fd26c-1233-4c73-bb9e-bdb8b1584760` is interactively prepared as
+  `2025-08-10` + `WEEKDAY` + `actual_date_profile`.
+- Root cause was a field collision: Quick Setup stored the calendar waiver
+  name `fixed_weekday_timetable_pv_counterfactual` in `comparison_type`, while
+  Prepare correctly reserves that field for the formal pair design
+  `same_service_date_pv_counterfactual`. The scenario also retained the prior
+  pair role/source after its service date was changed.
+- Quick Setup now keeps the waiver solely in `calendar_policy` and
+  `allow_fixed_weekday_timetable_pv_counterfactual`, and clears stale formal
+  comparison type/role/source metadata on an interactive save. Prepare accepts
+  and normalizes only the exact legacy Sunday/WEEKDAY/actual-profile shape so
+  already-saved scenarios are not stranded; other invalid comparison types
+  remain rejected.
+- This is a provenance repair only. It does not change the selected date,
+  weekday timetable rows, route/depot scope, fleet, PV curve, tariff, BESS, or
+  optimization semantics. The result must still be labelled a fixed-weekday
+  timetable PV counterfactual, not actual Sunday operation.
+- Validation: the focused Quick Setup/Prepare/calendar/Rolling/pair suite
+  passes (52 tests), the complete suite passes (1,089 tests), and the exact
+  persisted legacy shape from the affected scenario reaches builder
+  configuration with `comparison_type/role/source=None` while retaining the
+  explicit calendar waiver.
+- Live BFF verification from code commit `dd829a9` then completed Fresh Prepare
+  for the affected scenario without HTTP 422. Prepared input
+  `prepared-b8601506bd9b49e5-dbc36084d07b5fa8-9dd564c9` is `ready=true` with
+  service date `2025-08-10`, 1 depot, 16 routes, 264 trips, 60 vehicles, and 10
+  chargers. Its schema is `v5_pv_rated_output_authoritative`; comparison
+  type/role/source are null and the explicit fixed-weekday calendar policy is
+  retained.
+
+## 2026-08-02 PV rated-output input and reverse area estimate
+
+- The depot manager and detailed depot-energy editor now treat
+  `pv_capacity_kw` as the editable optimization input. Changing the rated
+  output rebuilds PV generation from the persisted capacity-factor shape;
+  grid price, weather policy, BESS state, and timetable semantics are not
+  modified.
+- The shared calculation now reports
+  `estimated_installable_area_m2 = pv_capacity_kw /
+  panel_power_density_kw_m2` and a separately named
+  `estimated_depot_area_from_pv_capacity_m2 =
+  estimated_installable_area_m2 / usable_area_ratio`. Measured
+  `depot_area_m2` remains master data and is never overwritten by this inverse
+  estimate. The round-trip `derived_pv_capacity_kw` is retained as an audit
+  value.
+- `pv_capacity_kw_manual_override=true` and
+  `pv_capacity_input_mode=rated_output_manual` carry the selection through
+  the Tk editor, PV API, Prepare, and `ProblemBuilder`. Rows without the
+  explicit override continue to use the legacy area-derived capacity for
+  backward compatibility. An explicit rated output of zero disables PV.
+- The formal HTTP pair runner no longer replaces a frontend manual rated
+  output with `depot_area_m2 * usable_area_ratio * panel_power_density`. Its
+  new `--pv-capacity-kw` option fixes one declared rated output across both
+  cases and scales each independently hashed weather curve by that same value.
+- `PREPARED_INPUT_SCHEMA_VERSION` is now
+  `v5_pv_rated_output_authoritative`. All formal comparisons after this model
+  change require fresh Prepare and fresh optimization artifacts; older runs
+  remain diagnostic and must not be relabelled.
+- A fresh controlled pair was executed from frozen SHA
+  `bb6c7fc3e49067f178a1540e4061ad4b83c015e0` (tag
+  `research-pv-rated-1000kw-20260802`) with a common 1,000 kW rated output,
+  flat 30 JPY/kWh grid price, and zero demand-charge rate. Prepare and the
+  canonical scenario retained the measured 1,450 m2 depot area while recording
+  5,000 m2 required installable area and 14,285.714286 m2 estimated depot-area
+  equivalent. Sunny/rain PV totals were 6,056.25 / 996.2 kWh.
+- Both cases served 264/264 trips, passed independent physical checks and the
+  24/24 Rolling chain, and selected the same 14-BEV/18-ICE composition with
+  46/218 trips. Both had zero grid-to-bus energy. Rain still used only
+  575.541036 kWh of PV directly or through BESS and curtailed 420.658964 kWh;
+  1,000 kW therefore saturates even the rain case, so an equal assignment is
+  economically expected rather than evidence of a remaining capacity-input
+  bug. The pair is retained at
+  `output/formal_pair_20260802_flat30_pv1000_rated_output` as diagnostic only.
+- The pair remains `BLOCKED`: only three of 21 requested candidates were
+  evaluated; the same-assignment strict audit is incomplete; and Phase 3 still
+  declares `objective_is_actual_cost=false` even though the numeric solver to
+  canonical-accounting residual was only `1.164153e-10 JPY`. A smaller-capacity
+  sweep is required to locate the binding-PV range; this 1,000 kW pair must not
+  be used to claim that weather has no dispatch effect.
+
+## 2026-08-02 Composition-target search budget correction
+
+- The first flat-30 rerun from `fc3f4ba41648d6138c81a59ef6a76a74e094bbff`
+  reached feasible 264/264-trip rolling artifacts in both cases, but all
+  four in-inventory adjacent used-powertrain targets were `TIME_LIMIT` with
+  zero incumbents.  The prior per-target 4.5-second cap therefore left the
+  composition evidence unresolved; it did not establish that `(13,19)` was
+  optimal.  The pair remains diagnostic at
+  `output/formal_pair_20260802_flat30_composition_search_r2`.
+- `OptimizationConfig.stage1_composition_target_time_limit_sec` now records
+  a 25-second per-target cap, bounded by the existing 100-second Stage 1
+  candidate reserve and divided across the remaining targets.  This is a
+  solver-budget correction, not a BEV preference or weather strategy.  The
+  effective cap is persisted in the candidate-selection metadata so a fresh
+  frozen rerun can be audited.
+- The second fresh rerun from `a083919ec679fdec64907ef46ba94cbf2dffc8c3`
+  still reached `TIME_LIMIT` with no incumbent for all four adjacent targets.
+  Exact-count targets now receive partial MIP starts that activate an unused
+  opposite-powertrain vehicle and retire the source vehicle's duties.  The
+  starts are hints only: the unchanged Stage 1 model, temporary count
+  equalities, Stage 2, and independent physical validation must accept the
+  resulting candidate.  This remains diagnostic until a fresh frozen pair
+  confirms composition evidence.
+- The fresh pair from frozen SHA `b02859b826165c8a612a81c145eb1b06f24cb7e3`
+  used those activation/retirement starts successfully.  Both cases produced
+  three physically valid compositions `(12,20)`, `(13,19)`, and `(14,18)`;
+  the sunny selected candidate was `(14,18)` with 46 BEV trips, while rain
+  selected `(12,20)` with 42 BEV trips.  Both served 264/264 trips and passed
+  24/24 rolling and independent physical validation.  This is diagnostic
+  evidence only: the formal pair remains BLOCKED because only three of the
+  requested ten Stage 2 candidates were evaluated, the +/-2 targets remained
+  unresolved time limits, and the solver objective is still a two-stage proxy
+  rather than an actual-cost objective (rain residual: -19.214065 JPY).
+
+## 2026-08-01 Phase 3 composition evidence and formal cost-release guard
+
+- Review of the reachable Phase 3 path corrected an outdated diagnosis: the
+  current Stage 1 objective already contains a slot-indexed, assignment-coupled
+  continuous PV/grid/BESS recourse, with PV supply limits, charge windows,
+  BESS losses/terminal SOC, and slot-specific grid prices. The historical
+  `min(grid_price)` aggregate calculation remains a labelled lower-bound
+  diagnostic and is not reintroduced into the objective. Stage 2 remains the
+  fixed-assignment binary charging/physical-dispatch authority.
+- `used_vehicle` and `used_vehicle_day` activation binaries and one-time
+  vehicle-day cost were already linked to assignments. The missing evidence was
+  a search over different activated powertrain counts: the old alternatives
+  excluded trip-level BEV/ICE patterns and used only already-active whole-duty
+  swap starts, so 21 candidates could all retain one `(used_bev, used_ice)`
+  pair without proving alternatives infeasible.
+- `OptimizationConfig.stage1_composition_search_radius` now requests exact
+  temporary Stage 1 count constraints around the primary composition:
+  `(BEV+d, ICE-d)` and `(BEV-d, ICE+d)` for `d=1..radius`. Formal frontend
+  research runs force radius `>=2`; normal callers retain the legacy behavior
+  only when they explicitly leave it at zero. Each target records target and
+  observed counts, status, bound, gap, runtime, candidate hash, and an IIS
+  hash/list if Gurobi proves `INFEASIBLE`. An accepted IIS certificate must be
+  nonempty, contain a temporary target-count constraint, and carry the
+  SHA-256 of the exact temporary Stage 1 LP plus solver controls; otherwise it
+  is diagnostic only. A time limit, no incumbent, failed Stage 2, failed
+  physical validation, failed IIS, or missing LP hash is explicitly
+  `unresolved`, never an infeasibility certificate.
+- `stage1_used_powertrain_composition_search.json/.csv` and the enriched
+  candidate audit persist this evidence. Formal composition evidence is
+  accepted only when two or more physically valid used-powertrain pairs were
+  evaluated, every in-inventory adjacent target is exactly certified
+  infeasible, or the selected inventory itself has no adjacent composition.
+  The formal claim gate otherwise adds
+  `used_powertrain_composition_search_not_certified`.
+- Every rich frontend result now writes
+  `assignment_economic_audit.json/.csv`. The audit distinguishes Stage 1
+  continuous recourse from Stage 2/rolling authority; gives scalar grid BEV,
+  ICE, and break-even marginal costs only for uniform selected-scope
+  coefficients; reports gross PV only as an input-side diagnostic instead of
+  inventing a scalar renewable budget under slot/terminal constraints; excludes
+  initial BESS inventory from a free-renewable credit; and keeps depot-slot
+  source flows separate from non-solver-native vehicle-source attribution.
+- Formal two-stage pair construction now rejects a case when
+  `solver_objective_matches_accounting_total` is false or composition evidence
+  is unaccepted. This is a release-scope guard, not a false conversion of a
+  Phase 3 Stage 1 score into canonical rolling cost. Current historical
+  2026-07-31 outputs remain diagnostic and require a fresh clean-commit rerun.
+- Focused regression added: interchangeable BEV/ICE duties produce multiple
+  used-powertrain candidates; pair construction rejects objective/accounting
+  and composition failures; the economic audit verifies 30 JPY/kWh grid BEV
+  charging at `1.316/0.95*30` JPY/km, ICE at
+  `0.2212389*150` JPY/km, and zero free initial BESS credit.
 
 ## 2026-07-31 Controlled uniform-tariff sensitivity support
 
@@ -110,7 +438,7 @@
   feasible candidate with the lowest canonical actual cost. This does not claim
   integrated global optimality.
 - Prepare schema
-  `v4_same_service_date_pv_counterfactual_explicit_fleet_state` requires the
+  `v5_pv_rated_output_authoritative` retains the v4 requirement that the
   service date and counterfactual PV source date to remain explicit and
   separate. The rain role additionally requires the explicit fixed-weekday
   counterfactual permission. Pair validation rejects implicit legacy weather

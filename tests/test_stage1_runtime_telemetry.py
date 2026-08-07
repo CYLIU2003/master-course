@@ -212,6 +212,94 @@ def test_single_run_stays_blocked_until_counterfactual_pair_is_verified() -> Non
     ]
 
 
+def test_two_stage_formal_release_blocks_unreconciled_or_frozen_composition() -> None:
+    claim_scope = _research_claim_scope_payload(
+        optimization_result={
+            "run_profile": "day_ahead_and_hourly_rolling",
+            "solver_metadata": {
+                "research_run": True,
+                "research_run_accepted": True,
+                "research_submission_git_provenance_eligible": True,
+                "research_acceptance_checks": {},
+                "optimization_structure": "two_stage",
+                "solver_objective_matches_accounting_total": False,
+                "stage1_used_powertrain_composition_search_accepted": False,
+            },
+            "solution_validity": {"validated_feasible": True},
+        },
+        solver_settings={"mip_gap_target_met": True},
+        weather_policy={"enabled": False},
+        rolling_execution={
+            "status": "executed_and_accepted",
+            "rolling_execution_minutes": 60,
+        },
+    )
+
+    assert claim_scope["teacher_release_status"] == "BLOCKED"
+    assert "solver_objective_canonical_accounting_mismatch" in claim_scope[
+        "teacher_release_failed_checks"
+    ]
+    assert "used_powertrain_composition_search_not_certified" in claim_scope[
+        "teacher_release_failed_checks"
+    ]
+
+
+def test_two_stage_formal_release_requires_numeric_and_certificate_evidence() -> None:
+    """True legacy metadata cannot turn incomplete evidence into a release."""
+
+    claim_scope = _research_claim_scope_payload(
+        optimization_result={
+            "run_profile": "day_ahead_and_hourly_rolling",
+            "solver_metadata": {
+                "research_run": True,
+                "research_run_accepted": True,
+                "research_submission_git_provenance_eligible": True,
+                "research_acceptance_checks": {},
+                "optimization_structure": "two_stage",
+                "solver_objective_matches_accounting_total": True,
+                "stage1_used_powertrain_composition_search_accepted": True,
+            },
+            "solution_validity": {"validated_feasible": True},
+        },
+        solver_settings={"mip_gap_target_met": True},
+        weather_policy={"enabled": False},
+        rolling_execution={
+            "status": "executed_and_accepted",
+            "rolling_execution_minutes": 60,
+        },
+        objective_accounting_reconciliation={
+            "schema_version": "solver_objective_accounting_reconciliation_v1",
+            "solver_objective_value_jpy": 100.0,
+            "solver_objective_source": "optimization_result.objective_value",
+            "canonical_accounting_total_jpy": 110.0,
+            "canonical_accounting_source": "rolling_hourly_chain/executed_day_accounting.json",
+            "difference_jpy": -10.0,
+            "absolute_difference_jpy": 10.0,
+            "tolerance_jpy": 1.0e-6,
+            "numeric_values_available": True,
+            "numeric_residual_within_tolerance": False,
+            "objective_is_actual_cost": True,
+            "matches_canonical_accounting_total": False,
+            "objective_semantics": "actual_cost",
+        },
+        composition_search_certificate=None,
+    )
+
+    assert claim_scope["teacher_release_status"] == "BLOCKED"
+    assert "solver_objective_canonical_accounting_mismatch" in claim_scope[
+        "teacher_release_failed_checks"
+    ]
+    assert "used_powertrain_composition_search_not_certified" in claim_scope[
+        "teacher_release_failed_checks"
+    ]
+    assert claim_scope["evidence"][
+        "solver_objective_accounting_reconciliation_errors"
+    ]
+    assert claim_scope["evidence"][
+        "stage1_used_powertrain_composition_search_errors"
+    ]
+
+
 def test_interactive_run_defaults_and_provenance_record_server_enforcement() -> None:
     request = RunOptimizationBody()
     assert request.stage1_best_obj_stop_enabled is False

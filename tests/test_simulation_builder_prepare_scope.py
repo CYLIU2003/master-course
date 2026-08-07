@@ -158,7 +158,7 @@ def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -
     ]
 
 
-def test_apply_builder_configuration_persists_fixed_weekday_pv_policy() -> None:
+def test_apply_builder_configuration_migrates_legacy_fixed_weekday_marker() -> None:
     scenario_doc = {
         "meta": {},
         "depots": [{"id": "dep1", "name": "Depot 1"}],
@@ -169,7 +169,16 @@ def test_apply_builder_configuration_persists_fixed_weekday_pv_policy() -> None:
         "chargers": [{"id": "chg-1", "siteId": "dep1", "powerKw": 90}],
         "vehicle_templates": [],
         "scenario_overlay": {},
-        "simulation_config": {},
+        "simulation_config": {
+            "service_date": "2025-08-10",
+            "service_dates": ["2025-08-10"],
+            "weather_mode": "actual_date_profile",
+            "allow_fixed_weekday_timetable_pv_counterfactual": True,
+            "calendar_policy": "fixed_weekday_timetable_pv_counterfactual",
+            "comparison_type": "fixed_weekday_timetable_pv_counterfactual",
+            "comparison_role": "pv_curve_counterfactual",
+            "counterfactual_pv_source_date": "2025-08-10",
+        },
         "dispatch_scope": {},
         "calendar": [{"service_id": "WEEKDAY"}],
     }
@@ -225,10 +234,40 @@ def test_apply_builder_configuration_persists_fixed_weekday_pv_policy() -> None:
         simulation_config["calendar_policy"]
         == "fixed_weekday_timetable_pv_counterfactual"
     )
-    assert (
-        simulation_config["comparison_type"]
-        == "fixed_weekday_timetable_pv_counterfactual"
+    assert simulation_config["comparison_type"] is None
+    assert simulation_config["comparison_role"] is None
+    assert simulation_config["counterfactual_pv_source_date"] is None
+    assert simulation_config["weather_observation_date"] == "2025-08-10"
+
+    explicit_invalid_body = body.model_copy(deep=True)
+    explicit_invalid_body.simulation_settings.comparison_type = (
+        "fixed_weekday_timetable_pv_counterfactual"
     )
+    with (
+        mock.patch.object(
+            simulation_builder.store,
+            "get_scenario_document_shallow",
+            return_value=copy.deepcopy(scenario_doc),
+        ),
+        mock.patch.object(
+            simulation_builder.store,
+            "get_scenario",
+            return_value=scenario_meta,
+        ),
+        mock.patch.object(
+            simulation_builder.store,
+            "route_ids_for_selected_depots",
+            return_value=["route-a"],
+        ),
+    ):
+        with pytest.raises(
+            ValueError,
+            match="comparison_type must be",
+        ):
+            simulation_builder.apply_builder_configuration(
+                "scenario-1",
+                explicit_invalid_body,
+            )
 
 
 def test_apply_builder_configuration_separates_service_and_pv_source_dates() -> None:

@@ -97,6 +97,8 @@ def test_prepare_payload_separates_service_date_from_pv_source() -> None:
     assert len(sunny["selected_route_ids"]) == 16
     sunny_settings = sunny["simulation_settings"]
     rain_settings = rain["simulation_settings"]
+    assert sunny_settings["vehicle_usage_cost_semantics"] == "unclassified"
+    assert rain_settings["vehicle_usage_cost_semantics"] == "unclassified"
     assert (
         sunny_settings["comparison_type"]
         == rain_settings["comparison_type"]
@@ -152,7 +154,7 @@ def test_prepare_payload_replaces_inherited_tou_with_uniform_tariff() -> None:
     ]
 
 
-def test_controlled_pv_asset_replaces_stale_capacity_and_preserves_bess() -> None:
+def test_controlled_pv_asset_retains_rated_output_and_preserves_bess() -> None:
     runner = _load_runner()
     profile, provenance = runner._load_derived_pv_profile(
         depot_id="tsurumaki",
@@ -188,7 +190,11 @@ def test_controlled_pv_asset_replaces_stale_capacity_and_preserves_bess() -> Non
         profile_provenance=provenance,
     )
 
-    assert asset["pv_capacity_kw"] == 101.5
+    assert asset["pv_capacity_kw"] == 1000.0
+    assert asset["estimated_installable_area_m2"] == 5000.0
+    assert asset["estimated_depot_area_from_pv_capacity_m2"] == pytest.approx(
+        14285.714286
+    )
     assert asset["pv_case_id"] == "tsurumaki_2025-08-10_60min"
     assert asset["pv_profile_dates"] == ["2025-08-10"]
     assert asset["pv_generation_kwh_by_date"] == [
@@ -199,7 +205,8 @@ def test_controlled_pv_asset_replaces_stale_capacity_and_preserves_bess() -> Non
         }
     ]
     assert evidence["frontend_asset_pv_capacity_kw_before"] == 1000.0
-    assert evidence["pv_generation_kwh"] == pytest.approx(101.1143)
+    assert evidence["selected_pv_capacity_source"] == "frontend_rated_output"
+    assert evidence["pv_generation_kwh"] == pytest.approx(996.2)
     for field, expected in (
         ("bess_enabled", True),
         ("bess_energy_kwh", 6000.0),
@@ -235,6 +242,7 @@ def test_pv_asset_is_attached_from_the_frontend_bootstrap() -> None:
                             "usable_area_ratio": 0.35,
                             "panel_power_density_kw_m2": 0.2,
                             "pv_capacity_kw": 1000.0,
+                            "pv_capacity_kw_manual_override": True,
                             "bess_energy_kwh": 600.0,
                         }
                     ]
@@ -252,16 +260,63 @@ def test_pv_asset_is_attached_from_the_frontend_bootstrap() -> None:
             pv_source_date="2025-08-05",
             comparison_role="baseline",
         ),
-        expected_pv_kwh=614.709375,
+        expected_pv_kwh=6056.25,
         timeout_seconds=987.0,
     )
 
     asset = payload["simulation_settings"]["depot_energy_assets"][0]
-    assert asset["pv_capacity_kw"] == 101.5
-    assert sum(asset["pv_generation_kwh_by_slot"]) == pytest.approx(614.709375)
+    assert asset["pv_capacity_kw"] == 1000.0
+    assert sum(asset["pv_generation_kwh_by_slot"]) == pytest.approx(6056.25)
     assert asset["bess_energy_kwh"] == 600.0
     assert context["pv_profile_source"]["pv_profile_id"] == (
         "tsurumaki_2025-08-05_60min"
+    )
+
+
+def test_runner_pv_capacity_argument_overrides_frontend_rated_output() -> None:
+    runner = _load_runner()
+    profile, provenance = runner._load_derived_pv_profile(
+        depot_id="tsurumaki",
+        pv_source_date="2025-08-10",
+        timestep_min=60,
+    )
+
+    asset, evidence = runner._build_controlled_pv_asset(
+        frontend_asset={
+            "depot_id": "tsurumaki",
+            "depot_area_m2": 1450.0,
+            "usable_area_ratio": 0.35,
+            "panel_power_density_kw_m2": 0.2,
+            "pv_capacity_kw": 1000.0,
+            "pv_capacity_kw_manual_override": True,
+        },
+        profile=profile,
+        profile_provenance=provenance,
+        pv_capacity_kw=750.0,
+    )
+
+    assert asset["pv_capacity_kw"] == 750.0
+    assert asset["estimated_installable_area_m2"] == 3750.0
+    assert evidence["selected_pv_capacity_source"] == "runner_argument"
+    assert evidence["pv_generation_kwh"] == pytest.approx(747.15)
+
+
+def test_cli_requires_explicit_consent_to_override_frontend_pv_capacity() -> None:
+    runner = _load_runner()
+
+    with pytest.raises(ValueError, match="replaces the frontend PV rated output"):
+        runner._validate_pv_capacity_override_request(
+            pv_capacity_kw=101.5,
+            allow_frontend_pv_capacity_override=False,
+        )
+
+    runner._validate_pv_capacity_override_request(
+        pv_capacity_kw=1000.0,
+        allow_frontend_pv_capacity_override=True,
+    )
+    runner._validate_pv_capacity_override_request(
+        pv_capacity_kw=None,
+        allow_frontend_pv_capacity_override=False,
     )
 
 
@@ -325,6 +380,54 @@ def test_optimization_payloads_match_except_fresh_prepared_id() -> None:
     assert sunny["run_hourly_rolling"] is True
     assert sunny["rolling_execution_minutes"] == 60
     assert sunny["mip_gap"] == 0.1
+
+
+def test_optimization_payload_exposes_frontier_and_integrated_actual_cost() -> None:
+    runner = _load_runner()
+
+    frontier = runner.build_optimization_payload(
+        "prepared-frontier",
+        experiment_case="phase3_bev_frontier",
+    )
+    assert frontier["mode"] == "phase3_two_stage"
+    assert frontier["stage1_bev_frontier_enabled"] is True
+    assert frontier["stage1_bev_frontier_min_count"] == 15
+    assert frontier["stage1_bev_frontier_max_count"] == 35
+    assert frontier["stage1_stage2_candidate_limit"] >= 22
+
+    integrated = runner.build_optimization_payload(
+        "prepared-integrated",
+        experiment_case="phase4_integrated_actual_cost",
+    )
+    assert integrated["mode"] == "phase4_integrated"
+    assert integrated["integrated_actual_cost_objective"] is True
+    assert integrated["time_limit_seconds"] >= 3600
+
+    maximum_ev = runner.build_optimization_payload(
+        "prepared-maximum-ev",
+        experiment_case="phase4_maximum_ev_utilization",
+    )
+    assert maximum_ev["mode"] == "phase4_integrated"
+    assert maximum_ev["integrated_actual_cost_objective"] is False
+    assert maximum_ev["integrated_ev_utilization_mode"] == (
+        "minimum_ice_fuel_lexicographic"
+    )
+    assert maximum_ev["integrated_actual_cost_upper_bound_jpy"] is None
+
+    constrained = runner.build_optimization_payload(
+        "prepared-cost-constrained-ev",
+        experiment_case="phase4_cost_constrained_ev_utilization",
+        actual_cost_upper_bound_jpy=101_000.0,
+        actual_cost_upper_bound_delta_ratio=0.01,
+    )
+    assert constrained["integrated_actual_cost_upper_bound_jpy"] == 101_000.0
+    assert constrained["integrated_actual_cost_upper_bound_delta_ratio"] == 0.01
+
+    with pytest.raises(ValueError, match="upper bound"):
+        runner.build_optimization_payload(
+            "prepared-missing-cap",
+            experiment_case="phase4_cost_constrained_ev_utilization",
+        )
 
 
 def test_case_execution_uses_formal_timeout_for_synchronous_prepare(

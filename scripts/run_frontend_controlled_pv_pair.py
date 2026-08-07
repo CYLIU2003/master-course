@@ -37,6 +37,7 @@ EXPECTED_PV_KWH = {
     "sunny": 614.709375,
     "rain": 101.1143,
 }
+REFERENCE_PV_CAPACITY_KW = 101.5
 POWERTRAIN_ELECTRIC = {"BEV", "PHEV", "FCEV"}
 TARGET_ROUTE_IDS_BY_DEPOT = {
     # Canonical 16-variant Tsurumaki scope recovered identically from both
@@ -61,6 +62,37 @@ TARGET_ROUTE_IDS_BY_DEPOT = {
         "odpt-route-fb12ae43f5b0",
     ),
 }
+
+
+def _expected_pv_kwh_for_capacity(case_name: str, capacity_kw: float) -> float:
+    return round(
+        EXPECTED_PV_KWH[case_name]
+        * float(capacity_kw)
+        / REFERENCE_PV_CAPACITY_KW,
+        6,
+    )
+
+
+def _validate_pv_capacity_override_request(
+    *,
+    pv_capacity_kw: float | None,
+    allow_frontend_pv_capacity_override: bool,
+) -> None:
+    """Reject accidental replacement of a frontend rated-output selection."""
+
+    if pv_capacity_kw is None:
+        return
+    if not math.isfinite(pv_capacity_kw) or pv_capacity_kw <= 0.0:
+        raise ValueError("--pv-capacity-kw must be a positive finite kW value")
+    if not allow_frontend_pv_capacity_override:
+        raise ValueError(
+            "--pv-capacity-kw replaces the frontend PV rated output. Omit it "
+            "to use the saved frontend value, or add "
+            "--allow-frontend-pv-capacity-override for an intentional "
+            "capacity sensitivity."
+        )
+
+
 CONTROLLED_COST_COMPONENT_FLAGS = {
     "vehicle_fixed_cost": False,
     "vehicle_usage_cost": True,
@@ -233,6 +265,7 @@ def build_prepare_payload(
     service_date: str,
     pv_source_date: str,
     comparison_role: str,
+    vehicle_usage_cost_semantics: str = "unclassified",
     grid_energy_price_yen_per_kwh: float | None = None,
     demand_charge_yen_per_kw: float | None = None,
 ) -> dict[str, Any]:
@@ -293,6 +326,7 @@ def build_prepare_payload(
             "cost_component_flags": dict(
                 CONTROLLED_COST_COMPONENT_FLAGS
             ),
+            "vehicle_usage_cost_semantics": vehicle_usage_cost_semantics,
             **tariff_settings,
             "solver_mode": "mode_milp_only",
             "objective_mode": "total_cost",
@@ -335,10 +369,16 @@ def build_prepare_payload(
     }
 
 
-def build_optimization_payload(prepared_input_id: str) -> dict[str, Any]:
+def build_optimization_payload(
+    prepared_input_id: str,
+    *,
+    experiment_case: str = "phase3_baseline",
+    actual_cost_upper_bound_jpy: float | None = None,
+    actual_cost_upper_bound_delta_ratio: float | None = None,
+) -> dict[str, Any]:
     """Build the identical frontend optimization request for either case."""
 
-    return {
+    payload = {
         "mode": "mode_milp_only",
         "research_run": True,
         "time_step_min": 60,
@@ -348,8 +388,10 @@ def build_optimization_payload(prepared_input_id: str) -> dict[str, Any]:
         "stage2_time_limit_seconds": 300,
         "stage1_best_obj_stop_enabled": False,
         # One incumbent plus up to twenty alternatives supports the mandatory
-        # same-assignment audit without introducing a weather-specific bias.
+        # composition and same-assignment audit without introducing a
+        # weather-specific bias.
         "stage1_stage2_candidate_limit": 21,
+        "stage1_composition_search_radius": 2,
         "gurobi_threads": 1,
         "run_profile": "day_ahead_and_hourly_rolling",
         "run_hourly_rolling": True,
@@ -369,6 +411,70 @@ def build_optimization_payload(prepared_input_id: str) -> dict[str, Any]:
         "enableWeatherOperationPolicy": False,
         "require_all_available_bevs": False,
     }
+    if experiment_case == "phase3_bev_frontier":
+        payload.update(
+            {
+                "mode": "phase3_two_stage",
+                "time_limit_seconds": 3600,
+                "stage1_time_limit_seconds": 3000,
+                "stage2_time_limit_seconds": 600,
+                "stage1_stage2_candidate_limit": 22,
+                "stage1_composition_search_radius": 0,
+                "stage1_bev_frontier_enabled": True,
+                "stage1_bev_frontier_min_count": 15,
+                "stage1_bev_frontier_max_count": 35,
+                "stage1_bev_frontier_target_time_limit_seconds": 120,
+            }
+        )
+    elif experiment_case == "phase4_integrated_actual_cost":
+        payload.update(
+            {
+                "mode": "phase4_integrated",
+                "time_limit_seconds": 3600,
+                "stage1_time_limit_seconds": None,
+                "stage2_time_limit_seconds": None,
+                "stage1_stage2_candidate_limit": 1,
+                "stage1_composition_search_radius": 0,
+                "integrated_actual_cost_objective": True,
+            }
+        )
+    elif experiment_case in {
+        "phase4_maximum_ev_utilization",
+        "phase4_cost_constrained_ev_utilization",
+    }:
+        if (
+            experiment_case == "phase4_cost_constrained_ev_utilization"
+            and actual_cost_upper_bound_jpy is None
+        ):
+            raise ValueError(
+                "phase4_cost_constrained_ev_utilization requires an absolute "
+                "canonical actual-cost upper bound"
+            )
+        payload.update(
+            {
+                "mode": "phase4_integrated",
+                "time_limit_seconds": 3600,
+                "stage1_time_limit_seconds": None,
+                "stage2_time_limit_seconds": None,
+                "stage1_stage2_candidate_limit": 1,
+                "stage1_composition_search_radius": 0,
+                "integrated_actual_cost_objective": False,
+                "integrated_ev_utilization_mode": (
+                    "minimum_ice_fuel_lexicographic"
+                ),
+                "integrated_actual_cost_upper_bound_jpy": (
+                    actual_cost_upper_bound_jpy
+                ),
+                "integrated_actual_cost_upper_bound_delta_ratio": (
+                    actual_cost_upper_bound_delta_ratio
+                ),
+            }
+        )
+    elif experiment_case != "phase3_baseline":
+        raise ValueError(
+            f"Unsupported optimization experiment case: {experiment_case}"
+        )
+    return payload
 
 
 class HttpJsonClient:
@@ -551,13 +657,14 @@ def _build_controlled_pv_asset(
     frontend_asset: Mapping[str, Any],
     profile: Mapping[str, Any],
     profile_provenance: Mapping[str, Any],
+    pv_capacity_kw: float | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Replace only the selected PV curve in a frontend depot asset.
 
     BESS and every other non-PV field are copied verbatim from the frontend
-    builder defaults.  The installed PV capacity is rebuilt from the selected
-    depot's physical area, usable-area ratio, and panel-power density so a
-    stale manual PV-capacity override cannot scale a date profile incorrectly.
+    builder defaults.  An explicit rated output takes precedence; otherwise a
+    frontend manual override is retained, with area-derived capacity used only
+    for legacy assets that have no explicit rated-output contract.
     """
 
     depot_id = str(profile_provenance.get("depot_id") or "")
@@ -574,11 +681,10 @@ def _build_controlled_pv_asset(
             f"{asset_depot_id!r}"
         )
 
-    depot_area_m2 = _required_positive_number(
-        frontend_asset,
-        "depot_area_m2",
-        "depotAreaM2",
-        label="depot area",
+    depot_area_m2 = _number(
+        frontend_asset.get("depot_area_m2")
+        if "depot_area_m2" in frontend_asset
+        else frontend_asset.get("depotAreaM2")
     )
     usable_area_ratio = _required_positive_number(
         frontend_asset,
@@ -592,12 +698,50 @@ def _build_controlled_pv_asset(
         "panelPowerDensityKwM2",
         label="panel-power density",
     )
-    installed_capacity_kw = round(
-        depot_area_m2 * usable_area_ratio * panel_power_density_kw_m2,
+    area_derived_capacity_kw = (
+        round(
+            depot_area_m2 * usable_area_ratio * panel_power_density_kw_m2,
+            6,
+        )
+        if depot_area_m2 is not None and depot_area_m2 > 0.0
+        else None
+    )
+    frontend_capacity_kw = _number(
+        frontend_asset.get("pv_capacity_kw")
+        if "pv_capacity_kw" in frontend_asset
+        else frontend_asset.get("pvCapacityKw")
+    )
+    frontend_manual_override = bool(
+        frontend_asset.get(
+            "pv_capacity_kw_manual_override",
+            frontend_asset.get("pvCapacityKwManualOverride", False),
+        )
+    )
+    if pv_capacity_kw is not None:
+        selected_capacity_kw = float(pv_capacity_kw)
+        capacity_source = "runner_argument"
+    elif frontend_manual_override and frontend_capacity_kw is not None:
+        selected_capacity_kw = float(frontend_capacity_kw)
+        capacity_source = "frontend_rated_output"
+    elif area_derived_capacity_kw is not None:
+        selected_capacity_kw = float(area_derived_capacity_kw)
+        capacity_source = "legacy_depot_area_estimate"
+    else:
+        raise ValueError(
+            "Controlled PV asset requires an explicit rated output or a "
+            "positive legacy depot-area estimate"
+        )
+    if not math.isfinite(selected_capacity_kw) or selected_capacity_kw <= 0.0:
+        raise ValueError("PV rated output must be a positive finite kW value")
+    selected_capacity_kw = round(selected_capacity_kw, 6)
+    estimated_installable_area_m2 = round(
+        selected_capacity_kw / panel_power_density_kw_m2,
         6,
     )
-    if installed_capacity_kw <= 0.0:
-        raise ValueError("Area-derived installed PV capacity must be positive")
+    estimated_depot_area_m2 = round(
+        estimated_installable_area_m2 / usable_area_ratio,
+        6,
+    )
 
     factors = list(profile.get("capacity_factor_by_slot") or ())
     expected_slot_count = (24 * 60) // timestep_min
@@ -607,7 +751,7 @@ def _build_controlled_pv_asset(
         )
     slot_h = float(timestep_min) / 60.0
     generation = [
-        round(installed_capacity_kw * float(factor) * slot_h, 6)
+        round(selected_capacity_kw * float(factor) * slot_h, 6)
         for factor in factors
     ]
     profile_id = f"{depot_id}_{pv_source_date}_{timestep_min}min"
@@ -616,11 +760,12 @@ def _build_controlled_pv_asset(
         {
             "depot_id": depot_id,
             "pv_enabled": True,
-            "pv_capacity_kw": installed_capacity_kw,
-            # The explicit value equals the physical area-derived capacity;
-            # this prevents any stale alternate field from changing the
-            # profile scale between the frontend and canonical builder.
+            "pv_capacity_kw": selected_capacity_kw,
             "pv_capacity_kw_manual_override": True,
+            "pv_capacity_input_mode": "rated_output_manual",
+            "estimated_installable_area_m2": estimated_installable_area_m2,
+            "estimated_depot_area_from_pv_capacity_m2": estimated_depot_area_m2,
+            "derived_pv_capacity_kw": selected_capacity_kw,
             "pv_case_id": profile_id,
             "pv_profile_source": "derived_daily",
             "pv_source_type": "solcast_daily",
@@ -646,20 +791,19 @@ def _build_controlled_pv_asset(
         }
     )
     evidence = {
-        "schema_version": "controlled_pv_asset_replacement_v1",
+        "schema_version": "controlled_pv_asset_replacement_v2",
         **dict(profile_provenance),
         "frontend_asset_pv_capacity_kw_before": _number(
             frontend_asset.get("pv_capacity_kw")
             if "pv_capacity_kw" in frontend_asset
             else frontend_asset.get("pvCapacityKw")
         ),
-        "frontend_asset_pv_manual_override_before": bool(
-            frontend_asset.get(
-                "pv_capacity_kw_manual_override",
-                frontend_asset.get("pvCapacityKwManualOverride", False),
-            )
-        ),
-        "area_derived_installed_capacity_kw": installed_capacity_kw,
+        "frontend_asset_pv_manual_override_before": frontend_manual_override,
+        "selected_pv_capacity_kw": selected_capacity_kw,
+        "selected_pv_capacity_source": capacity_source,
+        "area_derived_installed_capacity_kw": area_derived_capacity_kw,
+        "estimated_installable_area_m2": estimated_installable_area_m2,
+        "estimated_depot_area_from_pv_capacity_m2": estimated_depot_area_m2,
         "pv_profile_id": profile_id,
         "pv_generation_kwh": round(sum(generation), 6),
         "pv_generation_kwh_by_slot": generation,
@@ -687,6 +831,7 @@ def _attach_controlled_pv_asset_to_prepare_payload(
     prepare_payload: Mapping[str, Any],
     expected_pv_kwh: float | None,
     timeout_seconds: float,
+    pv_capacity_kw: float | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Fetch frontend asset controls and attach one explicit PV curve to Prepare."""
 
@@ -717,6 +862,7 @@ def _attach_controlled_pv_asset_to_prepare_payload(
         frontend_asset=frontend_asset,
         profile=profile,
         profile_provenance=profile_provenance,
+        pv_capacity_kw=pv_capacity_kw,
     )
     actual_pv_kwh = _number(evidence.get("pv_generation_kwh"))
     if (
@@ -735,6 +881,11 @@ def _attach_controlled_pv_asset_to_prepare_payload(
             "Selected PV source does not yield the controlled expected total: "
             f"expected {expected_pv_kwh}, got {actual_pv_kwh}"
         )
+    evidence["expected_pv_generation_kwh"] = (
+        round(float(expected_pv_kwh), 6)
+        if expected_pv_kwh is not None
+        else actual_pv_kwh
+    )
 
     attached_payload = json.loads(
         json.dumps(prepare_payload, ensure_ascii=False, allow_nan=False)
@@ -824,6 +975,9 @@ def _execute_case(
     frozen_sha: str,
     log: list[dict[str, Any]],
     pv_asset_context: Mapping[str, Any] | None = None,
+    optimization_experiment_case: str = "phase3_baseline",
+    actual_cost_upper_bound_jpy: float | None = None,
+    actual_cost_upper_bound_delta_ratio: float | None = None,
 ) -> dict[str, Any]:
     case_dir = output_dir / name
     case_dir.mkdir(parents=True, exist_ok=False)
@@ -890,7 +1044,14 @@ def _execute_case(
             f"{name} Prepare reused forbidden old input {prepared_input_id}"
         )
 
-    optimization_payload = build_optimization_payload(prepared_input_id)
+    optimization_payload = build_optimization_payload(
+        prepared_input_id,
+        experiment_case=optimization_experiment_case,
+        actual_cost_upper_bound_jpy=actual_cost_upper_bound_jpy,
+        actual_cost_upper_bound_delta_ratio=(
+            actual_cost_upper_bound_delta_ratio
+        ),
+    )
     optimization_payload["service_id"] = str(
         prepare_payload.get("day_type") or "WEEKDAY"
     )
@@ -1821,6 +1982,7 @@ def _case_gate_audit(
     prepared_trip_count: int,
     frozen_sha: str,
     tariff_condition: Mapping[str, Any],
+    optimization_experiment_case: str = "phase3_baseline",
 ) -> dict[str, Any]:
     summary = _read_json(case_dir / "summary.json")
     settings = _read_json(case_dir / "solver_settings.json")
@@ -1843,6 +2005,12 @@ def _case_gate_audit(
         case_dir / "final_cost_reconciliation.json"
     )
     completeness = _read_json(case_dir / "artifact_completeness.json")
+    assignment_economic_audit = _read_json(
+        case_dir / "assignment_economic_audit.json"
+    )
+    composition_search = _read_json_optional(
+        case_dir / "stage1_used_powertrain_composition_search.json"
+    )
     acceptance = dict(settings.get("research_acceptance_checks") or {})
     search_telemetry = dict(
         settings.get("stage1_search_telemetry") or {}
@@ -1870,8 +2038,119 @@ def _case_gate_audit(
     response_prepared_input_id = str(
         prepare_response.get("preparedInputId") or ""
     ).strip()
+    phase4_actual_cost = (
+        optimization_experiment_case
+        == "phase4_integrated_actual_cost"
+    )
+    phase4_policy = optimization_experiment_case in {
+        "phase4_maximum_ev_utilization",
+        "phase4_cost_constrained_ev_utilization",
+    }
+    phase4_integrated = phase4_actual_cost or phase4_policy
+    phase4_policy_cost_cap_valid = bool(
+        not phase4_policy
+        or (
+            optimization_experiment_case
+            == "phase4_maximum_ev_utilization"
+            and settings.get("integrated_actual_cost_upper_bound_jpy") is None
+        )
+        or (
+            optimization_experiment_case
+            == "phase4_cost_constrained_ev_utilization"
+            and _number(
+                settings.get("integrated_actual_cost_upper_bound_jpy")
+            )
+            is not None
+            and settings.get(
+                "integrated_actual_cost_upper_bound_verified"
+            )
+            is True
+        )
+    )
+    phase3_frontier = (
+        optimization_experiment_case == "phase3_bev_frontier"
+    )
+    frontier_target_records = list(
+        composition_search.get("target_records") or []
+    )
+    expected_frontier_target_count = 35 - 15 + 1
+    phase4_telemetry_complete = bool(
+        _number(settings.get("solve_time_sec")) is not None
+        and bool(str(settings.get("solver_termination_reason") or "").strip())
+    )
+    phase3_telemetry_complete = bool(
+        all(
+            _number(value) is not None
+            for value in (
+                settings.get("stage1_runtime_seconds"),
+                settings.get("stage2_runtime_seconds"),
+                settings.get("stage1_gurobi_raw_best_bound"),
+                settings.get("stage1_gurobi_raw_mip_gap_ratio"),
+                settings.get("stage1_certified_best_bound"),
+                settings.get("stage1_certified_mip_gap_ratio"),
+                search_telemetry.get("first_incumbent_runtime_sec"),
+                final_search_telemetry.get("explored_node_count"),
+            )
+        )
+        and bool(
+            str(settings.get("stage1_termination_reason") or "").strip()
+        )
+    )
+    frontier_selection_complete = bool(
+        composition_search.get("frontier_enabled") is True
+        and composition_search.get("frontier_total_used_vehicle_count_fixed")
+        is False
+        and len(frontier_target_records) == expected_frontier_target_count
+        and composition_search.get("all_requested_targets_resolved") is True
+        and not list(composition_search.get("unresolved_targets") or [])
+        and int(
+            settings.get("stage1_stage2_feasible_candidate_count") or 0
+        )
+        >= 1
+        and bool(
+            str(
+                settings.get("stage1_stage2_selected_candidate_hash") or ""
+            ).strip()
+        )
+        and _number(
+            settings.get(
+                "stage1_stage2_selected_canonical_actual_cost_jpy"
+            )
+        )
+        is not None
+    )
+    phase3_baseline_selection_complete = bool(
+        int(settings.get("stage1_distinct_candidate_count") or 0) >= 10
+        and int(
+            settings.get("stage1_stage2_candidate_count_evaluated") or 0
+        )
+        >= 10
+        and int(
+            settings.get("stage1_stage2_feasible_candidate_count") or 0
+        )
+        >= 1
+        and int(
+            settings.get("stage1_stage2_selected_candidate_index") or 0
+        )
+        >= 1
+        and bool(
+            str(
+                settings.get("stage1_stage2_selected_candidate_hash") or ""
+            ).strip()
+        )
+        and _number(
+            settings.get(
+                "stage1_stage2_selected_canonical_actual_cost_jpy"
+            )
+        )
+        is not None
+    )
     certified_gap = _number(
-        settings.get("stage1_certified_mip_gap_ratio")
+        settings.get(
+            "achieved_mip_gap"
+            if phase4_integrated
+            else "stage1_certified_mip_gap_ratio"
+        )
     )
     zero_metric_names = (
         "unassigned_trip_count",
@@ -1993,9 +2272,18 @@ def _case_gate_audit(
             certified_gap is not None and certified_gap <= 0.1 + 1.0e-12
         ),
         "solver_controls_match_formal_request": (
-            settings.get("time_limit_seconds_requested") == 1800
-            and settings.get("stage1_time_limit_seconds_requested") == 1500
-            and settings.get("stage2_time_limit_seconds_requested") == 300
+            settings.get("time_limit_seconds_requested")
+            == (3600 if (phase4_integrated or phase3_frontier) else 1800)
+            and (
+                phase4_integrated
+                or settings.get("stage1_time_limit_seconds_requested")
+                == (3000 if phase3_frontier else 1500)
+            )
+            and (
+                phase4_integrated
+                or settings.get("stage2_time_limit_seconds_requested")
+                == (600 if phase3_frontier else 300)
+            )
             and _number(settings.get("mip_gap_requested_ratio")) == 0.1
             and settings.get("stage1_best_obj_stop_enabled") is False
             and settings.get("gurobi_threads") == 1
@@ -2006,94 +2294,155 @@ def _case_gate_audit(
                 )
                 or 0
             )
-            >= 10
+            >= (1 if phase4_integrated else 22 if phase3_frontier else 10)
+            and int(
+                settings.get("stage1_composition_search_radius_requested")
+                or 0
+            ) >= (0 if (phase4_integrated or phase3_frontier) else 2)
+            and (
+                not phase3_frontier
+                or settings.get("stage1_bev_frontier_enabled") is True
+            )
+            and (
+                not phase4_actual_cost
+                or settings.get("integrated_actual_cost_objective_requested")
+                is True
+            )
+            and (
+                not phase4_policy
+                or settings.get("integrated_actual_cost_contract_applied")
+                is True
+                and settings.get("integrated_ev_utilization_mode")
+                == "minimum_ice_fuel_lexicographic"
+                and phase4_policy_cost_cap_valid
+            )
         ),
         "tariff_condition_verified_from_canonical_slots": (
             tariff_evidence.get("accepted") is True
         ),
         "solver_telemetry_complete": (
-            all(
-                _number(value) is not None
-                for value in (
-                    settings.get("stage1_runtime_seconds"),
-                    settings.get("stage2_runtime_seconds"),
-                    settings.get("stage1_gurobi_raw_best_bound"),
-                    settings.get("stage1_gurobi_raw_mip_gap_ratio"),
-                    settings.get("stage1_certified_best_bound"),
-                    settings.get("stage1_certified_mip_gap_ratio"),
-                    search_telemetry.get(
-                        "first_incumbent_runtime_sec"
-                    ),
-                    final_search_telemetry.get(
-                        "explored_node_count"
-                    ),
-                )
-            )
-            and bool(
-                str(
-                    settings.get("stage1_termination_reason") or ""
-                ).strip()
-            )
+            phase4_telemetry_complete
+            if phase4_integrated
+            else phase3_telemetry_complete
         ),
         "candidate_evidence_present": (
-            (case_dir / "stage1_stage2_candidate_evaluation.json").is_file()
+            phase4_integrated
+            or (case_dir / "stage1_stage2_candidate_evaluation.json").is_file()
             and (
                 case_dir / "stage1_stage2_candidate_evaluation.csv"
             ).is_file()
         ),
-        "candidate_selection_complete": (
-            int(settings.get("stage1_distinct_candidate_count") or 0) >= 10
-            and int(
-                settings.get(
-                    "stage1_stage2_candidate_count_evaluated"
+        "assignment_economic_audit_present": (
+            (case_dir / "assignment_economic_audit.json").is_file()
+            and (case_dir / "assignment_economic_audit.csv").is_file()
+            and assignment_economic_audit.get("schema_version")
+            == "assignment_economic_audit_v1"
+            and all(
+                key in assignment_economic_audit
+                for key in (
+                    "bev_grid_marginal_cost_jpy_per_km",
+                    "ice_marginal_cost_jpy_per_km",
+                    "renewable_budget_kwh",
+                    "renewable_energy_allocated_in_stage1_kwh",
+                    "grid_energy_allocated_in_stage1_kwh",
+                    "stage1_bev_trip_count",
+                    "stage2_bev_trip_count",
+                    "assignment_energy_coupling_mode",
+                    "weather_response_expected",
+                    "weather_response_observed",
                 )
-                or 0
             )
-            >= 10
-            and int(
-                settings.get(
-                    "stage1_stage2_feasible_candidate_count"
+        ),
+        "used_powertrain_composition_search_certified": (
+            phase4_integrated
+            or (
+                composition_search.get("schema_version")
+                == (
+                    "stage1_used_powertrain_composition_search_v2"
+                    if phase3_frontier
+                    else "stage1_used_powertrain_composition_search_v1"
                 )
-                or 0
-            )
-            >= 1
-            and int(
-                settings.get(
-                    "stage1_stage2_selected_candidate_index"
+                and composition_search.get(
+                    "accepted_for_formal_composition_evidence"
                 )
-                or 0
+                is True
+                and settings.get(
+                    "stage1_used_powertrain_composition_search_accepted"
+                )
+                is True
             )
-            >= 1
-            and bool(
-                str(
-                    settings.get(
-                        "stage1_stage2_selected_candidate_hash"
+        ),
+        "solver_objective_matches_canonical_accounting": (
+            (
+                summary.get("solver_objective_matches_accounting_total")
+                is False
+                and settings.get(
+                    "actual_cost_objective_structural_contract_passed"
+                )
+                is True
+                and settings.get("integrated_actual_cost_contract_applied")
+                is True
+                and settings.get("integrated_primary_objective_kind")
+                == "minimum_ice_fuel_lexicographic"
+            )
+            if phase4_policy
+            else (
+                summary.get("solver_objective_matches_accounting_total")
+                is True
+                and (
+                    not phase4_actual_cost
+                    or settings.get(
+                        "actual_cost_objective_structural_contract_passed"
                     )
-                    or ""
-                ).strip()
-            )
-            and _number(
-                settings.get(
-                    "stage1_stage2_selected_canonical_actual_cost_jpy"
+                    is True
+                    and settings.get(
+                        "actual_cost_objective_numeric_reconciliation_passed"
+                    )
+                    is True
                 )
             )
-            is not None
+        ),
+        "candidate_selection_complete": (
+            True
+            if phase4_integrated
+            else (
+                frontier_selection_complete
+                if phase3_frontier
+                else phase3_baseline_selection_complete
+            )
         ),
         "slot_energy_recourse_used": (
-            settings.get("stage1_energy_cost_proxy_used_in_objective")
-            is False
-            and _nested(
-                settings,
-                "stage1_time_indexed_energy_recourse_configuration",
-                "used_in_stage1_objective",
+            (
+                (
+                    settings.get(
+                        "integrated_actual_cost_objective_requested"
+                    )
+                    is True
+                    if phase4_actual_cost
+                    else settings.get(
+                        "integrated_actual_cost_contract_applied"
+                    )
+                    is True
+                )
+                and settings.get("executed_phase") == "phase4_integrated"
             )
-            is True
-            and _nested(
-                settings,
-                "stage1_time_indexed_energy_recourse_configuration",
-                "arbitrary_weather_assignment_bias_used",
+            if phase4_integrated
+            else (
+                settings.get("stage1_energy_cost_proxy_used_in_objective")
+                is False
+                and _nested(
+                    settings,
+                    "stage1_time_indexed_energy_recourse_configuration",
+                    "used_in_stage1_objective",
+                )
+                is True
+                and _nested(
+                    settings,
+                    "stage1_time_indexed_energy_recourse_configuration",
+                    "arbitrary_weather_assignment_bias_used",
+                )
+                is False
             )
-            is False
         ),
         "terminal_claim_message_consistent": _claim_artifacts_consistent(
             settings=settings,
@@ -2578,6 +2927,7 @@ def _build_pair_control_audit(
     pair_manifest: Mapping[str, Any],
     assignment: Mapping[str, Any],
     same_assignment: Mapping[str, Any] | None,
+    optimization_experiment_case: str = "phase3_baseline",
 ) -> dict[str, Any]:
     sunny = _read_json(sunny_dir / "comparison_case_manifest.json")
     rain = _read_json(rain_dir / "comparison_case_manifest.json")
@@ -2585,6 +2935,8 @@ def _build_pair_control_audit(
     rain_control = dict(rain.get("comparison_control_payload") or {})
     sunny_kpi = _read_json(sunny_dir / "kpi_summary.json")
     rain_kpi = _read_json(rain_dir / "kpi_summary.json")
+    sunny_pv_source = _read_json_optional(sunny_dir / "pv_profile_source.json") or {}
+    rain_pv_source = _read_json_optional(rain_dir / "pv_profile_source.json") or {}
     required_controls = (
         "service_date",
         "service_id",
@@ -2617,16 +2969,30 @@ def _build_pair_control_audit(
     }
     sunny_pv = _number(sunny_kpi.get("pv_generation_kwh"))
     rain_pv = _number(rain_kpi.get("pv_generation_kwh"))
+    sunny_expected_pv = _number(
+        sunny_pv_source.get("expected_pv_generation_kwh")
+    )
+    rain_expected_pv = _number(
+        rain_pv_source.get("expected_pv_generation_kwh")
+    )
+    if sunny_expected_pv is None:
+        sunny_expected_pv = EXPECTED_PV_KWH["sunny"]
+    if rain_expected_pv is None:
+        rain_expected_pv = EXPECTED_PV_KWH["rain"]
     day_ahead_control_fields = (
         "time_limit_seconds_effective",
-        "stage1_time_limit_seconds_requested",
-        "stage2_time_limit_seconds_requested",
         "mip_gap_requested_ratio",
         "stage1_best_obj_stop_enabled",
         "gurobi_threads",
         "stage1_stage2_candidate_limit",
+        "stage1_composition_search_radius",
         "random_seed",
     )
+    if not optimization_experiment_case.startswith("phase4_"):
+        day_ahead_control_fields += (
+            "stage1_time_limit_seconds_requested",
+            "stage2_time_limit_seconds_requested",
+        )
     rolling_control_fields = (
         "gurobi_threads",
         "mip_gap",
@@ -2696,11 +3062,11 @@ def _build_pair_control_audit(
         ),
         "sunny_expected_pv_total": (
             sunny_pv is not None
-            and abs(sunny_pv - EXPECTED_PV_KWH["sunny"]) <= 1.0e-6
+            and abs(sunny_pv - sunny_expected_pv) <= 1.0e-6
         ),
         "rain_expected_pv_total": (
             rain_pv is not None
-            and abs(rain_pv - EXPECTED_PV_KWH["rain"]) <= 1.0e-6
+            and abs(rain_pv - rain_expected_pv) <= 1.0e-6
         ),
         "pair_manifest_accepted": (
             pair_manifest.get(
@@ -2721,6 +3087,8 @@ def _build_pair_control_audit(
         "controls": controls,
         "sunny_pv_generation_kwh": sunny_pv,
         "rain_pv_generation_kwh": rain_pv,
+        "sunny_expected_pv_generation_kwh": sunny_expected_pv,
+        "rain_expected_pv_generation_kwh": rain_expected_pv,
         "sunny_pv_profile_hash": sunny.get("pv_profile_hash"),
         "rain_pv_profile_hash": rain.get("pv_profile_hash"),
         "comparison_control_hash": sunny.get("comparison_control_hash"),
@@ -2976,6 +3344,75 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--pv-capacity-kw",
+        type=float,
+        default=None,
+        help=(
+            "Apply one explicit positive PV rated output to both cases. "
+            "When omitted, each frontend asset's explicit rated output is "
+            "retained; legacy assets fall back to their area estimate."
+        ),
+    )
+    parser.add_argument(
+        "--allow-frontend-pv-capacity-override",
+        action="store_true",
+        help=(
+            "Acknowledge that --pv-capacity-kw intentionally replaces the "
+            "rated output saved in each frontend scenario. Omit both options "
+            "to keep the frontend value authoritative."
+        ),
+    )
+    parser.add_argument(
+        "--optimization-experiment-case",
+        choices=(
+            "phase3_baseline",
+            "phase3_bev_frontier",
+            "phase4_integrated_actual_cost",
+            "phase4_maximum_ev_utilization",
+            "phase4_cost_constrained_ev_utilization",
+        ),
+        default="phase3_baseline",
+        help=(
+            "Select the unchanged Phase-3 baseline, the used-BEV >= K "
+            "frontier, integrated accounting-cost Phase 4, maximum-EV "
+            "lexicographic Phase 4, or its cost-constrained variant."
+        ),
+    )
+    parser.add_argument(
+        "--actual-cost-upper-bound-jpy",
+        type=float,
+        default=None,
+        help=(
+            "Absolute canonical operating-cost cap for the cost-constrained "
+            "EV-utilization case. Derive it from a separately evidenced "
+            "Phase-4 actual-cost optimum C*."
+        ),
+    )
+    parser.add_argument(
+        "--actual-cost-upper-bound-delta-percent",
+        type=float,
+        default=None,
+        help=(
+            "Recorded epsilon percentage used to derive the absolute cap; "
+            "accepted values for the declared experiment are 0, 1, 3, 5, 10."
+        ),
+    )
+    parser.add_argument(
+        "--vehicle-usage-cost-semantics",
+        choices=(
+            "unclassified",
+            "fixed_vehicle_day_cost",
+            "driver_cost_proxy",
+            "provisional_sensitivity",
+        ),
+        default="unclassified",
+        help=(
+            "Declare what the persisted per-used-bus-day coefficient means. "
+            "A positive unclassified or provisional coefficient blocks an "
+            "economic research claim."
+        ),
+    )
+    parser.add_argument(
         "--job-timeout-seconds",
         type=float,
         default=14_400.0,
@@ -2990,6 +3427,35 @@ def _parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = _parser().parse_args()
+    _validate_pv_capacity_override_request(
+        pv_capacity_kw=args.pv_capacity_kw,
+        allow_frontend_pv_capacity_override=(
+            args.allow_frontend_pv_capacity_override
+        ),
+    )
+    if args.optimization_experiment_case == (
+        "phase4_cost_constrained_ev_utilization"
+    ):
+        if (
+            args.actual_cost_upper_bound_jpy is None
+            or not math.isfinite(args.actual_cost_upper_bound_jpy)
+            or args.actual_cost_upper_bound_jpy < 0.0
+        ):
+            raise ValueError(
+                "cost-constrained EV utilization requires a nonnegative "
+                "finite --actual-cost-upper-bound-jpy"
+            )
+        if args.actual_cost_upper_bound_delta_percent not in {
+            0.0,
+            1.0,
+            3.0,
+            5.0,
+            10.0,
+        }:
+            raise ValueError(
+                "--actual-cost-upper-bound-delta-percent must be one of "
+                "0, 1, 3, 5, 10"
+            )
     tariff_condition = _uniform_tariff_condition(
         grid_energy_price_yen_per_kwh=args.grid_energy_price_yen_per_kwh,
         demand_charge_yen_per_kw=args.demand_charge_yen_per_kw,
@@ -3038,11 +3504,21 @@ def main() -> int:
         "bff_opt_executor": os.environ.get("BFF_OPT_EXECUTOR"),
         "comparison_name": comparison_name,
         "tariff_condition": tariff_condition,
+        "pv_capacity_kw": args.pv_capacity_kw,
+        "allow_frontend_pv_capacity_override": (
+            args.allow_frontend_pv_capacity_override
+        ),
+        "optimization_experiment_case": (
+            args.optimization_experiment_case
+        ),
+        "vehicle_usage_cost_semantics": (
+            args.vehicle_usage_cost_semantics
+        ),
         "pv_curve_delivery": (
             "Each Prepare request carries a date-specific, explicitly "
             "materialized depot-energy asset generated from the frontend "
-            "asset's physical PV area and the repository's derived PV "
-            "capacity-factor profile."
+            "asset's selected PV rated output and the repository's derived "
+            "PV capacity-factor profile."
         ),
         "runtime_comparison_repetitions_per_case": 1,
         "runtime_claim_eligible": False,
@@ -3057,13 +3533,20 @@ def main() -> int:
         (
             "sunny",
             args.sunny_scenario_id,
-            EXPECTED_PV_KWH["sunny"],
+            (
+                _expected_pv_kwh_for_capacity("sunny", args.pv_capacity_kw)
+                if args.pv_capacity_kw is not None
+                else None
+            ),
             build_prepare_payload(
                 depot_id=args.depot_id,
                 service_id=args.service_id,
                 service_date=args.service_date,
                 pv_source_date=args.service_date,
                 comparison_role="baseline",
+                vehicle_usage_cost_semantics=(
+                    args.vehicle_usage_cost_semantics
+                ),
                 grid_energy_price_yen_per_kwh=(
                     args.grid_energy_price_yen_per_kwh
                 ),
@@ -3073,13 +3556,20 @@ def main() -> int:
         (
             "rain",
             args.rain_scenario_id,
-            EXPECTED_PV_KWH["rain"],
+            (
+                _expected_pv_kwh_for_capacity("rain", args.pv_capacity_kw)
+                if args.pv_capacity_kw is not None
+                else None
+            ),
             build_prepare_payload(
                 depot_id=args.depot_id,
                 service_id=args.service_id,
                 service_date=args.service_date,
                 pv_source_date=args.rain_pv_source_date,
                 comparison_role="pv_curve_counterfactual",
+                vehicle_usage_cost_semantics=(
+                    args.vehicle_usage_cost_semantics
+                ),
                 grid_energy_price_yen_per_kwh=(
                     args.grid_energy_price_yen_per_kwh
                 ),
@@ -3107,6 +3597,7 @@ def main() -> int:
                     prepare_payload=prepare_payload,
                     expected_pv_kwh=expected_pv_kwh,
                     timeout_seconds=args.job_timeout_seconds,
+                    pv_capacity_kw=args.pv_capacity_kw,
                 )
             )
             events.append(
@@ -3140,6 +3631,17 @@ def main() -> int:
                 frozen_sha=frozen_sha,
                 log=events,
                 pv_asset_context=pv_asset_context,
+                optimization_experiment_case=(
+                    args.optimization_experiment_case
+                ),
+                actual_cost_upper_bound_jpy=(
+                    args.actual_cost_upper_bound_jpy
+                ),
+                actual_cost_upper_bound_delta_ratio=(
+                    None
+                    if args.actual_cost_upper_bound_delta_percent is None
+                    else args.actual_cost_upper_bound_delta_percent / 100.0
+                ),
             )
             case_results[name] = result
             events.append(
@@ -3268,6 +3770,9 @@ def main() -> int:
                 ),
                 frozen_sha=frozen_sha,
                 tariff_condition=tariff_condition,
+                optimization_experiment_case=(
+                    args.optimization_experiment_case
+                ),
             )
             case_gate_audits[name] = audit
             failed_checks.extend(
@@ -3279,6 +3784,9 @@ def main() -> int:
             pair_manifest=pair_manifest,
             assignment=assignment,
             same_assignment=same_assignment,
+            optimization_experiment_case=(
+                args.optimization_experiment_case
+            ),
         )
         _write_json(
             output_dir / "pair" / "pair_control_audit.json",

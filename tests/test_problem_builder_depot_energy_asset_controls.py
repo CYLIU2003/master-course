@@ -352,6 +352,8 @@ def test_problem_builder_uses_manual_pv_capacity_override_without_depot_area() -
 
     assert asset.pv_enabled is True
     assert asset.pv_capacity_kw == 120.0
+    assert asset.depot_area_m2 is None
+    assert asset.pv_installable_area_m2 == 600.0
     assert tuple(asset.pv_generation_kwh_by_slot) == tuple([15.0] * 24 + [30.0] * 24)
 
 
