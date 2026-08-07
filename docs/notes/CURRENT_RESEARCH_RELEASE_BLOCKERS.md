@@ -12,7 +12,46 @@ completion audit also rejects a contradiction between solver settings,
 persisted claim classification, and terminal response. The current
 integrated focused regression passes (`177 passed`) and the complete suite
 passes (`1163 passed`); compileall and `git diff --check` also pass. These code
-checks do not replace a fresh clean-commit formal run.
+checks alone do not establish release; the subsequent clean-run evidence and
+its remaining blockers are recorded below.
+
+## 2026-08-07 clean high-PV BEV-frontier result
+
+A fresh frontend HTTP pair now exists at
+`output/formal_pair_20260807_flat30_pv1000_bess6000_phase3_frontier_head`,
+frozen at clean commit `e94c8154cdcb566cb298a2a8a92ef14b2d1a5f7a`.
+Both cases use the saved 1,000 kW PV rating, 6,000 kWh / 900 kW BESS,
+3,000 -> 3,000 kWh stationary inventory, flat 30 JPY/kWh grid energy, zero
+demand charge, and the same 32-bus used-fleet size. The 20,000 JPY coefficient
+is explicitly declared as a fixed vehicle-day cost for this sensitivity.
+
+All 21 `used BEV >= K`, `K=15..35`, targets resolve. High PV selects a
+physically validated 27 BEVs / 5 ICE buses with 183 / 81 trips and
+666,164.082366 JPY/day. The low-PV counterfactual selects 21 BEVs / 11 ICE
+buses with 91 / 173 trips and 698,469.250509 JPY/day. Both serve 264/264
+trips, pass terminal BEV/BESS energy and independent schedule validation, and
+complete accepted 24/24 Rolling. The controlled comparison holds all audited
+non-PV inputs fixed (`comparison_control_hash =
+8a09ea3a3017f8e6fd4caf64fa56de0ff2ff303735d7d13e10e10d5bb4df676f`).
+Relative to low PV, high PV uses six more BEVs and 92 more BEV trips while
+reducing canonical operating cost by 32,305.168143 JPY/day (4.625%) and
+operational CO2 by 545.342135 kg/day (55.155%).
+
+This establishes a high-BEV, lower-operating-cost feasible frontier witness
+and overturns the earlier inference from the local 11--15 BEV candidate pool.
+It does **not** discharge teacher release. Phase 3 remains a two-stage proxy,
+not the integrated canonical actual-cost objective. The high-PV numeric
+solver/accounting residual is zero but `objective_is_actual_cost=false`; the
+low-PV residual is -49.560460 JPY. Consequently the pair manifest and
+completion audit remain **BLOCKED** and the result must not be described as an
+integrated global optimum.
+
+The 1,000 kW input is also an expanded-site/off-site high-PV sensitivity. Its
+reverse audit requires 5,000 m2 installable panel area and about 14,285.7 m2
+depot area under the saved assumptions, versus the stored 1,450 m2 site area.
+The reported daily total excludes PV/BESS CAPEX, financing, and replacement;
+it is not a lifecycle-cost result. The experiment ZIP has 536 entries and
+passes `ZipFile.testzip()`.
 
 ## 2026-08-07 branch integration status
 
@@ -42,12 +81,12 @@ states, and vehicle-timeline export failures are logged rather than silently
 discarded. Focused regressions cover the repaired contracts, and the complete
 suite passes (`1196 passed`).
 
-This is code-validation evidence only. No Prepare or optimization run was
-performed while the tree was dirty, and no pre-change prepared input or output
-is valid evidence for this implementation. Tk/BFF must be restarted and both
-weather scenarios must be freshly Prepared and executed from the frozen clean
-commit. Teacher release therefore remains **BLOCKED** until all per-run and
-pair-level formal gates pass.
+No Prepare or optimization run was performed while the tree was dirty, and no
+pre-change prepared input or output is valid evidence for this implementation.
+The subsequent frozen-commit frontier pair is recorded above. Teacher release
+remains **BLOCKED** because its Phase-3 objective/accounting gates fail; a
+future integrated actual-cost run must still satisfy every per-run and
+pair-level formal gate.
 
 ## 2026-08-05 frontend 1,000 kW setting restoration
 

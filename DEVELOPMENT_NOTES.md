@@ -1,5 +1,43 @@
 # Development Notes
 
+## 2026-08-07 clean 1,000 kW PV BEV-frontier evidence
+
+- Executed a fresh frontend HTTP pair from clean frozen commit
+  `e94c8154cdcb566cb298a2a8a92ef14b2d1a5f7a` at
+  `output/formal_pair_20260807_flat30_pv1000_bess6000_phase3_frontier_head`.
+  Both cases used the saved 1,000 kW PV rating, 6,000 kWh / 900 kW BESS with
+  3,000 -> 3,000 kWh inventory, flat 30 JPY/kWh grid energy, zero demand
+  charge, and a declared 20,000 JPY fixed vehicle-day cost. The runner made
+  fresh prepared inputs and did not use stale duties or a weather policy.
+- The full `used BEV >= K`, `K=15..35`, frontier changes the resolved schedule
+  from high PV 27 BEVs / 5 ICE buses and 183 / 81 trips to low PV 21 BEVs / 11
+  ICE buses and 91 / 173 trips. Both use 32 buses, serve 264/264 trips, pass
+  independent physical validation and terminal energy checks, and complete
+  accepted 24/24 Rolling. All 21 requested frontier targets resolve.
+- Executed-day accounting reports 666,164.082366 JPY and zero grid import at
+  6,056.25 kWh PV, versus 698,469.250509 JPY and 126.610037 kWh grid import at
+  996.2 kWh PV. The high-PV candidate is therefore 32,305.168143 JPY/day
+  (4.625%) cheaper, uses six more BEVs and 92 more BEV trips, and emits
+  545.342135 kgCO2/day (55.155%) less in this operating-cost scope.
+- This corrects the interpretation of the earlier 15-BEV local candidate pool:
+  its cost decreased through the largest searched composition, so it did not
+  prove a 15-BEV optimum. The expanded frontier provides a physically
+  validated high-BEV/low-cost witness without a weather-direction bias.
+- The pair remains intentionally `BLOCKED`. Phase 3 is not an integrated
+  global actual-cost objective. High PV has a zero numeric solver/accounting
+  residual but `objective_is_actual_cost=false`; low PV has a -49.560460 JPY
+  residual. The pair manifest therefore rejects both actual-cost objective
+  checks. The result may be presented as a controlled, physically feasible
+  frontier result, not as an integrated global optimum.
+- The 1,000 kW rating is a high-PV sensitivity, not a current-roof potential:
+  its reverse audit requires 5,000 m2 of installable panel area and about
+  14,285.7 m2 of depot area under the saved assumptions, versus the stored
+  1,450 m2 site area. PV/BESS CAPEX and financing also remain outside the
+  daily operating-cost total.
+- The adjacent ZIP contains 536 entries, is 23,514,502 bytes, and passes
+  `ZipFile.testzip()` with no corrupt member. Git SHA and clean status match
+  at experiment start and end.
+
 ## 2026-08-07 PV/BESS, demand-charge, and frontend closure
 
 - Replaced the Solcast period-end anchor approximation with interval-overlap
@@ -31,8 +69,10 @@
   warning. Artifact completeness remains the fail-closed release gate.
 - Validation: focused regression `131 passed`, follow-up solver/persistence
   regression `126 passed`, final full suite `1196 passed`; `compileall` and
-  `git diff --check` pass. No Prepare or optimization run was performed, so
-  existing outputs remain non-current and teacher release remains BLOCKED.
+  `git diff --check` pass. No Prepare or optimization run was performed during
+  that code-validation step. The subsequent clean frontier run is recorded
+  above and remains teacher-release `BLOCKED` for the stated Phase-3 objective
+  and accounting reasons.
 
 ## 2026-08-07 Branch integration validation
 
