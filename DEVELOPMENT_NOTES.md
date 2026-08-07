@@ -1,5 +1,12 @@
 # Development Notes
 
+## 2026-08-07 README の利用者導線を再設計
+
+- GitHub 上の入口を、約 1,600 行の契約・履歴・数式の混在した構成から、目的別の短い導線へ再構成した。現在の実装、数理モデル、受理条件は変更していない。
+- README は「何をするシステムか」「ソースからの起動」「最初の最適化」「結果の判定」「正式研究実行」の順に整理した。詳細な契約は削除して主張を弱めたのではなく、現行の `FORMAL_RUNBOOK_CURRENT.md`、`CURRENT_RESEARCH_RELEASE_BLOCKERS.md`、教員向け資料、運用ガイドへのリンクを正本として明示した。
+- 実装と不一致だった新規利用者向け出力先表記を `outputs/` から既定の `output/` に是正し、存在しない配布済み `.exe` を通常の起動導線から外した。React/Tauri は引き続き設計段階であり、現行操作画面は Tkinter + FastAPI であることを明示した。
+- `tests/test_readme_navigation.py` を追加し、実際の起動・操作・研究判定への入口と、README 内のローカル文書リンクを回帰確認する。
+
 ## 2026-08-06 Formal-run Git preflight and explicit trial mode
 
 - Root cause: Tk `_build_optimization_run_payload()` hard-coded

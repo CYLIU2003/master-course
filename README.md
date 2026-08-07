@@ -1,1612 +1,185 @@
-# master-course — EV バス配車・充電スケジューリング最適化研究システム
+# master-course
 
-![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?logo=fastapi&logoColor=white)
-![UI](https://img.shields.io/badge/UI-Tkinter-3776AB?logo=python&logoColor=white)
-![Solver](https://img.shields.io/badge/Solver-Gurobi-EE3524)
-![Optimization](https://img.shields.io/badge/Optimization-MILP%2BALNS-FF6F00)
-![Status](https://img.shields.io/badge/Status-Core%20Package%20%28Tkinter%2BFastAPI%29-0A66C2)
+> 東急バスの BEV／ICE 混成車両を対象に、便割当、充電、PV、BESS、系統電力を一貫して評価する研究用最適化システムです。
 
-## Research-evidence contract (updated 2026-08-06)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+![UI Tkinter](https://img.shields.io/badge/UI-Tkinter-3776AB?logo=python&logoColor=white)
+![Solver Gurobi](https://img.shields.io/badge/Solver-Gurobi-EE3524)
 
-Release status is fail-closed and artifact-driven. It is **BLOCKED** unless
-`output/formal_pair_20260730/completion_audit.json` records `status=READY`,
-zero failed checks, the exact current frozen Git SHA at both start and end,
-and a completed ZIP. This conditional gate lets the repository remain
-untouched while a formal experiment is running. The authoritative open-item
-register and per-run acceptance table are
-[`docs/notes/CURRENT_RESEARCH_RELEASE_BLOCKERS.md`](docs/notes/CURRENT_RESEARCH_RELEASE_BLOCKERS.md).
+> [!IMPORTANT]
+> **現在の研究公開ステータスは `BLOCKED` です。** 個別ジョブの完了、可行解、Rolling の受理、正式な研究受理は別の判定です。最新の判定理由と必要な証跡は、[研究リリースのブロッカー一覧](docs/notes/CURRENT_RESEARCH_RELEASE_BLOCKERS.md)を確認してください。
 
-Manual frontend runs now preserve the input, Prepare output, code provenance, and
-validation context required for retrospective audit. A manual result remains a
-simulation artifact, not an automatically accepted research result.
+## まず、目的に合う入口を選ぶ
 
-- `code_provenance.json` records the Git SHA, dirty state, tracked-patch hash,
-  untracked-file hashes, repository root, Python/Gurobi environment, and any
-  capture failure before the solve begins. A formal `research_run=true` request
-  now fails before job creation unless the worktree is clean and a non-empty
-  SHA is available; the worker repeats the same guard immediately before the
-  solve. Dirty diagnostics remain possible only as explicitly non-research
-  runs. A source change during the solve is a hard failure.
-- `run_input_provenance/` records the scenario snapshot, Prepare audit, effective
-  optimization parameters, hashes, and validation result.
-- `scenario_fleet_contract_v2` makes the exact active vehicle set from the
-  materialized prepared scenario and explicitly selected depot/scope
-  authoritative. It records active IDs, excluded records/reasons, canonical
-  powertrains, initial-state hash, vehicle-parameter hash, and the complete
-  contract hash. There is no global BEV/ICE count. Optional CLI count arguments
-  are assertions only.
-  `ProblemBuilder` preserves this complete contract in canonical problem
-  metadata; the frontend rolling preflight writes that same payload to
-  `scenario_fleet_contract.json` and refuses to infer it from a count or
-  validation summary.
-  Formal records must explicitly define initial SOC/fuel and availability;
-  contradictory availability fields fail. Prepare schema
-  `v4_same_service_date_pv_counterfactual_explicit_fleet_state` materializes the
-  effective initial ICE fuel (tank capacity × the configured initial/max
-  percentage) and, when omitted by legacy records, the selected depot's full
-  charger-ID set. The derivation rule and counts are persisted in
-  `fleet_state_materialization`; no physical distance, SOC, fuel consumption,
-  or energy value is rescaled. Vehicle-type-catalog battery, consumption,
-  charge-power, and charger-compatibility data are materialized into the active
-  record and parameter hash, while the raw model/type remains auditable in the
-  artifact.
-- `charging_source_provenance.json` distinguishes exact depot/time-step energy
-  flows from vehicle-level allocations. A proportional allocation must never be
-  described as solver-native vehicle-source evidence.
-- For an accepted rolling run,
-  `rolling_hourly_chain/executed_day_accounting.json` is the unique final cost
-  source. The final `graph/canonical_cost_ledger.json`, summary, experiment
-  JSON/Markdown, `results.xlsx`, and optimization result must match its total
-  and each cost component within `1e-6 JPY`, or the job fails. Day-ahead-only
-  diagnostics retain a solver-evaluated ledger but cannot be presented as a
-  rolling result. Demand charge and grid-related CO2 cost must not be
-  reconstructed from mutable CSV aliases. Physical fuel liters, tank
-  balances, refueling, and ICE CO2 are never rescaled to force agreement with
-  a monetary total: any solver-versus-physical mismatch remains an explicit
-  `NG`. Disabling the fuel-cost component makes `fuel_cost_jpy=0` while
-  preserving liters and emissions.
-  Vehicle activation/usage cost, fixed ownership cost, and acquisition cost
-  are separate report fields; one must never be used as an alias for another.
-  The Markdown canonical-total marker is parsed as finite numeric evidence and
-  compared under that same `1e-6 JPY` contract; a byte-for-byte float rendering
-  difference is not treated as a distinct monetary result.
-  `refuel_events.csv` and `graph/refuel_events.csv` retain their headers when
-  the canonical refueling schedule has zero events. Artifact completeness
-  accepts those header-only exports only in that case and otherwise requires
-  their exact schemas and event multisets to match the canonical result.
-- Non-service travel is canonicalized as one row per physical event in
-  `graph/movement_event_ledger.(csv|json)`. The only event types are
-  `startup`, `connection`, and `terminal_return`; a connection belongs to the
-  following trip and is not copied to the prior trip's `deadhead_after`.
-  Vehicle-slot fuel, CO2, and BEV energy are aggregated from this event ledger,
-  preventing before/after double counting.
-- Objective/accounting equality is a semantic contract, not a universal
-  reporting rule. `objective_accounting_equality_required=true` requires an
-  exact match; CO2/balanced/utilization and two-stage proxy objectives use
-  `SKIPPED` and are reported as `solver_objective_score`. Accounting cost is
-  independently validated by the canonical ledger residual.
-- Result-claim messaging keeps proof scope separate from gap status. A
-  two-stage feasible candidate may satisfy the certified Stage 1 gap target
-  while still lacking integrated global-optimality proof. The BFF job message
-  reports each gate independently; it must not state that the requested gap is
-  unestablished when `mip_gap_target_met=true`. The controlled-pair completion
-  audit rejects any contradiction between solver settings, persisted claim
-  classification, and the terminal job response.
-- The evidence ZIP is written once to a validated temporary archive and then
-  atomically promoted. `completion_audit.json` is finalized before packaging,
-  so its bytes inside the ZIP equal the source-tree artifact. It does not claim
-  a self-referential archive size that would change when the audit is embedded.
-- Startup, inter-trip, and return deadhead SOC events use the same canonical
-  energy functions in the solver and independent validator. For
-  `return_to_initial`, the first depot deadhead is part of the daily energy
-  balance. If a final return completes inside the last modeled slot, the
-  independent replay advances through the return-completion boundary and
-  checks the SOC immediately after that return; it neither checks the
-  pre-return slot state nor borrows charging from the following day. Fixed BESS
-  terminal targets are equalities; the solver feasibility
-  tolerance is stage-specific: Stage 1 defaults to `1e-6`, while Stage 2 uses
-  `1e-9`. Stage 2 also fixes `IntFeasTol=1e-9` so a binary physical-charger
-  assignment cannot be treated as zero while linked continuous charging power
-  remains reportable. BEV terminal SOC separately declares its scientific
-  tolerance (default `1e-6 kWh`). Effective primal/integrality tolerances and
-  Gurobi violation/scaling diagnostics are persisted in
-  `solver_settings.json`.
-  The Phase 3 terminal-SOC contract records the raw deviation, scientific
-  tolerance, Gurobi-derived numeric margin, acceptance limit, and reason; the
-  MILP uses the scientific tolerance and post-solve adds only that narrow
-  numeric margin. The independent physical-event validator consumes this same
-  contract: it does not widen the scientific tolerance or suppress a terminal
-  SOC violation.
-- Formal PV counterfactual comparison is fail-closed: it requires equal trip,
-  active-vehicle, vehicle-parameter, initial-state, charger, BESS, tariff,
-  calendar, and solver-control content hashes; only a separately recorded PV
-  curve may differ. Scenario/prepared IDs are provenance, not scientific
-  equality by themselves. Comparing a weekday to a Sunday is rejected as a
-  weather-only claim. The counterfactual must also change a depot
-  PV-generation hash or energy total; a relabelled duplicate is rejected.
-  `graph/calendar_weather_validation.json` records service date, timetable day
-  type, weather observation date/source, and comparison type. A declared
-  research fleet is separately hard-checked and written to
-  `graph/research_fleet_validation.json`. Formal frontend runs bind the exact
-  active vehicle IDs and parameter hashes from the prepared selected scope to
-  Canonical input. Duplicate/empty IDs, unknown types, invalid availability,
-  or physical-parameter omissions fail before optimization. Persisted inactive
-  records are excluded with reasons. The model does not invent an ID/type or
-  substitute a global fleet constant.
-  Requiring all available BEVs to serve is a separate policy-sensitivity
-  checkbox and constraint, not the unconstrained baseline.
-- The formal frontend weather runner explicitly enables the persisted weather
-  policy before building the Canonical problem. The Sunday/WEEKDAY case is
-  allowed only through the recorded
-  `fixed_weekday_timetable_pv_counterfactual` waiver; it is intentionally a
-  weekday timetable on the requested date, not a claim about the Sunday
-  timetable.
-  Tk Quick Setup and Prepare derive and persist that declaration only when the
-  user has selected one Sunday date, `WEEKDAY`, and the actual-date PV profile.
-  The declaration changes neither the selected date, timetable rows, route
-  scope, nor the PV curve; it is carried into the prepared input and Rolling
-  calendar audit as provenance.
-- The day-ahead/Rolling fixed depot-asset hash excludes the PV curve identity,
-  generation total, and generation hash together. BESS, charger, tariff, and
-  depot-limit fields remain in the hash; this prevents a legitimate PV-only
-  update from being rejected as a control mismatch.
-- Hourly rolling execution is reported as `not_executed` unless an actual rolling
-  chain was run and its log is attached. `executed_and_accepted` additionally
-  requires a persisted full-horizon `rolling_chain_summary.json` whose every
-  acceptance check passes; a partial or failed chain is
-  `executed_not_accepted`. No output fabricates rolling evidence, a missing ICE
-  vehicle, or weather-dispatch behavior.
-- After accepted Rolling, an independent event-level validator reconstructs
-  service, startup/connection/return deadheads, waiting, charging, and
-  refueling. Required metric absence is an error. Unknown chargers, charging
-  at an impossible location, event overlap, charger concurrency/compatibility,
-  and independent SOC/fuel failures block finalization. Multiple energy-source
-  rows for one vehicle/charger/slot are one physical charging session.
-  Its input is recorded in `physical_validation_input_manifest.json`: the
-  SHA-verified `canonical_solver_result.json` supplies vehicle paths and
-  refueling, while only
-  `rolling_hourly_chain/charging_schedule.csv` replaces day-ahead charging.
-  The finalizer fails closed if the canonical SHA, served-trip set, or exact
-  prepared-problem trip coverage does not match; it never validates the
-  lossy BFF reporting wrapper as a substitute for the canonical schedule.
-- The Tk/BFF time-axis selector preserves `5`, `15`, `30`, and `60` minute
-  values. The 2026-07-30 controlled-PV experiment specification uses
-  60-minute internal slots and 60-minute Rolling updates in both cases; other
-  widths must be declared as separate sensitivities and require fresh Prepare
-  and execution.
-- The Tk frontend separates `試行計算（研究提出不可）` from
-  `正式研究実行（clean Git必須）`; trial execution is the safe default. Both
-  use the same payload object for logging and submission, and the log always
-  includes `research_run`. Formal execution calls
-  `GET /api/research/git-preflight` before submission and lists the exact
-  `git status --porcelain` rows when blocked. The BFF repeats the check before
-  job creation and retains the worker-side final guard, closing the UI/API
-  bypass and source-change race without weakening research acceptance.
-  A trial sends `research_run=false`; its result, audit, summary, run manifest,
-  and claim-scope artifacts are marked `diagnostic_only=true`,
-  `research_submission_ready=false`, `teacher_release_status=BLOCKED`, and
-  `blocking_reason=dirty_or_nonformal_run`.
-- Both Tk optimization classifications send
-  `run_profile=day_ahead_and_hourly_rolling`,
-  `run_hourly_rolling=true`, and `rolling_execution_minutes=60`. The BFF
-  enforces the 60-minute full-chain policy for that profile, persists the exact
-  canonical day-ahead problem/result/input hashes, and invokes
-  `run_rolling_chain()` in-process in the same job and run directory. A stale
-  client cannot turn rolling off by sending `run_hourly_rolling=false`.
-  Day-ahead-only diagnostics require the explicit
-  `run_profile=day_ahead_exploratory`; their report is labelled
-  `DAY-AHEAD ONLY - NOT A ROLLING RESULT`.
-- Final human/reporting artifacts are regenerated after rolling validation.
-  `summary.json`, `experiment_report.md`, `results.xlsx`, and
-  `run_manifest.json` expose `rolling_execution.status`,
-  `research_submission_ready`, `teacher_release_status`, all failed checks,
-  raw versus certified Stage 1 gap, the requested gap, and cost/objective
-  semantics. Any infeasible/truncated/state-handoff-failed rolling step fails
-  the frontend job while preserving the day-ahead and rolling diagnostics.
-  When Rolling fails, final executed-day reconciliation is not invoked on the
-  incomplete prefix; the original step error remains the surfaced job error.
-  Monetary cost components remain numeric in the Excel reconciliation sheet.
-  Mapping/list/tuple cost provenance or diagnostic metadata is preserved there
-  as deterministic compact JSON text, because an Excel cell cannot represent
-  those structures directly; this serialization never changes the accounting
-  inputs or their validation, and unsupported types fail closed. Missing,
-  invalid, or non-finite monetary evidence is never coerced to zero: the
-  reconciliation artifact retains `null` for its observation/residual and
-  fails the job. `summary.energy_cost_jpy` remains the electricity component;
-  the explicit `propulsion_energy_cost_jpy` field is the electricity-plus-fuel
-  aggregate. If any final reporting or artifact gate fails, every persisted
-  release surface is scrubbed to `BLOCKED` and `DIAGNOSTIC` rather than leaving
-  a torn `READY` claim. A single ordinary frontend run also remains blocked
-  from teacher release until the required controlled counterfactual pair has
-  been independently verified. The pair builder may discharge only that
-  pending-pair blocker; each case must independently have an accepted artifact
-  contract and a terminal `manifest.json` state of `complete`, as well as the
-  fixed-control, physical, and accounting evidence.
-- A successfully completed ordinary frontend job must also pass
-  `frontend_run_artifacts_v1`. The BFF writes
-  `artifact_completeness.json` only after final reporting, checks the complete
-  root/raw/graph/research-provenance bundle, every Rolling step handoff,
-  independent physical-validation artifacts, the readable Excel sheets, and
-  the final cost reconciliation. A missing, empty, malformed, or undeclared
-  required artifact fails the job instead of returning a misleading
-  `completed` status. The Tk execution monitor shows the run directory and
-  verified/required artifact counts. Recheck a saved run with
-  `python scripts/verify_frontend_run_artifacts.py <RUN_DIR>
-  --research-run --require-rolling`.
-- An accepted Rolling run also generates a literature-aligned evidence bundle
-  under `graph/literature_figures/`: five PNG/SVG figures, one source CSV per
-  figure, a literature/page mapping, a run KPI table, and sixteen
-  analysis-ready raw CSV files covering vehicle events, BEV SOC, charger
-  sessions, hourly PV/BESS/grid flows, costs, CO2, fleet parameters, validation
-  metrics, and excluded vehicles. `raw_data/raw_data_catalog.csv` defines every
-  dataset and its canonical source; `manifest.json` records file hashes.
-  The ordinary frontend artifact audit recalculates and checks every declared
-  plot/table/raw-CSV hash and every canonical-source hash; a size or SHA-256
-  mismatch fails the run. The charger figure separately exposes simultaneous
-  occupied-port count and aggregate charging kW, so a multi-port charger is not
-  collapsed to the maximum single-vehicle power. Depot-specific tariff signals
-  are retained separately rather than overwritten by timestamp.
-  Missing or modified figure/CSV evidence fails the ordinary frontend artifact
-  contract.
-  Single-run output never fabricates paired-PV, Monte Carlo, capacity-sweep, or
-  runtime-distribution figures. See
-  [`docs/model/LITERATURE_FIGURE_MAPPING.md`](docs/model/LITERATURE_FIGURE_MAPPING.md).
-- Final experiment-report costs are sourced from
-  `graph/canonical_cost_ledger.json`. `experiment_report.md` and
-  `results.xlsx` are required final artifacts; generation failure fails the
-  frontend job instead of being silently reported as success. Install
-  `requirements.txt`, including `openpyxl`, before starting the BFF.
-- Rolling state handoff treats solver values within `1e-6 kWh` of a BESS SOC
-  bound as numerical residue and clamps them to that bound. Values beyond that
-  tolerance remain hard errors; this does not relax the physical BESS limits.
-- Stage 1 `BestObjStop` is explicit. It is allowed for operational planning but
-  is a stopping-rule intervention, not evidence that one case is intrinsically
-  faster. `solver_settings.json` separates Gurobi's raw MIP gap from the
-  analytical/certified gap and records the termination reason. Disable it for
-  runtime experiments and fix the Gurobi thread count across repetitions.
-- The Tk/BFF interactive `run-optimization` route now enforces that runtime
-  baseline automatically: `BestObjStop=OFF`, `Gurobi Threads=1`. The run input
-  records both the submitted request and the server-enforced effective values;
-  the formal CLI runner is intentionally not overridden.
-- The same interactive route now enforces per-vehicle BEV
-  `return_to_initial` terminal SOC. This changes the mathematical meaning of
-  manual day-ahead runs: a high/low-PV comparison can no longer use BEV energy
-  inventory carried out of the day. The requested and effective policy are
-  recorded in `interactive_terminal_soc_controls`, and old fixed-target runs
-  are not directly comparable on daily operating cost.
-- Formal Phase 3 frontend runs force the complete feasible successor network
-  and prohibit fallback/post-solve repair. Stage 1 now couples assignment to a
-  slot-indexed continuous energy-recourse relaxation: depot-presence charging
-  windows, compatible charger ports and power, BEV SOC, per-slot PV allocation,
-  grid import and contract overage, peak demand, BESS operation and terminal
-  SOC, TOU electricity, fuel, CO2, vehicle, driver, degradation, demand, and
-  other enabled accounting terms. The former whole-day PV-credit proxy remains
-  diagnostic only and no weather-specific assignment bias is used.
-- Stage 2 remains the exact fixed-assignment binary charger/SOC/PV/BESS check.
-  Formal research requests evaluate at least ten distinct Stage 1 assignments
-  in Stage 2; the controlled-PV runner requests one incumbent plus twenty
-  alternatives. Stage 1 retains its primary solution pool, then explicitly
-  excludes already evaluated BEV/ICE trip patterns. Opposite-powertrain
-  whole-duty swaps are supplied only as partial MIP starts to accelerate that
-  unchanged weather-aware model; they are never accepted directly and add no
-  objective bias or physical exemption. Every retained assignment is persisted,
-  and the candidate with the lowest canonical actual cost is selected only
-  after both Stage 2 and the independent canonical physical validator accept
-  it. Candidate artifacts persist the independent validation status, error
-  count, and error hash; a Stage 2 incumbent alone is not selectable.
-  Only a Gurobi `INFEASIBLE` certificate may return a failed assignment to
-  Stage 1 as an IIS-backed no-good cut; a `TIME_LIMIT` without an incumbent
-  does not justify such a feasibility cut. This remains a bounded two-stage
-  method, not an integrated global total-cost optimum.
-- The certified Stage 1 reporting bound keeps Gurobi's raw bound separate from
-  a reproducible analytical floor. That floor adds the strict path-cover
-  vehicle-use minimum to an optimistic direct service-energy/fuel minimum,
-  after pooling all PV, usable BESS inventory, and permissible initial BEV SOC
-  as free energy. It omits only nonnegative costs and fails closed if an
-  externally supplied vehicle fixed-use cost is negative; it never changes the
-  solver objective or Gurobi's native certificate.
-- Integrated Phase 4 forbids vehicle discharge until V2G has an explicit
-  depot-flow ledger, accounting treatment, and artifact provenance. The former
-  free discharge variable was an unaccounted energy sink under
-  `return_to_initial`. Phase 4 now uses the same `1e-9` feasibility and
-  integrality numeric contract as physical Stage 2 and rejects positive
-  charging without a selected compatible charger.
-- `scripts/run_frontend_controlled_pv_pair.py` is a standard-library HTTP-only
-  controller for same-service-date high/low-PV sensitivity runs. It performs a
-  fresh Prepare, submits and polls the ordinary BFF optimization endpoint,
-  records exact request/response payloads, runs the two cases sequentially,
-  applies the formal job timeout to the synchronous Prepare/submit requests,
-  sends the audited 16-route Tsurumaki scope and common explicit SOC/ICE-fuel
-  fleet controls, and rejects any materialized route-count drift immediately,
-  checks the pair controls and artifacts, and packages the evidence. Any failed
-  run, pair, oracle, accounting, physical, Rolling, gap, or provenance gate
-  keeps the experiment blocked.
-- The Stage 2 infeasibility retry is covered by a real Gurobi/IIS regression:
-  continuous Stage 1 charger sharing first produces infeasible all-BEV
-  assignments, then full-assignment no-good cuts reach an independently
-  feasible BEV/ICE schedule. This validates the retry call path, but does not
-  make the bounded feedback loop exhaustive or Phase 3 an integrated global
-  total-cost model.
-- The Tk operation start/end pair is now controlled by an explicit checkbox.
-  It is off by default, disables the pair in the UI, and makes the canonical
-  energy/SOC horizon exactly `00:00–23:59` (24 hours, not 1,439 minutes).
-  The requested pair and `operation_time_window_enabled` flow through Quick
-  Setup, Prepare, BFF, and `ProblemBuilder`; a run records the requested and
-  effective values in `interactive_operation_time_window_controls` and
-  canonical metadata. This is an energy-horizon control, not a timetable-row
-  filter. If it is enabled, terminal-SOC requirements may still extend the
-  internal energy horizon; use the emitted `operation_time_window_*` and
-  `energy_horizon_*` fields when auditing or comparing runs.
-- `experiment_report.json` and `experiment_report.md` are copied into each run
-  after canonical reporting finalization; they reconcile the accounting total
-  with electricity, demand allocation, fuel, CO₂, and vehicle-use terms.
-  Two-stage reports display the requested MIP gap, Stage 1 Gurobi native gap,
-  certified/analytical gap, and termination reason as distinct fields.
-  `simulation_conditions_tou_prices.csv` and
-  `simulation_conditions_contract_limits.csv` are emitted from the canonical
-  price slots and depot import limits actually supplied to the solver. A
-  physical base-load value is blank unless the canonical model represents it;
-  the separate `demand_charge_weight` column preserves the actual model value.
-  Their source is recorded in `simulation_conditions_provenance.json`.
-  `research_claim_scope.json` states the claims the
-  run supports. A manual PV-only pair is an exploratory PV-supply sensitivity,
-  not weather-adaptive dispatch, an integrated global optimum, or a monthly
-  demand-charge/investment result.
-- Reporting rebuild logs list a file in `updated_files` only when its content
-  hash actually changed. In particular, an existing but untouched
-  `results.xlsx` is not reported as regenerated.
+| やりたいこと | 最初に読む・実行するもの |
+| --- | --- |
+| 画面から通常の最適化を動かす | [最短で起動する](#最短で起動する) → [最初の最適化](#最初の最適化) |
+| 研究用の正式実行をする | [正式研究実行の手順](docs/notes/FORMAL_RUNBOOK_CURRENT.md) と [ブロッカー一覧](docs/notes/CURRENT_RESEARCH_RELEASE_BLOCKERS.md) |
+| モデルを教員・共同研究者に説明する | [教員レビューガイド](README_core_professor.md) |
+| 日常運用、比較、障害対応を確認する | [運用ガイド](readme_operation.md) |
+| 実装・検証・変更履歴を確認する | [開発ノート](DEVELOPMENT_NOTES.md) |
 
-The formal command sequence and required acceptance checks are in
-[the Phase 3 manual validation runbook](docs/notes/phase3_manual_validation_runbook_20260716.md).
+## このシステムでできること
 
----
+- 時刻表と営業所・路線スコープから、車両ごとの便割当と回送を作成する。
+- BEV の SOC、充電器、PV、BESS、系統電力、料金を制約として充電計画を評価する。
+- 日初の計画に加え、1 時間ごとの Rolling 再最適化、物理スケジュール検証、実行日会計を成果物として残す。
 
-## クイックナビ
+現行の研究実装は **Phase 3 の二段階最適化**です。便割当とエネルギー運用を一つの目的関数で同時に解いた大域的総費用最適解ではありません。主張できる範囲は、必ず成果物ごとの受理ゲートに従ってください。
 
-> [!TIP]
-> **読む順番の推奨：** 要約 → 1章（問題設定）→ 2章（数理モデル）→ 4章（起動）→ 5章（フロー）→ 7章（トラブル）
+## 現在の構成と扱い
 
-| 節 | 参照先 | 使いどころ |
-|---|---|---|
-| 要約 | [このシステムが何をしているか（先生向け要約）](#このシステムが何をしているか先生向け要約) | 最初の 5 分で研究対象と全体像を掴む |
-| 1 | [1. このシステムが解く問題](#1-このシステムが解く問題先生向け概要) | 入力・決定・出力の流れを確認する |
-| 2 | [2. 最適化モデルの説明](#2-最適化モデルの説明) | 数理モデル、変数、制約、目的関数を見る |
-| 3 | [3. 実装状況と研究フェーズ](#3-実装状況と研究フェーズ) | 実装済み範囲と未実装範囲を確認する |
-| 4 | [4. セットアップと実行手順](#4-セットアップと実行手順) | 環境構築、起動、初回接続を行う |
-| 5 | [5. 東急全体最適化の推奨フロー](#5-東急全体最適化の推奨フロー) | Prepare/最適化を流す順番を確認する |
-| 6 | [6. システム構成](#6-システム構成) | ディレクトリ構成と主要 API を確認する |
-| 7 | [7. 既知の注意事項とトラブルシューティング](#7-既知の注意事項とトラブルシューティング) | dataset 不整合・エラー時の対処を見る |
-| 8 | [8. パラメータ保全リスト](#8-パラメータ保全リスト) | 研究パラメータをどこで保持しているか確認する |
-| 9 | [9. 実装詳細（技術リファレンス）](#9-実装詳細技術リファレンス) | 実装変数や dispatch 判定式を追う |
-| 10 | [10. 実測監査](#10-実測監査) | KPI と再現コマンドを確認する |
-| 11 | [11. AI エージェント向けアーキテクチャ仕様](#11-ai-エージェント向けアーキテクチャ仕様) | 自動修正時の制約と責務境界を確認する |
-| UI移行 | [React + FastAPI frontend migration specification](docs/frontend/README.md) | Tkinterを維持したReact移行の要件・契約・UI/UX・受入基準を確認する |
+| 項目 | 現在の扱い |
+| --- | --- |
+| 操作画面 | Tkinter + FastAPI BFF。`python run_app.py` が両方を起動します。 |
+| API | FastAPI の `/api` 配下。起動後の対話的な仕様は `http://127.0.0.1:8000/docs` で確認できます。 |
+| React / Tauri | まだ設計・受入基準の段階です。通常運用の手順としては扱いません。詳細は [frontend 移行仕様](docs/frontend/README.md)。 |
+| 出力 | 現在の既定ルートは `output/`。各 run は通常 `output/<日付>/run_*` に保存されます。 |
 
 ```mermaid
 flowchart LR
-  UI[Tkinter UI] --> API[FastAPI BFF]
-  API --> PREP[Prepare Input]
-  PREP --> OPT[Optimization Core]
-  OPT --> SOLVE[MILP / ALNS / GA / ABC]
-  SOLVE --> OUT[Results / Audit]
+    UI[Tkinter 操作画面] --> BFF[FastAPI BFF /api]
+    BFF --> CORE[配車・最適化コア]
+    CORE --> ART[run 成果物]
+    ART --> CHECK[Rolling・物理検証・会計・研究受理]
 ```
 
-> **要点**
-> - 本 README は「理想仕様」ではなく「現行実装」を優先して説明します。
-> - 実装済み/未実装は 3章で明示し、断定表現を避けています。
-> - 実行前に 4章・5章、問題発生時は 7章、検証時は 10章を参照してください。
+## 最短で起動する
 
-<details>
-<summary><strong>更新メモ（2026-04-01 / 出力構成・複数連続日対応準備）v2</strong></summary>
+### 前提
 
-### 本日の達成項目
+- Windows / PowerShell
+- Python 3.11 以上（CI の検証対象は Python 3.11）
+- MILP を実行する場合は、別途 Gurobi と有効なライセンス
+- 利用対象の built dataset（画面のデータ状態で確認）
 
-#### 0) 連続日オペレーション制御の追加（2026-04-01 追記）
-- `startTime` / `endTime` を Quick Setup で保持し、BFF・最適化ビルダ・Tk で往復可能にした
-- 連続日では日次の route-band 拘束に変更（同一車両は「日ごとに」1 band。翌日はその日の最初の担当路線で再バンド）
-- 夜間（`endTime` 以降〜翌日 `startTime` まで）の車庫滞在中は、充電器上限の範囲で順次充電を許可
-- 充電バッファは既存のフロント設定（`finalSocFloorPercent` / `finalSocTargetPercent` / 許容帯）をそのまま利用
-- 連続日の既定 fragment 上限は `planningDays` を下限に自動調整（未指定時）
-
-#### 0-b) 5日連続（平日）再実行の現状
-- 5日×4モードの実行導線（Quick Setup→Prepare→Optimization）は動作し、`planningDays=5` / 日付列 / 実日 PV 紐付けは確認済み
-- ただし現時点の大規模5日ケースでは `unserved` が高止まりし、目標の「欠便ゼロ」には未到達
-- 切り分け上は multi-day での可行性/計算時間の追加調整が必要（単日では既に欠便ゼロ実績あり）
-
-#### ① 出力構成の完全統一 ✅
-- **dated 階層**: `output/<YYYY-MM-DD>/run_YYYYMMDD_HHMM/`
-  - 運用向けアーカイブコンセプトで旧リッチ出力相当を統一化
-- **リッチファイルセット**（30+ファイル）：
-  - CSVデータレイヤ（cost_breakdown, co2_breakdown, simulation_conditions_*, site_power_balance, vehicle_schedule, refuel_events など）
-  - JSON メタデータ（summary, optimization_result, optimization_audit, kpi_summary など）
-  - Excel multi-sheet (`results.xlsx` - openpyxl で動的生成)  
-  - 単位マッピング(`run_manifest.json`)
-  - グラフ・図表（`graph/` 配下、route_band_diagrams SVG、vehicle_operation_diagrams SVG、vehicle_timeline 複製）
-- **系統受電量の明示化**:
-  - `grid_to_bus_kwh` (直給) / `grid_to_bess_kwh` (BESS充電) / `grid_import_total_kwh` (合計)
-  - cost_breakdown_detail + site_power_balance で同期
-  - 旧「全ゼロ受電」の曖昧性を「明確な 0 or 正数」に統一化
-- **充電源内訳と契約超過の明示化**:
-  - `charging_summary.(json/csv)` で depot 別 / 全体の `grid_to_bus_kwh`, `pv_to_bus_kwh`, `bess_to_bus_kwh`, `pv_to_bess_kwh`, `grid_to_bess_kwh`, `pv_curtail_kwh` を確認可能
-  - `depot_energy_flows.(json/csv)` と `graph/depot_power_timeseries_5min.csv` で slot 単位の `grid_import_kw`, `contract_limit_kw`, `contract_over_limit_kwh`, `contract_limit_exceeded` を確認可能
-  - per-source flow が plan に明示されない run では、`source_provenance_exact=false` と note を残した上で `charging_slots` から grid-origin 充電のみを診断的に再構成する
-
-#### ② 4ソルバー再検証 ✅
-- **MILP/ALNS/GA/ABC** all modes: `unserved=0`, `penalty_unserved=0` (最新実行 2026-04-01 1907-1913)
-  - Objective: 209,493 JPY (全モード一致)
-  - Trips: 598/598 (欠便なし)
-  - Energy cost: 209,493 JPY（全コストの100%）
-  - Grid import: 0.0 kWh（系統受電なし - PV完全自給）
-- **出力アーティファクト網羅性**: 
-  - スコープ出力（従来型）＋ dated 出力（新型）の 2 系統を同時生成
-  - 新 csv/json/xlsx ファイル群の自動生成・検証完了
-
-#### ③ 複数連続日対応の基本フレーム確認 ✅
-- **infrastructure**: trip/price/PV 拡張サポート実装済み (`src/optimization/common/builder.py`)
-  - `planning_days > 1` 時の trip 日付オフセット (1440 min = 24h)
-  - TOU 価格スロット複製
-  - PV 発生列拡張
-- **Phase 1 テスト設計**: multi-day 基本動作検証用スクリプト作成 (test_multiday_phase1.py)
-  - single-day vs 2-day scenario 比較フレーム準備完了
-  - Trip 倍加 / objective scaling / unserved 追跡
-
-### 課題・今後の実装方針
-
-#### A. Multi-day optimization の検証
-- **pending**: Phase 1 実行（trip 倍加/cost scaling の実測）
-- **next**: overnight idle SOCリセット patterns の確認
-- **future**: PV 複数日プロファイル（季変等）への対応
-
-#### B. Output 日別 breakdown の追加
-- `cost_breakdown_daily.csv` / `depot_energy_flows_daily.csv`  
-- `vehicle_timeline_daily.json` — 日別統計
-- `route_band_diagrams/{date}/` — 日付ディレクトリ化
-
-#### C. 研究フェーズの準備
-- multi-day scenario の Prepare / Built / Scoped flow との互換性検証
-- BFF API の `/scenarios/{id}/optimization` で multi_day scoped run 検証
-- Experiment logger に multi-day KPI（日別エネルギー、cross-day activity) 等を追加
-
-### ドキュメント・参照先
-
-- [analysis_multiday_plan.md](analysis_multiday_plan.md) — Phase 単位の実装ロードマップ
-- [bff/routers/optimization.py](bff/routers/optimization.py) — dated run directory logic (L537-781, 1325-1570)
-- [src/optimization/common/builder.py](src/optimization/common/builder.py) — multi-day trip/price/PV replication (L399-432, 465-482, 1781-1798)
-
-</details>
-
-<details>
-<summary><strong>更新メモ</strong></summary>
-
-- 2026-07-27: 日次Phase 3後の1時間rollingは、日次入力契約が受理済みの場合にのみin-processで起動し、日次モデルの実効エネルギー地平を先頭から末尾まで走査する。日次で解いた実効PV時系列は `effective_pv_profiles.json` とそのSHA-256で固定し、rollingはこれを再読込してから予測更新を適用する。残り地平の目的値は加算せず、実行prefixだけを一度接続した `executed_day_accounting.json` を出力する。`rolling_chain_summary.json`、比較表、時刻別PV/grid/BESS/SOCグラフCSV、`energy_source`付き充電CSVを同じrunの`rolling_hourly_chain/`へ保存する。`charging_schedule.csv` は `(vehicle_id, slot_index, charger_id)` を物理充電枠のキーとし、`energy_source`別の行はその枠の電源内訳である。現行Phase 3の車両別内訳は営業所・時刻別の比例配分であり、`vehicle_source_provenance_exact=false` のときsolver-nativeな電源割当ではない。固定平日時刻表を日曜PV反実仮想へ使う例外は、明示policyと固定control hashを持つ `fixed_weekday_timetable_pv_counterfactual` に限定し、実際の日曜運行とは表示しない。
-- 2026-07-23: フロントから手動実行した`output/<date>/run_*`へ、`scenario_input_snapshot.json`、`prepare_input_audit.json`、`optimization_parameters.json`、`run_input_summary.md`、`run_input_manifest.json`、`run_input_validation.json`をsolver開始前に保存する。保存scenario、実行時override、Prepare profile/scope、車両・充電器・営業所・路線inventory、canonical実効パラメータを分離し、巨大prepared input本体は複製せずpath・size・完全SHA-256で固定する。後日確認は`python scripts/verify_run_input_provenance.py --run-dir <RUN_DIR>`を使用し、hash又はscenario/prepared ID不一致時は終了コード2となる。
-- 2026-07-23: `output/2026-07-23`の晴雨成果物を再監査し、非研究run、2025-08-10（日曜）の`WEEKDAY`指定、未適用のPV予測曲線、車両別電源由来の過剰なexact表明を正式結果の停止条件にした。formal runnerは暦日・service IDとPV曲線適用をfail-closedで検査する。車両別の系統/PV/BESS内訳は営業所×時刻の確定比率による按分と明示し、BEV35台全数使用は基準費用最小化と分けた`--minimum-used-bev-count 35`政策感度として扱う。1時間rollingは実装済みだが当該runでは未実行であり、最終監査は`--require-rolling`で晴雨双方の受理済みchainを要求できる。本番再計算は未実施で、同日・同一ダイヤの晴雨入力と実在ICE26台を準備するまで既存結果を研究結論に使わない。
-- 2026-07-18: `core_new` commit`1b5deeb`のclean worktree、固定prepared SHA、15分、候補接続削減なしでgrid-only正式baselineを実行した。264/264便、Stage 2 optimal、独立違反0、fallback/postsolve repairなし、会計再計算残差0円を確認し、正式検証14項目をすべて通過した。Stage 1はtime limit・gap 12.582%のため最適解とは扱わない。成果物は`output/research_phase3_grid_only_15min_formal_20260718_full_network`。
-- 2026-07-18: 15分grid-only正式baseline runnerで候補接続上限`0`（削減なし）を明示できるようにし、prepared input SHA、候補上限、input hash、commitを実験識別子へ固定した。最終planの費用を再評価して会計残差`1e-6円`以下を受理条件とし、264/264便、独立違反0、fallback/postsolve repairなし、候補削減0、clean commitを`scripts/verify_research_phase3_baseline.py`で一括検査する。
-- 2026-07-17: canonical結果が不可行・fallback・postsolve不成立の場合、`summary.json`、root/graph `kpi_summary.json`、充電集計、site power balance、`results.xlsx`、experiment reportの費用・物理フロー・CO₂ KPIを正常な0値として扱わず、canonicalの担当/未担当便数、`result_status`、`failure_stage`、`research_kpi_eligible=false`を優先する結果妥当性gateを追加した。生のsolver成果物とledgerは原因診断用に保持する。successor pruningで候補arcを実際に削除したMILPは`supports_exact_milp=false`とし、縮約ネットワーク上の解を元候補網の大域厳密解と呼ばない。再現可能な監査・可視化は`scripts/audit_core_new_review_20260717.py`、厳格レビューは`docs/reviews/core_new_strict_review_20260717.md`を参照する。
-- 2026-07-16: 営業所設備画面で定置型BESSの終端方針を`運用範囲のみ` / `初期SOCへ戻す目標` / `終端SOC目標を指定`から選択できるようにした。SOC上下限と終端下限は全方針でhard constraintのまま保持する。フロントの主要入口を営業所設備・車両・solver条件の設定ハブへ集約し、画面トークンと構成判断を`DESIGN.md`へ明文化した。日次Phase 3割当を固定した1時間再最適化は、EV/BESS SOCと既発生需要ピークを次時刻へ自動継承できる。長時間計算の手動受理手順は`docs/notes/phase3_manual_validation_runbook_20260716.md`を参照する。
-- 2026-04-17: `tools/scenario_backup_tk.py` の車両管理に `initialSoc` 編集欄を追加し、営業所単位で固定値 / ランダムの一括設定もできるようにした。`vehicles[].initialSoc` を車両ごとの開始 SOC の正本とし、未設定時のみ `initial_soc` / `initial_soc_percent` を既定値として使う。
-- 2026-04-01: Tk クライアントに直結実行の初期実装を追加し、`MC_DIRECT_CALL=1` 時は `Prepare / Prepared simulation / Run optimization / Reoptimize / Job取得` を HTTP ではなく `bff.services.direct_runtime` 経由で同一プロセス実行できるようにした（未対応エンドポイントは従来どおり HTTP）
-- 2026-04-01: `tools/scenario_backup_tk.py` の UI を再構成し、主導線（接続→シナリオ選択→Prepare→実行→結果確認）を前面化。重複していた `設定保存` ボタンと上部 `App Context` ボタンを削除し、補助機能は `ツール` メニューへ集約。実行モードを `直結 / HTTP互換` の切替UIとして明示した
-- 2026-04-01: `mode_milp_only` で `allowPartialService=false` の strict 条件が infeasible になった場合、`unserved==0` 制約のみを実行時に自動緩和して再最適化するフォールバックを追加。`INF_OR_UNBD` は `DualReductions=0` で再判定した上で処理し、解なしで全停止するケースを抑制した
-- 2026-04-02: MILP の time_limit 時にゼロ担当解へ落ちやすい問題を抑えるため、`problem.baseline_plan` を使った warm start を追加し、`y/unserved/used_vehicle/start_arc/end_arc` の初期値を与えるようにした
-- 2026-04-05: scenario `237d5623-aa94-4f72-9da1-17b9070264be` / `prepared-11efb997690030ef` の route24 近傍切り分けで、旧 run `run_20260404_1611` の未担当 56 便が `渋24=49`, `渋23=7` に集中していることを確認した。builder の baseline 構築と ALNS repair が shared trip を `allowed_vehicle_types[0]` から順に消費しており、実 fleet materialize 前に BEV 側へ寄り切るのが主因だったため、現在は actual fleet 台数順で割当順序を決め、baseline も実車両へ materialize しながら構築するよう修正した
-- 2026-04-05: MILP が `TIME_LIMIT` かつ incumbent なし (`SolCount==0`) の場合、空の全欠便計画ではなく dispatch baseline を返す `solver_status=time_limit_baseline` を追加した。この経路と `auto_relaxed_baseline` はどちらも `solver_metadata.supports_exact_milp=false` とし、exact MILP 解と誤認しないようにした。4 ソルバー再実行結果は `outputs/mode_compare_route24_fix_rerun_20260405.json` / `outputs/mode_compare_route24_fix_rerun_20260405.csv`、先生向け要約は `docs/route24_solver_report_20260405.md` に保存している
-- 2026-04-05: 固定 scope 再実行用に `scripts/benchmark_fixed_prepared_scope.py` を追加した。prepared input から materialize した `timetable_rows` を再生成せずに `MILP/ALNS/GA/ABC` を sequential 実行し、comparison JSON / CSV、per-solver JSON、`verdict.md`、`consistency_check.json` を同じ stem 配下へ保存する
-- 2026-04-05: deadhead alias 修理後に残っていた code-caused unserved を潰すため、fully shared scope では `ProblemBuilder` が pooled shared path-cover baseline を使って actual fleet 全体で duty cover を組むようにした。`DispatchContext.locations_equivalent()` も追加し、`tsurumaki` と `odpt.BusstopPole:...Tsurumakieigyousho...` のような depot alias を 0 分 deadhead の同地点として扱うよう揃えた。actual BFF fixed-scope rerun では `974/974 served` を回復し、bundle は `output/reports/20260405_fixed_scope_237d5623_unserved_fix/`、報告書は `docs/fixed_scope_unserved_fix_report_20260405.md` に保存している
-- 2026-04-05: `tools/bus_operation_visualizer_tk.py` / `tools/multi_run_visualizer_tk.py` を新しい dated run + report bundle 構成へ対応させた。`output/<date>/run_*` と `output/reports/.../comparison.json` の両方を走査でき、最適化 run 直下に `simulation_result.json` が無い場合でも run 内の同名ファイルを優先して読む
-- 2026-04-05: `tools/multi_run_visualizer_tk.py` の export は、比較表と教授向けレポートだけでなく `solver_comparison_table.csv/.md`、best run の `graph/route_band_diagrams/`、各 solver の `solver_route_band_diagrams/<mode>_<run_id>/` も出力するようにした。固定 scope rerun bundle では `output/reports/20260405_fixed_scope_237d5623_unserved_fix/graph/route_band_diagrams/` と `output/reports/20260405_fixed_scope_237d5623_unserved_fix/solver_comparison_table.csv` を確認できる
-- 2026-04-06: fixed scope `237d5623-aa94-4f72-9da1-17b9070264be` / `prepared-11efb997690030ef` に対して、startup deadhead の既知 missing path を assignment / MILP start arc の両方で禁止しつつ、初便への回送は simulation horizon 外から開始できるよう修正した。deadhead metric merge では `deadhead_speed_kmh` を上限として既存・推論 metric を再拘束し、BFF canonical path では MILP warm start も有効化した
-- 2026-04-06: `fixedRouteBandMode=true` なら `enableVehicleDiagramOutput` の設定値に依存せず `graph/route_band_diagrams/*.svg` を標準出力するよう canonical export 条件を修正した。実 run は `output/2026-04-06/run_20260406_*`、bundle は `output/reports/20260406_fixed_scope_237d5623_model_fix/`、教授向け要約は `docs/fixed_scope_model_fix_report_20260406.md` に保存している
-- 2026-04-06: canonical rich output に充電源内訳を追加し、`charging_summary.(json/csv)`、`depot_energy_flows.(json/csv)`、拡張 `site_power_balance.csv`、拡張 `graph/depot_power_timeseries_5min.csv` から「系統からいくら買ったか」「PV/BESS からどれだけバスへ供給したか」「契約上限を超えて overage penalty が発生したか」を確認できるようにした。solver plan に per-source flow が無い場合は `source_provenance_exact=false` と `charging_summary_warning` を残し、補助出力の欠落が optimization result 保存全体を止めないようにした
-- 2026-04-06: 各バスの「運用・回送・充電・給油」を縦軸=車両、横軸=時刻の横棒で出す `graph/vehicle_operation_diagrams/*.svg` を標準出力へ追加した。service bar には `band_label / route_family / route_id` のいずれかをラベル表示し、`tools/bus_operation_visualizer_tk.py` の図Aも同じく車両別横棒表示へ更新した
-- 2026-04-06: metaheuristic engine が wrapper 側の mode 設定を実際に使うよう見直し、GA は `genetic_like`、ABC は `bee_colony_like` の acceptance を metadata に出すよう修正した。fixed scope rerun では 4 solver すべて `974/974 served` を回復したが、MILP は `solver_status=time_limit_baseline`, `supports_exact_milp=false` のため exact ではなく fallback のままである
-- 2026-04-06: fixed prepared scope 実行で `fixedRouteBandMode` が stale prepared payload に上書きされていた問題を修正し、現在は `ScenarioStore` / Prepare / materialize / BFF canonical solve の全経路で route-band を標準 ON にしている。さらに route-band 図は flag に関わらず `fixedRouteBandMode=true` なら標準出力される
-- 2026-04-06: 自分で追加確認した問題として、同一車両の複数 fragment が「前 fragment の終点から次 fragment の始点へ物理的に移動できるか」を十分に見ておらず、見かけ上 `974/974 served` でも同一車両が depot から何度も重複出発している run があった。現在は vehicle fragment reassignment で direct/depot transition を再評価し、same-band は直接接続可能なら duty 結合、cross-band は depot-reset 必須とする post-solve repair を通してから export している。この変更は数理的意味を厳しくするため、過去の KPI 主張を一部無効化し得る
-- 2026-04-06: 上の truthfulness fix 後の actual BFF rerun は `output/2026-04-06/run_20260406_1117/`, `output/2026-04-06/run_20260406_1122/`, `output/2026-04-06/run_20260406_1128/`, `output/2026-04-06/run_20260406_1133/` に保存した。bundle は `output/reports/20260406_route_band_standard_rerun/` で、served は `MILP=880`, `ALNS=889`, `GA=887`, `ABC=887`、4 solver とも exported plan は ex-post feasible で `route_band_diagrams` / `vehicle_operation_diagrams` を標準出力している
-- 2026-04-06: fixed scope truthful rerun の追加検証として、prepared input variant `prepared-11efb997690030ef-byd20` を作り `BYD K8 2.0 x 20` を加えた fleet 115 台で actual BFF path の 4 solver を再実行した。run は `output/2026-04-06/run_20260406_1316/`, `output/2026-04-06/run_20260406_1322/`, `output/2026-04-06/run_20260406_1327/`, `output/2026-04-06/run_20260406_1332/`、bundle は `output/reports/20260406_route_band_standard_rerun_byd20/` に保存した。ALNS/GA/ABC は `974/974 served` を回復した一方、MILP は backend `optimal` でも postsolve truthfulness repair 後の exported plan は `879/974 served` であり、exact backend model と export truthfulness の差が残っている
-- 2026-04-07: BYD+20 fixed prepared scope の直実行 MILP を書き直し寄りで再点検し、MILP の service occupancy を `price slot` 依存の粗い制約から exact interval overlap clique へ置き換えた。これで同一 1 時間 slot 内の back-to-back trip を偽 overlap として落とさないようにしたうえ、postsolve truthful plan が repaired baseline を下回った場合は `truthful_baseline_guardrail` で weaker candidate を採用しないようにした。direct benchmark bundle は `output/reports/20260407_byd20_direct_solver_comparison/` に保存しており、4 solver すべて `974/974 served`、MILP は `solver_status=truthful_baseline_guardrail`, `supports_exact_milp=false`, objective `3759781.965055769`、ALNS は objective `3740426.089000456` だった
-- 2026-04-07: `scripts/benchmark_fixed_prepared_scope.py` は repo root からそのまま実行できるよう self-bootstrap で `sys.path` に root を追加した。`$env:PYTHONPATH` を別途設定しなくても fixed prepared scope benchmark を再現できる
-- 2026-04-09: strict coverage / same-day depot cycle repair を追加した。`OptimizationScenario.service_coverage_mode` を canonical coverage switch として builder / evaluator / feasibility / MILP / benchmark summary に通し、`strict` では未担当 trip を `objective_value=inf` または infeasible 扱いに揃えた。same-day fragment は day-aware cap で `vehicle_fragment_counts` / `vehicles_with_multiple_fragments` / `max_fragments_observed` まで監査し、prepared input には `scope_hash` を保存して `prepared_input_id` / `scenario_hash` / `scope_hash` の固定 snapshot 比較を可能にした。`SolverConfig.fixed_route_band_mode` の既定値は `false` へ変更し、必要な scenario だけ明示 opt-in にした
-- 2026-04-10: 第2版 strict benchmark guard を追加した。`ProblemVehicle.available=False` は solver assignment 候補から完全除外し、summary / benchmark では `available_vehicle_count_total` と `unused_available_vehicle_ids` を available 車両だけの母数で出す。MILP は unavailable vehicle の `used_vehicle` を 0 に固定し、同一日 same-day fragment の `end_arc -> start_arc` には depot reset feasibility cut を入れた。`scripts/benchmark_solver_modes.py` は prepared input を固定指定しない場合、各 solver run 前に `force_reprepare=true` で scenario から再 prepare し、`scenario_hash/scope_hash/trip_count/vehicle_count/available_vehicle_count_total/objective_mode/service_coverage_mode` が一致しない row を `appendix_prepare_mismatch` として主比較から外す
-- 2026-04-10: 営業所PV容量を固定入力から営業所面積由来へ変更した。`営業所別充電器管理` で `営業所面積 [m²]` を保存し、`depot_area_m2 * 0.35 * 0.20` で `pv_capacity_kw` を導出する。Solcast は容量係数/時系列形状として扱い、Prepare/canonical builder で `pv_generation_kwh_by_slot = derived_capacity_kw * capacity_factor * Δt[h]` を再構築する。`depot_area_m2` が null または 0 以下なら PV は無効で、旧 `pv_capacity_kw` だけではPVを有効化しない。この変更はPV規模の数学的意味を変えるため、旧固定容量PVのKPIとは直接比較しない
-- 2026-04-11: `tsurumaki` の strict coverage で `strict_coverage_precheck_infeasible` が誤検知される問題を修正した。原因は dispatch trip の `route_family_code` が canonical `ProblemTrip` へ伝播しておらず、`fixed_route_band_mode=true` の precheck が family ではなく `route_id` を band key として扱っていたこと。現在は `ProblemTrip.route_family_code` を追加し、dispatch→canonical 変換と multi-day 複製で保持する。これにより route variant が異なっても同一 family なら precheck が同一 band として評価される。`fixed_route_band_mode=false` で回避する暫定運用はモデル意味を変えるため benchmark 比較には使わない
-- 2026-04-11: Windows で job_store の `temp_path.replace(path)` が `PermissionError [WinError 5]` になることがあったため、job 永続化に retry/backoff を追加し、thread 実行の job は polling 時に disk を再読込しないようにした。API の background task や graph ビルドは `execution_model=thread` を明示し、同一プロセス内の self-contention を避けている
-- 2026-04-11: `tsurumaki / WEEKDAY / prepared-ca500b7c95b16ca9` では startup deadhead の depot→stop ルールが欠けていたため、`startup_deadhead_missing` が 152 件まとめて発生して MILP に進めなかった。`src/route_family_runtime.py` に depot 座標由来の deadhead 推論を追加し、`arrival + turnaround + deadhead <= next departure` の strict feasibility は維持したまま、`tsurumaki -> 上町駅` のような startup connectivity を復元した
-- 2026-04-13: strict infeasible の診断を強化した。`strict_coverage_precheck` は solver 実行前の構造的 feasibility gate であり、SOC / charger / PV / weather / objective cost には依存しない。最適化結果・benchmark export・Tk モニター・Prepare 応答には `strict coverage needs at least N vehicles, current fleet is M` の説明、`interval_only_lower_bound` と dispatch lower bound、blocked transition reason counts、prepared scope audit（zero/missing distance・deadhead_missing 優勢警告）を出すようにした。`distance_km=0` は strict precheck の直接原因ではないが、energy/cost KPI の研究妥当性を壊すため必ず warning として扱う
-- 2026-04-14: 当面の運用方針として、`allowIntraDepotRouteSwap=false` の場合は canonical optimization / Prepare 保存時に `fixed_route_band_mode` を実効的に強制 ON とし、同一営業所内でも `渋22 -> 渋21` のような route family を跨ぐ車両トレードを許さないようにした。UI 上の stale 設定で `fixedRouteBandMode=false` が残っていても、solver 実行時は family 跨ぎを禁止する
-- 2026-04-15: 小型 `渋21/渋22` 検証で `BASELINE_FALLBACK` かつ `trip_count_unserved=0` が「検証済み欠便なし」に見えていた問題を修正した。出力に `solution_validity` を追加し、fallback / postsolve infeasible / infeasibility reason が残る場合は `validated_no_cancellation=false` として扱う。fallback baseline は maximum cardinality のまま deadhead/wait 最小化 matching を使うようにし、route-band SVG/manifest には hourly coverage strip、scheduled=0 gap、unserved gap、deadhead ratio export を追加した。SOC repair は active service/deadhead slot に充電を挿入しない
-- 2026-04-17: `return_leg_bonus` を `total_cost` へ直接差し引いていたため、実費は正でも `total_cost` が負になる問題を修正した。現在の `cost_breakdown.total_cost` / `total_cost_with_assets` は純粋な会計コスト、`objective_value` は復路ボーナスを含む solver score、`return_leg_bonus` は独立項目として出力する。`solution_validity.validated_feasible=false` の run は Summary/Visualizer 上でも `暫定/無効` として扱う
-- 2026-04-18: 車両管理画面に複数選択用 checkbox を追加し、表示中の全選択・選択車両の有効化/無効化/削除・選択車両の初期SOC固定/ランダム更新をできるようにした。SOC一括設定は checkbox 未選択時でも表示中の BEV 全件へフォールバックする。checkbox 列は大型化し、ヘッダクリックで全選択/全解除できる。`テンプレートから営業所へ追加` と `テンプレート追加 -> 作成後に追加` も固定値/ランダム範囲で `initialSoc` を決められる。フロント側は vehicle row cache を使って選択時の追加 API 呼び出しを避け、stale な `refresh_vehicles` 応答を捨て、実行時の JSON 大量ログと過剰ポーリングを減らして UI の引っ掛かりを抑えた
-- 2026-04-21: `dispatch_pooled_shared_path_cover_baseline` が `max_cardinality_min_deadhead_wait` だけで長い BEV chain を1台へ寄せ、`BASELINE_FALLBACK` 後に SOC を崩しやすかったため、pooled shared baseline は vehicle 初期SOC / reserve / 便距離ベースの簡易電費で chain を prefix 分割して unused vehicle へ再配分するよう修正した。`electricity_cost_basis=provisional_drive` の仕様は変えておらず、直したのは fallback baseline duty の切り方だけ
-- 2026-04-24: `finalSocTargetPercent` の意味を「終業後に帰庫し、翌日始業前までに満たす Hard SOC 目標」へ変更した。target 設定時の単日 canonical horizon は始業時刻から翌日の同じ始業時刻までの 24h とし、`metadata.operation_end_time` は営業終了時刻のまま保持する。MILP は選択された終端 trip から home depot への return deadhead を SOC に反映し、帰庫不能な `end_arc` を禁止し、post-return target slot で `SOC >= max(floor, target - tolerance)` を課す。ALNS / GA / ABC / fallback baseline の postsolve も最終帰庫後 target 充電を追加し、生成した充電枠は既存 evaluator の実充電費・grid/PV/BESS flow・demand charge 集計に渡す
-- 2026-04-24: Historical Analog Weather Proxy v1 を追加した。`data/weather/processed/*.csv` の過去日別気象から `service_date` より前の類似日を選び、その実気象を当日朝の擬似予報として `operation_mode=aggressive/normal/conservative` へ変換する。最適化本体は外部サイトへアクセスせず、BFF は `weatherProxyForecastPath` と `enableWeatherOperationPolicy=true` を受けた場合だけ forecast JSON を検証する。weather policy は SOC 目標・初期SOC・EV/ICE soft bias を上書きせず、PV proxy / 代表PV曲線がある場合だけ canonical problem の PV 発電列へ反映する。対象日当日の実績は類似日選択に使わず、`analog_date < service_date` と `no_future_leakage=true` を必須にする。run 出力には `weather_proxy_forecast.json`, `weather_operation_policy.json`, `weather_policy_audit.json` と `run_manifest.json` の weather proxy 要約を残す。PV の運用限界費用は 0 円/kWh とするが、PV 設備費・保守費・減価償却費は `total_cost_with_assets` 等の会計KPIから消さない
-- 2026-04-28: Tk フロントにも Historical Analog Weather Proxy v1 の導線を追加した。`PV天気モード` はPV発電形状/係数用、`Historical analog予報` はPV proxy / 代表PV曲線を最適化へ渡すための擬似予報として分離表示し、ローカル予報JSONの選択・検証、日別気象CSVからの予報JSON生成、Quick Setup/Prepare/run-optimization への `enableWeatherOperationPolicy` / `weatherProxyForecastPath` 伝播を行う。weather proxy 選択では SOC floor/target を変更しない。無効時は stale な予報パスを実行しない。併せて Quick Setup 読込時に `0` のSOC/係数値を fallback で潰す表示不具合と、Prepare開始表示が入力検証前に出る不具合を修正した
-- 2026-04-28: Tk の実行パラメータ編集導線をタブ化した。編集できる `StringVar` / quick-setup / prepare / run-optimization payload は維持したまま、よく使う料金・SOC・ペナルティ、SOC/燃料詳細、料金/CO2と cost flags、PV/予報、目的/ソルバー詳細へ分け、最適化前に確認すべき順で辿れるようにした。外側キャンバスの mouse wheel binding も子ウィジェットへ張り直し、長い設定画面をスクロールしやすくした
-- 2026-04-30: EV/ICE 混成費用の ledger を厳密化した。`electricity_cost` / `electricity_cost_final` はEVの電力商品費のみ、`fuel_cost` はICE/PHEV等の液体燃料費のみ、`energy_cost` は後方互換の推進費合計（EV電力+ICE燃料）として扱う。`charging_summary.json` と `kpi_summary.json` の `electricity_cost_jpy` からICE燃料を除外し、`fuel_cost_jpy` と `propulsion_energy_cost_jpy` を別出力する。MILP 目的関数も `electricity_cost` 重みと `fuel_cost` 重みを分け、需要料金・契約超過ペナルティは電力商品費に混ぜない。燃料側も `fuel_cost_provisional_jpy`（走行から推定した暫定費）、`fuel_cost_refueled_jpy`（実給油で確定した費用）、`fuel_cost_provisional_leftover_jpy`（未給油分の暫定残）、`fuel_cost_final_jpy`（最終燃料ledger）を出力する
-- 2026-04-29: Solcast 由来の `data/derived/pv_profiles/*_YYYY-MM-DD_60min.json` を `WeatherProxyForecast` に変換する `solcast_pv_proxy_v1` を追加した。PV の capacity factor 列から発電回復見込みを `sun_score`、低PV回復リスクを `rain_risk` proxy として計算し、PV 発電見込みを canonical problem の PV 列へ渡す。SOC floor/target、初期SOC、EV/ICE bias は weather proxy では変更しない。未来情報リーク防止のため `forecast_issue_date < service_date` を必須とし、Solcast版では後方互換の `analog_date` 欄に issue date を入れる。CLI は `scripts/weather/build_solcast_pv_proxy_forecast.py`、Tk は `PV/予報` タブの「Solcast PVから予報JSON生成」から使える
-- 2026-04-30: `solcast_pv_proxy_v1` は運行日当日の実PV形状を読むため検証用/Oracle寄りとして明示し、通常の予報シミュレーション用に `solcast_typical_pv_proxy_v1` を追加した。`scripts/weather/build_solcast_typical_curves.py` は過去 Solcast profile を日積算 capacity factor hours で rainy/cloudy/sunny に分類し、各時刻の平均24h capacity factor曲線を作る。`scripts/weather/build_solcast_typical_proxy_forecast.py` はその代表曲線から forecast JSON を作り、BFF は weather policy 有効時に代表曲線を canonical `depot_energy_assets` のPV列へ時刻対応で反映する。PV規模は従来どおり `depot_area_m2 * 0.35 * 0.20`、Solcastは形状だけに使う。EV/ICE の選択は weather bias ではなく、PV・買電・燃料費・需要料金・SOC制約・車両制約から最適化が判断する。充電または給油だけを行った未運用車両も `graph/vehicle_timeline.csv` と `vehicle_operation_diagrams/all_vehicles.svg` に出力する
-- 2026-04-29: Weather proxy 有効時に `mode_milp_only` へ長い `time_limit_seconds` を渡すと、post-return SOC target と 24h horizon により小規模 scope でも時間上限まで走り切るため、Tk からの実行では既定で 300 秒に制限するようにした。長時間MILPを意図して実行する場合は環境変数 `MC_ALLOW_LONG_WEATHER_MILP=1` を設定する
-- 2026-04-05: `bff/routers/simulation.py` の canonical bridge は旧 `plan.vehicle_paths` 前提で current canonical output の top-level `vehicle_paths` を落としていたため修正し、`src/simulator.py` は `feasible` / `time_limit_baseline` を valid status として扱うよう更新した。slot 境界の back-to-back trip を overlap 扱いする fallback も修正し、ALNS best run の prepared simulation は `served=974`, `vehicle_count_used=88`, `simulation_total_cost=3245610.92`, `simulation_total_co2_kg=3845.7289`, residual `time_connection=21` まで改善した
-- 2026-04-01: canonical 最適化の保存先を拡張し、従来の feed/snapshot スコープ出力に加えて `output/<YYYY-MM-DD>/run_YYYYMMDD_HHMM/` を同時生成するようにした。run 配下には `summary.json`, `solver_result.json`, `canonical_solver_result.json`, `cost_breakdown_detail.(json/csv)`, `objective_breakdown.(json/csv)`, `kpi_summary.json`, `site_power_balance.csv`, `depot_energy_flows.(json/csv)`, `graph/manifest.json`, `graph/route_band_diagrams/manifest.json` など単位付き成果物を出力し、系統受電量（`grid_to_bus_kwh`, `grid_to_bess_kwh`, `grid_import_total_kwh`）を明示確認できるようにした
-- 2026-03-31: PV は「月平均」ではなく `serviceDate/serviceDates` で選んだ実日プロファイルを使う方式へ切り替え、Tk / Quick Setup / Prepare / canonical optimizer で同じ日付列を共有するようにした
-- 2026-03-31: 営業所別エネルギー資産は `depot_energy_assets` で `pv_capacity_kw` と `bess_energy_kwh / bess_power_kw` を編集できる前提に整理し、日別 PV capacity factor から複数日 horizon 用の発電列を再構築できるようにした。2026-04-10以降、PV容量は `depot_area_m2` から自動導出し、手入力容量は旧データの形状復元用メタデータとしてのみ扱う
-- 2026-03-31: `ProblemBuilder.build_from_scenario()` の `planning_days` 取りこぼし、multi-day price slot 複製時の `co2_factor` フィールド不整合、MILP metadata 用の重複 model build を修正した
-- 2026-03-31: prepared-input optimization は `rebuild_dispatch=false` のとき scope artifact を SQLite に書き戻さず in-memory solve するよう変更し、`optimization_result` / `simulation_result` は SQLite lock 時に JSON sidecar へフォールバック保存できるようにした
-- 2026-03-31: scenario `237d5623-aa94-4f72-9da1-17b9070264be` を `2025-08-04`, `fixedRouteBandMode=true`, `disableVehicleAcquisitionCost=true`, `objectiveMode=total_cost`, 実日 PV で 4 モード比較し、結果を `output/optimization_comparison_api_237d_actual_pv_2025-08-04_final.json` に保存した（MILP は `time_limit`, ALNS/GA/ABC は同一 incumbent で `trip_count_served=638`, `trip_count_unserved=336`）
-
-- scenario `237d5623-aa94-4f72-9da1-17b9070264be` の total_cost 再検証に合わせ、prepared input から materialize した `stops` に catalog 座標を再補完するよう変更し、scoped prepared JSON が stale でも canonical dispatch graph の deadhead 推論が落ちないようにした
-- `BusstopPole` の番線違い (`...00240050.` / `...00240050.4` など) は同一 physical stop alias として 0 分 deadhead を自動補完し、route-band 固定でも terminal bay 差分だけで接続不能にならないようにした
-- canonical MILP の trip-connection arc は feasible graph 全探索から「近い successor 上位のみ」へ pruning し、`mode_milp_only` が 237d scoped case で 다시 `OPTIMAL` まで戻るようにした
-- canonical MILP の解復元は `y` の時刻順ソートではなく選択 arc/path から duty fragment を再構成するよう修正し、結果検証での偽の infeasible chain を除去した
-- `required_soc_departure_percent` の小数値 (`0.939` = 0.939%) を ratio (`93.9%`) と誤解していた経路を修正し、ALNS / GA / ABC の false SOC violation を解消した
-- fragment integrity 検証は duty envelope ではなく actual trip interval 同士で重なりを見るよう変更し、同一車両の sparse fragment を誤って overlap 扱いしないようにした
-- Quick Setup / Tk 既定は `fixedRouteBandMode=true`・`enableVehicleDiagramOutput=true` を標準化し、route-band 図を基本出力にした（fragment 上限は既存互換のため configurable のまま保持）
-- BFF canonical solve (`/api/scenarios/{id}/run-optimization`) でも `graph/vehicle_timeline.csv` と `graph/route_band_diagrams/*.svg` を出力するようにし、フロント/バック経由の MILP 実行でも route-band 可視化を直接確認できるようにした
-
-- `objectiveMode` の定義を `total_cost/co2/balanced/utilization` で統一（helper/overlay/schema を整合）
-- `fixed_route_band_mode` を MILP 制約に反映し、1 車両が複数 route family をまたがない運用を選択可能に
-- C3 の開始/終了断片上限を `max_start_fragments_per_vehicle` / `max_end_fragments_per_vehicle` で制御
-- `required_soc_departure_percent` を trip レベルで導出し MILP の出発時 SOC 下限制約として適用（0-1/0-100 正規化）
-- 最適化結果シリアライズに `objective_components_raw` / `_weighted` / `pv_summary` / `utilization_summary` / `termination_reason` / `effective_limits` を追加
-- `energy_required_kwh_bev` が欠損/0 のタスクは走行距離と推定係数（既知タスク平均、未取得時は 1.2 kWh/km）で補完
-- Quick Setup に `finalSocTargetPercent`（翌日始業前までに満たす帰庫後SOC目標）を追加し、フロント入力→BFF保存→最適化設定参照を接続（`finalSocFloorPercent` と後方互換で同期）
-- `finalSocTargetPercent` は `null` でない場合、MILP / ALNS / GA / ABC / fallback baseline の最終出力で Hard 目標として扱う。実効下限は `max(finalSocFloorPercent, finalSocTargetPercent - finalSocTargetTolerancePercent)` で、target が `null` の場合は従来どおり floor のみ維持する
-- Quick Setup に `finalSocTargetTolerancePercent`（帰庫後SOC目標の許容不足幅）を追加し、許容不足幅を差し引いた実効下限を Hard target として使う
-- 「固定路線バンド（路線間車両トレード禁止）」チェックは `fixedRouteBandMode` として dispatch scope に保存され、MILP の route-family 制約に連動
-- ICE 車両にも燃料残量の状態遷移を追加し、便出発前の必要燃料チェックと走行後の残量更新（trip + deadhead 消費）を MILP 制約で扱うよう拡張
-- `disable_vehicle_acquisition_cost` は simulation 設定から共通最適化（`src/optimization/common`）経路にも反映され、ON 時は車両固定費（日割り導入費）を 0 として評価
-- Quick Setup に `initialIceFuelPercent` / `minIceFuelPercent` / `defaultIceTankCapacityL` を追加し、ICE の初期燃料・最低バッファ・既定タンク容量をフロント入力から最適化へ反映
-- デフォルト車両テンプレートを 6 車種（BYD K8 2.0 / ブルーリボン Z EV / エルガ EV / ブルーリボン 2KG-KV290N4 6AT / エルガ 2KG-LV290N4 6AT / エアロスター 2KG-MP38FK 6AT）へ更新し、ICE は `energyConsumption` を L/km（燃費逆数）で統一、タンク容量は標準 160L を採用
-- ICE 燃料モデルを拡張し、燃料残量が下限バッファに近づいた場合は refuel 変数で補充できるようにした（補充速度は「5分で下限→上限バッファ到達」想定）。`maxIceFuelPercent` を上限バッファとして追加
-- 回送速度を `deadhead_speed_kmh`（既定 18 km/h）でパラメータ化し、Tk 基本パラメータ・Quick Setup・Prepare・最適化計算（燃費/CO2/電費の deadhead 換算）へ反映
-- 補給イベントを出力可視化へ追加し、`vehicle_timelines.json/csv`・`graph/vehicle_timeline.csv`・`optimization_result.refueling_schedule` で「いつ・何L補充したか」を確認可能にした。`route_band_diagrams/*.svg` には ICE 補給マーカー（緑の印）を表示
-- 補給イベント専用CSV `refuel_events.csv`（run直下と `graph/` 配下）を追加し、時刻順に「車両・デポ・補充L」を単独確認できるようにした
-- `refuel_events.csv` に可視化補助列として `vehicle_type` / `route_band_id` / `route_band_label` / `route_family_code` を追加し、可視化ツールから車種・路線帯別に扱えるようにした
-- 充電・給油の許可窓を `charging_window_mode=timetable_layover`（既定）で運行時刻表ベース化し、`home_depot_charge_pre_window_min` / `home_depot_charge_post_window_min` で home depot 出発前・到着後の許可窓幅を分単位で制御可能にした（旧 `home_depot_proxy` 近似モードも互換維持）
-- `tools/bus_operation_visualizer_tk.py` / `tools/multi_run_visualizer_tk.py` の UI 表示を日本語化し、主要数値パラメータに単位（`[台]` `[秒]` `[円]` `[kg-CO2]`）を明記
-- Solcast 営業所一括取得フロー用の実データ台帳を生成：
-  - 2026-03-24T06:51:40.627289+00:00 に `data/external/solcast_raw/depot_coordinates_tokyu_all.json`（12 営業所座標）を生成
-  - 2026-03-24T07:10:50.337433+00:00 に `data/external/solcast_raw/solcast_acquisition_registry_tokyu_all.json`（取得・利用台帳）を生成
-  - 詳細運用は `readme_operation.md` の「5. 営業所別 Solcast キャッシュ運用」を参照
-- 距離推定で `zero distance ratio` が高くなるケース向けに、`distance`/`stop` のキー揺れ吸収、座標欠損時の `stop_count`・所要時間ベース補完、Prepare監査ログ（座標カバレッジ/route距離件数）を追加
-- 最適化モニターの失敗時診断を強化し、`problemdata_build_audit` 未取得時でもエラー文から `tasks/vehicles/travel_connections` を抽出し、さらに prepared input サマリ（trip/route/vehicle/depot/timetable_rows とファイル位置）を表示するようにした
-- 最適化ジョブで「要求 prepared_input_id」と「実使用 prepared_input_id / JSONパス」をメタデータと失敗メッセージに表示し、UI 側でも `payload_effective` を出して stale 自動同期後の実効入力を追跡できるようにした
-- `fixed_route_band_mode` の拘束粒度を系統 family ベースへ寄せ、`黒07(本線/区間便/入出庫便)` のような variant 差分は同一 band（例: `黒07`）として扱うよう正規化した
-- `travel_connections=0` かつ `allow_partial_service=false` で即停止していた最適化を自動緩和し、実行時のみ `allow_partial_service=true` を有効化して hard stop を回避するよう変更（監査 warning に理由を記録）
-- 契約電力制約に「超過スラック（kWh）」を追加し、`contract_overage_penalty_yen_per_kwh` で超過罰金を目的関数へ加算できるよう拡張（`enable_contract_overage_penalty` で ON/OFF）
-- BESS 有効営業所では `grid_to_bus_priority_penalty_yen_per_kwh` / `grid_to_bess_priority_penalty_yen_per_kwh` を目的関数に追加し、PV/BESS 優先・Grid 後順位の運用をコスト面で強化
-- 最適化の時間刻み既定を 1 時間（`time_step_min=60` / `timestep_min=60`）へ統一し、PV 発電量・BESS/SOC 遷移・契約上限制約の評価を同一スロット幅で整合化
-- SOCカウントを trip イベント照合型へ調整し、各 trip の終了時点で消費電力量を一括反映する運用（運行中充電禁止制約は維持）を追加
-- デポ電力フローに `PV->Bus` 直給を追加し、`PV->BESS` のみだった供給構造を `PV->Bus/PV->BESS/PV Curtail` に拡張
-- 充電器容量制約を「全体合算」から「デポ単位合算（同時台数・総kW）」へ変更
-- 充電・給油について、非走行条件に加えて `charging_window_mode=timetable_layover` では時刻表ベースの home depot 充電窓（出発前/到着後）でのみ許可、`home_depot_proxy` では従来の前後スロット近傍近似を適用
-- 出発時SOC下限制約を `required_soc_departure_percent` のみの判定から、車両ごとの `trip_energy_kwh + floor_kwh` 必要量判定へ変更（旧 percent は後方互換の補助下限として併用）
-- MILP 内の trip 電費/燃料消費は `trip.energy_kwh` / `trip.fuel_l` 固定値優先から、車両レート（`energy_consumption_kwh_per_km` / `fuel_consumption_l_per_km`）優先へ変更
-
-</details>
-
-## このシステムが何をしているか（先生向け要約）
-
-本システムの現行 core は、東急バス 1 日分の運行計画について以下の **3 つを同時に決める** 混合整数線形計画（MILP）です。
-
-**① 決める内容（決定変数）**
-
-- どの便をどの車両（BEV：電気バス / ICE：エンジンバス）に割り当てるか
-- 電気バス（BEV）をいつ・何 kW 充電するか
-- 充電電力を PV（太陽光）と系統電力からどう配分するか
-
-**② 守る条件（制約の種類）**
-
-- 時刻表の全便を担当車両に割り当てる（欠便は大きな罰則で抑止）
-- 走行中に充電しない / バッテリー残量（SOC）を下限以上に保つ
-- 充電設備の台数・出力の上限を守る / 系統受電が契約電力以内
-
-**③ 最小化する費用（目的関数）**
-
-- ICE バスの燃料費（O1）＋ 電気代・TOU（O2）＋ デマンド料金（O3）＋ 車両固定費（O4）を **1 本の式として合算して最小化**します
-- CO₂ 費用・電池劣化費（パラメータで有効化、デフォルトは 0 = 無効）
-- **O1 と O2 を別々に最小化しないことが重要です**：O1 だけなら「ICE を使わない」、O2 だけなら「BEV を充電しない」が自明な解となり研究上の意味がありません。合算することで ICE↔BEV の最適な混合比率が得られます
-
-> **実装上の重要な注意点（誠実な開示）**
->
-> - **C1 欠便制約**：「全便を必ず割り当てる」は絶対制約ではなく、欠便変数に大きな罰則を課す**罰則付き緩和**として実装しています（通常は欠便が抑止されますが、解なし状態の回避が目的です）。
-> - **C14 充電器制約**：「各充電器にどの車両が接続されているか」を厳密に追うのではなく、デポ単位の合計容量（同時台数・総kW）制約として実装しています。
-> - **C20/C21 ピーク判定**：tariff テーブルが設定されている場合はそれを優先しますが、未設定時は時間帯別価格の中央値で on/off を近似的に分類しています。
-> - **目的関数モード**：`objectiveMode=total_cost` は従来のコスト最小、`objectiveMode=co2` は CO₂排出量最小、`objectiveMode=balanced` はコストと排出の加重和、`objectiveMode=utilization` は運行達成を維持しつつ車両稼働の効率化を重視します。`co2` モードでは `co2_price_per_kg=0` でも排出量そのものを最小化します。
-> - **CO₂費・劣化費**：`total_cost` モードでは、パラメータ（`co2_price_per_kg`・`degradation` 重み）に正の値を設定すると目的関数へ加算されます。
-> - **BESS 終端 SOC**：営業所別 `depot_energy_assets` は `scenario_overlay.depot_energy_assets` を優先し、後方互換として `simulation_config.depot_energy_assets` も維持します。Tk 行編集では BESS 初期 SOC / 運用下限 / 運用上限 / 終端下限を `%` で入力でき、保存時に容量 [kWh] へ変換します。postsolve の derived source split でも終端 SOC 下限を守るため、必要なら後方スロットの `bess_to_bus` を `grid_to_bus` へ戻し、`bess_terminal_soc_violation_kwh` を metadata / レポートへ残します。
-> - **PV 会計保存則**：出力時の `pv_curtail_kwh` は plan の古い値をそのまま信用せず、`max(0, pv_generation_kwh - pv_to_bus_kwh - pv_to_bess_kwh)` で再整合します。`pv_to_bess` は curtail に混ぜず、`pv_utilization_rate = (pv_to_bus + pv_to_bess) / pv_generation` として出力します。
-> - **CO₂ 内訳**：ICE 由来は `diesel_consumption_liter * ice_co2_kg_per_l`、Grid 由来は実際の `grid_import_kwh * grid_co2_factor`、PV と BESS storage 自体の operational CO₂ は 0 として分離します。国交省燃費・CO₂候補は `data/vehicle_catalog.json` を優先し、次に `data/engine_bus/output/engine_bus_simulation_library.json` を参照します。
-> - **MILP fallback の読み方**：`solver_status=time_limit_baseline` または `auto_relaxed_baseline` は、Gurobi で exact incumbent を採れなかったため dispatch baseline を返したことを意味します。この場合 `solver_metadata.supports_exact_milp=false` であり、exact MILP 最適解や proven optimum を主張してはいけません。
-
-実装本体：[`src/optimization/milp/solver_adapter.py`](src/optimization/milp/solver_adapter.py)
-研究仕様（目標定式化）：[`docs/constant/formulation.md`](docs/constant/formulation.md)
-実装済み範囲の詳細：[`docs/constant/implementation_status.md`](docs/constant/implementation_status.md)
-
----
-
-Tkinter + FastAPI BFF のみで東急全体の最適化を再現実行できるパッケージです。
-
----
-
----
-
-## 1. このシステムが解く問題（先生向け概要）
-
-### 1.1 一言で言うと
-
-東急バスの1日の運行計画において、
-
-- **どの便をどの車両（BEV or ICE）に任せるか**
-- **BEV をいつ・どれだけ充電するか**
-- **充電に使う電力を PV（太陽光）と系統電力からどう調達するか**
-
-の3つを同時に決定し、**1日の総費用を最小化**します。
-
-### 1.2 入力・決定・出力の流れ
-
-```
-【入力】
-  時刻表（便ごとの出発・到着・走行距離）
-  車両諸元（BEV: バッテリー容量・充電出力 / ICE: 燃費・燃料単価）
-  電力料金（時間帯別単価・デマンド料金・契約電力上限）
-  PV 発電予測（時間帯別の太陽光発電量）
-        ↓
-【決定】（モデルが自動で決める項目）
-  ① 各便をどの車両に割り当てるか
-  ② 各 BEV をいつ・何 kW 充電するか
-  ③ 充電電力を PV と系統電力からどう分配するか
-        ↓
-【守るべき条件（制約）】
-  ✔ 時刻表の全便を必ず担当車両に割り当てる（欠便は大きなペナルティ）
-  ✔ BEV は走行中に充電しない（デポ滞在中のみ充電可能）
-  ✔ バッテリー残量（SOC）が下限を下回らない（電欠禁止）
-  ✔ 充電器の台数・出力の上限を超えない
-  ✔ 系統受電量が契約電力を超えない
-        ↓
-【出力】
-  車両ごとの運行スケジュール（どの便を担当するか）
-  充電スケジュール（いつ・何 kW 充電するか）
-  費用内訳（燃料費・電気代・デマンド料金・CO₂費・劣化費）
-  担当不能な未充足便のリスト
-```
-
-### 1.3 最小化する費用の内訳
-
-| 費目 | 内容 | 設定 |
-|------|------|------|
-| ICE 燃料費 | エンジンバスの燃料消費量 × 燃料単価 | 常時有効 |
-| 電気代（TOU） | 時間帯別電力単価 × 系統買電量 | 常時有効 |
-| デマンド料金 | 「最大需要電力（ピーク電力）× デマンド単価」 | 常時有効 |
-| 車両固定費 | 使用車両に対する日割り固定費 | 車両設定がある場合 |
-| 欠便ペナルティ | 担当不能便への大きなペナルティ（実質禁止） | 常時有効 |
-| CO₂ 費用 | CO₂ 排出量 × CO₂ 価格（ICE 燃料由来 + 系統電力由来） | `co2_price_per_kg > 0` で有効 |
-| 電池劣化費 | 充電量 ÷ バッテリー容量 × 劣化単価 | `degradation > 0` で有効 |
-
-> **デマンド料金について**：電力会社との契約では、その月の「最大需要電力（30分ごとの平均電力の最大値）」に応じた基本料金が発生します。
-> BEV の充電タイミングを分散させると最大需要電力を抑えられ、デマンド料金が下がります。
-> この効果を定量化するために O3 として目的関数に含めています。
-> 現行 core は day-ahead 単日最適化のため、デマンド料金は「単日 proxy（ピーク抑制の代理評価）」として扱います。月次契約の厳密再現は rolling/月次拡張で扱う想定です。
-
----
-
-## 2. 最適化モデルの説明
-
-本システムは **MILP（混合整数線形計画）** で定式化されています。
-ソルバーは [Gurobi](https://www.gurobi.com/) を使用します。
-
-> **MILP とは**：0/1 の整数変数（「便 j を車両 k に割り当てるか否か」など）と
-> 連続変数（「充電電力 c kW」など）を混在させた最適化問題の総称です。
-> 線形式で書けるため、Gurobi などの商用ソルバーで大規模な実問題を解くことができます。
-
-### 2.1 モデルが決める変数（決定変数）
-
-> ソルバーが値を決定する変数です。制約と目的関数の中で使われます。
-> 実装ファイル：[`src/optimization/milp/solver_adapter.py`](src/optimization/milp/solver_adapter.py)
-
-#### 主要決定変数
-
-| 記号 | 意味 | 型・範囲 | Python コード変数 | 定義行 |
-|------|------|---------|-----------------|--------|
-| $y_j^k$ | 車両 $k$ が便 $j$ を担当する（1）か否（0）か | 0/1 整数 | `y[(vehicle_id, trip_id)]` | [L97](src/optimization/milp/solver_adapter.py#L97) |
-| $x_{ij}^k$ | 車両 $k$ が便 $i$ の直後に便 $j$ を担当（1）か否（0）か | 0/1 整数 | `x[(vehicle_id, from_trip_id, to_trip_id)]` | [L100](src/optimization/milp/solver_adapter.py#L100) |
-| $u_j$ | 便 $j$ が未充足（担当不能）である（1）か否（0）か | 0/1 整数 | `unserved[trip_id]` | [L114](src/optimization/milp/solver_adapter.py#L114) |
-| $z_k$ | 車両 $k$ が1日に1便以上使用される（1）か否（0）か | 0/1 整数 | `used_vehicle[vehicle_id]` | [L119](src/optimization/milp/solver_adapter.py#L119) |
-| $\xi_{k,t}$ | 車両 $k$ がスロット $t$ に充電 ON（1）か OFF（0）か | 0/1 整数 | `charge_on_var[(vehicle_id, slot_idx)]` | [L215](src/optimization/milp/solver_adapter.py#L215) |
-| $c_{k,t}$ | 車両 $k$ のスロット $t$ での充電電力（kW） | 連続 $[0,\, c_{\max}]$ | `c_var[(vehicle_id, slot_idx)]` | [L216](src/optimization/milp/solver_adapter.py#L216) |
-| $s_{k,t}$ | 車両 $k$ のスロット $t$ でのバッテリー残量 SOC（kWh） | 連続 $[SOC_{\min},\, cap_k]$ | `s_var[(vehicle_id, slot_idx)]` | [L218](src/optimization/milp/solver_adapter.py#L218) |
-| $g_t$ | スロット $t$ での系統買電量（kWh） | 連続 $\geq 0$ | `g_var[slot_idx]` | [L297](src/optimization/milp/solver_adapter.py#L297) |
-| $pv_t^{ch}$ | スロット $t$ での PV 自家消費量（kWh） | 連続 $\geq 0$ | `pv_ch_var[slot_idx]` | [L298](src/optimization/milp/solver_adapter.py#L298) |
-| $\bar{p}_t$ | スロット $t$ の平均需要電力（kW）= $g_t / \Delta t$ | 連続 $\geq 0$ | `p_avg_var[slot_idx]` | [L299](src/optimization/milp/solver_adapter.py#L299) |
-| $W^{on}$ | オンピーク期間中の最大需要電力（kW） | 連続 $\geq 0$ | `w_on_var` | [L301](src/optimization/milp/solver_adapter.py#L301) |
-| $W^{off}$ | オフピーク期間中の最大需要電力（kW） | 連続 $\geq 0$ | `w_off_var` | [L302](src/optimization/milp/solver_adapter.py#L302) |
-
-#### 補助変数（制約式のみに使用）
-
-| 用途 | Python コード変数 | 定義行 | 備考 |
-|------|-----------------|--------|------|
-| 便鎖の先頭フラグ | `start_arc[(vehicle_id, trip_id)]` | [L105](src/optimization/milp/solver_adapter.py#L105) | C2/C3 の流量保存で使用 |
-| 便鎖の末尾フラグ | `end_arc[(vehicle_id, trip_id)]` | [L109](src/optimization/milp/solver_adapter.py#L109) | C2/C3 の流量保存で使用 |
-| 放電電力（kW） | `d_var[(vehicle_id, slot_idx)]` | [L217](src/optimization/milp/solver_adapter.py#L217) | V2G 対応用・現行は SOC 遷移に組み込み |
-
-### 2.2 守るべき条件（制約）の説明
-
-制約には C1〜C21 の番号を付けて管理しています（詳細は `docs/constant/formulation.md`）。
-以下では非専門家向けに意味を説明します。
-
-#### 便割当の制約（C1〜C5）
-
-- **C1：各便には必ず1台の担当車両を割り当てる（罰則付き緩和）**
-  理論式では等式制約 $\sum_k y_j^k = 1$ ですが、実装では欠便変数 $u_j$ を導入して
-  $\sum_k y_j^k + u_j = 1$ とし、欠便に大きなペナルティ $\pi \cdot u_j$ を課すことで実質的に抑止します。
-  これにより「解なし（infeasible）」状態を避けつつ、通常は欠便が発生しない設計になっています。
-
-  > **先生向け補足**：「欠便ゼロを絶対制約にしている」ではなく「欠便には大きな罰則をかけ、通常は回避されるようにしている」が正確な説明です。
-
-- **C2：車両の行路は連続した便の鎖になる**
-  便 $j$ を担当したら、その前後の便との「接続」が整合的でなければなりません（流量保存）。
-
-- **C3：各車両の出庫・入庫は1日1回まで**
-
-- **C4：時刻的に接続不可能な便への移動は禁止**
-  便 $i$ の到着後、転換時間＋回送時間以内に便 $j$ の出発地へ到着できない組み合わせは最初から排除します。
-
-- **C5：同じ車両が同時刻に2つの便を担当することを明示禁止**
-  重複する時間帯の便ペア $(i, j)$ に対し $y_i^k + y_j^k \leq 1$ を直接追加します。
-
-#### バッテリー残量（SOC）の制約（C6〜C11）
-
-> **SOC（State of Charge）**：バッテリーの残量を指します。ここでは kWh 単位で管理します。
-
-- **C6〜C8：SOC の時系列遷移**（充電で増加、走行・回送で減少）
-
-  $$s_{k,t+1} = s_{k,t} + \eta \cdot c_{k,t} \cdot \Delta t - e_k(j) \cdot y_j^k - e_k^{dh} \cdot x_{ij}^k$$
-
-  $\eta$：充電効率（≈ 0.95）、$e_k(j)$：便 $j$ の走行エネルギー（kWh）、$\Delta t$：時間刻み（h）
-
-- **C9：SOC は常に上下限の範囲内**（電欠禁止・過充電禁止）
-
-  $$SOC_{\min} \leq s_{k,t} \leq cap_k$$
-
-- **C10：出庫時の SOC 設定**（車両の `initialSoc` を優先し、未設定時は `initial_soc` / `initial_soc_percent` を既定値として使用）
-
-- **C11：帰庫後の SOC は翌日確保用の下限以上。`finalSocTargetPercent` 設定時は最終 trip から home depot への return deadhead 後、翌日始業前 target slot で `max(floor, target - tolerance)` 以上を Hard に要求する**
-
-#### 充電設備の制約（C12〜C14）
-
-- **C12：走行中は充電しない**
-
-  $$c_{k,t} \leq c_{\max} \cdot (1 - \text{running}_{k,t})$$
-
-- **C13：1台あたりの充電電力は充電器定格以下**（ON/OFF 二値変数 $\xi_{k,t}$ を導入して厳密化）
-
-- **C14：同時充電台数と総 kW 容量の両方の上限**
-
-  $$\sum_k \xi_{k,t} \leq N_c^{\max}, \quad \sum_k c_{k,t} \leq P_c^{\max}$$
-
-  > **実装の正直な開示**：「各充電器にどの車両が物理的に接続されているか」を厳密に追う
-  > 割当制約は実装していません。実装では、全充電器の合計台数（$N_c^{\max}$）と
-  > 合計 kW 容量（$P_c^{\max}$）の上限を守ることで、過負荷を防ぐ設計になっています。
-
-#### 電力システムの制約（C15〜C21）
-
-- **C15：電力バランス**（系統 + PV = 充電需要を常に成立させる）
-
-  $$g_t + pv_t^{ch} = \sum_k c_{k,t} \cdot \Delta t$$
-
-- **C16：PV 自家消費量は発電量以内**
-
-- **C17：系統への逆潮流禁止**（$g_t \geq 0$）
-
-- **C18：系統受電量は契約電力以内（超過罰金モード時はスラック許容）**
-
-- **C19〜C21：デマンド料金計算用のピーク電力定義**
-
-  > **実装の正直な開示**：オンピーク / オフピークの時間帯分類は、tariff テーブルに `demand_charge_weight` が設定されている場合はその定義を優先します。
-  > 未設定の場合は「時間帯別単価の中央値以上をオンピーク」という近似分類を使います。
-  > 電力会社の正式な契約時間帯定義を完全再現しているわけではありません。
-
-#### 制約コード対応表（C1〜C21）
-
-| No. | 内容 | 実装コード式（抜粋） | 実装行 |
-|-----|------|-------------------|--------|
-| C1 | 各便一意割当（罰則付き緩和） | `sum(y[k,j]) + unserved[j] == 1` | [L130](src/optimization/milp/solver_adapter.py#L130) |
-| C2 | フロー保存（便鎖整合性） | `incoming + start_arc[key] == y[key]` | [L156–157](src/optimization/milp/solver_adapter.py#L156) |
-| C3 | 出庫・入庫は高々1回 | `sum(start_arc) <= 1`, `sum(end_arc) <= 1` | [L160–161](src/optimization/milp/solver_adapter.py#L160) |
-| C4 | 可行アークのみ利用 | `arc_pairs` を `feasible_connections` から生成 | [model_builder.py](src/optimization/milp/model_builder.py) |
-| C5 | 重複運行禁止（明示制約） | `y[key_a] + y[key_b] <= 1` （重複ペア全列挙） | [L163–178](src/optimization/milp/solver_adapter.py#L163) |
-| C6–C8 | SOC 時系列遷移 | `s[next] == s[cur] + 0.95*c*Δt - trip_energy - dh_energy` | [L255–262](src/optimization/milp/solver_adapter.py#L255) |
-| C9 | SOC 上下限（変数の lb/ub） | `lb=soc_min, ub=cap` | [L218](src/optimization/milp/solver_adapter.py#L218) |
-| C10 | 出庫時 SOC 固定 | `s_var[first_slot] == initial_kwh` | [L229](src/optimization/milp/solver_adapter.py#L229) |
-| C11 | 帰庫後 SOC 下限 / target | target 未設定時は floor、target 設定時は post-return target slot で `SOC >= max(floor, target - tolerance)` | [solver_adapter.py](src/optimization/milp/solver_adapter.py) |
-| C12 | 走行中充電禁止 | `charge_on_var[k,t] <= 1 - running_expr` | [L271](src/optimization/milp/solver_adapter.py#L271) |
-| C13 | 充電電力上限（充電器定格） | `c_var[k,t] <= charge_max_kw * charge_on_var[k,t]` | [L272–275](src/optimization/milp/solver_adapter.py#L272) |
-| C14 | 同時充電台数・容量上限 | `sum(charge_on_var) <= total_ports`, `sum(c_var) <= total_kw` | [L284–291](src/optimization/milp/solver_adapter.py#L284) |
-| C15 | 電力バランス | `g_var[t] + pv_ch_var[t] == charge_kwh_expr` | [L315](src/optimization/milp/solver_adapter.py#L315) |
-| C16 | PV 自家消費上限 | `pv_ch_var[t] <= pv_available * Δt` | [L316](src/optimization/milp/solver_adapter.py#L316) |
-| C17 | 非逆潮流 | `lb=0.0` （g_var の変数定義） | [L297](src/optimization/milp/solver_adapter.py#L297) |
-| C18 | 契約電力上限（超過罰金モード時は `+ slack`） | `g_var[t] <= contract_limit_kw * Δt (+ slack)` | [L317](src/optimization/milp/solver_adapter.py#L317) |
-| C19 | 平均需要電力の定義 | `p_avg_var[t] == g_var[t] / Δt` | [L320](src/optimization/milp/solver_adapter.py#L320) |
-| C20 | オンピーク最大需要 | `w_on_var >= p_avg_var[t]` （on_peak スロット） | [L324](src/optimization/milp/solver_adapter.py#L324) |
-| C21 | オフピーク最大需要 | `w_off_var >= p_avg_var[t]` （off_peak スロット） | [L326](src/optimization/milp/solver_adapter.py#L326) |
-
-### 2.3 目的関数（最小化する式）
-
-> [!IMPORTANT]
-> **O1〜O4・欠便ペナルティはすべて 1 本の式に足し合わせて同時に最小化します。**
->
-> O1（ICE 燃料費）だけを最小化すれば「ICE を 1 台も走らせない」が自明な最適解となり、
-> O2（電気代）だけを最小化すれば「BEV を 1 台も充電しない（ICE のみ運用）」が自明な最適解となります。
-> それぞれを単独で扱っても研究上の意味はありません。
->
-> O1 と O2 は同じ目的関数内で比較するが、ledger と出力では分離する。「ICE を使えば燃料費（O1）が増え、BEV を充電すれば電気代（O2）が増える」
-> というトレードオフが内在化され、ソルバーが **ICE と BEV の最適な混合比率** を自動決定します。
->
-> **費用 ledger の契約**: `electricity_cost` はEV電力商品費のみ、`fuel_cost` はICE燃料費のみ、`energy_cost` は後方互換の推進費合計（`electricity_cost + fuel_cost`）です。
-> デマンド料金と契約超過ペナルティは電力商品費ではなく、`demand_cost` / `contract_overage_cost` として別費目です。
-> 燃料費も電力費と同様に、暫定走行費 `fuel_cost_provisional_jpy`、実給油費 `fuel_cost_refueled_jpy`、暫定残 `fuel_cost_provisional_leftover_jpy`、最終値 `fuel_cost_final_jpy` を出します。
->
-> **欠便ペナルティは通常ON**です。研究上の ablation で `cost_component_flags.unserved_penalty=false` にした場合だけ目的関数から外れます。
-> strict coverage の可否判定や `solution_validity` は、この費用重みとは別に評価します。
-
-#### 目的関数の全体式
-
-$$
-\min \quad C_{total} = w_f O1 + w_e O2 + w_d O3 + w_v O4 + w_u \sum_j \pi \cdot u_j + \underbrace{C_{CO_2}^{*} + C_{degr}^{*}}_{\text{パラメータ設定時のみ有効}}
-$$
-
-各項の展開式：
-
-$$
-O1 = \underbrace{\sum_{k \in K^{ICE},\, j \in J} c_f \cdot f_k(j) \cdot y_j^k}_{\text{便走行分}}
-   + \underbrace{\sum_{k \in K^{ICE},\, (i,j) \in A} c_f \cdot f_k^{dh}(i,j) \cdot x_{ij}^k}_{\text{回送走行分}}
-$$
-
-$$
-O2 = \sum_{t \in T} p_t^{grid} \cdot g_t \qquad
-O3 = p^{dem,on} \cdot W^{on} + p^{dem,off} \cdot W^{off} \qquad
-O4 = \sum_{k \in K} c_k^{veh} \cdot z_k
-$$
-
-$$
-C_{CO_2}^{*} = p^{CO_2} \cdot \Bigl(
-  \alpha_{ICE} \sum_{k \in K^{ICE},j} f_k(j) \cdot y_j^k
-  + \alpha_{grid} \sum_{t} g_t
-\Bigr) \quad \bigl(p^{CO_2} > 0 \text{ のとき有効}\bigr)
-$$
-
-$$
-C_{degr}^{*} = w^{degr} \cdot \sum_{k \in K^{BEV},\, t} \frac{c_{k,t} \cdot \Delta t}{cap_k} \cdot \beta
-\quad \bigl(w^{degr} > 0 \text{ のとき有効}\bigr)
-$$
-
-#### 各費目の有効化条件
-
-| 費目 | 記号 | 有効化条件 | コード行 |
-|------|------|-----------|---------|
-| ICE 燃料費（便走行） | $O1_{\text{trip}}$ | `cost_component_flags.fuel_cost=true`（既定ON、ICE車両が0台なら0） | [solver_adapter.py](src/optimization/milp/solver_adapter.py) |
-| ICE 燃料費（回送） | $O1_{\text{dh}}$ | `cost_component_flags.fuel_cost=true`（同上） | [solver_adapter.py](src/optimization/milp/solver_adapter.py) |
-| 電気代（TOU） | $O2$ | `cost_component_flags.electricity_cost=true`（既定ON、系統買電量が0なら0） | [solver_adapter.py](src/optimization/milp/solver_adapter.py) |
-| デマンド料金 | $O3$ | `cost_component_flags.demand_charge_cost=true`（既定ON） | [solver_adapter.py](src/optimization/milp/solver_adapter.py) |
-| 車両固定費 | $O4$ | **常に有効**（`fixed_use_cost_jpy = 0` で実質無効化可） | [L369–370](src/optimization/milp/solver_adapter.py#L369) |
-| 欠便ペナルティ | $\pi \cdot u_j$ | `cost_component_flags.unserved_penalty=true`（既定ON） | [solver_adapter.py](src/optimization/milp/solver_adapter.py) |
-| CO₂ 費用 | $C_{CO_2}^{*}$ | `co2_price_per_kg > 0` のときのみ加算 | [L372–407](src/optimization/milp/solver_adapter.py#L372) |
-| 電池劣化費 | $C_{degr}^{*}$ | `degradation_weight > 0` のときのみ加算 | [L409–423](src/optimization/milp/solver_adapter.py#L409) |
-
-> **コードにおける加算順序（[L330–428](src/optimization/milp/solver_adapter.py#L330)）：**
-> `objective = LinExpr()` → O2 → O1 → O3 → O4 → CO₂費（条件付き） → 劣化費（条件付き） → **欠便ペナルティ（無条件）** → `setObjective(minimize)`
-
-> [!NOTE]
-> **データの流れ：** Tkinter UI → Quick Setup 保存 → BFF `PUT /quick-setup` → `dispatch_scope` / `scenario_overlay` →
-> `src/optimization/common/builder.py`（`CanonicalOptimizationProblem`）→ `solver_adapter.py`
->
-> Quick Setup の `simulationSettings.depotEnergyAssets` は `simulation_config.depot_energy_assets` として保存され、
-> B 案（PV/BESS/Grid）制御の入力に使われます。
-> `builder.py` の車両展開は、選択営業所の実車両レコード（`vehicles[*].id` / `depotId`）を優先し、
-> タイプ別カウント由来の合成ID生成はフォールバック経路としてのみ使用します。
-
-### 2.4 解法モード
-
-| モード | アルゴリズム | 用途 |
-|--------|-------------|------|
-| `mode_milp_only` | Gurobi MILP（`supports_exact_milp=true` / fallback なし / gap 確認済みのときのみ exact。それ以外は非厳密） | 小〜中規模の最適化試行 |
-| `mode_alns_only` | ALNS（適応型大規模近傍探索） | 大規模の近似解・高速探索 |
-| `mode_ga` | **GA prototype** | 独立した genetic search の試作実装 |
-| `mode_abc` | **ABC prototype** | 独立した bee colony search の試作実装 |
-
-> ⚠️ **実装上の注意**: 現在の `mode_ga` と `mode_abc` は独立実装ですが、修論上は **prototype** として扱ってください。`solver_metadata.true_solver_family="ga"` / `"abc"`、`solver_metadata.solver_display_name="GA prototype"` / `"ABC prototype"`、`solver_metadata.solver_maturity="prototype"`、`delegates_to="none"` で判別できます。正式な本比較には入れず、探索器の参考実装として扱うのが安全です。
-
-ALNS・GA・ABC は共通評価器 `src/optimization/common/evaluator.py` で O1〜O4 および CO₂費・劣化費を評価します。
-
----
-
-## 3. 実装状況と研究フェーズ
-
-### 3.1 定式化・実装・今後の3層構造
-
-| 層 | 内容 | 参照先 |
-|----|------|--------|
-| 目標定式化 | 研究として最終的に目指す C1〜C21 / O1〜O4 の完全モデル | `docs/constant/formulation.md` |
-| 実装済み範囲 | 2026-03-18 時点で core に実装された範囲 | `docs/constant/implementation_status.md` |
-| 今後の計画 | ε制約法による多目的化・MILP 妥当性確認（Phase 3-4） | 本章 3.3 節 |
-
-### 3.2 制約の実装状況（C1〜C21）
-
-| No. | 内容 | 状態 | 備考 |
-|-----|------|------|------|
-| C1 | 各便の一意割当 | 🔶 部分対応 | 欠便を罰則付き緩和で許容（意図的設計） |
-| C2 | フロー保存（便鎖の整合性） | ✅ 対応 | |
-| C3 | 各車両の出庫・入庫は高々1回 | ✅ 対応 | |
-| C4 | 接続可能アークのみ利用 | ✅ 対応 | 不可アークは変数自体を作らない |
-| C5 | 同時刻の重複運行禁止 | ✅ 対応 | 重複ペア明示制約 `y[k,i]+y[k,j]≤1` を実装済み |
-| C6 | SOC 遷移（デポ滞在中充電） | 🔶 部分対応 | 連続遷移による近似（厳密 Big-M なし） |
-| C7 | SOC 遷移（便走行消費） | 🔶 部分対応 | 同上 |
-| C8 | SOC 遷移（回送消費） | 🔶 部分対応（近似） | 距離→エネルギー換算に近似あり |
-| C9 | SOC 上下限（常時） | ✅ 対応 | |
-| C10 | 出庫時 SOC | ✅ 対応 | 車両 `initialSoc` が優先、未設定は `initial_soc` / `initial_soc_percent` を既定値として使用 |
-| C11 | 帰庫後 SOC 下限 | ✅ 対応 | |
-| C12 | 走行中充電禁止 | ✅ 対応 | |
-| C13 | 充電電力上限（定格） | ✅ 対応 | ON/OFF 二値変数 $\xi_{k,t}$ を導入 |
-| C14 | 同時充電台数・容量上限 | ✅ 対応 | 台数と kW 容量を分離実装 |
-| C15 | 電力バランス | ✅ 対応 | |
-| C16 | PV 供給上限 | ✅ 対応 | |
-| C17 | 非逆潮流 | ✅ 対応 | |
-| C18 | 系統受電容量上限（契約電力） | ✅ 対応 | 既定は上限厳守。`enable_contract_overage_penalty` 有効時は超過スラックを罰金付きで許容 |
-| C19 | 平均需要電力の定義 | ✅ 対応 | |
-| C20 | オンピーク最大需要電力 | 🔶 改善対応 | tariff 設定がある場合は優先適用、未設定時は中央値フォールバック |
-| C21 | オフピーク最大需要電力 | 🔶 改善対応 | 同上 |
-
-### 3.3 目的関数の実装状況
-
-| 費目 | 状態 | 条件 |
-|------|------|------|
-| O1：ICE 燃料費（便 + 回送） | ✅ 実装済み | `fuel_cost` flag / weight で制御 |
-| O2：TOU 電気代 | ✅ 実装済み | `electricity_cost` flag / weight で制御 |
-| O3：デマンド料金 | ✅ 実装済み | `demand_charge_cost` flag / weight で制御 |
-| O4：車両固定費 | ✅ 実装済み | 車両設定がある場合 |
-| 欠便ペナルティ | ✅ 実装済み | 常時有効 |
-| CO₂ 費用 | ✅ 実装済み | `co2_price_per_kg > 0` で有効 |
-| 電池劣化費 | ✅ 実装済み | `weights.degradation > 0` で有効 |
-| PV 余剰売電 | ❌ 未実装 | 将来拡張 |
-
-MILP（`solver_adapter.py`）と ALNS/GA/ABC 評価器（`evaluator.py`）は同一条件で同一費目を計算します。EV電力費とICE燃料費は目的重みも出力KPIも分離し、`energy_cost` は旧互換の推進費合計としてのみ扱います。weather policy は SOC 下限・帰庫後 SOC 目標・初期SOC・EV/ICE soft bias を上書きせず、PV 発電見込み（`solcast_typical_pv_proxy_v1` の代表曲線）だけを最適化入力へ渡します。EV/ICE 選択は PV・買電・燃料費・需要料金・SOC制約・車両制約から最適化が判断します。
-
-### 3.3.1 Canonical Ledger と出力KPI
-
-最適化・シミュレーション後の研究用出力は、solver result から直接グラフ JSON を個別再計算せず、`src/optimization/accounting/` の canonical ledger を一次ソースにします。基本の動線は `Optimization / Simulation Result -> vehicle_slot_ledger -> vehicle_energy_ledger -> energy_flow_ledger -> kpi_summary / graph / validation` です。
-
-Energy flow の定義は、`energy_flow_ledger.csv` で `pv_generation_kwh = pv_to_bus_kwh + pv_to_bess_kwh + pv_curtailed_kwh + pv_export_kwh`、`grid_import_kwh = grid_to_bus_kwh + grid_to_bess_kwh + facility_load_kwh`、`bus_charging_total_kwh = grid_to_bus_kwh + pv_to_bus_kwh + bess_to_bus_kwh` として検証します。現時点で `pv_export_kwh` と `facility_load_kwh` は 0 として明示します。
-
-車両別の充電源は、MILP の車両・電源・slot 変数が残っている場合は `vehicle_charging_source_allocation_method=solver_native` として出力します。車両別ソース変数がない場合は、同一 depot / timestep の `grid_to_bus_kwh`、`pv_to_bus_kwh`、`bess_to_bus_kwh` 比率を同時刻の車両充電量へ比例配賦し、`vehicle_charging_source_allocation_method=proportional_by_timestep`、`vehicle_charging_source_is_solver_native=false` を出します。
-
-Cost definition は `gross_operating_cost_jpy` と `objective_value` を分離します。`gross_operating_cost_jpy` は電力購入、デマンド、燃料、CO2、電池劣化、車両使用などの実費系 ledger 合計です。`objective_value` は solver 内部目的関数であり、ペナルティやボーナス、天気戦略 bias を含む場合があるため実費とは限りません。UI 用の `reported_total_cost_jpy` は summary metadata の `cost_definition` を参照してください。
-
-`solver_status` が `BASELINE_FALLBACK` または `PARTIAL_BASELINE_FALLBACK` の場合、`is_optimization_result=false`、`result_interpretation=baseline_fallback_result` として扱います。この結果は実行可能性や欠便状況の説明には使えますが、MILP/ALNS が改善解または最適解を得た結果としては扱いません。
-
-`data_flow_validation.csv` は `check_name,status,expected_value,actual_value,difference,tolerance,severity,message,source_files` 形式です。`ERROR` は研究結果として使う前に解消すべき不整合、`WARNING` は解釈上の注意、`INFO` は補助情報を意味します。主要チェックには PV 収支、系統受電収支、バス充電源収支、車両別充電源収支、燃料・CO2・コスト整合、service_date 整合、SOC NaN/範囲、fallback metadata 整合が含まれます。
-
-CO2 の主KPIは `grid_plus_ice` 境界に統一します。`total_co2_kg = grid_co2_kg + ice_co2_kg` であり、ICE単独の排出量は `ice_co2_kg` として別に保持します。現段階では BESS 由来CO2の厳密な充電元追跡は未実装のため、`co2_accounting_method=grid_import_based`、`bess_co2_source_tracking=false` を metadata に出します。
-
-燃料消費の source of truth は vehicle/trip 由来の `fuel_canonical_ledger.csv` です。`graph/fuel_timeseries.csv` はこの台帳から時刻別に集約した派生出力であり、`fuel_timeseries_matches_vehicle_fuel_ledger` などの validation で二重計上や不一致を検出します。
-
-初期SOCは `initial_soc_ledger.csv` に車両別の `initial_soc_ratio` / `initial_soc_kwh` / `initial_soc_source` / random seed / SOC範囲を保存します。低SOCランダム化などで SOC 下限違反や早期便の担当困難がある場合は `initial_soc_precheck.csv` と `physical_feasibility_status` に反映し、SOC違反を含む結果を `PHYSICALLY_FEASIBLE` として扱いません。
-
-### 3.4 研究フェーズ別の実装計画
-
-| Phase | 位置づけ | 状態 |
-|-------|---------|------|
-| Phase 1（説明責務） | README・formulation.md・implementation_status.md の整備、先生向け説明図 | ✅ 完了 |
-| Phase 2（定式整合） | 充電器台数制約分離・充電 ON/OFF 二値・tariff 優先ピーク判定・C5 明示制約 | ✅ 完了 |
-| Phase 3（目的関数拡張） | CO₂ 費用の目的関数化・電池劣化費の目的関数化 | ✅ 完了 / deterministic MILP 妥当性確認・ε制約法は 🔲 未 |
-| Phase 4（研究拡張） | ALNS + MILP ハイブリッド本格導入・Rolling horizon / 不確実性対応 | 🔲 未 |
-
----
-
-## 4. セットアップと実行手順
-
-### 4.0 単一アプリ版からの起動（推奨・環境構築不要）
-TkinterフロントエンドとFastAPIバックエンドは、**1つの実行ファイル（.exe）に統合**されています。
-
-1. **配置先:** dist/MasterCourseApp/MasterCourseApp.exe
-2. **実行:** 上記 .exe をダブルクリックするだけで、裏でFastAPIが立ち上がり、自動でTkinter画面が起動します。
-3. **出力:** 実行結果等は .exe と同じディレクトリ内の outputs/scenarios/ へ保存されます。
-
-※ 開発用として .exe を再ビルドしたい場合は、ターミナルで pyinstaller build_exe.spec -y を実行してください。
-
----
-
-### 4.1 環境構築
+初回だけ、仮想環境と依存関係を準備します。
 
 ```powershell
-python -m venv .venv
+py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
-### 4.2 開発環境からの起動（1ターミナルでOK）
+MILP を使う環境では、Gurobi を導入・ライセンス設定したうえで `gurobipy` も追加します。
 
-Python環境がある場合は、以下のコマンド1つでバックエンドとフロントエンドの両方が起動します。
+```powershell
+python -m pip install gurobipy
+python -c "import gurobipy as gp; m=gp.Model(); x=m.addVar(lb=0.0, name='x'); m.setObjective(x); m.optimize(); print('gurobi_ok', gp.gurobi.version())"
+```
+
+起動は次の一行です。FastAPI が起動可能になるのを待ってから Tkinter 画面を開き、画面を閉じると BFF も終了します。
 
 ```powershell
 python run_app.py
 ```
-*(内部でFastAPIサーバーをバックグラウンド起動し、自動的にTkinterが立ち上がります。画面を閉じるとバックエンドも自動終了します。)*
 
----
-
-### 4.3 Route Variant Labeler（路線タグ付与）
-
-路線バリアントの手動タグ付与が必要な場合のみ使用します。
+API だけを起動して確認したい場合は、次を使います。
 
 ```powershell
-.\.venv\Scripts\Activate.ps1
-python tools/route_variant_labeler_tk.py
+python -m uvicorn bff.main:app --host 127.0.0.1 --port 8000
 ```
-
-操作手順：
-1. 対象 Scenario を選択
-2. Route family / variant を選択
-3. タグ（variant type / canonical direction 等）を編集・保存
-4. `tools/scenario_backup_tk.py` 側で `ラベルをシナリオへ反映` を実行
-
-### 4.4 初回接続時の使い方
-
-1. BFF を起動してから `python tools/scenario_backup_tk.py` を開く
-2. Tk で `接続確認` を実行し、`/api/app/datasets` の候補取得ログを確認する
-3. `datasetId` は runtime 実行可能な候補のみが既定表示される。2026-03-21 時点の既定 runtime dataset は `tokyu_full`
-4. `新規作成` 後は必ず `Quick Setup 読込` を押し、営業所・路線の候補を読み直す
-5. 路線一覧は `data/catalog-fast/normalized/routes.jsonl` があれば常にそれを優先して表示する。Quick Setup では「運行種別サマリ」表を営業所・路線一覧の上に置き、選択した `dayType` に trip が存在する raw route variant だけを営業所配下で `routeFamilyCode` 単位に折りたたみ表示する。系統番号の数字は半角に正規化して表示する
-6. Quick Setup は保存済み `dispatch_scope` の route 選択をそのままベースにしつつ、現在選択している `dayType` に存在しない route variant は候補から外す。trip / timetable のスコープ確定は `Prepare` 実行時に「現在選択している route のみ」を対象に行う。展開すると本線・区間便・入出庫便などの raw variant を個別に外せる
-7. 保存時は `refine + excludeRouteIds` として保存するため、同じ営業所の系統を基本全部含めつつ、特定 family の入出庫便だけ / 区間便だけ除外する設定を保持できる
-8. 路線は raw route を消さずに保持したまま、`routeFamilyCode` で同一系統として束ねる。営業所行・系統行・variant 行には現在の `dayType` の trip 数を表示し、variant 行では必要に応じて総 trip 数も併記する。Prepare / dispatch / 最適化では「選択 route のみ」を使って trip / timetable を読み込み、`origin_stop_id` / `destination_stop_id` と stop 座標から同一系統内の上り下り・本線・区間便・入出庫便の terminal 間 deadhead を自動補完する
-9. 既存シナリオを開いた直後に営業所や路線の選択が空なら、stale な保存選択が runtime 補正で外れた可能性があるため選び直す
-10. `Quick Setup 保存` → `ソルバー設定` → `Solver対応 Prepare` → `実行` の順で進める。`実行` は `最適化計算` / `Preparedシミュレーション` / `再最適化` を切り替える
-
----
-
-### 4.5 論文用バス運行状態可視化（EV/エンジン識別対応）
-
-最適化 run フォルダまたは comparison bundle から、論文掲載向けの運行状態図を生成する専用アプリです。
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-python tools/bus_operation_visualizer_tk.py
-```
-
-操作手順：
-1. `Browse` で run フォルダ（例: `output/2025-08-04/run_20260405_1713`）または `output/reports/...` の comparison bundle を選択
-2. `Load` を押してデータを読込
-3. `Only assigned buses` / `Max buses` を調整
-4. `Summary` タブで `status / exact-fallback / objective / solve_time_seconds / total_cost / total_co2_kg / simulation_result_path` を確認
-5. `Details` タブで詳細 key-value を確認、`Raw JSON` タブで元JSONを確認
-6. `Render` で2種類の図を生成
-7. `Save PNG` / `Save SVG` / `Save PDF` で高解像度保存
-
-特長：
-- 英語フォントは Times New Roman、日本語フォントはメイリオを使用
-- EV とエンジンバスを別ラベル（`EV-xx` / `ENG-xx`）で表示
-- ガント図では EV/エンジンでハッチ方向を変えて識別
-- 充電図では緑の濃淡で充電出力比を表示
-- アプリ内の文字ベース表示（Summary/Details/Raw JSON）で総コスト・総CO2を即時確認可能
-- current `vehicle_timeline_gantt.csv` の `state/start_time/end_time` schema と旧 `event_type/start_time_idx/end_time_idx` schema の両方を読める
-- report bundle 入力時は comparison の best objective run を自動選択し、外部 simulation artifact も表示対象へ解決する
-
----
-
-### 4.6 複数 run 比較可視化（multi-run）
-
-`output` 配下の複数日・複数シナリオ・複数 run と `output/reports/.../comparison.json` bundle を横断して、比較表と比較図を生成するアプリです。
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-python tools/multi_run_visualizer_tk.py
-```
-
-操作手順：
-1. `Base folder` に `output`（またはその下位）を指定
-2. `Scan` で `run_*` フォルダと comparison bundle を収集
-3. `Date / Scenario / Depot / Service` フィルタを設定して `Apply Filter`
-4. 比較対象 run を複数選択
-5. `Preview Text Summary` で `mode / exact-fallback / status / total_cost / total_co2_kg / objective / solve_time_sec / served / unserved / vehicles` を確認
-6. `Preview Comparison Charts` で `Total Cost` と `Total CO2` の棒グラフを確認
-7. 必要に応じて `Only assigned` / `Max buses` / `Export SVG` を調整
-8. `先生向けレポート` で scenario 詳細 + simulation 指標を含む Markdown を単独出力できる
-9. `Export Selected` で比較表・教授向けレポート・図を一括出力
-
-出力内容（`<base>/analysis_export/<timestamp>/`）：
-- `summary_table.csv`（比較テーブル）
-- `summary_report.md`（比較レポート）
-- `professor_report.md`（scenario 詳細、4 solver 比較、simulation 指標）
-- `solver_comparison_table.csv` / `solver_comparison_table.md`（solver ごとの計算時間・objective・served/unserved を明示）
-- `graph/route_band_diagrams/`（best objective run を旧 `run_*/graph/route_band_diagrams` 互換で複製）
-- `solver_route_band_diagrams/<mode>_<run_id>/`（各 solver run の route-band 図一式）
-- `total_cost_comparison.png` / `total_co2_comparison.png`
-- `Export SVG` 有効時: 比較図の `.svg`
-- 各 run サブフォルダに `bus_operation_figure_a/b`（PNG、必要に応じてSVG）
-
-使い分け：
-- 単一 run を詳細に確認する場合: `tools/bus_operation_visualizer_tk.py`
-- 複数 run の総コスト・総CO2を比較する場合: `tools/multi_run_visualizer_tk.py`
-
----
-
-### 4.7 固定フォーマット Graph Exports（Phase 1 必須）
-
-`export_all` 実行時に、論文・再分析向けの構造化データを自動生成します。
-
-出力先：
-1. run ごと: `.../run_YYYYMMDD_HHMM/graph/`
-
-生成ファイル（Phase 1 必須）：
-- `manifest.json`
-- `vehicle_timeline.csv`
-- `soc_events.csv`
-- `depot_power_timeseries_5min.csv`
-- `trip_assignment.csv`
-- `cost_breakdown.json`
-- `kpi_summary.json`
-
-追加出力（route-band 可視化）：
-- `route_band_diagrams/manifest.json`
-- `route_band_diagrams/*.svg`
-- `vehicle_operation_diagrams/manifest.json`
-- `vehicle_operation_diagrams/*.svg`
-
-route-band 可視化の仕様：
-- 出力先は各 optimization run 配下の `graph/` です。例: `output/<YYYY-MM-DD>/run_YYYYMMDD_HHMM/graph/`
-- `vehicle_timeline.csv` には `vehicle_type`, `band_id`, `band_label`, `route_family_code`, `route_series_code`, `event_route_band_id` を含めます。
-- `trip_assignment.csv` には `assigned_vehicle_type`, `assigned_vehicle_band_id`, `band_id` を含めます。
-- SVG は actual service の `band_id` ごとに 1 band 1 ファイルで出力し、route `stopSequence` の順番を stop 軸の正本として使います。stop 名は `data/catalog-fast/normalized/stops.jsonl` と `data/catalog-fast/tokyu_bus_data/route_stop_times/*.jsonl` から補完し、対象 band の route 以外の stop は本線軸に出しません。
-- 本線は最長の営業系統を基準に構成し、区間便はその stop 軸の途中に差し込みます。入出庫など本線外の terminal は main axis に混ぜず、図の上側または下側の side lane に分けて飛び線で表します。
-- 上り/下り、区間便、入出庫便は同じ band の図へ統合し、service は stop-time polyline、same-band / depot deadhead は破線、depot stay は点線で重ねます。ICE/BEV は色系統を分け、凡例に `vehicle_id [ICE/BEV]` と type legend を表示します。
-- catalog-fast に該当 trip の stop-time が無い場合だけ、route `stopSequence` 上を線形補間して「その時刻におおよそどこにいるか」を見られるようにします。
-- 時間軸は常に `00:00` から `23:59` の 1 日固定です。`simulation_config.start_time` 起点の slot index を実時刻へ補正してから `vehicle_timeline.csv` / `trip_assignment.csv` / SVG に反映するため、夕方以降の便が軸外へ飛ぶことはありません。
-- SVG では vehicle ごとの日内最初の便に対する `depot_out`、最後の便の後の `depot_in`、および同一 band 内の長い空き時間や charge row を挟む区間の temporary depot stay を推定描画します。depot が当該路線の stopSequence に含まれない場合は side lane にのみ出します。
-- `fixed_route_band_mode=true` の run では、そのまま路線専属ダイヤ図として使えます。通常 run でも出力しますが、`route_band_diagrams/manifest.json` の `mixed_event_route_band_detected=true` は「その route graph に出てくる車両が同日に他 band の trip も担当した」ことを意味します。
-- `vehicle_operation_diagrams/all_vehicles.svg` は、縦軸を車両、横軸を時刻とした全車両横棒図です。`service` は運用、`deadhead` は回送、`charge` は充電、`refuel` は給油を表し、運用バー内ラベルで路線系統を確認できます。運用便がなくても、充電または給油イベントだけを持つ車両は `graph/vehicle_timeline.csv` と `all_vehicles.svg` に出ます。
-
-補足：
-- タイムゾーンは `Asia/Tokyo`、時刻は ISO 8601 形式です。
-- まず構造化データを安定出力し、描画は Tk アプリ / Notebook / フロントで再利用する方針です。
-
-### 4.8 readme_save（保存先・出力先一覧）
-
-この節は、README に散らばりやすい保存先と出力先をひとまとめにした参照用メモです。
-
-注記:
-- current canonical / report 出力の正本 root は `output/` です。
-- 旧資料に残る `outputs/...` は historical path です。2026-04-06 時点の最新 fixed-scope truthfulness rerun の正本 bundle は `output/reports/20260406_route_band_standard_rerun/` です。older bundle `output/reports/20260406_fixed_scope_237d5623_model_fix/` は route-band truthfulness fix 前の記録です。
-- BYD K8 2.0 を 20 台追加した variant の最新 bundle は `output/reports/20260406_route_band_standard_rerun_byd20/` です。
-- 2026-04-07 時点の BYD+20 direct prepared-scope benchmark 正本は `output/reports/20260407_byd20_direct_solver_comparison/` です。`comparison.json/csv` と `comparison/milp.json` に MILP rebuild 後の定量比較を保存しています。
-- 今回の canonical rich run の正本は `output/2026-04-06/run_20260406_1117/`、`output/2026-04-06/run_20260406_1122/`、`output/2026-04-06/run_20260406_1128/`、`output/2026-04-06/run_20260406_1133/` にあります。
-- BYD+20 variant run の正本は `output/2026-04-06/run_20260406_1316/`、`output/2026-04-06/run_20260406_1322/`、`output/2026-04-06/run_20260406_1327/`、`output/2026-04-06/run_20260406_1332/` にあります。
-- `fixedRouteBandMode=true` の run では `graph/route_band_diagrams/` を標準出力し、report bundle 側にも best-run mirror と per-solver copy を必ず残します。
-
-| 種別 | 保存先 / 出力先 | 補足 |
-|---|---|---|
-| 実行 run 出力 | `output/<YYYY-MM-DD>/run_YYYYMMDD_HHMM/` | current canonical optimization run の単位出力 |
-| Graph Exports | `.../run_YYYYMMDD_HHMM/graph/` | `manifest.json`、`vehicle_timeline.csv`、`soc_events.csv` など |
-| route-band 図 | `.../run_YYYYMMDD_HHMM/graph/route_band_diagrams/` | `manifest.json` と `*.svg` |
-| 車両別横棒図 | `.../run_YYYYMMDD_HHMM/graph/vehicle_operation_diagrams/` | `all_vehicles.svg` と `manifest.json` |
-| 充電内訳サマリ | `.../run_YYYYMMDD_HHMM/charging_summary.json` | depot 別 / 全体の grid・PV・BESS 内訳、契約超過、EV電力コスト（ICE燃料は含めない） |
-| 充電内訳時系列 | `.../run_YYYYMMDD_HHMM/depot_energy_flows.csv` | depot-slot ごとの grid/PV/BESS/curtail/SOC/contract over を一覧化 |
-| 充電契約監視 | `.../run_YYYYMMDD_HHMM/graph/depot_power_timeseries_5min.csv` | `grid_import_kw`, `contract_limit_kw`, `contract_over_limit_kwh`, `contract_limit_exceeded` を 5 分粒度で確認 |
-| weather proxy forecast | `.../run_YYYYMMDD_HHMM/weather_proxy_forecast.json` | historical analog v1 / Solcast proxy v1 の擬似予報。`analog_date` または `forecast_issue_date < service_date` と `no_future_leakage=true` を監査 |
-| weather operation policy | `.../run_YYYYMMDD_HHMM/weather_operation_policy.json` | `operation_mode` と、weather policy が SOC / 初期SOC / soft bias を変更しないことを示す監査 metadata |
-| weather policy audit | `.../run_YYYYMMDD_HHMM/weather_policy_audit.json` | metadata keys、PV 限界費用 0 円/kWh方針、代表PV曲線の適用有無、SOC / EV-ICE bias 非適用の監査 |
-| weather PV representative curve | `.../run_YYYYMMDD_HHMM/weather_pv_representative_curve.json` | `solcast_typical_pv_proxy_v1` 使用時の sunny/cloudy/rainy 代表24h capacity factor曲線、分類閾値、source dates |
-| report bundle | `output/reports/<bundle_name>/` | `comparison.json/csv`、`professor_report.md`、比較図、simulation 要約 |
-| report bundle route-band 図 | `output/reports/<bundle_name>/graph/route_band_diagrams/` | best run を旧 run 互換で複製した図 |
-| report bundle per-solver route-band 図 | `output/reports/<bundle_name>/solver_route_band_diagrams/<mode>_<run_id>/` | solver ごとの route-band 図一式 |
-| report bundle solver 表 | `output/reports/<bundle_name>/solver_comparison_table.csv` | 計算時間・objective・served/unserved の明示表 |
-| 複数 run 比較 | `output/.../analysis_export/{timestamp}/` | visualizer export の比較テーブル・比較レポート・比較図 |
-| Built dataset | `data/built/{dataset_id}/` | runtime 実行可能な dataset の保存先 |
-| Catalog 正規化データ | `data/catalog-fast/normalized/` | 路線一覧や Quick Setup で優先参照 |
-| GTFS 出力 | `GTFS/TokyuBus-GTFS/` | 標準 GTFS feed と sidecar |
-
----
-
-## 5. 東急全体最適化の推奨フロー
-
-1. シナリオ作成
-2. Quick Setup 読込
-3. 運行種別サマリで `dayType` を決めてから営業所と路線を選択
-4. パラメータを設定（費用・SOC 等）
-5. **シナリオ設定を保存（Quick Setup 保存）**
-6. **ソルバー詳細設定を確定** (`solverMode` / `objectiveMode=total_cost|co2`)
-7. **`Solver対応 Prepare` を実行**（← 保存後・ソルバー設定後に実行）
-8. Prepare ログで `tripCount` / `solver profile` / 車両台数・充電器台数を確認
-9. 実行種別を選んで `④ 実行`
-10. Job completed と Optimization / Simulation 結果を確認
-
-> [!IMPORTANT]
-> **保存・ソルバー設定を変更したら必ず `Solver対応 Prepare` を再実行すること。**
-> Prepare を飛ばすと、最新の営業所・路線・SOC・solver mode / objective mode 設定が最適化入力に反映されません。
-> trip / timetable の route スコープ確定も Prepare で初めて行います。
 
 > [!NOTE]
-> **台数について：** Prepare 時は「選択した営業所に登録済みの車両台数・充電器台数」をそのまま利用します。
-> 手入力は不要です。SOC 設定は車両ごとの `initialSoc` を優先し、未設定車両は `Cost / Tariff Parameters` の `initial_soc` / `soc_min` / `soc_max` を既定値として使います。
-> `soc_max` / `socMax` は canonical metadata の `charge_upper_buffer_ratio` にも使われ、営業所待機中の追加充電は実費、`demand_charge_cost`、`vehicle_timeline.csv`、`all_vehicles.svg` に反映されます。以前の結果と KPI を比較する場合は、buffer 充電の有無を揃えてください。
+> この checkout には配布済みの `.exe` は含まれていません。配布物を受け取っている場合は、その配布元の手順を優先してください。
 
-> [!NOTE]
-> **保存先：** `Quick Setup 保存` では route/depot 選択を `dispatch_scope` と `scenario_overlay` の両方へ同期します。
-> `Solver対応 Prepare` は現在の設定から solver-specific prepared input を作成し、`④ 実行` はその prepared input を正本として使います。
+## 最初の最適化
 
-> [!WARNING]
-> **既存シナリオを開いた場合：** 旧 `tokyu_dispatch_ready` ベースなど runtime 未整備 dataset のシナリオを開くと、
-> BFF は利用可能な runtime master（現行既定は `tokyu_full`）へ自動補正します。
-> 無効な営業所・路線選択はクリアされるため、`Quick Setup 読込` 後に選択内容を再確認してください。
+通常は、画面の案内どおり次の 4 ステップで十分です。
 
----
+1. シナリオを選び、対象の運行日・営業所・路線を確認する。
+2. `Quick Setup 保存` で選択内容を確定する。
+3. 条件を変える必要がある場合だけ `ソルバー設定` を開く。
+4. `高速実行` を押す。未 Prepare または stale のときは、画面が Prepare を先に実行してから最適化ジョブを開始します。
 
-## 6. システム構成
+対象スコープ、便数、車両、充電器を実行前に明示確認したいときは、`Solver対応 Prepare` を個別に使います。Quick Setup やソルバー条件を変更した後は、必ず再 Prepare してください。
 
-### 6.1 ファイル構成
+### 結果を正しく読む
 
-| カテゴリ | パス |
-|---------|------|
-| Tkinter UI | `tools/scenario_backup_tk.py`, `tools/route_variant_labeler_tk.py`, `tools/bus_operation_visualizer_tk.py`, `tools/multi_run_visualizer_tk.py` |
-| FastAPI BFF | `bff/` |
-| Dispatch（運行可行性） | `src/dispatch/` |
-| 最適化ソルバー | `src/optimization/` |
-| パイプライン | `src/pipeline/` |
-| 設定・定数 | `config/`, `docs/constant/` |
-| データセット | `data/seed/tokyu/`, `data/built/{dataset_id}/`（現行既定 runtime は `data/built/tokyu_full/`） |
+| 表示・成果物 | 分かること | それだけでは分からないこと |
+| --- | --- | --- |
+| ジョブが `completed` | 非同期ジョブが終端状態になった | 可行性、物理妥当性、研究受理 |
+| `solver_status=OPTIMAL` または `FEASIBLE` | 数理最適化が解を返した | Rolling、独立物理検証、正式な研究主張 |
+| `rolling_execution.status=executed_and_accepted` | 保存された Rolling 連鎖が受理された | 比較対照の妥当性、研究公開の可否 |
+| `teacher_release_status=READY` | 正式な研究リリースの全ゲートが通った | それ以上の一般化や統合大域最適性 |
 
-### 6.2 除外したもの
+画面の `Optimization結果` から run ディレクトリを確認してください。主な成果物は次のとおりです。
 
-React frontend、テスト、一時検証スクリプト、`__pycache__`、ログ・一時成果物
+- `summary.json`: 実行・受理状態の要約
+- `experiment_report.md`: 読みやすい実験報告
+- `results.xlsx`: 集計と照合用の表
+- `rolling_hourly_chain/executed_day_accounting.json`: 受理済み Rolling の最終費用正本
 
-### 6.3 主な API 導線
+`job completed` だけを成功や研究成果として扱わないでください。
 
-| エンドポイント | 用途 |
-|--------------|------|
-| `GET /api/app/datasets` | runtime 実行可能な dataset 候補と既定 dataset の確認 |
-| `GET /api/app/context` | データセット準備状態の確認 |
-| `GET /api/app/data-status` | dataset ごとの built/runtime readiness の確認 |
-| `POST/GET /api/scenarios/*` | シナリオ CRUD |
-| `GET/PUT /api/scenarios/{id}/quick-setup` | Quick Setup の読込・保存 |
-| `POST /api/scenarios/{id}/simulation/prepare` | 最適化入力の生成（Prepare） |
-| `POST /api/scenarios/{id}/simulation/run` | Prepared input を使って simulation job を開始 |
-| `GET /api/research/git-preflight` | 正式研究実行前のGit SHA・dirty状態・未commit変更一覧の確認 |
-| `POST /api/scenarios/{id}/run-optimization` | 最適化ジョブの開始 |
-| `GET /api/jobs/{job_id}` | ジョブ状態の確認 |
+## 研究用の正式実行
 
----
+通常の試行計算と正式研究実行は意図的に分けています。試行計算は診断用であり、dirty な Git worktree でも動かせますが、成果物は研究公開 `BLOCKED` のままです。
 
-## 7. 既知の注意事項とトラブルシューティング
+正式実行では、少なくとも次を満たす必要があります。
 
-### 7.1 実行環境
+1. clean な worktree と固定した Git SHA から開始する。
+2. 運行日、時刻表、営業所・路線、車両、初期状態、充電器、BESS、料金、ソルバー条件を明示して Prepare する。
+3. 日初計画、全時間帯の Rolling、独立物理検証、実行日会計、成果物照合をすべて通す。
+4. PV 比較では、PV 曲線以外の対照条件をハッシュで一致させる。
 
-- Windows では最適化実行器の既定が `thread` モードです。
-  必要に応じて環境変数 `BFF_OPT_EXECUTOR=process` で切り替えられます。
-- Windows では simulation 実行器の既定も `thread` モードです。
-  必要に応じて環境変数 `BFF_SIM_EXECUTOR=process` で切り替えられます。
-- ポート衝突時は 8000 以外のポートで起動し、Tkinter 側の接続先を合わせてください。
+具体的なコマンド、必須証跡、失敗時の表記は [正式研究実行の手順](docs/notes/FORMAL_RUNBOOK_CURRENT.md) を正本とします。最新の未解決事項は [研究リリースのブロッカー一覧](docs/notes/CURRENT_RESEARCH_RELEASE_BLOCKERS.md) で確認してください。
 
-### 7.2 503 エラー（`BUILT_DATASET_REQUIRED`）
+## よくある確認ポイント
 
-`data/built/tokyu_full` が未準備の場合に発生します。
+### データが利用できない
 
-```powershell
-python catalog_update_app.py refresh gtfs-pipeline `
-  --source-dir data/catalog-fast `
-  --built-datasets tokyu_full
+まず画面または `GET /api/app/data-status` でデータ状態を確認してください。`BUILT_DATASET_REQUIRED` が出た場合は、データを推測で補わず、[運用ガイドのデータ復旧手順](readme_operation.md#no-module-named-tokyubus_gtfs)に従ってください。
+
+### 503 またはジョブ待ちになる
+
+BFF は同時に一つの実行しか受け付けません。前のジョブの終了を待つか、比較実行には [運用ガイド](readme_operation.md#1-ソルバーモード比較benchmark) の順次実行スクリプトを使ってください。
+
+### `INFEASIBLE` になる
+
+SOC、初期状態、車両台数、充電器・契約電力、回送接続、`allowPartialService` を確認し、条件を変えた後は Prepare からやり直してください。制約を緩めたり、時刻表を勝手に加工したりして解を作ることはしません。
+
+## 関連資料
+
+| 読者・用途 | 資料 |
+| --- | --- |
+| 日常操作・比較・トラブルシューティング | [運用ガイド](readme_operation.md) |
+| 指導教員・共同研究者向けのモデル説明 | [教員レビューガイド](README_core_professor.md) |
+| 定式化と実装状況 | [制約・目的関数の定式化](docs/constant/formulation.md) / [実装状況](docs/constant/implementation_status.md) |
+| 車両セットを固定する研究契約 | [Scenario Fleet Contract](docs/model/SCENARIO_FLEET_CONTRACT.md) |
+| 図表・生データの対応 | [Literature Figure Mapping](docs/model/LITERATURE_FIGURE_MAPPING.md) |
+| React + FastAPI、その後の Tauri 移行 | [frontend 移行仕様](docs/frontend/README.md) |
+| 実装の変更履歴・検証結果 | [開発ノート](DEVELOPMENT_NOTES.md) |
+
+## リポジトリの見取り図
+
+```text
+run_app.py                  Tkinter + FastAPI をまとめて起動
+tools/scenario_backup_tk.py 現行の操作画面
+bff/                        FastAPI BFF と run の最終化
+src/                        配車・最適化・検証のコア
+data/                       入力データと built dataset
+output/                     実行成果物（Git 管理外）
+docs/                       研究・運用・移行の詳細資料
+tests/                      回帰テスト
 ```
 
-- `No module named 'tokyubus_gtfs'` の環境でも、`data/catalog-fast/normalized/*.jsonl` から自動フォールバックします。
-- 出力に `"pipeline_fallback": true` があれば完了しています。
-- データ配置・生成後、BFF を再起動してください。
+## 開発・検証
 
-### 7.3 runtime 未整備 dataset / stale scenario の補正
-
-**Dataset の扱い**
-
-- `tokyu_dispatch_ready` は runtime 用 `trips.parquet` を持たず実行対象 dataset には使えない
-- `datasetId` 候補は `runtimeReady=true` を優先表示（runtime 未整備は通常候補から除外）
-- 新規シナリオ作成時に runtime 未整備 dataset を選ぶと bootstrap は `tokyu_full` へ自動フォールバック
-- 既存シナリオを開くと BFF は stale な route/depot master を runtime 実在データへ補正する
-  → 選択が外れた場合は `Quick Setup 読込` 後に選び直してください
-
-**Quick Setup の表示ルール**
-
-- 営業所一覧はすべて表示し、初期選択は route-backed な営業所のみ（`routeCount=0` は路線未展開）
-- 路線一覧は「現在の `dayType` に trip を持つ route variant」のみ表示
-- route limit は 0 trip 候補を落とした後に適用（有効路線が limit で隠れることはない）
-- 路線一覧の基本は `data/catalog-fast/normalized/routes.jsonl`（存在する場合優先）
-- `営業所別充電器管理` の `営業所面積 [m²]` が営業所別PVの規模入力で、`simulationSettings.depotEnergyAssets` / `simulation_config.depot_energy_assets` には `depot_area_m2` と Solcast由来の容量係数・発電列が保存される
-- `depot_area_m2 <= 0` または未設定の営業所はPV無効。`pv_capacity_kw` は `depot_area_m2 * 0.35 * 0.20` から再計算される
-- `solcast_pv_proxy_v1` / `actual_date_profile` は運行日当日の実PV形状を使う検証用。通常の予報シミュレーションでは `PV/予報` タブで「代表カーブ生成」→ `solcast_typical_sunny/cloudy/rainy/auto` →「代表PVから予報JSON生成」→ weather policy 有効化の順に使う
-- `solcast_typical_pv_proxy_v1` は代表24h capacity factor曲線を時刻対応で切り出し、営業所面積由来のPV容量で再スケールする。天気クラスは SOC / 初期SOC / EV-ICE bias を変更せず、PV 発電見込みの差だけを最適化へ渡す
-
-> [!WARNING]
-> **`Prepare` 後に `tripCount=0`** → 「選択 route × dayType × service_date」に該当 trip なし。
-> Quick Setup で dayType と路線選択を見直してください。
-
-**Prepare・実行フロー**
-
-- `Quick Setup 保存` → `dispatch_scope` + `scenario_overlay` に route/depot を同期
-- `Solver対応 Prepare` → 現在の UI 選択と solver 設定から prepared input を再生成
-- `④ 実行` → dispatch 再構築が不要なら prepared input を直接使用（従来より軽量）
-- 実行時に prepared input の stale 409 が返った場合は、Tkinter が `currentPreparedInputId` へ自動同期して再送し、必要時のみ自動 Prepare を再実行して再送する
-
-**`objective=Infinity` / `SOLVED_INFEASIBLE` の見方**
-
-- `candidate_generation_mode=strict_coverage_precheck` かつ `strict_coverage_precheck.infeasible=true` なら、solver search は本格実行前に止まっています。まず `strict coverage needs at least N vehicles, current fleet is M` を確認してください。
-- この precheck は `arrival + turnaround + deadhead <= next departure` を維持した relaxed path-cover 下界であり、SOC / charger / PV / weather / cost は使いません。したがって `finalSocTargetTolerancePercent` や PV 設定の変更でこの判定が覆るわけではありません。
-- `interval_only_lower_bound < dispatch lower bound` の差が大きいときは、単純な同時運行台数不足ではなく、deadhead / turnaround / depot reset 接続が fleet を追加で必要としていることを意味します。`blocked_transition_reason_counts` の dominant reason を確認してください。
-- `prepared_scope_audit` に `trip_distance_zero_or_missing` や `route_distance_zero_or_missing` が出た場合、strict infeasible の直接原因とは限りませんが、energy/cost/CO2 KPI は比較不能になります。研究結果として扱う前に距離データを修復してください。
-
-**`rebuild_dispatch` と duty**
-
-- `rebuild_dispatch=false`（既定）では duty 再生成は行わないため `dutyCount=0` になる場合あり
-- dispatch duty を確認したい場合は `dispatch再構築ON` で実行
-
-**route family を跨ぐ車両トレード**
-
-- 当面は `allowIntraDepotRouteSwap=false` を優先し、同一営業所内でも route family を跨ぐ車両トレードは許可しません。`渋22` の空き車両が `渋21` の昼間便を拾う、といった挙動は canonical optimization / Prepare 保存時に止めます。
-- `fixedRouteBandMode=false` の stale 設定が残っていても、`allowIntraDepotRouteSwap=false` なら solver 実行時の実効値は family lock ありとして扱います。
-
-**fallback 結果と「欠便なし」の扱い**
-
-- `solver_status=BASELINE_FALLBACK`、`canonical_solver_result.feasible=false`、または `infeasibility_reasons` が残る run は、`trip_count_unserved=0` でも検証済みの欠便なし解ではありません。
-- `solution_validity.validated_no_cancellation=true` のときだけ、欠便なし・実行可能な解として扱います。`baseline_fallback_or_postsolve_infeasible` が出た場合は、`trip_assignment.csv` は割当候補の説明用であり、運用計画としては未承認です。
-- route-band SVG の灰色帯は scheduled trip がない時間帯、緑は全 scheduled trip served、赤は unserved ありを示します。渋21の昼間が空白に見える場合は、まず manifest の `hourly_scheduled_served_unserved` と `no_scheduled_gaps` を確認してください。
-
-**`No travel connections generated` と INFEASIBLE**
-
-- `build_report.travel_connection_count=0` かつ `allowPartialService=false` のまま `tripCount > vehicleCount` で実行すると、MILP は厳格配車条件により INFEASIBLE になります
-- まずは `未配車許容`（`allowPartialService`）を ON にして `Quick Setup 保存` → `Solver対応 Prepare` → `実行` の順で回避してください
-- 恒久的には route スコープを段階的に絞り、`travel_connection_count` が 0 にならない構成へ調整してください
-
-**`Distance estimation audit: zero distance ratio ...` が高い場合**
-
-- Prepare ログの `stop_coords=x/y` と `routes_with_distance=a/b` を確認し、座標欠損か route 距離欠損かを先に切り分ける
-- 2026-03-26 以降は `distance_km/distanceKm/distance`、`lat/lon/latitude/longitude` などのキー揺れを吸収して補完する
-- それでも比率が高い場合は、対象 dataset の stop 座標（`stops`）と route 停留所連鎖（`stopSequence`）の欠損を優先修正する
-
-**Timetable first の原則**
-
-- `timetable_rows` / `stop_timetables` を更新すると BFF は stale な `trips` / `graph` / `duties` / `dispatch_plan` / `simulation_result` / `optimization_result` を破棄し scenario を `draft` へ戻す
-- 大規模 scope では `TravelConnection` を feasible edge のみ保持する疎形式（全 trip 対の O(n²) 展開は行わない）
-
-### 7.4 MILP 変数名の長さエラー
-
-`ERROR: Name too long (maximum name length is 255 characters)` が出た場合は MILP 変数名長が原因です。
-2026-03-18 時点で `src/optimization/milp/solver_adapter.py` は全変数を自動命名（`name=` 省略）に変更済みです。
-
-### 7.5 Gurobi の動作確認
+開発環境では `pytest` を追加してから、少なくとも次を実行してください。
 
 ```powershell
-python -c "import gurobipy as gp; m=gp.Model(); x=m.addVar(lb=0.0,name='x'); m.setObjective(x, gp.GRB.MINIMIZE); m.optimize(); print('gurobi_ok', gp.gurobi.version())"
+python -m pip install pytest
+python -m compileall -q src bff scripts tools
+python -m pytest -q -p no:cacheprovider
 ```
 
-`gurobi_ok` が出力されれば Python 側の Gurobi は利用可能です。
-ライセンス未設定の場合は `optimize()` でライセンスエラーになります。
-
-### 7.6 job completed ≠ 最適化成功
-
-> [!WARNING]
-> `job completed` はジョブ管理システム上の完了であり、数理最適化の成功とは別です。
-> `solver_status` が `ERROR` / `INFEASIBLE` の場合、最適化結果ファイルが生成されないことがあります。
-
----
-
-## 8. パラメータ保全リスト
-
-> [!CAUTION]
-> 以下のパラメータは最適化計算に直接関与します。**削除・名称変更しないでください。**
-> 詳細は [`docs/core_parameter_preservation_manifest.md`](docs/core_parameter_preservation_manifest.md) を参照してください。
-
-**ソルバー設定**
-`solverMode`, `objectiveMode`, `timeLimitSeconds`, `mipGap`, `alnsIterations`, `randomSeed`
-
-`solverMode` を変えた場合は prepared input が stale になるため、必ず `Solver対応 Prepare` をやり直してください。
-`objectiveMode` は現在 `total_cost` / `co2` / `balanced` / `utilization` の 4 種類です。`co2` は `co2_price_per_kg` が 0 でも CO₂排出量最小として解きます。
-
-**スコープ設定**
-`selectedDepotIds`, `selectedRouteIds`, `dayType`, `service_id`, `service_date`,
-`includeShortTurn`, `includeDepotMoves`, `includeDeadhead`,
-`allowIntraDepotRouteSwap`, `allowInterDepotSwap`
-
-**ペナルティ**
-`allowPartialService`, `unservedPenalty`
-
-**料金・排出係数**
-`gridFlatPricePerKwh`, `gridSellPricePerKwh`, `demandChargeCostPerKw`,
-`dieselPricePerL`, `gridCo2KgPerKwh`, `co2PricePerKg`, `iceCo2KgPerL`,
-`depotPowerLimitKw`, `degradationWeight`, `tou_pricing`
-
-**営業所エネルギー資産**
-`depotEnergyAssets`, `depot_energy_assets`, `bess_energy_kwh`, `bess_power_kw`,
-`bess_initial_soc_kwh`, `bess_soc_min_kwh`, `bess_soc_max_kwh`,
-`bess_terminal_soc_min_kwh`, `bess_charge_efficiency`, `bess_discharge_efficiency`,
-`bess_cycle_cost_yen_per_kwh`, `allow_grid_to_bess`, `pv_generation_kwh_by_slot`
-
-**車両・テンプレート**
-`type`, `modelCode`, `modelName`, `capacityPassengers`,
-`batteryKwh`, `fuelTankL`, `energyConsumption`, `fuelEfficiencyKmPerL`,
-`co2EmissionGPerKm`, `co2EmissionKgPerL`,
-`curbWeightKg`, `grossVehicleWeightKg`, `engineDisplacementL`, `maxTorqueNm`, `maxPowerKw`,
-`chargePowerKw`, `minSoc`, `maxSoc`, `acquisitionCost`, `enabled`
-
----
-
-## 9. 実装詳細（技術リファレンス）
-
-この章は開発者・指導教員向けの詳細情報です。
-
-### 9.1 数式記号と実装変数の対応
-
-| 数式記号 | 意味 | 実装変数（Python） |
-|---------|------|-------------------|
-| $y_j^k$ | 便割当 | `y[(vehicle_id, trip_id)]` |
-| $x_{ij}^k$ | 便間接続アーク | `x[(vehicle_id, from_trip_id, to_trip_id)]` |
-| $u_j$ | 欠便フラグ | `unserved[trip_id]` |
-| $z_k$ | 車両使用フラグ | `used_vehicle[vehicle_id]` |
-| $\xi_{k,t}$ | 充電 ON/OFF | `charge_on_var[(vehicle_id, slot_idx)]` |
-| $c_{k,t}$ | 充電電力 | `c_var[(vehicle_id, slot_idx)]` |
-| $s_{k,t}$ | SOC | `s_var[(vehicle_id, slot_idx)]` |
-| $g_t$ | 系統買電量 | `g_var[slot_idx]` |
-| $pv_t^{ch}$ | PV 自家消費 | `pv_ch_var[slot_idx]` |
-| $\bar{p}_t$ | 平均需要電力 | `p_avg_var[slot_idx]` |
-| $W^{on}, W^{off}$ | ピーク需要 | `w_on_var`, `w_off_var` |
-| $P^{contract}$ | 契約電力上限 | `contract_limit_kw` |
-
-実装ファイル: `src/optimization/milp/solver_adapter.py`（MILP）、`src/optimization/common/evaluator.py`（ALNS/GA/ABC）
-
-### 9.2 C1〜C21 詳細実装表
-
-詳細は `docs/constant/implementation_status.md` を参照してください。
-本 README の 3.2 節が要約版です。
-
-### 9.3 dispatch 接続可否の判定式
-
-便 $i$ の後に便 $j$ を接続するには以下を満たす必要があります。
-
-$$arrival(i) + turnaround(dest_i) + deadhead(dest_i, origin_j) \leq departure(j)$$
-
-実装: `src/dispatch/feasibility.py`、`src/dispatch/graph_builder.py`
-
-補足:
-- 接続判定は stop 名ではなく `origin_stop_id` / `destination_stop_id` を優先して使います。
-- 明示 `deadhead_rules` が無い場合でも、同一 `routeFamilyCode` の terminal stop 座標から回送候補を補完します。
-- これにより、同一系統番号に属する上り下り・本線・区間便・入出庫便を raw trip のまま接続判定できます。
-
-### 9.4 定数文書トレーサビリティ
-
-| 定数文書 | 採用目的 | 反映先 |
-|---------|---------|--------|
-| `docs/constant/formulation.md` | C1-C21 / O1-O4 定式の正本 | 本 README、`src/optimization/milp/*` |
-| `docs/constant/implementation_status.md` | 実装状況一覧 | 本 README 3章 |
-| `docs/constant/AGENTS_ev_route_cost.md` | EV/ICE 混成・コスト統合方針 | `bff/routers/optimization.py` |
-| `docs/constant/AGENTS.md` | timetable-first の不変条件 | `src/dispatch/*` |
-| `docs/constant/ebus_prototype_model_gurobi.md` | Gurobi 実装指針 | `src/optimization/milp/solver_adapter.py` |
-
-### 9.5 非 Tk フロント機能の移植バックログ
-
-`docs/tkinter_feature_parity_backlog.md` を正本として管理しています。
-
-### 9.6 完成判定チェックリスト
-
-- BFF 起動と `/api/app/context` 応答
-- Tkinter から Prepare 成功
-- Tkinter から最適化 Job が完走
-- core 内に `frontend/tests/tmp/cache/log` が存在しない
-- パラメータ保全マニフェストに挙げた項目が保持されている
-
-### 9.7 結果画面の確認ポイント
-
-- `Optimization結果` / `Simulation結果` の Summary タブは、`総コスト`、`担当便数`、`未担当便数`、`使用車両数` と主要な非ゼロ内訳を先頭表示する。
-- `Cost Breakdown` タブは、`総コスト` を先頭に非ゼロ項目を上段へ並べ、構成比 (`share`) も確認できる。
-- 2026-04-17 以降、`総コスト` は純粋な会計値、`目的関数値` は復路ボーナス (`return_leg_bonus`) を含む solver score として分離表示する。したがって `目的関数値` は負になり得るが、`総コスト` は reward を差し引かない。
-- 2026-04-30 以降、`EV電力コスト` と `燃料コスト` は別行で表示する。`推進費合計(EV電力+ICE燃料)` は後方互換の集計であり、電力費として読まない。
-- 燃料費は `確定燃料コスト`、`暫定燃料コスト`、`実給油燃料コスト`、`暫定燃料コスト残` を表示する。実給油がない run では、最終燃料費は暫定走行費として残る。
-- 2026-03-31 時点では、シナリオ `237d5623-aa94-4f72-9da1-17b9070264be` の最新 `optimization_result` に非ゼロ内訳が保存済みであり、`energy_cost=202,796.50054309692`, `vehicle_cost=483,447.4885844756`, `driver_cost=2,006,683.333333335`, `penalty_unserved=3,360,000.0`, `total_cost=6,052,927.3224609075` を結果画面から確認できる前提とする。
-
-### 9.8 コスト成分トグル
-
-- `基本パラメータ` のコスト設定は、重複していた `disable_vehicle_acquisition_cost` 単独チェックを廃止し、単一の `目的関数に含めるコスト項目` 表へ統一する。
-- チェックボックスはコード上の実コスト/ペナルティ単位で持つ。2026-03-31 時点の公開項目は `車両固定費（日割り導入費）`, `運転士コスト`, `系統電力コスト`, `燃料コスト`, `需要料金`, `CO2コスト`, `未配車ペナルティ`, `車種切替コスト`, `車載電池劣化コスト`, `基準計画乖離コスト`, `契約超過ペナルティ` と、MILP 専用の充電ペナルティ群である。
-- 保存形式は `simulation_config.cost_component_flags` を正とし、旧シナリオの `disable_vehicle_acquisition_cost / enableVehicleCost / enableDriverCost / enableOtherCost` は互換変換して読む。
-- 左パネルの `運行種別サマリ` は route 一覧の表示母集団を変えず、曜日ごとの便数表示だけを更新する。これに合わせて検索用文字列は route cache 側で事前計算し、day type 切替時の不要な再構築を避ける。
-
----
-
-## 10. 実測監査
-
-第三者が追試できるよう、監査スクリプトと成果物を追加しています。
-
-- スクリプト: `scripts/audit_timetable_alignment.py`
-- 提出版レポート: `docs/reproduction/timetable_alignment_audit_20260318.md`
-- 監査成果物（WEEKDAY）: `outputs/audit/bbe1e1bd/timetable_alignment_audit.{json,csv,md}`
-
-### 10.1 監査 KPI
-
-| KPI | 意味 |
-|-----|------|
-| `timetable_rows_count` | 時刻表行数（便数） |
-| `unserved_trip_count` | 担当不能便数 |
-| `departure_arrival_match_rate` | 出発・到着一致率 |
-| `checked_coverage_rate` | 一致率算出に使えた便の割合 |
-| `day_tag_match` | prepared input と最適化結果の曜日タグ整合性 |
-
-`day_tag_match = false` の場合、サービス日種別が異なるため `departure_arrival_match_rate` を品質判定に使わないでください。
-
-### 10.2 再現コマンド
+README の入口とリンクだけを確認する軽量テストは次です。
 
 ```powershell
-python scripts/audit_timetable_alignment.py `
-  --scenario-id bbe1e1bd-cd70-4fc0-9cca-6c5283b71a4f `
-  --prepared-input-path outputs/prepared_inputs/bbe1e1bd-cd70-4fc0-9cca-6c5283b71a4f/prepared-7822b5b6dd60630d.json `
-  --optimization-result-path outputs/tokyu/2026-03-14/optimization/bbe1e1bd-cd70-4fc0-9cca-6c5283b71a4f/meguro/WEEKDAY/optimization_result.json `
-  --out-dir outputs/audit/bbe1e1bd
+python -m pytest -q tests/test_readme_navigation.py
 ```
 
----
-
-## 11. AI エージェント向けアーキテクチャ仕様
-
-この README と関連ドキュメントを読む自動化エージェント向けの要約です。
-
-### 11.1 守るべき基本方針
-
-- **Timetable first, dispatch second.**
-- Dispatch は `src/dispatch/` を通して扱い、UI や BFF で独自実装しない。
-- 最適化入力に関わるパラメータは削除しない。
-- `operator_id` を含まないデータは扱わない。
-- `docs/constant/` は原則 read-only とする。
-
-### 11.2 レイヤーの役割
-
-| レイヤー | 役割 |
-|---|---|
-| Tkinter UI | 研究・運用の入力画面、結果確認 |
-| FastAPI BFF | API 経由のオーケストレーション |
-| Dispatch Core | 時刻表からの接続可否・車両 duty 生成 |
-| Optimization Core | MILP / ALNS / GA / ABC による最適化 |
-| Data / Catalog | シナリオ・マスタ・派生データの保管 |
-
-### 11.3 実装時の注意点
-
-- 既存の最適化パラメータ契約を壊さない。
-- 既知の Tkinter 機能は維持する。
-- 一時ファイル・cache・tmp スクリプトは core 配布前に整理する。
-- 変更が README / development note に反映されているか確認する。
-- 迷ったらまず既存の章と `docs/constant/` を優先して参照する。
-# Research execution note
-
-The frontend-equivalent Phase 3 runner keeps the release decision in
-`summary.json` as the canonical gate.  A successful 24-step hourly rolling
-chain records operational acceptance but must not promote a run that is still
-blocked by research-cost, optimality, provenance, or comparison checks.  The
-generated `experiment_report.md` mirrors that gate.
-
-### Controlled flat-tariff sensitivity
-
-`scripts/run_frontend_controlled_pv_pair.py` can deliberately apply the same
-uniform tariff to both freshly prepared cases with
-`--grid-energy-price-yen-per-kwh <JPY>` and
-`--demand-charge-yen-per-kw <JPY>`. It sends both the flat-price field and a
-single `00:00--24:00` TOU band, because an inherited multi-band TOU schedule
-would otherwise take precedence over the flat value. For a zero basic/demand
-charge, pass `--demand-charge-yen-per-kw 0`; this leaves physical grid limits
-unchanged while zeroing the model's demand-charge coefficient. The runner
-persists `tariff_condition.json` and accepts a case only when all 24 canonical
-rows in `simulation_conditions_tou_prices.csv` match the requested price and
-demand-charge rate. This is a separate tariff sensitivity, not a replacement
-for a PV-only comparison under the original tariff.
-
-The controller does not accept a `pv_profile_id` label as evidence that the
-curve changed. Before each Prepare it reads the normal frontend
-`editor-bootstrap` response, preserves its non-PV depot-asset fields, and
-attaches a one-date PV asset built from the selected depot's physical area,
-usable-area ratio, panel-power density, and the separately hashed
-`data/derived/pv_profiles/<depot>_<date>_<timestep>min.json` capacity-factor
-curve. It records the bootstrap response, source-profile hash, replacement
-asset, and exact Prepare request. A missing source, invalid slot series, or a
-source total that differs from the controlled expected PV total fails before
-Prepare; a date/profile label alone is never treated as a PV switch.
+研究計算の意味、制約、受理ゲートに影響する変更では、README だけで説明を完結させず、該当する runbook・開発ノート・ブロッカー資料も同時に更新してください。
