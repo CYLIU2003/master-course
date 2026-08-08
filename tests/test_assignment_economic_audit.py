@@ -157,3 +157,39 @@ def test_assignment_economic_audit_keeps_pv_input_without_an_incumbent() -> None
     assert audit["gross_pv_available_kwh"] == pytest.approx(191.25)
     assert audit["renewable_energy_allocated_in_stage1_kwh"] == 0.0
     assert audit["grid_energy_allocated_in_stage1_kwh"] == 0.0
+
+
+def test_assignment_economic_audit_uses_phase4_integrated_source_flows() -> None:
+    problem = SimpleNamespace(
+        price_slots=(SimpleNamespace(grid_buy_yen_per_kwh=30.0),),
+        vehicles=(),
+        vehicle_types=(),
+        scenario=SimpleNamespace(diesel_price_yen_per_l=150.0),
+        depot_energy_assets={},
+    )
+
+    audit = _assignment_economic_audit_payload(
+        canonical_problem=problem,
+        optimization_result={
+            "solver_metadata": {
+                "assignment_energy_coupling_mode": (
+                    "phase4_integrated_slot_energy_recourse"
+                ),
+            },
+            "cost_breakdown": {
+                "pv_to_bus_kwh": 10.0,
+                "pv_to_bess_kwh": 20.0,
+                "bess_to_bus_kwh": 15.0,
+                "grid_to_bus_kwh": 2.0,
+                "grid_to_bess_kwh": 3.0,
+            },
+            "summary": {},
+        },
+    )
+
+    assert audit["assignment_energy_coupling_mode"] == (
+        "phase4_integrated_slot_energy_recourse"
+    )
+    assert audit["renewable_energy_allocated_in_stage1_kwh"] == 30.0
+    assert audit["grid_energy_allocated_in_stage1_kwh"] == 5.0
+    assert audit["stage1_source_flows_kwh"]["bess_to_bus_kwh"] == 15.0

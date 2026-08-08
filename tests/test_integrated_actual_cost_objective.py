@@ -344,6 +344,10 @@ def test_phase4_solver_reconciles_integrated_actual_cost_on_full_day() -> None:
         "solver_objective_matches_accounting_total"
     ] is True
     assert result.cost_breakdown["objective_is_actual_cost"] is True
+    assert result.solver_metadata["assignment_energy_coupling_mode"] == (
+        "phase4_integrated_slot_energy_recourse"
+    )
+    assert result.solver_metadata["solve_time_sec"] is not None
     terminal_targets = result.solver_metadata[
         "vehicle_terminal_soc_target_kwh_by_vehicle"
     ]
@@ -367,6 +371,57 @@ def test_phase4_solver_reconciles_integrated_actual_cost_on_full_day() -> None:
             target_kwh,
             abs=accepted_deviation_kwh,
         )
+
+
+def test_phase4_degradation_uses_canonical_throughput_price() -> None:
+    problem = ProblemBuilder().build_from_dispatch(
+        _dispatch_context(),
+        scenario_id="actual-cost-degradation-throughput",
+        vehicle_counts={"BEV": 1},
+        chargers=(ChargerDefinition("chg-1", "DEPOT", 60.0),),
+        canonical_depot_id="DEPOT",
+        timestep_min=60,
+        operation_start_time="05:00",
+        operation_end_time="23:00",
+        final_soc_floor_percent=20.0,
+        final_soc_target_percent=80.0,
+        final_soc_target_tolerance_percent=0.0,
+        price_slots=tuple(
+            EnergyPriceSlot(
+                slot_index=slot_index,
+                grid_buy_yen_per_kwh=10.0,
+            )
+            for slot_index in range(24)
+        ),
+        battery_degradation_price_jpy_per_kwh=2.5,
+        vehicle_usage_cost_jpy_per_used_bus=0.0,
+    )
+
+    result = OptimizationEngine().solve(
+        problem,
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            phase="phase4_integrated",
+            integrated_actual_cost_objective=True,
+            time_limit_sec=30,
+            mip_gap=0.0,
+            random_seed=42,
+            warm_start=False,
+            allow_postsolve_repair=False,
+        ),
+    )
+    charged_kwh = sum(
+        slot.charge_kw * problem.scenario.timestep_min / 60.0
+        for slot in result.plan.charging_slots
+    )
+
+    assert result.feasible, result.infeasibility_reasons
+    assert result.cost_breakdown["degradation_cost"] == pytest.approx(
+        charged_kwh * 2.5
+    )
+    assert result.solver_metadata[
+        "solver_objective_matches_accounting_total"
+    ] is True
 
 
 def test_phase4_final_slot_trip_has_one_energy_debit_and_no_trip_charge() -> None:

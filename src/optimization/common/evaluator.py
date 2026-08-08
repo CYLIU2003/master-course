@@ -361,15 +361,27 @@ class CostEvaluator:
         switch_cost = weights.switch * float(switch_count)
 
         slot_hours = max(problem.scenario.timestep_min, 1) / 60.0
-        degradation_cycles = 0.0
-        for slot in plan.charging_slots:
-            vehicle = vehicle_by_id.get(slot.vehicle_id)
-            if vehicle is None:
-                continue
-            charged_kwh = max(slot.charge_kw, 0.0) * slot_hours
-            capacity_kwh = max(float(vehicle.battery_capacity_kwh or 0.0), 1.0)
-            degradation_cycles += charged_kwh / capacity_kwh
-        degradation_cost = weights.degradation * degradation_cycles * 50.0
+        degradation_price_jpy_per_kwh = max(
+            float(
+                problem.metadata.get(
+                    "battery_degradation_price_jpy_per_kwh", 0.0
+                )
+                or 0.0
+            ),
+            0.0,
+        )
+        charged_energy_kwh = sum(
+            max(slot.charge_kw, 0.0) * slot_hours
+            for slot in plan.charging_slots
+            if slot.vehicle_id in vehicle_by_id
+        )
+        degradation_cost = (
+            weights.degradation
+            * degradation_price_jpy_per_kwh
+            * charged_energy_kwh
+            if component_flags.get("battery_degradation_cost", True)
+            else 0.0
+        )
 
         if service_coverage_mode == "penalized":
             unserved_penalty = weights.unserved * len(plan.unserved_trip_ids)

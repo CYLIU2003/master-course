@@ -1,16 +1,45 @@
 # Current research release blockers
 
 Status date: 2026-08-08
-Code status: a fresh clean diagnostic at `223c9f1` proved that the integrated
-objective reacts to high PV (sunny reached 25 BEVs versus rain's 15), but also
-exposed a final-slot charging omission, duplicated terminal trip-energy debit,
-and an unphysical BESS auxiliary-deviation read. The current working tree
-corrects those defects and tightens formal Phase 4 actual-cost resolution from
-5% to 0.1%; focused tests pass (`48 passed`), the full suite passes
-(`1212 passed`), and compileall/diff-check pass. This is not yet clean-commit
-formal evidence. Release remains blocked pending a new frozen commit, fresh
-Prepare, both completed frontend jobs, accepted physical/Rolling gates,
-accounting reconciliation, and honestly reported achieved gaps.
+Code status: clean commit `b8793f3` produced physically valid, weather-
+responsive sunny/rain incumbents, but formal release remained blocked by the
+requested 0.1% optimality gap plus three evidence/accounting defects. The
+current working tree unifies the battery-degradation price, preserves measured
+solver runtime, exports effective Phase 4/Rolling controls and uses a
+gap-certified integrated solve instead of an inapplicable Stage-1 composition
+artifact. It also switches a verified-seed Phase 4 search from incumbent focus
+to bound focus. Focused tests pass (`101 passed`), the complete suite passes
+(`1215 passed`), and compileall/diff-check pass. This is not yet clean-commit
+formal evidence. Release remains
+blocked pending a new frozen commit, fresh Prepare, both completed
+frontend jobs, accepted physical/Rolling/accounting gates and honestly reported
+achieved gaps.
+
+## 2026-08-08 accounting and optimality-certificate blocker
+
+The clean pair at
+`output/formal_pair_20260808_flat30_pv1000_bess6000_phase4_finalslot_b8793f3_gap001`
+is the current physical baseline. Sunny used 25 BEVs / 7 ICE buses for 156 /
+108 trips; rain used 15 / 17 for 48 / 216. Both cases served all 264 trips,
+returned BEV and BESS SOC to target, passed physical validation, and completed
+24/24 Rolling. This confirms that 1,000 kW PV changes the integrated dispatch;
+it does not prove either incumbent globally optimal.
+
+Formal evidence then failed for reasons distinct from physical feasibility.
+The solver/evaluator charged a hard-coded per-cycle degradation proxy while the
+canonical ledger correctly used the scenario's zero JPY/kWh coefficient. The
+Phase 4 plan omitted the effective one-thread/BestObjStop controls; the BFF
+discarded its elapsed-time fallback before writing solver settings; Rolling
+similarly omitted its applied thread count. Finally, the pair builder demanded
+a Stage-1 composition-search artifact from a solver that has no Stage 1.
+
+The current correction keeps one cost definition across solver, evaluator and
+ledger, carries actual controls and runtime into artifacts, and recognizes
+composition only when the full integrated successor network meets its requested
+global gap. It does not waive the gap: sunny previously stopped at 5.1337% and
+rain at 100%. A verified integrated incumbent now triggers bound-focused Gurobi
+search, but release remains blocked until a fresh clean run actually reaches
+0.1% or is honestly retained as a non-optimal diagnostic candidate.
 
 ## 2026-08-08 final-slot and composition-resolution blocker
 

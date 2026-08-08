@@ -1,5 +1,31 @@
 # master-course
 
+## 2026-08-08 Phase 4 accounting and formal-evidence correction
+
+- The corrected clean pair at
+  `output/formal_pair_20260808_flat30_pv1000_bess6000_phase4_finalslot_b8793f3_gap001`
+  confirms that integrated dispatch reacts to the 1,000 kW PV input: sunny
+  uses 25 BEVs / 7 ICE buses (156 / 108 trips), while rain uses 15 BEVs /
+  17 ICE buses (48 / 216 trips). Both serve 264/264 trips, pass the independent
+  physical validator, and complete 24/24 Rolling. They remain non-optimal
+  candidates because the requested 0.1% gap was not established.
+- A formal-evidence audit found that Phase 4 applied the requested one-thread
+  control but did not export it, discarded its measured solve time while
+  constructing `solver_settings.json`, and was incorrectly required to emit a
+  Stage-1 composition-search certificate. Phase 4 now exports its actual
+  coupling/control metadata; a full-network integrated solve counts as fleet-
+  composition evidence only after its requested global MIP gap is certified.
+- BEV battery degradation no longer uses a hidden 50 JPY/cycle proxy. Solver,
+  evaluator, and canonical ledger now share the scenario's
+  `battery_degradation_cost_coeff_yen_per_kwh` throughput price. A disabled or
+  zero-price component contributes exactly zero in all three paths.
+- When the verified same-problem Phase 3 handoff already supplies a complete
+  integrated incumbent, Phase 4 changes from feasibility focus to bound focus
+  (`MIPFocus=3`, `Heuristics=0.1`). This does not alter the objective or relax
+  a constraint; it allocates the remaining solve budget to the missing
+  optimality certificate. The complete repository suite passes `1215 passed`;
+  fresh clean-commit formal evidence is still required.
+
 ## 2026-08-08 Phase 4 final-slot and composition-resolution correction
 
 - A fresh clean-commit diagnostic at

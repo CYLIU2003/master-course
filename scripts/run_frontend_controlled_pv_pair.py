@@ -2398,17 +2398,26 @@ def _case_gate_audit(
             and settings.get("stage1_best_obj_stop_enabled") is False
             and settings.get("gurobi_threads") == 1
             and settings.get("random_seed") == 42
-            and int(
-                settings.get(
-                    "stage1_stage2_candidate_limit_requested"
+            and (
+                phase4_integrated
+                or int(
+                    settings.get(
+                        "stage1_stage2_candidate_limit_requested"
+                    )
+                    or 0
                 )
-                or 0
+                >= (22 if phase3_frontier else 10)
             )
-            >= (1 if phase4_integrated else 22 if phase3_frontier else 10)
-            and int(
-                settings.get("stage1_composition_search_radius_requested")
-                or 0
-            ) >= (0 if (phase4_integrated or phase3_frontier) else 2)
+            and (
+                phase4_integrated
+                or int(
+                    settings.get(
+                        "stage1_composition_search_radius_requested"
+                    )
+                    or 0
+                )
+                >= (0 if phase3_frontier else 2)
+            )
             and (
                 not phase3_frontier
                 or settings.get("stage1_bev_frontier_enabled") is True
@@ -3145,12 +3154,12 @@ def _build_pair_control_audit(
         "mip_gap_requested_ratio",
         "stage1_best_obj_stop_enabled",
         "gurobi_threads",
-        "stage1_stage2_candidate_limit",
-        "stage1_composition_search_radius",
         "random_seed",
     )
     if not optimization_experiment_case.startswith("phase4_"):
         day_ahead_control_fields += (
+            "stage1_stage2_candidate_limit",
+            "stage1_composition_search_radius",
             "stage1_time_limit_seconds_requested",
             "stage2_time_limit_seconds_requested",
         )

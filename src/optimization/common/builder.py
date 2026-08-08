@@ -469,6 +469,18 @@ class ProblemBuilder:
         )
         if pv_curtail_penalty_yen_per_kwh is None:
             pv_curtail_penalty_yen_per_kwh = 0.0
+        battery_degradation_price_jpy_per_kwh = self._safe_float(
+            self._first_present(
+                cost_cfg.get(
+                    "battery_degradation_cost_coeff_yen_per_kwh"
+                ),
+                simulation_cfg.get(
+                    "battery_degradation_cost_coeff_yen_per_kwh"
+                ),
+            )
+        )
+        if battery_degradation_price_jpy_per_kwh is None:
+            battery_degradation_price_jpy_per_kwh = 0.0
         vehicle_usage_cost_jpy_per_used_bus = self._safe_float(
             self._first_present(
                 cost_cfg.get("vehicle_usage_cost_jpy_per_used_bus"),
@@ -601,6 +613,9 @@ class ProblemBuilder:
             grid_to_bess_priority_penalty_yen_per_kwh=grid_to_bess_priority_penalty_yen_per_kwh,
             pv_marginal_charge_cost_yen_per_kwh=pv_marginal_charge_cost_yen_per_kwh,
             pv_curtail_penalty_yen_per_kwh=pv_curtail_penalty_yen_per_kwh,
+            battery_degradation_price_jpy_per_kwh=(
+                battery_degradation_price_jpy_per_kwh
+            ),
             vehicle_usage_cost_jpy_per_used_bus=vehicle_usage_cost_jpy_per_used_bus,
             vehicle_usage_cost_semantics=vehicle_usage_cost_semantics,
             selected_depot_record=selected_depot_record,
@@ -678,6 +693,7 @@ class ProblemBuilder:
         grid_to_bess_priority_penalty_yen_per_kwh: Optional[float] = None,
         pv_marginal_charge_cost_yen_per_kwh: float = 0.0,
         pv_curtail_penalty_yen_per_kwh: float = 0.0,
+        battery_degradation_price_jpy_per_kwh: float = 0.0,
         vehicle_usage_cost_jpy_per_used_bus: float = 0.0,
         vehicle_usage_cost_semantics: str = "unclassified",
         selected_depot_record: Optional[Dict[str, Any]] = None,
@@ -759,6 +775,10 @@ class ProblemBuilder:
         )
         pv_curtail_penalty_yen_per_kwh = max(
             float(pv_curtail_penalty_yen_per_kwh or 0.0),
+            0.0,
+        )
+        battery_degradation_price_jpy_per_kwh = max(
+            float(battery_degradation_price_jpy_per_kwh or 0.0),
             0.0,
         )
         vehicle_usage_cost_jpy_per_used_bus = max(
@@ -1425,6 +1445,13 @@ class ProblemBuilder:
                 ),
                 "pv_marginal_charge_cost_yen_per_kwh": float(pv_marginal_charge_cost_yen_per_kwh),
                 "pv_curtail_penalty_yen_per_kwh": float(pv_curtail_penalty_yen_per_kwh),
+                "battery_degradation_price_jpy_per_kwh": (
+                    float(battery_degradation_price_jpy_per_kwh)
+                    if normalized_cost_component_flags.get(
+                        "battery_degradation_cost", True
+                    )
+                    else 0.0
+                ),
                 "vehicle_usage_cost_jpy_per_used_bus": float(vehicle_usage_cost_jpy_per_used_bus),
                 "vehicle_usage_cost_semantics": vehicle_usage_cost_semantics,
                 "vehicle_usage_cost_semantics_classified": (

@@ -158,6 +158,9 @@ class MILPOptimizer:
                     )
                 ),
                 "optimization_structure": str((plan.metadata or {}).get("optimization_structure") or ("two_stage" if getattr(config, "thesis_mode", False) else "integrated")),
+                "assignment_energy_coupling_mode": (plan.metadata or {}).get(
+                    "assignment_energy_coupling_mode"
+                ),
                 "stage1_solver_status": (plan.metadata or {}).get("stage1_solver_status"),
                 "assignment_solution_method": (plan.metadata or {}).get(
                     "assignment_solution_method"
@@ -639,6 +642,7 @@ class MILPOptimizer:
                 "achieved_mip_gap": outcome.final_gap if outcome.has_feasible_incumbent else None,
                 "nodes_explored": outcome.nodes_explored,
                 "runtime_sec": outcome.runtime_sec,
+                "solve_time_sec": outcome.runtime_sec,
                 "first_feasible_sec": outcome.first_feasible_sec,
                 "uses_exact_repair": False,
                 "presolve_reduction_summary": dict(outcome.presolve_reduction_summary or {}),

@@ -1,5 +1,41 @@
 # Development Notes
 
+## 2026-08-08 Phase 4 accounting, telemetry and bound-focus correction
+
+- The clean `b8793f342c1c886a3f44db843448c13505d62a78` pair at
+  `output/formal_pair_20260808_flat30_pv1000_bess6000_phase4_finalslot_b8793f3_gap001`
+  closed the final-slot physical defects. Sunny returned 25 BEVs / 7 ICE buses
+  and 156 / 108 trips; rain returned 15 / 17 and 48 / 216. Both served 264/264,
+  had terminal BEV/BESS balance, passed independent physical validation, and
+  completed 24/24 Rolling. Sunny ended at 5.1337% raw gap; rain ended at 100%,
+  so both remain `validated_non_exact` candidates.
+- The remaining 297.07357 JPY sunny objective/accounting mismatch was a hidden
+  semantic split: integrated and Stage-1 objectives plus `CostEvaluator` used
+  `50 * charged_kWh / capacity_kWh`, while the canonical ledger used the saved
+  scenario throughput coefficient, which is zero in this pair. ProblemBuilder
+  now materializes `battery_degradation_price_jpy_per_kwh`; both MILPs and the
+  evaluator charge `weight * price * charged_kWh`, exactly matching the ledger.
+- Phase 4 now exports `phase4_integrated_slot_energy_recourse`, the effective
+  `gurobi_threads`, Stage-1 BestObjStop state, and solve time. Phase-1 Rolling
+  metadata also exports its effective thread count. The BFF no longer inserts
+  measured elapsed time into a temporary dictionary and then builds
+  `solver_settings.json` from the stale pre-insertion metadata.
+- The pair manifest treats a full-network Phase 4 solve as powertrain-
+  composition certification only when an incumbent exists and the requested
+  global MIP gap is met. Stage-1 adjacent-composition evidence remains required
+  for two-stage Phase 3 and is not fabricated for integrated Phase 4.
+- A complete verified integrated warm start makes further feasibility-focused
+  search redundant. After the fixed-dispatch recourse preflight passes, the
+  unrestricted model uses `MIPFocus=3` and `Heuristics=0.1` to prioritize its
+  lower-bound certificate. The objective, feasible region, physical checks and
+  0.1% release threshold are unchanged.
+- Focused regression coverage exercises the shared degradation price, Phase 4
+  source-flow audit, solver telemetry, and gap-certified composition semantics.
+  The focused set passes `101 passed`; the complete repository suite passes
+  `1215 passed` in 59.68 seconds; compileall and `git diff --check` pass. A
+  fresh clean-commit sunny/rain pair remains required before release status can
+  change.
+
 ## 2026-08-08 Phase 4 late-service SOC and MIP-gap correction
 
 - Executed a clean fresh-Prepare pair at commit

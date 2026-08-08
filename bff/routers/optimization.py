@@ -2441,6 +2441,12 @@ def _assignment_economic_audit_payload(
         solver_metadata.get("stage1_time_indexed_energy_recourse_result")
         or {}
     )
+    cost_breakdown = dict(optimization_result.get("cost_breakdown") or {})
+    assignment_energy_coupling_mode = str(
+        solver_metadata.get("assignment_energy_coupling_mode")
+        or recourse_configuration.get("semantics")
+        or "not_available_from_solver_metadata"
+    )
 
     def _finite_nonnegative(value: Any) -> Optional[float]:
         try:
@@ -2575,11 +2581,29 @@ def _assignment_economic_audit_payload(
             ).values()
             if bool(getattr(asset, "pv_enabled", False))
         )
-    pv_to_bus = _finite_nonnegative(recourse_result.get("pv_to_bus_kwh")) or 0.0
-    pv_to_bess = _finite_nonnegative(recourse_result.get("pv_to_bess_kwh")) or 0.0
-    bess_to_bus = _finite_nonnegative(recourse_result.get("bess_to_bus_kwh")) or 0.0
-    grid_to_bus = _finite_nonnegative(recourse_result.get("grid_to_bus_kwh")) or 0.0
-    grid_to_bess = _finite_nonnegative(recourse_result.get("grid_to_bess_kwh")) or 0.0
+    pv_to_bus = _finite_nonnegative(
+        recourse_result.get("pv_to_bus_kwh", cost_breakdown.get("pv_to_bus_kwh"))
+    ) or 0.0
+    pv_to_bess = _finite_nonnegative(
+        recourse_result.get(
+            "pv_to_bess_kwh", cost_breakdown.get("pv_to_bess_kwh")
+        )
+    ) or 0.0
+    bess_to_bus = _finite_nonnegative(
+        recourse_result.get(
+            "bess_to_bus_kwh", cost_breakdown.get("bess_to_bus_kwh")
+        )
+    ) or 0.0
+    grid_to_bus = _finite_nonnegative(
+        recourse_result.get(
+            "grid_to_bus_kwh", cost_breakdown.get("grid_to_bus_kwh")
+        )
+    ) or 0.0
+    grid_to_bess = _finite_nonnegative(
+        recourse_result.get(
+            "grid_to_bess_kwh", cost_breakdown.get("grid_to_bess_kwh")
+        )
+    ) or 0.0
 
     candidate_rows = list(
         solver_metadata.get("stage1_stage2_candidate_evaluation") or []
@@ -2609,10 +2633,7 @@ def _assignment_economic_audit_payload(
 
     return {
         "schema_version": "assignment_economic_audit_v1",
-        "assignment_energy_coupling_mode": str(
-            recourse_configuration.get("semantics")
-            or "not_available_from_solver_metadata"
-        ),
+        "assignment_energy_coupling_mode": assignment_energy_coupling_mode,
         "assignment_energy_coupling_stage2_authority": str(
             recourse_configuration.get("stage2_authority") or "not_recorded"
         ),
@@ -11455,7 +11476,9 @@ def _run_optimization(
             1 for vehicle in problem.vehicles if bool(getattr(vehicle, "available", True))
         )
         unused_available_vehicle_ids = list(engine_result.plan.unused_available_vehicle_ids(problem))
-        solver_metadata = dict(engine_result.solver_metadata or {})
+        # Preserve the post-solve wall-clock fallback already inserted into
+        # ``result_payload`` instead of rebuilding from stale engine metadata.
+        solver_metadata = dict(result_payload.get("solver_metadata") or {})
         strict_coverage_precheck = dict(
             solver_metadata.get("strict_coverage_precheck")
             or (result_payload.get("strict_coverage_precheck") if isinstance(result_payload, dict) else {})

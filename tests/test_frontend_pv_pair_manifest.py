@@ -197,6 +197,55 @@ def test_pair_manifest_proves_fixed_controls_and_exact_pv_difference(
     assert (output_dir / "comparison_report.md").is_file()
 
 
+def test_phase4_gap_certificate_replaces_stage1_composition_artifact(
+    tmp_path: Path,
+) -> None:
+    baseline = tmp_path / "baseline"
+    counterfactual = tmp_path / "counterfactual"
+    output_dir = tmp_path / "pair"
+    for run_dir, role, pv_hash, pv_values, total_cost in (
+        (baseline, "baseline", "high-pv", [1.0, 2.0], 100.0),
+        (
+            counterfactual,
+            "pv_curve_counterfactual",
+            "low-pv",
+            [0.2, 0.3],
+            120.0,
+        ),
+    ):
+        _case(
+            run_dir,
+            role=role,
+            control_hash="fixed-controls",
+            pv_hash=pv_hash,
+            pv_values=pv_values,
+            total_cost=total_cost,
+        )
+        (run_dir / "stage1_used_powertrain_composition_search.json").unlink()
+        _write_json(
+            run_dir / "solver_settings.json",
+            {
+                "executed_phase": "phase4_integrated",
+                "supports_exact_milp": True,
+                "has_feasible_incumbent": True,
+                "mip_gap_target_met": True,
+            },
+        )
+
+    manifest = build_frontend_pv_pair_artifacts(
+        baseline_run_dir=baseline,
+        counterfactual_run_dir=counterfactual,
+        output_dir=output_dir,
+    )
+
+    assert manifest["checks"][
+        "baseline_used_powertrain_composition_search_certified"
+    ] is True
+    assert manifest["checks"][
+        "counterfactual_used_powertrain_composition_search_certified"
+    ] is True
+
+
 def test_pair_manifest_rejects_case_with_a_non_pair_release_blocker(
     tmp_path: Path,
 ) -> None:

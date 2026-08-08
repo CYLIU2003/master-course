@@ -3145,20 +3145,29 @@ class GurobiMILPAdapter:
                         for coeff, key in electric_deadhead_kwh_by_slot.get(slot_idx, []):
                             objective += co2_price * co2_factor * coeff * x[key]
 
-        # Battery degradation cost: added when weights.degradation > 0.
-        # degradation_cost ≈ (charged_kwh / capacity_kwh) * unit_cost_per_cycle
+        # Battery degradation uses the same scenario throughput price
+        # (JPY/kWh charged) as the canonical accounting ledger.
         degradation_weight = problem.objective_weights.degradation
-        if degradation_weight > 0:
-            unit_cost_per_cycle = 50.0
+        degradation_price_jpy_per_kwh = self._safe_nonnegative_float(
+            problem.metadata.get("battery_degradation_price_jpy_per_kwh"),
+            default=0.0,
+        )
+        if (
+            component_flags.get("battery_degradation_cost", True)
+            and degradation_weight > 0
+            and degradation_price_jpy_per_kwh > 0.0
+        ):
             for vehicle in problem.vehicles:
                 if vehicle.vehicle_id not in bev_ids:
                     continue
-                cap = max(vehicle.battery_capacity_kwh or 300.0, 1.0)
                 for slot_idx in slot_indices:
                     if (vehicle.vehicle_id, slot_idx) not in c_var:
                         continue
-                    # charged_kwh = c_var * timestep_h; cycles = charged_kwh / cap
-                    coeff = degradation_weight * unit_cost_per_cycle * timestep_h / cap
+                    coeff = (
+                        degradation_weight
+                        * degradation_price_jpy_per_kwh
+                        * timestep_h
+                    )
                     objective += coeff * c_var[(vehicle.vehicle_id, slot_idx)]
 
         # End-of-day SOC target deviation penalty (soft).
@@ -3469,6 +3478,17 @@ class GurobiMILPAdapter:
                     first_feasible_sec = time.perf_counter() - optimize_started_at
             except Exception:
                 return
+
+        # A verified complete Phase-3 seed already supplies a feasible
+        # incumbent.  Continuing with the generic feasibility-focused profile
+        # wastes the integrated budget rediscovering incumbents while the
+        # research gate needs a lower-bound certificate.  Switch only after the
+        # same-problem recourse preflight has certified the start.
+        if integrated_warm_start_audit.get(
+            "integrated_feasible_start_applied", False
+        ):
+            model.Params.MIPFocus = 3
+            model.Params.Heuristics = 0.1
 
         model.optimize(_capture_first_feasible)
         
@@ -4102,6 +4122,16 @@ class GurobiMILPAdapter:
                 "source": "milp_gurobi",
                 "status": solver_status,
                 "objective_value": float(model.ObjVal),
+                "assignment_energy_coupling_mode": (
+                    "phase4_integrated_slot_energy_recourse"
+                ),
+                "stage1_best_obj_stop_enabled": bool(
+                    getattr(config, "stage1_best_obj_stop_enabled", True)
+                ),
+                "stage1_best_obj_stop_applied": False,
+                "gurobi_threads": configured_threads,
+                "integrated_mip_focus": int(model.Params.MIPFocus),
+                "integrated_heuristics": float(model.Params.Heuristics),
                 "duty_vehicle_map": duty_vehicle_map,
                 "integrated_unmodeled_vehicle_discharge_forbidden": True,
                 "integrated_vehicle_discharge_semantics": (
@@ -5452,9 +5482,16 @@ class GurobiMILPAdapter:
             float(problem.objective_weights.degradation or 0.0),
             0.0,
         )
+        degradation_price_jpy_per_kwh = self._safe_nonnegative_float(
+            problem.metadata.get(
+                "battery_degradation_price_jpy_per_kwh"
+            ),
+            default=0.0,
+        )
         if (
             component_flags.get("battery_degradation_cost", True)
             and degradation_weight > 0.0
+            and degradation_price_jpy_per_kwh > 0.0
         ):
             timestep_h = max(
                 float(
@@ -5475,15 +5512,10 @@ class GurobiMILPAdapter:
             )
             for vehicle in problem.vehicles:
                 vehicle_id = str(vehicle.vehicle_id)
-                capacity_kwh = max(
-                    float(vehicle.battery_capacity_kwh or 0.0),
-                    1.0,
-                )
                 coefficient = (
                     degradation_weight
-                    * 50.0
+                    * degradation_price_jpy_per_kwh
                     * timestep_h
-                    / capacity_kwh
                 )
                 for (
                     candidate_vehicle_id,
@@ -10882,6 +10914,7 @@ class GurobiMILPAdapter:
                 ),
                 "stage2_gurobi_feasibility_tol": stage2_feasibility_tol,
                 "stage2_gurobi_integrality_tol": stage2_integrality_tol,
+                "gurobi_threads": configured_threads,
                 "stage2_numeric_diagnostics": stage2_numeric_diagnostics,
                 "stage1_time_limit_sec_effective": (
                     0
@@ -11207,6 +11240,7 @@ class GurobiMILPAdapter:
             ),
             "stage2_gurobi_feasibility_tol": stage2_feasibility_tol,
             "stage2_gurobi_integrality_tol": stage2_integrality_tol,
+            "gurobi_threads": configured_threads,
             "stage2_numeric_diagnostics": stage2_numeric_diagnostics,
             "stage2_contract_overage_enabled": (
                 enable_contract_overage_penalty

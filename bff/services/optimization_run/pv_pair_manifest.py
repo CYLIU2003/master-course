@@ -106,6 +106,9 @@ def _case(run_dir: Path) -> dict[str, Any]:
         "research_claim_scope": claim_scope,
         "canonical_cost_ledger": ledger,
         "summary": summary,
+        "solver_settings": _load_optional_object(
+            run_dir / "solver_settings.json"
+        ),
         "solver_objective_accounting_reconciliation": _load_optional_object(
             run_dir / SOLVER_OBJECTIVE_ACCOUNTING_RECONCILIATION_FILE
         ),
@@ -185,6 +188,26 @@ def _case_base_release_gate_passes(claim_scope: Mapping[str, Any]) -> bool:
     )
 
 
+def _phase4_integrated_composition_is_certified(
+    case: Mapping[str, Any],
+) -> bool:
+    """Recognize a gap-certified full integrated solve as composition proof.
+
+    Phase 4 chooses assignment, vehicle activation, charging, PV, and BESS in
+    one MILP.  Requiring a Stage-1-only adjacent-composition artifact from
+    that path is a category error.  The replacement is deliberately strict:
+    the full successor network and requested global MIP gap must both pass.
+    """
+
+    settings = dict(case.get("solver_settings") or {})
+    return bool(
+        settings.get("executed_phase") == "phase4_integrated"
+        and settings.get("supports_exact_milp") is True
+        and settings.get("has_feasible_incumbent") is True
+        and settings.get("mip_gap_target_met") is True
+    )
+
+
 def build_frontend_pv_pair_artifacts(
     *,
     baseline_run_dir: Path,
@@ -219,13 +242,17 @@ def build_frontend_pv_pair_artifacts(
         )
     )
     baseline_composition_certificate_errors = (
-        validate_stage1_used_powertrain_composition_search(
+        []
+        if _phase4_integrated_composition_is_certified(baseline)
+        else validate_stage1_used_powertrain_composition_search(
             baseline["composition_search_certificate"],
             require_accepted=True,
         )
     )
     counterfactual_composition_certificate_errors = (
-        validate_stage1_used_powertrain_composition_search(
+        []
+        if _phase4_integrated_composition_is_certified(counterfactual)
+        else validate_stage1_used_powertrain_composition_search(
             counterfactual["composition_search_certificate"],
             require_accepted=True,
         )
