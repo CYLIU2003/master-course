@@ -2,6 +2,11 @@
 
 ## 2026-08-08 weather response and inventory-scaled composition search
 
+- Inventory-scaled exact-composition search never exports negative BEV/ICE
+  counts. Non-negative targets outside the selected inventory remain explicit
+  boundary evidence but are not solved, keeping large radii compatible with
+  the strict pair-certificate validator.
+
 - Clean commit `4cb571ade840d9147dd3c91d00718dfbdc531163` was run through
   fresh frontend Prepare for the controlled pair at
   `output/formal_pair_20260808_flat30_pv1000_bess6000_phase4_radius10_4cb571a_gap001`.

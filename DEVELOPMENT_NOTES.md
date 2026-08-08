@@ -1,5 +1,16 @@
 # Development Notes
 
+## 2026-08-08: inventory-span composition targets are count-valid
+
+- Exact used-powertrain composition search now omits negative BEV/ICE targets
+  before exporting the formal certificate. Non-negative targets beyond the
+  selected inventory remain as explicit inventory-boundary evidence and are
+  never solved. This keeps large inventory-scaled radii compatible with the
+  fail-closed pair-artifact validator; the validator itself remains strict.
+- A regression test exercises a radius much larger than the synthetic fleet and
+  requires every exported target count to remain non-negative; the existing
+  one-powertrain Phase 4 seed test preserves the no-adjacent-inventory boundary.
+
 ## 2026-08-08 controlled-pair diagnosis and adaptive seed span
 
 - Frozen SHA `4cb571ade840d9147dd3c91d00718dfbdc531163` completed the

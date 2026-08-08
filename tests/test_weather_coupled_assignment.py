@@ -583,7 +583,7 @@ def test_phase3_composition_search_activates_unused_powertrain_inventory() -> No
             warm_start=False,
             stage1_best_obj_stop_enabled=False,
             stage1_stage2_candidate_limit=3,
-            stage1_composition_search_radius=1,
+            stage1_composition_search_radius=100,
             gurobi_threads=1,
         ),
     )
@@ -600,13 +600,18 @@ def test_phase3_composition_search_activates_unused_powertrain_inventory() -> No
     }
 
     assert certificate["enabled"] is True
-    assert certificate["radius_requested"] == 1
+    assert certificate["radius_requested"] == 100
     assert metadata[
         "stage1_composition_target_time_limit_cap_seconds"
     ] == pytest.approx(25.0)
     assert len(feasible_compositions) >= 2
     assert certificate["multiple_feasible_compositions_found"] is True
     assert certificate["accepted_for_formal_composition_evidence"] is True
+    assert all(
+        int(record["target_used_bev"]) >= 0
+        and int(record["target_used_ice"]) >= 0
+        for record in certificate["target_records"]
+    )
     assert any(
         row["stage1_candidate_source"]
         == "used_powertrain_composition_neighborhood"

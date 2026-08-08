@@ -7698,11 +7698,17 @@ class GurobiMILPAdapter:
                     stage1_composition_search_radius + 1,
                 ):
                     for bev_delta in (distance, -distance):
+                        target_used_bev = int(primary_used_bev + bev_delta)
+                        target_used_ice = int(primary_used_ice - bev_delta)
+                        # A large inventory-scaled radius must not persist
+                        # mathematically invalid negative count targets.  A
+                        # non-negative target beyond the selected inventory is
+                        # still retained as explicit inventory-boundary
+                        # evidence, but it is never submitted to the solver.
+                        if target_used_bev < 0 or target_used_ice < 0:
+                            continue
                         requested_targets.append(
-                            (
-                                int(primary_used_bev + bev_delta),
-                                int(primary_used_ice - bev_delta),
-                            )
+                            (target_used_bev, target_used_ice)
                         )
             for target in requested_targets:
                 if target in seen_target_compositions:

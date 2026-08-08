@@ -1,5 +1,15 @@
 # Current research release blockers
 
+## 2026-08-08 inventory-span certificate producer/validator correction
+
+The first inventory-span rerun found physically valid compositions from 7 to
+27 used BEVs, but its pair builder correctly rejected the exported certificate:
+the large symmetric radius also persisted impossible negative count targets.
+The producer now omits negative targets while retaining non-negative
+outside-inventory records as explicit boundary evidence; the fail-closed
+validator remains unchanged. Results from the pre-fix SHA remain diagnostic
+pair evidence only; a fresh clean-commit pair is required for release.
+
 ## 2026-08-08 controlled pair outcome and remaining optimality blocker
 
 Clean commit `4cb571ade840d9147dd3c91d00718dfbdc531163` completed the
