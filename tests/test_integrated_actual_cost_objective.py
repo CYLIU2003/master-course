@@ -31,6 +31,7 @@ from src.optimization.engine import (
     OptimizationEngine,
     _phase4_seed_composition_search_limits,
     _phase4_seed_inventory_span_truncated,
+    _phase4_seed_model_build_overhead_allowance_sec,
     actual_cost_objective_reconciles,
 )
 from src.gurobi_runtime import ensure_gurobi
@@ -40,6 +41,7 @@ from src.optimization.milp.solver_adapter import (
     _identical_vehicle_prefix_remap,
     _integrated_search_controls,
     _ordered_identical_vehicle_groups,
+    _stage1_candidate_evaluation_priority_key,
 )
 from test_post_return_soc_target import _dispatch_context
 
@@ -56,6 +58,42 @@ def test_verified_integrated_start_keeps_incumbent_improvement_profile() -> None
     assert _integrated_search_controls(
         verified_feasible_start=False
     )["profile"] == "find_feasible_solution_then_bound"
+
+
+def test_phase4_seed_wall_allowance_preserves_stage2_solver_budget() -> None:
+    assert _phase4_seed_model_build_overhead_allowance_sec(
+        available_vehicle_count=60,
+        candidate_limit=61,
+    ) == 600
+    assert _phase4_seed_model_build_overhead_allowance_sec(
+        available_vehicle_count=2,
+        candidate_limit=21,
+    ) == 20
+    assert _phase4_seed_model_build_overhead_allowance_sec(
+        available_vehicle_count=60,
+        candidate_limit=1,
+    ) == 0
+
+
+def test_stage2_candidates_prioritize_weather_aware_relaxed_cost() -> None:
+    candidates = [
+        (1, 705_000.0, "primary", "primary_pool", AssignmentPlan()),
+        (2, 666_000.0, "sunny-high-bev", "composition", AssignmentPlan()),
+        (3, float("nan"), "invalid", "composition", AssignmentPlan()),
+        (4, 666_000.0, "sunny-high-bev-b", "composition", AssignmentPlan()),
+    ]
+
+    ordered = sorted(
+        candidates,
+        key=_stage1_candidate_evaluation_priority_key,
+    )
+
+    assert [candidate[2] for candidate in ordered] == [
+        "sunny-high-bev",
+        "sunny-high-bev-b",
+        "primary",
+        "invalid",
+    ]
 
 
 def test_identical_vehicle_prefix_remap_preserves_duty_choice() -> None:
@@ -759,6 +797,16 @@ def test_phase4_uses_verified_same_problem_phase3_plan_as_complete_mip_start() -
     ] is True
     seed_audit = result.solver_metadata["phase4_phase3_seed_audit"]
     assert seed_audit["seed_stage1_stage2_candidate_evaluation"]
+    assert seed_audit["seed_wall_runtime_sec"] > 0.0
+    assert seed_audit[
+        "seed_stage1_stage2_candidate_evaluation_order"
+    ] == "stage1_relaxed_objective_ascending_then_candidate_hash"
+    assert (
+        seed_audit[
+            "seed_stage1_stage2_candidate_evaluation_initial_budget_sec"
+        ]
+        > 0.0
+    )
     assert seed_audit["seed_stage1_stage2_selected_candidate_hash"]
     assert seed_audit[
         "seed_stage1_time_indexed_energy_recourse_configuration"

@@ -1,5 +1,40 @@
 # Current research release blockers
 
+## 2026-08-09 Phase 4 seed recourse was starved by model-build wall time
+
+The fresh sunny formal attempt from clean SHA
+`bf3fc2907fe852b39aa303272287e2133bd628a9` is preserved at
+`output/2026-08-09/run_20260809_0608` as **DIAGNOSTIC ONLY**. Its Stage 1
+composition search repaired the earlier regression and recovered assignment
+incumbents from 7 through 27 used BEVs. It did not produce a physical
+day-ahead result: every Stage 2 candidate was
+`not_run_feedback_budget_reserved`, the Phase 3 seed selected no candidate,
+Phase 4 received no verified start and finished after 3,600 seconds with zero
+incumbents and 264 unserved trips. Rolling correctly refused to start.
+
+The root cause is a budget-semantics defect. Gurobi's per-model `TimeLimit`
+does not include Python-side construction of the many exact-composition
+models, while the Phase 3 feedback deadline was a single 600-second wall
+clock. Model construction therefore spent the time intended for the explicit
+120-second Stage 2 solver budget. The correction keeps the declared 480/120
+solver limits unchanged and adds a separate deterministic wall allowance of
+10 seconds per reachable requested alternative, capped at 600 seconds. Solver
+and wall budgets are now distinct audited fields.
+
+Stage 2 candidate evaluation is also reordered by the weather-aware Stage 1
+relaxed objective, then candidate hash. The candidate set and feasible region
+are unchanged, and physical canonical Stage 2 cost remains authoritative. This
+prevents the 27-BEV sunny candidate—the lowest relaxed-cost row—from being
+last solely because symmetric deltas were generated from the primary count.
+
+The automatically started rain attempt was stopped before code changes; it is
+not pair evidence. Release remains `BLOCKED` until the budget/order correction
+passes tests, is committed cleanly, and a fresh controlled pair completes all
+day-ahead, Rolling, physical, accounting, provenance, control-match and 0.1%
+gap gates. A recovered high-BEV incumbent alone is not an optimality result.
+The current code suite passes `1230` tests; that closes the code-regression
+check only, not the fresh-run or optimality blockers.
+
 ## 2026-08-09 integrated optimality and composition coverage remain blocked
 
 Frozen SHA `14bbcfa1ba97889674e113eae44bfa3ec71577e0` completed the

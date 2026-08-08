@@ -486,6 +486,22 @@ def test_phase3_selects_lowest_canonical_cost_from_exact_stage2_candidates() -> 
     assert metadata["stage1_distinct_candidate_count"] == 2
     assert len(candidates) == 2
     assert len(feasible_costs) == 2
+    assert [
+        float(item["stage1_relaxed_objective_jpy"])
+        for item in candidates
+    ] == sorted(
+        float(item["stage1_relaxed_objective_jpy"])
+        for item in candidates
+    )
+    assert metadata["stage1_stage2_candidate_evaluation_order"] == (
+        "stage1_relaxed_objective_ascending_then_candidate_hash"
+    )
+    assert (
+        metadata[
+            "stage1_stage2_candidate_evaluation_initial_budget_sec"
+        ]
+        > 0.0
+    )
     assert metadata[
         "stage1_stage2_selected_canonical_actual_cost_jpy"
     ] == pytest.approx(min(feasible_costs))

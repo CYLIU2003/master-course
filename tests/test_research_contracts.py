@@ -157,9 +157,16 @@ def test_solver_settings_persists_phase4_seed_and_total_time_budget() -> None:
             "phase4_phase3_seed_audit": {
                 "requested": True,
                 "seed_time_limit_sec": 600,
+                "seed_wall_clock_budget_sec": 700,
+                "seed_wall_runtime_sec": 650.0,
+                "seed_model_build_overhead_allowance_sec": 100,
                 "seed_stage1_time_limit_sec": 480,
                 "seed_stage2_time_limit_sec": 120,
                 "seed_stage1_stage2_candidate_limit": 10,
+                "seed_stage1_stage2_candidate_evaluation_order": (
+                    "stage1_relaxed_objective_ascending_then_candidate_hash"
+                ),
+                "seed_stage1_stage2_candidate_evaluation_initial_budget_sec": 25.0,
                 "seed_stage1_composition_search_radius": 2,
                 "seed_search_directionality": (
                     "primary_plus_symmetric_adjacent_compositions"
@@ -178,9 +185,22 @@ def test_solver_settings_persists_phase4_seed_and_total_time_budget() -> None:
 
     assert payload["phase4_phase3_seed_enabled"] is True
     assert payload["phase4_phase3_seed_time_limit_sec"] == 600
+    assert payload["phase4_phase3_seed_wall_clock_budget_sec"] == 700
+    assert payload["phase4_phase3_seed_wall_runtime_sec"] == pytest.approx(
+        650.0
+    )
+    assert payload[
+        "phase4_phase3_seed_model_build_overhead_allowance_sec"
+    ] == 100
     assert payload["phase4_phase3_seed_stage1_time_limit_sec"] == 480
     assert payload["phase4_phase3_seed_stage2_time_limit_sec"] == 120
     assert payload["phase4_phase3_seed_candidate_limit"] == 10
+    assert payload["phase4_phase3_seed_candidate_evaluation_order"] == (
+        "stage1_relaxed_objective_ascending_then_candidate_hash"
+    )
+    assert payload[
+        "phase4_phase3_seed_candidate_evaluation_initial_budget_sec"
+    ] == pytest.approx(25.0)
     assert payload["phase4_phase3_seed_composition_search_radius"] == 2
     assert payload["phase4_phase3_seed_bev_frontier_enabled"] is False
     assert payload[

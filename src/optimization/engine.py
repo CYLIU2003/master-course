@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import replace
 import math
+import time
 
 from src.optimization.abc.engine import ABCOptimizer
 from src.optimization.alns.engine import ALNSOptimizer
@@ -41,6 +42,8 @@ from src.optimization.milp.engine import MILPOptimizer
 _PHASE4_SEED_MIN_COMPOSITION_CANDIDATE_LIMIT = 21
 _PHASE4_SEED_MIN_COMPOSITION_SEARCH_RADIUS = 10
 _PHASE4_SEED_MAX_COMPOSITION_SEARCH_SIZE = 100
+_PHASE4_SEED_MODEL_BUILD_ALLOWANCE_SEC_PER_TARGET = 10
+_PHASE4_SEED_MODEL_BUILD_ALLOWANCE_SEC_MAX = 600
 
 
 def _phase4_seed_inventory_span_truncated(
@@ -94,6 +97,37 @@ def _phase4_seed_composition_search_limits(
         _PHASE4_SEED_MAX_COMPOSITION_SEARCH_SIZE,
     )
     return candidate_limit, radius
+
+
+def _phase4_seed_model_build_overhead_allowance_sec(
+    *,
+    available_vehicle_count: int,
+    candidate_limit: int,
+) -> int:
+    """Reserve audited wall time for exact-composition model rebuilds.
+
+    Gurobi's ``TimeLimit`` excludes Python-side construction of each adjacent
+    exact-composition model.  Treating the sum of Stage 1 and Stage 2 solver
+    limits as a shared wall deadline can therefore consume the entire Stage 2
+    budget before any physical candidate is evaluated.  The allowance is not
+    additional solver time: the explicit Stage 1 and Stage 2 limits remain
+    unchanged.  It only keeps their wall-clock envelope from charging model
+    construction against the Stage 2 solver budget.
+    """
+
+    requested_alternative_count = max(int(candidate_limit) - 1, 0)
+    possible_alternative_count = max(int(available_vehicle_count), 0)
+    rebuild_target_count = min(
+        requested_alternative_count,
+        possible_alternative_count,
+    )
+    if rebuild_target_count <= 0:
+        return 0
+    return min(
+        rebuild_target_count
+        * _PHASE4_SEED_MODEL_BUILD_ALLOWANCE_SEC_PER_TARGET,
+        _PHASE4_SEED_MODEL_BUILD_ALLOWANCE_SEC_MAX,
+    )
 
 
 def actual_cost_objective_reconciles(
@@ -857,6 +891,15 @@ class OptimizationEngine:
             ),
             requested_radius=int(config.stage1_composition_search_radius),
         )
+        seed_model_build_overhead_allowance_sec = (
+            _phase4_seed_model_build_overhead_allowance_sec(
+                available_vehicle_count=available_vehicle_count,
+                candidate_limit=seed_candidate_limit,
+            )
+        )
+        seed_wall_clock_budget_sec = (
+            seed_limit_sec + seed_model_build_overhead_allowance_sec
+        )
         seed_config = replace(
             config,
             phase="phase3_two_stage",
@@ -870,7 +913,12 @@ class OptimizationEngine:
             integrated_actual_cost_upper_bound_delta_ratio=None,
             phase4_phase3_seed_enabled=False,
             phase4_phase3_seed_bev_frontier_enabled=False,
-            time_limit_sec=seed_limit_sec,
+            # ``time_limit_sec`` owns the shared wall deadline inside the
+            # two-stage adapter.  Stage-specific solver limits below preserve
+            # the declared 480/120 split; this extra audited envelope covers
+            # only Python/model-construction overhead for the inventory-span
+            # composition search.
+            time_limit_sec=seed_wall_clock_budget_sec,
             stage1_time_limit_sec=stage1_limit_sec,
             stage2_time_limit_sec=stage2_limit_sec,
             # The outer Phase 4 request intentionally has no Stage 1 pool and
@@ -912,7 +960,9 @@ class OptimizationEngine:
                 "phase4_phase3_seed_role": "mip_start_only",
             },
         )
+        seed_wall_started = time.perf_counter()
         seed_result = self._milp.solve(seed_problem, seed_config)
+        seed_wall_runtime_sec = time.perf_counter() - seed_wall_started
         seed_plan = seed_result.plan
         expected_trip_ids = set(problem.eligible_trip_ids())
         seed_trip_ids = set(seed_plan.served_trip_ids)
@@ -933,6 +983,10 @@ class OptimizationEngine:
             "role": "mip_start_only",
             "same_canonical_problem": True,
             "seed_time_limit_sec": seed_limit_sec,
+            "seed_wall_clock_budget_sec": seed_wall_clock_budget_sec,
+            "seed_model_build_overhead_allowance_sec": (
+                seed_model_build_overhead_allowance_sec
+            ),
             "seed_stage1_time_limit_sec": stage1_limit_sec,
             "seed_stage2_time_limit_sec": stage2_limit_sec,
             "integrated_seed_recourse_preflight_enabled": bool(
@@ -1018,6 +1072,7 @@ class OptimizationEngine:
                 seed_result.solver_metadata.get("runtime_sec", 0.0)
                 or 0.0
             ),
+            "seed_wall_runtime_sec": float(seed_wall_runtime_sec),
             "seed_result_feasible": bool(seed_result.feasible),
             "seed_stage1_feasible": bool(
                 seed_metadata.get("stage1_feasible", False)
@@ -1087,6 +1142,26 @@ class OptimizationEngine:
                 "stage1_stage2_candidate_evaluation"
             )
             or ()
+        )
+        acceptance[
+            "seed_stage1_stage2_candidate_evaluation_order"
+        ] = str(
+            seed_metadata.get("stage1_stage2_candidate_evaluation_order")
+            or seed_result.solver_metadata.get(
+                "stage1_stage2_candidate_evaluation_order"
+            )
+            or ""
+        )
+        acceptance[
+            "seed_stage1_stage2_candidate_evaluation_initial_budget_sec"
+        ] = float(
+            seed_metadata.get(
+                "stage1_stage2_candidate_evaluation_initial_budget_sec"
+            )
+            or seed_result.solver_metadata.get(
+                "stage1_stage2_candidate_evaluation_initial_budget_sec"
+            )
+            or 0.0
         )
         acceptance["seed_stage1_stage2_selected_candidate_hash"] = str(
             seed_metadata.get("stage1_stage2_selected_candidate_hash")

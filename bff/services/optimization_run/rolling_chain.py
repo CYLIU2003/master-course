@@ -780,6 +780,19 @@ def _comparison_case_manifest(
             "phase4_phase3_seed_time_limit_sec": solver_settings.get(
                 "phase4_phase3_seed_time_limit_sec"
             ),
+            "phase4_phase3_seed_wall_clock_budget_sec": (
+                solver_settings.get(
+                    "phase4_phase3_seed_wall_clock_budget_sec"
+                )
+            ),
+            "phase4_phase3_seed_wall_runtime_sec": solver_settings.get(
+                "phase4_phase3_seed_wall_runtime_sec"
+            ),
+            "phase4_phase3_seed_model_build_overhead_allowance_sec": (
+                solver_settings.get(
+                    "phase4_phase3_seed_model_build_overhead_allowance_sec"
+                )
+            ),
             "phase4_phase3_seed_stage1_time_limit_sec": (
                 solver_settings.get(
                     "phase4_phase3_seed_stage1_time_limit_sec"
@@ -792,6 +805,16 @@ def _comparison_case_manifest(
             ),
             "phase4_phase3_seed_candidate_limit": solver_settings.get(
                 "phase4_phase3_seed_candidate_limit"
+            ),
+            "phase4_phase3_seed_candidate_evaluation_order": (
+                solver_settings.get(
+                    "phase4_phase3_seed_candidate_evaluation_order"
+                )
+            ),
+            "phase4_phase3_seed_candidate_evaluation_initial_budget_sec": (
+                solver_settings.get(
+                    "phase4_phase3_seed_candidate_evaluation_initial_budget_sec"
+                )
             ),
             "phase4_phase3_seed_composition_search_radius": (
                 solver_settings.get(

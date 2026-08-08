@@ -1,5 +1,34 @@
 # master-course
 
+## 2026-08-09 Phase 4 seed wall-budget correction
+
+- Clean commit `bf3fc2907fe852b39aa303272287e2133bd628a9` was freshly
+  prepared for the flat-30/no-demand/PV-1000/BESS-6000 pair. The sunny run at
+  `output/2026-08-09/run_20260809_0608` is **DIAGNOSTIC ONLY**: Stage 1
+  recovered feasible assignment incumbents from 7 through 27 used BEVs, but
+  all 21 Stage 2 candidate rows were `not_run_feedback_budget_reserved`.
+  Phase 4 consequently received no verified physical seed, found no incumbent
+  in 3,600 seconds, served 0/264 trips and correctly blocked Rolling/release.
+- The 600-second seed contract had been used simultaneously as a Gurobi solver
+  budget and as a wall deadline. Rebuilding every exact-composition model is
+  Python-side work excluded from Gurobi `TimeLimit`; on the full inventory it
+  consumed the wall remainder reserved for Stage 2. The solver limits remain
+  480 seconds for Stage 1 and 120 seconds for Stage 2. A separately reported,
+  deterministic model-build allowance of 10 seconds per requested reachable
+  alternative (maximum 600 seconds) now expands only the shared wall envelope.
+- Stage 2 evaluates the unchanged candidate set in ascending weather-aware
+  Stage 1 relaxed objective, with candidate hash as the deterministic tie
+  break. This is not a BEV/weather policy preference: Stage 2 physical
+  canonical cost remains the selection authority. The order and initial Stage
+  2 budget are exported for audit, and the formal pair runner rejects missing
+  or inconsistent solver/wall-budget records.
+- The automatically started rain diagnostic was stopped after the deterministic
+  seed-handoff defect was confirmed; code was not changed while either run was
+  active. A fresh clean-commit pair is required after tests and commit.
+- Focused Gurobi/Phase 4/BFF/runner regressions and the full repository suite
+  pass (`1230 passed`). This validates code behavior only; it is not a formal
+  pair result.
+
 ## 2026-08-09 Phase 4 composition-search regression diagnosis
 
 - Clean commit `14bbcfa1ba97889674e113eae44bfa3ec71577e0` completed the

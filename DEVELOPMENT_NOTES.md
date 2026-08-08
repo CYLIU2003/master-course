@@ -1,5 +1,38 @@
 # Development Notes
 
+## 2026-08-09: Phase 4 seed wall-budget starvation correction
+
+- Fresh sunny run `output/2026-08-09/run_20260809_0608` from clean SHA
+  `bf3fc2907fe852b39aa303272287e2133bd628a9` confirmed that the symmetry-safe
+  composition starts restored Stage 1 incumbents across 7--27 used BEVs. The
+  lowest sunny Stage 1 relaxed objective was the 27-BEV/5-ICE candidate at
+  666,164.082366 JPY. This is candidate evidence, not a physical or optimal
+  result.
+- The run nevertheless ended `NO_VALID_INCUMBENT`: Phase 3 seed runtime was
+  485.502 solver seconds, but exact-composition model construction consumed the
+  shared 600-second wall deadline. All 21 Stage 2 evaluations were marked
+  `not_run_feedback_budget_reserved`; the selected candidate hash was empty,
+  integrated warm start was rejected as `baseline_is_not_verified_phase3_seed`,
+  and Phase 4 found zero incumbents in 3,600 seconds. Rolling correctly did not
+  start, and the result remains diagnostic.
+- `_with_verified_phase4_phase3_seed()` now distinguishes declared solver time
+  from model-build wall allowance. Stage 1/Stage 2 limits remain 480/120
+  seconds. The shared wall envelope receives a deterministic allowance of 10
+  seconds per reachable requested alternative, capped at 600 seconds. Audit
+  fields persist seed solver budget, seed wall budget, overhead allowance and
+  the existing combined solver budget separately.
+- Before physical Stage 2 evaluation, the unchanged Stage 1 candidate set is
+  ordered by finite weather-aware relaxed objective and then candidate hash.
+  This prevents generation order from starving the economically best sunny
+  high-BEV candidate. Stage 2 canonical physical cost still selects the final
+  plan; no BEV minimum, weather bias, fallback or repair was added.
+- The failed sunny artifacts were retained. The automatically launched rain
+  run was terminated before changing code because the same deterministic
+  handoff defect made the pair incapable of satisfying the formal contract.
+  A fresh Prepare and clean-commit controlled pair remain required.
+- Focused seed/composition/Gurobi/BFF/runner/Rolling tests pass, followed by the
+  full repository suite (`1230 passed in 63.76s`).
+
 ## 2026-08-09: controlled-pair diagnosis and symmetry-safe composition starts
 
 - Frozen SHA `14bbcfa1ba97889674e113eae44bfa3ec71577e0` completed the

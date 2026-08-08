@@ -10166,6 +10166,19 @@ def _solver_settings_payload(
         "phase4_phase3_seed_time_limit_sec": _int_or_none(
             phase4_seed_audit.get("seed_time_limit_sec")
         ),
+        "phase4_phase3_seed_wall_clock_budget_sec": _int_or_none(
+            phase4_seed_audit.get("seed_wall_clock_budget_sec")
+        ),
+        "phase4_phase3_seed_wall_runtime_sec": _float_or_none(
+            phase4_seed_audit.get("seed_wall_runtime_sec")
+        ),
+        "phase4_phase3_seed_model_build_overhead_allowance_sec": (
+            _int_or_none(
+                phase4_seed_audit.get(
+                    "seed_model_build_overhead_allowance_sec"
+                )
+            )
+        ),
         "phase4_phase3_seed_stage1_time_limit_sec": _int_or_none(
             phase4_seed_audit.get("seed_stage1_time_limit_sec")
         ),
@@ -10174,6 +10187,18 @@ def _solver_settings_payload(
         ),
         "phase4_phase3_seed_candidate_limit": _int_or_none(
             phase4_seed_audit.get("seed_stage1_stage2_candidate_limit")
+        ),
+        "phase4_phase3_seed_candidate_evaluation_order": (
+            phase4_seed_audit.get(
+                "seed_stage1_stage2_candidate_evaluation_order"
+            )
+        ),
+        "phase4_phase3_seed_candidate_evaluation_initial_budget_sec": (
+            _float_or_none(
+                phase4_seed_audit.get(
+                    "seed_stage1_stage2_candidate_evaluation_initial_budget_sec"
+                )
+            )
         ),
         "phase4_phase3_seed_composition_search_radius": _int_or_none(
             phase4_seed_audit.get(

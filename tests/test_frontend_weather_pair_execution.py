@@ -30,9 +30,15 @@ def test_formal_phase4_seed_control_contract_matches_server_profile() -> None:
     settings = {
         "phase4_phase3_seed_enabled": True,
         "phase4_phase3_seed_time_limit_sec": 600,
+        "phase4_phase3_seed_wall_clock_budget_sec": 620,
+        "phase4_phase3_seed_model_build_overhead_allowance_sec": 20,
         "phase4_phase3_seed_stage1_time_limit_sec": 480,
         "phase4_phase3_seed_stage2_time_limit_sec": 120,
         "phase4_phase3_seed_candidate_limit": 21,
+        "phase4_phase3_seed_candidate_evaluation_order": (
+            "stage1_relaxed_objective_ascending_then_candidate_hash"
+        ),
+        "phase4_phase3_seed_candidate_evaluation_initial_budget_sec": 25.0,
         "phase4_phase3_seed_composition_search_radius": 10,
         "phase4_phase3_seed_available_vehicle_count": 2,
         "phase4_phase3_seed_required_candidate_limit": 21,

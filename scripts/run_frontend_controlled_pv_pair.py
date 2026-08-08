@@ -2079,11 +2079,49 @@ def _phase4_seed_controls_match(settings: Mapping[str, Any]) -> bool:
     required_radius = settings.get(
         "phase4_phase3_seed_required_composition_search_radius"
     )
+    available_vehicle_count = settings.get(
+        "phase4_phase3_seed_available_vehicle_count"
+    )
+    expected_model_build_allowance_sec = (
+        min(
+            min(
+                max(candidate_limit - 1, 0),
+                max(available_vehicle_count, 0),
+            )
+            * 10,
+            600,
+        )
+        if isinstance(candidate_limit, int)
+        and isinstance(available_vehicle_count, int)
+        else None
+    )
+    expected_seed_wall_budget_sec = (
+        600 + expected_model_build_allowance_sec
+        if expected_model_build_allowance_sec is not None
+        else None
+    )
     return bool(
         settings.get("phase4_phase3_seed_enabled") is True
         and settings.get("phase4_phase3_seed_time_limit_sec") == 600
         and settings.get("phase4_phase3_seed_stage1_time_limit_sec") == 480
         and settings.get("phase4_phase3_seed_stage2_time_limit_sec") == 120
+        and settings.get(
+            "phase4_phase3_seed_model_build_overhead_allowance_sec"
+        )
+        == expected_model_build_allowance_sec
+        and settings.get("phase4_phase3_seed_wall_clock_budget_sec")
+        == expected_seed_wall_budget_sec
+        and settings.get("phase4_phase3_seed_candidate_evaluation_order")
+        == "stage1_relaxed_objective_ascending_then_candidate_hash"
+        and (
+            _number(
+                settings.get(
+                    "phase4_phase3_seed_candidate_evaluation_initial_budget_sec"
+                )
+            )
+            or 0.0
+        )
+        > 0.0
         and isinstance(candidate_limit, int)
         and isinstance(required_candidate_limit, int)
         and candidate_limit >= required_candidate_limit >= 21
@@ -3214,9 +3252,13 @@ def _build_pair_control_audit(
         day_ahead_control_fields += (
             "phase4_phase3_seed_enabled",
             "phase4_phase3_seed_time_limit_sec",
+            "phase4_phase3_seed_wall_clock_budget_sec",
+            "phase4_phase3_seed_model_build_overhead_allowance_sec",
             "phase4_phase3_seed_stage1_time_limit_sec",
             "phase4_phase3_seed_stage2_time_limit_sec",
             "phase4_phase3_seed_candidate_limit",
+            "phase4_phase3_seed_candidate_evaluation_order",
+            "phase4_phase3_seed_candidate_evaluation_initial_budget_sec",
             "phase4_phase3_seed_composition_search_radius",
             "phase4_phase3_seed_available_vehicle_count",
             "phase4_phase3_seed_required_candidate_limit",
