@@ -21,6 +21,8 @@ from src.optimization.common.seed_fingerprint import (
 )
 from src.optimization.engine import (
     OptimizationEngine,
+    _phase4_seed_composition_search_limits,
+    _phase4_seed_inventory_span_truncated,
     actual_cost_objective_reconciles,
 )
 from src.gurobi_runtime import ensure_gurobi
@@ -29,6 +31,41 @@ from src.optimization.milp.solver_adapter import (
     _actual_bess_terminal_soc_deviation_by_depot,
 )
 from test_post_return_soc_target import _dispatch_context
+
+
+def test_phase4_seed_composition_search_scales_with_selected_fleet() -> None:
+    candidate_limit, radius = _phase4_seed_composition_search_limits(
+        available_vehicle_count=60,
+        requested_candidate_limit=1,
+        requested_radius=0,
+    )
+
+    assert candidate_limit == 61
+    assert radius == 60
+
+
+def test_phase4_seed_composition_search_preserves_small_scope_floor() -> None:
+    candidate_limit, radius = _phase4_seed_composition_search_limits(
+        available_vehicle_count=2,
+        requested_candidate_limit=1,
+        requested_radius=0,
+    )
+
+    assert candidate_limit == 21
+    assert radius == 10
+
+
+def test_phase4_seed_composition_search_caps_oversized_scope() -> None:
+    candidate_limit, radius = _phase4_seed_composition_search_limits(
+        available_vehicle_count=100,
+        requested_candidate_limit=500,
+        requested_radius=500,
+    )
+
+    assert candidate_limit == 100
+    assert radius == 100
+    assert _phase4_seed_inventory_span_truncated(99) is False
+    assert _phase4_seed_inventory_span_truncated(100) is True
 
 
 def _same_slot_back_to_back_problem(

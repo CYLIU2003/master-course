@@ -34,6 +34,13 @@ def test_formal_phase4_seed_control_contract_matches_server_profile() -> None:
         "phase4_phase3_seed_stage2_time_limit_sec": 120,
         "phase4_phase3_seed_candidate_limit": 21,
         "phase4_phase3_seed_composition_search_radius": 10,
+        "phase4_phase3_seed_available_vehicle_count": 2,
+        "phase4_phase3_seed_required_candidate_limit": 21,
+        "phase4_phase3_seed_required_composition_search_radius": 10,
+        "phase4_phase3_seed_composition_search_scope": (
+            "selected_available_vehicle_inventory_symmetric_span"
+        ),
+        "phase4_phase3_seed_inventory_span_truncated": False,
         "phase4_phase3_seed_search_directionality": (
             "primary_plus_symmetric_adjacent_compositions"
         ),
@@ -47,6 +54,14 @@ def test_formal_phase4_seed_control_contract_matches_server_profile() -> None:
 
     assert runner._phase4_seed_controls_match(settings) is True
     settings["phase4_phase3_seed_composition_search_radius"] = 5
+    assert runner._phase4_seed_controls_match(settings) is False
+
+    settings["phase4_phase3_seed_composition_search_radius"] = 60
+    settings["phase4_phase3_seed_required_composition_search_radius"] = 60
+    settings["phase4_phase3_seed_candidate_limit"] = 61
+    settings["phase4_phase3_seed_required_candidate_limit"] = 61
+    assert runner._phase4_seed_controls_match(settings) is True
+    settings["phase4_phase3_seed_inventory_span_truncated"] = True
     assert runner._phase4_seed_controls_match(settings) is False
 
 

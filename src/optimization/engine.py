@@ -38,6 +38,64 @@ from src.optimization.hybrid.hybrid_engine import HybridOptimizer
 from src.optimization.milp.engine import MILPOptimizer
 
 
+_PHASE4_SEED_MIN_COMPOSITION_CANDIDATE_LIMIT = 21
+_PHASE4_SEED_MIN_COMPOSITION_SEARCH_RADIUS = 10
+_PHASE4_SEED_MAX_COMPOSITION_SEARCH_SIZE = 100
+
+
+def _phase4_seed_inventory_span_truncated(
+    available_vehicle_count: int,
+) -> bool:
+    """Return whether the primary plus all fixed-total mixes exceed the cap."""
+
+    return bool(
+        max(int(available_vehicle_count), 0) + 1
+        > _PHASE4_SEED_MAX_COMPOSITION_SEARCH_SIZE
+    )
+
+
+def _phase4_seed_composition_search_limits(
+    *,
+    available_vehicle_count: int,
+    requested_candidate_limit: int,
+    requested_radius: int,
+) -> tuple[int, int]:
+    """Return neutral Phase 4 seed controls spanning the selected fleet.
+
+    A fixed radius is unsafe because the primary Stage 1 composition is an
+    incumbent, not a stable reference point.  Sizing the symmetric search from
+    the selected available fleet lets the exact one-for-one BEV/ICE targets
+    cover every composition for the incumbent's used-vehicle total whenever
+    the selected fleet is within the research guardrail cap.
+    """
+
+    available_count = max(int(available_vehicle_count), 0)
+    bounded_available_count = min(
+        available_count,
+        _PHASE4_SEED_MAX_COMPOSITION_SEARCH_SIZE,
+    )
+    radius = min(
+        max(
+            int(requested_radius),
+            _PHASE4_SEED_MIN_COMPOSITION_SEARCH_RADIUS,
+            bounded_available_count,
+        ),
+        _PHASE4_SEED_MAX_COMPOSITION_SEARCH_SIZE,
+    )
+    candidate_limit = min(
+        max(
+            int(requested_candidate_limit),
+            _PHASE4_SEED_MIN_COMPOSITION_CANDIDATE_LIMIT,
+            min(
+                available_count + 1,
+                _PHASE4_SEED_MAX_COMPOSITION_SEARCH_SIZE,
+            ),
+        ),
+        _PHASE4_SEED_MAX_COMPOSITION_SEARCH_SIZE,
+    )
+    return candidate_limit, radius
+
+
 def actual_cost_objective_reconciles(
     *,
     raw_objective_jpy: float,
@@ -784,6 +842,21 @@ class OptimizationEngine:
         )
         stage2_limit_sec = min(max(seed_limit_sec // 5, 60), 180)
         stage1_limit_sec = max(seed_limit_sec - stage2_limit_sec, 60)
+        available_vehicle_count = sum(
+            1
+            for vehicle in problem.vehicles
+            if bool(getattr(vehicle, "available", True))
+        )
+        (
+            seed_candidate_limit,
+            seed_composition_search_radius,
+        ) = _phase4_seed_composition_search_limits(
+            available_vehicle_count=available_vehicle_count,
+            requested_candidate_limit=int(
+                config.stage1_stage2_candidate_limit
+            ),
+            requested_radius=int(config.stage1_composition_search_radius),
+        )
         seed_config = replace(
             config,
             phase="phase3_two_stage",
@@ -803,19 +876,16 @@ class OptimizationEngine:
             # The outer Phase 4 request intentionally has no Stage 1 pool and
             # therefore commonly carries candidate_limit=1.  Reusing that
             # value here would silently collapse the Phase 3 seed search to
-            # its primary composition.  Keep the seed budget explicit and
-            # stable across frontend callers.  Radius ten explores both
-            # powertrain directions symmetrically; Stage 2 canonical cost
-            # still selects the hand-off, so this is candidate diversity, not
-            # an EV-preference policy.
-            # Primary composition plus both directions for deltas 1..10.
-            # The 2026-08-08 controlled pair proved radius five insufficient:
-            # its primary 18-BEV seed could not reach the known lower-cost
-            # 25-BEV sunny composition.
-            stage1_stage2_candidate_limit=21,
-            stage1_composition_search_radius=max(
-                int(config.stage1_composition_search_radius),
-                10,
+            # its primary composition.  Keep the seed budget explicit while
+            # deriving the symmetric span from the selected available fleet.
+            # The primary composition is solver-dependent: the 2026-08-08
+            # controlled pair moved from 18 to 13 BEVs, so even radius ten
+            # stopped at 23 BEVs while the sunny cost curve was still falling.
+            # Stage 2 canonical cost still selects the hand-off, so exhaustive
+            # one-for-one composition diversity is not an EV policy bias.
+            stage1_stage2_candidate_limit=seed_candidate_limit,
+            stage1_composition_search_radius=(
+                seed_composition_search_radius
             ),
             stage1_bev_frontier_enabled=bool(
                 getattr(
@@ -913,6 +983,21 @@ class OptimizationEngine:
             ),
             "seed_stage1_composition_search_radius": int(
                 seed_config.stage1_composition_search_radius
+            ),
+            "seed_available_vehicle_count": available_vehicle_count,
+            "seed_composition_search_required_candidate_limit": (
+                seed_candidate_limit
+            ),
+            "seed_composition_search_required_radius": (
+                seed_composition_search_radius
+            ),
+            "seed_composition_search_scope": (
+                "selected_available_vehicle_inventory_symmetric_span"
+            ),
+            "seed_composition_search_inventory_span_truncated": bool(
+                _phase4_seed_inventory_span_truncated(
+                    available_vehicle_count
+                )
             ),
             "seed_search_directionality": (
                 "explicit_minimum_bev_frontier_sensitivity"

@@ -1,5 +1,33 @@
 # Current research release blockers
 
+## 2026-08-08 controlled pair outcome and remaining optimality blocker
+
+Clean commit `4cb571ade840d9147dd3c91d00718dfbdc531163` completed the
+controlled frontend pair at
+`output/formal_pair_20260808_flat30_pv1000_bess6000_phase4_radius10_4cb571a_gap001`.
+Sunny used 23 BEVs / 9 ICE buses for 121 / 143 trips at 685,663.511395 JPY;
+rain used 21 / 11 for 91 / 173 at 698,419.690050 JPY. Both served all 264
+trips, passed independent physical validation and 24/24 Rolling, and matched
+the canonical executed accounting total exactly. All non-PV pair controls
+matched and the PV profiles differed as declared, so the pair is accepted for
+controlled PV sensitivity.
+
+This pair demonstrates the expected direction without policy bias. Rain used
+all 996.2 kWh PV plus 124.985 kWh grid-to-bus energy; its candidate cost was
+lowest at 21 BEVs and rose at 22 and 23. Sunny used 1,563.002 kWh from
+6,056.25 kWh PV with no grid purchase, and its cost continued falling to the
+23-BEV search boundary. Thus the earlier identical 18-BEV result was caused by
+candidate-search truncation. It was not evidence that additional sunny PV had
+no dispatch value.
+
+Release remains `BLOCKED`: both integrated models processed one node and ended
+at 100% gap, so neither composition is globally certified. The latest run also
+showed that fixed radius ten was still unsafe because the primary composition
+moved from 18 to 13 BEVs. The working tree replaces that fixed radius with a
+selected-inventory-scaled symmetric span and makes formal control audit fail
+closed when the span is truncated. Fresh clean-commit execution is required
+before that follow-up correction can become current formal evidence.
+
 Status date: 2026-08-08
 Code status: clean commit `b8793f3` produced physically valid, weather-
 responsive sunny/rain incumbents, but formal release remained blocked by the

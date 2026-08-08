@@ -748,8 +748,8 @@ class RunOptimizationBody(BaseModel):
     # older client cannot restore the early stop or a machine-dependent thread
     # count through a request body.
     stage1_best_obj_stop_enabled: bool = INTERACTIVE_STAGE1_BEST_OBJ_STOP_ENABLED
-    stage1_stage2_candidate_limit: int = Field(default=1, ge=1, le=50)
-    stage1_composition_search_radius: int = Field(default=0, ge=0, le=10)
+    stage1_stage2_candidate_limit: int = Field(default=1, ge=1, le=100)
+    stage1_composition_search_radius: int = Field(default=0, ge=0, le=100)
     stage1_bev_frontier_enabled: bool = False
     stage1_bev_frontier_min_count: int = Field(default=15, ge=0, le=200)
     stage1_bev_frontier_max_count: int = Field(default=35, ge=0, le=200)
@@ -10102,6 +10102,30 @@ def _solver_settings_payload(
         "phase4_phase3_seed_composition_search_radius": _int_or_none(
             phase4_seed_audit.get(
                 "seed_stage1_composition_search_radius"
+            )
+        ),
+        "phase4_phase3_seed_available_vehicle_count": _int_or_none(
+            phase4_seed_audit.get("seed_available_vehicle_count")
+        ),
+        "phase4_phase3_seed_required_candidate_limit": _int_or_none(
+            phase4_seed_audit.get(
+                "seed_composition_search_required_candidate_limit"
+            )
+        ),
+        "phase4_phase3_seed_required_composition_search_radius": (
+            _int_or_none(
+                phase4_seed_audit.get(
+                    "seed_composition_search_required_radius"
+                )
+            )
+        ),
+        "phase4_phase3_seed_composition_search_scope": (
+            phase4_seed_audit.get("seed_composition_search_scope")
+        ),
+        "phase4_phase3_seed_inventory_span_truncated": bool(
+            phase4_seed_audit.get(
+                "seed_composition_search_inventory_span_truncated",
+                True,
             )
         ),
         "phase4_phase3_seed_search_directionality": (

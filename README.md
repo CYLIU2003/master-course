@@ -1,5 +1,35 @@
 # master-course
 
+## 2026-08-08 weather response and inventory-scaled composition search
+
+- Clean commit `4cb571ade840d9147dd3c91d00718dfbdc531163` was run through
+  fresh frontend Prepare for the controlled pair at
+  `output/formal_pair_20260808_flat30_pv1000_bess6000_phase4_radius10_4cb571a_gap001`.
+  Both cases fixed 264 trips, 60 selected vehicles, 10 chargers, flat
+  30 JPY/kWh energy, zero demand charge, a 1,000 kW PV rating and a
+  6,000 kWh / 3,000->3,000 kWh BESS. Only the separately hashed PV curve
+  differed.
+- Sunny used 23 BEVs / 9 ICE buses and served 121 / 143 trips at
+  685,663.511395 JPY. Rain used 21 / 11 and served 91 / 173 trips at
+  698,419.690050 JPY. Both served 264/264, passed independent physical
+  validation and 24/24 Rolling, and reconciled solver objective to canonical
+  accounting exactly. The pair is accepted for controlled PV sensitivity but
+  remains `BLOCKED` for formal optimality because both full integrated models
+  stopped at 100% gap after one node.
+- The rain cost curve reached its minimum at 21 BEVs: all 996.2 kWh of PV was
+  used and 124.985 kWh of grid-to-bus energy was purchased; 22 and 23 BEVs
+  increased cost. Sunny used 1,563.002 kWh of its 6,056.25 kWh PV input with
+  zero grid purchase, and cost continued falling through the radius-10 search
+  boundary at 23 BEVs. This proves the prior identical 18-BEV result was a
+  candidate-search failure, not evidence that sunny PV lacked economic value.
+- A second boundary defect was therefore corrected: the internal Phase 4 seed
+  no longer assumes that a solver-dependent primary composition can be covered
+  by a fixed +/-10 radius. Candidate count and symmetric radius now scale from
+  the selected available fleet (61 candidates and radius 60 for this 60-bus
+  scope), while Stage 2 actual cost remains the selector. The formal runner
+  rejects truncated inventory spans. No weather direction or BEV preference
+  is added.
+
 ## 2026-08-08 Phase 4 accounting and formal-evidence correction
 
 - The clean `b64bedb` controlled pair at

@@ -1,5 +1,38 @@
 # Development Notes
 
+## 2026-08-08 controlled-pair diagnosis and adaptive seed span
+
+- Frozen SHA `4cb571ade840d9147dd3c91d00718dfbdc531163` completed the
+  frontend-controlled flat-30/no-demand/PV-1000/BESS-6000 pair at
+  `output/formal_pair_20260808_flat30_pv1000_bess6000_phase4_radius10_4cb571a_gap001`.
+  Pair controls and fleet/timetable/initial-state hashes matched; only the PV
+  profile hash differed. Both jobs served 264/264, passed physical validation
+  and 24/24 Rolling, retained `objective_is_actual_cost=true`, and reconciled
+  objective and executed accounting total exactly.
+- Sunny selected 23 BEVs / 9 ICE buses and 121 / 143 trips at
+  685,663.511395 JPY. It used 1,563.002 kWh of 6,056.25 kWh PV input and zero
+  grid energy. Rain selected 21 / 11 and 91 / 173 at 698,419.690050 JPY. It
+  exhausted 996.2 kWh PV and purchased 124.985 kWh grid-to-bus energy. Rain's
+  candidate objective fell through 21 BEVs, then rose for 22 and 23; sunny's
+  objective was still falling at the 23-BEV boundary.
+- The full integrated model has roughly 776,752 variables and 1,929,148
+  constraints. Both cases processed only one node and stopped at 100% gap, so
+  the verified Phase 3 seed determined the incumbent. These are physically
+  valid controlled-sensitivity candidates, not global optima.
+- The run exposed that the previous fixed radius ten was still primary-point
+  dependent: the fresh primary was 13 BEVs, not the earlier 18, so the search
+  stopped at 23 and omitted the known feasible 25-BEV region. Phase 4 now
+  derives the neutral candidate limit and symmetric radius from the selected
+  available vehicle count, subject to an explicit 100-vehicle research cap.
+  With 60 selected vehicles the effective controls are 61 candidates and
+  radius 60; exact inventory-invalid targets are skipped, and canonical Stage
+  2 actual cost selects the hand-off.
+- Solver/BFF/runner metadata now records the available count, required limits,
+  coverage scope and truncation flag. Formal pair execution rejects a search
+  whose applied controls are smaller than required or whose selected-inventory
+  span hit the cap. Focused regression coverage includes both the 60-vehicle
+  scaling case and fail-closed formal-control checks.
+
 ## 2026-08-08 Phase 4 accounting, telemetry and search-profile correction
 
 - Clean commit `b64bedbd0bf5e371d1b6a31f9d8478a7b0d07295` was run through

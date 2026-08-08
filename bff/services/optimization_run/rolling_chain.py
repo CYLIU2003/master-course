@@ -798,6 +798,31 @@ def _comparison_case_manifest(
                     "phase4_phase3_seed_composition_search_radius"
                 )
             ),
+            "phase4_phase3_seed_available_vehicle_count": (
+                solver_settings.get(
+                    "phase4_phase3_seed_available_vehicle_count"
+                )
+            ),
+            "phase4_phase3_seed_required_candidate_limit": (
+                solver_settings.get(
+                    "phase4_phase3_seed_required_candidate_limit"
+                )
+            ),
+            "phase4_phase3_seed_required_composition_search_radius": (
+                solver_settings.get(
+                    "phase4_phase3_seed_required_composition_search_radius"
+                )
+            ),
+            "phase4_phase3_seed_composition_search_scope": (
+                solver_settings.get(
+                    "phase4_phase3_seed_composition_search_scope"
+                )
+            ),
+            "phase4_phase3_seed_inventory_span_truncated": (
+                solver_settings.get(
+                    "phase4_phase3_seed_inventory_span_truncated"
+                )
+            ),
             "phase4_phase3_seed_search_directionality": (
                 solver_settings.get(
                     "phase4_phase3_seed_search_directionality"

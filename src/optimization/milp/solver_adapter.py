@@ -4783,7 +4783,7 @@ class GurobiMILPAdapter:
                 ),
                 1,
             ),
-            50,
+            100,
         )
         stage1_composition_search_radius = min(
             max(
@@ -4797,7 +4797,7 @@ class GurobiMILPAdapter:
                 ),
                 0,
             ),
-            10,
+            100,
         )
         stage1_composition_search_enabled = bool(
             stage2_enabled
@@ -4833,7 +4833,7 @@ class GurobiMILPAdapter:
                     stage1_stage2_candidate_limit,
                     stage1_bev_frontier_target_count + 1,
                 ),
-                50,
+                100,
             )
         stage1_explicit_powertrain_search_enabled = bool(
             stage1_composition_search_enabled

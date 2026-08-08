@@ -2069,16 +2069,31 @@ def _phase4_warm_start_evidence_valid(
 def _phase4_seed_controls_match(settings: Mapping[str, Any]) -> bool:
     """Verify the server-authoritative neutral Phase 4 seed contract."""
 
+    candidate_limit = settings.get("phase4_phase3_seed_candidate_limit")
+    required_candidate_limit = settings.get(
+        "phase4_phase3_seed_required_candidate_limit"
+    )
+    radius = settings.get(
+        "phase4_phase3_seed_composition_search_radius"
+    )
+    required_radius = settings.get(
+        "phase4_phase3_seed_required_composition_search_radius"
+    )
     return bool(
         settings.get("phase4_phase3_seed_enabled") is True
         and settings.get("phase4_phase3_seed_time_limit_sec") == 600
         and settings.get("phase4_phase3_seed_stage1_time_limit_sec") == 480
         and settings.get("phase4_phase3_seed_stage2_time_limit_sec") == 120
-        and settings.get("phase4_phase3_seed_candidate_limit") == 21
-        and settings.get(
-            "phase4_phase3_seed_composition_search_radius"
-        )
-        == 10
+        and isinstance(candidate_limit, int)
+        and isinstance(required_candidate_limit, int)
+        and candidate_limit >= required_candidate_limit >= 21
+        and isinstance(radius, int)
+        and isinstance(required_radius, int)
+        and radius >= required_radius >= 10
+        and settings.get("phase4_phase3_seed_composition_search_scope")
+        == "selected_available_vehicle_inventory_symmetric_span"
+        and settings.get("phase4_phase3_seed_inventory_span_truncated")
+        is False
         and settings.get("phase4_phase3_seed_search_directionality")
         == "primary_plus_symmetric_adjacent_compositions"
         and settings.get("phase4_phase3_seed_bev_frontier_enabled") is False
@@ -3167,6 +3182,11 @@ def _build_pair_control_audit(
             "phase4_phase3_seed_stage2_time_limit_sec",
             "phase4_phase3_seed_candidate_limit",
             "phase4_phase3_seed_composition_search_radius",
+            "phase4_phase3_seed_available_vehicle_count",
+            "phase4_phase3_seed_required_candidate_limit",
+            "phase4_phase3_seed_required_composition_search_radius",
+            "phase4_phase3_seed_composition_search_scope",
+            "phase4_phase3_seed_inventory_span_truncated",
             "phase4_phase3_seed_search_directionality",
             "phase4_phase3_seed_bev_frontier_enabled",
             "phase4_integrated_seed_recourse_preflight_enabled",
