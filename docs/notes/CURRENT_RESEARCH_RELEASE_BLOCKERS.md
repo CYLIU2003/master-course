@@ -20,7 +20,10 @@ The working tree shifts an independently verified complete-start solve from a
 feasibility-heavy profile to one uninterrupted bound-certification profile,
 adds an audited integer-valid objective floor, removes only exact vehicle-ID
 permutation symmetry, warms each adjacent composition from its feasible
-neighbor, and fixes the interactive resource contract at eight Gurobi threads.
+neighbor. An eight-thread clean attempt was stopped after private allocation
+reached about 58 GB and OS virtual-memory headroom fell below 1 GB; it is not
+research evidence. The interactive resource contract is now four Gurobi
+threads for both cases.
 No weather or BEV preference and no feasibility relaxation is introduced.
 
 Release remains `BLOCKED` until these changes are committed, fresh Prepare is

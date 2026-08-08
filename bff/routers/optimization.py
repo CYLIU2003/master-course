@@ -163,7 +163,7 @@ INTERACTIVE_RUNTIME_POLICY_VERSION = "interactive_runtime_controls_v1"
 INTERACTIVE_STAGE1_BEST_OBJ_STOP_ENABLED = False
 # Keep a fixed value for pair reproducibility while using enough of the
 # research workstation to finish the integrated root relaxation and proof.
-INTERACTIVE_GUROBI_THREADS = 8
+INTERACTIVE_GUROBI_THREADS = 4
 INTERACTIVE_TERMINAL_SOC_POLICY_VERSION = "interactive_terminal_soc_controls_v1"
 INTERACTIVE_BEV_TERMINAL_SOC_POLICY = "return_to_initial"
 INTERACTIVE_OPERATION_TIME_WINDOW_CONTROLS_VERSION = (
@@ -403,7 +403,7 @@ def _interactive_runtime_controls_payload(
         "effective": effective,
         "override_applied": requested != effective,
         "reason": (
-            "Interactive runs disable Stage 1 BestObjStop and use eight fixed "
+            "Interactive runs disable Stage 1 BestObjStop and use four fixed "
             "Gurobi threads so their solver controls are recorded consistently "
             "while Phase 4 can advance its global bound."
         ),
@@ -908,7 +908,7 @@ def _optimization_capabilities() -> Dict[str, Any]:
             "Results are persisted to the scenario snapshot; job state is not.",
             "Optimization/re-optimization runs in a dedicated executor so API polling stays responsive.",
             "Only one optimization/re-optimization job is allowed at a time in this BFF process.",
-            "Interactive /run-optimization enforces Stage 1 BestObjStop=OFF and Gurobi Threads=8; the formal CLI runner remains explicit.",
+            "Interactive /run-optimization enforces Stage 1 BestObjStop=OFF and Gurobi Threads=4; the formal CLI runner remains explicit.",
             "The default interactive profile executes the complete 60-minute rolling chain in the same job; day-ahead-only diagnostics require run_profile=day_ahead_exploratory.",
         ],
     }

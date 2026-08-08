@@ -82,7 +82,7 @@ _ACTUAL_DATE_PV_PROFILE_ID = "actual_date_profile"
 # payload makes the effective interactive solver controls visible in the
 # console and run provenance without asking the user to set them every time.
 _INTERACTIVE_STAGE1_BEST_OBJ_STOP_ENABLED = False
-_INTERACTIVE_GUROBI_THREADS = 8
+_INTERACTIVE_GUROBI_THREADS = 4
 _TRIAL_RUN_LABEL = "試行計算（研究提出不可）"
 _FORMAL_RESEARCH_RUN_LABEL = "正式研究実行（clean Git必須）"
 _RESEARCH_EXECUTION_OPTIONS = (

@@ -26,10 +26,13 @@
   start. Adjacent composition warm starts use the same ordering, and each next
   delta starts from the last feasible adjacent composition instead of always
   rebuilding from the primary composition.
-- The interactive BFF/Tk contract now fixes Gurobi at eight threads rather than
-  one and records requested/effective values. Controlled pair cases still use
-  exactly the same thread count. This changes search resources, not the
-  mathematical feasible set, prices, PV/BESS flows, or objective semantics.
+- The first clean execution with eight threads reached about 58 GB of private
+  allocation and left less than 1 GB of OS virtual-memory headroom. It was
+  stopped before an out-of-memory failure and is diagnostic only. The
+  interactive BFF/Tk contract therefore fixes Gurobi at four threads rather
+  than one, records requested/effective values, and keeps both controlled cases
+  identical. This changes search resources, not the mathematical feasible set,
+  prices, PV/BESS flows, or objective semantics.
 - Focused cost, composition, research-contract, runtime-control and frontend
   regressions pass (`159 passed`), and the complete suite passes (`1,226
   passed`). Fresh clean-commit Prepare and both complete frontend cases remain

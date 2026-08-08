@@ -18,8 +18,11 @@
   symmetry among vehicles whose complete solver-relevant records are equal.
   Baseline-active identifiers are ordered first so the verified warm start
   remains feasible; adjacent composition starts use the same canonical order.
-- Interactive frontend runs use a fixed eight Gurobi threads on this host. The
-  applied value is persisted and must match between controlled cases. These
+- Interactive frontend runs use a fixed four Gurobi threads on this host. An
+  eight-thread clean diagnostic exhausted the practical virtual-memory margin
+  (about 58 GB private allocation with less than 1 GB remaining), so it was
+  stopped and is not research evidence. The applied value is persisted and
+  must match between controlled cases. These
   changes do not alter PV, tariff, fleet, timetable, SOC, charger, or
   accounting semantics and do not add a BEV/weather preference.
 - Fresh Prepare and a clean frozen-commit sunny/rain rerun are still required.

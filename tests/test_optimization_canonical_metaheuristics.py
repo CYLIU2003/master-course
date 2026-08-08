@@ -181,10 +181,10 @@ def test_run_optimization_uses_canonical_engine_for_ga_mode() -> None:
             100,
             0.25,
             stage1_best_obj_stop_enabled=True,
-            gurobi_threads=8,
+            gurobi_threads=4,
             frontend_request_payload={
                 "stage1_best_obj_stop_enabled": True,
-                "gurobi_threads": 8,
+                "gurobi_threads": 4,
             },
         )
 
@@ -195,7 +195,7 @@ def test_run_optimization_uses_canonical_engine_for_ga_mode() -> None:
     effective_scenario = problem_builder_cls.return_value.build_from_scenario.call_args.args[0]
     assert config.warm_start is True
     assert config.stage1_best_obj_stop_enabled is False
-    assert config.gurobi_threads == 8
+    assert config.gurobi_threads == 4
     assert effective_scenario["simulation_config"]["bev_terminal_soc_policy"] == "return_to_initial"
     assert effective_scenario["simulation_config"]["final_soc_target_percent"] is None
     assert effective_scenario["simulation_config"]["operation_time_window_enabled"] is False
@@ -206,11 +206,11 @@ def test_run_optimization_uses_canonical_engine_for_ga_mode() -> None:
     assert provenance_kwargs["frontend_request"]["mode"] == "ga"
     assert provenance_kwargs["frontend_request"]["raw_frontend_body"] == {
         "stage1_best_obj_stop_enabled": True,
-        "gurobi_threads": 8,
+        "gurobi_threads": 4,
     }
     assert provenance_kwargs["frontend_request"]["interactive_runtime_controls"][
         "effective"
-    ] == {"stage1_best_obj_stop_enabled": False, "gurobi_threads": 8}
+    ] == {"stage1_best_obj_stop_enabled": False, "gurobi_threads": 4}
     assert provenance_kwargs["frontend_request"]["interactive_terminal_soc_controls"][
         "effective"
     ]["bev_terminal_soc_policy"] == "return_to_initial"
@@ -223,7 +223,7 @@ def test_run_optimization_uses_canonical_engine_for_ga_mode() -> None:
     assert stored_fields["optimization_result"]["solver_mode"] == "mode_ga_only"
     assert stored_fields["optimization_result"]["solver_settings"][
         "interactive_runtime_controls"
-    ]["effective"] == {"stage1_best_obj_stop_enabled": False, "gurobi_threads": 8}
+    ]["effective"] == {"stage1_best_obj_stop_enabled": False, "gurobi_threads": 4}
     assert stored_fields["optimization_result"]["solver_settings"][
         "interactive_operation_time_window_controls"
     ]["effective"]["end_time"] == "23:59"
