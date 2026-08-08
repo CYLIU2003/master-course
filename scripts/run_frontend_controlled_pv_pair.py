@@ -394,7 +394,7 @@ def build_optimization_payload(
         # weather-specific bias.
         "stage1_stage2_candidate_limit": 21,
         "stage1_composition_search_radius": 2,
-        "gurobi_threads": 1,
+        "gurobi_threads": 4,
         "run_profile": "day_ahead_and_hourly_rolling",
         "run_hourly_rolling": True,
         "rolling_execution_minutes": 60,
@@ -2447,7 +2447,7 @@ def _case_gate_audit(
             and _number(settings.get("mip_gap_requested_ratio"))
             == requested_gap_ratio
             and settings.get("stage1_best_obj_stop_enabled") is False
-            and settings.get("gurobi_threads") == 1
+            and settings.get("gurobi_threads") == 4
             and settings.get("random_seed") == 42
             and (
                 phase4_integrated
@@ -2682,10 +2682,31 @@ def _build_same_assignment_investigation(
             rain_dir / "stage1_stage2_candidate_evaluation.json"
         ),
     }
+    settings_by_case = {
+        "sunny": sunny_settings,
+        "rain": rain_settings,
+    }
+    phase4_seed_audits = {
+        case: dict(settings.get("phase4_phase3_seed_audit") or {})
+        for case, settings in settings_by_case.items()
+    }
     candidates_by_case = {
         "sunny": _candidate_rows(sunny_dir, "sunny"),
         "rain": _candidate_rows(rain_dir, "rain"),
     }
+    for case in ("sunny", "rain"):
+        if candidates_by_case[case]:
+            continue
+        candidates_by_case[case] = [
+            {"case": case, **dict(candidate)}
+            for candidate in list(
+                phase4_seed_audits[case].get(
+                    "seed_stage1_stage2_candidate_evaluation"
+                )
+                or ()
+            )
+            if isinstance(candidate, Mapping)
+        ]
     candidates = [
         *candidates_by_case["sunny"],
         *candidates_by_case["rain"],
@@ -2716,7 +2737,11 @@ def _build_same_assignment_investigation(
     )
     selected_hash_by_case = {
         case: str(
-            payload.get("selected_candidate_hash") or ""
+            payload.get("selected_candidate_hash")
+            or phase4_seed_audits[case].get(
+                "seed_stage1_stage2_selected_candidate_hash"
+            )
+            or ""
         )
         for case, payload in candidate_payloads.items()
     }
@@ -2945,15 +2970,27 @@ def _build_same_assignment_investigation(
         duty_overlap_rows,
     )
 
-    sunny_recourse_hash = _nested(
-        sunny_settings,
-        "stage1_time_indexed_energy_recourse_configuration",
-        "objective_coefficient_and_rhs_hash",
+    def _recourse_configuration(settings: Mapping[str, Any]) -> dict[str, Any]:
+        direct = settings.get(
+            "stage1_time_indexed_energy_recourse_configuration"
+        )
+        if isinstance(direct, Mapping) and direct:
+            return dict(direct)
+        seed_audit = settings.get("phase4_phase3_seed_audit")
+        if not isinstance(seed_audit, Mapping):
+            return {}
+        seed = seed_audit.get(
+            "seed_stage1_time_indexed_energy_recourse_configuration"
+        )
+        return dict(seed) if isinstance(seed, Mapping) else {}
+
+    sunny_recourse_configuration = _recourse_configuration(sunny_settings)
+    rain_recourse_configuration = _recourse_configuration(rain_settings)
+    sunny_recourse_hash = sunny_recourse_configuration.get(
+        "objective_coefficient_and_rhs_hash"
     )
-    rain_recourse_hash = _nested(
-        rain_settings,
-        "stage1_time_indexed_energy_recourse_configuration",
-        "objective_coefficient_and_rhs_hash",
+    rain_recourse_hash = rain_recourse_configuration.get(
+        "objective_coefficient_and_rhs_hash"
     )
     checks = {
         "pv_profile_hashes_differ": (
@@ -2966,13 +3003,12 @@ def _build_same_assignment_investigation(
             and sunny_recourse_hash != rain_recourse_hash
         ),
         "arbitrary_weather_bias_disabled": all(
-            _nested(
-                settings,
-                "stage1_time_indexed_energy_recourse_configuration",
-                "arbitrary_weather_assignment_bias_used",
-            )
+            configuration.get("arbitrary_weather_assignment_bias_used")
             is False
-            for settings in (sunny_settings, rain_settings)
+            for configuration in (
+                sunny_recourse_configuration,
+                rain_recourse_configuration,
+            )
         ),
         "stage1_selected_recourse_objectives_differ": (
             selected_recourse_objective_by_case["sunny"] is not None

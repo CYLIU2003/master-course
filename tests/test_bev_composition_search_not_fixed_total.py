@@ -92,12 +92,16 @@ def test_bev_frontier_uses_only_minimum_bev_constraint() -> None:
     ice_group = next(
         group for group in symmetry_groups if group[0].startswith("ice-")
     )
-    assert target_one["partial_mip_start_source_vehicle_ids"] == [
-        ice_group[-1]
+    assert target_one[
+        "partial_mip_start_symmetry_prefix_normalized"
+    ] is True
+    target_one_remap = target_one[
+        "partial_mip_start_symmetry_prefix_vehicle_id_remap"
     ]
-    assert target_one["partial_mip_start_target_vehicle_ids"] == [
-        bev_group[0]
-    ]
+    assert set(target_one_remap).issubset(set(ice_group) | set(bev_group))
+    assert set(target_one_remap.values()).issubset(
+        set(ice_group) | set(bev_group)
+    )
     assert set(target_two["partial_mip_start_source_vehicle_ids"]) == set(
         ice_group
     )
@@ -105,6 +109,10 @@ def test_bev_frontier_uses_only_minimum_bev_constraint() -> None:
         bev_group
     )
     assert target_two["partial_mip_start_applied"] is True
+    assert isinstance(
+        target_two["partial_mip_start_symmetry_prefix_normalized"],
+        bool,
+    )
     assert target_two["partial_mip_start_replacement_count"] == 2
     assert target_two["frontier_resolution_candidate_hash"]
     assert (

@@ -1,23 +1,42 @@
 # master-course
 
-## 2026-08-09 Phase 4 proof-search correction
+## 2026-08-09 Phase 4 composition-search regression diagnosis
 
-- The latest clean sunny/rain incumbents are physically valid and weather
-  responsive (sunny 27 BEVs / 5 ICE buses, rain 21 / 11), but both integrated
-  MILPs stopped after one node with a 100% raw gap and a zero best bound. They
-  are candidates, not globally certified optima.
-- The full model has about 776,752 variables and 1,929,148 constraints. Once a
-  complete Phase 3 recourse start is independently verified, Phase 4 now uses
-  one uninterrupted bound-certification profile (`MIPFocus=3`,
-  `Heuristics=0.01`) instead of continuing the feasibility-heavy profile.
+- Clean commit `14bbcfa1ba97889674e113eae44bfa3ec71577e0` completed the
+  fresh-Prepare controlled pair at
+  `output/formal_pair_20260809_flat30_pv1000_bess6000_phase4_proof_14bbcfa_gap001`.
+  Both cases served 264/264, passed independent physical validation and 24/24
+  Rolling, and reconciled objective to executed accounting exactly. The pair
+  is nevertheless `BLOCKED`: both integrated MILPs stopped after one node with
+  a 100% raw gap and best bound zero.
+- Sunny and rain both returned the same 16-BEV / 16-ICE, 58 / 206-trip
+  incumbent at 704,401.909629 JPY. This is not evidence that the composition is
+  optimal. Sunny generated 6,056.25 kWh and curtailed about 5,344.07 kWh. Rain
+  still generated 996.2 kWh, enough to supply the selected assignment's
+  650.493 kWh bus charging through PV/BESS with zero grid purchase. The weather
+  difference therefore becomes economic only in the high-BEV compositions
+  that this run failed to evaluate.
+- The exact-composition seed divided 120 seconds across the complete inventory
+  span, leaving only about 3.4--3.8 seconds per target. It found physically
+  feasible 7--16 BEV compositions, while every 17--32 target ended unresolved
+  at the time limit. Exact activation-prefix symmetry had coupled identifier
+  order to duty replacement and forced economically poor duties into the BEV
+  starts. The correction chooses duties by energy/cost suitability, then
+  bijectively permutes only exact-identical vehicle IDs onto the prefix. This
+  preserves the feasible set and all objective coefficients.
+- The full model has about 776,752 variables and 1,929,173 constraints. The
+  proof-focused `MIPFocus=3`, `Heuristics=0.01` profile neither improved the
+  zero root bound nor repaired the weak seed. Phase 4 therefore returns to the
+  weather-neutral incumbent-improvement profile (`MIPFocus=1`,
+  `Heuristics=0.5`) while retaining the analytical lower-bound audit.
 - A strict path-cover vehicle-day floor and an optimistic weather-energy/fuel
   floor are combined into an integer-valid objective lower-bound constraint.
   It is disabled fail-closed for partial service, non-total-cost objectives,
   negative objective terms, or a non-actual-cost model.
 - Activation-prefix constraints remove only exact identifier-permutation
   symmetry among vehicles whose complete solver-relevant records are equal.
-  Baseline-active identifiers are ordered first so the verified warm start
-  remains feasible; adjacent composition starts use the same canonical order.
+  Prefix normalization is an ID permutation after duty choice; it must never
+  decide which duty is converted between powertrains.
 - Interactive frontend runs use a fixed four Gurobi threads on this host. An
   eight-thread clean diagnostic exhausted the practical virtual-memory margin
   (about 58 GB private allocation with less than 1 GB remaining), so it was
@@ -25,7 +44,11 @@
   must match between controlled cases. These
   changes do not alter PV, tariff, fleet, timetable, SOC, charger, or
   accounting semantics and do not add a BEV/weather preference.
-- Fresh Prepare and a clean frozen-commit sunny/rain rerun are still required.
+- The formal pair runner now requests and audits the same four-thread runtime
+  contract, and Phase 4 carries its Phase 3 candidate/recourse evidence into
+  the same-assignment audit instead of treating integrated output as if no seed
+  alternatives existed.
+- A fresh Prepare and clean frozen-commit sunny/rain rerun are still required.
   Formal release stays `BLOCKED` unless each run meets the requested 0.1% gap
   and all physical, Rolling, provenance, and accounting gates pass.
 

@@ -1081,6 +1081,28 @@ class OptimizationEngine:
                 False,
             )
         )
+        acceptance["seed_stage1_stage2_candidate_evaluation"] = list(
+            seed_metadata.get("stage1_stage2_candidate_evaluation")
+            or seed_result.solver_metadata.get(
+                "stage1_stage2_candidate_evaluation"
+            )
+            or ()
+        )
+        acceptance["seed_stage1_stage2_selected_candidate_hash"] = str(
+            seed_metadata.get("stage1_stage2_selected_candidate_hash")
+            or ""
+        )
+        acceptance[
+            "seed_stage1_time_indexed_energy_recourse_configuration"
+        ] = dict(
+            seed_metadata.get(
+                "stage1_time_indexed_energy_recourse_configuration"
+            )
+            or seed_result.solver_metadata.get(
+                "stage1_time_indexed_energy_recourse_configuration"
+            )
+            or {}
+        )
         accepted = bool(
             seed_result.feasible
             and seed_metadata.get("stage1_feasible") is True

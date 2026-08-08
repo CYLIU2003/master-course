@@ -420,6 +420,88 @@ def test_optimization_payloads_match_except_fresh_prepared_id() -> None:
     assert sunny["run_hourly_rolling"] is True
     assert sunny["rolling_execution_minutes"] == 60
     assert sunny["mip_gap"] == 0.1
+    assert sunny["gurobi_threads"] == 4
+
+
+def test_same_assignment_audit_reads_phase4_seed_candidates(
+    tmp_path: Path,
+) -> None:
+    runner = _load_runner()
+    case_dirs = {
+        case: tmp_path / case for case in ("sunny", "rain")
+    }
+    for case, case_dir in case_dirs.items():
+        case_dir.mkdir()
+        recourse_hash = f"{case}-recourse"
+        selected = {
+            "assignment_hash": f"{case}-selected",
+            "candidate_hash": f"{case}-selected",
+            "feasible": True,
+            "stage2_solver_status": "optimal",
+            "stage2_actual_canonical_cost_jpy": 100.0,
+            "stage1_recourse_objective_jpy": 10.0 if case == "sunny" else 20.0,
+            "vehicle_trip_assignments": [
+                {
+                    "trip_id": "trip-1",
+                    "vehicle_id": "bev-1",
+                    "powertrain": "BEV",
+                }
+            ],
+            "relaxed_pv_overlap_by_bev_duty": [
+                {"vehicle_id": "bev-1", "duty_ids": ["duty-1"]}
+            ],
+        }
+        alternative = {
+            **selected,
+            "assignment_hash": f"{case}-alternative",
+            "candidate_hash": f"{case}-alternative",
+            "stage2_actual_canonical_cost_jpy": 110.0,
+            "vehicle_trip_assignments": [
+                {
+                    "trip_id": "trip-1",
+                    "vehicle_id": "ice-1",
+                    "powertrain": "ICE",
+                }
+            ],
+        }
+        (case_dir / "solver_settings.json").write_text(
+            json.dumps(
+                {
+                    "phase4_phase3_seed_audit": {
+                        "seed_stage1_stage2_selected_candidate_hash": (
+                            f"{case}-selected"
+                        ),
+                        "seed_stage1_stage2_candidate_evaluation": [
+                            selected,
+                            alternative,
+                        ],
+                        "seed_stage1_time_indexed_energy_recourse_configuration": {
+                            "objective_coefficient_and_rhs_hash": recourse_hash,
+                            "arbitrary_weather_assignment_bias_used": False,
+                        },
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        (case_dir / "comparison_case_manifest.json").write_text(
+            json.dumps({"pv_profile_hash": f"{case}-pv"}),
+            encoding="utf-8",
+        )
+
+    audit = runner._build_same_assignment_investigation(
+        output_dir=tmp_path,
+        sunny_dir=case_dirs["sunny"],
+        rain_dir=case_dirs["rain"],
+        assignment={"assignment_hashes_equal": True},
+    )
+
+    assert audit["sunny_stage1_recourse_hash"] == "sunny-recourse"
+    assert audit["rain_stage1_recourse_hash"] == "rain-recourse"
+    assert audit["checks"]["arbitrary_weather_bias_disabled"] is True
+    assert audit["checks"]["sunny_candidate_assignments_recorded"] is True
+    assert audit["sunny_alternative_assignment_count"] == 1
+    assert audit["rain_alternative_assignment_count"] == 1
 
 
 def test_optimization_payload_exposes_frontier_and_integrated_actual_cost() -> None:

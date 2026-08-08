@@ -1,36 +1,44 @@
 # Current research release blockers
 
-## 2026-08-09 integrated optimality proof remains blocked
+## 2026-08-09 integrated optimality and composition coverage remain blocked
 
-The latest clean pair improved the weather response: sunny used 27 BEVs / 5
-ICE buses for 183 / 81 trips, while rain used 21 / 11 for 91 / 173. Both
-served 264/264, passed independent physical validation, returned BEV/BESS SOC,
-completed 24/24 Rolling, and reconciled solver objective to executed accounting.
-These are valid incumbents, not optima. Each full integrated model had about
-776,752 variables and 1,929,148 constraints, processed one node, retained best
-bound zero, and stopped at the 3,600-second limit with a 100% raw gap.
+Frozen SHA `14bbcfa1ba97889674e113eae44bfa3ec71577e0` completed the
+fresh-Prepare controlled pair at
+`output/formal_pair_20260809_flat30_pv1000_bess6000_phase4_proof_14bbcfa_gap001`.
+Both cases served 264/264, passed independent physical validation, returned
+BEV/BESS SOC, completed 24/24 Rolling, and reconciled solver objective to
+executed accounting. They are valid physical candidates, not optima. Both full
+integrated models processed one node, retained native best bound zero, and
+stopped at the 3,600-second limit with a 100% raw gap.
 
-The remaining failure is therefore proof search, not a missing sunny-PV signal.
-Sunny had about 6,056.25 kWh PV and curtailed roughly 3,631 kWh; the solver had
-renewable headroom for more BEV operation. Grid-only BEV energy remains more
-expensive than ICE fuel at the declared 30 JPY/kWh tariff, so the rain
-composition can rationally remain ICE-heavy.
+Both cases returned the same 16-BEV / 16-ICE, 58 / 206-trip incumbent at
+704,401.909629 JPY. This does not refute the sunny-PV hypothesis. Sunny
+generated 6,056.25 kWh and curtailed about 5,344.07 kWh. Rain still generated
+996.2 kWh, while the selected low-BEV assignment needed only 650.493 kWh of
+bus charging; both therefore bought zero grid energy. A weather response can
+appear only after evaluating higher-BEV assignments.
 
-The working tree shifts an independently verified complete-start solve from a
-feasibility-heavy profile to one uninterrupted bound-certification profile,
-adds an audited integer-valid objective floor, removes only exact vehicle-ID
-permutation symmetry, warms each adjacent composition from its feasible
-neighbor. An eight-thread clean attempt was stopped after private allocation
-reached about 58 GB and OS virtual-memory headroom fell below 1 GB; it is not
-research evidence. The interactive resource contract is now four Gurobi
-threads for both cases.
-No weather or BEV preference and no feasibility relaxation is introduced.
+The seed composition loop found physically feasible 7--16 BEV compositions.
+Every 17--32 target received about 3.4--3.8 seconds and ended time-limit with no
+incumbent; none was certified infeasible. Exact activation-prefix symmetry had
+incorrectly influenced which duty was offered for powertrain replacement: the
+suffix vehicle ID, rather than the easiest identical-ICE duty, was retired.
+The working tree now selects duties by energy suitability and only afterwards
+permutes exact-identical IDs onto the prefix. This is a symmetry-equivalent
+relabeling, not a weather/BEV preference or feasible-set change.
 
-Release remains `BLOCKED` until these changes are committed, fresh Prepare is
-performed for both controlled cases, Git state remains frozen, the requested
-0.1% gap is actually met, and all physical, Rolling, provenance, accounting,
-and pair-control checks pass. A better time-limit incumbent alone does not
-close this blocker.
+The proof-focused `MIPFocus=3`, `Heuristics=0.01` run did not advance the root
+bound and preserved the weak seed. The working tree restores the neutral
+`MIPFocus=1`, `Heuristics=0.5` incumbent-improvement profile, keeps the audited
+analytical lower-bound floor, aligns the formal runner with the four-thread
+runtime contract, and propagates Phase 3 candidate/recourse evidence into the
+Phase 4 same-assignment audit. An eight-thread attempt remains diagnostic only.
+
+Release remains `BLOCKED` until the correction is committed, both cases are
+freshly prepared and rerun from a frozen clean SHA, the composition audit
+covers the relevant higher-BEV alternatives, and the requested 0.1% gap plus
+all physical, Rolling, provenance, accounting, and pair-control gates pass. A
+better time-limit incumbent alone does not close this blocker.
 
 ## 2026-08-08 inventory-span certificate producer/validator correction
 

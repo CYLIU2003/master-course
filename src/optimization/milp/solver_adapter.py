@@ -79,18 +79,19 @@ def _integrated_search_controls(
 ) -> Dict[str, Any]:
     """Return the weather-neutral Phase 4 search controls.
 
-    A complete, independently checked Phase 3 recourse start already solves
-    the feasibility problem.  Continuing to spend half of the search effort
-    on primal heuristics can then leave the root relaxation unfinished and the
-    global lower bound at zero.  The proof profile therefore shifts effort to
-    the bound while retaining one uninterrupted branch-and-bound tree.
+    A complete, independently checked Phase 3 recourse start solves the first
+    feasibility problem, but it is not necessarily a strong incumbent.  The
+    full 264-trip model has repeatedly left the root bound at zero under both
+    proof- and incumbent-focused profiles.  Keep the weather-neutral profile
+    that can still improve a weak seed instead of suppressing heuristics before
+    a useful bound exists.
     """
 
     if verified_feasible_start:
         return {
-            "profile": "certify_bound_after_verified_feasible_start",
-            "mip_focus": 3,
-            "heuristics": 0.01,
+            "profile": "improve_incumbent_from_verified_feasible_start",
+            "mip_focus": 1,
+            "heuristics": 0.5,
             "presolve": 2,
         }
     return {
@@ -177,6 +178,41 @@ def _ordered_identical_vehicle_groups(
             )
         )
     return tuple(sorted(ordered_groups, key=lambda group: group[0]))
+
+
+def _identical_vehicle_prefix_remap(
+    selected_vehicle_ids: Iterable[str],
+    identical_vehicle_groups: Sequence[Sequence[str]],
+) -> Dict[str, str]:
+    """Map an equivalent active set onto each exact group's ordered prefix.
+
+    Composition-neighbourhood starts choose duties for their economic and
+    physical suitability.  Activation-prefix cuts choose vehicle identifiers
+    only to remove exact symmetry.  Conflating the two made the neighbourhood
+    retire whichever active identifier happened to be last, even when another
+    identical vehicle carried the much easier duty.  This bijection preserves
+    every coefficient while letting the duty choice remain meaningful.
+    """
+
+    selected = {str(vehicle_id) for vehicle_id in selected_vehicle_ids}
+    remap: Dict[str, str] = {}
+    for raw_group in identical_vehicle_groups:
+        group = tuple(str(vehicle_id) for vehicle_id in raw_group)
+        active = tuple(vehicle_id for vehicle_id in group if vehicle_id in selected)
+        prefix = group[: len(active)]
+        active_outside_prefix = tuple(
+            vehicle_id for vehicle_id in active if vehicle_id not in prefix
+        )
+        inactive_inside_prefix = tuple(
+            vehicle_id for vehicle_id in prefix if vehicle_id not in active
+        )
+        if len(active_outside_prefix) != len(inactive_inside_prefix):
+            raise RuntimeError(
+                "identical vehicle prefix remap is not bijective: "
+                f"group={group!r} active={active!r}"
+            )
+        remap.update(zip(active_outside_prefix, inactive_inside_prefix))
+    return remap
 
 
 def _actual_bess_terminal_soc_deviation_by_depot(
@@ -5275,11 +5311,6 @@ class GurobiMILPAdapter:
             )
             for position, vehicle_id in enumerate(vehicle_ids)
         }
-        stage1_vehicle_symmetry_group = {
-            vehicle_id: vehicle_ids
-            for vehicle_ids in stage1_identical_vehicle_groups
-            for vehicle_id in vehicle_ids
-        }
         stage1_identical_vehicle_activation_prefix_constraint_count = 0
         for group_index, vehicle_ids in enumerate(
             stage1_identical_vehicle_groups
@@ -7187,6 +7218,74 @@ class GurobiMILPAdapter:
                     - target_service_energy
                 )
 
+            def _normalize_start_to_symmetry_prefix(
+                start: Mapping[str, Any],
+            ) -> Optional[Dict[str, Any]]:
+                """Permute only exact-identical IDs to satisfy prefix cuts."""
+
+                vehicle_id_remap = _identical_vehicle_prefix_remap(
+                    start.get("selected_used") or (),
+                    stage1_identical_vehicle_groups,
+                )
+                normalized = dict(start)
+                if not vehicle_id_remap:
+                    normalized["symmetry_prefix_vehicle_id_remap"] = {}
+                    return normalized
+
+                def _remap_key(key: Any) -> Any:
+                    if isinstance(key, tuple) and key:
+                        return (
+                            vehicle_id_remap.get(str(key[0]), str(key[0])),
+                            *key[1:],
+                        )
+                    return vehicle_id_remap.get(str(key), str(key))
+
+                selected_sets = {
+                    "selected_y": {
+                        _remap_key(key)
+                        for key in (start.get("selected_y") or ())
+                    },
+                    "selected_x": {
+                        _remap_key(key)
+                        for key in (start.get("selected_x") or ())
+                    },
+                    "selected_start": {
+                        _remap_key(key)
+                        for key in (start.get("selected_start") or ())
+                    },
+                    "selected_end": {
+                        _remap_key(key)
+                        for key in (start.get("selected_end") or ())
+                    },
+                    "selected_used": {
+                        _remap_key(key)
+                        for key in (start.get("selected_used") or ())
+                    },
+                    "selected_used_day": {
+                        _remap_key(key)
+                        for key in (start.get("selected_used_day") or ())
+                    },
+                }
+                variable_domains = {
+                    "selected_y": y,
+                    "selected_x": x,
+                    "selected_start": start_arc,
+                    "selected_end": end_arc,
+                    "selected_used": used_vehicle,
+                    "selected_used_day": used_vehicle_day,
+                }
+                if any(
+                    not selected_sets[name].issubset(variable_domains[name])
+                    for name in selected_sets
+                ):
+                    return None
+                normalized.update(selected_sets)
+                normalized["symmetry_prefix_vehicle_id_remap"] = dict(
+                    sorted(vehicle_id_remap.items())
+                )
+                normalized["symmetry_prefix_normalized"] = True
+                return normalized
+
             def _build_replacement_start(
                 replacements: Mapping[str, str],
                 *,
@@ -7285,7 +7384,7 @@ class GurobiMILPAdapter:
                     for _source_vehicle_id, target_vehicle_id
                     in replacement_pairs
                 )
-                return {
+                start = {
                     # Retain the single-value fields for existing adjacent
                     # search readers while exposing every replacement used by
                     # a multi-step frontier start.
@@ -7335,6 +7434,7 @@ class GurobiMILPAdapter:
                         in replacement_pairs
                     ),
                 }
+                return _normalize_start_to_symmetry_prefix(start)
 
             def _build_unused_bev_duty_split_starts(
             ) -> Dict[int, List[Dict[str, Any]]]:
@@ -7579,7 +7679,14 @@ class GurobiMILPAdapter:
                         "selected_used_day": set(selected_used_day),
                         "warm_start_priority_score": float(bev_delta),
                     }
-                    starts.setdefault(bev_delta, []).append(start)
+                    normalized_start = _normalize_start_to_symmetry_prefix(
+                        start
+                    )
+                    if normalized_start is None:
+                        break
+                    starts.setdefault(bev_delta, []).append(
+                        normalized_start
+                    )
                 return starts
 
             starts_by_delta: Dict[int, List[Dict[str, Any]]] = {}
@@ -7610,47 +7717,13 @@ class GurobiMILPAdapter:
                             single_start["warm_start_priority_score"]
                         )
 
-                # One deterministic non-conflicting prefix supplies every
-                # reachable delta.  This is especially important for the BEV
-                # frontier: its first declared K may be more than one vehicle
-                # above the primary composition, so a one-replacement start
-                # cannot satisfy the temporary lower bound.  Source vehicles
-                # are retired from the end of an exact-symmetry group and
-                # targets are activated from its beginning, keeping every
-                # partial start compatible with the activation-prefix cuts.
+                # One deterministic non-conflicting sequence supplies every
+                # reachable delta.  Select replacements by duty suitability;
+                # _build_replacement_start then permutes only exact-identical
+                # vehicle IDs onto the symmetry-breaking activation prefix.
                 replacements: Dict[str, str] = {}
                 used_target_ids: Set[str] = set()
                 rejected_pairs: Set[Tuple[str, str]] = set()
-
-                def _retirement_preserves_symmetry_prefix(
-                    source_vehicle_id: str,
-                ) -> bool:
-                    group = stage1_vehicle_symmetry_group.get(
-                        source_vehicle_id
-                    )
-                    if group is None:
-                        return True
-                    position = group.index(source_vehicle_id)
-                    return all(
-                        vehicle_id not in active_vehicle_ids
-                        or vehicle_id in replacements
-                        for vehicle_id in group[position + 1 :]
-                    )
-
-                def _activation_preserves_symmetry_prefix(
-                    target_vehicle_id: str,
-                ) -> bool:
-                    group = stage1_vehicle_symmetry_group.get(
-                        target_vehicle_id
-                    )
-                    if group is None:
-                        return True
-                    position = group.index(target_vehicle_id)
-                    return all(
-                        vehicle_id in active_vehicle_ids
-                        or vehicle_id in used_target_ids
-                        for vehicle_id in group[:position]
-                    )
 
                 while True:
                     eligible_pairs = [
@@ -7670,12 +7743,6 @@ class GurobiMILPAdapter:
                             target_vehicle_id,
                         )
                         not in rejected_pairs
-                        and _retirement_preserves_symmetry_prefix(
-                            source_vehicle_id
-                        )
-                        and _activation_preserves_symmetry_prefix(
-                            target_vehicle_id
-                        )
                     ]
                     if not eligible_pairs:
                         break
@@ -8466,6 +8533,18 @@ class GurobiMILPAdapter:
                                                 "powertrain_pattern_hash"
                                             ]
                                         ),
+                                        "symmetry_prefix_normalized": bool(
+                                            start.get(
+                                                "symmetry_prefix_normalized",
+                                                False,
+                                            )
+                                        ),
+                                        "symmetry_prefix_vehicle_id_remap": dict(
+                                            start.get(
+                                                "symmetry_prefix_vehicle_id_remap"
+                                            )
+                                            or {}
+                                        ),
                                     }
                                     for start in composition_mip_starts
                                 ],
@@ -8533,6 +8612,18 @@ class GurobiMILPAdapter:
                                     composition_mip_start[
                                         "warm_start_priority_score"
                                     ]
+                                ),
+                                "partial_mip_start_symmetry_prefix_normalized": bool(
+                                    composition_mip_start.get(
+                                        "symmetry_prefix_normalized",
+                                        False,
+                                    )
+                                ),
+                                "partial_mip_start_symmetry_prefix_vehicle_id_remap": dict(
+                                    composition_mip_start.get(
+                                        "symmetry_prefix_vehicle_id_remap"
+                                    )
+                                    or {}
                                 ),
                             }
                         )

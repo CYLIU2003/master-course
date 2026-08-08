@@ -37,24 +37,34 @@ from src.gurobi_runtime import ensure_gurobi
 from src.optimization.milp.solver_adapter import (
     GurobiMILPAdapter,
     _actual_bess_terminal_soc_deviation_by_depot,
+    _identical_vehicle_prefix_remap,
     _integrated_search_controls,
     _ordered_identical_vehicle_groups,
 )
 from test_post_return_soc_target import _dispatch_context
 
 
-def test_verified_integrated_start_selects_bound_certification_profile() -> None:
+def test_verified_integrated_start_keeps_incumbent_improvement_profile() -> None:
     assert _integrated_search_controls(
         verified_feasible_start=True
     ) == {
-        "profile": "certify_bound_after_verified_feasible_start",
-        "mip_focus": 3,
-        "heuristics": 0.01,
+        "profile": "improve_incumbent_from_verified_feasible_start",
+        "mip_focus": 1,
+        "heuristics": 0.5,
         "presolve": 2,
     }
     assert _integrated_search_controls(
         verified_feasible_start=False
     )["profile"] == "find_feasible_solution_then_bound"
+
+
+def test_identical_vehicle_prefix_remap_preserves_duty_choice() -> None:
+    remap = _identical_vehicle_prefix_remap(
+        {"ice-b", "ice-c", "bev-a"},
+        (("ice-a", "ice-b", "ice-c"), ("bev-a", "bev-b")),
+    )
+
+    assert remap == {"ice-c": "ice-a"}
 
 
 def test_identical_vehicle_group_keeps_baseline_active_identifier_first() -> None:
@@ -747,6 +757,12 @@ def test_phase4_uses_verified_same_problem_phase3_plan_as_complete_mip_start() -
     assert result.solver_metadata["phase4_phase3_seed_audit"][
         "accepted"
     ] is True
+    seed_audit = result.solver_metadata["phase4_phase3_seed_audit"]
+    assert seed_audit["seed_stage1_stage2_candidate_evaluation"]
+    assert seed_audit["seed_stage1_stage2_selected_candidate_hash"]
+    assert seed_audit[
+        "seed_stage1_time_indexed_energy_recourse_configuration"
+    ]["arbitrary_weather_assignment_bias_used"] is False
     assert result.solver_metadata["phase4_phase3_seed_audit"][
         "seed_stage1_stage2_candidate_limit"
     ] == 21
@@ -784,9 +800,9 @@ def test_phase4_uses_verified_same_problem_phase3_plan_as_complete_mip_start() -
     assert len(audit["integrated_solution_start_fingerprint"]) == 64
     assert audit["dispatch_fixed_recourse_runtime_sec"] >= 0.0
     assert result.solver_metadata["first_feasible_sec"] == 0.0
-    assert result.solver_metadata["integrated_mip_focus"] == 3
+    assert result.solver_metadata["integrated_mip_focus"] == 1
     assert result.solver_metadata["integrated_heuristics"] == pytest.approx(
-        0.01
+        0.5
     )
     assert result.solver_metadata["integrated_symmetry"] == -1
     assert result.solver_metadata["integrated_search_profile"][
@@ -794,7 +810,7 @@ def test_phase4_uses_verified_same_problem_phase3_plan_as_complete_mip_start() -
     ] == 1
     assert result.solver_metadata["integrated_search_profile"]["phases"][0][
         "phase"
-    ] == "certify_bound_after_verified_feasible_start"
+    ] == "improve_incumbent_from_verified_feasible_start"
     assert result.solver_metadata["integrated_search_profile"][
         "schema_version"
     ] == "phase4_integrated_search_profile_v2"

@@ -1,5 +1,42 @@
 # Development Notes
 
+## 2026-08-09: controlled-pair diagnosis and symmetry-safe composition starts
+
+- Frozen SHA `14bbcfa1ba97889674e113eae44bfa3ec71577e0` completed the
+  flat-30/no-demand/PV-1000/BESS-6000 frontend pair at
+  `output/formal_pair_20260809_flat30_pv1000_bess6000_phase4_proof_14bbcfa_gap001`.
+  Both cases served all 264 trips, passed independent physical validation and
+  24/24 Rolling, and reconciled the integrated objective to executed-day
+  accounting with zero residual. Both remained `FEASIBLE_CANDIDATE` /
+  `BLOCKED` because the 0.1% gap was not established.
+- Sunny and rain both selected 16 BEVs / 16 ICE buses and 58 / 206 trips at
+  704,401.909629 JPY. Sunny generated 6,056.25 kWh and curtailed about
+  5,344.07 kWh; rain generated 996.2 kWh. The selected assignment charged only
+  650.493 kWh, so even rain supplied it from PV/BESS with zero grid purchase.
+  Equality at this low-BEV incumbent is therefore expected; it says nothing
+  about the unsearched high-BEV region.
+- The inventory-wide exact-composition loop allocated only 3.4--3.8 seconds to
+  each target. It found physical candidates from 7 through 16 used BEVs; all
+  17--32 targets were time-limit/no-incumbent, not infeasibility certificates.
+  The previous clean SHA had reached 27 BEVs with the same nominal per-target
+  budget, identifying activation-prefix warm-start construction as the
+  regression rather than the mathematical model.
+- Composition replacements again choose source duties by their deterministic
+  energy score. A new exact-identical-vehicle bijection then remaps only active
+  identifiers onto the activation prefix. This keeps every start compatible
+  with the symmetry cuts without forcing the suffix identifier's potentially
+  unsuitable duty into a BEV. The remap and normalization flag are persisted
+  in the composition certificate.
+- The all-budget proof profile (`MIPFocus=3`, `Heuristics=0.01`) left the root
+  bound at zero and preserved the weak seed. Since the same full model also
+  fails to finish its root relaxation under the incumbent profile, Phase 4 now
+  uses `MIPFocus=1`, `Heuristics=0.5` after a verified start so it can improve
+  a weak incumbent; no claim is made that this proves the requested gap.
+- The controlled-pair payload and formal audit now both require four Gurobi
+  threads. Phase 4 seed audit metadata also carries the Phase 3 candidate rows,
+  selected hash, and recourse configuration so a same-assignment investigation
+  can audit actual alternatives and verify that arbitrary weather bias is off.
+
 ## 2026-08-09: Phase 4 bound certification and exact fleet symmetry
 
 - The latest clean pair produced a lower-cost sunny incumbent with 27 BEVs / 5
@@ -7,11 +44,11 @@
   1,929,148-constraint integrated solve processed one node and stopped at a
   100% raw gap with best bound zero. The result diagnoses proof-search failure;
   it does not establish either fleet composition as optimal.
-- When fixed-dispatch recourse has independently verified a complete Phase 4
-  MIP start, the unrestricted solve now keeps one tree and applies
-  `MIPFocus=3`, `Heuristics=0.01`, and `Presolve=2`. Without a certified start,
-  the existing feasibility profile remains in force. The selected profile and
-  each effective parameter are exported.
+- The initial implementation applied `MIPFocus=3`, `Heuristics=0.01`, and
+  `Presolve=2` after verified fixed-dispatch recourse. The subsequent clean
+  pair above showed that this did not advance the root bound and could preserve
+  a weak incumbent; it has been superseded by the incumbent-improvement
+  profile documented above.
 - Phase 4 adds an integer-valid total-cost floor equal to the strict relaxed
   path-cover vehicle-day floor plus the existing optimistic weather-aware
   service energy/fuel floor. It ignores deadhead, timing, charger contention,
