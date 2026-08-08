@@ -1,6 +1,6 @@
 # Development Notes
 
-## 2026-08-08 Phase 4 accounting, telemetry and bound-focus correction
+## 2026-08-08 Phase 4 accounting, telemetry and search-profile correction
 
 - The clean `b8793f342c1c886a3f44db843448c13505d62a78` pair at
   `output/formal_pair_20260808_flat30_pv1000_bess6000_phase4_finalslot_b8793f3_gap001`
@@ -24,17 +24,32 @@
   composition certification only when an incumbent exists and the requested
   global MIP gap is met. Stage-1 adjacent-composition evidence remains required
   for two-stage Phase 3 and is not fabricated for integrated Phase 4.
-- A complete verified integrated warm start makes further feasibility-focused
-  search redundant. After the fixed-dispatch recourse preflight passes, the
-  unrestricted model uses `MIPFocus=3` and `Heuristics=0.1` to prioritize its
-  lower-bound certificate. The objective, feasible region, physical checks and
-  0.1% release threshold are unchanged.
+- Commit `3e49cff3cc0a25ac9fcd96c47c34af17777b19a0` was then executed through
+  the clean frontend path. Sunny `output/2026-08-08/run_20260808_1126`
+  reconciled the solver objective and accounting total exactly, exported one
+  Gurobi thread and the integrated coupling mode, and passed physical checks.
+  However, all-budget `MIPFocus=3, Heuristics=0.1` retained the 15-BEV / 17-ICE
+  Phase 3 seed, explored one node and stopped after 3,600 seconds at 100% gap.
+  Because this was a clear search regression from the 25-BEV clean baseline,
+  the rain job was stopped before its main solve. It is an incomplete
+  diagnostic, not a formal pair.
+- The corrected profile keeps one uninterrupted integrated solve on the known
+  incumbent-improving `MIPFocus=1, Heuristics=0.5` profile. A proposed final
+  bound-focused restart was rejected during review because a second
+  `optimize()` call may discard the useful branch-and-bound tree and leave a
+  weaker final certificate. Objective, bound, gap and runtime are exported for
+  the single search. `Symmetry=2` handles the 25 technically identical ICE
+  vehicles without adding ID-order constraints or invalidating the complete
+  MIP start.
+- The neutral Phase 3 hand-off now reserves 11 candidates: the primary
+  composition and exact symmetric used-powertrain deltas +/-1 through +/-5.
+  The one-sided BEV frontier remains disabled; Stage 2 canonical actual cost
+  chooses the hand-off, so no weather or BEV preference is introduced.
 - Focused regression coverage exercises the shared degradation price, Phase 4
   source-flow audit, solver telemetry, and gap-certified composition semantics.
-  The focused set passes `101 passed`; the complete repository suite passes
-  `1215 passed` in 59.68 seconds; compileall and `git diff --check` pass. A
-  fresh clean-commit sunny/rain pair remains required before release status can
-  change.
+  The final focused set passes `72 tests`; the complete repository suite passes
+  `1216 tests` in 54.80 seconds. A fresh clean-commit sunny/rain pair remains
+  required before release status can change.
 
 ## 2026-08-08 Phase 4 late-service SOC and MIP-gap correction
 

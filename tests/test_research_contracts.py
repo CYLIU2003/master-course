@@ -97,6 +97,34 @@ def test_solver_settings_preserves_enabled_bev_frontier_control() -> None:
     assert payload["stage1_bev_frontier_enabled"] is True
 
 
+def test_solver_settings_persists_integrated_search_profile() -> None:
+    search_profile = {
+        "schema_version": "phase4_integrated_search_profile_v1",
+        "phase_count_executed": 1,
+        "phases": [
+            {
+                "phase": "uninterrupted_incumbent_and_bound_search",
+                "mip_focus": 1,
+            },
+        ],
+    }
+    payload = _solver_settings_payload(
+        time_limit_seconds_requested=3_600,
+        mip_gap_requested=0.001,
+        solver_metadata={
+            "integrated_mip_focus": 1,
+            "integrated_heuristics": 0.5,
+            "integrated_symmetry": 2,
+            "integrated_search_profile": search_profile,
+        },
+    )
+
+    assert payload["integrated_mip_focus"] == 1
+    assert payload["integrated_heuristics"] == pytest.approx(0.5)
+    assert payload["integrated_symmetry"] == 2
+    assert payload["integrated_search_profile"] == search_profile
+
+
 def test_solver_settings_persists_phase4_seed_and_total_time_budget() -> None:
     payload = _solver_settings_payload(
         time_limit_seconds_requested=3600,

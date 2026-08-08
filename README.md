@@ -19,12 +19,22 @@
   evaluator, and canonical ledger now share the scenario's
   `battery_degradation_cost_coeff_yen_per_kwh` throughput price. A disabled or
   zero-price component contributes exactly zero in all three paths.
-- When the verified same-problem Phase 3 handoff already supplies a complete
-  integrated incumbent, Phase 4 changes from feasibility focus to bound focus
-  (`MIPFocus=3`, `Heuristics=0.1`). This does not alter the objective or relax
-  a constraint; it allocates the remaining solve budget to the missing
-  optimality certificate. The complete repository suite passes `1215 passed`;
-  fresh clean-commit formal evidence is still required.
+- A clean-commit follow-up (`output/2026-08-08/run_20260808_1126`) verified the
+  corrected zero degradation charge, exact solver/accounting reconciliation,
+  one-thread control, solve-time export and integrated coupling metadata. It
+  also exposed a search regression: using bound focus for the entire 3,600
+  seconds retained the 15-BEV seed, explored one node and ended at 100% gap.
+  The rain job was intentionally stopped before its long solve, so that
+  directory is incomplete and is not pair evidence.
+- A verified same-problem seed now keeps one uninterrupted, weather-neutral
+  `MIPFocus=1, Heuristics=0.5` branch-and-bound search. Splitting the budget
+  into two `optimize()` calls was rejected in review because a restart can
+  discard the useful search tree and weaken the final bound. `Symmetry=2`
+  addresses interchangeable ICE buses without imposing vehicle-ID
+  constraints. The neutral Phase 3 seed explores the primary used-powertrain
+  composition plus both directions for deltas 1--5; Stage 2 actual cost still
+  selects the hand-off. The focused set passes `72 tests`; the complete suite
+  passes `1216 tests`. Fresh clean-commit formal evidence is still required.
 
 ## 2026-08-08 Phase 4 final-slot and composition-resolution correction
 

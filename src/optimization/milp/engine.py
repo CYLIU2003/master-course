@@ -633,6 +633,21 @@ class MILPOptimizer:
                     )
                     or {}
                 ),
+                "integrated_mip_focus": (plan.metadata or {}).get(
+                    "integrated_mip_focus"
+                ),
+                "integrated_heuristics": (plan.metadata or {}).get(
+                    "integrated_heuristics"
+                ),
+                "integrated_symmetry": (plan.metadata or {}).get(
+                    "integrated_symmetry"
+                ),
+                "integrated_search_profile": dict(
+                    (plan.metadata or {}).get(
+                        "integrated_search_profile"
+                    )
+                    or {}
+                ),
                 "best_bound": outcome.best_bound,
                 # A gap is meaningful only when the returned solver outcome
                 # has an incumbent.  Infeasible/no-incumbent runs must not

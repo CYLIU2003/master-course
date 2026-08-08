@@ -804,11 +804,15 @@ class OptimizationEngine:
             # therefore commonly carries candidate_limit=1.  Reusing that
             # value here would silently collapse the Phase 3 seed search to
             # its primary composition.  Keep the seed budget explicit and
-            # stable across frontend callers.
-            stage1_stage2_candidate_limit=10,
+            # stable across frontend callers.  Radius five explores both
+            # powertrain directions symmetrically; Stage 2 canonical cost
+            # still selects the hand-off, so this is candidate diversity, not
+            # an EV-preference policy.
+            # Primary composition plus both directions for deltas 1..5.
+            stage1_stage2_candidate_limit=11,
             stage1_composition_search_radius=max(
                 int(config.stage1_composition_search_radius),
-                2,
+                5,
             ),
             stage1_bev_frontier_enabled=bool(
                 getattr(

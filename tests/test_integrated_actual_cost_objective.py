@@ -612,7 +612,10 @@ def test_phase4_uses_verified_same_problem_phase3_plan_as_complete_mip_start() -
     ] is True
     assert result.solver_metadata["phase4_phase3_seed_audit"][
         "seed_stage1_stage2_candidate_limit"
-    ] == 10
+    ] == 11
+    assert result.solver_metadata["phase4_phase3_seed_audit"][
+        "seed_stage1_composition_search_radius"
+    ] == 5
     assert len(
         result.solver_metadata["phase4_phase3_seed_audit"][
             "seed_plan_fingerprint"
@@ -636,6 +639,17 @@ def test_phase4_uses_verified_same_problem_phase3_plan_as_complete_mip_start() -
     assert len(audit["integrated_solution_start_fingerprint"]) == 64
     assert audit["dispatch_fixed_recourse_runtime_sec"] >= 0.0
     assert result.solver_metadata["first_feasible_sec"] == 0.0
+    assert result.solver_metadata["integrated_mip_focus"] == 1
+    assert result.solver_metadata["integrated_heuristics"] == pytest.approx(
+        0.5
+    )
+    assert result.solver_metadata["integrated_symmetry"] == 2
+    assert result.solver_metadata["integrated_search_profile"][
+        "phase_count_executed"
+    ] == 1
+    assert result.solver_metadata["integrated_search_profile"]["phases"][0][
+        "phase"
+    ] == "uninterrupted_incumbent_and_bound_search"
     assert result.solver_metadata["phase4_phase3_seed_audit"][
         "seed_runtime_sec"
     ] > 0.0

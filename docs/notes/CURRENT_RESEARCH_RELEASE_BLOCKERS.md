@@ -3,14 +3,18 @@
 Status date: 2026-08-08
 Code status: clean commit `b8793f3` produced physically valid, weather-
 responsive sunny/rain incumbents, but formal release remained blocked by the
-requested 0.1% optimality gap plus three evidence/accounting defects. The
-current working tree unifies the battery-degradation price, preserves measured
-solver runtime, exports effective Phase 4/Rolling controls and uses a
-gap-certified integrated solve instead of an inapplicable Stage-1 composition
-artifact. It also switches a verified-seed Phase 4 search from incumbent focus
-to bound focus. Focused tests pass (`101 passed`), the complete suite passes
-(`1215 passed`), and compileall/diff-check pass. This is not yet clean-commit
-formal evidence. Release remains
+requested 0.1% optimality gap plus three evidence/accounting defects. Commit
+`3e49cff` fixed those evidence/accounting defects; sunny run
+`output/2026-08-08/run_20260808_1126` verified exact reconciliation and
+controls, but an all-budget bound-focus profile regressed to the 15-BEV seed
+and 100% gap. The rain job was intentionally stopped and is not pair evidence.
+The current working tree restores the uninterrupted incumbent-improving search,
+enables solver symmetry handling and expands the neutral symmetric seed
+neighborhood. A proposed second bound-focused optimize call was rejected
+because restarting can lose the useful search tree and weaken the final
+certificate. The change is covered by `72` focused passing tests and `1216`
+total passing tests, but is not yet clean-commit formal evidence. Release
+remains
 blocked pending a new frozen commit, fresh Prepare, both completed
 frontend jobs, accepted physical/Rolling/accounting gates and honestly reported
 achieved gaps.
@@ -37,9 +41,10 @@ The current correction keeps one cost definition across solver, evaluator and
 ledger, carries actual controls and runtime into artifacts, and recognizes
 composition only when the full integrated successor network meets its requested
 global gap. It does not waive the gap: sunny previously stopped at 5.1337% and
-rain at 100%. A verified integrated incumbent now triggers bound-focused Gurobi
-search, but release remains blocked until a fresh clean run actually reaches
-0.1% or is honestly retained as a non-optimal diagnostic candidate.
+rain at 100%. A verified integrated incumbent now receives one uninterrupted
+incumbent-and-bound search using the profile that previously improved the
+sunny composition. Release remains blocked until a fresh clean run actually
+reaches 0.1% or is honestly retained as a non-optimal diagnostic candidate.
 
 ## 2026-08-08 final-slot and composition-resolution blocker
 

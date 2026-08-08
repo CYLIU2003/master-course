@@ -10071,6 +10071,18 @@ def _solver_settings_payload(
         "integrated_actual_cost_contract_applied": bool(
             metadata.get("integrated_actual_cost_contract_applied", False)
         ),
+        "integrated_mip_focus": _int_or_none(
+            metadata.get("integrated_mip_focus")
+        ),
+        "integrated_heuristics": _float_or_none(
+            metadata.get("integrated_heuristics")
+        ),
+        "integrated_symmetry": _int_or_none(
+            metadata.get("integrated_symmetry")
+        ),
+        "integrated_search_profile": dict(
+            metadata.get("integrated_search_profile") or {}
+        ),
         "phase4_phase3_seed_audit": phase4_seed_audit,
         "phase4_phase3_seed_enabled": bool(
             phase4_seed_audit.get("requested", False)
