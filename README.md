@@ -29,12 +29,19 @@
 - A verified same-problem seed now keeps one uninterrupted, weather-neutral
   `MIPFocus=1, Heuristics=0.5` branch-and-bound search. Splitting the budget
   into two `optimize()` calls was rejected in review because a restart can
-  discard the useful search tree and weaken the final bound. `Symmetry=2`
-  addresses interchangeable ICE buses without imposing vehicle-ID
-  constraints. The neutral Phase 3 seed explores the primary used-powertrain
-  composition plus both directions for deltas 1--5; Stage 2 actual cost still
-  selects the hand-off. The focused set passes `72 tests`; the complete suite
-  passes `1216 tests`. Fresh clean-commit formal evidence is still required.
+  discard the useful search tree and weaken the final bound. A subsequent
+  clean sunny run showed that forcing `Symmetry=2` also regressed search: it
+  spent heavy root-processing effort and returned 18 BEVs / 14 ICE buses,
+  59 / 205 trips and 100% gap. Gurobi's automatic symmetry setting is therefore
+  restored. The neutral Phase 3 seed still explores the primary composition
+  plus both directions for deltas 1--5; Stage 2 actual cost selects the
+  hand-off.
+- Rolling finalization no longer hard-codes every day-ahead objective as
+  non-actual-cost. Phase 3 remains false. Phase 4 is true only when its
+  structural and numeric actual-cost contracts passed and the immutable solver
+  objective still equals the accepted executed-day ledger within `1e-6 JPY`.
+  The focused set passes `78 tests`; the complete suite passes `1218 tests`.
+  Fresh clean-commit formal evidence is still required.
 
 ## 2026-08-08 Phase 4 final-slot and composition-resolution correction
 

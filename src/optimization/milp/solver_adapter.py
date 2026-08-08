@@ -1127,11 +1127,6 @@ class GurobiMILPAdapter:
         model.Params.MIPFocus = 1  # Focus on finding feasible solutions
         model.Params.Heuristics = 0.5  # Increased heuristics effort
         model.Params.Presolve = 2  # Aggressive presolve
-        # The selected fleet can contain many physically identical buses
-        # (25 identical ICE vehicles in the controlled pair).  Ask Gurobi to
-        # search aggressively for permutation symmetry without imposing a
-        # vehicle-ID ordering that could invalidate a certified MIP start.
-        model.Params.Symmetry = 2
 
         pre_stats: Dict[str, Any] = {}
         iis_generated = False
@@ -3493,8 +3488,9 @@ class GurobiMILPAdapter:
         # model under a second parameter profile can discard the useful search
         # tree and leave the final artifact with a weaker bound.  The profile
         # below is the one that improved the sunny incumbent in the clean
-        # regression pair; Symmetry=2 separately addresses identical ICE
-        # permutations without changing the feasible region.
+        # regression pair.  Gurobi's default automatic symmetry policy is
+        # retained: forcing aggressive detection spent the sunny budget in
+        # root processing and regressed the incumbent.
         model.Params.TimeLimit = max(float(config.time_limit_sec), 0.001)
         model.Params.MIPFocus = 1
         model.Params.Heuristics = 0.5

@@ -114,14 +114,14 @@ def test_solver_settings_persists_integrated_search_profile() -> None:
         solver_metadata={
             "integrated_mip_focus": 1,
             "integrated_heuristics": 0.5,
-            "integrated_symmetry": 2,
+            "integrated_symmetry": -1,
             "integrated_search_profile": search_profile,
         },
     )
 
     assert payload["integrated_mip_focus"] == 1
     assert payload["integrated_heuristics"] == pytest.approx(0.5)
-    assert payload["integrated_symmetry"] == 2
+    assert payload["integrated_symmetry"] == -1
     assert payload["integrated_search_profile"] == search_profile
 
 

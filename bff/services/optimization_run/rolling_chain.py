@@ -1157,6 +1157,59 @@ def refresh_frontend_rolling_manifest(
     )
 
 
+def _rolling_objective_cost_contract(
+    *,
+    optimization_result: Mapping[str, Any],
+    executed_breakdown: Mapping[str, Any],
+    tolerance_jpy: float = 1.0e-6,
+) -> tuple[bool, bool]:
+    """Classify whether the day-ahead objective remains the executed cost.
+
+    Rolling replaces the accounting source, not the day-ahead solver
+    objective.  Phase 3 must therefore remain non-actual-cost.  An integrated
+    Phase 4 result can retain the stronger classification only when its
+    day-ahead structural/numeric contract already passed and the executed-day
+    total still equals the immutable solver objective.
+    """
+
+    solver_metadata = dict(
+        optimization_result.get("solver_metadata") or {}
+    )
+    day_ahead_breakdown = dict(
+        optimization_result.get("cost_breakdown") or {}
+    )
+    try:
+        objective_value = float(optimization_result.get("objective_value"))
+        executed_total = float(executed_breakdown.get("total_cost"))
+    except (TypeError, ValueError):
+        return False, False
+    numeric_match = bool(
+        math.isfinite(objective_value)
+        and math.isfinite(executed_total)
+        and abs(objective_value - executed_total)
+        <= max(float(tolerance_jpy), 0.0)
+    )
+    integrated_contract = bool(
+        str(solver_metadata.get("executed_phase") or "")
+        == "phase4_integrated"
+        and solver_metadata.get(
+            "integrated_actual_cost_contract_applied"
+        )
+        is True
+        and solver_metadata.get(
+            "actual_cost_objective_structural_contract_passed"
+        )
+        is True
+        and solver_metadata.get(
+            "actual_cost_objective_numeric_reconciliation_passed"
+        )
+        is True
+        and day_ahead_breakdown.get("objective_is_actual_cost") is True
+    )
+    objective_is_actual_cost = bool(integrated_contract and numeric_match)
+    return objective_is_actual_cost, objective_is_actual_cost
+
+
 def finalize_frontend_rolling_evidence(
     *,
     run_dir: Path,
@@ -1275,6 +1328,16 @@ def finalize_frontend_rolling_evidence(
         problem.metadata.get("cost_component_flags") or {}
     )
     solver_metadata = dict(optimization_result.get("solver_metadata") or {})
+    day_ahead_breakdown = dict(
+        optimization_result.get("cost_breakdown") or {}
+    )
+    (
+        objective_is_actual_cost,
+        solver_objective_matches_accounting_total,
+    ) = _rolling_objective_cost_contract(
+        optimization_result=optimization_result,
+        executed_breakdown=executed_breakdown,
+    )
     ledger = canonical_cost_ledger_from_breakdown(
         breakdown=executed_breakdown,
         scenario_id=str(optimization_result.get("scenario_id") or ""),
@@ -1289,9 +1352,14 @@ def finalize_frontend_rolling_evidence(
             if optimization_result.get("objective_value") is not None
             else None
         ),
-        # Phase 3's day-ahead objective is not the stitched rolling cost.
-        objective_is_actual_cost=False,
-        solver_objective_matches_accounting_total=False,
+        # Phase 3 remains false because its two-stage objective is not the
+        # stitched rolling cost.  Phase 4 can remain an actual-cost objective
+        # only when its day-ahead contract was already certified and its
+        # unchanged objective numerically equals the executed-day ledger.
+        objective_is_actual_cost=objective_is_actual_cost,
+        solver_objective_matches_accounting_total=(
+            solver_objective_matches_accounting_total
+        ),
         carbon_price_jpy_per_kg=float(
             getattr(problem.scenario, "co2_price_per_kg", 0.0) or 0.0
         ),
@@ -1317,7 +1385,6 @@ def finalize_frontend_rolling_evidence(
         ledger,
     )
 
-    day_ahead_breakdown = dict(optimization_result.get("cost_breakdown") or {})
     optimization_result["day_ahead_cost_breakdown"] = day_ahead_breakdown
     optimization_result["cost_breakdown"] = executed_breakdown
     optimization_result["final_accounting_source"] = (

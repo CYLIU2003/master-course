@@ -38,18 +38,29 @@
   bound-focused restart was rejected during review because a second
   `optimize()` call may discard the useful branch-and-bound tree and leave a
   weaker final certificate. Objective, bound, gap and runtime are exported for
-  the single search. `Symmetry=2` handles the 25 technically identical ICE
-  vehicles without adding ID-order constraints or invalidating the complete
-  MIP start.
+  the single search.
 - The neutral Phase 3 hand-off now reserves 11 candidates: the primary
   composition and exact symmetric used-powertrain deltas +/-1 through +/-5.
   The one-sided BEV frontier remains disabled; Stage 2 canonical actual cost
   chooses the hand-off, so no weather or BEV preference is introduced.
+- Clean sunny run `output/2026-08-08/run_20260808_1300` then showed that forced
+  `Symmetry=2` was also a regression. It served 264/264 and passed physical
+  checks, but returned 18 BEVs / 14 ICE buses, 59 / 205 trips, objective
+  704,318.633649 JPY, best bound zero and 100% gap after 3,600 seconds. Root
+  processing temporarily used about 17.6 GB private memory. The rain job was
+  stopped before its main solve because the shared profile was already known
+  to be defective. The solver now retains Gurobi's automatic symmetry policy.
+- The same run exposed a reporting defect after accepted Rolling: the numeric
+  solver/executed-day difference was only `1.16e-10 JPY`, but rolling
+  finalization hard-coded `objective_is_actual_cost=false` for all phases.
+  Phase 3 remains false; Phase 4 now retains true only when its day-ahead
+  structural/numeric contracts passed and the executed total equals the
+  immutable solver objective within `1e-6 JPY`.
 - Focused regression coverage exercises the shared degradation price, Phase 4
   source-flow audit, solver telemetry, and gap-certified composition semantics.
-  The final focused set passes `72 tests`; the complete repository suite passes
-  `1216 tests` in 54.80 seconds. A fresh clean-commit sunny/rain pair remains
-  required before release status can change.
+  The updated focused set passes `78 tests`; the complete repository suite
+  passes `1218 tests` in 68.17 seconds. A fresh clean-commit sunny/rain pair
+  remains required before release status can change.
 
 ## 2026-08-08 Phase 4 late-service SOC and MIP-gap correction
 

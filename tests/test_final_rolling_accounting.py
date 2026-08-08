@@ -17,11 +17,55 @@ from bff.routers.optimization import (
 from bff.services.optimization_run.cost_breakdown import (
     CANONICAL_LEDGER_COMPONENT_SOURCES,
 )
+from bff.services.optimization_run.rolling_chain import (
+    _rolling_objective_cost_contract,
+)
 
 
 def _write_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_phase4_actual_cost_contract_survives_equal_rolling_total() -> None:
+    result = {
+        "objective_value": 704_318.6336491926,
+        "cost_breakdown": {"objective_is_actual_cost": True},
+        "solver_metadata": {
+            "executed_phase": "phase4_integrated",
+            "integrated_actual_cost_contract_applied": True,
+            "actual_cost_objective_structural_contract_passed": True,
+            "actual_cost_objective_numeric_reconciliation_passed": True,
+        },
+    }
+
+    assert _rolling_objective_cost_contract(
+        optimization_result=result,
+        executed_breakdown={"total_cost": 704_318.6336491928},
+    ) == (True, True)
+
+
+def test_rolling_actual_cost_contract_rejects_phase3_or_changed_total() -> None:
+    result = {
+        "objective_value": 704_318.0,
+        "cost_breakdown": {"objective_is_actual_cost": True},
+        "solver_metadata": {
+            "executed_phase": "phase3_two_stage",
+            "integrated_actual_cost_contract_applied": True,
+            "actual_cost_objective_structural_contract_passed": True,
+            "actual_cost_objective_numeric_reconciliation_passed": True,
+        },
+    }
+    assert _rolling_objective_cost_contract(
+        optimization_result=result,
+        executed_breakdown={"total_cost": 704_318.0},
+    ) == (False, False)
+
+    result["solver_metadata"]["executed_phase"] = "phase4_integrated"
+    assert _rolling_objective_cost_contract(
+        optimization_result=result,
+        executed_breakdown={"total_cost": 704_319.0},
+    ) == (False, False)
 
 
 def _write_cost_artifacts(run_dir: Path, *, total: float) -> dict:

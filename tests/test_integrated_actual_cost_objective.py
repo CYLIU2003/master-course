@@ -643,7 +643,7 @@ def test_phase4_uses_verified_same_problem_phase3_plan_as_complete_mip_start() -
     assert result.solver_metadata["integrated_heuristics"] == pytest.approx(
         0.5
     )
-    assert result.solver_metadata["integrated_symmetry"] == 2
+    assert result.solver_metadata["integrated_symmetry"] == -1
     assert result.solver_metadata["integrated_search_profile"][
         "phase_count_executed"
     ] == 1

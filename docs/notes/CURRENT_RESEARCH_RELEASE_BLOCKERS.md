@@ -8,13 +8,15 @@ requested 0.1% optimality gap plus three evidence/accounting defects. Commit
 `output/2026-08-08/run_20260808_1126` verified exact reconciliation and
 controls, but an all-budget bound-focus profile regressed to the 15-BEV seed
 and 100% gap. The rain job was intentionally stopped and is not pair evidence.
-The current working tree restores the uninterrupted incumbent-improving search,
-enables solver symmetry handling and expands the neutral symmetric seed
-neighborhood. A proposed second bound-focused optimize call was rejected
-because restarting can lose the useful search tree and weaken the final
-certificate. The change is covered by `72` focused passing tests and `1216`
-total passing tests, but is not yet clean-commit formal evidence. Release
-remains
+Clean sunny run `output/2026-08-08/run_20260808_1300` then proved forced
+`Symmetry=2` was also a regression: 18 BEVs / 14 ICE buses, 59 / 205 trips and
+100% gap. It also exposed that accepted Rolling hard-coded
+`objective_is_actual_cost=false` despite a `1.16e-10 JPY` numeric residual.
+The current working tree restores Gurobi automatic symmetry and classifies a
+Phase 4 executed-day objective as actual cost only when every day-ahead
+contract and the final numeric equality pass. Phase 3 remains false. This is
+covered by `78` focused passing tests and `1218` total passing tests, but is not
+yet clean-commit formal evidence. Release remains
 blocked pending a new frozen commit, fresh Prepare, both completed
 frontend jobs, accepted physical/Rolling/accounting gates and honestly reported
 achieved gaps.
