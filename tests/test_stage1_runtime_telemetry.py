@@ -303,7 +303,7 @@ def test_two_stage_formal_release_requires_numeric_and_certificate_evidence() ->
 def test_interactive_run_defaults_and_provenance_record_server_enforcement() -> None:
     request = RunOptimizationBody()
     assert request.stage1_best_obj_stop_enabled is False
-    assert request.gurobi_threads == 1
+    assert request.gurobi_threads == 8
     assert request.run_profile == "day_ahead_and_hourly_rolling"
     assert request.run_hourly_rolling is True
     assert request.rolling_execution_minutes == 60
@@ -317,7 +317,7 @@ def test_interactive_run_defaults_and_provenance_record_server_enforcement() -> 
     assert controls["override_applied"] is True
     assert controls["effective"] == {
         "stage1_best_obj_stop_enabled": False,
-        "gurobi_threads": 1,
+        "gurobi_threads": 8,
     }
 
 

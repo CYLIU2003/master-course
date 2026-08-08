@@ -1,5 +1,31 @@
 # master-course
 
+## 2026-08-09 Phase 4 proof-search correction
+
+- The latest clean sunny/rain incumbents are physically valid and weather
+  responsive (sunny 27 BEVs / 5 ICE buses, rain 21 / 11), but both integrated
+  MILPs stopped after one node with a 100% raw gap and a zero best bound. They
+  are candidates, not globally certified optima.
+- The full model has about 776,752 variables and 1,929,148 constraints. Once a
+  complete Phase 3 recourse start is independently verified, Phase 4 now uses
+  one uninterrupted bound-certification profile (`MIPFocus=3`,
+  `Heuristics=0.01`) instead of continuing the feasibility-heavy profile.
+- A strict path-cover vehicle-day floor and an optimistic weather-energy/fuel
+  floor are combined into an integer-valid objective lower-bound constraint.
+  It is disabled fail-closed for partial service, non-total-cost objectives,
+  negative objective terms, or a non-actual-cost model.
+- Activation-prefix constraints remove only exact identifier-permutation
+  symmetry among vehicles whose complete solver-relevant records are equal.
+  Baseline-active identifiers are ordered first so the verified warm start
+  remains feasible; adjacent composition starts use the same canonical order.
+- Interactive frontend runs use a fixed eight Gurobi threads on this host. The
+  applied value is persisted and must match between controlled cases. These
+  changes do not alter PV, tariff, fleet, timetable, SOC, charger, or
+  accounting semantics and do not add a BEV/weather preference.
+- Fresh Prepare and a clean frozen-commit sunny/rain rerun are still required.
+  Formal release stays `BLOCKED` unless each run meets the requested 0.1% gap
+  and all physical, Rolling, provenance, and accounting gates pass.
+
 ## 2026-08-08 weather response and inventory-scaled composition search
 
 - Inventory-scaled exact-composition search never exports negative BEV/ICE

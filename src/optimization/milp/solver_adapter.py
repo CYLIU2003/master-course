@@ -73,6 +73,112 @@ _FEEDBACK_GLOBAL_DEADLINE_KEY = "_stage2_feedback_global_deadline_monotonic"
 _FEEDBACK_GLOBAL_STARTED_KEY = "_stage2_feedback_global_started_monotonic"
 
 
+def _integrated_search_controls(
+    *,
+    verified_feasible_start: bool,
+) -> Dict[str, Any]:
+    """Return the weather-neutral Phase 4 search controls.
+
+    A complete, independently checked Phase 3 recourse start already solves
+    the feasibility problem.  Continuing to spend half of the search effort
+    on primal heuristics can then leave the root relaxation unfinished and the
+    global lower bound at zero.  The proof profile therefore shifts effort to
+    the bound while retaining one uninterrupted branch-and-bound tree.
+    """
+
+    if verified_feasible_start:
+        return {
+            "profile": "certify_bound_after_verified_feasible_start",
+            "mip_focus": 3,
+            "heuristics": 0.01,
+            "presolve": 2,
+        }
+    return {
+        "profile": "find_feasible_solution_then_bound",
+        "mip_focus": 1,
+        "heuristics": 0.5,
+        "presolve": 2,
+    }
+
+
+def _problem_vehicle_symmetry_signature(vehicle: Any) -> Tuple[Any, ...]:
+    """Return every solver-relevant vehicle field except its identifier."""
+
+    return (
+        str(getattr(vehicle, "vehicle_type", "") or ""),
+        str(getattr(vehicle, "home_depot_id", "") or ""),
+        getattr(vehicle, "initial_soc", None),
+        getattr(vehicle, "battery_capacity_kwh", None),
+        getattr(vehicle, "reserve_soc", None),
+        bool(getattr(vehicle, "available", True)),
+        getattr(vehicle, "initial_fuel_l", None),
+        getattr(vehicle, "fuel_tank_capacity_l", None),
+        getattr(vehicle, "fuel_reserve_l", None),
+        getattr(vehicle, "fuel_consumption_l_per_km", None),
+        getattr(vehicle, "energy_consumption_kwh_per_km", None),
+        getattr(vehicle, "fixed_use_cost_jpy", None),
+        getattr(vehicle, "charge_power_max_kw", None),
+        tuple(
+            sorted(
+                str(charger_id)
+                for charger_id in (
+                    getattr(vehicle, "compatible_charger_ids", ()) or ()
+                )
+            )
+        ),
+    )
+
+
+def _ordered_identical_vehicle_groups(
+    problem: CanonicalOptimizationProblem,
+) -> Tuple[Tuple[str, ...], ...]:
+    """Return exact vehicle-symmetry groups with the warm start first.
+
+    Permuting vehicles inside one returned group cannot change any solver
+    coefficient.  Ordering vehicles used by the baseline before unused group
+    members keeps a complete MIP start compatible with activation-prefix
+    symmetry breaking.  Only identifiers are reordered; the selected fleet
+    inventory and all vehicle records remain unchanged.
+    """
+
+    baseline_active_vehicle_ids: Set[str] = set()
+    baseline = problem.baseline_plan
+    if baseline is not None:
+        for duty in baseline.duties:
+            vehicle_id = str(
+                baseline.vehicle_id_for_duty(str(duty.duty_id)) or ""
+            )
+            if vehicle_id:
+                baseline_active_vehicle_ids.add(vehicle_id)
+
+    grouped: Dict[Tuple[Any, ...], List[str]] = {}
+    for vehicle in problem.vehicles:
+        if not bool(getattr(vehicle, "available", True)):
+            continue
+        grouped.setdefault(
+            _problem_vehicle_symmetry_signature(vehicle), []
+        ).append(str(vehicle.vehicle_id))
+
+    ordered_groups: List[Tuple[str, ...]] = []
+    for vehicle_ids in grouped.values():
+        if len(vehicle_ids) <= 1:
+            continue
+        ordered_groups.append(
+            tuple(
+                sorted(
+                    vehicle_ids,
+                    key=lambda vehicle_id: (
+                        0
+                        if vehicle_id in baseline_active_vehicle_ids
+                        else 1,
+                        vehicle_id,
+                    ),
+                )
+            )
+        )
+    return tuple(sorted(ordered_groups, key=lambda group: group[0]))
+
+
 def _actual_bess_terminal_soc_deviation_by_depot(
     *,
     bess_soc_end_kwh_by_depot_slot: Mapping[str, Mapping[int, float]],
@@ -1251,6 +1357,25 @@ class GurobiMILPAdapter:
             for vehicle in problem.vehicles
             for day_idx in day_indices
         }
+        integrated_identical_vehicle_groups = (
+            _ordered_identical_vehicle_groups(problem)
+        )
+        integrated_identical_vehicle_activation_prefix_constraint_count = 0
+        for group_index, vehicle_ids in enumerate(
+            integrated_identical_vehicle_groups
+        ):
+            for position, (previous_vehicle_id, next_vehicle_id) in enumerate(
+                zip(vehicle_ids, vehicle_ids[1:])
+            ):
+                model.addConstr(
+                    used_vehicle[previous_vehicle_id]
+                    >= used_vehicle[next_vehicle_id],
+                    name=(
+                        "integrated_identical_vehicle_activation_prefix__"
+                        f"g{group_index}__p{position}"
+                    ),
+                )
+                integrated_identical_vehicle_activation_prefix_constraint_count += 1
         integrated_strict_precheck = dict(
             problem.metadata.get("strict_coverage_precheck") or {}
         )
@@ -3282,6 +3407,95 @@ class GurobiMILPAdapter:
                 if bonus > 0.0:
                     objective -= _return_leg_bonus_weight * bonus * var
 
+        # Add an integer-valid objective floor before branch-and-bound.  The
+        # strict path-cover precheck proves the vehicle-day component, while
+        # the independent weather-aware certificate optimistically pools PV,
+        # BESS and BEV energy.  Their sum cuts only fractional relaxations; it
+        # does not remove any feasible integer dispatch or favor a powertrain.
+        integrated_analytical_objective_floor_blockers: List[str] = []
+        if allow_partial_service:
+            integrated_analytical_objective_floor_blockers.append(
+                "partial_service_enabled"
+            )
+        if objective_mode != "total_cost":
+            integrated_analytical_objective_floor_blockers.append(
+                "objective_mode_is_not_total_cost"
+            )
+        if not bool(
+            getattr(config, "integrated_actual_cost_objective", False)
+        ):
+            integrated_analytical_objective_floor_blockers.append(
+                "integrated_actual_cost_objective_disabled"
+            )
+        if any(
+            float(vehicle.fixed_use_cost_jpy or 0.0) < 0.0
+            for vehicle in problem.vehicles
+        ):
+            integrated_analytical_objective_floor_blockers.append(
+                "negative_vehicle_fixed_use_cost"
+            )
+        if any(
+            float(value or 0.0) < 0.0
+            for value in weather_bias_by_vehicle_type.values()
+        ):
+            integrated_analytical_objective_floor_blockers.append(
+                "negative_weather_assignment_bias"
+            )
+        if _return_leg_bonus_weight > 0.0:
+            integrated_analytical_objective_floor_blockers.append(
+                "negative_return_leg_bonus_term"
+            )
+
+        integrated_vehicle_usage_analytical_lower_bound = (
+            float(integrated_vehicle_count_lower_bound)
+            * vehicle_usage_weight
+            * vehicle_usage_unit_cost
+            if (
+                integrated_vehicle_count_lower_bound > 0
+                and component_flags.get("vehicle_usage_cost", True)
+                and vehicle_usage_unit_cost > 0.0
+            )
+            else 0.0
+        )
+        integrated_weather_energy_fuel_lower_bound_details = (
+            self._stage1_analytical_weather_energy_fuel_lower_bound(
+                problem=problem,
+                assignment_vehicle_ids_by_trip=(
+                    assignment_vehicle_ids_by_trip
+                ),
+                vehicle_by_id=vehicle_by_id,
+                component_flags=component_flags,
+            )
+        )
+        integrated_weather_energy_fuel_analytical_lower_bound = (
+            float(
+                integrated_weather_energy_fuel_lower_bound_details.get(
+                    "lower_bound_jpy", 0.0
+                )
+                or 0.0
+            )
+            if integrated_weather_energy_fuel_lower_bound_details.get(
+                "valid"
+            )
+            is True
+            else 0.0
+        )
+        integrated_analytical_objective_lower_bound = (
+            integrated_vehicle_usage_analytical_lower_bound
+            + integrated_weather_energy_fuel_analytical_lower_bound
+        )
+        integrated_analytical_objective_floor_constraint_count = 0
+        if (
+            not integrated_analytical_objective_floor_blockers
+            and math.isfinite(integrated_analytical_objective_lower_bound)
+            and integrated_analytical_objective_lower_bound > 0.0
+        ):
+            model.addConstr(
+                objective >= integrated_analytical_objective_lower_bound,
+                name="integrated_analytical_total_cost_lower_bound",
+            )
+            integrated_analytical_objective_floor_constraint_count = 1
+
         integrated_warm_start_audit = self._apply_integrated_plan_warm_start(
             problem,
             enabled=bool(getattr(config, "warm_start", True)),
@@ -3484,27 +3698,37 @@ class GurobiMILPAdapter:
                 "integrated_feasible_start_applied", False
             )
         )
-        # Keep one uninterrupted branch-and-bound search.  Restarting the
-        # model under a second parameter profile can discard the useful search
-        # tree and leave the final artifact with a weaker bound.  The profile
-        # below is the one that improved the sunny incumbent in the clean
-        # regression pair.  Gurobi's default automatic symmetry policy is
-        # retained: forcing aggressive detection spent the sunny budget in
-        # root processing and regressed the incumbent.
+        # Keep one uninterrupted branch-and-bound search. Restarting under a
+        # second profile can discard the useful search tree. A verified full
+        # start removes the need for a feasibility-heavy heuristic phase, so
+        # that case uses a lower-bound certification profile. Gurobi's default
+        # automatic symmetry policy is retained because the exact activation
+        # prefixes above already remove the known identical-fleet symmetry.
+        integrated_search_controls = _integrated_search_controls(
+            verified_feasible_start=verified_integrated_start
+        )
         model.Params.TimeLimit = max(float(config.time_limit_sec), 0.001)
-        model.Params.MIPFocus = 1
-        model.Params.Heuristics = 0.5
+        model.Params.MIPFocus = int(
+            integrated_search_controls["mip_focus"]
+        )
+        model.Params.Heuristics = float(
+            integrated_search_controls["heuristics"]
+        )
+        model.Params.Presolve = int(
+            integrated_search_controls["presolve"]
+        )
         phase_started_at = time.perf_counter()
         model.optimize(_capture_first_feasible)
         phase_wall_sec = float(time.perf_counter() - phase_started_at)
         phase_has_incumbent = bool(model.SolCount > 0)
         integrated_search_telemetry: List[Dict[str, Any]] = [
             {
-                "phase": "uninterrupted_incumbent_and_bound_search",
+                "phase": str(integrated_search_controls["profile"]),
                 "time_limit_sec": float(config.time_limit_sec),
                 "wall_time_sec": phase_wall_sec,
                 "mip_focus": int(model.Params.MIPFocus),
                 "heuristics": float(model.Params.Heuristics),
+                "presolve": int(model.Params.Presolve),
                 "symmetry": int(model.Params.Symmetry),
                 "solver_status": status_map.get(
                     model.Status, f"status_{model.Status}"
@@ -4172,8 +4396,11 @@ class GurobiMILPAdapter:
                 "integrated_heuristics": float(model.Params.Heuristics),
                 "integrated_symmetry": int(model.Params.Symmetry),
                 "integrated_search_profile": {
-                    "schema_version": "phase4_integrated_search_profile_v1",
+                    "schema_version": "phase4_integrated_search_profile_v2",
                     "verified_feasible_start": verified_integrated_start,
+                    "selected_profile": str(
+                        integrated_search_controls["profile"]
+                    ),
                     "total_time_limit_sec": float(config.time_limit_sec),
                     "phase_count_executed": len(
                         integrated_search_telemetry
@@ -4184,6 +4411,46 @@ class GurobiMILPAdapter:
                         "bound_search"
                     ),
                 },
+                "integrated_analytical_objective_lower_bound": (
+                    integrated_analytical_objective_lower_bound
+                ),
+                "integrated_vehicle_usage_analytical_lower_bound": (
+                    integrated_vehicle_usage_analytical_lower_bound
+                ),
+                "integrated_analytical_weather_energy_fuel_lower_bound": (
+                    integrated_weather_energy_fuel_analytical_lower_bound
+                ),
+                "integrated_analytical_weather_energy_fuel_lower_bound_details": (
+                    integrated_weather_energy_fuel_lower_bound_details
+                ),
+                "integrated_analytical_objective_floor_constraint_count": (
+                    integrated_analytical_objective_floor_constraint_count
+                ),
+                "integrated_analytical_objective_floor_certificate_eligible": (
+                    not integrated_analytical_objective_floor_blockers
+                ),
+                "integrated_analytical_objective_floor_blockers": tuple(
+                    integrated_analytical_objective_floor_blockers
+                ),
+                "integrated_analytical_objective_lower_bound_semantics": (
+                    "integer_valid_sum_of_strict_path_cover_vehicle_day_"
+                    "cost_floor_and_optimistic_weather_energy_fuel_floor"
+                ),
+                "integrated_identical_vehicle_groups": [
+                    list(group)
+                    for group in integrated_identical_vehicle_groups
+                ],
+                "integrated_identical_vehicle_group_count": len(
+                    integrated_identical_vehicle_groups
+                ),
+                "integrated_identical_vehicle_activation_prefix_constraint_count": (
+                    integrated_identical_vehicle_activation_prefix_constraint_count
+                ),
+                "integrated_identical_vehicle_symmetry_semantics": (
+                    "exact_identifier_permutation_symmetry_only; all solver_"
+                    "relevant vehicle fields equal and baseline-active IDs_"
+                    "ordered first"
+                ),
                 "duty_vehicle_map": duty_vehicle_map,
                 "integrated_unmodeled_vehicle_discharge_forbidden": True,
                 "integrated_vehicle_discharge_semantics": (
@@ -4998,6 +5265,37 @@ class GurobiMILPAdapter:
             for vehicle in problem.vehicles
             for day_idx in day_indices
         }
+        stage1_identical_vehicle_groups = _ordered_identical_vehicle_groups(
+            problem
+        )
+        stage1_vehicle_symmetry_rank = {
+            vehicle_id: (group_index, position)
+            for group_index, vehicle_ids in enumerate(
+                stage1_identical_vehicle_groups
+            )
+            for position, vehicle_id in enumerate(vehicle_ids)
+        }
+        stage1_vehicle_symmetry_group = {
+            vehicle_id: vehicle_ids
+            for vehicle_ids in stage1_identical_vehicle_groups
+            for vehicle_id in vehicle_ids
+        }
+        stage1_identical_vehicle_activation_prefix_constraint_count = 0
+        for group_index, vehicle_ids in enumerate(
+            stage1_identical_vehicle_groups
+        ):
+            for position, (previous_vehicle_id, next_vehicle_id) in enumerate(
+                zip(vehicle_ids, vehicle_ids[1:])
+            ):
+                stage1.addConstr(
+                    used_vehicle[previous_vehicle_id]
+                    >= used_vehicle[next_vehicle_id],
+                    name=(
+                        "stage1_identical_vehicle_activation_prefix__"
+                        f"g{group_index}__p{position}"
+                    ),
+                )
+                stage1_identical_vehicle_activation_prefix_constraint_count += 1
 
         strict_precheck = dict(
             problem.metadata.get("strict_coverage_precheck") or {}
@@ -6003,6 +6301,16 @@ class GurobiMILPAdapter:
                     "stage1_vehicle_count_lower_bound_constraint_count": (
                         stage1_vehicle_count_lower_bound_constraint_count
                     ),
+                    "stage1_identical_vehicle_groups": [
+                        list(group)
+                        for group in stage1_identical_vehicle_groups
+                    ],
+                    "stage1_identical_vehicle_group_count": len(
+                        stage1_identical_vehicle_groups
+                    ),
+                    "stage1_identical_vehicle_activation_prefix_constraint_count": (
+                        stage1_identical_vehicle_activation_prefix_constraint_count
+                    ),
                     "stage1_vehicle_count_lower_bound_semantics": (
                         "relaxed_dispatch_feasible_minimum_path_cover_vehicle_day_lb"
                     ),
@@ -6233,6 +6541,16 @@ class GurobiMILPAdapter:
                 ),
                 "stage1_vehicle_count_lower_bound_constraint_count": (
                     stage1_vehicle_count_lower_bound_constraint_count
+                ),
+                "stage1_identical_vehicle_groups": [
+                    list(group)
+                    for group in stage1_identical_vehicle_groups
+                ],
+                "stage1_identical_vehicle_group_count": len(
+                    stage1_identical_vehicle_groups
+                ),
+                "stage1_identical_vehicle_activation_prefix_constraint_count": (
+                    stage1_identical_vehicle_activation_prefix_constraint_count
                 ),
                 "stage1_vehicle_count_lower_bound_semantics": (
                     "relaxed_dispatch_feasible_minimum_path_cover_vehicle_day_lb"
@@ -6787,18 +7105,36 @@ class GurobiMILPAdapter:
             active_vehicle_ids = set(duties_by_vehicle)
             available_by_group = {
                 "ELECTRIC": sorted(
-                    str(vehicle.vehicle_id)
-                    for vehicle in problem.vehicles
-                    if bool(getattr(vehicle, "available", True))
-                    and _powertrain_group(str(vehicle.vehicle_id))
-                    == "ELECTRIC"
+                    (
+                        str(vehicle.vehicle_id)
+                        for vehicle in problem.vehicles
+                        if bool(getattr(vehicle, "available", True))
+                        and _powertrain_group(str(vehicle.vehicle_id))
+                        == "ELECTRIC"
+                    ),
+                    key=lambda vehicle_id: (
+                        stage1_vehicle_symmetry_rank.get(
+                            vehicle_id,
+                            (len(stage1_identical_vehicle_groups), 0),
+                        ),
+                        vehicle_id,
+                    ),
                 ),
                 "COMBUSTION": sorted(
-                    str(vehicle.vehicle_id)
-                    for vehicle in problem.vehicles
-                    if bool(getattr(vehicle, "available", True))
-                    and _powertrain_group(str(vehicle.vehicle_id))
-                    == "COMBUSTION"
+                    (
+                        str(vehicle.vehicle_id)
+                        for vehicle in problem.vehicles
+                        if bool(getattr(vehicle, "available", True))
+                        and _powertrain_group(str(vehicle.vehicle_id))
+                        == "COMBUSTION"
+                    ),
+                    key=lambda vehicle_id: (
+                        stage1_vehicle_symmetry_rank.get(
+                            vehicle_id,
+                            (len(stage1_identical_vehicle_groups), 0),
+                        ),
+                        vehicle_id,
+                    ),
                 ),
             }
             active_by_group = {
@@ -7256,10 +7592,6 @@ class GurobiMILPAdapter:
                     for vehicle_id in available_by_group[target_group]
                     if vehicle_id not in active_vehicle_ids
                 ]
-                compatible_targets_by_source: Dict[
-                    str,
-                    List[str],
-                ] = {}
                 replacement_score_by_pair: Dict[
                     Tuple[str, str],
                     float,
@@ -7272,112 +7604,111 @@ class GurobiMILPAdapter:
                         )
                         if single_start is None:
                             continue
-                        compatible_targets_by_source.setdefault(
-                            source_vehicle_id,
-                            [],
-                        ).append(target_vehicle_id)
                         replacement_score_by_pair[
                             (source_vehicle_id, target_vehicle_id)
                         ] = float(
                             single_start["warm_start_priority_score"]
                         )
 
-                # Construct a maximum-cardinality matching before choosing
-                # prefixes. A score-greedy pairing can strand a source that
-                # has only one compatible target and incorrectly omit a
-                # reachable multi-vehicle delta.
-                target_to_source: Dict[str, str] = {}
-
-                def _augment_replacement_matching(
-                    source_vehicle_id: str,
-                    visited_target_ids: Set[str],
-                ) -> bool:
-                    compatible_target_ids = sorted(
-                        compatible_targets_by_source.get(
-                            source_vehicle_id,
-                            (),
-                        ),
-                        key=lambda target_vehicle_id: (
-                            replacement_score_by_pair[
-                                (source_vehicle_id, target_vehicle_id)
-                            ],
-                            target_vehicle_id,
-                        ),
-                    )
-                    for target_vehicle_id in compatible_target_ids:
-                        if target_vehicle_id in visited_target_ids:
-                            continue
-                        visited_target_ids.add(target_vehicle_id)
-                        matched_source_vehicle_id = target_to_source.get(
-                            target_vehicle_id
-                        )
-                        if (
-                            matched_source_vehicle_id is None
-                            or _augment_replacement_matching(
-                                matched_source_vehicle_id,
-                                visited_target_ids,
-                            )
-                        ):
-                            target_to_source[target_vehicle_id] = (
-                                source_vehicle_id
-                            )
-                            return True
-                    return False
-
-                for source_vehicle_id in sorted(
-                    compatible_targets_by_source,
-                    key=lambda item: (
-                        len(compatible_targets_by_source[item]),
-                        item,
-                    ),
-                ):
-                    _augment_replacement_matching(
-                        source_vehicle_id,
-                        set(),
-                    )
-
-                compatible_pairs = [
-                    (
-                        replacement_score_by_pair[
-                            (source_vehicle_id, target_vehicle_id)
-                        ],
-                        source_vehicle_id,
-                        target_vehicle_id,
-                    )
-                    for target_vehicle_id, source_vehicle_id
-                    in target_to_source.items()
-                ]
-
                 # One deterministic non-conflicting prefix supplies every
                 # reachable delta.  This is especially important for the BEV
                 # frontier: its first declared K may be more than one vehicle
                 # above the primary composition, so a one-replacement start
-                # cannot satisfy the temporary lower bound.
+                # cannot satisfy the temporary lower bound.  Source vehicles
+                # are retired from the end of an exact-symmetry group and
+                # targets are activated from its beginning, keeping every
+                # partial start compatible with the activation-prefix cuts.
                 replacements: Dict[str, str] = {}
                 used_target_ids: Set[str] = set()
-                for _score, source_vehicle_id, target_vehicle_id in sorted(
-                    compatible_pairs,
-                    key=lambda item: (item[0], item[1], item[2]),
-                ):
-                    if (
-                        source_vehicle_id in replacements
-                        or target_vehicle_id in used_target_ids
-                    ):
-                        continue
-                    trial_replacements = {
-                        **replacements,
-                        source_vehicle_id: target_vehicle_id,
-                    }
-                    delta = bev_delta * len(trial_replacements)
-                    start = _build_replacement_start(
-                        trial_replacements,
-                        bev_delta=delta,
+                rejected_pairs: Set[Tuple[str, str]] = set()
+
+                def _retirement_preserves_symmetry_prefix(
+                    source_vehicle_id: str,
+                ) -> bool:
+                    group = stage1_vehicle_symmetry_group.get(
+                        source_vehicle_id
                     )
-                    if start is None:
-                        continue
-                    replacements = trial_replacements
-                    used_target_ids.add(target_vehicle_id)
-                    starts_by_delta.setdefault(delta, []).append(start)
+                    if group is None:
+                        return True
+                    position = group.index(source_vehicle_id)
+                    return all(
+                        vehicle_id not in active_vehicle_ids
+                        or vehicle_id in replacements
+                        for vehicle_id in group[position + 1 :]
+                    )
+
+                def _activation_preserves_symmetry_prefix(
+                    target_vehicle_id: str,
+                ) -> bool:
+                    group = stage1_vehicle_symmetry_group.get(
+                        target_vehicle_id
+                    )
+                    if group is None:
+                        return True
+                    position = group.index(target_vehicle_id)
+                    return all(
+                        vehicle_id in active_vehicle_ids
+                        or vehicle_id in used_target_ids
+                        for vehicle_id in group[:position]
+                    )
+
+                while True:
+                    eligible_pairs = [
+                        (
+                            score,
+                            source_vehicle_id,
+                            target_vehicle_id,
+                        )
+                        for (
+                            source_vehicle_id,
+                            target_vehicle_id,
+                        ), score in replacement_score_by_pair.items()
+                        if source_vehicle_id not in replacements
+                        and target_vehicle_id not in used_target_ids
+                        and (
+                            source_vehicle_id,
+                            target_vehicle_id,
+                        )
+                        not in rejected_pairs
+                        and _retirement_preserves_symmetry_prefix(
+                            source_vehicle_id
+                        )
+                        and _activation_preserves_symmetry_prefix(
+                            target_vehicle_id
+                        )
+                    ]
+                    if not eligible_pairs:
+                        break
+                    accepted_pair = False
+                    for (
+                        _score,
+                        source_vehicle_id,
+                        target_vehicle_id,
+                    ) in sorted(
+                        eligible_pairs,
+                        key=lambda item: (item[0], item[1], item[2]),
+                    ):
+                        trial_replacements = {
+                            **replacements,
+                            source_vehicle_id: target_vehicle_id,
+                        }
+                        delta = bev_delta * len(trial_replacements)
+                        start = _build_replacement_start(
+                            trial_replacements,
+                            bev_delta=delta,
+                        )
+                        if start is None:
+                            rejected_pairs.add(
+                                (source_vehicle_id, target_vehicle_id)
+                            )
+                            continue
+                        replacements = trial_replacements
+                        used_target_ids.add(target_vehicle_id)
+                        starts_by_delta.setdefault(delta, []).append(start)
+                        accepted_pair = True
+                        break
+                    if not accepted_pair:
+                        break
 
             for delta, split_starts in (
                 _build_unused_bev_duty_split_starts().items()
@@ -7775,6 +8106,12 @@ class GurobiMILPAdapter:
             )
             attempted_valid_targets = 0
             previous_frontier_plan: Optional[AssignmentPlan] = stage1_plan
+            previous_composition_plan_by_direction: Dict[
+                int, AssignmentPlan
+            ] = {
+                1: stage1_plan,
+                -1: stage1_plan,
+            }
             for target_record in composition_target_records:
                 if not target_record["target_within_selected_inventory"]:
                     composition_search_events.append(dict(target_record))
@@ -7814,6 +8151,9 @@ class GurobiMILPAdapter:
                     continue
 
                 target_used_bev = int(target_record["target_used_bev"])
+                target_bev_delta_from_primary = int(
+                    target_record["delta_used_bev_from_primary"]
+                )
                 raw_target_used_ice = target_record.get("target_used_ice")
                 target_used_ice = (
                     int(raw_target_used_ice)
@@ -7867,6 +8207,10 @@ class GurobiMILPAdapter:
                 frontier_warm_start_applied = False
                 frontier_warm_start_source = ""
                 frontier_warm_start_reason = "not_frontier_search"
+                adjacent_composition_warm_start_source_used_bev = None
+                adjacent_composition_warm_start_source_used_ice = None
+                adjacent_composition_warm_start_delta_used_bev = None
+                adjacent_composition_mip_start_count = 0
                 # Each target has a different temporary composition bound.
                 # Clear indexed starts from the preceding target before its
                 # own incumbent or activation starts are recorded/applied.
@@ -7890,13 +8234,82 @@ class GurobiMILPAdapter:
                         used_vehicle_day=used_vehicle_day,
                         trip_day_index_by_trip_id=trip_day_index_by_trip_id,
                     )
+                else:
+                    direction = (
+                        1 if target_bev_delta_from_primary > 0 else -1
+                    )
+                    adjacent_plan = (
+                        previous_composition_plan_by_direction[direction]
+                    )
+                    (
+                        adjacent_used_bev,
+                        adjacent_used_ice,
+                    ) = _candidate_used_powertrain_composition(
+                        adjacent_plan
+                    )
+                    adjacent_delta = (
+                        target_used_bev - adjacent_used_bev
+                    )
+                    if adjacent_delta != 0:
+                        adjacent_starts = (
+                            _powertrain_activation_replacement_mip_starts(
+                                adjacent_plan
+                            ).get(adjacent_delta, [])
+                        )
+                        composition_mip_starts.extend(adjacent_starts)
+                        adjacent_composition_mip_start_count = len(
+                            adjacent_starts
+                        )
+                        adjacent_composition_warm_start_source_used_bev = (
+                            adjacent_used_bev
+                        )
+                        adjacent_composition_warm_start_source_used_ice = (
+                            adjacent_used_ice
+                        )
+                        adjacent_composition_warm_start_delta_used_bev = (
+                            adjacent_delta
+                        )
                 delta_starts = composition_activation_mip_starts.get(
                     int(target_record["delta_used_bev_from_primary"]),
                     [],
                 )
                 if delta_starts:
-                    composition_mip_starts = list(delta_starts)
-                    composition_mip_start = delta_starts[0]
+                    composition_mip_starts.extend(delta_starts)
+                if composition_mip_starts:
+                    distinct_composition_mip_starts: List[
+                        Dict[str, Any]
+                    ] = []
+                    seen_composition_mip_starts: Set[
+                        Tuple[Any, ...]
+                    ] = set()
+                    for candidate_start in composition_mip_starts:
+                        start_key = (
+                            str(candidate_start.get("start_mode") or ""),
+                            str(
+                                candidate_start.get(
+                                    "powertrain_pattern_hash"
+                                )
+                                or ""
+                            ),
+                            tuple(
+                                candidate_start.get("source_vehicle_ids")
+                                or ()
+                            ),
+                            tuple(
+                                candidate_start.get("target_vehicle_ids")
+                                or ()
+                            ),
+                        )
+                        if start_key in seen_composition_mip_starts:
+                            continue
+                        seen_composition_mip_starts.add(start_key)
+                        distinct_composition_mip_starts.append(
+                            candidate_start
+                        )
+                    composition_mip_starts = (
+                        distinct_composition_mip_starts
+                    )
+                    composition_mip_start = composition_mip_starts[0]
                     _apply_partial_assignment_mip_starts(
                         composition_mip_starts
                     )
@@ -7976,6 +8389,27 @@ class GurobiMILPAdapter:
                             ),
                             "frontier_warm_start_reason": (
                                 frontier_warm_start_reason
+                            ),
+                            "adjacent_composition_warm_start_applied": (
+                                adjacent_composition_mip_start_count > 0
+                            ),
+                            "adjacent_composition_mip_start_count": (
+                                adjacent_composition_mip_start_count
+                            ),
+                            "adjacent_composition_warm_start_source_used_bev": (
+                                adjacent_composition_warm_start_source_used_bev
+                            ),
+                            "adjacent_composition_warm_start_source_used_ice": (
+                                adjacent_composition_warm_start_source_used_ice
+                            ),
+                            "adjacent_composition_warm_start_delta_used_bev": (
+                                adjacent_composition_warm_start_delta_used_bev
+                            ),
+                            "adjacent_composition_warm_start_semantics": (
+                                "previous_feasible_plan_in_same_count_"
+                                "direction_plus_one_exact_activation_hint"
+                                if adjacent_composition_mip_start_count > 0
+                                else "none"
                             ),
                         }
                     )
@@ -8309,6 +8743,15 @@ class GurobiMILPAdapter:
                         )
                         if stage1_bev_frontier_enabled:
                             previous_frontier_plan = composition_plan
+                        else:
+                            direction = (
+                                1
+                                if target_bev_delta_from_primary > 0
+                                else -1
+                            )
+                            previous_composition_plan_by_direction[
+                                direction
+                            ] = composition_plan
                         if assignment_hash in seen_candidate_hashes:
                             target_record[
                                 "candidate_accepted_for_stage2_evaluation"

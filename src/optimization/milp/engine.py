@@ -311,6 +311,20 @@ class MILPOptimizer:
                 "stage1_vehicle_count_lower_bound_semantics": (
                     plan.metadata or {}
                 ).get("stage1_vehicle_count_lower_bound_semantics"),
+                "stage1_identical_vehicle_groups": list(
+                    (plan.metadata or {}).get(
+                        "stage1_identical_vehicle_groups"
+                    )
+                    or ()
+                ),
+                "stage1_identical_vehicle_group_count": (
+                    plan.metadata or {}
+                ).get("stage1_identical_vehicle_group_count"),
+                "stage1_identical_vehicle_activation_prefix_constraint_count": (
+                    plan.metadata or {}
+                ).get(
+                    "stage1_identical_vehicle_activation_prefix_constraint_count"
+                ),
                 "stage1_redundant_arc_link_constraints_omitted": (
                     plan.metadata or {}
                 ).get("stage1_redundant_arc_link_constraints_omitted"),
@@ -647,6 +661,70 @@ class MILPOptimizer:
                         "integrated_search_profile"
                     )
                     or {}
+                ),
+                "integrated_analytical_objective_lower_bound": (
+                    (plan.metadata or {}).get(
+                        "integrated_analytical_objective_lower_bound"
+                    )
+                ),
+                "integrated_vehicle_usage_analytical_lower_bound": (
+                    (plan.metadata or {}).get(
+                        "integrated_vehicle_usage_analytical_lower_bound"
+                    )
+                ),
+                "integrated_analytical_weather_energy_fuel_lower_bound": (
+                    (plan.metadata or {}).get(
+                        "integrated_analytical_weather_energy_fuel_lower_bound"
+                    )
+                ),
+                "integrated_analytical_weather_energy_fuel_lower_bound_details": dict(
+                    (plan.metadata or {}).get(
+                        "integrated_analytical_weather_energy_fuel_lower_bound_details"
+                    )
+                    or {}
+                ),
+                "integrated_analytical_objective_floor_constraint_count": (
+                    (plan.metadata or {}).get(
+                        "integrated_analytical_objective_floor_constraint_count"
+                    )
+                ),
+                "integrated_analytical_objective_floor_certificate_eligible": bool(
+                    (plan.metadata or {}).get(
+                        "integrated_analytical_objective_floor_certificate_eligible",
+                        False,
+                    )
+                ),
+                "integrated_analytical_objective_floor_blockers": list(
+                    (plan.metadata or {}).get(
+                        "integrated_analytical_objective_floor_blockers"
+                    )
+                    or ()
+                ),
+                "integrated_analytical_objective_lower_bound_semantics": (
+                    (plan.metadata or {}).get(
+                        "integrated_analytical_objective_lower_bound_semantics"
+                    )
+                ),
+                "integrated_identical_vehicle_groups": list(
+                    (plan.metadata or {}).get(
+                        "integrated_identical_vehicle_groups"
+                    )
+                    or ()
+                ),
+                "integrated_identical_vehicle_group_count": (
+                    (plan.metadata or {}).get(
+                        "integrated_identical_vehicle_group_count"
+                    )
+                ),
+                "integrated_identical_vehicle_activation_prefix_constraint_count": (
+                    (plan.metadata or {}).get(
+                        "integrated_identical_vehicle_activation_prefix_constraint_count"
+                    )
+                ),
+                "integrated_identical_vehicle_symmetry_semantics": (
+                    (plan.metadata or {}).get(
+                        "integrated_identical_vehicle_symmetry_semantics"
+                    )
                 ),
                 "best_bound": outcome.best_bound,
                 # A gap is meaningful only when the returned solver outcome

@@ -622,6 +622,20 @@ def test_phase3_composition_search_activates_unused_powertrain_inventory() -> No
         == "physically_feasible_stage2_candidate"
         for row in certificate["target_records"]
     )
+    adjacent_target = next(
+        row
+        for row in certificate["target_records"]
+        if int(row["target_used_bev"]) == 2
+    )
+    assert adjacent_target[
+        "adjacent_composition_warm_start_applied"
+    ] is True
+    assert adjacent_target[
+        "adjacent_composition_warm_start_source_used_bev"
+    ] == 1
+    assert adjacent_target[
+        "adjacent_composition_warm_start_delta_used_bev"
+    ] == 1
     assert all(
         row.get("final_disposition") != "stage1_infeasibility_certificate"
         or row.get("solver_status") == "infeasible"

@@ -116,6 +116,17 @@ def test_solver_settings_persists_integrated_search_profile() -> None:
             "integrated_heuristics": 0.5,
             "integrated_symmetry": -1,
             "integrated_search_profile": search_profile,
+            "integrated_analytical_objective_lower_bound": 640_000.0,
+            "integrated_vehicle_usage_analytical_lower_bound": 640_000.0,
+            "integrated_analytical_weather_energy_fuel_lower_bound": 0.0,
+            "integrated_analytical_objective_floor_constraint_count": 1,
+            "integrated_analytical_objective_floor_certificate_eligible": True,
+            "integrated_analytical_objective_floor_blockers": [],
+            "integrated_identical_vehicle_groups": [
+                ["ice-001", "ice-002"]
+            ],
+            "integrated_identical_vehicle_group_count": 1,
+            "integrated_identical_vehicle_activation_prefix_constraint_count": 1,
         },
     )
 
@@ -123,6 +134,19 @@ def test_solver_settings_persists_integrated_search_profile() -> None:
     assert payload["integrated_heuristics"] == pytest.approx(0.5)
     assert payload["integrated_symmetry"] == -1
     assert payload["integrated_search_profile"] == search_profile
+    assert payload[
+        "integrated_analytical_objective_lower_bound"
+    ] == pytest.approx(640_000.0)
+    assert payload[
+        "integrated_analytical_objective_floor_constraint_count"
+    ] == 1
+    assert payload[
+        "integrated_analytical_objective_floor_certificate_eligible"
+    ] is True
+    assert payload["integrated_identical_vehicle_group_count"] == 1
+    assert payload[
+        "integrated_identical_vehicle_activation_prefix_constraint_count"
+    ] == 1
 
 
 def test_solver_settings_persists_phase4_seed_and_total_time_budget() -> None:

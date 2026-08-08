@@ -4,8 +4,15 @@ from types import SimpleNamespace
 import pytest
 
 import src.optimization.engine as optimization_engine_module
-from src.dispatch.models import DeadheadRule, DispatchContext, Trip, VehicleProfile
+from src.dispatch.models import (
+    DeadheadRule,
+    DispatchContext,
+    Trip,
+    VehicleDuty,
+    VehicleProfile,
+)
 from src.optimization.common.problem import (
+    AssignmentPlan,
     CanonicalOptimizationProblem,
     DepotEnergyAsset,
     OptimizationObjectiveWeights,
@@ -14,6 +21,7 @@ from src.optimization.common.problem import (
     OptimizationConfig,
     OptimizationMode,
     EnergyPriceSlot,
+    ProblemVehicle,
 )
 from src.optimization.common.builder import ProblemBuilder
 from src.optimization.common.seed_fingerprint import (
@@ -29,8 +37,56 @@ from src.gurobi_runtime import ensure_gurobi
 from src.optimization.milp.solver_adapter import (
     GurobiMILPAdapter,
     _actual_bess_terminal_soc_deviation_by_depot,
+    _integrated_search_controls,
+    _ordered_identical_vehicle_groups,
 )
 from test_post_return_soc_target import _dispatch_context
+
+
+def test_verified_integrated_start_selects_bound_certification_profile() -> None:
+    assert _integrated_search_controls(
+        verified_feasible_start=True
+    ) == {
+        "profile": "certify_bound_after_verified_feasible_start",
+        "mip_focus": 3,
+        "heuristics": 0.01,
+        "presolve": 2,
+    }
+    assert _integrated_search_controls(
+        verified_feasible_start=False
+    )["profile"] == "find_feasible_solution_then_bound"
+
+
+def test_identical_vehicle_group_keeps_baseline_active_identifier_first() -> None:
+    base = _phase4_seed_problem("identical-vehicle-symmetry")
+    identical_a = ProblemVehicle(
+        vehicle_id="ice-a",
+        vehicle_type="ICE",
+        home_depot_id="DEPOT",
+        initial_fuel_l=100.0,
+        fuel_tank_capacity_l=120.0,
+        fuel_reserve_l=12.0,
+        fuel_consumption_l_per_km=0.2,
+    )
+    identical_b = replace(identical_a, vehicle_id="ice-b")
+    nonidentical = replace(
+        identical_a,
+        vehicle_id="ice-c",
+        initial_fuel_l=90.0,
+    )
+    baseline = AssignmentPlan(
+        duties=(VehicleDuty("duty-b", "ICE", ()),),
+        metadata={"duty_vehicle_map": {"duty-b": "ice-b"}},
+    )
+    problem = replace(
+        base,
+        vehicles=(identical_a, identical_b, nonidentical),
+        baseline_plan=baseline,
+    )
+
+    assert _ordered_identical_vehicle_groups(problem) == (
+        ("ice-b", "ice-a"),
+    )
 
 
 def test_phase4_seed_composition_search_scales_with_selected_fleet() -> None:
@@ -561,6 +617,43 @@ def test_phase4_allows_back_to_back_trips_inside_one_energy_slot(
     assert plan.unserved_trip_ids == ()
 
 
+def test_phase4_objective_floor_is_disabled_for_negative_bonus_term() -> None:
+    problem = _same_slot_back_to_back_problem("ICE")
+    problem = replace(
+        problem,
+        objective_weights=replace(
+            problem.objective_weights,
+            return_leg_bonus=1.0,
+        ),
+    )
+
+    outcome, plan = GurobiMILPAdapter().solve(
+        problem,
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            phase="phase4_integrated",
+            integrated_actual_cost_objective=True,
+            time_limit_sec=30,
+            mip_gap=0.0,
+            random_seed=42,
+            warm_start=False,
+            allow_postsolve_repair=False,
+            research_run=True,
+        ),
+    )
+
+    assert outcome.has_feasible_incumbent, outcome.solver_status
+    assert plan.metadata[
+        "integrated_analytical_objective_floor_constraint_count"
+    ] == 0
+    assert plan.metadata[
+        "integrated_analytical_objective_floor_certificate_eligible"
+    ] is False
+    assert "negative_return_leg_bonus_term" in plan.metadata[
+        "integrated_analytical_objective_floor_blockers"
+    ]
+
+
 def _phase4_seed_problem(
     scenario_id: str = "actual-cost-verified-phase3-seed",
 ) -> CanonicalOptimizationProblem:
@@ -616,7 +709,14 @@ def _phase4_seed_problem(
 
 
 def test_phase4_uses_verified_same_problem_phase3_plan_as_complete_mip_start() -> None:
-    problem = _phase4_seed_problem()
+    base_problem = _phase4_seed_problem()
+    problem = replace(
+        base_problem,
+        metadata={
+            **dict(base_problem.metadata or {}),
+            "vehicle_usage_cost_jpy_per_used_bus": 20_000.0,
+        },
+    )
     result = OptimizationEngine().solve(
         problem,
         OptimizationConfig(
@@ -684,9 +784,9 @@ def test_phase4_uses_verified_same_problem_phase3_plan_as_complete_mip_start() -
     assert len(audit["integrated_solution_start_fingerprint"]) == 64
     assert audit["dispatch_fixed_recourse_runtime_sec"] >= 0.0
     assert result.solver_metadata["first_feasible_sec"] == 0.0
-    assert result.solver_metadata["integrated_mip_focus"] == 1
+    assert result.solver_metadata["integrated_mip_focus"] == 3
     assert result.solver_metadata["integrated_heuristics"] == pytest.approx(
-        0.5
+        0.01
     )
     assert result.solver_metadata["integrated_symmetry"] == -1
     assert result.solver_metadata["integrated_search_profile"][
@@ -694,7 +794,19 @@ def test_phase4_uses_verified_same_problem_phase3_plan_as_complete_mip_start() -
     ] == 1
     assert result.solver_metadata["integrated_search_profile"]["phases"][0][
         "phase"
-    ] == "uninterrupted_incumbent_and_bound_search"
+    ] == "certify_bound_after_verified_feasible_start"
+    assert result.solver_metadata["integrated_search_profile"][
+        "schema_version"
+    ] == "phase4_integrated_search_profile_v2"
+    assert result.solver_metadata[
+        "integrated_analytical_objective_floor_constraint_count"
+    ] == 1
+    assert result.solver_metadata[
+        "integrated_analytical_objective_lower_bound"
+    ] >= 20_000.0
+    assert result.solver_metadata[
+        "integrated_analytical_objective_floor_certificate_eligible"
+    ] is True
     assert result.solver_metadata["phase4_phase3_seed_audit"][
         "seed_runtime_sec"
     ] > 0.0

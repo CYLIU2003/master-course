@@ -1,5 +1,40 @@
 # Development Notes
 
+## 2026-08-09: Phase 4 bound certification and exact fleet symmetry
+
+- The latest clean pair produced a lower-cost sunny incumbent with 27 BEVs / 5
+  ICE buses and a rain incumbent with 21 / 11, but each 776,752-variable,
+  1,929,148-constraint integrated solve processed one node and stopped at a
+  100% raw gap with best bound zero. The result diagnoses proof-search failure;
+  it does not establish either fleet composition as optimal.
+- When fixed-dispatch recourse has independently verified a complete Phase 4
+  MIP start, the unrestricted solve now keeps one tree and applies
+  `MIPFocus=3`, `Heuristics=0.01`, and `Presolve=2`. Without a certified start,
+  the existing feasibility profile remains in force. The selected profile and
+  each effective parameter are exported.
+- Phase 4 adds an integer-valid total-cost floor equal to the strict relaxed
+  path-cover vehicle-day floor plus the existing optimistic weather-aware
+  service energy/fuel floor. It ignores deadhead, timing, charger contention,
+  demand and other nonnegative costs. The constraint is fail-closed when
+  partial service, a non-total-cost objective, a non-actual-cost model, a
+  negative fixed vehicle cost, a negative weather term, or a return-leg reward
+  could invalidate it. Its components, certificate hash, blockers and applied
+  constraint count are persisted through the engine and BFF.
+- Exact identifier-permutation symmetry is removed with activation prefixes
+  only when every `ProblemVehicle` solver-relevant field except `vehicle_id`
+  matches. Baseline-active IDs precede unused IDs, preserving the complete MIP
+  start. Adjacent composition warm starts use the same ordering, and each next
+  delta starts from the last feasible adjacent composition instead of always
+  rebuilding from the primary composition.
+- The interactive BFF/Tk contract now fixes Gurobi at eight threads rather than
+  one and records requested/effective values. Controlled pair cases still use
+  exactly the same thread count. This changes search resources, not the
+  mathematical feasible set, prices, PV/BESS flows, or objective semantics.
+- Focused cost, composition, research-contract, runtime-control and frontend
+  regressions pass (`159 passed`), and the complete suite passes (`1,226
+  passed`). Fresh clean-commit Prepare and both complete frontend cases remain
+  necessary before these changes are research evidence.
+
 ## 2026-08-08: inventory-span composition targets are count-valid
 
 - Exact used-powertrain composition search now omits negative BEV/ICE targets
@@ -1841,7 +1876,8 @@
 
 - **P1 — front-end runs required users to remember runtime controls:** the Tk
   payload now supplies `stage1_best_obj_stop_enabled=false` and
-  `gurobi_threads=1`, and the BFF worker enforces the same values immediately
+  `gurobi_threads=1` at that time (the current interactive contract is eight
+  threads), and the BFF worker enforces the current values immediately
   before `OptimizationConfig` is built. A stale or manually edited frontend
   request cannot re-enable the early stop or change the thread count. The raw
   request and the enforced effective values are both persisted under

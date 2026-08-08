@@ -359,7 +359,7 @@ def test_build_optimization_run_payload_centralizes_fast_and_manual_execution() 
         "integrated_ev_utilization_mode": "disabled",
         "integrated_actual_cost_upper_bound_jpy": None,
         "integrated_actual_cost_upper_bound_delta_ratio": None,
-        "gurobi_threads": 1,
+        "gurobi_threads": 8,
         "run_profile": "day_ahead_and_hourly_rolling",
         "run_hourly_rolling": True,
         "rolling_execution_minutes": 60,

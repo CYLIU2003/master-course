@@ -78,6 +78,32 @@ def test_bev_frontier_uses_only_minimum_bev_constraint() -> None:
         for record in certificate["target_records"]
         if record["target_used_bev"] == 2
     )
+    target_one = next(
+        record
+        for record in certificate["target_records"]
+        if record["target_used_bev"] == 1
+    )
+    symmetry_groups = result.plan.metadata[
+        "stage1_identical_vehicle_groups"
+    ]
+    bev_group = next(
+        group for group in symmetry_groups if group[0].startswith("bev-")
+    )
+    ice_group = next(
+        group for group in symmetry_groups if group[0].startswith("ice-")
+    )
+    assert target_one["partial_mip_start_source_vehicle_ids"] == [
+        ice_group[-1]
+    ]
+    assert target_one["partial_mip_start_target_vehicle_ids"] == [
+        bev_group[0]
+    ]
+    assert set(target_two["partial_mip_start_source_vehicle_ids"]) == set(
+        ice_group
+    )
+    assert set(target_two["partial_mip_start_target_vehicle_ids"]) == set(
+        bev_group
+    )
     assert target_two["partial_mip_start_applied"] is True
     assert target_two["partial_mip_start_replacement_count"] == 2
     assert target_two["frontier_resolution_candidate_hash"]

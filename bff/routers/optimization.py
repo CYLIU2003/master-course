@@ -161,7 +161,9 @@ _OPTIMIZATION_EXECUTOR: Optional[Executor] = None
 # CLI runner remains independently configurable for non-interactive studies.
 INTERACTIVE_RUNTIME_POLICY_VERSION = "interactive_runtime_controls_v1"
 INTERACTIVE_STAGE1_BEST_OBJ_STOP_ENABLED = False
-INTERACTIVE_GUROBI_THREADS = 1
+# Keep a fixed value for pair reproducibility while using enough of the
+# research workstation to finish the integrated root relaxation and proof.
+INTERACTIVE_GUROBI_THREADS = 8
 INTERACTIVE_TERMINAL_SOC_POLICY_VERSION = "interactive_terminal_soc_controls_v1"
 INTERACTIVE_BEV_TERMINAL_SOC_POLICY = "return_to_initial"
 INTERACTIVE_OPERATION_TIME_WINDOW_CONTROLS_VERSION = (
@@ -401,8 +403,9 @@ def _interactive_runtime_controls_payload(
         "effective": effective,
         "override_applied": requested != effective,
         "reason": (
-            "Interactive runs disable Stage 1 BestObjStop and use one Gurobi "
-            "thread so their solver controls are recorded consistently."
+            "Interactive runs disable Stage 1 BestObjStop and use eight fixed "
+            "Gurobi threads so their solver controls are recorded consistently "
+            "while Phase 4 can advance its global bound."
         ),
     }
 
@@ -905,7 +908,7 @@ def _optimization_capabilities() -> Dict[str, Any]:
             "Results are persisted to the scenario snapshot; job state is not.",
             "Optimization/re-optimization runs in a dedicated executor so API polling stays responsive.",
             "Only one optimization/re-optimization job is allowed at a time in this BFF process.",
-            "Interactive /run-optimization enforces Stage 1 BestObjStop=OFF and Gurobi Threads=1; the formal CLI runner remains explicit.",
+            "Interactive /run-optimization enforces Stage 1 BestObjStop=OFF and Gurobi Threads=8; the formal CLI runner remains explicit.",
             "The default interactive profile executes the complete 60-minute rolling chain in the same job; day-ahead-only diagnostics require run_profile=day_ahead_exploratory.",
         ],
     }
@@ -10001,6 +10004,28 @@ def _solver_settings_payload(
         "stage1_model_constraint_count": _int_or_none(
             metadata.get("stage1_model_constraint_count")
         ),
+        "stage1_vehicle_count_lower_bound": _int_or_none(
+            metadata.get("stage1_vehicle_count_lower_bound")
+        ),
+        "stage1_vehicle_count_lower_bound_constraint_count": _int_or_none(
+            metadata.get(
+                "stage1_vehicle_count_lower_bound_constraint_count"
+            )
+        ),
+        "stage1_vehicle_count_lower_bound_semantics": metadata.get(
+            "stage1_vehicle_count_lower_bound_semantics"
+        ),
+        "stage1_identical_vehicle_groups": list(
+            metadata.get("stage1_identical_vehicle_groups") or ()
+        ),
+        "stage1_identical_vehicle_group_count": _int_or_none(
+            metadata.get("stage1_identical_vehicle_group_count")
+        ),
+        "stage1_identical_vehicle_activation_prefix_constraint_count": _int_or_none(
+            metadata.get(
+                "stage1_identical_vehicle_activation_prefix_constraint_count"
+            )
+        ),
         "stage1_energy_cost_proxy_used_in_objective": bool(
             metadata.get("stage1_energy_cost_proxy_used_in_objective", False)
         ),
@@ -10082,6 +10107,57 @@ def _solver_settings_payload(
         ),
         "integrated_search_profile": dict(
             metadata.get("integrated_search_profile") or {}
+        ),
+        "integrated_analytical_objective_lower_bound": _float_or_none(
+            metadata.get("integrated_analytical_objective_lower_bound")
+        ),
+        "integrated_vehicle_usage_analytical_lower_bound": _float_or_none(
+            metadata.get(
+                "integrated_vehicle_usage_analytical_lower_bound"
+            )
+        ),
+        "integrated_analytical_weather_energy_fuel_lower_bound": _float_or_none(
+            metadata.get(
+                "integrated_analytical_weather_energy_fuel_lower_bound"
+            )
+        ),
+        "integrated_analytical_weather_energy_fuel_lower_bound_details": dict(
+            metadata.get(
+                "integrated_analytical_weather_energy_fuel_lower_bound_details"
+            )
+            or {}
+        ),
+        "integrated_analytical_objective_floor_constraint_count": _int_or_none(
+            metadata.get(
+                "integrated_analytical_objective_floor_constraint_count"
+            )
+        ),
+        "integrated_analytical_objective_floor_certificate_eligible": bool(
+            metadata.get(
+                "integrated_analytical_objective_floor_certificate_eligible",
+                False,
+            )
+        ),
+        "integrated_analytical_objective_floor_blockers": list(
+            metadata.get("integrated_analytical_objective_floor_blockers")
+            or ()
+        ),
+        "integrated_analytical_objective_lower_bound_semantics": metadata.get(
+            "integrated_analytical_objective_lower_bound_semantics"
+        ),
+        "integrated_identical_vehicle_groups": list(
+            metadata.get("integrated_identical_vehicle_groups") or ()
+        ),
+        "integrated_identical_vehicle_group_count": _int_or_none(
+            metadata.get("integrated_identical_vehicle_group_count")
+        ),
+        "integrated_identical_vehicle_activation_prefix_constraint_count": _int_or_none(
+            metadata.get(
+                "integrated_identical_vehicle_activation_prefix_constraint_count"
+            )
+        ),
+        "integrated_identical_vehicle_symmetry_semantics": metadata.get(
+            "integrated_identical_vehicle_symmetry_semantics"
         ),
         "phase4_phase3_seed_audit": phase4_seed_audit,
         "phase4_phase3_seed_enabled": bool(

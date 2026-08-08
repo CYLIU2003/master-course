@@ -1,5 +1,34 @@
 # Current research release blockers
 
+## 2026-08-09 integrated optimality proof remains blocked
+
+The latest clean pair improved the weather response: sunny used 27 BEVs / 5
+ICE buses for 183 / 81 trips, while rain used 21 / 11 for 91 / 173. Both
+served 264/264, passed independent physical validation, returned BEV/BESS SOC,
+completed 24/24 Rolling, and reconciled solver objective to executed accounting.
+These are valid incumbents, not optima. Each full integrated model had about
+776,752 variables and 1,929,148 constraints, processed one node, retained best
+bound zero, and stopped at the 3,600-second limit with a 100% raw gap.
+
+The remaining failure is therefore proof search, not a missing sunny-PV signal.
+Sunny had about 6,056.25 kWh PV and curtailed roughly 3,631 kWh; the solver had
+renewable headroom for more BEV operation. Grid-only BEV energy remains more
+expensive than ICE fuel at the declared 30 JPY/kWh tariff, so the rain
+composition can rationally remain ICE-heavy.
+
+The working tree shifts an independently verified complete-start solve from a
+feasibility-heavy profile to one uninterrupted bound-certification profile,
+adds an audited integer-valid objective floor, removes only exact vehicle-ID
+permutation symmetry, warms each adjacent composition from its feasible
+neighbor, and fixes the interactive resource contract at eight Gurobi threads.
+No weather or BEV preference and no feasibility relaxation is introduced.
+
+Release remains `BLOCKED` until these changes are committed, fresh Prepare is
+performed for both controlled cases, Git state remains frozen, the requested
+0.1% gap is actually met, and all physical, Rolling, provenance, accounting,
+and pair-control checks pass. A better time-limit incumbent alone does not
+close this blocker.
+
 ## 2026-08-08 inventory-span certificate producer/validator correction
 
 The first inventory-span rerun found physically valid compositions from 7 to
