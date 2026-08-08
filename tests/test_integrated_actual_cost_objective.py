@@ -612,10 +612,18 @@ def test_phase4_uses_verified_same_problem_phase3_plan_as_complete_mip_start() -
     ] is True
     assert result.solver_metadata["phase4_phase3_seed_audit"][
         "seed_stage1_stage2_candidate_limit"
-    ] == 11
+    ] == 21
     assert result.solver_metadata["phase4_phase3_seed_audit"][
         "seed_stage1_composition_search_radius"
-    ] == 5
+    ] == 10
+    composition_certificate = result.solver_metadata[
+        "stage1_used_powertrain_composition_search"
+    ]
+    assert composition_certificate["enabled"] is True
+    assert composition_certificate["radius_requested"] == 10
+    assert result.solver_metadata[
+        "stage1_used_powertrain_composition_search_accepted"
+    ] is True
     assert len(
         result.solver_metadata["phase4_phase3_seed_audit"][
             "seed_plan_fingerprint"

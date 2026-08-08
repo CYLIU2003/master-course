@@ -2066,6 +2066,42 @@ def _phase4_warm_start_evidence_valid(
     )
 
 
+def _phase4_seed_controls_match(settings: Mapping[str, Any]) -> bool:
+    """Verify the server-authoritative neutral Phase 4 seed contract."""
+
+    return bool(
+        settings.get("phase4_phase3_seed_enabled") is True
+        and settings.get("phase4_phase3_seed_time_limit_sec") == 600
+        and settings.get("phase4_phase3_seed_stage1_time_limit_sec") == 480
+        and settings.get("phase4_phase3_seed_stage2_time_limit_sec") == 120
+        and settings.get("phase4_phase3_seed_candidate_limit") == 21
+        and settings.get(
+            "phase4_phase3_seed_composition_search_radius"
+        )
+        == 10
+        and settings.get("phase4_phase3_seed_search_directionality")
+        == "primary_plus_symmetric_adjacent_compositions"
+        and settings.get("phase4_phase3_seed_bev_frontier_enabled") is False
+        and settings.get(
+            "phase4_integrated_seed_recourse_preflight_enabled"
+        )
+        is True
+        and settings.get(
+            "phase4_integrated_seed_recourse_time_limit_sec"
+        )
+        == 300
+        and settings.get(
+            "phase4_integrated_seed_recourse_preflight_requested"
+        )
+        is True
+        and settings.get(
+            "phase4_integrated_seed_recourse_preflight_feasible"
+        )
+        is True
+        and settings.get("phase4_total_solver_time_budget_sec") == 4500
+    )
+
+
 def _case_gate_audit(
     *,
     name: str,
@@ -2429,47 +2465,7 @@ def _case_gate_audit(
             )
             and (
                 not phase4_integrated
-                or settings.get("phase4_phase3_seed_enabled") is True
-                and settings.get("phase4_phase3_seed_time_limit_sec") == 600
-                and settings.get(
-                    "phase4_phase3_seed_stage1_time_limit_sec"
-                )
-                == 480
-                and settings.get(
-                    "phase4_phase3_seed_stage2_time_limit_sec"
-                )
-                == 120
-                and settings.get("phase4_phase3_seed_candidate_limit") == 10
-                and settings.get(
-                    "phase4_phase3_seed_composition_search_radius"
-                )
-                == 2
-                and settings.get(
-                    "phase4_phase3_seed_search_directionality"
-                )
-                == "primary_plus_symmetric_adjacent_compositions"
-                and settings.get(
-                    "phase4_phase3_seed_bev_frontier_enabled"
-                )
-                is False
-                and settings.get(
-                    "phase4_integrated_seed_recourse_preflight_enabled"
-                )
-                is True
-                and settings.get(
-                    "phase4_integrated_seed_recourse_time_limit_sec"
-                )
-                == 300
-                and settings.get(
-                    "phase4_integrated_seed_recourse_preflight_requested"
-                )
-                is True
-                and settings.get(
-                    "phase4_integrated_seed_recourse_preflight_feasible"
-                )
-                is True
-                and settings.get("phase4_total_solver_time_budget_sec")
-                == 4500
+                or _phase4_seed_controls_match(settings)
             )
             and (
                 not phase4_policy

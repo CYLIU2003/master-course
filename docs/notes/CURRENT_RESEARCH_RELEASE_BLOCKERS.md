@@ -12,11 +12,19 @@ Clean sunny run `output/2026-08-08/run_20260808_1300` then proved forced
 `Symmetry=2` was also a regression: 18 BEVs / 14 ICE buses, 59 / 205 trips and
 100% gap. It also exposed that accepted Rolling hard-coded
 `objective_is_actual_cost=false` despite a `1.16e-10 JPY` numeric residual.
-The current working tree restores Gurobi automatic symmetry and classifies a
-Phase 4 executed-day objective as actual cost only when every day-ahead
-contract and the final numeric equality pass. Phase 3 remains false. This is
-covered by `78` focused passing tests and `1218` total passing tests, but is not
-yet clean-commit formal evidence. Release remains
+The subsequent clean `b64bedb` pair completed both jobs with valid physical
+and Rolling evidence, but both returned the same 18-BEV / 14-ICE, 59 / 205-trip
+incumbent at 100% gap. That incumbent uses only about 714--716 kWh of PV input,
+so rain's 996.2 kWh is already sufficient. Radius five could not move from the
+primary 18-BEV seed to the known lower-cost 25-BEV sunny composition; this is
+candidate-search truncation, not evidence that sunny PV has no value. The
+working tree expands the neutral exact neighborhood to +/-10, propagates the
+seed composition certificate into Phase 4, and preserves the verified actual-
+cost contract through the BFF cost bridge. Phase 3 remains non-actual-cost.
+The pair runner's stale 10-candidate/radius-2 control expectation is also
+updated to the server's 21-candidate/radius-10 profile.
+The focused suite passes 114 tests and the complete suite passes 1,220 tests.
+These changes are not yet clean-commit formal evidence. Release remains
 blocked pending a new frozen commit, fresh Prepare, both completed
 frontend jobs, accepted physical/Rolling/accounting gates and honestly reported
 achieved gaps.

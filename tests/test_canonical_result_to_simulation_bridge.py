@@ -514,6 +514,32 @@ class TestCostBreakdownKeyMapping:
         assert cb["contract_over_limit_kwh"] == 2.0
         assert cb["contract_overage_cost"] == 1000.0
 
+    def test_cost_breakdown_preserves_verified_objective_contract(self):
+        """The BFF bridge must not discard verified Phase 4 semantics."""
+        from bff.routers.optimization import _cost_breakdown
+
+        result_payload = {
+            "objective_value": 704_318.6336491926,
+            "obj_breakdown": {
+                "total_cost": 704_318.6336491926,
+                "objective_is_actual_cost": True,
+            },
+            "solver_metadata": {
+                "solver_objective_matches_accounting_total": True,
+                "objective_semantics": (
+                    "phase4_integrated_verified_accounting_total_cost"
+                ),
+            },
+        }
+
+        cb = _cost_breakdown(result_payload, sim_payload=None)
+
+        assert cb["objective_is_actual_cost"] is True
+        assert cb["solver_objective_matches_accounting_total"] is True
+        assert cb["objective_semantics"] == (
+            "phase4_integrated_verified_accounting_total_cost"
+        )
+
     def test_cost_breakdown_keeps_electricity_and_fuel_separate(self):
         """_cost_breakdown() should not relabel ICE fuel as electricity."""
         from bff.routers.optimization import _cost_breakdown

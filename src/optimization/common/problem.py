@@ -384,7 +384,10 @@ class OptimizationConfig:
     #
     # ``0`` preserves the legacy candidate search for non-formal callers.
     # Formal frontend research runs enforce a radius of at least two at the
-    # BFF boundary and fail release when that evidence is unresolved.
+    # BFF boundary and fail release when that evidence is unresolved.  The
+    # Phase 4 seed uses a wider symmetric radius so a poor primary incumbent
+    # cannot prevent economically relevant one-for-one powertrain swaps from
+    # reaching the integrated MIP start.
     stage1_composition_search_radius: int = 0
     # Each exact used-powertrain target receives a bounded share of the
     # Stage 1 candidate-enumeration reserve.  The cap must be long enough for

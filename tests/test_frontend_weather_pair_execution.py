@@ -25,6 +25,31 @@ def _load_runner() -> ModuleType:
     return module
 
 
+def test_formal_phase4_seed_control_contract_matches_server_profile() -> None:
+    runner = _load_runner()
+    settings = {
+        "phase4_phase3_seed_enabled": True,
+        "phase4_phase3_seed_time_limit_sec": 600,
+        "phase4_phase3_seed_stage1_time_limit_sec": 480,
+        "phase4_phase3_seed_stage2_time_limit_sec": 120,
+        "phase4_phase3_seed_candidate_limit": 21,
+        "phase4_phase3_seed_composition_search_radius": 10,
+        "phase4_phase3_seed_search_directionality": (
+            "primary_plus_symmetric_adjacent_compositions"
+        ),
+        "phase4_phase3_seed_bev_frontier_enabled": False,
+        "phase4_integrated_seed_recourse_preflight_enabled": True,
+        "phase4_integrated_seed_recourse_time_limit_sec": 300,
+        "phase4_integrated_seed_recourse_preflight_requested": True,
+        "phase4_integrated_seed_recourse_preflight_feasible": True,
+        "phase4_total_solver_time_budget_sec": 4500,
+    }
+
+    assert runner._phase4_seed_controls_match(settings) is True
+    settings["phase4_phase3_seed_composition_search_radius"] = 5
+    assert runner._phase4_seed_controls_match(settings) is False
+
+
 def test_runner_has_no_optimization_domain_imports() -> None:
     tree = ast.parse(RUNNER_PATH.read_text(encoding="utf-8"))
     imported_roots: set[str] = set()

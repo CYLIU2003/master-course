@@ -749,7 +749,7 @@ class RunOptimizationBody(BaseModel):
     # count through a request body.
     stage1_best_obj_stop_enabled: bool = INTERACTIVE_STAGE1_BEST_OBJ_STOP_ENABLED
     stage1_stage2_candidate_limit: int = Field(default=1, ge=1, le=50)
-    stage1_composition_search_radius: int = Field(default=0, ge=0, le=5)
+    stage1_composition_search_radius: int = Field(default=0, ge=0, le=10)
     stage1_bev_frontier_enabled: bool = False
     stage1_bev_frontier_min_count: int = Field(default=15, ge=0, le=200)
     stage1_bev_frontier_max_count: int = Field(default=35, ge=0, le=200)

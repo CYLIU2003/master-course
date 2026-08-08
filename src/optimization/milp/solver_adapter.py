@@ -4797,7 +4797,7 @@ class GurobiMILPAdapter:
                 ),
                 0,
             ),
-            5,
+            10,
         )
         stage1_composition_search_enabled = bool(
             stage2_enabled

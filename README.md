@@ -2,6 +2,30 @@
 
 ## 2026-08-08 Phase 4 accounting and formal-evidence correction
 
+- The clean `b64bedb` controlled pair at
+  `output/formal_pair_20260808_flat30_pv1000_bess6000_phase4_autosym_b64bedb_gap001`
+  held flat 30 JPY/kWh, zero demand charge, 1,000 kW PV rating and a 6,000 kWh
+  BESS fixed. Both cases returned the same 18-BEV / 14-ICE, 59 / 205-trip
+  incumbent at 704,318.633649 JPY. This is not an economic optimum: both runs
+  explored one node and stopped at 100% gap, while the earlier clean sunny
+  run already contains a lower-cost 25-BEV incumbent. The selected 18-BEV
+  dispatch consumes only about 714--716 kWh of PV input, so even rain's
+  996.2 kWh PV curve is sufficient; sunny's remaining PV cannot affect a
+  composition that the seed search never generated.
+- The Phase 4 seed therefore expands its weather-neutral exact composition
+  neighborhood from +/-5 to +/-10 vehicles (21 candidates including the
+  primary). Stage 2 canonical cost still selects the hand-off; no weather or
+  BEV preference enters the objective. The complete Phase 3 seed composition
+  certificate is now propagated to Phase 4 instead of exporting an invalid
+  empty artifact.
+- The BFF cost bridge now preserves the engine's verified
+  `objective_is_actual_cost`, accounting-match, and objective-semantics fields.
+  Previously it discarded those fields before Rolling, causing a numerically
+  exact Phase 4 result to be mislabeled as a proxy objective. The focused
+  regression set passes 114 tests and the complete suite passes 1,220 tests.
+- The controlled-pair runner's formal-control audit now checks the same
+  21-candidate, radius-10 Phase 4 seed profile that the server actually runs;
+  it no longer rejects a valid run against stale 10-candidate/radius-2 values.
 - The corrected clean pair at
   `output/formal_pair_20260808_flat30_pv1000_bess6000_phase4_finalslot_b8793f3_gap001`
   confirms that integrated dispatch reacts to the 1,000 kW PV input: sunny
@@ -34,7 +58,7 @@
   spent heavy root-processing effort and returned 18 BEVs / 14 ICE buses,
   59 / 205 trips and 100% gap. Gurobi's automatic symmetry setting is therefore
   restored. The neutral Phase 3 seed still explores the primary composition
-  plus both directions for deltas 1--5; Stage 2 actual cost selects the
+  plus both directions for deltas 1--10; Stage 2 actual cost selects the
   hand-off.
 - Rolling finalization no longer hard-codes every day-ahead objective as
   non-actual-cost. Phase 3 remains false. Phase 4 is true only when its

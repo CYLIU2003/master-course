@@ -2,6 +2,34 @@
 
 ## 2026-08-08 Phase 4 accounting, telemetry and search-profile correction
 
+- Clean commit `b64bedbd0bf5e371d1b6a31f9d8478a7b0d07295` was run through
+  fresh Prepare for the controlled sunny/rain pair at
+  `output/formal_pair_20260808_flat30_pv1000_bess6000_phase4_autosym_b64bedb_gap001`.
+  Both cases were physically valid, completed 24/24 Rolling and reconciled
+  within `1.16e-10 JPY`, but both selected 18 BEVs / 14 ICE buses and 59 / 205
+  trips at 704,318.633649 JPY. Both explored one node and stopped at 100% gap.
+  The result is dominated by the earlier 25-BEV sunny incumbent and is not an
+  optimality result.
+- The identical incumbent has a concrete energy explanation: its PV-to-bus
+  plus PV-to-BESS input is about 716 kWh in sunny and 714 kWh in rain. Rain's
+  996.2 kWh curve can already cover it, so the extra sunny PV has zero marginal
+  value until a higher-BEV composition is evaluated. Radius five constrained
+  the primary 18-BEV seed search to at most 23 BEVs and could not reach the
+  known 25-BEV sunny solution.
+- The same-problem Phase 3 seed now retains 21 candidates and searches exact
+  symmetric deltas +/-1 through +/-10. The Phase 3 composition certificate and
+  acceptance flag are copied into Phase 4 solver evidence. This broadens
+  candidate generation without a directional weather/BEV policy.
+- `cost_breakdown()` now preserves actual-cost, accounting-match and objective
+  semantics from the engine. This closes the remaining BFF-to-Rolling metadata
+  loss that kept `objective_is_actual_cost=false` despite a structurally and
+  numerically verified Phase 4 objective. The relevant focused suite passes
+  114 tests; the complete repository suite passes 1,220 tests in 56.50 seconds.
+- The controlled-pair runner previously hard-coded the obsolete Phase 4 seed
+  contract as 10 candidates/radius 2, making
+  `solver_controls_match_formal_request=false` even when the server applied
+  its declared profile. The audit now uses one tested helper and matches the
+  server-authoritative 21-candidate/radius-10 contract.
 - The clean `b8793f342c1c886a3f44db843448c13505d62a78` pair at
   `output/formal_pair_20260808_flat30_pv1000_bess6000_phase4_finalslot_b8793f3_gap001`
   closed the final-slot physical defects. Sunny returned 25 BEVs / 7 ICE buses
@@ -39,8 +67,8 @@
   `optimize()` call may discard the useful branch-and-bound tree and leave a
   weaker final certificate. Objective, bound, gap and runtime are exported for
   the single search.
-- The neutral Phase 3 hand-off now reserves 11 candidates: the primary
-  composition and exact symmetric used-powertrain deltas +/-1 through +/-5.
+- The neutral Phase 3 hand-off now reserves 21 candidates: the primary
+  composition and exact symmetric used-powertrain deltas +/-1 through +/-10.
   The one-sided BEV frontier remains disabled; Stage 2 canonical actual cost
   chooses the hand-off, so no weather or BEV preference is introduced.
 - Clean sunny run `output/2026-08-08/run_20260808_1300` then showed that forced

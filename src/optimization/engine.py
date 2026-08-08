@@ -804,15 +804,18 @@ class OptimizationEngine:
             # therefore commonly carries candidate_limit=1.  Reusing that
             # value here would silently collapse the Phase 3 seed search to
             # its primary composition.  Keep the seed budget explicit and
-            # stable across frontend callers.  Radius five explores both
+            # stable across frontend callers.  Radius ten explores both
             # powertrain directions symmetrically; Stage 2 canonical cost
             # still selects the hand-off, so this is candidate diversity, not
             # an EV-preference policy.
-            # Primary composition plus both directions for deltas 1..5.
-            stage1_stage2_candidate_limit=11,
+            # Primary composition plus both directions for deltas 1..10.
+            # The 2026-08-08 controlled pair proved radius five insufficient:
+            # its primary 18-BEV seed could not reach the known lower-cost
+            # 25-BEV sunny composition.
+            stage1_stage2_candidate_limit=21,
             stage1_composition_search_radius=max(
                 int(config.stage1_composition_search_radius),
-                5,
+                10,
             ),
             stage1_bev_frontier_enabled=bool(
                 getattr(
@@ -975,6 +978,23 @@ class OptimizationEngine:
         }
         acceptance["seed_candidate_hash_present"] = bool(
             acceptance["seed_candidate_hash"]
+        )
+        seed_composition_certificate = dict(
+            seed_result.solver_metadata.get(
+                "stage1_used_powertrain_composition_search"
+            )
+            or {}
+        )
+        acceptance["seed_used_powertrain_composition_search"] = (
+            seed_composition_certificate
+        )
+        acceptance[
+            "seed_used_powertrain_composition_search_accepted"
+        ] = bool(
+            seed_result.solver_metadata.get(
+                "stage1_used_powertrain_composition_search_accepted",
+                False,
+            )
         )
         accepted = bool(
             seed_result.feasible
@@ -1499,6 +1519,15 @@ class OptimizationEngine:
         candidate_costs = costs
 
         solver_metadata = dict(result.solver_metadata or {})
+        phase4_seed_audit_for_evidence = dict(
+            solver_metadata.get("phase4_phase3_seed_audit") or {}
+        )
+        phase4_seed_composition_certificate = dict(
+            phase4_seed_audit_for_evidence.get(
+                "seed_used_powertrain_composition_search"
+            )
+            or {}
+        )
         solver_metadata.update(
             {
                 "integrated_actual_cost_objective_requested": (
@@ -1537,6 +1566,20 @@ class OptimizationEngine:
                     if actual_cost_contract_requested
                     else solver_metadata.get(
                         "solver_objective_matches_accounting_total", False
+                    )
+                ),
+                # Phase 4 has no Stage 1 of its own.  Its formal composition
+                # evidence is the same-problem, physically verified Phase 3
+                # seed search.  Preserve that complete certificate instead of
+                # exporting an empty object that the pair validator must
+                # reject.
+                "stage1_used_powertrain_composition_search": (
+                    phase4_seed_composition_certificate
+                ),
+                "stage1_used_powertrain_composition_search_accepted": bool(
+                    phase4_seed_audit_for_evidence.get(
+                        "seed_used_powertrain_composition_search_accepted",
+                        False,
                     )
                 ),
                 "vehicle_usage_cost_semantics": (

@@ -302,9 +302,10 @@ def canonical_cost_breakdown_json(*, problem, engine_result, scenario_id: str) -
 
 def cost_breakdown(
     result_payload: Dict[str, Any], sim_payload: Dict[str, Any] | None
-) -> Dict[str, float]:
+) -> Dict[str, Any]:
     obj_breakdown = dict(result_payload.get("obj_breakdown") or {})
     obj_breakdown.update(normalize_pv_energy_breakdown(obj_breakdown))
+    solver_metadata = dict(result_payload.get("solver_metadata") or {})
     sim_values = dict(sim_payload or {})
 
     def first_float(*values: Any, default: float = 0.0) -> float:
@@ -510,5 +511,26 @@ def cost_breakdown(
             if total_cost_value is not None
             else result_payload.get("objective_value", 0.0)
             or 0.0
+        ),
+        # Preserve the engine's independently verified objective contract.
+        # Dropping these fields here made the rolling finalizer classify a
+        # numerically exact Phase 4 objective as a proxy objective even though
+        # the solver metadata retained the structural and numeric evidence.
+        "objective_is_actual_cost": bool(
+            obj_breakdown.get("objective_is_actual_cost", False)
+        ),
+        "solver_objective_matches_accounting_total": bool(
+            obj_breakdown.get(
+                "solver_objective_matches_accounting_total",
+                solver_metadata.get(
+                    "solver_objective_matches_accounting_total",
+                    False,
+                ),
+            )
+        ),
+        "objective_semantics": str(
+            obj_breakdown.get("objective_semantics")
+            or solver_metadata.get("objective_semantics")
+            or ""
         ),
     }
