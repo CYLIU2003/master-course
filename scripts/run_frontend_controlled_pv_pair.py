@@ -3258,7 +3258,6 @@ def _build_pair_control_audit(
             "phase4_phase3_seed_stage2_time_limit_sec",
             "phase4_phase3_seed_candidate_limit",
             "phase4_phase3_seed_candidate_evaluation_order",
-            "phase4_phase3_seed_candidate_evaluation_initial_budget_sec",
             "phase4_phase3_seed_composition_search_radius",
             "phase4_phase3_seed_available_vehicle_count",
             "phase4_phase3_seed_required_candidate_limit",

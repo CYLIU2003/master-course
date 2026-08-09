@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 
 from bff.routers.optimization import _rolling_execution_evidence
+from bff.services.optimization_run.rolling_chain import (
+    _day_ahead_solver_control_payload,
+)
 from src.optimization.rolling.acceptance import (
     ROLLING_CHAIN_REQUIRED_ACCEPTANCE_CHECKS,
 )
@@ -21,6 +24,43 @@ def test_rolling_metadata_without_chain_is_not_execution(tmp_path) -> None:
     )
 
     assert result["status"] == "not_executed"
+
+
+def test_pv_comparison_control_hash_excludes_runtime_telemetry() -> None:
+    declared = {
+        "time_limit_seconds_effective": 3600,
+        "mip_gap_requested_ratio": 0.001,
+        "gurobi_threads": 4,
+        "phase4_phase3_seed_wall_clock_budget_sec": 1200,
+        "phase4_phase3_seed_candidate_evaluation_order": (
+            "stage1_relaxed_objective_ascending_then_candidate_hash"
+        ),
+        "random_seed": 42,
+    }
+    sunny = {
+        **declared,
+        "phase4_phase3_seed_wall_runtime_sec": 744.319,
+        "phase4_phase3_seed_candidate_evaluation_initial_budget_sec": 460.267,
+    }
+    rain = {
+        **declared,
+        "phase4_phase3_seed_wall_runtime_sec": 744.112,
+        "phase4_phase3_seed_candidate_evaluation_initial_budget_sec": 460.462,
+    }
+
+    sunny_controls = _day_ahead_solver_control_payload(sunny)
+    rain_controls = _day_ahead_solver_control_payload(rain)
+
+    assert sunny_controls == rain_controls
+    assert "phase4_phase3_seed_wall_runtime_sec" not in sunny_controls
+    assert (
+        "phase4_phase3_seed_candidate_evaluation_initial_budget_sec"
+        not in sunny_controls
+    )
+    changed_seed_controls = _day_ahead_solver_control_payload(
+        {**sunny, "random_seed": 43}
+    )
+    assert changed_seed_controls != sunny_controls
 
 
 def test_rolling_chain_requires_all_acceptance_checks(tmp_path) -> None:

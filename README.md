@@ -497,4 +497,14 @@ README の入口とリンクだけを確認する軽量テストは次です。
 python -m pytest -q tests/test_readme_navigation.py
 ```
 
+## Controlled PV comparison hashes
+
+Sunny/rain controlled comparisons hash only controls declared before the
+solve: timetable and fleet fingerprints, tariff and depot assets, solver time
+limits, gap target, threads, random seed, and Phase 4 seed budgets/search
+settings. Observed telemetry such as actual seed wall time and the seconds
+remaining when Stage 2 starts is retained in each run audit, but is not part of
+`comparison_control_hash`. Those values naturally vary between otherwise
+identical cases and must never be treated as experimental-control differences.
+
 研究計算の意味、制約、受理ゲートに影響する変更では、README だけで説明を完結させず、該当する runbook・開発ノート・ブロッカー資料も同時に更新してください。

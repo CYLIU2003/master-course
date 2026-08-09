@@ -693,6 +693,107 @@ def _non_pv_depot_asset_hash(problem: Any) -> str:
     return _canonical_hash(fixed)
 
 
+def _day_ahead_solver_control_payload(
+    solver_settings: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Return declared day-ahead controls, excluding observed telemetry.
+
+    Controlled comparisons must hash settings that were fixed before solve.
+    Realized wall time and the budget remaining after candidate construction
+    are outcomes of execution, so including either would make otherwise
+    identical sunny/rain controls differ because of normal runtime jitter.
+    """
+
+    return {
+        "time_limit_seconds_effective": solver_settings.get(
+            "time_limit_seconds_effective"
+        ),
+        "stage1_time_limit_seconds_requested": solver_settings.get(
+            "stage1_time_limit_seconds_requested"
+        ),
+        "stage2_time_limit_seconds_requested": solver_settings.get(
+            "stage2_time_limit_seconds_requested"
+        ),
+        "mip_gap_requested_ratio": solver_settings.get(
+            "mip_gap_requested_ratio"
+        ),
+        "stage1_best_obj_stop_enabled": solver_settings.get(
+            "stage1_best_obj_stop_enabled"
+        ),
+        "gurobi_threads": solver_settings.get("gurobi_threads"),
+        "stage1_stage2_candidate_limit": solver_settings.get(
+            "stage1_stage2_candidate_limit_requested"
+        ),
+        "stage1_composition_search_radius": solver_settings.get(
+            "stage1_composition_search_radius_requested"
+        ),
+        "phase4_phase3_seed_enabled": solver_settings.get(
+            "phase4_phase3_seed_enabled"
+        ),
+        "phase4_phase3_seed_time_limit_sec": solver_settings.get(
+            "phase4_phase3_seed_time_limit_sec"
+        ),
+        "phase4_phase3_seed_wall_clock_budget_sec": solver_settings.get(
+            "phase4_phase3_seed_wall_clock_budget_sec"
+        ),
+        "phase4_phase3_seed_model_build_overhead_allowance_sec": (
+            solver_settings.get(
+                "phase4_phase3_seed_model_build_overhead_allowance_sec"
+            )
+        ),
+        "phase4_phase3_seed_stage1_time_limit_sec": solver_settings.get(
+            "phase4_phase3_seed_stage1_time_limit_sec"
+        ),
+        "phase4_phase3_seed_stage2_time_limit_sec": solver_settings.get(
+            "phase4_phase3_seed_stage2_time_limit_sec"
+        ),
+        "phase4_phase3_seed_candidate_limit": solver_settings.get(
+            "phase4_phase3_seed_candidate_limit"
+        ),
+        "phase4_phase3_seed_candidate_evaluation_order": solver_settings.get(
+            "phase4_phase3_seed_candidate_evaluation_order"
+        ),
+        "phase4_phase3_seed_composition_search_radius": solver_settings.get(
+            "phase4_phase3_seed_composition_search_radius"
+        ),
+        "phase4_phase3_seed_available_vehicle_count": solver_settings.get(
+            "phase4_phase3_seed_available_vehicle_count"
+        ),
+        "phase4_phase3_seed_required_candidate_limit": solver_settings.get(
+            "phase4_phase3_seed_required_candidate_limit"
+        ),
+        "phase4_phase3_seed_required_composition_search_radius": (
+            solver_settings.get(
+                "phase4_phase3_seed_required_composition_search_radius"
+            )
+        ),
+        "phase4_phase3_seed_composition_search_scope": solver_settings.get(
+            "phase4_phase3_seed_composition_search_scope"
+        ),
+        "phase4_phase3_seed_inventory_span_truncated": solver_settings.get(
+            "phase4_phase3_seed_inventory_span_truncated"
+        ),
+        "phase4_phase3_seed_search_directionality": solver_settings.get(
+            "phase4_phase3_seed_search_directionality"
+        ),
+        "phase4_phase3_seed_bev_frontier_enabled": solver_settings.get(
+            "phase4_phase3_seed_bev_frontier_enabled"
+        ),
+        "phase4_integrated_seed_recourse_preflight_enabled": (
+            solver_settings.get(
+                "phase4_integrated_seed_recourse_preflight_enabled"
+            )
+        ),
+        "phase4_integrated_seed_recourse_time_limit_sec": solver_settings.get(
+            "phase4_integrated_seed_recourse_time_limit_sec"
+        ),
+        "phase4_total_solver_time_budget_sec": solver_settings.get(
+            "phase4_total_solver_time_budget_sec"
+        ),
+        "random_seed": solver_settings.get("random_seed"),
+    }
+
+
 def _comparison_case_manifest(
     *,
     scenario: Mapping[str, Any],
@@ -726,7 +827,7 @@ def _comparison_case_manifest(
         optimization_result.get("solver_settings") or {}
     )
     control_payload = {
-        "schema_version": "frontend_pv_control_contract_v1",
+        "schema_version": "frontend_pv_control_contract_v2",
         "service_date": service_date,
         "service_id": input_audit.get("service_id"),
         "trip_input_hash": chain.get("trip_input_hash"),
@@ -751,126 +852,9 @@ def _comparison_case_manifest(
         "energy_horizon_slot_count": chain.get("energy_horizon_slot_count"),
         "solver_backend": chain.get("solver_backend"),
         "solver_version": chain.get("solver_version"),
-        "day_ahead_solver_controls": {
-            "time_limit_seconds_effective": solver_settings.get(
-                "time_limit_seconds_effective"
-            ),
-            "stage1_time_limit_seconds_requested": solver_settings.get(
-                "stage1_time_limit_seconds_requested"
-            ),
-            "stage2_time_limit_seconds_requested": solver_settings.get(
-                "stage2_time_limit_seconds_requested"
-            ),
-            "mip_gap_requested_ratio": solver_settings.get(
-                "mip_gap_requested_ratio"
-            ),
-            "stage1_best_obj_stop_enabled": solver_settings.get(
-                "stage1_best_obj_stop_enabled"
-            ),
-            "gurobi_threads": solver_settings.get("gurobi_threads"),
-            "stage1_stage2_candidate_limit": solver_settings.get(
-                "stage1_stage2_candidate_limit_requested"
-            ),
-            "stage1_composition_search_radius": solver_settings.get(
-                "stage1_composition_search_radius_requested"
-            ),
-            "phase4_phase3_seed_enabled": solver_settings.get(
-                "phase4_phase3_seed_enabled"
-            ),
-            "phase4_phase3_seed_time_limit_sec": solver_settings.get(
-                "phase4_phase3_seed_time_limit_sec"
-            ),
-            "phase4_phase3_seed_wall_clock_budget_sec": (
-                solver_settings.get(
-                    "phase4_phase3_seed_wall_clock_budget_sec"
-                )
-            ),
-            "phase4_phase3_seed_wall_runtime_sec": solver_settings.get(
-                "phase4_phase3_seed_wall_runtime_sec"
-            ),
-            "phase4_phase3_seed_model_build_overhead_allowance_sec": (
-                solver_settings.get(
-                    "phase4_phase3_seed_model_build_overhead_allowance_sec"
-                )
-            ),
-            "phase4_phase3_seed_stage1_time_limit_sec": (
-                solver_settings.get(
-                    "phase4_phase3_seed_stage1_time_limit_sec"
-                )
-            ),
-            "phase4_phase3_seed_stage2_time_limit_sec": (
-                solver_settings.get(
-                    "phase4_phase3_seed_stage2_time_limit_sec"
-                )
-            ),
-            "phase4_phase3_seed_candidate_limit": solver_settings.get(
-                "phase4_phase3_seed_candidate_limit"
-            ),
-            "phase4_phase3_seed_candidate_evaluation_order": (
-                solver_settings.get(
-                    "phase4_phase3_seed_candidate_evaluation_order"
-                )
-            ),
-            "phase4_phase3_seed_candidate_evaluation_initial_budget_sec": (
-                solver_settings.get(
-                    "phase4_phase3_seed_candidate_evaluation_initial_budget_sec"
-                )
-            ),
-            "phase4_phase3_seed_composition_search_radius": (
-                solver_settings.get(
-                    "phase4_phase3_seed_composition_search_radius"
-                )
-            ),
-            "phase4_phase3_seed_available_vehicle_count": (
-                solver_settings.get(
-                    "phase4_phase3_seed_available_vehicle_count"
-                )
-            ),
-            "phase4_phase3_seed_required_candidate_limit": (
-                solver_settings.get(
-                    "phase4_phase3_seed_required_candidate_limit"
-                )
-            ),
-            "phase4_phase3_seed_required_composition_search_radius": (
-                solver_settings.get(
-                    "phase4_phase3_seed_required_composition_search_radius"
-                )
-            ),
-            "phase4_phase3_seed_composition_search_scope": (
-                solver_settings.get(
-                    "phase4_phase3_seed_composition_search_scope"
-                )
-            ),
-            "phase4_phase3_seed_inventory_span_truncated": (
-                solver_settings.get(
-                    "phase4_phase3_seed_inventory_span_truncated"
-                )
-            ),
-            "phase4_phase3_seed_search_directionality": (
-                solver_settings.get(
-                    "phase4_phase3_seed_search_directionality"
-                )
-            ),
-            "phase4_phase3_seed_bev_frontier_enabled": (
-                solver_settings.get(
-                    "phase4_phase3_seed_bev_frontier_enabled"
-                )
-            ),
-            "phase4_integrated_seed_recourse_preflight_enabled": (
-                solver_settings.get(
-                    "phase4_integrated_seed_recourse_preflight_enabled"
-                )
-            ),
-            "phase4_integrated_seed_recourse_time_limit_sec": (
-                solver_settings.get(
-                    "phase4_integrated_seed_recourse_time_limit_sec"
-                )
-            ),
-            "phase4_total_solver_time_budget_sec": solver_settings.get(
-                "phase4_total_solver_time_budget_sec"
-            ),
-            "random_seed": solver_settings.get("random_seed"),
-        },
+        "day_ahead_solver_controls": _day_ahead_solver_control_payload(
+            solver_settings
+        ),
         "rolling_solver_controls": {
             "gurobi_threads": chain.get("gurobi_threads"),
             "mip_gap": chain.get("mip_gap"),

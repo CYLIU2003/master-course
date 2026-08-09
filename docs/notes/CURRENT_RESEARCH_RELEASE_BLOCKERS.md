@@ -1126,3 +1126,24 @@ If any row fails, preserve the numbers but add all three labels:
 6. Fill the table per run and build the PV pair manifest.
 7. Seek independent Claude Code/executive review.
 8. Only when every required row is accepted may the release be tagged READY.
+
+## 2026-08-09 Phase 4 PV1000 pair status
+
+The clean-SHA `b29c6e0` pair completed both day-ahead and 24/24 Rolling cases
+with 264/264 trips, no fallback, no successor pruning, valid physical checks,
+and reconciled executed-day accounting. The observed feasible incumbents were
+27 BEVs/5 ICE buses (sunny) and 21 BEVs/11 ICE buses (rain). This is useful
+diagnostic evidence that assignment now responds to PV availability.
+
+The pair is still `BLOCKED` for research release:
+
+- both integrated runs reached the 3,600-second limit with a raw gap of 100%,
+  not the requested 0.1%; and
+- the `b29c6e0` pair manifest falsely rejected fixed controls because its hash
+  included actual seed runtime and the realized Stage 2 starting budget.
+
+The latter acceptance bug is fixed after that run by excluding observed
+runtime telemetry from the fixed-control hash while preserving it in per-run
+audits. A fresh clean-commit pair is required; the older outputs must not be
+relabelled as evidence for the repaired commit. Even after a successful pair
+manifest, the 0.1% gap remains a separate blocker.

@@ -2684,3 +2684,21 @@ locks this distinction in place.
   `981 passed`. `compileall` and `git diff --check` also pass. A fresh
   264-trip ordinary frontend run remains intentionally pending for the user's
   manual execution.
+
+# 2026-08-09 - PV pair control-hash runtime telemetry fix
+
+- The clean `b29c6e0` Phase 4 pair completed both 264-trip cases and accepted
+  24/24 Rolling. Sunny used 27 BEVs/5 ICE buses and rain used 21 BEVs/11 ICE
+  buses, but the pair builder incorrectly rejected `fixed_controls_match`.
+- Root cause: `comparison_control_hash` included observed
+  `phase4_phase3_seed_wall_runtime_sec` and
+  `phase4_phase3_seed_candidate_evaluation_initial_budget_sec`. The values
+  differed by normal runtime jitter even though all pre-solve controls matched.
+- The comparison hash now includes declared budgets and search settings but
+  excludes those two runtime outcomes. Per-run solver settings still retain
+  both values for audit. The control-payload schema is bumped to
+  `frontend_pv_control_contract_v2`.
+- Focused regression: `47 passed`. Re-normalizing the completed pair's stored
+  control payloads produced the same hash on both sides. Because acceptance
+  code changed after the pair ran, those outputs remain evidence for SHA
+  `b29c6e0` and are not relabelled as a formal result for the new commit.
