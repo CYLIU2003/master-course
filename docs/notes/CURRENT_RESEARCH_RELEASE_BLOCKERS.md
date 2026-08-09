@@ -1400,3 +1400,38 @@ runtime telemetry from the fixed-control hash while preserving it in per-run
 audits. A fresh clean-commit pair is required; the older outputs must not be
 relabelled as evidence for the repaired commit. Even after a successful pair
 manifest, the 0.1% gap remains a separate blocker.
+
+## 2026-08-10 current Phase 4 PV1000 pair status
+
+This section supersedes the stale statements above that a repaired-hash fresh
+pair is still absent. Frozen clean SHA
+`06ae09218be99ca47b951dcf6ddad886056b0ad6` completed both normal frontend
+cases and assembled
+`output/formal_pair_20260810_flat30_pv1000_bess6000_phase4_06ae092_gap001`.
+
+Verified now:
+
+- same 2025-08-05 weekday service and matching non-PV controls;
+- 1,000 kW PV rating, 6,000 kWh BESS, 30 JPY/kWh energy charge, and
+  0 JPY/kW demand charge;
+- 264/264 trips, no fallback, no post-solve repair, no successor pruning;
+- 24/24 Rolling, valid physical schedule and terminal SOC, complete artifacts,
+  and accounting reconciliation in both cases;
+- controlled-PV comparison accepted under control hash
+  `32a67fadd0e94f238407bea9160c1f96b0b2451ad18f15beb7b91c7ac012026d`;
+- high PV used 27 BEVs/5 ICE buses for 183/81 trips; low PV used 21/11
+  for 91/173 trips.
+
+Still blocked:
+
+- high-PV certified gap is 3.9276% and low-PV certified gap is 2.3871%,
+  versus the predeclared 0.1% target; and
+- therefore `formal_research_submission_ready=false`, even though
+  `accepted_for_controlled_pv_sensitivity_comparison=true`.
+
+The high-PV incumbent curtailed 3,606.64 of 6,056.25 kWh, so the observed
+27-BEV plateau is not an energy-supply shortage. Examined 28--32 BEV candidate
+assignments failed exact recourse on vehicle-local depot-presence,
+charge-power, and terminal-SOC constraints. That explains the examined
+candidate failures but is not a proof that every assignment with 28 or more
+BEVs is infeasible; the remaining MILP gaps prohibit that claim.

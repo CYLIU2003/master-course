@@ -742,3 +742,24 @@ remaining when Stage 2 starts is retained in each run audit, but is not part of
 identical cases and must never be treated as experimental-control differences.
 
 研究計算の意味、制約、受理ゲートに影響する変更では、README だけで説明を完結させず、該当する runbook・開発ノート・ブロッカー資料も同時に更新してください。
+
+## Latest controlled PV1000 evidence (2026-08-10)
+
+The clean frozen commit `06ae09218be99ca47b951dcf6ddad886056b0ad6`
+was run through the ordinary HTTP Prepare/optimization path with a common
+2025-08-05 weekday service, 30 JPY/kWh energy charge, 0 JPY/kW demand charge,
+1,000 kW PV rating, and 6,000 kWh BESS. The final Phase 4 incumbents used
+27 BEVs/5 ICE buses in the high-PV case and 21 BEVs/11 ICE buses in the low-PV
+case. The `13 BEV/19 ICE` value in the artifacts is the Phase 3 seed candidate,
+not the final integrated assignment.
+
+Both cases served 264/264 trips, completed 24/24 Rolling, passed physical and
+accounting validation, and the pair passed the controlled-PV comparison
+contract. They did not meet the requested 0.1% MILP gap (3.928% high PV and
+2.387% low PV), so formal research submission remains `BLOCKED`.
+
+High-PV output was not energy-limited: 6,056.25 kWh was generated and
+3,606.64 kWh was curtailed. Candidate diagnostics for 28--32 BEVs instead
+identify vehicle-local charging-window/terminal-SOC conflicts in the examined
+assignments. These failed assignments are evidence about the observed
+incumbent plateau, not a proof that every 28-BEV assignment is infeasible.

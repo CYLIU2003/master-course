@@ -3011,3 +3011,45 @@ locks this distinction in place.
   comparison accepted=true, formal ready=false, with the two missing gap
   certificates reported explicitly. The original SHA-93d artifacts are not
   relabelled as results of the post-run reporting fix.
+
+# 2026-08-10 - Memory-safe Phase 4 PV1000 pair and EV plateau diagnosis
+
+- Frozen clean SHA `06ae09218be99ca47b951dcf6ddad886056b0ad6` completed
+  the fresh pair at
+  `output/formal_pair_20260810_flat30_pv1000_bess6000_phase4_06ae092_gap001`.
+  Gurobi dual simplex was fixed for root and node LPs, node files start at
+  0.5 GB, and `SoftMemLimit=32 GB`; this preserved the exact feasible set and
+  objective while avoiding the earlier concurrent-root memory exhaustion.
+- Both runs used the same 2025-08-05 weekday service, 264 trips, 60 active
+  vehicles, 10 chargers, 6,000 kWh BESS with 3,000 -> 3,000 kWh SOC,
+  30 JPY/kWh grid energy, 0 JPY/kW demand charge, and 1,000 kW PV rating.
+  Only the separately hashed PV curve changed.
+- Final high-PV assignment: 27 BEVs/5 ICE buses, 183/81 trips, total cost
+  666,164.082366 JPY. Final low-PV assignment: 21/11 buses, 91/173 trips,
+  total cost 698,419.690050 JPY. Both served 264/264, completed 24/24 Rolling,
+  returned BEV/BESS SOC, passed physical validation, and reconciled solver and
+  canonical accounting totals.
+- The high-PV case generated 6,056.25 kWh, imported 0 kWh, charged buses with
+  2,219.59 kWh, and curtailed 3,606.64 kWh. Therefore PV energy quantity is
+  not the reason the observed incumbent stops at 27 BEVs. The final charging
+  plan used at most 8 of 10 chargers concurrently.
+- Eight examined 28--32 BEV seed assignments all failed exact fixed-assignment
+  Stage 2 recourse. In a representative 28/4 candidate, BEV
+  `befc4670-e889-45d9-bd65-23118c02e196` served 16 trips from 07:26 through
+  23:24, required 201.946 kWh including deadhead/return energy, could accept
+  only 90.642 kWh in chronological home-depot windows, and missed its
+  return-to-initial terminal target by 111.303 kWh. Its IIS contains only
+  vehicle charging-availability, vehicle charging-power, SOC-transition, and
+  terminal-SOC constraints. This identifies a vehicle-local time/location
+  bottleneck, not a depot-PV or shared-charger bottleneck.
+- This is not a composition-wide infeasibility certificate. The integrated
+  runs reached their 3,600-second limits with certified gaps 3.9276% and
+  2.3871%, above the requested 0.1%. The pair is accepted as a controlled PV
+  sensitivity but remains `BLOCKED` for formal research submission.
+- Post-run artifact review found a diagnostic-only defect: the Stage 2
+  energy-shortage CSV applied battery-SOC arithmetic to ICE duties using a
+  synthetic 1 kWh capacity. SOC/charging precheck rows now include only
+  BEV/PHEV/FCEV. Assignment and duty evidence still includes ICE, and the
+  solver, IIS, objective, feasibility, and frozen run results are unchanged.
+- The diagnostic fix passed 60 focused tests; `compileall`, `git diff --check`,
+  and the complete regression suite passed with `1256 passed`.

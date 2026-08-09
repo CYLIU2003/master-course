@@ -21,6 +21,20 @@ from src.optimization.milp.engine import MILPOptimizer
 from src.optimization.milp.solver_adapter import GurobiMILPAdapter
 
 
+@pytest.mark.parametrize("vehicle_type", ("BEV", "bev", "PHEV", "FCEV"))
+def test_stage2_soc_diagnostics_include_electric_powertrains(
+    vehicle_type: str,
+) -> None:
+    assert GurobiMILPAdapter._uses_electric_soc_diagnostics(vehicle_type)
+
+
+@pytest.mark.parametrize("vehicle_type", ("ICE", "DIESEL", "HEV", "", None))
+def test_stage2_soc_diagnostics_exclude_fuel_powertrains(
+    vehicle_type: str | None,
+) -> None:
+    assert not GurobiMILPAdapter._uses_electric_soc_diagnostics(vehicle_type)
+
+
 def test_vehicle_local_iis_uses_exact_vehicle_assignment_pattern_cut() -> None:
     scope = GurobiMILPAdapter._classify_stage2_iis_assignment_cut_scope(
         iis_constraint_names=(

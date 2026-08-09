@@ -13383,6 +13383,11 @@ class GurobiMILPAdapter:
             "reason": reason,
         }
 
+    @staticmethod
+    def _uses_electric_soc_diagnostics(vehicle_type: Any) -> bool:
+        """Return whether a powertrain has solver-modelled traction SOC."""
+        return str(vehicle_type or "").upper() in {"BEV", "PHEV", "FCEV"}
+
     def _persist_stage2_failure_diagnostics(
         self,
         *,
@@ -13526,6 +13531,12 @@ class GurobiMILPAdapter:
         for vehicle_id, trip_ids in sorted(assigned_paths.items()):
             vehicle = vehicle_by_id.get(vehicle_id)
             if vehicle is None:
+                continue
+            # These rows simulate battery SOC and charging opportunity.  Fuel
+            # vehicles remain in the assignment/duty evidence above, but must
+            # not be given a synthetic 1 kWh battery and reported as having an
+            # energy shortage.
+            if not self._uses_electric_soc_diagnostics(vehicle.vehicle_type):
                 continue
             ordered = [trip_by_id[trip_id] for trip_id in trip_ids if trip_id in trip_by_id]
             if not ordered:
