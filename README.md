@@ -1,27 +1,29 @@
 # master-course
 
-## 2026-08-09 cost-ranked exact-composition seed search
+## 2026-08-09 adjacent feasible-continuation seed search
 
-- A nonformal 300-second BFF diagnostic from clean commit `c819e36` confirmed
-  that the verified-seed objective and vehicle-day cutoffs are active, but the
-  776,752-variable integrated model still ends at root node one with raw bound
-  zero. Parameter focus alone does not close the formal proof gap.
-- A separate `used BEV >= 32` diagnostic is deliberately not used as an
-  optimization result: it kept 19 ICE buses and activated 51 buses, proving
-  that a one-sided BEV policy frontier is not a substitute for the canonical
-  fixed-cost optimum.
-- The remaining seed defect is budget allocation. In the completed formal
-  pair, exact `32 BEV / 0 ICE` received 2.694 solver seconds and `31 / 1`
-  received 2.772 seconds, while their unverified constructive duties were then
-  rejected by Stage 2. This did not establish global infeasibility.
-- Exact-composition targets are now ranked by the optimistic cost of their
-  complete constructive dispatch, never by BEV direction. The Stage 1 reserve
-  grows only when exact-composition search was explicitly requested; the
-  highest cost-priority targets may receive up to 60 seconds while at least two
-  seconds remain for every later target. Stage 2 canonical cost still chooses
-  the seed, and the unrestricted integrated MILP remains the proof model.
-- Focused regressions pass (`61`) and the full repository suite passes
-  (`1239 passed in 55.35s`). Fresh clean-run evidence is still required.
+- A fresh sunny frontend run from clean commit `beb13e3` exposed a regression
+  in the exact-composition search order. Optimistic-cost ordering tried
+  `32/0`, `31/1`, `30/2` and `29/3` first, spent about 60 solver seconds on
+  each without an incumbent, then left only 10.156 seconds for the promising
+  `28/4` target. The run therefore fell back to `27/5`; this is search-budget
+  starvation, not evidence that `28/4` is physically or economically worse.
+- Exact fleet mixes now walk outward from the primary feasible solution in
+  symmetric distance order. Each BEV-increasing and BEV-decreasing direction
+  reuses its last feasible adjacent composition as a MIP start, and the
+  remaining enumeration time is shared equally across remaining targets.
+  This ordering contains no weather or BEV preference.
+- Optimistic constructive cost remains exported as diagnostic evidence but no
+  longer orders exact target solves. Stage 2 still ranks every recovered
+  candidate by canonical actual cost including diesel, grid, PV/BESS recourse
+  and vehicle-day cost. The unrestricted integrated MILP remains the only
+  global proof model.
+- The interrupted `beb13e3` pair is diagnostic only; its rain case was stopped
+  after the sunny defect was established. A clean commit, fresh Prepare and
+  both formal runs are required before the release status can change from
+  `BLOCKED`.
+- Focused regressions pass (`80`) and the complete repository suite passes
+  (`1239 passed in 59.56s`).
 
 ## 2026-08-09 verified-start cutoff and bound-search correction
 

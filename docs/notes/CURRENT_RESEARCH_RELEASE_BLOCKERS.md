@@ -1,22 +1,46 @@
 # Current research release blockers
 
-## 2026-08-09 exact-composition alternatives remain under-searched
+## 2026-08-09 adjacent-continuation correction requires a fresh formal pair
+
+Clean SHA `beb13e303ce272b77caf719f8e745c65c22668cd` did not validate the
+cost-ranked search strategy. In its fresh sunny run, exact compositions
+`32/0`, `31/1`, `30/2` and `29/3` each used roughly 60 solver seconds without
+an incumbent. Only 10.156 seconds remained for `28/4`, although a separate
+diagnostic had previously found a physically valid `28/4` sunny candidate.
+The selected `27/5` result therefore reflects target-order starvation and
+cannot be used to conclude that sunny PV has no further effect on fleet mix.
+
+The correction is weather-neutral: exact targets are traversed by distance
+from the primary feasible composition, each direction continues from its last
+feasible adjacent MIP start, and the remaining time is shared equally. No BEV
+minimum, sunny preference, trip lower bound or weather coefficient is added.
+Stage 2 canonical actual cost remains the selection authority and the
+unrestricted Phase 4 MILP remains the proof authority.
+
+Focused regressions pass (`80`) and the complete suite passes (`1239 passed in
+59.56s`). These code checks do not replace the fresh formal pair.
+
+Release remains `BLOCKED`. The interrupted `beb13e3` rain run and the older
+prepared-input diagnostic are not formal pair evidence. Completion still
+requires a clean frozen commit, fresh Prepare for sunny and rain, unchanged
+non-PV control hashes, 264/264 service, 24/24 Rolling, physical and accounting
+validity, and the requested 0.1% certified integrated gap in both cases.
+
+## 2026-08-09 superseded cost-ranked under-search note
 
 The clean `c819e36` cutoff diagnostic did not move Gurobi's raw lower bound in
 300 seconds. A one-sided `used BEV >= 32` diagnostic also showed why a BEV
 minimum is not a remedy: it retained 19 ICE buses, used 51 total buses, and
 optimized a policy-constrained problem rather than the requested cost problem.
 
-The actionable defect is exact-composition time allocation. The last formal
-pair gave `32/0` only 2.694 seconds and `31/1` only 2.772 seconds. Stage 2
+The then-actionable defect was exact-composition time allocation. The last
+formal pair gave `32/0` only 2.694 seconds and `31/1` only 2.772 seconds. Stage 2
 infeasibility of their first reconstructed duties is not an infeasibility
-certificate for every assignment at those mixes. The current working tree
-orders exact mixes by audited constructive-dispatch optimistic cost and gives
-the leading candidates up to 60 seconds without encoding a BEV/weather
-direction. Stage 2 actual cost and the unrestricted Phase 4 model remain
-authoritative. Focused tests pass (`61`) and the full suite passes (`1239
-passed in 55.35s`). A clean commit, fresh Prepare and both formal runs remain
-required; release stays `BLOCKED`.
+certificate for every assignment at those mixes. The cost-ranked working tree
+ordered exact mixes by audited constructive cost. A later fresh run
+demonstrated starvation of the reachable adjacent path, so that strategy is
+superseded by the correction above. Stage 2 actual cost and the unrestricted
+Phase 4 model remain authoritative.
 
 ## 2026-08-09 verified candidate rescue; integrated proof still blocked
 

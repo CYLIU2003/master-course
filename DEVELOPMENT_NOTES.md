@@ -1,6 +1,35 @@
 # Development Notes
 
-## 2026-08-09: cost-prioritized exact fleet-mix search
+## 2026-08-09: adjacent feasible-continuation fixes seed-search starvation
+
+- Fresh sunny job `60af38bd-c548-4971-aeae-3fc3785945b9` from clean SHA
+  `beb13e303ce272b77caf719f8e745c65c22668cd` used fresh frontend Prepare and
+  reproduced `27 BEV / 5 ICE`, but its target telemetry identified a search
+  regression. Exact `32/0`, `31/1`, `30/2` and `29/3` each consumed about 60
+  seconds without an incumbent. `28/4` was reached with only 10.156 seconds
+  remaining, and `27/5` received 1.999 seconds. The rain job was aborted after
+  this deterministic defect was established; the incomplete pair is not
+  research evidence.
+- A separate short diagnostic had already recovered a physically valid
+  `28/4`, 199-BEV-trip sunny seed at 660,983.783805 JPY. That diagnostic used
+  an older prepared input and is not formal evidence, but it falsifies the
+  assumption that the cost-ranked run had proved `28/4` unavailable.
+- Exact-composition feasibility traversal now sorts by absolute distance from
+  the primary feasible used-powertrain composition, preserving the original
+  symmetric `+1, -1, +2, -2, ...` order. Direction-specific state therefore
+  continues `K -> K+1` (or `K -> K-1`) from the last feasible MIP start rather
+  than jumping directly from the primary mix to an extreme target.
+- Remaining composition time is divided equally among remaining targets and
+  capped by the configured per-target limit. Optimistic constructive cost is
+  still exported for audit, but it does not order feasibility solves. Stage 2
+  candidate evaluation remains `canonical actual cost ascending`, so the
+  change introduces neither a weather strategy nor a BEV lower bound.
+- Focused regressions cover order, equal budget sharing, continuation warm
+  starts and Stage 2 cost selection (`80 passed`); the complete suite passes
+  (`1239 passed in 59.56s`). Fresh clean-commit pair evidence remains required
+  before claiming an improved feasible seed or formal optimality.
+
+## 2026-08-09: superseded cost-prioritized exact fleet-mix search
 
 - Clean commit `c819e36fdf5c315d0132015bb6e7154a31708cec` was exercised through
   the BFF with the previous sunny prepared input as a diagnostic-only run.
@@ -18,14 +47,10 @@
   seconds each. Their reconstructed starts failed Stage 2, but alternative
   assignments at those same mixes were not searched enough to establish a
   physical boundary.
-- Exact fixed-total targets now carry an audited constructive-dispatch
-  optimistic cost and are solved in ascending cost order. This is a search
-  heuristic only: it neither skips a target nor certifies a target-wide lower
-  bound. Explicit exact-composition search reserves up to 80% of Stage 1 (with
-  a 400-second cap); each leading target may use up to 60 seconds while two
-  seconds per later target remain reserved. Policy frontiers retain equal time
-  sharing. New metadata records request order, cost order, score provenance,
-  and per-target time.
+- Exact fixed-total targets at this historical point carried an audited
+  constructive-dispatch optimistic cost and were solved in ascending cost
+  order. The subsequent fresh run showed that this jump-to-extreme ordering
+  starved adjacent continuation; it is superseded by the section above.
 - Focused composition/integrated/BFF research-contract regressions pass (`61`)
   and the full suite passes (`1239 passed in 55.35s`).
 

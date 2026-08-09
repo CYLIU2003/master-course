@@ -201,31 +201,20 @@ def _verified_start_objective_search_bounds(
     return result
 
 
-def _composition_target_search_priority_key(
+def _composition_target_continuation_priority_key(
     record: Mapping[str, Any],
-) -> Tuple[int, int, float, int, int]:
-    """Order exact fleet mixes by an audited optimistic cost score.
+) -> Tuple[int, int, int]:
+    """Walk exact fleet mixes outward from the primary feasible solution.
 
-    The score is computed from a complete constructive dispatch and is used
-    only to decide which temporary exact-composition model receives the scarce
-    search budget first.  Stage 2 canonical cost remains the selection
-    authority, and the unrestricted integrated solve remains the proof model.
-    The original symmetric request order is retained as the final tie-break.
+    Exact-composition models are much more likely to obtain an incumbent when
+    each direction can reuse the preceding feasible composition as its MIP
+    start.  This ordering is deliberately independent of weather and
+    powertrain direction.  Canonical Stage 2 actual cost, not this feasibility
+    traversal, remains the candidate-selection authority.
     """
 
-    raw_priority = record.get("search_priority_lower_bound_jpy")
-    try:
-        priority = float(raw_priority)
-    except (TypeError, ValueError):
-        priority = math.inf
-    certified = bool(
-        record.get("search_priority_lower_bound_certified")
-        and math.isfinite(priority)
-    )
     return (
         0 if record.get("target_within_selected_inventory") else 1,
-        0 if certified else 1,
-        priority if math.isfinite(priority) else math.inf,
         abs(int(record.get("delta_used_bev_from_primary") or 0)),
         int(record.get("requested_order_index") or 0),
     )
@@ -236,30 +225,18 @@ def _composition_target_time_limit_sec(
     remaining_budget_sec: float,
     remaining_target_count: int,
     target_time_limit_cap_sec: float,
-    cost_priority_enabled: bool,
-    minimum_later_target_sec: float = 2.0,
 ) -> float:
     """Allocate exact-composition time without starving later targets.
 
-    Cost-prioritized exact targets may consume up to the configured cap, while
-    reserving a deterministic minimum for every remaining target.  Frontier
-    policy sweeps keep equal sharing because their order is an explicit policy
-    axis rather than an incumbent-search heuristic.
+    Exact adjacent-continuation and frontier sweeps use equal sharing so an
+    early target cannot consume the budget needed to reach later compositions.
     """
 
     remaining_budget = max(float(remaining_budget_sec), 0.0)
     remaining_targets = max(int(remaining_target_count), 1)
     cap = max(float(target_time_limit_cap_sec), 0.25)
     equal_share = max(remaining_budget / remaining_targets, 0.25)
-    if not cost_priority_enabled:
-        return min(cap, equal_share)
-    later_reserve = min(
-        max(float(minimum_later_target_sec), 0.25)
-        * max(remaining_targets - 1, 0),
-        remaining_budget,
-    )
-    available_now = max(remaining_budget - later_reserve, 0.25)
-    return min(cap, max(equal_share, available_now))
+    return min(cap, equal_share)
 
 
 def _problem_vehicle_symmetry_signature(vehicle: Any) -> Tuple[Any, ...]:
@@ -8860,10 +8837,11 @@ class GurobiMILPAdapter:
 
             if not stage1_bev_frontier_enabled:
                 # A complete replacement start provides an optimistic,
-                # weather-neutral dispatch cost for search ordering before any
-                # temporary target solve runs.  It is not a target-wide lower
-                # bound and is never used to skip a composition or certify the
-                # final objective.
+                # weather-neutral dispatch cost for diagnostics.  It is not a
+                # target-wide lower bound and is never used to skip, order, or
+                # certify a composition.  Temporary exact models instead walk
+                # outward from the primary feasible solution so each direction
+                # can continue from its last feasible MIP start.
                 for target_record in composition_target_records:
                     if not target_record["target_within_selected_inventory"]:
                         continue
@@ -8931,7 +8909,7 @@ class GurobiMILPAdapter:
                             }
                         )
                 composition_target_records.sort(
-                    key=_composition_target_search_priority_key
+                    key=_composition_target_continuation_priority_key
                 )
                 for search_order_rank, target_record in enumerate(
                     composition_target_records,
@@ -8939,8 +8917,10 @@ class GurobiMILPAdapter:
                 ):
                     target_record["search_order_rank"] = search_order_rank
                     target_record["search_order_semantics"] = (
-                        "certified_constructive_dispatch_optimistic_cost_"
-                        "then_distance_then_original_symmetric_order"
+                        "adjacent_distance_from_primary_then_original_"
+                        "symmetric_order_with_direction_specific_feasible_"
+                        "mip_start_continuation; stage2_candidates_selected_"
+                        "by_canonical_actual_cost"
                     )
 
             valid_target_count = sum(
@@ -9048,9 +9028,6 @@ class GurobiMILPAdapter:
                         ),
                         target_time_limit_cap_sec=(
                             composition_target_time_limit_cap_sec
-                        ),
-                        cost_priority_enabled=(
-                            not stage1_bev_frontier_enabled
                         ),
                     )
                 )
@@ -11351,7 +11328,9 @@ class GurobiMILPAdapter:
             ),
             "stage1_cost_ranked_composition_budget_semantics": (
                 "enabled_only_for_exact_composition_sweeps_with_at_least_"
-                "ten_candidate_slots; cost_order_changes_search_only"
+                "ten_candidate_slots; reserves_enumeration_time_only; exact_"
+                "targets_follow_adjacent_feasible_continuation_with_equal_"
+                "sharing_and_stage2_selection_remains_canonical_actual_cost"
             ),
             "stage1_candidate_enumeration_runtime_seconds": max(
                 stage1_total_solver_runtime_sec

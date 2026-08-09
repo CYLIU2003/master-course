@@ -36,7 +36,7 @@ from src.optimization.engine import (
 )
 from src.gurobi_runtime import ensure_gurobi
 from src.optimization.milp.solver_adapter import (
-    _composition_target_search_priority_key,
+    _composition_target_continuation_priority_key,
     _composition_target_time_limit_sec,
     GurobiMILPAdapter,
     _actual_bess_terminal_soc_deviation_by_depot,
@@ -139,14 +139,14 @@ def test_verified_start_cap_does_not_change_ev_utilization_objective() -> None:
     ]
 
 
-def test_exact_composition_targets_are_ordered_by_cost_not_bev_direction() -> None:
+def test_exact_composition_targets_continue_outward_despite_cost_score() -> None:
     records = [
         {
             "target_within_selected_inventory": True,
-            "target_used_bev": 12,
-            "delta_used_bev_from_primary": -1,
-            "requested_order_index": 2,
-            "search_priority_lower_bound_jpy": 700_000.0,
+            "target_used_bev": 32,
+            "delta_used_bev_from_primary": 19,
+            "requested_order_index": 5,
+            "search_priority_lower_bound_jpy": 600_000.0,
             "search_priority_lower_bound_certified": True,
         },
         {
@@ -157,30 +157,46 @@ def test_exact_composition_targets_are_ordered_by_cost_not_bev_direction() -> No
             "search_priority_lower_bound_jpy": 710_000.0,
             "search_priority_lower_bound_certified": True,
         },
+        {
+            "target_within_selected_inventory": True,
+            "target_used_bev": 12,
+            "delta_used_bev_from_primary": -1,
+            "requested_order_index": 2,
+            "search_priority_lower_bound_jpy": 700_000.0,
+            "search_priority_lower_bound_certified": True,
+        },
+        {
+            "target_within_selected_inventory": True,
+            "target_used_bev": 15,
+            "delta_used_bev_from_primary": 2,
+            "requested_order_index": 3,
+            "search_priority_lower_bound_jpy": 690_000.0,
+            "search_priority_lower_bound_certified": True,
+        },
     ]
 
-    ordered = sorted(records, key=_composition_target_search_priority_key)
+    continuation_ordered = sorted(
+        records,
+        key=_composition_target_continuation_priority_key,
+    )
 
-    assert [record["target_used_bev"] for record in ordered] == [12, 14]
+    assert [record["target_used_bev"] for record in continuation_ordered] == [
+        14,
+        12,
+        15,
+        32,
+    ]
 
 
-def test_cost_priority_budget_preserves_time_for_later_compositions() -> None:
-    first_target_seconds = _composition_target_time_limit_sec(
+def test_adjacent_continuation_budget_is_shared_equally() -> None:
+    continuation_seconds = _composition_target_time_limit_sec(
         remaining_budget_sec=300.0,
         remaining_target_count=25,
         target_time_limit_cap_sec=60.0,
-        cost_priority_enabled=True,
-    )
-    frontier_seconds = _composition_target_time_limit_sec(
-        remaining_budget_sec=300.0,
-        remaining_target_count=25,
-        target_time_limit_cap_sec=120.0,
-        cost_priority_enabled=False,
     )
 
-    assert first_target_seconds == pytest.approx(60.0)
-    assert frontier_seconds == pytest.approx(12.0)
-    assert 300.0 - first_target_seconds >= 24 * 2.0
+    assert continuation_seconds == pytest.approx(12.0)
+    assert continuation_seconds * 25 == pytest.approx(300.0)
 
 
 def test_phase4_seed_wall_allowance_preserves_stage2_solver_budget() -> None:

@@ -638,29 +638,24 @@ def test_phase3_composition_search_activates_unused_powertrain_inventory() -> No
         == "physically_feasible_stage2_candidate"
         for row in certificate["target_records"]
     )
-    adjacent_target = next(
+    continued_target = next(
         row
         for row in certificate["target_records"]
         if int(row["target_used_bev"]) == 2
     )
-    assert adjacent_target[
+    assert continued_target[
         "adjacent_composition_warm_start_applied"
     ] is True
-    assert adjacent_target[
+    assert continued_target[
         "adjacent_composition_warm_start_source_used_bev"
-    ] == int(certificate["primary_used_powertrain_composition"]["used_bev"])
-    assert adjacent_target[
+    ] == 1
+    assert continued_target[
         "adjacent_composition_warm_start_delta_used_bev"
-    ] == (
-        int(adjacent_target["target_used_bev"])
-        - int(
-            adjacent_target[
-                "adjacent_composition_warm_start_source_used_bev"
-            ]
-        )
-    )
-    assert adjacent_target["search_order_rank"] == 1
-    assert adjacent_target["search_priority_lower_bound_jpy"] == pytest.approx(
+    ] == 1
+    assert continued_target["search_order_rank"] == 2
+    assert continued_target[
+        "search_priority_lower_bound_jpy"
+    ] == pytest.approx(
         0.0
     )
     assert all(
