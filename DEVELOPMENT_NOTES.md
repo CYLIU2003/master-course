@@ -1,5 +1,28 @@
 # Development Notes
 
+## 2026-08-09: exact-composition search stops at its first feasibility witness
+
+- The fresh adjacent pair established feasible Stage-2 compositions from
+  `7/25` through `27/5`, but every easy exact-composition solve continued to
+  close its Stage-1 objective gap after finding an incumbent. Exact `28/4`
+  consequently received only 11.696 seconds and remained unresolved; two
+  constructive duties failed Stage 2, which is not composition-wide proof.
+- Exact used-powertrain targets are candidate-generation feasibility problems,
+  not independent optimality claims. Their Gurobi solve now sets
+  `SolutionLimit=1`, records
+  `search_termination_policy=first_incumbent_feasibility_witness`, extracts the
+  unchanged-model incumbent, and returns unused shared time to later targets.
+- Frontier sensitivity targets retain their existing optimization policy. If
+  an exact target has no solution, `SolutionLimit` never triggers: the model
+  can still reach the allocated time limit or `INFEASIBLE`, followed by the
+  existing IIS and model-hash certificate checks. The prior solution limit is
+  restored after every temporary target.
+- The change is neutral with respect to weather and powertrain economics.
+  Stage 2 still performs exact charging/PV/BESS evaluation and final candidates
+  are selected by canonical actual cost. Focused regressions pass (`54`),
+  compileall/diff checks pass, and the complete suite passes (`1240 passed in
+  56.27s`). A new formal pair is pending.
+
 ## 2026-08-09: adjacent pair result and certified-gap audit correction
 
 - Frozen SHA `32e3509cacd6309675bef2e850405e07483b24fb` completed the fresh

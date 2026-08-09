@@ -653,6 +653,15 @@ def test_phase3_composition_search_activates_unused_powertrain_inventory() -> No
         "adjacent_composition_warm_start_delta_used_bev"
     ] == 1
     assert continued_target["search_order_rank"] == 2
+    assert continued_target["search_status"] in {
+        "optimal",
+        "solution_limit",
+    }
+    assert (
+        continued_target["search_termination_policy"]
+        == "first_incumbent_feasibility_witness"
+    )
+    assert continued_target["solution_limit"] == 1
     assert continued_target[
         "search_priority_lower_bound_jpy"
     ] == pytest.approx(

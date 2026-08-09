@@ -1,5 +1,26 @@
 # Current research release blockers
 
+## 2026-08-09 exact `28/4` boundary search correction is awaiting evidence
+
+The completed clean-SHA pair proves a PV response through `27/5` sunny versus
+`21/11` rain, but it does not resolve exact `28/4`. The exact-composition loop
+used each target's full optimization slice after finding a Stage-1 incumbent;
+therefore earlier feasible counts consumed time that should have remained for
+the harder adjacent boundary. The two `28/4` constructive assignments rejected
+by Stage 2 remain assignment-level failures only.
+
+The corrected exact-composition solve stops after its first feasible witness
+and passes that unchanged assignment to exact Stage 2. A target without an
+incumbent still runs until its allocated limit or a solver-proven infeasible
+status, preserving the existing IIS-backed certificate contract. No BEV
+minimum, weather preference, trip quota or accounting change is introduced.
+
+Release remains `BLOCKED`. Focused regressions pass (`54`) and the complete
+suite passes (`1240 passed in 56.27s`), but the change still needs a clean
+commit, fresh Prepare for both cases, and a new controlled pair. Even if it
+recovers a different sunny incumbent, both cases must still meet the requested
+0.1% certified integrated gap before formal readiness.
+
 ## 2026-08-09 adjacent pair responds to PV; proof gap remains
 
 Clean SHA `32e3509cacd6309675bef2e850405e07483b24fb` completed the controlled

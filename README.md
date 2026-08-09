@@ -1,5 +1,26 @@
 # master-course
 
+## 2026-08-09 exact-composition feasibility-witness cutoff
+
+- The current controlled pair already shows the intended economic response:
+  sunny uses `27 BEV / 5 ICE` and 183 BEV trips, while rain uses `21 / 11`
+  and 91 BEV trips. The remaining sunny boundary is exact `28/4`, not a
+  frozen-weather failure.
+- Exact used-powertrain targets exist to recover one Stage-1-feasible witness
+  for exact Stage 2 evaluation. They previously kept optimizing after finding
+  that witness, so the easy `14/18` through `27/5` targets each consumed their
+  full share and left only 11.696 seconds for the unresolved `28/4` target.
+- Exact-composition searches now use Gurobi `SolutionLimit=1`. A found witness
+  is passed to Stage 2 immediately and unused shared time remains available to
+  harder adjacent targets. Targets with no incumbent continue until their
+  allocated time limit or a genuine `INFEASIBLE` result, so IIS-backed
+  composition certificates are not weakened.
+- This is a weather-neutral search policy. It adds no BEV minimum, trip quota,
+  sunny coefficient or objective bias; Stage 2 canonical actual cost still
+  selects the final candidate. Focused regressions pass (`54`) and the full
+  suite passes (`1240 passed in 56.27s`). Fresh clean-commit pair evidence is
+  required before this search change is credited with a new result.
+
 ## 2026-08-09 controlled pair after adjacent continuation
 
 - Clean SHA `32e3509cacd6309675bef2e850405e07483b24fb` completed fresh

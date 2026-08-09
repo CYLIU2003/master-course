@@ -9234,6 +9234,19 @@ class GurobiMILPAdapter:
                 stage1.Params.TimeLimit = composition_time_limit_sec
                 stage1.Params.PoolSearchMode = 0
                 stage1.Params.PoolSolutions = 1
+                saved_solution_limit = int(stage1.Params.SolutionLimit)
+                stop_after_first_feasible_witness = bool(
+                    not stage1_bev_frontier_enabled
+                )
+                if stop_after_first_feasible_witness:
+                    # Exact-composition targets are feasibility witnesses for
+                    # the Stage-2 candidate pool, not separate optimization
+                    # claims.  Continuing to close each target's Stage-1 gap
+                    # starves the harder adjacent compositions of their shared
+                    # search budget.  If no incumbent exists, SolutionLimit
+                    # does not fire, so an INFEASIBLE result can still be
+                    # certified by the unchanged model and IIS path below.
+                    stage1.Params.SolutionLimit = 1
                 composition_started = time.perf_counter()
                 try:
                     stage1.optimize()
@@ -9257,6 +9270,16 @@ class GurobiMILPAdapter:
                             "solver_runtime_sec": composition_solver_runtime_sec,
                             "wall_time_sec": composition_wall_time_sec,
                             "time_limit_sec": composition_time_limit_sec,
+                            "search_termination_policy": (
+                                "first_incumbent_feasibility_witness"
+                                if stop_after_first_feasible_witness
+                                else "optimize_frontier_target_within_time_limit"
+                            ),
+                            "solution_limit": (
+                                1
+                                if stop_after_first_feasible_witness
+                                else saved_solution_limit
+                            ),
                             "solution_count": int(
                                 getattr(stage1, "SolCount", 0) or 0
                             ),
@@ -9908,6 +9931,7 @@ class GurobiMILPAdapter:
                                 )
                             )
                 finally:
+                    stage1.Params.SolutionLimit = saved_solution_limit
                     stage1.remove(
                         [
                             constraint
@@ -13574,6 +13598,7 @@ class GurobiMILPAdapter:
         status_map = {
             GRB.OPTIMAL: "optimal",
             GRB.TIME_LIMIT: "time_limit",
+            GRB.SOLUTION_LIMIT: "solution_limit",
             GRB.SUBOPTIMAL: "suboptimal",
             GRB.INFEASIBLE: "infeasible",
             GRB.INF_OR_UNBD: "inf_or_unbd",
