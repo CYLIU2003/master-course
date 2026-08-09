@@ -1,5 +1,39 @@
 # Development Notes
 
+## 2026-08-10: clean witness-cutoff pair and post-run evidence fixes
+
+- Frozen SHA `99a2035694fd90fccf42fe8222a4f1d3b344e83e` completed the
+  controlled same-service-date pair at
+  `output/formal_pair_20260809_flat30_pv1000_bess6000_phase4_witness_99a2035_gap001`.
+  Both cases use fresh prepared inputs, serve 264/264, preserve the fleet and
+  initial-state hashes, pass physical validation, terminal BEV/BESS SOC,
+  executed-day accounting and 24/24 Rolling. Pair comparison checks all pass;
+  only the separately hashed PV profile differs.
+- Sunny remains `27 BEV / 5 ICE`, 183 / 81 trips, 6,056.25 kWh PV, zero grid
+  import and 666,164.082366 JPY. Rain remains `21 / 11`, 91 / 173 trips,
+  996.2 kWh PV, 124.985104 kWh grid import and 698,419.690050 JPY. This is a
+  verified PV response of six used BEVs and 92 BEV trips without a weather
+  objective bias.
+- Exact 25--27 BEV targets terminate with `SOLUTION_LIMIT` after about 3.6
+  seconds. Exact `28/4` now receives 47.798 seconds (previously 11.696) but has
+  no Stage-1 incumbent. Two complete 28/4 constructive candidates reach Stage
+  2 and are infeasible in about 0.16 seconds each. The target remains
+  unresolved because no composition-wide infeasibility certificate exists.
+- Formal readiness is false. The analytical certified gaps are 3.927573%
+  sunny and 2.387096% rain versus the requested 0.1%; the raw Gurobi bound is
+  zero and raw gap is 100% in both cases.
+- Post-run review found that `research_comparison.md` sourced only
+  `stage1_certified_mip_gap_ratio`, so its Phase-4 certified-gap row was blank
+  even though formal gating used the correct integrated field. `_solver_row`
+  now prefers `certified_mip_gap_ratio` and falls back to the Stage-1 field.
+- Phase-4 problems now attach the Phase-3 candidate diagnostics directory so
+  internal fixed-assignment Stage-2 failures can write IIS, energy-shortage and
+  vehicle-path evidence. Recursive no-good feedback remains enabled only for a
+  direct Phase-3 run, so this diagnostics fix does not alter Phase-4 search
+  semantics. Focused regressions pass (`35`), compileall/diff checks pass and
+  the complete suite passes (`1242 passed in 64.24s`). Fresh evidence for
+  these post-run changes is pending.
+
 ## 2026-08-09: exact-composition search stops at its first feasibility witness
 
 - The fresh adjacent pair established feasible Stage-2 compositions from

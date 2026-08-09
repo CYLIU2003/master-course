@@ -10459,6 +10459,40 @@ def _solver_settings_payload(
     }
 
 
+def _configure_assignment_energy_diagnostics(
+    problem: Any,
+    *,
+    phase_token: str,
+    output_dir: str | Path,
+    research_run: bool,
+) -> None:
+    """Attach candidate diagnostics without broadening Phase-3 feedback.
+
+    Phase 4 obtains its incumbent from an internal Phase-3 candidate search,
+    so failed fixed-assignment Stage-2 candidates need the same IIS/path
+    evidence as a directly requested Phase-3 run.  Recursive no-good feedback
+    remains limited to a direct Phase-3 solve; enabling diagnostics must not
+    silently change the Phase-4 search problem.
+    """
+
+    metadata = getattr(problem, "metadata", None)
+    if not isinstance(metadata, dict):
+        return
+    if phase_token in {"phase3_two_stage", "phase4_integrated"}:
+        metadata["phase3_diagnostics_dir"] = str(
+            Path(output_dir) / "diagnostics"
+        )
+    if phase_token != "phase3_two_stage":
+        return
+    metadata["stage2_feedback_max_iterations"] = (
+        2 if research_run else 1
+    )
+    metadata["stage2_feedback_policy"] = (
+        "retry_only_after_gurobi_infeasible_certificate_with_"
+        "full_assignment_no_good_cut"
+    )
+
+
 def _run_optimization(
     scenario_id: str,
     job_id: str,
@@ -10805,20 +10839,12 @@ def _run_optimization(
                     require_all_available_bevs=require_all_available_bevs,
                 )
             )
-            if (
-                phase_token == "phase3_two_stage"
-                and isinstance(problem.metadata, dict)
-            ):
-                problem.metadata["phase3_diagnostics_dir"] = str(
-                    Path(output_dir) / "diagnostics"
-                )
-                problem.metadata["stage2_feedback_max_iterations"] = (
-                    2 if bool(research_run) else 1
-                )
-                problem.metadata["stage2_feedback_policy"] = (
-                    "retry_only_after_gurobi_infeasible_certificate_with_"
-                    "full_assignment_no_good_cut"
-                )
+            _configure_assignment_energy_diagnostics(
+                problem,
+                phase_token=phase_token,
+                output_dir=output_dir,
+                research_run=bool(research_run),
+            )
             run_input_provenance = persist_run_input_provenance(
                 run_dir=Path(output_dir),
                 base_scenario=base_scenario,

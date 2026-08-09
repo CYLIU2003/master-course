@@ -406,6 +406,39 @@ def test_run_optimization_records_canonical_graph_artifacts_for_milp_mode() -> N
         assert stored_fields["optimization_result"]["graph_artifacts"][key] == value
 
 
+def test_phase4_problem_enables_seed_candidate_diagnostics_without_feedback() -> None:
+    phase4_problem = SimpleNamespace(metadata={})
+    phase3_problem = SimpleNamespace(metadata={})
+
+    optimization._configure_assignment_energy_diagnostics(
+        phase4_problem,
+        phase_token="phase4_integrated",
+        output_dir="outputs/phase4-test",
+        research_run=True,
+    )
+
+    assert phase4_problem.metadata["phase3_diagnostics_dir"] == str(
+        Path("outputs/phase4-test") / "diagnostics"
+    )
+    assert "stage2_feedback_max_iterations" not in phase4_problem.metadata
+    assert "stage2_feedback_policy" not in phase4_problem.metadata
+
+    optimization._configure_assignment_energy_diagnostics(
+        phase3_problem,
+        phase_token="phase3_two_stage",
+        output_dir="outputs/phase3-test",
+        research_run=True,
+    )
+
+    assert phase3_problem.metadata["phase3_diagnostics_dir"] == str(
+        Path("outputs/phase3-test") / "diagnostics"
+    )
+    assert phase3_problem.metadata["stage2_feedback_max_iterations"] == 2
+    assert phase3_problem.metadata["stage2_feedback_policy"].startswith(
+        "retry_only_after_gurobi_infeasible_certificate"
+    )
+
+
 def test_run_optimization_endpoint_submits_current_prepared_input_job() -> None:
     fake_job = SimpleNamespace(
         job_id="job-1",

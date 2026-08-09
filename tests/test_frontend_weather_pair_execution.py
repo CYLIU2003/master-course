@@ -94,6 +94,44 @@ def test_formal_gap_gate_uses_integrated_certified_gap_not_raw_gap() -> None:
     ) is None
 
 
+def test_solver_row_prefers_integrated_certified_gap_for_reporting(
+    tmp_path: Path,
+) -> None:
+    runner = _load_runner()
+    case_dir = tmp_path / "sunny"
+    rolling_dir = case_dir / "rolling_hourly_chain"
+    rolling_dir.mkdir(parents=True)
+    (case_dir / "solver_settings.json").write_text(
+        json.dumps(
+            {
+                "certified_mip_gap_ratio": 0.0392757326,
+                "stage1_certified_mip_gap_ratio": None,
+            }
+        ),
+        encoding="utf-8",
+    )
+    for path, payload in (
+        (case_dir / "summary.json", {}),
+        (case_dir / "input_audit.json", {}),
+        (case_dir / "comparison_case_manifest.json", {}),
+        (case_dir / "case_execution_metadata.json", {}),
+        (rolling_dir / "rolling_chain_summary.json", {"steps": []}),
+        (case_dir / "vehicle_timelines.csv", {}),
+    ):
+        if path.suffix == ".json":
+            path.write_text(json.dumps(payload), encoding="utf-8")
+        else:
+            path.write_text(
+                "vehicle_id,powertrain,trip_id\n",
+                encoding="utf-8",
+            )
+
+    row = runner._solver_row("sunny", case_dir)
+
+    assert row["certified_gap"] == pytest.approx(0.0392757326)
+    assert row["stage1_certified_gap"] is None
+
+
 def test_runner_has_no_optimization_domain_imports() -> None:
     tree = ast.parse(RUNNER_PATH.read_text(encoding="utf-8"))
     imported_roots: set[str] = set()

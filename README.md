@@ -1,5 +1,34 @@
 # master-course
 
+## 2026-08-10 controlled pair after feasibility-witness cutoff
+
+- Clean frozen SHA `99a2035694fd90fccf42fe8222a4f1d3b344e83e` completed
+  fresh Prepare, Phase 4 actual-cost optimization and 24/24 Rolling for both
+  cases at
+  `output/formal_pair_20260809_flat30_pv1000_bess6000_phase4_witness_99a2035_gap001`.
+  The bundle and ZIP preserve PV 1,000 kW, BESS 6,000 kWh, flat grid energy
+  30 JPY/kWh, demand charge 0 JPY/kW and identical non-PV control hash
+  `ebb5ddf8bf094c15f48c45e402b6825acb8b910235d936e940fd7a41e603c292`.
+- Sunny uses `27 BEV / 5 ICE` and 183 / 81 trips at 666,164.082366 JPY;
+  rain uses `21 / 11` and 91 / 173 trips at 698,419.690050 JPY. Both serve
+  264/264, pass physical/SOC/accounting checks and 24/24 Rolling. The pair
+  manifest accepts the controlled PV sensitivity.
+- The cutoff works as intended: exact 25, 26 and 27-BEV targets now return
+  their first witness in about 3.6 seconds. Exact `28/4` receives 47.8 seconds
+  instead of 11.7, but finds no Stage-1 incumbent; its two complete
+  constructive assignments are Stage-2 infeasible. This remains an unresolved
+  composition boundary, not a proof that all `28/4` assignments are infeasible.
+- Formal release remains `BLOCKED`: sunny certified gap is 3.927573% and rain
+  is 2.387096%, both above the requested 0.1% (raw Gurobi gaps are 100%).
+- Post-run audit found two evidence-output defects. The pair research table
+  read only the Phase-3 certified-gap field, leaving the Phase-4 gap row blank;
+  and Phase-4 internal Phase-3 candidates did not receive the diagnostics root,
+  so failed `28/4` candidates exported no IIS/path files. The reporting path
+  now prefers `certified_mip_gap_ratio`, and Phase 4 now enables candidate
+  diagnostics without enabling recursive Phase-3 feedback. These post-run
+  changes pass 35 focused regressions and the complete suite (`1242 passed in
+  64.24s`), but do not relabel the SHA-99a2035 bundle as new-code evidence.
+
 ## 2026-08-09 exact-composition feasibility-witness cutoff
 
 - The current controlled pair already shows the intended economic response:

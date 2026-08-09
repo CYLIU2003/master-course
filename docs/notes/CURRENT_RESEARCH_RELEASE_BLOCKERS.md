@@ -1,5 +1,31 @@
 # Current research release blockers
 
+## 2026-08-10 witness-cutoff pair: PV response accepted, proof still blocked
+
+Clean frozen SHA `99a2035694fd90fccf42fe8222a4f1d3b344e83e` completed the
+full controlled pair at
+`output/formal_pair_20260809_flat30_pv1000_bess6000_phase4_witness_99a2035_gap001`.
+All pair-comparison checks pass. Sunny uses 27 BEVs / 5 ICE buses and 183 BEV
+trips; rain uses 21 / 11 and 91 BEV trips. Both serve 264/264, complete 24/24
+Rolling, pass physical and terminal-SOC checks, reconcile accounting and use
+the same frozen non-PV control hash. The controlled PV sensitivity is accepted.
+
+The cutoff is verified but does not expand the selected sunny composition.
+Easy exact targets through 27 BEVs terminate in about 3.6 seconds, leaving
+47.8 seconds for exact `28/4`. That target still has no Stage-1 incumbent; two
+complete candidate assignments fail exact Stage 2. These are assignment-level
+failures only because no IIS-backed exact-composition infeasibility certificate
+exists.
+
+Release remains `BLOCKED`. Sunny certified gap is 3.927573% and rain is
+2.387096%, both above 0.1%; raw gaps are 100%. Post-run reporting and candidate
+diagnostic fixes require a new clean commit and fresh evidence: the Phase-4
+comparison table now reads the integrated certified gap, and internal Phase-3
+candidate failures now receive an IIS/path diagnostics directory without
+enabling recursive feedback. Focused regressions pass (`35`) and the complete
+suite passes (`1242 passed in 64.24s`). The completed SHA-99a2035 artifacts are
+not relabelled as results of those later fixes.
+
 ## 2026-08-09 exact `28/4` boundary search correction is awaiting evidence
 
 The completed clean-SHA pair proves a PV response through `27/5` sunny versus

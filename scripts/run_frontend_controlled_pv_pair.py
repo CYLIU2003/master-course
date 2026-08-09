@@ -1603,6 +1603,11 @@ def _solver_row(case: str, case_dir: Path) -> dict[str, Any]:
         for step in steps
         if isinstance(step, Mapping)
     )
+    certified_gap = _number(settings.get("certified_mip_gap_ratio"))
+    if certified_gap is None:
+        certified_gap = _number(
+            settings.get("stage1_certified_mip_gap_ratio")
+        )
     return {
         "case": case,
         "run_id": Path(
@@ -1630,6 +1635,7 @@ def _solver_row(case: str, case_dir: Path) -> dict[str, Any]:
         "stage1_certified_gap": settings.get(
             "stage1_certified_mip_gap_ratio"
         ),
+        "certified_gap": certified_gap,
         "requested_gap": settings.get("mip_gap_requested_ratio"),
         "termination_reason": settings.get("stage1_termination_reason"),
         "node_count": telemetry_final.get("explored_node_count"),
@@ -1838,7 +1844,7 @@ def _research_values(
             "case_execution_metadata.json",
         ),
         "Certified MILP gap": (
-            solver_row.get("stage1_certified_gap"),
+            solver_row.get("certified_gap"),
             "ratio",
             "solver_settings.json",
         ),
