@@ -1,5 +1,27 @@
 # master-course
 
+## 2026-08-09 current PV-1000 controlled-pair result
+
+- Clean frozen commit `93d122e1fc929d4833f2997560fa16cf7523e96d`
+  completed fresh frontend Prepare, day-ahead Phase 4, and 24/24 Rolling for
+  both cases at
+  `output/formal_pair_20260809_flat30_pv1000_bess6000_phase4_pairhash_93d122e_gap001`.
+  Both cases served 264/264 trips, used the same 60-vehicle/10-charger scope,
+  flat 30 JPY/kWh energy, zero demand charge, a 1,000 kW PV rating, and a
+  6,000 kWh BESS returning from 3,000 to 3,000 kWh. Only the separately hashed
+  actual-day PV curve differed.
+- Sunny generated 6,056.25 kWh and used 27 BEVs / 5 ICE buses for 183 / 81
+  trips. Rain generated 996.2 kWh and used 21 / 11 for 91 / 173 trips. The
+  controlled comparison is accepted and demonstrates a weather response
+  without a hidden BEV or weather bias.
+- Both integrated solves stopped at the 3,600-second limit with a 100% raw
+  gap. They are physically valid, accounting-reconciled incumbents, not
+  certified global optima. Formal research release remains `BLOCKED`.
+- Pair-manifest schema v2 keeps these two statements separate:
+  `accepted_for_controlled_pv_sensitivity_comparison` may be true for matched,
+  physically valid incumbents, while `formal_research_submission_ready` is
+  fail-closed unless both requested MIP-gap certificates are present.
+
 ## 2026-08-09 Phase 4 seed wall-budget correction
 
 - Clean commit `bf3fc2907fe852b39aa303272287e2133bd628a9` was freshly

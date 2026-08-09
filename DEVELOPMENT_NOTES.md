@@ -2702,3 +2702,31 @@ locks this distinction in place.
   control payloads produced the same hash on both sides. Because acceptance
   code changed after the pair ran, those outputs remain evidence for SHA
   `b29c6e0` and are not relabelled as a formal result for the new commit.
+
+# 2026-08-09 - PV1000 pair rerun and pair-readiness gap gate
+
+- Clean frozen SHA `93d122e1fc929d4833f2997560fa16cf7523e96d`
+  completed the fresh controlled pair at
+  `output/formal_pair_20260809_flat30_pv1000_bess6000_phase4_pairhash_93d122e_gap001`.
+  Sunny used 27 BEVs / 5 ICE buses for 183 / 81 trips; rain used 21 / 11 for
+  91 / 173. Both served 264/264, completed 24/24 Rolling, returned BEV/BESS
+  SOC, reconciled executed-day accounting, and matched every declared non-PV
+  control under comparison hash
+  `18e7afc99d1aae1f118da8b3beceb65d11a66dc30552ef7bd60c31fb82e80cf1`.
+- Sunny generated 6,056.25 kWh, bought no grid energy, and curtailed 3,606.64
+  kWh. Rain generated 996.2 kWh and bought 124.985 kWh. The observed 27/5
+  versus 21/11 composition is accepted controlled-sensitivity evidence, but
+  both integrated solves stopped at a 100% raw gap instead of the requested
+  0.1%, so the completion audit remains `BLOCKED`.
+- Post-run review found that pair manifest v1 could still write
+  `formal_research_submission_ready=true` because it discharged the pending
+  comparison blocker without consulting each run's `mip_gap_target_met`.
+  Manifest v2 now retains controlled-comparison acceptance separately and
+  requires a feasible incumbent plus the requested MIP-gap certificate in
+  both cases before formal readiness can become true. Missing legacy solver
+  telemetry fails closed.
+- Focused manifest tests pass (`10 passed`). Rebuilding only the pair manifest
+  from the frozen run artifacts in a separate diagnostic directory produces
+  comparison accepted=true, formal ready=false, with the two missing gap
+  certificates reported explicitly. The original SHA-93d artifacts are not
+  relabelled as results of the post-run reporting fix.

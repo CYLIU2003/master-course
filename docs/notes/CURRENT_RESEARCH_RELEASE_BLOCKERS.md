@@ -1,5 +1,35 @@
 # Current research release blockers
 
+## 2026-08-09 current controlled pair: response verified, optimality blocked
+
+Clean frozen SHA `93d122e1fc929d4833f2997560fa16cf7523e96d`
+completed the fresh PV-only controlled pair at
+`output/formal_pair_20260809_flat30_pv1000_bess6000_phase4_pairhash_93d122e_gap001`.
+All declared non-PV controls and the comparison hash match. Both cases served
+264/264 trips, passed physical validation, completed 24/24 Rolling, returned
+BEV/BESS SOC, and reconciled the solver objective to executed-day accounting.
+
+The feasible response is now explicit: sunny used 27 BEVs / 5 ICE buses and
+183 / 81 trips; rain used 21 / 11 and 91 / 173. Sunny generated 6,056.25 kWh,
+bought zero grid energy, and curtailed 3,606.64 kWh. Rain generated 996.2 kWh
+and bought 124.985 kWh. This supports a controlled PV-sensitivity claim, not
+an optimal-composition claim.
+
+Release remains `BLOCKED` because both integrated runs reached 3,600 seconds
+with a 100% raw gap instead of the requested 0.1%. Sunny composition search
+found physically feasible rows through 27 BEVs and decreasing cost through
+that boundary; 28--32 were time-limit unresolved, not certified infeasible.
+Thus 27 is an observed search frontier, not a proven physical or economic
+maximum.
+
+Post-run review also found that pair manifest v1 incorrectly wrote
+`formal_research_submission_ready=true` while the completion audit correctly
+blocked both missing gap certificates. Manifest v2 separates controlled-pair
+acceptance from formal readiness and fails the latter closed unless both runs
+record feasible incumbents and `mip_gap_target_met=true`. This reporting fix
+has unit and diagnostic rebuild evidence; it does not relabel the frozen
+SHA-93d solver outputs as evidence for the subsequent code commit.
+
 ## 2026-08-09 Phase 4 seed recourse was starved by model-build wall time
 
 The fresh sunny formal attempt from clean SHA

@@ -188,6 +188,22 @@ def _case_base_release_gate_passes(claim_scope: Mapping[str, Any]) -> bool:
     )
 
 
+def _requested_mip_gap_is_certified(case: Mapping[str, Any]) -> bool:
+    """Require the recorded full-run gap target for formal pair readiness.
+
+    A physically valid incumbent is sufficient for a controlled sensitivity
+    comparison, but it is not sufficient for a formal optimality result.  The
+    per-run solver settings are the canonical source for this distinction.
+    Missing legacy telemetry therefore fails closed.
+    """
+
+    settings = dict(case.get("solver_settings") or {})
+    return bool(
+        settings.get("has_feasible_incumbent") is True
+        and settings.get("mip_gap_target_met") is True
+    )
+
+
 def _phase4_integrated_composition_is_certified(
     case: Mapping[str, Any],
 ) -> bool:
@@ -371,22 +387,35 @@ def build_frontend_pv_pair_artifacts(
         baseline["pv_profile"], counterfactual["pv_profile"]
     )
     rows = _comparison_rows(baseline, counterfactual)
-    both_case_base_release_gates_pass = all(
-        checks[name]
-        for name in (
-            "baseline_case_base_release_gate_passes",
-            "counterfactual_case_base_release_gate_passes",
-        )
-    )
     accepted = not failed_checks
-    payload = {
-        "schema_version": "frontend_pv_pair_manifest_v1",
-        "accepted_for_controlled_pv_sensitivity_comparison": accepted,
-        "formal_research_submission_ready": bool(
-            accepted and both_case_base_release_gates_pass
+    formal_release_checks = {
+        "controlled_pv_sensitivity_comparison_accepted": accepted,
+        "baseline_case_base_release_gate_passes": checks[
+            "baseline_case_base_release_gate_passes"
+        ],
+        "counterfactual_case_base_release_gate_passes": checks[
+            "counterfactual_case_base_release_gate_passes"
+        ],
+        "baseline_requested_mip_gap_certified": (
+            _requested_mip_gap_is_certified(baseline)
         ),
+        "counterfactual_requested_mip_gap_certified": (
+            _requested_mip_gap_is_certified(counterfactual)
+        ),
+    }
+    formal_release_failed_checks = sorted(
+        name
+        for name, passed in formal_release_checks.items()
+        if passed is not True
+    )
+    payload = {
+        "schema_version": "frontend_pv_pair_manifest_v2",
+        "accepted_for_controlled_pv_sensitivity_comparison": accepted,
+        "formal_research_submission_ready": not formal_release_failed_checks,
         "checks": checks,
         "failed_checks": failed_checks,
+        "formal_release_checks": formal_release_checks,
+        "formal_release_failed_checks": formal_release_failed_checks,
         "release_evidence_errors": {
             "baseline": {
                 "solver_objective_accounting": (
@@ -483,6 +512,13 @@ def build_frontend_pv_pair_artifacts(
         *[
             f"- {name}: `{'PASS' if passed else 'FAIL'}`"
             for name, passed in checks.items()
+        ],
+        "",
+        "## Formal release checks",
+        "",
+        *[
+            f"- {name}: `{'PASS' if passed else 'FAIL'}`"
+            for name, passed in formal_release_checks.items()
         ],
         "",
         "## Comparison",

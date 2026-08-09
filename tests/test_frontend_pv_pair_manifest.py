@@ -63,6 +63,7 @@ def _case(
     artifact_contract_accepted: bool = True,
     terminal_run_state: str = "complete",
     comparison_requested: bool = True,
+    mip_gap_target_met: bool = True,
 ) -> None:
     service_date = "2025-08-05"
     pv_source_date = (
@@ -153,6 +154,13 @@ def _case(
         _valid_composition_certificate(),
     )
     _write_json(
+        run_dir / "solver_settings.json",
+        {
+            "has_feasible_incumbent": True,
+            "mip_gap_target_met": mip_gap_target_met,
+        },
+    )
+    _write_json(
         run_dir / "effective_pv_profiles.json",
         {"forecast_by_depot": {"dep-1": pv_values}},
     )
@@ -189,12 +197,53 @@ def test_pair_manifest_proves_fixed_controls_and_exact_pv_difference(
 
     assert manifest["accepted_for_controlled_pv_sensitivity_comparison"] is True
     assert manifest["formal_research_submission_ready"] is True
+    assert manifest["formal_release_failed_checks"] == []
     assert manifest["pv_difference"]["total_difference_kwh"] == pytest.approx(
         -2.5
     )
     assert manifest["assignment_hashes_equal"] is True
     assert (output_dir / "comparison_table.csv").is_file()
     assert (output_dir / "comparison_report.md").is_file()
+
+
+def test_pair_manifest_keeps_comparison_but_blocks_formal_ready_when_gap_missed(
+    tmp_path: Path,
+) -> None:
+    baseline = tmp_path / "baseline"
+    counterfactual = tmp_path / "counterfactual"
+    output_dir = tmp_path / "pair"
+    _case(
+        baseline,
+        role="baseline",
+        control_hash="fixed-controls",
+        pv_hash="high-pv",
+        pv_values=[1.0, 2.0],
+        total_cost=100.0,
+        mip_gap_target_met=False,
+    )
+    _case(
+        counterfactual,
+        role="pv_curve_counterfactual",
+        control_hash="fixed-controls",
+        pv_hash="low-pv",
+        pv_values=[0.2, 0.3],
+        total_cost=120.0,
+        mip_gap_target_met=False,
+    )
+
+    manifest = build_frontend_pv_pair_artifacts(
+        baseline_run_dir=baseline,
+        counterfactual_run_dir=counterfactual,
+        output_dir=output_dir,
+    )
+
+    assert manifest["accepted_for_controlled_pv_sensitivity_comparison"] is True
+    assert manifest["formal_research_submission_ready"] is False
+    assert manifest["failed_checks"] == []
+    assert manifest["formal_release_failed_checks"] == [
+        "baseline_requested_mip_gap_certified",
+        "counterfactual_requested_mip_gap_certified",
+    ]
 
 
 def test_phase4_gap_certificate_replaces_stage1_composition_artifact(
