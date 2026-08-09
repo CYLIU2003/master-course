@@ -92,12 +92,14 @@ def _integrated_search_controls(
             "mip_focus": 3,
             "heuristics": 0.01,
             "presolve": 1,
+            "nodefile_start_gb": 0.5,
         }
     return {
         "profile": "find_feasible_solution_then_bound",
         "mip_focus": 1,
         "heuristics": 0.5,
         "presolve": 2,
+        "nodefile_start_gb": 0.5,
     }
 
 
@@ -1400,9 +1402,8 @@ class GurobiMILPAdapter:
         import os
         enable_milp_diagnostics = bool(os.environ.get("MILP_ENABLE_DIAGNOSTICS", ""))
         diagnostic_output_dir = os.environ.get("MILP_DIAGNOSTIC_DIR", "output/milp_diagnostics")
-        
+
         if enable_milp_diagnostics:
-            from pathlib import Path
             Path(diagnostic_output_dir).mkdir(parents=True, exist_ok=True)
             model.Params.OutputFlag = 1
             log_file = os.path.join(diagnostic_output_dir, f"gurobi_{int(time.time())}.log")
@@ -1993,6 +1994,7 @@ class GurobiMILPAdapter:
         integrated_vehicle_terminal_soc_target_kwh: Dict[str, float] = {}
         fuel_l_var: Dict[Tuple[str, int], Any] = {}
         refuel_l_var: Dict[Tuple[str, int], Any] = {}
+        refuel_on_var: Dict[Tuple[str, int], Any] = {}
         g_var: Dict[int, Any] = {}
         pv_ch_var: Dict[int, Any] = {}
         p_avg_var: Dict[int, Any] = {}
@@ -2024,6 +2026,8 @@ class GurobiMILPAdapter:
         physical_charger_assignment_var: Dict[Tuple[str, str, int], Any] = {}
         physical_charger_power_var: Dict[Tuple[str, str, int], Any] = {}
         physical_charger_metadata: Dict[str, Any] = {}
+        integrated_activity_blocking_constraint_count = 0
+        integrated_activity_blocking_implication_count = 0
         w_on_var = None
         w_off_var = None
         effective_depot_energy_assets: Dict[str, DepotEnergyAsset] = {}
@@ -2608,19 +2612,45 @@ class GurobiMILPAdapter:
                         if (vehicle.vehicle_id, trip.trip_id) in y
                         and self._trip_active_in_slot(problem, trip.departure_min, trip.arrival_min, slot_idx)
                     )
-                    for running_assignment_var in running_assignment_vars:
-                        model.addConstr(
-                            charge_on_var[(vehicle.vehicle_id, slot_idx)]
-                            <= 1 - running_assignment_var
+                    added_rows, represented_implications = (
+                        self._add_aggregated_binary_activity_block(
+                            model,
+                            gp=gp,
+                            activity_var=charge_on_var[
+                                (vehicle.vehicle_id, slot_idx)
+                            ],
+                            blocking_vars=running_assignment_vars,
+                            name=(
+                                "integrated_charge_blocked_by_trip__"
+                                f"{vehicle.vehicle_id}__{slot_idx}"
+                            ),
                         )
+                    )
+                    integrated_activity_blocking_constraint_count += added_rows
+                    integrated_activity_blocking_implication_count += (
+                        represented_implications
+                    )
                     away_terms = away_from_home_slot_terms.get(
                         (vehicle.vehicle_id, slot_idx), []
                     )
-                    for away_var in away_terms:
-                        model.addConstr(
-                            charge_on_var[(vehicle.vehicle_id, slot_idx)]
-                            <= 1 - away_var
+                    added_rows, represented_implications = (
+                        self._add_aggregated_binary_activity_block(
+                            model,
+                            gp=gp,
+                            activity_var=charge_on_var[
+                                (vehicle.vehicle_id, slot_idx)
+                            ],
+                            blocking_vars=away_terms,
+                            name=(
+                                "integrated_charge_blocked_away__"
+                                f"{vehicle.vehicle_id}__{slot_idx}"
+                            ),
                         )
+                    )
+                    integrated_activity_blocking_constraint_count += added_rows
+                    integrated_activity_blocking_implication_count += (
+                        represented_implications
+                    )
                     proxy_terms = home_depot_slot_proxy_terms.get((vehicle.vehicle_id, slot_idx), [])
                     slot_day_idx = slot_idx // slots_per_day
                     assigned_day_indices = assignment_day_indices_by_vehicle.get(vehicle.vehicle_id, set())
@@ -2764,6 +2794,14 @@ class GurobiMILPAdapter:
                         ub=max(refuel_per_slot_l, 0.0),
                         vtype=GRB.CONTINUOUS,
                     )
+                    refuel_on_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(
+                        vtype=GRB.BINARY,
+                    )
+                    model.addConstr(
+                        refuel_l_var[(vehicle.vehicle_id, slot_idx)]
+                        <= max(refuel_per_slot_l, 0.0)
+                        * refuel_on_var[(vehicle.vehicle_id, slot_idx)]
+                    )
 
                 if initial_ice_fuel_ratio_override is not None:
                     initial_l = initial_ice_fuel_ratio_override * tank_cap_l
@@ -2827,29 +2865,55 @@ class GurobiMILPAdapter:
                             slot_idx,
                         )
                     )
-                    for running_assignment_var in running_assignment_vars:
-                        model.addConstr(
-                            refuel_l_var[(vehicle.vehicle_id, slot_idx)]
-                            <= max(refuel_per_slot_l, 0.0)
-                            * (1 - running_assignment_var)
+                    added_rows, represented_implications = (
+                        self._add_aggregated_binary_activity_block(
+                            model,
+                            gp=gp,
+                            activity_var=refuel_on_var[
+                                (vehicle.vehicle_id, slot_idx)
+                            ],
+                            blocking_vars=running_assignment_vars,
+                            name=(
+                                "integrated_refuel_blocked_by_trip__"
+                                f"{vehicle.vehicle_id}__{slot_idx}"
+                            ),
                         )
+                    )
+                    integrated_activity_blocking_constraint_count += added_rows
+                    integrated_activity_blocking_implication_count += (
+                        represented_implications
+                    )
                     proxy_terms = home_depot_slot_proxy_terms.get((vehicle.vehicle_id, slot_idx), [])
                     if proxy_terms:
                         model.addConstr(
-                            refuel_l_var[(vehicle.vehicle_id, slot_idx)]
-                            <= max(refuel_per_slot_l, 0.0) * gp.quicksum(proxy_terms)
+                            refuel_on_var[(vehicle.vehicle_id, slot_idx)]
+                            <= gp.quicksum(proxy_terms)
                         )
                     else:
                         model.addConstr(
-                            refuel_l_var[(vehicle.vehicle_id, slot_idx)] == 0
+                            refuel_on_var[(vehicle.vehicle_id, slot_idx)] == 0
                         )
-                    for away_var in away_from_home_slot_terms.get(
+                    away_terms = away_from_home_slot_terms.get(
                         (vehicle.vehicle_id, slot_idx), []
-                    ):
-                        model.addConstr(
-                            refuel_l_var[(vehicle.vehicle_id, slot_idx)]
-                            <= max(refuel_per_slot_l, 0.0) * (1 - away_var)
+                    )
+                    added_rows, represented_implications = (
+                        self._add_aggregated_binary_activity_block(
+                            model,
+                            gp=gp,
+                            activity_var=refuel_on_var[
+                                (vehicle.vehicle_id, slot_idx)
+                            ],
+                            blocking_vars=away_terms,
+                            name=(
+                                "integrated_refuel_blocked_away__"
+                                f"{vehicle.vehicle_id}__{slot_idx}"
+                            ),
                         )
+                    )
+                    integrated_activity_blocking_constraint_count += added_rows
+                    integrated_activity_blocking_implication_count += (
+                        represented_implications
+                    )
 
                 vehicle_arcs = [
                     (f_trip, t_trip)
@@ -3716,6 +3780,7 @@ class GurobiMILPAdapter:
             charge_power_var=c_var,
             discharge_power_var=d_var,
             vehicle_soc_var=s_var,
+            refuel_on_var=refuel_on_var,
             refuel_l_var=refuel_l_var,
             physical_charger_assignment_var=(
                 physical_charger_assignment_var
@@ -3900,14 +3965,11 @@ class GurobiMILPAdapter:
             )
             integrated_verified_start_vehicle_day_cap_constraint_count = 1
 
-        # Materialize the exact cutoff constraints before recording model-size
-        # diagnostics.  Gurobi also updates implicitly at optimize(), but an
-        # explicit update keeps the exported pre-solve statistics auditable.
-        if (
-            integrated_verified_start_objective_cap_constraint_count
-            or integrated_verified_start_vehicle_day_cap_constraint_count
-        ):
-            model.update()
+        # Materialize every variable and row before recording model-size
+        # diagnostics.  Gurobi also updates implicitly at optimize(), but
+        # relying on that left cold-start runs reporting zero variables and
+        # constraints while warm-start runs reported the real model size.
+        model.update()
 
         # Define status_map early for diagnostics
         status_map = {
@@ -3985,6 +4047,14 @@ class GurobiMILPAdapter:
         model.Params.Presolve = int(
             integrated_search_controls["presolve"]
         )
+        integrated_nodefile_dir = (
+            Path(tempfile.gettempdir()) / "master_course_gurobi_nodes"
+        )
+        integrated_nodefile_dir.mkdir(parents=True, exist_ok=True)
+        model.Params.NodefileStart = float(
+            integrated_search_controls["nodefile_start_gb"]
+        )
+        model.Params.NodefileDir = str(integrated_nodefile_dir)
         phase_started_at = time.perf_counter()
         model.optimize(_capture_first_feasible)
         phase_wall_sec = float(time.perf_counter() - phase_started_at)
@@ -3997,6 +4067,8 @@ class GurobiMILPAdapter:
                 "mip_focus": int(model.Params.MIPFocus),
                 "heuristics": float(model.Params.Heuristics),
                 "presolve": int(model.Params.Presolve),
+                "nodefile_start_gb": float(model.Params.NodefileStart),
+                "nodefile_dir": str(model.Params.NodefileDir),
                 "symmetry": int(model.Params.Symmetry),
                 "solver_status": status_map.get(
                     model.Status, f"status_{model.Status}"
@@ -4718,6 +4790,10 @@ class GurobiMILPAdapter:
                 "integrated_mip_focus": int(model.Params.MIPFocus),
                 "integrated_heuristics": float(model.Params.Heuristics),
                 "integrated_symmetry": int(model.Params.Symmetry),
+                "integrated_nodefile_start_gb": float(
+                    model.Params.NodefileStart
+                ),
+                "integrated_nodefile_dir": str(model.Params.NodefileDir),
                 "integrated_search_profile": {
                     "schema_version": "phase4_integrated_search_profile_v2",
                     "verified_feasible_start": verified_integrated_start,
@@ -4935,6 +5011,20 @@ class GurobiMILPAdapter:
                 ),
                 "integrated_redundant_arc_link_constraints_omitted": (
                     integrated_redundant_arc_link_constraints_omitted
+                ),
+                "integrated_activity_blocking_constraint_count": (
+                    integrated_activity_blocking_constraint_count
+                ),
+                "integrated_activity_blocking_implication_count": (
+                    integrated_activity_blocking_implication_count
+                ),
+                "integrated_activity_blocking_constraints_aggregated": max(
+                    integrated_activity_blocking_implication_count
+                    - integrated_activity_blocking_constraint_count,
+                    0,
+                ),
+                "integrated_refuel_activation_binary_count": len(
+                    refuel_on_var
                 ),
                 "integrated_fragment_pairwise_constraint_count": (
                     integrated_fragment_pairwise_constraint_count
@@ -5730,8 +5820,34 @@ class GurobiMILPAdapter:
                     "Stage 1 feasibility no-good cut references assignment "
                     f"pairs absent from the current full model: {missing_pairs[:5]}"
                 )
+            exact_pattern_vehicle_ids = tuple(
+                sorted(
+                    {
+                        str(vehicle_id)
+                        for vehicle_id in (
+                            raw_cut.get("exact_pattern_vehicle_ids") or ()
+                        )
+                    }
+                )
+            )
+            cut_vehicle_ids = {vehicle_id for vehicle_id, _ in cut_pairs}
+            if exact_pattern_vehicle_ids and cut_vehicle_ids != set(
+                exact_pattern_vehicle_ids
+            ):
+                raise ValueError(
+                    "Exact-pattern Stage 1 no-good cut vehicle IDs must match "
+                    "the included assignment-pair vehicle IDs"
+                )
+            included_pair_set = set(cut_pairs)
+            excluded_pairs = tuple(
+                pair
+                for pair in y
+                if pair[0] in exact_pattern_vehicle_ids
+                and pair not in included_pair_set
+            )
             stage1.addConstr(
                 gp.quicksum(y[pair] for pair in cut_pairs)
+                - gp.quicksum(y[pair] for pair in excluded_pairs)
                 <= len(cut_pairs) - 1,
                 name=f"stage1_stage2_nogood__{cut_index}",
             )
@@ -12488,6 +12604,30 @@ class GurobiMILPAdapter:
                 and remaining_feedback_budget_sec > 0.0
             )
             if can_add_proven_infeasible_assignment_cut:
+                iis_cut_scope = self._classify_stage2_iis_assignment_cut_scope(
+                    iis_constraint_names=tuple(
+                        diagnostic_metadata.get(
+                            "stage2_iis_constraint_names", ()
+                        )
+                        or ()
+                    ),
+                    iis_variable_bound_names=tuple(
+                        diagnostic_metadata.get(
+                            "stage2_iis_variable_bound_names", ()
+                        )
+                        or ()
+                    ),
+                    assigned_vehicle_ids=tuple(assigned_paths),
+                )
+                exact_pattern_vehicle_ids = tuple(
+                    iis_cut_scope["vehicle_ids"]
+                )
+                cut_vehicle_ids = (
+                    exact_pattern_vehicle_ids
+                    if iis_cut_scope["cut_scope"]
+                    == "vehicle_local_exact_assignment_pattern"
+                    else tuple(sorted(assigned_paths))
+                )
                 assignment_pairs_for_cut = tuple(
                     sorted(
                         (
@@ -12495,6 +12635,7 @@ class GurobiMILPAdapter:
                             str(trip_id),
                         )
                         for vehicle_id, trip_ids in assigned_paths.items()
+                        if vehicle_id in cut_vehicle_ids
                         for trip_id in trip_ids
                     )
                 )
@@ -12514,9 +12655,11 @@ class GurobiMILPAdapter:
                     )
                     existing_cuts.append(
                         {
-                            "cut_type": (
-                                "stage2_proven_infeasible_full_assignment_"
-                                "no_good"
+                            "cut_type": iis_cut_scope["cut_type"],
+                            "cut_scope": iis_cut_scope["cut_scope"],
+                            "cut_scope_reason": iis_cut_scope["reason"],
+                            "exact_pattern_vehicle_ids": list(
+                                exact_pattern_vehicle_ids
                             ),
                             "candidate_hash": candidate_hash,
                             "assignment_pairs": [
@@ -12532,6 +12675,12 @@ class GurobiMILPAdapter:
                             "iis_constraint_count": int(
                                 diagnostic_metadata.get(
                                     "stage2_iis_constraint_count", 0
+                                )
+                                or 0
+                            ),
+                            "iis_variable_bound_count": int(
+                                diagnostic_metadata.get(
+                                    "stage2_iis_variable_bound_count", 0
                                 )
                                 or 0
                             ),
@@ -12559,8 +12708,12 @@ class GurobiMILPAdapter:
                                 )
                                 or 0
                             ),
-                            "cut_type": (
-                                "full_assignment_no_good_cut"
+                            "cut_type": iis_cut_scope["cut_type"],
+                            "cut_scope": iis_cut_scope["cut_scope"],
+                            "cut_scope_reason": iis_cut_scope["reason"],
+                            "cut_vehicle_ids": list(cut_vehicle_ids),
+                            "cut_assignment_pair_count": len(
+                                assignment_pairs_for_cut
                             ),
                             "stage1_runtime_seconds": stage1_runtime_sec,
                             "stage2_runtime_seconds": float(
@@ -13184,6 +13337,89 @@ class GurobiMILPAdapter:
             final_plan,
         )
 
+    @staticmethod
+    def _classify_stage2_iis_assignment_cut_scope(
+        *,
+        iis_constraint_names: Sequence[str],
+        iis_variable_bound_names: Sequence[str],
+        assigned_vehicle_ids: Sequence[str],
+    ) -> Dict[str, Any]:
+        """Choose the narrowest IIS-backed Stage 1 no-good cut that is safe.
+
+        A vehicle-local IIS proves only that vehicle's *exact* assignment
+        pattern infeasible.  It must not cut supersets of that path because an
+        inserted trip can change deadhead structure.  Shared charger, depot,
+        grid, or variable-bound IIS members require the conservative full-plan
+        cut used historically.
+        """
+        names = tuple(str(name) for name in iis_constraint_names if str(name))
+        variable_bounds = tuple(
+            str(name) for name in iis_variable_bound_names if str(name)
+        )
+        vehicle_ids = tuple(sorted({str(value) for value in assigned_vehicle_ids}))
+        local_prefixes = (
+            "soc_initial__",
+            "soc_transition__",
+            "soc_lower__",
+            "soc_upper__",
+            "departure_soc__",
+            "terminal_soc__",
+            "charge_availability__",
+            "charge_power_vehicle__",
+        )
+
+        def constraint_vehicle_id(name: str) -> Optional[str]:
+            if not name.startswith(local_prefixes):
+                return None
+            for vehicle_id in vehicle_ids:
+                if any(
+                    name.startswith(f"{prefix}{vehicle_id}__")
+                    or name == f"{prefix}{vehicle_id}"
+                    for prefix in local_prefixes
+                ):
+                    return vehicle_id
+            return None
+
+        implicated_vehicle_ids = tuple(
+            sorted(
+                {
+                    vehicle_id
+                    for name in names
+                    for vehicle_id in (constraint_vehicle_id(name),)
+                    if vehicle_id is not None
+                }
+            )
+        )
+        all_constraints_vehicle_local = bool(names) and all(
+            constraint_vehicle_id(name) is not None for name in names
+        )
+        if (
+            all_constraints_vehicle_local
+            and implicated_vehicle_ids
+            and not variable_bounds
+        ):
+            return {
+                "cut_type": "vehicle_local_exact_assignment_pattern_no_good_cut",
+                "cut_scope": "vehicle_local_exact_assignment_pattern",
+                "vehicle_ids": implicated_vehicle_ids,
+                "reason": "iis_contains_only_vehicle_local_constraints",
+            }
+
+        if variable_bounds:
+            reason = "iis_contains_variable_bounds"
+        elif not names:
+            reason = "iis_constraint_list_empty"
+        elif not all_constraints_vehicle_local:
+            reason = "iis_contains_shared_or_unknown_constraints"
+        else:
+            reason = "iis_vehicle_identity_unresolved"
+        return {
+            "cut_type": "full_assignment_no_good_cut",
+            "cut_scope": "full_assignment",
+            "vehicle_ids": (),
+            "reason": reason,
+        }
+
     def _persist_stage2_failure_diagnostics(
         self,
         *,
@@ -13376,7 +13612,9 @@ class GurobiMILPAdapter:
             )
             max_charge = len(chargeable_slots) * charge_max_kw * timestep_h * 0.95
             required = trip_energy + deadhead_energy + return_energy + terminal_requirement - minimum
-            shortage = max(required - ((initial_kwh - minimum) + max_charge), 0.0)
+            aggregate_shortage = max(
+                required - ((initial_kwh - minimum) + max_charge), 0.0
+            )
             row = {
                 "vehicle_id": vehicle_id,
                 "vehicle_type": str(vehicle.vehicle_type),
@@ -13404,8 +13642,7 @@ class GurobiMILPAdapter:
                 ),
                 "max_chargeable_energy_kwh": max_charge,
                 "required_energy_kwh": required,
-                "energy_shortage_kwh": shortage,
-                "individually_energy_feasible": shortage <= 1.0e-9,
+                "aggregate_energy_shortage_kwh": aggregate_shortage,
                 "first_departure_trip_id": str(ordered[0].trip_id),
                 "first_departure_min": int(ordered[0].departure_min),
                 "last_arrival_min": int(ordered[-1].arrival_min),
@@ -13415,6 +13652,7 @@ class GurobiMILPAdapter:
             maximum_soc_before_slot: Dict[int, float] = {}
             cumulative_charge_before_slot: Dict[int, float] = {}
             maximum_soc = initial_kwh
+            minimum_maximum_soc_observed = initial_kwh
             cumulative_charge = 0.0
             for slot_idx in sorted(valid_slot_indices):
                 maximum_soc_before_slot[slot_idx] = maximum_soc
@@ -13433,8 +13671,13 @@ class GurobiMILPAdapter:
                     ),
                     0.0,
                 )
+                minimum_maximum_soc_observed = min(
+                    minimum_maximum_soc_observed,
+                    maximum_soc,
+                )
 
             previous_trip: Optional[ProblemTrip] = None
+            maximum_departure_shortage = 0.0
             for trip in ordered:
                 deadhead_before_departure = (
                     startup_precheck.startup_deadhead_energy_kwh
@@ -13461,6 +13704,19 @@ class GurobiMILPAdapter:
                     cap_kwh=cap,
                     final_soc_floor_kwh=minimum,
                 ) + deadhead_before_departure
+                departure_shortage = (
+                    max(
+                        required_departure
+                        - maximum_soc_before_departure,
+                        0.0,
+                    )
+                    if maximum_soc_before_departure is not None
+                    else float("inf")
+                )
+                maximum_departure_shortage = max(
+                    maximum_departure_shortage,
+                    departure_shortage,
+                )
                 departure_rows.append(
                     {
                         "vehicle_id": vehicle_id,
@@ -13471,12 +13727,8 @@ class GurobiMILPAdapter:
                         ),
                         "required_departure_soc_kwh": required_departure,
                         "shortage_kwh": (
-                            max(
-                                required_departure
-                                - maximum_soc_before_departure,
-                                0.0,
-                            )
-                            if maximum_soc_before_departure is not None
+                            departure_shortage
+                            if math.isfinite(departure_shortage)
                             else None
                         ),
                         "deadhead_energy_before_departure_kwh": deadhead_before_departure,
@@ -13488,6 +13740,69 @@ class GurobiMILPAdapter:
                     }
                 )
                 previous_trip = trip
+
+            scheduled_load_kwh = sum(
+                max(
+                    float(
+                        trip_load_by_vehicle_slot.get(
+                            (vehicle_id, slot_idx), 0.0
+                        )
+                        or 0.0
+                    ),
+                    0.0,
+                )
+                for slot_idx in valid_slot_indices
+            )
+            unposted_terminal_load_kwh = max(
+                trip_energy
+                + deadhead_energy
+                + return_energy
+                - scheduled_load_kwh,
+                0.0,
+            )
+            time_ordered_terminal_soc_kwh = (
+                maximum_soc - unposted_terminal_load_kwh
+            )
+            minimum_soc_shortage = max(
+                minimum - minimum_maximum_soc_observed,
+                0.0,
+            )
+            terminal_soc_shortage = max(
+                terminal_requirement - time_ordered_terminal_soc_kwh,
+                0.0,
+            )
+            time_ordered_shortage = max(
+                maximum_departure_shortage,
+                minimum_soc_shortage,
+                terminal_soc_shortage,
+            )
+            row.update(
+                {
+                    "time_ordered_deliverable_charge_kwh": cumulative_charge,
+                    "time_ordered_unposted_terminal_load_kwh": (
+                        unposted_terminal_load_kwh
+                    ),
+                    "time_ordered_terminal_soc_kwh": (
+                        time_ordered_terminal_soc_kwh
+                    ),
+                    "time_ordered_minimum_soc_observed_kwh": (
+                        minimum_maximum_soc_observed
+                    ),
+                    "departure_soc_shortage_kwh": (
+                        maximum_departure_shortage
+                    ),
+                    "minimum_soc_shortage_kwh": minimum_soc_shortage,
+                    "terminal_soc_shortage_kwh": terminal_soc_shortage,
+                    "energy_shortage_kwh": time_ordered_shortage,
+                    "individually_energy_feasible": (
+                        time_ordered_shortage <= 1.0e-9
+                    ),
+                    "individual_energy_feasibility_semantics": (
+                        "optimistic_time_ordered_soc_without_shared_charger_"
+                        "or_depot_energy_competition"
+                    ),
+                }
+            )
 
         self._write_diagnostic_csv(output_dir / "stage1_candidate_assignment.csv", assignment_rows)
         self._write_diagnostic_csv(output_dir / "stage1_candidate_vehicle_paths.csv", path_rows)
@@ -13509,6 +13824,7 @@ class GurobiMILPAdapter:
             "departure_soc__",
             "terminal_soc__",
             "charge_availability__",
+            "charge_power_vehicle__",
             "charger_ports__",
             "charger_power__",
             "grid_limit__",
@@ -13532,11 +13848,33 @@ class GurobiMILPAdapter:
                 [{"constraint_name": name} for name in iis_constraint_names],
             )
             iis_written = True
+        iis_variable_bound_names = (
+            sorted(
+                {
+                    str(variable.VarName)
+                    for variable in stage2.getVars()
+                    if bool(getattr(variable, "IISLB", False))
+                    or bool(getattr(variable, "IISUB", False))
+                }
+            )
+            if iis_written
+            else []
+        )
+        if iis_variable_bound_names:
+            self._write_diagnostic_csv(
+                output_dir / "stage2_iis_variable_bounds.csv",
+                [
+                    {"variable_name": name}
+                    for name in iis_variable_bound_names
+                ],
+            )
         summary = {
             "stage2_status": self._status_name(GRB, stage2.Status),
             "iis_generated": iis_written,
             "iis_constraint_count": len(iis_constraint_names),
             "iis_constraint_names": iis_constraint_names,
+            "iis_variable_bound_count": len(iis_variable_bound_names),
+            "iis_variable_bound_names": iis_variable_bound_names,
             "constraint_count": len(all_constraint_names),
             "constraint_count_by_prefix": constraint_count_by_prefix,
             "vehicle_soc_semantics": "slot_start",
@@ -13583,6 +13921,8 @@ class GurobiMILPAdapter:
             "stage2_iis_generated": iis_written,
             "stage2_iis_constraint_count": len(iis_constraint_names),
             "stage2_iis_constraint_names": iis_constraint_names,
+            "stage2_iis_variable_bound_count": len(iis_variable_bound_names),
+            "stage2_iis_variable_bound_names": iis_variable_bound_names,
             "stage2_feedback_iteration": feedback_iteration,
         }
 
@@ -13808,6 +14148,7 @@ class GurobiMILPAdapter:
         charge_power_var: Mapping[Tuple[str, int], Any],
         discharge_power_var: Mapping[Tuple[str, int], Any],
         vehicle_soc_var: Mapping[Tuple[str, int], Any],
+        refuel_on_var: Mapping[Tuple[str, int], Any],
         refuel_l_var: Mapping[Tuple[str, int], Any],
         physical_charger_assignment_var: Mapping[
             Tuple[str, str, int], Any
@@ -14121,6 +14462,10 @@ class GurobiMILPAdapter:
             )
         for key, var in refuel_l_var.items():
             var.Start = float(refuel_l_by_key.get(key, 0.0))
+        for key, var in refuel_on_var.items():
+            var.Start = (
+                1.0 if refuel_l_by_key.get(key, 0.0) > 1.0e-9 else 0.0
+            )
 
         def _slot_value(
             mapping: Mapping[str, Mapping[int, float]],
@@ -18492,6 +18837,39 @@ class GurobiMILPAdapter:
         except (TypeError, ValueError):
             return default
         return parsed if parsed >= 1 else default
+
+    @staticmethod
+    def _add_aggregated_binary_activity_block(
+        model: Any,
+        *,
+        gp: Any,
+        activity_var: Any,
+        blocking_vars: Sequence[Any],
+        name: str,
+    ) -> Tuple[int, int]:
+        """Forbid one binary activity when any binary blocker is selected.
+
+        For ``m`` blockers, ``m * activity + sum(blockers) <= m`` is
+        integer-equivalent to the ``m`` individual implications
+        ``activity <= 1 - blocker_i``.  The aggregate form preserves every
+        feasible integer dispatch while avoiding one row per candidate trip
+        or deadhead arc in a coarse energy slot.
+
+        Returns:
+            A pair of the number of rows added and the number of individual
+            implications represented by that row.
+        """
+
+        blockers = tuple(blocking_vars)
+        blocker_count = len(blockers)
+        if blocker_count == 0:
+            return 0, 0
+        model.addConstr(
+            blocker_count * activity_var + gp.quicksum(blockers)
+            <= blocker_count,
+            name=name,
+        )
+        return 1, blocker_count
 
     def _safe_nonnegative_float(self, value: Any, *, default: float) -> float:
         try:

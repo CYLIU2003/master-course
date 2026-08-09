@@ -156,6 +156,19 @@ _RESULT_METRIC_LABELS = {
     "co2_cost": "CO2コスト",
     "total_co2_kg": "CO2排出量[kg]",
 }
+_RESULT_METRIC_LABELS.update(
+    {
+        "ev_used_count": "最終解 EV使用台数",
+        "ice_used_count": "最終解 ICE使用台数",
+        "stage1_primary_candidate_used_bev_count": (
+            "Stage 1初期候補 EV使用台数（最終解ではない）"
+        ),
+        "stage1_primary_candidate_used_ice_count": (
+            "Stage 1初期候補 ICE使用台数（最終解ではない）"
+        ),
+        "powertrain_composition_semantics": "動力構成の表示基準",
+    }
+)
 _PRIMARY_COST_BREAKDOWN_KEYS = (
     "total_cost",
     "total_cost_with_assets",
@@ -6373,6 +6386,15 @@ class App:
         weather_curve = dict(weather_policy.get("representative_curve") or {})
         charging_summary = dict(resp.get("charging_summary") or {})
         charging_totals = dict(charging_summary.get("totals") or {})
+        final_powertrain_composition = dict(
+            run_summary.get("final_used_powertrain_composition") or {}
+        )
+        stage1_primary_composition = dict(
+            run_summary.get(
+                "stage1_primary_candidate_used_powertrain_composition"
+            )
+            or {}
+        )
         weather_operation_mode = self._pick_text(
             weather_profile.get("operation_mode"),
             weather_forecast.get("operation_mode"),
@@ -6443,9 +6465,24 @@ class App:
                 run_summary.get("vehicle_count_used"),
                 kpi.get("vehicle_count_used"),
             ),
-            "ev_used_count": self._pick_number(run_summary.get("ev_used_count")),
+            "ev_used_count": self._pick_number(
+                final_powertrain_composition.get("used_bev"),
+                run_summary.get("ev_used_count"),
+            ),
             "ev_unused_count": self._pick_number(run_summary.get("ev_unused_count")),
-            "ice_used_count": self._pick_number(run_summary.get("ice_used_count")),
+            "ice_used_count": self._pick_number(
+                final_powertrain_composition.get("used_ice"),
+                run_summary.get("ice_used_count"),
+            ),
+            "stage1_primary_candidate_used_bev_count": self._pick_number(
+                stage1_primary_composition.get("used_bev")
+            ),
+            "stage1_primary_candidate_used_ice_count": self._pick_number(
+                stage1_primary_composition.get("used_ice")
+            ),
+            "powertrain_composition_semantics": self._pick_text(
+                run_summary.get("powertrain_composition_semantics")
+            ),
             "weather_class": weather_class,
             "weather_operation_mode": weather_operation_mode,
             "pv_utilization_rate": self._pick_number(

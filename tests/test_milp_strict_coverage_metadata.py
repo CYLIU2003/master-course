@@ -5,7 +5,7 @@ from dataclasses import replace
 import pytest
 
 from src.dispatch.models import DispatchContext, Trip, TurnaroundRule, VehicleProfile
-from src.gurobi_runtime import is_gurobi_available
+from src.gurobi_runtime import ensure_gurobi, is_gurobi_available
 from src.optimization.common.builder import ProblemBuilder
 from src.optimization.common.problem import (
     OptimizationConfig,
@@ -14,6 +14,7 @@ from src.optimization.common.problem import (
 )
 from src.optimization.milp.engine import MILPOptimizer
 from src.optimization.milp.solver_adapter import (
+    GurobiMILPAdapter,
     _best_objective_stop_from_certified_lower_bound,
     _configured_gurobi_feasibility_tol,
     _configured_gurobi_integrality_tol,
@@ -367,7 +368,13 @@ def test_integrated_omits_arc_links_implied_by_node_flow_equalities() -> None:
         ],
         turnaround_rules={"A": TurnaroundRule(stop_id="A", min_turnaround_min=0)},
         deadhead_rules={},
-        vehicle_profiles={"ICE": VehicleProfile(vehicle_type="ICE")},
+        vehicle_profiles={
+            "ICE": VehicleProfile(
+                vehicle_type="ICE",
+                fuel_tank_capacity_l=300.0,
+                fuel_consumption_l_per_km=0.2,
+            )
+        },
     )
     problem = ProblemBuilder().build_from_dispatch(
         context,
@@ -393,3 +400,62 @@ def test_integrated_omits_arc_links_implied_by_node_flow_equalities() -> None:
     assert result.solver_metadata[
         "integrated_redundant_arc_link_constraints_omitted"
     ] == 2
+    assert result.solver_metadata[
+        "integrated_activity_blocking_constraint_count"
+    ] > 0
+    assert result.solver_metadata[
+        "integrated_activity_blocking_implication_count"
+    ] >= result.solver_metadata[
+        "integrated_activity_blocking_constraint_count"
+    ]
+    assert result.solver_metadata[
+        "integrated_refuel_activation_binary_count"
+    ] > 0
+
+
+@pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
+def test_aggregated_activity_block_is_integer_equivalent_to_implications() -> None:
+    gp, grb = ensure_gurobi()
+
+    for activity_value in (0, 1):
+        for blocker_mask in range(8):
+            blocker_values = tuple(
+                int(bool(blocker_mask & (1 << position)))
+                for position in range(3)
+            )
+            model = gp.Model()
+            model.Params.OutputFlag = 0
+            activity = model.addVar(vtype=grb.BINARY)
+            blockers = tuple(model.addVar(vtype=grb.BINARY) for _ in range(3))
+            rows, implications = (
+                GurobiMILPAdapter._add_aggregated_binary_activity_block(
+                    model,
+                    gp=gp,
+                    activity_var=activity,
+                    blocking_vars=blockers,
+                    name="activity_block",
+                )
+            )
+            assert (rows, implications) == (1, 3)
+            activity.lb = activity_value
+            activity.ub = activity_value
+            for variable, value in zip(blockers, blocker_values):
+                variable.lb = value
+                variable.ub = value
+            model.optimize()
+
+            expected_feasible = not (
+                activity_value == 1 and any(blocker_values)
+            )
+            assert (model.Status == grb.OPTIMAL) is expected_feasible
+
+    empty_model = gp.Model()
+    empty_model.Params.OutputFlag = 0
+    empty_activity = empty_model.addVar(vtype=grb.BINARY)
+    assert GurobiMILPAdapter._add_aggregated_binary_activity_block(
+        empty_model,
+        gp=gp,
+        activity_var=empty_activity,
+        blocking_vars=(),
+        name="empty_activity_block",
+    ) == (0, 0)

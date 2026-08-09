@@ -18,6 +18,60 @@ from src.optimization.common.problem import (
     ProblemVehicleType,
 )
 from src.optimization.milp.engine import MILPOptimizer
+from src.optimization.milp.solver_adapter import GurobiMILPAdapter
+
+
+def test_vehicle_local_iis_uses_exact_vehicle_assignment_pattern_cut() -> None:
+    scope = GurobiMILPAdapter._classify_stage2_iis_assignment_cut_scope(
+        iis_constraint_names=(
+            "soc_initial__bev-1",
+            "charge_availability__bev-1__slot_7__trip_active",
+            "departure_soc__bev-1__trip-42",
+            "terminal_soc__bev-1__return_to_initial_upper",
+        ),
+        iis_variable_bound_names=(),
+        assigned_vehicle_ids=("bev-1", "bev-2"),
+    )
+
+    assert scope == {
+        "cut_type": "vehicle_local_exact_assignment_pattern_no_good_cut",
+        "cut_scope": "vehicle_local_exact_assignment_pattern",
+        "vehicle_ids": ("bev-1",),
+        "reason": "iis_contains_only_vehicle_local_constraints",
+    }
+
+
+@pytest.mark.parametrize(
+    ("constraint_names", "variable_bound_names", "expected_reason"),
+    (
+        (
+            ("soc_initial__bev-1", "charger_ports__charger-1__slot_7"),
+            (),
+            "iis_contains_shared_or_unknown_constraints",
+        ),
+        (
+            ("soc_initial__bev-1", "terminal_soc__bev-1__target"),
+            ("soc_bev-1_7:IISLB",),
+            "iis_contains_variable_bounds",
+        ),
+        ((), (), "iis_constraint_list_empty"),
+    ),
+)
+def test_shared_or_bound_iis_keeps_conservative_full_assignment_cut(
+    constraint_names: tuple[str, ...],
+    variable_bound_names: tuple[str, ...],
+    expected_reason: str,
+) -> None:
+    scope = GurobiMILPAdapter._classify_stage2_iis_assignment_cut_scope(
+        iis_constraint_names=constraint_names,
+        iis_variable_bound_names=variable_bound_names,
+        assigned_vehicle_ids=("bev-1", "bev-2"),
+    )
+
+    assert scope["cut_type"] == "full_assignment_no_good_cut"
+    assert scope["cut_scope"] == "full_assignment"
+    assert scope["vehicle_ids"] == ()
+    assert scope["reason"] == expected_reason
 
 
 def _feedback_problem(diagnostics_dir: str) -> CanonicalOptimizationProblem:
@@ -212,6 +266,7 @@ def test_proven_stage2_infeasibility_returns_a_no_good_cut_to_stage1(
     assert len(feedback_history) == 2
     assert all(entry["stage2_status"] == "infeasible" for entry in feedback_history)
     assert all(entry["iis_generated"] is True for entry in feedback_history)
+    assert all(entry["cut_scope"] == "full_assignment" for entry in feedback_history)
     assert "BEV" in assigned_vehicle_types
     assert "ICE" in assigned_vehicle_types
     assert (tmp_path / "diagnostics" / "stage2_infeasible.ilp").is_file()

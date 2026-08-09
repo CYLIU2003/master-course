@@ -1,5 +1,42 @@
 # master-course
 
+## 2026-08-10 final-composition clarity and Phase-4 search diagnostics
+
+- The latest completed controlled pair does **not** use the same fleet mix in
+  both weather cases.  Its final integrated incumbents are `27 BEV / 5 ICE`
+  (sunny, 183 BEV trips) and `21 / 11` (rain, 91 BEV trips).  The repeatedly
+  displayed `13 / 19` value is the Phase-3 Stage-1 primary seed candidate, not
+  the selected Stage-2 seed and not the final Phase-4 solution.
+- Result summaries now publish `final_used_powertrain_composition` separately
+  from `stage1_primary_candidate_used_powertrain_composition`.  The Tk result
+  labels use “final solution” and explicitly mark the Stage-1 value as not the
+  final solution, preventing seed-search telemetry from being read as the
+  optimized fleet composition.
+- Sunny PV quantity is not the current boundary: the completed sunny incumbent
+  imports zero grid electricity and curtails 3,606.64 kWh.  Above 27 BEVs, the
+  unresolved issue is whether another BEV can satisfy its chronological duty,
+  charging-window, charger and terminal-SOC constraints while retaining the
+  32-bus fleet.  Failure of the two tested `28/4` assignments is not proof that
+  every `28/4` assignment is infeasible.
+- Stage-2 diagnostics now simulate each BEV path in chronological order and
+  separate departure, minimum-SOC and terminal-SOC shortages.  A vehicle-local
+  IIS cuts only that exact vehicle assignment pattern; an IIS containing a
+  shared charger/site constraint or a variable bound conservatively cuts the
+  full assignment.  This avoids both repeating a known-bad path and incorrectly
+  excluding untested supersets.
+- Phase 4 aggregates equivalent activity-blocking implications and models ICE
+  refuelling activation explicitly, reducing redundant rows without weakening
+  timetable, SOC or charger constraints.  Integrated runs also spill the MIP
+  node tree after 0.5 GB to an OS temporary directory as a memory-safety guard.
+  A diagnostic attempt to disable degenerate root moves was rejected after
+  private memory approached 54 GB; it is not research evidence and that
+  parameter change is not retained.
+- Formal release remains `BLOCKED` until a fresh clean-commit pair closes the
+  requested 0.1% certified gaps and passes every physical, rolling, provenance
+  and accounting gate.  These implementation changes do not relabel the
+  existing SHA-`99a2035` artifacts.  The complete repository suite passes
+  (`1248 passed in 65.46s`), with compile and diff checks also clean.
+
 ## 2026-08-10 controlled pair after feasibility-witness cutoff
 
 - Clean frozen SHA `99a2035694fd90fccf42fe8222a4f1d3b344e83e` completed

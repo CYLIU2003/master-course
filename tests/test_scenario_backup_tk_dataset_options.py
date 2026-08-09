@@ -1417,6 +1417,40 @@ def test_extract_result_summary_separates_total_cost_objective_and_validity_badg
     assert summary["return_leg_bonus"] == 111500.0
 
 
+def test_extract_result_summary_distinguishes_final_and_stage1_compositions() -> None:
+    app = App.__new__(App)
+
+    summary = App._extract_result_summary(
+        app,
+        {
+            "summary": {
+                "ev_used_count": 13,
+                "ice_used_count": 19,
+                "powertrain_composition_semantics": (
+                    "final_published_solver_incumbent"
+                ),
+                "final_used_powertrain_composition": {
+                    "used_bev": 27,
+                    "used_ice": 5,
+                },
+                "stage1_primary_candidate_used_powertrain_composition": {
+                    "used_bev": 13,
+                    "used_ice": 19,
+                },
+            }
+        },
+    )
+
+    assert summary["ev_used_count"] == 27.0
+    assert summary["ice_used_count"] == 5.0
+    assert summary["stage1_primary_candidate_used_bev_count"] == 13.0
+    assert summary["stage1_primary_candidate_used_ice_count"] == 19.0
+    assert (
+        summary["powertrain_composition_semantics"]
+        == "final_published_solver_incumbent"
+    )
+
+
 def test_ordered_cost_breakdown_items_prioritizes_total_and_non_zero_costs() -> None:
     rows = _ordered_cost_breakdown_items(
         {

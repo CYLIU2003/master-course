@@ -57,10 +57,13 @@ def test_verified_integrated_start_uses_bound_certification_profile() -> None:
         "mip_focus": 3,
         "heuristics": 0.01,
         "presolve": 1,
+        "nodefile_start_gb": 0.5,
     }
-    assert _integrated_search_controls(
+    cold_start_controls = _integrated_search_controls(
         verified_feasible_start=False
-    )["profile"] == "find_feasible_solution_then_bound"
+    )
+    assert cold_start_controls["profile"] == "find_feasible_solution_then_bound"
+    assert cold_start_controls["nodefile_start_gb"] == 0.5
 
 
 def test_verified_start_bounds_preserve_seed_and_limit_vehicle_days() -> None:
@@ -948,6 +951,14 @@ def test_phase4_uses_verified_same_problem_phase3_plan_as_complete_mip_start() -
     )
     assert seed_audit["seed_stage1_stage2_selected_candidate_hash"]
     assert seed_audit[
+        "seed_selected_plan_used_powertrain_composition"
+    ]["semantics"] == (
+        "selected_phase3_stage2_feasible_mip_start_not_phase4_result"
+    )
+    assert seed_audit[
+        "seed_stage1_primary_candidate_used_powertrain_composition"
+    ] == {"used_bev": 1, "used_ice": 0}
+    assert seed_audit[
         "seed_stage1_time_indexed_energy_recourse_configuration"
     ]["arbitrary_weather_assignment_bias_used"] is False
     assert result.solver_metadata["phase4_phase3_seed_audit"][
@@ -992,6 +1003,9 @@ def test_phase4_uses_verified_same_problem_phase3_plan_as_complete_mip_start() -
         0.01
     )
     assert result.solver_metadata["integrated_symmetry"] == -1
+    assert result.solver_metadata["integrated_nodefile_start_gb"] == pytest.approx(
+        0.5
+    )
     assert result.solver_metadata["integrated_search_profile"][
         "phase_count_executed"
     ] == 1

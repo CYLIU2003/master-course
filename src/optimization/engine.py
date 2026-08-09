@@ -1119,6 +1119,35 @@ class OptimizationEngine:
         acceptance["seed_candidate_hash_present"] = bool(
             acceptance["seed_candidate_hash"]
         )
+        seed_used_vehicle_type_by_id = {
+            str(seed_plan.vehicle_id_for_duty(duty.duty_id)): str(
+                duty.vehicle_type or ""
+            ).upper()
+            for duty in seed_plan.duties
+            if duty.legs
+        }
+        seed_electric_types = {"BEV", "PHEV", "FCEV"}
+        acceptance["seed_selected_plan_used_powertrain_composition"] = {
+            "used_bev": sum(
+                vehicle_type in seed_electric_types
+                for vehicle_type in seed_used_vehicle_type_by_id.values()
+            ),
+            "used_ice": sum(
+                vehicle_type not in seed_electric_types
+                for vehicle_type in seed_used_vehicle_type_by_id.values()
+            ),
+            "semantics": (
+                "selected_phase3_stage2_feasible_mip_start_not_phase4_result"
+            ),
+        }
+        for field_name in (
+            "stage1_objective",
+            "stage1_best_bound",
+            "stage1_gurobi_raw_best_bound",
+            "stage1_certified_best_bound",
+            "stage1_certified_mip_gap_ratio",
+        ):
+            acceptance[f"seed_{field_name}"] = seed_metadata.get(field_name)
         seed_composition_certificate = dict(
             seed_result.solver_metadata.get(
                 "stage1_used_powertrain_composition_search"
@@ -1127,6 +1156,14 @@ class OptimizationEngine:
         )
         acceptance["seed_used_powertrain_composition_search"] = (
             seed_composition_certificate
+        )
+        acceptance[
+            "seed_stage1_primary_candidate_used_powertrain_composition"
+        ] = dict(
+            seed_composition_certificate.get(
+                "primary_used_powertrain_composition"
+            )
+            or {}
         )
         acceptance[
             "seed_used_powertrain_composition_search_accepted"

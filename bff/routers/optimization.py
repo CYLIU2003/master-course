@@ -10223,6 +10223,23 @@ def _solver_settings_payload(
         "integrated_identical_vehicle_symmetry_semantics": metadata.get(
             "integrated_identical_vehicle_symmetry_semantics"
         ),
+        "integrated_redundant_arc_link_constraints_omitted": _int_or_none(
+            metadata.get("integrated_redundant_arc_link_constraints_omitted")
+        ),
+        "integrated_activity_blocking_constraint_count": _int_or_none(
+            metadata.get("integrated_activity_blocking_constraint_count")
+        ),
+        "integrated_activity_blocking_implication_count": _int_or_none(
+            metadata.get("integrated_activity_blocking_implication_count")
+        ),
+        "integrated_activity_blocking_constraints_aggregated": _int_or_none(
+            metadata.get(
+                "integrated_activity_blocking_constraints_aggregated"
+            )
+        ),
+        "integrated_refuel_activation_binary_count": _int_or_none(
+            metadata.get("integrated_refuel_activation_binary_count")
+        ),
         "phase4_phase3_seed_audit": phase4_seed_audit,
         "phase4_phase3_seed_enabled": bool(
             phase4_seed_audit.get("requested", False)
@@ -11717,6 +11734,15 @@ def _run_optimization(
         # Preserve the post-solve wall-clock fallback already inserted into
         # ``result_payload`` instead of rebuilding from stale engine metadata.
         solver_metadata = dict(result_payload.get("solver_metadata") or {})
+        phase4_seed_audit_for_summary = dict(
+            solver_metadata.get("phase4_phase3_seed_audit") or {}
+        )
+        stage1_primary_candidate_composition = dict(
+            phase4_seed_audit_for_summary.get(
+                "seed_stage1_primary_candidate_used_powertrain_composition"
+            )
+            or {}
+        )
         strict_coverage_precheck = dict(
             solver_metadata.get("strict_coverage_precheck")
             or (result_payload.get("strict_coverage_precheck") if isinstance(result_payload, dict) else {})
@@ -11904,6 +11930,22 @@ def _run_optimization(
                 "vehicle_count_by_type": vehicle_count_by_type,
                 "available_vehicle_count_by_type": available_vehicle_count_by_type,
                 "used_vehicle_count_by_type": vehicle_count_by_type,
+                "powertrain_composition_semantics": (
+                    "final_published_solver_incumbent"
+                ),
+                "final_used_powertrain_composition": {
+                    "used_bev": ev_used_count,
+                    "used_ice": ice_used_count,
+                },
+                "stage1_primary_candidate_used_powertrain_composition": (
+                    stage1_primary_candidate_composition
+                ),
+                "stage1_primary_candidate_composition_semantics": (
+                    "phase3_initial_candidate_not_final_phase3_selection_"
+                    "and_not_phase4_result"
+                    if stage1_primary_candidate_composition
+                    else None
+                ),
                 "unused_available_vehicle_ids_by_type": unused_available_vehicle_ids_by_type,
                 "ev_available_count": ev_available_count,
                 "ev_used_count": ev_used_count,

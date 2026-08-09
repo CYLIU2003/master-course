@@ -1,5 +1,47 @@
 # Development Notes
 
+## 2026-08-10: distinguish the final integrated fleet from its Stage-1 seed
+
+- Audit of
+  `formal_pair_20260809_flat30_pv1000_bess6000_phase4_witness_99a2035_gap001`
+  found a presentation ambiguity, not a missing weather response.  Phase 4
+  finally uses `27 BEV / 5 ICE` in sun and `21 / 11` in rain.  The `13 / 19`
+  composition belongs to the Stage-1 primary candidate inside Phase-3 seed
+  generation; treating it as the Phase-4 result discards both Stage-2
+  candidate selection and the unrestricted integrated incumbent.
+- `bff/routers/optimization.py` now emits an explicit final composition plus
+  the separately named Stage-1 primary composition.  The Tk summary reader
+  prefers the final field and labels the Stage-1 field “not the final
+  solution”.  Phase-4 seed audit also records the selected Stage-2-feasible
+  seed composition and its Stage-1 objective/bound provenance.
+- The sunny result has 6,056.25 kWh of PV, zero grid import and 3,606.64 kWh of
+  curtailment.  Consequently, adding nameplate PV cannot by itself move the
+  current 27-BEV boundary.  Candidate `28/4` assignments must still align each
+  duty's departures and terminal target with vehicle-local charge windows and
+  shared chargers.  The current evidence rejects two assignments, not the
+  entire composition.
+- The optimistic Stage-2 path audit is now chronological.  It records charge
+  deliverable before each departure, departure/minimum/terminal SOC shortage,
+  and an individually feasible flag while retaining the old whole-day energy
+  total as a non-authoritative aggregate diagnostic.
+- IIS feedback is deliberately scoped.  An IIS containing only vehicle-local
+  SOC and charging-availability rows produces an exact-pattern no-good for the
+  implicated vehicle(s).  Shared capacity rows, unknown rows or IIS variable
+  bounds retain the conservative full-assignment no-good.  The decision and
+  IIS-bound inventory are exported in feedback history and diagnostics.
+- Phase-4 activity blockers are aggregated by activity and ICE refuel events
+  use linked activation binaries.  This preserves the original implication
+  truth table while removing a large redundant constraint family.  Gurobi
+  node files start at 0.5 GB in the OS temporary directory to cap in-memory
+  branch-and-bound growth.  `DegenMoves=0` was tested only in a nonformal sunny
+  diagnostic and reverted after process private memory approached 54 GB and
+  system free memory fell to about 1.09 GB.
+- The existing controlled pair remains `BLOCKED` at 3.927573% sunny and
+  2.387096% rain certified gaps versus the requested 0.1%.  A new clean frozen
+  commit, fresh Prepare and both complete runs are required before any release
+  claim changes.  Focused regressions, compileall and diff checks pass, and the
+  complete suite passes (`1248 passed in 65.46s`).
+
 ## 2026-08-10: clean witness-cutoff pair and post-run evidence fixes
 
 - Frozen SHA `99a2035694fd90fccf42fe8222a4f1d3b344e83e` completed the

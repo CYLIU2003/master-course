@@ -1,5 +1,36 @@
 # Current research release blockers
 
+## 2026-08-10 composition display corrected; new formal evidence pending
+
+The apparent `13 BEV / 19 ICE` sunny/rain equality was caused by reading the
+Phase-3 Stage-1 primary candidate as though it were the final integrated
+solution.  The completed clean-SHA pair's authoritative Phase-4 incumbents are
+`27/5` sunny and `21/11` rain, with 183 versus 91 BEV trips.  The controlled PV
+response therefore exists and is already accepted at the pair-comparison
+level; it is separate from formal optimality acceptance.
+
+The remaining sunny boundary is not total PV energy.  Sunny imports no grid
+energy and curtails 3,606.64 kWh.  Exact `28/4` remains unresolved because two
+tested assignments fail Stage-2 chronological SOC/charging recourse and the
+Stage-1 exact search has no incumbent, but no composition-wide infeasibility
+certificate exists.  Neither “28/4 is impossible” nor “more PV must select
+28/4” is currently supported.
+
+The working implementation separates final and Stage-1 composition fields,
+adds chronological vehicle-path shortage evidence, scopes vehicle-local IIS
+feedback to an exact assignment-pattern cut, preserves full-assignment cuts
+for shared constraints and IIS bounds, and reduces redundant integrated
+activity-blocking rows.  MIP node spill starts at 0.5 GB as a memory guard.  A
+nonformal `DegenMoves=0` experiment that approached 54 GB private memory was
+stopped and reverted; it cannot be cited as a completed optimization result.
+
+Release remains `BLOCKED`.  The last completed pair still misses the 0.1%
+certified-gap target (3.927573% sunny, 2.387096% rain), and the new code still
+requires a clean commit, fresh Prepare and a new complete controlled pair.  No
+old output may be relabelled as evidence for these changes.  The complete code
+suite passes (`1248 passed in 65.46s`); this validates implementation behavior,
+not the pending formal experiment.
+
 ## 2026-08-10 witness-cutoff pair: PV response accepted, proof still blocked
 
 Clean frozen SHA `99a2035694fd90fccf42fe8222a4f1d3b344e83e` completed the

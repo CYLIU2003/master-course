@@ -331,6 +331,18 @@ class MILPOptimizer:
                 "integrated_redundant_arc_link_constraints_omitted": (
                     plan.metadata or {}
                 ).get("integrated_redundant_arc_link_constraints_omitted"),
+                "integrated_activity_blocking_constraint_count": (
+                    plan.metadata or {}
+                ).get("integrated_activity_blocking_constraint_count"),
+                "integrated_activity_blocking_implication_count": (
+                    plan.metadata or {}
+                ).get("integrated_activity_blocking_implication_count"),
+                "integrated_activity_blocking_constraints_aggregated": (
+                    plan.metadata or {}
+                ).get("integrated_activity_blocking_constraints_aggregated"),
+                "integrated_refuel_activation_binary_count": (
+                    plan.metadata or {}
+                ).get("integrated_refuel_activation_binary_count"),
                 "stage1_time_limit_sec_effective": (plan.metadata or {}).get(
                     "stage1_time_limit_sec_effective"
                 ),
@@ -686,6 +698,12 @@ class MILPOptimizer:
                 "integrated_symmetry": (plan.metadata or {}).get(
                     "integrated_symmetry"
                 ),
+                "integrated_nodefile_start_gb": (plan.metadata or {}).get(
+                    "integrated_nodefile_start_gb"
+                ),
+                "integrated_nodefile_dir": (plan.metadata or {}).get(
+                    "integrated_nodefile_dir"
+                ),
                 "integrated_search_profile": dict(
                     (plan.metadata or {}).get(
                         "integrated_search_profile"
@@ -940,7 +958,11 @@ class MILPOptimizer:
             "constraints": {
                 "trip_cover": len(problem.trips),
                 "vehicle_use_link": len(assignment_pairs),
-                "connection_link": len(arc_pairs) * 2,
+                # Both Phase 3 and Phase 4 use node-flow equalities; explicit
+                # x<=y endpoint rows are intentionally omitted as redundant.
+                "connection_link": 0,
+                "connection_link_omitted": len(arc_pairs) * 2,
+                "connection_node_flow": len(assignment_pairs) * 2,
             },
             "objective_terms": (),
             "variable_samples": [],
