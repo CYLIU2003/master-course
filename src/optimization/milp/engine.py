@@ -331,18 +331,12 @@ class MILPOptimizer:
                 "integrated_redundant_arc_link_constraints_omitted": (
                     plan.metadata or {}
                 ).get("integrated_redundant_arc_link_constraints_omitted"),
+                "integrated_activity_blocking_formulation": (
+                    plan.metadata or {}
+                ).get("integrated_activity_blocking_formulation"),
                 "integrated_activity_blocking_constraint_count": (
                     plan.metadata or {}
                 ).get("integrated_activity_blocking_constraint_count"),
-                "integrated_activity_blocking_implication_count": (
-                    plan.metadata or {}
-                ).get("integrated_activity_blocking_implication_count"),
-                "integrated_activity_blocking_constraints_aggregated": (
-                    plan.metadata or {}
-                ).get("integrated_activity_blocking_constraints_aggregated"),
-                "integrated_refuel_activation_binary_count": (
-                    plan.metadata or {}
-                ).get("integrated_refuel_activation_binary_count"),
                 "stage1_time_limit_sec_effective": (plan.metadata or {}).get(
                     "stage1_time_limit_sec_effective"
                 ),

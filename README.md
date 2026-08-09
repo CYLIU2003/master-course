@@ -24,18 +24,21 @@
   shared charger/site constraint or a variable bound conservatively cuts the
   full assignment.  This avoids both repeating a known-bad path and incorrectly
   excluding untested supersets.
-- Phase 4 aggregates equivalent activity-blocking implications and models ICE
-  refuelling activation explicitly, reducing redundant rows without weakening
-  timetable, SOC or charger constraints.  Integrated runs also spill the MIP
-  node tree after 0.5 GB to an OS temporary directory as a memory-safety guard.
-  A diagnostic attempt to disable degenerate root moves was rejected after
-  private memory approached 54 GB; it is not research evidence and that
-  parameter change is not retained.
+- A first attempt to aggregate activity-blocking implications was rejected
+  after the clean-SHA sunny run reached 93.1% of the Windows commit limit
+  (85.8/92.1 GB).  Although integer-equivalent, that aggregate has a weaker LP
+  relaxation than the individual `activity <= 1 - blocker` rows.  The strong
+  individual formulation is restored; the aborted run is diagnostic only.
+  Integrated runs still spill the MIP node tree after 0.5 GB to an OS
+  temporary directory as a branch-and-bound memory guard.  A separate attempt
+  to disable degenerate root moves was also rejected and is not retained.
 - Formal release remains `BLOCKED` until a fresh clean-commit pair closes the
   requested 0.1% certified gaps and passes every physical, rolling, provenance
   and accounting gate.  These implementation changes do not relabel the
-  existing SHA-`99a2035` artifacts.  The complete repository suite passes
-  (`1248 passed in 65.46s`), with compile and diff checks also clean.
+  existing SHA-`99a2035` artifacts.  The pre-run complete repository suite
+  passed (`1248 passed in 65.46s`).  After restoring the strong formulation,
+  the complete suite passes again (`1247 passed in 55.79s`); a new clean
+  commit is still required before another formal run.
 
 ## 2026-08-10 controlled pair after feasibility-witness cutoff
 

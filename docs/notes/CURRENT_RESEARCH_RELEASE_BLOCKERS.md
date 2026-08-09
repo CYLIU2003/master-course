@@ -18,18 +18,21 @@ certificate exists.  Neither “28/4 is impossible” nor “more PV must select
 
 The working implementation separates final and Stage-1 composition fields,
 adds chronological vehicle-path shortage evidence, scopes vehicle-local IIS
-feedback to an exact assignment-pattern cut, preserves full-assignment cuts
-for shared constraints and IIS bounds, and reduces redundant integrated
-activity-blocking rows.  MIP node spill starts at 0.5 GB as a memory guard.  A
-nonformal `DegenMoves=0` experiment that approached 54 GB private memory was
-stopped and reverted; it cannot be cited as a completed optimization result.
+feedback to an exact assignment-pattern cut, and preserves full-assignment
+cuts for shared constraints and IIS bounds.  The attempted activity-row
+aggregation was removed: it was integer-equivalent but weakened the LP
+relaxation.  The clean-SHA `4e0558d` sunny run reached 85.8/92.1 GB Windows
+commit (93.1%) and was safely stopped; rain never started.  That partial run is
+diagnostic only.  Strong individual implication rows are restored, while MIP
+node spill remains configured at 0.5 GB as a branch-tree safety guard.
 
 Release remains `BLOCKED`.  The last completed pair still misses the 0.1%
 certified-gap target (3.927573% sunny, 2.387096% rain), and the new code still
 requires a clean commit, fresh Prepare and a new complete controlled pair.  No
-old output may be relabelled as evidence for these changes.  The complete code
-suite passes (`1248 passed in 65.46s`); this validates implementation behavior,
-not the pending formal experiment.
+old output may be relabelled as evidence for these changes.  The prior complete
+suite (`1248 passed`) validates SHA `4e0558d` before its runtime defect was
+observed.  The restored strong formulation passes the complete suite (`1247
+passed in 55.79s`), but still needs a clean commit and full pair.
 
 ## 2026-08-10 witness-cutoff pair: PV response accepted, proof still blocked
 

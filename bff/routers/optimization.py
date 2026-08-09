@@ -10226,19 +10226,11 @@ def _solver_settings_payload(
         "integrated_redundant_arc_link_constraints_omitted": _int_or_none(
             metadata.get("integrated_redundant_arc_link_constraints_omitted")
         ),
+        "integrated_activity_blocking_formulation": metadata.get(
+            "integrated_activity_blocking_formulation"
+        ),
         "integrated_activity_blocking_constraint_count": _int_or_none(
             metadata.get("integrated_activity_blocking_constraint_count")
-        ),
-        "integrated_activity_blocking_implication_count": _int_or_none(
-            metadata.get("integrated_activity_blocking_implication_count")
-        ),
-        "integrated_activity_blocking_constraints_aggregated": _int_or_none(
-            metadata.get(
-                "integrated_activity_blocking_constraints_aggregated"
-            )
-        ),
-        "integrated_refuel_activation_binary_count": _int_or_none(
-            metadata.get("integrated_refuel_activation_binary_count")
         ),
         "phase4_phase3_seed_audit": phase4_seed_audit,
         "phase4_phase3_seed_enabled": bool(

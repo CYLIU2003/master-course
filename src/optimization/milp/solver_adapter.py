@@ -1994,7 +1994,6 @@ class GurobiMILPAdapter:
         integrated_vehicle_terminal_soc_target_kwh: Dict[str, float] = {}
         fuel_l_var: Dict[Tuple[str, int], Any] = {}
         refuel_l_var: Dict[Tuple[str, int], Any] = {}
-        refuel_on_var: Dict[Tuple[str, int], Any] = {}
         g_var: Dict[int, Any] = {}
         pv_ch_var: Dict[int, Any] = {}
         p_avg_var: Dict[int, Any] = {}
@@ -2027,7 +2026,6 @@ class GurobiMILPAdapter:
         physical_charger_power_var: Dict[Tuple[str, str, int], Any] = {}
         physical_charger_metadata: Dict[str, Any] = {}
         integrated_activity_blocking_constraint_count = 0
-        integrated_activity_blocking_implication_count = 0
         w_on_var = None
         w_off_var = None
         effective_depot_energy_assets: Dict[str, DepotEnergyAsset] = {}
@@ -2612,45 +2610,21 @@ class GurobiMILPAdapter:
                         if (vehicle.vehicle_id, trip.trip_id) in y
                         and self._trip_active_in_slot(problem, trip.departure_min, trip.arrival_min, slot_idx)
                     )
-                    added_rows, represented_implications = (
-                        self._add_aggregated_binary_activity_block(
-                            model,
-                            gp=gp,
-                            activity_var=charge_on_var[
-                                (vehicle.vehicle_id, slot_idx)
-                            ],
-                            blocking_vars=running_assignment_vars,
-                            name=(
-                                "integrated_charge_blocked_by_trip__"
-                                f"{vehicle.vehicle_id}__{slot_idx}"
-                            ),
+                    for running_assignment_var in running_assignment_vars:
+                        model.addConstr(
+                            charge_on_var[(vehicle.vehicle_id, slot_idx)]
+                            <= 1 - running_assignment_var
                         )
-                    )
-                    integrated_activity_blocking_constraint_count += added_rows
-                    integrated_activity_blocking_implication_count += (
-                        represented_implications
-                    )
+                        integrated_activity_blocking_constraint_count += 1
                     away_terms = away_from_home_slot_terms.get(
                         (vehicle.vehicle_id, slot_idx), []
                     )
-                    added_rows, represented_implications = (
-                        self._add_aggregated_binary_activity_block(
-                            model,
-                            gp=gp,
-                            activity_var=charge_on_var[
-                                (vehicle.vehicle_id, slot_idx)
-                            ],
-                            blocking_vars=away_terms,
-                            name=(
-                                "integrated_charge_blocked_away__"
-                                f"{vehicle.vehicle_id}__{slot_idx}"
-                            ),
+                    for away_var in away_terms:
+                        model.addConstr(
+                            charge_on_var[(vehicle.vehicle_id, slot_idx)]
+                            <= 1 - away_var
                         )
-                    )
-                    integrated_activity_blocking_constraint_count += added_rows
-                    integrated_activity_blocking_implication_count += (
-                        represented_implications
-                    )
+                        integrated_activity_blocking_constraint_count += 1
                     proxy_terms = home_depot_slot_proxy_terms.get((vehicle.vehicle_id, slot_idx), [])
                     slot_day_idx = slot_idx // slots_per_day
                     assigned_day_indices = assignment_day_indices_by_vehicle.get(vehicle.vehicle_id, set())
@@ -2794,14 +2768,6 @@ class GurobiMILPAdapter:
                         ub=max(refuel_per_slot_l, 0.0),
                         vtype=GRB.CONTINUOUS,
                     )
-                    refuel_on_var[(vehicle.vehicle_id, slot_idx)] = model.addVar(
-                        vtype=GRB.BINARY,
-                    )
-                    model.addConstr(
-                        refuel_l_var[(vehicle.vehicle_id, slot_idx)]
-                        <= max(refuel_per_slot_l, 0.0)
-                        * refuel_on_var[(vehicle.vehicle_id, slot_idx)]
-                    )
 
                 if initial_ice_fuel_ratio_override is not None:
                     initial_l = initial_ice_fuel_ratio_override * tank_cap_l
@@ -2865,55 +2831,32 @@ class GurobiMILPAdapter:
                             slot_idx,
                         )
                     )
-                    added_rows, represented_implications = (
-                        self._add_aggregated_binary_activity_block(
-                            model,
-                            gp=gp,
-                            activity_var=refuel_on_var[
-                                (vehicle.vehicle_id, slot_idx)
-                            ],
-                            blocking_vars=running_assignment_vars,
-                            name=(
-                                "integrated_refuel_blocked_by_trip__"
-                                f"{vehicle.vehicle_id}__{slot_idx}"
-                            ),
+                    for running_assignment_var in running_assignment_vars:
+                        model.addConstr(
+                            refuel_l_var[(vehicle.vehicle_id, slot_idx)]
+                            <= max(refuel_per_slot_l, 0.0)
+                            * (1 - running_assignment_var)
                         )
-                    )
-                    integrated_activity_blocking_constraint_count += added_rows
-                    integrated_activity_blocking_implication_count += (
-                        represented_implications
-                    )
+                        integrated_activity_blocking_constraint_count += 1
                     proxy_terms = home_depot_slot_proxy_terms.get((vehicle.vehicle_id, slot_idx), [])
                     if proxy_terms:
                         model.addConstr(
-                            refuel_on_var[(vehicle.vehicle_id, slot_idx)]
-                            <= gp.quicksum(proxy_terms)
+                            refuel_l_var[(vehicle.vehicle_id, slot_idx)]
+                            <= max(refuel_per_slot_l, 0.0)
+                            * gp.quicksum(proxy_terms)
                         )
                     else:
                         model.addConstr(
-                            refuel_on_var[(vehicle.vehicle_id, slot_idx)] == 0
+                            refuel_l_var[(vehicle.vehicle_id, slot_idx)] == 0
                         )
-                    away_terms = away_from_home_slot_terms.get(
+                    for away_var in away_from_home_slot_terms.get(
                         (vehicle.vehicle_id, slot_idx), []
-                    )
-                    added_rows, represented_implications = (
-                        self._add_aggregated_binary_activity_block(
-                            model,
-                            gp=gp,
-                            activity_var=refuel_on_var[
-                                (vehicle.vehicle_id, slot_idx)
-                            ],
-                            blocking_vars=away_terms,
-                            name=(
-                                "integrated_refuel_blocked_away__"
-                                f"{vehicle.vehicle_id}__{slot_idx}"
-                            ),
+                    ):
+                        model.addConstr(
+                            refuel_l_var[(vehicle.vehicle_id, slot_idx)]
+                            <= max(refuel_per_slot_l, 0.0) * (1 - away_var)
                         )
-                    )
-                    integrated_activity_blocking_constraint_count += added_rows
-                    integrated_activity_blocking_implication_count += (
-                        represented_implications
-                    )
+                        integrated_activity_blocking_constraint_count += 1
 
                 vehicle_arcs = [
                     (f_trip, t_trip)
@@ -3780,7 +3723,6 @@ class GurobiMILPAdapter:
             charge_power_var=c_var,
             discharge_power_var=d_var,
             vehicle_soc_var=s_var,
-            refuel_on_var=refuel_on_var,
             refuel_l_var=refuel_l_var,
             physical_charger_assignment_var=(
                 physical_charger_assignment_var
@@ -5012,19 +4954,11 @@ class GurobiMILPAdapter:
                 "integrated_redundant_arc_link_constraints_omitted": (
                     integrated_redundant_arc_link_constraints_omitted
                 ),
+                "integrated_activity_blocking_formulation": (
+                    "pairwise_strong_lp"
+                ),
                 "integrated_activity_blocking_constraint_count": (
                     integrated_activity_blocking_constraint_count
-                ),
-                "integrated_activity_blocking_implication_count": (
-                    integrated_activity_blocking_implication_count
-                ),
-                "integrated_activity_blocking_constraints_aggregated": max(
-                    integrated_activity_blocking_implication_count
-                    - integrated_activity_blocking_constraint_count,
-                    0,
-                ),
-                "integrated_refuel_activation_binary_count": len(
-                    refuel_on_var
                 ),
                 "integrated_fragment_pairwise_constraint_count": (
                     integrated_fragment_pairwise_constraint_count
@@ -14148,7 +14082,6 @@ class GurobiMILPAdapter:
         charge_power_var: Mapping[Tuple[str, int], Any],
         discharge_power_var: Mapping[Tuple[str, int], Any],
         vehicle_soc_var: Mapping[Tuple[str, int], Any],
-        refuel_on_var: Mapping[Tuple[str, int], Any],
         refuel_l_var: Mapping[Tuple[str, int], Any],
         physical_charger_assignment_var: Mapping[
             Tuple[str, str, int], Any
@@ -14462,10 +14395,6 @@ class GurobiMILPAdapter:
             )
         for key, var in refuel_l_var.items():
             var.Start = float(refuel_l_by_key.get(key, 0.0))
-        for key, var in refuel_on_var.items():
-            var.Start = (
-                1.0 if refuel_l_by_key.get(key, 0.0) > 1.0e-9 else 0.0
-            )
 
         def _slot_value(
             mapping: Mapping[str, Mapping[int, float]],
@@ -18837,39 +18766,6 @@ class GurobiMILPAdapter:
         except (TypeError, ValueError):
             return default
         return parsed if parsed >= 1 else default
-
-    @staticmethod
-    def _add_aggregated_binary_activity_block(
-        model: Any,
-        *,
-        gp: Any,
-        activity_var: Any,
-        blocking_vars: Sequence[Any],
-        name: str,
-    ) -> Tuple[int, int]:
-        """Forbid one binary activity when any binary blocker is selected.
-
-        For ``m`` blockers, ``m * activity + sum(blockers) <= m`` is
-        integer-equivalent to the ``m`` individual implications
-        ``activity <= 1 - blocker_i``.  The aggregate form preserves every
-        feasible integer dispatch while avoiding one row per candidate trip
-        or deadhead arc in a coarse energy slot.
-
-        Returns:
-            A pair of the number of rows added and the number of individual
-            implications represented by that row.
-        """
-
-        blockers = tuple(blocking_vars)
-        blocker_count = len(blockers)
-        if blocker_count == 0:
-            return 0, 0
-        model.addConstr(
-            blocker_count * activity_var + gp.quicksum(blockers)
-            <= blocker_count,
-            name=name,
-        )
-        return 1, blocker_count
 
     def _safe_nonnegative_float(self, value: Any, *, default: float) -> float:
         try:

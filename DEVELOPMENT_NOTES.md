@@ -29,18 +29,24 @@
   implicated vehicle(s).  Shared capacity rows, unknown rows or IIS variable
   bounds retain the conservative full-assignment no-good.  The decision and
   IIS-bound inventory are exported in feedback history and diagnostics.
-- Phase-4 activity blockers are aggregated by activity and ICE refuel events
-  use linked activation binaries.  This preserves the original implication
-  truth table while removing a large redundant constraint family.  Gurobi
-  node files start at 0.5 GB in the OS temporary directory to cap in-memory
-  branch-and-bound growth.  `DegenMoves=0` was tested only in a nonformal sunny
-  diagnostic and reverted after process private memory approached 54 GB and
-  system free memory fell to about 1.09 GB.
+- Clean SHA `4e0558d` began a fresh sunny run, but it was stopped before a
+  result when Windows committed bytes reached 85.8/92.1 GB (93.1%).  The
+  process still had physical memory available, so monitoring only working-set
+  RAM would have missed the failure risk.  This run is diagnostic and the rain
+  case was not started.
+- Root review identified the new activity aggregation as mathematically
+  integer-equivalent but LP-weaker: `m*a + sum(b) <= m` does not preserve the
+  relaxation of every `a + b_i <= 1` row.  The aggregate and its refuel
+  activation binaries are therefore removed and the strong individual
+  implications restored.  Gurobi node files still start at 0.5 GB in the OS
+  temporary directory, but node spill cannot repair a weak or memory-heavy
+  root relaxation.  `DegenMoves=0` remains reverted as well.
 - The existing controlled pair remains `BLOCKED` at 3.927573% sunny and
   2.387096% rain certified gaps versus the requested 0.1%.  A new clean frozen
   commit, fresh Prepare and both complete runs are required before any release
-  claim changes.  Focused regressions, compileall and diff checks pass, and the
-  complete suite passes (`1248 passed in 65.46s`).
+  claim changes.  The `1248 passed` suite preceded the rejected formal run;
+  after restoration, focused regressions pass (`136`) and the complete suite
+  passes (`1247 passed in 55.79s`).  A new clean commit is required next.
 
 ## 2026-08-10: clean witness-cutoff pair and post-run evidence fixes
 
