@@ -1,5 +1,41 @@
 # Development Notes
 
+## 2026-08-09: complete dispatch promotion and independent integrated gap
+
+- The PV-1000 pair at clean SHA `93d122e` reached 27 BEVs in sunny and 21 in
+  rain, but exact 28--32-BEV target solves ended after roughly three seconds
+  with no incumbent. Their activation-replacement builders had already formed
+  complete discrete dispatches. The old path discarded those structures unless
+  Gurobi reproduced an incumbent inside the short target solve, so the result
+  confused a computational frontier with a physical/economic boundary.
+- `_build_vehicle_duties_from_selected_assignment_keys()` now reconstructs
+  duties from complete selected assignment, successor and start keys. Promotion
+  requires exact duplicate-free trip coverage, in-domain arcs, unique incoming
+  and outgoing successors, balanced start/end fragments, the exact activated
+  vehicle set and the requested powertrain composition.
+- Promotion occurs only when the corresponding target solve has no incumbent
+  and is not infeasible. A normal solver incumbent retains the previous path;
+  an IIS-backed infeasible target is never overridden. Promoted plans explicitly
+  state that Stage 1 energy recourse is uncertified and must pass exact Stage 2
+  plus independent physical validation before cost comparison.
+- Candidate priority preserves honest cost semantics. Native candidates retain
+  their weather-aware relaxed objective. Constructive candidates use exact ICE
+  fuel/CO2, fixed-vehicle and vehicle-day costs while omitting other terms. It
+  is labelled a valid lower bound only when the analytical nonnegative-term
+  guard passes; otherwise it is an uncertified priority score. Neither value is
+  substituted for Stage 2 canonical actual cost.
+- `MILPSolverOutcome`, engine metadata and BFF solver settings now preserve
+  `raw_best_bound` / `raw_mip_gap_ratio` separately from
+  `certified_best_bound` / `certified_mip_gap_ratio`. For integrated Phase 4,
+  the certified bound is `max(Gurobi ObjBound, independent analytical floor)`
+  clamped to the incumbent. Phase 3 Stage 1 certificates remain separately
+  named and are not relabelled as integrated proof.
+- Focused composition, integrated actual-cost, BFF, pair-runner, Rolling and
+  research-contract tests pass; the complete suite passes `1233` tests in
+  `54.29s`. Fresh Prepare and a clean frozen-commit frontend pair remain
+  necessary before the new candidate coverage or certified gap becomes
+  research evidence.
+
 ## 2026-08-09: Phase 4 seed wall-budget starvation correction
 
 - Fresh sunny run `output/2026-08-09/run_20260809_0608` from clean SHA

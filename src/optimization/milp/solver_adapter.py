@@ -872,6 +872,9 @@ class MILPSolverOutcome:
     warm_start_source: str = ""
     best_bound: Optional[float] = None
     final_gap: Optional[float] = None
+    certified_best_bound: Optional[float] = None
+    certified_gap: Optional[float] = None
+    certified_gap_semantics: str = ""
     nodes_explored: Optional[int] = None
     runtime_sec: float = 0.0
     first_feasible_sec: Optional[float] = None
@@ -3880,6 +3883,58 @@ class GurobiMILPAdapter:
         }
         best_bound = self._model_bound(model)
         final_gap = self._model_gap(model) if has_feasible_incumbent else None
+        certified_best_bound = best_bound
+        certified_gap = final_gap
+        certified_gap_semantics = (
+            "gurobi_raw_obj_bound_and_mip_gap"
+            if has_feasible_incumbent
+            else ""
+        )
+        if (
+            has_feasible_incumbent
+            and not integrated_analytical_objective_floor_blockers
+            and integrated_analytical_objective_lower_bound is not None
+            and math.isfinite(
+                float(integrated_analytical_objective_lower_bound)
+            )
+        ):
+            independent_bound = float(
+                integrated_analytical_objective_lower_bound
+            )
+            incumbent_objective = float(model.ObjVal)
+            bound_consistency_tolerance = max(
+                1.0e-6,
+                integrated_feasibility_tol
+                * max(abs(incumbent_objective), 1.0),
+            )
+            if independent_bound > (
+                incumbent_objective + bound_consistency_tolerance
+            ):
+                integrated_analytical_objective_floor_blockers.append(
+                    "analytical_lower_bound_exceeds_feasible_incumbent"
+                )
+                certified_gap_semantics = (
+                    "gurobi_raw_gap_only_analytical_bound_rejected_as_"
+                    "inconsistent_with_feasible_incumbent"
+                )
+            else:
+                valid_bounds = [independent_bound]
+                if best_bound is not None and math.isfinite(
+                    float(best_bound)
+                ):
+                    valid_bounds.append(float(best_bound))
+                certified_best_bound = min(
+                    max(valid_bounds),
+                    incumbent_objective,
+                )
+                certified_gap = max(
+                    incumbent_objective - certified_best_bound,
+                    0.0,
+                ) / max(abs(incumbent_objective), 1.0e-9)
+                certified_gap_semantics = (
+                    "maximum_of_gurobi_raw_obj_bound_and_independent_integer_"
+                    "valid_analytical_objective_lower_bound"
+                )
         nodes_explored = None
         if hasattr(model, "NodeCount"):
             try:
@@ -3902,6 +3957,9 @@ class GurobiMILPAdapter:
             "warm_start_source": warm_start_source,
             "best_bound": best_bound,
             "final_gap": final_gap,
+            "certified_best_bound": certified_best_bound,
+            "certified_gap": certified_gap,
+            "certified_gap_semantics": certified_gap_semantics,
             "nodes_explored": nodes_explored,
             "runtime_sec": runtime_sec,
             "first_feasible_sec": first_feasible_sec,
@@ -4497,6 +4555,15 @@ class GurobiMILPAdapter:
                 "integrated_analytical_objective_lower_bound_semantics": (
                     "integer_valid_sum_of_strict_path_cover_vehicle_day_"
                     "cost_floor_and_optimistic_weather_energy_fuel_floor"
+                ),
+                "integrated_gurobi_raw_best_bound": best_bound,
+                "integrated_gurobi_raw_mip_gap_ratio": final_gap,
+                "integrated_certified_best_bound": (
+                    certified_best_bound
+                ),
+                "integrated_certified_mip_gap_ratio": certified_gap,
+                "integrated_certified_mip_gap_semantics": (
+                    certified_gap_semantics
                 ),
                 "integrated_identical_vehicle_groups": [
                     list(group)
@@ -6915,6 +6982,344 @@ class GurobiMILPAdapter:
                 },
             )
 
+        def _constructive_dispatch_priority_lower_bound(
+            plan: AssignmentPlan,
+        ) -> float:
+            """Return an optimistic dispatch priority score for ordering only.
+
+            The bound prices exact ICE movement, fixed vehicle activation,
+            and vehicle-days in the reconstructed dispatch.  It deliberately
+            omits BEV energy, driver, degradation, switching, and every other
+            term.  It is a valid lower bound only when the existing analytical
+            objective-certificate guard has proved all omitted terms
+            nonnegative.  Stage 2 actual accounting remains the sole
+            candidate-selection objective in every case.
+            """
+
+            assigned_vehicle_ids = {
+                str(plan.vehicle_id_for_duty(duty.duty_id))
+                for duty in plan.duties
+                if duty.legs
+            }
+            lower_bound = 0.0
+            if component_flags.get("vehicle_fixed_cost", True):
+                lower_bound += sum(
+                    vehicle_weight
+                    * float(
+                        getattr(vehicle_by_id.get(vehicle_id), "fixed_use_cost_jpy", 0.0)
+                        or 0.0
+                    )
+                    for vehicle_id in assigned_vehicle_ids
+                )
+            if (
+                component_flags.get("vehicle_usage_cost", True)
+                and vehicle_usage_unit_cost > 0.0
+            ):
+                used_vehicle_days = {
+                    (
+                        str(plan.vehicle_id_for_duty(duty.duty_id)),
+                        int(
+                            trip_day_index_by_trip_id.get(
+                                str(leg.trip.trip_id),
+                                0,
+                            )
+                        ),
+                    )
+                    for duty in plan.duties
+                    for leg in duty.legs
+                }
+                lower_bound += (
+                    vehicle_usage_weight
+                    * vehicle_usage_unit_cost
+                    * len(used_vehicle_days)
+                )
+
+            for duty in plan.duties:
+                if not duty.legs:
+                    continue
+                vehicle_id = str(plan.vehicle_id_for_duty(duty.duty_id))
+                vehicle = vehicle_by_id.get(vehicle_id)
+                if vehicle is None or _powertrain_group(vehicle_id) == "ELECTRIC":
+                    continue
+                fuel_unit_cost = _ice_fuel_unit_cost(vehicle)
+                trip_ids = [
+                    str(leg.trip.trip_id)
+                    for leg in duty.legs
+                ]
+                fuel_l = sum(
+                    self._trip_fuel_l(problem, vehicle, trip_id)
+                    for trip_id in trip_ids
+                )
+                fuel_l += sum(
+                    self._deadhead_fuel_l(
+                        problem,
+                        vehicle,
+                        from_trip_id,
+                        to_trip_id,
+                    )
+                    for from_trip_id, to_trip_id in zip(
+                        trip_ids,
+                        trip_ids[1:],
+                    )
+                )
+                first_trip = trip_by_id.get(trip_ids[0])
+                if first_trip is not None:
+                    startup = self._startup_energy_precheck(
+                        problem,
+                        vehicle,
+                        first_trip,
+                        dispatch_trip_by_id=dispatch_trip_by_id,
+                    )
+                    fuel_l += (
+                        self._deadhead_distance_km(
+                            problem,
+                            int(startup.startup_deadhead_min or 0),
+                        )
+                        * max(
+                            float(
+                                getattr(
+                                    vehicle,
+                                    "fuel_consumption_l_per_km",
+                                    0.0,
+                                )
+                                or 0.0
+                            ),
+                            0.0,
+                        )
+                    )
+                last_trip = trip_by_id.get(trip_ids[-1])
+                if last_trip is not None:
+                    return_exists, return_deadhead_min = return_deadhead_min_to_home(
+                        problem,
+                        vehicle,
+                        last_trip,
+                    )
+                    if return_exists:
+                        fuel_l += (
+                            self._deadhead_distance_km(
+                                problem,
+                                int(return_deadhead_min or 0),
+                            )
+                            * max(
+                                float(
+                                    getattr(
+                                        vehicle,
+                                        "fuel_consumption_l_per_km",
+                                        0.0,
+                                    )
+                                    or 0.0
+                                ),
+                                0.0,
+                            )
+                        )
+                lower_bound += fuel_unit_cost * fuel_l
+            return float(lower_bound)
+
+        def _constructive_candidate_from_complete_start(
+            start: Mapping[str, Any],
+            *,
+            target_used_bev: int,
+            target_used_ice: Optional[int],
+            target_delta_used_bev: int,
+            frontier_enabled: bool,
+        ) -> Optional[Tuple[AssignmentPlan, float, str]]:
+            """Promote a complete discrete MIP start to Stage 2 evaluation.
+
+            This is not a Stage 1 incumbent and does not satisfy energy
+            recourse by construction.  It is accepted here only when its
+            assignment and path keys form an exact, duplicate-free coverage
+            of the canonical trips and its activated composition satisfies
+            the temporary target.  Stage 2 and the physical checker must
+            still accept it before it can influence the selected result.
+            """
+
+            selected_y = {
+                (str(vehicle_id), str(trip_id))
+                for vehicle_id, trip_id in (start.get("selected_y") or ())
+            }
+            selected_x = {
+                (
+                    str(vehicle_id),
+                    str(from_trip_id),
+                    str(to_trip_id),
+                )
+                for vehicle_id, from_trip_id, to_trip_id in (
+                    start.get("selected_x") or ()
+                )
+            }
+            selected_start = {
+                (str(vehicle_id), str(trip_id))
+                for vehicle_id, trip_id in (
+                    start.get("selected_start") or ()
+                )
+            }
+            selected_end = {
+                (str(vehicle_id), str(trip_id))
+                for vehicle_id, trip_id in (start.get("selected_end") or ())
+            }
+            selected_used = {
+                str(vehicle_id)
+                for vehicle_id in (start.get("selected_used") or ())
+            }
+            expected_trip_ids = {
+                str(trip.trip_id)
+                for trip in problem.trips
+            }
+            selected_trip_ids = [trip_id for _vehicle_id, trip_id in selected_y]
+            if (
+                len(selected_y) != len(expected_trip_ids)
+                or len(selected_trip_ids) != len(set(selected_trip_ids))
+                or set(selected_trip_ids) != expected_trip_ids
+                or any(key not in y for key in selected_y)
+                or any(key not in x for key in selected_x)
+                or any(key not in start_arc for key in selected_start)
+                or any(key not in end_arc for key in selected_end)
+            ):
+                return None
+            active_vehicle_ids = {
+                vehicle_id for vehicle_id, _trip_id in selected_y
+            }
+            if active_vehicle_ids != selected_used:
+                return None
+            if any(
+                (vehicle_id, from_trip_id) not in selected_y
+                or (vehicle_id, to_trip_id) not in selected_y
+                for vehicle_id, from_trip_id, to_trip_id in selected_x
+            ):
+                return None
+            if any(key not in selected_y for key in selected_start | selected_end):
+                return None
+            selected_successor_sources = [
+                (vehicle_id, from_trip_id)
+                for vehicle_id, from_trip_id, _to_trip_id in selected_x
+            ]
+            selected_successor_targets = [
+                (vehicle_id, to_trip_id)
+                for vehicle_id, _from_trip_id, to_trip_id in selected_x
+            ]
+            if (
+                len(selected_successor_sources)
+                != len(set(selected_successor_sources))
+                or len(selected_successor_targets)
+                != len(set(selected_successor_targets))
+                or len(selected_x) != len(selected_y) - len(selected_start)
+                or len(selected_start) != len(selected_end)
+            ):
+                return None
+
+            duties, served_trip_ids, duty_vehicle_map = (
+                self._build_vehicle_duties_from_selected_assignment_keys(
+                    problem=problem,
+                    trip_by_id=trip_by_id,
+                    dispatch_trip_by_id=dispatch_trip_by_id,
+                    selected_y=selected_y,
+                    selected_x=selected_x,
+                    selected_start=selected_start,
+                )
+            )
+            if (
+                len(served_trip_ids) != len(expected_trip_ids)
+                or len(set(served_trip_ids)) != len(expected_trip_ids)
+                or set(served_trip_ids) != expected_trip_ids
+                or len(duties) != len(selected_start)
+                or len(duties) != len(selected_end)
+                or set(duty_vehicle_map.values()) != active_vehicle_ids
+            ):
+                return None
+            plan = AssignmentPlan(
+                duties=tuple(duties),
+                served_trip_ids=tuple(sorted(expected_trip_ids)),
+                unserved_trip_ids=(),
+                metadata={
+                    **dict(stage1_plan.metadata or {}),
+                    "duty_vehicle_map": duty_vehicle_map,
+                    "stage1_objective": None,
+                    "stage1_candidate_source": (
+                        "constructive_powertrain_activation_start"
+                    ),
+                    "stage1_composition_target_used_bev": target_used_bev,
+                    "stage1_composition_target_used_ice": target_used_ice,
+                    "stage1_composition_target_delta_used_bev": (
+                        target_delta_used_bev
+                    ),
+                    "stage1_frontier_minimum_used_bev_count": (
+                        target_used_bev if frontier_enabled else None
+                    ),
+                    "stage1_composition_search_solver_status": (
+                        "constructive_dispatch_pending_stage2"
+                    ),
+                    "stage1_time_indexed_energy_recourse_result": {
+                        "available": False,
+                        "objective_jpy": None,
+                        "reason": (
+                            "constructive_dispatch_candidate_requires_"
+                            "stage2_physical_recourse"
+                        ),
+                    },
+                    "constructive_dispatch_validation": {
+                        "exact_trip_coverage": True,
+                        "duplicate_trip_assignment_count": 0,
+                        "selected_assignment_count": len(selected_y),
+                        "selected_successor_count": len(selected_x),
+                        "selected_fragment_count": len(duties),
+                        "selected_used_vehicle_count": len(selected_used),
+                        "stage1_energy_recourse_certified": False,
+                        "stage2_physical_validation_required": True,
+                    },
+                    "constructive_start_mode": str(
+                        start.get("start_mode") or "unspecified"
+                    ),
+                    "constructive_start_powertrain_pattern_hash": str(
+                        start.get("powertrain_pattern_hash") or ""
+                    ),
+                },
+            )
+            actual_used_bev, actual_used_ice = (
+                _candidate_used_powertrain_composition(plan)
+            )
+            target_satisfied = (
+                actual_used_bev >= target_used_bev
+                if frontier_enabled
+                else (
+                    actual_used_bev == target_used_bev
+                    and target_used_ice is not None
+                    and actual_used_ice == target_used_ice
+                )
+            )
+            if not target_satisfied:
+                return None
+            priority_lower_bound = (
+                _constructive_dispatch_priority_lower_bound(plan)
+            )
+            assignment_hash = _candidate_hash(
+                _assignment_pairs_for_plan(plan)
+            )
+            plan = replace(
+                plan,
+                metadata={
+                    **dict(plan.metadata or {}),
+                    "stage1_candidate_assignment_hash": assignment_hash,
+                    "stage1_candidate_priority_cost_jpy": (
+                        priority_lower_bound
+                    ),
+                    "stage1_candidate_priority_cost_semantics": (
+                        (
+                            "valid_dispatch_only_lower_bound_of_exact_ice_"
+                            "fuel_and_co2_fixed_vehicle_and_vehicle_day_"
+                            "costs_with_other_nonnegative_terms_omitted_not_"
+                            "stage1_solver_objective"
+                            if stage1_analytical_total_objective_certificate_eligible
+                            else "optimistic_dispatch_priority_score_not_a_"
+                            "certified_lower_bound_or_stage1_solver_objective"
+                        )
+                    ),
+                    "stage1_candidate_priority_lower_bound_certified": bool(
+                        stage1_analytical_total_objective_certificate_eligible
+                    ),
+                },
+            )
+            return plan, priority_lower_bound, assignment_hash
+
         def _add_powertrain_pattern_no_good(
             pattern: Tuple[Tuple[str, str], ...],
             *,
@@ -8406,6 +8811,95 @@ class GurobiMILPAdapter:
                     _apply_partial_assignment_mip_starts(
                         composition_mip_starts
                     )
+                pending_constructive_candidates: List[
+                    Tuple[AssignmentPlan, float, str, Dict[str, Any]]
+                ] = []
+                constructive_candidate_records: List[Dict[str, Any]] = []
+                for candidate_start in composition_mip_starts:
+                    constructive_candidate = (
+                        _constructive_candidate_from_complete_start(
+                            candidate_start,
+                            target_used_bev=target_used_bev,
+                            target_used_ice=target_used_ice,
+                            target_delta_used_bev=int(
+                                target_record[
+                                    "delta_used_bev_from_primary"
+                                ]
+                            ),
+                            frontier_enabled=stage1_bev_frontier_enabled,
+                        )
+                    )
+                    if constructive_candidate is None:
+                        constructive_candidate_records.append(
+                            {
+                                "accepted_for_stage2_evaluation": False,
+                                "rejection_reason": (
+                                    "incomplete_or_invalid_discrete_dispatch"
+                                ),
+                                "start_mode": str(
+                                    candidate_start.get("start_mode") or ""
+                                ),
+                                "powertrain_pattern_hash": str(
+                                    candidate_start.get(
+                                        "powertrain_pattern_hash"
+                                    )
+                                    or ""
+                                ),
+                            }
+                        )
+                        continue
+                    (
+                        constructive_plan,
+                        constructive_priority_lower_bound,
+                        constructive_assignment_hash,
+                    ) = constructive_candidate
+                    actual_constructive_used_bev, actual_constructive_used_ice = (
+                        _candidate_used_powertrain_composition(
+                            constructive_plan
+                        )
+                    )
+                    candidate_record = {
+                        "candidate_hash": constructive_assignment_hash,
+                        "assignment_hash": constructive_assignment_hash,
+                        "start_mode": str(
+                            candidate_start.get("start_mode") or ""
+                        ),
+                        "powertrain_pattern_hash": str(
+                            candidate_start.get("powertrain_pattern_hash")
+                            or ""
+                        ),
+                        "actual_used_bev": actual_constructive_used_bev,
+                        "actual_used_ice": actual_constructive_used_ice,
+                        "priority_lower_bound_jpy": (
+                            constructive_priority_lower_bound
+                        ),
+                        "priority_cost_jpy": (
+                            constructive_priority_lower_bound
+                        ),
+                        "priority_cost_semantics": (
+                            constructive_plan.metadata.get(
+                                "stage1_candidate_priority_cost_semantics"
+                            )
+                        ),
+                        "priority_lower_bound_certified": bool(
+                            constructive_plan.metadata.get(
+                                "stage1_candidate_priority_lower_bound_certified",
+                                False,
+                            )
+                        ),
+                        "stage1_energy_recourse_certified": False,
+                        "stage2_physical_validation_required": True,
+                        "promotion_status": "pending_stage1_solver_result",
+                    }
+                    constructive_candidate_records.append(candidate_record)
+                    pending_constructive_candidates.append(
+                        (
+                            constructive_plan,
+                            constructive_priority_lower_bound,
+                            constructive_assignment_hash,
+                            candidate_record,
+                        )
+                    )
                 stage1.Params.TimeLimit = composition_time_limit_sec
                 stage1.Params.PoolSearchMode = 0
                 stage1.Params.PoolSolutions = 1
@@ -8653,6 +9147,157 @@ class GurobiMILPAdapter:
                                 ),
                             }
                         )
+                    composition_solution_count = int(
+                        getattr(stage1, "SolCount", 0) or 0
+                    )
+                    promote_constructive_dispatch = bool(
+                        composition_solution_count == 0
+                        and composition_status != "infeasible"
+                    )
+                    for (
+                        constructive_plan,
+                        constructive_priority_lower_bound,
+                        constructive_assignment_hash,
+                        candidate_record,
+                    ) in pending_constructive_candidates:
+                        if not promote_constructive_dispatch:
+                            candidate_record.update(
+                                {
+                                    "accepted_for_stage2_evaluation": False,
+                                    "promotion_status": (
+                                        "not_needed_stage1_incumbent_available"
+                                        if composition_solution_count > 0
+                                        else "not_promoted_stage1_infeasible"
+                                    ),
+                                    "rejection_reason": (
+                                        "stage1_incumbent_available"
+                                        if composition_solution_count > 0
+                                        else "stage1_infeasible"
+                                    ),
+                                }
+                            )
+                            continue
+                        if (
+                            len(stage1_candidates)
+                            >= stage1_stage2_candidate_limit
+                        ):
+                            candidate_record.update(
+                                {
+                                    "accepted_for_stage2_evaluation": False,
+                                    "promotion_status": (
+                                        "not_promoted_candidate_limit_reached"
+                                    ),
+                                    "rejection_reason": (
+                                        "candidate_limit_reached"
+                                    ),
+                                }
+                            )
+                            continue
+                        if (
+                            constructive_assignment_hash
+                            in seen_candidate_hashes
+                        ):
+                            candidate_record.update(
+                                {
+                                    "accepted_for_stage2_evaluation": False,
+                                    "promotion_status": (
+                                        "not_promoted_duplicate_assignment"
+                                    ),
+                                    "rejection_reason": (
+                                        "duplicate_assignment_hash"
+                                    ),
+                                }
+                            )
+                            continue
+                        seen_candidate_hashes.add(
+                            constructive_assignment_hash
+                        )
+                        candidate_record.update(
+                            {
+                                "accepted_for_stage2_evaluation": True,
+                                "promotion_status": (
+                                    "promoted_after_stage1_no_incumbent"
+                                ),
+                            }
+                        )
+                        stage1_candidates.append(
+                            (
+                                len(stage1_candidates),
+                                constructive_priority_lower_bound,
+                                constructive_assignment_hash,
+                                (
+                                    "constructive_powertrain_activation_"
+                                    "start"
+                                ),
+                                replace(
+                                    constructive_plan,
+                                    metadata={
+                                        **dict(
+                                            constructive_plan.metadata or {}
+                                        ),
+                                        "stage1_pool_solution_index": (
+                                            len(stage1_candidates)
+                                        ),
+                                        "stage1_composition_search_solver_status": (
+                                            composition_status
+                                        ),
+                                    },
+                                ),
+                            )
+                        )
+                    if constructive_candidate_records:
+                        accepted_constructive_records = [
+                            record
+                            for record in constructive_candidate_records
+                            if record.get(
+                                "accepted_for_stage2_evaluation"
+                            )
+                            is True
+                        ]
+                        constructive_record_update: Dict[str, Any] = {
+                            "constructive_dispatch_candidate_count": len(
+                                constructive_candidate_records
+                            ),
+                            "constructive_dispatch_candidate_accepted_count": len(
+                                accepted_constructive_records
+                            ),
+                            "constructive_dispatch_candidates": (
+                                constructive_candidate_records
+                            ),
+                            "constructive_dispatch_semantics": (
+                                "complete_discrete_dispatch_promoted_only_"
+                                "after_stage1_no_incumbent_then_pending_"
+                                "exact_stage2_and_independent_physical_"
+                                "validation"
+                            ),
+                        }
+                        if accepted_constructive_records:
+                            first_promoted = accepted_constructive_records[0]
+                            constructive_record_update.update(
+                                {
+                                    "candidate_hash": first_promoted[
+                                        "candidate_hash"
+                                    ],
+                                    "actual_used_bev": first_promoted[
+                                        "actual_used_bev"
+                                    ],
+                                    "actual_used_ice": first_promoted[
+                                        "actual_used_ice"
+                                    ],
+                                    "candidate_accepted_for_stage2_evaluation": True,
+                                    "stage1_relaxed_objective_jpy": (
+                                        first_promoted[
+                                            "priority_cost_jpy"
+                                        ]
+                                    ),
+                                    "stage1_relaxed_objective_semantics": (
+                                        first_promoted[
+                                            "priority_cost_semantics"
+                                        ]
+                                    ),
+                                }
+                            )
+                        target_record.update(constructive_record_update)
                     if composition_status == "infeasible":
                         iis_constraint_names: List[str] = []
                         iis_error = ""
@@ -8870,12 +9515,33 @@ class GurobiMILPAdapter:
                                 direction
                             ] = composition_plan
                         if assignment_hash in seen_candidate_hashes:
+                            already_scheduled = any(
+                                str(
+                                    record.get("candidate_hash") or ""
+                                )
+                                == assignment_hash
+                                and record.get(
+                                    "accepted_for_stage2_evaluation"
+                                )
+                                is True
+                                for record in target_record.get(
+                                    "constructive_dispatch_candidates",
+                                    (),
+                                )
+                            )
                             target_record[
                                 "candidate_accepted_for_stage2_evaluation"
-                            ] = False
-                            target_record["candidate_rejection_reason"] = (
-                                "duplicate_assignment_hash"
-                            )
+                            ] = already_scheduled
+                            target_record[
+                                "solver_candidate_duplicate_assignment_hash"
+                            ] = True
+                            target_record[
+                                "solver_candidate_duplicate_already_scheduled"
+                            ] = already_scheduled
+                            if not already_scheduled:
+                                target_record[
+                                    "candidate_rejection_reason"
+                                ] = "duplicate_assignment_hash"
                         else:
                             seen_candidate_hashes.add(assignment_hash)
                             target_record[
@@ -9340,14 +10006,15 @@ class GurobiMILPAdapter:
 
         # Exact-composition candidates are generated by distance from the
         # primary composition, not by economic merit.  Under a finite Stage 2
-        # budget that order can starve the best sunny high-BEV candidate even
-        # after Stage 1 has found it.  Reorder the unchanged set by the
-        # weather-aware relaxed objective before physical recourse evaluation.
+        # budget that order can starve a better candidate.  Solver incumbents
+        # use their weather-aware relaxed objective; complete constructive
+        # dispatches use a separately labelled valid lower bound until Stage 2
+        # supplies the canonical physical cost.
         stage1_candidates.sort(
             key=_stage1_candidate_evaluation_priority_key
         )
         candidate_evaluation_order = (
-            "stage1_relaxed_objective_ascending_then_candidate_hash"
+            "candidate_priority_cost_ascending_then_candidate_hash"
         )
         candidate_evaluation_initial_budget_sec = (
             _remaining_stage_budget_sec(
@@ -9412,6 +10079,25 @@ class GurobiMILPAdapter:
                         "candidate_hash": assignment_hash,
                         "assignment_hash": assignment_hash,
                         "stage1_relaxed_objective_jpy": relaxed_objective,
+                        "stage1_candidate_priority_cost_jpy": (
+                            relaxed_objective
+                        ),
+                        "stage1_candidate_priority_cost_semantics": (
+                            (candidate_plan.metadata or {}).get(
+                                "stage1_candidate_priority_cost_semantics",
+                                "stage1_weather_aware_relaxed_objective",
+                            )
+                        ),
+                        "stage1_candidate_priority_is_solver_native": (
+                            candidate_source
+                            != "constructive_powertrain_activation_start"
+                        ),
+                        "constructive_dispatch_validation": dict(
+                            (candidate_plan.metadata or {}).get(
+                                "constructive_dispatch_validation"
+                            )
+                            or {}
+                        ),
                         "stage2_solver_status": (
                             "not_run_feedback_budget_reserved"
                         ),
@@ -9600,6 +10286,25 @@ class GurobiMILPAdapter:
                     "candidate_hash": assignment_hash,
                     "assignment_hash": assignment_hash,
                     "stage1_relaxed_objective_jpy": relaxed_objective,
+                    "stage1_candidate_priority_cost_jpy": (
+                        relaxed_objective
+                    ),
+                    "stage1_candidate_priority_cost_semantics": (
+                        (candidate_plan.metadata or {}).get(
+                            "stage1_candidate_priority_cost_semantics",
+                            "stage1_weather_aware_relaxed_objective",
+                        )
+                    ),
+                    "stage1_candidate_priority_is_solver_native": (
+                        candidate_source
+                        != "constructive_powertrain_activation_start"
+                    ),
+                    "constructive_dispatch_validation": dict(
+                        (candidate_plan.metadata or {}).get(
+                            "constructive_dispatch_validation"
+                        )
+                        or {}
+                    ),
                     "stage2_solver_status": str(
                         candidate_plan_metadata.get(
                             "stage2_solver_status",
@@ -10255,11 +10960,27 @@ class GurobiMILPAdapter:
                 "minimum_canonical_actual_cost_among_stage2_feasible_"
                 "independently_physically_valid_"
                 "time_bounded_primary_pool_used_powertrain_composition_"
-                "neighborhood_and_powertrain_pattern_no_good_enumeration_"
-                "candidates"
+                "neighborhood_complete_constructive_dispatch_and_"
+                "powertrain_pattern_no_good_enumeration_candidates"
             ),
             "stage1_stage2_candidate_global_optimality_claimed": False,
             "stage1_stage2_candidate_evaluation": candidate_evaluations,
+            "stage1_constructive_dispatch_candidate_count": sum(
+                candidate_source
+                == "constructive_powertrain_activation_start"
+                for (
+                    _pool_index,
+                    _priority_cost,
+                    _candidate_hash_value,
+                    candidate_source,
+                    _candidate_plan,
+                ) in stage1_candidates
+            ),
+            "stage1_constructive_dispatch_candidate_semantics": (
+                "exact_discrete_trip_paths_promoted_from_complete_mip_"
+                "starts_but_accepted_only_after_stage2_recourse_and_"
+                "independent_physical_validation"
+            ),
             "stage1_primary_incumbent_objective_jpy": (
                 stage1_objective_value
             ),
@@ -16392,31 +17113,90 @@ class GurobiMILPAdapter:
         start_arc: Dict[Tuple[str, str], Any],
         use_pool_solution: bool = False,
     ) -> Tuple[List[VehicleDuty], List[str], Dict[str, str]]:
+        selected_y = {
+            key
+            for key, variable in y.items()
+            if self._binary_value(
+                variable,
+                use_pool_solution=use_pool_solution,
+            )
+        }
+        selected_x = {
+            key
+            for key, variable in x.items()
+            if self._binary_value(
+                variable,
+                use_pool_solution=use_pool_solution,
+            )
+        }
+        selected_start = {
+            key
+            for key, variable in start_arc.items()
+            if self._binary_value(
+                variable,
+                use_pool_solution=use_pool_solution,
+            )
+        }
+        return self._build_vehicle_duties_from_selected_assignment_keys(
+            problem=problem,
+            trip_by_id=trip_by_id,
+            dispatch_trip_by_id=dispatch_trip_by_id,
+            selected_y=selected_y,
+            selected_x=selected_x,
+            selected_start=selected_start,
+        )
+
+    def _build_vehicle_duties_from_selected_assignment_keys(
+        self,
+        *,
+        problem: CanonicalOptimizationProblem,
+        trip_by_id: Dict[str, ProblemTrip],
+        dispatch_trip_by_id: Dict[str, Any],
+        selected_y: Iterable[Tuple[str, str]],
+        selected_x: Iterable[Tuple[str, str, str]],
+        selected_start: Iterable[Tuple[str, str]],
+    ) -> Tuple[List[VehicleDuty], List[str], Dict[str, str]]:
+        """Build duties from a complete discrete dispatch selection.
+
+        Composition-neighbourhood starts already contain a full set of
+        assignment, successor, and start-arc keys.  Reconstructing that
+        dispatch directly prevents a short target-MILP time limit from
+        discarding an otherwise complete candidate.  This method certifies
+        only the discrete trip paths; charging, SOC, charger occupancy, and
+        depot-energy feasibility remain the responsibility of Stage 2 and
+        the independent physical checker.
+        """
+
         duties: List[VehicleDuty] = []
         served_trip_ids: List[str] = []
         duty_vehicle_map: Dict[str, str] = {}
+        selected_y_keys = {
+            (str(vehicle_id), str(trip_id))
+            for vehicle_id, trip_id in selected_y
+        }
+        selected_x_keys = {
+            (str(vehicle_id), str(from_trip_id), str(to_trip_id))
+            for vehicle_id, from_trip_id, to_trip_id in selected_x
+        }
+        selected_start_keys = {
+            (str(vehicle_id), str(trip_id))
+            for vehicle_id, trip_id in selected_start
+        }
 
         for vehicle in problem.vehicles:
             vehicle_id = str(vehicle.vehicle_id)
             assigned_trip_ids = {
                 trip.trip_id
                 for trip in problem.trips
-                if (vehicle_id, trip.trip_id) in y
-                and self._binary_value(
-                    y[(vehicle_id, trip.trip_id)],
-                    use_pool_solution=use_pool_solution,
-                )
+                if (vehicle_id, trip.trip_id) in selected_y_keys
             }
             if not assigned_trip_ids:
                 continue
 
             successor_by_trip: Dict[str, str] = {}
             predecessor_by_trip: Dict[str, str] = {}
-            for v_id, from_trip_id, to_trip_id in x:
-                if v_id != vehicle_id or not self._binary_value(
-                    x[(v_id, from_trip_id, to_trip_id)],
-                    use_pool_solution=use_pool_solution,
-                ):
+            for v_id, from_trip_id, to_trip_id in selected_x_keys:
+                if v_id != vehicle_id:
                     continue
                 if from_trip_id not in assigned_trip_ids or to_trip_id not in assigned_trip_ids:
                     continue
@@ -16426,11 +17206,7 @@ class GurobiMILPAdapter:
             start_trip_ids = [
                 trip_id
                 for trip_id in assigned_trip_ids
-                if (vehicle_id, trip_id) in start_arc
-                and self._binary_value(
-                    start_arc[(vehicle_id, trip_id)],
-                    use_pool_solution=use_pool_solution,
-                )
+                if (vehicle_id, trip_id) in selected_start_keys
             ]
             if not start_trip_ids:
                 start_trip_ids = [

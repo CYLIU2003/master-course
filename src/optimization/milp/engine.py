@@ -727,10 +727,25 @@ class MILPOptimizer:
                     )
                 ),
                 "best_bound": outcome.best_bound,
+                "raw_best_bound": outcome.best_bound,
+                "certified_best_bound": outcome.certified_best_bound,
                 # A gap is meaningful only when the returned solver outcome
                 # has an incumbent.  Infeasible/no-incumbent runs must not
                 # expose a stale or stage-1 gap as an achieved gap.
                 "final_gap": outcome.final_gap if outcome.has_feasible_incumbent else None,
+                "raw_mip_gap_ratio": (
+                    outcome.final_gap
+                    if outcome.has_feasible_incumbent
+                    else None
+                ),
+                "certified_mip_gap_ratio": (
+                    outcome.certified_gap
+                    if outcome.has_feasible_incumbent
+                    else None
+                ),
+                "certified_mip_gap_semantics": (
+                    outcome.certified_gap_semantics
+                ),
                 "requested_mip_gap": float(config.mip_gap),
                 "achieved_mip_gap": outcome.final_gap if outcome.has_feasible_incumbent else None,
                 "nodes_explored": outcome.nodes_explored,

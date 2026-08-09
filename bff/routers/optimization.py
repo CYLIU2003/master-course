@@ -9722,12 +9722,22 @@ def _apply_result_claim_classification(
         label = "invalid_or_infeasible_result"
         display_name = "Invalid or infeasible result"
     mip_gap_target_met = settings.get("mip_gap_target_met") is True
-    certified_mip_gap = settings.get("stage1_certified_mip_gap_ratio")
+    certified_mip_gap = settings.get(
+        "certified_mip_gap_ratio",
+        settings.get("stage1_certified_mip_gap_ratio"),
+    )
     if label == "feasible_candidate" and mip_gap_target_met:
         interpretation = (
-            "A physically feasible incumbent meeting the certified Stage 1 "
-            "MIP gap target; remaining optimality blockers are listed "
-            "separately and still forbid an integrated global-optimum claim."
+            (
+                "A physically feasible incumbent meeting the certified Stage 1 "
+                "MIP gap target; remaining optimality blockers are listed "
+                "separately and still forbid an integrated global-optimum claim."
+                if settings.get("certified_mip_gap_ratio") is None
+                and settings.get("stage1_certified_mip_gap_ratio") is not None
+                else "A physically feasible incumbent meeting a separately "
+                "certified integrated MIP gap target; remaining optimality "
+                "blockers are listed separately."
+            )
             if certified_mip_gap is not None
             else "A physically feasible incumbent meeting the requested MIP "
             "gap target; remaining optimality blockers are listed separately."
@@ -9816,7 +9826,21 @@ def _solver_settings_payload(
     )
     stage1_best_obj_stop_enabled = metadata.get("stage1_best_obj_stop_enabled")
     stage1_best_obj_stop_applied = metadata.get("stage1_best_obj_stop_applied")
-    certified_gap = _float_or_none(metadata.get("stage1_certified_mip_gap_ratio"))
+    stage1_certified_gap = _float_or_none(
+        metadata.get("stage1_certified_mip_gap_ratio")
+    )
+    certified_gap = _float_or_none(
+        metadata.get("certified_mip_gap_ratio")
+    )
+    if certified_gap is None:
+        certified_gap = stage1_certified_gap
+    certified_bound = _float_or_none(
+        metadata.get("certified_best_bound")
+    )
+    if certified_bound is None:
+        certified_bound = _float_or_none(
+            metadata.get("stage1_certified_best_bound")
+        )
     gap_for_target = certified_gap if certified_gap is not None else achieved_gap
     mip_gap_target_met = bool(
         requested_gap is not None
@@ -9837,6 +9861,22 @@ def _solver_settings_payload(
         "mip_gap_requested_percent": None if requested_gap is None else requested_gap * 100.0,
         "mip_gap_achieved_ratio": achieved_gap,
         "mip_gap_achieved_percent": None if achieved_gap is None else achieved_gap * 100.0,
+        "gurobi_raw_best_bound": _float_or_none(
+            metadata.get("raw_best_bound", metadata.get("best_bound"))
+        ),
+        "gurobi_raw_mip_gap_ratio": _float_or_none(
+            metadata.get("raw_mip_gap_ratio", metadata.get("final_gap"))
+        ),
+        "certified_best_bound": certified_bound,
+        "certified_mip_gap_ratio": certified_gap,
+        "certified_mip_gap_percent": (
+            None if certified_gap is None else certified_gap * 100.0
+        ),
+        "certified_mip_gap_semantics": str(
+            metadata.get("certified_mip_gap_semantics")
+            or metadata.get("stage1_certified_mip_gap_semantics")
+            or ""
+        ),
         "gurobi_mip_gap_is_ratio": True,
         "has_feasible_incumbent": has_feasible_incumbent,
         "incumbent_count": _int_or_none(
@@ -9913,12 +9953,11 @@ def _solver_settings_payload(
         "stage1_certified_best_bound": _float_or_none(
             metadata.get("stage1_certified_best_bound")
         ),
-        "stage1_certified_mip_gap_ratio": certified_gap,
+        "stage1_certified_mip_gap_ratio": stage1_certified_gap,
         "stage1_certified_mip_gap_percent": (
             None
-            if _float_or_none(metadata.get("stage1_certified_mip_gap_ratio")) is None
-            else _float_or_none(metadata.get("stage1_certified_mip_gap_ratio"))
-            * 100.0
+            if stage1_certified_gap is None
+            else stage1_certified_gap * 100.0
         ),
         "stage1_certified_mip_gap_semantics": metadata.get(
             "stage1_certified_mip_gap_semantics"

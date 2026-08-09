@@ -494,7 +494,7 @@ def test_phase3_selects_lowest_canonical_cost_from_exact_stage2_candidates() -> 
         for item in candidates
     )
     assert metadata["stage1_stage2_candidate_evaluation_order"] == (
-        "stage1_relaxed_objective_ascending_then_candidate_hash"
+        "candidate_priority_cost_ascending_then_candidate_hash"
     )
     assert (
         metadata[

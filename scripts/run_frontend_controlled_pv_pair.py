@@ -2112,7 +2112,7 @@ def _phase4_seed_controls_match(settings: Mapping[str, Any]) -> bool:
         and settings.get("phase4_phase3_seed_wall_clock_budget_sec")
         == expected_seed_wall_budget_sec
         and settings.get("phase4_phase3_seed_candidate_evaluation_order")
-        == "stage1_relaxed_objective_ascending_then_candidate_hash"
+        == "candidate_priority_cost_ascending_then_candidate_hash"
         and (
             _number(
                 settings.get(

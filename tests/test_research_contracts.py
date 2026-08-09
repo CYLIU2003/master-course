@@ -97,6 +97,31 @@ def test_solver_settings_preserves_enabled_bev_frontier_control() -> None:
     assert payload["stage1_bev_frontier_enabled"] is True
 
 
+def test_solver_settings_uses_integrated_certified_gap_without_hiding_raw_gap() -> None:
+    payload = _solver_settings_payload(
+        time_limit_seconds_requested=3_600,
+        mip_gap_requested=0.001,
+        solver_metadata={
+            "has_feasible_incumbent": True,
+            "best_bound": 0.0,
+            "final_gap": 1.0,
+            "raw_best_bound": 0.0,
+            "raw_mip_gap_ratio": 1.0,
+            "certified_best_bound": 640_000.0,
+            "certified_mip_gap_ratio": 0.0005,
+            "certified_mip_gap_semantics": (
+                "maximum_of_gurobi_and_independent_bound"
+            ),
+        },
+    )
+
+    assert payload["mip_gap_achieved_ratio"] == pytest.approx(1.0)
+    assert payload["gurobi_raw_mip_gap_ratio"] == pytest.approx(1.0)
+    assert payload["certified_best_bound"] == pytest.approx(640_000.0)
+    assert payload["certified_mip_gap_ratio"] == pytest.approx(0.0005)
+    assert payload["mip_gap_target_met"] is True
+
+
 def test_solver_settings_persists_integrated_search_profile() -> None:
     search_profile = {
         "schema_version": "phase4_integrated_search_profile_v1",
@@ -164,7 +189,7 @@ def test_solver_settings_persists_phase4_seed_and_total_time_budget() -> None:
                 "seed_stage2_time_limit_sec": 120,
                 "seed_stage1_stage2_candidate_limit": 10,
                 "seed_stage1_stage2_candidate_evaluation_order": (
-                    "stage1_relaxed_objective_ascending_then_candidate_hash"
+                    "candidate_priority_cost_ascending_then_candidate_hash"
                 ),
                 "seed_stage1_stage2_candidate_evaluation_initial_budget_sec": 25.0,
                 "seed_stage1_composition_search_radius": 2,
@@ -196,7 +221,7 @@ def test_solver_settings_persists_phase4_seed_and_total_time_budget() -> None:
     assert payload["phase4_phase3_seed_stage2_time_limit_sec"] == 120
     assert payload["phase4_phase3_seed_candidate_limit"] == 10
     assert payload["phase4_phase3_seed_candidate_evaluation_order"] == (
-        "stage1_relaxed_objective_ascending_then_candidate_hash"
+        "candidate_priority_cost_ascending_then_candidate_hash"
     )
     assert payload[
         "phase4_phase3_seed_candidate_evaluation_initial_budget_sec"

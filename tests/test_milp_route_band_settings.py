@@ -359,6 +359,26 @@ def test_solver_adapter_builds_multiple_fragments_from_selected_arcs() -> None:
         f"milp_{vehicle_id}__frag2": vehicle_id,
     }
 
+    direct_duties, direct_served, direct_map = (
+        adapter._build_vehicle_duties_from_selected_assignment_keys(
+            problem=problem,
+            trip_by_id=problem.trip_by_id(),
+            dispatch_trip_by_id=problem.dispatch_context.trips_by_id(),
+            selected_y={key for key, var in y.items() if var.X > 0.5},
+            selected_x={key for key, var in x.items() if var.X > 0.5},
+            selected_start={
+                key for key, var in start_arc.items() if var.X > 0.5
+            },
+        )
+    )
+
+    assert [tuple(duty.trip_ids) for duty in direct_duties] == [
+        ("t1", "t2"),
+        ("t3",),
+    ]
+    assert direct_served == served_trip_ids
+    assert direct_map == duty_vehicle_map
+
 
 def test_milp_model_builder_limits_successor_arcs_per_trip() -> None:
     context = DispatchContext(

@@ -800,7 +800,7 @@ def test_phase4_uses_verified_same_problem_phase3_plan_as_complete_mip_start() -
     assert seed_audit["seed_wall_runtime_sec"] > 0.0
     assert seed_audit[
         "seed_stage1_stage2_candidate_evaluation_order"
-    ] == "stage1_relaxed_objective_ascending_then_candidate_hash"
+    ] == "candidate_priority_cost_ascending_then_candidate_hash"
     assert (
         seed_audit[
             "seed_stage1_stage2_candidate_evaluation_initial_budget_sec"
@@ -871,6 +871,18 @@ def test_phase4_uses_verified_same_problem_phase3_plan_as_complete_mip_start() -
     assert result.solver_metadata[
         "integrated_analytical_objective_floor_certificate_eligible"
     ] is True
+    assert result.solver_metadata["raw_best_bound"] is not None
+    assert result.solver_metadata["raw_mip_gap_ratio"] is not None
+    assert result.solver_metadata["certified_best_bound"] is not None
+    assert result.solver_metadata["certified_mip_gap_ratio"] is not None
+    assert (
+        result.solver_metadata["certified_best_bound"]
+        >= result.solver_metadata["raw_best_bound"]
+    )
+    assert (
+        result.solver_metadata["certified_mip_gap_ratio"]
+        <= result.solver_metadata["raw_mip_gap_ratio"]
+    )
     assert result.solver_metadata["phase4_phase3_seed_audit"][
         "seed_runtime_sec"
     ] > 0.0

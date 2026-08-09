@@ -1,5 +1,29 @@
 # Current research release blockers
 
+## 2026-08-09 working-tree correction awaiting clean rerun
+
+The current correction addresses the unresolved 28--32-BEV search boundary
+without forcing BEV use. A complete discrete composition MIP start is retained
+for Stage 2 only when its short Stage 1 target solve returns no incumbent. It
+must prove exact trip/path coverage first and then pass unchanged SOC, charger,
+PV/BESS/grid, accounting and independent physical checks. Solver-found
+incumbents and IIS-backed infeasibility certificates keep precedence.
+
+Integrated optimality telemetry is also split into immutable Gurobi raw
+bound/gap and a separately named certified bound/gap based on the existing
+integer-valid analytical objective floor. The formal gap gate may use the
+certified value; it may not overwrite or conceal a 100% raw gap. Phase 3's
+Stage 1 certificate remains distinct from Phase 4 integrated certification.
+
+The full code suite passes `1233` tests. Release nevertheless remains
+`BLOCKED`: these changes have not yet been committed and rerun through fresh
+frontend Prepare from a clean frozen SHA. Completion requires both sunny and
+rain to serve 264/264, pass physical validation and 24/24 Rolling, reconcile
+canonical accounting, preserve all matched non-PV controls, and meet the
+requested 0.1% certified integrated gap. If higher-BEV constructive candidates
+fail Stage 2, the failure evidence must identify SOC, charger, trip-chain or
+energy-recourse causes rather than treating target-MILP timeout as infeasible.
+
 ## 2026-08-09 current controlled pair: response verified, optimality blocked
 
 Clean frozen SHA `93d122e1fc929d4833f2997560fa16cf7523e96d`

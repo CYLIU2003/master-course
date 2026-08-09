@@ -36,7 +36,7 @@ def test_formal_phase4_seed_control_contract_matches_server_profile() -> None:
         "phase4_phase3_seed_stage2_time_limit_sec": 120,
         "phase4_phase3_seed_candidate_limit": 21,
         "phase4_phase3_seed_candidate_evaluation_order": (
-            "stage1_relaxed_objective_ascending_then_candidate_hash"
+            "candidate_priority_cost_ascending_then_candidate_hash"
         ),
         "phase4_phase3_seed_candidate_evaluation_initial_budget_sec": 25.0,
         "phase4_phase3_seed_composition_search_radius": 10,

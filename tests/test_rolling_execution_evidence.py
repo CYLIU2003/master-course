@@ -33,7 +33,7 @@ def test_pv_comparison_control_hash_excludes_runtime_telemetry() -> None:
         "gurobi_threads": 4,
         "phase4_phase3_seed_wall_clock_budget_sec": 1200,
         "phase4_phase3_seed_candidate_evaluation_order": (
-            "stage1_relaxed_objective_ascending_then_candidate_hash"
+            "candidate_priority_cost_ascending_then_candidate_hash"
         ),
         "random_seed": 42,
     }

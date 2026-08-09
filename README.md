@@ -1,5 +1,34 @@
 # master-course
 
+## 2026-08-09 complete composition-candidate rescue and gap certification
+
+- Exact-composition search no longer discards a complete dispatch merely
+  because its short target MILP ends without an incumbent. When a MIP start
+  contains exact 264-trip coverage, unique predecessor/successor paths, valid
+  start/end fragments and the requested used-powertrain count, it is retained
+  as a **constructive dispatch candidate** only after the target solve returns
+  no incumbent. It is not a Stage 1 solution or energy-feasibility claim.
+- Every constructive candidate must still pass the unchanged Stage 2 SOC,
+  charger, PV/BESS/grid recourse, canonical cost evaluation and independent
+  physical checker before it can enter final cost selection. No BEV minimum,
+  weather bias, fallback, post-solve repair, timetable rewrite or successor
+  pruning is added.
+- Candidate ordering now reports
+  `candidate_priority_cost_ascending_then_candidate_hash`. Solver candidates
+  use the weather-aware Stage 1 relaxed objective. Constructive candidates use
+  a separately labelled dispatch-only lower bound when the nonnegative-term
+  certificate is valid; Stage 2 actual canonical cost remains authoritative.
+- Phase 4 now exports Gurobi raw bound/gap and an independent certified
+  bound/gap separately. The certified bound is the maximum of Gurobi's bound
+  and the existing integer-valid analytical objective floor. Raw telemetry is
+  never overwritten. The formal gap gate can use the certified gap only when
+  that floor is eligible and its provenance is recorded.
+- The complete repository suite passes (`1233 passed in 54.29s`). This proves
+  the code regression contract only. A fresh clean-commit sunny/rain pair is
+  still required, and release remains `BLOCKED` until both cases meet the
+  requested 0.1% certified gap plus all physical, Rolling, accounting,
+  provenance and matched-control gates.
+
 ## 2026-08-09 current PV-1000 controlled-pair result
 
 - Clean frozen commit `93d122e1fc929d4833f2997560fa16cf7523e96d`
