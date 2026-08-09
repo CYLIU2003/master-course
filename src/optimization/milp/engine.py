@@ -647,6 +647,27 @@ class MILPOptimizer:
                     )
                     or {}
                 ),
+                "integrated_verified_start_search_bounds": dict(
+                    (plan.metadata or {}).get(
+                        "integrated_verified_start_search_bounds"
+                    )
+                    or {}
+                ),
+                "integrated_verified_start_objective_cap_constraint_count": (
+                    (plan.metadata or {}).get(
+                        "integrated_verified_start_objective_cap_constraint_count"
+                    )
+                ),
+                "integrated_verified_start_vehicle_day_cap_constraint_count": (
+                    (plan.metadata or {}).get(
+                        "integrated_verified_start_vehicle_day_cap_constraint_count"
+                    )
+                ),
+                "integrated_verified_start_search_bound_semantics": (
+                    (plan.metadata or {}).get(
+                        "integrated_verified_start_search_bound_semantics"
+                    )
+                ),
                 "integrated_mip_focus": (plan.metadata or {}).get(
                     "integrated_mip_focus"
                 ),

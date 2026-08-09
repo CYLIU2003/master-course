@@ -79,20 +79,19 @@ def _integrated_search_controls(
 ) -> Dict[str, Any]:
     """Return the weather-neutral Phase 4 search controls.
 
-    A complete, independently checked Phase 3 recourse start solves the first
-    feasibility problem, but it is not necessarily a strong incumbent.  The
-    full 264-trip model has repeatedly left the root bound at zero under both
-    proof- and incumbent-focused profiles.  Keep the weather-neutral profile
-    that can still improve a weak seed instead of suppressing heuristics before
-    a useful bound exists.
+    A complete, independently checked Phase 3 recourse start removes the need
+    to spend the integrated budget rediscovering feasibility.  Formal runs
+    need a certified lower bound, so the verified-start profile focuses on the
+    bound and keeps only a small weather-neutral heuristic allowance.  Runs
+    without a verified start retain the feasibility-oriented profile.
     """
 
     if verified_feasible_start:
         return {
-            "profile": "improve_incumbent_from_verified_feasible_start",
-            "mip_focus": 1,
-            "heuristics": 0.5,
-            "presolve": 2,
+            "profile": "certify_bound_from_verified_feasible_start",
+            "mip_focus": 3,
+            "heuristics": 0.01,
+            "presolve": 1,
         }
     return {
         "profile": "find_feasible_solution_then_bound",
@@ -100,6 +99,106 @@ def _integrated_search_controls(
         "heuristics": 0.5,
         "presolve": 2,
     }
+
+
+def _verified_start_objective_search_bounds(
+    *,
+    warm_start_audit: Mapping[str, Any],
+    analytical_floor_blockers: Sequence[str],
+    vehicle_usage_weight: float,
+    vehicle_usage_unit_cost: float,
+    feasibility_tolerance: float,
+    vehicle_usage_cost_enabled: bool = True,
+    canonical_cost_is_primary_objective: bool = True,
+) -> Dict[str, Any]:
+    """Derive exact search bounds from an independently feasible MIP start.
+
+    The fixed-dispatch recourse preflight optimizes the same integrated model
+    with every dispatch binary fixed.  When it succeeds, its objective is a
+    feasible upper bound for the unrestricted minimization problem.  Adding
+    that value as an explicit constraint preserves the verified seed and every
+    improving solution while giving presolve a usable cutoff.
+
+    When every objective term is nonnegative, the common vehicle-day charge
+    additionally yields an integer-valid upper bound on used vehicle-days.
+    This bound is intentionally disabled whenever the analytical-floor audit
+    found a negative objective term.
+    """
+
+    result: Dict[str, Any] = {
+        "eligible": False,
+        "objective_upper_bound_jpy": None,
+        "objective_upper_bound_tolerance_jpy": None,
+        "vehicle_day_upper_bound": None,
+        "blocking_reasons": [],
+    }
+    if not canonical_cost_is_primary_objective:
+        result["blocking_reasons"].append(
+            "canonical_cost_is_not_primary_objective"
+        )
+        return result
+    if not bool(
+        warm_start_audit.get("integrated_dispatch_fixed_recourse_feasible")
+    ):
+        result["blocking_reasons"].append(
+            "integrated_dispatch_fixed_recourse_not_feasible"
+        )
+        return result
+    raw_objective = warm_start_audit.get(
+        "dispatch_fixed_recourse_objective_value"
+    )
+    try:
+        incumbent_objective = float(raw_objective)
+    except (TypeError, ValueError):
+        result["blocking_reasons"].append(
+            "dispatch_fixed_recourse_objective_missing"
+        )
+        return result
+    if not math.isfinite(incumbent_objective) or incumbent_objective < 0.0:
+        result["blocking_reasons"].append(
+            "dispatch_fixed_recourse_objective_invalid"
+        )
+        return result
+
+    tolerance_jpy = max(
+        1.0e-6,
+        max(float(feasibility_tolerance), 0.0)
+        * max(abs(incumbent_objective), 1.0),
+    )
+    objective_upper_bound = incumbent_objective + tolerance_jpy
+    result.update(
+        {
+            "eligible": True,
+            "objective_upper_bound_jpy": objective_upper_bound,
+            "objective_upper_bound_tolerance_jpy": tolerance_jpy,
+        }
+    )
+
+    nonnegative_vehicle_day_cost = (
+        max(float(vehicle_usage_weight), 0.0)
+        * max(float(vehicle_usage_unit_cost), 0.0)
+        if vehicle_usage_cost_enabled
+        else 0.0
+    )
+    if analytical_floor_blockers:
+        result["blocking_reasons"].append(
+            "negative_or_noncanonical_objective_term_blocks_vehicle_day_cap"
+        )
+    elif nonnegative_vehicle_day_cost <= 0.0:
+        result["blocking_reasons"].append(
+            "positive_vehicle_day_cost_unavailable"
+        )
+    else:
+        result["vehicle_day_upper_bound"] = max(
+            int(
+                math.floor(
+                    (objective_upper_bound + 1.0e-9)
+                    / nonnegative_vehicle_day_cost
+                )
+            ),
+            0,
+        )
+    return result
 
 
 def _problem_vehicle_symmetry_signature(vehicle: Any) -> Tuple[Any, ...]:
@@ -3705,7 +3804,73 @@ class GurobiMILPAdapter:
                 ),
             )
         )
-        
+
+        # The recourse preflight above is an independent feasibility
+        # certificate for the exact integrated model.  Feed its canonical
+        # objective back as an explicit incumbent cutoff.  This is not an
+        # objective bias: it retains the certified seed itself and every
+        # solution that can improve it.
+        verified_start_search_bounds = (
+            _verified_start_objective_search_bounds(
+                warm_start_audit=integrated_warm_start_audit,
+                analytical_floor_blockers=(
+                    integrated_analytical_objective_floor_blockers
+                ),
+                vehicle_usage_weight=vehicle_usage_weight,
+                vehicle_usage_unit_cost=vehicle_usage_unit_cost,
+                vehicle_usage_cost_enabled=component_flags.get(
+                    "vehicle_usage_cost", True
+                ),
+                feasibility_tolerance=integrated_feasibility_tol,
+                canonical_cost_is_primary_objective=(
+                    not allow_partial_service
+                    and integrated_ev_utilization_mode == "disabled"
+                    and objective_mode == "total_cost"
+                    and bool(
+                        getattr(
+                            config,
+                            "integrated_actual_cost_objective",
+                            False,
+                        )
+                    )
+                ),
+            )
+        )
+        integrated_verified_start_objective_cap_constraint_count = 0
+        verified_start_objective_upper_bound = (
+            verified_start_search_bounds.get(
+                "objective_upper_bound_jpy"
+            )
+        )
+        if verified_start_objective_upper_bound is not None:
+            model.addConstr(
+                objective
+                <= float(verified_start_objective_upper_bound),
+                name="integrated_verified_start_objective_upper_bound",
+            )
+            integrated_verified_start_objective_cap_constraint_count = 1
+
+        integrated_verified_start_vehicle_day_cap_constraint_count = 0
+        verified_start_vehicle_day_upper_bound = (
+            verified_start_search_bounds.get("vehicle_day_upper_bound")
+        )
+        if verified_start_vehicle_day_upper_bound is not None:
+            model.addConstr(
+                gp.quicksum(used_vehicle_day.values())
+                <= int(verified_start_vehicle_day_upper_bound),
+                name="integrated_verified_start_vehicle_day_upper_bound",
+            )
+            integrated_verified_start_vehicle_day_cap_constraint_count = 1
+
+        # Materialize the exact cutoff constraints before recording model-size
+        # diagnostics.  Gurobi also updates implicitly at optimize(), but an
+        # explicit update keeps the exported pre-solve statistics auditable.
+        if (
+            integrated_verified_start_objective_cap_constraint_count
+            or integrated_verified_start_vehicle_day_cap_constraint_count
+        ):
+            model.update()
+
         # Define status_map early for diagnostics
         status_map = {
             GRB.OPTIMAL: "optimal",
@@ -4594,6 +4759,20 @@ class GurobiMILPAdapter:
                 ),
                 "integrated_warm_start_audit": (
                     integrated_warm_start_audit
+                ),
+                "integrated_verified_start_search_bounds": dict(
+                    verified_start_search_bounds
+                ),
+                "integrated_verified_start_objective_cap_constraint_count": (
+                    integrated_verified_start_objective_cap_constraint_count
+                ),
+                "integrated_verified_start_vehicle_day_cap_constraint_count": (
+                    integrated_verified_start_vehicle_day_cap_constraint_count
+                ),
+                "integrated_verified_start_search_bound_semantics": (
+                    "independently_feasible_fixed_recourse_seed_objective_"
+                    "upper_bound_plus_nonnegative_vehicle_day_count_cap;_"
+                    "preserves_seed_and_all_improving_solutions"
                 ),
                 "horizon_start": str(problem.scenario.horizon_start or "00:00"),
                 "timestep_min": int(problem.scenario.timestep_min),

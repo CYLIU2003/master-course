@@ -1,5 +1,42 @@
 # master-course
 
+## 2026-08-09 verified-start cutoff and bound-search correction
+
+- The clean frozen `96f17e10175d614d29f45ee79df95cf70ff4e6eb` pair at
+  `output/formal_pair_20260809_flat30_pv1000_bess6000_phase4_constructive_96f17e1_gap001`
+  completed fresh frontend Prepare, Phase 4 and 24/24 Rolling for sunny and
+  rain. The pair control hash matches, only the PV hash differs, 264/264 trips
+  are served in both cases, physical/accounting gates pass and pair manifest
+  v2 accepts the controlled PV sensitivity. Formal readiness is still
+  `BLOCKED`.
+- The repaired candidate path evaluated 29 Stage 1/Stage 2 candidates per
+  case. Complete 32-, 31-, 30-, 29- and 28-BEV dispatch starts reached exact
+  Stage 2 instead of being discarded at the short Stage 1 time limit. Those
+  particular high-BEV duties were Stage 2 infeasible; this is candidate-level
+  evidence, not a proof that every assignment at the same composition is
+  infeasible. Sunny selected 27 BEVs / 5 ICE buses and rain selected 21 / 11.
+- Sunny cost is 666,164.082366 JPY with a 3.927573% certified gap; rain cost is
+  698,419.690050 JPY with a 2.387096% certified gap. Both Gurobi raw gaps remain
+  100% because the 776,752-variable / 1,929,173-constraint integrated model
+  spends the 3,600-second search at the root node. These are validated feasible
+  candidates, not certified global optima.
+- The current correction feeds the independently feasible fixed-recourse seed
+  objective back to the same canonical-cost-primary integrated model as an
+  explicit upper bound. It
+  also derives an integer-valid used-vehicle-day cap when every objective term
+  is nonnegative. Both constraints preserve the seed and every improving
+  solution; they add no BEV minimum or weather preference. A verified seed now
+  uses a weather-neutral lower-bound search profile (`MIPFocus=3`,
+  `Heuristics=0.01`, conservative presolve) instead of spending half of the
+  search effort on incumbent heuristics after feasibility is already proven.
+  Maximum-EV lexicographic and partial-service multiobjective cases are
+  explicitly excluded and retain their separately declared policy contracts.
+  A vehicle-day cap is also disabled when that cost component is disabled.
+- Focused regressions pass (`41 passed`) and the complete repository suite
+  passes (`1237 passed in 54.15s`). A clean commit and fresh pair are still
+  required. The `96f17e1` outputs remain the authoritative completed pair for
+  the previous solver and are not relabelled as evidence for this correction.
+
 ## 2026-08-09 complete composition-candidate rescue and gap certification
 
 - Exact-composition search no longer discards a complete dispatch merely
@@ -23,11 +60,9 @@
   and the existing integer-valid analytical objective floor. Raw telemetry is
   never overwritten. The formal gap gate can use the certified gap only when
   that floor is eligible and its provenance is recorded.
-- The complete repository suite passes (`1233 passed in 54.29s`). This proves
-  the code regression contract only. A fresh clean-commit sunny/rain pair is
-  still required, and release remains `BLOCKED` until both cases meet the
-  requested 0.1% certified gap plus all physical, Rolling, accounting,
-  provenance and matched-control gates.
+- The complete repository suite passed (`1233 passed in 54.29s`) before the
+  `96f17e1` pair above. That pair proves the candidate-rescue behavior but did
+  not meet the requested 0.1% certified gap.
 
 ## 2026-08-09 current PV-1000 controlled-pair result
 

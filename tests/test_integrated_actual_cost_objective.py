@@ -42,22 +42,99 @@ from src.optimization.milp.solver_adapter import (
     _integrated_search_controls,
     _ordered_identical_vehicle_groups,
     _stage1_candidate_evaluation_priority_key,
+    _verified_start_objective_search_bounds,
 )
 from test_post_return_soc_target import _dispatch_context
 
 
-def test_verified_integrated_start_keeps_incumbent_improvement_profile() -> None:
+def test_verified_integrated_start_uses_bound_certification_profile() -> None:
     assert _integrated_search_controls(
         verified_feasible_start=True
     ) == {
-        "profile": "improve_incumbent_from_verified_feasible_start",
-        "mip_focus": 1,
-        "heuristics": 0.5,
-        "presolve": 2,
+        "profile": "certify_bound_from_verified_feasible_start",
+        "mip_focus": 3,
+        "heuristics": 0.01,
+        "presolve": 1,
     }
     assert _integrated_search_controls(
         verified_feasible_start=False
     )["profile"] == "find_feasible_solution_then_bound"
+
+
+def test_verified_start_bounds_preserve_seed_and_limit_vehicle_days() -> None:
+    bounds = _verified_start_objective_search_bounds(
+        warm_start_audit={
+            "integrated_dispatch_fixed_recourse_feasible": True,
+            "dispatch_fixed_recourse_objective_value": 666_164.0,
+        },
+        analytical_floor_blockers=(),
+        vehicle_usage_weight=1.0,
+        vehicle_usage_unit_cost=20_000.0,
+        feasibility_tolerance=1.0e-9,
+    )
+
+    assert bounds["eligible"] is True
+    assert bounds["objective_upper_bound_jpy"] > 666_164.0
+    assert bounds["vehicle_day_upper_bound"] == 33
+
+
+def test_verified_start_vehicle_day_cap_blocks_negative_objective_terms() -> None:
+    bounds = _verified_start_objective_search_bounds(
+        warm_start_audit={
+            "integrated_dispatch_fixed_recourse_feasible": True,
+            "dispatch_fixed_recourse_objective_value": 666_164.0,
+        },
+        analytical_floor_blockers=("negative_return_leg_bonus_term",),
+        vehicle_usage_weight=1.0,
+        vehicle_usage_unit_cost=20_000.0,
+        feasibility_tolerance=1.0e-9,
+    )
+
+    assert bounds["eligible"] is True
+    assert bounds["objective_upper_bound_jpy"] is not None
+    assert bounds["vehicle_day_upper_bound"] is None
+
+
+def test_verified_start_vehicle_day_cap_requires_enabled_cost_component() -> None:
+    bounds = _verified_start_objective_search_bounds(
+        warm_start_audit={
+            "integrated_dispatch_fixed_recourse_feasible": True,
+            "dispatch_fixed_recourse_objective_value": 666_164.0,
+        },
+        analytical_floor_blockers=(),
+        vehicle_usage_weight=1.0,
+        vehicle_usage_unit_cost=20_000.0,
+        vehicle_usage_cost_enabled=False,
+        feasibility_tolerance=1.0e-9,
+    )
+
+    assert bounds["eligible"] is True
+    assert bounds["objective_upper_bound_jpy"] is not None
+    assert bounds["vehicle_day_upper_bound"] is None
+    assert bounds["blocking_reasons"] == [
+        "positive_vehicle_day_cost_unavailable"
+    ]
+
+
+def test_verified_start_cap_does_not_change_ev_utilization_objective() -> None:
+    bounds = _verified_start_objective_search_bounds(
+        warm_start_audit={
+            "integrated_dispatch_fixed_recourse_feasible": True,
+            "dispatch_fixed_recourse_objective_value": 666_164.0,
+        },
+        analytical_floor_blockers=(),
+        vehicle_usage_weight=1.0,
+        vehicle_usage_unit_cost=20_000.0,
+        feasibility_tolerance=1.0e-9,
+        canonical_cost_is_primary_objective=False,
+    )
+
+    assert bounds["eligible"] is False
+    assert bounds["objective_upper_bound_jpy"] is None
+    assert bounds["vehicle_day_upper_bound"] is None
+    assert bounds["blocking_reasons"] == [
+        "canonical_cost_is_not_primary_objective"
+    ]
 
 
 def test_phase4_seed_wall_allowance_preserves_stage2_solver_budget() -> None:
@@ -848,9 +925,9 @@ def test_phase4_uses_verified_same_problem_phase3_plan_as_complete_mip_start() -
     assert len(audit["integrated_solution_start_fingerprint"]) == 64
     assert audit["dispatch_fixed_recourse_runtime_sec"] >= 0.0
     assert result.solver_metadata["first_feasible_sec"] == 0.0
-    assert result.solver_metadata["integrated_mip_focus"] == 1
+    assert result.solver_metadata["integrated_mip_focus"] == 3
     assert result.solver_metadata["integrated_heuristics"] == pytest.approx(
-        0.5
+        0.01
     )
     assert result.solver_metadata["integrated_symmetry"] == -1
     assert result.solver_metadata["integrated_search_profile"][
@@ -858,13 +935,22 @@ def test_phase4_uses_verified_same_problem_phase3_plan_as_complete_mip_start() -
     ] == 1
     assert result.solver_metadata["integrated_search_profile"]["phases"][0][
         "phase"
-    ] == "improve_incumbent_from_verified_feasible_start"
+    ] == "certify_bound_from_verified_feasible_start"
     assert result.solver_metadata["integrated_search_profile"][
         "schema_version"
     ] == "phase4_integrated_search_profile_v2"
     assert result.solver_metadata[
         "integrated_analytical_objective_floor_constraint_count"
     ] == 1
+    assert result.solver_metadata[
+        "integrated_verified_start_objective_cap_constraint_count"
+    ] == 1
+    assert result.solver_metadata[
+        "integrated_verified_start_vehicle_day_cap_constraint_count"
+    ] == 1
+    assert result.solver_metadata[
+        "integrated_verified_start_search_bounds"
+    ]["eligible"] is True
     assert result.solver_metadata[
         "integrated_analytical_objective_lower_bound"
     ] >= 20_000.0

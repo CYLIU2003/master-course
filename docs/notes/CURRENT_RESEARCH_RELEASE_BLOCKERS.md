@@ -1,6 +1,41 @@
 # Current research release blockers
 
-## 2026-08-09 working-tree correction awaiting clean rerun
+## 2026-08-09 verified candidate rescue; integrated proof still blocked
+
+Clean SHA `96f17e10175d614d29f45ee79df95cf70ff4e6eb` completed
+`output/formal_pair_20260809_flat30_pv1000_bess6000_phase4_constructive_96f17e1_gap001`.
+Both cases used fresh Prepare, served 264/264, passed physical validation and
+24/24 Rolling, reconciled accounting, preserved the frozen Git SHA and matched
+all non-PV controls. Pair manifest v2 accepts the controlled PV sensitivity but
+sets `formal_research_submission_ready=false`.
+
+The candidate fix is verified. Both cases evaluated complete high-BEV starts
+through Stage 2: 32/0, 31/1, 30/2, 29/3 and 28/4 were infeasible for their
+specific reconstructed duties. Sunny selected 27/5 and rain selected 21/11.
+These Stage 2 failures are not global infeasibility certificates for every
+assignment with the same counts.
+
+Release remains `BLOCKED`. Sunny certified gap is 3.927573% and rain is
+2.387096%, versus the requested 0.1%; both raw gaps are 100%. The integrated
+model has 776,752 variables and 1,929,173 constraints and did not finish its
+root node in 3,600 seconds. The exact failed checks are
+`sunny:certified_gap_at_most_requested`,
+`rain:certified_gap_at_most_requested` and
+`pair:pair_formal_research_submission_ready`.
+
+The current working-tree correction uses the independently feasible
+fixed-recourse objective as an explicit integrated objective upper bound and,
+only when all cost terms are nonnegative, as a used-vehicle-day upper bound.
+It also changes a verified-start search from incumbent-heavy heuristics to a
+weather-neutral lower-bound profile. These constraints preserve the seed and
+all improving solutions; they do not force BEV use or encode weather direction.
+The automatic cutoff is limited to canonical-cost-only primary runs and does
+not alter partial-service or maximum-EV lexicographic policy scenarios. The
+vehicle-day cap is omitted when that cost component is disabled.
+Focused regressions pass (`41`) and the full suite passes (`1237 passed in
+54.15s`). A clean commit and a fresh pair are still required.
+
+## 2026-08-09 superseded pre-run candidate-rescue note
 
 The current correction addresses the unresolved 28--32-BEV search boundary
 without forcing BEV use. A complete discrete composition MIP start is retained

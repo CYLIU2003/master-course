@@ -147,6 +147,16 @@ def test_solver_settings_persists_integrated_search_profile() -> None:
             "integrated_analytical_objective_floor_constraint_count": 1,
             "integrated_analytical_objective_floor_certificate_eligible": True,
             "integrated_analytical_objective_floor_blockers": [],
+            "integrated_verified_start_search_bounds": {
+                "eligible": True,
+                "objective_upper_bound_jpy": 666_164.001,
+                "vehicle_day_upper_bound": 33,
+            },
+            "integrated_verified_start_objective_cap_constraint_count": 1,
+            "integrated_verified_start_vehicle_day_cap_constraint_count": 1,
+            "integrated_verified_start_search_bound_semantics": (
+                "preserves_seed_and_all_improving_solutions"
+            ),
             "integrated_identical_vehicle_groups": [
                 ["ice-001", "ice-002"]
             ],
@@ -168,6 +178,15 @@ def test_solver_settings_persists_integrated_search_profile() -> None:
     assert payload[
         "integrated_analytical_objective_floor_certificate_eligible"
     ] is True
+    assert payload["integrated_verified_start_search_bounds"][
+        "vehicle_day_upper_bound"
+    ] == 33
+    assert payload[
+        "integrated_verified_start_objective_cap_constraint_count"
+    ] == 1
+    assert payload[
+        "integrated_verified_start_vehicle_day_cap_constraint_count"
+    ] == 1
     assert payload["integrated_identical_vehicle_group_count"] == 1
     assert payload[
         "integrated_identical_vehicle_activation_prefix_constraint_count"

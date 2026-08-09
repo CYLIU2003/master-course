@@ -10184,6 +10184,22 @@ def _solver_settings_payload(
         "integrated_analytical_objective_lower_bound_semantics": metadata.get(
             "integrated_analytical_objective_lower_bound_semantics"
         ),
+        "integrated_verified_start_search_bounds": dict(
+            metadata.get("integrated_verified_start_search_bounds") or {}
+        ),
+        "integrated_verified_start_objective_cap_constraint_count": _int_or_none(
+            metadata.get(
+                "integrated_verified_start_objective_cap_constraint_count"
+            )
+        ),
+        "integrated_verified_start_vehicle_day_cap_constraint_count": _int_or_none(
+            metadata.get(
+                "integrated_verified_start_vehicle_day_cap_constraint_count"
+            )
+        ),
+        "integrated_verified_start_search_bound_semantics": metadata.get(
+            "integrated_verified_start_search_bound_semantics"
+        ),
         "integrated_identical_vehicle_groups": list(
             metadata.get("integrated_identical_vehicle_groups") or ()
         ),

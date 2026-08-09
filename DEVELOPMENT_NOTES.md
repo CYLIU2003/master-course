@@ -1,5 +1,44 @@
 # Development Notes
 
+## 2026-08-09: verified incumbent cutoff after complete-candidate pair
+
+- Clean SHA `96f17e10175d614d29f45ee79df95cf70ff4e6eb` completed the
+  fresh controlled pair at
+  `output/formal_pair_20260809_flat30_pv1000_bess6000_phase4_constructive_96f17e1_gap001`.
+  Both cases served 264/264, passed independent physical validation and 24/24
+  Rolling, reconciled solver/canonical/executed-day accounting and retained a
+  clean unchanged Git SHA. Pair manifest v2 accepts the controlled PV
+  sensitivity and correctly leaves formal readiness false.
+- Candidate rescue is exercised, not merely unit-tested. Each case evaluated
+  29 candidate rows. Constructive 32/0, 31/1, 30/2, 29/3 and 28/4 starts were
+  sent to Stage 2 first and rejected as energy/charging infeasible for those
+  exact duties. Sunny selected the feasible 27/5 candidate at 666,164.082366
+  JPY; rain selected 21/11 at 698,419.690050 JPY. These failures do not certify
+  every alternative assignment at those compositions.
+- The remaining blocker is integrated proof. Sunny records a 640,000 JPY
+  independent lower bound and 3.927573% certified gap. Rain records
+  681,747.739537 JPY and 2.387096%. Raw Gurobi bound remains zero in both runs;
+  the 776,752-variable / 1,929,173-constraint model reaches only root node one
+  in the 3,600-second budget.
+- `_verified_start_objective_search_bounds()` now derives a canonical objective
+  cutoff from the independently solved fixed-dispatch recourse model. The
+  unrestricted model adds `objective <= verified_seed_cost + tolerance`, which
+  preserves the verified solution and every improvement. When the existing
+  nonnegative-term audit passes, the same certificate adds a common
+  vehicle-day count upper bound (33 days for the sunny incumbent, 34 for rain).
+  Negative objective terms or a disabled vehicle-usage component disable the
+  count bound; no hidden directional preference is introduced. The automatic
+  cutoff is disabled when canonical cost is not the sole primary objective, so
+  partial-service multiobjective and maximum-EV lexicographic cases retain
+  their separate explicit policy contracts.
+- Verified integrated starts now use `MIPFocus=3`, `Heuristics=0.01` and
+  `Presolve=1`. An unverified start retains the feasibility-oriented controls.
+  Solver metadata exports both new constraint counts, the exact bound inputs
+  and blockers. This changes search performance only, not feasible schedules,
+  objective coefficients or accounting semantics. Focused tests pass (`41`)
+  and the complete suite passes (`1237 passed in 54.15s`). Fresh clean-run
+  evidence is required before claiming an optimality improvement.
+
 ## 2026-08-09: complete dispatch promotion and independent integrated gap
 
 - The PV-1000 pair at clean SHA `93d122e` reached 27 BEVs in sunny and 21 in
