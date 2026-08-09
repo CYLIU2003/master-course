@@ -32,12 +32,23 @@
   Integrated runs still spill the MIP node tree after 0.5 GB to an OS
   temporary directory as a branch-and-bound memory guard.  A separate attempt
   to disable degenerate root moves was also rejected and is not retained.
+- A second clean-SHA sunny diagnostic with the restored strong formulation
+  reproduced the same `32/0` through `28/4` failed-candidate frontier, but the
+  integrated fixed-dispatch recourse root then drove Windows commit to 96.4%.
+  This localizes the memory spike before branch-tree growth, where node-file
+  spill cannot help.  Both the recourse preflight and final integrated search
+  now use dual simplex (`Method=1`, `NodeMethod=1`) to avoid automatic
+  concurrent root-method model copies and a 32 GB `SoftMemLimit` to terminate
+  gracefully with an auditable `memory_limit` status if the exact solve still
+  exceeds its budget.  These controls change search mechanics only; they do
+  not alter the feasible set, objective, tariff, PV curve or weather response.
 - Formal release remains `BLOCKED` until a fresh clean-commit pair closes the
   requested 0.1% certified gaps and passes every physical, rolling, provenance
   and accounting gate.  These implementation changes do not relabel the
   existing SHA-`99a2035` artifacts.  The pre-run complete repository suite
   passed (`1248 passed in 65.46s`).  After restoring the strong formulation,
-  the complete suite passes again (`1247 passed in 55.79s`); a new clean
+  the complete suite passed (`1247 passed in 55.79s`); after adding the exact
+  root-memory controls it passes again (`1247 passed in 58.22s`).  A new clean
   commit is still required before another formal run.
 
 ## 2026-08-10 controlled pair after feasibility-witness cutoff

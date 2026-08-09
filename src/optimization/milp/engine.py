@@ -692,6 +692,15 @@ class MILPOptimizer:
                 "integrated_symmetry": (plan.metadata or {}).get(
                     "integrated_symmetry"
                 ),
+                "integrated_root_method": (plan.metadata or {}).get(
+                    "integrated_root_method"
+                ),
+                "integrated_node_method": (plan.metadata or {}).get(
+                    "integrated_node_method"
+                ),
+                "integrated_soft_mem_limit_gb": (plan.metadata or {}).get(
+                    "integrated_soft_mem_limit_gb"
+                ),
                 "integrated_nodefile_start_gb": (plan.metadata or {}).get(
                     "integrated_nodefile_start_gb"
                 ),

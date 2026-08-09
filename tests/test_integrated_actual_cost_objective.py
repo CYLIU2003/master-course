@@ -58,12 +58,18 @@ def test_verified_integrated_start_uses_bound_certification_profile() -> None:
         "heuristics": 0.01,
         "presolve": 1,
         "nodefile_start_gb": 0.5,
+        "root_method": 1,
+        "node_method": 1,
+        "soft_mem_limit_gb": 32.0,
     }
     cold_start_controls = _integrated_search_controls(
         verified_feasible_start=False
     )
     assert cold_start_controls["profile"] == "find_feasible_solution_then_bound"
     assert cold_start_controls["nodefile_start_gb"] == 0.5
+    assert cold_start_controls["root_method"] == 1
+    assert cold_start_controls["node_method"] == 1
+    assert cold_start_controls["soft_mem_limit_gb"] == 32.0
 
 
 def test_verified_start_bounds_preserve_seed_and_limit_vehicle_days() -> None:
@@ -1003,9 +1009,19 @@ def test_phase4_uses_verified_same_problem_phase3_plan_as_complete_mip_start() -
         0.01
     )
     assert result.solver_metadata["integrated_symmetry"] == -1
+    assert result.solver_metadata["integrated_root_method"] == 1
+    assert result.solver_metadata["integrated_node_method"] == 1
+    assert result.solver_metadata[
+        "integrated_soft_mem_limit_gb"
+    ] == pytest.approx(32.0)
     assert result.solver_metadata["integrated_nodefile_start_gb"] == pytest.approx(
         0.5
     )
+    assert audit["dispatch_fixed_recourse_root_method"] == 1
+    assert audit["dispatch_fixed_recourse_node_method"] == 1
+    assert audit[
+        "dispatch_fixed_recourse_soft_mem_limit_gb"
+    ] == pytest.approx(32.0)
     assert result.solver_metadata["integrated_search_profile"][
         "phase_count_executed"
     ] == 1

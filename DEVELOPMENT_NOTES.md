@@ -41,12 +41,30 @@
   implications restored.  Gurobi node files still start at 0.5 GB in the OS
   temporary directory, but node spill cannot repair a weak or memory-heavy
   root relaxation.  `DegenMoves=0` remains reverted as well.
+- Clean SHA `612e4a7` then reproduced the same candidate frontier with the
+  restored strong rows: `32/0`, `31/1`, `30/2`, `29/3` and two `28/4`
+  assignments all failed exact Stage-2 recourse, with a maximum chronological
+  shortage of 111.30337352 kWh in the `28/4` diagnostics.  The integrated
+  fixed-dispatch recourse preflight nevertheless reached 96.4% Windows commit
+  before branch-and-bound node growth.  The root cause is therefore not the
+  rejected aggregate alone and not a branch-tree spill failure.
+- Phase 4 now applies the same weather-neutral memory controls to the recourse
+  preflight and the final integrated solve: dual-simplex root and node LP
+  methods (`Method=1`, `NodeMethod=1`) and `SoftMemLimit=32 GB`.  Automatic
+  concurrent root methods can retain multiple model copies; forcing one
+  simplex method avoids that avoidable duplication.  A soft limit returns a
+  recorded `memory_limit` termination instead of risking an operating-system
+  commit failure.  The values are promoted into plan, solver-settings and
+  search-profile evidence.  The exact MILP rows and cost coefficients are
+  unchanged, so a memory-limited run remains diagnostic and release-blocked.
 - The existing controlled pair remains `BLOCKED` at 3.927573% sunny and
   2.387096% rain certified gaps versus the requested 0.1%.  A new clean frozen
   commit, fresh Prepare and both complete runs are required before any release
   claim changes.  The `1248 passed` suite preceded the rejected formal run;
   after restoration, focused regressions pass (`136`) and the complete suite
-  passes (`1247 passed in 55.79s`).  A new clean commit is required next.
+  passed (`1247 passed in 55.79s`).  The root-memory correction passes 153
+  focused regressions and the complete suite (`1247 passed in 58.22s`).  A new
+  clean commit is required next.
 
 ## 2026-08-10: clean witness-cutoff pair and post-run evidence fixes
 

@@ -140,6 +140,9 @@ def test_solver_settings_persists_integrated_search_profile() -> None:
             "integrated_mip_focus": 1,
             "integrated_heuristics": 0.5,
             "integrated_symmetry": -1,
+            "integrated_root_method": 1,
+            "integrated_node_method": 1,
+            "integrated_soft_mem_limit_gb": 32.0,
             "integrated_search_profile": search_profile,
             "integrated_analytical_objective_lower_bound": 640_000.0,
             "integrated_vehicle_usage_analytical_lower_bound": 640_000.0,
@@ -168,6 +171,9 @@ def test_solver_settings_persists_integrated_search_profile() -> None:
     assert payload["integrated_mip_focus"] == 1
     assert payload["integrated_heuristics"] == pytest.approx(0.5)
     assert payload["integrated_symmetry"] == -1
+    assert payload["integrated_root_method"] == 1
+    assert payload["integrated_node_method"] == 1
+    assert payload["integrated_soft_mem_limit_gb"] == pytest.approx(32.0)
     assert payload["integrated_search_profile"] == search_profile
     assert payload[
         "integrated_analytical_objective_lower_bound"

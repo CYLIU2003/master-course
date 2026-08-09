@@ -10223,6 +10223,15 @@ def _solver_settings_payload(
         "integrated_identical_vehicle_symmetry_semantics": metadata.get(
             "integrated_identical_vehicle_symmetry_semantics"
         ),
+        "integrated_root_method": _int_or_none(
+            metadata.get("integrated_root_method")
+        ),
+        "integrated_node_method": _int_or_none(
+            metadata.get("integrated_node_method")
+        ),
+        "integrated_soft_mem_limit_gb": _float_or_none(
+            metadata.get("integrated_soft_mem_limit_gb")
+        ),
         "integrated_redundant_arc_link_constraints_omitted": _int_or_none(
             metadata.get("integrated_redundant_arc_link_constraints_omitted")
         ),

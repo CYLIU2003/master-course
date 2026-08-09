@@ -26,13 +26,24 @@ commit (93.1%) and was safely stopped; rain never started.  That partial run is
 diagnostic only.  Strong individual implication rows are restored, while MIP
 node spill remains configured at 0.5 GB as a branch-tree safety guard.
 
+The restored-row clean SHA `612e4a7` reproduced the same candidate failures,
+including a maximum 111.30337352 kWh chronological shortage among the tested
+`28/4` duties.  It then reached 96.4% Windows commit during integrated
+fixed-dispatch recourse, before branch-tree growth.  Phase 4 now forces dual
+simplex for both recourse preflight and final integrated root/node LPs and
+sets a 32 GB Gurobi `SoftMemLimit`.  These are weather-neutral exact-search
+controls; any `memory_limit` termination remains explicit diagnostic evidence
+and cannot satisfy the formal gap gate.
+
 Release remains `BLOCKED`.  The last completed pair still misses the 0.1%
 certified-gap target (3.927573% sunny, 2.387096% rain), and the new code still
 requires a clean commit, fresh Prepare and a new complete controlled pair.  No
 old output may be relabelled as evidence for these changes.  The prior complete
 suite (`1248 passed`) validates SHA `4e0558d` before its runtime defect was
 observed.  The restored strong formulation passes the complete suite (`1247
-passed in 55.79s`), but still needs a clean commit and full pair.
+passed in 55.79s`); the root-memory correction passes 153 focused regressions
+and the complete suite (`1247 passed in 58.22s`).  It still needs a clean
+commit and full pair.
 
 ## 2026-08-10 witness-cutoff pair: PV response accepted, proof still blocked
 

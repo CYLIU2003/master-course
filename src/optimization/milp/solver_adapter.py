@@ -83,7 +83,10 @@ def _integrated_search_controls(
     to spend the integrated budget rediscovering feasibility.  Formal runs
     need a certified lower bound, so the verified-start profile focuses on the
     bound and keeps only a small weather-neutral heuristic allowance.  Runs
-    without a verified start retain the feasibility-oriented profile.
+    without a verified start retain the feasibility-oriented profile.  Both
+    profiles use one simplex root method because automatic concurrent methods
+    can retain multiple copies of this very large model.  The soft memory
+    limit is a termination guard, not a relaxation of any model constraint.
     """
 
     if verified_feasible_start:
@@ -93,6 +96,9 @@ def _integrated_search_controls(
             "heuristics": 0.01,
             "presolve": 1,
             "nodefile_start_gb": 0.5,
+            "root_method": 1,
+            "node_method": 1,
+            "soft_mem_limit_gb": 32.0,
         }
     return {
         "profile": "find_feasible_solution_then_bound",
@@ -100,6 +106,9 @@ def _integrated_search_controls(
         "heuristics": 0.5,
         "presolve": 2,
         "nodefile_start_gb": 0.5,
+        "root_method": 1,
+        "node_method": 1,
+        "soft_mem_limit_gb": 32.0,
     }
 
 
@@ -3922,6 +3931,9 @@ class GurobiMILPAdapter:
             GRB.INF_OR_UNBD: "inf_or_unbd",
             GRB.UNBOUNDED: "unbounded",
         }
+        memory_limit_status = getattr(GRB, "MEM_LIMIT", None)
+        if memory_limit_status is not None:
+            status_map[memory_limit_status] = "memory_limit"
         
         # Pre-optimization diagnostics
         pre_stats = {
@@ -3989,6 +4001,15 @@ class GurobiMILPAdapter:
         model.Params.Presolve = int(
             integrated_search_controls["presolve"]
         )
+        model.Params.Method = int(
+            integrated_search_controls["root_method"]
+        )
+        model.Params.NodeMethod = int(
+            integrated_search_controls["node_method"]
+        )
+        model.Params.SoftMemLimit = float(
+            integrated_search_controls["soft_mem_limit_gb"]
+        )
         integrated_nodefile_dir = (
             Path(tempfile.gettempdir()) / "master_course_gurobi_nodes"
         )
@@ -4009,6 +4030,9 @@ class GurobiMILPAdapter:
                 "mip_focus": int(model.Params.MIPFocus),
                 "heuristics": float(model.Params.Heuristics),
                 "presolve": int(model.Params.Presolve),
+                "root_method": int(model.Params.Method),
+                "node_method": int(model.Params.NodeMethod),
+                "soft_mem_limit_gb": float(model.Params.SoftMemLimit),
                 "nodefile_start_gb": float(model.Params.NodefileStart),
                 "nodefile_dir": str(model.Params.NodefileDir),
                 "symmetry": int(model.Params.Symmetry),
@@ -4732,6 +4756,11 @@ class GurobiMILPAdapter:
                 "integrated_mip_focus": int(model.Params.MIPFocus),
                 "integrated_heuristics": float(model.Params.Heuristics),
                 "integrated_symmetry": int(model.Params.Symmetry),
+                "integrated_root_method": int(model.Params.Method),
+                "integrated_node_method": int(model.Params.NodeMethod),
+                "integrated_soft_mem_limit_gb": float(
+                    model.Params.SoftMemLimit
+                ),
                 "integrated_nodefile_start_gb": float(
                     model.Params.NodefileStart
                 ),
@@ -13878,6 +13907,9 @@ class GurobiMILPAdapter:
             GRB.INF_OR_UNBD: "inf_or_unbd",
             GRB.UNBOUNDED: "unbounded",
         }
+        memory_limit_status = getattr(GRB, "MEM_LIMIT", None)
+        if memory_limit_status is not None:
+            status_map[memory_limit_status] = "memory_limit"
         user_obj_limit = getattr(GRB, "USER_OBJ_LIMIT", None)
         if user_obj_limit is not None:
             status_map[user_obj_limit] = "objective_limit"
@@ -14632,6 +14664,9 @@ class GurobiMILPAdapter:
                 "dispatch_fixed_recourse_iis_constraint_semantic_sample": [],
                 "dispatch_fixed_recourse_iis_variable_bound_semantic_sample": [],
                 "dispatch_fixed_recourse_iis_fingerprint": "",
+                "dispatch_fixed_recourse_root_method": 1,
+                "dispatch_fixed_recourse_node_method": 1,
+                "dispatch_fixed_recourse_soft_mem_limit_gb": 32.0,
             }
         )
         if not configured:
@@ -14734,7 +14769,26 @@ class GurobiMILPAdapter:
             "MIPGap": float(model.Params.MIPGap),
             "MIPFocus": int(model.Params.MIPFocus),
             "SolutionLimit": int(model.Params.SolutionLimit),
+            "Method": int(model.Params.Method),
+            "NodeMethod": int(model.Params.NodeMethod),
+            "SoftMemLimit": float(model.Params.SoftMemLimit),
         }
+        preflight_memory_controls = _integrated_search_controls(
+            verified_feasible_start=False
+        )
+        audit.update(
+            {
+                "dispatch_fixed_recourse_root_method": int(
+                    preflight_memory_controls["root_method"]
+                ),
+                "dispatch_fixed_recourse_node_method": int(
+                    preflight_memory_controls["node_method"]
+                ),
+                "dispatch_fixed_recourse_soft_mem_limit_gb": float(
+                    preflight_memory_controls["soft_mem_limit_gb"]
+                ),
+            }
+        )
         integrated_solution_variables: List[Any] = []
         integrated_solution_values: List[float] = []
         preflight_started_at = time.perf_counter()
@@ -14747,6 +14801,15 @@ class GurobiMILPAdapter:
             model.Params.MIPGap = 1.0
             model.Params.MIPFocus = 1
             model.Params.SolutionLimit = 1
+            model.Params.Method = int(
+                preflight_memory_controls["root_method"]
+            )
+            model.Params.NodeMethod = int(
+                preflight_memory_controls["node_method"]
+            )
+            model.Params.SoftMemLimit = float(
+                preflight_memory_controls["soft_mem_limit_gb"]
+            )
             model.optimize()
             audit["dispatch_fixed_recourse_runtime_sec"] = float(
                 getattr(model, "Runtime", 0.0) or 0.0
@@ -14760,6 +14823,9 @@ class GurobiMILPAdapter:
                 GRB.SUBOPTIMAL: "suboptimal",
                 GRB.SOLUTION_LIMIT: "solution_limit",
             }
+            memory_limit_status = getattr(GRB, "MEM_LIMIT", None)
+            if memory_limit_status is not None:
+                status_names[memory_limit_status] = "memory_limit"
             audit["dispatch_fixed_recourse_status"] = status_names.get(
                 model.Status,
                 f"status_{model.Status}",
@@ -14957,6 +15023,9 @@ class GurobiMILPAdapter:
             model.Params.MIPGap = saved_parameters["MIPGap"]
             model.Params.MIPFocus = saved_parameters["MIPFocus"]
             model.Params.SolutionLimit = saved_parameters["SolutionLimit"]
+            model.Params.Method = saved_parameters["Method"]
+            model.Params.NodeMethod = saved_parameters["NodeMethod"]
+            model.Params.SoftMemLimit = saved_parameters["SoftMemLimit"]
             model.update()
             model.reset()
             if integrated_solution_values:
