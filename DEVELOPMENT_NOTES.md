@@ -1,5 +1,34 @@
 # Development Notes
 
+## 2026-08-09: adjacent pair result and certified-gap audit correction
+
+- Frozen SHA `32e3509cacd6309675bef2e850405e07483b24fb` completed the fresh
+  controlled 1,000-kW-PV / 6,000-kWh-BESS pair. Both cases serve 264/264,
+  preserve the Git SHA, pass independent physical validation, 24/24 Rolling,
+  terminal SOC and canonical/executed-day accounting. Pair controls match and
+  only the separately hashed PV curve differs.
+- Sunny selects `27/5` with 183 BEV trips, zero grid purchase and
+  666,164.082366 JPY. Rain selects `21/11` with 91 BEV trips, 124.985104 kWh
+  grid purchase and 698,419.690050 JPY. The same candidate search recovers
+  many feasible compositions in both cases; Stage 2 canonical actual cost
+  creates the six-BEV and 92-trip response without a weather bias.
+- Exact `28/4` obtained no Stage 1 incumbent in 11.696 seconds. Two complete
+  constructive `28/4` assignments were evaluated and rejected by Stage 2.
+  The target correctly remains unresolved: failure of those assignments is
+  not a proof that every `28/4` assignment is infeasible.
+- The completion runner incorrectly used integrated `achieved_mip_gap` (raw
+  Gurobi gap) as `certified_gap`. The canonical artifacts retain the correct
+  values: 3.927573% sunny and 2.387096% rain versus raw 100%. A pure helper now
+  selects `certified_mip_gap_ratio` for integrated formal gating and fails
+  closed when it is missing; Phase 3 continues to use
+  `stage1_certified_mip_gap_ratio`.
+- The gate correction does not change this pair's result because both
+  certified gaps still exceed 0.1%. New-code formal evidence remains pending.
+- The focused frontend/research/optimization regressions pass (`81`), the
+  complete repository suite passes (`1240 passed in 64.68s`), and re-reading
+  the completed pair through the corrected gate returns 0.0392757 sunny and
+  0.0238710 rain without modifying the old artifacts.
+
 ## 2026-08-09: adjacent feasible-continuation fixes seed-search starvation
 
 - Fresh sunny job `60af38bd-c548-4971-aeae-3fc3785945b9` from clean SHA

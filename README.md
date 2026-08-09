@@ -1,5 +1,27 @@
 # master-course
 
+## 2026-08-09 controlled pair after adjacent continuation
+
+- Clean SHA `32e3509cacd6309675bef2e850405e07483b24fb` completed fresh
+  frontend Prepare, Phase 4 and 24/24 Rolling for both cases at
+  `output/formal_pair_20260809_flat30_pv1000_bess6000_phase4_adjacent_32e3509_gap001`.
+  All 264 trips, physical checks, terminal SOC, accounting reconciliation and
+  non-PV pair controls pass.
+- Sunny selects `27 BEV / 5 ICE` and 183 BEV trips at 666,164.082366 JPY;
+  rain selects `21 / 11` and 91 BEV trips at 698,419.690050 JPY. The controlled
+  pair manifest accepts the PV sensitivity: weather response is no longer
+  frozen to one used-powertrain composition.
+- Formal release remains `BLOCKED`. The independent certified gaps are
+  3.927573% sunny and 2.387096% rain, both above the requested 0.1%; raw Gurobi
+  gaps remain 100% with a zero raw bound.
+- Post-run audit found that the pair runner labeled the raw integrated gap as
+  `certified_gap`. The formal gate now reads `certified_mip_gap_ratio` while
+  preserving raw-gap telemetry separately. This correction does not change
+  the current pair's BLOCKED outcome and requires fresh evidence for its new
+  commit.
+- Focused regressions pass (`81`) and the complete suite passes (`1240 passed
+  in 64.68s`).
+
 ## 2026-08-09 adjacent feasible-continuation seed search
 
 - A fresh sunny frontend run from clean commit `beb13e3` exposed a regression

@@ -1,5 +1,35 @@
 # Current research release blockers
 
+## 2026-08-09 adjacent pair responds to PV; proof gap remains
+
+Clean SHA `32e3509cacd6309675bef2e850405e07483b24fb` completed the controlled
+pair at
+`output/formal_pair_20260809_flat30_pv1000_bess6000_phase4_adjacent_32e3509_gap001`.
+The pair is physically and economically valid: both cases serve 264/264, pass
+24/24 Rolling and SOC/accounting checks, preserve the frozen SHA and match all
+non-PV controls. Sunny selects `27 BEV / 5 ICE` and 183 BEV trips; rain selects
+`21 / 11` and 91 BEV trips. The pair-level controlled PV sensitivity is
+accepted.
+
+Release remains `BLOCKED` only on integrated proof: certified gaps are
+3.927573% sunny and 2.387096% rain against the requested 0.1%, while raw Gurobi
+gaps are 100%. The runner's completion audit mislabeled that raw 100% value as
+`certified_gap`; the gate now reads the canonical `certified_mip_gap_ratio`.
+This reporting correction does not make either case pass and has not yet been
+rerun from its own clean commit.
+
+Focused regressions pass (`81`) and the complete repository suite passes
+(`1240 passed in 64.68s`). Re-auditing the completed artifacts in memory with
+the corrected gate preserves both gap failures at their actual certified
+values.
+
+The next optimization boundary is exact `28/4`. The adjacent search reaches
+`27/5`, then times out at `28/4` without an incumbent; two constructed `28/4`
+assignments fail Stage 2 energy recourse. This is not a composition-wide
+infeasibility certificate. Further work must use the recorded SOC/charger
+failure evidence to construct a different duty reassignment, not force a BEV
+minimum or relabel the target infeasible.
+
 ## 2026-08-09 adjacent-continuation correction requires a fresh formal pair
 
 Clean SHA `beb13e303ce272b77caf719f8e745c65c22668cd` did not validate the

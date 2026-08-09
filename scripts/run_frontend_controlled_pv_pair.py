@@ -2155,6 +2155,29 @@ def _phase4_seed_controls_match(settings: Mapping[str, Any]) -> bool:
     )
 
 
+def _certified_gap_ratio_for_gate(
+    *,
+    settings: Mapping[str, Any],
+    phase4_integrated: bool,
+) -> float | None:
+    """Return only the independently certified gap used by the formal gate.
+
+    ``achieved_mip_gap`` is the immutable raw Gurobi gap for integrated runs.
+    It must remain visible, but it is not the analytical certified gap exported
+    in ``certified_mip_gap_ratio``.  Mixing these fields makes the completion
+    audit falsely report a 100% certified gap even when the independent lower
+    bound proves a smaller one.
+    """
+
+    return _number(
+        settings.get(
+            "certified_mip_gap_ratio"
+            if phase4_integrated
+            else "stage1_certified_mip_gap_ratio"
+        )
+    )
+
+
 def _case_gate_audit(
     *,
     name: str,
@@ -2342,12 +2365,9 @@ def _case_gate_audit(
         )
         is not None
     )
-    certified_gap = _number(
-        settings.get(
-            "achieved_mip_gap"
-            if phase4_integrated
-            else "stage1_certified_mip_gap_ratio"
-        )
+    certified_gap = _certified_gap_ratio_for_gate(
+        settings=settings,
+        phase4_integrated=phase4_integrated,
     )
     zero_metric_names = (
         "unassigned_trip_count",

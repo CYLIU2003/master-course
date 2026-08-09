@@ -71,6 +71,29 @@ def test_formal_phase4_seed_control_contract_matches_server_profile() -> None:
     assert runner._phase4_seed_controls_match(settings) is False
 
 
+def test_formal_gap_gate_uses_integrated_certified_gap_not_raw_gap() -> None:
+    runner = _load_runner()
+    settings = {
+        "achieved_mip_gap": 1.0,
+        "raw_mip_gap_ratio": 1.0,
+        "certified_mip_gap_ratio": 0.0238709629,
+        "stage1_certified_mip_gap_ratio": 0.092,
+    }
+
+    assert runner._certified_gap_ratio_for_gate(
+        settings=settings,
+        phase4_integrated=True,
+    ) == pytest.approx(0.0238709629)
+    assert runner._certified_gap_ratio_for_gate(
+        settings=settings,
+        phase4_integrated=False,
+    ) == pytest.approx(0.092)
+    assert runner._certified_gap_ratio_for_gate(
+        settings={"achieved_mip_gap": 0.0},
+        phase4_integrated=True,
+    ) is None
+
+
 def test_runner_has_no_optimization_domain_imports() -> None:
     tree = ast.parse(RUNNER_PATH.read_text(encoding="utf-8"))
     imported_roots: set[str] = set()
