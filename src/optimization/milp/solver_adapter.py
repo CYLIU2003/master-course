@@ -201,6 +201,67 @@ def _verified_start_objective_search_bounds(
     return result
 
 
+def _composition_target_search_priority_key(
+    record: Mapping[str, Any],
+) -> Tuple[int, int, float, int, int]:
+    """Order exact fleet mixes by an audited optimistic cost score.
+
+    The score is computed from a complete constructive dispatch and is used
+    only to decide which temporary exact-composition model receives the scarce
+    search budget first.  Stage 2 canonical cost remains the selection
+    authority, and the unrestricted integrated solve remains the proof model.
+    The original symmetric request order is retained as the final tie-break.
+    """
+
+    raw_priority = record.get("search_priority_lower_bound_jpy")
+    try:
+        priority = float(raw_priority)
+    except (TypeError, ValueError):
+        priority = math.inf
+    certified = bool(
+        record.get("search_priority_lower_bound_certified")
+        and math.isfinite(priority)
+    )
+    return (
+        0 if record.get("target_within_selected_inventory") else 1,
+        0 if certified else 1,
+        priority if math.isfinite(priority) else math.inf,
+        abs(int(record.get("delta_used_bev_from_primary") or 0)),
+        int(record.get("requested_order_index") or 0),
+    )
+
+
+def _composition_target_time_limit_sec(
+    *,
+    remaining_budget_sec: float,
+    remaining_target_count: int,
+    target_time_limit_cap_sec: float,
+    cost_priority_enabled: bool,
+    minimum_later_target_sec: float = 2.0,
+) -> float:
+    """Allocate exact-composition time without starving later targets.
+
+    Cost-prioritized exact targets may consume up to the configured cap, while
+    reserving a deterministic minimum for every remaining target.  Frontier
+    policy sweeps keep equal sharing because their order is an explicit policy
+    axis rather than an incumbent-search heuristic.
+    """
+
+    remaining_budget = max(float(remaining_budget_sec), 0.0)
+    remaining_targets = max(int(remaining_target_count), 1)
+    cap = max(float(target_time_limit_cap_sec), 0.25)
+    equal_share = max(remaining_budget / remaining_targets, 0.25)
+    if not cost_priority_enabled:
+        return min(cap, equal_share)
+    later_reserve = min(
+        max(float(minimum_later_target_sec), 0.25)
+        * max(remaining_targets - 1, 0),
+        remaining_budget,
+    )
+    available_now = max(remaining_budget - later_reserve, 0.25)
+    return min(cap, max(equal_share, available_now))
+
+
 def _problem_vehicle_symmetry_signature(vehicle: Any) -> Tuple[Any, ...]:
     """Return every solver-relevant vehicle field except its identifier."""
 
@@ -5414,6 +5475,10 @@ class GurobiMILPAdapter:
             stage1_composition_search_enabled
             or stage1_bev_frontier_enabled
         )
+        stage1_cost_ranked_composition_budget_enabled = bool(
+            stage1_composition_search_enabled
+            and stage1_stage2_candidate_limit >= 10
+        )
         stage1_candidate_enumeration_reserve_sec = 0.0
         stage1_primary_search_time_limit_sec = float(stage_time_limit)
         if stage2_enabled and stage1_stage2_candidate_limit > 1:
@@ -5427,8 +5492,20 @@ class GurobiMILPAdapter:
                     float(stage1_stage2_candidate_limit - 1) * 5.0,
                     30.0,
                 ),
-                max(float(stage_time_limit) * 0.2, 0.0),
-                100.0,
+                max(
+                    float(stage_time_limit)
+                    * (
+                        0.8
+                        if stage1_cost_ranked_composition_budget_enabled
+                        else 0.2
+                    ),
+                    0.0,
+                ),
+                (
+                    400.0
+                    if stage1_cost_ranked_composition_budget_enabled
+                    else 100.0
+                ),
                 max(float(stage_time_limit) - 1.0, 0.0),
             )
             if stage1_bev_frontier_enabled:
@@ -8673,9 +8750,9 @@ class GurobiMILPAdapter:
                         if stage1_bev_frontier_enabled
                         else "stage1_composition_target_time_limit_sec"
                     ),
-                    120.0 if stage1_bev_frontier_enabled else 25.0,
+                    120.0 if stage1_bev_frontier_enabled else 60.0,
                 )
-                or (120.0 if stage1_bev_frontier_enabled else 25.0)
+                or (120.0 if stage1_bev_frontier_enabled else 60.0)
             ),
             0.25,
         )
@@ -8718,7 +8795,10 @@ class GurobiMILPAdapter:
                         requested_targets.append(
                             (target_used_bev, target_used_ice)
                         )
-            for target in requested_targets:
+            for requested_order_index, target in enumerate(
+                requested_targets,
+                start=1,
+            ):
                 if target in seen_target_compositions:
                     continue
                 seen_target_compositions.add(target)
@@ -8770,12 +8850,98 @@ class GurobiMILPAdapter:
                             <= len(available_combustion_vehicle_ids)
                         )
                     ),
+                    "requested_order_index": requested_order_index,
                 }
                 if not target_record["target_within_selected_inventory"]:
                     target_record["search_status"] = (
                         "outside_selected_inventory"
                     )
                 composition_target_records.append(target_record)
+
+            if not stage1_bev_frontier_enabled:
+                # A complete replacement start provides an optimistic,
+                # weather-neutral dispatch cost for search ordering before any
+                # temporary target solve runs.  It is not a target-wide lower
+                # bound and is never used to skip a composition or certify the
+                # final objective.
+                for target_record in composition_target_records:
+                    if not target_record["target_within_selected_inventory"]:
+                        continue
+                    target_used_bev = int(
+                        target_record["target_used_bev"]
+                    )
+                    target_used_ice = int(
+                        target_record["target_used_ice"]
+                    )
+                    target_delta = int(
+                        target_record["delta_used_bev_from_primary"]
+                    )
+                    priority_candidates: List[
+                        Tuple[float, bool]
+                    ] = []
+                    for candidate_start in (
+                        composition_activation_mip_starts.get(
+                            target_delta,
+                            (),
+                        )
+                    ):
+                        constructive_candidate = (
+                            _constructive_candidate_from_complete_start(
+                                candidate_start,
+                                target_used_bev=target_used_bev,
+                                target_used_ice=target_used_ice,
+                                target_delta_used_bev=target_delta,
+                                frontier_enabled=False,
+                            )
+                        )
+                        if constructive_candidate is None:
+                            continue
+                        constructive_plan, priority_cost, _ = (
+                            constructive_candidate
+                        )
+                        priority_candidates.append(
+                            (
+                                float(priority_cost),
+                                bool(
+                                    (constructive_plan.metadata or {}).get(
+                                        "stage1_candidate_priority_"
+                                        "lower_bound_certified",
+                                        False,
+                                    )
+                                ),
+                            )
+                        )
+                    if priority_candidates:
+                        priority_cost, priority_certified = min(
+                            priority_candidates,
+                            key=lambda item: item[0],
+                        )
+                        target_record.update(
+                            {
+                                "search_priority_lower_bound_jpy": (
+                                    priority_cost
+                                ),
+                                "search_priority_lower_bound_certified": (
+                                    priority_certified
+                                ),
+                                "search_priority_source": (
+                                    "complete_constructive_dispatch_"
+                                    "optimistic_cost"
+                                ),
+                            }
+                        )
+                composition_target_records.sort(
+                    key=_composition_target_search_priority_key
+                )
+                for search_order_rank, target_record in enumerate(
+                    composition_target_records,
+                    start=1,
+                ):
+                    target_record["search_order_rank"] = search_order_rank
+                    target_record["search_order_semantics"] = (
+                        "certified_constructive_dispatch_optimistic_cost_"
+                        "then_distance_then_original_symmetric_order"
+                    )
 
             valid_target_count = sum(
                 record["target_within_selected_inventory"]
@@ -8872,12 +9038,21 @@ class GurobiMILPAdapter:
                         ),
                     )
                 stage1.update()
-                composition_time_limit_sec = min(
-                    composition_target_time_limit_cap_sec,
-                    max(
-                        composition_budget_remaining / remaining_valid_targets,
-                        0.25,
-                    ),
+                composition_time_limit_sec = (
+                    _composition_target_time_limit_sec(
+                        remaining_budget_sec=(
+                            composition_budget_remaining
+                        ),
+                        remaining_target_count=(
+                            remaining_valid_targets
+                        ),
+                        target_time_limit_cap_sec=(
+                            composition_target_time_limit_cap_sec
+                        ),
+                        cost_priority_enabled=(
+                            not stage1_bev_frontier_enabled
+                        ),
+                    )
                 )
                 composition_mip_starts: List[Dict[str, Any]] = []
                 composition_mip_start: Optional[Dict[str, Any]] = None
@@ -11170,6 +11345,13 @@ class GurobiMILPAdapter:
             ),
             "stage1_candidate_enumeration_reserve_seconds": (
                 stage1_candidate_enumeration_reserve_sec
+            ),
+            "stage1_cost_ranked_composition_budget_enabled": (
+                stage1_cost_ranked_composition_budget_enabled
+            ),
+            "stage1_cost_ranked_composition_budget_semantics": (
+                "enabled_only_for_exact_composition_sweeps_with_at_least_"
+                "ten_candidate_slots; cost_order_changes_search_only"
             ),
             "stage1_candidate_enumeration_runtime_seconds": max(
                 stage1_total_solver_runtime_sec

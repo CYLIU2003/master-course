@@ -471,6 +471,15 @@ class MILPOptimizer:
                 "stage1_candidate_enumeration_reserve_seconds": (
                     plan.metadata or {}
                 ).get("stage1_candidate_enumeration_reserve_seconds"),
+                "stage1_cost_ranked_composition_budget_enabled": bool(
+                    (plan.metadata or {}).get(
+                        "stage1_cost_ranked_composition_budget_enabled",
+                        False,
+                    )
+                ),
+                "stage1_cost_ranked_composition_budget_semantics": (
+                    plan.metadata or {}
+                ).get("stage1_cost_ranked_composition_budget_semantics"),
                 "stage1_candidate_enumeration_runtime_seconds": (
                     plan.metadata or {}
                 ).get("stage1_candidate_enumeration_runtime_seconds"),

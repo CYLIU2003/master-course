@@ -394,7 +394,7 @@ class OptimizationConfig:
     # the full-network count-constrained MIP to discover an incumbent; a
     # shorter diagnostic slice can incorrectly leave every adjacent target
     # unresolved without proving feasibility or infeasibility.
-    stage1_composition_target_time_limit_sec: float = 25.0
+    stage1_composition_target_time_limit_sec: float = 60.0
     # Optional lower-bound frontier over the number of activated electric
     # vehicles.  Unlike ``stage1_composition_search_radius``, each temporary
     # solve adds only ``sum(used_electric) >= K``.  ICE activation and the

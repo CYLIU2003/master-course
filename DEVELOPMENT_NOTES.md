@@ -1,5 +1,34 @@
 # Development Notes
 
+## 2026-08-09: cost-prioritized exact fleet-mix search
+
+- Clean commit `c819e36fdf5c315d0132015bb6e7154a31708cec` was exercised through
+  the BFF with the previous sunny prepared input as a diagnostic-only run.
+  The new objective cutoff and 34-vehicle-day cap were present, but 300 seconds
+  still produced raw bound `0`, raw gap `100%`, node count `1`, and a weak
+  690,112.753616 JPY seed because the shortened request evaluated only through
+  22 BEVs. It is not fresh-Prepare or research evidence.
+- A second Phase 3 diagnostic set `used BEV >= 32`. It found a physically valid
+  but policy-distorted 32-BEV / 19-ICE / 51-bus candidate at
+  1,087,748.735571 JPY; the ordinary 13/19 candidate remained cheaper. This
+  confirms that the one-sided frontier must remain a policy sensitivity and
+  cannot repair actual-cost minimization.
+- Artifact inspection identified the neutral search defect: formal exact mixes
+  `32/0`, `31/1`, `30/2`, `29/3`, and `28/4` received only 2.694--3.465
+  seconds each. Their reconstructed starts failed Stage 2, but alternative
+  assignments at those same mixes were not searched enough to establish a
+  physical boundary.
+- Exact fixed-total targets now carry an audited constructive-dispatch
+  optimistic cost and are solved in ascending cost order. This is a search
+  heuristic only: it neither skips a target nor certifies a target-wide lower
+  bound. Explicit exact-composition search reserves up to 80% of Stage 1 (with
+  a 400-second cap); each leading target may use up to 60 seconds while two
+  seconds per later target remain reserved. Policy frontiers retain equal time
+  sharing. New metadata records request order, cost order, score provenance,
+  and per-target time.
+- Focused composition/integrated/BFF research-contract regressions pass (`61`)
+  and the full suite passes (`1239 passed in 55.35s`).
+
 ## 2026-08-09: verified incumbent cutoff after complete-candidate pair
 
 - Clean SHA `96f17e10175d614d29f45ee79df95cf70ff4e6eb` completed the

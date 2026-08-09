@@ -1,5 +1,28 @@
 # master-course
 
+## 2026-08-09 cost-ranked exact-composition seed search
+
+- A nonformal 300-second BFF diagnostic from clean commit `c819e36` confirmed
+  that the verified-seed objective and vehicle-day cutoffs are active, but the
+  776,752-variable integrated model still ends at root node one with raw bound
+  zero. Parameter focus alone does not close the formal proof gap.
+- A separate `used BEV >= 32` diagnostic is deliberately not used as an
+  optimization result: it kept 19 ICE buses and activated 51 buses, proving
+  that a one-sided BEV policy frontier is not a substitute for the canonical
+  fixed-cost optimum.
+- The remaining seed defect is budget allocation. In the completed formal
+  pair, exact `32 BEV / 0 ICE` received 2.694 solver seconds and `31 / 1`
+  received 2.772 seconds, while their unverified constructive duties were then
+  rejected by Stage 2. This did not establish global infeasibility.
+- Exact-composition targets are now ranked by the optimistic cost of their
+  complete constructive dispatch, never by BEV direction. The Stage 1 reserve
+  grows only when exact-composition search was explicitly requested; the
+  highest cost-priority targets may receive up to 60 seconds while at least two
+  seconds remain for every later target. Stage 2 canonical cost still chooses
+  the seed, and the unrestricted integrated MILP remains the proof model.
+- Focused regressions pass (`61`) and the full repository suite passes
+  (`1239 passed in 55.35s`). Fresh clean-run evidence is still required.
+
 ## 2026-08-09 verified-start cutoff and bound-search correction
 
 - The clean frozen `96f17e10175d614d29f45ee79df95cf70ff4e6eb` pair at

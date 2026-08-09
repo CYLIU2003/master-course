@@ -1,5 +1,23 @@
 # Current research release blockers
 
+## 2026-08-09 exact-composition alternatives remain under-searched
+
+The clean `c819e36` cutoff diagnostic did not move Gurobi's raw lower bound in
+300 seconds. A one-sided `used BEV >= 32` diagnostic also showed why a BEV
+minimum is not a remedy: it retained 19 ICE buses, used 51 total buses, and
+optimized a policy-constrained problem rather than the requested cost problem.
+
+The actionable defect is exact-composition time allocation. The last formal
+pair gave `32/0` only 2.694 seconds and `31/1` only 2.772 seconds. Stage 2
+infeasibility of their first reconstructed duties is not an infeasibility
+certificate for every assignment at those mixes. The current working tree
+orders exact mixes by audited constructive-dispatch optimistic cost and gives
+the leading candidates up to 60 seconds without encoding a BEV/weather
+direction. Stage 2 actual cost and the unrestricted Phase 4 model remain
+authoritative. Focused tests pass (`61`) and the full suite passes (`1239
+passed in 55.35s`). A clean commit, fresh Prepare and both formal runs remain
+required; release stays `BLOCKED`.
+
 ## 2026-08-09 verified candidate rescue; integrated proof still blocked
 
 Clean SHA `96f17e10175d614d29f45ee79df95cf70ff4e6eb` completed

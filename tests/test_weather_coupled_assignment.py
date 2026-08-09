@@ -619,7 +619,7 @@ def test_phase3_composition_search_activates_unused_powertrain_inventory() -> No
     assert certificate["radius_requested"] == 100
     assert metadata[
         "stage1_composition_target_time_limit_cap_seconds"
-    ] == pytest.approx(25.0)
+    ] == pytest.approx(60.0)
     assert len(feasible_compositions) >= 2
     assert certificate["multiple_feasible_compositions_found"] is True
     assert certificate["accepted_for_formal_composition_evidence"] is True
@@ -648,10 +648,21 @@ def test_phase3_composition_search_activates_unused_powertrain_inventory() -> No
     ] is True
     assert adjacent_target[
         "adjacent_composition_warm_start_source_used_bev"
-    ] == 1
+    ] == int(certificate["primary_used_powertrain_composition"]["used_bev"])
     assert adjacent_target[
         "adjacent_composition_warm_start_delta_used_bev"
-    ] == 1
+    ] == (
+        int(adjacent_target["target_used_bev"])
+        - int(
+            adjacent_target[
+                "adjacent_composition_warm_start_source_used_bev"
+            ]
+        )
+    )
+    assert adjacent_target["search_order_rank"] == 1
+    assert adjacent_target["search_priority_lower_bound_jpy"] == pytest.approx(
+        0.0
+    )
     assert all(
         row.get("final_disposition") != "stage1_infeasibility_certificate"
         or row.get("solver_status") == "infeasible"

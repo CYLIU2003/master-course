@@ -1163,6 +1163,25 @@ class OptimizationEngine:
             )
             or 0.0
         )
+        acceptance["seed_cost_ranked_composition_budget_enabled"] = bool(
+            seed_metadata.get(
+                "stage1_cost_ranked_composition_budget_enabled",
+                False,
+            )
+            or seed_result.solver_metadata.get(
+                "stage1_cost_ranked_composition_budget_enabled",
+                False,
+            )
+        )
+        acceptance["seed_cost_ranked_composition_budget_semantics"] = str(
+            seed_metadata.get(
+                "stage1_cost_ranked_composition_budget_semantics"
+            )
+            or seed_result.solver_metadata.get(
+                "stage1_cost_ranked_composition_budget_semantics"
+            )
+            or ""
+        )
         acceptance["seed_stage1_stage2_selected_candidate_hash"] = str(
             seed_metadata.get("stage1_stage2_selected_candidate_hash")
             or ""

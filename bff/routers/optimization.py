@@ -10014,6 +10014,15 @@ def _solver_settings_payload(
         "stage1_candidate_enumeration_reserve_seconds": _float_or_none(
             metadata.get("stage1_candidate_enumeration_reserve_seconds")
         ),
+        "stage1_cost_ranked_composition_budget_enabled": bool(
+            metadata.get(
+                "stage1_cost_ranked_composition_budget_enabled",
+                False,
+            )
+        ),
+        "stage1_cost_ranked_composition_budget_semantics": metadata.get(
+            "stage1_cost_ranked_composition_budget_semantics"
+        ),
         "stage1_candidate_enumeration_runtime_seconds": _float_or_none(
             metadata.get("stage1_candidate_enumeration_runtime_seconds")
         ),
@@ -10253,6 +10262,17 @@ def _solver_settings_payload(
                 phase4_seed_audit.get(
                     "seed_stage1_stage2_candidate_evaluation_initial_budget_sec"
                 )
+            )
+        ),
+        "phase4_phase3_seed_cost_ranked_composition_budget_enabled": bool(
+            phase4_seed_audit.get(
+                "seed_cost_ranked_composition_budget_enabled",
+                False,
+            )
+        ),
+        "phase4_phase3_seed_cost_ranked_composition_budget_semantics": (
+            phase4_seed_audit.get(
+                "seed_cost_ranked_composition_budget_semantics"
             )
         ),
         "phase4_phase3_seed_composition_search_radius": _int_or_none(

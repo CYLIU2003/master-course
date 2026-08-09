@@ -211,6 +211,10 @@ def test_solver_settings_persists_phase4_seed_and_total_time_budget() -> None:
                     "candidate_priority_cost_ascending_then_candidate_hash"
                 ),
                 "seed_stage1_stage2_candidate_evaluation_initial_budget_sec": 25.0,
+                "seed_cost_ranked_composition_budget_enabled": True,
+                "seed_cost_ranked_composition_budget_semantics": (
+                    "cost_order_changes_search_only"
+                ),
                 "seed_stage1_composition_search_radius": 2,
                 "seed_search_directionality": (
                     "primary_plus_symmetric_adjacent_compositions"
@@ -245,6 +249,12 @@ def test_solver_settings_persists_phase4_seed_and_total_time_budget() -> None:
     assert payload[
         "phase4_phase3_seed_candidate_evaluation_initial_budget_sec"
     ] == pytest.approx(25.0)
+    assert payload[
+        "phase4_phase3_seed_cost_ranked_composition_budget_enabled"
+    ] is True
+    assert payload[
+        "phase4_phase3_seed_cost_ranked_composition_budget_semantics"
+    ] == "cost_order_changes_search_only"
     assert payload["phase4_phase3_seed_composition_search_radius"] == 2
     assert payload["phase4_phase3_seed_bev_frontier_enabled"] is False
     assert payload[
