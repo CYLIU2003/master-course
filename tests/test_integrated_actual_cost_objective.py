@@ -1076,6 +1076,53 @@ def test_phase4_uses_verified_same_problem_phase3_plan_as_complete_mip_start() -
     ] is True
 
 
+def test_phase4_stops_after_verified_start_already_certifies_requested_gap() -> None:
+    base_problem = _phase4_seed_problem(
+        "actual-cost-certified-start-stop"
+    )
+    problem = replace(
+        base_problem,
+        metadata={
+            **dict(base_problem.metadata or {}),
+            "vehicle_usage_cost_jpy_per_used_bus": 20_000.0,
+        },
+    )
+
+    result = OptimizationEngine().solve(
+        problem,
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            phase="phase4_integrated",
+            integrated_actual_cost_objective=True,
+            phase4_phase3_seed_enabled=True,
+            phase4_phase3_seed_time_limit_sec=60,
+            stage1_stage2_candidate_limit=1,
+            time_limit_sec=30,
+            mip_gap=0.5,
+            random_seed=42,
+            warm_start=True,
+            allow_postsolve_repair=False,
+            research_run=True,
+            requested_phase_token="phase4_integrated",
+            requested_phase="phase4_integrated",
+            resolved_phase="phase4_integrated",
+            executed_phase="phase4_integrated",
+        ),
+    )
+
+    assert result.feasible, result.infeasibility_reasons
+    assert result.solver_metadata[
+        "integrated_certified_gap_stop_applied"
+    ] is True
+    assert result.solver_metadata[
+        "integrated_certified_gap_at_verified_start"
+    ] <= 0.5
+    assert result.solver_metadata[
+        "certified_mip_gap_ratio"
+    ] <= 0.5
+    assert result.solver_status in {"objective_limit", "optimal"}
+
+
 def test_phase4_formal_gate_rejects_failed_declared_seed(monkeypatch) -> None:
     problem = _phase4_seed_problem("actual-cost-rejected-formal-seed")
     monkeypatch.setattr(

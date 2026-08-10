@@ -794,6 +794,7 @@ def test_weather_energy_fuel_certificate_is_a_pv_sensitive_lower_bound() -> None
 
     sunny = _certificate(25.0)
     rain = _certificate(0.0)
+    sunny_repeat = _certificate(25.0)
     global_fallback = _certificate_for_problem(
         replace(
             _full_phase3_counterexample(
@@ -812,6 +813,21 @@ def test_weather_energy_fuel_certificate_is_a_pv_sensitive_lower_bound() -> None
     assert float(rain["lower_bound_jpy"]) > float(
         sunny["lower_bound_jpy"]
     )
+    sunny_path_lp = dict(sunny["path_powertrain_source_flow_lp"])
+    rain_path_lp = dict(rain["path_powertrain_source_flow_lp"])
+    assert sunny_path_lp["status"] == "optimal"
+    assert sunny_path_lp["valid"] is True
+    assert len(str(sunny_path_lp["input_hash"])) == 64
+    assert sunny_path_lp["input_hash"] != rain_path_lp["input_hash"]
+    assert sunny_path_lp["input_hash"] == dict(
+        sunny_repeat["path_powertrain_source_flow_lp"]
+    )["input_hash"]
+    assert float(sunny["lower_bound_jpy"]) > float(
+        sunny["independent_trip_lower_bound_jpy"]
+    )
+    assert sunny["certificate_input_hash"] == sunny_repeat[
+        "certificate_input_hash"
+    ]
     assert sunny["certificate_input_hash"] != rain[
         "certificate_input_hash"
     ]

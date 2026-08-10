@@ -1,5 +1,36 @@
 # Current research release blockers
 
+## 2026-08-10 1% release-candidate implementation awaits clean pair evidence
+
+The nonterminating full search has been reduced to a bounded completion path.
+A weather-neutral exact-Stage-2 neighborhood finds a lower-cost sunny
+`32 BEV / 0 ICE` candidate at `644,741.923030 JPY`.  The corresponding rain
+search retains the prior cost-minimizing `21/11` incumbent at
+`698,419.690050 JPY`; it observes `30/2` as feasible but more expensive.  The
+bounded search is upper-bound evidence only and does not certify the maximum
+feasible EV count.
+
+An independent continuous powertrain path/source-flow relaxation strengthens
+the total analytical lower bound to `640,000.000000 JPY` sunny and
+`695,632.938124 JPY` rain on the prior inputs.  Because free energy is bounded
+by selected BEV path energy, it no longer subtracts all PV credit from a
+hypothetical ICE-heavy solution.  Vehicle identity, path count, timing,
+chargers and depot coupling remain relaxed, and the exact LP input is hashed.
+The resulting diagnostic gaps are about `0.7355%` and `0.3990%`, below a newly
+predeclared 1% target.  A verified integrated start that meets that certificate
+can terminate through `BestObjStop` without changing the model objective or
+feasible region.
+
+Release remains `BLOCKED` at this point.  These numbers replay old plans and
+inputs through a dirty working tree; they are not new formal evidence and do
+not retroactively satisfy the historical 0.1% target.  The complete suite
+passes (`1260 passed in 61.38s`).  Required next steps are review, a clean
+commit, BFF restart, fresh Prepare for both cases, a separately labelled
+`--actual-cost-mip-gap 0.01` run, 24/24
+Rolling, physical/SOC/accounting/provenance checks, and controlled-pair
+manifest acceptance.  No READY claim is permitted before those artifacts
+exist.
+
 ## 2026-08-10 composition display corrected; new formal evidence pending
 
 The apparent `13 BEV / 19 ICE` sunny/rain equality was caused by reading the

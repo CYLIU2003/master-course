@@ -962,8 +962,29 @@ class OptimizationEngine:
         )
         seed_wall_started = time.perf_counter()
         seed_result = self._milp.solve(seed_problem, seed_config)
-        seed_wall_runtime_sec = time.perf_counter() - seed_wall_started
         seed_plan = seed_result.plan
+        seed_neighborhood_audit: Mapping[str, object] = {
+            "schema_version": (
+                "phase4_seed_unused_bev_activation_neighborhood_v1"
+            ),
+            "enabled": False,
+            "termination_reason": "disabled",
+        }
+        if bool(
+            getattr(
+                config,
+                "phase4_phase3_seed_unused_bev_neighborhood_enabled",
+                False,
+            )
+        ):
+            seed_plan, seed_neighborhood_audit = (
+                self._milp.improve_phase4_seed_with_unused_bev_neighborhood(
+                    seed_problem,
+                    config,
+                    seed_plan,
+                )
+            )
+        seed_wall_runtime_sec = time.perf_counter() - seed_wall_started
         expected_trip_ids = set(problem.eligible_trip_ids())
         seed_trip_ids = set(seed_plan.served_trip_ids)
         seed_metadata = dict(seed_plan.metadata or {})
@@ -989,6 +1010,71 @@ class OptimizationEngine:
             ),
             "seed_stage1_time_limit_sec": stage1_limit_sec,
             "seed_stage2_time_limit_sec": stage2_limit_sec,
+            "unused_bev_activation_neighborhood_enabled": bool(
+                getattr(
+                    config,
+                    "phase4_phase3_seed_unused_bev_neighborhood_enabled",
+                    False,
+                )
+            ),
+            "unused_bev_activation_neighborhood_time_limit_sec": max(
+                int(
+                    getattr(
+                        config,
+                        "phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec",
+                        120,
+                    )
+                    or 120
+                ),
+                1,
+            ),
+            "unused_bev_activation_neighborhood_per_solve_sec": max(
+                int(
+                    getattr(
+                        config,
+                        "phase4_phase3_seed_unused_bev_neighborhood_per_solve_sec",
+                        5,
+                    )
+                    or 5
+                ),
+                1,
+            ),
+            "unused_bev_activation_neighborhood_max_evaluations": max(
+                int(
+                    getattr(
+                        config,
+                        "phase4_phase3_seed_unused_bev_neighborhood_max_evaluations",
+                        512,
+                    )
+                    or 512
+                ),
+                1,
+            ),
+            "powertrain_duty_swap_rounds": max(
+                int(
+                    getattr(
+                        config,
+                        "phase4_phase3_seed_powertrain_duty_swap_rounds",
+                        2,
+                    )
+                    or 0
+                ),
+                0,
+            ),
+            "unused_bev_identity_exchange_rounds": max(
+                int(
+                    getattr(
+                        config,
+                        "phase4_phase3_seed_unused_bev_identity_exchange_rounds",
+                        2,
+                    )
+                    or 0
+                ),
+                0,
+            ),
+            "unused_bev_activation_neighborhood": dict(
+                seed_neighborhood_audit
+            ),
             "integrated_seed_recourse_preflight_enabled": bool(
                 getattr(
                     config,
@@ -1009,6 +1095,27 @@ class OptimizationEngine:
             ),
             "total_solver_time_budget_sec": (
                 seed_limit_sec
+                + (
+                    max(
+                        int(
+                            getattr(
+                                config,
+                                "phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec",
+                                120,
+                            )
+                            or 120
+                        ),
+                        1,
+                    )
+                    if bool(
+                        getattr(
+                            config,
+                            "phase4_phase3_seed_unused_bev_neighborhood_enabled",
+                            False,
+                        )
+                    )
+                    else 0
+                )
                 + (
                     max(
                         int(
@@ -1101,7 +1208,7 @@ class OptimizationEngine:
             ),
             "seed_plan_fingerprint": seed_plan_fingerprint,
             "seed_cost_jpy": float(
-                seed_result.cost_breakdown.get("total_cost", 0.0) or 0.0
+                self._evaluator.evaluate(problem, seed_plan).total_cost
             ),
             "seed_failure_reasons": tuple(
                 str(reason)

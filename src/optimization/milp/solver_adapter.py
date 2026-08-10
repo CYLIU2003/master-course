@@ -524,6 +524,120 @@ def _stage1_candidate_evaluation_priority_key(
     )
 
 
+def _remap_plan_vehicle_ids(
+    plan: AssignmentPlan,
+    *,
+    replacement_by_source_vehicle: Mapping[str, str],
+    vehicle_type_by_id: Mapping[str, str],
+    candidate_source: str,
+) -> AssignmentPlan:
+    """Return a dispatch-only plan with whole vehicle paths reassigned.
+
+    The duty topology and trip order are immutable.  Energy, SOC, charger,
+    refuelling, and ledger fields are deliberately cleared because they belong
+    to the old vehicle identities and must be rebuilt by Stage 2.
+    """
+
+    normalized_replacements = {
+        str(source_vehicle_id): str(target_vehicle_id)
+        for source_vehicle_id, target_vehicle_id in dict(
+            replacement_by_source_vehicle or {}
+        ).items()
+        if str(source_vehicle_id) != str(target_vehicle_id)
+    }
+    original_duty_vehicle_map = plan.duty_vehicle_map()
+    remapped_duty_vehicle_map: Dict[str, str] = {}
+    remapped_duties: List[VehicleDuty] = []
+    for duty in plan.duties:
+        duty_id = str(duty.duty_id)
+        source_vehicle_id = str(original_duty_vehicle_map[duty_id])
+        target_vehicle_id = normalized_replacements.get(
+            source_vehicle_id,
+            source_vehicle_id,
+        )
+        remapped_duty_vehicle_map[duty_id] = target_vehicle_id
+        remapped_duties.append(
+            replace(
+                duty,
+                vehicle_type=str(
+                    vehicle_type_by_id.get(
+                        target_vehicle_id,
+                        duty.vehicle_type,
+                    )
+                ),
+            )
+        )
+
+    metadata = {
+        **dict(plan.metadata or {}),
+        "source": str(candidate_source),
+        "duty_vehicle_map": remapped_duty_vehicle_map,
+        "phase4_seed_unused_bev_candidate_replacements": dict(
+            sorted(normalized_replacements.items())
+        ),
+    }
+    return replace(
+        plan,
+        duties=tuple(remapped_duties),
+        charging_slots=(),
+        refuel_slots=(),
+        grid_to_bus_kwh_by_depot_slot={},
+        pv_to_bus_kwh_by_depot_slot={},
+        bess_to_bus_kwh_by_depot_slot={},
+        pv_to_bess_kwh_by_depot_slot={},
+        grid_to_bess_kwh_by_depot_slot={},
+        pv_curtail_kwh_by_depot_slot={},
+        bess_soc_kwh_by_depot_slot={},
+        contract_over_limit_kwh_by_depot_slot={},
+        vehicle_soc_kwh_by_vehicle_slot={},
+        vehicle_cost_ledger=(),
+        daily_cost_ledger=(),
+        metadata=metadata,
+    )
+
+
+def _maximum_bipartite_vehicle_matching(
+    adjacency_by_source: Mapping[str, Sequence[str]],
+) -> Dict[str, str]:
+    """Return a deterministic maximum-cardinality source-to-target matching."""
+
+    target_owner: Dict[str, str] = {}
+
+    def _augment(source_vehicle_id: str, seen_targets: Set[str]) -> bool:
+        for target_vehicle_id in sorted(
+            {
+                str(value)
+                for value in adjacency_by_source.get(source_vehicle_id, ())
+            }
+        ):
+            if target_vehicle_id in seen_targets:
+                continue
+            seen_targets.add(target_vehicle_id)
+            previous_source = target_owner.get(target_vehicle_id)
+            if previous_source is None or _augment(
+                previous_source,
+                seen_targets,
+            ):
+                target_owner[target_vehicle_id] = source_vehicle_id
+                return True
+        return False
+
+    for source_vehicle_id in sorted(
+        (str(value) for value in adjacency_by_source),
+        key=lambda value: (
+            len(tuple(adjacency_by_source.get(value, ()))),
+            value,
+        ),
+    ):
+        _augment(source_vehicle_id, set())
+    return {
+        source_vehicle_id: target_vehicle_id
+        for target_vehicle_id, source_vehicle_id in sorted(
+            target_owner.items()
+        )
+    }
+
+
 def _resolved_stage_time_limit_sec(
     config: OptimizationConfig,
     *,
@@ -1332,6 +1446,701 @@ class DispatchBaselineMILPAdapter:
 class GurobiMILPAdapter:
     backend_name = "gurobi"
 
+    def improve_phase4_seed_with_unused_bev_neighborhood(
+        self,
+        problem: CanonicalOptimizationProblem,
+        config: OptimizationConfig,
+        seed_plan: AssignmentPlan,
+    ) -> Tuple[AssignmentPlan, Dict[str, Any]]:
+        """Improve a Phase 4 seed using exact fixed-assignment recourse.
+
+        The neighborhood never changes trip order or the integrated Phase 4
+        objective.  It first measures every admissible active-ICE to unused-BEV
+        whole-duty replacement with Stage 2, then verifies a maximum-cardinality
+        combined activation and bounded BEV identity exchanges.  Only a strict
+        canonical-cost improvement is selected as the MIP start; the highest
+        feasible BEV count is reported separately as sensitivity evidence.
+        """
+
+        enabled = bool(
+            getattr(
+                config,
+                "phase4_phase3_seed_unused_bev_neighborhood_enabled",
+                False,
+            )
+        )
+        wall_limit_sec = max(
+            int(
+                getattr(
+                    config,
+                    "phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec",
+                    120,
+                )
+                or 120
+            ),
+            1,
+        )
+        per_solve_sec = max(
+            int(
+                getattr(
+                    config,
+                    "phase4_phase3_seed_unused_bev_neighborhood_per_solve_sec",
+                    5,
+                )
+                or 5
+            ),
+            1,
+        )
+        max_evaluations = max(
+            int(
+                getattr(
+                    config,
+                    "phase4_phase3_seed_unused_bev_neighborhood_max_evaluations",
+                    512,
+                )
+                or 512
+            ),
+            1,
+        )
+        powertrain_duty_swap_round_limit = max(
+            int(
+                getattr(
+                    config,
+                    "phase4_phase3_seed_powertrain_duty_swap_rounds",
+                    2,
+                )
+                or 0
+            ),
+            0,
+        )
+        exchange_round_limit = max(
+            int(
+                getattr(
+                    config,
+                    "phase4_phase3_seed_unused_bev_identity_exchange_rounds",
+                    2,
+                )
+                or 0
+            ),
+            0,
+        )
+        audit: Dict[str, Any] = {
+            "schema_version": (
+                "phase4_seed_unused_bev_activation_neighborhood_v1"
+            ),
+            "enabled": enabled,
+            "role": "feasible_upper_bound_candidate_generation_only",
+            "global_optimality_claimed": False,
+            "weather_strategy_bias_applied": False,
+            "trip_paths_modified": False,
+            "wall_time_limit_sec": wall_limit_sec,
+            "per_stage2_solve_time_limit_sec": per_solve_sec,
+            "maximum_candidate_evaluations": max_evaluations,
+            "powertrain_duty_swap_round_limit": (
+                powertrain_duty_swap_round_limit
+            ),
+            "identity_exchange_round_limit": exchange_round_limit,
+            "candidate_evaluations": [],
+            "selected": False,
+            "termination_reason": "disabled",
+        }
+        if not enabled:
+            return seed_plan, audit
+
+        started = time.monotonic()
+        deadline = started + float(wall_limit_sec)
+        evaluator = CostEvaluator()
+        physical_checker = FeasibilityChecker()
+        vehicle_by_id = {
+            str(vehicle.vehicle_id): vehicle
+            for vehicle in problem.vehicles
+        }
+        vehicle_type_by_id = {
+            vehicle_id: str(vehicle.vehicle_type)
+            for vehicle_id, vehicle in vehicle_by_id.items()
+        }
+        electric_types = {"BEV", "PHEV", "FCEV"}
+
+        def _is_electric(vehicle_id: str) -> bool:
+            return str(
+                vehicle_type_by_id.get(str(vehicle_id), "")
+            ).upper() in electric_types
+
+        def _composition(plan: AssignmentPlan) -> Tuple[int, int]:
+            used_vehicle_ids = {
+                str(plan.vehicle_id_for_duty(duty.duty_id))
+                for duty in plan.duties
+                if duty.legs
+            }
+            used_bev = sum(
+                _is_electric(vehicle_id)
+                for vehicle_id in used_vehicle_ids
+            )
+            return used_bev, len(used_vehicle_ids) - used_bev
+
+        def _assignment_hash(plan: AssignmentPlan) -> str:
+            payload = tuple(
+                sorted(
+                    (
+                        str(plan.vehicle_id_for_duty(duty.duty_id)),
+                        str(leg.trip.trip_id),
+                    )
+                    for duty in plan.duties
+                    for leg in duty.legs
+                )
+            )
+            return hashlib.sha256(
+                json.dumps(
+                    payload,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest()
+
+        baseline_report = physical_checker.evaluate(problem, seed_plan)
+        baseline_breakdown = evaluator.evaluate(problem, seed_plan)
+        baseline_feasible = bool(
+            baseline_report.feasible
+            and baseline_breakdown.evaluation_feasible
+        )
+        baseline_cost = (
+            float(baseline_breakdown.total_cost)
+            if baseline_feasible
+            else math.inf
+        )
+        baseline_used_bev, baseline_used_ice = _composition(seed_plan)
+        audit.update(
+            {
+                "baseline_canonical_cost_jpy": (
+                    baseline_cost if math.isfinite(baseline_cost) else None
+                ),
+                "baseline_used_bev": baseline_used_bev,
+                "baseline_used_ice": baseline_used_ice,
+                "baseline_assignment_hash": _assignment_hash(seed_plan),
+                "baseline_physical_feasible": baseline_report.feasible,
+                "baseline_accounting_feasible": (
+                    baseline_breakdown.evaluation_feasible
+                ),
+            }
+        )
+        if not baseline_feasible:
+            audit["termination_reason"] = "baseline_not_independently_feasible"
+            audit["wall_runtime_sec"] = time.monotonic() - started
+            return seed_plan, audit
+
+        evaluation_rows: List[Dict[str, Any]] = audit[
+            "candidate_evaluations"
+        ]
+        feasible_candidates: List[
+            Tuple[float, int, int, AssignmentPlan, str, Mapping[str, str]]
+        ] = [
+            (
+                baseline_cost,
+                baseline_used_bev,
+                baseline_used_ice,
+                seed_plan,
+                "baseline",
+                {},
+            )
+        ]
+
+        def _budget_available() -> bool:
+            return bool(
+                len(evaluation_rows) < max_evaluations
+                and time.monotonic() < deadline
+            )
+
+        def _evaluate_candidate(
+            candidate_plan: AssignmentPlan,
+            *,
+            candidate_kind: str,
+            replacements: Mapping[str, str],
+        ) -> Optional[
+            Tuple[float, int, int, AssignmentPlan, str, Mapping[str, str]]
+        ]:
+            if not _budget_available():
+                return None
+            evaluation_index = len(evaluation_rows) + 1
+            remaining_wall_sec = max(deadline - time.monotonic(), 0.0)
+            effective_solve_sec = max(
+                min(per_solve_sec, int(max(remaining_wall_sec, 1.0))),
+                1,
+            )
+            candidate_metadata = {
+                **dict(problem.metadata or {}),
+                "stage2_feedback_max_iterations": 0,
+                "phase4_seed_unused_bev_neighborhood_candidate_index": (
+                    evaluation_index
+                ),
+            }
+            candidate_problem = replace(
+                problem,
+                metadata=candidate_metadata,
+            )
+            candidate_config = replace(
+                config,
+                phase="phase3_two_stage",
+                requested_phase="phase3_two_stage_phase4_seed_neighborhood",
+                resolved_phase="phase3_two_stage",
+                executed_phase="phase3_two_stage",
+                thesis_mode=True,
+                integrated_actual_cost_objective=False,
+                integrated_ev_utilization_mode="disabled",
+                integrated_actual_cost_upper_bound_jpy=None,
+                integrated_actual_cost_upper_bound_delta_ratio=None,
+                phase4_phase3_seed_enabled=False,
+                phase4_phase3_seed_unused_bev_neighborhood_enabled=False,
+                time_limit_sec=effective_solve_sec,
+                stage1_time_limit_sec=1,
+                stage2_time_limit_sec=effective_solve_sec,
+                stage1_stage2_candidate_limit=1,
+                stage1_composition_search_radius=0,
+                stage1_bev_frontier_enabled=False,
+                research_run=True,
+                allow_postsolve_repair=False,
+            )
+            candidate_started = time.perf_counter()
+            outcome, solved_plan = self._solve_thesis_stage2_charging_dispatch(
+                candidate_problem,
+                candidate_config,
+                candidate_plan,
+                stage1_status="phase4_seed_neighborhood_fixed_assignment",
+                stage1_gap=None,
+                stage1_bound=None,
+                stage1_objective_value=None,
+                stage1_runtime_sec=0.0,
+                slots_per_day=max(
+                    1,
+                    (24 * 60)
+                    // max(int(problem.scenario.timestep_min), 1),
+                ),
+            )
+            runtime_sec = time.perf_counter() - candidate_started
+            solved_metadata = dict(solved_plan.metadata or {})
+            stage2_feasible = bool(
+                outcome.has_feasible_incumbent
+                and solved_metadata.get(
+                    "stage2_has_feasible_incumbent",
+                    solved_metadata.get("stage2_feasible", False),
+                )
+            )
+            physical_report = physical_checker.evaluate(
+                candidate_problem,
+                solved_plan,
+            ) if stage2_feasible else None
+            breakdown = evaluator.evaluate(
+                candidate_problem,
+                solved_plan,
+            ) if stage2_feasible else None
+            feasible = bool(
+                stage2_feasible
+                and physical_report is not None
+                and physical_report.feasible
+                and breakdown is not None
+                and breakdown.evaluation_feasible
+            )
+            canonical_cost = (
+                float(breakdown.total_cost)
+                if feasible and breakdown is not None
+                else None
+            )
+            used_bev, used_ice = _composition(solved_plan)
+            assignment_hash = _assignment_hash(solved_plan)
+            evaluation_rows.append(
+                {
+                    "candidate_index": evaluation_index,
+                    "candidate_kind": str(candidate_kind),
+                    "replacements": dict(sorted(replacements.items())),
+                    "assignment_hash": assignment_hash,
+                    "stage2_solver_status": str(outcome.solver_status),
+                    "stage2_feasible": stage2_feasible,
+                    "physical_validation_feasible": bool(
+                        physical_report is not None
+                        and physical_report.feasible
+                    ),
+                    "canonical_evaluation_feasible": bool(
+                        breakdown is not None
+                        and breakdown.evaluation_feasible
+                    ),
+                    "feasible": feasible,
+                    "canonical_cost_jpy": canonical_cost,
+                    "used_bev": used_bev,
+                    "used_ice": used_ice,
+                    "runtime_sec": runtime_sec,
+                    "stage2_time_limit_sec_effective": effective_solve_sec,
+                }
+            )
+            if not feasible or canonical_cost is None:
+                return None
+            result = (
+                canonical_cost,
+                used_bev,
+                used_ice,
+                solved_plan,
+                candidate_kind,
+                dict(replacements),
+            )
+            feasible_candidates.append(result)
+            return result
+
+        used_vehicle_ids = set(seed_plan.duties_by_vehicle())
+        active_ice_ids = sorted(
+            vehicle_id
+            for vehicle_id in used_vehicle_ids
+            if not _is_electric(vehicle_id)
+        )
+        unused_bev_ids = sorted(
+            vehicle_id
+            for vehicle_id, vehicle in vehicle_by_id.items()
+            if bool(getattr(vehicle, "available", True))
+            and _is_electric(vehicle_id)
+            and vehicle_id not in used_vehicle_ids
+        )
+        adjacency_by_ice: Dict[str, List[str]] = {
+            vehicle_id: [] for vehicle_id in active_ice_ids
+        }
+        for source_vehicle_id in active_ice_ids:
+            source_vehicle = vehicle_by_id.get(source_vehicle_id)
+            if source_vehicle is None:
+                continue
+            for target_vehicle_id in unused_bev_ids:
+                target_vehicle = vehicle_by_id.get(target_vehicle_id)
+                if target_vehicle is None or str(
+                    target_vehicle.home_depot_id
+                ) != str(source_vehicle.home_depot_id):
+                    continue
+                replacements = {
+                    source_vehicle_id: target_vehicle_id,
+                }
+                candidate_plan = _remap_plan_vehicle_ids(
+                    seed_plan,
+                    replacement_by_source_vehicle=replacements,
+                    vehicle_type_by_id=vehicle_type_by_id,
+                    candidate_source=(
+                        "phase4_seed_unused_bev_single_activation"
+                    ),
+                )
+                result = _evaluate_candidate(
+                    candidate_plan,
+                    candidate_kind="single_ice_to_unused_bev",
+                    replacements=replacements,
+                )
+                if result is not None:
+                    adjacency_by_ice[source_vehicle_id].append(
+                        target_vehicle_id
+                    )
+                if not _budget_available():
+                    break
+            if not _budget_available():
+                break
+
+        matching = _maximum_bipartite_vehicle_matching(adjacency_by_ice)
+        audit["single_activation_feasibility_graph"] = {
+            source_vehicle_id: sorted(target_vehicle_ids)
+            for source_vehicle_id, target_vehicle_ids in sorted(
+                adjacency_by_ice.items()
+            )
+        }
+        audit["maximum_cardinality_pairwise_matching"] = dict(
+            sorted(matching.items())
+        )
+        audit["maximum_cardinality_pairwise_matching_size"] = len(matching)
+        if matching and _budget_available():
+            combined_plan = _remap_plan_vehicle_ids(
+                seed_plan,
+                replacement_by_source_vehicle=matching,
+                vehicle_type_by_id=vehicle_type_by_id,
+                candidate_source=(
+                    "phase4_seed_unused_bev_combined_activation"
+                ),
+            )
+            combined_result = _evaluate_candidate(
+                combined_plan,
+                candidate_kind="combined_maximum_matching_activation",
+                replacements=matching,
+            )
+            if combined_result is None:
+                cumulative_mapping: Dict[str, str] = {}
+                for source_vehicle_id, target_vehicle_id in sorted(
+                    matching.items()
+                ):
+                    if not _budget_available():
+                        break
+                    trial_mapping = {
+                        **cumulative_mapping,
+                        source_vehicle_id: target_vehicle_id,
+                    }
+                    trial_plan = _remap_plan_vehicle_ids(
+                        seed_plan,
+                        replacement_by_source_vehicle=trial_mapping,
+                        vehicle_type_by_id=vehicle_type_by_id,
+                        candidate_source=(
+                            "phase4_seed_unused_bev_cumulative_activation"
+                        ),
+                    )
+                    trial_result = _evaluate_candidate(
+                        trial_plan,
+                        candidate_kind="cumulative_matching_activation",
+                        replacements=trial_mapping,
+                    )
+                    if trial_result is not None:
+                        cumulative_mapping = trial_mapping
+
+        best_cost_result = min(
+            feasible_candidates,
+            key=lambda item: (
+                item[0],
+                _assignment_hash(item[3]),
+            ),
+        )
+        completed_powertrain_duty_swap_rounds = 0
+        for round_index in range(
+            1,
+            powertrain_duty_swap_round_limit + 1,
+        ):
+            if not _budget_available():
+                break
+            anchor_plan = best_cost_result[3]
+            anchor_cost = float(best_cost_result[0])
+            anchor_used_ids = set(anchor_plan.duties_by_vehicle())
+            selected_bev_ids = sorted(
+                vehicle_id
+                for vehicle_id in anchor_used_ids
+                if _is_electric(vehicle_id)
+            )
+            selected_ice_ids = sorted(
+                vehicle_id
+                for vehicle_id in anchor_used_ids
+                if not _is_electric(vehicle_id)
+            )
+            round_results: List[
+                Tuple[
+                    float,
+                    int,
+                    int,
+                    AssignmentPlan,
+                    str,
+                    Mapping[str, str],
+                ]
+            ] = []
+            for bev_vehicle_id in selected_bev_ids:
+                bev_vehicle = vehicle_by_id.get(bev_vehicle_id)
+                if bev_vehicle is None:
+                    continue
+                for ice_vehicle_id in selected_ice_ids:
+                    ice_vehicle = vehicle_by_id.get(ice_vehicle_id)
+                    if ice_vehicle is None or str(
+                        ice_vehicle.home_depot_id
+                    ) != str(bev_vehicle.home_depot_id):
+                        continue
+                    replacements = {
+                        bev_vehicle_id: ice_vehicle_id,
+                        ice_vehicle_id: bev_vehicle_id,
+                    }
+                    candidate_plan = _remap_plan_vehicle_ids(
+                        anchor_plan,
+                        replacement_by_source_vehicle=replacements,
+                        vehicle_type_by_id=vehicle_type_by_id,
+                        candidate_source=(
+                            "phase4_seed_powertrain_duty_swap"
+                        ),
+                    )
+                    result = _evaluate_candidate(
+                        candidate_plan,
+                        candidate_kind=(
+                            f"powertrain_duty_swap_round_{round_index}"
+                        ),
+                        replacements=replacements,
+                    )
+                    if result is not None:
+                        round_results.append(result)
+                    if not _budget_available():
+                        break
+                if not _budget_available():
+                    break
+            completed_powertrain_duty_swap_rounds = round_index
+            improving_results = [
+                result
+                for result in round_results
+                if float(result[0]) < anchor_cost - 1.0e-6
+            ]
+            if not improving_results:
+                break
+            best_cost_result = min(
+                improving_results,
+                key=lambda item: (
+                    item[0],
+                    _assignment_hash(item[3]),
+                ),
+            )
+
+        completed_exchange_rounds = 0
+        for round_index in range(1, exchange_round_limit + 1):
+            if not _budget_available():
+                break
+            anchor_plan = best_cost_result[3]
+            anchor_cost = float(best_cost_result[0])
+            anchor_used_ids = set(anchor_plan.duties_by_vehicle())
+            selected_bev_ids = sorted(
+                vehicle_id
+                for vehicle_id in anchor_used_ids
+                if _is_electric(vehicle_id)
+            )
+            exchange_target_ids = sorted(
+                vehicle_id
+                for vehicle_id, vehicle in vehicle_by_id.items()
+                if bool(getattr(vehicle, "available", True))
+                and _is_electric(vehicle_id)
+                and vehicle_id not in anchor_used_ids
+            )
+            round_results: List[
+                Tuple[
+                    float,
+                    int,
+                    int,
+                    AssignmentPlan,
+                    str,
+                    Mapping[str, str],
+                ]
+            ] = []
+            for source_vehicle_id in selected_bev_ids:
+                source_vehicle = vehicle_by_id.get(source_vehicle_id)
+                if source_vehicle is None:
+                    continue
+                for target_vehicle_id in exchange_target_ids:
+                    target_vehicle = vehicle_by_id.get(target_vehicle_id)
+                    if target_vehicle is None or str(
+                        target_vehicle.home_depot_id
+                    ) != str(source_vehicle.home_depot_id):
+                        continue
+                    replacements = {
+                        source_vehicle_id: target_vehicle_id,
+                    }
+                    candidate_plan = _remap_plan_vehicle_ids(
+                        anchor_plan,
+                        replacement_by_source_vehicle=replacements,
+                        vehicle_type_by_id=vehicle_type_by_id,
+                        candidate_source=(
+                            "phase4_seed_unused_bev_identity_exchange"
+                        ),
+                    )
+                    result = _evaluate_candidate(
+                        candidate_plan,
+                        candidate_kind=(
+                            f"bev_identity_exchange_round_{round_index}"
+                        ),
+                        replacements=replacements,
+                    )
+                    if result is not None:
+                        round_results.append(result)
+                    if not _budget_available():
+                        break
+                if not _budget_available():
+                    break
+            completed_exchange_rounds = round_index
+            improving_results = [
+                result
+                for result in round_results
+                if float(result[0]) < anchor_cost - 1.0e-6
+            ]
+            if not improving_results:
+                break
+            best_cost_result = min(
+                improving_results,
+                key=lambda item: (
+                    item[0],
+                    _assignment_hash(item[3]),
+                ),
+            )
+
+        best_cost_result = min(
+            [best_cost_result, *feasible_candidates],
+            key=lambda item: (
+                item[0],
+                _assignment_hash(item[3]),
+            ),
+        )
+        maximum_bev_result = min(
+            feasible_candidates,
+            key=lambda item: (
+                -item[1],
+                item[0],
+                _assignment_hash(item[3]),
+            ),
+        )
+        selected_improvement = bool(
+            float(best_cost_result[0]) < baseline_cost - 1.0e-6
+        )
+        selected_plan = best_cost_result[3] if selected_improvement else seed_plan
+        selected_cost = (
+            float(best_cost_result[0])
+            if selected_improvement
+            else baseline_cost
+        )
+        selected_used_bev, selected_used_ice = _composition(selected_plan)
+        if len(evaluation_rows) >= max_evaluations:
+            termination_reason = "maximum_candidate_evaluations_reached"
+        elif time.monotonic() >= deadline:
+            termination_reason = "wall_time_limit_reached"
+        else:
+            termination_reason = "neighborhood_exhausted"
+        audit.update(
+            {
+                "selected": selected_improvement,
+                "selection_semantics": (
+                    "strict_minimum_canonical_actual_cost_improvement_only;"
+                    "maximum_bev_candidate_is_reported_separately"
+                ),
+                "selected_candidate_kind": (
+                    best_cost_result[4]
+                    if selected_improvement
+                    else "baseline"
+                ),
+                "selected_candidate_replacements": dict(
+                    sorted(best_cost_result[5].items())
+                ) if selected_improvement else {},
+                "selected_canonical_cost_jpy": selected_cost,
+                "selected_cost_improvement_jpy": (
+                    baseline_cost - selected_cost
+                ),
+                "selected_used_bev": selected_used_bev,
+                "selected_used_ice": selected_used_ice,
+                "selected_assignment_hash": _assignment_hash(selected_plan),
+                "maximum_observed_used_bev": maximum_bev_result[1],
+                "maximum_observed_used_ice": maximum_bev_result[2],
+                "maximum_bev_candidate_canonical_cost_jpy": (
+                    maximum_bev_result[0]
+                ),
+                "maximum_bev_candidate_kind": maximum_bev_result[4],
+                "maximum_bev_candidate_replacements": dict(
+                    sorted(maximum_bev_result[5].items())
+                ),
+                "maximum_bev_candidate_assignment_hash": _assignment_hash(
+                    maximum_bev_result[3]
+                ),
+                "candidate_evaluation_count": len(evaluation_rows),
+                "feasible_candidate_count": len(feasible_candidates) - 1,
+                "completed_identity_exchange_rounds": (
+                    completed_exchange_rounds
+                ),
+                "completed_powertrain_duty_swap_rounds": (
+                    completed_powertrain_duty_swap_rounds
+                ),
+                "termination_reason": termination_reason,
+                "wall_runtime_sec": time.monotonic() - started,
+            }
+        )
+        return (
+            replace(
+                selected_plan,
+                metadata={
+                    **dict(selected_plan.metadata or {}),
+                    "phase4_seed_unused_bev_activation_neighborhood": audit,
+                },
+            ),
+            audit,
+        )
+
     def solve(
         self,
         problem: CanonicalOptimizationProblem,
@@ -2035,6 +2844,7 @@ class GurobiMILPAdapter:
         physical_charger_power_var: Dict[Tuple[str, str, int], Any] = {}
         physical_charger_metadata: Dict[str, Any] = {}
         integrated_activity_blocking_constraint_count = 0
+        integrated_redundant_endpoint_away_terms_omitted = 0
         w_on_var = None
         w_off_var = None
         effective_depot_energy_assets: Dict[str, DepotEnergyAsset] = {}
@@ -2150,6 +2960,20 @@ class GurobiMILPAdapter:
                             first_departure_min,
                         ):
                             if first_slot_idx <= slot_idx <= last_slot_idx:
+                                # ``start_arc[v, trip] <= y[v, trip]`` follows
+                                # directly from the nonnegative incoming-flow
+                                # equality.  When the trip itself already
+                                # blocks this coarse slot, repeating the same
+                                # implication for its startup deadhead is LP-
+                                # redundant as well as integer-redundant.
+                                if self._trip_active_in_slot(
+                                    problem,
+                                    trip.departure_min,
+                                    trip.arrival_min,
+                                    slot_idx,
+                                ):
+                                    integrated_redundant_endpoint_away_terms_omitted += 1
+                                    continue
                                 away_from_home_slot_terms.setdefault(
                                     (vehicle_id, slot_idx), []
                                 ).append(start_var)
@@ -2204,6 +3028,30 @@ class GurobiMILPAdapter:
                             deadhead_end_min,
                         ):
                             if first_slot_idx <= slot_idx <= last_slot_idx:
+                                # Node-flow equalities imply
+                                # ``x[v,i,j] <= y[v,i]`` and
+                                # ``x[v,i,j] <= y[v,j]``.  If either endpoint
+                                # trip already blocks charging/refuelling in
+                                # this slot, the pairwise away-row is dominated
+                                # in the LP relaxation and can be omitted
+                                # without changing the feasible projection.
+                                endpoint_trip_blocks_slot = (
+                                    self._trip_active_in_slot(
+                                        problem,
+                                        previous_trip.departure_min,
+                                        previous_trip.arrival_min,
+                                        slot_idx,
+                                    )
+                                    or self._trip_active_in_slot(
+                                        problem,
+                                        next_trip.departure_min,
+                                        next_trip.arrival_min,
+                                        slot_idx,
+                                    )
+                                )
+                                if endpoint_trip_blocks_slot:
+                                    integrated_redundant_endpoint_away_terms_omitted += 1
+                                    continue
                                 away_from_home_slot_terms.setdefault(
                                     (vehicle_id, slot_idx), []
                                 ).append(arc_var)
@@ -3627,9 +4475,10 @@ class GurobiMILPAdapter:
 
         # Add an integer-valid objective floor before branch-and-bound.  The
         # strict path-cover precheck proves the vehicle-day component, while
-        # the independent weather-aware certificate optimistically pools PV,
-        # BESS and BEV energy.  Their sum cuts only fractional relaxations; it
-        # does not remove any feasible integer dispatch or favor a powertrain.
+        # the weather-aware certificate takes the stronger of an independent-
+        # trip floor and a continuous powertrain path/source-flow relaxation.
+        # Their sum cuts only fractional relaxations; it does not remove any
+        # feasible integer dispatch or favor a powertrain.
         integrated_analytical_objective_floor_blockers: List[str] = []
         if allow_partial_service:
             integrated_analytical_objective_floor_blockers.append(
@@ -3683,6 +4532,7 @@ class GurobiMILPAdapter:
                 ),
                 vehicle_by_id=vehicle_by_id,
                 component_flags=component_flags,
+                arc_pairs=arc_pairs,
             )
         )
         integrated_weather_energy_fuel_analytical_lower_bound = (
@@ -3934,6 +4784,9 @@ class GurobiMILPAdapter:
         memory_limit_status = getattr(GRB, "MEM_LIMIT", None)
         if memory_limit_status is not None:
             status_map[memory_limit_status] = "memory_limit"
+        user_objective_limit_status = getattr(GRB, "USER_OBJ_LIMIT", None)
+        if user_objective_limit_status is not None:
+            status_map[user_objective_limit_status] = "objective_limit"
         
         # Pre-optimization diagnostics
         pre_stats = {
@@ -4018,6 +4871,58 @@ class GurobiMILPAdapter:
             integrated_search_controls["nodefile_start_gb"]
         )
         model.Params.NodefileDir = str(integrated_nodefile_dir)
+        integrated_certified_gap_stop_threshold = None
+        integrated_certified_gap_at_verified_start = None
+        integrated_certified_gap_stop_applied = False
+        preflight_objective_value = integrated_warm_start_audit.get(
+            "dispatch_fixed_recourse_objective_value"
+        )
+        if (
+            verified_integrated_start
+            and bool(verified_start_search_bounds.get("eligible", False))
+            and not integrated_analytical_objective_floor_blockers
+            and integrated_analytical_objective_lower_bound is not None
+            and preflight_objective_value is not None
+        ):
+            try:
+                preflight_objective = float(preflight_objective_value)
+                analytical_lower_bound = float(
+                    integrated_analytical_objective_lower_bound
+                )
+                integrated_certified_gap_at_verified_start = max(
+                    preflight_objective - analytical_lower_bound,
+                    0.0,
+                ) / max(abs(preflight_objective), 1.0e-9)
+                integrated_certified_gap_stop_threshold = (
+                    _best_objective_stop_from_certified_lower_bound(
+                        analytical_lower_bound,
+                        max(float(config.mip_gap), 0.0),
+                    )
+                )
+            except (TypeError, ValueError, OverflowError):
+                integrated_certified_gap_at_verified_start = None
+                integrated_certified_gap_stop_threshold = None
+            if (
+                integrated_certified_gap_stop_threshold is not None
+                and math.isfinite(preflight_objective)
+                and preflight_objective
+                <= float(integrated_certified_gap_stop_threshold)
+                + max(
+                    1.0e-6,
+                    integrated_feasibility_tol
+                    * max(abs(preflight_objective), 1.0),
+                )
+            ):
+                # The complete fixed-dispatch recourse is a feasible solution
+                # of this exact integrated model.  Combined with the
+                # independently audited integer-valid lower bound, it already
+                # certifies the requested relative gap.  BestObjStop merely
+                # asks Gurobi to accept that complete start and terminate; it
+                # does not alter the feasible region or objective.
+                model.Params.BestObjStop = float(
+                    integrated_certified_gap_stop_threshold
+                )
+                integrated_certified_gap_stop_applied = True
         phase_started_at = time.perf_counter()
         model.optimize(_capture_first_feasible)
         phase_wall_sec = float(time.perf_counter() - phase_started_at)
@@ -4053,6 +4958,15 @@ class GurobiMILPAdapter:
                     int(model.NodeCount)
                     if hasattr(model, "NodeCount")
                     else None
+                ),
+                "certified_gap_stop_threshold": (
+                    integrated_certified_gap_stop_threshold
+                ),
+                "certified_gap_at_verified_start": (
+                    integrated_certified_gap_at_verified_start
+                ),
+                "certified_gap_stop_applied": (
+                    integrated_certified_gap_stop_applied
                 ),
             }
         ]
@@ -4815,6 +5729,20 @@ class GurobiMILPAdapter:
                 "integrated_certified_mip_gap_semantics": (
                     certified_gap_semantics
                 ),
+                "integrated_certified_gap_stop_threshold": (
+                    integrated_certified_gap_stop_threshold
+                ),
+                "integrated_certified_gap_at_verified_start": (
+                    integrated_certified_gap_at_verified_start
+                ),
+                "integrated_certified_gap_stop_applied": (
+                    integrated_certified_gap_stop_applied
+                ),
+                "integrated_certified_gap_stop_semantics": (
+                    "gurobi_best_obj_stop_from_independent_integer_valid_"
+                    "analytical_lower_bound_after_exact_integrated_fixed_"
+                    "dispatch_recourse_feasible_start"
+                ),
                 "integrated_identical_vehicle_groups": [
                     list(group)
                     for group in integrated_identical_vehicle_groups
@@ -4988,6 +5916,14 @@ class GurobiMILPAdapter:
                 ),
                 "integrated_activity_blocking_constraint_count": (
                     integrated_activity_blocking_constraint_count
+                ),
+                "integrated_redundant_endpoint_away_blocking_terms_omitted": (
+                    integrated_redundant_endpoint_away_terms_omitted
+                ),
+                "integrated_redundant_endpoint_away_blocking_semantics": (
+                    "lp_dominance_only; start_arc_le_assignment_and_"
+                    "connection_arc_le_both_endpoint_assignments; omitted_"
+                    "only_when_an_endpoint_trip_already_blocks_the_same_slot"
                 ),
                 "integrated_fragment_pairwise_constraint_count": (
                     integrated_fragment_pairwise_constraint_count
@@ -6384,9 +7320,10 @@ class GurobiMILPAdapter:
         # Keep independently reproducible analytical certificates separate
         # from Gurobi's own ObjBound telemetry.  The path-cover precheck
         # certifies the vehicle-day usage component.  The second certificate
-        # independently relaxes every trip's powertrain choice and pools all
-        # free PV/BESS/initial-SOC energy, so it remains an optimistic floor on
-        # the disjoint direct service-energy/fuel component.
+        # independently relaxes vehicle identity, path count, timing, chargers,
+        # and depot coupling while charging free PV/BESS/initial-SOC energy only
+        # against selected electric path energy.  It therefore remains an
+        # optimistic floor on the disjoint service/deadhead energy/fuel cost.
         fixed_use_costs_are_nonnegative = all(
             float(vehicle.fixed_use_cost_jpy or 0.0) >= 0.0
             for vehicle in problem.vehicles
@@ -6410,6 +7347,7 @@ class GurobiMILPAdapter:
                 ),
                 vehicle_by_id=vehicle_by_id,
                 component_flags=component_flags,
+                arc_pairs=arc_pairs,
             )
         )
         stage1_weather_energy_fuel_lower_bound = (
@@ -16053,16 +16991,18 @@ class GurobiMILPAdapter:
         assignment_vehicle_ids_by_trip: Mapping[str, List[str]],
         vehicle_by_id: Mapping[str, Any],
         component_flags: Mapping[str, bool],
+        arc_pairs: Sequence[Tuple[str, str, str]] = (),
     ) -> Dict[str, Any]:
         """Certify an optimistic weather-aware service-energy cost floor.
 
-        Each trip independently chooses its cheapest compatible direct-service
-        option: ICE fuel plus CO2, or BEV charger-input energy at the cheapest
-        grid slot.  All PV, usable initial BESS inventory, and every available
-        BEV's permissible initial-SOC drawdown are then pooled as free charger
-        input.  Ignoring paths, deadheads, timing, charger contention, demand,
-        degradation, and depot boundaries can only reduce cost, so the result
-        is a lower bound rather than a dispatch estimate.
+        The baseline certificate lets each trip independently choose its
+        cheapest compatible powertrain and pools every admissible free-energy
+        source.  A stronger continuous path-cover relaxation also includes
+        optimistic startup, inter-trip, and return deadhead quantities while
+        limiting free-source credit to energy assigned to electric paths.
+        Vehicle identity, path-count, timing, charger, and depot coupling stay
+        relaxed, so both values remain lower bounds rather than dispatch
+        estimates.
         """
 
         electric_types = {"BEV", "PHEV", "FCEV"}
@@ -16319,9 +17259,502 @@ class GurobiMILPAdapter:
         maximum_free_source_credit_jpy = (
             minimum_grid_unit_cost * pooled_free_source_kwh
         )
-        lower_bound_jpy = max(
+        independent_trip_lower_bound_jpy = max(
             trip_option_cost_floor - maximum_free_source_credit_jpy,
             0.0,
+        )
+        path_source_lp_audit: Dict[str, Any] = {
+            "status": "not_run",
+            "valid": False,
+            "lower_bound_jpy": None,
+            "input_hash": None,
+            "runtime_sec": 0.0,
+            "variable_count": 0,
+            "constraint_count": 0,
+            "powertrain_arc_count": 0,
+            "free_source_used_kwh": None,
+            "grid_source_used_kwh": None,
+        }
+        path_source_lp_lower_bound_jpy: Optional[float] = None
+        if (
+            not trip_without_compatible_assignment
+            and is_gurobi_available()
+        ):
+            path_source_lp_started = time.perf_counter()
+            path_source_model = None
+            try:
+                gp, grb = ensure_gurobi()
+                path_source_model = gp.Model(
+                    "analytical_powertrain_path_source_cost_floor"
+                )
+                path_source_model.Params.OutputFlag = 0
+                path_source_model.Params.Threads = 1
+                path_source_model.Params.Method = 1
+                dispatch_trip_by_id = (
+                    problem.dispatch_context.trips_by_id()
+                )
+                powertrain_by_vehicle_id = {
+                    vehicle_id: (
+                        "ELECTRIC"
+                        if str(
+                            getattr(vehicle, "vehicle_type", "") or ""
+                        ).upper()
+                        in electric_types
+                        else "COMBUSTION"
+                    )
+                    for vehicle_id, vehicle in vehicle_by_id.items()
+                }
+                allowed_trip_powertrains: Set[Tuple[str, str]] = set()
+                service_quantity_by_trip_powertrain: Dict[
+                    Tuple[str, str], float
+                ] = {}
+                startup_quantity_by_trip_powertrain: Dict[
+                    Tuple[str, str], float
+                ] = {}
+                return_quantity_by_trip_powertrain: Dict[
+                    Tuple[str, str], float
+                ] = {}
+                for trip in problem.trips:
+                    trip_id = str(trip.trip_id)
+                    vehicles_by_powertrain: Dict[str, List[Any]] = {
+                        "ELECTRIC": [],
+                        "COMBUSTION": [],
+                    }
+                    for vehicle_id in assignment_vehicle_ids_by_trip.get(
+                        trip_id, ()
+                    ):
+                        vehicle = vehicle_by_id.get(str(vehicle_id))
+                        if vehicle is None:
+                            continue
+                        vehicles_by_powertrain[
+                            powertrain_by_vehicle_id[str(vehicle_id)]
+                        ].append(vehicle)
+                    for powertrain, compatible_vehicles in (
+                        vehicles_by_powertrain.items()
+                    ):
+                        if not compatible_vehicles:
+                            continue
+                        key = (trip_id, powertrain)
+                        allowed_trip_powertrains.add(key)
+                        service_quantities: List[float] = []
+                        startup_quantities: List[float] = []
+                        return_quantities: List[float] = []
+                        for vehicle in compatible_vehicles:
+                            if powertrain == "ELECTRIC":
+                                service_quantities.append(
+                                    max(
+                                        self._trip_energy_kwh(
+                                            problem,
+                                            vehicle,
+                                            trip_id,
+                                        ),
+                                        0.0,
+                                    )
+                                    / charge_efficiency
+                                )
+                            else:
+                                service_quantities.append(
+                                    _ice_unit_cost(vehicle)
+                                    * max(
+                                        self._trip_fuel_l(
+                                            problem,
+                                            vehicle,
+                                            trip_id,
+                                        ),
+                                        0.0,
+                                    )
+                                )
+                            startup_precheck = (
+                                self._startup_energy_precheck(
+                                    problem,
+                                    vehicle,
+                                    trip,
+                                    dispatch_trip_by_id=(
+                                        dispatch_trip_by_id
+                                    ),
+                                )
+                            )
+                            if powertrain == "ELECTRIC":
+                                startup_quantities.append(
+                                    max(
+                                        startup_precheck.startup_deadhead_energy_kwh,
+                                        0.0,
+                                    )
+                                    / charge_efficiency
+                                )
+                            else:
+                                startup_quantities.append(
+                                    _ice_unit_cost(vehicle)
+                                    * self._deadhead_distance_km(
+                                        problem,
+                                        int(
+                                            startup_precheck.startup_deadhead_min
+                                        ),
+                                    )
+                                    * max(
+                                        float(
+                                            getattr(
+                                                vehicle,
+                                                "fuel_consumption_l_per_km",
+                                                0.0,
+                                            )
+                                            or 0.0
+                                        ),
+                                        0.0,
+                                    )
+                                )
+                            (
+                                return_exists,
+                                return_deadhead_min,
+                            ) = return_deadhead_min_to_home(
+                                problem,
+                                vehicle,
+                                trip,
+                            )
+                            if powertrain == "ELECTRIC":
+                                return_quantities.append(
+                                    (
+                                        max(
+                                            return_deadhead_energy_kwh(
+                                                problem,
+                                                vehicle,
+                                                trip,
+                                            ),
+                                            0.0,
+                                        )
+                                        / charge_efficiency
+                                    )
+                                    if return_exists
+                                    else 0.0
+                                )
+                            else:
+                                return_quantities.append(
+                                    (
+                                        _ice_unit_cost(vehicle)
+                                        * self._deadhead_distance_km(
+                                            problem,
+                                            int(return_deadhead_min),
+                                        )
+                                        * max(
+                                            float(
+                                                getattr(
+                                                    vehicle,
+                                                    "fuel_consumption_l_per_km",
+                                                    0.0,
+                                                )
+                                                or 0.0
+                                            ),
+                                            0.0,
+                                        )
+                                    )
+                                    if return_exists
+                                    else 0.0
+                                )
+                        service_quantity_by_trip_powertrain[key] = min(
+                            service_quantities
+                        )
+                        startup_quantity_by_trip_powertrain[key] = min(
+                            startup_quantities
+                        )
+                        return_quantity_by_trip_powertrain[key] = min(
+                            return_quantities
+                        )
+
+                effective_arc_pairs = tuple(arc_pairs)
+                if not effective_arc_pairs:
+                    effective_arc_pairs = tuple(
+                        MILPModelBuilder().enumerate_arc_pairs(
+                            problem,
+                            problem.trip_by_id(),
+                        )
+                    )
+                arc_quantity_by_powertrain: Dict[
+                    Tuple[str, str, str], float
+                ] = {}
+                for vehicle_id, from_trip_id, to_trip_id in (
+                    effective_arc_pairs
+                ):
+                    vehicle = vehicle_by_id.get(str(vehicle_id))
+                    if vehicle is None:
+                        continue
+                    powertrain = powertrain_by_vehicle_id.get(
+                        str(vehicle_id)
+                    )
+                    if powertrain is None:
+                        continue
+                    arc_key = (
+                        str(from_trip_id),
+                        str(to_trip_id),
+                        powertrain,
+                    )
+                    if (
+                        (arc_key[0], powertrain)
+                        not in allowed_trip_powertrains
+                        or (arc_key[1], powertrain)
+                        not in allowed_trip_powertrains
+                    ):
+                        continue
+                    if powertrain == "ELECTRIC":
+                        quantity = max(
+                            self._deadhead_energy_kwh(
+                                problem,
+                                vehicle,
+                                arc_key[0],
+                                arc_key[1],
+                            ),
+                            0.0,
+                        ) / charge_efficiency
+                    else:
+                        quantity = _ice_unit_cost(vehicle) * max(
+                            self._deadhead_fuel_l(
+                                problem,
+                                vehicle,
+                                arc_key[0],
+                                arc_key[1],
+                            ),
+                            0.0,
+                        )
+                    arc_quantity_by_powertrain[arc_key] = min(
+                        arc_quantity_by_powertrain.get(
+                            arc_key,
+                            math.inf,
+                        ),
+                        quantity,
+                    )
+
+                path_source_lp_input = {
+                    "minimum_grid_unit_cost_yen_per_kwh": (
+                        minimum_grid_unit_cost
+                    ),
+                    "pooled_free_source_kwh": pooled_free_source_kwh,
+                    "allowed_trip_powertrains": [
+                        list(key)
+                        for key in sorted(allowed_trip_powertrains)
+                    ],
+                    "service_quantity_by_trip_powertrain": [
+                        [*key, value]
+                        for key, value in sorted(
+                            service_quantity_by_trip_powertrain.items()
+                        )
+                    ],
+                    "startup_quantity_by_trip_powertrain": [
+                        [*key, value]
+                        for key, value in sorted(
+                            startup_quantity_by_trip_powertrain.items()
+                        )
+                    ],
+                    "return_quantity_by_trip_powertrain": [
+                        [*key, value]
+                        for key, value in sorted(
+                            return_quantity_by_trip_powertrain.items()
+                        )
+                    ],
+                    "arc_quantity_by_powertrain": [
+                        [*key, value]
+                        for key, value in sorted(
+                            arc_quantity_by_powertrain.items()
+                        )
+                    ],
+                }
+                path_source_lp_audit["input_hash"] = hashlib.sha256(
+                    json.dumps(
+                        path_source_lp_input,
+                        ensure_ascii=False,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ).encode("utf-8")
+                ).hexdigest()
+
+                assignment_var = {
+                    key: path_source_model.addVar(
+                        lb=0.0,
+                        ub=1.0,
+                        vtype=grb.CONTINUOUS,
+                    )
+                    for key in allowed_trip_powertrains
+                }
+                start_var = {
+                    key: path_source_model.addVar(
+                        lb=0.0,
+                        ub=1.0,
+                        vtype=grb.CONTINUOUS,
+                    )
+                    for key in allowed_trip_powertrains
+                }
+                end_var = {
+                    key: path_source_model.addVar(
+                        lb=0.0,
+                        ub=1.0,
+                        vtype=grb.CONTINUOUS,
+                    )
+                    for key in allowed_trip_powertrains
+                }
+                connection_var = {
+                    key: path_source_model.addVar(
+                        lb=0.0,
+                        ub=1.0,
+                        vtype=grb.CONTINUOUS,
+                    )
+                    for key in arc_quantity_by_powertrain
+                }
+                incoming_by_key: Dict[
+                    Tuple[str, str], List[Any]
+                ] = {
+                    key: [] for key in allowed_trip_powertrains
+                }
+                outgoing_by_key: Dict[
+                    Tuple[str, str], List[Any]
+                ] = {
+                    key: [] for key in allowed_trip_powertrains
+                }
+                for (
+                    from_trip_id,
+                    to_trip_id,
+                    powertrain,
+                ), variable in connection_var.items():
+                    outgoing_by_key[
+                        (from_trip_id, powertrain)
+                    ].append(variable)
+                    incoming_by_key[(to_trip_id, powertrain)].append(
+                        variable
+                    )
+                for key, variable in assignment_var.items():
+                    path_source_model.addConstr(
+                        start_var[key]
+                        + gp.quicksum(incoming_by_key[key])
+                        == variable
+                    )
+                    path_source_model.addConstr(
+                        end_var[key]
+                        + gp.quicksum(outgoing_by_key[key])
+                        == variable
+                    )
+                for trip in problem.trips:
+                    trip_id = str(trip.trip_id)
+                    path_source_model.addConstr(
+                        gp.quicksum(
+                            assignment_var[(trip_id, powertrain)]
+                            for powertrain in (
+                                "ELECTRIC",
+                                "COMBUSTION",
+                            )
+                            if (trip_id, powertrain) in assignment_var
+                        )
+                        == 1.0
+                    )
+
+                electric_source_requirement = gp.quicksum(
+                    service_quantity_by_trip_powertrain[key]
+                    * assignment_var[key]
+                    + startup_quantity_by_trip_powertrain[key]
+                    * start_var[key]
+                    + return_quantity_by_trip_powertrain[key]
+                    * end_var[key]
+                    for key in allowed_trip_powertrains
+                    if key[1] == "ELECTRIC"
+                ) + gp.quicksum(
+                    arc_quantity_by_powertrain[key]
+                    * connection_var[key]
+                    for key in arc_quantity_by_powertrain
+                    if key[2] == "ELECTRIC"
+                )
+                combustion_cost = gp.quicksum(
+                    service_quantity_by_trip_powertrain[key]
+                    * assignment_var[key]
+                    + startup_quantity_by_trip_powertrain[key]
+                    * start_var[key]
+                    + return_quantity_by_trip_powertrain[key]
+                    * end_var[key]
+                    for key in allowed_trip_powertrains
+                    if key[1] == "COMBUSTION"
+                ) + gp.quicksum(
+                    arc_quantity_by_powertrain[key]
+                    * connection_var[key]
+                    for key in arc_quantity_by_powertrain
+                    if key[2] == "COMBUSTION"
+                )
+                free_source_var = path_source_model.addVar(
+                    lb=0.0,
+                    ub=max(pooled_free_source_kwh, 0.0),
+                    vtype=grb.CONTINUOUS,
+                )
+                grid_source_var = path_source_model.addVar(
+                    lb=0.0,
+                    vtype=grb.CONTINUOUS,
+                )
+                path_source_model.addConstr(
+                    free_source_var + grid_source_var
+                    == electric_source_requirement
+                )
+                path_source_model.setObjective(
+                    combustion_cost
+                    + minimum_grid_unit_cost * grid_source_var,
+                    grb.MINIMIZE,
+                )
+                path_source_model.optimize()
+                if path_source_model.Status == grb.OPTIMAL:
+                    candidate_lower_bound = max(
+                        float(path_source_model.ObjVal),
+                        0.0,
+                    )
+                    if math.isfinite(candidate_lower_bound):
+                        path_source_lp_lower_bound_jpy = (
+                            candidate_lower_bound
+                        )
+                        path_source_lp_audit.update(
+                            {
+                                "status": "optimal",
+                                "valid": True,
+                                "lower_bound_jpy": candidate_lower_bound,
+                                "free_source_used_kwh": max(
+                                    float(free_source_var.X),
+                                    0.0,
+                                ),
+                                "grid_source_used_kwh": max(
+                                    float(grid_source_var.X),
+                                    0.0,
+                                ),
+                            }
+                        )
+                else:
+                    path_source_lp_audit["status"] = (
+                        f"gurobi_status_{path_source_model.Status}"
+                    )
+                path_source_lp_audit.update(
+                    {
+                        "variable_count": int(path_source_model.NumVars),
+                        "constraint_count": int(
+                            path_source_model.NumConstrs
+                        ),
+                        "powertrain_arc_count": len(
+                            arc_quantity_by_powertrain
+                        ),
+                        "runtime_sec": float(
+                            getattr(path_source_model, "Runtime", 0.0)
+                            or 0.0
+                        ),
+                    }
+                )
+            except Exception as exc:
+                path_source_lp_audit.update(
+                    {
+                        "status": "error",
+                        "error": f"{type(exc).__name__}:{exc}",
+                    }
+                )
+            finally:
+                path_source_lp_audit["wall_runtime_sec"] = float(
+                    time.perf_counter() - path_source_lp_started
+                )
+                if path_source_model is not None:
+                    try:
+                        path_source_model.dispose()
+                    except Exception:
+                        pass
+
+        lower_bound_jpy = max(
+            independent_trip_lower_bound_jpy,
+            float(path_source_lp_lower_bound_jpy or 0.0),
         )
         certificate_input = {
             "charge_efficiency": charge_efficiency,
@@ -16347,6 +17780,14 @@ class GurobiMILPAdapter:
                 str(key): bool(value)
                 for key, value in sorted(component_flags.items())
             },
+            "path_powertrain_source_flow_lp": {
+                "status": path_source_lp_audit["status"],
+                "valid": path_source_lp_audit["valid"],
+                "lower_bound_jpy": path_source_lp_audit[
+                    "lower_bound_jpy"
+                ],
+                "input_hash": path_source_lp_audit["input_hash"],
+            },
         }
         certificate_hash = hashlib.sha256(
             json.dumps(
@@ -16359,6 +17800,10 @@ class GurobiMILPAdapter:
         return {
             "valid": not trip_without_compatible_assignment,
             "lower_bound_jpy": lower_bound_jpy,
+            "independent_trip_lower_bound_jpy": (
+                independent_trip_lower_bound_jpy
+            ),
+            "path_powertrain_source_flow_lp": path_source_lp_audit,
             "trip_option_cost_floor_before_free_source_credit_jpy": (
                 trip_option_cost_floor
             ),
@@ -16390,13 +17835,15 @@ class GurobiMILPAdapter:
             ),
             "certificate_input_hash": certificate_hash,
             "semantics": (
-                "independent_trip_minimum_of_direct_ice_fuel_plus_co2_or_"
-                "bev_service_energy_at_minimum_grid_unit_cost_minus_"
-                "optimistically_pooled_pv_bess_and_vehicle_soc_credit"
+                "maximum_of_independent_trip_floor_and_continuous_"
+                "powertrain_path_cover_source_flow_lp; free_pv_bess_and_"
+                "vehicle_soc_credit_is_bounded_by_selected_bev_service_"
+                "startup_connection_and_return_energy"
             ),
             "omitted_nonnegative_costs": (
-                "vehicle_paths_deadheads_timing_chargers_demand_contract_"
-                "overage_degradation_driver_switch_and_fixed_vehicle_cost"
+                "vehicle_identity_fragment_continuity_timing_chargers_"
+                "demand_contract_overage_degradation_driver_switch_and_"
+                "fixed_vehicle_cost"
             ),
         }
 

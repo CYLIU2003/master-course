@@ -4,7 +4,13 @@ from dataclasses import replace
 
 import pytest
 
-from src.dispatch.models import DispatchContext, Trip, TurnaroundRule, VehicleProfile
+from src.dispatch.models import (
+    DeadheadRule,
+    DispatchContext,
+    Trip,
+    TurnaroundRule,
+    VehicleProfile,
+)
 from src.gurobi_runtime import is_gurobi_available
 from src.optimization.common.builder import ProblemBuilder
 from src.optimization.common.problem import (
@@ -357,7 +363,7 @@ def test_integrated_omits_arc_links_implied_by_node_flow_equalities() -> None:
             Trip(
                 trip_id="t2",
                 route_id="r1",
-                origin="A",
+                origin="B",
                 destination="DEPOT",
                 departure_time="08:20",
                 arrival_time="08:30",
@@ -366,7 +372,13 @@ def test_integrated_omits_arc_links_implied_by_node_flow_equalities() -> None:
             ),
         ],
         turnaround_rules={"A": TurnaroundRule(stop_id="A", min_turnaround_min=0)},
-        deadhead_rules={},
+        deadhead_rules={
+            ("A", "B"): DeadheadRule(
+                from_stop="A",
+                to_stop="B",
+                travel_time_min=5,
+            )
+        },
         vehicle_profiles={
             "ICE": VehicleProfile(
                 vehicle_type="ICE",
@@ -405,3 +417,9 @@ def test_integrated_omits_arc_links_implied_by_node_flow_equalities() -> None:
     assert result.solver_metadata[
         "integrated_activity_blocking_constraint_count"
     ] > 0
+    assert result.solver_metadata[
+        "integrated_redundant_endpoint_away_blocking_terms_omitted"
+    ] == 1
+    assert result.solver_metadata[
+        "integrated_redundant_endpoint_away_blocking_semantics"
+    ].startswith("lp_dominance_only")

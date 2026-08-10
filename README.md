@@ -1,5 +1,46 @@
 # master-course
 
+## 2026-08-10 bounded Phase-4 completion path (fresh formal run pending)
+
+- Phase 4 now evaluates a bounded, weather-neutral fixed-assignment
+  neighborhood after its Phase-3 seed.  It tries unused-BEV activation,
+  BEV/ICE whole-duty swaps and BEV-identity exchanges; every candidate must
+  pass exact Stage 2, independent physical validation and canonical
+  accounting.  Only a strict actual-cost improvement becomes the integrated
+  MIP start.  The largest feasible BEV count is reported separately and is
+  never presented as an optimum or an infeasibility certificate.
+- Replaying the last clean pair's plans through this code is diagnostic only,
+  but it identifies the missing sunny incumbent: the unchanged 32 duty paths
+  are feasible as `32 BEV / 0 ICE` at `644,741.923030 JPY`, versus
+  `666,164.082366 JPY` for the old `27/5` plan.  In rain, 512 bounded candidates
+  did not improve the `21/11`, `698,419.690050 JPY` incumbent; `30/2` was the
+  highest observed feasible composition, not a proof that `31/1` or `32/0` is
+  impossible.
+- The independent analytical energy/fuel certificate now takes the stronger
+  of the old per-trip floor and a continuous powertrain path/source-flow LP.
+  The LP includes optimistic service, startup, connection and return energy,
+  and constrains free PV/BESS/SOC credit to energy selected on electric paths.
+  It still relaxes vehicle identity, path count, time, chargers and depot
+  coupling, so it is a lower bound rather than a dispatch estimate.  Its exact
+  coefficient set is SHA-256 fingerprinted in the result audit.
+- On the prior pair inputs, the new diagnostic total lower bounds are
+  `640,000.000000 JPY` sunny and `695,632.938124 JPY` rain.  Combined with the
+  candidate costs above, the implied certified gaps are about `0.7355%` and
+  `0.3990%`.  When a verified same-model start already meets the predeclared
+  gap, Phase 4 sets Gurobi `BestObjStop` to accept that start without spending
+  the remaining branch-and-bound budget; the feasible set and objective are
+  unchanged.
+- Endpoint away-from-depot implications already dominated by their trip
+  activity row are omitted.  The measured full model retains all 776,752
+  variables while reducing rows from 1,929,173 to 1,587,351.  This is an LP-
+  dominance reduction, not the previously rejected weak aggregation.
+- The controlled frontend runner keeps its historical 0.1% default and now
+  accepts `--actual-cost-mip-gap 0.01` for a separately predeclared 1%
+  release-candidate.  The historical 0.1% pair remains `BLOCKED`; none of the
+  diagnostics above are formal new-code evidence.  A clean commit, fresh
+  Prepare, both day-ahead runs, 24/24 Rolling, physical/accounting/provenance
+  checks and pair-manifest validation are still required.
+
 ## 2026-08-10 final-composition clarity and Phase-4 search diagnostics
 
 - The latest completed controlled pair does **not** use the same fleet mix in

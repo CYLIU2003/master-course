@@ -779,6 +779,36 @@ def _day_ahead_solver_control_payload(
         "phase4_phase3_seed_bev_frontier_enabled": solver_settings.get(
             "phase4_phase3_seed_bev_frontier_enabled"
         ),
+        "phase4_phase3_seed_unused_bev_neighborhood_enabled": (
+            solver_settings.get(
+                "phase4_phase3_seed_unused_bev_neighborhood_enabled"
+            )
+        ),
+        "phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec": (
+            solver_settings.get(
+                "phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec"
+            )
+        ),
+        "phase4_phase3_seed_unused_bev_neighborhood_per_solve_sec": (
+            solver_settings.get(
+                "phase4_phase3_seed_unused_bev_neighborhood_per_solve_sec"
+            )
+        ),
+        "phase4_phase3_seed_unused_bev_neighborhood_max_evaluations": (
+            solver_settings.get(
+                "phase4_phase3_seed_unused_bev_neighborhood_max_evaluations"
+            )
+        ),
+        "phase4_phase3_seed_unused_bev_identity_exchange_rounds": (
+            solver_settings.get(
+                "phase4_phase3_seed_unused_bev_identity_exchange_rounds"
+            )
+        ),
+        "phase4_phase3_seed_powertrain_duty_swap_rounds": (
+            solver_settings.get(
+                "phase4_phase3_seed_powertrain_duty_swap_rounds"
+            )
+        ),
         "phase4_integrated_seed_recourse_preflight_enabled": (
             solver_settings.get(
                 "phase4_integrated_seed_recourse_preflight_enabled"

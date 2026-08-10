@@ -10241,6 +10241,28 @@ def _solver_settings_payload(
         "integrated_activity_blocking_constraint_count": _int_or_none(
             metadata.get("integrated_activity_blocking_constraint_count")
         ),
+        "integrated_redundant_endpoint_away_blocking_terms_omitted": (
+            _int_or_none(
+                metadata.get(
+                    "integrated_redundant_endpoint_away_blocking_terms_omitted"
+                )
+            )
+        ),
+        "integrated_redundant_endpoint_away_blocking_semantics": metadata.get(
+            "integrated_redundant_endpoint_away_blocking_semantics"
+        ),
+        "integrated_certified_gap_stop_threshold": _float_or_none(
+            metadata.get("integrated_certified_gap_stop_threshold")
+        ),
+        "integrated_certified_gap_at_verified_start": _float_or_none(
+            metadata.get("integrated_certified_gap_at_verified_start")
+        ),
+        "integrated_certified_gap_stop_applied": bool(
+            metadata.get("integrated_certified_gap_stop_applied", False)
+        ),
+        "integrated_certified_gap_stop_semantics": metadata.get(
+            "integrated_certified_gap_stop_semantics"
+        ),
         "phase4_phase3_seed_audit": phase4_seed_audit,
         "phase4_phase3_seed_enabled": bool(
             phase4_seed_audit.get("requested", False)
@@ -10327,6 +10349,51 @@ def _solver_settings_payload(
         ),
         "phase4_phase3_seed_bev_frontier_enabled": bool(
             phase4_seed_audit.get("seed_bev_frontier_enabled", False)
+        ),
+        "phase4_phase3_seed_unused_bev_neighborhood_enabled": bool(
+            phase4_seed_audit.get(
+                "unused_bev_activation_neighborhood_enabled",
+                False,
+            )
+        ),
+        "phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec": (
+            _int_or_none(
+                phase4_seed_audit.get(
+                    "unused_bev_activation_neighborhood_time_limit_sec"
+                )
+            )
+        ),
+        "phase4_phase3_seed_unused_bev_neighborhood_per_solve_sec": (
+            _int_or_none(
+                phase4_seed_audit.get(
+                    "unused_bev_activation_neighborhood_per_solve_sec"
+                )
+            )
+        ),
+        "phase4_phase3_seed_unused_bev_neighborhood_max_evaluations": (
+            _int_or_none(
+                phase4_seed_audit.get(
+                    "unused_bev_activation_neighborhood_max_evaluations"
+                )
+            )
+        ),
+        "phase4_phase3_seed_unused_bev_identity_exchange_rounds": (
+            _int_or_none(
+                phase4_seed_audit.get(
+                    "unused_bev_identity_exchange_rounds"
+                )
+            )
+        ),
+        "phase4_phase3_seed_powertrain_duty_swap_rounds": (
+            _int_or_none(
+                phase4_seed_audit.get("powertrain_duty_swap_rounds")
+            )
+        ),
+        "phase4_phase3_seed_unused_bev_neighborhood": dict(
+            phase4_seed_audit.get(
+                "unused_bev_activation_neighborhood"
+            )
+            or {}
         ),
         "phase4_integrated_seed_recourse_preflight_enabled": bool(
             phase4_seed_audit.get(
@@ -10803,6 +10870,16 @@ def _run_optimization(
                 # time limit.  Explicit frontier sensitivities remain Phase 3
                 # experiments and are never injected here.
                 phase4_phase3_seed_bev_frontier_enabled=False,
+                phase4_phase3_seed_unused_bev_neighborhood_enabled=(
+                    phase_token == "phase4_integrated"
+                ),
+                phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec=120,
+                phase4_phase3_seed_unused_bev_neighborhood_per_solve_sec=5,
+                phase4_phase3_seed_unused_bev_neighborhood_max_evaluations=(
+                    512
+                ),
+                phase4_phase3_seed_powertrain_duty_swap_rounds=2,
+                phase4_phase3_seed_unused_bev_identity_exchange_rounds=2,
                 phase4_integrated_seed_recourse_preflight_enabled=(
                     phase_token == "phase4_integrated"
                 ),

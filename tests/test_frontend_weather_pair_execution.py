@@ -51,11 +51,21 @@ def test_formal_phase4_seed_control_contract_matches_server_profile() -> None:
             "primary_plus_symmetric_adjacent_compositions"
         ),
         "phase4_phase3_seed_bev_frontier_enabled": False,
+        "phase4_phase3_seed_unused_bev_neighborhood_enabled": True,
+        "phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec": 120,
+        "phase4_phase3_seed_unused_bev_neighborhood_per_solve_sec": 5,
+        "phase4_phase3_seed_unused_bev_neighborhood_max_evaluations": 512,
+        "phase4_phase3_seed_powertrain_duty_swap_rounds": 2,
+        "phase4_phase3_seed_unused_bev_identity_exchange_rounds": 2,
+        "phase4_phase3_seed_unused_bev_neighborhood": {
+            "enabled": True,
+            "termination_reason": "neighborhood_exhausted",
+        },
         "phase4_integrated_seed_recourse_preflight_enabled": True,
         "phase4_integrated_seed_recourse_time_limit_sec": 300,
         "phase4_integrated_seed_recourse_preflight_requested": True,
         "phase4_integrated_seed_recourse_preflight_feasible": True,
-        "phase4_total_solver_time_budget_sec": 4500,
+        "phase4_total_solver_time_budget_sec": 4620,
     }
 
     assert runner._phase4_seed_controls_match(settings) is True
@@ -593,6 +603,20 @@ def test_optimization_payload_exposes_frontier_and_integrated_actual_cost() -> N
     assert integrated["time_limit_seconds"] >= 3600
     assert integrated["mip_gap"] == pytest.approx(0.001)
     assert integrated.get("stage1_bev_frontier_enabled", False) is False
+
+    integrated_one_percent = runner.build_optimization_payload(
+        "prepared-integrated-one-percent",
+        experiment_case="phase4_integrated_actual_cost",
+        actual_cost_mip_gap=0.01,
+    )
+    assert integrated_one_percent["mip_gap"] == pytest.approx(0.01)
+
+    with pytest.raises(ValueError, match="actual_cost_mip_gap"):
+        runner.build_optimization_payload(
+            "prepared-integrated-invalid-gap",
+            experiment_case="phase4_integrated_actual_cost",
+            actual_cost_mip_gap=1.0,
+        )
 
     maximum_ev = runner.build_optimization_payload(
         "prepared-maximum-ev",

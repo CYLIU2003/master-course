@@ -9,6 +9,7 @@ from src.optimization.common.evaluator import CostEvaluator
 from src.optimization.common.feasibility import FeasibilityChecker
 from src.optimization.common.benchmarking import solver_benchmark_eligibility
 from src.optimization.common.problem import (
+    AssignmentPlan,
     CanonicalOptimizationProblem,
     OptimizationConfig,
     OptimizationEngineResult,
@@ -22,6 +23,20 @@ class MILPOptimizer:
         self._adapter = GurobiMILPAdapter()
         self._feasibility = FeasibilityChecker()
         self._evaluator = CostEvaluator()
+
+    def improve_phase4_seed_with_unused_bev_neighborhood(
+        self,
+        problem: CanonicalOptimizationProblem,
+        config: OptimizationConfig,
+        seed_plan: AssignmentPlan,
+    ) -> tuple[AssignmentPlan, Dict[str, Any]]:
+        """Delegate the bounded exact-Stage-2 Phase 4 seed neighborhood."""
+
+        return self._adapter.improve_phase4_seed_with_unused_bev_neighborhood(
+            problem,
+            config,
+            seed_plan,
+        )
 
     def solve(
         self,
@@ -337,6 +352,16 @@ class MILPOptimizer:
                 "integrated_activity_blocking_constraint_count": (
                     plan.metadata or {}
                 ).get("integrated_activity_blocking_constraint_count"),
+                "integrated_redundant_endpoint_away_blocking_terms_omitted": (
+                    plan.metadata or {}
+                ).get(
+                    "integrated_redundant_endpoint_away_blocking_terms_omitted"
+                ),
+                "integrated_redundant_endpoint_away_blocking_semantics": (
+                    plan.metadata or {}
+                ).get(
+                    "integrated_redundant_endpoint_away_blocking_semantics"
+                ),
                 "stage1_time_limit_sec_effective": (plan.metadata or {}).get(
                     "stage1_time_limit_sec_effective"
                 ),
@@ -681,6 +706,27 @@ class MILPOptimizer:
                 "integrated_verified_start_search_bound_semantics": (
                     (plan.metadata or {}).get(
                         "integrated_verified_start_search_bound_semantics"
+                    )
+                ),
+                "integrated_certified_gap_stop_threshold": (
+                    (plan.metadata or {}).get(
+                        "integrated_certified_gap_stop_threshold"
+                    )
+                ),
+                "integrated_certified_gap_at_verified_start": (
+                    (plan.metadata or {}).get(
+                        "integrated_certified_gap_at_verified_start"
+                    )
+                ),
+                "integrated_certified_gap_stop_applied": bool(
+                    (plan.metadata or {}).get(
+                        "integrated_certified_gap_stop_applied",
+                        False,
+                    )
+                ),
+                "integrated_certified_gap_stop_semantics": (
+                    (plan.metadata or {}).get(
+                        "integrated_certified_gap_stop_semantics"
                     )
                 ),
                 "integrated_mip_focus": (plan.metadata or {}).get(

@@ -1,5 +1,63 @@
 # Development Notes
 
+## 2026-08-10: bounded Phase-4 seed improvement and source-coupled proof floor
+
+- The prior full Phase-4 model had a verified feasible start but could spend
+  3,600 seconds without processing a branch-and-bound node.  Removing
+  endpoint away-from-depot rows that are LP-dominated by the corresponding
+  endpoint trip activity row reduces the measured model from 1,929,173 to
+  1,587,351 constraints while preserving 776,752 variables.  The proof uses
+  `start[v,r] <= y[v,r]` and `x[v,i,j] <= y[v,i], y[v,j]` from node flow; no
+  implications are summed or weakened.
+- A bounded candidate generator now runs between the neutral Phase-3 seed and
+  integrated preflight.  Whole duties may be remapped from used ICE to unused
+  BEV, swapped between used BEV/ICE identities, or exchanged between BEV
+  identities.  Stale charging, SOC, source-flow, refuelling and ledger fields
+  are cleared before exact Stage 2 reconstructs them.  Acceptance requires a
+  Stage-2 incumbent, `FeasibilityChecker.feasible`, canonical accounting
+  feasibility and a strict cost reduction.  The search has a 120-second wall
+  limit, 5-second per-candidate limit and 512-evaluation cap; it introduces no
+  weather coefficient, BEV quota or global-optimality claim.
+- Diagnostic replay of the old clean pair plan finds a sunny all-BEV
+  fixed-dispatch recourse at `644,741.923029935 JPY` with 155.472886 kWh grid
+  purchase.  The rain neighborhood retains `21/11` at
+  `698,419.690050 JPY`; the maximum observed feasible count is `30/2` at
+  `710,619.401404 JPY`.  These results explain why sunny EV use should rise,
+  while also showing why maximum feasible EV count and minimum actual cost
+  must remain separate questions.  They are dirty-worktree diagnostics, not
+  formal pair evidence.
+- The weather energy/fuel lower bound now solves the continuous relaxation
+
+  `min C_ICE(path) + c_grid * E_grid`
+
+  subject to continuous powertrain path coverage and
+
+  `E_free + E_grid = E_BEV_service + E_BEV_start + E_BEV_arc + E_BEV_return`,
+  `0 <= E_free <= pooled admissible PV/BESS/vehicle-SOC source energy`.
+
+  Service/start/return quantities use the minimum compatible vehicle value;
+  connection quantities use the minimum compatible powertrain arc value.
+  Vehicle identity, fleet path counts, timing, charger occupancy and depot
+  source coupling are relaxed and all omitted objective terms must be
+  nonnegative.  Therefore the LP is optimistic and its maximum with the older
+  independent-trip floor is still a valid lower bound.  Its sorted coefficient
+  payload receives an input SHA-256 which is included in the outer certificate
+  hash.
+- Applying that certificate to the prior inputs yields an energy/fuel floor of
+  `0 JPY` sunny and `55,632.938123641 JPY` rain.  Adding the separately proven
+  32-bus vehicle-day floor gives `640,000.000000` and `695,632.938123641 JPY`;
+  the diagnostic incumbent gaps are `0.735476%` and `0.399008%` respectively.
+  Phase 4 now derives a `BestObjStop` threshold from this independently audited
+  floor only when exact integrated fixed-dispatch recourse has already
+  supplied a complete feasible start within the requested gap.
+- `run_frontend_controlled_pv_pair.py` retains the 0.1% default but accepts a
+  validated `--actual-cost-mip-gap` so a distinct 1% experiment can be
+  declared before fresh Prepare.  It records that target in environment and
+  optimization-request evidence.  Focused cost, pair-runner, strict-model and
+  neighborhood regressions pass (`74`), and the complete repository suite
+  passes (`1260 passed in 61.38s`).  A clean formal pair is still required
+  before release status changes.
+
 ## 2026-08-10: distinguish the final integrated fleet from its Stage-1 seed
 
 - Audit of

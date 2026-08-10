@@ -424,6 +424,18 @@ class OptimizationConfig:
     phase4_phase3_seed_enabled: bool = False
     phase4_phase3_seed_time_limit_sec: int = 600
     phase4_phase3_seed_bev_frontier_enabled: bool = False
+    # After the neutral Phase 3 seed search, a bounded fixed-assignment
+    # neighborhood may activate currently unused BEVs and exchange BEV
+    # identities.  Every candidate is accepted only after an exact Stage 2
+    # charging/SOC solve plus canonical cost and physical validation.  This is
+    # an upper-bound generator; it never changes the integrated objective or
+    # supplies optimality evidence by itself.
+    phase4_phase3_seed_unused_bev_neighborhood_enabled: bool = False
+    phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec: int = 120
+    phase4_phase3_seed_unused_bev_neighborhood_per_solve_sec: int = 5
+    phase4_phase3_seed_unused_bev_neighborhood_max_evaluations: int = 512
+    phase4_phase3_seed_powertrain_duty_swap_rounds: int = 2
+    phase4_phase3_seed_unused_bev_identity_exchange_rounds: int = 2
     # A Phase 3 plan is physically valid under the decomposed Stage 2 model,
     # but that alone does not prove it satisfies every Phase 4 constraint.
     # Before the unrestricted integrated search, temporarily fix only the
