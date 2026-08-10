@@ -834,3 +834,22 @@ generic successful frontend text such as `Optimization complete.` is accepted
 when those structured fields agree. Explicit prose that contradicts a gap or
 integrated-scope gate still fails closed. A fresh clean-commit pair remains
 required after this reporting-only correction.
+
+### Final PV1000 1% controlled pair (2026-08-10)
+
+Clean frozen SHA `6bf6bd7eebec06dde1a899bebe5e02f3dc9fd62c`
+completed the ordinary frontend HTTP path with fresh Prepare for both cases.
+The high-PV case used 32 BEVs and 0 ICE buses for all 264 trips; the low-PV
+case used 21 BEVs and 11 ICE buses for 91/173 trips. Certified gaps were
+0.735476% and 0.399008%, both within the predeclared 1% target. Both cases
+passed 264/264 coverage, 24/24 Rolling, physical/SOC, accounting, artifact,
+tariff, Git-provenance, and solver-control gates. The pair manifest reports
+controlled comparison accepted and formal research submission ready with no
+failed checks.
+
+The authoritative pair output is
+`output/formal_pair_20260810_flat30_pv1000_bess6000_phase4_6bf6bd7_gap01`.
+Standalone case summaries remain blocked only by
+`controlled_counterfactual_pair_not_verified`, because they are finalized
+before their counterpart exists. The immutable pair manifest is the
+pair-scoped release attestation and discharges that single pending check.

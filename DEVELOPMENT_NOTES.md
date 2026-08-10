@@ -3158,3 +3158,37 @@ locks this distinction in place.
   (`1263 passed in 57.56s`). MIT-style self-review found no P0/P1 issue in the
   bounded postprocessor change; external Claude Code is not installed in this
   environment, so no independent Claude review is claimed.
+
+# 2026-08-10 - Final clean PV1000 1% pair accepted
+
+- Frozen clean SHA `6bf6bd7eebec06dde1a899bebe5e02f3dc9fd62c` completed
+  the fresh pair at
+  `output/formal_pair_20260810_flat30_pv1000_bess6000_phase4_6bf6bd7_gap01`
+  in 2,324.1 seconds. Sunny and rain frontend jobs both reached `completed`
+  after integrated Phase 4, 24-step Rolling, independent validation, and
+  report finalization. The evidence ZIP was created beside the directory.
+- Controlled inputs are 2025-08-05 weekday service, 264 trips, the identical
+  active fleet and initial state, 10 chargers, 30 JPY/kWh grid energy,
+  0 JPY/kW demand charge, 1,000 kW manual PV rating, and a 6,000 kWh / 900 kW
+  BESS at 3,000 -> 3,000 kWh. Only the PV curve differs: 6,056.25 kWh high PV
+  versus 996.2 kWh low PV. The comparison control hash is
+  `3c0ee7cc5bfcd78a16b7a2f10c9177c8b08071710d362394f14ab842f0605c50`.
+- High PV selected 32 BEVs / 0 ICE buses and 264/0 trips. Executed cost is
+  644,741.923030 JPY, grid import 155.472886 kWh, fuel 0 L, and certified gap
+  0.735476%. Low PV selected 21/11 and 91/173 trips. Executed cost is
+  698,419.690050 JPY, grid import 124.985104 kWh, fuel 357.881339 L, and
+  certified gap 0.399008%. The weather response is therefore 11 used BEVs and
+  173 BEV trips, not the identical 13/19 Phase-3 seed composition.
+- `completion_audit.json` is `READY` with no failed checks. Both case audits,
+  the controlled comparison, pair controls, differing PV hashes, assignment
+  difference, and `frontend_pv_pair_manifest_v2` pass. The pair manifest has
+  `formal_research_submission_ready=true` and no formal-release failures.
+- The standalone case claim scopes remain immutable and contain only the
+  pending `controlled_counterfactual_pair_not_verified` release check. The
+  pair builder is explicitly designed to discharge that one circular pending
+  check after both cases exist; it does not rewrite the source run artifacts.
+  Pair-level claims must cite the pair manifest, while a case viewed alone
+  remains correctly blocked.
+- The sunny all-BEV fuel ledger, time series, and summary are valid header-only
+  CSV relations rather than zero-byte files. Artifact completeness accepts all
+  three, confirming the empty-fuel export correction on the formal path.

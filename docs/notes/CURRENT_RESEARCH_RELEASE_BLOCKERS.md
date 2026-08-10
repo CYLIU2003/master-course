@@ -1,22 +1,24 @@
 # Current research release blockers
 
-## 2026-08-10 pair postprocessor fix requires a final clean rerun
+## 2026-08-10 final clean 1% pair completed: no pair-level blocker
 
-Clean SHA `fa2c3808fdedb986ab703770ab8c9b6cf4cb17c7` completed both fresh
-frontend jobs. The all-BEV sunny case now has complete header-only empty fuel
-relations, and both cases pass physical, 24/24 Rolling, accounting, provenance,
-tariff, solver telemetry, and artifact checks. Sunny is `32 BEV / 0 ICE` with
-264 BEV trips and a 0.735476% certified gap; rain is `21/11` with 91/173 trips
-and a 0.399008% certified gap. Both are below the predeclared 1% target.
+Clean frozen SHA `6bf6bd7eebec06dde1a899bebe5e02f3dc9fd62c` completed both fresh
+frontend jobs and the pair postprocessor. Sunny is `32 BEV / 0 ICE`, 264/0
+trips, 644,741.923030 JPY, and 0.735476% certified gap. Rain is `21/11`,
+91/173 trips, 698,419.690050 JPY, and 0.399008% certified gap. Both are below
+the predeclared 1% threshold and pass 264/264 coverage, 24/24 Rolling,
+physical/SOC, accounting, provenance, tariff, solver-control, and artifact
+gates. The all-BEV empty fuel outputs are valid header-only relations.
 
-The pair bundle remained `BLOCKED` only because its local postprocessor
-replaced the requested 1% with the old 0.1% constant and required obsolete
-English completion phrases. The runner now passes the declared gap to the case
-audit and validates structured claim fields instead of exact prose. A read-only
-re-audit of the frozen artifacts passes both cases, but repository policy
-forbids upgrading pre-change outputs. Release therefore remains `BLOCKED`
-until this change is committed and one final clean pair completes and its
-pair-level manifest is accepted.
+`completion_audit.json` is `READY`, with empty `failed_checks`. The pair
+manifest accepts the controlled PV sensitivity and reports
+`formal_research_submission_ready=true`, with all five formal release checks
+passing. The standalone case summaries retain only
+`controlled_counterfactual_pair_not_verified`: this is the intentional
+pre-pair pending state and is discharged by the immutable pair manifest after
+both cases exist. A single case must still not be presented as the verified
+pair. There is no remaining blocker for this pair-scoped 1% release-candidate;
+the historical 0.1% runs below remain historical and are not upgraded.
 
 ## 2026-08-10 all-BEV export gate requires one clean rerun
 
