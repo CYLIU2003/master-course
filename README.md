@@ -823,3 +823,14 @@ High-PV output was not energy-limited: 6,056.25 kWh was generated and
 identify vehicle-local charging-window/terminal-SOC conflicts in the examined
 assignments. These failed assignments are evidence about the observed
 incumbent plateau, not a proof that every 28-BEV assignment is infeasible.
+
+### 1% pair-audit compatibility fix (2026-08-10)
+
+The controlled-pair runner now carries the explicitly predeclared
+`--actual-cost-mip-gap` value into its post-run case audit. A run requested at
+1% is therefore checked against 1%, not the historical 0.1% default. Claim
+consistency is checked from `result_claim_classification` and solver settings;
+generic successful frontend text such as `Optimization complete.` is accepted
+when those structured fields agree. Explicit prose that contradicts a gap or
+integrated-scope gate still fails closed. A fresh clean-commit pair remains
+required after this reporting-only correction.

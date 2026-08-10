@@ -3128,3 +3128,33 @@ locks this distinction in place.
   solver, IIS, objective, feasibility, and frozen run results are unchanged.
 - The diagnostic fix passed 60 focused tests; `compileall`, `git diff --check`,
   and the complete regression suite passed with `1256 passed`.
+
+# 2026-08-10 - Controlled-pair postprocessor respects declared Phase 4 gap
+
+- Clean SHA `fa2c3808fdedb986ab703770ab8c9b6cf4cb17c7` completed both
+  frontend jobs after the empty all-BEV fuel export correction. Sunny produced
+  `32 BEV / 0 ICE`, 264/0 trips and a 0.735476% certified gap; rain produced
+  `21/11`, 91/173 trips and a 0.399008% certified gap. Both used the
+  predeclared 1% target and passed physical, Rolling, accounting, provenance,
+  tariff, and artifact-completeness checks.
+- The pair completion audit nevertheless failed three reporting checks. The
+  case-audit helper discarded the CLI `--actual-cost-mip-gap 0.01` and compared
+  both results with the historical `PHASE4_ACTUAL_COST_MIP_GAP=0.001` constant.
+  It also required the old `feasible_candidate` label and exact English gap
+  phrases, while an integrated accepted result correctly uses
+  `validated_optimality_claim_candidate` and may return the generic terminal
+  message `Optimization complete.`.
+- The audit now receives the declared actual-cost gap explicitly, validates it
+  as finite in `[0, 1)`, and compares structured result-classification fields,
+  blocker lists, requested/certified gaps, and solver settings. Terminal prose
+  is used only to reject explicit contradictions. Re-auditing the frozen
+  artifacts in read-only mode accepts both cases with no failed checks; those
+  artifacts are not relabelled as results of the new code.
+- Focused runner regression tests cover integrated structured success, a
+  certified gap above the request, legacy two-stage scope blockers, real gap
+  misses, contradictory terminal text, and the custom 1% propagation. A fresh
+  clean-commit pair is still mandatory before release readiness is claimed.
+- `compileall`, `git diff --check`, and the complete regression suite pass
+  (`1263 passed in 57.56s`). MIT-style self-review found no P0/P1 issue in the
+  bounded postprocessor change; external Claude Code is not installed in this
+  environment, so no independent Claude review is claimed.

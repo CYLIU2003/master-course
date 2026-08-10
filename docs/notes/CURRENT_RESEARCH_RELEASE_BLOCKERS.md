@@ -1,5 +1,23 @@
 # Current research release blockers
 
+## 2026-08-10 pair postprocessor fix requires a final clean rerun
+
+Clean SHA `fa2c3808fdedb986ab703770ab8c9b6cf4cb17c7` completed both fresh
+frontend jobs. The all-BEV sunny case now has complete header-only empty fuel
+relations, and both cases pass physical, 24/24 Rolling, accounting, provenance,
+tariff, solver telemetry, and artifact checks. Sunny is `32 BEV / 0 ICE` with
+264 BEV trips and a 0.735476% certified gap; rain is `21/11` with 91/173 trips
+and a 0.399008% certified gap. Both are below the predeclared 1% target.
+
+The pair bundle remained `BLOCKED` only because its local postprocessor
+replaced the requested 1% with the old 0.1% constant and required obsolete
+English completion phrases. The runner now passes the declared gap to the case
+audit and validates structured claim fields instead of exact prose. A read-only
+re-audit of the frozen artifacts passes both cases, but repository policy
+forbids upgrading pre-change outputs. Release therefore remains `BLOCKED`
+until this change is committed and one final clean pair completes and its
+pair-level manifest is accepted.
+
 ## 2026-08-10 all-BEV export gate requires one clean rerun
 
 The fresh 1% calculations at clean SHA `6853edae956c71c3c28ec285660a0f0b7c788e69`

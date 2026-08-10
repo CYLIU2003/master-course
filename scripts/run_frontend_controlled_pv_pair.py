@@ -1945,15 +1945,24 @@ def _claim_artifacts_consistent(
     optimization_result: Mapping[str, Any],
     terminal_response: Mapping[str, Any],
 ) -> bool:
-    """Fail closed when terminal prose contradicts persisted claim gates."""
+    """Fail closed when persisted claim gates contradict one another.
+
+    The result classification is the canonical claim contract.  Terminal text
+    is intentionally allowed to be generic because frontend wording can change
+    without changing the research semantics; only an explicit contradictory
+    claim in that text is rejected.
+    """
 
     classification = dict(
         optimization_result.get("result_claim_classification") or {}
     )
-    if (
-        classification.get("label") != "feasible_candidate"
-        or terminal_response.get("status") != "completed"
-    ):
+    if terminal_response.get("status") != "completed":
+        return False
+
+    physically_feasible = (
+        classification.get("physical_feasibility_claim_eligible") is True
+    )
+    if not physically_feasible:
         return False
 
     settings_gap_met = settings.get("mip_gap_target_met") is True
@@ -1961,43 +1970,100 @@ def _claim_artifacts_consistent(
         return False
 
     blockers = set(classification.get("optimality_blocking_reasons") or [])
-    message = str(terminal_response.get("message") or "")
-    interpretation = str(classification.get("interpretation") or "")
-    mentions_gap_failure = (
-        "requested MIP gap" in message and "not established" in message
+    optimality_eligible = (
+        classification.get("optimality_claim_eligible") is True
     )
+    expected_optimality_eligible = settings_gap_met and not blockers
+    if optimality_eligible is not expected_optimality_eligible:
+        return False
+
+    expected_label = (
+        "validated_optimality_claim_candidate"
+        if expected_optimality_eligible
+        else "feasible_candidate"
+    )
+    if classification.get("label") != expected_label:
+        return False
+
+    requested_gap = _number(settings.get("mip_gap_requested_ratio"))
+    classified_requested_gap = _number(
+        classification.get("requested_mip_gap")
+    )
+    if (
+        requested_gap is not None
+        and classified_requested_gap is not None
+        and not math.isclose(
+            requested_gap,
+            classified_requested_gap,
+            rel_tol=0.0,
+            abs_tol=1.0e-12,
+        )
+    ):
+        return False
+
     certified_gap = _number(classification.get("certified_mip_gap"))
-
+    has_gap_blocker = "requested_mip_gap_not_met" in blockers
     if settings_gap_met:
-        gap_phrase = (
-            "certified Stage 1 MIP gap target passed"
-            if certified_gap is not None
-            else "requested MIP gap target passed"
-        )
-        gap_semantics_match = (
-            gap_phrase in message
-            and not mentions_gap_failure
-            and "meeting the" in interpretation
-            and "MIP gap target" in interpretation
-        )
-    else:
-        gap_semantics_match = (
-            mentions_gap_failure
-            and "meeting the certified Stage 1 MIP gap target"
-            not in interpretation
-            and "meeting the requested MIP gap target"
-            not in interpretation
-        )
+        if has_gap_blocker:
+            return False
+        if (
+            certified_gap is not None
+            and requested_gap is not None
+            and certified_gap > requested_gap + 1.0e-12
+        ):
+            return False
+    elif not has_gap_blocker:
+        return False
 
-    integrated_scope_match = (
-        "not_an_integrated_global_assignment_and_charging_milp"
-        not in blockers
-        or (
-            "integrated global optimality" in message
-            and "not established" in message
-        )
+    message = str(terminal_response.get("message") or "").lower()
+    gap_tail = (
+        message[message.index("mip gap") :]
+        if "mip gap" in message
+        else ""
     )
-    return gap_semantics_match and integrated_scope_match
+    gap_failure_index = gap_tail.find("not established")
+    explicit_gap_failure = (
+        gap_failure_index >= 0
+        and "passed" not in gap_tail[:gap_failure_index]
+    )
+    explicit_gap_success = "passed" in gap_tail
+    if settings_gap_met and explicit_gap_failure:
+        return False
+    if not settings_gap_met and explicit_gap_success:
+        return False
+
+    explicit_integrated_success = (
+        "integrated global optimality" in message
+        and "not established" not in message
+        and ("established" in message or "passed" in message)
+    )
+    if (
+        "not_an_integrated_global_assignment_and_charging_milp" in blockers
+        and explicit_integrated_success
+    ):
+        return False
+    return True
+
+
+def _requested_gap_ratio_for_case(
+    *,
+    optimization_experiment_case: str,
+    actual_cost_mip_gap: float,
+) -> float:
+    """Return the predeclared gap that the case audit must enforce."""
+
+    if optimization_experiment_case == "phase4_integrated_actual_cost":
+        if not math.isfinite(actual_cost_mip_gap) or not (
+            0.0 <= actual_cost_mip_gap < 1.0
+        ):
+            raise ValueError("actual_cost_mip_gap must be finite in [0, 1)")
+        return float(actual_cost_mip_gap)
+    if optimization_experiment_case in {
+        "phase4_maximum_ev_utilization",
+        "phase4_cost_constrained_ev_utilization",
+    }:
+        return PHASE4_POLICY_MIP_GAP
+    return 0.1
 
 
 def _phase4_warm_start_evidence_valid(
@@ -2232,6 +2298,7 @@ def _case_gate_audit(
     frozen_sha: str,
     tariff_condition: Mapping[str, Any],
     optimization_experiment_case: str = "phase3_baseline",
+    actual_cost_mip_gap: float = PHASE4_ACTUAL_COST_MIP_GAP,
 ) -> dict[str, Any]:
     summary = _read_json(case_dir / "summary.json")
     settings = _read_json(case_dir / "solver_settings.json")
@@ -2296,12 +2363,9 @@ def _case_gate_audit(
         "phase4_cost_constrained_ev_utilization",
     }
     phase4_integrated = phase4_actual_cost or phase4_policy
-    requested_gap_ratio = (
-        PHASE4_ACTUAL_COST_MIP_GAP
-        if phase4_actual_cost
-        else PHASE4_POLICY_MIP_GAP
-        if phase4_policy
-        else 0.1
+    requested_gap_ratio = _requested_gap_ratio_for_case(
+        optimization_experiment_case=optimization_experiment_case,
+        actual_cost_mip_gap=actual_cost_mip_gap,
     )
     phase4_policy_cost_cap_valid = bool(
         not phase4_policy
@@ -4138,6 +4202,7 @@ def main() -> int:
                 optimization_experiment_case=(
                     args.optimization_experiment_case
                 ),
+                actual_cost_mip_gap=args.actual_cost_mip_gap,
             )
             case_gate_audits[name] = audit
             failed_checks.extend(

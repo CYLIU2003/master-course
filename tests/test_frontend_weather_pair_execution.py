@@ -894,6 +894,8 @@ def test_claim_artifact_gate_accepts_certified_gap_pass_with_scope_blocker() -> 
     runner = _load_runner()
     classification = {
         "label": "feasible_candidate",
+        "physical_feasibility_claim_eligible": True,
+        "optimality_claim_eligible": False,
         "mip_gap_target_met": True,
         "certified_mip_gap": 0.03284,
         "optimality_blocking_reasons": [
@@ -923,6 +925,8 @@ def test_claim_artifact_gate_accepts_real_gap_miss() -> None:
     runner = _load_runner()
     classification = {
         "label": "feasible_candidate",
+        "physical_feasibility_claim_eligible": True,
+        "optimality_claim_eligible": False,
         "mip_gap_target_met": False,
         "certified_mip_gap": 0.12,
         "optimality_blocking_reasons": [
@@ -957,6 +961,8 @@ def test_claim_artifact_gate_rejects_gap_pass_reported_as_gap_miss() -> None:
         optimization_result={
             "result_claim_classification": {
                 "label": "feasible_candidate",
+                "physical_feasibility_claim_eligible": True,
+                "optimality_claim_eligible": False,
                 "mip_gap_target_met": True,
                 "certified_mip_gap": 0.03284,
                 "optimality_blocking_reasons": [
@@ -977,6 +983,72 @@ def test_claim_artifact_gate_rejects_gap_pass_reported_as_gap_miss() -> None:
             ),
         },
     )
+
+
+def test_claim_artifact_gate_accepts_integrated_gap_pass_with_generic_message() -> None:
+    runner = _load_runner()
+    classification = {
+        "label": "validated_optimality_claim_candidate",
+        "physical_feasibility_claim_eligible": True,
+        "optimality_claim_eligible": True,
+        "mip_gap_target_met": True,
+        "requested_mip_gap": 0.01,
+        "certified_mip_gap": 0.0074,
+        "optimality_blocking_reasons": [],
+        "interpretation": (
+            "See physical and research acceptance artifacts for scope."
+        ),
+    }
+
+    assert runner._claim_artifacts_consistent(
+        settings={
+            "mip_gap_target_met": True,
+            "mip_gap_requested_ratio": 0.01,
+        },
+        optimization_result={"result_claim_classification": classification},
+        terminal_response={
+            "status": "completed",
+            "message": "Optimization complete.",
+        },
+    )
+
+
+def test_claim_artifact_gate_rejects_certified_gap_above_requested() -> None:
+    runner = _load_runner()
+    classification = {
+        "label": "validated_optimality_claim_candidate",
+        "physical_feasibility_claim_eligible": True,
+        "optimality_claim_eligible": True,
+        "mip_gap_target_met": True,
+        "requested_mip_gap": 0.01,
+        "certified_mip_gap": 0.011,
+        "optimality_blocking_reasons": [],
+    }
+
+    assert not runner._claim_artifacts_consistent(
+        settings={
+            "mip_gap_target_met": True,
+            "mip_gap_requested_ratio": 0.01,
+        },
+        optimization_result={"result_claim_classification": classification},
+        terminal_response={
+            "status": "completed",
+            "message": "Optimization complete.",
+        },
+    )
+
+
+def test_requested_gap_ratio_uses_predeclared_actual_cost_value() -> None:
+    runner = _load_runner()
+
+    assert runner._requested_gap_ratio_for_case(
+        optimization_experiment_case="phase4_integrated_actual_cost",
+        actual_cost_mip_gap=0.01,
+    ) == pytest.approx(0.01)
+    assert runner._requested_gap_ratio_for_case(
+        optimization_experiment_case="phase3_baseline",
+        actual_cost_mip_gap=0.01,
+    ) == pytest.approx(0.1)
 
 
 def test_zip_directory_preserves_final_completion_audit_bytes(
