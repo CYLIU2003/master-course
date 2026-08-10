@@ -670,7 +670,22 @@ def test_canonical_graph_exports_write_legacy_graph_files_even_when_diagrams_dis
     assert (tmp_path / "graph" / "energy_flow_timeseries.csv").exists()
     assert (tmp_path / "graph" / "bus_charging_total_timeseries.csv").exists()
     assert (tmp_path / "graph" / "vehicle_soc_timeseries.csv").exists()
-    assert (tmp_path / "graph" / "fuel_summary.csv").exists()
+    fuel_summary_path = tmp_path / "graph" / "fuel_summary.csv"
+    fuel_canonical_path = tmp_path / "graph" / "fuel_canonical_ledger.csv"
+    fuel_timeseries_path = tmp_path / "graph" / "fuel_timeseries.csv"
+    assert fuel_summary_path.exists()
+    assert fuel_canonical_path.exists()
+    assert fuel_timeseries_path.exists()
+    for fuel_path in (
+        fuel_summary_path,
+        fuel_canonical_path,
+        fuel_timeseries_path,
+    ):
+        # This fixture is all-BEV. Empty fuel relations must retain their CSV
+        # schema instead of becoming ambiguous zero-byte artifacts.
+        assert fuel_path.stat().st_size > 0
+        with fuel_path.open(encoding="utf-8", newline="") as handle:
+            assert list(csv.DictReader(handle)) == []
     assert (tmp_path / "graph" / "trip_assignment.csv").exists()
     refuel_events_path = tmp_path / "graph" / "refuel_events.csv"
     assert refuel_events_path.exists()

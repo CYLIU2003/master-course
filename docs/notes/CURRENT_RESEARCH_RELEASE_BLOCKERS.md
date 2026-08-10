@@ -1,5 +1,24 @@
 # Current research release blockers
 
+## 2026-08-10 all-BEV export gate requires one clean rerun
+
+The fresh 1% calculations at clean SHA `6853edae956c71c3c28ec285660a0f0b7c788e69`
+resolve the original fleet-response question at solver level. Sunny selects
+`32 BEV / 0 ICE` and all 264 trips are electric at `644,741.923030 JPY` with a
+`0.735476%` certified gap. Rain selects `21/11`, with 91 BEV and 173 ICE trips,
+at `698,419.690050 JPY` with a `0.399008%` certified gap. Both complete 24/24
+Rolling and use the controlled 30 JPY/kWh, zero-demand-charge, 1000 kW PV,
+6000 kWh BESS setup.
+
+Release remains `BLOCKED` because the sunny frontend job failed only after
+calculation and Rolling: an all-BEV day generated no fuel rows, and the final
+artifact gate correctly rejected three zero-byte fuel CSVs as ambiguous. The
+export path now writes header-only canonical fuel ledger, fuel timeseries and
+fuel summary files for a valid empty relation. This correction does not change
+the objective, constraints, tariff, PV profile, seed, or selected composition.
+A new clean commit and fresh two-case run are required before pair-manifest or
+teacher-release acceptance can be claimed.
+
 ## 2026-08-10 1% release-candidate implementation awaits clean pair evidence
 
 The nonterminating full search has been reduced to a bounded completion path.

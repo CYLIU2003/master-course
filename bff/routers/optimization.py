@@ -176,6 +176,15 @@ FULL_DAY_OPERATION_END_TIME = "23:59"
 # the typed solver setting.
 FORMAL_RESEARCH_MAX_SUCCESSORS_PER_TRIP = 0
 FORMAL_RESEARCH_SUCCESSOR_POLICY = "full_network"
+_FUEL_SUMMARY_FIELDS = (
+    "vehicle_id",
+    "vehicle_type",
+    "fuel_liters",
+    "trip_fuel_liters",
+    "deadhead_fuel_liters",
+    "refuel_liters",
+    "unit",
+)
 
 
 def _research_git_state_is_ready(git_state: Dict[str, Any]) -> bool:
@@ -8584,6 +8593,10 @@ def _persist_canonical_graph_exports(
     output_dir: str,
 ) -> Dict[str, Any]:
     from bff.mappers.scenario_to_problemdata import _build_graph_export_context
+    from src.optimization.accounting.export import (
+        FUEL_TIMESERIES_FIELDNAMES,
+        export_accounting_outputs,
+    )
     from src.result_exporter import (
         _build_route_band_diagram_assets,
         _build_vehicle_operation_diagram_assets,
@@ -8929,8 +8942,6 @@ def _persist_canonical_graph_exports(
     graph_dir.mkdir(parents=True, exist_ok=True)
     if accounting_artifacts is not None:
         try:
-            from src.optimization.accounting import export_accounting_outputs
-
             accounting_paths = export_accounting_outputs(graph_dir, accounting_artifacts)
             kpi_summary = dict(accounting_artifacts.summary)
             research_extended_exports["co2_timeseries.csv"] = [dict(row) for row in accounting_artifacts.co2_timeseries]
@@ -8945,10 +8956,24 @@ def _persist_canonical_graph_exports(
     for filename, rows in research_energy_exports.items():
         _write_csv(graph_dir / filename, rows)
     for filename, rows in research_extended_exports.items():
-        _write_csv(graph_dir / filename, rows)
+        if filename == "fuel_timeseries.csv":
+            # An all-BEV solution has no fuel rows, but it is still a complete
+            # canonical result. Preserve the schema so the final artifact gate
+            # can distinguish a valid empty relation from a truncated file.
+            _write_csv_rows(
+                graph_dir / filename,
+                rows,
+                list(FUEL_TIMESERIES_FIELDNAMES),
+            )
+        else:
+            _write_csv(graph_dir / filename, rows)
     _write_csv(graph_dir / "vehicle_charging_source_timeseries.csv", vehicle_charging_source_rows)
     _write_csv(graph_dir / "vehicle_soc_timeseries.csv", vehicle_soc_timeseries_rows)
-    _write_csv(graph_dir / "fuel_summary.csv", fuel_summary_rows)
+    _write_csv_rows(
+        graph_dir / "fuel_summary.csv",
+        fuel_summary_rows,
+        list(_FUEL_SUMMARY_FIELDS),
+    )
     _write_csv(graph_dir / "trip_assignment.csv", trip_assignment_rows)
     # A zero-refuel day is valid evidence.  Preserve its schema rather than
     # emitting a zero-byte file, because the graph manifest declares this

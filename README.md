@@ -1,5 +1,24 @@
 # master-course
 
+## 2026-08-10 all-BEV fuel-artifact correction
+
+- Clean SHA `6853edae956c71c3c28ec285660a0f0b7c788e69` completed both
+  day-ahead and 24/24 Rolling calculations for the fresh 1% controlled pair.
+  The integrated final compositions are `32 BEV / 0 ICE` (sunny, 264 BEV
+  trips, `644,741.923030 JPY`, certified gap `0.735476%`) and
+  `21 BEV / 11 ICE` (rain, 91 BEV trips, `698,419.690050 JPY`, certified gap
+  `0.399008%`). This confirms a large PV-driven response without a weather
+  preference term or BEV quota.
+- The sunny frontend job nevertheless failed at the last artifact gate because
+  a valid all-BEV day has zero fuel rows and three declared fuel CSVs were
+  emitted as zero-byte files. Zero fuel is valid data; a zero-byte file is not
+  self-describing evidence. Canonical fuel ledger, fuel timeseries and fuel
+  summary exports now retain their CSV headers when the relation is empty.
+- The failed pair remains `BLOCKED` and is not formal pair evidence. A fresh
+  clean-commit rerun is required because the reporting contract changed; the
+  solver, cost equations, feasible region and sunny/rain decisions are
+  unchanged by this export-only correction.
+
 ## 2026-08-10 bounded Phase-4 completion path (fresh formal run pending)
 
 - Phase 4 now evaluates a bounded, weather-neutral fixed-assignment

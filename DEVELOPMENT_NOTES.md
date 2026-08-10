@@ -1,5 +1,22 @@
 # Development Notes
 
+## 2026-08-10: preserve empty fuel schemas for all-BEV solutions
+
+- Fresh SHA-`6853eda` Phase-4 calculations produced a physically and
+  economically valid sunny all-BEV result (`32/0`, 264/0 trips,
+  `644,741.923030 JPY`, certified gap `0.735476%`) and a rain `21/11` result
+  (`698,419.690050 JPY`, certified gap `0.399008%`). Both completed 24/24
+  Rolling, but the sunny frontend job failed during final artifact enforcement.
+- The failure was an export-contract defect: `fuel_canonical_ledger.csv`,
+  `fuel_timeseries.csv`, and `fuel_summary.csv` were zero bytes when their row
+  sets were empty. The exporters now write canonical headers for empty fuel
+  relations, matching the existing zero-refuel-event convention. Non-empty
+  fuel rows and all cost/model semantics are unchanged.
+- The all-BEV graph regression now requires all three fuel artifacts to be
+  nonzero, schema-readable CSVs with zero data rows. The failed SHA-`6853eda`
+  pair remains diagnostic; formal pair evidence requires a new clean commit
+  and fresh Prepare for both weather cases.
+
 ## 2026-08-10: bounded Phase-4 seed improvement and source-coupled proof floor
 
 - The prior full Phase-4 model had a verified feasible start but could spend

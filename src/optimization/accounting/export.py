@@ -8,6 +8,34 @@ from typing import Any, Iterable, Mapping, Sequence
 from .schema import AccountingArtifacts
 
 
+FUEL_CANONICAL_LEDGER_FIELDNAMES = (
+    "timestamp",
+    "service_date",
+    "vehicle_id",
+    "operator_id",
+    "vehicle_type",
+    "trip_id",
+    "route_id",
+    "distance_km",
+    "fuel_efficiency_km_per_l",
+    "fuel_consumption_l",
+    "refuel_l",
+    "fuel_cost_jpy",
+    "ice_co2_kg",
+    "diesel_price_jpy_per_l",
+    "fuel_emission_factor_kg_per_l",
+)
+FUEL_TIMESERIES_FIELDNAMES = (
+    "timestamp",
+    "service_date",
+    "fuel_consumption_l",
+    "refuel_l",
+    "fuel_cost_jpy",
+    "ice_co2_kg",
+    "fuel_source_of_truth",
+)
+
+
 def _row_dict(row: Any) -> dict[str, Any]:
     if is_dataclass(row):
         return asdict(row)
@@ -16,13 +44,22 @@ def _row_dict(row: Any) -> dict[str, Any]:
     raise TypeError(f"Unsupported row type: {type(row)!r}")
 
 
-def _write_csv(path: Path, rows: Sequence[Any]) -> None:
+def _write_csv(
+    path: Path,
+    rows: Sequence[Any],
+    *,
+    empty_fieldnames: Sequence[str] = (),
+) -> None:
     import csv
 
     data = [_row_dict(row) for row in rows]
     path.parent.mkdir(parents=True, exist_ok=True)
     if not data:
-        path.write_text("", encoding="utf-8")
+        if not empty_fieldnames:
+            path.write_text("", encoding="utf-8")
+            return
+        with path.open("w", encoding="utf-8", newline="") as handle:
+            csv.DictWriter(handle, fieldnames=list(empty_fieldnames)).writeheader()
         return
     fieldnames = list(data[0].keys())
     with path.open("w", encoding="utf-8", newline="") as handle:
@@ -99,8 +136,16 @@ def export_accounting_outputs(output_dir: str | Path, artifacts: AccountingArtif
     _write_csv(vehicle_energy_csv, vehicle_energy_rows)
     _write_csv(energy_csv, energy_rows)
     _write_csv(bess_timeseries_csv, bess_rows)
-    _write_csv(fuel_canonical_csv, fuel_canonical_rows)
-    _write_csv(fuel_timeseries_csv, fuel_timeseries_rows)
+    _write_csv(
+        fuel_canonical_csv,
+        fuel_canonical_rows,
+        empty_fieldnames=FUEL_CANONICAL_LEDGER_FIELDNAMES,
+    )
+    _write_csv(
+        fuel_timeseries_csv,
+        fuel_timeseries_rows,
+        empty_fieldnames=FUEL_TIMESERIES_FIELDNAMES,
+    )
     _write_csv(co2_timeseries_csv, co2_timeseries_rows)
     _write_csv(initial_soc_csv, initial_soc_rows)
     _write_csv(initial_soc_precheck_csv, initial_soc_precheck_rows)
