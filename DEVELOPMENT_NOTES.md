@@ -1,5 +1,74 @@
 # Development Notes
 
+## 2026-08-11: progress-report evidence bundle and cumulative work record
+
+### Cumulative implementation evidence
+
+- Frontend scenario persistence was traced from the Tk editor through the BFF
+  scenario DTO and Prepare materialization. Saved flat energy price, demand
+  charge, PV rated output, BESS capacity/power/SOC and their explicit input
+  modes are now preserved instead of being overwritten by derived defaults.
+  A manually entered PV rating is authoritative; the estimated installable
+  panel area and area-equivalent depot capacity are reverse-calculated from
+  that rating while the stored physical depot-area observation remains
+  unchanged.
+- Same-service-date PV counterfactual Prepare now carries the explicit
+  comparison type and the fixed-weekday-timetable waiver only when required.
+  The high-PV and low-PV cases therefore share service date, timetable, route
+  scope, selected-depot fleet/initial state, chargers, BESS, tariff and solver
+  controls; only the separately hashed PV curve differs.
+- Formal and diagnostic execution semantics remain separated. Formal frontend
+  execution requires a clean frozen Git SHA before submission and verifies the
+  same SHA/dirty state after solving. Diagnostic dirty-tree runs remain
+  non-submission evidence and cannot become teacher-ready through a UI label
+  or report postprocessor.
+- The assignment/energy work introduced source-aware Stage-1 recourse,
+  adjacent used-powertrain composition search, unused-BEV activation
+  neighborhoods, exact Stage-2/physical screening, objective/accounting
+  reconciliation and the unrestricted integrated Phase-4 actual-cost model.
+  No weather coefficient, BEV minimum, timetable rewrite, fallback or
+  post-solve repair was added. The 2026-08-10 clean pair demonstrates the
+  intended response: high PV selected 32 BEVs/0 ICE and all 264 BEV trips;
+  low PV selected 21/11 and 91/173 trips under the same non-PV controls.
+- Reporting corrections distinguish the Phase-3 primary seed composition from
+  the final integrated assignment, retain canonical header-only fuel CSVs for
+  all-BEV solutions, use the predeclared Phase-4 gap in pair auditing, and keep
+  standalone-case and pair-level release scopes immutable and separate.
+
+### New progress-report artifact contract
+
+- `scripts/build_frontend_pv_pair_progress_report.py` is a read-only pair
+  postprocessor. It reads executed-day accounting, assignment timelines,
+  solver certificates, physical/Rolling gates, pair controls and both
+  literature-figure manifests. It does not recalculate monetary totals from
+  plotted values and does not modify either source run.
+- A completed controlled pair now automatically writes `progress_report/`
+  with seven comparison figures in both PNG and SVG, six analysis-ready CSV
+  tables, a Japanese progress-report Markdown summary, an exhaustive case/pair
+  validation-gate matrix, a catalog of the existing five detailed figures per
+  run, and an `evidence_index.json` containing file size and SHA-256 lineage
+  for every required source and generated artifact.
+- The seven pair figures cover headline status/KPIs; used vehicle and trip
+  composition; executed PV/BESS/grid flows; 24-hour energy profiles; canonical
+  cost components; fuel/operational CO2; and certified MILP gaps plus selected
+  acceptance gates. The case-level `results.xlsx` files and ten detailed
+  literature figures remain in their canonical run directories and are
+  referenced rather than copied or rewritten.
+- `run_frontend_controlled_pv_pair.py` persists `case_gate_audits.json`, invokes
+  the new builder before packaging, records its subprocess evidence, and
+  blocks pair completion when the progress bundle is absent or incomplete.
+  This is an evidence-completeness gate; it does not upgrade a BLOCKED model or
+  case claim to READY.
+- A read-only replay against a junctioned copy of the prior clean pair produced
+  all 7 figures, 6 tables and 10 per-run figure references without changing a
+  source hash. Focused regression tests cover output completeness, source
+  immutability, lineage hashes, 48 hourly rows, gate export and overwrite
+  refusal and manifest path confinement (`33 passed`). The complete repository
+  suite passes (`1265 passed in 60.01s`), along with `compileall` and
+  `git diff --check`. A fresh
+  clean-commit frontend pair is still required before these new artifacts can
+  be used as evidence for the current code.
+
 ## 2026-08-10: preserve empty fuel schemas for all-BEV solutions
 
 - Fresh SHA-`6853eda` Phase-4 calculations produced a physically and

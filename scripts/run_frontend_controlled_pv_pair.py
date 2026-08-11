@@ -3543,6 +3543,40 @@ def _run_pair_builder(
     return execution
 
 
+def _run_progress_report_builder(output_dir: Path) -> dict[str, Any]:
+    """Generate the pair-level progress-report data and figure bundle."""
+
+    command = [
+        sys.executable,
+        str(
+            REPO_ROOT
+            / "scripts"
+            / "build_frontend_pv_pair_progress_report.py"
+        ),
+        str(output_dir),
+    ]
+    completed = subprocess.run(
+        command,
+        cwd=REPO_ROOT,
+        text=True,
+        encoding="utf-8",
+        capture_output=True,
+        check=False,
+    )
+    execution = {
+        "command": command,
+        "returncode": completed.returncode,
+        "stdout": completed.stdout,
+        "stderr": completed.stderr,
+        "completed_at_utc": _utc_now(),
+    }
+    _write_json(
+        output_dir / "progress_report_builder_execution.json",
+        execution,
+    )
+    return execution
+
+
 def _run_small_integrated_oracle(
     *,
     name: str,
@@ -4117,6 +4151,7 @@ def main() -> int:
     same_assignment: dict[str, Any] | None = None
     case_gate_audits: dict[str, Any] = {}
     small_oracle_audits: dict[str, Any] = {}
+    progress_report: dict[str, Any] = {}
     both_completed = all(
         case_results.get(name, {}).get("job_status") == "completed"
         for name in ("sunny", "rain")
@@ -4208,6 +4243,10 @@ def main() -> int:
             failed_checks.extend(
                 f"{name}:{check}" for check in audit["failed_checks"]
             )
+        _write_json(
+            output_dir / "case_gate_audits.json",
+            case_gate_audits,
+        )
         pair_control = _build_pair_control_audit(
             sunny_dir=sunny_dir,
             rain_dir=rain_dir,
@@ -4225,6 +4264,17 @@ def main() -> int:
         failed_checks.extend(
             f"pair:{check}" for check in pair_control["failed_checks"]
         )
+        progress_execution = _run_progress_report_builder(output_dir)
+        progress_report = _read_json_optional(
+            output_dir / "progress_report" / "manifest.json"
+        )
+        if progress_execution["returncode"] != 0:
+            failed_checks.append(
+                "progress_report:builder_failed:"
+                + str(progress_execution.get("stderr") or "").strip()
+            )
+        if progress_report.get("bundle_complete") is not True:
+            failed_checks.append("progress_report:bundle_incomplete")
     else:
         failed_checks.append("pair:both_frontend_jobs_not_completed")
 
@@ -4266,6 +4316,13 @@ def main() -> int:
                 "formal_research_submission_ready"
             ),
             "failed_checks": pair_manifest.get("failed_checks"),
+        },
+        "progress_report": {
+            "status": progress_report.get("status"),
+            "bundle_complete": progress_report.get("bundle_complete"),
+            "manifest_path": "progress_report/manifest.json",
+            "figure_count": progress_report.get("figure_count"),
+            "table_count": progress_report.get("table_count"),
         },
         "zip_created": True,
         "zip_path": str(Path(f"{output_dir}.zip").resolve()),

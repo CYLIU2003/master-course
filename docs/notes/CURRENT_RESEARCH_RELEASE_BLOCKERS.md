@@ -1,5 +1,26 @@
 # Current research release blockers
 
+## 2026-08-11 progress-report bundle implemented; fresh pair pending
+
+The pair runner now generates a progress-report evidence bundle automatically
+after both normal frontend jobs, the pair manifest, case gates and fixed-control
+audit exist. The bundle contains seven PNG/SVG comparison figures, six CSV
+tables, the complete case/pair gate matrix, links to all ten per-run detailed
+figures, a progress-report Markdown file and SHA-256 lineage for every source
+and generated artifact. Missing or incomplete progress evidence blocks final
+pair packaging, but this reporting gate cannot upgrade solver, physical,
+accounting or research acceptance.
+
+The implementation has passed focused regression (`33 passed`), the complete
+suite (`1265 passed in 60.01s`) and a read-only replay of
+the prior SHA-`6bf6bd7` pair. That replay is visualization validation only: it
+does not relabel the historical outputs as evidence for the new code. The
+current-code evidence requirement remains a clean commit, fresh Prepare for
+both scenarios, ordinary frontend HTTP optimization, 24/24 Rolling, all
+physical/accounting/provenance/control gates, the pair manifest and the new
+progress-report bundle. Actual rerun results must be appended here only after
+that frozen-SHA execution finishes.
+
 ## 2026-08-10 final clean 1% pair completed: no pair-level blocker
 
 Clean frozen SHA `6bf6bd7eebec06dde1a899bebe5e02f3dc9fd62c` completed both fresh
