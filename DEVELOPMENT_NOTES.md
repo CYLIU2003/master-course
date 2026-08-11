@@ -1,5 +1,71 @@
 # Development Notes
 
+## 2026-08-11: canonical Rolling reporting snapshot and compact presentation release
+
+- Added `scripts/build_reporting_snapshot.py`, a fail-closed read-only
+  postprocessor for an already completed controlled PV pair. It never invokes
+  optimization and hashes every required source before and after generation so
+  source-run mutation aborts the release.
+- Final assignment and used-vehicle counts now come only from
+  `graph/trip_assignment.csv`. Energy flows, electricity/fuel/vehicle/CO2 cost,
+  accounting total, operational CO2 and terminal energy come only from
+  `rolling_hourly_chain/executed_day_accounting.json`. The 24 hourly plots and
+  tables come from the accepted Rolling chart relation, while physical and
+  solver-quality claims retain their dedicated canonical sources.
+- The snapshot intentionally excludes the internal Rolling/search objective and
+  the `111500 JPY` return-leg search adjustment. Public reports expose only the
+  executed accounting total and its canonical components. High PV is labelled
+  `SOLVED_WITHIN_DECLARED_GAP` at `0.735476%`; the low-PV raw
+  `objective_limit` result remains visible and is labelled
+  `CERTIFIED_NEAR_OPTIMAL` from its independent `0.399008%` certificate rather
+  than being relabelled `OPTIMAL`.
+- The postprocessor verifies trip coverage, unique vehicle counts, vehicle-day
+  cost, canonical cost summation, PV/grid energy balances, hourly-to-daily
+  reconciliation, PV-rated-output area/capacity reverse calculations, BESS
+  request/accounting SOC consistency, physical validation, 24/24 Rolling,
+  solver requested/effective settings, gap certificates, matched
+  asset/effective-control hashes, differing PV hashes and the immutable pair
+  manifest. It also blocks legacy superseded
+  warning text and requires one shared snapshot digest in every public artifact. The
+  Python and workbook generators are themselves content-hashed in the snapshot
+  and rechecked after generation; release and ZIP targets are restricted to
+  safe immediate children of the source pair directory.
+- Added `scripts/build_reporting_snapshot_workbook.mjs` using the bundled
+  `@oai/artifact-tool` runtime. The workbook separates summary, assignment,
+  energy, cost, validation, hourly energy, hourly SOC and provenance sheets;
+  comparison differences and chart helpers remain formula-driven. All eight
+  sheets are rendered during generation for visual QA and the workbook is
+  scanned for formula errors before release.
+- Applied the postprocessor without reoptimization to
+  `output/formal_pair_20260811_flat30_pv1000_bess6000_phase4_2632de9_gap01_progress`.
+  The compact `release/` has 15 files and a sibling `release.zip`, all tied to
+  snapshot SHA-256
+  `dcd15a8a76c96b663070a7410b2f8fc0c22f9b27f313daab9ce43151106c97ef`.
+  It reports high PV as `32 BEV / 0 ICE`, `264 / 0` trips and
+  `644741.923030 JPY`; low PV as `21 / 11`, `91 / 173` and
+  `698419.690050 JPY`. The input-side `1000 kW` PV rating, reverse-calculated
+  `5000 m2` panel area, `14285.714286 m2` required depot area and
+  `6000 kWh` BESS are included in the snapshot and workbook.
+- This derived bundle is `READY_FOR_PROGRESS_PRESENTATION` and deliberately
+  sets `research_submission_ready=false` because the compact postprocessor does
+  not assess input realism. It preserves the source pair manifest's separate
+  formal readiness field and never rewrites the two standalone case summaries.
+- Regression coverage in `tests/test_reporting_snapshot.py` checks canonical
+  assignment selection, internal-objective exclusion, near-optimal status
+  normalization, vehicle-day mismatch failure, single-digest propagation,
+  source/generator immutability, ZIP integrity, output-path containment and
+  stale-warning rejection. Workbook release also fails closed unless all eight
+  sheets and previews exist and the formula-error count is exactly zero.
+- Final verification passed `34` focused reporting/pair/README regressions and
+  the complete repository suite (`1279 passed in 59.47s`). Independent release
+  audit rehashed all 24 canonical source files plus both generator files,
+  confirmed all `38/38` release gates, the exact 15-file release/ZIP inventory,
+  zero workbook formula errors, one shared snapshot digest, and no legacy
+  warning or internal return-leg objective value. All six public figures and
+  all eight workbook-sheet renders were visually inspected; the one cost-chart
+  legend collision found
+  during review was corrected before the final release was generated.
+
 ## 2026-08-11: progress-report evidence bundle and cumulative work record
 
 ### Fresh formal pair evidence at frozen SHA `2632de9`

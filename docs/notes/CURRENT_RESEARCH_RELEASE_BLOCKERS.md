@@ -1,5 +1,37 @@
 # Current research release blockers
 
+## 2026-08-11 compact reporting release: progress presentation ready
+
+The accepted current-code pair has now been canonicalized without another
+optimization run. `scripts/build_reporting_snapshot.py` reads the final graph
+assignment, accepted 24-hour Rolling accounting, physical validation, effective
+solver controls and immutable pair manifests, then generates every public
+table, workbook sheet and figure from one reporting snapshot. Source-run hashes
+are checked before and after the operation and were unchanged.
+
+The derived output is
+`output/formal_pair_20260811_flat30_pv1000_bess6000_phase4_2632de9_gap01_progress/release/`
+with sibling `release.zip`. All 15 public files record reporting snapshot
+SHA-256
+`dcd15a8a76c96b663070a7410b2f8fc0c22f9b27f313daab9ce43151106c97ef`.
+The release reports the same accepted outcomes as the source pair: high PV
+`32 BEV / 0 ICE`, `264 / 0` trips and `644741.923030 JPY`; low PV
+`21 / 11`, `91 / 173` and `698419.690050 JPY`. It uses Rolling execution for
+all published energy, cost and emissions figures and excludes the internal
+search objective and return-leg adjustment.
+Both cases reconcile the Solver's requested/effective day-ahead controls at
+`3600 s` and `1%`, followed by `24` Rolling steps at `30 s` and `1%` each. The
+low-PV raw `objective_limit`/`100%` Gurobi gap is retained beside its independent
+`0.399008%` certified gap rather than relabelled `OPTIMAL`.
+
+The compact bundle is `READY_FOR_PROGRESS_PRESENTATION`; every reporting gate,
+workbook formula scan, visual-sheet render and stale-warning scan passes. Its
+own `research_submission_ready=false` is an explicit scope boundary: this
+postprocessor does not assess whether the input assumptions are realistic.
+That field does not reverse the source pair's immutable formal attestation and
+does not relabel either standalone case. Research-submission claims must still
+cite `pair/pair_manifest.json` and separately justify the input assumptions.
+
 ## 2026-08-11 current-code progress bundle pair completed: no pair-level blocker
 
 The pair runner now generates a progress-report evidence bundle automatically

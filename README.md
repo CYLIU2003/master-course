@@ -884,3 +884,72 @@ canonical `results.xlsx` files and all underlying run artifacts. A complete
 chart bundle does not by itself make a pair research-ready; cite
 `pair/pair_manifest.json` for pair scope and each `research_claim_scope.json`
 for standalone-case scope.
+
+## Canonical reporting snapshot for a completed pair
+
+`scripts/build_reporting_snapshot.py` is the read-only presentation-release
+postprocessor for an already completed controlled pair. It does not call the
+optimizer and does not rewrite either run. It uses:
+
+- `graph/trip_assignment.csv` for final service-trip and used-vehicle counts;
+- `rolling_hourly_chain/executed_day_accounting.json` for final energy, cost,
+  emissions and terminal-energy results;
+- `rolling_hourly_chain/hourly_energy_flow_chart.csv` for the published hourly
+  energy and SOC series;
+- `graph/physical_schedule_validation.json` for the final physical verdict;
+- `solver_settings.json` and the effective values in
+  `optimization_parameters.json` for solver controls and certificates; and
+- the two case manifests plus `pair/pair_manifest.json` for controlled-pair
+  identity and claim scope.
+
+The command requires the Node executable and `node_modules` directory returned
+by the workspace dependency loader because `results.xlsx` is authored with the
+bundled spreadsheet runtime:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\build_reporting_snapshot.py `
+  <PAIR_DIR> `
+  --node-executable <BUNDLED_NODE_EXE> `
+  --node-modules-dir <BUNDLED_NODE_MODULES> `
+  --workbook-preview-dir <VISUAL_QA_DIRECTORY>
+```
+
+After every gate passes, the script atomically writes `release/` and
+`release.zip`. The release contains one `reporting_snapshot.json`, seven compact
+JSON/CSV result/validation relations, a formula-audited `results.xlsx`, and six
+PNG figures. Every public file records the same `reporting_snapshot_sha256`; the
+snapshot also records the content hashes of both reporting generators. Custom
+release and ZIP paths are accepted only as safe immediate children of the pair
+directory.
+
+Day-ahead energy-flow tables and the internal search objective (including any
+return-leg search adjustment) are excluded from public final-cost KPIs.
+
+The fixed public inventory is:
+
+```text
+release/
+├─ reporting_snapshot.json
+├─ result_summary.json
+├─ comparison_pair_manifest.json
+├─ validation_summary.json
+├─ comparison_summary.csv
+├─ vehicle_assignment.csv
+├─ energy_balance.csv
+├─ cost_breakdown.csv
+├─ results.xlsx
+└─ figures/
+   ├─ cost_comparison.png
+   ├─ dispatch_comparison.png
+   ├─ energy_flow_baseline.png
+   ├─ energy_flow_low_pv.png
+   ├─ soc_baseline.png
+   └─ soc_low_pv.png
+```
+
+The 2026-08-11 pair snapshot is under
+`output/formal_pair_20260811_flat30_pv1000_bess6000_phase4_2632de9_gap01_progress/release/`.
+Its derived release is `READY_FOR_PROGRESS_PRESENTATION`. The field
+`research_submission_ready=false` means this compact presentation postprocessor
+does not assess input realism; it does not downgrade or replace the immutable
+pair-level formal attestation in `pair/pair_manifest.json`.
