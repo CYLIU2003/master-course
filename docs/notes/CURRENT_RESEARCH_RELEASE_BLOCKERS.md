@@ -1,6 +1,6 @@
 # Current research release blockers
 
-## 2026-08-11 progress-report bundle implemented; fresh pair pending
+## 2026-08-11 current-code progress bundle pair completed: no pair-level blocker
 
 The pair runner now generates a progress-report evidence bundle automatically
 after both normal frontend jobs, the pair manifest, case gates and fixed-control
@@ -11,15 +11,42 @@ and generated artifact. Missing or incomplete progress evidence blocks final
 pair packaging, but this reporting gate cannot upgrade solver, physical,
 accounting or research acceptance.
 
-The implementation has passed focused regression (`33 passed`), the complete
-suite (`1265 passed in 60.01s`) and a read-only replay of
-the prior SHA-`6bf6bd7` pair. That replay is visualization validation only: it
-does not relabel the historical outputs as evidence for the new code. The
-current-code evidence requirement remains a clean commit, fresh Prepare for
-both scenarios, ordinary frontend HTTP optimization, 24/24 Rolling, all
-physical/accounting/provenance/control gates, the pair manifest and the new
-progress-report bundle. Actual rerun results must be appended here only after
-that frozen-SHA execution finishes.
+The previously pending current-code execution is complete. Frozen SHA
+`2632de9962e85138c0fe6e4d3da1c74122c3dfff` was clean before submission and
+unchanged/clean after both ordinary frontend HTTP jobs. Each case used fresh
+Prepare for the same `2025-08-05` weekday service, 264 trips, 60 active
+vehicles, ten chargers, `1000 kW` PV rating, `6000 kWh / 900 kW` BESS with
+`3000 -> 3000 kWh`, `30 JPY/kWh` energy price and zero demand charge. The
+trip, fleet, initial-state, charger, non-PV asset, tariff and solver-control
+hashes match; only the PV profile hash differs (`6056.250` versus
+`996.200 kWh`).
+
+High PV uses `32 BEV / 0 ICE` for `264 / 0` trips at
+`644741.923030 JPY`, with `155.472886 kWh` grid import, zero fuel,
+`77.736443 kg` operational CO2 and a `0.735476%` certified gap. Low PV uses
+`21 BEV / 11 ICE` for `91 / 173` trips at `698419.690050 JPY`, with
+`124.985104 kWh` grid import, `357.881339 L` fuel,
+`987.936116 kg` operational CO2 and a `0.399008%` gap. Both serve `264/264`,
+complete `24/24` Rolling, and pass physical/SOC, accounting, provenance,
+tariff, solver-control and artifact checks. The exhaustive export has
+`70/70` passing case/pair gates.
+
+`completion_audit.json` is `READY`, and `pair/pair_manifest.json` reports
+`formal_research_submission_ready=true` with no failed checks. The progress
+bundle has 7 PNG/SVG comparison figures, 6 CSV tables and 10 detailed-figure
+references. Independent audit confirmed all 128 indexed source/generated
+hashes, all 17 rendered figures, both three-sheet workbooks with zero formula
+errors, and all 748 ZIP members with no CRC or byte-hash mismatch. Evidence is
+under
+`output/formal_pair_20260811_flat30_pv1000_bess6000_phase4_2632de9_gap01_progress/`
+and its sibling `.zip` archive.
+
+There is no remaining blocker for this pair-scoped 1% controlled-PV result.
+The two standalone summaries still retain only
+`controlled_counterfactual_pair_not_verified`, which is their intentional
+pre-pair state; do not relabel either standalone file as READY. The pair-level
+claim is supported by the immutable pair manifest. This documentation update
+occurs after the run and does not change the frozen execution SHA.
 
 ## 2026-08-10 final clean 1% pair completed: no pair-level blocker
 

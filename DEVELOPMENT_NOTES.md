@@ -2,6 +2,55 @@
 
 ## 2026-08-11: progress-report evidence bundle and cumulative work record
 
+### Fresh formal pair evidence at frozen SHA `2632de9`
+
+- The current implementation was committed as
+  `2632de9962e85138c0fe6e4d3da1c74122c3dfff`, the worktree was verified
+  clean, and a dedicated no-reload BFF was started from that frozen commit.
+  Both cases then used fresh Prepare and the ordinary frontend HTTP job path;
+  the ending SHA was unchanged and the ending porcelain status was empty.
+- The saved frontend inputs were used without a command-line PV-capacity
+  override: PV rated output `1000 kW`, estimated installable panel area
+  `5000 m2`, capacity-implied depot area `14285.714286 m2`, BESS
+  `6000 kWh / 900 kW`, BESS initial/terminal target `3000 / 3000 kWh`, ten
+  chargers, grid energy `30 JPY/kWh`, and demand charge `0 JPY/kW`.
+- The controlled pair holds the `2025-08-05` weekday timetable, 264 trips,
+  60 active vehicles, initial SOC, charger and non-PV depot assets, tariff,
+  seed and day-ahead/Rolling controls fixed. The comparison-control hash is
+  `a5504ea4a0a13bb7870475aed85859a6dd71c6272603739ff8ecbb6aa0f7b1fd`;
+  only the separately hashed PV curve differs. High PV supplies
+  `6056.250 kWh`, while the low-PV curve sourced from `2025-08-10` supplies
+  `996.200 kWh`.
+- The high-PV solution uses `32 BEV / 0 ICE` and assigns `264 / 0` trips;
+  its canonical executed-day total is `644741.923030 JPY`, grid import is
+  `155.472886 kWh`, fuel is zero, operational CO2 is `77.736443 kg`, and the
+  certified MILP gap is `0.735476%`. The low-PV solution uses
+  `21 BEV / 11 ICE` and assigns `91 / 173` trips; its total is
+  `698419.690050 JPY`, grid import is `124.985104 kWh`, fuel is
+  `357.881339 L`, operational CO2 is `987.936116 kg`, and its gap is
+  `0.399008%`. Thus the controlled high-PV response is `+11` used BEVs and
+  `+173` BEV trips, with `53677.767020 JPY` lower executed cost and
+  `910.199673 kg` lower operational CO2.
+- Both cases serve `264/264` trips, complete `24/24` accepted Rolling steps,
+  pass physical schedule, charger, BEV/BESS terminal SOC, grid contract,
+  objective/accounting, artifact, provenance and solver-control checks, and
+  reconcile the canonical cost components within floating-point tolerance.
+  The exported matrix contains `70/70` passing gates (30 per case and 10 at
+  pair scope). `completion_audit.json` is `READY`; the immutable pair manifest
+  has `formal_research_submission_ready=true` and no failed check.
+  Standalone case files intentionally retain only
+  `controlled_counterfactual_pair_not_verified`; pair-scope claims must cite
+  `pair/pair_manifest.json` rather than relabel either standalone summary.
+- The evidence directory is
+  `output/formal_pair_20260811_flat30_pv1000_bess6000_phase4_2632de9_gap01_progress/`
+  and the matching archive is the same path with `.zip`. Its progress bundle
+  contains seven comparison figures in PNG/SVG, six CSV tables and links to
+  all ten per-run detailed figures. Independent inspection opened all 17 PNG
+  figures and all six workbook sheets; both `results.xlsx` files have zero
+  formula-error matches. All 106 indexed source artifacts and 22 generated
+  artifacts match their SHA-256 entries. The ZIP contains 748 files with no
+  CRC, path, presence or byte-hash mismatch.
+
 ### Cumulative implementation evidence
 
 - Frontend scenario persistence was traced from the Tk editor through the BFF
@@ -65,9 +114,9 @@
   immutability, lineage hashes, 48 hourly rows, gate export and overwrite
   refusal and manifest path confinement (`33 passed`). The complete repository
   suite passes (`1265 passed in 60.01s`), along with `compileall` and
-  `git diff --check`. A fresh
-  clean-commit frontend pair is still required before these new artifacts can
-  be used as evidence for the current code.
+  `git diff --check`. The fresh frozen-SHA run documented above now satisfies
+  the current-code evidence requirement; the earlier replay remains only a
+  visualization regression check.
 
 ## 2026-08-10: preserve empty fuel schemas for all-BEV solutions
 
