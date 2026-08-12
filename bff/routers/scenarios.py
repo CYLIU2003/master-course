@@ -894,6 +894,23 @@ class UpdateQuickSetupBody(BaseModel):
     touPricing: Optional[List[Dict[str, Any]]] = None
     deadheadSpeedKmh: Optional[float] = Field(default=None, gt=0.0)
     objectivePreset: Optional[str] = None
+    tripEnergyModel: Optional[Literal[
+        "distance_average_v0",
+        "literature_proxy_v1",
+    ]] = None
+    tripEnergySensitivityScale: Optional[float] = Field(default=None, ge=0.0)
+    chargingPowerModel: Optional[Literal[
+        "constant_power_v0",
+        "piecewise_soc_taper_v1",
+    ]] = None
+    chargeSetupMinutes: Optional[int] = Field(default=None, ge=0)
+    chargeTeardownMinutes: Optional[int] = Field(default=None, ge=0)
+    minimumChargeSessionMinutes: Optional[int] = Field(default=None, ge=0)
+    pvInputSemantics: Optional[Literal[
+        "available_surplus_after_depot_load",
+        "gross_generation_before_depot_load",
+    ]] = None
+    co2EmissionsCapKg: Optional[float] = Field(default=None, ge=0.0)
     pvProfileId: Optional[str] = None
     weatherMode: Optional[str] = None
     allowFixedWeekdayTimetablePvCounterfactual: Optional[bool] = None
@@ -1919,6 +1936,36 @@ def _builder_defaults(
             or overlay_solver.get("objective_preset")
             or "cost"
         ),
+        "tripEnergyModel": str(
+            simulation_config.get("trip_energy_model")
+            or overlay_solver.get("trip_energy_model")
+            or "literature_proxy_v1"
+        ),
+        "tripEnergySensitivityScale": float(
+            _first_present_value(
+                simulation_config.get("trip_energy_sensitivity_scale"),
+                overlay_solver.get("trip_energy_sensitivity_scale"),
+                default=1.0,
+            )
+        ),
+        "chargingPowerModel": str(
+            simulation_config.get("charging_power_model")
+            or "piecewise_soc_taper_v1"
+        ),
+        "chargeSetupMinutes": int(
+            simulation_config.get("charge_setup_minutes", 5)
+        ),
+        "chargeTeardownMinutes": int(
+            simulation_config.get("charge_teardown_minutes", 5)
+        ),
+        "minimumChargeSessionMinutes": int(
+            simulation_config.get("minimum_charge_session_minutes", 15)
+        ),
+        "pvInputSemantics": str(
+            simulation_config.get("pv_input_semantics")
+            or "available_surplus_after_depot_load"
+        ),
+        "co2EmissionsCapKg": simulation_config.get("co2_emissions_cap_kg"),
         "timeStepMin": timestep_min,
         "timestepMin": timestep_min,
         "fixedRouteBandMode": bool(
@@ -2547,6 +2594,32 @@ def _build_quick_setup_payload(
                 builder_defaults.get("objectiveMode") or "total_cost"
             ),
             "objectivePreset": builder_defaults.get("objectivePreset") or "cost",
+            "tripEnergyModel": builder_defaults.get("tripEnergyModel") or "literature_proxy_v1",
+            "tripEnergySensitivityScale": float(
+                _first_present_value(
+                    builder_defaults.get("tripEnergySensitivityScale"),
+                    default=1.0,
+                )
+            ),
+            "chargingPowerModel": builder_defaults.get("chargingPowerModel") or "piecewise_soc_taper_v1",
+            "chargeSetupMinutes": int(
+                _first_present_value(
+                    builder_defaults.get("chargeSetupMinutes"), default=5
+                )
+            ),
+            "chargeTeardownMinutes": int(
+                _first_present_value(
+                    builder_defaults.get("chargeTeardownMinutes"), default=5
+                )
+            ),
+            "minimumChargeSessionMinutes": int(
+                _first_present_value(
+                    builder_defaults.get("minimumChargeSessionMinutes"),
+                    default=15,
+                )
+            ),
+            "pvInputSemantics": builder_defaults.get("pvInputSemantics") or "available_surplus_after_depot_load",
+            "co2EmissionsCapKg": builder_defaults.get("co2EmissionsCapKg"),
             "timeStepMin": int(builder_defaults.get("timeStepMin") or 30),
             "timestepMin": int(builder_defaults.get("timestepMin") or builder_defaults.get("timeStepMin") or 30),
             "timeLimitSeconds": int(
@@ -3134,6 +3207,12 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             solver_config["milp_max_successors_per_trip"] = int(body.milpMaxSuccessorsPerTrip)
         if body.objectivePreset is not None:
             solver_config["objective_preset"] = str(body.objectivePreset)
+        if body.tripEnergyModel is not None:
+            solver_config["trip_energy_model"] = str(body.tripEnergyModel)
+        if body.tripEnergySensitivityScale is not None:
+            solver_config["trip_energy_sensitivity_scale"] = float(
+                body.tripEnergySensitivityScale
+            )
         try:
             _validate_effective_quick_setup_solver_controls(solver_config)
         except ValueError as exc:
@@ -3353,6 +3432,38 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             )
         if body.objectivePreset is not None:
             simulation_config["objective_preset"] = str(body.objectivePreset)
+        if body.tripEnergyModel is not None:
+            simulation_config["trip_energy_model"] = str(body.tripEnergyModel)
+        if body.tripEnergySensitivityScale is not None:
+            simulation_config["trip_energy_sensitivity_scale"] = float(
+                body.tripEnergySensitivityScale
+            )
+        if body.chargingPowerModel is not None:
+            simulation_config["charging_power_model"] = str(
+                body.chargingPowerModel
+            )
+        if body.chargeSetupMinutes is not None:
+            simulation_config["charge_setup_minutes"] = int(
+                body.chargeSetupMinutes
+            )
+        if body.chargeTeardownMinutes is not None:
+            simulation_config["charge_teardown_minutes"] = int(
+                body.chargeTeardownMinutes
+            )
+        if body.minimumChargeSessionMinutes is not None:
+            simulation_config["minimum_charge_session_minutes"] = int(
+                body.minimumChargeSessionMinutes
+            )
+        if body.pvInputSemantics is not None:
+            simulation_config["pv_input_semantics"] = str(
+                body.pvInputSemantics
+            )
+        if "co2EmissionsCapKg" in body.model_fields_set:
+            simulation_config["co2_emissions_cap_kg"] = (
+                None
+                if body.co2EmissionsCapKg is None
+                else float(body.co2EmissionsCapKg)
+            )
         if body.pvProfileId is not None:
             simulation_config["pv_profile_id"] = str(body.pvProfileId)
         if body.pvMarginalChargeCostYenPerKwh is not None:

@@ -1,5 +1,55 @@
 # Development Notes
 
+## 2026-08-12: thesis-model validity contract implementation
+
+- Added a deterministic trip-level demand model, `literature_proxy_v1`.
+  BEV trip weights use distance and duration elasticities from Ji et al.
+  (2022, DOI `10.1016/j.commtr.2022.100069`); ICE trip weights use the
+  reported peak/off-peak consumption ratio. Both are normalized to preserve
+  the configured fleet-average daily demand, and an explicit sensitivity
+  multiplier supports 0.8--1.2 checks. These are literature proxies, not
+  measured trip observations.
+- Added powertrain-specific trip energy/fuel fields to the canonical problem.
+  The MILP now gives these explicit trip values precedence over vehicle-wide
+  rates. The canonical trip fingerprint was bumped to
+  `canonical_optimization_input_v4_trip_energy_model` so pre-change prepared
+  inputs and results cannot be treated as comparable evidence.
+- Completed ODPT platform-family aliasing for trip endpoints. IDs such as an
+  empty platform suffix and `.1` now resolve as the same physical stop without
+  inventing a deadhead rule. Prepare also exports a route-band-OFF transition
+  audit and records `formal_transition_network_ready=false` while any
+  `deadhead_missing` pair remains.
+- Defined PV input as `available_surplus_after_depot_load`. The legacy
+  `pv_generation_kwh_by_slot` series remains for compatibility, while the
+  canonical asset also records the equivalent available-surplus series and
+  semantics. Gross PV input is rejected while no explicit depot-load series
+  exists, preventing gross generation from being mislabeled as surplus.
+- Added `research_lexicographic_v1`: service coverage (when partial service is
+  allowed), used vehicle-days, canonical operating cost, inter-trip deadhead,
+  and charge-session count are optimized in that order. Weather bias and the
+  return-leg bonus are forbidden/disabled for this preset. The 20,000 JPY
+  vehicle-day parameter remains available as an explicit sensitivity; it no
+  longer determines the primary research objective under this preset.
+- Added a solver-native CO2 epsilon constraint using the same ICE fuel and
+  grid-energy emissions expression used for carbon cost. Added
+  `piecewise_soc_taper_v1`: 100% charge power below 80% SOC, 2/3 power at
+  80--90%, and 1/3 power above 90%, with explicit setup, teardown, and minimum
+  session-duration constraints in both Phase 4 and Phase 3 Stage 2.
+- Wired every new parameter through Tk Quick Setup load/save, Prepare DTOs,
+  scenario overlay persistence, canonical metadata, and economic audit output.
+  Prepared-input schema is now `v6_trip_energy_pv_semantics_charge_taper`.
+- Added `scripts/build_thesis_experiment_matrix.py`. It generates the
+  time-step, energy-demand, PV, route-band, vehicle-day-cost, and CO2 epsilon
+  experiment contract for the normal frontend/BFF path and never invokes the
+  solver directly. B0 rule-based arrival charging remains explicitly blocked
+  until a canonical baseline adapter exists; it is not fabricated from a
+  Phase 3/4 result.
+- Focused verification completed: trip proxy/platform alias/fingerprint/taper
+  tests, assignment audit/artifact completeness, Quick Setup/Prepare scope,
+  integrated actual-cost, Stage 2 feedback, and objective-mode tests. A fresh
+  full suite also passed (`1290 passed`). A fresh clean-commit formal pair is
+  still required before research release.
+
 ## 2026-08-11: canonical Rolling reporting snapshot and compact presentation release
 
 - Added `scripts/build_reporting_snapshot.py`, a fail-closed read-only

@@ -2116,6 +2116,18 @@ class App:
         self.unserved_penalty_var = tk.StringVar(value="10000")
         self.objective_weights_json_var = tk.StringVar(value="")
         self.objective_preset_var = tk.StringVar(value="cost")
+        self.trip_energy_model_var = tk.StringVar(value="literature_proxy_v1")
+        self.trip_energy_sensitivity_scale_var = tk.StringVar(value="1.0")
+        self.charging_power_model_var = tk.StringVar(
+            value="piecewise_soc_taper_v1"
+        )
+        self.charge_setup_minutes_var = tk.StringVar(value="5")
+        self.charge_teardown_minutes_var = tk.StringVar(value="5")
+        self.minimum_charge_session_minutes_var = tk.StringVar(value="15")
+        self.pv_input_semantics_var = tk.StringVar(
+            value="available_surplus_after_depot_load"
+        )
+        self.co2_emissions_cap_kg_var = tk.StringVar(value="")
         self.max_start_fragments_var = tk.StringVar(value="100")
         self.max_end_fragments_var = tk.StringVar(value="100")
         self.initial_soc_percent_var = tk.StringVar(value="0.8")
@@ -2747,6 +2759,48 @@ class App:
             optim_grp,
             "終了断片上限", self.max_end_fragments_var,
             tip0="各車両が 1 日に入庫できる最大回数。通常は開始断片上限と同じ値にする。",
+        )
+        self._param_row2(
+            optim_grp,
+            "便別エネルギーモデル",
+            self.trip_energy_model_var,
+            tip0=(
+                "literature_proxy_v1 は距離・所要時間・時間帯で便別需要を配分し、"
+                "日合計は設定原単位へ正規化します。"
+            ),
+            label1="消費量感度倍率",
+            var1=self.trip_energy_sensitivity_scale_var,
+            tip1="0.8～1.2等の決定論的感度分析に使用します。",
+        )
+        self._param_row2(
+            optim_grp,
+            "充電電力モデル",
+            self.charging_power_model_var,
+            tip0="piecewise_soc_taper_v1 はSOC 80%/90%で充電出力を低下させます。",
+            label1="最低接続時間[分]",
+            var1=self.minimum_charge_session_minutes_var,
+            tip1="充電セッションを継続する最低時間です。",
+        )
+        self._param_row2(
+            optim_grp,
+            "接続準備[分]",
+            self.charge_setup_minutes_var,
+            tip0="各充電セッション開始時の接続準備時間です。",
+            label1="解除準備[分]",
+            var1=self.charge_teardown_minutes_var,
+            tip1="各充電セッション終了時の解除準備時間です。",
+        )
+        self._param_row2(
+            optim_grp,
+            "PV入力の意味",
+            self.pv_input_semantics_var,
+            tip0=(
+                "available_surplus_after_depot_load を選ぶと、入力曲線を"
+                "所内負荷控除後の利用可能余剰PVとして扱います。"
+            ),
+            label1="CO2上限[kg/日]",
+            var1=self.co2_emissions_cap_kg_var,
+            tip1="空欄は上限制約なし。Phase 4のε制約感度で使用します。",
         )
         self._labeled_entry(optim_grp, "拡張係数(JSON)", self.objective_weights_json_var)
         ttk.Checkbutton(optim_grp, text="車両ダイヤグラム出力", variable=self.enable_vehicle_diagram_output_var).pack(anchor="w", pady=(2, 0))
@@ -7028,6 +7082,45 @@ class App:
                 self._setting_text(solver, "randomSeed", default=42)
             )
             self.objective_preset_var.set(str(solver.get("objectivePreset") or sim.get("objectivePreset") or "cost"))
+            self.trip_energy_model_var.set(
+                str(
+                    solver.get("tripEnergyModel")
+                    or sim.get("tripEnergyModel")
+                    or "literature_proxy_v1"
+                )
+            )
+            self.trip_energy_sensitivity_scale_var.set(
+                str(
+                    solver.get("tripEnergySensitivityScale")
+                    if solver.get("tripEnergySensitivityScale") is not None
+                    else sim.get("tripEnergySensitivityScale", 1.0)
+                )
+            )
+            self.charging_power_model_var.set(
+                str(
+                    sim.get("chargingPowerModel")
+                    or "piecewise_soc_taper_v1"
+                )
+            )
+            self.charge_setup_minutes_var.set(
+                str(sim.get("chargeSetupMinutes", 5))
+            )
+            self.charge_teardown_minutes_var.set(
+                str(sim.get("chargeTeardownMinutes", 5))
+            )
+            self.minimum_charge_session_minutes_var.set(
+                str(sim.get("minimumChargeSessionMinutes", 15))
+            )
+            self.pv_input_semantics_var.set(
+                str(
+                    sim.get("pvInputSemantics")
+                    or "available_surplus_after_depot_load"
+                )
+            )
+            co2_cap = sim.get("co2EmissionsCapKg")
+            self.co2_emissions_cap_kg_var.set(
+                "" if co2_cap is None else str(co2_cap)
+            )
             self.max_start_fragments_var.set(
                 self._setting_text(
                     solver,
@@ -7344,6 +7437,36 @@ class App:
             "solverMode": solver_mode,
             "objectiveMode": self.objective_mode_var.get().strip(),
             "objectivePreset": self.objective_preset_var.get().strip() or "cost",
+            "tripEnergyModel": (
+                self.trip_energy_model_var.get().strip()
+                or "literature_proxy_v1"
+            ),
+            "tripEnergySensitivityScale": self._parse_float(
+                self.trip_energy_sensitivity_scale_var.get(), 1.0
+            ),
+            "chargingPowerModel": (
+                self.charging_power_model_var.get().strip()
+                or "piecewise_soc_taper_v1"
+            ),
+            "chargeSetupMinutes": max(
+                self._parse_int(self.charge_setup_minutes_var.get(), 5), 0
+            ),
+            "chargeTeardownMinutes": max(
+                self._parse_int(self.charge_teardown_minutes_var.get(), 5), 0
+            ),
+            "minimumChargeSessionMinutes": max(
+                self._parse_int(
+                    self.minimum_charge_session_minutes_var.get(), 15
+                ),
+                0,
+            ),
+            "pvInputSemantics": (
+                self.pv_input_semantics_var.get().strip()
+                or "available_surplus_after_depot_load"
+            ),
+            "co2EmissionsCapKg": self._parse_float(
+                self.co2_emissions_cap_kg_var.get(), None
+            ),
             "timeStepMin": self._timestep_min_value(),
             "timestepMin": self._timestep_min_value(),
             "timeLimitSeconds": self._parse_int(self.time_limit_var.get(), 300),
@@ -8737,6 +8860,36 @@ class App:
                 "solver_mode": self.solver_mode_var.get().strip(),
                 "objective_mode": self.objective_mode_var.get().strip(),
                 "objective_preset": self.objective_preset_var.get().strip() or "cost",
+                "trip_energy_model": (
+                    self.trip_energy_model_var.get().strip()
+                    or "literature_proxy_v1"
+                ),
+                "trip_energy_sensitivity_scale": self._parse_float(
+                    self.trip_energy_sensitivity_scale_var.get(), 1.0
+                ),
+                "charging_power_model": (
+                    self.charging_power_model_var.get().strip()
+                    or "piecewise_soc_taper_v1"
+                ),
+                "charge_setup_minutes": max(
+                    self._parse_int(self.charge_setup_minutes_var.get(), 5), 0
+                ),
+                "charge_teardown_minutes": max(
+                    self._parse_int(self.charge_teardown_minutes_var.get(), 5), 0
+                ),
+                "minimum_charge_session_minutes": max(
+                    self._parse_int(
+                        self.minimum_charge_session_minutes_var.get(), 15
+                    ),
+                    0,
+                ),
+                "pv_input_semantics": (
+                    self.pv_input_semantics_var.get().strip()
+                    or "available_surplus_after_depot_load"
+                ),
+                "co2_emissions_cap_kg": self._parse_float(
+                    self.co2_emissions_cap_kg_var.get(), None
+                ),
                 "time_step_min": self._timestep_min_value(),
                 "timestep_min": self._timestep_min_value(),
                 "planning_days": planning_days,

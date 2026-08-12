@@ -37,11 +37,24 @@ def _normalize_stop_name(value: Any) -> str:
     return _normalize_text(value).replace(" ", "")
 
 
-def _normalize_stop_platform_family(value: Any) -> str:
+def normalize_stop_platform_family(value: Any) -> str:
+    """Return the platform-independent ODPT stop identifier.
+
+    ODPT stop-platform identifiers may encode boarding positions as a suffix
+    after the eight-digit stop family (for example ``...00240324.1``).  An
+    empty suffix (``...00240324.``) denotes the same physical stop family and
+    must not require a deadhead rule.  The original identifier is returned for
+    non-ODPT inputs so this helper is safe for mixed source datasets.
+    """
+
     raw = _normalize_text(value)
     if not raw:
         return ""
     return re.sub(r"(\.\d{8})\.\w*$", r"\1", raw)
+
+
+# Backward-compatible private name for older imports inside this module.
+_normalize_stop_platform_family = normalize_stop_platform_family
 
 
 def normalize_direction(value: Any, default: str = "outbound") -> str:

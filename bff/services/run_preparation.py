@@ -7,6 +7,7 @@ import math
 import re
 import time
 import unicodedata
+from copy import deepcopy
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -30,7 +31,7 @@ log = logging.getLogger("run_prep")
 # canonical solver input.  The schema suffix is part of prepared_input_id, so
 # old prepared files cannot be silently reused after a fleet-contract change.
 PREPARED_INPUT_SCHEMA_VERSION = (
-    "v5_pv_rated_output_authoritative"
+    "v6_trip_energy_pv_semantics_charge_taper"
 )
 
 
@@ -1888,6 +1889,7 @@ def _build_prepared_scope_audit(prepared_input: dict[str, Any]) -> dict[str, Any
         "route_distance_samples": list(distance_join_analysis.get("route_distance_samples") or []),
         "distance_join_diagnosis": dict(distance_join_analysis.get("distance_join_diagnosis") or {}),
         "strict_coverage_precheck": {},
+        "route_band_off_transition_audit": {},
         "fixed_route_band_mode": bool(solver_config.get("fixed_route_band_mode", False)),
         "warning_codes": [],
         "warnings": [],
@@ -1909,6 +1911,30 @@ def _build_prepared_scope_audit(prepared_input: dict[str, Any]) -> dict[str, Any
                 planning_days=planning_days,
             )
             audit["strict_coverage_precheck"] = evaluate_strict_coverage_precheck(problem).to_metadata()
+            route_band_off_input = deepcopy(prepared_input)
+            route_band_off_overlay = route_band_off_input.setdefault(
+                "scenario_overlay", {}
+            )
+            route_band_off_solver = route_band_off_overlay.setdefault(
+                "solver_config", {}
+            )
+            route_band_off_solver["fixed_route_band_mode"] = False
+            route_band_off_simulation = route_band_off_input.setdefault(
+                "simulation_config", {}
+            )
+            route_band_off_simulation["fixed_route_band_mode"] = False
+            route_band_off_problem = ProblemBuilder().build_from_scenario(
+                route_band_off_input,
+                depot_id=primary_depot_id,
+                service_id=str(service_ids[0]),
+                config=OptimizationConfig(mode=OptimizationMode.MILP),
+                planning_days=planning_days,
+            )
+            audit["route_band_off_transition_audit"] = (
+                evaluate_strict_coverage_precheck(
+                    route_band_off_problem
+                ).to_metadata()
+            )
     except Exception as exc:
         audit["strict_coverage_precheck"] = {
             "checked": False,
@@ -1940,6 +1966,25 @@ def _build_prepared_scope_audit(prepared_input: dict[str, Any]) -> dict[str, Any
     dominant_reason = str(strict_precheck.get("dominant_blocked_transition_reason") or "").strip()
     if dominant_reason == "deadhead_missing":
         audit["warning_codes"].append("deadhead_missing_dominates_relaxed_connectivity")
+    route_band_off_audit = dict(
+        audit.get("route_band_off_transition_audit") or {}
+    )
+    route_band_off_deadhead_missing = int(
+        dict(
+            route_band_off_audit.get("blocked_transition_reason_counts") or {}
+        ).get("deadhead_missing", 0)
+        or 0
+    )
+    audit["route_band_off_deadhead_missing_count"] = (
+        route_band_off_deadhead_missing
+    )
+    audit["formal_transition_network_ready"] = (
+        route_band_off_deadhead_missing == 0
+    )
+    if route_band_off_deadhead_missing > 0:
+        audit["warning_codes"].append(
+            "route_band_off_deadhead_matrix_incomplete"
+        )
 
     audit["warning_codes"] = sorted(set(audit.get("warning_codes") or []))
     audit["warnings"] = _prepared_scope_audit_warnings(audit)

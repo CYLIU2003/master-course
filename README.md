@@ -805,6 +805,32 @@ identical cases and must never be treated as experimental-control differences.
 
 ## Latest controlled PV1000 evidence (2026-08-10)
 
+> **Current-HEAD notice (2026-08-12):** the model now supports trip-level
+> literature-proxy energy demand, explicit surplus-PV semantics, ODPT
+> platform-family transition aliases, a lexicographic research objective, a
+> CO2 epsilon cap, and SOC-dependent charging power with setup/teardown time.
+> These changes alter the mathematical model and input fingerprints. The
+> results below remain historical evidence for their recorded SHA and must not
+> be presented as results of the revised model. See
+> [the current blocker document](docs/notes/CURRENT_RESEARCH_RELEASE_BLOCKERS.md)
+> before starting a fresh formal pair.
+
+The new settings are available in Quick Setup and persist through Save,
+reload, and Prepare:
+
+- `trip_energy_model = literature_proxy_v1` and an explicit sensitivity scale;
+- `pv_input_semantics = available_surplus_after_depot_load`;
+- `objective_preset = research_lexicographic_v1`;
+- `charging_power_model = piecewise_soc_taper_v1`, setup/teardown minutes, and
+  minimum session duration;
+- optional `co2_emissions_cap_kg` for Phase 4 epsilon-constraint cases.
+
+Generate the controlled sensitivity contract without running a solver:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\build_thesis_experiment_matrix.py
+```
+
 The clean frozen commit `06ae09218be99ca47b951dcf6ddad886056b0ad6`
 was run through the ordinary HTTP Prepare/optimization path with a common
 2025-08-05 weekday service, 30 JPY/kWh energy charge, 0 JPY/kW demand charge,

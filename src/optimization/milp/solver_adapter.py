@@ -3520,6 +3520,23 @@ class GurobiMILPAdapter:
                             >= charge_on_var[start_key] - charge_on_var[(vehicle.vehicle_id, prev_slot_idx)]
                         )
 
+                self._add_piecewise_charge_power_constraints(
+                    model=model,
+                    gp=gp,
+                    GRB=GRB,
+                    problem=problem,
+                    vehicle_id=vehicle.vehicle_id,
+                    slot_indices=slot_indices,
+                    soc_var=s_var,
+                    charge_power_var=c_var,
+                    charge_on_var=charge_on_var,
+                    capacity_kwh=cap,
+                    charge_max_kw=charge_max_kw,
+                    timestep_h=timestep_h,
+                    session_start_var=charge_session_start_var,
+                    name_prefix="integrated_charge",
+                )
+
             if bev_ids and slot_indices:
                 vehicle_by_id = {v.vehicle_id: v for v in problem.vehicles}
                 (
@@ -4014,6 +4031,12 @@ class GurobiMILPAdapter:
         )
         unserved_penalty_weight = max(problem.objective_weights.unserved, 0.0)
         objective_mode = normalize_objective_mode(problem.scenario.objective_mode)
+        objective_preset = str(
+            problem.metadata.get("objective_preset") or ""
+        ).strip().lower()
+        research_lexicographic_objective = (
+            objective_preset == "research_lexicographic_v1"
+        )
         energy_weight = max(problem.objective_weights.energy, 0.0)
         fuel_weight = max(problem.objective_weights.fuel, 0.0)
         demand_weight = max(problem.objective_weights.demand, 0.0)
@@ -4039,9 +4062,26 @@ class GurobiMILPAdapter:
             problem.metadata.get("opportunistic_topup_deficit_penalty_yen_per_kwh"),
             default=500.0,
         )
+        if research_lexicographic_objective:
+            charge_session_start_penalty = 0.0
+            slot_concurrency_penalty = 0.0
+            early_charge_penalty_per_kwh = 0.0
+            charge_upper_buffer_penalty_per_kwh = 0.0
+            opportunistic_topup_deficit_penalty_per_kwh = 0.0
 
         objective = gp.LinExpr()
         ice_fuel_l_objective = gp.LinExpr()
+        co2_emissions_objective = gp.LinExpr()
+        deadhead_distance_objective = gp.LinExpr()
+        for (_vehicle_id, from_trip_id, to_trip_id), var in x.items():
+            deadhead_min = problem.dispatch_context.get_deadhead_min(
+                trip_by_id[from_trip_id].destination,
+                trip_by_id[to_trip_id].origin,
+            )
+            deadhead_distance_objective += self._deadhead_distance_km(
+                problem,
+                deadhead_min,
+            ) * var
         # O2: electricity cost based on actual charging source flows.
         price_by_slot = {slot.slot_index: slot.grid_buy_yen_per_kwh for slot in problem.price_slots}
         grid_to_bus_priority_penalty = self._safe_nonnegative_float(
@@ -4246,6 +4286,10 @@ class GurobiMILPAdapter:
                 vehicle.vehicle_type,
             )
         if any(abs(value) > 1.0e-9 for value in weather_bias_by_vehicle_type.values()):
+            if research_lexicographic_objective:
+                raise ValueError(
+                    "research_lexicographic_v1 forbids weather objective bias"
+                )
             for (vehicle_id, _trip_id), var in y.items():
                 vehicle = vehicle_by_id.get(str(vehicle_id))
                 if vehicle is None:
@@ -4267,7 +4311,12 @@ class GurobiMILPAdapter:
                     return value
             return ice_co2_kg_per_l
 
-        if co2_price > 0 and component_flags.get("co2_cost", True):
+        # Build physical emissions independently of their monetary price.  The
+        # same expression is used by both carbon pricing and the epsilon cap,
+        # preventing the reporting metric and policy constraint from drifting.
+        if component_flags.get("co2_cost", True) or getattr(
+            config, "co2_emissions_cap_kg", None
+        ) is not None:
             # ICE CO₂ from trip fuel consumption.
             for (vehicle_id, trip_id), var in y.items():
                 vehicle = next((v for v in problem.vehicles if v.vehicle_id == vehicle_id), None)
@@ -4277,7 +4326,9 @@ class GurobiMILPAdapter:
                 if trip is None:
                     continue
                 fuel_l = self._trip_fuel_l(problem, vehicle, trip_id)
-                objective += co2_price * _ice_co2_kg_per_l_for_vehicle(vehicle) * fuel_l * var
+                co2_emissions_objective += (
+                    _ice_co2_kg_per_l_for_vehicle(vehicle) * fuel_l * var
+                )
             # ICE CO₂ from deadhead fuel consumption.
             for (vehicle_id, from_trip_id, to_trip_id), var in x.items():
                 vehicle = next((v for v in problem.vehicles if v.vehicle_id == vehicle_id), None)
@@ -4291,16 +4342,20 @@ class GurobiMILPAdapter:
                     trip_by_id[to_trip_id].origin,
                 )
                 dh_km = self._deadhead_distance_km(problem, dh_min)
-                objective += co2_price * _ice_co2_kg_per_l_for_vehicle(vehicle) * dh_km * fuel_rate * var
+                co2_emissions_objective += (
+                    _ice_co2_kg_per_l_for_vehicle(vehicle)
+                    * dh_km
+                    * fuel_rate
+                    * var
+                )
             for assignment_key, fuel_l in (
                 ice_startup_fuel_l_by_assignment.items()
             ):
                 vehicle = vehicle_by_id.get(str(assignment_key[0]))
                 if vehicle is None:
                     continue
-                objective += (
-                    co2_price
-                    * _ice_co2_kg_per_l_for_vehicle(vehicle)
+                co2_emissions_objective += (
+                    _ice_co2_kg_per_l_for_vehicle(vehicle)
                     * fuel_l
                     * start_arc[assignment_key]
                 )
@@ -4310,9 +4365,8 @@ class GurobiMILPAdapter:
                 vehicle = vehicle_by_id.get(str(assignment_key[0]))
                 if vehicle is None:
                     continue
-                objective += (
-                    co2_price
-                    * _ice_co2_kg_per_l_for_vehicle(vehicle)
+                co2_emissions_objective += (
+                    _ice_co2_kg_per_l_for_vehicle(vehicle)
                     * fuel_l
                     * end_arc[assignment_key]
                 )
@@ -4322,19 +4376,32 @@ class GurobiMILPAdapter:
                 for (depot_id, slot_idx), var in g2bus_var.items():
                     co2_factor = max(float(co2_by_slot.get(slot_idx, 0.0) or 0.0), 0.0)
                     if co2_factor > 0.0:
-                        objective += co2_price * co2_factor * var
+                        co2_emissions_objective += co2_factor * var
                 for (depot_id, slot_idx), var in g2bess_var.items():
                     co2_factor = max(float(co2_by_slot.get(slot_idx, 0.0) or 0.0), 0.0)
                     if co2_factor > 0.0:
-                        objective += co2_price * co2_factor * var
+                        co2_emissions_objective += co2_factor * var
             else:
                 for slot_idx in slot_indices:
                     co2_factor = co2_by_slot.get(slot_idx, 0.0)
                     if co2_factor > 0:
                         for coeff, key in electric_trip_kwh_by_slot.get(slot_idx, []):
-                            objective += co2_price * co2_factor * coeff * y[key]
+                            co2_emissions_objective += co2_factor * coeff * y[key]
                         for coeff, key in electric_deadhead_kwh_by_slot.get(slot_idx, []):
-                            objective += co2_price * co2_factor * coeff * x[key]
+                            co2_emissions_objective += co2_factor * coeff * x[key]
+
+        if co2_price > 0.0 and component_flags.get("co2_cost", True):
+            objective += co2_price * co2_emissions_objective
+
+        co2_emissions_cap_kg = getattr(config, "co2_emissions_cap_kg", None)
+        if co2_emissions_cap_kg is not None:
+            cap_kg = float(co2_emissions_cap_kg)
+            if cap_kg < 0.0:
+                raise ValueError("co2_emissions_cap_kg must be nonnegative")
+            model.addConstr(
+                co2_emissions_objective <= cap_kg,
+                name="co2_emissions_epsilon_cap_kg",
+            )
 
         # Battery degradation uses the same scenario throughput price
         # (JPY/kWh charged) as the canonical accounting ledger.
@@ -4434,6 +4501,8 @@ class GurobiMILPAdapter:
         _return_leg_bonus_weight = max(
             float(getattr(problem.objective_weights, "return_leg_bonus", 0.0) or 0.0), 0.0
         )
+        if research_lexicographic_objective:
+            _return_leg_bonus_weight = 0.0
         if _return_leg_bonus_weight > 0.0 and x:
             _RETURN_LEG_BONUS_BASE_YEN = 500.0
             turnaround_pairs: Dict[Tuple[str, str], float] = {}
@@ -4480,13 +4549,62 @@ class GurobiMILPAdapter:
         # Their sum cuts only fractional relaxations; it does not remove any
         # feasible integer dispatch or favor a powertrain.
         integrated_analytical_objective_floor_blockers: List[str] = []
-        if allow_partial_service:
+        used_vehicle_day_objective = gp.quicksum(used_vehicle_day.values())
+        charge_session_count_objective = gp.quicksum(
+            charge_session_start_var.values()
+        )
+
+        if research_lexicographic_objective:
+            model.ModelSense = GRB.MINIMIZE
+            objective_index = 0
+            if allow_partial_service:
+                model.setObjectiveN(
+                    gp.quicksum(
+                        unserved[trip.trip_id] for trip in problem.trips
+                    ),
+                    index=objective_index,
+                    priority=5,
+                    name="coverage",
+                )
+                objective_index += 1
+            model.setObjectiveN(
+                used_vehicle_day_objective,
+                index=objective_index,
+                priority=4,
+                name="used_vehicle_days",
+            )
+            objective_index += 1
+            model.setObjectiveN(
+                objective,
+                index=objective_index,
+                priority=3,
+                name="canonical_operating_cost",
+            )
+            objective_index += 1
+            model.setObjectiveN(
+                deadhead_distance_objective,
+                index=objective_index,
+                priority=2,
+                name="inter_trip_deadhead_km",
+            )
+            objective_index += 1
+            model.setObjectiveN(
+                charge_session_count_objective,
+                index=objective_index,
+                priority=1,
+                name="charge_session_count",
+            )
+        elif allow_partial_service:
             integrated_analytical_objective_floor_blockers.append(
                 "partial_service_enabled"
             )
         if objective_mode != "total_cost":
             integrated_analytical_objective_floor_blockers.append(
                 "objective_mode_is_not_total_cost"
+            )
+        if research_lexicographic_objective:
+            integrated_analytical_objective_floor_blockers.append(
+                "lexicographic_primary_is_not_canonical_cost"
             )
         if not bool(
             getattr(config, "integrated_actual_cost_objective", False)
@@ -4621,6 +4739,14 @@ class GurobiMILPAdapter:
                 "integrated_ev_utilization_mode must be 'disabled' or "
                 "'minimum_ice_fuel_lexicographic'"
             )
+        if (
+            research_lexicographic_objective
+            and integrated_ev_utilization_mode != "disabled"
+        ):
+            raise ValueError(
+                "research_lexicographic_v1 cannot be combined with a "
+                "powertrain-preference objective"
+            )
         actual_cost_upper_bound_jpy = getattr(
             config,
             "integrated_actual_cost_upper_bound_jpy",
@@ -4729,6 +4855,7 @@ class GurobiMILPAdapter:
                 canonical_cost_is_primary_objective=(
                     not allow_partial_service
                     and integrated_ev_utilization_mode == "disabled"
+                    and not research_lexicographic_objective
                     and objective_mode == "total_cost"
                     and bool(
                         getattr(
@@ -5082,10 +5209,15 @@ class GurobiMILPAdapter:
                     max(valid_bounds),
                     incumbent_objective,
                 )
-                certified_gap = max(
+                independent_certified_gap = max(
                     incumbent_objective - certified_best_bound,
                     0.0,
                 ) / max(abs(incumbent_objective), 1.0e-9)
+                certified_gap = (
+                    min(independent_certified_gap, max(float(final_gap), 0.0))
+                    if final_gap is not None
+                    else independent_certified_gap
+                )
                 certified_gap_semantics = (
                     "maximum_of_gurobi_raw_obj_bound_and_independent_integer_"
                     "valid_analytical_objective_lower_bound"
@@ -5658,9 +5790,41 @@ class GurobiMILPAdapter:
             metadata={
                 "source": "milp_gurobi",
                 "status": solver_status,
-                "objective_value": float(model.ObjVal),
+                "objective_value": (
+                    float(objective.getValue())
+                    if research_lexicographic_objective
+                    else float(model.ObjVal)
+                ),
+                "raw_solver_primary_objective_value": float(model.ObjVal),
+                "objective_value_semantics": (
+                    "canonical_operating_cost_secondary_objective"
+                    if research_lexicographic_objective
+                    else "configured_solver_objective"
+                ),
                 "assignment_energy_coupling_mode": (
                     "phase4_integrated_slot_energy_recourse"
+                ),
+                "objective_preset": objective_preset,
+                "objective_hierarchy": (
+                    [
+                        "coverage_if_partial",
+                        "used_vehicle_days",
+                        "canonical_operating_cost",
+                        "inter_trip_deadhead_km",
+                        "charge_session_count",
+                    ]
+                    if research_lexicographic_objective
+                    else ["configured_objective"]
+                ),
+                "co2_emissions_cap_kg": co2_emissions_cap_kg,
+                "co2_epsilon_constraint_enabled": (
+                    co2_emissions_cap_kg is not None
+                ),
+                "charging_power_model": problem.metadata.get(
+                    "charging_power_model", "constant_power_v0"
+                ),
+                "trip_energy_model": problem.metadata.get(
+                    "trip_energy_model", "distance_average_v0"
                 ),
                 "stage1_best_obj_stop_enabled": bool(
                     getattr(config, "stage1_best_obj_stop_enabled", True)
@@ -13079,6 +13243,22 @@ class GurobiMILPAdapter:
                     c_var[(vehicle_id, slot_idx)] <= charge_max_kw * charge_on_var[(vehicle_id, slot_idx)],
                     name=f"charge_power_vehicle__{vehicle_id}__slot_{slot_idx}",
                 )
+            self._add_piecewise_charge_power_constraints(
+                model=stage2,
+                gp=gp,
+                GRB=GRB,
+                problem=problem,
+                vehicle_id=vehicle_id,
+                slot_indices=slot_indices,
+                soc_var=s_var,
+                charge_power_var=c_var,
+                charge_on_var=charge_on_var,
+                capacity_kwh=cap,
+                charge_max_kw=charge_max_kw,
+                timestep_h=timestep_h,
+                session_start_var=None,
+                name_prefix="stage2_charge",
+            )
             stage2.addConstr(
                 s_var[(vehicle_id, slot_indices[0])] == initial_kwh,
                 name=f"soc_initial__{vehicle_id}",
@@ -20210,10 +20390,162 @@ class GurobiMILPAdapter:
         trip = problem.trip_by_id().get(trip_id)
         if trip is None:
             return 0.0
+        type_specific = getattr(trip, "energy_kwh_by_vehicle_type", {}) or {}
+        explicit_energy = self._lookup_powertrain_quantity(
+            type_specific,
+            getattr(vehicle, "vehicle_type", ""),
+        )
+        if explicit_energy is not None:
+            return explicit_energy
         drive_rate = self._vehicle_energy_rate_kwh_per_km(problem, vehicle, trip)
         if drive_rate > 0.0:
             return max(float(trip.distance_km or 0.0), 0.0) * drive_rate
         return max(float(trip.energy_kwh or 0.0), 0.0)
+
+    def _add_piecewise_charge_power_constraints(
+        self,
+        *,
+        model: Any,
+        gp: Any,
+        GRB: Any,
+        problem: CanonicalOptimizationProblem,
+        vehicle_id: str,
+        slot_indices: Sequence[int],
+        soc_var: Mapping[Tuple[str, int], Any],
+        charge_power_var: Mapping[Tuple[str, int], Any],
+        charge_on_var: Mapping[Tuple[str, int], Any],
+        capacity_kwh: float,
+        charge_max_kw: float,
+        timestep_h: float,
+        session_start_var: Optional[Mapping[Tuple[str, int], Any]] = None,
+        name_prefix: str,
+    ) -> None:
+        """Add the documented SOC taper and charge-session time contract."""
+
+        mode = str(
+            problem.metadata.get("charging_power_model")
+            or "constant_power_v0"
+        ).strip().lower()
+        if mode == "constant_power_v0":
+            return
+        if mode != "piecewise_soc_taper_v1":
+            raise ValueError(f"unsupported charging_power_model: {mode}")
+        if not slot_indices:
+            return
+
+        setup_h = max(
+            float(problem.metadata.get("charge_setup_minutes") or 0.0), 0.0
+        ) / 60.0
+        teardown_h = max(
+            float(problem.metadata.get("charge_teardown_minutes") or 0.0), 0.0
+        ) / 60.0
+        minimum_minutes = max(
+            int(problem.metadata.get("minimum_charge_session_minutes") or 0), 0
+        )
+        required_slots = max(
+            int(math.ceil(minimum_minutes / max(timestep_h * 60.0, 1.0))),
+            1,
+        )
+        if setup_h + teardown_h >= timestep_h * required_slots:
+            raise ValueError(
+                "charge setup and teardown time must be shorter than the "
+                "minimum charge-session duration"
+            )
+
+        start_vars: dict[Tuple[str, int], Any] = {}
+        end_vars: dict[Tuple[str, int], Any] = {}
+        for pos, slot_idx in enumerate(slot_indices):
+            key = (vehicle_id, slot_idx)
+            on_var = charge_on_var[key]
+            if session_start_var is not None and key in session_start_var:
+                start = session_start_var[key]
+            else:
+                start = model.addVar(
+                    vtype=GRB.BINARY,
+                    name=f"{name_prefix}_start__{vehicle_id}__{slot_idx}",
+                )
+            end = model.addVar(
+                vtype=GRB.BINARY,
+                name=f"{name_prefix}_end__{vehicle_id}__{slot_idx}",
+            )
+            start_vars[key] = start
+            end_vars[key] = end
+
+            if pos == 0:
+                model.addConstr(start == on_var)
+            else:
+                previous_on = charge_on_var[(vehicle_id, slot_indices[pos - 1])]
+                model.addConstr(start >= on_var - previous_on)
+                model.addConstr(start <= on_var)
+                model.addConstr(start <= 1 - previous_on)
+            if pos == len(slot_indices) - 1:
+                model.addConstr(end == on_var)
+            else:
+                next_on = charge_on_var[(vehicle_id, slot_indices[pos + 1])]
+                model.addConstr(end >= on_var - next_on)
+                model.addConstr(end <= on_var)
+                model.addConstr(end <= 1 - next_on)
+
+            low_band = model.addVar(
+                vtype=GRB.BINARY,
+                name=f"{name_prefix}_soc_lt80__{vehicle_id}__{slot_idx}",
+            )
+            middle_band = model.addVar(
+                vtype=GRB.BINARY,
+                name=f"{name_prefix}_soc_80_90__{vehicle_id}__{slot_idx}",
+            )
+            high_band = model.addVar(
+                vtype=GRB.BINARY,
+                name=f"{name_prefix}_soc_ge90__{vehicle_id}__{slot_idx}",
+            )
+            model.addConstr(low_band + middle_band + high_band == on_var)
+            model.addConstr(charge_power_var[key] >= 1.0e-4 * on_var)
+            soc = soc_var[key]
+            cap = max(float(capacity_kwh), 1.0)
+            band_epsilon_kwh = 1.0e-4
+            model.addConstr(
+                soc
+                <= 0.80 * cap
+                - band_epsilon_kwh
+                + cap * (1 - low_band)
+            )
+            model.addConstr(soc >= 0.80 * cap - cap * (1 - middle_band))
+            model.addConstr(
+                soc
+                <= 0.90 * cap
+                - band_epsilon_kwh
+                + cap * (1 - middle_band)
+            )
+            model.addConstr(soc >= 0.90 * cap - cap * (1 - high_band))
+            model.addConstr(
+                charge_power_var[key]
+                <= max(float(charge_max_kw), 0.0)
+                * (low_band + (2.0 / 3.0) * middle_band + (1.0 / 3.0) * high_band)
+            )
+            model.addConstr(
+                charge_power_var[key] * timestep_h
+                <= max(float(charge_max_kw), 0.0)
+                * (
+                    timestep_h * on_var
+                    - setup_h * start
+                    - teardown_h * end
+                )
+            )
+
+        if required_slots <= 1:
+            return
+        for pos, slot_idx in enumerate(slot_indices):
+            key = (vehicle_id, slot_idx)
+            if pos + required_slots > len(slot_indices):
+                model.addConstr(start_vars[key] == 0)
+                continue
+            model.addConstr(
+                gp.quicksum(
+                    charge_on_var[(vehicle_id, candidate_slot)]
+                    for candidate_slot in slot_indices[pos : pos + required_slots]
+                )
+                >= required_slots * start_vars[key]
+            )
 
     def _vehicle_energy_rate_kwh_per_km(
         self,
@@ -20240,10 +20572,32 @@ class GurobiMILPAdapter:
         trip = problem.trip_by_id().get(trip_id)
         if trip is None:
             return 0.0
+        type_specific = getattr(trip, "fuel_l_by_vehicle_type", {}) or {}
+        explicit_fuel = self._lookup_powertrain_quantity(
+            type_specific,
+            getattr(vehicle, "vehicle_type", ""),
+        )
+        if explicit_fuel is not None:
+            return explicit_fuel
         fuel_rate = max(float(vehicle.fuel_consumption_l_per_km or 0.0), 0.0)
         if fuel_rate > 0.0:
             return max(float(trip.distance_km or 0.0), 0.0) * fuel_rate
         return max(float(trip.fuel_l or 0.0), 0.0)
+
+    @staticmethod
+    def _lookup_powertrain_quantity(
+        quantities: Mapping[str, Any],
+        vehicle_type: Any,
+    ) -> Optional[float]:
+        normalized_type = str(vehicle_type or "").strip()
+        for key in (normalized_type, normalized_type.upper()):
+            if key not in quantities:
+                continue
+            try:
+                return max(float(quantities[key] or 0.0), 0.0)
+            except (TypeError, ValueError):
+                return None
+        return None
 
     def _deadhead_fuel_l(
         self,

@@ -784,6 +784,7 @@ class RunOptimizationBody(BaseModel):
         ge=0.0,
         le=1.0,
     )
+    co2_emissions_cap_kg: Optional[float] = Field(default=None, ge=0.0)
     gurobi_threads: Optional[int] = Field(
         default=INTERACTIVE_GUROBI_THREADS,
         ge=1,
@@ -2646,6 +2647,43 @@ def _assignment_economic_audit_payload(
     return {
         "schema_version": "assignment_economic_audit_v1",
         "assignment_energy_coupling_mode": assignment_energy_coupling_mode,
+        "trip_energy_model": (
+            (getattr(canonical_problem, "metadata", {}) or {}).get(
+                "trip_energy_model", "distance_average_v0"
+            )
+            if canonical_problem is not None
+            else solver_metadata.get("trip_energy_model", "not_recorded")
+        ),
+        "trip_energy_model_provenance": (
+            dict(
+                (getattr(canonical_problem, "metadata", {}) or {}).get(
+                    "trip_energy_model_provenance", {}
+                )
+            )
+            if canonical_problem is not None
+            else {}
+        ),
+        "pv_input_semantics_by_depot": (
+            {
+                str(depot_id): str(
+                    getattr(asset, "pv_input_semantics", "not_recorded")
+                )
+                for depot_id, asset in dict(
+                    getattr(canonical_problem, "depot_energy_assets", {}) or {}
+                ).items()
+            }
+            if canonical_problem is not None
+            else {}
+        ),
+        "charging_power_model": (
+            (getattr(canonical_problem, "metadata", {}) or {}).get(
+                "charging_power_model", "constant_power_v0"
+            )
+            if canonical_problem is not None
+            else solver_metadata.get("charging_power_model", "not_recorded")
+        ),
+        "objective_preset": solver_metadata.get("objective_preset"),
+        "co2_emissions_cap_kg": solver_metadata.get("co2_emissions_cap_kg"),
         "assignment_energy_coupling_stage2_authority": str(
             recourse_configuration.get("stage2_authority") or "not_recorded"
         ),
@@ -6458,6 +6496,17 @@ def _research_claim_scope_payload(
         teacher_release_failed_checks.append("git_provenance_not_research_eligible")
     if run_profile == DAY_AHEAD_EXPLORATORY_PROFILE:
         teacher_release_failed_checks.append("day_ahead_only_exploratory_profile")
+    prepared_scope_audit = dict(
+        optimization_result.get("prepared_scope_audit") or {}
+    )
+    if (
+        bool(metadata.get("research_run", False))
+        and "formal_transition_network_ready" in prepared_scope_audit
+        and prepared_scope_audit.get("formal_transition_network_ready") is not True
+    ):
+        teacher_release_failed_checks.append(
+            "route_band_off_deadhead_matrix_incomplete"
+        )
     is_two_stage = (
         str(metadata.get("optimization_structure") or "").lower()
         == "two_stage"
@@ -10641,6 +10690,7 @@ def _run_optimization(
     integrated_ev_utilization_mode: str = "disabled",
     integrated_actual_cost_upper_bound_jpy: Optional[float] = None,
     integrated_actual_cost_upper_bound_delta_ratio: Optional[float] = None,
+    co2_emissions_cap_kg: Optional[float] = None,
 ) -> None:
     output_dir: Optional[str] = None
     raw_frontend_request_payload = dict(frontend_request_payload or {})
@@ -10829,6 +10879,20 @@ def _run_optimization(
             phase_token = _phase_from_solver_mode(solver_mode)
             requested_phase = phase_token or solver_mode
             is_diagnostic_mode = solver_mode == "diagnostic" or solver_mode == "debug_mode"
+            prepared_cost_cfg = dict(
+                ((scenario.get("scenario_overlay") or {}).get("cost_coefficients") or {})
+            )
+            prepared_simulation_cfg = dict(
+                scenario.get("simulation_config") or {}
+            )
+            effective_co2_emissions_cap_kg = (
+                co2_emissions_cap_kg
+                if co2_emissions_cap_kg is not None
+                else prepared_cost_cfg.get(
+                    "co2_emissions_cap_kg",
+                    prepared_simulation_cfg.get("co2_emissions_cap_kg"),
+                )
+            )
             opt_config = OptimizationConfig(
                 mode=opt_mode,
                 time_limit_sec=time_limit_seconds,
@@ -10877,6 +10941,11 @@ def _run_optimization(
                     else float(
                         integrated_actual_cost_upper_bound_delta_ratio
                     )
+                ),
+                co2_emissions_cap_kg=(
+                    None
+                    if effective_co2_emissions_cap_kg is None
+                    else float(effective_co2_emissions_cap_kg)
                 ),
                 phase4_phase3_seed_enabled=(
                     phase_token == "phase4_integrated"
@@ -13167,6 +13236,7 @@ def run_optimization(
             request.integrated_ev_utilization_mode,
             request.integrated_actual_cost_upper_bound_jpy,
             request.integrated_actual_cost_upper_bound_delta_ratio,
+            request.co2_emissions_cap_kg,
         ),
         job_id=job.job_id,
         scenario_id=scenario_id,

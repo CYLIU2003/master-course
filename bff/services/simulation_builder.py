@@ -503,6 +503,24 @@ def apply_builder_configuration(
         overlay.solver_config.objective_preset = str(
             body.simulation_settings.objective_preset
         )
+    overlay.charging_constraints.charging_power_model = (
+        body.simulation_settings.charging_power_model
+    )
+    overlay.charging_constraints.charge_setup_minutes = int(
+        body.simulation_settings.charge_setup_minutes
+    )
+    overlay.charging_constraints.charge_teardown_minutes = int(
+        body.simulation_settings.charge_teardown_minutes
+    )
+    overlay.charging_constraints.minimum_charge_session_minutes = int(
+        body.simulation_settings.minimum_charge_session_minutes
+    )
+    overlay.solver_config.trip_energy_model = (
+        body.simulation_settings.trip_energy_model
+    )
+    overlay.solver_config.trip_energy_sensitivity_scale = float(
+        body.simulation_settings.trip_energy_sensitivity_scale
+    )
     overlay.solver_config.fixed_route_band_mode = bool(
         body.simulation_settings.fixed_route_band_mode
     )
@@ -607,6 +625,9 @@ def apply_builder_configuration(
         overlay.cost_coefficients.co2_price_per_kg = (
             body.simulation_settings.co2_price_per_kg
         )
+    overlay.cost_coefficients.co2_emissions_cap_kg = (
+        body.simulation_settings.co2_emissions_cap_kg
+    )
     if body.simulation_settings.pv_marginal_charge_cost_yen_per_kwh is not None:
         overlay.cost_coefficients.pv_marginal_charge_cost_yen_per_kwh = max(
             float(body.simulation_settings.pv_marginal_charge_cost_yen_per_kwh),
@@ -621,6 +642,9 @@ def apply_builder_configuration(
         overlay.cost_coefficients.pv_profile_id = str(
             body.simulation_settings.pv_profile_id
         )
+    overlay.cost_coefficients.pv_input_semantics = (
+        body.simulation_settings.pv_input_semantics
+    )
     if body.simulation_settings.weather_mode is not None:
         overlay.cost_coefficients.weather_mode = str(
             body.simulation_settings.weather_mode
@@ -914,6 +938,12 @@ def apply_builder_configuration(
         ],
         "charger_count": len(runtime_chargers),
         "charger_power_kw": overlay.charging_constraints.charger_power_limit_kw,
+        "charging_power_model": overlay.charging_constraints.charging_power_model,
+        "charge_setup_minutes": overlay.charging_constraints.charge_setup_minutes,
+        "charge_teardown_minutes": overlay.charging_constraints.charge_teardown_minutes,
+        "minimum_charge_session_minutes": (
+            overlay.charging_constraints.minimum_charge_session_minutes
+        ),
         "use_selected_depot_vehicle_inventory": use_selected_vehicle_inventory,
         "use_selected_depot_charger_inventory": use_selected_charger_inventory,
         "disable_vehicle_acquisition_cost": bool(
@@ -926,6 +956,10 @@ def apply_builder_configuration(
         "solver_mode": body.simulation_settings.solver_mode,
         "objective_mode": overlay.solver_config.objective_mode,
         "objective_preset": overlay.solver_config.objective_preset,
+        "trip_energy_model": overlay.solver_config.trip_energy_model,
+        "trip_energy_sensitivity_scale": (
+            overlay.solver_config.trip_energy_sensitivity_scale
+        ),
         "fixed_route_band_mode": overlay.solver_config.fixed_route_band_mode,
         "milp_max_successors_per_trip": overlay.solver_config.milp_max_successors_per_trip,
         "enable_vehicle_diagram_output": overlay.solver_config.enable_vehicle_diagram_output,
@@ -963,7 +997,9 @@ def apply_builder_configuration(
         "default_ice_tank_capacity_l": body.simulation_settings.default_ice_tank_capacity_l,
         "co2_price_source": body.simulation_settings.co2_price_source,
         "co2_reference_date": body.simulation_settings.co2_reference_date,
+        "co2_emissions_cap_kg": overlay.cost_coefficients.co2_emissions_cap_kg,
         "pv_profile_id": overlay.cost_coefficients.pv_profile_id,
+        "pv_input_semantics": overlay.cost_coefficients.pv_input_semantics,
         "weather_mode": overlay.cost_coefficients.weather_mode,
         "weather_factor_scalar": overlay.cost_coefficients.weather_factor_scalar,
         "enable_weather_operation_policy": bool(

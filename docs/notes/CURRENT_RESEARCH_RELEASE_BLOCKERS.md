@@ -1,5 +1,30 @@
 # Current research release blockers
 
+## 2026-08-12 model revision: fresh formal evidence required
+
+The current worktree changes the canonical feasible region, objective
+hierarchy, charging-power constraints, trip energy/fuel inputs, transition
+aliases, prepared-input schema, and research fingerprints. Consequently, every
+2026-08-11 pair remains valid only as historical evidence for its frozen SHA;
+it is not evidence for the revised model. Current-HEAD research release is
+`BLOCKED` until all of the following are complete from one clean frozen commit:
+
+1. fresh Prepare for both controlled PV cases;
+2. route-band-OFF transition audit with `deadhead_missing = 0`, or an explicit
+   non-READY result listing the still-missing matrix entries;
+3. 15/30/60-minute, trip-demand, route-band, and vehicle-day-cost sensitivity;
+4. accepted Phase 4 plus 24/24 Rolling, physical validation, canonical
+   accounting, and immutable pair verification;
+5. a small exact-model audit and the frontend/BFF ablation matrix;
+6. a canonical rule-based B0 adapter before B0 may be included in comparative
+   claims.
+
+The implemented PV semantics are
+`available_surplus_after_depot_load`; gross PV is not accepted without an
+explicit depot-load series. `literature_proxy_v1` is a deterministic proxy,
+not a measured trip-energy model, and that limitation must remain in the
+thesis. No new optimization has been run during this code-changing step.
+
 ## 2026-08-11 compact reporting release: progress presentation ready
 
 The accepted current-code pair has now been canonicalized without another

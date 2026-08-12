@@ -1500,6 +1500,24 @@ class OptimizationEngine:
                 ),
             )
             metadata = dict(problem.metadata or {})
+            if str(metadata.get("objective_preset") or "").strip().lower() == (
+                "research_lexicographic_v1"
+            ):
+                metadata.update(
+                    {
+                        "solver_objective_matches_accounting_total": False,
+                        "objective_actual_cost_mode": False,
+                        "objective_semantics": (
+                            "lexicographic_vehicle_days_then_canonical_cost_"
+                            "then_deadhead_and_charge_sessions"
+                        ),
+                        "research_cost_optimality_claim_scope": (
+                            "lexicographic_solution_not_unconstrained_scalar_"
+                            "total_cost_optimum"
+                        ),
+                    }
+                )
+                problem = replace(problem, metadata=metadata)
         if is_two_stage:
             # A two-stage decomposition has two solver objectives.  Its
             # accounting total is a KPI, not a globally minimized scalar cost.

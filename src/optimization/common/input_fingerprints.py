@@ -7,7 +7,7 @@ import json
 from typing import Any
 
 
-INPUT_FINGERPRINT_SCHEMA = "canonical_optimization_input_v3"
+INPUT_FINGERPRINT_SCHEMA = "canonical_optimization_input_v4_trip_energy_model"
 
 
 def _canonical_hash(payload: Any) -> str:
@@ -42,6 +42,28 @@ def canonical_trip_input_hash(problem: Any) -> str:
             "distance_km": float(trip.distance_km),
             "energy_kwh": float(trip.energy_kwh),
             "fuel_l": float(trip.fuel_l),
+            "energy_kwh_by_vehicle_type": {
+                str(key): float(value)
+                for key, value in sorted(
+                    dict(
+                        getattr(trip, "energy_kwh_by_vehicle_type", {}) or {}
+                    ).items()
+                )
+            },
+            "fuel_l_by_vehicle_type": {
+                str(key): float(value)
+                for key, value in sorted(
+                    dict(
+                        getattr(trip, "fuel_l_by_vehicle_type", {}) or {}
+                    ).items()
+                )
+            },
+            "energy_model_id": str(
+                getattr(trip, "energy_model_id", "") or ""
+            ),
+            "energy_model_provenance": dict(
+                getattr(trip, "energy_model_provenance", {}) or {}
+            ),
             "required_soc_departure_percent": (
                 None
                 if trip.required_soc_departure_percent is None

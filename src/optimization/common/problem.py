@@ -114,6 +114,10 @@ class ProblemTrip:
     route_family_code: str = ""
     direction: str = ""
     route_variant_type: str = "unknown"
+    energy_kwh_by_vehicle_type: Mapping[str, float] = field(default_factory=dict)
+    fuel_l_by_vehicle_type: Mapping[str, float] = field(default_factory=dict)
+    energy_model_id: str = "distance_average_v0"
+    energy_model_provenance: Mapping[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -206,6 +210,8 @@ class DepotEnergyAsset:
     depot_id: str
     pv_enabled: bool = False
     pv_generation_kwh_by_slot: Tuple[float, ...] = ()
+    available_pv_surplus_kwh_by_slot: Tuple[float, ...] = ()
+    pv_input_semantics: str = "available_surplus_after_depot_load"
     capacity_factor_by_slot: Tuple[float, ...] = ()
     pv_case_id: str = "none"
     pv_capex_jpy_per_kw: float = 0.0
@@ -408,6 +414,8 @@ class OptimizationConfig:
     # explicit contract.  The engine then removes every solver-only preference
     # term and verifies the raw MILP objective against canonical accounting.
     integrated_actual_cost_objective: bool = False
+    trip_energy_model: str = "distance_average_v0"
+    trip_energy_sensitivity_scale: float = 1.0
     # Optional Phase 4 policy frontiers.  Both retain the same canonical-cost
     # structural contract, but optimize ICE fuel first and total cost second.
     # ``integrated_actual_cost_upper_bound_jpy`` turns the unconstrained
@@ -415,6 +423,7 @@ class OptimizationConfig:
     integrated_ev_utilization_mode: str = "disabled"
     integrated_actual_cost_upper_bound_jpy: Optional[float] = None
     integrated_actual_cost_upper_bound_delta_ratio: Optional[float] = None
+    co2_emissions_cap_kg: Optional[float] = None
     # A full-network Phase 4 model is substantially harder than the Phase 3
     # decomposition.  When enabled, the engine first solves Phase 3 on the
     # *same in-memory canonical problem* and accepts its plan only after full

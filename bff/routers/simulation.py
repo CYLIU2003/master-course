@@ -103,6 +103,13 @@ class PrepareSimulationSettingsBody(BaseModel):
     fleet_templates: list[PrepareFleetTemplateBody] = Field(default_factory=list)
     charger_count: int = Field(default=4, ge=0)
     charger_power_kw: float = Field(default=90.0, ge=0.0)
+    charging_power_model: Literal[
+        "constant_power_v0",
+        "piecewise_soc_taper_v1",
+    ] = "piecewise_soc_taper_v1"
+    charge_setup_minutes: int = Field(default=5, ge=0)
+    charge_teardown_minutes: int = Field(default=5, ge=0)
+    minimum_charge_session_minutes: int = Field(default=15, ge=0)
     use_selected_depot_vehicle_inventory: bool = True
     use_selected_depot_charger_inventory: bool = True
     disable_vehicle_acquisition_cost: bool = False
@@ -114,6 +121,11 @@ class PrepareSimulationSettingsBody(BaseModel):
     solver_mode: str = "mode_milp_only"
     objective_mode: str = "total_cost"
     objective_preset: Optional[str] = None
+    trip_energy_model: Literal[
+        "distance_average_v0",
+        "literature_proxy_v1",
+    ] = "distance_average_v0"
+    trip_energy_sensitivity_scale: float = Field(default=1.0, ge=0.0)
     fixed_route_band_mode: bool = False
     enable_vehicle_diagram_output: bool = True
     allow_partial_service: bool = False
@@ -139,6 +151,7 @@ class PrepareSimulationSettingsBody(BaseModel):
     ice_co2_kg_per_l: Optional[float] = Field(default=None, ge=0.0)
     grid_co2_kg_per_kwh: Optional[float] = Field(default=None, ge=0.0)
     co2_price_per_kg: Optional[float] = Field(default=None, ge=0.0)
+    co2_emissions_cap_kg: Optional[float] = Field(default=None, ge=0.0)
     pv_marginal_charge_cost_yen_per_kwh: Optional[float] = Field(default=None, ge=0.0)
     pv_curtail_penalty_yen_per_kwh: Optional[float] = Field(default=None, ge=0.0)
     depot_power_limit_kw: Optional[float] = Field(default=None, ge=0.0)
@@ -157,6 +170,10 @@ class PrepareSimulationSettingsBody(BaseModel):
     timestep_min: Optional[Literal[5, 15, 30, 60]] = None
     depot_energy_assets: Optional[list[Dict[str, Any]]] = None
     pv_profile_id: Optional[str] = None
+    pv_input_semantics: Literal[
+        "available_surplus_after_depot_load",
+        "gross_generation_before_depot_load",
+    ] = "available_surplus_after_depot_load"
     weather_mode: Optional[str] = None
     comparison_type: Optional[str] = None
     comparison_role: Optional[str] = None

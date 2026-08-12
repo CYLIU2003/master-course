@@ -29,10 +29,15 @@ from src.optimization.common.bev_terminal_policy import (
 from src.route_family_runtime import (
     merge_deadhead_metrics,
     normalize_direction,
+    normalize_stop_platform_family,
     normalize_variant_type,
 )
 from .soc_utils import normalize_soc_ratio_like, resolve_soc_kwh
 from .time_axis import normalize_timestep_min
+from .trip_energy_proxy import (
+    LITERATURE_PROXY_MODEL_ID,
+    build_literature_proxy_trip_demands,
+)
 from .tou_pricing import price_for_minute
 from .fleet_contract import (
     FleetContractError,
@@ -550,6 +555,28 @@ class ProblemBuilder:
             )
         )
         weather_strategy_metadata = {}
+        trip_energy_model = str(
+            self._first_present(
+                solver_cfg.get("trip_energy_model"),
+                simulation_cfg.get("trip_energy_model"),
+                "distance_average_v0",
+            )
+            or "distance_average_v0"
+        ).strip().lower()
+        if trip_energy_model not in {
+            "distance_average_v0",
+            LITERATURE_PROXY_MODEL_ID,
+        }:
+            raise ValueError(f"unsupported trip_energy_model: {trip_energy_model}")
+        trip_energy_sensitivity_scale = float(
+            self._first_present(
+                solver_cfg.get("trip_energy_sensitivity_scale"),
+                simulation_cfg.get("trip_energy_sensitivity_scale"),
+                1.0,
+            )
+        )
+        if trip_energy_sensitivity_scale < 0.0:
+            raise ValueError("trip_energy_sensitivity_scale must be non-negative")
         return self.build_from_dispatch(
             context,
             scenario_id=str((scenario.get("meta") or {}).get("id") or ""),
@@ -632,6 +659,29 @@ class ProblemBuilder:
             cost_component_flags=cost_component_flags,
             weather_strategy_metadata=weather_strategy_metadata,
             allow_synthetic_pv_fallback=allow_synthetic_pv_fallback,
+            trip_energy_model=trip_energy_model,
+            trip_energy_sensitivity_scale=trip_energy_sensitivity_scale,
+            objective_preset=solver_cfg.get("objective_preset"),
+            charging_power_model=str(
+                charging_cfg.get("charging_power_model")
+                or simulation_cfg.get("charging_power_model")
+                or "piecewise_soc_taper_v1"
+            ),
+            charge_setup_minutes=int(
+                charging_cfg.get("charge_setup_minutes")
+                if charging_cfg.get("charge_setup_minutes") is not None
+                else simulation_cfg.get("charge_setup_minutes", 5)
+            ),
+            charge_teardown_minutes=int(
+                charging_cfg.get("charge_teardown_minutes")
+                if charging_cfg.get("charge_teardown_minutes") is not None
+                else simulation_cfg.get("charge_teardown_minutes", 5)
+            ),
+            minimum_charge_session_minutes=int(
+                charging_cfg.get("minimum_charge_session_minutes")
+                if charging_cfg.get("minimum_charge_session_minutes") is not None
+                else simulation_cfg.get("minimum_charge_session_minutes", 15)
+            ),
         )
 
     def build_from_dispatch(
@@ -713,6 +763,13 @@ class ProblemBuilder:
         cost_component_flags: Optional[Mapping[str, Any]] = None,
         weather_strategy_metadata: Optional[Mapping[str, Any]] = None,
         allow_synthetic_pv_fallback: bool = False,
+        trip_energy_model: str = "distance_average_v0",
+        trip_energy_sensitivity_scale: float = 1.0,
+        objective_preset: Optional[str] = None,
+        charging_power_model: str = "piecewise_soc_taper_v1",
+        charge_setup_minutes: int = 5,
+        charge_teardown_minutes: int = 5,
+        minimum_charge_session_minutes: int = 15,
     ) -> CanonicalOptimizationProblem:
         config = config or OptimizationConfig()
         vehicle_counts = vehicle_counts or {}
@@ -815,9 +872,29 @@ class ProblemBuilder:
         canonical_depot_id = str(canonical_depot_id or "depot_default")
         bev_reference_capacity_kwh = self._reference_bev_capacity_kwh(context)
         final_soc_floor_ratio = self._normalize_percent_like_to_ratio(final_soc_floor_percent)
+        normalized_trip_energy_model = str(
+            trip_energy_model or "distance_average_v0"
+        ).strip().lower()
+        trip_demand_proxy = None
+        if normalized_trip_energy_model == LITERATURE_PROXY_MODEL_ID:
+            trip_demand_proxy = build_literature_proxy_trip_demands(
+                context.trips,
+                bev_kwh_per_km=self._reference_bev_energy_rate(context),
+                ice_l_per_km=self._reference_ice_fuel_rate(context),
+                sensitivity_scale=trip_energy_sensitivity_scale,
+            )
         trip_nodes_list: List[ProblemTrip] = []
         for trip in context.trips:
-            energy_kwh = self._estimate_trip_energy(trip.distance_km, context)
+            energy_kwh = (
+                float(trip_demand_proxy.energy_kwh_by_trip.get(trip.trip_id, 0.0))
+                if trip_demand_proxy is not None
+                else self._estimate_trip_energy(trip.distance_km, context)
+            )
+            fuel_l = (
+                float(trip_demand_proxy.fuel_l_by_trip.get(trip.trip_id, 0.0))
+                if trip_demand_proxy is not None
+                else self._estimate_trip_fuel(trip.distance_km, context)
+            )
             has_electric_vehicle = any(
                 str(vt).upper() in {"BEV", "PHEV", "FCEV"}
                 for vt in trip.allowed_vehicle_types
@@ -840,12 +917,24 @@ class ProblemBuilder:
                     distance_km=trip.distance_km,
                     allowed_vehicle_types=trip.allowed_vehicle_types,
                     energy_kwh=energy_kwh,
-                    fuel_l=self._estimate_trip_fuel(trip.distance_km, context),
+                    fuel_l=fuel_l,
                     service_id=context.service_date,
                     required_soc_departure_percent=required_soc_departure_percent,
                     route_family_code=str(getattr(trip, "route_family_code", "") or ""),
                     direction=str(getattr(trip, "direction", "") or ""),
                     route_variant_type=str(getattr(trip, "route_variant_type", "") or ""),
+                    energy_kwh_by_vehicle_type=(
+                        {"BEV": energy_kwh} if trip_demand_proxy is not None else {}
+                    ),
+                    fuel_l_by_vehicle_type=(
+                        {"ICE": fuel_l} if trip_demand_proxy is not None else {}
+                    ),
+                    energy_model_id=normalized_trip_energy_model,
+                    energy_model_provenance=(
+                        dict(trip_demand_proxy.provenance)
+                        if trip_demand_proxy is not None
+                        else {}
+                    ),
                 )
             )
 
@@ -873,7 +962,11 @@ class ProblemBuilder:
                     required_soc_departure_percent=base_trip.required_soc_departure_percent,
                     route_family_code=base_trip.route_family_code,
                     direction=base_trip.direction,
-                    route_variant_type=base_trip.route_variant_type,
+                        route_variant_type=base_trip.route_variant_type,
+                        energy_kwh_by_vehicle_type=base_trip.energy_kwh_by_vehicle_type,
+                        fuel_l_by_vehicle_type=base_trip.fuel_l_by_vehicle_type,
+                        energy_model_id=base_trip.energy_model_id,
+                        energy_model_provenance=base_trip.energy_model_provenance,
                 )
                     trip_nodes_list.append(replicated_trip)
         
@@ -1399,6 +1492,31 @@ class ProblemBuilder:
                 "max_ice_fuel_percent": max_ice_fuel_percent,
                 "default_ice_tank_capacity_l": default_ice_tank_capacity_l,
                 "deadhead_speed_kmh": deadhead_speed_kmh,
+                "objective_preset": str(objective_preset or "").strip().lower(),
+                "charging_power_model": str(
+                    charging_power_model or "piecewise_soc_taper_v1"
+                ).strip().lower(),
+                "charge_setup_minutes": max(int(charge_setup_minutes), 0),
+                "charge_teardown_minutes": max(int(charge_teardown_minutes), 0),
+                "minimum_charge_session_minutes": max(
+                    int(minimum_charge_session_minutes), 0
+                ),
+                "trip_energy_model": normalized_trip_energy_model,
+                "trip_energy_sensitivity_scale": float(
+                    trip_energy_sensitivity_scale
+                ),
+                "trip_energy_model_provenance": (
+                    dict(trip_demand_proxy.provenance)
+                    if trip_demand_proxy is not None
+                    else {
+                        "model_id": "distance_average_v0",
+                        "model_role": "configured_fleet_average_distance_rate",
+                    }
+                ),
+                "pv_input_semantics_by_depot": {
+                    depot_id: asset.pv_input_semantics
+                    for depot_id, asset in depot_energy_assets.items()
+                },
                 "charging_window_mode": str(charging_window_mode or "timetable_layover").strip().lower(),
                 "allow_overnight_depot_moves": str(allow_overnight_depot_moves or "forbid").strip().lower(),
                 "overnight_window_start": str(overnight_window_start or "23:00"),
@@ -1525,6 +1643,27 @@ class ProblemBuilder:
         assets: Dict[str, DepotEnergyAsset] = {}
         overlay = (metadata_source.get("scenario_overlay") or {}) if isinstance(metadata_source, dict) else {}
         sim_cfg = metadata_source.get("simulation_config") or {} if isinstance(metadata_source, dict) else {}
+        overlay_cost_cfg = (
+            (overlay.get("cost_coefficients") or {})
+            if isinstance(overlay, Mapping)
+            else {}
+        )
+        default_pv_input_semantics = str(
+            self._first_present(
+                sim_cfg.get("pv_input_semantics"),
+                overlay_cost_cfg.get("pv_input_semantics"),
+                "available_surplus_after_depot_load",
+            )
+            or "available_surplus_after_depot_load"
+        ).strip().lower()
+        allowed_pv_input_semantics = {
+            "available_surplus_after_depot_load",
+            "gross_generation_before_depot_load",
+        }
+        if default_pv_input_semantics not in allowed_pv_input_semantics:
+            raise ValueError(
+                f"unsupported pv_input_semantics: {default_pv_input_semantics}"
+            )
         depot_assets_raw: List[Dict[str, Any]] = []
         sim_assets = sim_cfg.get("depot_energy_assets") or []
         if isinstance(sim_assets, Mapping):
@@ -1757,11 +1896,31 @@ class ProblemBuilder:
             )
             if bess_discharge_efficiency is None:
                 bess_discharge_efficiency = 0.95
+            pv_input_semantics = str(
+                raw.get("pv_input_semantics") or default_pv_input_semantics
+            ).strip().lower()
+            if pv_input_semantics not in allowed_pv_input_semantics:
+                raise ValueError(
+                    f"unsupported pv_input_semantics for {depot.depot_id}: "
+                    f"{pv_input_semantics}"
+                )
+            if pv_enabled and pv_input_semantics == "gross_generation_before_depot_load":
+                raise ValueError(
+                    "gross_generation_before_depot_load requires an explicit "
+                    "depot-load series; use available_surplus_after_depot_load "
+                    "for the current research model"
+                )
 
             asset = DepotEnergyAsset(
                 depot_id=depot.depot_id,
                 pv_enabled=pv_enabled,
                 pv_generation_kwh_by_slot=pv_series,
+                available_pv_surplus_kwh_by_slot=(
+                    pv_series
+                    if pv_input_semantics == "available_surplus_after_depot_load"
+                    else ()
+                ),
+                pv_input_semantics=pv_input_semantics,
                 capacity_factor_by_slot=capacity_factor_series,
                 pv_case_id=str(raw.get("pv_case_id") or "default"),
                 pv_capex_jpy_per_kw=float(raw.get("pv_capex_jpy_per_kw") or 0.0),
@@ -2450,6 +2609,18 @@ class ProblemBuilder:
             alias_sets.setdefault(alias_text, set()).add(target_text)
 
         stop_ids_by_name: Dict[str, set[str]] = {}
+        stop_ids_by_platform_family: Dict[str, set[str]] = {}
+
+        def _index_stop_id(stop_id: Any) -> None:
+            stop_id_text = str(stop_id or "").strip()
+            if not stop_id_text:
+                return
+            platform_family = normalize_stop_platform_family(stop_id_text)
+            if platform_family and platform_family != stop_id_text:
+                stop_ids_by_platform_family.setdefault(
+                    platform_family.casefold(), set()
+                ).add(stop_id_text)
+
         for stop in scenario.get("stops") or []:
             if not isinstance(stop, dict):
                 continue
@@ -2457,6 +2628,7 @@ class ProblemBuilder:
             stop_name = str(stop.get("name") or stop.get("stop_name") or "").strip()
             if not stop_id:
                 continue
+            _index_stop_id(stop_id)
             _register(stop_id, stop_id)
             if stop_name:
                 _register(stop_id, stop_name)
@@ -2464,6 +2636,8 @@ class ProblemBuilder:
                 stop_ids_by_name.setdefault(stop_name.casefold(), set()).add(stop_id)
 
         for trip in trips:
+            _index_stop_id(trip.origin_stop_id)
+            _index_stop_id(trip.destination_stop_id)
             _register(trip.origin, trip.origin_stop_id or trip.origin)
             _register(trip.destination, trip.destination_stop_id or trip.destination)
             if trip.origin_stop_id:
@@ -2473,7 +2647,11 @@ class ProblemBuilder:
                 _register(trip.destination_stop_id, trip.destination_stop_id)
                 _register(trip.destination_stop_id, trip.destination)
 
-        for sibling_ids in stop_ids_by_name.values():
+        sibling_groups = [
+            *stop_ids_by_name.values(),
+            *stop_ids_by_platform_family.values(),
+        ]
+        for sibling_ids in sibling_groups:
             if len(sibling_ids) < 2:
                 continue
             ordered_ids = sorted(str(item).strip() for item in sibling_ids if str(item).strip())
@@ -3874,12 +4052,18 @@ class ProblemBuilder:
         )
 
     def _estimate_trip_energy(self, distance_km: float, context: DispatchContext) -> float:
+        return max(distance_km, 0.0) * self._reference_bev_energy_rate(context)
+
+    def _estimate_trip_fuel(self, distance_km: float, context: DispatchContext) -> float:
+        return max(distance_km, 0.0) * self._reference_ice_fuel_rate(context)
+
+    def _reference_bev_energy_rate(self, context: DispatchContext) -> float:
         bev = context.vehicle_profiles.get("BEV")
         if not bev or bev.energy_consumption_kwh_per_km is None:
             return 0.0
-        return max(distance_km, 0.0) * bev.energy_consumption_kwh_per_km
+        return max(float(bev.energy_consumption_kwh_per_km), 0.0)
 
-    def _estimate_trip_fuel(self, distance_km: float, context: DispatchContext) -> float:
+    def _reference_ice_fuel_rate(self, context: DispatchContext) -> float:
         fuel_rates = [
             profile.fuel_consumption_l_per_km
             for profile in context.vehicle_profiles.values()
@@ -3887,7 +4071,7 @@ class ProblemBuilder:
         ]
         if not fuel_rates:
             return 0.0
-        return max(distance_km, 0.0) * min(fuel_rates)
+        return max(float(min(fuel_rates)), 0.0)
 
     def _reference_bev_capacity_kwh(self, context: DispatchContext) -> Optional[float]:
         bev_candidates = [

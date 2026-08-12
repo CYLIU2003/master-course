@@ -45,6 +45,13 @@ class ChargingConfig(BaseModel):
     final_soc_floor_percent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
     final_soc_target_percent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
     final_soc_target_tolerance_percent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    charging_power_model: Literal[
+        "constant_power_v0",
+        "piecewise_soc_taper_v1",
+    ] = "piecewise_soc_taper_v1"
+    charge_setup_minutes: int = Field(default=5, ge=0)
+    charge_teardown_minutes: int = Field(default=5, ge=0)
+    minimum_charge_session_minutes: int = Field(default=15, ge=0)
 
 
 class CostConfig(BaseModel):
@@ -64,9 +71,14 @@ class CostConfig(BaseModel):
     ice_co2_kg_per_l: float = Field(default=2.64, ge=0.0)
     grid_co2_kg_per_kwh: float = Field(default=0.0, ge=0.0)
     co2_price_per_kg: float = Field(default=1.0, ge=0.0)
+    co2_emissions_cap_kg: Optional[float] = Field(default=None, ge=0.0)
     co2_price_source: Optional[str] = None
     co2_reference_date: Optional[str] = None
     pv_profile_id: Optional[str] = None
+    pv_input_semantics: Literal[
+        "available_surplus_after_depot_load",
+        "gross_generation_before_depot_load",
+    ] = "available_surplus_after_depot_load"
     pv_resolution_minutes: int = Field(default=60, ge=1)
     weather_mode: Optional[str] = None
     weather_factor_scalar: Optional[float] = Field(default=None, ge=0.0)
@@ -112,6 +124,11 @@ class SolverConfig(BaseModel):
     unserved_penalty: float = Field(default=10000.0, ge=0.0)
     objective_weights: dict[str, float] = Field(default_factory=dict)
     objective_preset: Optional[str] = None
+    trip_energy_model: Literal[
+        "distance_average_v0",
+        "literature_proxy_v1",
+    ] = "distance_average_v0"
+    trip_energy_sensitivity_scale: float = Field(default=1.0, ge=0.0)
     fixed_route_band_mode: bool = False
     max_start_fragments_per_vehicle: int = Field(default=100, ge=1)
     max_end_fragments_per_vehicle: int = Field(default=100, ge=1)
