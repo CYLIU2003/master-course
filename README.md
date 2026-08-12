@@ -1012,8 +1012,32 @@ PV, BESS, electric-fleet, CO2-cost, or non-total-cost cases fail closed.
 The current equation-to-code-to-test traceability table is maintained in
 `docs/notes/THESIS_EQUATION_CODE_TEST_MAP.md`.
 
-The thesis method comparison uses the names M0--M3. The generated experiment
-matrix intentionally keeps M0 (rule dispatch plus immediate charging) and M2
-(optimized dispatch plus simple charging) blocked until their physical rule
-adapters exist; M1 and M3 availability must not be presented as evidence that
-those two missing baselines were executed.
+The thesis method comparison uses the names M0--M3. Every canonical frontend
+day-ahead run now writes
+`thesis_ablation/day_ahead_method_candidates.json` and `.csv`. M0 applies a
+deterministic rule assignment plus arrival-immediate PV-then-grid charging;
+M2 applies the same non-optimizing charging rule when the primary run includes
+optimized dispatch. A charging-only primary is labeled M1, and only a
+`phase4_integrated` primary is labeled M3; Phase 2/3 results are never relabeled
+as integrated optimization. The rule never uses BESS,
+never repairs or reassigns an infeasible candidate, and records physical errors
+instead. M1 still requires an explicit `phase1_charging_only` run against the
+same prepared input. Therefore the generated M0/M2/M3 file is a candidate
+diagnostic, not a complete four-method result or a research-release shortcut.
+The frontend artifact-completeness gate nevertheless requires both candidate
+files and checks availability against the primary optimization structure. This
+prevents a failed adjunct calculation or a mislabeled Phase 1/2/3 result from
+disappearing behind a successful primary solve.
+
+The v1 rule baseline is intentionally conservative: a vehicle must be resident
+for a complete time slot, and the piecewise-taper mode deducts setup and
+teardown time from every charged slot. This exact session policy is exported in
+the rule audit; it must not be described as an optimized or continuous charger
+session.
+
+Electric vehicles with more than one disconnected duty fragment are also
+rejected by the independent SOC checker. The current solver can establish that
+either a direct transition or a depot reset is temporally feasible, but it does
+not persist which alternative supplied the inter-fragment energy. Until that
+choice is solver-native, replaying SOC across fragments would be ambiguous and
+must not be presented as physically certified.

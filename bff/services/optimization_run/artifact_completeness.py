@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-ARTIFACT_CONTRACT_VERSION = "frontend_run_artifacts_v1"
+ARTIFACT_CONTRACT_VERSION = "frontend_run_artifacts_v2"
 PHYSICAL_VALIDATION_INPUT_MANIFEST_SCHEMA_VERSION = (
     "physical_validation_input_manifest_v1"
 )
@@ -93,6 +93,8 @@ BASE_REQUIRED_ARTIFACTS = (
     "summary.json",
     "targeted_trips.csv",
     "targeted_trips.json",
+    "thesis_ablation/day_ahead_method_candidates.csv",
+    "thesis_ablation/day_ahead_method_candidates.json",
     "trip_type_counts.csv",
     "trip_type_counts.json",
     "trip_powertrain_cost_comparison.csv",
@@ -880,6 +882,112 @@ def required_frontend_artifacts(
     if require_two_stage_composition_certificate:
         paths.extend(TWO_STAGE_FORMAL_REQUIRED_ARTIFACTS)
     return _normalized_paths(paths)
+
+
+def _validate_thesis_ablation_candidates(
+    *,
+    run_dir: Path,
+    content_errors: list[str],
+) -> None:
+    """Validate that the automatic postprocessor produced honest candidates."""
+
+    relative_path = "thesis_ablation/day_ahead_method_candidates.json"
+    path = run_dir / relative_path
+    if not path.is_file():
+        return
+    try:
+        payload = _load_json_object(path)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        content_errors.append(f"{relative_path}: {exc}")
+        return
+    if payload.get("schema_version") != (
+        "thesis_day_ahead_ablation_candidates_v1"
+    ):
+        content_errors.append(f"{relative_path}: invalid schema_version")
+    if payload.get("comparison_scope") != "same_canonical_problem_day_ahead":
+        content_errors.append(f"{relative_path}: invalid comparison_scope")
+    if payload.get("rolling_costs_mixed_into_comparison") is not False:
+        content_errors.append(
+            f"{relative_path}: rolling costs must not be mixed into day-ahead candidates"
+        )
+    if payload.get("additional_solver_invoked_by_postprocessor") is not False:
+        content_errors.append(
+            f"{relative_path}: postprocessor must not hide an additional solve"
+        )
+    if payload.get("research_conclusion_eligible") is not False:
+        content_errors.append(
+            f"{relative_path}: partial candidates cannot be research-conclusion eligible"
+        )
+    method_rows = list(payload.get("methods") or [])
+    by_method = {
+        str(row.get("method_id") or ""): row
+        for row in method_rows
+        if isinstance(row, Mapping)
+    }
+    if set(by_method) != {"M0", "M1", "M2", "M3"}:
+        content_errors.append(
+            f"{relative_path}: methods must contain exactly M0, M1, M2, M3"
+        )
+    primary_structure = str(
+        payload.get("primary_optimization_structure") or ""
+    ).strip().lower()
+    if payload.get("primary_optimization_structure_source") not in {
+        "engine_result.solver_metadata",
+        "plan.metadata",
+    }:
+        content_errors.append(
+            f"{relative_path}: invalid primary_optimization_structure_source"
+        )
+    expected_available = {
+        "charging_only": {"M0", "M1"},
+        "assignment_only": {"M0", "M2"},
+        "two_stage": {"M0", "M2"},
+        "integrated": {"M0", "M2", "M3"},
+    }.get(primary_structure)
+    if expected_available is None:
+        content_errors.append(
+            f"{relative_path}: unsupported primary_optimization_structure"
+        )
+        expected_available = {"M0"}
+    for method_id in expected_available:
+        if dict(by_method.get(method_id) or {}).get("candidate_available") is not True:
+            content_errors.append(
+                f"{relative_path}: {method_id} candidate is unavailable"
+            )
+    for method_id in set(by_method) - expected_available:
+        if dict(by_method.get(method_id) or {}).get("candidate_available") is not False:
+            content_errors.append(
+                f"{relative_path}: {method_id} is mislabeled as available for "
+                f"{primary_structure}"
+            )
+    if primary_structure != "charging_only":
+        m1 = dict(by_method.get("M1") or {})
+        if m1.get("construction_status") != "SEPARATE_PHASE1_RUN_REQUIRED":
+            content_errors.append(
+                f"{relative_path}: M1 must remain an explicit separate-run requirement"
+            )
+    if primary_structure != "integrated":
+        m3 = dict(by_method.get("M3") or {})
+        if m3.get("construction_status") != (
+            "SEPARATE_PHASE4_INTEGRATED_RUN_REQUIRED"
+        ):
+            content_errors.append(
+                f"{relative_path}: non-integrated primary must not be labeled M3"
+            )
+    declared_sha = str(payload.get("payload_sha256") or "").strip().lower()
+    content_without_sha = dict(payload)
+    content_without_sha.pop("payload_sha256", None)
+    actual_sha = hashlib.sha256(
+        json.dumps(
+            content_without_sha,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        ).encode("utf-8")
+    ).hexdigest()
+    if declared_sha != actual_sha:
+        content_errors.append(f"{relative_path}: payload_sha256 mismatch")
 
 
 def _validate_assignment_economic_audit(
@@ -1778,6 +1886,10 @@ def audit_frontend_run_artifacts(
     run_dir = Path(run_dir).resolve()
     content_errors: list[str] = []
     _validate_assignment_economic_audit(
+        run_dir=run_dir,
+        content_errors=content_errors,
+    )
+    _validate_thesis_ablation_candidates(
         run_dir=run_dir,
         content_errors=content_errors,
     )

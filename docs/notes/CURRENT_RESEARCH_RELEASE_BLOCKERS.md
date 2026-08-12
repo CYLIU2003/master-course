@@ -16,8 +16,8 @@ it is not evidence for the revised model. Current-HEAD research release is
 4. accepted Phase 4 plus 24/24 Rolling, physical validation, canonical
    accounting, and immutable pair verification;
 5. a small exact-model audit and the frontend/BFF ablation matrix;
-6. a canonical rule-based B0 adapter before B0 may be included in comparative
-   claims.
+6. an explicit M1 fixed-dispatch charging solve and a fresh same-input M0--M3
+   comparison before method-level effect sizes may be claimed.
 
 The implemented PV semantics are
 `available_surplus_after_depot_load`; gross PV is not accepted without an
@@ -1635,12 +1635,25 @@ nor substitutes for a fresh full frontend/BFF formal run.
 
 Remaining blocking work for the requested method comparison:
 
-- M0 rule-based dispatch plus arrival-immediate charging has no canonical
-  physical energy adapter;
-- M2 optimized dispatch plus the same simple charging rule has no canonical
-  physical energy adapter;
-- therefore M0--M3 comparative effect sizes are not yet reporting-eligible;
+- M0 and M2 now have canonical deterministic charging adapters, and ordinary
+  frontend runs emit their day-ahead candidate costs, assignments, source
+  flows, and physical validation beside M3 under `thesis_ablation/`;
+- the frontend artifact-completeness gate now rejects missing or malformed
+  candidates, verifies the artifact payload hash, and prevents Phase 1/2/3
+  results from being mislabeled as the integrated M3 method;
+- M1 still requires an explicit `phase1_charging_only` run against the same
+  prepared input and frozen SHA. The ordinary frontend postprocessor does not
+  silently launch this additional optimization;
+- therefore the emitted M0/M2/M3 partial artifact is explicitly
+  `research_conclusion_eligible=false`, and M0--M3 comparative effect sizes
+  remain blocked until fresh controlled four-method evidence exists;
 - the exact oracle v1 covers all-ICE cases only; electric SOC, charger shortage,
-  PV=0, BESS=0, and tariff-break-even oracle fixtures remain to be added; and
+  PV=0, BESS=0, and tariff-break-even oracle fixtures remain to be added;
+- a multi-fragment electric assignment is now rejected with `SOC_FRAGMENT`.
+  Stage 2 does not yet persist whether the feasible fragment transition is
+  direct or a depot reset, so its transition energy cannot be independently
+  replayed without inference. Formal evidence must remain single-fragment per
+  electric vehicle until that solver-native choice and continuous SOC ledger
+  are implemented; and
 - every pre-v7 prepared input and every pre-fix result remains evidence for its
   original code only. Fresh Prepare from a clean frozen commit is mandatory.

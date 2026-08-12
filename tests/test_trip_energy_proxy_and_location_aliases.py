@@ -11,6 +11,7 @@ from src.optimization.common.problem import (
     ProblemVehicle,
 )
 from src.optimization.common.input_fingerprints import canonical_trip_input_hash
+from src.optimization.common.soc_helpers import trip_energy_kwh
 from src.optimization.common.trip_energy_proxy import (
     build_literature_proxy_trip_demands,
 )
@@ -99,6 +100,7 @@ def test_explicit_trip_vehicle_type_demand_overrides_vehicle_average_rate() -> N
 
     assert adapter._trip_energy_kwh(problem, bev, "trip") == pytest.approx(21.0)
     assert adapter._trip_fuel_l(problem, ice, "trip") == pytest.approx(3.0)
+    assert trip_energy_kwh(problem, bev, problem_trip) == pytest.approx(21.0)
 
 
 def test_odpt_platform_variants_are_registered_as_same_location_aliases() -> None:

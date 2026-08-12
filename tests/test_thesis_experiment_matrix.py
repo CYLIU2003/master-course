@@ -30,6 +30,7 @@ def test_experiment_matrix_contains_required_sensitivities() -> None:
         for row in payload["ablation_contract"]
         if row["case_id"].startswith("M0_")
     )
+    assert baseline["candidate_generation_available"] is True
     assert baseline["reporting_eligible"] is False
 
 
@@ -55,10 +56,18 @@ def test_experiment_matrix_separates_method_and_component_ablations() -> None:
     )
     assert (
         method_rows["M1_fixed_dispatch_optimized_energy"]["reporting_eligible"]
-        is True
+        is False
     )
     assert (
         method_rows["M3_integrated_dispatch_energy_bess"]["reporting_eligible"]
-        is True
+        is False
+    )
+    assert (
+        method_rows["M1_fixed_dispatch_optimized_energy"]["implementation_status"]
+        == "SEPARATE_PHASE1_RUN_REQUIRED"
+    )
+    assert (
+        "thesis_ablation/day_ahead_method_candidates.json"
+        in payload["required_outputs"]
     )
     assert len(payload["component_ablation_contract"]) == 3

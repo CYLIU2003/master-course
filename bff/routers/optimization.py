@@ -92,6 +92,11 @@ from bff.services.optimization_run.rolling_chain import (
     persist_frontend_day_ahead_rolling_contract,
     refresh_frontend_rolling_manifest,
 )
+from bff.services.optimization_run.thesis_ablation import (
+    CSV_COLUMNS as THESIS_ABLATION_CSV_COLUMNS,
+    ablation_candidate_csv_rows,
+    build_day_ahead_ablation_candidates,
+)
 from bff.services.optimization_run.rich_outputs import (
     persist_json_outputs as _persist_json_outputs,
     run_stamp as _run_stamp,
@@ -11206,6 +11211,75 @@ def _run_optimization(
                     ),
                 }
             )
+            thesis_ablation_dir = Path(output_dir) / "thesis_ablation"
+            try:
+                thesis_ablation_payload = build_day_ahead_ablation_candidates(
+                    problem=problem,
+                    optimized_plan=engine_result.plan,
+                    optimized_solver_status=str(engine_result.solver_status or ""),
+                    primary_optimization_structure=str(
+                        engine_solver_metadata.get("optimization_structure")
+                        or ""
+                    ),
+                )
+                _persist_json_outputs(
+                    str(thesis_ablation_dir),
+                    {
+                        "day_ahead_method_candidates.json": (
+                            thesis_ablation_payload
+                        )
+                    },
+                )
+                _write_csv_rows(
+                    thesis_ablation_dir / "day_ahead_method_candidates.csv",
+                    ablation_candidate_csv_rows(thesis_ablation_payload),
+                    list(THESIS_ABLATION_CSV_COLUMNS),
+                )
+                engine_solver_metadata["thesis_ablation_candidates"] = {
+                    "status": thesis_ablation_payload.get("status"),
+                    "artifact": (
+                        "thesis_ablation/day_ahead_method_candidates.json"
+                    ),
+                    "csv_artifact": (
+                        "thesis_ablation/day_ahead_method_candidates.csv"
+                    ),
+                    "payload_sha256": thesis_ablation_payload.get(
+                        "payload_sha256"
+                    ),
+                    "available_method_ids": thesis_ablation_payload.get(
+                        "available_method_ids"
+                    ),
+                    "missing_method_ids": thesis_ablation_payload.get(
+                        "missing_method_ids"
+                    ),
+                    "research_conclusion_eligible": False,
+                }
+            except Exception as exc:
+                thesis_ablation_failure = {
+                    "schema_version": (
+                        "thesis_day_ahead_ablation_candidates_failure_v1"
+                    ),
+                    "status": "FAILED",
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "research_conclusion_eligible": False,
+                }
+                _persist_json_outputs(
+                    str(thesis_ablation_dir),
+                    {
+                        "day_ahead_method_candidates_failure.json": (
+                            thesis_ablation_failure
+                        )
+                    },
+                )
+                engine_solver_metadata["thesis_ablation_candidates"] = {
+                    "status": "FAILED",
+                    "artifact": (
+                        "thesis_ablation/"
+                        "day_ahead_method_candidates_failure.json"
+                    ),
+                    "error": thesis_ablation_failure["error"],
+                    "research_conclusion_eligible": False,
+                }
             # Production results are immutable dataclasses.  Lightweight
             # compatibility/test adapters may expose the same contract as a
             # mutable object, so do not make provenance capture itself prevent

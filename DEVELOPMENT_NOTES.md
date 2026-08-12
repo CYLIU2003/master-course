@@ -3469,10 +3469,55 @@ locks this distinction in place.
   trip fallback. The independent oracle and integrated MILP now agree on
   assignment, liters, cost, and emissions.
 - Renamed the thesis method contract to M0--M3 and separated it from the
-  PV/BESS component ablation. M0 and M2 remain explicitly blocked until their
-  immediate-charge adapters exist; no reporting eligibility is inferred from
-  a label alone.
-- Focused regression after implementation: `38 passed`. No formal optimization
-  run was executed from this dirty development state. Because prepared schema
+  PV/BESS component ablation.
+- Added `arrival_immediate_charge_baseline_v1`. M0 applies it to the canonical
+  rule assignment and M2 applies it to the optimized assignment. The adapter
+  allocates physical charger ports by continuous home-depot arrival order,
+  uses direct PV before grid, holds BESS at initial SOC, and fails closed on
+  SOC, transition, charger, or coverage errors. It never repairs or reassigns
+  a candidate. The v1 session contract is conservative and explicit: only
+  complete residence slots are used, and piecewise-taper setup/teardown is
+  deducted per charged slot rather than claiming optimized continuous
+  sessions. Depot-reset energy is materialized at a multi-fragment boundary,
+  but a plan exceeding the canonical fragment limit remains infeasible; the
+  adapter does not override that independent checker.
+- A final self-review found that the legacy SOC checker restarted every BEV
+  duty fragment from initial SOC and replayed the vehicle's complete charge
+  ledger for each fragment. Stage 2 currently proves only that a direct or
+  depot-reset transition is possible; it does not persist the selected
+  alternative or its energy. `FeasibilityChecker` now fails closed with
+  `SOC_FRAGMENT` for every multi-fragment electric vehicle and skips the
+  ambiguous replay. Single-fragment formal cases are unchanged. Continuous
+  electric fragment SOC remains an explicit blocker until transition choice
+  and energy are solver-native.
+- Canonical frontend runs now emit
+  `thesis_ablation/day_ahead_method_candidates.json` and `.csv`, with every
+  available candidate evaluated by the same `CostEvaluator` and
+  `FeasibilityChecker`. The method label follows solver structure:
+  `charging_only` supplies M1, dispatch-capable runs can supply M2, and only
+  `integrated` supplies M3. Missing methods remain explicit separate-run
+  requirements; no additional solver is hidden in postprocessing and no
+  day-ahead candidate cost is mixed with Rolling accounting. The partial
+  artifact is therefore `research_conclusion_eligible=false`.
+- Added both ablation candidate files to the frontend artifact-completeness
+  v2 contract. The semantic audit verifies the payload SHA, exact M0--M3 method
+  set, and method availability appropriate to `charging_only`,
+  `assignment_only`, `two_stage`, or `integrated`. A failed adapter or
+  non-integrated result mislabeled as M3 can no longer be hidden by an
+  otherwise successful primary solve.
+- Corrected `trip_energy_kwh` precedence so independent SOC/charging checks
+  honor explicit per-powertrain trip energy before a vehicle distance rate,
+  matching the integrated MILP.
+- A no-solver smoke check against the latest existing 264-trip, 60-vehicle
+  prepared input constructed the 32-vehicle M0 baseline and passed coverage,
+  transition, SOC, and charger validation with no errors. This is
+  implementation evidence only: the prepared input predates this commit and
+  no optimization result or research claim was generated from it.
+- Focused regression after the transition/oracle implementation: `38 passed`.
+  The M0/M2 adapter, canonical BFF path, and artifact gate subsequently passed
+  46 focused tests. After the final fail-closed electric-fragment guard, the
+  complete repository regression passed `1306 passed in 65.70s`. No formal
+  optimization run was executed from this
+  dirty development state. Because prepared schema
   and accounting semantics changed, all future evidence requires fresh
   Prepare and a clean frozen commit; older outputs retain their original SHA.

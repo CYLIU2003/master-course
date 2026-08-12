@@ -650,6 +650,39 @@ class FeasibilityChecker:
             by_slot = charge_by_vehicle.setdefault(vid, {})
             by_slot[int(slot.slot_index)] = by_slot.get(int(slot.slot_index), 0.0) + max(float(slot.charge_kw or 0.0), 0.0)
 
+        # Multiple disconnected duties for one electric vehicle require an
+        # explicit choice between a direct inter-fragment transition and a
+        # return-to-depot/start-from-depot reset.  The current Stage-2 model
+        # validates that at least one transition is temporally possible, but
+        # it does not persist which alternative supplied the transition
+        # energy.  Replaying every duty from initial SOC (the legacy checker
+        # behaviour) can therefore double-count charging and falsely certify
+        # an electric schedule.  Fail closed until that transition choice is
+        # solver-native and the SOC ledger can be replayed continuously.
+        unsupported_fragment_vehicle_ids: set[str] = set()
+        for vehicle_id, duties in plan.duties_by_vehicle().items():
+            if len(duties) <= 1:
+                continue
+            vehicle = vehicle_by_id.get(str(vehicle_id))
+            vehicle_type_id = str(
+                getattr(vehicle, "vehicle_type", "")
+                or getattr(duties[0], "vehicle_type", "")
+                or ""
+            )
+            vehicle_type = type_by_id.get(vehicle_type_id)
+            powertrain = str(
+                getattr(vehicle_type, "powertrain_type", "")
+                or vehicle_type_id
+            ).upper()
+            if powertrain not in {"BEV", "PHEV", "FCEV"}:
+                continue
+            unsupported_fragment_vehicle_ids.add(str(vehicle_id))
+            errors.append(
+                f"[SOC_FRAGMENT] vehicle={vehicle_id} fragment_count={len(duties)} "
+                "cannot be certified because the selected direct-or-depot "
+                "transition energy is not solver-native"
+            )
+
         last_duty_by_vehicle_day: Dict[tuple[str, int], str] = {}
         if target_enabled:
             for duty in plan.duties:
@@ -669,6 +702,8 @@ class FeasibilityChecker:
 
         for duty in plan.duties:
             vehicle_id = str(duty_vehicle_map.get(duty.duty_id, duty.duty_id))
+            if vehicle_id in unsupported_fragment_vehicle_ids:
+                continue
             vehicle = vehicle_by_id.get(vehicle_id)
             vtype = type_by_id.get(duty.vehicle_type)
             powertrain = str((vtype.powertrain_type if vtype else duty.vehicle_type) or "").upper()

@@ -311,6 +311,17 @@ def trip_energy_kwh(
     vehicle: Any,
     trip: ProblemTrip,
 ) -> float:
+    type_specific = dict(
+        getattr(trip, "energy_kwh_by_vehicle_type", {}) or {}
+    )
+    vehicle_type = str(getattr(vehicle, "vehicle_type", "") or "").strip()
+    for key in (vehicle_type, vehicle_type.upper()):
+        if key not in type_specific:
+            continue
+        try:
+            return max(float(type_specific[key] or 0.0), 0.0)
+        except (TypeError, ValueError):
+            break
     drive_rate = vehicle_energy_rate_kwh_per_km(problem, vehicle, trip)
     if drive_rate > 0.0:
         return max(float(trip.distance_km or 0.0), 0.0) * drive_rate

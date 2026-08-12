@@ -16,8 +16,8 @@ validated.
 | Connection feasibility (a_i+turn_i+deadhead_{ij}\le d_j) | `DispatchContext.feasible_connections`; `fragment_transition_diagnostic` | `tests/test_route_band_transition_reason_codes.py`, `tests/test_run_preparation_scope_audit.py` | Missing OD, alias failure, route-band policy, and insufficient time are distinct |
 | Startup, inter-trip, and return deadhead energy/fuel | `startup_deadhead_*`, `_deadhead_energy_kwh`, `_deadhead_fuel_l`, `return_deadhead_energy_kwh` | small exact fuel oracle; physical validation suites | All-ICE startup/connection/return fuel is independently enumerated; electric oracle boundary case remains open |
 | BEV trip energy | `trip_energy_kwh`, `fuel_l_by_vehicle_type`, `trip_energy_proxy.py`; assignment-linked integrated expressions | `tests/test_trip_energy_proxy_and_location_aliases.py` and energy accounting suites | Route/direction/time-band proxy and sensitivity scale are tested; empirical calibration remains an input-study task |
-| Vehicle SOC transition | integrated SOC expressions and `soc_transition__*`; Stage 2 `s_var` | SOC/terminal/physical-validation suites | Solver and independent physical checker both evaluate SOC; a complete electric exhaustive oracle remains open |
-| Charger availability, setup/teardown, minimum session, and taper | physical charger binaries/power variables; `charging_power_model=piecewise_soc_taper_v1` | charge-taper and physical-charger test suites | Implemented and regression-tested; 15/30/60-minute formal comparison remains unexecuted at current HEAD |
+| Vehicle SOC transition | integrated SOC expressions and `soc_transition__*`; Stage 2 `s_var`; independent `SOC_FRAGMENT` guard | SOC/terminal/physical-validation suites; `tests/test_immediate_charge_baseline.py` | Solver and independent physical checker evaluate single-fragment SOC; ambiguous multi-fragment electric transitions fail closed; a complete electric exhaustive oracle remains open |
+| Charger availability, setup/teardown, minimum session, and taper | physical charger binaries/power variables; `charging_power_model=piecewise_soc_taper_v1`; M0/M2 `immediate_charge.py` | charge-taper and physical-charger test suites; `tests/test_immediate_charge_baseline.py` | Optimized and deterministic rule paths are separately identified; 15/30/60-minute formal comparison remains unexecuted at current HEAD |
 | Depot power balance | `grid_import`, `pv2bus`, `pv2bess`, `bess2bus`, curtailment, bus load | energy-flow and accounting reconciliation suites | Exact depot/slot flows are preserved; final reporting uses executed Rolling values |
 | BESS SOC and terminal target | integrated/Stage-2 BESS SOC expressions and resolved terminal target | BESS terminal and energy-flow tests | Initial inventory is not treated as free when terminal target equals initial SOC |
 | Lexicographic objective | strict service, used vehicle-days, canonical operating cost, then deadhead/session terms | small exact oracle; objective and accounting reconciliation tests | Four-trip primary/secondary choice matches enumeration; formal full-scale optimality still depends on certified gap |
@@ -46,7 +46,12 @@ bound for the positive-part proxy, not permission to relax physical SOC.
    terminal SOC, and electricity-price break-even.
 2. Attach exact generated Gurobi constraint names to every row where the
    integrated path currently relies on unnamed constraints.
-3. Add M0 and M2 physical charging-rule adapters and compare M0--M3 through
-   the same BFF accounting and validation path.
-4. Execute the predeclared 15/30/60-minute, route-band, energy-scale, PV-scale,
+3. Persist the selected direct-versus-depot fragment transition and its energy
+   in the solver result, then replay multi-fragment electric SOC continuously;
+   until then `SOC_FRAGMENT` remains a formal blocker.
+4. Execute M1 explicitly and compare fresh M0--M3 candidates from the same
+   prepared input and frozen SHA. M0/M2/M3 day-ahead artifacts now share the
+   BFF cost evaluator and physical checker, but this deliberately does not mix
+   their day-ahead values with accepted Rolling accounting.
+5. Execute the predeclared 15/30/60-minute, route-band, energy-scale, PV-scale,
    and CO2-cap matrices from a clean frozen commit.

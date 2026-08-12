@@ -249,6 +249,45 @@ def _complete_run(tmp_path: Path) -> Path:
             continue
         _write_artifact(run_dir / relative_path)
 
+    ablation_payload = {
+        "schema_version": "thesis_day_ahead_ablation_candidates_v1",
+        "status": "PARTIAL_CANDIDATE_SET",
+        "comparison_scope": "same_canonical_problem_day_ahead",
+        "primary_optimization_structure": "integrated",
+        "primary_optimization_structure_source": "engine_result.solver_metadata",
+        "cost_basis": "canonical_cost_evaluator_day_ahead",
+        "rolling_costs_mixed_into_comparison": False,
+        "additional_solver_invoked_by_postprocessor": False,
+        "complete_four_method_comparison_available": False,
+        "available_method_ids": ["M0", "M2", "M3"],
+        "day_ahead_comparable_method_ids": ["M0", "M2", "M3"],
+        "missing_method_ids": ["M1"],
+        "research_conclusion_eligible": False,
+        "research_claim_limit": "fixture",
+        "methods": [
+            {"method_id": "M0", "candidate_available": True},
+            {
+                "method_id": "M1",
+                "candidate_available": False,
+                "construction_status": "SEPARATE_PHASE1_RUN_REQUIRED",
+            },
+            {"method_id": "M2", "candidate_available": True},
+            {"method_id": "M3", "candidate_available": True},
+        ],
+    }
+    ablation_payload["payload_sha256"] = hashlib.sha256(
+        json.dumps(
+            ablation_payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        ).encode("utf-8")
+    ).hexdigest()
+    (
+        run_dir / "thesis_ablation" / "day_ahead_method_candidates.json"
+    ).write_text(json.dumps(ablation_payload), encoding="utf-8")
+
     assignment_economic_audit = {
         "schema_version": "assignment_economic_audit_v1",
         "bev_grid_marginal_cost_jpy_per_km": 41.5578947368421,
@@ -528,6 +567,40 @@ def test_complete_frontend_run_artifact_contract_passes(
     assert (
         audit["required_artifact_count"]
         == audit["verified_artifact_count"]
+    )
+
+
+def test_artifact_contract_rejects_missing_m2_ablation_candidate(
+    tmp_path: Path,
+) -> None:
+    run_dir = _complete_run(tmp_path)
+    path = run_dir / "thesis_ablation" / "day_ahead_method_candidates.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    for row in payload["methods"]:
+        if row["method_id"] == "M2":
+            row["candidate_available"] = False
+    payload.pop("payload_sha256", None)
+    payload["payload_sha256"] = hashlib.sha256(
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        ).encode("utf-8")
+    ).hexdigest()
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    audit = audit_frontend_run_artifacts(
+        run_dir,
+        research_run=True,
+        require_rolling=True,
+    )
+
+    assert audit["accepted"] is False
+    assert any(
+        "M2 candidate is unavailable" in error
+        for error in audit["content_errors"]
     )
 
 
