@@ -2,6 +2,31 @@
 
 ## 2026-08-12: thesis-model validity contract implementation
 
+- Ran the first clean-SHA frontend/BFF formal attempt for the revised model at
+  `6f645020f8473c42c15dce8d654bcc00d052615a`. The sunny case used fresh
+  Prepare and the saved 1,000 kW PV / 6,000 kWh BESS controls. Phase 4 served
+  264/264 trips with a 31-BEV / 1-ICE, 248/16-trip incumbent, but stopped at
+  the declared time limit without satisfying the requested gap. Hourly Rolling
+  subsequently failed closed at 06:00, so neither that case nor the aborted
+  low-PV case is formal pair evidence.
+- Root-caused the 06:00 Rolling failure to loss of charge-session state at the
+  receding-horizon boundary. The 05:00 solve planned a continuous two-slot
+  session and correctly allowed 82.5 kW in its second slot. When 06:00 became
+  the first slot of the next solve, the taper/session model incorrectly
+  treated it as a new session, deducted both five-minute setup and teardown,
+  reduced usable power to 75 kW, and made terminal SOC infeasible.
+- Added `active_charge_session_vehicle_ids` to the measured hourly execution
+  state and `rolling_active_charge_session_vehicle_ids` to the solver config.
+  The next remaining-day MILP now suppresses setup only for a verified
+  continuation; ended, inactive, or unknown vehicles cannot obtain that credit.
+  State provenance defines continuation as positive charging power in both the
+  last executed slot and the next planned boundary slot.
+- Added focused state, forwarding, and one-slot Gurobi tests. The exact failed
+  sunny prepared input, day-ahead assignment, and step-5 measured state were
+  also replayed diagnostically: step 6 changed from `INFEASIBLE` to Stage-2
+  `optimal`, restored 82.5 kW for `builder-bev-tsurumaki-002`, and returned no
+  infeasibility reasons. This replay is bug evidence only, not a formal rerun.
+
 - Added a deterministic trip-level demand model, `literature_proxy_v1`.
   BEV trip weights use distance and duration elasticities from Ji et al.
   (2022, DOI `10.1016/j.commtr.2022.100069`); ICE trip weights use the

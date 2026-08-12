@@ -1,5 +1,33 @@
 # Current research release blockers
 
+## 2026-08-12 revised-model formal attempt: Rolling boundary bug fixed, rerun pending
+
+Frozen clean SHA `6f645020f8473c42c15dce8d654bcc00d052615a` was exercised
+through the normal frontend/BFF path with fresh Prepare, 30 JPY/kWh energy,
+zero demand charge, 1,000 kW PV and a 6,000 kWh / 900 kW BESS. The sunny
+Phase-4 day-ahead solve served all 264 trips and produced a 31-BEV / 1-ICE,
+248/16-trip incumbent. It reached its declared time limit without the requested
+gap, so it was already ineligible for an optimality claim.
+
+Hourly Rolling then failed at 06:00. This was not a hidden SOC repair or a
+physical relaxation: the run stopped and retained its IIS. The failure was a
+software defect in the piecewise charging-session boundary. A session that was
+active in the last executed slot was forgotten when the next remaining-day
+horizon began. The first new slot therefore paid setup time again, reducing
+the affected slot from 82.5 kW to 75 kW and making the fixed assignment
+infeasible.
+
+The implementation now passes the active charge-session vehicle IDs with the
+measured SOC/BESS/demand state and suppresses setup only when both the last
+executed slot and next planned slot have positive charging for that vehicle.
+Focused tests pass, and a diagnostic replay of the exact failed
+prepared input, assignment and 05:00 state makes the 06:00 Stage-2 solve
+optimal and feasible with the expected 82.5 kW charge. The original run remains
+`BLOCKED` and diagnostic; the low-PV solve was intentionally stopped after the
+common Rolling defect was confirmed. A fresh clean-commit sunny/rain run with
+24/24 accepted Rolling, physical validation, accounting, pair hashes and the
+declared gap gate is still required.
+
 ## 2026-08-12 model revision: fresh formal evidence required
 
 The current worktree changes the canonical feasible region, objective

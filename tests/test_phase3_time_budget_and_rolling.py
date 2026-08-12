@@ -11,6 +11,7 @@ from src.dispatch.models import DutyLeg, Trip, VehicleDuty
 from src.optimization.common.problem import (
     AssignmentPlan,
     CanonicalOptimizationProblem,
+    ChargingSlot,
     DepotEnergyAsset,
     EnergyPriceSlot,
     OptimizationConfig,
@@ -20,6 +21,7 @@ from src.optimization.common.problem import (
     ProblemVehicle,
 )
 from src.optimization.milp.solver_adapter import (
+    GurobiMILPAdapter,
     ROLLING_REMAINING_DAY_FIXED_ASSIGNMENT,
     _pv_generation_kwh_at_slot,
     _remaining_posted_transition_fraction,
@@ -274,12 +276,41 @@ def _hourly_result_problem() -> CanonicalOptimizationProblem:
     )
 
 
-def _hourly_result(*, include_next_vehicle_soc: bool = True) -> OptimizationEngineResult:
+def _hourly_result(
+    *,
+    include_next_vehicle_soc: bool = True,
+    active_charge_session: bool = True,
+) -> OptimizationEngineResult:
     vehicle_soc = {0: 100.0}
     if include_next_vehicle_soc:
         vehicle_soc[1] = 90.0
     plan = AssignmentPlan(
         duties=(VehicleDuty(duty_id="duty-1", vehicle_type="BEV", legs=()),),
+        charging_slots=(
+            (
+                ChargingSlot(
+                    vehicle_id="ev-1",
+                    slot_index=0,
+                    charger_id="charger-1",
+                    charge_kw=10.0,
+                ),
+                ChargingSlot(
+                    vehicle_id="ev-1",
+                    slot_index=1,
+                    charger_id="charger-1",
+                    charge_kw=10.0,
+                ),
+            )
+            if active_charge_session
+            else (
+                ChargingSlot(
+                    vehicle_id="ev-1",
+                    slot_index=0,
+                    charger_id="charger-1",
+                    charge_kw=10.0,
+                ),
+            )
+        ),
         grid_to_bus_kwh_by_depot_slot={"dep-1": {0: 10.0}},
         grid_to_bess_kwh_by_depot_slot={"dep-1": {0: 5.0}},
         bess_soc_kwh_by_depot_slot={"dep-1": {0: 48.0}},
@@ -313,7 +344,80 @@ def test_hourly_state_handoff_uses_boundary_soc_and_executed_grid_peak() -> None
     assert state.actual_bess_soc_kwh == {"dep-1": 48.0}
     assert state.observed_on_peak_kw_by_depot == {"dep-1": 15.0}
     assert state.observed_off_peak_kw_by_depot == {"dep-1": 3.0}
+    assert state.active_charge_session_vehicle_ids == ("ev-1",)
     assert state.to_dict()["state_semantics"]["vehicle_soc"] == "start_of_next_slot"
+    assert state.to_dict()["active_charge_session_vehicle_ids"] == ["ev-1"]
+
+
+def test_hourly_state_handoff_does_not_invent_inactive_charge_session() -> None:
+    state = build_next_execution_state(
+        _hourly_result_problem(),
+        _hourly_result(active_charge_session=False),
+        current_min=5 * 60,
+        execution_minutes=60,
+    )
+
+    assert state.active_charge_session_vehicle_ids == ()
+
+
+@pytest.mark.parametrize(
+    ("initial_session_active", "expected_charge_kw"),
+    ((False, 75.0), (True, 82.5)),
+)
+def test_piecewise_charge_setup_is_not_reapplied_to_rolling_continuation(
+    initial_session_active: bool,
+    expected_charge_kw: float,
+) -> None:
+    gp = pytest.importorskip("gurobipy")
+    try:
+        model = gp.Model("rolling_charge_session_boundary")
+    except gp.GurobiError as exc:  # pragma: no cover - license-dependent CI
+        pytest.skip(f"Gurobi model creation unavailable: {exc}")
+    model.Params.OutputFlag = 0
+    charge_on = model.addVar(vtype=gp.GRB.BINARY, name="charge_on")
+    charge_power = model.addVar(lb=0.0, ub=90.0, name="charge_power")
+    soc = model.addVar(lb=0.0, ub=300.0, name="soc")
+    model.addConstr(charge_on == 1)
+    model.addConstr(soc == 150.0)
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="rolling-session-boundary",
+            horizon_start="00:00",
+            timestep_min=60,
+        ),
+        dispatch_context=None,
+        trips=(),
+        vehicles=(),
+        metadata={
+            "charging_power_model": "piecewise_soc_taper_v1",
+            "charge_setup_minutes": 5,
+            "charge_teardown_minutes": 5,
+            "minimum_charge_session_minutes": 15,
+        },
+    )
+
+    GurobiMILPAdapter()._add_piecewise_charge_power_constraints(
+        model=model,
+        gp=gp,
+        GRB=gp.GRB,
+        problem=problem,
+        vehicle_id="ev-1",
+        slot_indices=(6,),
+        soc_var={("ev-1", 6): soc},
+        charge_power_var={("ev-1", 6): charge_power},
+        charge_on_var={("ev-1", 6): charge_on},
+        capacity_kwh=300.0,
+        charge_max_kw=90.0,
+        timestep_h=1.0,
+        session_start_var=None,
+        name_prefix="rolling_boundary",
+        initial_session_active=initial_session_active,
+    )
+    model.setObjective(charge_power, gp.GRB.MAXIMIZE)
+    model.optimize()
+
+    assert model.Status == gp.GRB.OPTIMAL
+    assert charge_power.X == pytest.approx(expected_charge_kw, abs=1.0e-6)
 
 
 def test_hourly_state_handoff_rejects_missing_next_vehicle_soc() -> None:

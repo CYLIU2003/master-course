@@ -260,6 +260,7 @@ class RollingReoptimizer:
         actual_bess_soc_kwh: Optional[Mapping[str, float]] = None,
         observed_on_peak_kw_by_depot: Optional[Mapping[str, float]] = None,
         observed_off_peak_kw_by_depot: Optional[Mapping[str, float]] = None,
+        active_charge_session_vehicle_ids: tuple[str, ...] = (),
         execution_minutes: int = 60,
         bess_terminal_policy: str = "scenario",
     ):
@@ -350,6 +351,26 @@ class RollingReoptimizer:
                     f"Measured SOC for {vehicle_id!r} is outside [0, {capacity}] kWh"
                 )
         known_depot_ids = set(map(str, problem.depot_energy_assets))
+        normalized_active_charge_session_vehicle_ids = tuple(
+            sorted(
+                {
+                    str(vehicle_id)
+                    for vehicle_id in active_charge_session_vehicle_ids
+                    if str(vehicle_id).strip()
+                }
+            )
+        )
+        unknown_active_charge_session_vehicle_ids = sorted(
+            set(normalized_active_charge_session_vehicle_ids).difference(
+                electric_vehicle_ids
+            )
+        )
+        if unknown_active_charge_session_vehicle_ids:
+            raise ValueError(
+                "Active charge-session state references a vehicle outside "
+                "the fixed electric assignment: "
+                f"{unknown_active_charge_session_vehicle_ids}"
+            )
         for label, observed_peaks in (
             ("on-peak", observed_on_peak_kw_by_depot or {}),
             ("off-peak", observed_off_peak_kw_by_depot or {}),
@@ -397,6 +418,9 @@ class RollingReoptimizer:
             ),
             rolling_observed_off_peak_kw_by_depot=dict(
                 observed_off_peak_kw_by_depot or {}
+            ),
+            rolling_active_charge_session_vehicle_ids=(
+                normalized_active_charge_session_vehicle_ids
             ),
         )
         return self._engine.solve(problem, rolling_config)

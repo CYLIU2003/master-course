@@ -36,9 +36,11 @@ from src.optimization.rolling.reoptimizer import (
 class _CaptureEngine:
     def __init__(self) -> None:
         self.last_problem = None
+        self.last_config = None
 
     def solve(self, problem, config):
         self.last_problem = problem
+        self.last_config = config
         return {"ok": True, "config": config.mode.value}
 
 
@@ -456,6 +458,7 @@ def test_hourly_charging_reoptimization_carries_measured_bess_state_and_fixed_as
         actual_bess_soc_kwh={"dep-1": 275.0},
         observed_on_peak_kw_by_depot={"dep-1": 90.0},
         observed_off_peak_kw_by_depot={"dep-1": 70.0},
+        active_charge_session_vehicle_ids=("veh-1",),
         bess_terminal_policy="scenario",
     )
 
@@ -472,6 +475,27 @@ def test_hourly_charging_reoptimization_carries_measured_bess_state_and_fixed_as
         "dep-1": 300.0
     }
     assert result["config"] == "milp"
+    assert capture.last_config is not None
+    assert capture.last_config.rolling_active_charge_session_vehicle_ids == (
+        "veh-1",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="outside the fixed electric assignment",
+    ):
+        optimizer.reoptimize_charging_hour(
+            problem,
+            day_ahead_plan,
+            OptimizationConfig(time_limit_sec=30),
+            current_min=0,
+            actual_soc={"veh-1": 240.0},
+            actual_bess_soc_kwh={"dep-1": 275.0},
+            observed_on_peak_kw_by_depot={"dep-1": 90.0},
+            observed_off_peak_kw_by_depot={"dep-1": 70.0},
+            active_charge_session_vehicle_ids=("unknown-vehicle",),
+            bess_terminal_policy="scenario",
+        )
 
     optimizer.reoptimize_charging_hour(
         problem,

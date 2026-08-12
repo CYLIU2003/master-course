@@ -13203,6 +13203,17 @@ class GurobiMILPAdapter:
                 )
             )
 
+        rolling_active_charge_session_vehicle_ids = frozenset(
+            str(vehicle_id)
+            for vehicle_id in (
+                getattr(
+                    config,
+                    "rolling_active_charge_session_vehicle_ids",
+                    (),
+                )
+                or ()
+            )
+        )
         for vehicle_id in assigned_bev_ids:
             vehicle = vehicle_by_id[vehicle_id]
             cap = max(float(vehicle.battery_capacity_kwh or 300.0), 1.0)
@@ -13257,6 +13268,10 @@ class GurobiMILPAdapter:
                 charge_max_kw=charge_max_kw,
                 timestep_h=timestep_h,
                 session_start_var=None,
+                initial_session_active=(
+                    is_remaining_day_reoptimization
+                    and vehicle_id in rolling_active_charge_session_vehicle_ids
+                ),
                 name_prefix="stage2_charge",
             )
             stage2.addConstr(
@@ -20419,6 +20434,7 @@ class GurobiMILPAdapter:
         timestep_h: float,
         session_start_var: Optional[Mapping[Tuple[str, int], Any]] = None,
         name_prefix: str,
+        initial_session_active: bool = False,
     ) -> None:
         """Add the documented SOC taper and charge-session time contract."""
 
@@ -20472,7 +20488,16 @@ class GurobiMILPAdapter:
             end_vars[key] = end
 
             if pos == 0:
-                model.addConstr(start == on_var)
+                # A receding-horizon boundary may cut through a physical
+                # charging session.  When the last executed slot was charging,
+                # the first remaining slot continues that session and must not
+                # pay setup time again.  Without this state, each hourly solve
+                # shortens a continuous session at the boundary and can turn a
+                # previously feasible remaining-day plan infeasible.
+                if initial_session_active:
+                    model.addConstr(start == 0)
+                else:
+                    model.addConstr(start == on_var)
             else:
                 previous_on = charge_on_var[(vehicle_id, slot_indices[pos - 1])]
                 model.addConstr(start >= on_var - previous_on)

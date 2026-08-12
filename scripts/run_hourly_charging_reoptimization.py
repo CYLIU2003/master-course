@@ -1389,6 +1389,12 @@ def run_rolling_chain(
                 observed_off_peak_kw_by_depot=dict(
                     state.get("observed_off_peak_kw_by_depot") or {}
                 ),
+                active_charge_session_vehicle_ids=tuple(
+                    str(vehicle_id)
+                    for vehicle_id in list(
+                        state.get("active_charge_session_vehicle_ids") or ()
+                    )
+                ),
                 execution_minutes=int(request.execution_minutes),
                 bess_terminal_policy=request.bess_terminal_policy,
             )

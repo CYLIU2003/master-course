@@ -32,6 +32,7 @@ class HourlyExecutionState:
     actual_bess_soc_kwh: Mapping[str, float]
     observed_on_peak_kw_by_depot: Mapping[str, float]
     observed_off_peak_kw_by_depot: Mapping[str, float]
+    active_charge_session_vehicle_ids: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -44,10 +45,16 @@ class HourlyExecutionState:
             "observed_off_peak_kw_by_depot": dict(
                 self.observed_off_peak_kw_by_depot
             ),
+            "active_charge_session_vehicle_ids": list(
+                self.active_charge_session_vehicle_ids
+            ),
             "state_semantics": {
                 "vehicle_soc": "start_of_next_slot",
                 "bess_soc": "end_of_last_executed_slot",
                 "demand_peak": "maximum_grid_import_kw_over_executed_slots",
+                "active_charge_session_vehicle_ids": (
+                    "positive_charge_power_in_last_executed_and_next_planned_slots"
+                ),
             },
         }
 
@@ -167,6 +174,24 @@ def build_next_execution_state(
         )
         for depot_id in depot_ids
     }
+    positive_charge_vehicle_ids_by_slot: dict[int, set[str]] = {}
+    for charging_slot in tuple(plan.charging_slots or ()):
+        if float(charging_slot.charge_kw or 0.0) <= 1.0e-9:
+            continue
+        positive_charge_vehicle_ids_by_slot.setdefault(
+            int(charging_slot.slot_index), set()
+        ).add(str(charging_slot.vehicle_id))
+    active_charge_session_vehicle_ids = tuple(
+        sorted(
+            positive_charge_vehicle_ids_by_slot.get(
+                last_executed_slot, set()
+            ).intersection(
+                positive_charge_vehicle_ids_by_slot.get(
+                    next_boundary_slot, set()
+                )
+            )
+        )
+    )
     grid_to_bus = dict(plan.grid_to_bus_kwh_by_depot_slot or {})
     grid_to_bess = dict(plan.grid_to_bess_kwh_by_depot_slot or {})
     for depot_id in depot_ids:
@@ -197,6 +222,9 @@ def build_next_execution_state(
         actual_bess_soc_kwh=bess_soc,
         observed_on_peak_kw_by_depot=on_peak,
         observed_off_peak_kw_by_depot=off_peak,
+        active_charge_session_vehicle_ids=(
+            active_charge_session_vehicle_ids
+        ),
     )
 
 
@@ -241,6 +269,7 @@ class DayAheadHourlyOptimizer:
         actual_bess_soc_kwh: Optional[Mapping[str, float]] = None,
         observed_on_peak_kw_by_depot: Optional[Mapping[str, float]] = None,
         observed_off_peak_kw_by_depot: Optional[Mapping[str, float]] = None,
+        active_charge_session_vehicle_ids: tuple[str, ...] = (),
         execution_minutes: int = 60,
         bess_terminal_policy: str = "scenario",
     ):
@@ -253,6 +282,9 @@ class DayAheadHourlyOptimizer:
             actual_bess_soc_kwh=actual_bess_soc_kwh,
             observed_on_peak_kw_by_depot=observed_on_peak_kw_by_depot,
             observed_off_peak_kw_by_depot=observed_off_peak_kw_by_depot,
+            active_charge_session_vehicle_ids=(
+                active_charge_session_vehicle_ids
+            ),
             execution_minutes=execution_minutes,
             bess_terminal_policy=bess_terminal_policy,
         )

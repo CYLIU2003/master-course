@@ -468,6 +468,10 @@ class OptimizationConfig:
     rolling_execution_minutes: Optional[int] = None
     rolling_observed_on_peak_kw_by_depot: Mapping[str, float] = field(default_factory=dict)
     rolling_observed_off_peak_kw_by_depot: Mapping[str, float] = field(default_factory=dict)
+    # Vehicles with positive charge power in both the last executed slot and
+    # the first remaining planned slot.  The first slot of the next rolling
+    # horizon continues those sessions, so setup time must not be charged twice.
+    rolling_active_charge_session_vehicle_ids: Tuple[str, ...] = ()
     target_gap_to_baseline: Optional[float] = None
     warm_start: bool = True
     acceptance: str = "simulated_annealing"

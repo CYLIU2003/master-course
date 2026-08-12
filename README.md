@@ -1,5 +1,25 @@
 # master-course
 
+## 2026-08-12 Rolling charge-session boundary correction
+
+- A clean-SHA formal attempt at `6f645020f8473c42c15dce8d654bcc00d052615a`
+  used fresh Prepare, 1,000 kW PV, a 6,000 kWh / 900 kW BESS,
+  30 JPY/kWh energy and zero demand charge. The sunny Phase-4 day-ahead
+  incumbent served 264/264 trips with 31 BEVs and 1 ICE bus, but the run is
+  diagnostic only: the solver stopped at its declared time limit without the
+  requested gap and Hourly Rolling failed at 06:00.
+- The Rolling failure was traced to a receding-horizon boundary bug. A charge
+  session spanning 05:00--07:00 paid setup time once in the 05:00 solve, then
+  the 06:00 solve forgot that the session was already active and charged setup
+  time again. This reduced the affected one-hour charging limit from 82.5 kW
+  to 75 kW and made the fixed assignment infeasible.
+- Hourly state now carries only vehicle IDs with positive charging in both the
+  last executed and next planned slot. The next solve treats its first slot as
+  a continuation for those vehicles, while ended or inactive sessions still
+  pay normal setup time.
+  Focused tests and a replay of the exact failed 06:00 state pass; a fresh
+  clean-commit 24/24 Rolling pair is still required before any research claim.
+
 ## 2026-08-10 all-BEV fuel-artifact correction
 
 - Clean SHA `6853edae956c71c3c28ec285660a0f0b7c788e69` completed both
