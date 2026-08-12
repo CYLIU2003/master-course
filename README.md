@@ -831,6 +831,32 @@ Generate the controlled sensitivity contract without running a solver:
 .\.venv\Scripts\python.exe scripts\build_thesis_experiment_matrix.py
 ```
 
+Execute selected rows through the same HTTP Prepare/job-polling path as the
+frontend by supplying complete frontend request templates. The runner removes
+any old prepared ID and obtains a fresh one for every case:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_thesis_sensitivity_matrix.py `
+  --scenario-id <scenario-id> `
+  --base-prepare-request <frontend_prepare_request.json> `
+  --base-optimization-request <frontend_optimization_request.json> `
+  --output-dir output/thesis_sensitivity_<frozen-sha> `
+  --case-id TIME_60 --case-id TIME_30 --case-id TIME_15
+```
+
+Omit `--case-id` only when intentionally running the complete predeclared
+matrix. `COMPLETED_SUBSET` is never promoted to a complete research matrix.
+Each result is checked for clean frozen Git provenance, the declared effective
+parameter, unpruned Phase 4 execution, requested MIP gap, physical validity,
+accepted Rolling accounting, final artifact hashes, and unchanged non-varied
+fleet/timetable/tariff controls.
+
+`pv_scale` is a supply sensitivity: it multiplies the available PV energy
+series after the saved rated output and capacity-factor curve are applied. It
+does not rewrite `pv_capacity_kw`. Route-band OFF also sets
+`allow_intra_depot_route_swap=true`; without that operational permission the
+canonical scope lock correctly forces route-band ON.
+
 The clean frozen commit `06ae09218be99ca47b951dcf6ddad886056b0ad6`
 was run through the ordinary HTTP Prepare/optimization path with a common
 2025-08-05 weekday service, 30 JPY/kWh energy charge, 0 JPY/kW demand charge,

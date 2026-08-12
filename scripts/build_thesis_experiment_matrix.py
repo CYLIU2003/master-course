@@ -32,14 +32,39 @@ def build_experiment_matrix() -> dict[str, Any]:
     }
     cases: list[dict[str, Any]] = []
 
-    def add(case_id: str, family: str, changes: dict[str, Any]) -> None:
+    def add(
+        case_id: str,
+        family: str,
+        changes: dict[str, Any],
+        *,
+        request_overrides: dict[str, Any] | None = None,
+    ) -> None:
+        prepare_settings = {**common, **changes}
+        timestep_min = int(prepare_settings.get("timestep_min") or 60)
+        optimization_overrides: dict[str, Any] = {
+            "mode": "phase4_integrated",
+            "research_run": True,
+            "integrated_actual_cost_objective": True,
+            "stage1_best_obj_stop_enabled": False,
+            "run_profile": "day_ahead_and_hourly_rolling",
+            "run_hourly_rolling": True,
+            "time_step_min": timestep_min,
+            "timestep_min": timestep_min,
+            "rolling_execution_minutes": timestep_min,
+        }
+        if "co2_emissions_cap_kg" in prepare_settings:
+            optimization_overrides["co2_emissions_cap_kg"] = (
+                prepare_settings["co2_emissions_cap_kg"]
+            )
         cases.append(
             {
                 "case_id": case_id,
                 "family": family,
-                "prepare_settings": {**common, **changes},
+                "prepare_settings": prepare_settings,
+                "prepare_request_overrides": dict(request_overrides or {}),
+                "optimization_request_overrides": optimization_overrides,
                 "execution_path": (
-                    "POST /api/scenarios/{scenario_id}/prepare-simulation then "
+                    "POST /api/scenarios/{scenario_id}/simulation/prepare then "
                     "POST /api/scenarios/{scenario_id}/run-optimization"
                 ),
                 "research_run_required": True,
@@ -69,12 +94,25 @@ def build_experiment_matrix() -> dict[str, Any]:
             f"ROUTE_BAND_{'ON' if route_band else 'OFF'}",
             "route_band_ablation",
             {"fixed_route_band_mode": route_band},
+            request_overrides={
+                # The canonical builder forces route-band ON while intra-depot
+                # route swapping is prohibited. OFF must lift that scope lock.
+                "allow_intra_depot_route_swap": not route_band,
+            },
         )
     for usage_cost in (0.0, 20_000.0):
         add(
             f"VEHICLE_DAY_{int(usage_cost)}",
             "vehicle_day_cost_sensitivity",
-            {"vehicle_usage_cost_jpy_per_used_bus": usage_cost},
+            {
+                # This family deliberately tests the scalar total-cost model.
+                # Under research_lexicographic_v1 the number of vehicle-days
+                # is a higher-priority objective, so changing its yen
+                # coefficient cannot reveal the coefficient's dispatch effect.
+                "objective_preset": "scalar_total_cost_v1",
+                "vehicle_usage_cost_jpy_per_used_bus": usage_cost,
+                "vehicle_usage_cost_semantics": "fixed_vehicle_day_cost",
+            },
         )
     for cap in (None, 750.0, 500.0, 250.0, 100.0):
         add(
@@ -87,6 +125,24 @@ def build_experiment_matrix() -> dict[str, Any]:
         "schema_version": "thesis_experiment_matrix_v2",
         "execution_semantics": "frontend_bff_only_no_direct_solver",
         "common_control_contract": common,
+        "parameter_semantics": {
+            "pv_scale": (
+                "Multiplicative alpha applied to the available PV energy "
+                "series after rated-capacity generation is constructed; it "
+                "does not change pv_capacity_kw."
+            ),
+            "route_band_off": (
+                "fixed_route_band_mode=false together with "
+                "allow_intra_depot_route_swap=true; otherwise the canonical "
+                "scope lock forces route-band ON."
+            ),
+            "vehicle_day_cost_sensitivity": (
+                "Uses scalar_total_cost_v1 for both 0 and 20000 JPY cases. "
+                "The main research_lexicographic_v1 objective minimizes "
+                "vehicle-days at a higher priority and would make the yen "
+                "coefficient irrelevant to dispatch."
+            ),
+        },
         "cases": cases,
         "ablation_contract": [
             {

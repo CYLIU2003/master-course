@@ -176,9 +176,17 @@ def test_frontend_run_input_bundle_is_self_verifying(tmp_path: Path) -> None:
     assert parameters["effective_problem_scenario"]["timestep_min"] == 15
     assert parameters["runtime_environment"]["python_version"]
     assert parameters["canonical_input_dimensions"]["trip_input_sha256"]
+    assert parameters["canonical_input_dimensions"][
+        "trip_structure_input_sha256"
+    ]
     assert parameters["canonical_input_dimensions"]["vehicle_input_sha256"]
     assert parameters["canonical_input_dimensions"]["charger_input_sha256"]
     assert parameters["canonical_input_dimensions"]["price_input_sha256"]
+    assert parameters["canonical_input_dimensions"]["price_value_set_sha256"]
+    assert parameters["canonical_input_dimensions"][
+        "energy_asset_control_input_sha256"
+    ]
+    assert parameters["canonical_input_dimensions"]["objective_weights_sha256"]
     assert parameters["canonical_input_dimensions"]["pv_profile_sha256"]
     assert parameters["canonical_input_dimensions"][
         "canonical_ablation_input_sha256"

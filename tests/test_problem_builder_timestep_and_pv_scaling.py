@@ -74,6 +74,23 @@ def test_problem_builder_uses_configured_timestep_30() -> None:
     assert problem.depot_energy_assets["dep-1"].pv_generation_kwh_by_slot == (17.5, 35.0)
 
 
+def test_problem_builder_applies_pv_supply_scale_without_changing_rating() -> None:
+    scenario = _scenario(60)
+    scenario["simulation_config"]["pv_scale"] = 0.25
+
+    problem = ProblemBuilder().build_from_scenario(
+        scenario,
+        depot_id="dep-1",
+        service_id="WEEKDAY",
+    )
+    asset = problem.depot_energy_assets["dep-1"]
+
+    assert asset.pv_capacity_kw == 70.0
+    assert asset.pv_supply_scale == 0.25
+    assert asset.pv_generation_kwh_by_slot == (8.75, 17.5)
+    assert problem.metadata["pv_supply_scale_by_depot"] == {"dep-1": 0.25}
+
+
 def test_problem_builder_normalizes_ev_alias_to_canonical_powertrain() -> None:
     scenario = _scenario(15)
     scenario["vehicles"][0]["type"] = "EV"

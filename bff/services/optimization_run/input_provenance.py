@@ -473,22 +473,72 @@ def _optimization_parameters(
     price_slots = tuple(getattr(canonical_problem, "price_slots", ()) or ())
     pv_slots = tuple(getattr(canonical_problem, "pv_slots", ()) or ())
     trip_input = [_json_safe(item) for item in trips]
+    trip_structure_input = [
+        {
+            key: value
+            for key, value in dict(item).items()
+            if key
+            not in {
+                "energy_kwh",
+                "fuel_l",
+                "energy_kwh_by_vehicle_type",
+                "fuel_l_by_vehicle_type",
+                "energy_model_id",
+                "energy_model_provenance",
+            }
+        }
+        if isinstance(item, Mapping)
+        else item
+        for item in trip_input
+    ]
     vehicle_input = [_json_safe(item) for item in vehicles]
     charger_input = [_json_safe(item) for item in chargers]
     depot_input = [_json_safe(item) for item in depots]
     vehicle_type_input = [_json_safe(item) for item in vehicle_types]
     price_input = [_json_safe(item) for item in price_slots]
+    price_value_set_input = sorted(
+        {
+            (
+                float(getattr(item, "grid_buy_yen_per_kwh", 0.0) or 0.0),
+                float(getattr(item, "grid_sell_yen_per_kwh", 0.0) or 0.0),
+                float(getattr(item, "demand_charge_weight", 0.0) or 0.0),
+                float(getattr(item, "co2_factor", 0.0) or 0.0),
+            )
+            for item in price_slots
+        }
+    )
+    objective_weights_input = _json_safe(
+        getattr(canonical_problem, "objective_weights", None)
+    )
     pv_input = {
         "pv_slots": [_json_safe(item) for item in pv_slots],
         "depot_energy_assets": _json_safe(
             getattr(canonical_problem, "depot_energy_assets", {}) or {}
         ),
     }
+    energy_asset_control_input = _json_safe(
+        getattr(canonical_problem, "depot_energy_assets", {}) or {}
+    )
+    if isinstance(energy_asset_control_input, Mapping):
+        energy_asset_control_input = {
+            str(depot_id): {
+                key: value
+                for key, value in dict(asset).items()
+                if key
+                not in {
+                    "pv_generation_kwh_by_slot",
+                    "available_pv_surplus_kwh_by_slot",
+                    "capacity_factor_by_slot",
+                    "pv_supply_scale",
+                }
+            }
+            if isinstance(asset, Mapping)
+            else asset
+            for depot_id, asset in energy_asset_control_input.items()
+        }
     canonical_ablation_input = {
         "scenario": _json_safe(problem_scenario),
-        "objective_weights": _json_safe(
-            getattr(canonical_problem, "objective_weights", None)
-        ),
+        "objective_weights": objective_weights_input,
         "trips": trip_input,
         "vehicles": vehicle_input,
         "vehicle_types": vehicle_type_input,
@@ -551,6 +601,9 @@ def _optimization_parameters(
             "trip_input_sha256": hashlib.sha256(
                 _canonical_json_bytes(trip_input)
             ).hexdigest(),
+            "trip_structure_input_sha256": hashlib.sha256(
+                _canonical_json_bytes(trip_structure_input)
+            ).hexdigest(),
             "vehicle_input_sha256": hashlib.sha256(
                 _canonical_json_bytes(vehicle_input)
             ).hexdigest(),
@@ -565,6 +618,15 @@ def _optimization_parameters(
             ).hexdigest(),
             "price_input_sha256": hashlib.sha256(
                 _canonical_json_bytes(price_input)
+            ).hexdigest(),
+            "price_value_set_sha256": hashlib.sha256(
+                _canonical_json_bytes(price_value_set_input)
+            ).hexdigest(),
+            "energy_asset_control_input_sha256": hashlib.sha256(
+                _canonical_json_bytes(energy_asset_control_input)
+            ).hexdigest(),
+            "objective_weights_sha256": hashlib.sha256(
+                _canonical_json_bytes(objective_weights_input)
             ).hexdigest(),
             "pv_profile_sha256": hashlib.sha256(
                 _canonical_json_bytes(pv_input)

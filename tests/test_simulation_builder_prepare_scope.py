@@ -76,6 +76,7 @@ def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -
             weather_proxy_station_name="東京",
             pv_marginal_charge_cost_yen_per_kwh=4.25,
             pv_curtail_penalty_yen_per_kwh=7.5,
+            pv_scale=0.25,
             depot_energy_assets=[
                 {
                     "depot_id": "dep1",
@@ -142,6 +143,8 @@ def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -
     assert updated["scenario_overlay"]["cost_coefficients"]["pv_marginal_charge_cost_yen_per_kwh"] == 4.25
     assert updated["simulation_config"]["pv_curtail_penalty_yen_per_kwh"] == 7.5
     assert updated["scenario_overlay"]["cost_coefficients"]["pv_curtail_penalty_yen_per_kwh"] == 7.5
+    assert updated["simulation_config"]["pv_scale"] == 0.25
+    assert updated["scenario_overlay"]["cost_coefficients"]["pv_scale"] == 0.25
     assert updated["scenario_overlay"]["depot_energy_assets"] == {
         "dep1": {
             "depot_id": "dep1",

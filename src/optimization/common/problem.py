@@ -218,6 +218,7 @@ class DepotEnergyAsset:
     pv_om_jpy_per_kw_year: float = 0.0
     pv_life_years: int = 25
     pv_capacity_kw: float = 0.0
+    pv_supply_scale: float = 1.0
     depot_area_m2: Optional[float] = None
     pv_installable_area_m2: float = 0.0
     usable_area_ratio: float = 0.35
@@ -750,6 +751,11 @@ class CanonicalOptimizationProblem:
             if not math.isfinite(pv_capacity_kw) or pv_capacity_kw < 0.0:
                 raise ValueError(
                     f"Depot {depot_id} PV capacity must be finite and non-negative"
+                )
+            pv_supply_scale = float(asset.pv_supply_scale)
+            if not math.isfinite(pv_supply_scale) or pv_supply_scale < 0.0:
+                raise ValueError(
+                    f"Depot {depot_id} PV supply scale must be finite and non-negative"
                 )
             if any(
                 not math.isfinite(float(value)) or float(value) < 0.0

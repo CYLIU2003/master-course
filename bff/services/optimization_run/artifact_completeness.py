@@ -1015,6 +1015,8 @@ def _validate_assignment_economic_audit(
         "vehicle_usage_cost_semantics",
         "vehicle_usage_cost_semantics_classified",
         "vehicle_usage_cost_semantics_research_eligible",
+        "pv_supply_scale_by_depot",
+        "co2_emissions_cap_kg",
     }
     if json_path.is_file():
         try:

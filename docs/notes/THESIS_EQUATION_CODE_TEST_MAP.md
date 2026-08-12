@@ -18,6 +18,7 @@ validated.
 | BEV trip energy | `trip_energy_kwh`, `fuel_l_by_vehicle_type`, `trip_energy_proxy.py`; assignment-linked integrated expressions | `tests/test_trip_energy_proxy_and_location_aliases.py` and energy accounting suites | Route/direction/time-band proxy and sensitivity scale are tested; empirical calibration remains an input-study task |
 | Vehicle SOC transition | integrated SOC expressions and `soc_transition__*`; Stage 2 `s_var`; independent `SOC_FRAGMENT` guard | SOC/terminal/physical-validation suites; `tests/test_immediate_charge_baseline.py`; `tests/test_small_exact_electric_oracle.py` | Independent assignment enumeration plus SciPy/HiGHS charging verifies departure readiness and return-to-initial SOC for the bounded grid-only scope; ambiguous multi-fragment electric transitions still fail closed |
 | Charger availability, setup/teardown, minimum session, and taper | physical charger binaries/power variables; `charging_power_model=piecewise_soc_taper_v1`; M0/M2 `immediate_charge.py` | charge-taper and physical-charger test suites; `tests/test_immediate_charge_baseline.py`; `tests/test_small_exact_electric_oracle.py` | Independent one-port/two-port shortage fixtures cover constant-power concurrency; taper and setup/teardown remain covered by focused production-path tests; 15/30/60-minute formal comparison remains unexecuted at current HEAD |
+| PV available-surplus balance and supply multiplier | `DepotEnergyAsset.available_pv_surplus_kwh_by_slot`, `pv_supply_scale`; integrated/Stage-2 PV balance | PV/BESS and cost-audit suites; `tests/test_problem_builder_timestep_and_pv_scaling.py`; `tests/test_thesis_sensitivity_matrix.py` | Gross-PV input is rejected without a depot-load series; alpha scales kWh without rewriting rated kW |
 | Depot power balance | `grid_import`, `pv2bus`, `pv2bess`, `bess2bus`, curtailment, bus load | energy-flow and accounting reconciliation suites | Exact depot/slot flows are preserved; final reporting uses executed Rolling values |
 | BESS SOC and terminal target | integrated/Stage-2 BESS SOC expressions and resolved terminal target | BESS terminal and energy-flow tests | Initial inventory is not treated as free when terminal target equals initial SOC |
 | Lexicographic objective | strict service, used vehicle-days, canonical operating cost, then deadhead/session terms | both small exact oracles; objective and accounting reconciliation tests | All-ICE path selection and grid-only BEV/ICE tariff crossing match independent enumeration; formal full-scale optimality still depends on certified gap |
@@ -56,4 +57,6 @@ bound for the positive-part proxy, not permission to relax physical SOC.
    current-HEAD full-scale
    evidence is still pending.
 4. Execute the predeclared 15/30/60-minute, route-band, energy-scale, PV-scale,
-   and CO2-cap matrices from a clean frozen commit.
+   and CO2-cap matrices from a clean frozen commit using
+   `run_thesis_sensitivity_matrix.py`. The runner and fail-closed aggregation
+   are implemented; current-HEAD execution evidence is still pending.

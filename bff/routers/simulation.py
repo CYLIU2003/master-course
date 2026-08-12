@@ -154,6 +154,7 @@ class PrepareSimulationSettingsBody(BaseModel):
     co2_emissions_cap_kg: Optional[float] = Field(default=None, ge=0.0)
     pv_marginal_charge_cost_yen_per_kwh: Optional[float] = Field(default=None, ge=0.0)
     pv_curtail_penalty_yen_per_kwh: Optional[float] = Field(default=None, ge=0.0)
+    pv_scale: float = Field(default=1.0, ge=0.0)
     depot_power_limit_kw: Optional[float] = Field(default=None, ge=0.0)
     tou_pricing: list[PrepareTimeOfUseBandBody] = Field(default_factory=list)
     service_date: Optional[str] = None

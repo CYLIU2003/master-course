@@ -1517,6 +1517,10 @@ class ProblemBuilder:
                     depot_id: asset.pv_input_semantics
                     for depot_id, asset in depot_energy_assets.items()
                 },
+                "pv_supply_scale_by_depot": {
+                    depot_id: asset.pv_supply_scale
+                    for depot_id, asset in depot_energy_assets.items()
+                },
                 "charging_window_mode": str(charging_window_mode or "timetable_layover").strip().lower(),
                 "allow_overnight_depot_moves": str(allow_overnight_depot_moves or "forbid").strip().lower(),
                 "overnight_window_start": str(overnight_window_start or "23:00"),
@@ -1664,6 +1668,19 @@ class ProblemBuilder:
             raise ValueError(
                 f"unsupported pv_input_semantics: {default_pv_input_semantics}"
             )
+        default_pv_supply_scale = self._safe_float(
+            self._first_present(
+                sim_cfg.get("pv_scale"),
+                overlay_cost_cfg.get("pv_scale"),
+                1.0,
+            )
+        )
+        if (
+            default_pv_supply_scale is None
+            or not math.isfinite(default_pv_supply_scale)
+            or default_pv_supply_scale < 0.0
+        ):
+            raise ValueError("pv_scale must be finite and non-negative")
         depot_assets_raw: List[Dict[str, Any]] = []
         sim_assets = sim_cfg.get("depot_energy_assets") or []
         if isinstance(sim_assets, Mapping):
@@ -1771,9 +1788,30 @@ class ProblemBuilder:
                 if explicit_pv_enabled is not None
                 else True
             )
+            pv_supply_scale = self._safe_float(
+                self._first_present(
+                    raw.get("pv_scale"),
+                    raw.get("pvScale"),
+                    default_pv_supply_scale,
+                )
+            )
+            if (
+                pv_supply_scale is None
+                or not math.isfinite(pv_supply_scale)
+                or pv_supply_scale < 0.0
+            ):
+                raise ValueError(
+                    f"pv_scale for {depot.depot_id} must be finite and non-negative"
+                )
             if pv_enabled:
                 pv_series = tuple(
-                    round(effective_pv_capacity_kw * max(float(factor or 0.0), 0.0) * slot_h, 6)
+                    round(
+                        effective_pv_capacity_kw
+                        * max(float(factor or 0.0), 0.0)
+                        * slot_h
+                        * pv_supply_scale,
+                        6,
+                    )
                     for factor in capacity_factor_series
                 )
             else:
@@ -1927,6 +1965,7 @@ class ProblemBuilder:
                 pv_om_jpy_per_kw_year=float(raw.get("pv_om_jpy_per_kw_year") or 0.0),
                 pv_life_years=int(raw.get("pv_life_years") or 25),
                 pv_capacity_kw=round(effective_pv_capacity_kw, 6) if pv_enabled else 0.0,
+                pv_supply_scale=float(pv_supply_scale),
                 depot_area_m2=area_estimate.depot_area_m2,
                 pv_installable_area_m2=round(
                     capacity_estimate.required_installable_area_m2,

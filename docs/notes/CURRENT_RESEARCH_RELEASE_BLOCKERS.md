@@ -28,6 +28,17 @@ not a measured trip-energy model, and that limitation must remain in the
 thesis. Only bounded unit-test oracles were solved during this code-changing
 step; no frontend, full-scale, Rolling, or formal research run was executed.
 
+The sensitivity execution path is now implemented but not yet executed at the
+current HEAD. `scripts/run_thesis_sensitivity_matrix.py` compiles the
+predeclared matrix into fresh frontend Prepare and Phase 4 requests, then
+requires physical, Rolling, gap, artifact-hash, Git, and cross-case control
+checks. Two previously silent no-op cases were fixed: `pv_scale` now changes
+the canonical PV kWh series while preserving rated kW, and route-band OFF now
+also permits intra-depot route swapping so the scope lock does not force it
+back ON. Item 3 remains an evidence blocker until the clean-commit matrix (or
+an explicitly scoped subset) is actually run; a subset cannot discharge the
+full-matrix gate.
+
 The independent exact-audit boundary now includes a second, electric oracle.
 It completely enumerates assignments and uses a separate SciPy/HiGHS charging
 MILP for strict one-depot, one-day, flat-tariff, PV=0, BESS=0,

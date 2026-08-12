@@ -2689,6 +2689,18 @@ def _assignment_economic_audit_payload(
         ),
         "objective_preset": solver_metadata.get("objective_preset"),
         "co2_emissions_cap_kg": solver_metadata.get("co2_emissions_cap_kg"),
+        "pv_supply_scale_by_depot": (
+            {
+                str(depot_id): float(
+                    getattr(asset, "pv_supply_scale", 1.0)
+                )
+                for depot_id, asset in dict(
+                    getattr(canonical_problem, "depot_energy_assets", {}) or {}
+                ).items()
+            }
+            if canonical_problem is not None
+            else {}
+        ),
         "assignment_energy_coupling_stage2_authority": str(
             recourse_configuration.get("stage2_authority") or "not_recorded"
         ),

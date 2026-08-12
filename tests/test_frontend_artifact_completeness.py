@@ -306,6 +306,8 @@ def _complete_run(tmp_path: Path) -> Path:
         "vehicle_usage_cost_semantics": "operator_incremental_vehicle_day_cost",
         "vehicle_usage_cost_semantics_classified": True,
         "vehicle_usage_cost_semantics_research_eligible": True,
+        "pv_supply_scale_by_depot": {"depot-a": 1.0},
+        "co2_emissions_cap_kg": None,
     }
     (run_dir / "assignment_economic_audit.json").write_text(
         json.dumps(assignment_economic_audit), encoding="utf-8"

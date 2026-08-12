@@ -41,13 +41,33 @@
 - Added `scripts/build_thesis_experiment_matrix.py`. It generates the
   time-step, energy-demand, PV, route-band, vehicle-day-cost, and CO2 epsilon
   experiment contract for the normal frontend/BFF path and never invokes the
-  solver directly. B0 rule-based arrival charging remains explicitly blocked
-  until a canonical baseline adapter exists; it is not fabricated from a
-  Phase 3/4 result.
+  solver directly. The later M0/M2 rule adapters and explicit M1/M3 merge now
+  provide the separate same-input method-comparison path; no method is
+  fabricated from another Phase result.
+- Fixed two no-op sensitivity definitions found by tracing the reachable
+  Prepare-to-ProblemBuilder path. `pv_scale` is now a validated Prepare field,
+  is persisted in scenario/overlay input, multiplies the constructed PV kWh
+  series without changing rated `pv_capacity_kw`, and is recorded per depot as
+  `pv_supply_scale`. Route-band OFF now explicitly enables intra-depot route
+  swapping, because the canonical scope lock otherwise correctly forces the
+  route band back ON.
+- Added `scripts/run_thesis_sensitivity_matrix.py`. It accepts complete
+  frontend Prepare/optimization request templates, obtains a fresh prepared
+  input for every selected row, submits only the BFF HTTP endpoints, polls the
+  public job API, copies the finalized run, and emits an audited JSON/CSV
+  result. It checks the declared effective parameter, unpruned Phase 4,
+  research/gap/physical/Rolling gates, final artifact hashes, frozen Git SHA,
+  and a cross-case stable-control fingerprint. A subset is labeled
+  `COMPLETED_SUBSET`, never a complete research matrix.
+- Fixed the sensitivity runner's completeness-snapshot boundary found during
+  review. `artifact_completeness.json` is the container written after the
+  final artifact hashes are computed and therefore cannot hash itself; the
+  runner now validates its status/schema separately while verifying every
+  snapshotted source artifact against the recorded size and SHA-256.
 - Focused verification completed: trip proxy/platform alias/fingerprint/taper
   tests, assignment audit/artifact completeness, Quick Setup/Prepare scope,
   integrated actual-cost, Stage 2 feedback, and objective-mode tests. A fresh
-  full suite also passed (`1290 passed`). A fresh clean-commit formal pair is
+  full suite also passed (`1336 passed`). A fresh clean-commit formal pair is
   still required before research release.
 
 ## 2026-08-11: canonical Rolling reporting snapshot and compact presentation release
