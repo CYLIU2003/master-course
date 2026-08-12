@@ -31,7 +31,7 @@ log = logging.getLogger("run_prep")
 # canonical solver input.  The schema suffix is part of prepared_input_id, so
 # old prepared files cannot be silently reused after a fleet-contract change.
 PREPARED_INPUT_SCHEMA_VERSION = (
-    "v6_trip_energy_pv_semantics_charge_taper"
+    "v7_transition_compatibility_trip_energy_pv_charge"
 )
 
 
@@ -1864,6 +1864,216 @@ def _prepared_scope_audit_warnings(audit: dict[str, Any]) -> list[str]:
     return warnings
 
 
+def _normalize_compatibility_powertrain(value: Any) -> str:
+    text = str(value or "").strip().upper()
+    if not text:
+        return ""
+    try:
+        return canonical_powertrain({"type": text}, research_run=False)
+    except ValueError:
+        return text
+
+
+def _build_vehicle_trip_compatibility_audit(
+    prepared_input: dict[str, Any],
+) -> dict[str, Any]:
+    """Materialize the trip/powertrain eligibility contract used by MILP.
+
+    Formal research may assume that every selected powertrain can operate every
+    trip, but that assumption must be explicit.  This audit distinguishes an
+    input matrix from the builder's backward-compatible implicit fallback.
+    """
+
+    vehicle_type_by_id: dict[str, str] = {}
+    for row in list(prepared_input.get("vehicles") or []):
+        if not isinstance(row, dict):
+            continue
+        vehicle_id = str(
+            row.get("id") or row.get("vehicleId") or row.get("vehicle_id") or ""
+        ).strip()
+        powertrain = _normalize_compatibility_powertrain(
+            row.get("powertrain")
+            or row.get("powertrainType")
+            or row.get("type")
+            or row.get("vehicleType")
+        )
+        if vehicle_id and powertrain:
+            vehicle_type_by_id[vehicle_id] = powertrain
+    selected_powertrains = tuple(sorted(set(vehicle_type_by_id.values())))
+
+    permission_vehicle_ids_by_route: dict[str, set[str]] = {}
+    routes_with_permissions: set[str] = set()
+    unknown_permission_vehicle_ids: set[str] = set()
+    for permission in list(prepared_input.get("vehicle_route_permissions") or []):
+        if not isinstance(permission, dict):
+            continue
+        route_id = str(
+            permission.get("routeId") or permission.get("route_id") or ""
+        ).strip()
+        vehicle_id = str(
+            permission.get("vehicleId") or permission.get("vehicle_id") or ""
+        ).strip()
+        if not route_id or not vehicle_id:
+            continue
+        routes_with_permissions.add(route_id)
+        if bool(permission.get("allowed", True)):
+            if vehicle_id in vehicle_type_by_id:
+                permission_vehicle_ids_by_route.setdefault(route_id, set()).add(
+                    vehicle_id
+                )
+            else:
+                unknown_permission_vehicle_ids.add(vehicle_id)
+
+    simulation_config = dict(prepared_input.get("simulation_config") or {})
+    explicit_assumption = str(
+        prepared_input.get("vehicle_trip_compatibility_assumption")
+        or simulation_config.get("vehicle_trip_compatibility_assumption")
+        or ""
+    ).strip().lower()
+    all_selected_assumption = explicit_assumption in {
+        "all_selected_powertrains",
+        "all_selected_vehicle_types",
+    }
+
+    matrix_rows: list[dict[str, Any]] = []
+    source_counts: Counter[str] = Counter()
+    allowed_trip_count_by_powertrain: Counter[str] = Counter()
+    incompatible_trip_ids: list[str] = []
+    unknown_allowed_powertrains: set[str] = set()
+    implicit_trip_ids: list[str] = []
+    powertrain_projection_mismatch_trip_ids: list[str] = []
+    all_selected_powertrains_trip_count = 0
+    for index, trip in enumerate(list(prepared_input.get("trips") or [])):
+        if not isinstance(trip, dict):
+            continue
+        trip_id = str(trip.get("trip_id") or trip.get("id") or f"trip-{index}")
+        route_id = str(trip.get("route_id") or trip.get("routeId") or "").strip()
+        raw_allowed = trip.get("allowed_vehicle_types")
+        if raw_allowed is None:
+            raw_allowed = trip.get("allowedVehicleTypes")
+        if isinstance(raw_allowed, (list, tuple)) and raw_allowed:
+            allowed = tuple(
+                sorted(
+                    {
+                        normalized
+                        for item in raw_allowed
+                        if (normalized := _normalize_compatibility_powertrain(item))
+                    }
+                )
+            )
+            source = "trip_explicit_allowed_vehicle_types"
+        elif route_id in routes_with_permissions:
+            explicit_vehicle_ids = tuple(
+                sorted(permission_vehicle_ids_by_route.get(route_id, set()))
+            )
+            allowed = tuple(
+                sorted(
+                    {
+                        vehicle_type_by_id[vehicle_id]
+                        for vehicle_id in explicit_vehicle_ids
+                    }
+                )
+            )
+            source = "explicit_vehicle_route_permissions"
+        elif all_selected_assumption:
+            allowed = selected_powertrains
+            source = "explicit_all_selected_powertrains_assumption"
+        else:
+            allowed = selected_powertrains
+            source = "implicit_builder_all_powertrains_fallback"
+            implicit_trip_ids.append(trip_id)
+
+        if source == "explicit_vehicle_route_permissions":
+            allowed_vehicle_ids = explicit_vehicle_ids
+        else:
+            allowed_vehicle_ids = tuple(
+                sorted(
+                    vehicle_id
+                    for vehicle_id, powertrain in vehicle_type_by_id.items()
+                    if powertrain in set(allowed)
+                )
+            )
+        powertrain_projected_vehicle_ids = tuple(
+            sorted(
+                vehicle_id
+                for vehicle_id, powertrain in vehicle_type_by_id.items()
+                if powertrain in set(allowed)
+            )
+        )
+        if allowed_vehicle_ids != powertrain_projected_vehicle_ids:
+            powertrain_projection_mismatch_trip_ids.append(trip_id)
+
+        source_counts[source] += 1
+        for powertrain in allowed:
+            allowed_trip_count_by_powertrain[powertrain] += 1
+            if powertrain not in selected_powertrains:
+                unknown_allowed_powertrains.add(powertrain)
+        if not set(allowed).intersection(selected_powertrains):
+            incompatible_trip_ids.append(trip_id)
+        if set(allowed) == set(selected_powertrains) and selected_powertrains:
+            all_selected_powertrains_trip_count += 1
+        matrix_rows.append(
+            {
+                "trip_id": trip_id,
+                "route_id": route_id,
+                "allowed_powertrains": list(allowed),
+                "allowed_vehicle_ids": list(allowed_vehicle_ids),
+                "source": source,
+            }
+        )
+
+    matrix_hash_payload = json.dumps(
+        matrix_rows,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    formal_ready = bool(
+        matrix_rows
+        and selected_powertrains
+        and not implicit_trip_ids
+        and not incompatible_trip_ids
+        and not unknown_allowed_powertrains
+        and not unknown_permission_vehicle_ids
+        and not powertrain_projection_mismatch_trip_ids
+    )
+    return {
+        "schema_version": "vehicle_trip_compatibility_audit_v1",
+        "selected_powertrains": list(selected_powertrains),
+        "trip_count": len(matrix_rows),
+        "source_counts": dict(sorted(source_counts.items())),
+        "allowed_trip_count_by_powertrain": dict(
+            sorted(allowed_trip_count_by_powertrain.items())
+        ),
+        "all_selected_powertrains_trip_count": all_selected_powertrains_trip_count,
+        "explicit_all_selected_powertrains_assumption": bool(
+            matrix_rows
+            and all_selected_powertrains_trip_count == len(matrix_rows)
+            and not implicit_trip_ids
+        ),
+        "implicit_fallback_trip_count": len(implicit_trip_ids),
+        "implicit_fallback_trip_ids_sample": implicit_trip_ids[:20],
+        "incompatible_trip_count": len(incompatible_trip_ids),
+        "incompatible_trip_ids_sample": incompatible_trip_ids[:20],
+        "unknown_allowed_powertrains": sorted(unknown_allowed_powertrains),
+        "unknown_permission_vehicle_ids": sorted(
+            unknown_permission_vehicle_ids
+        ),
+        "vehicle_level_restriction_trip_count": len(
+            powertrain_projection_mismatch_trip_ids
+        ),
+        "vehicle_level_restriction_trip_ids_sample": (
+            powertrain_projection_mismatch_trip_ids[:20]
+        ),
+        "solver_powertrain_projection_exact": not bool(
+            powertrain_projection_mismatch_trip_ids
+        ),
+        "compatibility_matrix_sha256": hashlib.sha256(matrix_hash_payload).hexdigest(),
+        "matrix_rows": matrix_rows,
+        "formal_vehicle_trip_compatibility_ready": formal_ready,
+    }
+
+
 def _build_prepared_scope_audit(prepared_input: dict[str, Any]) -> dict[str, Any]:
     trip_rows = [
         dict(item)
@@ -1882,6 +2092,9 @@ def _build_prepared_scope_audit(prepared_input: dict[str, Any]) -> dict[str, Any
         trip_rows=trip_rows,
         route_rows=route_rows,
     )
+    vehicle_trip_compatibility = _build_vehicle_trip_compatibility_audit(
+        prepared_input
+    )
     audit: dict[str, Any] = {
         "trip_distance_audit": dict(distance_join_analysis.get("trip_distance_audit") or {}),
         "trip_distance_samples": list(distance_join_analysis.get("trip_distance_samples") or []),
@@ -1890,6 +2103,12 @@ def _build_prepared_scope_audit(prepared_input: dict[str, Any]) -> dict[str, Any
         "distance_join_diagnosis": dict(distance_join_analysis.get("distance_join_diagnosis") or {}),
         "strict_coverage_precheck": {},
         "route_band_off_transition_audit": {},
+        "vehicle_trip_compatibility_audit": vehicle_trip_compatibility,
+        "formal_vehicle_trip_compatibility_ready": bool(
+            vehicle_trip_compatibility.get(
+                "formal_vehicle_trip_compatibility_ready", False
+            )
+        ),
         "fixed_route_band_mode": bool(solver_config.get("fixed_route_band_mode", False)),
         "warning_codes": [],
         "warnings": [],
@@ -1923,6 +2142,13 @@ def _build_prepared_scope_audit(prepared_input: dict[str, Any]) -> dict[str, Any
                 "simulation_config", {}
             )
             route_band_off_simulation["fixed_route_band_mode"] = False
+            # ProblemBuilder also derives the route-band lock from the saved
+            # Quick Setup swap policy. An OFF sensitivity must clear both
+            # controls; otherwise the audit silently rebuilds the ON graph.
+            route_band_off_dispatch_scope = route_band_off_input.setdefault(
+                "dispatch_scope", {}
+            )
+            route_band_off_dispatch_scope["allowIntraDepotRouteSwap"] = True
             route_band_off_problem = ProblemBuilder().build_from_scenario(
                 route_band_off_input,
                 depot_id=primary_depot_id,
@@ -1984,6 +2210,10 @@ def _build_prepared_scope_audit(prepared_input: dict[str, Any]) -> dict[str, Any
     if route_band_off_deadhead_missing > 0:
         audit["warning_codes"].append(
             "route_band_off_deadhead_matrix_incomplete"
+        )
+    if not audit["formal_vehicle_trip_compatibility_ready"]:
+        audit["warning_codes"].append(
+            "vehicle_trip_compatibility_contract_incomplete"
         )
 
     audit["warning_codes"] = sorted(set(audit.get("warning_codes") or []))

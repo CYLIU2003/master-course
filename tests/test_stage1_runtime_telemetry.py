@@ -212,6 +212,35 @@ def test_single_run_stays_blocked_until_counterfactual_pair_is_verified() -> Non
     ]
 
 
+def test_teacher_release_blocks_incomplete_vehicle_trip_compatibility() -> None:
+    claim_scope = _research_claim_scope_payload(
+        optimization_result={
+            "run_profile": "day_ahead_and_hourly_rolling",
+            "solver_metadata": {
+                "research_run": True,
+                "research_run_accepted": True,
+                "research_submission_git_provenance_eligible": True,
+                "research_acceptance_checks": {},
+            },
+            "prepared_scope_audit": {
+                "formal_transition_network_ready": True,
+                "formal_vehicle_trip_compatibility_ready": False,
+            },
+            "solution_validity": {"validated_feasible": True},
+        },
+        solver_settings={"mip_gap_target_met": True},
+        weather_policy={"enabled": False},
+        rolling_execution={
+            "status": "executed_and_accepted",
+            "rolling_execution_minutes": 60,
+        },
+    )
+
+    assert "vehicle_trip_compatibility_contract_incomplete" in claim_scope[
+        "teacher_release_failed_checks"
+    ]
+
+
 def test_two_stage_formal_release_blocks_unreconciled_or_frozen_composition() -> None:
     claim_scope = _research_claim_scope_payload(
         optimization_result={

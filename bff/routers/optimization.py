@@ -6507,6 +6507,15 @@ def _research_claim_scope_payload(
         teacher_release_failed_checks.append(
             "route_band_off_deadhead_matrix_incomplete"
         )
+    if (
+        bool(metadata.get("research_run", False))
+        and "formal_vehicle_trip_compatibility_ready" in prepared_scope_audit
+        and prepared_scope_audit.get("formal_vehicle_trip_compatibility_ready")
+        is not True
+    ):
+        teacher_release_failed_checks.append(
+            "vehicle_trip_compatibility_contract_incomplete"
+        )
     is_two_stage = (
         str(metadata.get("optimization_structure") or "").lower()
         == "two_stage"

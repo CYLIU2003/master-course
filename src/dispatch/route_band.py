@@ -80,17 +80,36 @@ def fragment_transition_direct_deadhead_min(
     *,
     dispatch_context: Any | None,
 ) -> Tuple[bool, int]:
+    exists, minutes, _reason_code = fragment_transition_direct_deadhead_diagnostic(
+        from_duty,
+        to_duty,
+        dispatch_context=dispatch_context,
+    )
+    return (exists, minutes)
+
+
+def fragment_transition_direct_deadhead_diagnostic(
+    from_duty: Any,
+    to_duty: Any,
+    *,
+    dispatch_context: Any | None,
+) -> tuple[bool, int, str]:
+    """Resolve a direct transition without conflating missing OD data and time.
+
+    This function only diagnoses location continuity.  Turnaround and schedule
+    slack are evaluated separately by ``fragment_transition_diagnostic``.
+    """
     if dispatch_context is None:
-        return (True, 0)
+        return (True, 0, "direct_ok")
     from_legs = tuple(getattr(from_duty, "legs", ()) or ())
     to_legs = tuple(getattr(to_duty, "legs", ()) or ())
     if not from_legs or not to_legs:
-        return (True, 0)
+        return (True, 0, "direct_ok")
 
     from_trip = getattr(from_legs[-1], "trip", None)
     to_trip = getattr(to_legs[0], "trip", None)
     if from_trip is None or to_trip is None:
-        return (True, 0)
+        return (True, 0, "direct_ok")
 
     from_location = str(
         getattr(from_trip, "destination_stop_id", "")
@@ -103,9 +122,9 @@ def fragment_transition_direct_deadhead_min(
         or ""
     ).strip()
     if not from_location or not to_location:
-        return (True, 0)
+        return (True, 0, "direct_ok")
 
-    return _required_deadhead_min(
+    return required_deadhead_diagnostic(
         from_location,
         to_location,
         dispatch_context=dispatch_context,
@@ -263,10 +282,12 @@ def fragment_transition_diagnostic(
         to_duty,
         horizon_start_min=horizon_start_min,
     )
-    direct_exists, _direct_deadhead = fragment_transition_direct_deadhead_min(
-        from_duty,
-        to_duty,
-        dispatch_context=dispatch_context,
+    direct_exists, _direct_deadhead, direct_reason = (
+        fragment_transition_direct_deadhead_diagnostic(
+            from_duty,
+            to_duty,
+            dispatch_context=dispatch_context,
+        )
     )
     direct_ok = fragment_transition_allows_direct_connection(
         from_duty,
@@ -291,19 +312,34 @@ def fragment_transition_diagnostic(
             direct_ok=direct_ok,
             depot_reset_ok=depot_reset_ok,
             route_band_blocked=True,
-            deadhead_missing=not direct_exists and not depot_reset_ok,
-            location_alias_missing=not direct_exists and dispatch_context is not None,
+            deadhead_missing=(
+                direct_reason == "deadhead_missing" and not depot_reset_ok
+            ),
+            location_alias_missing=(
+                direct_reason == "location_alias_missing" and not depot_reset_ok
+            ),
         )
     feasible = depot_reset_ok or direct_ok
-    reason_code = "direct_ok" if direct_ok else ("depot_reset_ok" if depot_reset_ok else "deadhead_missing")
+    if direct_ok:
+        reason_code = "direct_ok"
+    elif depot_reset_ok:
+        reason_code = "depot_reset_ok"
+    elif not direct_exists:
+        reason_code = direct_reason
+    else:
+        reason_code = "insufficient_transition_time"
     return FragmentTransitionDiagnostic(
         feasible=feasible,
         reason_code=reason_code,
         direct_ok=direct_ok,
         depot_reset_ok=depot_reset_ok,
         route_band_blocked=False,
-        deadhead_missing=not direct_exists and not depot_reset_ok,
-        location_alias_missing=not direct_exists and dispatch_context is not None,
+        deadhead_missing=(
+            direct_reason == "deadhead_missing" and not depot_reset_ok
+        ),
+        location_alias_missing=(
+            direct_reason == "location_alias_missing" and not depot_reset_ok
+        ),
     )
 
 

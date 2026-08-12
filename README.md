@@ -979,3 +979,41 @@ Its derived release is `READY_FOR_PROGRESS_PRESENTATION`. The field
 `research_submission_ready=false` means this compact presentation postprocessor
 does not assess input realism; it does not downgrade or replace the immutable
 pair-level formal attestation in `pair/pair_manifest.json`.
+
+## Thesis validity audits after Prepare
+
+Every newly prepared input now materializes two contracts in
+`prepared_scope_audit.json` before a formal solve is allowed:
+
+- the route-transition audit distinguishes a genuinely missing deadhead OD
+  from insufficient turnaround/deadhead time, and recomputes a real
+  route-band-OFF sensitivity by clearing both the solver lock and the saved
+  intra-depot route-swap lock; and
+- `vehicle_trip_compatibility_audit` records every trip's allowed vehicle IDs
+  and powertrains, the source of that permission, and a SHA-256 of the complete
+  vehicle-by-trip matrix. An implicit “all selected powertrains may serve every
+  trip” fallback blocks teacher release. Vehicle-specific restrictions within
+  one powertrain also fail closed until the solver represents them without a
+  powertrain-only projection.
+
+For the current 264-trip Tsurumaki prepared scope, the corrected diagnostic
+finds no missing deadhead OD in the route-band-OFF network. The relaxed vehicle
+lower bound is 32 with route-band ON and 25 with route-band OFF, versus an
+interval-only lower bound of 18. These are structural lower-bound diagnostics,
+not optimized fleet counts; they show why the route-band policy must be
+reported as an explicit operating assumption.
+
+`src/optimization/validation/small_exact_oracle.py` supplies an independent
+all-ICE exhaustive oracle for strict one-day cases of at most ten trips. It is
+used only in bounded tests, never as a formal-run shortcut. The four-trip
+fixture verifies the integrated MILP assignment, per-vehicle fuel use,
+canonical fuel cost, and CO2 ledger against complete enumeration. Unsupported
+PV, BESS, electric-fleet, CO2-cost, or non-total-cost cases fail closed.
+The current equation-to-code-to-test traceability table is maintained in
+`docs/notes/THESIS_EQUATION_CODE_TEST_MAP.md`.
+
+The thesis method comparison uses the names M0--M3. The generated experiment
+matrix intentionally keeps M0 (rule dispatch plus immediate charging) and M2
+(optimized dispatch plus simple charging) blocked until their physical rule
+adapters exist; M1 and M3 availability must not be presented as evidence that
+those two missing baselines were executed.

@@ -1610,3 +1610,37 @@ assignments failed exact recourse on vehicle-local depot-presence,
 charge-power, and terminal-SOC constraints. That explains the examined
 candidate failures but is not a proof that every assignment with 28 or more
 BEVs is infeasible; the remaining MILP gaps prohibit that claim.
+
+## 2026-08-12 current implementation boundary
+
+The Phase-1 structural audit is now materially stronger. On the current
+264-trip Tsurumaki prepared input, route-band OFF has `deadhead_missing=0`; the
+previous 676 count was an incorrect label for insufficient turnaround slack.
+The corrected relaxed vehicle lower bounds are 32 with route-band ON and 25
+with route-band OFF, compared with 18 from interval overlap alone. A future
+paper must therefore state the route-band rule explicitly and report the
+ON/OFF sensitivity; it must not call 32 an unconstrained fleet optimum.
+
+Fresh Prepare now also requires an explicit vehicle-by-trip compatibility
+contract for formal release. The current input explicitly allows every
+selected BEV and ICE on every trip. Any future input that reaches the builder's
+implicit all-powertrain fallback, or contains same-powertrain vehicle-specific
+restrictions that the current solver would project away, is blocked with
+`vehicle_trip_compatibility_contract_incomplete`.
+
+The bounded four-trip exact-oracle test now matches integrated MILP assignment,
+vehicle-specific fuel consumption, canonical fuel cost, and CO2. This is a
+unit-level mathematical check only. It neither validates PV/BESS/SOC equations
+nor substitutes for a fresh full frontend/BFF formal run.
+
+Remaining blocking work for the requested method comparison:
+
+- M0 rule-based dispatch plus arrival-immediate charging has no canonical
+  physical energy adapter;
+- M2 optimized dispatch plus the same simple charging rule has no canonical
+  physical energy adapter;
+- therefore M0--M3 comparative effect sizes are not yet reporting-eligible;
+- the exact oracle v1 covers all-ICE cases only; electric SOC, charger shortage,
+  PV=0, BESS=0, and tariff-break-even oracle fixtures remain to be added; and
+- every pre-v7 prepared input and every pre-fix result remains evidence for its
+  original code only. Fresh Prepare from a clean frozen commit is mandatory.

@@ -28,6 +28,37 @@ def test_experiment_matrix_contains_required_sensitivities() -> None:
     baseline = next(
         row
         for row in payload["ablation_contract"]
-        if row["case_id"].startswith("B0_")
+        if row["case_id"].startswith("M0_")
     )
     assert baseline["reporting_eligible"] is False
+
+
+def test_experiment_matrix_separates_method_and_component_ablations() -> None:
+    payload = build_experiment_matrix()
+
+    method_rows = {
+        row["case_id"]: row for row in payload["ablation_contract"]
+    }
+    assert set(method_rows) == {
+        "M0_rule_based_dispatch_arrival_charge",
+        "M1_fixed_dispatch_optimized_energy",
+        "M2_optimized_dispatch_simple_charge",
+        "M3_integrated_dispatch_energy_bess",
+    }
+    assert (
+        method_rows["M0_rule_based_dispatch_arrival_charge"]["reporting_eligible"]
+        is False
+    )
+    assert (
+        method_rows["M2_optimized_dispatch_simple_charge"]["reporting_eligible"]
+        is False
+    )
+    assert (
+        method_rows["M1_fixed_dispatch_optimized_energy"]["reporting_eligible"]
+        is True
+    )
+    assert (
+        method_rows["M3_integrated_dispatch_energy_bess"]["reporting_eligible"]
+        is True
+    )
+    assert len(payload["component_ablation_contract"]) == 3

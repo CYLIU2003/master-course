@@ -84,33 +84,53 @@ def build_experiment_matrix() -> dict[str, Any]:
         )
 
     return {
-        "schema_version": "thesis_experiment_matrix_v1",
+        "schema_version": "thesis_experiment_matrix_v2",
         "execution_semantics": "frontend_bff_only_no_direct_solver",
         "common_control_contract": common,
         "cases": cases,
         "ablation_contract": [
             {
-                "case_id": "B0_rule_based_dispatch_arrival_charge",
+                "case_id": "M0_rule_based_dispatch_arrival_charge",
                 "implementation_status": "BLOCKED_REQUIRES_RULE_BASELINE_ADAPTER",
                 "reporting_eligible": False,
+                "dispatch_semantics": "canonical_rule_based_fixed_dispatch",
+                "energy_semantics": "arrival_immediate_charge_without_optimization",
             },
             {
-                "case_id": "B1_fixed_dispatch_optimized_energy",
+                "case_id": "M1_fixed_dispatch_optimized_energy",
                 "implementation_status": "AVAILABLE_AS_FIXED_ASSIGNMENT_ROLLING",
                 "reporting_eligible": True,
+                "dispatch_semantics": "canonical_rule_based_fixed_dispatch",
+                "energy_semantics": "optimized_charging_and_bess",
             },
             {
-                "case_id": "B2_integrated_without_pv_bess",
+                "case_id": "M2_optimized_dispatch_simple_charge",
+                "implementation_status": "BLOCKED_REQUIRES_SIMPLE_CHARGE_ADAPTER",
+                "reporting_eligible": False,
+                "dispatch_semantics": "optimized_dispatch",
+                "energy_semantics": "arrival_immediate_charge_without_optimization",
+            },
+            {
+                "case_id": "M3_integrated_dispatch_energy_bess",
+                "implementation_status": "AVAILABLE",
+                "reporting_eligible": True,
+                "dispatch_semantics": "optimized_dispatch",
+                "energy_semantics": "optimized_charging_and_bess",
+            },
+        ],
+        "component_ablation_contract": [
+            {
+                "case_id": "A0_integrated_without_pv_bess",
                 "implementation_status": "AVAILABLE",
                 "reporting_eligible": True,
             },
             {
-                "case_id": "B3_integrated_with_pv_without_bess",
+                "case_id": "A1_integrated_with_pv_without_bess",
                 "implementation_status": "AVAILABLE",
                 "reporting_eligible": True,
             },
             {
-                "case_id": "B4_integrated_with_pv_and_bess",
+                "case_id": "A2_integrated_with_pv_and_bess",
                 "implementation_status": "AVAILABLE",
                 "reporting_eligible": True,
             },

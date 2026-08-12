@@ -5,14 +5,20 @@ from src.dispatch.route_band import fragment_transition_diagnostic, required_dea
 
 
 class _Context:
-    def __init__(self, deadheads: dict[tuple[str, str], int] | None = None) -> None:
+    def __init__(
+        self,
+        deadheads: dict[tuple[str, str], int] | None = None,
+        *,
+        turnaround_min: int = 0,
+    ) -> None:
         self._deadheads = deadheads or {}
+        self._turnaround_min = int(turnaround_min)
 
     def get_deadhead_min(self, from_stop: str, to_stop: str) -> int:
         return int(self._deadheads.get((from_stop, to_stop), 0))
 
     def get_turnaround_min(self, stop: str) -> int:
-        return 0
+        return self._turnaround_min
 
     def locations_equivalent(self, left: str, right: str) -> bool:
         return left == right
@@ -61,3 +67,19 @@ def test_required_deadhead_diagnostic_distinguishes_missing_deadhead() -> None:
 
     assert exists is False
     assert reason == "deadhead_missing"
+
+
+def test_transition_diagnostic_does_not_call_short_turnaround_deadhead_missing() -> None:
+    diagnostic = fragment_transition_diagnostic(
+        _duty("d1", "t1", "A", "B", "FAM1"),
+        _duty("d2", "t2", "B", "D", "FAM1"),
+        home_depot_id="DEPOT",
+        dispatch_context=_Context(turnaround_min=25),
+        fixed_route_band_mode=False,
+        allow_same_day_depot_cycles=False,
+    )
+
+    assert diagnostic.feasible is False
+    assert diagnostic.reason_code == "insufficient_transition_time"
+    assert diagnostic.deadhead_missing is False
+    assert diagnostic.location_alias_missing is False

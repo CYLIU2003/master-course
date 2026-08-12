@@ -114,6 +114,59 @@ def test_prepared_scope_audit_relaxes_warning_when_vehicle_lower_bound_is_met() 
     assert audit["strict_coverage_precheck"]["checked"] is True
     assert audit["strict_coverage_precheck"]["infeasible"] is False
     assert audit["strict_coverage_precheck"]["relaxed_vehicle_lower_bound"] == 2
+    compatibility = audit["vehicle_trip_compatibility_audit"]
+    assert audit["formal_vehicle_trip_compatibility_ready"] is True
+    assert compatibility["source_counts"] == {
+        "trip_explicit_allowed_vehicle_types": 2
+    }
+    assert compatibility["allowed_trip_count_by_powertrain"] == {"BEV": 2}
+    assert compatibility["explicit_all_selected_powertrains_assumption"] is True
+    assert compatibility["matrix_rows"][0]["allowed_vehicle_ids"] == [
+        "veh-1",
+        "veh-2",
+    ]
+    assert compatibility["solver_powertrain_projection_exact"] is True
+    assert len(compatibility["compatibility_matrix_sha256"]) == 64
+
+
+def test_prepared_scope_audit_blocks_implicit_all_powertrain_fallback() -> None:
+    payload = _prepared_payload(vehicle_count=2)
+    for trip in payload["trips"]:
+        trip.pop("allowed_vehicle_types", None)
+
+    audit = _build_prepared_scope_audit(payload)
+
+    compatibility = audit["vehicle_trip_compatibility_audit"]
+    assert audit["formal_vehicle_trip_compatibility_ready"] is False
+    assert compatibility["implicit_fallback_trip_count"] == 2
+    assert compatibility["source_counts"] == {
+        "implicit_builder_all_powertrains_fallback": 2
+    }
+    assert (
+        "vehicle_trip_compatibility_contract_incomplete"
+        in audit["warning_codes"]
+    )
+
+
+def test_prepared_scope_audit_blocks_vehicle_level_permission_projection() -> None:
+    payload = _prepared_payload(vehicle_count=2)
+    for trip in payload["trips"]:
+        trip.pop("allowed_vehicle_types", None)
+    payload["vehicle_route_permissions"] = [
+        {"routeId": "route-a", "vehicleId": "veh-1", "allowed": True},
+        {"routeId": "route-a", "vehicleId": "veh-2", "allowed": False},
+    ]
+
+    audit = _build_prepared_scope_audit(payload)
+
+    compatibility = audit["vehicle_trip_compatibility_audit"]
+    assert compatibility["source_counts"] == {
+        "explicit_vehicle_route_permissions": 2
+    }
+    assert compatibility["matrix_rows"][0]["allowed_vehicle_ids"] == ["veh-1"]
+    assert compatibility["solver_powertrain_projection_exact"] is False
+    assert compatibility["vehicle_level_restriction_trip_count"] == 2
+    assert audit["formal_vehicle_trip_compatibility_ready"] is False
 
 
 def test_trip_distance_uses_all_ordered_stop_coordinates() -> None:
@@ -231,6 +284,11 @@ def test_prepared_scope_audit_does_not_fail_when_route_band_block_samples_are_em
     assert "prepared_scope_audit_failed" not in audit["warning_codes"]
     assert audit["strict_coverage_precheck"]["checked"] is True
     assert "route_band_blocked" in audit["strict_coverage_precheck"]["blocked_transition_reason_counts"]
+    assert "route_band_blocked" not in (
+        audit["route_band_off_transition_audit"][
+            "blocked_transition_reason_counts"
+        ]
+    )
 
 
 def test_run_preparation_fails_hard_when_all_scope_distances_are_missing(monkeypatch) -> None:

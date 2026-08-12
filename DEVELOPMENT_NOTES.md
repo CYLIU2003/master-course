@@ -3426,3 +3426,53 @@ locks this distinction in place.
 - The sunny all-BEV fuel ledger, time series, and summary are valid header-only
   CSV relations rather than zero-byte files. Artifact completeness accepts all
   three, confirming the empty-fuel export correction on the formal path.
+
+# 2026-08-12 - Transition truthfulness, compatibility contract, and exact oracle
+
+- Rebuilt the current 264-trip prepared scope before changing the solver. The
+  old diagnostic reported 676 `deadhead_missing` pairs with route-band ON.
+  Manual tracing showed that a same-place Soshigaya connection had a valid
+  zero-minute deadhead alias but only four minutes of schedule slack against a
+  ten-minute turnaround rule. The failure was therefore time insufficiency,
+  not a missing OD.
+- `src/dispatch/route_band.py` now separates direct location/OD resolution from
+  the turnaround-time test. A known OD with insufficient slack is exported as
+  `insufficient_transition_time`; `deadhead_missing` and
+  `location_alias_missing` remain reserved for their actual data failures.
+  The hard feasibility inequality is unchanged.
+- Found a second audit defect: the route-band-OFF clone cleared the solver flag
+  but retained Quick Setup's `allowIntraDepotRouteSwap=false`, so
+  `ProblemBuilder` silently restored route-band ON. The audit now clears both
+  controls. On the current prepared input the corrected results are:
+  interval-only lower bound 18 vehicles; route-band ON lower bound 32 with
+  20,048 route-band blocks and 676 insufficient-time blocks; route-band OFF
+  lower bound 25 with 1,867 insufficient-time blocks and zero missing OD.
+  These are lower bounds, not optimized fleet-composition claims.
+- Prepare schema v7 now writes a complete vehicle-by-trip compatibility matrix,
+  its powertrain projection, permission source, and SHA-256. Explicit trip permissions, explicit
+  vehicle-route permissions, and an explicit all-selected-powertrains
+  assumption are distinguishable. The backward-compatible implicit all-type
+  fallback is still usable for non-formal data but now blocks teacher release.
+  Vehicle-specific restrictions within one powertrain also block because the
+  current solver projects eligibility by powertrain. The current scope
+  explicitly permits every selected BEV and ICE on all 264 trips.
+- Added `small_exact_assignment_oracle_v1`, an independent Cartesian
+  enumeration for strict one-day all-ICE cases up to ten trips. It fails closed
+  outside that scope and does not import the MILP implementation. The four-trip
+  fixture enumerates 16 assignments, finds two feasible ones, and certifies a
+  two-vehicle, 6 L, 900 JPY optimum.
+- The first oracle/MILP comparison exposed a real accounting bug: the integrated
+  mathematical model used vehicle-specific ICE fuel rates (6 L) but the
+  evaluator, end-fuel ledger, and CO2 ledger reused the vehicle-type trip
+  default (5 L, 750 JPY). Those ledgers now use the same precedence as the
+  solver: explicit trip/powertrain quantity, then physical vehicle rate, then
+  trip fallback. The independent oracle and integrated MILP now agree on
+  assignment, liters, cost, and emissions.
+- Renamed the thesis method contract to M0--M3 and separated it from the
+  PV/BESS component ablation. M0 and M2 remain explicitly blocked until their
+  immediate-charge adapters exist; no reporting eligibility is inferred from
+  a label alone.
+- Focused regression after implementation: `38 passed`. No formal optimization
+  run was executed from this dirty development state. Because prepared schema
+  and accounting semantics changed, all future evidence requires fresh
+  Prepare and a clean frozen commit; older outputs retain their original SHA.

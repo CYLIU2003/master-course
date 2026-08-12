@@ -11,6 +11,7 @@ from .problem import (
     AssignmentPlan,
     CanonicalOptimizationProblem,
     DailyCostLedgerEntry,
+    ProblemTrip,
     VehicleCostLedgerEntry,
     classify_peak_slots,
     day_index_for_minute,
@@ -1450,14 +1451,21 @@ class CostEvaluator:
             vehicle_id = duty_vehicle_map.get(duty.duty_id, duty.duty_id)
             vehicle = vehicle_by_id.get(str(vehicle_id))
             depot_id = vehicle_depot.get(vehicle_id, "depot_default")
-            fuel_rate = self._fuel_rate_l_per_km(problem, duty.vehicle_type)
+            fuel_rate = self._vehicle_fuel_rate_l_per_km(
+                problem,
+                vehicle,
+                duty.vehicle_type,
+            )
             for leg in duty.legs:
                 trip = problem.trip_by_id().get(leg.trip.trip_id)
                 if trip is None:
                     continue
-                trip_fuel_l = max(float(trip.fuel_l or 0.0), 0.0)
-                if trip_fuel_l <= 0.0 and fuel_rate > 0.0:
-                    trip_fuel_l = max(float(trip.distance_km or 0.0), 0.0) * fuel_rate
+                trip_fuel_l = self._trip_fuel_l_for_vehicle(
+                    problem,
+                    trip,
+                    vehicle,
+                    duty.vehicle_type,
+                )
                 if trip_fuel_l > 0.0:
                     events.append((vehicle_id, depot_id, int(trip.departure_min), trip_fuel_l))
                 if leg.deadhead_from_prev_min > 0 and fuel_rate > 0.0:
@@ -1636,7 +1644,11 @@ class CostEvaluator:
         vehicle = vehicle_map.get(vehicle_id)
         if vehicle is None:
             return fuel
-        fuel_rate = max(float(getattr(vehicle, "fuel_consumption_l_per_km", 0.0) or 0.0), 0.0)
+        fuel_rate = self._vehicle_fuel_rate_l_per_km(
+            problem,
+            vehicle,
+            str(vehicle.vehicle_type),
+        )
         duty_vehicle_map = plan.duty_vehicle_map()
         for duty in plan.duties:
             if duty_vehicle_map.get(duty.duty_id, duty.duty_id) != vehicle_id:
@@ -1645,9 +1657,12 @@ class CostEvaluator:
                 trip = problem.trip_by_id().get(leg.trip.trip_id)
                 if trip is None:
                     continue
-                trip_fuel_l = max(float(trip.fuel_l or 0.0), 0.0)
-                if trip_fuel_l <= 0.0 and fuel_rate > 0.0:
-                    trip_fuel_l = max(float(trip.distance_km or 0.0), 0.0) * fuel_rate
+                trip_fuel_l = self._trip_fuel_l_for_vehicle(
+                    problem,
+                    trip,
+                    vehicle,
+                    str(vehicle.vehicle_type),
+                )
                 fuel -= trip_fuel_l
                 if leg.deadhead_from_prev_min > 0 and fuel_rate > 0.0:
                     fuel -= self._deadhead_distance_km(problem, leg.deadhead_from_prev_min) * fuel_rate
@@ -2106,6 +2121,51 @@ class CostEvaluator:
             return max(vt.fuel_consumption_l_per_km, 0.0)
         return 0.0
 
+    def _vehicle_fuel_rate_l_per_km(
+        self,
+        problem: CanonicalOptimizationProblem,
+        vehicle: object | None,
+        vehicle_type: str,
+    ) -> float:
+        if vehicle is not None:
+            vehicle_rate = max(
+                float(
+                    getattr(vehicle, "fuel_consumption_l_per_km", 0.0)
+                    or 0.0
+                ),
+                0.0,
+            )
+            if vehicle_rate > 0.0:
+                return vehicle_rate
+        return self._fuel_rate_l_per_km(problem, vehicle_type)
+
+    def _trip_fuel_l_for_vehicle(
+        self,
+        problem: CanonicalOptimizationProblem,
+        trip: ProblemTrip,
+        vehicle: object | None,
+        vehicle_type: str,
+    ) -> float:
+        type_specific = dict(
+            getattr(trip, "fuel_l_by_vehicle_type", {}) or {}
+        )
+        normalized_type = str(vehicle_type or "").strip()
+        for key in (normalized_type, normalized_type.upper()):
+            if key not in type_specific:
+                continue
+            try:
+                return max(float(type_specific[key] or 0.0), 0.0)
+            except (TypeError, ValueError):
+                break
+        fuel_rate = self._vehicle_fuel_rate_l_per_km(
+            problem,
+            vehicle,
+            vehicle_type,
+        )
+        if fuel_rate > 0.0:
+            return max(float(trip.distance_km or 0.0), 0.0) * fuel_rate
+        return max(float(trip.fuel_l or 0.0), 0.0)
+
     def _slot_buy_price(self, problem: CanonicalOptimizationProblem, slot_index: int) -> float:
         price_map = {slot.slot_index: slot.grid_buy_yen_per_kwh for slot in problem.price_slots}
         selected_price = price_map.get(slot_index)
@@ -2248,22 +2308,29 @@ class CostEvaluator:
         for duty in plan.duties:
             if not self._is_non_electric_powertrain(duty.vehicle_type, vehicle_type_by_id):
                 continue
+            vehicle_id = duty_vehicle_map.get(duty.duty_id, duty.duty_id)
+            vehicle = vehicle_by_id.get(str(vehicle_id))
             vehicle_ice_co2_kg_per_l = _ice_co2_kg_per_l_for_vehicle_type(duty.vehicle_type)
-            fuel_rate = self._fuel_rate_l_per_km(problem, duty.vehicle_type)
+            fuel_rate = self._vehicle_fuel_rate_l_per_km(
+                problem,
+                vehicle,
+                duty.vehicle_type,
+            )
             for leg in duty.legs:
                 # Trip fuel CO₂.
                 trip = problem.trip_by_id().get(leg.trip.trip_id)
                 if trip is not None:
-                    fuel_l = max(trip.fuel_l, 0.0)
-                    if fuel_l <= 0 and fuel_rate > 0:
-                        fuel_l = max(trip.distance_km, 0.0) * fuel_rate
+                    fuel_l = self._trip_fuel_l_for_vehicle(
+                        problem,
+                        trip,
+                        vehicle,
+                        duty.vehicle_type,
+                    )
                     ice_co2_kg += vehicle_ice_co2_kg_per_l * fuel_l
                 # Deadhead fuel CO₂.
                 if leg.deadhead_from_prev_min > 0 and fuel_rate > 0:
                     dh_km = self._deadhead_distance_km(problem, leg.deadhead_from_prev_min)
                     ice_co2_kg += vehicle_ice_co2_kg_per_l * dh_km * fuel_rate
-            vehicle_id = duty_vehicle_map.get(duty.duty_id, duty.duty_id)
-            vehicle = vehicle_by_id.get(str(vehicle_id))
             if vehicle is not None and duty.legs and fuel_rate > 0.0:
                 last_trip = problem.trip_by_id().get(duty.legs[-1].trip.trip_id)
                 if last_trip is not None:
