@@ -589,6 +589,54 @@ def test_integrated_ev_utilization_keeps_cost_contract_without_cost_claim() -> N
     assert aligned.metadata["actual_cost_objective_structural_contract_passed"] is True
 
 
+def test_research_lexicographic_contract_reports_vehicle_days_as_primary() -> None:
+    base_problem = _problem()
+    problem = replace(
+        base_problem,
+        metadata={
+            **dict(base_problem.metadata),
+            "objective_preset": "research_lexicographic_v1",
+        },
+    )
+
+    aligned, _ = OptimizationEngine._apply_phase_contract(
+        problem,
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            phase="phase4_integrated",
+            research_run=True,
+            integrated_actual_cost_objective=True,
+        ),
+    )
+
+    assert aligned.metadata["integrated_primary_objective_kind"] == (
+        "minimum_used_vehicle_days_lexicographic"
+    )
+    assert aligned.metadata["integrated_actual_cost_objective_requested"] is False
+    assert aligned.metadata["objective_actual_cost_mode"] is False
+    assert aligned.metadata["objective_semantics"] == (
+        "lexicographic_vehicle_days_then_canonical_cost_then_deadhead_and_"
+        "charge_sessions"
+    )
+
+    policy_config = replace(
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            phase="phase4_integrated",
+            research_run=True,
+            integrated_actual_cost_objective=True,
+        ),
+        integrated_ev_utilization_mode="minimum_ice_fuel_lexicographic",
+    )
+    policy_aligned, _ = OptimizationEngine._apply_phase_contract(
+        problem,
+        policy_config,
+    )
+    assert policy_aligned.metadata["integrated_primary_objective_kind"] == (
+        "minimum_used_vehicle_days_lexicographic"
+    )
+
+
 def test_phase4_solver_reconciles_integrated_actual_cost_on_full_day() -> None:
     problem = ProblemBuilder().build_from_dispatch(
         _dispatch_context(),

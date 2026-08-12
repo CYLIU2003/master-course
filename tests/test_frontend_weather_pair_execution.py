@@ -685,6 +685,9 @@ def test_objective_audit_accepts_declared_research_lexicographic_semantics() -> 
     settings = {
         "actual_cost_objective_structural_contract_passed": True,
         "integrated_actual_cost_contract_applied": True,
+        "integrated_primary_objective_kind": (
+            "minimum_used_vehicle_days_lexicographic"
+        ),
     }
 
     assert runner._solver_objective_accounting_contract_passes(
@@ -695,6 +698,18 @@ def test_objective_audit_accepts_declared_research_lexicographic_semantics() -> 
         },
         phase4_actual_cost=True,
         phase4_policy=False,
+    )
+    assert not runner._solver_objective_accounting_contract_passes(
+        summary={"solver_objective_matches_accounting_total": False},
+        settings={
+            **settings,
+            "integrated_primary_objective_kind": "canonical_actual_cost",
+        },
+        assignment_economic_audit={
+            "objective_preset": "research_lexicographic_v1"
+        },
+        phase4_actual_cost=True,
+        phase4_policy=True,
     )
     assert not runner._solver_objective_accounting_contract_passes(
         summary={"solver_objective_matches_accounting_total": True},

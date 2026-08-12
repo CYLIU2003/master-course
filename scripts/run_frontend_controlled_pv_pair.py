@@ -3307,6 +3307,21 @@ def _solver_objective_accounting_contract_passes(
 ) -> bool:
     """Distinguish scalar accounting equality from declared hierarchies."""
 
+    research_lexicographic = (
+        assignment_economic_audit.get("objective_preset")
+        == "research_lexicographic_v1"
+    )
+    if research_lexicographic:
+        return bool(
+            summary.get("solver_objective_matches_accounting_total") is False
+            and settings.get(
+                "actual_cost_objective_structural_contract_passed"
+            )
+            is True
+            and settings.get("integrated_actual_cost_contract_applied") is True
+            and settings.get("integrated_primary_objective_kind")
+            == "minimum_used_vehicle_days_lexicographic"
+        )
     if phase4_policy:
         return bool(
             summary.get("solver_objective_matches_accounting_total") is False
@@ -3317,19 +3332,6 @@ def _solver_objective_accounting_contract_passes(
             and settings.get("integrated_actual_cost_contract_applied") is True
             and settings.get("integrated_primary_objective_kind")
             == "minimum_ice_fuel_lexicographic"
-        )
-    research_lexicographic = (
-        assignment_economic_audit.get("objective_preset")
-        == "research_lexicographic_v1"
-    )
-    if phase4_actual_cost and research_lexicographic:
-        return bool(
-            summary.get("solver_objective_matches_accounting_total") is False
-            and settings.get(
-                "actual_cost_objective_structural_contract_passed"
-            )
-            is True
-            and settings.get("integrated_actual_cost_contract_applied") is True
         )
     return bool(
         summary.get("solver_objective_matches_accounting_total") is True

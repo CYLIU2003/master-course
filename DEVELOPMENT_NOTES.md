@@ -3734,3 +3734,70 @@ locks this distinction in place.
   `79 passed`; the complete repository regression passes
   `1348 passed in 70.73s`. A fresh clean-commit full pair is required because
   the lexicographic objective implementation changed after the preserved run.
+
+# 2026-08-13 - Post-fix controlled PV pair completed at `e4ddd3f`
+
+- Executed the mandatory post-fix pair from clean frozen SHA
+  `e4ddd3f146975c34ac61e957385cd5a26daaca66` through the ordinary frontend/BFF
+  Prepare, Phase 4, job polling, 24-hour Rolling, validation, accounting, pair
+  finalization, bounded-oracle and progress-report path. The worktree was clean
+  at both ends and the SHA did not change during either solve.
+- Both cases used the same 2025-08-05 `WEEKDAY` service, 264 trips, 60 active
+  vehicles, ten chargers, 30 JPY/kWh flat energy tariff, zero demand charge,
+  1,000 kW manually rated PV, 6,000 kWh / 900 kW BESS and 3,000 -> 3,000 kWh
+  BESS SOC. The input/output audit reports 5,000 m2 estimated installable panel
+  area and 14,285.714286 m2 estimated depot area from the 1,000 kW rating.
+  Non-PV controls share hash
+  `1ae12973a92ad50c1257cd67c351f485f4451b6d164298a72fc72204fd12df11`;
+  the two separately hashed PV curves differ by 5,060.05 kWh.
+- Both runs served 264/264 trips with zero missing/duplicate/overlapping trips,
+  zero transition, SOC, charger-concurrency and grid-contract violations,
+  accepted all 24 Rolling steps, kept the assignment hash constant during
+  Rolling, and reconciled the executed-day ledger. No fallback or post-solve
+  repair was used.
+- High PV used 31 BEVs / 1 ICE bus for 248/16 trips. Its executed ledger records
+  6,056.25 kWh PV generation, 401.407349 kWh PV-to-bus, 2,781.817437 kWh
+  PV-to-BESS, 2,510.590237 kWh BESS-to-bus, 156.039059 kWh grid import,
+  2,873.025214 kWh curtailment, 36.307510 L fuel, 650,234.729396 JPY total
+  cost and 170.814257 kg-CO2.
+- Low PV used 21 BEVs / 11 ICE buses for 91/173 trips. Its executed ledger
+  records 996.2 kWh PV generation, 293.407649 kWh PV-to-bus, 702.792351 kWh
+  PV-to-BESS, 634.270097 kWh BESS-to-bus, 130.948752 kWh grid import, zero
+  curtailment, 357.881339 L fuel, 698,318.002033 JPY total cost and
+  986.112082 kg-CO2.
+- `pair/pair_manifest.json` accepts the pair for the explicitly scoped
+  same-service-date PV-supply sensitivity comparison. Objective presets match;
+  both lexicographic objective-semantics audits, composition-search audits,
+  physical/accounting/artifact gates and pair-control checks pass. Assignment
+  hashes differ, so the observed response is not a reporting-only difference.
+- Formal research submission remains `BLOCKED` only at the pair release layer:
+  both integrated solves terminated at the time limit without a certified
+  full-model gap, so `baseline_requested_mip_gap_certified` and
+  `counterfactual_requested_mip_gap_certified` fail. These are physically valid
+  feasible incumbents and controlled sensitivity evidence, not certified
+  global or lexicographic optima.
+- Both post-fix 10-trip, 15-minute bounded integrated oracles returned exit code
+  0 and `integrated_exact_oracle_eligible=true`; integrated and two-stage
+  accounting costs were both 40,000 JPY with two used BEVs. This confirms the
+  repaired hierarchy on the bounded exact problem but does not discharge the
+  full 264-trip gap gate.
+- Authoritative directory:
+  `output/formal_pair_20260813_thesis_model_flat30_pv1000_bess6000_phase4_e4ddd3f_gap01_r2`.
+  The generated ZIP is 19,860,911 bytes with SHA-256
+  `504C282BDC51710AB821CCBCA2BDEA66FFBCFAC5B3D0AA5A4C42A2A63633E932`.
+  `progress_report/` is complete (`READY`) with seven PNG/SVG figures, six CSV
+  tables and hashed evidence indexes. Full-scale M0--M3 and the predeclared
+  sensitivity matrix remain unexecuted evidence tasks; their code paths are
+  implemented but this pair must not be presented as those experiments.
+- The post-run metadata review found one remaining evidence-label defect:
+  `integrated_primary_objective_kind` still said `canonical_actual_cost` under
+  `research_lexicographic_v1`, although Gurobi's actual first objective was used
+  vehicle-days. `_apply_phase_contract` now records
+  `minimum_used_vehicle_days_lexicographic` and correctly marks scalar actual
+  cost as not requested for that preset. This changes provenance only, not the
+  solved equations or preserved `e4ddd3f` results; the frozen pair is not
+  rewritten after the run. The pair runner now requires this truthful primary
+  label whenever `research_lexicographic_v1` is active, even if a conflicting
+  legacy EV-policy flag is also present. The relevant objective, exact-oracle,
+  pair and frontend-runner regressions pass `79 passed`; the complete repository
+  regression passes `1349 passed in 66.32s`.

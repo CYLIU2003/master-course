@@ -196,10 +196,14 @@ def test_integrated_milp_matches_independent_small_exact_oracle() -> None:
     assert result.solver_metadata["integrated_primary_ice_fuel_l"] == (
         pytest.approx(oracle.fuel_l, abs=1.0e-6)
     )
+    assert result.solver_metadata["integrated_primary_objective_kind"] == (
+        "minimum_used_vehicle_days_lexicographic"
+    )
     assert (
         result.solver_metadata["actual_cost_objective_numeric_reconciliation_passed"]
-        is True
+        is False
     )
+    assert result.cost_breakdown["objective_is_actual_cost"] is False
     assert {
         trip_id: result.plan.vehicle_id_for_duty(duty.duty_id)
         for duty in result.plan.duties

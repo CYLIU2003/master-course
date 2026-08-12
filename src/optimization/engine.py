@@ -1487,6 +1487,9 @@ class OptimizationEngine:
             getattr(config, "integrated_ev_utilization_mode", "disabled")
             or "disabled"
         ).strip().lower()
+        objective_preset = str(
+            metadata.get("objective_preset") or ""
+        ).strip().lower()
         if phase == "phase4_integrated" and (
             bool(getattr(config, "integrated_actual_cost_objective", False))
             or integrated_ev_utilization_mode != "disabled"
@@ -1494,15 +1497,17 @@ class OptimizationEngine:
             problem = OptimizationEngine._apply_integrated_actual_cost_contract(
                 problem,
                 objective_kind=(
-                    "minimum_ice_fuel_lexicographic"
-                    if integrated_ev_utilization_mode != "disabled"
-                    else "canonical_actual_cost"
+                    "minimum_used_vehicle_days_lexicographic"
+                    if objective_preset == "research_lexicographic_v1"
+                    else (
+                        "minimum_ice_fuel_lexicographic"
+                        if integrated_ev_utilization_mode != "disabled"
+                        else "canonical_actual_cost"
+                    )
                 ),
             )
             metadata = dict(problem.metadata or {})
-            if str(metadata.get("objective_preset") or "").strip().lower() == (
-                "research_lexicographic_v1"
-            ):
+            if objective_preset == "research_lexicographic_v1":
                 metadata.update(
                     {
                         "solver_objective_matches_accounting_total": False,

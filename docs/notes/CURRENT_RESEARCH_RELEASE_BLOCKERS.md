@@ -1,5 +1,55 @@
 # Current research release blockers
 
+## 2026-08-13 post-fix pair accepted for PV sensitivity; formal gap still blocks release
+
+The required clean post-fix rerun completed from frozen SHA
+`e4ddd3f146975c34ac61e957385cd5a26daaca66` through fresh Prepare, Phase 4,
+24/24 Rolling, independent physical validation, executed-day accounting,
+bounded exact-oracle audit and pair finalization. Git remained clean and
+unchanged. The two cases held all non-PV controls fixed and share comparison
+control hash
+`1ae12973a92ad50c1257cd67c351f485f4451b6d164298a72fc72204fd12df11`;
+their PV-profile and final-assignment hashes differ.
+
+| Metric | High PV | Low PV |
+|---|---:|---:|
+| Used BEV / ICE | 31 / 1 | 21 / 11 |
+| BEV / ICE trips | 248 / 16 | 91 / 173 |
+| PV generation | 6,056.25 kWh | 996.20 kWh |
+| Grid import | 156.039059 kWh | 130.948752 kWh |
+| Fuel consumption | 36.307510 L | 357.881339 L |
+| Executed total cost | 650,234.729396 JPY | 698,318.002033 JPY |
+| Executed CO2 | 170.814257 kg | 986.112082 kg |
+
+The pair passes physical, SOC, charger, Rolling, accounting, artifact,
+tariff, provenance, composition-search, objective-semantics and controlled-PV
+comparison gates. `objective_preset=research_lexicographic_v1` is now exported
+and matched, and both bounded 10-trip integrated oracles are exact-eligible.
+Accordingly, `pair/pair_manifest.json` sets
+`accepted_for_controlled_pv_sensitivity_comparison=true`.
+
+Formal research submission remains `BLOCKED` because neither full 264-trip
+integrated run established the predeclared 1% MIP gap before the time limit.
+The only pair release failures are
+`baseline_requested_mip_gap_certified` and
+`counterfactual_requested_mip_gap_certified`. The reported schedules are valid
+feasible incumbents and demonstrate a scoped PV-supply response, but they are
+not certified global or lexicographic optima.
+
+Authoritative evidence:
+`output/formal_pair_20260813_thesis_model_flat30_pv1000_bess6000_phase4_e4ddd3f_gap01_r2`
+and its ZIP (SHA-256
+`504C282BDC51710AB821CCBCA2BDEA66FFBCFAC5B3D0AA5A4C42A2A63633E932`).
+The progress bundle contains seven PNG/SVG figures, six source tables and a
+hashed evidence index. Full-scale M0--M3 ablation and the predeclared
+sensitivity matrix are still separate unexecuted evidence requirements.
+
+A post-run metadata review also found that the frozen run's
+`integrated_primary_objective_kind` label remained `canonical_actual_cost`
+despite the actual `research_lexicographic_v1` hierarchy. Current code now
+exports `minimum_used_vehicle_days_lexicographic`. This is a provenance-label
+correction only; it does not change or relabel the frozen `e4ddd3f` evidence.
+
 ## 2026-08-13 revised-model pair completed; objective-contract rerun required
 
 Frozen clean SHA `332b6af48260c89bc14a2ad2be67a0fd1d2f168e` completed

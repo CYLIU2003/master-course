@@ -958,7 +958,7 @@ Standalone case summaries remain blocked only by
 before their counterpart exists. The immutable pair manifest is the
 pair-scoped release attestation and discharges that single pending check.
 
-### Revised-model PV1000 diagnostic pair (2026-08-13)
+### Revised-model PV1000 controlled pair (2026-08-13)
 
 Clean frozen SHA `332b6af48260c89bc14a2ad2be67a0fd1d2f168e` was
 executed through the same frontend/BFF Prepare, optimization, 24-hour Rolling,
@@ -982,8 +982,37 @@ fixed after the run. A bounded 10-trip, 15-minute diagnostic now reports
 Gurobi `OPTIMAL`, a raw primary objective of two vehicle-days, a 40,000 JPY
 secondary accounting cost, valid physical checks, and an accepted exact
 oracle. The `332b6af` pair remains diagnostic evidence for its own SHA and
-must not be relabelled; a fresh clean-commit pair is required after this
-objective-contract change.
+must not be relabelled.
+
+The required post-fix run has now completed from clean frozen SHA
+`e4ddd3f146975c34ac61e957385cd5a26daaca66`. Fresh Prepare and the ordinary
+frontend/BFF path were used for both scenarios with the same 2025-08-05
+weekday service, 30 JPY/kWh flat energy price, zero demand charge, 1,000 kW
+saved PV rating, 6,000 kWh / 900 kW BESS, and 3,000 -> 3,000 kWh BESS SOC.
+The reverse-derived PV fields were exported as 5,000 m2 installable panel area
+and 14,285.714286 m2 estimated depot area.
+
+The high-PV feasible incumbent used 31 BEVs / 1 ICE bus for 248/16 trips; the
+low-PV incumbent used 21/11 for 91/173 trips. Both served 264/264 trips, passed
+the independent physical checks, completed accepted 24/24 Rolling, reconciled
+executed-day accounting, and passed the lexicographic objective-semantics and
+used-powertrain-composition audits. The control hash matched, the PV hashes and
+assignment hashes differed, and the pair manifest therefore accepts the result
+for the scoped same-service-date PV-supply sensitivity comparison.
+
+Formal research submission remains `BLOCKED`: both full Phase 4 solves ended at
+the time limit without a certified gap, so neither incumbent may be called a
+global or lexicographic optimum. The authoritative evidence is
+`output/formal_pair_20260813_thesis_model_flat30_pv1000_bess6000_phase4_e4ddd3f_gap01_r2`
+and its ZIP. The bundle contains seven PNG/SVG comparison figures, six source
+tables, the immutable pair manifest, both complete run directories, and the
+bounded exact-oracle audits. The 10-trip, 15-minute integrated oracle is
+Gurobi `OPTIMAL` in both cases and confirms the repaired objective hierarchy;
+it is formulation evidence, not a substitute for the missing full-run gap.
+After this frozen run, current code also corrected the exported
+`integrated_primary_objective_kind` label from `canonical_actual_cost` to
+`minimum_used_vehicle_days_lexicographic`; the historical artifacts are left
+unchanged and must be interpreted with their recorded objective hierarchy.
 
 ## Progress-report output for a controlled PV pair
 
