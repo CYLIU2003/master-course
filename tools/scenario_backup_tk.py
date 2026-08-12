@@ -9749,6 +9749,34 @@ class App:
         self.prepared_profile_name = ""
         self._update_prepared_status_label()
 
+    def _mark_solver_mode_change(self) -> None:
+        """Keep one prepared input across explicit MILP thesis phases.
+
+        Phase 1 and Phase 4 must be compared on the identical materialized
+        input. Their solver phase is an execution control, not a timetable or
+        fleet mutation. Other profile changes still invalidate Prepare.
+        """
+
+        milp_exact_modes = {
+            "mode_milp_only",
+            "thesis_mode",
+            "debug_mode",
+            "phase1_charging_only",
+            "phase2_assignment_only",
+            "phase3_two_stage",
+            "phase4_integrated",
+            "diagnostic",
+        }
+        current_mode = str(self.solver_mode_var.get() or "").strip().lower()
+        if (
+            self.prepared_ready
+            and bool(self.prepared_input_id)
+            and self.prepared_profile_name == "milp_exact"
+            and current_mode in milp_exact_modes
+        ):
+            return
+        self._mark_prepared_stale("solver mode changed")
+
     def _register_prepare_dependency_watchers(self) -> None:
         watched_pairs = [
             (self.day_type_var, "運行種別を変更"),
@@ -9819,7 +9847,15 @@ class App:
             for definition in COST_COMPONENT_DEFINITIONS
         )
         for variable, reason in watched_pairs:
-            variable.trace_add("write", lambda *_args, r=reason: self._mark_prepared_stale(r))
+            if variable is self.solver_mode_var:
+                variable.trace_add(
+                    "write", lambda *_args: self._mark_solver_mode_change()
+                )
+            else:
+                variable.trace_add(
+                    "write",
+                    lambda *_args, r=reason: self._mark_prepared_stale(r),
+                )
 
     def _extract_job_progress_percent(self, job: dict[str, Any]) -> float:
         raw = job.get("progress")
@@ -10632,6 +10668,7 @@ class App:
             textvariable=self.solver_mode_var,
             values=[
                 "mode_milp_only",
+                "phase1_charging_only",
                 "phase3_two_stage",
                 "phase4_integrated",
                 "mode_alns_only",
@@ -10896,6 +10933,7 @@ class App:
                 "mode_alns_milp",
                 "hybrid",
                 "milp",
+                "phase1_charging_only",
                 "phase3_two_stage",
                 "phase4_integrated",
             }

@@ -466,14 +466,41 @@ def _optimization_parameters(
     trips = tuple(getattr(canonical_problem, "trips", ()) or ())
     vehicles = tuple(getattr(canonical_problem, "vehicles", ()) or ())
     chargers = tuple(getattr(canonical_problem, "chargers", ()) or ())
+    depots = tuple(getattr(canonical_problem, "depots", ()) or ())
+    vehicle_types = tuple(
+        getattr(canonical_problem, "vehicle_types", ()) or ()
+    )
     price_slots = tuple(getattr(canonical_problem, "price_slots", ()) or ())
     pv_slots = tuple(getattr(canonical_problem, "pv_slots", ()) or ())
     trip_input = [_json_safe(item) for item in trips]
     vehicle_input = [_json_safe(item) for item in vehicles]
+    charger_input = [_json_safe(item) for item in chargers]
+    depot_input = [_json_safe(item) for item in depots]
+    vehicle_type_input = [_json_safe(item) for item in vehicle_types]
+    price_input = [_json_safe(item) for item in price_slots]
     pv_input = {
         "pv_slots": [_json_safe(item) for item in pv_slots],
         "depot_energy_assets": _json_safe(
             getattr(canonical_problem, "depot_energy_assets", {}) or {}
+        ),
+    }
+    canonical_ablation_input = {
+        "scenario": _json_safe(problem_scenario),
+        "objective_weights": _json_safe(
+            getattr(canonical_problem, "objective_weights", None)
+        ),
+        "trips": trip_input,
+        "vehicles": vehicle_input,
+        "vehicle_types": vehicle_type_input,
+        "depots": depot_input,
+        "chargers": charger_input,
+        "price_slots": price_input,
+        "pv_input": pv_input,
+        "feasible_connections": _json_safe(
+            getattr(canonical_problem, "feasible_connections", {}) or {}
+        ),
+        "baseline_plan": _json_safe(
+            getattr(canonical_problem, "baseline_plan", None)
         ),
     }
     return {
@@ -527,8 +554,23 @@ def _optimization_parameters(
             "vehicle_input_sha256": hashlib.sha256(
                 _canonical_json_bytes(vehicle_input)
             ).hexdigest(),
+            "charger_input_sha256": hashlib.sha256(
+                _canonical_json_bytes(charger_input)
+            ).hexdigest(),
+            "depot_input_sha256": hashlib.sha256(
+                _canonical_json_bytes(depot_input)
+            ).hexdigest(),
+            "vehicle_type_input_sha256": hashlib.sha256(
+                _canonical_json_bytes(vehicle_type_input)
+            ).hexdigest(),
+            "price_input_sha256": hashlib.sha256(
+                _canonical_json_bytes(price_input)
+            ).hexdigest(),
             "pv_profile_sha256": hashlib.sha256(
                 _canonical_json_bytes(pv_input)
+            ).hexdigest(),
+            "canonical_ablation_input_sha256": hashlib.sha256(
+                _canonical_json_bytes(canonical_ablation_input)
             ).hexdigest(),
         },
         "comparison_contract": {

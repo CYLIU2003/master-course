@@ -47,9 +47,13 @@ bound for the positive-part proxy, not permission to relax physical SOC.
 2. Persist the selected direct-versus-depot fragment transition and its energy
    in the solver result, then replay multi-fragment electric SOC continuously;
    until then `SOC_FRAGMENT` remains a formal blocker.
-3. Execute M1 explicitly and compare fresh M0--M3 candidates from the same
-   prepared input and frozen SHA. M0/M2/M3 day-ahead artifacts now share the
-   BFF cost evaluator and physical checker, but this deliberately does not mix
-   their day-ahead values with accepted Rolling accounting.
+3. Execute the implemented `phase1_charging_only` M1 frontend job and a fresh
+   M3 job, then pass `build_thesis_ablation_comparison.py`. The comparison code
+   now checks the prepared artifact, canonical mathematical-input fingerprint,
+   clean Git SHA, source acceptance/gap, payload hashes, physical validity, and
+   M0 identity without mixing Rolling accounting. It also revalidates the
+   final artifact hash snapshot so post-hoc source edits block comparison;
+   current-HEAD full-scale
+   evidence is still pending.
 4. Execute the predeclared 15/30/60-minute, route-band, energy-scale, PV-scale,
    and CO2-cap matrices from a clean frozen commit.

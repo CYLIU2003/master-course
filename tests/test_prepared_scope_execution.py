@@ -16,6 +16,18 @@ from bff.services.run_preparation import (
 )
 
 
+def test_explicit_thesis_phases_use_milp_exact_prepare_profile() -> None:
+    for phase in (
+        "phase1_charging_only",
+        "phase2_assignment_only",
+        "phase3_two_stage",
+        "phase4_integrated",
+    ):
+        profile = solver_prepare_profile(phase)
+        assert profile["solver_mode_effective"] == phase
+        assert profile["profile"] == "milp_exact"
+
+
 def test_prepare_materializes_explicit_fleet_state_from_existing_solver_rules() -> None:
     vehicles = [
         {

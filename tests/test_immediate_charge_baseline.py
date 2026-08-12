@@ -22,9 +22,11 @@ from src.optimization import (
     ChargerDefinition,
     EnergyPriceSlot,
     OptimizationConfig,
+    OptimizationEngine,
     OptimizationMode,
     ProblemBuilder,
 )
+from src.gurobi_runtime import is_gurobi_available
 from src.optimization.baselines.immediate_charge import (
     apply_arrival_immediate_charging,
     build_m0_rule_baseline,
@@ -454,3 +456,55 @@ def test_ablation_reconciles_structure_from_engine_metadata() -> None:
             optimized_solver_status="OPTIMAL",
             primary_optimization_structure="integrated",
         )
+
+
+@pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi is required")
+def test_explicit_phase1_run_optimizes_energy_on_fixed_baseline_dispatch() -> None:
+    problem = _single_bev_problem()
+    baseline_assignment = {
+        trip_id: problem.baseline_plan.vehicle_id_for_duty(duty.duty_id)
+        for duty in problem.baseline_plan.duties
+        for trip_id in duty.trip_ids
+    }
+    result = OptimizationEngine().solve(
+        problem,
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            phase="phase1_charging_only",
+            requested_phase_token="phase1_charging_only",
+            requested_phase="phase1_charging_only",
+            resolved_phase="phase1_charging_only",
+            executed_phase="phase1_charging_only",
+            fixed_assignment=problem.baseline_plan,
+            time_limit_sec=30,
+            mip_gap=0.0,
+            random_seed=42,
+            warm_start=False,
+            allow_postsolve_repair=False,
+        ),
+    )
+    optimized_assignment = {
+        trip_id: result.plan.vehicle_id_for_duty(duty.duty_id)
+        for duty in result.plan.duties
+        for trip_id in duty.trip_ids
+    }
+    payload = build_day_ahead_ablation_candidates(
+        problem=problem,
+        optimized_plan=result.plan,
+        optimized_solver_status=result.solver_status,
+        primary_optimization_structure=str(
+            result.solver_metadata.get("optimization_structure") or ""
+        ),
+    )
+    by_method = {row["method_id"]: row for row in payload["methods"]}
+
+    assert result.feasible is True
+    assert optimized_assignment == baseline_assignment
+    assert result.solver_metadata["optimization_structure"] == "charging_only"
+    assert result.solver_metadata["charging_dispatch_evaluated"] is True
+    assert result.solver_metadata["source_provenance_exact"] is True
+    assert by_method["M1"]["candidate_available"] is True
+    assert by_method["M1"]["day_ahead_comparison_eligible"] is True
+    assert by_method["M1"]["construction_status"] == (
+        "PRIMARY_PHASE1_DAY_AHEAD_RESULT"
+    )

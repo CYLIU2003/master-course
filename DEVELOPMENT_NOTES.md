@@ -3554,3 +3554,43 @@ locks this distinction in place.
   optimization was executed from this code-changing state. The exact oracle
   closes only the bounded electric formulation-test item; fresh M1/M0--M3,
   sensitivity, and controlled-pair evidence remain required.
+
+# 2026-08-12 - Explicit M1 and same-input M0--M3 comparison contract
+
+- Confirmed that the reachable canonical M1 path already exists:
+  `phase1_charging_only` normalizes the supplied fixed assignment (or the
+  canonical baseline assignment) and calls the same Stage-2 charging/PV/BESS
+  MILP used by the thesis pipeline. Added an end-to-end bounded Gurobi test
+  proving that the trip-to-vehicle assignment is unchanged, charging dispatch
+  and exact source provenance are evaluated, and the resulting frontend
+  candidate is labeled M1 rather than M2/M3.
+- Exposed `phase1_charging_only` in the Tk solver settings. Fixed Prepare's
+  phase classification so all explicit Phase 1--4 tokens use the
+  `milp_exact` profile instead of being mislabeled `hybrid_seeded`. The Tk
+  Prepare dependency watcher now preserves the prepared ID when switching
+  only among these explicit MILP phases; changing to ALNS/GA/ABC/hybrid still
+  marks it stale. This makes a literal same-prepared-input M1/M3 frontend pair
+  possible without weakening input mutation invalidation.
+- Extended `optimization_parameters.json` with hashes for chargers, depots,
+  vehicle types, tariffs, and one `canonical_ablation_input_sha256`. The latter
+  covers the effective scenario, objective weights, trips, vehicles, vehicle
+  types, depots, chargers, tariff/PV/BESS inputs, feasible connection network,
+  and baseline assignment. This prevents separate M1/M3 runs with a changed
+  tariff, charger set, connection graph, or rule dispatch from being combined.
+- Added `thesis_day_ahead_ablation_comparison_v1` and
+  `scripts/build_thesis_ablation_comparison.py`. The builder never invokes a
+  solver. It selects M0/M1 from the explicit Phase 1 artifact and M0/M2/M3 from
+  the explicit Phase 4 artifact only after verifying both source payload
+  digests, the same prepared ID and source bytes, the same canonical input and
+  clean Git SHA, valid research input bundles, accepted source solutions,
+  achieved MIP-gap targets, identical M0, and physical/comparison eligibility
+  for all four methods. Any mismatch produces `BLOCKED` with named failures.
+- The experiment matrix now records M1 as an available explicit frontend
+  phase and requires the merged comparison artifact. Focused M1, comparison,
+  input-provenance, Prepare, Tk, and experiment-contract regressions pass
+  `111 passed`. The comparison merge also rechecks the final hashes recorded
+  in each source `artifact_completeness.json` for the method candidates,
+  summary, solver settings, and run manifest. A post-hoc edit cannot inherit a
+  stale source acceptance label. No fresh 264-trip M1/M3 run was started from this dirty
+  development state; current-HEAD method effects remain unreported. The full
+  repository regression passes `1326 passed in 122.44s`.

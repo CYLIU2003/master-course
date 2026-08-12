@@ -64,10 +64,20 @@ def test_experiment_matrix_separates_method_and_component_ablations() -> None:
     )
     assert (
         method_rows["M1_fixed_dispatch_optimized_energy"]["implementation_status"]
-        == "SEPARATE_PHASE1_RUN_REQUIRED"
+        == "EXPLICIT_PHASE1_FRONTEND_RUN_AVAILABLE"
+    )
+    assert (
+        method_rows["M1_fixed_dispatch_optimized_energy"][
+            "candidate_generation_available"
+        ]
+        is True
     )
     assert (
         "thesis_ablation/day_ahead_method_candidates.json"
+        in payload["required_outputs"]
+    )
+    assert (
+        "thesis_ablation_comparison/day_ahead_method_comparison.json"
         in payload["required_outputs"]
     )
     assert len(payload["component_ablation_contract"]) == 3

@@ -1027,13 +1027,35 @@ day-ahead run now writes
 `thesis_ablation/day_ahead_method_candidates.json` and `.csv`. M0 applies a
 deterministic rule assignment plus arrival-immediate PV-then-grid charging;
 M2 applies the same non-optimizing charging rule when the primary run includes
-optimized dispatch. A charging-only primary is labeled M1, and only a
-`phase4_integrated` primary is labeled M3; Phase 2/3 results are never relabeled
-as integrated optimization. The rule never uses BESS,
+optimized dispatch. The solver settings UI exposes `phase1_charging_only` for
+an explicit fixed-baseline-dispatch M1 run, and only a `phase4_integrated`
+primary is labeled M3; Phase 2/3 results are never relabeled as integrated
+optimization. The rule never uses BESS,
 never repairs or reassigns an infeasible candidate, and records physical errors
-instead. M1 still requires an explicit `phase1_charging_only` run against the
-same prepared input. Therefore the generated M0/M2/M3 file is a candidate
-diagnostic, not a complete four-method result or a research-release shortcut.
+instead. M1 still requires its own frontend job against the same prepared input;
+the ordinary M3 job does not launch it silently. Switching between explicit
+MILP Phase 1--4 modes keeps an existing `milp_exact` prepared input valid, while
+changing to another solver profile still requires Prepare again. After both
+jobs finish, run:
+
+```powershell
+python scripts/build_thesis_ablation_comparison.py `
+  --phase1-run <PHASE1_RUN_DIR> `
+  --phase4-run <PHASE4_RUN_DIR> `
+  --output-dir <COMPARISON_DIR>
+```
+
+The comparison is READY only when both source payload hashes, prepared input
+ID and byte hash, canonical trips/vehicles/connections/chargers/tariff/PV/BESS/
+baseline fingerprint, clean Git SHA, research input validation, source
+acceptance, MIP-gap target, and M0 identity all agree. Otherwise it writes a
+BLOCKED artifact with every failed check. Thus a single-run M0/M2/M3 file
+remains a candidate diagnostic, not a complete four-method result or a
+research-release shortcut.
+At merge time the source method-candidate payload, `summary.json`,
+`solver_settings.json`, and `run_manifest.json` are also re-hashed against the
+final `artifact_completeness.json` snapshot. Any post-run edit blocks the
+comparison.
 The frontend artifact-completeness gate nevertheless requires both candidate
 files and checks availability against the primary optimization structure. This
 prevents a failed adjunct calculation or a mislabeled Phase 1/2/3 result from

@@ -627,6 +627,43 @@ def test_solver_settings_window_exposes_timestep_selector() -> None:
     assert "Prepareをやり直してください" in source
 
 
+def test_solver_settings_window_exposes_explicit_phase1_for_m1() -> None:
+    source = inspect.getsource(App.open_solver_settings_window)
+
+    assert '"phase1_charging_only"' in source
+    assert '"phase4_integrated"' in source
+
+
+def test_explicit_milp_phase_switch_preserves_same_prepared_input() -> None:
+    app = App.__new__(App)
+    app.solver_mode_var = DummyVar("phase1_charging_only")
+    app.prepared_input_id = "prepared-1"
+    app.prepared_ready = True
+    app.prepared_profile_name = "milp_exact"
+    calls: list[str] = []
+    app._mark_prepared_stale = lambda reason: calls.append(reason)
+
+    App._mark_solver_mode_change(app)
+
+    assert calls == []
+    assert app.prepared_input_id == "prepared-1"
+    assert app.prepared_ready is True
+
+
+def test_solver_profile_change_invalidates_prepared_input() -> None:
+    app = App.__new__(App)
+    app.solver_mode_var = DummyVar("mode_alns_only")
+    app.prepared_input_id = "prepared-1"
+    app.prepared_ready = True
+    app.prepared_profile_name = "milp_exact"
+    calls: list[str] = []
+    app._mark_prepared_stale = lambda reason: calls.append(reason)
+
+    App._mark_solver_mode_change(app)
+
+    assert len(calls) == 1
+
+
 def test_timestep_payload_uses_supported_discretization() -> None:
     app = App.__new__(App)
     app.timestep_min_var = DummyVar("30")

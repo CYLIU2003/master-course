@@ -177,7 +177,12 @@ def test_frontend_run_input_bundle_is_self_verifying(tmp_path: Path) -> None:
     assert parameters["runtime_environment"]["python_version"]
     assert parameters["canonical_input_dimensions"]["trip_input_sha256"]
     assert parameters["canonical_input_dimensions"]["vehicle_input_sha256"]
+    assert parameters["canonical_input_dimensions"]["charger_input_sha256"]
+    assert parameters["canonical_input_dimensions"]["price_input_sha256"]
     assert parameters["canonical_input_dimensions"]["pv_profile_sha256"]
+    assert parameters["canonical_input_dimensions"][
+        "canonical_ablation_input_sha256"
+    ]
     code_provenance = json.loads(
         (run_dir / CODE_PROVENANCE_FILE).read_text(encoding="utf-8")
     )

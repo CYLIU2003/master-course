@@ -17,8 +17,9 @@ it is not evidence for the revised model. Current-HEAD research release is
    accounting, and immutable pair verification;
 5. a fresh frontend/BFF ablation matrix (the bounded all-ICE and grid-only
    electric exact-model audits are now implemented and tested);
-6. an explicit M1 fixed-dispatch charging solve and a fresh same-input M0--M3
-   comparison before method-level effect sizes may be claimed.
+6. execute the now-available explicit M1 fixed-dispatch charging job and a
+   fresh M3 job, then pass the same-input M0--M3 comparison gate before
+   method-level effect sizes may be claimed.
 
 The implemented PV semantics are
 `available_surplus_after_depot_load`; gross PV is not accepted without an
@@ -36,6 +37,23 @@ failure, one-port versus two-port charger concurrency, canonical cost and
 physical validation, and agreement with the integrated Gurobi result. This is
 bounded formulation evidence only; it does not discharge the fresh 264-trip
 formal-run, M1/M0--M3, sensitivity, or pair gates above.
+
+The M1 execution and comparison path is now implemented. The Tk solver list
+exposes `phase1_charging_only`, Prepare classifies every explicit thesis phase
+as `milp_exact`, and the existing canonical Stage-2 solver keeps the baseline
+vehicle-trip assignment fixed while optimizing charging, PV, BESS, and grid
+flows. `scripts/build_thesis_ablation_comparison.py` merges that explicit M1
+run with an explicit Phase 4 run only after matching the prepared artifact,
+clean Git SHA, and a canonical fingerprint covering the scenario, objective
+weights, trips, vehicles, vehicle types, depots, chargers, tariffs, PV/BESS,
+feasible connections, and baseline assignment. Source acceptance, declared
+MIP-gap achievement, method physical validity, payload SHA, and identical M0
+are also mandatory. The merge rechecks the immutable hash snapshot recorded in
+each source `artifact_completeness.json`; edits to the candidates, summary,
+solver settings, or run manifest after finalization force `BLOCKED`. The
+implementation is tested, but no fresh full-scale M1
+or M3 frontend job has yet been executed at current HEAD, so item 6 remains an
+evidence blocker rather than an implementation blocker.
 
 ## 2026-08-11 compact reporting release: progress presentation ready
 

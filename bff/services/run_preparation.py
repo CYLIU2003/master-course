@@ -53,7 +53,16 @@ def _normalize_solver_mode(mode: Any) -> str:
 
 def solver_prepare_profile(mode: Any) -> dict[str, Any]:
     solver_mode_effective = _normalize_solver_mode(mode)
-    if solver_mode_effective in {"mode_milp_only", "thesis_mode", "debug_mode"}:
+    if solver_mode_effective in {
+        "mode_milp_only",
+        "thesis_mode",
+        "debug_mode",
+        "phase1_charging_only",
+        "phase2_assignment_only",
+        "phase3_two_stage",
+        "phase4_integrated",
+        "diagnostic",
+    }:
         return {
             "solver_mode_effective": solver_mode_effective,
             "profile": "milp_exact",
