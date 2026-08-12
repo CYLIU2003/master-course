@@ -270,6 +270,10 @@ def build_prepare_payload(
     vehicle_usage_cost_semantics: str = "unclassified",
     grid_energy_price_yen_per_kwh: float | None = None,
     demand_charge_yen_per_kw: float | None = None,
+    solver_mode: str = "phase3_two_stage",
+    objective_preset: str = "research_lexicographic_v1",
+    time_limit_seconds: int = 1800,
+    mip_gap: float = 0.1,
 ) -> dict[str, Any]:
     """Build the explicit frontend Prepare payload for one controlled case."""
 
@@ -330,13 +334,22 @@ def build_prepare_payload(
             ),
             "vehicle_usage_cost_semantics": vehicle_usage_cost_semantics,
             **tariff_settings,
-            "solver_mode": "mode_milp_only",
+            "solver_mode": solver_mode,
             "objective_mode": "total_cost",
+            "objective_preset": objective_preset,
+            "trip_energy_model": "literature_proxy_v1",
+            "trip_energy_sensitivity_scale": 1.0,
+            "charging_power_model": "piecewise_soc_taper_v1",
+            "charge_setup_minutes": 5,
+            "charge_teardown_minutes": 5,
+            "minimum_charge_session_minutes": 15,
+            "pv_input_semantics": "available_surplus_after_depot_load",
+            "pv_scale": 1.0,
             "fixed_route_band_mode": True,
             "allow_partial_service": False,
             "milp_max_successors_per_trip": None,
-            "time_limit_seconds": 1800,
-            "mip_gap": 0.1,
+            "time_limit_seconds": int(time_limit_seconds),
+            "mip_gap": float(mip_gap),
             "include_deadhead": True,
             "service_date": service_date,
             "service_dates": [service_date],
@@ -2721,34 +2734,13 @@ def _case_gate_audit(
                 is True
             )
         ),
-        "solver_objective_matches_canonical_accounting": (
-            (
-                summary.get("solver_objective_matches_accounting_total")
-                is False
-                and settings.get(
-                    "actual_cost_objective_structural_contract_passed"
-                )
-                is True
-                and settings.get("integrated_actual_cost_contract_applied")
-                is True
-                and settings.get("integrated_primary_objective_kind")
-                == "minimum_ice_fuel_lexicographic"
-            )
-            if phase4_policy
-            else (
-                summary.get("solver_objective_matches_accounting_total")
-                is True
-                and (
-                    not phase4_actual_cost
-                    or settings.get(
-                        "actual_cost_objective_structural_contract_passed"
-                    )
-                    is True
-                    and settings.get(
-                        "actual_cost_objective_numeric_reconciliation_passed"
-                    )
-                    is True
-                )
+        "solver_objective_accounting_semantics_valid": (
+            _solver_objective_accounting_contract_passes(
+                summary=summary,
+                settings=settings,
+                assignment_economic_audit=assignment_economic_audit,
+                phase4_actual_cost=phase4_actual_cost,
+                phase4_policy=phase4_policy,
             )
         ),
         "candidate_selection_complete": (
@@ -3303,6 +3295,56 @@ def _build_same_assignment_investigation(
         encoding="utf-8",
     )
     return payload
+
+
+def _solver_objective_accounting_contract_passes(
+    *,
+    summary: Mapping[str, Any],
+    settings: Mapping[str, Any],
+    assignment_economic_audit: Mapping[str, Any],
+    phase4_actual_cost: bool,
+    phase4_policy: bool,
+) -> bool:
+    """Distinguish scalar accounting equality from declared hierarchies."""
+
+    if phase4_policy:
+        return bool(
+            summary.get("solver_objective_matches_accounting_total") is False
+            and settings.get(
+                "actual_cost_objective_structural_contract_passed"
+            )
+            is True
+            and settings.get("integrated_actual_cost_contract_applied") is True
+            and settings.get("integrated_primary_objective_kind")
+            == "minimum_ice_fuel_lexicographic"
+        )
+    research_lexicographic = (
+        assignment_economic_audit.get("objective_preset")
+        == "research_lexicographic_v1"
+    )
+    if phase4_actual_cost and research_lexicographic:
+        return bool(
+            summary.get("solver_objective_matches_accounting_total") is False
+            and settings.get(
+                "actual_cost_objective_structural_contract_passed"
+            )
+            is True
+            and settings.get("integrated_actual_cost_contract_applied") is True
+        )
+    return bool(
+        summary.get("solver_objective_matches_accounting_total") is True
+        and (
+            not phase4_actual_cost
+            or settings.get(
+                "actual_cost_objective_structural_contract_passed"
+            )
+            is True
+            and settings.get(
+                "actual_cost_objective_numeric_reconciliation_passed"
+            )
+            is True
+        )
+    )
 
 
 def _build_pair_control_audit(
@@ -3921,6 +3963,34 @@ def main() -> int:
         grid_energy_price_yen_per_kwh=args.grid_energy_price_yen_per_kwh,
         demand_charge_yen_per_kw=args.demand_charge_yen_per_kw,
     )
+    phase4_run = args.optimization_experiment_case.startswith("phase4_")
+    prepare_solver_mode = (
+        "phase4_integrated" if phase4_run else "phase3_two_stage"
+    )
+    prepare_objective_preset = (
+        "scalar_total_cost_v1"
+        if args.optimization_experiment_case
+        in {
+            "phase4_maximum_ev_utilization",
+            "phase4_cost_constrained_ev_utilization",
+        }
+        else "research_lexicographic_v1"
+    )
+    prepare_time_limit_seconds = (
+        3600
+        if phase4_run
+        or args.optimization_experiment_case == "phase3_bev_frontier"
+        else 1800
+    )
+    if (
+        args.optimization_experiment_case
+        == "phase4_integrated_actual_cost"
+    ):
+        prepare_mip_gap = args.actual_cost_mip_gap
+    elif phase4_run:
+        prepare_mip_gap = PHASE4_POLICY_MIP_GAP
+    else:
+        prepare_mip_gap = 0.1
     output_dir = args.output_dir.resolve()
     zip_path = Path(f"{output_dir}.zip")
     if output_dir.exists() or zip_path.exists():
@@ -4013,6 +4083,10 @@ def main() -> int:
                     args.grid_energy_price_yen_per_kwh
                 ),
                 demand_charge_yen_per_kw=args.demand_charge_yen_per_kw,
+                solver_mode=prepare_solver_mode,
+                objective_preset=prepare_objective_preset,
+                time_limit_seconds=prepare_time_limit_seconds,
+                mip_gap=prepare_mip_gap,
             ),
         ),
         (
@@ -4036,6 +4110,10 @@ def main() -> int:
                     args.grid_energy_price_yen_per_kwh
                 ),
                 demand_charge_yen_per_kw=args.demand_charge_yen_per_kw,
+                solver_mode=prepare_solver_mode,
+                objective_preset=prepare_objective_preset,
+                time_limit_seconds=prepare_time_limit_seconds,
+                mip_gap=prepare_mip_gap,
             ),
         ),
     )

@@ -90,7 +90,7 @@ REQUIRED_CASE_GATE_KEYS = {
     "candidate_evidence_present",
     "assignment_economic_audit_present",
     "used_powertrain_composition_search_certified",
-    "solver_objective_matches_canonical_accounting",
+    "solver_objective_accounting_semantics_valid",
     "candidate_selection_complete",
     "slot_energy_recourse_used",
     "terminal_claim_message_consistent",

@@ -64,6 +64,7 @@ def _case(
     terminal_run_state: str = "complete",
     comparison_requested: bool = True,
     mip_gap_target_met: bool = True,
+    objective_preset: str = "scalar_total_cost_v1",
 ) -> None:
     service_date = "2025-08-05"
     pv_source_date = (
@@ -127,7 +128,9 @@ def _case(
         run_dir / "summary.json",
         {
             "trip_count_served": 264,
-            "solver_objective_matches_accounting_total": True,
+            "solver_objective_matches_accounting_total": (
+                objective_preset != "research_lexicographic_v1"
+            ),
             "used_powertrain_composition_search_accepted": True,
         },
     )
@@ -144,9 +147,17 @@ def _case(
             "tolerance_jpy": 1.0e-6,
             "numeric_values_available": True,
             "numeric_residual_within_tolerance": True,
-            "objective_is_actual_cost": True,
-            "matches_canonical_accounting_total": True,
-            "objective_semantics": "actual_cost",
+            "objective_is_actual_cost": (
+                objective_preset != "research_lexicographic_v1"
+            ),
+            "matches_canonical_accounting_total": (
+                objective_preset != "research_lexicographic_v1"
+            ),
+            "objective_semantics": (
+                "lexicographic_vehicle_days_then_canonical_cost"
+                if objective_preset == "research_lexicographic_v1"
+                else "actual_cost"
+            ),
         },
     )
     _write_json(
@@ -158,6 +169,13 @@ def _case(
         {
             "has_feasible_incumbent": True,
             "mip_gap_target_met": mip_gap_target_met,
+        },
+    )
+    _write_json(
+        run_dir / "assignment_economic_audit.json",
+        {
+            "schema_version": "assignment_economic_audit_v1",
+            "objective_preset": objective_preset,
         },
     )
     _write_json(
@@ -204,6 +222,78 @@ def test_pair_manifest_proves_fixed_controls_and_exact_pv_difference(
     assert manifest["assignment_hashes_equal"] is True
     assert (output_dir / "comparison_table.csv").is_file()
     assert (output_dir / "comparison_report.md").is_file()
+
+
+def test_pair_manifest_accepts_declared_lexicographic_accounting_semantics(
+    tmp_path: Path,
+) -> None:
+    baseline = tmp_path / "baseline"
+    counterfactual = tmp_path / "counterfactual"
+    output_dir = tmp_path / "pair"
+    for run_dir, role, pv_hash, pv_values, total_cost in (
+        (baseline, "baseline", "high-pv", [1.0, 2.0], 100.0),
+        (
+            counterfactual,
+            "pv_curve_counterfactual",
+            "low-pv",
+            [0.2, 0.3],
+            120.0,
+        ),
+    ):
+        _case(
+            run_dir,
+            role=role,
+            control_hash="fixed-controls",
+            pv_hash=pv_hash,
+            pv_values=pv_values,
+            total_cost=total_cost,
+            objective_preset="research_lexicographic_v1",
+        )
+
+    manifest = build_frontend_pv_pair_artifacts(
+        baseline_run_dir=baseline,
+        counterfactual_run_dir=counterfactual,
+        output_dir=output_dir,
+    )
+
+    assert manifest["accepted_for_controlled_pv_sensitivity_comparison"] is True
+    assert manifest["checks"][
+        "baseline_solver_objective_accounting_semantics_valid"
+    ] is True
+    assert manifest["checks"]["objective_presets_match"] is True
+
+
+def test_pair_manifest_rejects_different_objective_presets(
+    tmp_path: Path,
+) -> None:
+    baseline = tmp_path / "baseline"
+    counterfactual = tmp_path / "counterfactual"
+    output_dir = tmp_path / "pair"
+    _case(
+        baseline,
+        role="baseline",
+        control_hash="fixed-controls",
+        pv_hash="high-pv",
+        pv_values=[1.0, 2.0],
+        total_cost=100.0,
+        objective_preset="research_lexicographic_v1",
+    )
+    _case(
+        counterfactual,
+        role="pv_curve_counterfactual",
+        control_hash="fixed-controls",
+        pv_hash="low-pv",
+        pv_values=[0.2, 0.3],
+        total_cost=120.0,
+        objective_preset="scalar_total_cost_v1",
+    )
+
+    with pytest.raises(ValueError, match="objective_presets_match"):
+        build_frontend_pv_pair_artifacts(
+            baseline_run_dir=baseline,
+            counterfactual_run_dir=counterfactual,
+            output_dir=output_dir,
+        )
 
 
 def test_pair_manifest_keeps_comparison_but_blocks_formal_ready_when_gap_missed(
@@ -398,7 +488,9 @@ def test_pair_manifest_rejects_objective_accounting_or_composition_failure(
 
     with pytest.raises(
         ValueError,
-        match="counterfactual_solver_objective_matches_canonical_accounting",
+        match=(
+            "counterfactual_solver_objective_accounting_semantics_valid"
+        ),
     ):
         build_frontend_pv_pair_artifacts(
             baseline_run_dir=baseline,
@@ -441,7 +533,9 @@ def test_pair_manifest_rejects_true_summary_flags_without_evidence_artifacts(
 
     with pytest.raises(
         ValueError,
-        match="counterfactual_solver_objective_matches_canonical_accounting",
+        match=(
+            "counterfactual_solver_objective_accounting_semantics_valid"
+        ),
     ):
         build_frontend_pv_pair_artifacts(
             baseline_run_dir=baseline,

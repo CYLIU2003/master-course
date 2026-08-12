@@ -231,6 +231,20 @@ def test_prepare_payload_separates_service_date_from_pv_source() -> None:
     )
     assert sunny_settings["enable_weather_operation_policy"] is False
     assert rain_settings["enable_weather_operation_policy"] is False
+    assert sunny_settings["solver_mode"] == "phase3_two_stage"
+    assert rain_settings["solver_mode"] == "phase3_two_stage"
+    for field, expected in (
+        ("objective_preset", "research_lexicographic_v1"),
+        ("trip_energy_model", "literature_proxy_v1"),
+        ("trip_energy_sensitivity_scale", 1.0),
+        ("charging_power_model", "piecewise_soc_taper_v1"),
+        ("charge_setup_minutes", 5),
+        ("charge_teardown_minutes", 5),
+        ("minimum_charge_session_minutes", 15),
+        ("pv_input_semantics", "available_surplus_after_depot_load"),
+        ("pv_scale", 1.0),
+    ):
+        assert sunny_settings[field] == rain_settings[field] == expected
     for field, expected in (
         ("initial_ice_fuel_percent", 100.0),
         ("min_ice_fuel_percent", 10.0),
@@ -269,6 +283,28 @@ def test_prepare_payload_replaces_inherited_tou_with_uniform_tariff() -> None:
     assert "fixed at 30 JPY/kWh for every clock slot" in settings[
         "experiment_notes"
     ]
+
+
+def test_prepare_payload_records_phase4_effective_solver_controls() -> None:
+    runner = _load_runner()
+
+    payload = runner.build_prepare_payload(
+        depot_id="tsurumaki",
+        service_id="WEEKDAY",
+        service_date="2025-08-05",
+        pv_source_date="2025-08-05",
+        comparison_role="baseline",
+        solver_mode="phase4_integrated",
+        objective_preset="research_lexicographic_v1",
+        time_limit_seconds=3600,
+        mip_gap=0.01,
+    )
+
+    settings = payload["simulation_settings"]
+    assert settings["solver_mode"] == "phase4_integrated"
+    assert settings["objective_preset"] == "research_lexicographic_v1"
+    assert settings["time_limit_seconds"] == 3600
+    assert settings["mip_gap"] == pytest.approx(0.01)
 
 
 def test_controlled_pv_asset_retains_rated_output_and_preserves_bess() -> None:
@@ -617,7 +653,6 @@ def test_optimization_payload_exposes_frontier_and_integrated_actual_cost() -> N
             experiment_case="phase4_integrated_actual_cost",
             actual_cost_mip_gap=1.0,
         )
-
     maximum_ev = runner.build_optimization_payload(
         "prepared-maximum-ev",
         experiment_case="phase4_maximum_ev_utilization",
@@ -643,6 +678,33 @@ def test_optimization_payload_exposes_frontier_and_integrated_actual_cost() -> N
             "prepared-missing-cap",
             experiment_case="phase4_cost_constrained_ev_utilization",
         )
+
+
+def test_objective_audit_accepts_declared_research_lexicographic_semantics() -> None:
+    runner = _load_runner()
+    settings = {
+        "actual_cost_objective_structural_contract_passed": True,
+        "integrated_actual_cost_contract_applied": True,
+    }
+
+    assert runner._solver_objective_accounting_contract_passes(
+        summary={"solver_objective_matches_accounting_total": False},
+        settings=settings,
+        assignment_economic_audit={
+            "objective_preset": "research_lexicographic_v1"
+        },
+        phase4_actual_cost=True,
+        phase4_policy=False,
+    )
+    assert not runner._solver_objective_accounting_contract_passes(
+        summary={"solver_objective_matches_accounting_total": True},
+        settings=settings,
+        assignment_economic_audit={
+            "objective_preset": "research_lexicographic_v1"
+        },
+        phase4_actual_cost=True,
+        phase4_policy=False,
+    )
 
 
 def test_phase4_formal_gate_requires_verified_same_problem_full_warm_start() -> None:

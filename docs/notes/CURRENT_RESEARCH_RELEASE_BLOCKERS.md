@@ -39,6 +39,16 @@ back ON. Item 3 remains an evidence blocker until the clean-commit matrix (or
 an explicitly scoped subset) is actually run; a subset cannot discharge the
 full-matrix gate.
 
+The controlled sunny/rain runner now also sends the revised model controls in
+its fresh Prepare request and aligns Prepare's Phase/time-limit/gap fields with
+the submitted Phase 4 job. Its audit accepts the explicit
+`research_lexicographic_v1` hierarchy only when the solver correctly reports
+that the hierarchy is not a scalar accounting objective; it does not convert
+that result into an unconstrained total-cost optimum. The current-HEAD pair is
+still unexecuted, so this closes an execution-path bug, not the evidence gate.
+Pair verification applies the same semantic audit and rejects mixed objective
+presets rather than requiring false scalar equality from a valid hierarchy.
+
 The independent exact-audit boundary now includes a second, electric oracle.
 It completely enumerates assignments and uses a separate SciPy/HiGHS charging
 MILP for strict one-depot, one-day, flat-tariff, PV=0, BESS=0,

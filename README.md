@@ -825,6 +825,18 @@ reload, and Prepare:
   minimum session duration;
 - optional `co2_emissions_cap_kg` for Phase 4 epsilon-constraint cases.
 
+The controlled-pair runner sends the same model contract explicitly. For the
+Phase 4 actual-cost entry path it prepares `phase4_integrated`, the declared
+3600-second/gap controls, `literature_proxy_v1`,
+`research_lexicographic_v1`, `piecewise_soc_taper_v1`, and surplus-PV
+semantics before submitting the job. Under the research preset, the solver
+objective is a declared hierarchy (vehicle-days, canonical operating cost,
+deadhead, then charge sessions); the reported accounting total remains the
+canonical cost KPI and is not falsely labelled as the scalar solver objective.
+Pair verification validates this declared objective/accounting relationship
+and requires both cases to use the same objective preset; it does not demand
+numerical equality between unlike mathematical quantities.
+
 Generate the controlled sensitivity contract without running a solver:
 
 ```powershell

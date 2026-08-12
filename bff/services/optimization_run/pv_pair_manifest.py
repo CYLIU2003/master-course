@@ -106,6 +106,9 @@ def _case(run_dir: Path) -> dict[str, Any]:
         "research_claim_scope": claim_scope,
         "canonical_cost_ledger": ledger,
         "summary": summary,
+        "assignment_economic_audit": _load_optional_object(
+            run_dir / "assignment_economic_audit.json"
+        ),
         "solver_settings": _load_optional_object(
             run_dir / "solver_settings.json"
         ),
@@ -117,6 +120,57 @@ def _case(run_dir: Path) -> dict[str, Any]:
         ),
         "pv_profile": _pv_profile(run_dir),
     }
+
+
+def _objective_accounting_contract_errors(
+    case: Mapping[str, Any],
+) -> list[str]:
+    """Validate accounting evidence under the case's declared objective."""
+
+    reconciliation = dict(
+        case.get("solver_objective_accounting_reconciliation") or {}
+    )
+    economic_audit = dict(case.get("assignment_economic_audit") or {})
+    objective_preset = str(
+        economic_audit.get("objective_preset") or ""
+    ).strip()
+    if objective_preset != "research_lexicographic_v1":
+        return validate_solver_objective_accounting_reconciliation(
+            reconciliation,
+            require_match=True,
+        )
+
+    errors = validate_solver_objective_accounting_reconciliation(
+        reconciliation,
+        require_match=False,
+    )
+    artifact = SOLVER_OBJECTIVE_ACCOUNTING_RECONCILIATION_FILE
+    if reconciliation.get("objective_is_actual_cost") is not False:
+        errors.append(
+            f"{artifact}: research_lexicographic_v1 must not be labelled "
+            "as a scalar actual-cost objective"
+        )
+    if reconciliation.get("matches_canonical_accounting_total") is not False:
+        errors.append(
+            f"{artifact}: research_lexicographic_v1 must not claim scalar "
+            "objective/accounting equality"
+        )
+    if (
+        reconciliation.get("canonical_accounting_source")
+        != "rolling_hourly_chain/executed_day_accounting.json"
+    ):
+        errors.append(
+            f"{artifact}: lexicographic comparison requires executed-day "
+            "Rolling accounting"
+        )
+    if "lexicographic" not in str(
+        reconciliation.get("objective_semantics") or ""
+    ).lower():
+        errors.append(
+            f"{artifact}: objective_semantics does not declare a "
+            "lexicographic objective"
+        )
+    return errors
 
 
 def _comparison_rows(
@@ -246,16 +300,10 @@ def build_frontend_pv_pair_artifacts(
         counterfactual_manifest.get("comparison_control_payload") or {}
     )
     baseline_objective_accounting_errors = (
-        validate_solver_objective_accounting_reconciliation(
-            baseline["solver_objective_accounting_reconciliation"],
-            require_match=True,
-        )
+        _objective_accounting_contract_errors(baseline)
     )
     counterfactual_objective_accounting_errors = (
-        validate_solver_objective_accounting_reconciliation(
-            counterfactual["solver_objective_accounting_reconciliation"],
-            require_match=True,
-        )
+        _objective_accounting_contract_errors(counterfactual)
     )
     baseline_composition_certificate_errors = (
         []
@@ -340,11 +388,27 @@ def build_frontend_pv_pair_artifacts(
             dict(counterfactual["final_cost_reconciliation"]).get("status")
             == "OK"
         ),
-        "baseline_solver_objective_matches_canonical_accounting": (
+        "baseline_solver_objective_accounting_semantics_valid": (
             not baseline_objective_accounting_errors
         ),
-        "counterfactual_solver_objective_matches_canonical_accounting": (
+        "counterfactual_solver_objective_accounting_semantics_valid": (
             not counterfactual_objective_accounting_errors
+        ),
+        "objective_presets_match": (
+            bool(
+                str(
+                    dict(baseline["assignment_economic_audit"]).get(
+                        "objective_preset"
+                    )
+                    or ""
+                ).strip()
+            )
+            and dict(baseline["assignment_economic_audit"]).get(
+                "objective_preset"
+            )
+            == dict(counterfactual["assignment_economic_audit"]).get(
+                "objective_preset"
+            )
         ),
         "baseline_used_powertrain_composition_search_certified": (
             not baseline_composition_certificate_errors

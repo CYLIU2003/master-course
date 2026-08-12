@@ -64,10 +64,23 @@
   final artifact hashes are computed and therefore cannot hash itself; the
   runner now validates its status/schema separately while verifying every
   snapshotted source artifact against the recorded size and SHA-256.
+- Updated `run_frontend_controlled_pv_pair.py` to put the revised thesis model
+  on the actual formal execution path. Fresh Prepare now records the explicit
+  Phase, time limit/gap, trip-energy proxy, research objective preset,
+  SOC-taper charging, setup/teardown/minimum-session controls, surplus-PV
+  semantics, and unit PV multiplier. The case audit distinguishes a declared
+  lexicographic solver objective from scalar accounting equality instead of
+  rejecting or mislabelling it.
+- Updated the pair manifest to apply the same distinction. Scalar cost cases
+  still require exact solver/accounting reconciliation. A declared
+  `research_lexicographic_v1` pair instead requires a valid reconciliation
+  schema, Rolling as the canonical accounting source, explicit non-scalar
+  labels, lexicographic semantics, and the same objective preset in both
+  cases. Mixed objective presets fail closed.
 - Focused verification completed: trip proxy/platform alias/fingerprint/taper
   tests, assignment audit/artifact completeness, Quick Setup/Prepare scope,
   integrated actual-cost, Stage 2 feedback, and objective-mode tests. A fresh
-  full suite also passed (`1336 passed`). A fresh clean-commit formal pair is
+  full suite also passed (`1340 passed`). A fresh clean-commit formal pair is
   still required before research release.
 
 ## 2026-08-11: canonical Rolling reporting snapshot and compact presentation release
