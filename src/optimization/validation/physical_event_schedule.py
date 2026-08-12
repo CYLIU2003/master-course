@@ -14,6 +14,7 @@ from src.optimization.common.soc_helpers import (
     deadhead_before_trip_energy_kwh,
     return_deadhead_energy_kwh,
     return_deadhead_min_to_home,
+    trip_energy_kwh,
 )
 from src.optimization.common.time_axis import normalize_horizon_start_min
 
@@ -128,15 +129,48 @@ def _vehicle_powertrain(problem: Any, vehicle: Any) -> str:
     )
 
 
-def _service_energy(problem_trip: Any, vehicle: Any, powertrain: str) -> tuple[float, float]:
-    distance_km = max(_finite_float(getattr(problem_trip, "distance_km", 0.0)), 0.0)
+def _type_specific_quantity(
+    problem_trip: Any,
+    vehicle: Any,
+    field_name: str,
+) -> float | None:
+    quantities = dict(getattr(problem_trip, field_name, {}) or {})
+    vehicle_type = str(getattr(vehicle, "vehicle_type", "") or "").strip()
+    for key in (vehicle_type, vehicle_type.upper()):
+        if key not in quantities:
+            continue
+        try:
+            value = float(quantities[key] or 0.0)
+        except (TypeError, ValueError):
+            return None
+        return max(value, 0.0) if math.isfinite(value) else None
+    return None
+
+
+def _service_energy(
+    problem: Any,
+    problem_trip: Any,
+    vehicle: Any,
+    powertrain: str,
+) -> tuple[float, float]:
+    distance_km = max(
+        _finite_float(getattr(problem_trip, "distance_km", 0.0)),
+        0.0,
+    )
     if powertrain == "BEV":
-        rate = _finite_float(
-            getattr(vehicle, "energy_consumption_kwh_per_km", None),
-            _finite_float(getattr(problem_trip, "energy_kwh", 0.0))
-            / max(distance_km, 1.0e-9),
-        )
-        return distance_km * max(rate, 0.0), 0.0
+        # Reconstruct from the materialized trip demand, not from a legacy
+        # vehicle-average rate.  The canonical builder may assign a calibrated
+        # or literature-proxy quantity to each trip while preserving the daily
+        # aggregate.  The validator remains independent of solver output: it
+        # reads only the canonical problem input and serialized decisions.
+        return trip_energy_kwh(problem, vehicle, problem_trip), 0.0
+    type_specific_fuel = _type_specific_quantity(
+        problem_trip,
+        vehicle,
+        "fuel_l_by_vehicle_type",
+    )
+    if type_specific_fuel is not None:
+        return 0.0, type_specific_fuel
     rate = _finite_float(
         getattr(vehicle, "fuel_consumption_l_per_km", None),
         _finite_float(getattr(problem_trip, "fuel_l", 0.0))
@@ -217,7 +251,7 @@ def validate_physical_event_schedule(
                 continue
             powertrain = _vehicle_powertrain(problem, vehicle)
             service_energy_kwh, service_fuel_l = _service_energy(
-                problem_trip, vehicle, powertrain
+                problem, problem_trip, vehicle, powertrain
             )
             origin = _trip_endpoint(dispatch_trip, origin=True)
             destination = _trip_endpoint(dispatch_trip, origin=False)

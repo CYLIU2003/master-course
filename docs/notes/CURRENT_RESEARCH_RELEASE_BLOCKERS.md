@@ -1,5 +1,32 @@
 # Current research release blockers
 
+## 2026-08-13 trip-specific independent validation fixed, fresh pair pending
+
+The clean-SHA attempt at `624b42dcc5c40a07598000218d737a96569a5095`
+confirmed that the Rolling session-boundary fix works through the normal
+frontend/BFF path: the sunny case completed 24/24 feasible hourly solves and
+the rolling-chain acceptance checks passed. Day-ahead served all 264 trips
+with a 31-BEV / 1-ICE composition and a 248/16 trip split. The raw integrated
+status remained `time_limit` and the requested 1% MIP gap was not met.
+
+Finalization correctly failed closed, but the reported SOC violations were a
+validator semantic defect rather than physical violations in the canonical
+model. The independent event validator still recomputed each trip from the
+legacy vehicle-average distance rate. The revised model materializes
+trip-specific `literature_proxy_v1` BEV energy and ICE fuel quantities in the
+canonical problem, so the validator and solver were evaluating different
+energy demand for the same trip.
+
+The validator now consumes the canonical trip-specific demand while remaining
+independent of solver SOC output. BEV and ICE regression tests pass. A
+diagnostic replay of the preserved sunny assignment and executed charging
+schedule produces zero violations and an accepted 588-event physical ledger.
+This replay demonstrates the bug fix only. The original sunny run remains
+`BLOCKED`; the automatically started low-PV run was stopped because the shared
+defect made it ineligible and the source fix made the worktree dirty. A fresh
+clean-SHA pair, including the declared gap gate, 24/24 Rolling, physical
+validation, accounting reconciliation, and pair hashes, is still required.
+
 ## 2026-08-12 revised-model formal attempt: Rolling boundary bug fixed, rerun pending
 
 Frozen clean SHA `6f645020f8473c42c15dce8d654bcc00d052615a` was exercised

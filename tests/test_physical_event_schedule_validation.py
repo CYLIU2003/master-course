@@ -162,6 +162,83 @@ def test_valid_schedule_is_reconstructed_independently() -> None:
     assert validation["vehicle_soc_events"][-1]["soc_after_kwh"] == 180.0
 
 
+def test_trip_specific_bev_demand_is_the_independent_soc_source() -> None:
+    problem = _problem()
+    trips = tuple(
+        replace(
+            trip,
+            energy_kwh_by_vehicle_type={"BEV": 15.0},
+            energy_model_id="literature_proxy_v1",
+        )
+        for trip in problem.trips
+    )
+
+    validation = validate_physical_event_schedule(
+        problem=replace(problem, trips=trips),
+        serialized_result=_result(),
+    )
+
+    service_events = [
+        event
+        for event in validation["events"]
+        if event["event_type"] == "service_trip"
+    ]
+    assert [event["energy_kwh"] for event in service_events] == [15.0, 15.0]
+    assert validation["vehicle_soc_events"][-1]["soc_after_kwh"] == 170.0
+
+
+def test_trip_specific_ice_demand_is_the_independent_fuel_source() -> None:
+    problem = _problem()
+    ice_vehicle = replace(
+        problem.vehicles[0],
+        vehicle_type="ICE",
+        initial_soc=None,
+        battery_capacity_kwh=None,
+        reserve_soc=None,
+        initial_fuel_l=50.0,
+        fuel_tank_capacity_l=100.0,
+        fuel_reserve_l=0.0,
+        fuel_consumption_l_per_km=0.2,
+    )
+    ice_type = replace(
+        problem.vehicle_types[0],
+        vehicle_type_id="ICE",
+        powertrain_type="ICE",
+        battery_capacity_kwh=None,
+        energy_consumption_kwh_per_km=None,
+        fuel_tank_capacity_l=100.0,
+        fuel_consumption_l_per_km=0.2,
+    )
+    trips = tuple(
+        replace(
+            trip,
+            allowed_vehicle_types=("ICE",),
+            fuel_l_by_vehicle_type={"ICE": 3.0},
+            energy_model_id="literature_proxy_v1",
+        )
+        for trip in problem.trips
+    )
+    result = _result()
+    result["vehicle_paths"] = {"bev-1": ["trip-1", "trip-2"]}
+
+    validation = validate_physical_event_schedule(
+        problem=replace(
+            problem,
+            trips=trips,
+            vehicles=(ice_vehicle,),
+            vehicle_types=(ice_type,),
+        ),
+        serialized_result=result,
+    )
+
+    service_events = [
+        event
+        for event in validation["events"]
+        if event["event_type"] == "service_trip"
+    ]
+    assert [event["fuel_l"] for event in service_events] == [3.0, 3.0]
+
+
 def test_service_and_charging_overlap_fails() -> None:
     result = _result()
     result["charging_schedule"] = [_charging_row()]

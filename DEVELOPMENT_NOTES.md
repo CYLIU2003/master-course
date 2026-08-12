@@ -2,6 +2,37 @@
 
 ## 2026-08-12: thesis-model validity contract implementation
 
+- A second clean-SHA frontend/BFF attempt at
+  `624b42dcc5c40a07598000218d737a96569a5095` used fresh Prepare ID
+  `prepared-e56fd617b42198a7-e6406a7fd75ec751-d5e8413e` for the sunny case.
+  The Phase-4 incumbent served 264/264 trips using 31 BEVs and 1 ICE bus
+  (248/16 trips). Its raw status was `time_limit`; the requested 1% gap was not
+  met, so no optimality claim is permitted.
+- All 24 hourly Rolling subproblems were feasible and the chain acceptance
+  checks passed, demonstrating that the charging-session boundary correction
+  removed the prior 06:00 infeasibility. Final independent physical validation
+  nevertheless stopped the run with 31 BEV terminal-SOC and four lower-SOC
+  violations. The low-PV job was started automatically by the pair runner but
+  intentionally stopped once the shared validation defect and dirty-worktree
+  consequence were known; it is not evidence.
+- Root cause: `physical_event_schedule._service_energy()` ignored
+  `ProblemTrip.energy_kwh_by_vehicle_type` and
+  `ProblemTrip.fuel_l_by_vehicle_type`. It rebuilt service consumption from
+  the legacy vehicle-average distance rate while the MILP and Rolling chain
+  used the materialized `literature_proxy_v1` trip quantities. Individual
+  errors ranged from about 0.004 to 1.52 kWh and happened to offset in the
+  aggregate, which is why aggregate terminal energy alone did not detect the
+  semantic mismatch.
+- The independent validator now uses canonical trip-specific BEV energy and
+  ICE fuel inputs, not serialized solver SOC. Added explicit BEV and ICE
+  regression cases. A diagnostic replay using the preserved canonical input,
+  assignment, and executed charging decisions reconstructed 588 physical
+  events and 433 SOC events with zero violations and `accepted=true`.
+- Validation after the correction: focused physical/rolling/trip-demand suite
+  `35 passed`; complete repository suite `1345 passed`. The preserved failed
+  run and its generated pair ZIP remain `BLOCKED` and must not be relabelled;
+  fresh clean-commit evidence is required.
+
 - Ran the first clean-SHA frontend/BFF formal attempt for the revised model at
   `6f645020f8473c42c15dce8d654bcc00d052615a`. The sunny case used fresh
   Prepare and the saved 1,000 kW PV / 6,000 kWh BESS controls. Phase 4 served

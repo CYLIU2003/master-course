@@ -20,6 +20,26 @@
   Focused tests and a replay of the exact failed 06:00 state pass; a fresh
   clean-commit 24/24 Rolling pair is still required before any research claim.
 
+### 2026-08-13 independent trip-demand validation correction
+
+- The next clean-SHA frontend attempt at `624b42dcc5c40a07598000218d737a96569a5095`
+  completed all 24 sunny Rolling steps. The previous 06:00 charging-session
+  failure did not recur. The day-ahead result served 264/264 trips with
+  31 BEVs and 1 ICE bus (248/16 trips), but the integrated solve reached its
+  3,600-second limit without meeting the requested 1% gap.
+- Finalization still failed closed because the independent event validator
+  reconstructed service energy with the legacy vehicle-average kWh/km and
+  L/km rates. The canonical input now uses trip-specific
+  `literature_proxy_v1` quantities, so the validator incorrectly reported
+  31 terminal-SOC and four lower-SOC violations even though every Rolling
+  subproblem satisfied its canonical per-vehicle terminal target.
+- Independent reconstruction now reads the materialized per-trip BEV and ICE
+  demand from the canonical problem while remaining independent of solver SOC
+  output. An exact diagnostic replay of the preserved sunny assignment and
+  executed charging decisions reconstructs 588 physical events and 433 SOC
+  events with zero violations. The failed artifact remains diagnostic; a new
+  clean-commit sunny/low-PV pair is still required.
+
 ## 2026-08-10 all-BEV fuel-artifact correction
 
 - Clean SHA `6853edae956c71c3c28ec285660a0f0b7c788e69` completed both
