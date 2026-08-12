@@ -1,5 +1,46 @@
 # Current research release blockers
 
+## 2026-08-13 revised-model pair completed; objective-contract rerun required
+
+Frozen clean SHA `332b6af48260c89bc14a2ad2be67a0fd1d2f168e` completed
+fresh Prepare, Phase 4, 24/24 Rolling, physical validation, executed-day
+accounting and progress-report generation for both controlled PV cases. The
+non-PV control hash matched and the PV hashes differed. Both cases served all
+264 trips with zero unserved trips, no fallback and no post-solve repair.
+
+Observed feasible incumbents:
+
+| Metric | High PV | Low PV |
+|---|---:|---:|
+| Used BEV / ICE | 31 / 1 | 21 / 11 |
+| BEV / ICE trips | 248 / 16 | 91 / 173 |
+| PV generation | 6,056.25 kWh | 996.20 kWh |
+| Grid import | 156.039059 kWh | 130.948752 kWh |
+| Executed total cost | 650,234.729396 JPY | 698,318.002033 JPY |
+| Executed CO2 | 170.814257 kg | 986.112082 kg |
+
+This demonstrates a strong PV response in the two feasible incumbents. It
+does not establish that either composition is globally or lexicographically
+optimal. Both integrated solves ended at `time_limit`, and neither established
+the predeclared 1% gap.
+
+The run also exposed two P1 contract defects in the frozen code:
+
+1. `assignment_economic_audit.json` exported a null `objective_preset` even
+   though the canonical problem recorded `research_lexicographic_v1`. This
+   caused false objective-preset mismatch and false scalar-accounting failures.
+2. The integrated adapter called `setObjective` after `setObjectiveN`,
+   overwriting objective 0 of the declared research hierarchy.
+
+Both defects are fixed and covered by focused tests. The bounded 10-trip,
+15-minute post-fix diagnostic is Gurobi `OPTIMAL`, reports raw primary
+objective 2.0 for two vehicle-days and secondary accounting cost 40,000 JPY,
+passes physical/accounting validation, and is exact-oracle eligible. That
+small result is formulation evidence only. Because the objective implementation
+changed after the 264-trip run, the `332b6af` pair remains `DIAGNOSTIC` and a
+fresh clean-commit pair is mandatory. Even after rerun, the requested full-run
+gap remains an independent release gate.
+
 ## 2026-08-13 trip-specific independent validation fixed, fresh pair pending
 
 The clean-SHA attempt at `624b42dcc5c40a07598000218d737a96569a5095`

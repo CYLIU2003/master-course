@@ -4765,7 +4765,12 @@ class GurobiMILPAdapter:
                 name="integrated_actual_cost_upper_bound",
             )
 
-        if allow_partial_service:
+        if research_lexicographic_objective:
+            # The lexicographic objectives were installed above with
+            # setObjectiveN.  Calling setObjective here would overwrite
+            # objective 0 and silently change the declared hierarchy.
+            pass
+        elif allow_partial_service:
             coverage_objective = gp.quicksum(unserved[trip.trip_id] for trip in problem.trips)
             model.ModelSense = GRB.MINIMIZE
             if integrated_ev_utilization_mode != "disabled":

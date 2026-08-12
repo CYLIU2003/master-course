@@ -958,6 +958,33 @@ Standalone case summaries remain blocked only by
 before their counterpart exists. The immutable pair manifest is the
 pair-scoped release attestation and discharges that single pending check.
 
+### Revised-model PV1000 diagnostic pair (2026-08-13)
+
+Clean frozen SHA `332b6af48260c89bc14a2ad2be67a0fd1d2f168e` was
+executed through the same frontend/BFF Prepare, optimization, 24-hour Rolling,
+validation, accounting and reporting path after the trip-specific energy and
+Rolling session-boundary fixes. Both cases served 264/264 trips, passed the
+independent physical checks, accepted 24/24 Rolling, reconciled the executed
+day accounting, and generated the complete progress-report chart bundle.
+
+The feasible high-PV incumbent used 31 BEVs and 1 ICE bus for 248/16 trips.
+The low-PV incumbent used 21 BEVs and 11 ICE buses for 91/173 trips. Executed
+day totals were 650,234.73 JPY and 698,318.00 JPY, respectively. This is clear
+weather/PV response in the feasible incumbents, but it is not yet formal
+optimality evidence: both integrated solves terminated at the time limit and
+did not establish the requested 1% gap.
+
+The pair audit also exposed a reporting/model-contract defect in that frozen
+SHA. `objective_preset` was persisted in the canonical input but exported as
+null in `assignment_economic_audit.json`, and the integrated adapter reset
+objective 0 after installing the declared lexicographic hierarchy. Both are
+fixed after the run. A bounded 10-trip, 15-minute diagnostic now reports
+Gurobi `OPTIMAL`, a raw primary objective of two vehicle-days, a 40,000 JPY
+secondary accounting cost, valid physical checks, and an accepted exact
+oracle. The `332b6af` pair remains diagnostic evidence for its own SHA and
+must not be relabelled; a fresh clean-commit pair is required after this
+objective-contract change.
+
 ## Progress-report output for a controlled PV pair
 
 `scripts/run_frontend_controlled_pv_pair.py` uses the same Prepare,

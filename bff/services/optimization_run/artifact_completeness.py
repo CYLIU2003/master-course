@@ -1001,6 +1001,7 @@ def _validate_assignment_economic_audit(
     csv_path = run_dir / "assignment_economic_audit.csv"
     required_keys = {
         "schema_version",
+        "objective_preset",
         "bev_grid_marginal_cost_jpy_per_km",
         "ice_marginal_cost_jpy_per_km",
         "renewable_budget_kwh",
@@ -1036,6 +1037,7 @@ def _validate_assignment_economic_audit(
                 )
     if csv_path.is_file():
         expected_header = (
+            "objective_preset",
             "bev_grid_marginal_cost_jpy_per_km",
             "ice_marginal_cost_jpy_per_km",
             "renewable_budget_kwh",

@@ -193,3 +193,21 @@ def test_assignment_economic_audit_uses_phase4_integrated_source_flows() -> None
     assert audit["renewable_energy_allocated_in_stage1_kwh"] == 30.0
     assert audit["grid_energy_allocated_in_stage1_kwh"] == 5.0
     assert audit["stage1_source_flows_kwh"]["bess_to_bus_kwh"] == 15.0
+
+
+def test_assignment_economic_audit_uses_canonical_objective_preset_fallback() -> None:
+    problem = SimpleNamespace(
+        price_slots=(),
+        vehicles=(),
+        vehicle_types=(),
+        scenario=SimpleNamespace(diesel_price_yen_per_l=150.0),
+        depot_energy_assets={},
+        metadata={"objective_preset": "research_lexicographic_v1"},
+    )
+
+    audit = _assignment_economic_audit_payload(
+        canonical_problem=problem,
+        optimization_result={"solver_metadata": {}},
+    )
+
+    assert audit["objective_preset"] == "research_lexicographic_v1"

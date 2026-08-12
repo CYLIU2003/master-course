@@ -2446,6 +2446,9 @@ def _assignment_economic_audit_payload(
     """
 
     solver_metadata = dict(optimization_result.get("solver_metadata") or {})
+    problem_metadata = dict(
+        getattr(canonical_problem, "metadata", {}) or {}
+    )
     result_summary = dict(optimization_result.get("summary") or {})
     recourse_configuration = dict(
         solver_metadata.get("stage1_time_indexed_energy_recourse_configuration")
@@ -2687,7 +2690,14 @@ def _assignment_economic_audit_payload(
             if canonical_problem is not None
             else solver_metadata.get("charging_power_model", "not_recorded")
         ),
-        "objective_preset": solver_metadata.get("objective_preset"),
+        # The objective preset is an input-side model contract.  Phase 4 does
+        # not duplicate every canonical input into solver metadata, so fall
+        # back to the canonical problem instead of exporting a misleading
+        # null that makes otherwise identical comparison cases look different.
+        "objective_preset": (
+            solver_metadata.get("objective_preset")
+            or problem_metadata.get("objective_preset")
+        ),
         "co2_emissions_cap_kg": solver_metadata.get("co2_emissions_cap_kg"),
         "pv_supply_scale_by_depot": (
             {
@@ -3447,6 +3457,9 @@ def _persist_rich_run_outputs(
         run_dir / "assignment_economic_audit.csv",
         [
             {
+                "objective_preset": assignment_economic_audit.get(
+                    "objective_preset"
+                ),
                 "bev_grid_marginal_cost_jpy_per_km": (
                     assignment_economic_audit.get(
                         "bev_grid_marginal_cost_jpy_per_km"
@@ -3510,6 +3523,7 @@ def _persist_rich_run_outputs(
             }
         ],
         [
+            "objective_preset",
             "bev_grid_marginal_cost_jpy_per_km",
             "ice_marginal_cost_jpy_per_km",
             "renewable_budget_kwh",

@@ -290,6 +290,7 @@ def _complete_run(tmp_path: Path) -> Path:
 
     assignment_economic_audit = {
         "schema_version": "assignment_economic_audit_v1",
+        "objective_preset": "research_lexicographic_v1",
         "bev_grid_marginal_cost_jpy_per_km": 41.5578947368421,
         "ice_marginal_cost_jpy_per_km": 33.18584,
         "renewable_budget_kwh": 0.0,
@@ -319,6 +320,7 @@ def _complete_run(tmp_path: Path) -> Path:
             handle,
             fieldnames=list(
                 (
+                    "objective_preset",
                     "bev_grid_marginal_cost_jpy_per_km",
                     "ice_marginal_cost_jpy_per_km",
                     "renewable_budget_kwh",

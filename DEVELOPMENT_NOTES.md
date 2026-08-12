@@ -3683,3 +3683,54 @@ locks this distinction in place.
   stale source acceptance label. No fresh 264-trip M1/M3 run was started from this dirty
   development state; current-HEAD method effects remain unreported. The full
   repository regression passes `1326 passed in 122.44s`.
+
+# 2026-08-13 - Revised-model formal pair and lexicographic contract repair
+
+- Ran the two saved Tsurumaki scenarios through the ordinary frontend/BFF
+  path from clean frozen SHA
+  `332b6af48260c89bc14a2ad2be67a0fd1d2f168e`. Both fresh Prepare inputs held
+  the 2025-08-05 weekday service, 30 JPY/kWh flat energy price, zero demand
+  charge, 1,000 kW PV rating, 6,000 kWh / 900 kW BESS, 3,000 -> 3,000 kWh BESS
+  SOC, 60 selected vehicles, ten chargers, and 264 trips fixed. Only the
+  separately hashed 2025-08-05 and 2025-08-10 PV curves differed.
+- Both cases served 264/264 trips, completed and accepted 24/24 hourly
+  Rolling, passed the independent physical event validation, reconciled
+  executed-day accounting, and produced the complete pair progress-report
+  figures and source CSVs. The high-PV incumbent used 31 BEVs / 1 ICE bus for
+  248/16 trips; the low-PV incumbent used 21/11 for 91/173 trips.
+- Rolling accounting reported 650,234.729396 JPY and 170.814257 kg-CO2 for
+  high PV, versus 698,318.002033 JPY and 986.112082 kg-CO2 for low PV. High PV
+  generated 6,056.25 kWh, used 401.407349 kWh directly for buses and
+  2,781.817437 kWh for BESS, and curtailed 2,873.025214 kWh. Low PV generated
+  996.2 kWh, used 293.407649 kWh directly and 702.792351 kWh for BESS, with no
+  curtailment.
+- The pair remains `BLOCKED`. Both Phase 4 solves ended at `time_limit` and
+  did not establish the requested 1% gap. The preserved run must therefore be
+  described only as a physically valid feasible controlled candidate, not an
+  optimal fleet-composition result.
+- Pair finalization found a second, independent software defect. The canonical
+  metadata contained `objective_preset=research_lexicographic_v1`, but the
+  assignment economic audit read only solver metadata and exported null. The
+  pair builder consequently reported false objective-preset mismatch and
+  false scalar-accounting requirements. The audit now falls back to canonical
+  problem metadata and records the preset in both JSON and CSV; artifact
+  completeness requires the field.
+- A model-control review then found that the integrated adapter installed the
+  lexicographic objectives with `setObjectiveN` and later called
+  `setObjective`, overwriting objective 0. The scalar/policy objective branch
+  now explicitly skips that call when the research hierarchy is active.
+- Gurobi does not expose one scalar `MIPGap` for a completed hierarchical
+  multi-objective solve. The bounded exact-oracle gate now accepts missing
+  scalar gap only when both public and raw solver statuses are `OPTIMAL`, all
+  physical/accounting checks pass, and the recorded raw primary objective
+  equals the used vehicle-day count under the exact declared hierarchy.
+- Post-fix diagnostic execution on ten day-spanning trips at 15-minute
+  resolution completed with exit code 0: integrated Gurobi status `OPTIMAL`,
+  two used vehicles, raw primary objective 2.0, secondary accounting cost
+  40,000 JPY, and exact-oracle eligibility true. This bounded diagnostic does
+  not relabel the pre-fix 264-trip pair or discharge its missing full-run gap.
+- Focused regression for economic-audit provenance, artifact completeness,
+  pair semantics, frontend execution, and the small integrated oracle passes
+  `79 passed`; the complete repository regression passes
+  `1348 passed in 70.73s`. A fresh clean-commit full pair is required because
+  the lexicographic objective implementation changed after the preserved run.

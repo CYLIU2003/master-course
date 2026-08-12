@@ -90,6 +90,55 @@ def test_integrated_oracle_gate_fails_closed_on_accounting_residual() -> None:
     assert _is_integrated_exact_oracle_case(case) is False
 
 
+def test_integrated_oracle_accepts_optimal_multiobjective_without_scalar_gap() -> None:
+    case = {
+        "phase": "phase4_integrated",
+        "feasible": True,
+        "trip_count_unserved": 0,
+        "solver_status": "optimal",
+        "raw_plan_solver_status": "optimal",
+        "supports_integrated_exact_milp": True,
+        "final_gap_ratio": None,
+        "objective_matches_accounting": True,
+        "ev_energy_inventory_balanced": True,
+        "validation_metrics": {"all_required_validation_checks_passed": True},
+    }
+
+    assert _is_integrated_exact_oracle_case(case) is True
+
+    case["solver_status"] = "time_limit"
+    assert _is_integrated_exact_oracle_case(case) is False
+
+
+def test_integrated_oracle_verifies_declared_lexicographic_primary() -> None:
+    case = {
+        "phase": "phase4_integrated",
+        "feasible": True,
+        "trip_count_unserved": 0,
+        "solver_status": "optimal",
+        "raw_plan_solver_status": "optimal",
+        "supports_integrated_exact_milp": True,
+        "final_gap_ratio": None,
+        "objective_matches_accounting": True,
+        "ev_energy_inventory_balanced": True,
+        "validation_metrics": {"all_required_validation_checks_passed": True},
+        "objective_preset": "research_lexicographic_v1",
+        "objective_hierarchy": [
+            "coverage_if_partial",
+            "used_vehicle_days",
+            "canonical_operating_cost",
+            "inter_trip_deadhead_km",
+            "charge_session_count",
+        ],
+        "used_vehicle_count": 2,
+        "raw_solver_primary_objective_value": 2.0,
+    }
+
+    assert _is_integrated_exact_oracle_case(case) is True
+    case["raw_solver_primary_objective_value"] = 40_000.0
+    assert _is_integrated_exact_oracle_case(case) is False
+
+
 def test_five_minute_comparison_requires_both_exact_integrated_cases() -> None:
     def exact_case(timestep_min: int, cost: float) -> dict:
         return {

@@ -346,7 +346,8 @@ def _run_case(
     accounted_total_cost_jpy = float(
         cost_breakdown.get("total_cost", 0.0) or 0.0
     )
-    milp_objective_value = result.plan.metadata.get("objective_value")
+    plan_metadata = dict(result.plan.metadata or {})
+    milp_objective_value = plan_metadata.get("objective_value")
     objective_accounting_residual_jpy = (
         float(milp_objective_value) - accounted_total_cost_jpy
         if milp_objective_value is not None
@@ -464,6 +465,13 @@ def _run_case(
         ),
         "raw_plan_solver_status": str(result.plan.metadata.get("status") or ""),
         "milp_objective_value": milp_objective_value,
+        "raw_solver_primary_objective_value": plan_metadata.get(
+            "raw_solver_primary_objective_value"
+        ),
+        "objective_preset": plan_metadata.get("objective_preset"),
+        "objective_hierarchy": list(
+            plan_metadata.get("objective_hierarchy") or ()
+        ),
         "objective_accounting_residual_jpy": objective_accounting_residual_jpy,
         "objective_matches_accounting": bool(
             objective_accounting_residual_jpy is not None
@@ -491,15 +499,47 @@ def _run_case(
 def _is_integrated_exact_oracle_case(case: dict[str, Any]) -> bool:
     validation = dict(case.get("validation_metrics") or {})
     gap = case.get("final_gap_ratio")
+    solver_optimal = (
+        str(case.get("solver_status") or "").lower() == "optimal"
+        and str(case.get("raw_plan_solver_status") or "").lower()
+        == "optimal"
+    )
+    # Gurobi does not expose a single MIPGap/ObjBound for a completed
+    # hierarchical multi-objective solve.  OPTIMAL is still an exact
+    # certificate for every priority level; non-optimal termination remains
+    # rejected regardless of any separately reported gap.
+    exact_gap_or_optimal_multiobjective = solver_optimal and (
+        gap is None or abs(float(gap)) <= 1.0e-9
+    )
+    objective_preset = str(case.get("objective_preset") or "").strip()
+    lexicographic_contract_valid = True
+    if objective_preset == "research_lexicographic_v1":
+        expected_hierarchy = [
+            "coverage_if_partial",
+            "used_vehicle_days",
+            "canonical_operating_cost",
+            "inter_trip_deadhead_km",
+            "charge_session_count",
+        ]
+        primary_value = case.get("raw_solver_primary_objective_value")
+        lexicographic_contract_valid = bool(
+            list(case.get("objective_hierarchy") or ())
+            == expected_hierarchy
+            and primary_value is not None
+            and abs(
+                float(primary_value)
+                - float(case.get("used_vehicle_count") or 0)
+            )
+            <= 1.0e-6
+        )
     return bool(
         case.get("phase") == "phase4_integrated"
         and case.get("feasible")
         and int(case.get("trip_count_unserved") or 0) == 0
-        and str(case.get("solver_status") or "").lower() == "optimal"
-        and str(case.get("raw_plan_solver_status") or "").lower() == "optimal"
+        and solver_optimal
         and case.get("supports_integrated_exact_milp")
-        and gap is not None
-        and abs(float(gap)) <= 1.0e-9
+        and exact_gap_or_optimal_multiobjective
+        and lexicographic_contract_valid
         and case.get("objective_matches_accounting")
         and case.get("ev_energy_inventory_balanced")
         and validation.get("all_required_validation_checks_passed")
