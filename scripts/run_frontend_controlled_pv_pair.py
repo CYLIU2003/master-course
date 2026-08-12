@@ -2492,6 +2492,10 @@ def _case_gate_audit(
         settings=settings,
         phase4_integrated=phase4_integrated,
     )
+    research_lexicographic = (
+        assignment_economic_audit.get("objective_preset")
+        == "research_lexicographic_v1"
+    )
     zero_metric_names = (
         "unassigned_trip_count",
         "duplicate_trip_count",
@@ -2611,6 +2615,29 @@ def _case_gate_audit(
         "certified_gap_at_most_requested": (
             certified_gap is not None
             and certified_gap <= requested_gap_ratio + 1.0e-12
+        ),
+        "lexicographic_primary_certified_before_cost_gap": (
+            not research_lexicographic
+            or (
+                settings.get("integrated_lexicographic_solve_mode")
+                == "sequential_scalar_certification_v1"
+                and settings.get(
+                    "integrated_lexicographic_primary_certified"
+                )
+                is True
+                and _number(
+                    settings.get(
+                        "integrated_lexicographic_cost_objective_jpy"
+                    )
+                )
+                is not None
+                and _number(
+                    settings.get(
+                        "integrated_lexicographic_cost_best_bound_jpy"
+                    )
+                )
+                is not None
+            )
         ),
         "solver_controls_match_formal_request": (
             settings.get("time_limit_seconds_requested")
@@ -3321,6 +3348,12 @@ def _solver_objective_accounting_contract_passes(
             and settings.get("integrated_actual_cost_contract_applied") is True
             and settings.get("integrated_primary_objective_kind")
             == "minimum_used_vehicle_days_lexicographic"
+            and settings.get("integrated_lexicographic_solve_mode")
+            == "sequential_scalar_certification_v1"
+            and settings.get(
+                "integrated_lexicographic_primary_certified"
+            )
+            is True
         )
     if phase4_policy:
         return bool(

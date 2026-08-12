@@ -1,5 +1,36 @@
 # Current research release blockers
 
+## 2026-08-13 sequential cost-gap path implemented; fresh formal evidence pending
+
+The remaining full-pair optimality blocker was traced to evidence semantics,
+not to physical feasibility. `research_lexicographic_v1` previously used one
+Gurobi multi-objective solve. At a time limit, that path did not expose a
+scalar lower bound and MIP gap for the canonical-cost level, so the formal gate
+correctly rejected both `e4ddd3f` cases.
+
+Current code now performs sequential scalar certification under one shared
+Phase 4 time budget:
+
+1. certify minimum used vehicle-days exactly;
+2. fix that integer value;
+3. minimize canonical operating cost and export its `ObjBound`/`MIPGap`;
+4. run deadhead and charge-session tie-breaks only after exact cost.
+
+When a complete integrated recourse seed uses the independent strict
+path-cover lower-bound count, step 1 is certified without another solve. If
+the primary count is not exact, no cost gap is exported. The pair gate now
+requires this primary certificate and explicit cost-stage objective/bound
+telemetry, preventing a vehicle-count gap or tie-break gap from being reported
+as a cost certificate.
+
+Bounded tests pass, but this implementation postdates the authoritative
+`e4ddd3f` pair. Formal release therefore remains `BLOCKED` until a fresh clean
+current-HEAD pair completes Prepare, both 264-trip Phase 4 solves, 24/24
+Rolling, physical/accounting validation and pair finalization. Even then, each
+case must still meet the requested 1% canonical-cost gap; the code change does
+not guarantee that computational result. Full-scale M0--M3 and the declared
+sensitivity matrix also remain separate evidence blockers.
+
 ## 2026-08-13 post-fix pair accepted for PV sensitivity; formal gap still blocks release
 
 The required clean post-fix rerun completed from frozen SHA

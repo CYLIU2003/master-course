@@ -122,6 +122,52 @@ def test_solver_settings_uses_integrated_certified_gap_without_hiding_raw_gap() 
     assert payload["mip_gap_target_met"] is True
 
 
+def test_solver_settings_exports_sequential_lexicographic_certificates() -> None:
+    payload = _solver_settings_payload(
+        time_limit_seconds_requested=3_600,
+        mip_gap_requested=0.01,
+        solver_metadata={
+            "integrated_lexicographic_solve_mode": (
+                "sequential_scalar_certification_v1"
+            ),
+            "integrated_lexicographic_primary_value": 32.0,
+            "integrated_lexicographic_primary_best_bound": 32.0,
+            "integrated_lexicographic_primary_certified": True,
+            "integrated_lexicographic_primary_certificate": (
+                "verified_integrated_recourse_incumbent_matches_"
+                "strict_path_cover_integer_lower_bound"
+            ),
+            "integrated_lexicographic_cost_status": "time_limit",
+            "integrated_lexicographic_cost_objective_jpy": 650_000.0,
+            "integrated_lexicographic_cost_best_bound_jpy": 645_000.0,
+            "integrated_lexicographic_cost_raw_mip_gap_ratio": (
+                5_000.0 / 650_000.0
+            ),
+            "integrated_lexicographic_completed_objectives": [
+                "coverage_strict",
+                "used_vehicle_days",
+                "canonical_operating_cost",
+            ],
+        },
+    )
+
+    assert payload["integrated_lexicographic_solve_mode"] == (
+        "sequential_scalar_certification_v1"
+    )
+    assert payload["integrated_lexicographic_primary_certified"] is True
+    assert payload["integrated_lexicographic_primary_value"] == pytest.approx(
+        32.0
+    )
+    assert payload[
+        "integrated_lexicographic_cost_best_bound_jpy"
+    ] == pytest.approx(645_000.0)
+    assert payload["integrated_lexicographic_completed_objectives"] == [
+        "coverage_strict",
+        "used_vehicle_days",
+        "canonical_operating_cost",
+    ]
+
+
 def test_solver_settings_persists_integrated_search_profile() -> None:
     search_profile = {
         "schema_version": "phase4_integrated_search_profile_v1",

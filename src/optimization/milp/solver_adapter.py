@@ -4555,45 +4555,24 @@ class GurobiMILPAdapter:
         )
 
         if research_lexicographic_objective:
+            # Install only the first scalar objective here.  Gurobi's
+            # setObjectiveN telemetry does not expose a single canonical-cost
+            # bound when a multi-objective solve stops early.  The solve block
+            # below therefore proves each lexicographic level sequentially,
+            # fixes it, and then installs the next scalar objective.
             model.ModelSense = GRB.MINIMIZE
-            objective_index = 0
             if allow_partial_service:
-                model.setObjectiveN(
+                model.setObjective(
                     gp.quicksum(
                         unserved[trip.trip_id] for trip in problem.trips
                     ),
-                    index=objective_index,
-                    priority=5,
-                    name="coverage",
+                    GRB.MINIMIZE,
                 )
-                objective_index += 1
-            model.setObjectiveN(
-                used_vehicle_day_objective,
-                index=objective_index,
-                priority=4,
-                name="used_vehicle_days",
-            )
-            objective_index += 1
-            model.setObjectiveN(
-                objective,
-                index=objective_index,
-                priority=3,
-                name="canonical_operating_cost",
-            )
-            objective_index += 1
-            model.setObjectiveN(
-                deadhead_distance_objective,
-                index=objective_index,
-                priority=2,
-                name="inter_trip_deadhead_km",
-            )
-            objective_index += 1
-            model.setObjectiveN(
-                charge_session_count_objective,
-                index=objective_index,
-                priority=1,
-                name="charge_session_count",
-            )
+            else:
+                model.setObjective(
+                    used_vehicle_day_objective,
+                    GRB.MINIMIZE,
+                )
         elif allow_partial_service:
             integrated_analytical_objective_floor_blockers.append(
                 "partial_service_enabled"
@@ -4601,10 +4580,6 @@ class GurobiMILPAdapter:
         if objective_mode != "total_cost":
             integrated_analytical_objective_floor_blockers.append(
                 "objective_mode_is_not_total_cost"
-            )
-        if research_lexicographic_objective:
-            integrated_analytical_objective_floor_blockers.append(
-                "lexicographic_primary_is_not_canonical_cost"
             )
         if not bool(
             getattr(config, "integrated_actual_cost_objective", False)
@@ -4766,9 +4741,9 @@ class GurobiMILPAdapter:
             )
 
         if research_lexicographic_objective:
-            # The lexicographic objectives were installed above with
-            # setObjectiveN.  Calling setObjective here would overwrite
-            # objective 0 and silently change the declared hierarchy.
+            # The first scalar lexicographic objective was installed above.
+            # Later objectives are installed only after the preceding level
+            # has been certified and fixed.
             pass
         elif allow_partial_service:
             coverage_objective = gp.quicksum(unserved[trip.trip_id] for trip in problem.trips)
@@ -4828,6 +4803,8 @@ class GurobiMILPAdapter:
                 config=config,
                 GRB=GRB,
                 integrated_warm_start_audit=integrated_warm_start_audit,
+                canonical_cost_expression=objective,
+                used_vehicle_day_expression=used_vehicle_day_objective,
                 dispatch_variable_maps=(
                     ("assignment", y),
                     ("connection", x),
@@ -5006,102 +4983,491 @@ class GurobiMILPAdapter:
         integrated_certified_gap_stop_threshold = None
         integrated_certified_gap_at_verified_start = None
         integrated_certified_gap_stop_applied = False
+        lexicographic_primary_value: Optional[float] = None
+        lexicographic_primary_bound: Optional[float] = None
+        lexicographic_primary_certified = False
+        lexicographic_primary_certificate = ""
+        lexicographic_cost_status = "not_run"
+        lexicographic_cost_objective: Optional[float] = None
+        lexicographic_cost_best_bound: Optional[float] = None
+        lexicographic_cost_raw_gap: Optional[float] = None
+        lexicographic_completed_objectives: List[str] = []
+        integrated_search_telemetry: List[Dict[str, Any]] = []
         preflight_objective_value = integrated_warm_start_audit.get(
-            "dispatch_fixed_recourse_objective_value"
+            "dispatch_fixed_recourse_canonical_cost_jpy"
         )
-        if (
-            verified_integrated_start
-            and bool(verified_start_search_bounds.get("eligible", False))
-            and not integrated_analytical_objective_floor_blockers
-            and integrated_analytical_objective_lower_bound is not None
-            and preflight_objective_value is not None
-        ):
-            try:
-                preflight_objective = float(preflight_objective_value)
-                analytical_lower_bound = float(
-                    integrated_analytical_objective_lower_bound
-                )
-                integrated_certified_gap_at_verified_start = max(
-                    preflight_objective - analytical_lower_bound,
-                    0.0,
-                ) / max(abs(preflight_objective), 1.0e-9)
-                integrated_certified_gap_stop_threshold = (
-                    _best_objective_stop_from_certified_lower_bound(
-                        analytical_lower_bound,
-                        max(float(config.mip_gap), 0.0),
-                    )
-                )
-            except (TypeError, ValueError, OverflowError):
-                integrated_certified_gap_at_verified_start = None
-                integrated_certified_gap_stop_threshold = None
-            if (
-                integrated_certified_gap_stop_threshold is not None
-                and math.isfinite(preflight_objective)
-                and preflight_objective
-                <= float(integrated_certified_gap_stop_threshold)
-                + max(
-                    1.0e-6,
-                    integrated_feasibility_tol
-                    * max(abs(preflight_objective), 1.0),
-                )
+
+        def _remaining_integrated_time_sec() -> float:
+            return max(
+                float(config.time_limit_sec)
+                - float(time.perf_counter() - optimize_started_at),
+                0.0,
+            )
+
+        def _has_tiebreak_time_budget() -> bool:
+            minimum_sec = max(
+                1.0,
+                min(30.0, 0.01 * max(float(config.time_limit_sec), 1.0)),
+            )
+            return _remaining_integrated_time_sec() >= minimum_sec
+
+        def _record_integrated_stage(
+            *,
+            phase: str,
+            time_limit_sec: float,
+            wall_time_sec: float,
+            certificate: str = "",
+        ) -> None:
+            has_incumbent = bool(model.SolCount > 0)
+            integrated_search_telemetry.append(
+                {
+                    "phase": phase,
+                    "search_profile": str(
+                        integrated_search_controls["profile"]
+                    ),
+                    "time_limit_sec": float(time_limit_sec),
+                    "wall_time_sec": float(wall_time_sec),
+                    "mip_focus": int(model.Params.MIPFocus),
+                    "heuristics": float(model.Params.Heuristics),
+                    "presolve": int(model.Params.Presolve),
+                    "root_method": int(model.Params.Method),
+                    "node_method": int(model.Params.NodeMethod),
+                    "soft_mem_limit_gb": float(model.Params.SoftMemLimit),
+                    "nodefile_start_gb": float(model.Params.NodefileStart),
+                    "nodefile_dir": str(model.Params.NodefileDir),
+                    "symmetry": int(model.Params.Symmetry),
+                    "solver_status": status_map.get(
+                        model.Status, f"status_{model.Status}"
+                    ),
+                    "solution_count": int(model.SolCount),
+                    "objective_value": (
+                        float(model.ObjVal) if has_incumbent else None
+                    ),
+                    "best_bound": self._model_bound(model),
+                    "mip_gap_ratio": (
+                        self._model_gap(model) if has_incumbent else None
+                    ),
+                    "nodes_explored": (
+                        int(model.NodeCount)
+                        if hasattr(model, "NodeCount")
+                        else None
+                    ),
+                    "certificate": certificate,
+                    "certified_gap_stop_threshold": (
+                        integrated_certified_gap_stop_threshold
+                    ),
+                    "certified_gap_at_verified_start": (
+                        integrated_certified_gap_at_verified_start
+                    ),
+                    "certified_gap_stop_applied": (
+                        integrated_certified_gap_stop_applied
+                    ),
+                }
+            )
+
+        def _run_integrated_scalar_stage(
+            phase: str,
+            expression: Any,
+            *,
+            require_exact: bool,
+        ) -> bool:
+            remaining_sec = _remaining_integrated_time_sec()
+            if remaining_sec <= 1.0e-6:
+                return False
+            model.setObjective(expression, GRB.MINIMIZE)
+            model.Params.TimeLimit = max(remaining_sec, 0.001)
+            model.Params.MIPGap = (
+                0.0 if require_exact else max(float(config.mip_gap), 0.0)
+            )
+            phase_started_at = time.perf_counter()
+            model.optimize(_capture_first_feasible)
+            phase_wall_sec = float(time.perf_counter() - phase_started_at)
+            _record_integrated_stage(
+                phase=phase,
+                time_limit_sec=remaining_sec,
+                wall_time_sec=phase_wall_sec,
+            )
+            return bool(model.SolCount > 0)
+
+        def _carry_integrated_incumbent_as_start() -> None:
+            variables = list(model.getVars())
+            values = [
+                float(value)
+                for value in model.getAttr("X", variables)
+            ]
+            model.reset()
+            for variable, value in zip(variables, values):
+                variable.Start = value
+
+        def _integer_stage_is_exact(
+            incumbent_value: float,
+            best_bound_value: Optional[float],
+        ) -> bool:
+            if model.Status == GRB.OPTIMAL:
+                return True
+            if best_bound_value is None or not math.isfinite(
+                float(best_bound_value)
             ):
-                # The complete fixed-dispatch recourse is a feasible solution
-                # of this exact integrated model.  Combined with the
-                # independently audited integer-valid lower bound, it already
-                # certifies the requested relative gap.  BestObjStop merely
-                # asks Gurobi to accept that complete start and terminate; it
-                # does not alter the feasible region or objective.
-                model.Params.BestObjStop = float(
-                    integrated_certified_gap_stop_threshold
+                return False
+            integer_incumbent = int(round(float(incumbent_value)))
+            integer_lower_bound = int(
+                math.ceil(float(best_bound_value) - 1.0e-7)
+            )
+            return integer_lower_bound >= integer_incumbent
+
+        if research_lexicographic_objective:
+            lexicographic_sequence_can_continue = True
+
+            if allow_partial_service:
+                coverage_objective = gp.quicksum(
+                    unserved[trip.trip_id] for trip in problem.trips
                 )
-                integrated_certified_gap_stop_applied = True
-        phase_started_at = time.perf_counter()
-        model.optimize(_capture_first_feasible)
-        phase_wall_sec = float(time.perf_counter() - phase_started_at)
-        phase_has_incumbent = bool(model.SolCount > 0)
-        integrated_search_telemetry: List[Dict[str, Any]] = [
-            {
-                "phase": str(integrated_search_controls["profile"]),
-                "time_limit_sec": float(config.time_limit_sec),
-                "wall_time_sec": phase_wall_sec,
-                "mip_focus": int(model.Params.MIPFocus),
-                "heuristics": float(model.Params.Heuristics),
-                "presolve": int(model.Params.Presolve),
-                "root_method": int(model.Params.Method),
-                "node_method": int(model.Params.NodeMethod),
-                "soft_mem_limit_gb": float(model.Params.SoftMemLimit),
-                "nodefile_start_gb": float(model.Params.NodefileStart),
-                "nodefile_dir": str(model.Params.NodefileDir),
-                "symmetry": int(model.Params.Symmetry),
-                "solver_status": status_map.get(
-                    model.Status, f"status_{model.Status}"
-                ),
-                "solution_count": int(model.SolCount),
-                "objective_value": (
-                    float(model.ObjVal) if phase_has_incumbent else None
-                ),
-                "best_bound": self._model_bound(model),
-                "mip_gap_ratio": (
-                    self._model_gap(model)
-                    if phase_has_incumbent
-                    else None
-                ),
-                "nodes_explored": (
-                    int(model.NodeCount)
-                    if hasattr(model, "NodeCount")
-                    else None
-                ),
-                "certified_gap_stop_threshold": (
-                    integrated_certified_gap_stop_threshold
-                ),
-                "certified_gap_at_verified_start": (
-                    integrated_certified_gap_at_verified_start
-                ),
-                "certified_gap_stop_applied": (
-                    integrated_certified_gap_stop_applied
-                ),
-            }
-        ]
+                if _run_integrated_scalar_stage(
+                    "lexicographic_coverage",
+                    coverage_objective,
+                    require_exact=True,
+                ):
+                    coverage_value = float(coverage_objective.getValue())
+                    coverage_bound = self._model_bound(model)
+                    coverage_certified = _integer_stage_is_exact(
+                        coverage_value,
+                        coverage_bound,
+                    )
+                    if coverage_certified:
+                        _carry_integrated_incumbent_as_start()
+                        model.addConstr(
+                            coverage_objective == int(round(coverage_value)),
+                            name="lexicographic_optimal_unserved_count",
+                        )
+                        lexicographic_completed_objectives.append("coverage")
+                    else:
+                        lexicographic_sequence_can_continue = False
+                else:
+                    lexicographic_sequence_can_continue = False
+            else:
+                lexicographic_completed_objectives.append("coverage_strict")
+
+            preflight_used_vehicle_days = integrated_warm_start_audit.get(
+                "dispatch_fixed_recourse_used_vehicle_days"
+            )
+            preflight_proves_primary = False
+            if (
+                lexicographic_sequence_can_continue
+                and not allow_partial_service
+                and verified_integrated_start
+                and integrated_vehicle_count_lower_bound > 0
+                and preflight_used_vehicle_days is not None
+            ):
+                try:
+                    preflight_proves_primary = abs(
+                        float(preflight_used_vehicle_days)
+                        - float(integrated_vehicle_count_lower_bound)
+                    ) <= 1.0e-7
+                except (TypeError, ValueError, OverflowError):
+                    preflight_proves_primary = False
+
+            if preflight_proves_primary:
+                lexicographic_primary_value = float(
+                    integrated_vehicle_count_lower_bound
+                )
+                lexicographic_primary_bound = float(
+                    integrated_vehicle_count_lower_bound
+                )
+                lexicographic_primary_certified = True
+                lexicographic_primary_certificate = (
+                    "verified_integrated_recourse_incumbent_matches_"
+                    "strict_path_cover_integer_lower_bound"
+                )
+                model.addConstr(
+                    used_vehicle_day_objective
+                    == int(integrated_vehicle_count_lower_bound),
+                    name="lexicographic_optimal_used_vehicle_days",
+                )
+                integrated_search_telemetry.append(
+                    {
+                        "phase": "lexicographic_used_vehicle_days",
+                        "search_profile": "certificate_without_resolve",
+                        "time_limit_sec": 0.0,
+                        "wall_time_sec": 0.0,
+                        "solver_status": "certified",
+                        "solution_count": 1,
+                        "objective_value": lexicographic_primary_value,
+                        "best_bound": lexicographic_primary_bound,
+                        "mip_gap_ratio": 0.0,
+                        "nodes_explored": 0,
+                        "certificate": lexicographic_primary_certificate,
+                    }
+                )
+            elif lexicographic_sequence_can_continue:
+                if _run_integrated_scalar_stage(
+                    "lexicographic_used_vehicle_days",
+                    used_vehicle_day_objective,
+                    require_exact=True,
+                ):
+                    lexicographic_primary_value = float(
+                        used_vehicle_day_objective.getValue()
+                    )
+                    lexicographic_primary_bound = self._model_bound(model)
+                    lexicographic_primary_certified = _integer_stage_is_exact(
+                        lexicographic_primary_value,
+                        lexicographic_primary_bound,
+                    )
+                    if lexicographic_primary_certified:
+                        lexicographic_primary_certificate = (
+                            "gurobi_integer_objective_bound_certificate"
+                        )
+                        _carry_integrated_incumbent_as_start()
+                        model.addConstr(
+                            used_vehicle_day_objective
+                            == int(round(lexicographic_primary_value)),
+                            name="lexicographic_optimal_used_vehicle_days",
+                        )
+                    else:
+                        lexicographic_sequence_can_continue = False
+                else:
+                    lexicographic_sequence_can_continue = False
+
+            if lexicographic_primary_certified:
+                lexicographic_completed_objectives.append(
+                    "used_vehicle_days"
+                )
+
+            if (
+                lexicographic_sequence_can_continue
+                and lexicographic_primary_certified
+            ):
+                preflight_primary_matches = False
+                try:
+                    preflight_primary_matches = (
+                        preflight_used_vehicle_days is not None
+                        and abs(
+                            float(preflight_used_vehicle_days)
+                            - float(lexicographic_primary_value)
+                        )
+                        <= 1.0e-7
+                    )
+                except (TypeError, ValueError, OverflowError):
+                    preflight_primary_matches = False
+                if (
+                    verified_integrated_start
+                    and preflight_primary_matches
+                    and preflight_objective_value is not None
+                ):
+                    try:
+                        preflight_objective = float(preflight_objective_value)
+                        cost_tolerance = max(
+                            1.0e-6,
+                            integrated_feasibility_tol,
+                        )
+                        model.addConstr(
+                            objective <= preflight_objective + cost_tolerance,
+                            name=(
+                                "lexicographic_verified_start_canonical_cost_"
+                                "upper_bound"
+                            ),
+                        )
+                        if (
+                            not integrated_analytical_objective_floor_blockers
+                            and integrated_analytical_objective_lower_bound
+                            is not None
+                        ):
+                            analytical_lower_bound = float(
+                                integrated_analytical_objective_lower_bound
+                            )
+                            integrated_certified_gap_at_verified_start = max(
+                                preflight_objective - analytical_lower_bound,
+                                0.0,
+                            ) / max(abs(preflight_objective), 1.0e-9)
+                            integrated_certified_gap_stop_threshold = (
+                                _best_objective_stop_from_certified_lower_bound(
+                                    analytical_lower_bound,
+                                    max(float(config.mip_gap), 0.0),
+                                )
+                            )
+                            if (
+                                preflight_objective
+                                <= float(
+                                    integrated_certified_gap_stop_threshold
+                                )
+                                + cost_tolerance
+                            ):
+                                model.Params.BestObjStop = float(
+                                    integrated_certified_gap_stop_threshold
+                                )
+                                integrated_certified_gap_stop_applied = True
+                    except (TypeError, ValueError, OverflowError):
+                        integrated_certified_gap_at_verified_start = None
+                        integrated_certified_gap_stop_threshold = None
+
+                if _run_integrated_scalar_stage(
+                    "lexicographic_canonical_operating_cost",
+                    objective,
+                    require_exact=False,
+                ):
+                    lexicographic_cost_status = status_map.get(
+                        model.Status, f"status_{model.Status}"
+                    )
+                    lexicographic_cost_objective = float(
+                        objective.getValue()
+                    )
+                    lexicographic_cost_best_bound = self._model_bound(model)
+                    lexicographic_cost_raw_gap = self._model_gap(model)
+                    lexicographic_completed_objectives.append(
+                        "canonical_operating_cost"
+                    )
+
+                    cost_is_exact = bool(
+                        lexicographic_cost_raw_gap is not None
+                        and lexicographic_cost_raw_gap <= 1.0e-9
+                    )
+                    if cost_is_exact and _has_tiebreak_time_budget():
+                        # BestObjStop is expressed in the active objective's
+                        # units.  A JPY threshold from the cost stage must not
+                        # leak into the deadhead or charge-session stages.
+                        model.Params.BestObjStop = -float(GRB.INFINITY)
+                        _carry_integrated_incumbent_as_start()
+                        cost_fix_tolerance = max(
+                            1.0e-6,
+                            integrated_feasibility_tol,
+                        )
+                        model.addConstr(
+                            objective
+                            <= lexicographic_cost_objective
+                            + cost_fix_tolerance,
+                            name="lexicographic_optimal_cost_upper",
+                        )
+                        model.addConstr(
+                            objective
+                            >= lexicographic_cost_objective
+                            - cost_fix_tolerance,
+                            name="lexicographic_optimal_cost_lower",
+                        )
+                        if _run_integrated_scalar_stage(
+                            "lexicographic_inter_trip_deadhead_km",
+                            deadhead_distance_objective,
+                            require_exact=True,
+                        ):
+                            deadhead_value = float(
+                                deadhead_distance_objective.getValue()
+                            )
+                            deadhead_gap = self._model_gap(model)
+                            if (
+                                model.Status == GRB.OPTIMAL
+                                or (
+                                    deadhead_gap is not None
+                                    and deadhead_gap <= 1.0e-9
+                                )
+                            ):
+                                lexicographic_completed_objectives.append(
+                                    "inter_trip_deadhead_km"
+                                )
+                                if _has_tiebreak_time_budget():
+                                    _carry_integrated_incumbent_as_start()
+                                    deadhead_tolerance = max(
+                                        1.0e-7,
+                                        integrated_feasibility_tol,
+                                    )
+                                    model.addConstr(
+                                        deadhead_distance_objective
+                                        <= deadhead_value + deadhead_tolerance,
+                                        name=(
+                                            "lexicographic_optimal_deadhead_"
+                                            "upper"
+                                        ),
+                                    )
+                                    model.addConstr(
+                                        deadhead_distance_objective
+                                        >= deadhead_value - deadhead_tolerance,
+                                        name=(
+                                            "lexicographic_optimal_deadhead_"
+                                            "lower"
+                                        ),
+                                    )
+                                    if _run_integrated_scalar_stage(
+                                        "lexicographic_charge_session_count",
+                                        charge_session_count_objective,
+                                        require_exact=True,
+                                    ):
+                                        charge_session_gap = self._model_gap(
+                                            model
+                                        )
+                                        if (
+                                            model.Status == GRB.OPTIMAL
+                                            or (
+                                                charge_session_gap is not None
+                                                and charge_session_gap <= 1.0e-9
+                                            )
+                                        ):
+                                            lexicographic_completed_objectives.append(
+                                                "charge_session_count"
+                                            )
+            if not integrated_search_telemetry:
+                integrated_search_telemetry.append(
+                    {
+                        "phase": "lexicographic_not_started",
+                        "search_profile": str(
+                            integrated_search_controls["profile"]
+                        ),
+                        "time_limit_sec": 0.0,
+                        "wall_time_sec": 0.0,
+                        "solver_status": "not_run",
+                        "solution_count": 0,
+                        "objective_value": None,
+                        "best_bound": None,
+                        "mip_gap_ratio": None,
+                        "nodes_explored": 0,
+                        "certificate": "total_time_budget_exhausted",
+                    }
+                )
+        else:
+            if (
+                verified_integrated_start
+                and bool(verified_start_search_bounds.get("eligible", False))
+                and not integrated_analytical_objective_floor_blockers
+                and integrated_analytical_objective_lower_bound is not None
+                and preflight_objective_value is not None
+            ):
+                try:
+                    preflight_objective = float(preflight_objective_value)
+                    analytical_lower_bound = float(
+                        integrated_analytical_objective_lower_bound
+                    )
+                    integrated_certified_gap_at_verified_start = max(
+                        preflight_objective - analytical_lower_bound,
+                        0.0,
+                    ) / max(abs(preflight_objective), 1.0e-9)
+                    integrated_certified_gap_stop_threshold = (
+                        _best_objective_stop_from_certified_lower_bound(
+                            analytical_lower_bound,
+                            max(float(config.mip_gap), 0.0),
+                        )
+                    )
+                except (TypeError, ValueError, OverflowError):
+                    integrated_certified_gap_at_verified_start = None
+                    integrated_certified_gap_stop_threshold = None
+                if (
+                    integrated_certified_gap_stop_threshold is not None
+                    and math.isfinite(preflight_objective)
+                    and preflight_objective
+                    <= float(integrated_certified_gap_stop_threshold)
+                    + max(
+                        1.0e-6,
+                        integrated_feasibility_tol
+                        * max(abs(preflight_objective), 1.0),
+                    )
+                ):
+                    model.Params.BestObjStop = float(
+                        integrated_certified_gap_stop_threshold
+                    )
+                    integrated_certified_gap_stop_applied = True
+            phase_started_at = time.perf_counter()
+            model.optimize(_capture_first_feasible)
+            phase_wall_sec = float(time.perf_counter() - phase_started_at)
+            _record_integrated_stage(
+                phase=str(integrated_search_controls["profile"]),
+                time_limit_sec=float(config.time_limit_sec),
+                wall_time_sec=phase_wall_sec,
+            )
         
         # Post-optimization diagnostics
         if enable_milp_diagnostics:
@@ -5144,7 +5510,10 @@ class GurobiMILPAdapter:
         if model.Status == GRB.INF_OR_UNBD:
             # Distinguish infeasible from unbounded before deciding fallback behavior.
             model.Params.DualReductions = 0
-            model.optimize(_capture_first_feasible)
+            remaining_sec = _remaining_integrated_time_sec()
+            if remaining_sec > 1.0e-6:
+                model.Params.TimeLimit = max(remaining_sec, 0.001)
+                model.optimize(_capture_first_feasible)
 
         relaxed_partial_service = False
 
@@ -5168,17 +5537,44 @@ class GurobiMILPAdapter:
             "initial_num_bin_vars": int(pre_stats.get("num_binary_vars", 0) or 0),
             "initial_num_int_vars": int(pre_stats.get("num_integer_vars", 0) or 0),
         }
-        best_bound = self._model_bound(model)
-        final_gap = self._model_gap(model) if has_feasible_incumbent else None
+        if research_lexicographic_objective:
+            best_bound = lexicographic_cost_best_bound
+            final_gap = lexicographic_cost_raw_gap
+            incumbent_objective = lexicographic_cost_objective
+        else:
+            best_bound = self._model_bound(model)
+            final_gap = (
+                self._model_gap(model) if has_feasible_incumbent else None
+            )
+            incumbent_objective = (
+                float(model.ObjVal) if has_feasible_incumbent else None
+            )
         certified_best_bound = best_bound
         certified_gap = final_gap
         certified_gap_semantics = (
-            "gurobi_raw_obj_bound_and_mip_gap"
-            if has_feasible_incumbent
+            (
+                "sequential_lexicographic_canonical_cost_obj_bound_and_"
+                "mip_gap_after_exact_vehicle_day_fix"
+                if research_lexicographic_objective
+                else "gurobi_raw_obj_bound_and_mip_gap"
+            )
+            if (
+                has_feasible_incumbent
+                and incumbent_objective is not None
+                and (
+                    not research_lexicographic_objective
+                    or lexicographic_primary_certified
+                )
+            )
             else ""
         )
         if (
             has_feasible_incumbent
+            and incumbent_objective is not None
+            and (
+                not research_lexicographic_objective
+                or lexicographic_primary_certified
+            )
             and not integrated_analytical_objective_floor_blockers
             and integrated_analytical_objective_lower_bound is not None
             and math.isfinite(
@@ -5188,7 +5584,7 @@ class GurobiMILPAdapter:
             independent_bound = float(
                 integrated_analytical_objective_lower_bound
             )
-            incumbent_objective = float(model.ObjVal)
+            incumbent_objective = float(incumbent_objective)
             bound_consistency_tolerance = max(
                 1.0e-6,
                 integrated_feasibility_tol
@@ -5224,8 +5620,16 @@ class GurobiMILPAdapter:
                     else independent_certified_gap
                 )
                 certified_gap_semantics = (
-                    "maximum_of_gurobi_raw_obj_bound_and_independent_integer_"
-                    "valid_analytical_objective_lower_bound"
+                    (
+                        "sequential_lexicographic_exact_vehicle_days_then_"
+                        "maximum_of_canonical_cost_gurobi_bound_and_"
+                        "independent_integer_valid_analytical_cost_lower_bound"
+                    )
+                    if research_lexicographic_objective
+                    else (
+                        "maximum_of_gurobi_raw_obj_bound_and_independent_"
+                        "integer_valid_analytical_objective_lower_bound"
+                    )
                 )
         nodes_explored = None
         if hasattr(model, "NodeCount"):
@@ -5800,9 +6204,13 @@ class GurobiMILPAdapter:
                     if research_lexicographic_objective
                     else float(model.ObjVal)
                 ),
-                "raw_solver_primary_objective_value": float(model.ObjVal),
+                "raw_solver_primary_objective_value": (
+                    lexicographic_primary_value
+                    if research_lexicographic_objective
+                    else float(model.ObjVal)
+                ),
                 "objective_value_semantics": (
-                    "canonical_operating_cost_secondary_objective"
+                    "canonical_operating_cost_after_exact_vehicle_day_fix"
                     if research_lexicographic_objective
                     else "configured_solver_objective"
                 ),
@@ -5849,7 +6257,11 @@ class GurobiMILPAdapter:
                 ),
                 "integrated_nodefile_dir": str(model.Params.NodefileDir),
                 "integrated_search_profile": {
-                    "schema_version": "phase4_integrated_search_profile_v2",
+                    "schema_version": (
+                        "phase4_integrated_search_profile_v3"
+                        if research_lexicographic_objective
+                        else "phase4_integrated_search_profile_v2"
+                    ),
                     "verified_feasible_start": verified_integrated_start,
                     "selected_profile": str(
                         integrated_search_controls["profile"]
@@ -5860,10 +6272,49 @@ class GurobiMILPAdapter:
                     ),
                     "phases": integrated_search_telemetry,
                     "semantics": (
-                        "weather_neutral_uninterrupted_integrated_branch_and_"
-                        "bound_search"
+                        (
+                            "weather_neutral_sequential_lexicographic_scalar_"
+                            "solves_with_one_shared_wall_clock_budget"
+                        )
+                        if research_lexicographic_objective
+                        else (
+                            "weather_neutral_uninterrupted_integrated_branch_"
+                            "and_bound_search"
+                        )
                     ),
                 },
+                "integrated_lexicographic_solve_mode": (
+                    "sequential_scalar_certification_v1"
+                    if research_lexicographic_objective
+                    else "not_applicable"
+                ),
+                "integrated_lexicographic_primary_value": (
+                    lexicographic_primary_value
+                ),
+                "integrated_lexicographic_primary_best_bound": (
+                    lexicographic_primary_bound
+                ),
+                "integrated_lexicographic_primary_certified": (
+                    lexicographic_primary_certified
+                ),
+                "integrated_lexicographic_primary_certificate": (
+                    lexicographic_primary_certificate
+                ),
+                "integrated_lexicographic_cost_status": (
+                    lexicographic_cost_status
+                ),
+                "integrated_lexicographic_cost_objective_jpy": (
+                    lexicographic_cost_objective
+                ),
+                "integrated_lexicographic_cost_best_bound_jpy": (
+                    lexicographic_cost_best_bound
+                ),
+                "integrated_lexicographic_cost_raw_mip_gap_ratio": (
+                    lexicographic_cost_raw_gap
+                ),
+                "integrated_lexicographic_completed_objectives": tuple(
+                    lexicographic_completed_objectives
+                ),
                 "integrated_analytical_objective_lower_bound": (
                     integrated_analytical_objective_lower_bound
                 ),
@@ -15749,6 +16200,8 @@ class GurobiMILPAdapter:
         GRB: Any,
         integrated_warm_start_audit: Mapping[str, Any],
         dispatch_variable_maps: Sequence[Any],
+        canonical_cost_expression: Any = None,
+        used_vehicle_day_expression: Any = None,
     ) -> Dict[str, Any]:
         """Promote a decomposed seed only after integrated recourse succeeds.
 
@@ -15805,6 +16258,8 @@ class GurobiMILPAdapter:
                 "complete_integrated_solution_start": False,
                 "integrated_solution_start_fingerprint": "",
                 "dispatch_fixed_recourse_objective_value": None,
+                "dispatch_fixed_recourse_canonical_cost_jpy": None,
+                "dispatch_fixed_recourse_used_vehicle_days": None,
                 "dispatch_fixed_recourse_iis_generated": False,
                 "dispatch_fixed_recourse_iis_constraint_count": 0,
                 "dispatch_fixed_recourse_iis_variable_bound_count": 0,
@@ -16032,6 +16487,16 @@ class GurobiMILPAdapter:
                             "dispatch_fixed_recourse_reason": "",
                             "dispatch_fixed_recourse_objective_value": float(
                                 model.ObjVal
+                            ),
+                            "dispatch_fixed_recourse_canonical_cost_jpy": (
+                                float(canonical_cost_expression.getValue())
+                                if canonical_cost_expression is not None
+                                else None
+                            ),
+                            "dispatch_fixed_recourse_used_vehicle_days": (
+                                float(used_vehicle_day_expression.getValue())
+                                if used_vehicle_day_expression is not None
+                                else None
                             ),
                             "integrated_solution_start_count": len(
                                 integrated_solution_values

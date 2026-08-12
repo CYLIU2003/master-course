@@ -759,6 +759,58 @@ class MILPOptimizer:
                     )
                     or {}
                 ),
+                "integrated_lexicographic_solve_mode": (
+                    (plan.metadata or {}).get(
+                        "integrated_lexicographic_solve_mode"
+                    )
+                ),
+                "integrated_lexicographic_primary_value": (
+                    (plan.metadata or {}).get(
+                        "integrated_lexicographic_primary_value"
+                    )
+                ),
+                "integrated_lexicographic_primary_best_bound": (
+                    (plan.metadata or {}).get(
+                        "integrated_lexicographic_primary_best_bound"
+                    )
+                ),
+                "integrated_lexicographic_primary_certified": bool(
+                    (plan.metadata or {}).get(
+                        "integrated_lexicographic_primary_certified",
+                        False,
+                    )
+                ),
+                "integrated_lexicographic_primary_certificate": (
+                    (plan.metadata or {}).get(
+                        "integrated_lexicographic_primary_certificate"
+                    )
+                ),
+                "integrated_lexicographic_cost_status": (
+                    (plan.metadata or {}).get(
+                        "integrated_lexicographic_cost_status"
+                    )
+                ),
+                "integrated_lexicographic_cost_objective_jpy": (
+                    (plan.metadata or {}).get(
+                        "integrated_lexicographic_cost_objective_jpy"
+                    )
+                ),
+                "integrated_lexicographic_cost_best_bound_jpy": (
+                    (plan.metadata or {}).get(
+                        "integrated_lexicographic_cost_best_bound_jpy"
+                    )
+                ),
+                "integrated_lexicographic_cost_raw_mip_gap_ratio": (
+                    (plan.metadata or {}).get(
+                        "integrated_lexicographic_cost_raw_mip_gap_ratio"
+                    )
+                ),
+                "integrated_lexicographic_completed_objectives": list(
+                    (plan.metadata or {}).get(
+                        "integrated_lexicographic_completed_objectives"
+                    )
+                    or ()
+                ),
                 "integrated_analytical_objective_lower_bound": (
                     (plan.metadata or {}).get(
                         "integrated_analytical_objective_lower_bound"

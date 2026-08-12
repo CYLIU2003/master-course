@@ -688,6 +688,10 @@ def test_objective_audit_accepts_declared_research_lexicographic_semantics() -> 
         "integrated_primary_objective_kind": (
             "minimum_used_vehicle_days_lexicographic"
         ),
+        "integrated_lexicographic_solve_mode": (
+            "sequential_scalar_certification_v1"
+        ),
+        "integrated_lexicographic_primary_certified": True,
     }
 
     assert runner._solver_objective_accounting_contract_passes(
@@ -714,6 +718,19 @@ def test_objective_audit_accepts_declared_research_lexicographic_semantics() -> 
     assert not runner._solver_objective_accounting_contract_passes(
         summary={"solver_objective_matches_accounting_total": True},
         settings=settings,
+        assignment_economic_audit={
+            "objective_preset": "research_lexicographic_v1"
+        },
+        phase4_actual_cost=True,
+        phase4_policy=False,
+    )
+
+    assert not runner._solver_objective_accounting_contract_passes(
+        summary={"solver_objective_matches_accounting_total": False},
+        settings={
+            **settings,
+            "integrated_lexicographic_primary_certified": False,
+        },
         assignment_economic_audit={
             "objective_preset": "research_lexicographic_v1"
         },

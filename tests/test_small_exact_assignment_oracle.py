@@ -199,6 +199,36 @@ def test_integrated_milp_matches_independent_small_exact_oracle() -> None:
     assert result.solver_metadata["integrated_primary_objective_kind"] == (
         "minimum_used_vehicle_days_lexicographic"
     )
+    assert result.solver_metadata["integrated_lexicographic_solve_mode"] == (
+        "sequential_scalar_certification_v1"
+    )
+    assert result.solver_metadata[
+        "integrated_lexicographic_primary_certified"
+    ] is True
+    assert result.solver_metadata[
+        "integrated_lexicographic_primary_value"
+    ] == pytest.approx(oracle.used_vehicle_day_count)
+    assert result.solver_metadata[
+        "integrated_lexicographic_primary_best_bound"
+    ] == pytest.approx(oracle.used_vehicle_day_count)
+    assert result.solver_metadata[
+        "integrated_lexicographic_cost_objective_jpy"
+    ] == pytest.approx(oracle.canonical_operating_cost_jpy, abs=1.0e-6)
+    assert result.solver_metadata[
+        "integrated_lexicographic_cost_best_bound_jpy"
+    ] == pytest.approx(oracle.canonical_operating_cost_jpy, abs=1.0e-6)
+    assert result.solver_metadata[
+        "integrated_lexicographic_cost_raw_mip_gap_ratio"
+    ] == pytest.approx(0.0)
+    assert result.solver_metadata[
+        "integrated_lexicographic_completed_objectives"
+    ] == [
+        "coverage_strict",
+        "used_vehicle_days",
+        "canonical_operating_cost",
+        "inter_trip_deadhead_km",
+        "charge_session_count",
+    ]
     assert (
         result.solver_metadata["actual_cost_objective_numeric_reconciliation_passed"]
         is False

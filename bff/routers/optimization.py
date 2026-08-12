@@ -10539,6 +10539,42 @@ def _solver_settings_payload(
         "integrated_primary_objective_kind": metadata.get(
             "integrated_primary_objective_kind"
         ),
+        "integrated_lexicographic_solve_mode": metadata.get(
+            "integrated_lexicographic_solve_mode"
+        ),
+        "integrated_lexicographic_primary_value": _float_or_none(
+            metadata.get("integrated_lexicographic_primary_value")
+        ),
+        "integrated_lexicographic_primary_best_bound": _float_or_none(
+            metadata.get("integrated_lexicographic_primary_best_bound")
+        ),
+        "integrated_lexicographic_primary_certified": bool(
+            metadata.get(
+                "integrated_lexicographic_primary_certified",
+                False,
+            )
+        ),
+        "integrated_lexicographic_primary_certificate": metadata.get(
+            "integrated_lexicographic_primary_certificate"
+        ),
+        "integrated_lexicographic_cost_status": metadata.get(
+            "integrated_lexicographic_cost_status"
+        ),
+        "integrated_lexicographic_cost_objective_jpy": _float_or_none(
+            metadata.get("integrated_lexicographic_cost_objective_jpy")
+        ),
+        "integrated_lexicographic_cost_best_bound_jpy": _float_or_none(
+            metadata.get("integrated_lexicographic_cost_best_bound_jpy")
+        ),
+        "integrated_lexicographic_cost_raw_mip_gap_ratio": _float_or_none(
+            metadata.get(
+                "integrated_lexicographic_cost_raw_mip_gap_ratio"
+            )
+        ),
+        "integrated_lexicographic_completed_objectives": list(
+            metadata.get("integrated_lexicographic_completed_objectives")
+            or ()
+        ),
         "integrated_ev_utilization_mode": metadata.get(
             "integrated_ev_utilization_mode", "disabled"
         ),

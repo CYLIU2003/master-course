@@ -1,5 +1,31 @@
 # master-course
 
+## 2026-08-13 sequential lexicographic gap certification
+
+- `research_lexicographic_v1` no longer relies on one Gurobi
+  `setObjectiveN` call. A time-limited multi-objective solve did not expose a
+  canonical-cost `ObjBound`/`MIPGap`, so a valid 264-trip incumbent could not
+  certify the predeclared cost gap.
+- Phase 4 now uses one shared wall-clock budget and solves the hierarchy as
+  scalar stages. Under strict coverage it first proves the minimum used
+  vehicle-days, fixes that integer value, and then minimizes canonical
+  operating cost. Only this cost stage supplies the public raw/certified cost
+  bound and gap. Deadhead distance and charge-session count are attempted only
+  when the canonical cost is exact and enough shared time remains.
+- A complete integrated fixed-dispatch recourse seed can certify the first
+  stage without another solve when its used vehicle-days equal the independent
+  strict path-cover lower bound. The seed's canonical cost is recorded
+  separately; it is never mistaken for the vehicle-day objective.
+- The formal pair gate requires
+  `integrated_lexicographic_primary_certified=true` and scalar cost-stage
+  objective/bound telemetry before accepting a cost-gap certificate. Failure
+  at any earlier stage remains explicit and does not fall through to a false
+  optimality claim.
+- The change preserves the feasible region and cost coefficients but changes
+  the optimization algorithm and evidence schema. Existing `e4ddd3f` results
+  remain evidence only for that frozen SHA. A fresh clean-commit full pair is
+  required before the new sequential certificate can affect release status.
+
 ## 2026-08-12 Rolling charge-session boundary correction
 
 - A clean-SHA formal attempt at `6f645020f8473c42c15dce8d654bcc00d052615a`

@@ -3801,3 +3801,39 @@ locks this distinction in place.
   legacy EV-policy flag is also present. The relevant objective, exact-oracle,
   pair and frontend-runner regressions pass `79 passed`; the complete repository
   regression passes `1349 passed in 66.32s`.
+
+# 2026-08-13 - Sequential lexicographic cost-gap certification
+
+- Audited the remaining pair blocker and confirmed that the integrated
+  `research_lexicographic_v1` path used Gurobi `setObjectiveN`. When the full
+  model reached its time limit, the returned model state did not provide a
+  single canonical-operating-cost `ObjBound` or `MIPGap`; the release gate
+  therefore could not distinguish an uncertified cost stage from the
+  vehicle-day primary objective.
+- Replaced that path with sequential scalar solves under one unchanged Phase 4
+  wall-clock budget. The mathematical hierarchy is now implemented as
+  `min used_vehicle_days`, fix the certified integer optimum, then
+  `min canonical_operating_cost`. Exact cost is fixed before the optional
+  deadhead and charge-session tie-break stages. A stage that is not certified
+  prevents every lower-priority stage from running.
+- The strict path-cover lower bound and a complete integrated fixed-dispatch
+  recourse incumbent can certify the vehicle-day stage without re-solving when
+  both counts match. The preflight now records its used vehicle-days and its
+  canonical cost as separate quantities. A cost upper bound from that seed is
+  added only after the same minimum vehicle-day count is fixed, so it cannot
+  exclude a lexicographically superior lower-count solution.
+- Raw cost-stage objective, bound, gap, status, completed hierarchy levels and
+  the primary certificate are propagated through the MILP engine and BFF
+  `solver_settings.json`. The formal controlled-pair audit requires the
+  sequential solve mode, an exact primary certificate and non-null cost-stage
+  objective/bound before accepting the requested cost gap.
+- Independent four-trip enumeration agrees with the integrated result:
+  two vehicle-days, 900 JPY canonical cost, 900 JPY bound and zero cost gap;
+  all four requested hierarchy levels complete. A verified Phase 3 seed test
+  separately proves the no-resolve primary-certificate path. Focused Phase 4,
+  exact-oracle, BFF and pair regressions pass `130 passed`; the complete
+  repository regression passes `1351 passed in 65.94s`.
+- This changes solve sequencing and evidence metadata, not the feasible region,
+  energy balance, tariff or accounting equations. The frozen `e4ddd3f` pair is
+  not relabeled. Current-HEAD formal evidence remains pending a clean commit,
+  fresh Prepare, both full Phase 4 runs, Rolling and pair finalization.

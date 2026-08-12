@@ -1124,6 +1124,73 @@ def test_phase4_uses_verified_same_problem_phase3_plan_as_complete_mip_start() -
     ] is True
 
 
+def test_research_lexicographic_seed_certifies_vehicle_days_before_cost() -> None:
+    base_problem = _phase4_seed_problem(
+        "research-lexicographic-sequential-certification"
+    )
+    problem = replace(
+        base_problem,
+        metadata={
+            **dict(base_problem.metadata or {}),
+            "vehicle_usage_cost_jpy_per_used_bus": 20_000.0,
+            "objective_preset": "research_lexicographic_v1",
+        },
+    )
+
+    result = OptimizationEngine().solve(
+        problem,
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            phase="phase4_integrated",
+            integrated_actual_cost_objective=True,
+            phase4_phase3_seed_enabled=True,
+            phase4_phase3_seed_time_limit_sec=60,
+            stage1_stage2_candidate_limit=1,
+            time_limit_sec=30,
+            mip_gap=0.0,
+            random_seed=42,
+            warm_start=True,
+            allow_postsolve_repair=False,
+            research_run=True,
+            requested_phase_token="phase4_integrated",
+            requested_phase="phase4_integrated",
+            resolved_phase="phase4_integrated",
+            executed_phase="phase4_integrated",
+        ),
+    )
+
+    assert result.feasible, result.infeasibility_reasons
+    assert result.solver_metadata["integrated_lexicographic_solve_mode"] == (
+        "sequential_scalar_certification_v1"
+    )
+    assert result.solver_metadata[
+        "integrated_lexicographic_primary_certified"
+    ] is True
+    assert result.solver_metadata[
+        "integrated_lexicographic_primary_certificate"
+    ] == (
+        "verified_integrated_recourse_incumbent_matches_"
+        "strict_path_cover_integer_lower_bound"
+    )
+    warm_start_audit = result.solver_metadata["integrated_warm_start_audit"]
+    assert warm_start_audit[
+        "dispatch_fixed_recourse_used_vehicle_days"
+    ] == pytest.approx(1.0)
+    assert warm_start_audit[
+        "dispatch_fixed_recourse_canonical_cost_jpy"
+    ] is not None
+    phases = result.solver_metadata["integrated_search_profile"]["phases"]
+    assert phases[0]["phase"] == "lexicographic_used_vehicle_days"
+    assert phases[0]["search_profile"] == "certificate_without_resolve"
+    assert any(
+        phase["phase"] == "lexicographic_canonical_operating_cost"
+        for phase in phases
+    )
+    assert result.solver_metadata[
+        "integrated_lexicographic_cost_raw_mip_gap_ratio"
+    ] == pytest.approx(0.0)
+
+
 def test_phase4_stops_after_verified_start_already_certifies_requested_gap() -> None:
     base_problem = _phase4_seed_problem(
         "actual-cost-certified-start-stop"
