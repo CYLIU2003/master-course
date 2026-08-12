@@ -14,13 +14,13 @@ validated.
 | Vehicle-trip compatibility (a_{v,i}) | Prepare `vehicle_trip_compatibility_audit`; canonical `allowed_vehicle_types`; integrated assignment-variable eligibility | `tests/test_run_preparation_scope_audit.py` | Complete vehicle-ID matrix and hash are exported; same-powertrain per-vehicle restrictions currently fail closed |
 | Vehicle flow conservation | `start_arc`, `x[v,i,j]`, `end_arc`; incoming + start = assignment and outgoing + end = assignment | small exact oracle plus transition tests | Exhaustive four-trip path assignment agrees with MILP |
 | Connection feasibility (a_i+turn_i+deadhead_{ij}\le d_j) | `DispatchContext.feasible_connections`; `fragment_transition_diagnostic` | `tests/test_route_band_transition_reason_codes.py`, `tests/test_run_preparation_scope_audit.py` | Missing OD, alias failure, route-band policy, and insufficient time are distinct |
-| Startup, inter-trip, and return deadhead energy/fuel | `startup_deadhead_*`, `_deadhead_energy_kwh`, `_deadhead_fuel_l`, `return_deadhead_energy_kwh` | small exact fuel oracle; physical validation suites | All-ICE startup/connection/return fuel is independently enumerated; electric oracle boundary case remains open |
+| Startup, inter-trip, and return deadhead energy/fuel | `startup_deadhead_*`, `_deadhead_energy_kwh`, `_deadhead_fuel_l`, `return_deadhead_energy_kwh` | small exact fuel oracle; physical validation suites | All-ICE startup/connection/return fuel is independently enumerated; the electric oracle deliberately limits its proof scope to zero-deadhead depot round trips |
 | BEV trip energy | `trip_energy_kwh`, `fuel_l_by_vehicle_type`, `trip_energy_proxy.py`; assignment-linked integrated expressions | `tests/test_trip_energy_proxy_and_location_aliases.py` and energy accounting suites | Route/direction/time-band proxy and sensitivity scale are tested; empirical calibration remains an input-study task |
-| Vehicle SOC transition | integrated SOC expressions and `soc_transition__*`; Stage 2 `s_var`; independent `SOC_FRAGMENT` guard | SOC/terminal/physical-validation suites; `tests/test_immediate_charge_baseline.py` | Solver and independent physical checker evaluate single-fragment SOC; ambiguous multi-fragment electric transitions fail closed; a complete electric exhaustive oracle remains open |
-| Charger availability, setup/teardown, minimum session, and taper | physical charger binaries/power variables; `charging_power_model=piecewise_soc_taper_v1`; M0/M2 `immediate_charge.py` | charge-taper and physical-charger test suites; `tests/test_immediate_charge_baseline.py` | Optimized and deterministic rule paths are separately identified; 15/30/60-minute formal comparison remains unexecuted at current HEAD |
+| Vehicle SOC transition | integrated SOC expressions and `soc_transition__*`; Stage 2 `s_var`; independent `SOC_FRAGMENT` guard | SOC/terminal/physical-validation suites; `tests/test_immediate_charge_baseline.py`; `tests/test_small_exact_electric_oracle.py` | Independent assignment enumeration plus SciPy/HiGHS charging verifies departure readiness and return-to-initial SOC for the bounded grid-only scope; ambiguous multi-fragment electric transitions still fail closed |
+| Charger availability, setup/teardown, minimum session, and taper | physical charger binaries/power variables; `charging_power_model=piecewise_soc_taper_v1`; M0/M2 `immediate_charge.py` | charge-taper and physical-charger test suites; `tests/test_immediate_charge_baseline.py`; `tests/test_small_exact_electric_oracle.py` | Independent one-port/two-port shortage fixtures cover constant-power concurrency; taper and setup/teardown remain covered by focused production-path tests; 15/30/60-minute formal comparison remains unexecuted at current HEAD |
 | Depot power balance | `grid_import`, `pv2bus`, `pv2bess`, `bess2bus`, curtailment, bus load | energy-flow and accounting reconciliation suites | Exact depot/slot flows are preserved; final reporting uses executed Rolling values |
 | BESS SOC and terminal target | integrated/Stage-2 BESS SOC expressions and resolved terminal target | BESS terminal and energy-flow tests | Initial inventory is not treated as free when terminal target equals initial SOC |
-| Lexicographic objective | strict service, used vehicle-days, canonical operating cost, then deadhead/session terms | small exact oracle; objective and accounting reconciliation tests | Four-trip primary/secondary choice matches enumeration; formal full-scale optimality still depends on certified gap |
+| Lexicographic objective | strict service, used vehicle-days, canonical operating cost, then deadhead/session terms | both small exact oracles; objective and accounting reconciliation tests | All-ICE path selection and grid-only BEV/ICE tariff crossing match independent enumeration; formal full-scale optimality still depends on certified gap |
 | Cost-CO2 epsilon constraint | `co2_emissions_epsilon_cap_kg` and `co2_emissions_epsilon_cap_kg` constraint | experiment-matrix contract tests | Parameter path exists; Pareto frontier has not been formally executed at current HEAD |
 
 ## Bound and Big-M policy
@@ -42,16 +42,14 @@ bound for the positive-part proxy, not permission to relax physical SOC.
 
 ## Required additions before this map is complete
 
-1. Add electric exhaustive fixtures for PV=0, BESS=0, charger shortage,
-   terminal SOC, and electricity-price break-even.
-2. Attach exact generated Gurobi constraint names to every row where the
+1. Attach exact generated Gurobi constraint names to every row where the
    integrated path currently relies on unnamed constraints.
-3. Persist the selected direct-versus-depot fragment transition and its energy
+2. Persist the selected direct-versus-depot fragment transition and its energy
    in the solver result, then replay multi-fragment electric SOC continuously;
    until then `SOC_FRAGMENT` remains a formal blocker.
-4. Execute M1 explicitly and compare fresh M0--M3 candidates from the same
+3. Execute M1 explicitly and compare fresh M0--M3 candidates from the same
    prepared input and frozen SHA. M0/M2/M3 day-ahead artifacts now share the
    BFF cost evaluator and physical checker, but this deliberately does not mix
    their day-ahead values with accepted Rolling accounting.
-5. Execute the predeclared 15/30/60-minute, route-band, energy-scale, PV-scale,
+4. Execute the predeclared 15/30/60-minute, route-band, energy-scale, PV-scale,
    and CO2-cap matrices from a clean frozen commit.

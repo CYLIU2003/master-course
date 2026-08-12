@@ -3521,3 +3521,36 @@ locks this distinction in place.
   dirty development state. Because prepared schema
   and accounting semantics changed, all future evidence requires fresh
   Prepare and a clean frozen commit; older outputs retain their original SHA.
+
+# 2026-08-12 - Independent grid-only electric exact oracle
+
+- Added `small_exact_electric_oracle_v1` for bounded formulation verification.
+  It supports only strict one-day, one-depot cases with at most ten
+  depot-to-depot trips, PV=0, BESS=0, a flat grid tariff,
+  `constant_power_v0`, and BEV terminal SOC equal to initial SOC. Unsupported
+  powertrains, cost semantics, nonzero PV/BESS, time-varying tariffs, or
+  charger-ID compatibility fail closed.
+- Assignment is completely enumerated. For each dispatch-feasible assignment,
+  a separate SciPy/HiGHS MILP optimizes grid charging with binary charger-port
+  occupation, vehicle/charger power limits, depot import limit, slot SOC
+  bounds, departure readiness, and terminal equality. The audit intentionally
+  does not import or reuse the production Gurobi equations, so agreement is an
+  independent check rather than solver self-certification.
+- Added machine-readable optimal and infeasible certificates. They record the
+  total assignment enumeration, dispatch-feasible and energy-feasible counts,
+  costs, grid input, fuel, terminal SOC, and chosen assignment.
+- Added fixtures for the hand-calculated BEV/ICE grid-price break-even
+  `(150 / 4.52) * 0.95 / 1.316 = 23.956344 JPY/kWh`, BEV preference at
+  20 JPY/kWh, ICE preference at 30 JPY/kWh, return-to-initial infeasibility
+  without a charger, and simultaneous two-BEV infeasibility with one 20 kW
+  port versus feasibility with two ports. Each feasible oracle plan is also
+  checked by the canonical `FeasibilityChecker` and `CostEvaluator`; the
+  integrated Gurobi model matches the independent assignment and accounting
+  cost at both tariff sides within numerical tolerance.
+- Focused regression for both exact oracles passes `11 passed`; the related
+  SOC, charger, accounting, and integrated-objective regression passes
+  `68 passed`; and the complete repository regression passes
+  `1315 passed in 117.73s`. No frontend, 264-trip, Rolling, or formal research
+  optimization was executed from this code-changing state. The exact oracle
+  closes only the bounded electric formulation-test item; fresh M1/M0--M3,
+  sensitivity, and controlled-pair evidence remain required.

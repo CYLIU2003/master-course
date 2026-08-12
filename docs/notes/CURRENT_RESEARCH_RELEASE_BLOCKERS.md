@@ -15,7 +15,8 @@ it is not evidence for the revised model. Current-HEAD research release is
 3. 15/30/60-minute, trip-demand, route-band, and vehicle-day-cost sensitivity;
 4. accepted Phase 4 plus 24/24 Rolling, physical validation, canonical
    accounting, and immutable pair verification;
-5. a small exact-model audit and the frontend/BFF ablation matrix;
+5. a fresh frontend/BFF ablation matrix (the bounded all-ICE and grid-only
+   electric exact-model audits are now implemented and tested);
 6. an explicit M1 fixed-dispatch charging solve and a fresh same-input M0--M3
    comparison before method-level effect sizes may be claimed.
 
@@ -23,7 +24,18 @@ The implemented PV semantics are
 `available_surplus_after_depot_load`; gross PV is not accepted without an
 explicit depot-load series. `literature_proxy_v1` is a deterministic proxy,
 not a measured trip-energy model, and that limitation must remain in the
-thesis. No new optimization has been run during this code-changing step.
+thesis. Only bounded unit-test oracles were solved during this code-changing
+step; no frontend, full-scale, Rolling, or formal research run was executed.
+
+The independent exact-audit boundary now includes a second, electric oracle.
+It completely enumerates assignments and uses a separate SciPy/HiGHS charging
+MILP for strict one-depot, one-day, flat-tariff, PV=0, BESS=0,
+return-to-initial-SOC cases of at most ten trips. Tests cover the
+23.9563 JPY/kWh hand-calculated energy-price crossing, no-charger terminal-SOC
+failure, one-port versus two-port charger concurrency, canonical cost and
+physical validation, and agreement with the integrated Gurobi result. This is
+bounded formulation evidence only; it does not discharge the fresh 264-trip
+formal-run, M1/M0--M3, sensitivity, or pair gates above.
 
 ## 2026-08-11 compact reporting release: progress presentation ready
 

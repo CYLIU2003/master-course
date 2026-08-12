@@ -1009,6 +1009,16 @@ used only in bounded tests, never as a formal-run shortcut. The four-trip
 fixture verifies the integrated MILP assignment, per-vehicle fuel use,
 canonical fuel cost, and CO2 ledger against complete enumeration. Unsupported
 PV, BESS, electric-fleet, CO2-cost, or non-total-cost cases fail closed.
+`src/optimization/validation/small_electric_oracle.py` adds the complementary
+grid-only electric boundary audit. It completely enumerates assignment and
+solves each fixed-assignment charging problem with independent SciPy/HiGHS
+variables, rather than importing the production Gurobi formulation. Its
+explicit scope is one depot/day, at most ten depot-to-depot trips, PV=0,
+BESS=0, a flat tariff, constant-power charging, and BEV terminal SOC equal to
+initial SOC. The fixtures certify the hand-calculated 23.9563 JPY/kWh
+BEV/ICE break-even, charger-port shortage, terminal-SOC infeasibility, canonical
+accounting, and agreement with the integrated MILP. Unsupported physics fail
+closed and infeasible enumeration has a machine-readable certificate.
 The current equation-to-code-to-test traceability table is maintained in
 `docs/notes/THESIS_EQUATION_CODE_TEST_MAP.md`.
 
