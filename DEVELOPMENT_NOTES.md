@@ -1,5 +1,41 @@
 # Development Notes
 
+## 2026-08-13: prepared-input immutability across BFF restarts
+
+- The first controlled low-PV M1/M3 assembly was intentionally rejected by
+  `build_thesis_ablation_comparison.py`. Both jobs recorded prepared input ID
+  `prepared-8331f7eaa9fcb7eb-404f36795e908d12-d5e8413e`, canonical ablation
+  input hash
+  `9693fb2c52952480160b0a455a154bca9b02edb01f28f7ab3695b34ae0fc29c3`,
+  clean Git SHA `f46f1e8`, and matching M0 output, but their source byte hashes
+  were `c7091202...` and `4a45a62d...`. The blocked candidate metrics are not
+  adopted as thesis results.
+- Root cause: after a BFF restart the in-memory Prepare cache was empty.
+  `get_or_build_run_preparation()` regenerated the deterministic ID and wrote
+  the rebuilt JSON to the same path. The two recorded Prepare snapshots differ
+  only at top-level `prepared_at`, but that legitimate provenance timestamp
+  changed the full source-file SHA and destroyed the byte-identity evidence
+  required by the comparison gate.
+- `run_preparation.py` now rehydrates a matching saved prepared artifact without
+  rebuilding it. Repeated explicit Prepare uses create-once persistence: if
+  the complete canonical payload excluding only `prepared_at` is identical,
+  the original file, timestamp and SHA remain unchanged. If any other field
+  differs under the same ID, `PREPARED_INPUT_ID_COLLISION` stops the request;
+  the prior artifact is never overwritten. Concurrent creates use the same
+  equality check after the exclusive-create race.
+- The mathematical feasible region, energy/cost equations and objective are
+  unchanged. This is a provenance and reproducibility correction. Regression
+  tests cover timestamp-only reuse, real trip-content collision with byte
+  preservation, and process-restart reuse without invoking the builder.
+- The production-size 251,647,658-byte low-PV prepared artifact was replayed
+  with only `prepared_at` changed in memory. Its full file SHA-256 remained
+  `4A45A62DE369651487C72842D4C14D90F4ED276A6E3CE9651560BFF4797917D5`
+  before and after the immutability check.
+- Focused provenance/preparation/ablation regression: `30 passed`; complete
+  repository regression: `1373 passed in 69.10s`. Fresh controlled M1/M3
+  evidence remains pending the reviewed clean commit; no pre-fix run will be
+  relabeled.
+
 ## 2026-08-13: runtime-attested r7 validates feedback budgeting and provenance
 
 - Executed the normal frontend/BFF controlled pair from clean frozen SHA

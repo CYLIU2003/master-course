@@ -1,5 +1,26 @@
 # Current research release blockers
 
+## 2026-08-13 M0--M3 prepared-input provenance blocker
+
+- A first low-PV Phase 1/Phase 4 comparison attempt reached physically valid
+  frontend results, but the comparison is correctly `BLOCKED`. The prepared
+  ID, canonical ablation input hash, clean Git SHA and M0 payload match; the
+  original prepared JSON byte hashes do not.
+- The mismatch is not evidence of different trips or controls. Restarting the
+  BFF emptied the in-memory cache, rebuilt the same deterministic prepared ID,
+  and overwrote its source path with a payload whose saved snapshot differs
+  only in `prepared_at`. That made the old Phase 4 source SHA unverifiable and
+  invalidated this M1/M3 pair for research comparison.
+- The implementation now treats each prepared path as immutable: matching
+  persisted input is loaded after restart; a timestamp-only repeated Prepare
+  preserves the original bytes; a real same-ID content difference fails closed
+  as `PREPARED_INPUT_ID_COLLISION`. The comparison gate remains unchanged and
+  is not weakened to accept semantic hashes in place of source bytes.
+- Remaining release work: complete full regression/review, freeze a clean new
+  commit, invoke fresh Prepare, run low-PV M1 and M3 against that one immutable
+  source artifact, and regenerate M0--M3. Until then the candidate effect sizes
+  from the rejected pair are diagnostic only and must not enter the thesis.
+
 ## 2026-08-13 latest verdict: r7 verifies feedback evidence; sunny gap is unchanged
 
 Frozen SHA `f46f1e821e6773f7f647dd130b28427bbb3df10d` completed fresh

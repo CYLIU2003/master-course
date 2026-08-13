@@ -1,12 +1,21 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+import pytest
+
 from bff.routers import optimization
 from bff.services.run_preparation import (
+    PREPARED_INPUT_SCHEMA_VERSION,
+    PreparedInputIdentityCollisionError,
+    _persist_prepared_input_immutably,
+    _prepared_input_id,
     _scenario_hash,
+    _scope_cache_payload,
+    _scope_hash,
     _materialize_explicit_fleet_state,
     RunPreparation,
     get_or_build_run_preparation,
@@ -14,6 +23,130 @@ from bff.services.run_preparation import (
     materialize_scenario_from_prepared_input,
     solver_prepare_profile,
 )
+
+
+def test_prepared_artifact_reuses_original_bytes_when_only_timestamp_changes(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "prepared.json"
+    original = {
+        "prepared_input_id": "prepared-fixed",
+        "prepared_at": 1.0,
+        "trips": [{"trip_id": "trip-1", "distance_km": 5.0}],
+    }
+    rebuilt = {**original, "prepared_at": 2.0}
+
+    first = _persist_prepared_input_immutably(path, original)
+    original_bytes = path.read_bytes()
+    second = _persist_prepared_input_immutably(path, rebuilt)
+
+    assert first == original
+    assert second == original
+    assert path.read_bytes() == original_bytes
+    assert json.loads(path.read_text(encoding="utf-8"))["prepared_at"] == 1.0
+
+
+def test_prepared_artifact_rejects_content_change_under_same_id(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "prepared.json"
+    original = {
+        "prepared_input_id": "prepared-fixed",
+        "prepared_at": 1.0,
+        "trips": [{"trip_id": "trip-1", "distance_km": 5.0}],
+    }
+    changed = {
+        **original,
+        "prepared_at": 2.0,
+        "trips": [{"trip_id": "trip-1", "distance_km": 6.0}],
+    }
+    _persist_prepared_input_immutably(path, original)
+    original_bytes = path.read_bytes()
+
+    with pytest.raises(PreparedInputIdentityCollisionError):
+        _persist_prepared_input_immutably(path, changed)
+
+    assert path.read_bytes() == original_bytes
+
+
+def test_process_restart_reuses_persisted_prepared_input_without_rebuild(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    scenario = {
+        "meta": {"id": "scenario-restart"},
+        "scenario_overlay": {
+            "dataset_id": "tokyu_full",
+            "dataset_version": "dataset-v1",
+        },
+        "simulation_config": {
+            "service_date": "2025-08-05",
+            "service_dates": ["2025-08-05"],
+            "planning_days": 1,
+        },
+        "dispatch_scope": {"serviceId": "WEEKDAY", "depotId": "dep1"},
+    }
+    scope = SimpleNamespace(
+        depot_ids=["dep1"],
+        route_ids=["route-a"],
+        service_ids=["WEEKDAY"],
+        service_date="2025-08-05",
+        route_selectors=["route-a"],
+    )
+    scenario_hash = _scenario_hash(scenario)
+    scope_hash = _scope_hash(_scope_cache_payload(scenario, scope))
+    prepared_input_id = _prepared_input_id(scenario_hash, scope_hash)
+    prepared_root = tmp_path / "prepared_inputs"
+    prepared_dir = prepared_root / "scenario-restart"
+    prepared_dir.mkdir(parents=True)
+    prepared_path = prepared_dir / f"{prepared_input_id}.json"
+    payload = {
+        "prepared_input_id": prepared_input_id,
+        "prepared_input_schema_version": PREPARED_INPUT_SCHEMA_VERSION,
+        "scenario_id": "scenario-restart",
+        "dataset_id": "tokyu_full",
+        "dataset_version": "dataset-v1",
+        "scenario_hash": scenario_hash,
+        "scope_hash": scope_hash,
+        "prepared_at": 1.0,
+        "depot_ids": ["dep1"],
+        "route_ids": ["route-a"],
+        "service_ids": ["WEEKDAY"],
+        "service_date": "2025-08-05",
+        "service_dates": ["2025-08-05"],
+        "planning_days": 1,
+        "primary_depot_id": "dep1",
+        "trip_count": 1,
+        "timetable_row_count": 1,
+        "prepared_scope_audit": {
+            "trip_distance_audit": {"total_count": 1},
+            "warnings": ["persisted warning"],
+        },
+    }
+    prepared_path.write_text(json.dumps(payload), encoding="utf-8")
+    invalidate_scenario("scenario-restart")
+    monkeypatch.setattr("src.runtime_scope.resolve_scope", lambda *_args: scope)
+
+    def fail_rebuild(*_args, **_kwargs):
+        raise AssertionError("persisted prepared input must not be rebuilt")
+
+    monkeypatch.setattr(
+        "bff.services.run_preparation._build_run_preparation",
+        fail_rebuild,
+    )
+
+    result = get_or_build_run_preparation(
+        scenario,
+        tmp_path / "built",
+        prepared_root,
+        None,
+    )
+
+    assert result.is_valid is True
+    assert result.prepared_input_id == prepared_input_id
+    assert result.solver_input_path == prepared_path
+    assert result.scope_summary["load_source"] == "persisted_prepared_input"
+    assert result.warnings == ["persisted warning"]
 
 
 def test_explicit_thesis_phases_use_milp_exact_prepare_profile() -> None:

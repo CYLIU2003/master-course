@@ -1411,8 +1411,19 @@ never repairs or reassigns an infeasible candidate, and records physical errors
 instead. M1 still requires its own frontend job against the same prepared input;
 the ordinary M3 job does not launch it silently. Switching between explicit
 MILP Phase 1--4 modes keeps an existing `milp_exact` prepared input valid, while
-changing to another solver profile still requires Prepare again. After both
-jobs finish, run:
+changing to another solver profile still requires Prepare again.
+
+Prepared inputs are immutable evidence. After a BFF restart, a matching
+scenario/scope/schema ID is loaded from the saved JSON instead of being rebuilt
+at the same path. An explicit repeated Prepare may rebuild in memory, but it
+keeps the original file and byte SHA-256 when every solver-input field matches
+(creation time is provenance metadata only). If any trip, vehicle, tariff,
+PV/BESS, compatibility, or other canonical field differs under the same ID,
+Prepare fails with `PREPARED_INPUT_ID_COLLISION`; it never overwrites the prior
+artifact. This is required for an M1/M3 comparison to share both the prepared
+ID and the exact source byte hash across an application restart.
+
+After both jobs finish, run:
 
 ```powershell
 python scripts/build_thesis_ablation_comparison.py `

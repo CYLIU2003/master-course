@@ -137,6 +137,10 @@ class RunPreparation:
         return self.error is None and self.solver_input_path is not None
 
 
+class PreparedInputIdentityCollisionError(RuntimeError):
+    """Raised when one prepared-input ID would identify different content."""
+
+
 _prep_cache: dict[tuple[str, str, str, str, str, str], RunPreparation] = {}
 _VOLATILE_HASH_KEYS = {
     "__unloaded_artifact_fields__",
@@ -209,6 +213,130 @@ def _scope_hash(scope_payload: dict[str, Any]) -> str:
         default=str,
     )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
+
+
+def _prepared_payload_identity(payload: dict[str, Any]) -> str:
+    """Return the full prepared-input identity, excluding creation time only.
+
+    ``prepared_at`` is provenance metadata, not solver input.  Every other
+    field, including the complete trip/timetable payload, participates in the
+    identity so that a deterministic prepared ID can never be rebound to
+    different canonical input.
+    """
+
+    comparable = {key: value for key, value in payload.items() if key != "prepared_at"}
+    canonical = json.dumps(
+        comparable,
+        sort_keys=True,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        default=str,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _persist_prepared_input_immutably(
+    path: Path,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Create a prepared artifact once, or reuse byte-identical semantics.
+
+    A process restart may rebuild the same deterministic prepared-input ID.
+    When the solver content is unchanged, the original file (and therefore its
+    source SHA-256) is retained.  Different content under the same ID is a
+    provenance collision and must stop Prepare instead of overwriting evidence.
+    """
+
+    def load_existing() -> dict[str, Any]:
+        existing = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(existing, dict):
+            raise PreparedInputIdentityCollisionError(
+                f"Prepared input is not a JSON object: {path}"
+            )
+        if _prepared_payload_identity(existing) != _prepared_payload_identity(payload):
+            raise PreparedInputIdentityCollisionError(
+                "Prepared input ID collision: existing canonical content differs "
+                f"from the rebuilt payload ({path.name}). Change the scenario, "
+                "scope, dataset version, or prepared-input schema before retrying."
+            )
+        return existing
+
+    if path.exists():
+        return load_existing()
+
+    serialized = json.dumps(payload, ensure_ascii=False, indent=2, default=str)
+    try:
+        with path.open("x", encoding="utf-8") as handle:
+            handle.write(serialized)
+    except FileExistsError:
+        # Concurrent Prepare won the create race.  It is safe only when both
+        # processes produced the same canonical solver input.
+        return load_existing()
+    return payload
+
+
+def _run_preparation_from_persisted_input(
+    *,
+    path: Path,
+    scenario_id: str,
+    dataset_version: str,
+    scenario_hash: str,
+    scope_hash: str,
+    prepared_input_id: str,
+) -> RunPreparation:
+    """Rehydrate a preparation record without rebuilding or rewriting input."""
+
+    raw_payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw_payload, dict):
+        raise PreparedInputIdentityCollisionError(
+            f"Prepared input is not a JSON object: {path}"
+        )
+    payload = dict(raw_payload)
+    expected = {
+        "prepared_input_id": prepared_input_id,
+        "prepared_input_schema_version": PREPARED_INPUT_SCHEMA_VERSION,
+        "scenario_id": scenario_id,
+        "dataset_version": dataset_version,
+        "scenario_hash": scenario_hash,
+        "scope_hash": scope_hash,
+    }
+    mismatches = {
+        key: {"expected": value, "actual": payload.get(key)}
+        for key, value in expected.items()
+        if str(payload.get(key) or "") != str(value or "")
+    }
+    if mismatches:
+        raise PreparedInputIdentityCollisionError(
+            "Persisted prepared input identity does not match its current "
+            f"scenario/scope contract: {mismatches}"
+        )
+    prepared_scope_audit = dict(payload.get("prepared_scope_audit") or {})
+    return RunPreparation(
+        scenario_id=scenario_id,
+        dataset_version=dataset_version,
+        scenario_hash=scenario_hash,
+        scope_hash=scope_hash,
+        solver_input_path=path,
+        prepared_input_id=prepared_input_id,
+        prepared_at=float(payload.get("prepared_at") or path.stat().st_mtime),
+        warnings=list(prepared_scope_audit.get("warnings") or []),
+        scope_summary={
+            "depot_ids": list(payload.get("depot_ids") or []),
+            "route_ids": list(payload.get("route_ids") or []),
+            "service_ids": list(payload.get("service_ids") or []),
+            "service_date": payload.get("service_date"),
+            "service_dates": list(payload.get("service_dates") or []),
+            "planning_days": int(payload.get("planning_days") or 1),
+            "prepared_input_id": prepared_input_id,
+            "scenario_hash": scenario_hash,
+            "scope_hash": scope_hash,
+            "primary_depot_id": payload.get("primary_depot_id"),
+            "trip_count": int(payload.get("trip_count") or 0),
+            "timetable_row_count": int(payload.get("timetable_row_count") or 0),
+            "load_source": "persisted_prepared_input",
+            "prepared_scope_audit": prepared_scope_audit,
+        },
+    )
 
 
 def _normalize_scope_text(value: Any) -> str:
@@ -2536,12 +2664,52 @@ def get_or_build_run_preparation(
         scope_hash,
     )
 
+    prepared_input_id = _prepared_input_id(scenario_hash, scope_hash)
+    prepared_input_path = (
+        _prepared_input_dir(scenarios_dir, scenario_id)
+        / f"{prepared_input_id}.json"
+    )
+
     if cache_key in _prep_cache and not force_rebuild:
         cached = _prep_cache[cache_key]
         if cached.is_valid or cached.error_code == "PREPARE_DISTANCE_JOIN_BROKEN":
             log.debug("run_prep cache HIT: %s %s", scenario_id, scenario_hash)
             return cached
         log.debug("run_prep cache INVALID: %s", scenario_id)
+
+    if prepared_input_path.is_file() and not force_rebuild:
+        try:
+            persisted = _run_preparation_from_persisted_input(
+                path=prepared_input_path,
+                scenario_id=scenario_id,
+                dataset_version=dataset_version,
+                scenario_hash=scenario_hash,
+                scope_hash=scope_hash,
+                prepared_input_id=prepared_input_id,
+            )
+        except (
+            OSError,
+            ValueError,
+            PreparedInputIdentityCollisionError,
+        ) as exc:
+            return RunPreparation(
+                scenario_id=scenario_id,
+                dataset_version=dataset_version,
+                scenario_hash=scenario_hash,
+                scope_hash=scope_hash,
+                solver_input_path=None,
+                prepared_input_id=prepared_input_id,
+                scope_summary={},
+                error_code="PREPARED_INPUT_ID_COLLISION",
+                error=str(exc),
+            )
+        _prep_cache[cache_key] = persisted
+        log.info(
+            "Reusing immutable prepared input for scenario %s: %s",
+            scenario_id,
+            prepared_input_id,
+        )
+        return persisted
 
     log.info("Building run preparation for scenario %s (hash=%s)", scenario_id, scenario_hash)
     prep = _build_run_preparation(
@@ -2669,9 +2837,9 @@ def _build_run_preparation(
                 },
             )
         solver_input_path = scenario_dir / f"{prepared_input_id}.json"
-        solver_input_path.write_text(
-            json.dumps(solver_input, ensure_ascii=False, indent=2, default=str),
-            encoding="utf-8",
+        solver_input = _persist_prepared_input_immutably(
+            solver_input_path,
+            solver_input,
         )
         return RunPreparation(
             scenario_id=scenario_id,
@@ -2698,6 +2866,19 @@ def _build_run_preparation(
                 "route_catalog_audit": route_catalog_audit,
                 "prepared_scope_audit": prepared_scope_audit,
             },
+        )
+    except PreparedInputIdentityCollisionError as exc:
+        log.error("run_preparation identity collision for %s: %s", scenario_id, exc)
+        return RunPreparation(
+            scenario_id=scenario_id,
+            dataset_version=dataset_version,
+            scenario_hash=scenario_hash,
+            scope_hash=str(scope_hash),
+            solver_input_path=None,
+            prepared_input_id=_prepared_input_id(scenario_hash, scope_hash),
+            scope_summary={},
+            error_code="PREPARED_INPUT_ID_COLLISION",
+            error=str(exc),
         )
     except Exception as exc:
         log.error("run_preparation failed for %s: %s", scenario_id, exc)
