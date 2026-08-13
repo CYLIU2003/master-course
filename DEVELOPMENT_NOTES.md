@@ -36,9 +36,11 @@
   PNG/SVG figures from the verified payload. The reporting manifest records
   the source-run SHA separately from the clean report-builder SHA and hashes
   every derivative. The charts use explicit day-ahead scope, units, zero
-  baselines and direct labels; Rolling values remain excluded. Regression
-  tests reject payload tampering, reordered methods, dirty/unattested report
-  provenance and missing artifact hashes.
+  baselines and direct labels; Rolling values remain excluded. Manual visual
+  QA also checks title/legend/label collisions and reserves headroom above the
+  largest stacked energy bar. Regression tests reject payload tampering,
+  reordered methods, dirty/unattested report provenance and missing artifact
+  hashes.
 - This discharges the low-PV same-input day-ahead M0--M3 evidence item only.
   It does not cure the high-PV pair's 1.574005% versus 1% gap, establish a
   global integrated optimum, or discharge the declared time-step and other

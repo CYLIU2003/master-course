@@ -284,6 +284,9 @@ def _stacked_energy_panel(
     pv_direct: Sequence[float],
     bess: Sequence[float],
 ) -> None:
+    energy_totals = [
+        grid[i] + pv_direct[i] + bess[i] for i in range(len(labels))
+    ]
     ax.bar(
         labels,
         grid,
@@ -311,9 +314,7 @@ def _stacked_energy_panel(
         edgecolor=INK,
         linewidth=0.7,
     )
-    for index, total in enumerate(
-        grid[i] + pv_direct[i] + bess[i] for i in range(len(labels))
-    ):
+    for index, total in enumerate(energy_totals):
         ax.text(index, total + 18, f"{total:,.0f}", ha="center", fontsize=8)
         for value, bottom in (
             (grid[index], 0.0),
@@ -330,6 +331,7 @@ def _stacked_energy_panel(
                     color="white" if bottom > 0.0 or value == bess[index] else INK,
                     fontsize=7,
                 )
+    ax.set_ylim(0, max(energy_totals) * 1.14)
     ax.set_title("Energy delivered to buses by source", color=INK, fontsize=11)
     ax.set_ylabel("kWh")
     ax.legend(frameon=False, loc="upper center", ncol=3, fontsize=8)
