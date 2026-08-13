@@ -589,6 +589,8 @@ def test_run_optimization_endpoint_only_allows_day_ahead_with_explicit_profile()
     assert submitted_args[23] == "day_ahead_exploratory"
     assert submitted_args[24] is False
     assert submitted_args[25] == 60
+    assert submitted_args[26]["rolling_execution_minutes"] == 15
+    assert "rolling_controls_server_enforced" not in submitted_args[26]
 
 
 def test_formal_dirty_request_is_rejected_before_job_creation() -> None:

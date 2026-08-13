@@ -39,7 +39,7 @@ from scripts.run_frontend_controlled_pv_pair import (  # noqa: E402
 )
 
 
-SCHEMA_VERSION = "thesis_sensitivity_execution_v1"
+SCHEMA_VERSION = "thesis_sensitivity_execution_v2"
 CSV_COLUMNS = (
     "case_id",
     "family",
@@ -48,7 +48,13 @@ CSV_COLUMNS = (
     "job_id",
     "solver_status",
     "mip_gap_target_met",
+    "certified_mip_gap_percent",
     "solve_time_seconds",
+    "wall_time_seconds",
+    "timestep_min",
+    "rolling_execution_minutes_submitted",
+    "rolling_execution_minutes_requested",
+    "rolling_execution_minutes_effective",
     "trip_count_served",
     "trip_count_unserved",
     "vehicle_count_used",
@@ -216,6 +222,7 @@ def execute_sensitivity_matrix(
                 case=case,
                 run_dir=copied_run_dir,
                 terminal=terminal,
+                submitted_optimization_request=optimization_request,
             )
         except (OSError, ValueError) as exc:
             outcome = {
@@ -252,6 +259,7 @@ def execute_sensitivity_matrix(
             output_dir=output_dir,
             matrix=matrix,
             frozen_sha=frozen_sha,
+            audit_builder_sha=frozen_sha,
             selected_ids=selected_ids,
             outcomes=outcomes,
         )
@@ -260,6 +268,7 @@ def execute_sensitivity_matrix(
         output_dir=output_dir,
         matrix=matrix,
         frozen_sha=frozen_sha,
+        audit_builder_sha=frozen_sha,
         selected_ids=selected_ids,
         outcomes=outcomes,
     )
@@ -270,6 +279,7 @@ def _audit_case(
     case: Mapping[str, Any],
     run_dir: Path,
     terminal: Mapping[str, Any],
+    submitted_optimization_request: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     case_id = str(case.get("case_id") or "")
     if not run_dir.is_dir():
@@ -311,6 +321,10 @@ def _audit_case(
         parameters=required["optimization_parameters.json"],
         economic_audit=required["assignment_economic_audit.json"],
     )
+    request_provenance_match = _submitted_request_matches_provenance(
+        submitted_request=submitted_optimization_request,
+        parameters=required["optimization_parameters.json"],
+    )
     checks = {
         "frontend_job_completed": terminal.get("status") == "completed",
         "run_input_valid": input_validation.get("valid") is True,
@@ -344,11 +358,19 @@ def _audit_case(
         "rolling_accounting_eligible": accounting.get("eligible") is True,
         "declared_case_parameter_effective": parameter_match,
         "declared_common_controls_effective": declared_controls_match,
+        "submitted_request_provenance_matches": request_provenance_match,
     }
     failed = [name for name, passed in checks.items() if not passed]
     summary = required["summary.json"]
     costs = dict(accounting.get("cost_breakdown") or {})
     trip_types = dict(summary.get("trip_count_by_type") or {})
+    frontend_request = dict(
+        required["optimization_parameters.json"].get("frontend_request") or {}
+    )
+    raw_frontend_body = dict(frontend_request.get("raw_frontend_body") or {})
+    effective_rolling = dict(
+        frontend_request.get("effective_rolling_controls") or {}
+    )
     return {
         "case_id": case_id,
         "family": case.get("family"),
@@ -362,7 +384,25 @@ def _audit_case(
         "input_validation": input_validation,
         "solver_status": summary.get("solver_status"),
         "mip_gap_target_met": summary.get("mip_gap_target_met"),
+        "certified_mip_gap_percent": settings.get(
+            "certified_mip_gap_percent"
+        ),
         "solve_time_seconds": summary.get("solve_time_seconds"),
+        "timestep_min": dict(
+            required["optimization_parameters.json"].get(
+                "effective_problem_scenario"
+            )
+            or {}
+        ).get("timestep_min"),
+        "rolling_execution_minutes_submitted": dict(
+            submitted_optimization_request or {}
+        ).get("rolling_execution_minutes"),
+        "rolling_execution_minutes_requested": raw_frontend_body.get(
+            "rolling_execution_minutes"
+        ),
+        "rolling_execution_minutes_effective": effective_rolling.get(
+            "rolling_execution_minutes"
+        ),
         "trip_count_served": summary.get("trip_count_served"),
         "trip_count_unserved": summary.get("trip_count_unserved"),
         "vehicle_count_used": summary.get("vehicle_count_used"),
@@ -438,6 +478,13 @@ def _declared_controls_match(
     semantics_by_depot = dict(
         economic_audit.get("pv_input_semantics_by_depot") or {}
     )
+    frontend_request = dict(parameters.get("frontend_request") or {})
+    effective_rolling = dict(
+        frontend_request.get("effective_rolling_controls") or {}
+    )
+    expected_optimization = dict(
+        case.get("optimization_request_overrides") or {}
+    )
     checks = (
         scenario.get("objective_mode") == expected.get("objective_mode"),
         metadata.get("objective_preset") == expected.get("objective_preset"),
@@ -452,10 +499,16 @@ def _declared_controls_match(
         == expected.get("minimum_charge_session_minutes"),
         metadata.get("allow_partial_service")
         is expected.get("allow_partial_service"),
-        metadata.get("milp_max_successors_per_trip")
-        is expected.get("milp_max_successors_per_trip"),
+        _successor_limits_match(
+            metadata.get("milp_max_successors_per_trip"),
+            expected.get("milp_max_successors_per_trip"),
+        ),
         metadata.get("vehicle_usage_cost_semantics")
         == expected.get("vehicle_usage_cost_semantics"),
+        effective_rolling.get("run_hourly_rolling")
+        is expected_optimization.get("run_hourly_rolling"),
+        effective_rolling.get("rolling_execution_minutes")
+        == expected_optimization.get("rolling_execution_minutes"),
         bool(semantics_by_depot)
         and all(
             value == expected.get("pv_input_semantics")
@@ -465,6 +518,210 @@ def _declared_controls_match(
     return all(checks)
 
 
+def _successor_limits_match(effective: Any, declared: Any) -> bool:
+    """Compare successor limits while normalizing the unlimited sentinel.
+
+    The Prepare contract uses ``None`` for a complete successor network while
+    effective model metadata serializes the same setting as integer ``0``.
+    Positive finite caps must still match exactly.
+    """
+
+    if _is_unlimited_successor_limit(effective):
+        return _is_unlimited_successor_limit(declared)
+    if _is_unlimited_successor_limit(declared):
+        return False
+    return _numbers_equal(effective, declared)
+
+
+def _is_unlimited_successor_limit(value: Any) -> bool:
+    if value is None:
+        return True
+    try:
+        return int(value) == 0 and float(value) == 0.0
+    except (TypeError, ValueError, OverflowError):
+        return False
+
+
+def _submitted_request_matches_provenance(
+    *,
+    submitted_request: Mapping[str, Any] | None,
+    parameters: Mapping[str, Any],
+) -> bool:
+    """Verify that persisted raw request fields match the sent JSON body."""
+
+    if submitted_request is None:
+        return False
+    frontend_request = dict(parameters.get("frontend_request") or {})
+    recorded = frontend_request.get("raw_frontend_body")
+    if not isinstance(recorded, Mapping):
+        return False
+    return all(
+        key in recorded and _json_values_equal(recorded[key], value)
+        for key, value in submitted_request.items()
+    )
+
+
+def _json_values_equal(left: Any, right: Any) -> bool:
+    if isinstance(left, (int, float)) and not isinstance(left, bool):
+        if isinstance(right, (int, float)) and not isinstance(right, bool):
+            return _numbers_equal(left, right)
+    return left == right
+
+
+def rebuild_existing_sensitivity_audit(
+    *,
+    source_execution_dir: Path,
+    output_dir: Path,
+) -> dict[str, Any]:
+    """Re-audit immutable sensitivity runs without invoking Prepare or solve."""
+
+    audit_builder_sha = _assert_clean_frozen_repository()
+    source_execution_dir = Path(source_execution_dir).resolve()
+    output_dir = Path(output_dir).resolve()
+    if source_execution_dir == output_dir:
+        raise ValueError("re-audit output must differ from the source execution")
+    if output_dir.exists() and any(output_dir.iterdir()):
+        raise FileExistsError(
+            f"re-audit output directory must be empty: {output_dir}"
+        )
+
+    matrix_path = source_execution_dir / "experiment_matrix.json"
+    source_manifest_path = (
+        source_execution_dir / "sensitivity_execution_manifest.json"
+    )
+    matrix = _read_json(matrix_path)
+    source_manifest = _read_json(source_manifest_path)
+    claimed_source_payload_hash = str(
+        source_manifest.get("payload_sha256") or ""
+    ).strip()
+    unsigned_source_manifest = _json_copy(source_manifest)
+    unsigned_source_manifest.pop("payload_sha256", None)
+    if (
+        not claimed_source_payload_hash
+        or _canonical_hash(unsigned_source_manifest)
+        != claimed_source_payload_hash
+    ):
+        raise ValueError("source sensitivity manifest payload hash mismatch")
+    source_frozen_sha = str(source_manifest.get("frozen_git_sha") or "").strip()
+    if not source_frozen_sha:
+        raise ValueError("source sensitivity manifest has no frozen Git SHA")
+    selected_ids = {
+        str(value) for value in source_manifest.get("selected_case_ids") or []
+    }
+    if not selected_ids:
+        raise ValueError("source sensitivity manifest has no selected cases")
+
+    declared_cases = {
+        str(case.get("case_id") or ""): case
+        for case in matrix.get("cases") or []
+    }
+    unknown = sorted(selected_ids - set(declared_cases))
+    if unknown:
+        raise ValueError(
+            "source manifest references undeclared cases: " + ", ".join(unknown)
+        )
+    original_outcomes = {
+        str(row.get("case_id") or ""): dict(row)
+        for row in source_manifest.get("outcomes") or []
+    }
+    missing_outcomes = sorted(selected_ids - set(original_outcomes))
+    if missing_outcomes:
+        raise ValueError(
+            "source sensitivity manifest has no outcome for: "
+            + ", ".join(missing_outcomes)
+        )
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    _write_json(output_dir / "experiment_matrix.json", matrix)
+    _write_json(
+        output_dir / "reaudit_source.json",
+        {
+            "schema_version": "thesis_sensitivity_reaudit_source_v1",
+            "source_execution_dir": str(source_execution_dir),
+            "source_execution_manifest_sha256": sha256(
+                source_manifest_path.read_bytes()
+            ).hexdigest(),
+            "source_execution_payload_sha256": source_manifest.get(
+                "payload_sha256"
+            ),
+            "source_frozen_git_sha": source_frozen_sha,
+            "audit_builder_git_sha": audit_builder_sha,
+        },
+    )
+
+    outcomes: list[dict[str, Any]] = []
+    for case_id in sorted(selected_ids):
+        case = declared_cases[case_id]
+        source_case_dir = source_execution_dir / "cases" / case_id
+        run_dir = source_case_dir / "source_run"
+        terminal = _read_json(
+            source_case_dir / "frontend_job_terminal_response.json"
+        )
+        submitted_request = _read_json(
+            source_case_dir / "frontend_optimization_request.json"
+        )
+        outcome = _audit_case(
+            case=case,
+            run_dir=run_dir,
+            terminal=terminal,
+            submitted_optimization_request=submitted_request,
+        )
+        original = original_outcomes.get(case_id, {})
+        settings = _read_json(run_dir / "solver_settings.json")
+        source_git_matches = bool(
+            settings.get("git_sha") == source_frozen_sha
+            and settings.get("git_sha_after_solve") == source_frozen_sha
+            and settings.get("git_dirty") is False
+            and settings.get("git_dirty_after_solve") is False
+            and settings.get("git_state_unchanged_during_solve") is True
+        )
+        checks = dict(outcome.get("checks") or {})
+        checks["source_run_matches_original_frozen_git_sha"] = (
+            source_git_matches
+        )
+        outcome["checks"] = checks
+        outcome["failed_checks"] = [
+            name for name, passed in checks.items() if not passed
+        ]
+        outcome["case_accepted"] = not outcome["failed_checks"]
+        for key in (
+            "prepared_input_id",
+            "job_id",
+            "started_at_utc",
+            "completed_at_utc",
+            "wall_time_seconds",
+            "source_run_dir",
+            "copied_run_dir",
+            "git_sha_unchanged",
+        ):
+            if key in original:
+                outcome[key] = original[key]
+        outcome.update(
+            {
+                "reaudited_source_run_dir": str(run_dir),
+                "source_frozen_git_sha": source_frozen_sha,
+                "audit_builder_git_sha": audit_builder_sha,
+            }
+        )
+        outcomes.append(outcome)
+        case_output_dir = output_dir / "cases" / case_id
+        case_output_dir.mkdir(parents=True, exist_ok=False)
+        _write_json(case_output_dir / "case_execution_audit.json", outcome)
+
+    return _write_manifest(
+        output_dir=output_dir,
+        matrix=matrix,
+        frozen_sha=source_frozen_sha,
+        audit_builder_sha=audit_builder_sha,
+        selected_ids=selected_ids,
+        outcomes=outcomes,
+        source_execution_dir=source_execution_dir,
+        source_execution_manifest_sha256=sha256(
+            source_manifest_path.read_bytes()
+        ).hexdigest(),
+    )
+
+
 def _write_manifest(
     *,
     output_dir: Path,
@@ -472,6 +729,9 @@ def _write_manifest(
     frozen_sha: str,
     selected_ids: set[str],
     outcomes: list[dict[str, Any]],
+    audit_builder_sha: str | None = None,
+    source_execution_dir: Path | None = None,
+    source_execution_manifest_sha256: str | None = None,
 ) -> dict[str, Any]:
     declared_ids = {
         str(case.get("case_id") or "")
@@ -496,6 +756,13 @@ def _write_manifest(
         "schema_version": SCHEMA_VERSION,
         "generated_at_utc": _utc_now(),
         "frozen_git_sha": frozen_sha,
+        "audit_builder_git_sha": audit_builder_sha or frozen_sha,
+        "source_execution_dir": (
+            str(source_execution_dir) if source_execution_dir else None
+        ),
+        "source_execution_manifest_sha256": (
+            source_execution_manifest_sha256
+        ),
         "matrix_schema_version": matrix.get("schema_version"),
         "selected_case_ids": sorted(selected_ids),
         "completed_case_ids": sorted(completed_ids),
@@ -669,11 +936,19 @@ def _numbers_equal(left: Any, right: Any) -> bool:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--scenario-id", required=True)
+    parser.add_argument("--scenario-id")
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
-    parser.add_argument("--base-prepare-request", type=Path, required=True)
-    parser.add_argument("--base-optimization-request", type=Path, required=True)
+    parser.add_argument("--base-prepare-request", type=Path)
+    parser.add_argument("--base-optimization-request", type=Path)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument(
+        "--rebuild-existing-dir",
+        type=Path,
+        help=(
+            "Re-audit an existing sensitivity execution without any HTTP or "
+            "solver call; --output-dir must be a new directory."
+        ),
+    )
     parser.add_argument("--case-id", action="append", default=[])
     parser.add_argument("--timeout-seconds", type=float, default=14_400.0)
     parser.add_argument("--poll-interval-seconds", type=float, default=5.0)
@@ -681,19 +956,39 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
-    args = _parser().parse_args()
-    result = execute_sensitivity_matrix(
-        scenario_id=args.scenario_id,
-        base_url=args.base_url,
-        base_prepare_request=_read_json(args.base_prepare_request),
-        base_optimization_request=_read_json(
-            args.base_optimization_request
-        ),
-        output_dir=args.output_dir,
-        selected_case_ids=set(args.case_id) if args.case_id else None,
-        timeout_seconds=args.timeout_seconds,
-        poll_interval_seconds=args.poll_interval_seconds,
-    )
+    parser = _parser()
+    args = parser.parse_args()
+    if args.rebuild_existing_dir is not None:
+        if args.case_id:
+            parser.error("--case-id cannot be used with --rebuild-existing-dir")
+        result = rebuild_existing_sensitivity_audit(
+            source_execution_dir=args.rebuild_existing_dir,
+            output_dir=args.output_dir,
+        )
+    else:
+        missing = [
+            flag
+            for flag, value in (
+                ("--scenario-id", args.scenario_id),
+                ("--base-prepare-request", args.base_prepare_request),
+                ("--base-optimization-request", args.base_optimization_request),
+            )
+            if value is None
+        ]
+        if missing:
+            parser.error("normal execution requires " + ", ".join(missing))
+        result = execute_sensitivity_matrix(
+            scenario_id=args.scenario_id,
+            base_url=args.base_url,
+            base_prepare_request=_read_json(args.base_prepare_request),
+            base_optimization_request=_read_json(
+                args.base_optimization_request
+            ),
+            output_dir=args.output_dir,
+            selected_case_ids=set(args.case_id) if args.case_id else None,
+            timeout_seconds=args.timeout_seconds,
+            poll_interval_seconds=args.poll_interval_seconds,
+        )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if result["status"] != "BLOCKED" else 2
 

@@ -50,7 +50,11 @@ def build_experiment_matrix() -> dict[str, Any]:
             "run_hourly_rolling": True,
             "time_step_min": timestep_min,
             "timestep_min": timestep_min,
-            "rolling_execution_minutes": timestep_min,
+            # The frontend formal-run contract advances the fixed-assignment
+            # rolling controller every 60 minutes.  The time-discretization
+            # family varies only the MILP's internal energy-slot resolution;
+            # changing both controls would confound two different effects.
+            "rolling_execution_minutes": 60,
         }
         if "co2_emissions_cap_kg" in prepare_settings:
             optimization_overrides["co2_emissions_cap_kg"] = (
@@ -122,10 +126,15 @@ def build_experiment_matrix() -> dict[str, Any]:
         )
 
     return {
-        "schema_version": "thesis_experiment_matrix_v2",
+        "schema_version": "thesis_experiment_matrix_v3",
         "execution_semantics": "frontend_bff_only_no_direct_solver",
         "common_control_contract": common,
         "parameter_semantics": {
+            "time_discretization": (
+                "Varies the internal day-ahead and rolling energy-slot "
+                "resolution (15/30/60 minutes) while holding the frontend "
+                "rolling execution interval fixed at 60 minutes."
+            ),
             "pv_scale": (
                 "Multiplicative alpha applied to the available PV energy "
                 "series after rated-capacity generation is constructed; it "

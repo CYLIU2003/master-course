@@ -1,5 +1,26 @@
 # master-course
 
+## 2026-08-14 time-discretization diagnostic and corrected contract
+
+- Clean frozen SHA `01986881c8c4c2d69802be482dddf58865eb8535` completed
+  fresh frontend/BFF runs for 60-, 30-, and 15-minute internal energy slots.
+  All three served 264/264 trips, used 32 buses, assigned 91 BEV and 173 ICE
+  trips, and passed physical validation plus the 24-step fixed-assignment
+  Rolling accounting chain.
+- These runs are diagnostic, not accepted sensitivity evidence. All three
+  stopped at the time limit; their certified gaps were 6.550063%, 6.418238%,
+  and 6.352187% against the declared 1% target. The original matrix also
+  requested a 15/30-minute Rolling advance even though the formal BFF contract
+  correctly enforced a 60-minute advance, and the saved raw request had been
+  overwritten by that effective value.
+- The experiment contract now varies only the internal 15/30/60-minute slot
+  resolution and holds the Rolling advance at 60 minutes. Requested and
+  effective controls are recorded separately. `None` and `0` are normalized
+  only as the two documented sentinels for an unlimited successor network,
+  and immutable historical runs can be re-audited into a separate directory
+  without invoking Prepare or a solver. A fresh clean-commit rerun is required
+  before time-step convergence can be claimed.
+
 ## 2026-08-13 runtime-attested r7 feedback-budget evidence
 
 - Frozen SHA `f46f1e821e6773f7f647dd130b28427bbb3df10d` completed the

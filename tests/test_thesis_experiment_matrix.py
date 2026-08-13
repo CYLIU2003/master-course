@@ -72,8 +72,11 @@ def test_experiment_matrix_contains_required_sensitivities() -> None:
         "run_hourly_rolling": True,
         "time_step_min": 15,
         "timestep_min": 15,
-        "rolling_execution_minutes": 15,
+        "rolling_execution_minutes": 60,
     }
+    assert payload["parameter_semantics"]["time_discretization"].startswith(
+        "Varies the internal"
+    )
     co2_cap = next(
         case for case in payload["cases"] if case["case_id"] == "CO2_CAP_500"
     )

@@ -13416,6 +13416,10 @@ def run_optimization(
             ),
         ) from exc
     rolling_required = frontend_rolling_is_required(run_profile)
+    # Preserve the parsed request before applying server-authoritative rolling
+    # controls.  Provenance must distinguish what the client requested from
+    # what the BFF actually executed.
+    requested_frontend_payload = request.model_dump()
     effective_run_hourly_rolling = bool(rolling_required)
     effective_rolling_execution_minutes = 60
     timestep_min = _request_timestep_min(request.timestep_min, request.time_step_min)
@@ -13516,13 +13520,7 @@ def run_optimization(
             run_profile,
             effective_run_hourly_rolling,
             effective_rolling_execution_minutes,
-            {
-                **request.model_dump(),
-                "run_profile": run_profile,
-                "run_hourly_rolling": effective_run_hourly_rolling,
-                "rolling_execution_minutes": effective_rolling_execution_minutes,
-                "rolling_controls_server_enforced": bool(rolling_required),
-            },
+            requested_frontend_payload,
             request.stage1_stage2_candidate_limit,
             request.stage1_composition_search_radius,
             request.stage1_bev_frontier_enabled,

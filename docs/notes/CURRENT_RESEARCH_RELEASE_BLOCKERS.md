@@ -1,5 +1,34 @@
 # Current research release blockers
 
+## 2026-08-14 time-step tranche completed as diagnostic; corrected rerun required
+
+Frozen SHA `01986881c8c4c2d69802be482dddf58865eb8535` completed fresh
+60/30/15-minute internal-discretization jobs through the frontend/BFF path.
+Every case served 264/264 trips, used 32 buses, assigned 91 BEV and 173 ICE
+trips, passed independent physical validation, and produced an accepted
+24-step fixed-assignment Rolling accounting chain.
+
+This does not discharge the time-step blocker. All cases reached the 3,600
+second limit and missed the declared 1% target: certified gaps were 6.550063%
+(60), 6.418238% (30), and 6.352187% (15). Incumbent cost differences are
+diagnostic and cannot prove discretization convergence.
+
+The execution audit also found that the stored matrix requested the Rolling
+advance to follow the internal slot length, while the formal frontend contract
+server-enforced 60 minutes. The solver did use the intended 60-minute advance,
+but the BFF had overwritten the persisted raw request with that effective
+value. Consequently the original 30/15-minute request/effective distinction
+cannot be certified. The unlimited successor setting also produced a false
+control mismatch because declared `None` and effective `0` are equivalent
+sentinels.
+
+The code now fixes the experiment contract at a 60-minute Rolling advance,
+preserves requested and effective values separately, normalizes only the two
+unlimited-successor sentinels, and can re-audit historical immutable runs into
+a separate output with distinct source/builder Git provenance. The original
+execution remains `BLOCKED`; a fresh clean-commit rerun and the 1% gap gate are
+both still required before this sensitivity can support the thesis.
+
 ## 2026-08-13 low-PV M0--M3 gate discharged; broader release blockers remain
 
 - Fresh normal frontend/BFF Phase 1 and Phase 4 jobs completed from clean

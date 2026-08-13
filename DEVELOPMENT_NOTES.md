@@ -1,5 +1,43 @@
 # Development Notes
 
+## 2026-08-14: time-discretization diagnostic exposed provenance mismatch
+
+- Clean frozen SHA `01986881c8c4c2d69802be482dddf58865eb8535` executed the
+  predeclared low-PV `TIME_60`, `TIME_30`, and `TIME_15` cases through fresh
+  Prepare, the normal frontend/BFF Phase-4 path, and the accepted
+  fixed-assignment Rolling chain. The source execution is
+  `output/thesis_sensitivity_time_low_pv_20260813_0198688`; its original
+  manifest payload SHA-256 is
+  `68a9c858591f4c094b3d6df5f06a8ad496ecbd8e3a50c34329d8348147b3e3c5`.
+- Each case served 264/264 trips with 32 buses and the same 91/173 BEV/ICE
+  trip split. Executed-day totals for 60/30/15 minutes were respectively
+  58,318.002033 / 58,235.852189 / 58,221.042678 JPY, 986.112082 /
+  984.765363 / 984.522584 kg-CO2, and 130.948752 / 128.255315 /
+  127.769757 kWh of grid import. These values are diagnostics only.
+- All three day-ahead solves stopped at 3,600 seconds. Their independently
+  certified gaps were 6.550063%, 6.418238%, and 6.352187%, so none met the
+  declared 1% requirement. Physical feasibility and Rolling accounting pass;
+  optimality certification fails. The original matrix therefore remains
+  `BLOCKED` and does not establish time-step convergence.
+- Audit review found two non-mathematical defects. First, the matrix changed
+  both internal slot resolution and requested Rolling advance, while the
+  formal BFF intentionally enforces a 60-minute Rolling advance. Second, the
+  endpoint replaced the saved `raw_frontend_body` with server-effective
+  controls, preventing reconstruction of the sent request. A separate false
+  negative compared the unlimited-successor sentinels `None` and `0` by
+  object identity.
+- The matrix now holds Rolling advance fixed at 60 minutes and varies only the
+  internal energy-slot resolution. The BFF preserves the parsed client body
+  before applying effective controls. The sensitivity audit separately checks
+  the submitted JSON, persisted raw body, effective Rolling controls, and
+  finite/unlimited successor semantics. Re-audit mode reads the stored matrix
+  and immutable source runs, records source-run and audit-builder Git SHAs
+  separately, verifies artifact snapshots, and writes to a new directory
+  without HTTP, Prepare, solver, or source overwrite.
+- These changes do not alter the feasible region, objective, tariff, energy
+  equations, assignment, or gap rule. Focused compile and regression checks
+  passed; a fresh clean-commit 15/30/60-minute run remains required.
+
 ## 2026-08-13: verified low-PV M0--M3 comparison and reporting derivatives
 
 - Fresh frontend/BFF Phase 1 and Phase 4 jobs completed from clean frozen SHA

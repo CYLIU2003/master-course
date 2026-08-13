@@ -2,14 +2,18 @@ from __future__ import annotations
 
 import csv
 from hashlib import sha256
+import json
 from pathlib import Path
 
 from bff.routers.simulation import PrepareSimulationSettingsBody
+from scripts import run_thesis_sensitivity_matrix as sensitivity_runner
 from scripts.build_thesis_experiment_matrix import build_experiment_matrix
 from scripts.run_thesis_sensitivity_matrix import (
     _artifact_snapshot_matches,
     _case_parameter_matches,
     _declared_controls_match,
+    _submitted_request_matches_provenance,
+    _successor_limits_match,
     _snapshotted_artifact_paths,
     _write_manifest,
     build_case_requests,
@@ -63,7 +67,7 @@ def test_time_case_compiles_matching_prepare_optimization_and_rolling_steps() ->
     assert prepare["simulation_settings"]["timestep_min"] == 15
     assert optimization["time_step_min"] == 15
     assert optimization["timestep_min"] == 15
-    assert optimization["rolling_execution_minutes"] == 15
+    assert optimization["rolling_execution_minutes"] == 60
 
 
 def test_parameter_audit_distinguishes_pv_scale_and_route_band_lock() -> None:
@@ -101,6 +105,12 @@ def test_declared_control_audit_rejects_hidden_prepare_override() -> None:
     case = _case("PV_0.25")
     expected = case["prepare_settings"]
     parameters = {
+        "frontend_request": {
+            "effective_rolling_controls": {
+                "run_hourly_rolling": True,
+                "rolling_execution_minutes": 60,
+            }
+        },
         "effective_problem_scenario": {
             "objective_mode": expected["objective_mode"]
         },
@@ -141,6 +151,44 @@ def test_declared_control_audit_rejects_hidden_prepare_override() -> None:
         case=case,
         parameters=parameters,
         economic_audit=economic_audit,
+    )
+
+
+def test_successor_control_normalizes_only_unlimited_sentinels() -> None:
+    assert _successor_limits_match(0, None)
+    assert _successor_limits_match(None, 0)
+    assert _successor_limits_match(32, 32)
+    assert not _successor_limits_match(0, 32)
+    assert not _successor_limits_match(32, None)
+
+
+def test_submitted_request_provenance_detects_server_overwrite() -> None:
+    submitted = {
+        "mode": "phase4_integrated",
+        "rolling_execution_minutes": 30,
+        "mip_gap": 0.01,
+    }
+    parameters = {
+        "frontend_request": {
+            "raw_frontend_body": {
+                "mode": "phase4_integrated",
+                "rolling_execution_minutes": 30,
+                "mip_gap": 0.01,
+                "server_default": "allowed-extra-field",
+            }
+        }
+    }
+
+    assert _submitted_request_matches_provenance(
+        submitted_request=submitted,
+        parameters=parameters,
+    )
+    parameters["frontend_request"]["raw_frontend_body"][
+        "rolling_execution_minutes"
+    ] = 60
+    assert not _submitted_request_matches_provenance(
+        submitted_request=submitted,
+        parameters=parameters,
     )
 
 
@@ -244,3 +292,83 @@ def test_manifest_blocks_cross_case_control_drift(tmp_path: Path) -> None:
     assert payload["status"] == "BLOCKED"
     assert payload["stable_nonvaried_controls_match"] is False
     assert payload["research_matrix_complete"] is False
+
+
+def test_reaudit_preserves_source_sha_and_records_builder_sha(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    source = tmp_path / "source"
+    destination = tmp_path / "reaudit"
+    case_dir = source / "cases" / "A"
+    run_dir = case_dir / "source_run"
+    run_dir.mkdir(parents=True)
+    matrix = {
+        "schema_version": "test-matrix",
+        "cases": [{"case_id": "A", "family": "time_discretization"}],
+    }
+    source_manifest = {
+        "schema_version": "old",
+        "frozen_git_sha": "source-sha",
+        "selected_case_ids": ["A"],
+        "outcomes": [
+            {
+                "case_id": "A",
+                "job_id": "job-a",
+                "prepared_input_id": "prepared-a",
+                "wall_time_seconds": 12.5,
+            }
+        ],
+    }
+    source_manifest["payload_sha256"] = sensitivity_runner._canonical_hash(
+        source_manifest
+    )
+    for path, payload in (
+        (source / "experiment_matrix.json", matrix),
+        (source / "sensitivity_execution_manifest.json", source_manifest),
+        (case_dir / "frontend_job_terminal_response.json", {"status": "completed"}),
+        (case_dir / "frontend_optimization_request.json", {"mode": "phase4_integrated"}),
+        (
+            run_dir / "solver_settings.json",
+            {
+                "git_sha": "source-sha",
+                "git_sha_after_solve": "source-sha",
+                "git_dirty": False,
+                "git_dirty_after_solve": False,
+                "git_state_unchanged_during_solve": True,
+            },
+        ),
+    ):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+    monkeypatch.setattr(
+        sensitivity_runner,
+        "_assert_clean_frozen_repository",
+        lambda: "builder-sha",
+    )
+    monkeypatch.setattr(
+        sensitivity_runner,
+        "_audit_case",
+        lambda **_kwargs: {
+            "case_id": "A",
+            "family": "time_discretization",
+            "case_accepted": True,
+            "checks": {"base_audit": True},
+            "failed_checks": [],
+            "stable_control_fingerprint": "stable",
+        },
+    )
+
+    payload = sensitivity_runner.rebuild_existing_sensitivity_audit(
+        source_execution_dir=source,
+        output_dir=destination,
+    )
+
+    assert payload["frozen_git_sha"] == "source-sha"
+    assert payload["audit_builder_git_sha"] == "builder-sha"
+    assert payload["source_execution_dir"] == str(source.resolve())
+    assert payload["outcomes"][0]["job_id"] == "job-a"
+    assert payload["outcomes"][0]["checks"][
+        "source_run_matches_original_frozen_git_sha"
+    ] is True
