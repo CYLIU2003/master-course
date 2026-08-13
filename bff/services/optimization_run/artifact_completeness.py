@@ -330,6 +330,129 @@ def validate_solver_objective_accounting_reconciliation(
                 f"{artifact}: matches_canonical_accounting_total cannot be true without numeric values"
             )
 
+    canonical_cost_keys = (
+        "canonical_cost_objective_value_jpy",
+        "canonical_cost_objective_source",
+        "canonical_cost_difference_jpy",
+        "canonical_cost_absolute_difference_jpy",
+        "canonical_cost_numeric_values_available",
+        "canonical_cost_residual_within_tolerance",
+        "canonical_cost_contract_applied",
+        "canonical_cost_matches_accounting_total",
+    )
+    if any(key in payload for key in canonical_cost_keys):
+        missing = [key for key in canonical_cost_keys if key not in payload]
+        errors.extend(
+            f"{artifact}: missing canonical cost field {key}"
+            for key in missing
+        )
+        canonical_source = str(
+            payload.get("canonical_cost_objective_source") or ""
+        ).strip()
+        if not canonical_source:
+            errors.append(
+                f"{artifact}: canonical_cost_objective_source must be non-empty"
+            )
+        for key in (
+            "canonical_cost_numeric_values_available",
+            "canonical_cost_residual_within_tolerance",
+            "canonical_cost_contract_applied",
+            "canonical_cost_matches_accounting_total",
+        ):
+            if not isinstance(payload.get(key), bool):
+                errors.append(f"{artifact}: {key} must be a boolean")
+        canonical_values_available = (
+            payload.get("canonical_cost_numeric_values_available") is True
+        )
+        canonical_residual_within_tolerance = (
+            payload.get("canonical_cost_residual_within_tolerance") is True
+        )
+        canonical_contract_applied = (
+            payload.get("canonical_cost_contract_applied") is True
+        )
+        if canonical_values_available:
+            canonical_value = _finite_json_number(
+                payload.get("canonical_cost_objective_value_jpy")
+            )
+            canonical_difference = _finite_json_number(
+                payload.get("canonical_cost_difference_jpy")
+            )
+            canonical_absolute_difference = _finite_json_number(
+                payload.get("canonical_cost_absolute_difference_jpy")
+            )
+            accounting_total = _finite_json_number(
+                payload.get("canonical_accounting_total_jpy")
+            )
+            if canonical_value is None:
+                errors.append(
+                    f"{artifact}: canonical_cost_objective_value_jpy must be finite when canonical cost values are available"
+                )
+            if canonical_difference is None:
+                errors.append(
+                    f"{artifact}: canonical_cost_difference_jpy must be finite when canonical cost values are available"
+                )
+            if (
+                canonical_absolute_difference is None
+                or canonical_absolute_difference < 0.0
+            ):
+                errors.append(
+                    f"{artifact}: canonical_cost_absolute_difference_jpy must be finite and non-negative"
+                )
+            if (
+                canonical_value is not None
+                and accounting_total is not None
+                and canonical_difference is not None
+                and canonical_absolute_difference is not None
+            ):
+                expected = canonical_value - accounting_total
+                if not math.isclose(
+                    canonical_difference,
+                    expected,
+                    rel_tol=1.0e-12,
+                    abs_tol=1.0e-9,
+                ):
+                    errors.append(
+                        f"{artifact}: canonical_cost_difference_jpy is inconsistent"
+                    )
+                if not math.isclose(
+                    canonical_absolute_difference,
+                    abs(expected),
+                    rel_tol=1.0e-12,
+                    abs_tol=1.0e-9,
+                ):
+                    errors.append(
+                        f"{artifact}: canonical_cost_absolute_difference_jpy is inconsistent"
+                    )
+                if tolerance is not None:
+                    within_tolerance = abs(expected) <= tolerance
+                    if (
+                        payload.get(
+                            "canonical_cost_residual_within_tolerance"
+                        )
+                        is not within_tolerance
+                    ):
+                        errors.append(
+                            f"{artifact}: canonical_cost_residual_within_tolerance is inconsistent"
+                        )
+        elif canonical_residual_within_tolerance:
+            errors.append(
+                f"{artifact}: canonical cost residual cannot pass without numeric values"
+            )
+        expected_canonical_match = bool(
+            canonical_values_available
+            and canonical_residual_within_tolerance
+            and canonical_contract_applied
+            and payload.get("canonical_accounting_source")
+            == "rolling_hourly_chain/executed_day_accounting.json"
+        )
+        if (
+            payload.get("canonical_cost_matches_accounting_total")
+            is not expected_canonical_match
+        ):
+            errors.append(
+                f"{artifact}: canonical_cost_matches_accounting_total is not derived from cost, contract, and accounting source"
+            )
+
     if not require_match:
         return errors
 

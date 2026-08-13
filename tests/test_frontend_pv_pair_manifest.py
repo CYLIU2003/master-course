@@ -153,6 +153,18 @@ def _case(
             "matches_canonical_accounting_total": (
                 objective_preset != "research_lexicographic_v1"
             ),
+            "canonical_cost_objective_value_jpy": total_cost,
+            "canonical_cost_objective_source": (
+                "solver_metadata.integrated_lexicographic_cost_objective_jpy"
+                if objective_preset == "research_lexicographic_v1"
+                else "optimization_result.objective_value"
+            ),
+            "canonical_cost_difference_jpy": 0.0,
+            "canonical_cost_absolute_difference_jpy": 0.0,
+            "canonical_cost_numeric_values_available": True,
+            "canonical_cost_residual_within_tolerance": True,
+            "canonical_cost_contract_applied": True,
+            "canonical_cost_matches_accounting_total": True,
             "objective_semantics": (
                 "lexicographic_vehicle_days_then_canonical_cost"
                 if objective_preset == "research_lexicographic_v1"
@@ -261,6 +273,43 @@ def test_pair_manifest_accepts_declared_lexicographic_accounting_semantics(
         "baseline_solver_objective_accounting_semantics_valid"
     ] is True
     assert manifest["checks"]["objective_presets_match"] is True
+
+
+def test_pair_manifest_rejects_lexicographic_cost_stage_mismatch(
+    tmp_path: Path,
+) -> None:
+    baseline = tmp_path / "baseline"
+    counterfactual = tmp_path / "counterfactual"
+    output_dir = tmp_path / "pair"
+    for run_dir, role, total_cost in (
+        (baseline, "baseline", 100.0),
+        (counterfactual, "pv_curve_counterfactual", 120.0),
+    ):
+        _case(
+            run_dir,
+            role=role,
+            control_hash="fixed-controls",
+            pv_hash=f"{role}-pv",
+            pv_values=[1.0, 2.0],
+            total_cost=total_cost,
+            objective_preset="research_lexicographic_v1",
+        )
+    reconciliation_path = (
+        counterfactual / "solver_objective_accounting_reconciliation.json"
+    )
+    reconciliation = json.loads(reconciliation_path.read_text())
+    reconciliation["canonical_cost_matches_accounting_total"] = False
+    _write_json(reconciliation_path, reconciliation)
+
+    with pytest.raises(
+        ValueError,
+        match="counterfactual_solver_objective_accounting_semantics_valid",
+    ):
+        build_frontend_pv_pair_artifacts(
+            baseline_run_dir=baseline,
+            counterfactual_run_dir=counterfactual,
+            output_dir=output_dir,
+        )
 
 
 def test_pair_manifest_rejects_different_objective_presets(

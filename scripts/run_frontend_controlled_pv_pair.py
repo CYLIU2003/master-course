@@ -1065,6 +1065,23 @@ def _execute_case(
         )
     if int(prepare_response.get("tripCount") or 0) <= 0:
         raise RuntimeError(f"{name} Prepare materialized no trips")
+    requested_service_id = str(
+        prepare_payload.get("day_type") or ""
+    ).strip()
+    materialized_service_ids = {
+        str(value or "").strip()
+        for value in list(prepare_response.get("serviceIds") or ())
+        if str(value or "").strip()
+    }
+    if (
+        not requested_service_id
+        or materialized_service_ids != {requested_service_id}
+    ):
+        raise RuntimeError(
+            f"{name} Prepare service scope mismatch: requested "
+            f"{requested_service_id or '<empty>'}, materialized "
+            f"{sorted(materialized_service_ids)}"
+        )
     prepared_input_id = str(
         prepare_response.get("preparedInputId") or ""
     ).strip()
@@ -1084,9 +1101,7 @@ def _execute_case(
             actual_cost_upper_bound_delta_ratio
         ),
     )
-    optimization_payload["service_id"] = str(
-        prepare_payload.get("day_type") or "WEEKDAY"
-    )
+    optimization_payload["service_id"] = requested_service_id
     optimization_payload["depot_id"] = str(
         list(prepare_payload.get("selected_depot_ids") or [""])[0]
     )
@@ -1165,6 +1180,7 @@ def _execute_case(
         "case": name,
         "scenario_id": scenario_id,
         "prepared_input_id": prepared_input_id,
+        "service_id": requested_service_id,
         "job_id": job_id,
         "job_status": terminal.get("status"),
         "job_error": terminal.get("error"),
@@ -1753,6 +1769,12 @@ def _research_values(
         / "executed_day_accounting.json"
     )
     cost = dict(executed.get("cost_breakdown") or {})
+    canonical_fuel_consumption = _number(cost.get("ice_fuel_consumed_l"))
+    fuel_consumption_source = (
+        "rolling_hourly_chain/executed_day_accounting.json"
+        if canonical_fuel_consumption is not None
+        else "kpi_summary.json"
+    )
     return {
         "PV generation": (
             cost.get("pv_generated_kwh"),
@@ -1832,9 +1854,13 @@ def _research_values(
             "vehicle_timelines.csv",
         ),
         "Fuel consumption": (
-            kpi.get("ice_fuel_consumed_l"),
+            (
+                canonical_fuel_consumption
+                if canonical_fuel_consumption is not None
+                else kpi.get("ice_fuel_consumed_l")
+            ),
             "L",
-            "kpi_summary.json",
+            fuel_consumption_source,
         ),
         "Electricity cost": (
             cost.get("electricity_cost"),
@@ -2280,6 +2306,39 @@ def _phase4_seed_controls_match(settings: Mapping[str, Any]) -> bool:
     )
 
 
+def _phase4_actual_cost_contract_matches(
+    settings: Mapping[str, Any],
+) -> bool:
+    """Accept scalar or certified lexicographic canonical-cost contracts.
+
+    ``integrated_actual_cost_objective_requested`` is intentionally false for
+    ``research_lexicographic_v1`` because vehicle-days, not cost, are the
+    primary objective.  The canonical-cost level is nevertheless a real,
+    sequential scalar solve and must not be rejected as if energy recourse
+    were absent.
+    """
+
+    if settings.get("integrated_actual_cost_contract_applied") is not True:
+        return False
+    if settings.get("integrated_actual_cost_objective_requested") is True:
+        return True
+    return bool(
+        settings.get("integrated_primary_objective_kind")
+        == "minimum_used_vehicle_days_lexicographic"
+        and settings.get("integrated_lexicographic_solve_mode")
+        == "sequential_scalar_certification_v1"
+        and settings.get("integrated_lexicographic_primary_certified") is True
+        and _number(
+            settings.get("integrated_lexicographic_cost_objective_jpy")
+        )
+        is not None
+        and _number(
+            settings.get("integrated_lexicographic_cost_best_bound_jpy")
+        )
+        is not None
+    )
+
+
 def _certified_gap_ratio_for_gate(
     *,
     settings: Mapping[str, Any],
@@ -2683,8 +2742,7 @@ def _case_gate_audit(
             )
             and (
                 not phase4_actual_cost
-                or settings.get("integrated_actual_cost_objective_requested")
-                is True
+                or _phase4_actual_cost_contract_matches(settings)
             )
             and (
                 not phase4_integrated
@@ -2781,17 +2839,7 @@ def _case_gate_audit(
         ),
         "slot_energy_recourse_used": (
             (
-                (
-                    settings.get(
-                        "integrated_actual_cost_objective_requested"
-                    )
-                    is True
-                    if phase4_actual_cost
-                    else settings.get(
-                        "integrated_actual_cost_contract_applied"
-                    )
-                    is True
-                )
+                _phase4_actual_cost_contract_matches(settings)
                 and settings.get("executed_phase") == "phase4_integrated"
             )
             if phase4_integrated
@@ -3339,21 +3387,31 @@ def _solver_objective_accounting_contract_passes(
         == "research_lexicographic_v1"
     )
     if research_lexicographic:
+        canonical_cost = _number(
+            settings.get("integrated_lexicographic_cost_objective_jpy")
+        )
+        accounting_total = _number(
+            summary.get("reported_total_cost_jpy")
+            if summary.get("reported_total_cost_jpy") is not None
+            else summary.get("accounting_total_cost_jpy")
+        )
+        cost_stage_reconciles = bool(
+            canonical_cost is not None
+            and accounting_total is not None
+            and math.isclose(
+                canonical_cost,
+                accounting_total,
+                rel_tol=0.0,
+                abs_tol=1.0e-6,
+            )
+        )
         return bool(
-            summary.get("solver_objective_matches_accounting_total") is False
-            and settings.get(
+            settings.get(
                 "actual_cost_objective_structural_contract_passed"
             )
             is True
-            and settings.get("integrated_actual_cost_contract_applied") is True
-            and settings.get("integrated_primary_objective_kind")
-            == "minimum_used_vehicle_days_lexicographic"
-            and settings.get("integrated_lexicographic_solve_mode")
-            == "sequential_scalar_certification_v1"
-            and settings.get(
-                "integrated_lexicographic_primary_certified"
-            )
-            is True
+            and _phase4_actual_cost_contract_matches(settings)
+            and cost_stage_reconciles
         )
     if phase4_policy:
         return bool(
@@ -3751,6 +3809,28 @@ def _run_small_integrated_oracle(
     }
     _write_json(case_dir / "small_integrated_oracle_execution.json", audit)
     return audit
+
+
+def _effective_case_service_id(
+    *,
+    case_dir: Path,
+) -> str:
+    """Read the materialized service ID used by the canonical run."""
+
+    case_manifest = _read_json_optional(
+        case_dir / "comparison_case_manifest.json"
+    )
+    service_id = str(
+        _nested(
+            case_manifest,
+            "comparison_control_payload",
+            "service_id",
+        )
+        or ""
+    ).strip()
+    if not service_id:
+        raise ValueError(f"No effective service ID is available for {case_dir}")
+    return service_id
 
 
 def _write_execution_log(
@@ -4289,7 +4369,9 @@ def main() -> int:
                 ),
                 case_dir=case_dir,
                 depot_id=args.depot_id,
-                service_id=args.service_id,
+                service_id=_effective_case_service_id(
+                    case_dir=case_dir,
+                ),
             )
             small_oracle_audits[name] = oracle_audit
             failed_checks.extend(

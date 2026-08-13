@@ -36,6 +36,7 @@ class CostBreakdown:
     pv_self_consumption_cost_jpy: float = 0.0
     pv_marginal_charge_cost_yen_per_kwh: float = 0.0
     fuel_cost: float = 0.0
+    ice_fuel_consumed_l: float = 0.0
     demand_cost: float = 0.0
     vehicle_cost: float = 0.0
     vehicle_usage_cost: float = 0.0
@@ -112,6 +113,7 @@ class CostBreakdown:
             "pv_self_consumption_cost_jpy": self.pv_self_consumption_cost_jpy,
             "pv_marginal_charge_cost_yen_per_kwh": self.pv_marginal_charge_cost_yen_per_kwh,
             "fuel_cost": self.fuel_cost,
+            "ice_fuel_consumed_l": self.ice_fuel_consumed_l,
             "demand_cost": self.demand_cost,
             "vehicle_cost": self.vehicle_cost,
             "vehicle_usage_cost": self.vehicle_usage_cost,
@@ -445,6 +447,9 @@ class CostEvaluator:
         pv_asset_cost = float(energy_cost_components.get("pv_asset_cost", 0.0))
         bess_asset_cost = float(energy_cost_components.get("bess_asset_cost", 0.0))
         fuel_cost_final = float(fuel_cost_components.get("fuel_cost_final", 0.0))
+        ice_fuel_consumed_l = float(
+            fuel_cost_components.get("ice_fuel_consumed_l", 0.0)
+        )
         fuel_cost_final_source = str(
             fuel_cost_components.get(
                 "fuel_cost_final_source",
@@ -590,6 +595,7 @@ class CostEvaluator:
                 pv_self_consumption_cost_jpy=pv_self_consumption_cost_jpy,
                 pv_marginal_charge_cost_yen_per_kwh=pv_marginal_charge_cost,
                 fuel_cost=fuel_cost,
+                ice_fuel_consumed_l=ice_fuel_consumed_l,
                 demand_cost=demand_cost,
                 vehicle_cost=vehicle_cost,
                 vehicle_usage_cost=vehicle_usage_cost,
@@ -675,6 +681,7 @@ class CostEvaluator:
             pv_self_consumption_cost_jpy=pv_self_consumption_cost_jpy,
             pv_marginal_charge_cost_yen_per_kwh=pv_marginal_charge_cost,
             fuel_cost=fuel_cost,
+            ice_fuel_consumed_l=ice_fuel_consumed_l,
             demand_cost=demand_cost,
             vehicle_cost=vehicle_cost,
             vehicle_usage_cost=vehicle_usage_cost,
@@ -1164,6 +1171,7 @@ class CostEvaluator:
         if not drive_events:
             return {
                 "fuel_cost_final": 0.0,
+                "ice_fuel_consumed_l": 0.0,
                 "fuel_cost_provisional": 0.0,
                 "fuel_cost_provisional_leftover": 0.0,
                 "realized_refuel_cost": 0.0,
@@ -1215,6 +1223,10 @@ class CostEvaluator:
         fuel_cost_final = (provisional_total - rollback_cost) + realized_refuel_cost
         return {
             "fuel_cost_final": fuel_cost_final,
+            "ice_fuel_consumed_l": sum(
+                max(float(fuel_l or 0.0), 0.0)
+                for _vehicle_id, _depot_id, _slot_idx, fuel_l in drive_events
+            ),
             "fuel_cost_provisional": provisional_total,
             "fuel_cost_provisional_leftover": leftover,
             "realized_refuel_cost": realized_refuel_cost,

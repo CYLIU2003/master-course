@@ -166,6 +166,8 @@ def test_ice_fuel_and_co2_include_terminal_return_deadhead() -> None:
 
     # 2.0 L trip + 0.6 L startup + 1.2 L terminal return.
     assert sum(event[3] for event in drive_events) == pytest.approx(3.8)
+    assert breakdown.ice_fuel_consumed_l == pytest.approx(3.8)
+    assert breakdown.to_dict()["ice_fuel_consumed_l"] == pytest.approx(3.8)
     assert breakdown.fuel_cost == pytest.approx(570.0)
     assert breakdown.ice_co2_kg == pytest.approx(3.8 * 2.67)
     assert evaluator._estimate_vehicle_end_fuel_l(

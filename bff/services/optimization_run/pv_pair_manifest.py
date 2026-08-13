@@ -170,6 +170,31 @@ def _objective_accounting_contract_errors(
             f"{artifact}: objective_semantics does not declare a "
             "lexicographic objective"
         )
+    if (
+        reconciliation.get("canonical_cost_numeric_values_available")
+        is not True
+    ):
+        errors.append(
+            f"{artifact}: lexicographic canonical-cost values are unavailable"
+        )
+    if (
+        reconciliation.get("canonical_cost_residual_within_tolerance")
+        is not True
+    ):
+        errors.append(
+            f"{artifact}: lexicographic canonical-cost residual exceeds tolerance"
+        )
+    if reconciliation.get("canonical_cost_contract_applied") is not True:
+        errors.append(
+            f"{artifact}: lexicographic canonical-cost contract is absent"
+        )
+    if (
+        reconciliation.get("canonical_cost_matches_accounting_total")
+        is not True
+    ):
+        errors.append(
+            f"{artifact}: lexicographic canonical-cost level does not match accounting"
+        )
     return errors
 
 

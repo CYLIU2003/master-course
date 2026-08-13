@@ -11,7 +11,11 @@ from bff.routers.optimization import (
     _apply_interactive_bev_terminal_soc_policy,
     _interactive_runtime_controls_payload,
     _research_claim_scope_payload,
+    _solver_objective_accounting_reconciliation_payload,
     _solver_settings_payload,
+)
+from bff.services.optimization_run.artifact_completeness import (
+    validate_solver_objective_accounting_reconciliation,
 )
 
 
@@ -91,6 +95,58 @@ def test_solver_settings_separate_raw_gap_from_certified_gap_and_stop_rule() -> 
     assert settings["git_sha_after_solve"] == "abc123"
     assert settings["git_dirty_after_solve"] is False
     assert settings["git_state_unchanged_during_solve"] is True
+
+
+def test_lexicographic_cost_stage_reconciles_to_executed_accounting(
+    tmp_path,
+) -> None:
+    graph_dir = tmp_path / "graph"
+    graph_dir.mkdir()
+    (graph_dir / "canonical_cost_ledger.json").write_text(
+        """{
+          "accounting_total_cost_jpy": 650234.7293959259,
+          "source": "rolling_hourly_chain/executed_day_accounting.json",
+          "accounting_residual_tolerance_jpy": 0.000001,
+          "objective_is_actual_cost": false
+        }""",
+        encoding="utf-8",
+    )
+    payload = _solver_objective_accounting_reconciliation_payload(
+        run_dir=tmp_path,
+        optimization_result={
+            "objective_value": 12.0,
+            "solver_metadata": {
+                "integrated_actual_cost_contract_applied": True,
+                "integrated_lexicographic_cost_objective_jpy": (
+                    650234.729395926
+                ),
+                "objective_semantics": (
+                    "lexicographic_vehicle_days_then_canonical_cost"
+                ),
+            },
+        },
+    )
+
+    assert payload["objective_is_actual_cost"] is False
+    assert payload["matches_canonical_accounting_total"] is False
+    assert payload["canonical_cost_numeric_values_available"] is True
+    assert payload["canonical_cost_residual_within_tolerance"] is True
+    assert payload["canonical_cost_contract_applied"] is True
+    assert payload["canonical_cost_matches_accounting_total"] is True
+    assert not validate_solver_objective_accounting_reconciliation(
+        payload,
+        require_match=False,
+    )
+
+    payload["canonical_cost_contract_applied"] = False
+    assert (
+        "solver_objective_accounting_reconciliation.json: "
+        "canonical_cost_matches_accounting_total is not derived from cost, "
+        "contract, and accounting source"
+    ) in validate_solver_objective_accounting_reconciliation(
+        payload,
+        require_match=False,
+    )
 
 
 def test_manual_pv_only_claim_scope_rejects_weather_dispatch_and_runtime_claims() -> None:

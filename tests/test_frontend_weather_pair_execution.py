@@ -81,6 +81,27 @@ def test_formal_phase4_seed_control_contract_matches_server_profile() -> None:
     assert runner._phase4_seed_controls_match(settings) is False
 
 
+def test_phase4_actual_cost_contract_accepts_certified_lexicographic_level() -> None:
+    runner = _load_runner()
+    settings = {
+        "integrated_actual_cost_contract_applied": True,
+        "integrated_actual_cost_objective_requested": False,
+        "integrated_primary_objective_kind": (
+            "minimum_used_vehicle_days_lexicographic"
+        ),
+        "integrated_lexicographic_solve_mode": (
+            "sequential_scalar_certification_v1"
+        ),
+        "integrated_lexicographic_primary_certified": True,
+        "integrated_lexicographic_cost_objective_jpy": 650_000.0,
+        "integrated_lexicographic_cost_best_bound_jpy": 645_000.0,
+    }
+
+    assert runner._phase4_actual_cost_contract_matches(settings)
+    settings["integrated_lexicographic_cost_best_bound_jpy"] = None
+    assert not runner._phase4_actual_cost_contract_matches(settings)
+
+
 def test_formal_gap_gate_uses_integrated_certified_gap_not_raw_gap() -> None:
     runner = _load_runner()
     settings = {
@@ -692,10 +713,15 @@ def test_objective_audit_accepts_declared_research_lexicographic_semantics() -> 
             "sequential_scalar_certification_v1"
         ),
         "integrated_lexicographic_primary_certified": True,
+        "integrated_lexicographic_cost_objective_jpy": 100.0,
+        "integrated_lexicographic_cost_best_bound_jpy": 99.0,
     }
 
     assert runner._solver_objective_accounting_contract_passes(
-        summary={"solver_objective_matches_accounting_total": False},
+        summary={
+            "solver_objective_matches_accounting_total": False,
+            "reported_total_cost_jpy": 100.0,
+        },
         settings=settings,
         assignment_economic_audit={
             "objective_preset": "research_lexicographic_v1"
@@ -704,7 +730,10 @@ def test_objective_audit_accepts_declared_research_lexicographic_semantics() -> 
         phase4_policy=False,
     )
     assert not runner._solver_objective_accounting_contract_passes(
-        summary={"solver_objective_matches_accounting_total": False},
+        summary={
+            "solver_objective_matches_accounting_total": False,
+            "reported_total_cost_jpy": 100.0,
+        },
         settings={
             **settings,
             "integrated_primary_objective_kind": "canonical_actual_cost",
@@ -715,8 +744,11 @@ def test_objective_audit_accepts_declared_research_lexicographic_semantics() -> 
         phase4_actual_cost=True,
         phase4_policy=True,
     )
-    assert not runner._solver_objective_accounting_contract_passes(
-        summary={"solver_objective_matches_accounting_total": True},
+    assert runner._solver_objective_accounting_contract_passes(
+        summary={
+            "solver_objective_matches_accounting_total": True,
+            "reported_total_cost_jpy": 100.0,
+        },
         settings=settings,
         assignment_economic_audit={
             "objective_preset": "research_lexicographic_v1"
@@ -726,11 +758,24 @@ def test_objective_audit_accepts_declared_research_lexicographic_semantics() -> 
     )
 
     assert not runner._solver_objective_accounting_contract_passes(
-        summary={"solver_objective_matches_accounting_total": False},
+        summary={
+            "solver_objective_matches_accounting_total": False,
+            "reported_total_cost_jpy": 100.0,
+        },
         settings={
             **settings,
             "integrated_lexicographic_primary_certified": False,
         },
+        assignment_economic_audit={
+            "objective_preset": "research_lexicographic_v1"
+        },
+        phase4_actual_cost=True,
+        phase4_policy=False,
+    )
+
+    assert not runner._solver_objective_accounting_contract_passes(
+        summary={"reported_total_cost_jpy": 100.1},
+        settings=settings,
         assignment_economic_audit={
             "objective_preset": "research_lexicographic_v1"
         },
@@ -813,6 +858,7 @@ def test_case_execution_uses_formal_timeout_for_synchronous_prepare(
                     "preparedInputId": "prepared-fresh-timeout-test",
                     "routeCount": 16,
                     "tripCount": 264,
+                    "serviceIds": ["WEEKDAY"],
                 }
             elif path.endswith("/run-optimization"):
                 response = {"job_id": "job-timeout-test"}
@@ -905,6 +951,74 @@ def test_case_execution_fails_closed_on_materialized_route_scope_drift(
         )
 
 
+def test_case_execution_fails_closed_on_materialized_service_scope_drift(
+    tmp_path: Path,
+) -> None:
+    runner = _load_runner()
+
+    class DriftedServiceClient:
+        def request_json(
+            self,
+            method: str,
+            path: str,
+            payload: dict | None = None,
+            *,
+            timeout_seconds: float = 120.0,
+        ) -> tuple[dict, str]:
+            del method, payload, timeout_seconds
+            assert path.endswith("/simulation/prepare")
+            response = {
+                "ready": True,
+                "preparedInputId": "prepared-drifted-service",
+                "routeCount": 16,
+                "tripCount": 264,
+                "serviceIds": ["WEEKDAY"],
+            }
+            return response, json.dumps(response)
+
+    with pytest.raises(
+        RuntimeError,
+        match="Prepare service scope mismatch: requested SAT",
+    ):
+        runner._execute_case(
+            name="sunny",
+            scenario_id="scenario-service-drift-test",
+            prepare_payload=runner.build_prepare_payload(
+                depot_id="tsurumaki",
+                service_id="SAT",
+                service_date="2025-08-05",
+                pv_source_date="2025-08-05",
+                comparison_role="baseline",
+            ),
+            client=DriftedServiceClient(),
+            output_dir=tmp_path,
+            timeout_seconds=987.0,
+            poll_interval_seconds=0.0,
+            frozen_sha="a" * 40,
+            log=[],
+        )
+
+
+def test_small_oracle_uses_materialized_case_service_id(tmp_path: Path) -> None:
+    runner = _load_runner()
+    case_dir = tmp_path / "sunny"
+    case_dir.mkdir()
+    (case_dir / "comparison_case_manifest.json").write_text(
+        json.dumps(
+            {
+                "comparison_control_payload": {
+                    "service_id": "WEEKDAY",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert runner._effective_case_service_id(
+        case_dir=case_dir,
+    ) == "WEEKDAY"
+
+
 def test_vehicle_trip_assignments_are_complete_and_chronological() -> None:
     runner = _load_runner()
     assignments = {
@@ -955,6 +1069,40 @@ def test_bess_terminal_soc_reads_executed_day_terminal_record(
     )
 
     assert runner._bess_terminal_soc(tmp_path) == 300.0
+
+
+def test_research_values_prefer_executed_day_fuel_consumption(
+    tmp_path: Path,
+) -> None:
+    runner = _load_runner()
+    rolling_dir = tmp_path / "rolling_hourly_chain"
+    rolling_dir.mkdir()
+    (tmp_path / "kpi_summary.json").write_text(
+        json.dumps({"ice_fuel_consumed_l": 99.0}),
+        encoding="utf-8",
+    )
+    (tmp_path / "simulation_conditions.json").write_text(
+        json.dumps({"depot_energy_assets": []}),
+        encoding="utf-8",
+    )
+    (rolling_dir / "executed_day_accounting.json").write_text(
+        json.dumps(
+            {
+                "cost_breakdown": {
+                    "ice_fuel_consumed_l": 12.5,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    value, unit, source = runner._research_values(tmp_path, {})[
+        "Fuel consumption"
+    ]
+
+    assert value == pytest.approx(12.5)
+    assert unit == "L"
+    assert source == "rolling_hourly_chain/executed_day_accounting.json"
 
 
 def test_zero_metric_gate_is_fail_closed_for_missing_or_invalid_values() -> None:

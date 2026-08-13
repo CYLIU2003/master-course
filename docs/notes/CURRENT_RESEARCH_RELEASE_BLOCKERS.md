@@ -1,5 +1,48 @@
 # Current research release blockers
 
+## 2026-08-13 latest verdict: controlled pair accepted; sunny 1% gap remains
+
+The first clean full pair using sequential scalar lexicographic certification
+completed at frozen SHA `7cb1192cf6278e8854add16b58f04639a6656336`.
+Both cases served 264/264 trips, accepted all 24 Rolling steps, passed physical
+and canonical accounting checks, and preserved identical non-PV controls.
+The pair manifest sets
+`accepted_for_controlled_pv_sensitivity_comparison=true`.
+
+| Metric | High PV | Low PV |
+|---|---:|---:|
+| Used BEV / ICE | 31 / 1 | 21 / 11 |
+| BEV / ICE trips | 248 / 16 | 91 / 173 |
+| PV generation | 6,056.25 kWh | 996.20 kWh |
+| Grid import | 156.039059 kWh | 130.948752 kWh |
+| Rolling-consistent ICE fuel | 35.884956 L | 356.022849 L |
+| Executed total cost | 650,234.729396 JPY | 698,318.002033 JPY |
+| Executed operational CO2 | 170.814257 kg | 986.112082 kg |
+| Certified cost gap | 1.574005% | 0.547009% |
+| Gurobi raw cost gap | 1.574005% | 8.351210% |
+
+The low-PV certificate uses the maximum of Gurobi's bound and a separately
+validated integer-valid analytical lower bound; it must not be described as a
+Gurobi `OPTIMAL` result. The high-PV result exceeded the declared 1% gap.
+Consequently `formal_research_submission_ready=false`, with the only pair
+release failure `baseline_requested_mip_gap_certified`.
+
+The artifact is:
+`output/formal_pair_20260813_sequential_lexgap_flat30_pv1000_bess6000_phase4_7cb1192_gap01`.
+The high/low assignment difference is 157 BEV trips and ten used BEVs; the
+executed cost difference is 48,083.272637 JPY. This is controlled PV-supply
+sensitivity evidence, not proof of the high-PV global cost optimum.
+
+Post-run audit found that the frozen output's general-purpose KPI files still
+contained day-ahead CO2/fuel values while the progress report correctly used
+Rolling CO2. Current code now persists `ice_fuel_consumed_l` in executed-day
+accounting, explicitly reconciles the sequential canonical-cost level to that
+accounting total, and fails before solve when Prepare materializes a different
+service ID. The small oracle also reads the materialized `WEEKDAY` service ID;
+both preserved cases pass the corrected bounded oracle. Because these are
+post-run code changes, they require a new clean commit and fresh pair and do
+not rewrite the frozen artifacts.
+
 ## 2026-08-13 sequential cost-gap path implemented; fresh formal evidence pending
 
 The remaining full-pair optimality blocker was traced to evidence semantics,
@@ -48,7 +91,7 @@ their PV-profile and final-assignment hashes differ.
 | BEV / ICE trips | 248 / 16 | 91 / 173 |
 | PV generation | 6,056.25 kWh | 996.20 kWh |
 | Grid import | 156.039059 kWh | 130.948752 kWh |
-| Fuel consumption | 36.307510 L | 357.881339 L |
+| Day-ahead KPI fuel (not Rolling canonical) | 36.307510 L | 357.881339 L |
 | Executed total cost | 650,234.729396 JPY | 698,318.002033 JPY |
 | Executed CO2 | 170.814257 kg | 986.112082 kg |
 

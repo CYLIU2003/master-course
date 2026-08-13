@@ -1,5 +1,42 @@
 # master-course
 
+## 2026-08-13 current sequential formal-pair evidence
+
+- Clean frozen SHA `7cb1192cf6278e8854add16b58f04639a6656336` completed the
+  ordinary frontend/BFF path for the controlled high/low-PV pair: fresh
+  Prepare, Phase 4, 24/24 Rolling, physical validation, canonical executed-day
+  accounting, pair finalization, small exact-oracle checks and the progress
+  report bundle.
+- Both cases fixed the 2025-08-05 `WEEKDAY` timetable, 264 trips, 60 active
+  vehicles, ten chargers, 30 JPY/kWh grid energy, zero demand charge,
+  1,000 kW rated PV and a 6,000 kWh / 900 kW BESS with 3,000 -> 3,000 kWh
+  terminal inventory. The 1,000 kW manual rating is preserved and the
+  capacity-to-area audit reports 14,285.714286 m2 as the inverse estimated
+  depot area.
+- High PV uses 31 BEVs / 1 ICE bus for 248/16 trips; low PV uses 21/11 for
+  91/173 trips. Canonical Rolling totals are 650,234.729396 JPY and
+  170.814257 kg-CO2 for high PV, versus 698,318.002033 JPY and
+  986.112082 kg-CO2 for low PV. The controlled sensitivity comparison is
+  accepted, so this run demonstrates a substantial PV-responsive assignment
+  change without a weather-specific objective bias.
+- Minimum vehicle-days are certified at 32 in both cases. Low PV meets the
+  requested 1% canonical-cost gap using a valid independent lower bound
+  (certified 0.547009%; Gurobi raw gap 8.351210%). High PV stops at a
+  1.574005% canonical-cost gap and therefore fails the predeclared 1% gate.
+  The pair remains `BLOCKED` for formal research submission solely on
+  `baseline_requested_mip_gap_certified`; it is not a global-optimum claim.
+- Post-run auditing fixed three evidence bugs for the next fresh run:
+  lexicographic cost-level/accounting reconciliation is now explicit, the
+  pair runner uses the service ID materialized by Prepare for its small
+  oracle and fails closed on service-scope drift, and Rolling accounting now
+  persists ICE fuel liters for canonical reports. These fixes do not relabel
+  the frozen `7cb1192` artifacts; another clean-commit run is required to
+  exercise the new schema.
+- Evidence directory:
+  `output/formal_pair_20260813_sequential_lexgap_flat30_pv1000_bess6000_phase4_7cb1192_gap01`.
+  Its `progress_report/` contains seven PNG/SVG figures, six CSV tables and a
+  hashed evidence index.
+
 ## 2026-08-13 sequential lexicographic gap certification
 
 - `research_lexicographic_v1` no longer relies on one Gurobi

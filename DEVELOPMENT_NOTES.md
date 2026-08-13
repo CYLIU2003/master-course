@@ -1,5 +1,55 @@
 # Development Notes
 
+## 2026-08-13: sequential formal pair, evidence audit, and reporting repair
+
+- Ran the requested high/low-PV pair from clean frozen SHA
+  `7cb1192cf6278e8854add16b58f04639a6656336` through the same frontend/BFF
+  endpoints used by the application. Both fresh prepared inputs materialized
+  the 2025-08-05 `WEEKDAY` service with 264 trips, 60 active vehicles, ten
+  chargers, 30 JPY/kWh grid energy, zero demand charge, manually rated
+  1,000 kW PV and a 6,000 kWh / 900 kW BESS at 3,000 -> 3,000 kWh.
+- Both cases served all trips, passed independent physical validation,
+  accepted 24/24 Rolling steps and reconciled canonical executed-day costs.
+  High PV used 31 BEVs / 1 ICE for 248/16 trips and cost 650,234.729396 JPY;
+  low PV used 21/11 for 91/173 trips and cost 698,318.002033 JPY. Canonical
+  operational CO2 is 170.814257 versus 986.112082 kg. The pair is accepted for
+  the controlled PV sensitivity comparison.
+- Sequential certification proved 32 vehicle-days exactly in both cases. Low
+  PV has a 0.547009% certified cost gap using the documented independent
+  integer-valid lower bound even though Gurobi's raw gap is 8.351210%. High PV
+  has a 1.574005% cost gap. Formal release therefore remains `BLOCKED` only on
+  `baseline_requested_mip_gap_certified`; neither case is relabelled as a
+  Gurobi global optimum.
+- Authoritative frozen output:
+  `output/formal_pair_20260813_sequential_lexgap_flat30_pv1000_bess6000_phase4_7cb1192_gap01`.
+  The progress bundle is complete with seven PNG/SVG figure pairs, six CSV
+  tables and hashed source indexes. The observed high-minus-low response is
+  +10 used BEVs and +157 BEV trips; low PV costs 48,083.272637 JPY more.
+- Post-run review found three P1 evidence-path defects. First,
+  `integrated_actual_cost_objective_requested=false` is correct for a
+  vehicle-day-first lexicographic objective, but the runner incorrectly used
+  it to reject real slot-level recourse and solver controls. The audit now
+  recognizes the certified sequential cost contract. Second, the small oracle
+  used the CLI dataset ID (`tokyu_full`) rather than the `WEEKDAY` service ID
+  materialized by Prepare. Prepare/service drift now fails before solve and
+  the oracle reads the case manifest. Both preserved cases pass the corrected
+  bounded oracle. Third, objective reconciliation compared only the primary
+  vehicle-day scalar with accounting. New `canonical_cost_*` fields compare
+  the sequential cost-stage objective directly with accepted Rolling
+  accounting and are validated fail-closed by artifact and pair gates.
+- The frozen run also exposed reporting-source drift: `kpi_summary.json`
+  contained day-ahead fuel/CO2, whereas the canonical Rolling ledger contained
+  170.814257/986.112082 kg-CO2 and fuel costs equivalent to
+  35.884956/356.022849 L at 150 JPY/L. `CostBreakdown` now exports
+  `ice_fuel_consumed_l`, and new pair comparisons prefer that executed-day
+  field. Existing output is preserved; only a fresh run will carry the new
+  field natively.
+- Focused frontend, BFF, pair-manifest, telemetry and evaluator regression
+  passes 87 tests. The complete repository regression passes
+  `1357 passed in 69.10s`; compileall and `git diff --check` also pass. None
+  of these post-run changes relabels `7cb1192` evidence; a new clean frozen
+  SHA is mandatory before another formal pair.
+
 ## 2026-08-12: thesis-model validity contract implementation
 
 - A second clean-SHA frontend/BFF attempt at
@@ -3758,12 +3808,14 @@ locks this distinction in place.
 - High PV used 31 BEVs / 1 ICE bus for 248/16 trips. Its executed ledger records
   6,056.25 kWh PV generation, 401.407349 kWh PV-to-bus, 2,781.817437 kWh
   PV-to-BESS, 2,510.590237 kWh BESS-to-bus, 156.039059 kWh grid import,
-  2,873.025214 kWh curtailment, 36.307510 L fuel, 650,234.729396 JPY total
+  2,873.025214 kWh curtailment, 35.884956 L Rolling-consistent fuel,
+  650,234.729396 JPY total
   cost and 170.814257 kg-CO2.
 - Low PV used 21 BEVs / 11 ICE buses for 91/173 trips. Its executed ledger
   records 996.2 kWh PV generation, 293.407649 kWh PV-to-bus, 702.792351 kWh
   PV-to-BESS, 634.270097 kWh BESS-to-bus, 130.948752 kWh grid import, zero
-  curtailment, 357.881339 L fuel, 698,318.002033 JPY total cost and
+  curtailment, 356.022849 L Rolling-consistent fuel,
+  698,318.002033 JPY total cost and
   986.112082 kg-CO2.
 - `pair/pair_manifest.json` accepts the pair for the explicitly scoped
   same-service-date PV-supply sensitivity comparison. Objective presets match;

@@ -6419,6 +6419,45 @@ def _solver_objective_accounting_reconciliation_payload(
         and accounting_source
         == "rolling_hourly_chain/executed_day_accounting.json"
     )
+    canonical_cost_value = _finite_release_currency(
+        solver_metadata.get("integrated_lexicographic_cost_objective_jpy")
+    )
+    canonical_cost_source = (
+        "solver_metadata.integrated_lexicographic_cost_objective_jpy"
+        if canonical_cost_value is not None
+        else solver_source if objective_is_actual_cost else "unavailable"
+    )
+    if canonical_cost_value is None and objective_is_actual_cost:
+        canonical_cost_value = solver_value
+    canonical_cost_values_available = bool(
+        canonical_cost_value is not None and accounting_total is not None
+    )
+    canonical_cost_difference = (
+        float(canonical_cost_value - accounting_total)
+        if canonical_cost_values_available
+        else None
+    )
+    canonical_cost_absolute_difference = (
+        abs(canonical_cost_difference)
+        if canonical_cost_difference is not None
+        else None
+    )
+    canonical_cost_residual_within_tolerance = bool(
+        canonical_cost_absolute_difference is not None
+        and canonical_cost_absolute_difference <= tolerance
+    )
+    canonical_cost_contract_applied = bool(
+        objective_is_actual_cost
+        or solver_metadata.get("integrated_actual_cost_contract_applied")
+        is True
+    )
+    canonical_cost_matches_accounting_total = bool(
+        canonical_cost_values_available
+        and canonical_cost_residual_within_tolerance
+        and canonical_cost_contract_applied
+        and accounting_source
+        == "rolling_hourly_chain/executed_day_accounting.json"
+    )
     return {
         "schema_version": SOLVER_OBJECTIVE_ACCOUNTING_RECONCILIATION_SCHEMA_VERSION,
         "solver_objective_value_jpy": solver_value,
@@ -6435,6 +6474,22 @@ def _solver_objective_accounting_reconciliation_payload(
         "matches_canonical_accounting_total": (
             matches_canonical_accounting_total
         ),
+        "canonical_cost_objective_value_jpy": canonical_cost_value,
+        "canonical_cost_objective_source": canonical_cost_source,
+        "canonical_cost_difference_jpy": canonical_cost_difference,
+        "canonical_cost_absolute_difference_jpy": (
+            canonical_cost_absolute_difference
+        ),
+        "canonical_cost_numeric_values_available": (
+            canonical_cost_values_available
+        ),
+        "canonical_cost_residual_within_tolerance": (
+            canonical_cost_residual_within_tolerance
+        ),
+        "canonical_cost_contract_applied": canonical_cost_contract_applied,
+        "canonical_cost_matches_accounting_total": (
+            canonical_cost_matches_accounting_total
+        ),
         "legacy_solver_metadata_matches_accounting_total": (
             solver_metadata.get("solver_objective_matches_accounting_total")
         ),
@@ -6445,9 +6500,10 @@ def _solver_objective_accounting_reconciliation_payload(
         ),
         "semantics": (
             "Numeric comparison of the solver objective with the canonical "
-            "accounting total. A formal match additionally requires an "
-            "actual-cost objective and the accepted executed-day accounting "
-            "source; it never follows from a legacy boolean alone."
+            "accounting total. The canonical_cost_* fields separately audit "
+            "the certified cost level of a lexicographic solve. A formal "
+            "match requires the accepted executed-day accounting source and "
+            "never follows from a legacy boolean alone."
         ),
     }
 
