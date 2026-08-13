@@ -1,5 +1,41 @@
 # Development Notes
 
+## 2026-08-13: runtime-attested r7 validates feedback budgeting and provenance
+
+- Executed the normal frontend/BFF controlled pair from clean frozen SHA
+  `f46f1e821e6773f7f647dd130b28427bbb3df10d` after restarting the BFF.
+  Both jobs attest PID 60504 and matching clean startup/current/frozen SHAs;
+  Git stayed unchanged throughout the run. Fresh Prepare materialized the same
+  264-trip `WEEKDAY` scope, 60 active vehicles, ten chargers, 30 JPY/kWh,
+  zero demand charge, 1,000 kW PV and 6,000 kWh / 900 kW BESS.
+- Both cases serve 264/264 trips, accept 24/24 Rolling steps, pass independent
+  physical validation and canonical executed-day accounting, and return BESS
+  from 3,000 to 3,000 kWh. High PV remains 31/1 BEV/ICE buses, 248/16 trips,
+  650,234.729396 JPY and 170.814257 kg-CO2. Low PV remains 21/11, 91/173,
+  698,318.002033 JPY and 986.112082 kg-CO2. The pair control hash is
+  `d08c5fa55f984e0f83417c247910d34ae57e636d51b1953fdd0ba5c575dfe68b`.
+- High PV again stops at a certified 1.574005% gap and low PV meets the target
+  at 0.547009%. The controlled PV comparison passes, while formal submission
+  remains blocked only by `baseline_requested_mip_gap_certified`. The progress
+  bundle is independently `READY` with seven figures and six tables.
+- The retry allocator and new evidence fields behave as designed. Sunny
+  `渋23` funds two passes (33-second Stage 1, 9-second Stage 2, five-second
+  overhead reserve) under an 89-second limit, but Stage 1 has no incumbent;
+  Stage 2 is therefore `not_run`, feedback history is empty and no no-good cut
+  is claimed. Low-PV `渋22` funds 15 + 5 seconds per pass, obtains Stage-2
+  `optimal`, passes full validation and produces the known 26/6 candidate at
+  704,330.168664 JPY. Low-PV `渋23` records the same honest `not_run` outcome
+  after a Stage-1 time limit without an incumbent.
+- This run proves the audit no longer conflates "feedback allowed" with
+  "feedback applied". It does not show an IIS retry, because no reduced Stage
+  2 was proven infeasible. It also does not improve the sunny incumbent or
+  lower bound, and does not certify 32-BEV infeasibility.
+- Evidence:
+  `output/formal_pair_20260813_route_band_feedback_budget_attested_v7_flat30_pv1000_bess6000_phase4_f46f1e8_gap01_r7`;
+  total wall time 4,738.905068 seconds high PV and 1,163.467083 seconds low PV;
+  ZIP size 20,612,441 bytes; SHA-256
+  `EC05E786943500E6E032BE86841FEBC9E935E9FF790BC337FC8A4F318A765064`.
+
 ## 2026-08-13: reserve and expose a complete route-band feedback retry
 
 - Raised a P1 candidate-search evidence defect from the clean runtime-attested
@@ -25,7 +61,10 @@
   objective coefficients, validation, accounting, and 1% acceptance gate are
   unchanged. Related regression passes `72 passed`; the complete repository
   suite passes `1370 passed in 71.39s`; compileall and `git diff --check` pass.
-  Fresh clean-commit evidence is pending.
+  The clean r7 evidence above verifies the allocator and telemetry. No IIS
+  retry was applicable in r7 because the only failed route-band attempts did
+  not produce a Stage-1 incumbent, so their Stage 2 correctly remained
+  `not_run`.
 
 ## 2026-08-13: runtime-attested r6 controlled pair
 

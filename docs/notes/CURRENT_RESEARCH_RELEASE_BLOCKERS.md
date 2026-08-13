@@ -1,5 +1,33 @@
 # Current research release blockers
 
+## 2026-08-13 latest verdict: r7 verifies feedback evidence; sunny gap is unchanged
+
+Frozen SHA `f46f1e821e6773f7f647dd130b28427bbb3df10d` completed fresh
+Prepare, both frontend/BFF Phase-4 jobs, 24/24 Rolling, physical and canonical
+accounting validation, pair finalization, seven figures, six tables and the
+progress ZIP. Runtime PID 60504 and startup/current/frozen Git SHAs match and
+remain clean for both cases.
+
+The controlled result remains high PV 31/1 BEV/ICE buses and 248/16 trips at
+650,234.729396 JPY, versus low PV 21/11 and 91/173 at 698,318.002033 JPY.
+Both serve all 264 trips and differ in 157 powertrain assignments. The pair is
+accepted for controlled PV sensitivity. Formal submission remains `BLOCKED`
+solely because high PV has a certified 1.574005% gap against the declared 1%;
+low PV is certified at 0.547009%.
+
+The new route-band audit closes the evidence ambiguity but does not improve
+the result. Failed sunny `渋23` and low-PV `渋23` attempts time out in reduced
+Stage 1 without an incumbent, so Stage 2 is explicitly `not_run`; no IIS, cut
+or retry is claimed. Low-PV `渋22` reaches Stage-2 `optimal` and produces a
+fully validated 26/6 candidate at 704,330.168664 JPY, 6,012.166631 JPY more
+expensive than the selected 21/11 composition. This verifies search diversity
+and rational rejection, not all-BEV infeasibility.
+
+Evidence:
+`output/formal_pair_20260813_route_band_feedback_budget_attested_v7_flat30_pv1000_bess6000_phase4_f46f1e8_gap01_r7`.
+ZIP SHA-256:
+`EC05E786943500E6E032BE86841FEBC9E935E9FF790BC337FC8A4F318A765064`.
+
 ## 2026-08-13 latest verdict: r6 controlled pair accepted; sunny gap blocks formal release
 
 Frozen SHA `ccfbbbb321cfe4a9150f0e135172e52ee9751a6b` completed the normal
@@ -26,7 +54,7 @@ Evidence:
 ZIP SHA-256:
 `5B4A7014EBD7162D0B06F18AB87BECED878F057439306827692475921239E5F0`.
 
-## 2026-08-13 current code: complete feedback budget and audit; fresh rerun required
+## 2026-08-13 verified in r7: complete feedback budget and audit
 
 r6 also showed that `stage2_feedback_max_iterations=1` did not by itself fund
 or prove a complete retry. The initial Stage 1 and Stage 2 shared the deadline,
@@ -37,9 +65,9 @@ actual feedback status and history. Only a proven `INFEASIBLE` Stage 2 can add
 the exact-assignment no-good cut; `TIME_LIMIT` is not an infeasibility proof.
 
 This is an upper-bound candidate-generation and evidence change, not a change
-to the final feasible region or lower bound. A fresh clean-commit pair must
-verify the new telemetry. Regardless of that result, the formal blocker stays
-the sunny 1% certified-gap gate until a qualifying run satisfies it.
+to the final feasible region or lower bound. The clean r7 above verifies the
+new telemetry. The formal blocker stays the sunny 1% certified-gap gate until
+a qualifying run satisfies it.
 
 ## 2026-08-13 P0 provenance correction: r5 used a stale BFF runtime
 

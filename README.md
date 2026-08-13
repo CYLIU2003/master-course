@@ -1,5 +1,36 @@
 # master-course
 
+## 2026-08-13 runtime-attested r7 feedback-budget evidence
+
+- Frozen SHA `f46f1e821e6773f7f647dd130b28427bbb3df10d` completed the
+  same frontend/BFF controlled-PV workflow with fresh Prepare, both Phase-4
+  jobs, 24/24 Rolling, physical/accounting validation, pair finalization and
+  progress-report ZIP. BFF PID 60504 matched the clean startup/current/frozen
+  SHA throughout both solves.
+- The accepted controlled comparison is numerically unchanged from r6. High
+  PV uses 31/1 BEV/ICE buses for 248/16 trips at 650,234.729396 JPY and
+  170.814257 kg-CO2. Low PV uses 21/11 buses for 91/173 trips at
+  698,318.002033 JPY and 986.112082 kg-CO2. All 264 trips are served, and the
+  two assignments differ on 173 vehicle-trip rows, including 157 trips whose
+  powertrain changes.
+- Low PV meets the 1% target at a certified 0.547009% gap. High PV remains a
+  physically valid time-limited incumbent at 1.574005%, so the only formal
+  failure remains `baseline_requested_mip_gap_certified`. Reporting output is
+  `READY` with seven figures and six tables; formal research submission stays
+  `BLOCKED`.
+- The new route-band telemetry is complete. Sunny `渋23` used a funded
+  33-second Stage 1 plus 9-second Stage 2 per pass under an 89-second shared
+  limit, but Stage 1 found no incumbent, so Stage 2 is explicitly `not_run`
+  and IIS feedback is not applicable. Low-PV `渋22` is Stage-2 `optimal` and
+  again yields a full 26/6 candidate at 704,330.168664 JPY, correctly rejected
+  as 6,012.166631 JPY above the selected 21/11 solution. Low-PV `渋23` also
+  has no Stage-1 incumbent and records Stage 2 `not_run`. No run falsely
+  claims that feedback fired or that an all-BEV composition is infeasible.
+- Evidence directory:
+  `output/formal_pair_20260813_route_band_feedback_budget_attested_v7_flat30_pv1000_bess6000_phase4_f46f1e8_gap01_r7`.
+  ZIP size 20,612,441 bytes; SHA-256
+  `EC05E786943500E6E032BE86841FEBC9E935E9FF790BC337FC8A4F318A765064`.
+
 ## 2026-08-13 runtime-attested r6 controlled-PV evidence
 
 - Frozen SHA `ccfbbbb321cfe4a9150f0e135172e52ee9751a6b` completed fresh
