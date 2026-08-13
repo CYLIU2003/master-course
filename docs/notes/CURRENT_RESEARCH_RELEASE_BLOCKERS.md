@@ -1,5 +1,46 @@
 # Current research release blockers
 
+## 2026-08-13 latest verdict: r6 controlled pair accepted; sunny gap blocks formal release
+
+Frozen SHA `ccfbbbb321cfe4a9150f0e135172e52ee9751a6b` completed the normal
+frontend/BFF path with fresh Prepare and matching clean runtime/current/frozen
+Git attestation. Both 264-trip cases passed 24/24 Rolling, physical validation,
+terminal SOC, canonical accounting and controlled-pair finalization.
+
+High PV uses 31 BEVs / 1 ICE for 248/16 trips at 650,234.729396 JPY. Low PV
+uses 21/11 for 91/173 trips at 698,318.002033 JPY. The only controlled input
+difference is the PV curve (6,056.25 versus 996.20 kWh), so the pair is
+accepted for PV sensitivity. Formal submission remains `BLOCKED` solely
+because the sunny certified gap is 1.574005% against the predeclared 1%; low
+PV meets it at 0.547009%. Neither result is mislabeled as a global optimum.
+
+The low-PV neighborhood found a physically and Stage-2-feasible 26/6
+composition at 704,330.168664 JPY, 6,012.166631 JPY above the selected 21/11
+solution. This is direct evidence that composition search is not frozen and
+that more BEVs are not automatically cheaper under low PV and 30 JPY/kWh.
+Sunny did not find a 32-BEV incumbent, but the run contains no certificate
+that such a composition is infeasible.
+
+Evidence:
+`output/formal_pair_20260813_route_band_feedback_runtime_attested_v6_flat30_pv1000_bess6000_phase4_ccfbbbb_gap01_r6`.
+ZIP SHA-256:
+`5B4A7014EBD7162D0B06F18AB87BECED878F057439306827692475921239E5F0`.
+
+## 2026-08-13 current code: complete feedback budget and audit; fresh rerun required
+
+r6 also showed that `stage2_feedback_max_iterations=1` did not by itself fund
+or prove a complete retry. The initial Stage 1 and Stage 2 shared the deadline,
+and the attempt omitted Stage-2 status and IIS/no-good history. The current
+code divides the unchanged fair group deadline into equal initial/retry
+passes, reserves five percent for construction/IIS work, and records the
+actual feedback status and history. Only a proven `INFEASIBLE` Stage 2 can add
+the exact-assignment no-good cut; `TIME_LIMIT` is not an infeasibility proof.
+
+This is an upper-bound candidate-generation and evidence change, not a change
+to the final feasible region or lower bound. A fresh clean-commit pair must
+verify the new telemetry. Regardless of that result, the formal blocker stays
+the sunny 1% certified-gap gate until a qualifying run satisfies it.
+
 ## 2026-08-13 P0 provenance correction: r5 used a stale BFF runtime
 
 The attempted r5 rerun is not current-code evidence. Although its wrapper and
@@ -21,22 +62,20 @@ The automated pair runner independently requires the runtime attestation and
 exact frozen-SHA equality before Prepare. A missing field, old process, dirty
 startup or SHA/root mismatch is a hard failure with no solver job.
 
-Required next evidence remains a fresh r6 after a complete BFF restart from a
-new clean commit. It must show matching runtime/current/frozen SHAs and the new
-route-band feedback plus canonical cost-cap telemetry. The formal research
-verdict remains `BLOCKED` until that run also satisfies the predeclared sunny
-1% cost-gap gate; runtime provenance alone cannot discharge optimality.
+The clean r6 above verifies matching runtime/current/frozen SHAs and the
+canonical cost-cap telemetry. Its feedback audit exposed the separate budget
+and evidence defect now awaiting a fresh rerun. Runtime provenance alone does
+not discharge the sunny optimality blocker.
 
-## 2026-08-13 current code: route-band IIS feedback implemented; rerun pending
+## 2026-08-13 historical checkpoint: route-band IIS feedback before r6
 
-The v4 pair remains the latest accepted controlled-PV evidence and formal
-release remains blocked by the sunny 1.574005% canonical-cost gap. Its audit
-also exposed that the reduced route-band solve had an unused feedback path:
+At this checkpoint, v4 was the latest accepted controlled-PV evidence. Its
+audit exposed that the reduced route-band solve had an unused feedback path:
 the general Stage-2 IIS/no-good mechanism existed, but the internal candidate
 problem explicitly disabled it and spent most of the 90-second allowance on a
 single Stage 1.
 
-Current code gives the first reduced Stage 1 at most half of each route-band
+That patch gave the first reduced Stage 1 at most half of each route-band
 group's fair shared allowance and permits one IIS-backed exact-assignment
 no-good retry inside the unchanged deadline. This may find a different
 charging-feasible all-BEV partition; it does not prove that one exists and does
@@ -45,14 +84,14 @@ inadmissible until it passes local Stage 2, exact trip/count merge checks, the
 full original Stage 2, independent physical validation, and canonical
 accounting.
 
-The same patch corrects the lexicographic verified-start audit: after minimum
+The same patch corrected the lexicographic verified-start audit: after minimum
 vehicle-days are certified, the recorded bound now references
 `dispatch_fixed_recourse_canonical_cost_jpy` and reports the cost-cap row that
 was actually installed. This is evidence/provenance repair, not a stronger
-lower bound. A fresh clean-commit frontend/BFF pair is mandatory before either
-change can affect the blocker verdict.
+lower bound. The runtime-attested r6 above supersedes this checkpoint and
+exposes the narrower feedback-budget/audit defect addressed by current code.
 
-## 2026-08-13 latest verdict: controlled pair accepted; sunny 1% gap remains
+## 2026-08-13 historical v3/v4 verdict: controlled pair accepted
 
 The latest fresh pair at frozen SHA
 `583dced3306f3e27b1de248605b70c51fc72e570` completed the ordinary frontend/BFF

@@ -1,5 +1,62 @@
 # Development Notes
 
+## 2026-08-13: reserve and expose a complete route-band feedback retry
+
+- Raised a P1 candidate-search evidence defect from the clean runtime-attested
+  r6 pair. The audit declared `stage2_feedback_max_iterations=1`, but the
+  initial Stage 1 received half of the group budget and Stage 2 then consumed
+  part of the remaining shared deadline. The artifact did not record the
+  reduced Stage-2 status or feedback history, so it was impossible to prove
+  whether an IIS retry ran. Sunny used 44 + 5 seconds of an 89-second limit and
+  returned after 48.091 seconds; one low-PV group similarly used 30 + 5 of 61.
+- Added a pure retry-budget allocator. It retains the same fair group deadline,
+  funds the initial and maximum one feedback pass equally, reserves five
+  percent for construction/IIS overhead, and gives Stage 2 at least 20% of a
+  pass or the configured per-solve floor. If even two seconds per pass cannot
+  be funded, feedback is disabled explicitly instead of being advertised but
+  unreachable.
+- Route-band attempt telemetry now records the reduced Stage-2 status, actual
+  feedback iteration and history, applied flag, Stage-1 no-good count, funded
+  pass count and overhead reserve. A retry remains legal only after Gurobi
+  proves Stage 2 `INFEASIBLE`; a time-limit without an incumbent is not treated
+  as an infeasibility certificate.
+- This changes only bounded Phase-4 warm-start candidate generation and audit
+  semantics. The total solver allowance, final integrated constraints,
+  objective coefficients, validation, accounting, and 1% acceptance gate are
+  unchanged. Related regression passes `72 passed`; the complete repository
+  suite passes `1370 passed in 71.39s`; compileall and `git diff --check` pass.
+  Fresh clean-commit evidence is pending.
+
+## 2026-08-13: runtime-attested r6 controlled pair
+
+- Restarted the BFF from clean frozen SHA
+  `ccfbbbb321cfe4a9150f0e135172e52ee9751a6b`. Both jobs attest PID 50628,
+  the same clean startup/current/frozen SHA, unchanged Git state during solve,
+  fresh Prepare and the ordinary frontend/BFF execution path.
+- Both cases serve 264/264 trips, accept 24/24 Rolling steps, pass physical
+  validation, return BESS from 3,000 to 3,000 kWh, and reconcile canonical
+  executed-day accounting. The pair fixes 2025-08-05 `WEEKDAY`, 60 active
+  vehicles, ten chargers, 30 JPY/kWh, zero demand charge, 1,000 kW PV, and a
+  6,000 kWh / 900 kW BESS; only the separately hashed PV curve differs.
+- High PV produces 6,056.25 kWh and selects 31/1 BEV/ICE buses for 248/16
+  trips, 650,234.729396 JPY and 170.814257 kg-CO2. Low PV produces 996.20 kWh
+  and selects 21/11 buses for 91/173 trips, 698,318.002033 JPY and
+  986.112082 kg-CO2. The controlled comparison is accepted.
+- Low PV satisfies the declared gap with a certified 0.547009%; high PV is
+  time-limited at 1.574005%. Formal research submission therefore remains
+  blocked only by `baseline_requested_mip_gap_certified`; reporting readiness
+  is not promoted to formal readiness.
+- The low-PV route-band search produced a full Stage-2-feasible 26/6 candidate
+  at 704,330.168664 JPY. It was correctly rejected because it costs
+  6,012.166631 JPY more than the selected 21/11 composition. Sunny did not
+  find an exact all-BEV candidate, but no infeasibility certificate was
+  generated. The verified-start canonical objective cap is eligible and one
+  cap constraint is recorded in both cases.
+- Evidence:
+  `output/formal_pair_20260813_route_band_feedback_runtime_attested_v6_flat30_pv1000_bess6000_phase4_ccfbbbb_gap01_r6`;
+  ZIP size 20,602,885 bytes; SHA-256
+  `5B4A7014EBD7162D0B06F18AB87BECED878F057439306827692475921239E5F0`.
+
 ## 2026-08-13: bind formal runs to the code loaded by the BFF process
 
 - Raised a P0 research-provenance defect during the r5 rerun. Port 8000 was
@@ -23,8 +80,8 @@
   before Prepare and before any Gurobi work.
 - Focused provenance/BFF/pair-runner regression passes `52 passed`; the full
   repository suite passes `1367 passed in 68.57s`. Compileall and
-  `git diff --check` also pass. Clean-commit r6 evidence is still pending at
-  this checkpoint. The change affects evidence validity only; optimization
+  `git diff --check` also pass. The clean r6 evidence above verifies this
+  attestation. The change affects evidence validity only; optimization
   equations and acceptance gap thresholds are unchanged.
 
 ## 2026-08-13: feed reduced route-band Stage-2 IIS back to Stage 1

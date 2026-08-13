@@ -74,6 +74,80 @@ _FEEDBACK_GLOBAL_STARTED_KEY = "_stage2_feedback_global_started_monotonic"
 _ROUTE_BAND_REPARTITION_FEEDBACK_MAX_ITERATIONS = 1
 
 
+@dataclass(frozen=True)
+class _RouteBandRepartitionRetryBudget:
+    """Wall-clock allocation for one route-band repartition attempt."""
+
+    total_time_limit_sec: int
+    stage1_time_limit_sec: int
+    stage2_time_limit_sec: int
+    feedback_max_iterations: int
+    solve_pass_count: int
+    reserved_overhead_sec: int
+
+
+def _route_band_repartition_retry_budget(
+    *,
+    fair_group_budget_sec: float,
+    minimum_stage2_time_sec: int,
+    requested_feedback_max_iterations: int,
+) -> _RouteBandRepartitionRetryBudget:
+    """Reserve enough time for every declared Stage-1/Stage-2 pass.
+
+    Stage-2 feedback recursively resolves both stages.  Therefore, merely
+    limiting the first Stage 1 to half of the group budget does not reserve a
+    complete retry: the first Stage 2 also consumes that shared deadline.
+    This allocator gives each possible pass the same solver budget and keeps
+    five percent (at least one second) for model construction and IIS work.
+    """
+
+    total_time_limit_sec = max(int(fair_group_budget_sec), 2)
+    requested_feedback = max(int(requested_feedback_max_iterations), 0)
+    requested_pass_count = requested_feedback + 1
+    reserved_overhead_sec = max(
+        int(math.ceil(total_time_limit_sec * 0.05)),
+        1,
+    )
+    solver_budget_available_sec = max(
+        total_time_limit_sec - reserved_overhead_sec,
+        1,
+    )
+    maximum_pass_count = max(solver_budget_available_sec // 2, 1)
+    solve_pass_count = min(requested_pass_count, maximum_pass_count)
+    feedback_max_iterations = max(solve_pass_count - 1, 0)
+    solver_budget_sec = max(
+        solver_budget_available_sec,
+        solve_pass_count * 2,
+    )
+    per_pass_budget_sec = max(
+        solver_budget_sec // solve_pass_count,
+        2,
+    )
+    stage2_time_limit_sec = min(
+        max(
+            int(minimum_stage2_time_sec),
+            int(math.ceil(per_pass_budget_sec * 0.20)),
+            1,
+        ),
+        per_pass_budget_sec - 1,
+    )
+    stage1_time_limit_sec = per_pass_budget_sec - stage2_time_limit_sec
+    reserved_overhead_sec = max(
+        total_time_limit_sec
+        - solve_pass_count
+        * (stage1_time_limit_sec + stage2_time_limit_sec),
+        0,
+    )
+    return _RouteBandRepartitionRetryBudget(
+        total_time_limit_sec=total_time_limit_sec,
+        stage1_time_limit_sec=stage1_time_limit_sec,
+        stage2_time_limit_sec=stage2_time_limit_sec,
+        feedback_max_iterations=feedback_max_iterations,
+        solve_pass_count=solve_pass_count,
+        reserved_overhead_sec=reserved_overhead_sec,
+    )
+
+
 def _integrated_search_controls(
     *,
     verified_feasible_start: bool,
@@ -2373,9 +2447,7 @@ class GurobiMILPAdapter:
                         ),
                         "strict_coverage_precheck": reduced_strict_precheck,
                         "stage1_feasibility_no_good_cuts": (),
-                        "stage2_feedback_max_iterations": (
-                            _ROUTE_BAND_REPARTITION_FEEDBACK_MAX_ITERATIONS
-                        ),
+                        "stage2_feedback_max_iterations": 0,
                         "milp_max_successors_per_trip": None,
                         "phase4_seed_route_band_repartition_candidate": True,
                         "phase4_seed_route_band_repartition_route_band_id": (
@@ -2419,31 +2491,28 @@ class GurobiMILPAdapter:
                     attempt["status"] = "skipped_insufficient_fair_group_budget"
                     attempt["fair_group_budget_sec"] = fair_group_budget_sec
                     continue
-                # Keep the first reduced solve bounded to half of the fair
-                # group budget.  The remaining half is available to the
-                # existing IIS-backed Stage-2 feedback recursion, which can
-                # exclude one proven-infeasible assignment and repartition the
-                # same exact all-BEV route-band scope.  Previously Stage 1 used
-                # up to 60 seconds and feedback was disabled, leaving the
-                # declared 90-second route-band budget partly unused.
-                reduced_stage1_time_limit_sec = max(
-                    min(
-                        int(max(fair_group_budget_sec * 0.5, 1.0)),
-                        60,
+                retry_budget = _route_band_repartition_retry_budget(
+                    fair_group_budget_sec=fair_group_budget_sec,
+                    minimum_stage2_time_sec=per_solve_sec,
+                    requested_feedback_max_iterations=(
+                        _ROUTE_BAND_REPARTITION_FEEDBACK_MAX_ITERATIONS
                     ),
-                    1,
                 )
-                reduced_total_time_limit_sec = max(
-                    int(fair_group_budget_sec),
-                    2,
+                reduced_stage1_time_limit_sec = (
+                    retry_budget.stage1_time_limit_sec
                 )
-                reduced_stage2_time_limit_sec = max(
-                    min(
-                        per_solve_sec,
-                        reduced_total_time_limit_sec
-                        - reduced_stage1_time_limit_sec,
-                    ),
-                    1,
+                reduced_total_time_limit_sec = (
+                    retry_budget.total_time_limit_sec
+                )
+                reduced_stage2_time_limit_sec = (
+                    retry_budget.stage2_time_limit_sec
+                )
+                reduced_metadata["stage2_feedback_max_iterations"] = (
+                    retry_budget.feedback_max_iterations
+                )
+                reduced_problem = replace(
+                    reduced_problem,
+                    metadata=reduced_metadata,
                 )
                 reduced_config = replace(
                     config,
@@ -2484,7 +2553,13 @@ class GurobiMILPAdapter:
                     reduced_stage2_time_limit_sec
                 )
                 attempt["stage2_feedback_max_iterations"] = (
-                    _ROUTE_BAND_REPARTITION_FEEDBACK_MAX_ITERATIONS
+                    retry_budget.feedback_max_iterations
+                )
+                attempt["stage2_feedback_solve_pass_count"] = (
+                    retry_budget.solve_pass_count
+                )
+                attempt["feedback_reserved_overhead_sec"] = (
+                    retry_budget.reserved_overhead_sec
                 )
                 attempt["fair_group_budget_sec"] = fair_group_budget_sec
                 reduced_started = time.perf_counter()
@@ -2508,6 +2583,19 @@ class GurobiMILPAdapter:
                         }
                     )
                     continue
+                repartitioned_metadata = dict(
+                    repartitioned_plan.metadata or {}
+                )
+                feedback_history = list(
+                    repartitioned_metadata.get("stage2_feedback_history")
+                    or ()
+                )
+                no_good_cuts = list(
+                    repartitioned_metadata.get(
+                        "stage1_feasibility_no_good_cuts"
+                    )
+                    or ()
+                )
                 attempt.update(
                     {
                         "reduced_stage1_solver_status": str(
@@ -2517,13 +2605,30 @@ class GurobiMILPAdapter:
                             reduced_outcome.has_feasible_incumbent
                         ),
                         "reduced_stage2_feasible": bool(
-                            (repartitioned_plan.metadata or {}).get(
+                            repartitioned_metadata.get(
                                 "stage2_has_feasible_incumbent",
-                                (repartitioned_plan.metadata or {}).get(
+                                repartitioned_metadata.get(
                                     "stage2_feasible",
                                     False,
                                 ),
                             )
+                        ),
+                        "reduced_stage2_solver_status": (
+                            repartitioned_metadata.get(
+                                "stage2_solver_status"
+                            )
+                        ),
+                        "stage2_feedback_iteration": int(
+                            repartitioned_metadata.get(
+                                "stage2_feedback_iteration",
+                                len(feedback_history),
+                            )
+                            or 0
+                        ),
+                        "stage2_feedback_applied": bool(feedback_history),
+                        "stage2_feedback_history": feedback_history,
+                        "stage1_feasibility_no_good_cut_count": len(
+                            no_good_cuts
                         ),
                         "runtime_sec": time.perf_counter() - reduced_started,
                     }

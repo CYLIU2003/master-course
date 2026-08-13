@@ -22,6 +22,7 @@ from src.optimization.milp.solver_adapter import (
     _maximum_bipartite_vehicle_matching,
     _merge_route_band_repartition_plan,
     _remap_plan_vehicle_ids,
+    _route_band_repartition_retry_budget,
 )
 
 
@@ -205,11 +206,48 @@ def test_route_band_repartition_merge_rejects_changed_trip_coverage() -> None:
     assert merged is None
 
 
+def test_route_band_retry_budget_reserves_a_complete_feedback_pass() -> None:
+    budget = _route_band_repartition_retry_budget(
+        fair_group_budget_sec=90.0,
+        minimum_stage2_time_sec=5,
+        requested_feedback_max_iterations=1,
+    )
+
+    assert budget.total_time_limit_sec == 90
+    assert budget.feedback_max_iterations == 1
+    assert budget.solve_pass_count == 2
+    assert budget.stage1_time_limit_sec > budget.stage2_time_limit_sec >= 5
+    assert (
+        budget.solve_pass_count
+        * (budget.stage1_time_limit_sec + budget.stage2_time_limit_sec)
+        + budget.reserved_overhead_sec
+        <= budget.total_time_limit_sec
+    )
+
+
+def test_route_band_retry_budget_disables_unfunded_feedback() -> None:
+    budget = _route_band_repartition_retry_budget(
+        fair_group_budget_sec=4.0,
+        minimum_stage2_time_sec=1,
+        requested_feedback_max_iterations=1,
+    )
+
+    assert budget.feedback_max_iterations == 0
+    assert budget.solve_pass_count == 1
+    assert budget.stage1_time_limit_sec == 2
+    assert budget.stage2_time_limit_sec == 1
+    assert budget.reserved_overhead_sec == 1
+
+
 @pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
-@pytest.mark.parametrize("reduced_stage2_feasible", [True, False])
+@pytest.mark.parametrize(
+    ("reduced_stage2_feasible", "feedback_applied"),
+    ((True, False), (False, False), (True, True)),
+)
 def test_route_band_repartition_is_full_stage2_validated_before_selection(
     monkeypatch,
     reduced_stage2_feasible,
+    feedback_applied,
 ) -> None:
     class _FakeFeasibilityChecker:
         def evaluate(self, _problem, _plan):
@@ -360,6 +398,20 @@ def test_route_band_repartition_is_full_stage2_validated_before_selection(
                 "stage1_feasible": True,
                 "stage2_feasible": reduced_stage2_feasible,
                 "stage2_has_feasible_incumbent": reduced_stage2_feasible,
+                "stage2_solver_status": (
+                    "optimal" if reduced_stage2_feasible else "time_limit"
+                ),
+                "stage2_feedback_iteration": int(feedback_applied),
+                "stage2_feedback_history": (
+                    [{"iteration": 0, "candidate_hash": "retry-hash"}]
+                    if feedback_applied
+                    else []
+                ),
+                "stage1_feasibility_no_good_cuts": (
+                    [{"candidate_hash": "retry-hash"}]
+                    if feedback_applied
+                    else []
+                ),
             },
         )
         return (
@@ -471,9 +523,23 @@ def test_route_band_repartition_is_full_stage2_validated_before_selection(
     assert audit["route_band_repartition_feedback_max_iterations"] == 1
     attempt = audit["route_band_repartition_attempts"][0]
     assert attempt["stage2_feedback_max_iterations"] == 1
+    assert attempt["stage2_feedback_solve_pass_count"] == 2
+    assert attempt["stage2_feedback_applied"] is feedback_applied
+    assert len(attempt["stage2_feedback_history"]) == int(feedback_applied)
+    assert attempt["stage2_feedback_iteration"] == int(feedback_applied)
+    assert attempt["stage1_feasibility_no_good_cut_count"] == int(
+        feedback_applied
+    )
+    assert attempt["reduced_stage2_solver_status"] == (
+        "optimal" if reduced_stage2_feasible else "time_limit"
+    )
     assert attempt["reduced_total_time_limit_sec"] >= (
-        attempt["reduced_stage1_time_limit_sec"]
-        + attempt["reduced_stage2_time_limit_sec"]
+        attempt["stage2_feedback_solve_pass_count"]
+        * (
+            attempt["reduced_stage1_time_limit_sec"]
+            + attempt["reduced_stage2_time_limit_sec"]
+        )
+        + attempt["feedback_reserved_overhead_sec"]
     )
 
 

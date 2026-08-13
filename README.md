@@ -1,5 +1,52 @@
 # master-course
 
+## 2026-08-13 runtime-attested r6 controlled-PV evidence
+
+- Frozen SHA `ccfbbbb321cfe4a9150f0e135172e52ee9751a6b` completed fresh
+  Prepare, both frontend/BFF Phase-4 jobs, 24/24 Rolling, physical and
+  canonical accounting validation, pair finalization and the progress ZIP.
+  BFF PID 50628 reported the same clean startup/current/frozen SHA before and
+  after both solves, so this run closes the stale-runtime provenance defect.
+- The controlled comparison is accepted. High PV (6,056.25 kWh) uses 31/1
+  BEV/ICE buses for 248/16 trips and costs 650,234.729396 JPY. Low PV
+  (996.20 kWh) uses 21/11 buses for 91/173 trips and costs
+  698,318.002033 JPY. All 264 trips are served in both cases; non-PV controls
+  match and no weather-specific assignment bias is present.
+- Low PV meets the declared 1% threshold at a certified 0.547009% gap. High
+  PV remains time-limited at 1.574005%, so formal research submission is still
+  `BLOCKED` only by `baseline_requested_mip_gap_certified`. This is a valid
+  controlled sensitivity result, not a claim that the sunny incumbent is a
+  global optimum.
+- The low-PV route-band search found and fully validated a distinct 26-BEV /
+  6-ICE candidate, but its canonical cost was 704,330.168664 JPY, about
+  6,012.166631 JPY above the selected 21/11 solution. This proves that the
+  composition neighborhood is not frozen and that, at 30 JPY/kWh under low
+  PV, simply adding BEVs is not economically preferred. The sunny search did
+  not find an exact 32-BEV candidate; it did not certify such a composition
+  infeasible.
+- Evidence directory:
+  `output/formal_pair_20260813_route_band_feedback_runtime_attested_v6_flat30_pv1000_bess6000_phase4_ccfbbbb_gap01_r6`.
+  ZIP SHA-256:
+  `5B4A7014EBD7162D0B06F18AB87BECED878F057439306827692475921239E5F0`.
+
+## 2026-08-13 route-band feedback budget and audit correction (rerun pending)
+
+- r6 exposed that declaring one feedback iteration did not reserve a complete
+  second Stage-1/Stage-2 pass. For example, the sunny attempt allowed 44
+  seconds for Stage 1 and 5 for Stage 2 under an 89-second shared deadline;
+  it stopped after 48.091 seconds without auditable evidence of a retry.
+- Each fair route-band allowance is now divided into equal solver passes for
+  the initial solve and at most one proven-infeasible IIS retry. Five percent
+  (at least one second) is reserved for model construction and IIS work, and
+  Stage 2 receives at least 20% of each pass or the declared per-solve floor.
+  The total route-band deadline is unchanged.
+- Every attempt now exports the Stage-2 solver status, actual feedback
+  iteration, IIS/no-good history, no-good count, pass count and overhead
+  reserve. This affects only upper-bound candidate generation and evidence;
+  it does not change tariffs, objective coefficients, the integrated feasible
+  region or the formal gap rule. A fresh clean-commit pair is required before
+  this new policy can supersede r6.
+
 ## 2026-08-13 BFF runtime-source attestation (r5 diagnostic only)
 
 - The first post-`e321a3a` pair attempt reached a long-lived BFF process that
@@ -18,11 +65,10 @@
   process, or a SHA mismatch fails fast with an instruction to restart the
   BFF. This closes a provenance gap; it does not change the MILP, tariff,
   feasible region, incumbent, gap calculation or accounting equations.
-- A fresh clean-commit r6 is required to exercise the route-band IIS feedback
-  implementation. Until then, the v4 pair remains the latest accepted
-  controlled-PV evidence and the sunny 1% gap remains the formal blocker.
+- The fresh r6 above verifies the runtime attestation. Its route-band audit
+  then exposed the retry-budget issue addressed by the subsequent change.
 
-## 2026-08-13 route-band Stage-2 feedback correction (fresh evidence pending)
+## 2026-08-13 route-band Stage-2 feedback correction (historical pre-r6 checkpoint)
 
 - The v4 formal audit proved that the 90-second reduced route-band allowance
   stopped after one Stage-1/Stage-2 attempt. `stage2_feedback_max_iterations`
@@ -43,11 +89,11 @@
   and the actual cost-cap row installed after the minimum vehicle-day level is
   certified. Earlier v4 artifacts incorrectly displayed this bound as
   ineligible/zero rows even though the cost-stage constraint was present.
-- Focused regression passes; a clean-commit 264-trip controlled pair is still
-  required. The latest accepted evidence remains the v4 pair below, and formal
-  release remains blocked by the high-PV 1% gap.
+- At this checkpoint, focused regression passed and a clean-commit 264-trip
+  pair was still required. The runtime-attested r6 above now supersedes that
+  evidence checkpoint; the high-PV 1% gap remains unresolved.
 
-## 2026-08-13 current sequential formal-pair evidence
+## 2026-08-13 historical sequential formal-pair evidence through v4
 
 - Latest frozen pair `583dced3306f3e27b1de248605b70c51fc72e570`
   completed fresh Prepare, both Phase-4 jobs, 24/24 Rolling, independent
