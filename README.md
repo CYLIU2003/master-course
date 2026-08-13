@@ -32,6 +32,13 @@
   persists ICE fuel liters for canonical reports. These fixes do not relabel
   the frozen `7cb1192` artifacts; another clean-commit run is required to
   exercise the new schema.
+- The high-PV solve spent 3,600 seconds at one root node with a 640,000 JPY
+  analytical lower bound and a 650,234.729396 JPY incumbent. Because reaching
+  the declared 1% certificate now requires improving the incumbent below the
+  analytical BestObjStop threshold rather than improving that weak LP bound,
+  verified-start Phase 4 runs use a weather-neutral incumbent-focused profile
+  (`MIPFocus=1`, `Heuristics=0.25`, `Presolve=2`). This changes search only,
+  not the objective, feasible region or accounting, and needs a fresh pair.
 - Evidence directory:
   `output/formal_pair_20260813_sequential_lexgap_flat30_pv1000_bess6000_phase4_7cb1192_gap01`.
   Its `progress_report/` contains seven PNG/SVG figures, six CSV tables and a

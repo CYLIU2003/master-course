@@ -43,6 +43,17 @@ both preserved cases pass the corrected bounded oracle. Because these are
 post-run code changes, they require a new clean commit and fresh pair and do
 not rewrite the frozen artifacts.
 
+The sunny cost solve explored only its root node for the full 3,600-second
+budget. Its independent analytical lower bound was already 640,000 JPY; the
+1% acceptance threshold was therefore an incumbent of at most approximately
+646,464.65 JPY, while the verified seed remained 650,234.73 JPY. The previous
+verified-start controls (`MIPFocus=3`, `Heuristics=0.01`) concentrated on the
+weak root bound and did not target the quantity that could close this
+certificate. Current code uses the same weather-neutral
+incumbent-focused controls (`MIPFocus=1`, `Heuristics=0.25`, `Presolve=2`) for
+both cases. This does not guarantee success and cannot alter the frozen pair;
+fresh controlled evidence is still required.
+
 ## 2026-08-13 sequential cost-gap path implemented; fresh formal evidence pending
 
 The remaining full-pair optimality blocker was traced to evidence semantics,

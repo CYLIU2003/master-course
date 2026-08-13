@@ -80,10 +80,12 @@ def _integrated_search_controls(
     """Return the weather-neutral Phase 4 search controls.
 
     A complete, independently checked Phase 3 recourse start removes the need
-    to spend the integrated budget rediscovering feasibility.  Formal runs
-    need a certified lower bound, so the verified-start profile focuses on the
-    bound and keeps only a small weather-neutral heuristic allowance.  Runs
-    without a verified start retain the feasibility-oriented profile.  Both
+    to spend the integrated budget rediscovering feasibility.  Sequential
+    certification also supplies an independent integer-valid cost lower bound
+    and a corresponding BestObjStop threshold.  The verified-start profile
+    therefore searches for an incumbent that closes that certified gap instead
+    of spending the whole budget on a weak root relaxation.  Runs without a
+    verified start retain the stronger feasibility-oriented profile.  Both
     profiles use one simplex root method because automatic concurrent methods
     can retain multiple copies of this very large model.  The soft memory
     limit is a termination guard, not a relaxation of any model constraint.
@@ -91,10 +93,10 @@ def _integrated_search_controls(
 
     if verified_feasible_start:
         return {
-            "profile": "certify_bound_from_verified_feasible_start",
-            "mip_focus": 3,
-            "heuristics": 0.01,
-            "presolve": 1,
+            "profile": "close_certified_gap_from_verified_feasible_start",
+            "mip_focus": 1,
+            "heuristics": 0.25,
+            "presolve": 2,
             "nodefile_start_gb": 0.5,
             "root_method": 1,
             "node_method": 1,

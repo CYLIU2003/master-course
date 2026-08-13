@@ -49,6 +49,17 @@
   `1357 passed in 69.10s`; compileall and `git diff --check` also pass. None
   of these post-run changes relabels `7cb1192` evidence; a new clean frozen
   SHA is mandatory before another formal pair.
+- Gap diagnosis after the frozen pair showed the sunny canonical-cost solve
+  consumed 3,600 seconds at one root node. The 640,000 JPY analytical bound
+  already makes a <=646,464.65 JPY incumbent sufficient for the 1% stop, but
+  the verified seed was 650,234.73 JPY. The old verified-start profile focused
+  on bound improvement (`MIPFocus=3`, `Heuristics=0.01`, `Presolve=1`). It now
+  uses weather-neutral incumbent-gap closure (`MIPFocus=1`,
+  `Heuristics=0.25`, `Presolve=2`) while preserving all equations, objective
+  priorities, seed validation and the analytical certificate. Focused
+  integrated-search tests pass 61/61; the complete repository regression
+  passes `1357 passed in 67.09s` and compileall succeeds. A fresh pair is
+  required after this search-control change.
 
 ## 2026-08-12: thesis-model validity contract implementation
 

@@ -49,14 +49,14 @@ from src.optimization.milp.solver_adapter import (
 from test_post_return_soc_target import _dispatch_context
 
 
-def test_verified_integrated_start_uses_bound_certification_profile() -> None:
+def test_verified_integrated_start_uses_certified_gap_closure_profile() -> None:
     assert _integrated_search_controls(
         verified_feasible_start=True
     ) == {
-        "profile": "certify_bound_from_verified_feasible_start",
-        "mip_focus": 3,
-        "heuristics": 0.01,
-        "presolve": 1,
+        "profile": "close_certified_gap_from_verified_feasible_start",
+        "mip_focus": 1,
+        "heuristics": 0.25,
+        "presolve": 2,
         "nodefile_start_gb": 0.5,
         "root_method": 1,
         "node_method": 1,
@@ -1052,9 +1052,9 @@ def test_phase4_uses_verified_same_problem_phase3_plan_as_complete_mip_start() -
     assert len(audit["integrated_solution_start_fingerprint"]) == 64
     assert audit["dispatch_fixed_recourse_runtime_sec"] >= 0.0
     assert result.solver_metadata["first_feasible_sec"] == 0.0
-    assert result.solver_metadata["integrated_mip_focus"] == 3
+    assert result.solver_metadata["integrated_mip_focus"] == 1
     assert result.solver_metadata["integrated_heuristics"] == pytest.approx(
-        0.01
+        0.25
     )
     assert result.solver_metadata["integrated_symmetry"] == -1
     assert result.solver_metadata["integrated_root_method"] == 1
@@ -1075,7 +1075,7 @@ def test_phase4_uses_verified_same_problem_phase3_plan_as_complete_mip_start() -
     ] == 1
     assert result.solver_metadata["integrated_search_profile"]["phases"][0][
         "phase"
-    ] == "certify_bound_from_verified_feasible_start"
+    ] == "close_certified_gap_from_verified_feasible_start"
     assert result.solver_metadata["integrated_search_profile"][
         "schema_version"
     ] == "phase4_integrated_search_profile_v2"
