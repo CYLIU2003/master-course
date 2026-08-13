@@ -2,34 +2,34 @@
 
 ## 2026-08-13 current sequential formal-pair evidence
 
-- Latest frozen pair `b06c451b9f89e7930f25b7d7e28cf50af54df21c`
+- Latest frozen pair `583dced3306f3e27b1de248605b70c51fc72e570`
   completed fresh Prepare, both Phase-4 jobs, 24/24 Rolling, independent
   physical/accounting validation, pair finalization, the progress bundle and
-  ZIP export. It exactly reproduced the accepted controlled-PV response below:
-  high PV 31/1 BEV/ICE and 248/16 trips at 650,234.729396 JPY, versus low PV
-  21/11 and 91/173 at 698,318.002033 JPY. The pair-level control audit passes;
-  formal submission remains blocked only because high PV has a 1.574005%
-  certified cost gap against the declared 1% target (low PV: 0.547009%).
-- The new duty-suffix neighborhood generated 1,335 sunny crossover attempts;
-  six satisfied both dispatch cross-arcs and 24 all-BEV candidates received
-  exact fixed-assignment Stage-2 evaluation. None was energy/SOC feasible, so
-  it did not change the selected result. The next implementation must
-  re-partition the complete affected route-band trip set instead of relying on
-  one reciprocal suffix exchange. Evidence and report bundle:
-  `output/formal_pair_20260813_suffix_exchange_flat30_pv1000_bess6000_phase4_b06c451_gap01`.
-- Current code implements that next step as a weather-neutral, route-band
-  restricted dispatch candidate generator. For each same-depot route band
-  still using ICE, a reduced exact Stage 1 reassigns the complete affected
-  trip set to the already-used same-band BEVs plus unused BEV candidates. It
-  enforces the original affected vehicle count exactly, merges the result only
-  when trip coverage is identical, clears stale recourse, and requires a full
-  264-trip fixed-assignment Stage 2, independent physical validation and
-  canonical accounting before selection. The reduced result is never accepted
-  as energy feasibility or global optimality evidence by itself.
-- This implementation postdates `b06c451`; no current-HEAD formal pair has yet
-  exercised it. The preserved pair remains the authoritative result and stays
-  `BLOCKED` on the sunny 1% gap. Fresh Prepare and a clean frozen-commit pair
-  are required before the new candidate generator may change any KPI claim.
+  ZIP export. The controlled-PV comparison is accepted: high PV uses 31/1
+  BEV/ICE buses for 248/16 trips at 650,298.979262 JPY, while low PV uses 21/11
+  for 91/173 trips at 698,318.002033 JPY. Non-PV controls match, PV differs by
+  5,060.05 kWh, and 157 trip assignments change.
+- Formal submission remains `BLOCKED` only because high PV stopped at a
+  1.583730% certified canonical-cost gap against the declared 1% target. Low
+  PV is physically valid and certified within the target at 0.547009%. Neither
+  time-limited result is relabelled as a global optimum.
+- The first route-band repartition implementation generated one high-PV and
+  two low-PV all-BEV reduced Stage-1 candidates. All failed the original full
+  fixed-assignment Stage 2. More importantly, these reduced solves ran before
+  the proven fixed-duty neighborhood and consumed 60--102 of its 120 seconds;
+  the high-PV incumbent regressed by 64.249866 JPY and its gap worsened by
+  0.009725 percentage point. This is negative evidence, not an improvement.
+- Current code postdates `583dced` and fixes that regression. Fixed-duty
+  replacement, matching, suffix, swap and identity search retains its full
+  120-second budget and runs first. Route-band repartition then receives a
+  separate audited 90-second budget, anchors on the cheapest independently
+  validated incumbent, and must pass a reduced Stage 1 plus Stage 2 before it
+  can reach the unchanged full-problem Stage 2, physical and accounting gates.
+  The audit schema is v4 and the total declared Phase-4 solver budget is 4,710
+  seconds. A fresh clean-commit pair is required before this change affects
+  any reported KPI.
+- Latest evidence and report bundle:
+  `output/formal_pair_20260813_route_band_repartition_flat30_pv1000_bess6000_phase4_583dced_gap01_r3`.
 - Clean frozen SHA `7cb1192cf6278e8854add16b58f04639a6656336` completed the
   ordinary frontend/BFF path for the controlled high/low-PV pair: fresh
   Prepare, Phase 4, 24/24 Rolling, physical validation, canonical executed-day

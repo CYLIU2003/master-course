@@ -444,6 +444,10 @@ class OptimizationConfig:
     phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec: int = 120
     phase4_phase3_seed_unused_bev_neighborhood_per_solve_sec: int = 5
     phase4_phase3_seed_unused_bev_neighborhood_max_evaluations: int = 512
+    # Route-band duty repartition is more expensive than fixed-duty identity
+    # replacement.  Give it a separate, explicit budget so it cannot consume
+    # the proven fixed-duty neighborhood's time allowance.
+    phase4_phase3_seed_route_band_repartition_time_limit_sec: int = 90
     phase4_phase3_seed_powertrain_duty_swap_rounds: int = 2
     phase4_phase3_seed_unused_bev_identity_exchange_rounds: int = 2
     # A Phase 3 plan is physically valid under the decomposed Stage 2 model,

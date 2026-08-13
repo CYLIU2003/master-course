@@ -206,8 +206,10 @@ def test_route_band_repartition_merge_rejects_changed_trip_coverage() -> None:
 
 
 @pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
+@pytest.mark.parametrize("reduced_stage2_feasible", [True, False])
 def test_route_band_repartition_is_full_stage2_validated_before_selection(
     monkeypatch,
+    reduced_stage2_feasible,
 ) -> None:
     class _FakeFeasibilityChecker:
         def evaluate(self, _problem, _plan):
@@ -304,7 +306,7 @@ def test_route_band_repartition_is_full_stage2_validated_before_selection(
     adapter = GurobiMILPAdapter()
     reduced_stage1_calls = []
     full_stage2_calls = []
-    original_reduced_stage1 = adapter._solve_thesis_two_stage
+    full_stage2_sources = []
 
     def _fake_reduced_stage1(
         reduced_problem,
@@ -313,8 +315,12 @@ def test_route_band_repartition_is_full_stage2_validated_before_selection(
         stage2_enabled,
         diagnostic_mode=False,
     ):
-        assert stage2_enabled is False
+        assert stage2_enabled is True
         assert diagnostic_mode is False
+        assert full_stage2_sources
+        assert _config.time_limit_sec == (
+            _config.stage1_time_limit_sec + _config.stage2_time_limit_sec
+        )
         assert {vehicle.vehicle_type for vehicle in reduced_problem.vehicles} == {
             "BEV"
         }
@@ -324,17 +330,65 @@ def test_route_band_repartition_is_full_stage2_validated_before_selection(
         ] == 2
         assert len(reduced_problem.trips) == 4
         reduced_stage1_calls.append(reduced_problem)
-        return original_reduced_stage1(
-            reduced_problem,
-            _config,
-            stage2_enabled=stage2_enabled,
-            diagnostic_mode=diagnostic_mode,
+        trip_by_id = reduced_problem.trip_by_id()
+        repartitioned = AssignmentPlan(
+            duties=(
+                VehicleDuty(
+                    duty_id="repartition-a",
+                    vehicle_type="BEV",
+                    legs=(
+                        DutyLeg(trip_by_id["a-1"]),
+                        DutyLeg(trip_by_id["b-2"]),
+                    ),
+                ),
+                VehicleDuty(
+                    duty_id="repartition-b",
+                    vehicle_type="BEV",
+                    legs=(
+                        DutyLeg(trip_by_id["b-1"]),
+                        DutyLeg(trip_by_id["a-2"]),
+                    ),
+                ),
+            ),
+            served_trip_ids=tuple(sorted(trip_by_id)),
+            metadata={
+                "duty_vehicle_map": {
+                    "repartition-a": "bev-used",
+                    "repartition-b": "bev-unused",
+                },
+                "stage1_feasible": True,
+                "stage2_feasible": reduced_stage2_feasible,
+                "stage2_has_feasible_incumbent": reduced_stage2_feasible,
+            },
+        )
+        return (
+            MILPSolverOutcome(
+                solver_status="optimal",
+                used_backend="test-reduced-stage1-stage2",
+                supports_exact_milp=True,
+                has_feasible_incumbent=True,
+                incumbent_count=1,
+            ),
+            repartitioned,
         )
 
     def _fake_full_stage2(full_problem, _config, plan, **_kwargs):
         assert full_problem.trips == problem.trips
         assert full_problem.vehicles == problem.vehicles
         assert full_problem.dispatch_context is problem.dispatch_context
+        full_stage2_sources.append((plan.metadata or {}).get("source"))
+        if (plan.metadata or {}).get("source") != (
+            "phase4_seed_route_band_repartition_activation"
+        ):
+            return (
+                MILPSolverOutcome(
+                    solver_status="infeasible",
+                    used_backend="test-full-stage2",
+                    supports_exact_milp=True,
+                    has_feasible_incumbent=False,
+                ),
+                plan,
+            )
         assert set(plan.duties_by_vehicle()) == {"bev-used", "bev-unused"}
         assert sorted(plan.served_trip_ids) == sorted(
             trip.trip_id for trip in trips
@@ -374,8 +428,9 @@ def test_route_band_repartition_is_full_stage2_validated_before_selection(
             OptimizationConfig(
                 phase4_phase3_seed_unused_bev_neighborhood_enabled=True,
                 phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec=30,
+                phase4_phase3_seed_route_band_repartition_time_limit_sec=30,
                 phase4_phase3_seed_unused_bev_neighborhood_per_solve_sec=1,
-                phase4_phase3_seed_unused_bev_neighborhood_max_evaluations=1,
+                phase4_phase3_seed_unused_bev_neighborhood_max_evaluations=10,
                 phase4_phase3_seed_powertrain_duty_swap_rounds=1,
                 phase4_phase3_seed_unused_bev_identity_exchange_rounds=0,
             ),
@@ -384,14 +439,33 @@ def test_route_band_repartition_is_full_stage2_validated_before_selection(
     )
 
     assert len(reduced_stage1_calls) == 1
-    assert len(full_stage2_calls) == 1
-    assert set(selected.duties_by_vehicle()) == {"bev-used", "bev-unused"}
-    assert audit["selected"] is True
-    assert audit["selected_candidate_kind"] == (
-        "route_band_repartition_activation"
+    assert full_stage2_sources[0] == (
+        "phase4_seed_unused_bev_single_activation"
     )
-    assert audit["route_band_repartition_candidate_count"] == 1
-    assert audit["route_band_repartition_full_feasible_count"] == 1
+    if reduced_stage2_feasible:
+        assert len(full_stage2_calls) == 1
+        assert full_stage2_sources[-1] == (
+            "phase4_seed_route_band_repartition_activation"
+        )
+        assert set(selected.duties_by_vehicle()) == {
+            "bev-used",
+            "bev-unused",
+        }
+        assert audit["selected"] is True
+        assert audit["selected_candidate_kind"] == (
+            "route_band_repartition_activation"
+        )
+        assert audit["route_band_repartition_candidate_count"] == 1
+        assert audit["route_band_repartition_full_feasible_count"] == 1
+    else:
+        assert full_stage2_calls == []
+        assert set(selected.duties_by_vehicle()) == {"ice-1", "bev-used"}
+        assert audit["selected"] is False
+        assert audit["route_band_repartition_candidate_count"] == 0
+        assert audit["route_band_repartition_full_feasible_count"] == 0
+        assert audit["route_band_repartition_attempts"][0]["status"] == (
+            "reduced_stage1_stage2_no_exact_all_bev_incumbent"
+        )
     assert audit["weather_strategy_bias_applied"] is False
 
 

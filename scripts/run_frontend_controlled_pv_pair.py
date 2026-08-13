@@ -2273,6 +2273,10 @@ def _phase4_seed_controls_match(settings: Mapping[str, Any]) -> bool:
         )
         == 512
         and settings.get(
+            "phase4_phase3_seed_route_band_repartition_time_limit_sec"
+        )
+        == 90
+        and settings.get(
             "phase4_phase3_seed_powertrain_duty_swap_rounds"
         )
         == 2
@@ -2302,7 +2306,7 @@ def _phase4_seed_controls_match(settings: Mapping[str, Any]) -> bool:
             "phase4_integrated_seed_recourse_preflight_feasible"
         )
         is True
-        and settings.get("phase4_total_solver_time_budget_sec") == 4620
+        and settings.get("phase4_total_solver_time_budget_sec") == 4710
     )
 
 
@@ -3535,6 +3539,7 @@ def _build_pair_control_audit(
             "phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec",
             "phase4_phase3_seed_unused_bev_neighborhood_per_solve_sec",
             "phase4_phase3_seed_unused_bev_neighborhood_max_evaluations",
+            "phase4_phase3_seed_route_band_repartition_time_limit_sec",
             "phase4_phase3_seed_powertrain_duty_swap_rounds",
             "phase4_phase3_seed_unused_bev_identity_exchange_rounds",
             "phase4_integrated_seed_recourse_preflight_enabled",

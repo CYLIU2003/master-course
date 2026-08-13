@@ -10547,6 +10547,13 @@ def _solver_settings_payload(
                 )
             )
         ),
+        "phase4_phase3_seed_route_band_repartition_time_limit_sec": (
+            _int_or_none(
+                phase4_seed_audit.get(
+                    "route_band_repartition_time_limit_sec"
+                )
+            )
+        ),
         "phase4_phase3_seed_unused_bev_identity_exchange_rounds": (
             _int_or_none(
                 phase4_seed_audit.get(
@@ -11104,6 +11111,7 @@ def _run_optimization(
                 phase4_phase3_seed_unused_bev_neighborhood_max_evaluations=(
                     512
                 ),
+                phase4_phase3_seed_route_band_repartition_time_limit_sec=90,
                 phase4_phase3_seed_powertrain_duty_swap_rounds=2,
                 phase4_phase3_seed_unused_bev_identity_exchange_rounds=2,
                 phase4_integrated_seed_recourse_preflight_enabled=(

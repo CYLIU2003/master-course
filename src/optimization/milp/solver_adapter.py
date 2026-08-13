@@ -1729,9 +1729,10 @@ class GurobiMILPAdapter:
         """Improve a Phase 4 seed using exact fixed-assignment recourse.
 
         The neighborhood never changes the integrated Phase 4 objective.  It
-        first asks a reduced exact Stage 1 to repartition the affected
-        same-depot route band, then measures whole-duty replacement, bounded
-        suffix exchange, powertrain swap, and BEV identity alternatives.
+        first measures whole-duty replacement, bounded suffix exchange,
+        powertrain swap, and BEV identity alternatives.  It then asks a
+        reduced exact Stage 1/Stage 2 model to repartition the affected
+        same-depot route band from the best validated incumbent.
         Every changed dispatch is rebuilt by the full fixed-assignment Stage 2
         and independently validated.  Only a strict canonical-cost improvement
         is selected as the MIP start; the highest feasible BEV count is reported
@@ -1755,6 +1756,17 @@ class GurobiMILPAdapter:
                 or 120
             ),
             1,
+        )
+        route_band_wall_limit_sec = max(
+            int(
+                getattr(
+                    config,
+                    "phase4_phase3_seed_route_band_repartition_time_limit_sec",
+                    90,
+                )
+                or 0
+            ),
+            0,
         )
         per_solve_sec = max(
             int(
@@ -1805,7 +1817,7 @@ class GurobiMILPAdapter:
         )
         audit: Dict[str, Any] = {
             "schema_version": (
-                "phase4_seed_unused_bev_activation_neighborhood_v3"
+                "phase4_seed_unused_bev_activation_neighborhood_v4"
             ),
             "enabled": enabled,
             "role": "feasible_upper_bound_candidate_generation_only",
@@ -1818,13 +1830,22 @@ class GurobiMILPAdapter:
             "route_band_repartition_enabled": bool(
                 powertrain_duty_swap_round_limit > 0
                 and fixed_route_band_mode
+                and route_band_wall_limit_sec > 0
             ),
             "route_band_repartition_semantics": (
-                "reduced_exact_stage1_dispatch_candidate_generation_only;"
+                "best_validated_fixed_duty_incumbent_anchor;"
+                "separate_explicit_wall_budget;"
+                "reduced_exact_stage1_stage2_candidate_generation_only;"
                 "full_problem_fixed_assignment_stage2_physical_and_"
                 "canonical_accounting_validation_required"
             ),
-            "wall_time_limit_sec": wall_limit_sec,
+            "fixed_duty_neighborhood_wall_time_limit_sec": wall_limit_sec,
+            "route_band_repartition_wall_time_limit_sec": (
+                route_band_wall_limit_sec
+            ),
+            "total_wall_time_limit_sec": (
+                wall_limit_sec + route_band_wall_limit_sec
+            ),
             "per_stage2_solve_time_limit_sec": per_solve_sec,
             "maximum_candidate_evaluations": max_evaluations,
             "powertrain_duty_swap_round_limit": (
@@ -1839,7 +1860,8 @@ class GurobiMILPAdapter:
             return seed_plan, audit
 
         started = time.monotonic()
-        deadline = started + float(wall_limit_sec)
+        fixed_duty_deadline = started + float(wall_limit_sec)
+        deadline = fixed_duty_deadline
         evaluator = CostEvaluator()
         physical_checker = FeasibilityChecker()
         vehicle_by_id = {
@@ -2149,23 +2171,39 @@ class GurobiMILPAdapter:
                 )
             )
 
-        def _route_band_repartition_candidates() -> None:
+        def _route_band_repartition_candidates(
+            anchor_plan: AssignmentPlan,
+        ) -> None:
             nonlocal route_band_repartition_candidate_count
             nonlocal route_band_repartition_full_feasible_count
+            anchor_used_vehicle_ids = set(anchor_plan.duties_by_vehicle())
+            anchor_active_ice_ids = sorted(
+                vehicle_id
+                for vehicle_id in anchor_used_vehicle_ids
+                if not _is_electric(vehicle_id)
+            )
+            anchor_unused_bev_ids = sorted(
+                vehicle_id
+                for vehicle_id, vehicle in vehicle_by_id.items()
+                if bool(getattr(vehicle, "available", True))
+                and _is_electric(vehicle_id)
+                and vehicle_id not in anchor_used_vehicle_ids
+            )
             if (
                 powertrain_duty_swap_round_limit <= 0
                 or not fixed_route_band_mode
-                or not active_ice_ids
-                or not unused_bev_ids
+                or route_band_wall_limit_sec <= 0
+                or not anchor_active_ice_ids
+                or not anchor_unused_bev_ids
             ):
                 return
 
-            seed_duties_by_vehicle = seed_plan.duties_by_vehicle()
+            anchor_duties_by_vehicle = anchor_plan.duties_by_vehicle()
             group_ice_ids: Dict[Tuple[str, str], List[str]] = {}
-            for ice_vehicle_id in active_ice_ids:
+            for ice_vehicle_id in anchor_active_ice_ids:
                 ice_vehicle = vehicle_by_id.get(ice_vehicle_id)
                 route_band_ids = _vehicle_route_band_ids(
-                    seed_plan,
+                    anchor_plan,
                     ice_vehicle_id,
                 )
                 if ice_vehicle is None or len(route_band_ids) != 1:
@@ -2186,9 +2224,11 @@ class GurobiMILPAdapter:
                 ).append(ice_vehicle_id)
 
             problem_trip_by_id = problem.trip_by_id()
-            for (depot_id, route_band_id), ice_vehicle_ids in sorted(
-                group_ice_ids.items()
-            ):
+            route_band_groups = sorted(group_ice_ids.items())
+            for group_index, (
+                (depot_id, route_band_id),
+                ice_vehicle_ids,
+            ) in enumerate(route_band_groups):
                 attempt: Dict[str, Any] = {
                     "depot_id": depot_id,
                     "route_band_id": route_band_id,
@@ -2204,13 +2244,13 @@ class GurobiMILPAdapter:
 
                 same_band_bev_ids = sorted(
                     vehicle_id
-                    for vehicle_id in used_vehicle_ids
+                    for vehicle_id in anchor_used_vehicle_ids
                     if _is_electric(vehicle_id)
                     and str(
                         getattr(vehicle_by_id.get(vehicle_id), "home_depot_id", "")
                     )
                     == depot_id
-                    and _vehicle_route_band_ids(seed_plan, vehicle_id)
+                    and _vehicle_route_band_ids(anchor_plan, vehicle_id)
                     == (route_band_id,)
                 )
                 affected_vehicle_ids = tuple(
@@ -2219,7 +2259,7 @@ class GurobiMILPAdapter:
                 target_used_vehicle_count = len(affected_vehicle_ids)
                 depot_unused_bev_ids = sorted(
                     vehicle_id
-                    for vehicle_id in unused_bev_ids
+                    for vehicle_id in anchor_unused_bev_ids
                     if str(
                         getattr(vehicle_by_id.get(vehicle_id), "home_depot_id", "")
                     )
@@ -2243,7 +2283,7 @@ class GurobiMILPAdapter:
                 affected_duties = tuple(
                     duty
                     for vehicle_id in affected_vehicle_ids
-                    for duty in seed_duties_by_vehicle.get(vehicle_id, ())
+                    for duty in anchor_duties_by_vehicle.get(vehicle_id, ())
                 )
                 affected_trip_ids = tuple(
                     str(leg.trip.trip_id)
@@ -2272,7 +2312,7 @@ class GurobiMILPAdapter:
                     served_trip_ids=tuple(sorted(affected_trip_id_set)),
                     unserved_trip_ids=(),
                     metadata={
-                        **dict(seed_plan.metadata or {}),
+                        **dict(anchor_plan.metadata or {}),
                         "source": (
                             "phase4_seed_route_band_repartition_baseline"
                         ),
@@ -2359,10 +2399,23 @@ class GurobiMILPAdapter:
                     metadata=reduced_metadata,
                 )
                 remaining_wall_sec = max(deadline - time.monotonic(), 0.0)
+                remaining_group_count = max(
+                    len(route_band_groups) - group_index,
+                    1,
+                )
+                fair_group_budget_sec = (
+                    remaining_wall_sec / remaining_group_count
+                )
                 reduced_stage1_time_limit_sec = max(
                     min(
-                        int(max(remaining_wall_sec - per_solve_sec - 1.0, 1.0)),
-                        max(int(wall_limit_sec / 2), 10),
+                        int(
+                            max(
+                                fair_group_budget_sec
+                                - per_solve_sec
+                                - 1.0,
+                                1.0,
+                            )
+                        ),
                         60,
                     ),
                     1,
@@ -2382,9 +2435,15 @@ class GurobiMILPAdapter:
                     integrated_actual_cost_upper_bound_delta_ratio=None,
                     phase4_phase3_seed_enabled=False,
                     phase4_phase3_seed_unused_bev_neighborhood_enabled=False,
-                    time_limit_sec=reduced_stage1_time_limit_sec,
+                    # The two-stage solver enforces one shared wall-clock
+                    # deadline.  Reserve both explicit stage allowances;
+                    # otherwise a full Stage-1 run leaves zero time for the
+                    # newly required local Stage 2.
+                    time_limit_sec=(
+                        reduced_stage1_time_limit_sec + per_solve_sec
+                    ),
                     stage1_time_limit_sec=reduced_stage1_time_limit_sec,
-                    stage2_time_limit_sec=1,
+                    stage2_time_limit_sec=per_solve_sec,
                     stage1_stage2_candidate_limit=1,
                     stage1_composition_search_radius=0,
                     stage1_bev_frontier_enabled=False,
@@ -2396,13 +2455,14 @@ class GurobiMILPAdapter:
                 attempt["reduced_stage1_time_limit_sec"] = (
                     reduced_stage1_time_limit_sec
                 )
+                attempt["fair_group_budget_sec"] = fair_group_budget_sec
                 reduced_started = time.perf_counter()
                 try:
                     reduced_outcome, repartitioned_plan = (
                         self._solve_thesis_two_stage(
                             reduced_problem,
                             reduced_config,
-                            stage2_enabled=False,
+                            stage2_enabled=True,
                         )
                     )
                 except Exception as exc:  # candidate generator boundary
@@ -2425,14 +2485,33 @@ class GurobiMILPAdapter:
                         "reduced_stage1_has_feasible_incumbent": bool(
                             reduced_outcome.has_feasible_incumbent
                         ),
+                        "reduced_stage2_feasible": bool(
+                            (repartitioned_plan.metadata or {}).get(
+                                "stage2_has_feasible_incumbent",
+                                (repartitioned_plan.metadata or {}).get(
+                                    "stage2_feasible",
+                                    False,
+                                ),
+                            )
+                        ),
                         "runtime_sec": time.perf_counter() - reduced_started,
                     }
                 )
                 repartitioned_used_ids = set(
                     repartitioned_plan.duties_by_vehicle()
                 )
+                reduced_stage2_feasible = bool(
+                    (repartitioned_plan.metadata or {}).get(
+                        "stage2_has_feasible_incumbent",
+                        (repartitioned_plan.metadata or {}).get(
+                            "stage2_feasible",
+                            False,
+                        ),
+                    )
+                )
                 if (
                     not reduced_outcome.has_feasible_incumbent
+                    or not reduced_stage2_feasible
                     or len(repartitioned_used_ids)
                     != target_used_vehicle_count
                     or any(
@@ -2441,7 +2520,7 @@ class GurobiMILPAdapter:
                     )
                 ):
                     attempt["status"] = (
-                        "reduced_stage1_no_exact_all_bev_incumbent"
+                        "reduced_stage1_stage2_no_exact_all_bev_incumbent"
                     )
                     attempt["repartitioned_used_vehicle_ids"] = sorted(
                         repartitioned_used_ids
@@ -2449,7 +2528,7 @@ class GurobiMILPAdapter:
                     continue
 
                 merged_plan = _merge_route_band_repartition_plan(
-                    seed_plan,
+                    anchor_plan,
                     repartitioned_plan=repartitioned_plan,
                     affected_vehicle_ids=affected_vehicle_ids,
                     vehicle_type_by_id=vehicle_type_by_id,
@@ -2493,6 +2572,7 @@ class GurobiMILPAdapter:
                     "reduced_stage1_solver_status": str(
                         reduced_outcome.solver_status
                     ),
+                    "reduced_stage2_feasible": reduced_stage2_feasible,
                     "reduced_stage1_time_limit_sec": (
                         reduced_stage1_time_limit_sec
                     ),
@@ -2523,7 +2603,6 @@ class GurobiMILPAdapter:
                 if result is not None:
                     route_band_repartition_full_feasible_count += 1
 
-        _route_band_repartition_candidates()
         adjacency_by_ice: Dict[str, List[str]] = {
             vehicle_id: [] for vehicle_id in active_ice_ids
         }
@@ -3061,6 +3140,37 @@ class GurobiMILPAdapter:
                 ),
             )
 
+        fixed_duty_runtime_sec = time.monotonic() - started
+        if len(evaluation_rows) >= max_evaluations:
+            fixed_duty_termination_reason = (
+                "maximum_candidate_evaluations_reached"
+            )
+        elif time.monotonic() >= fixed_duty_deadline:
+            fixed_duty_termination_reason = "wall_time_limit_reached"
+        else:
+            fixed_duty_termination_reason = "neighborhood_exhausted"
+
+        route_band_started: Optional[float] = None
+        if (
+            route_band_wall_limit_sec > 0
+            and fixed_route_band_mode
+            and powertrain_duty_swap_round_limit > 0
+            and len(evaluation_rows) < max_evaluations
+        ):
+            # Preserve the proven fixed-duty search budget.  Route-band
+            # repartition starts only afterwards and anchors on the cheapest
+            # independently validated incumbent found so far.
+            best_cost_result = min(
+                [best_cost_result, *feasible_candidates],
+                key=lambda item: (
+                    item[0],
+                    _assignment_hash(item[3]),
+                ),
+            )
+            route_band_started = time.monotonic()
+            deadline = route_band_started + float(route_band_wall_limit_sec)
+            _route_band_repartition_candidates(best_cost_result[3])
+
         best_cost_result = min(
             [best_cost_result, *feasible_candidates],
             key=lambda item: (
@@ -3186,6 +3296,17 @@ class GurobiMILPAdapter:
                 ),
                 "completed_powertrain_duty_swap_rounds": (
                     completed_powertrain_duty_swap_rounds
+                ),
+                "fixed_duty_neighborhood_termination_reason": (
+                    fixed_duty_termination_reason
+                ),
+                "fixed_duty_neighborhood_wall_runtime_sec": (
+                    fixed_duty_runtime_sec
+                ),
+                "route_band_repartition_wall_runtime_sec": (
+                    (time.monotonic() - route_band_started)
+                    if route_band_started is not None
+                    else 0.0
                 ),
                 "termination_reason": termination_reason,
                 "wall_runtime_sec": time.monotonic() - started,

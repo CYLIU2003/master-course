@@ -965,7 +965,7 @@ class OptimizationEngine:
         seed_plan = seed_result.plan
         seed_neighborhood_audit: Mapping[str, object] = {
             "schema_version": (
-                "phase4_seed_unused_bev_activation_neighborhood_v3"
+                "phase4_seed_unused_bev_activation_neighborhood_v4"
             ),
             "enabled": False,
             "termination_reason": "disabled",
@@ -1050,6 +1050,17 @@ class OptimizationEngine:
                 ),
                 1,
             ),
+            "route_band_repartition_time_limit_sec": max(
+                int(
+                    getattr(
+                        config,
+                        "phase4_phase3_seed_route_band_repartition_time_limit_sec",
+                        90,
+                    )
+                    or 0
+                ),
+                0,
+            ),
             "powertrain_duty_swap_rounds": max(
                 int(
                     getattr(
@@ -1106,6 +1117,27 @@ class OptimizationEngine:
                             or 120
                         ),
                         1,
+                    )
+                    if bool(
+                        getattr(
+                            config,
+                            "phase4_phase3_seed_unused_bev_neighborhood_enabled",
+                            False,
+                        )
+                    )
+                    else 0
+                )
+                + (
+                    max(
+                        int(
+                            getattr(
+                                config,
+                                "phase4_phase3_seed_route_band_repartition_time_limit_sec",
+                                90,
+                            )
+                            or 0
+                        ),
+                        0,
                     )
                     if bool(
                         getattr(

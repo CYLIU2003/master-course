@@ -1,6 +1,48 @@
 # Development Notes
 
-## 2026-08-13: route-band restricted BEV duty re-partitioning
+## 2026-08-13: preserve fixed-duty search before route-band re-partitioning
+
+- Executed the normal frontend/BFF controlled pair from clean frozen SHA
+  `583dced3306f3e27b1de248605b70c51fc72e570` with fresh Prepare, 30 JPY/kWh,
+  zero demand charge, 1,000 kW PV and 6,000 kWh BESS. Both 264-trip cases
+  completed 24/24 Rolling, physical validation, executed-day accounting,
+  pair finalization, progress figures/tables and ZIP export. The pair control
+  contract passed and PV-only sensitivity was accepted.
+- High PV produced 31 BEVs / 1 ICE, 248/16 trips, 650,298.979262 JPY and a
+  1.583730% certified gap. Low PV produced 21/11, 91/173 trips,
+  698,318.002033 JPY and a certified 0.547009% gap. The formal pair remains
+  blocked only by `baseline_requested_mip_gap_certified`. The high-PV cost is
+  64.249866 JPY worse than the preceding `b06c451` incumbent and the gap is
+  0.009725 percentage point wider.
+- Audit isolated the regression: the v3 route-band reduced Stage 1 ran before
+  the fixed-duty neighborhood. One high-PV and two low-PV candidate solves
+  consumed 60--102 seconds from the same 120-second allowance, and every
+  merged candidate then failed the original full-problem Stage 2. High PV
+  consequently selected the earlier combined matching result instead of the
+  cheaper powertrain-duty-swap result previously found near evaluation 81.
+- v4 preserves the complete 120-second fixed-duty search first, then starts
+  route-band repartition from its cheapest independently validated incumbent
+  under a separate explicit 90-second budget. Multiple route bands divide the
+  remaining budget fairly. The reduced candidate solve now includes Stage 2;
+  a local SOC/charging-infeasible candidate is rejected before full-problem
+  recourse, while every locally feasible candidate must still pass the full
+  fixed-assignment Stage 2, physical validation and canonical accounting.
+- The new control is
+  `phase4_phase3_seed_route_band_repartition_time_limit_sec=90`. It is
+  persisted in solver settings, Rolling provenance and the controlled-pair
+  hash. The declared Phase-4 solver budget increases from 4,620 to 4,710
+  seconds. This changes only upper-bound candidate generation and runtime;
+  dispatch constraints, tariffs, PV/BESS equations, objective coefficients,
+  integrated feasible region and formal gap rules are unchanged.
+- Focused regression covers fixed-duty-before-route ordering, required reduced
+  Stage 2, local-infeasibility rejection, full-problem Stage-2 validation,
+  exact activation counts and pair-control persistence. Older `583dced`
+  artifacts remain frozen and are not relabelled; fresh clean-commit evidence
+  is required for v4. Focused regression passes 65 tests; the complete
+  repository suite passes `1363 passed in 71.02s`; compileall and
+  `git diff --check` also pass.
+
+## 2026-08-13: first route-band re-partitioning implementation (v3, superseded)
 
 - Raised and addressed the next failure exposed by the frozen `b06c451` pair:
   whole-duty replacement and one reciprocal suffix exchange preserve too much
@@ -41,10 +83,9 @@
   canonical accounting, or the integrated feasible region. Focused regression
   passes 76 tests; the complete repository regression passes
   `1362 passed in 66.95s`; compileall and `git diff --check` also pass.
-- No 264-trip formal run has been executed from this code-changing state. All
-  older outputs retain their frozen SHA and must not be relabelled. A clean
-  commit, fresh Prepare, both frontend/BFF cases, 24/24 Rolling and pair
-  finalization are required next.
+- At this implementation checkpoint no 264-trip formal run had yet been
+  executed. The later `583dced` pair above exercised v3 and exposed its search
+  ordering regression; those frozen outputs are preserved without relabelling.
 
 ## 2026-08-13: sequential formal pair, evidence audit, and reporting repair
 

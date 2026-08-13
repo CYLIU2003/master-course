@@ -3,42 +3,40 @@
 ## 2026-08-13 latest verdict: controlled pair accepted; sunny 1% gap remains
 
 The latest fresh pair at frozen SHA
-`b06c451b9f89e7930f25b7d7e28cf50af54df21c` reproduced every canonical KPI
-and release decision from the prior accepted pair. Its pair control audit is
-accepted, all 264 trips and 24 Rolling steps pass in both cases, and canonical
-cost, fuel, CO2, SOC and BESS terminal accounting reconcile. High PV remains
-31 BEV / 1 ICE with a 1.574005% certified cost gap; low PV remains 21/11 with
-a 0.547009% certificate. The only formal pair blocker is still
-`baseline_requested_mip_gap_certified`.
+`583dced3306f3e27b1de248605b70c51fc72e570` completed the ordinary frontend/BFF
+path, fresh Prepare, both 264-trip Phase-4 solves, 24/24 Rolling, physical and
+executed-day accounting validation, pair finalization, progress figures/tables
+and ZIP export. Non-PV controls match and PV differs by 5,060.05 kWh. The pair
+is accepted for controlled PV sensitivity, with 157 changed trip assignments.
 
-The attempted IIS-motivated suffix neighborhood did not close that blocker.
-For high PV it found six dispatch-valid crossover structures and evaluated 24
-all-BEV fixed assignments; all were Stage-2 energy/SOC infeasible. Because the
-algorithm exchanges only one pair of suffixes, it redistributes two long paths
-but cannot generally create enough depot charging windows across the complete
-affected route band. This is now recorded as negative evidence. Further blind
-single-exchange enumeration is not justified.
+High PV uses 31 BEVs / 1 ICE for 248/16 trips and costs 650,298.979262 JPY;
+low PV uses 21/11 for 91/173 trips and costs 698,318.002033 JPY. Low PV meets
+the declared gap using the certified 0.547009% bound. High PV stops at
+1.583730%, so the only formal release failure is
+`baseline_requested_mip_gap_certified`. These are feasible, physically valid
+solutions; the high-PV result is not a global-optimum claim.
 
-Current code now implements the required restricted route-band
-re-partitioning. A reduced exact Stage 1 covers the complete affected
-same-depot route-band trip set using only the already-used same-band BEVs and
-unused available BEVs. If `K` paths served that set before replacement, the
-candidate solve enforces `sum(used_BEV) >= K` and
-`sum(used_vehicle) <= K`; therefore the candidate retires the ICE paths
-one-for-one rather than adding buses. The reduced dispatch is not treated as
-energy-feasible evidence. It must preserve the exact trip set when merged into
-the original plan and then pass the full-problem fixed-assignment Stage 2,
-independent physical validation, and canonical cost evaluation. This remains
-a weather-neutral upper-bound generator, not a hidden BEV policy or an
-optimality certificate.
+The v3 route-band experiment is negative evidence. It generated one high-PV
+and two low-PV reduced all-BEV candidates, but all failed the original full
+fixed-assignment Stage 2. It also ran before the proven fixed-duty neighborhood
+and consumed 60--102 seconds from the same 120-second budget. The high-PV
+incumbent therefore regressed by 64.249866 JPY relative to `b06c451`, and its
+certified gap widened by 0.009725 percentage point.
 
-The implementation postdates frozen SHA `b06c451`. It has passed bounded and
-real-Gurobi regression tests but has not yet been exercised by a clean
-264-trip frontend/BFF pair. Accordingly the only current formal result remains
-the blocked `b06c451` pair. The next evidence step is a fresh frozen-commit
-pair; even if the new search finds a 32-BEV sunny candidate, formal release
-still requires the predeclared 1% cost-gap certificate and every unchanged
-Rolling, physical, accounting, and pair-control gate.
+Current v4 code preserves the full 120-second fixed-duty replacement/matching/
+suffix/swap/identity search first. Route-band repartition starts afterwards
+from the cheapest independently validated incumbent and has a separate,
+audited 90-second budget. Its reduced problem now runs both Stage 1 and Stage 2;
+local SOC/charging infeasibility is rejected before full-system evaluation.
+Locally feasible candidates must still preserve the exact trip set and pass
+the unchanged full-problem fixed-assignment Stage 2, independent physical
+validation and canonical accounting. No weather-specific objective bias or
+BEV lower bound is introduced into the final integrated solve.
+
+The v4 implementation postdates `583dced`; therefore no v4 KPI is yet formal
+evidence. A fresh clean-commit pair is required. Even a better or 32-BEV sunny
+incumbent will not remove the blocker unless the predeclared 1% canonical-cost
+gap and all unchanged Rolling, physical, accounting and pair-control gates pass.
 
 The first clean full pair using sequential scalar lexicographic certification
 completed at frozen SHA `7cb1192cf6278e8854add16b58f04639a6656336`.

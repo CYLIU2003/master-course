@@ -799,6 +799,11 @@ def _day_ahead_solver_control_payload(
                 "phase4_phase3_seed_unused_bev_neighborhood_max_evaluations"
             )
         ),
+        "phase4_phase3_seed_route_band_repartition_time_limit_sec": (
+            solver_settings.get(
+                "phase4_phase3_seed_route_band_repartition_time_limit_sec"
+            )
+        ),
         "phase4_phase3_seed_unused_bev_identity_exchange_rounds": (
             solver_settings.get(
                 "phase4_phase3_seed_unused_bev_identity_exchange_rounds"
