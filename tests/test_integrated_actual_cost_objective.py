@@ -148,6 +148,30 @@ def test_verified_start_cap_does_not_change_ev_utilization_objective() -> None:
     ]
 
 
+def test_verified_start_bounds_can_use_certified_canonical_cost_field() -> None:
+    bounds = _verified_start_objective_search_bounds(
+        warm_start_audit={
+            "integrated_dispatch_fixed_recourse_feasible": True,
+            "dispatch_fixed_recourse_objective_value": 32.0,
+            "dispatch_fixed_recourse_canonical_cost_jpy": 650_234.0,
+        },
+        analytical_floor_blockers=(),
+        vehicle_usage_weight=1.0,
+        vehicle_usage_unit_cost=20_000.0,
+        feasibility_tolerance=1.0e-9,
+        incumbent_objective_field=(
+            "dispatch_fixed_recourse_canonical_cost_jpy"
+        ),
+    )
+
+    assert bounds["eligible"] is True
+    assert bounds["objective_upper_bound_jpy"] > 650_234.0
+    assert bounds["vehicle_day_upper_bound"] == 32
+    assert bounds["incumbent_objective_field"] == (
+        "dispatch_fixed_recourse_canonical_cost_jpy"
+    )
+
+
 def test_exact_composition_targets_continue_outward_despite_cost_score() -> None:
     records = [
         {
@@ -1179,6 +1203,17 @@ def test_research_lexicographic_seed_certifies_vehicle_days_before_cost() -> Non
     assert warm_start_audit[
         "dispatch_fixed_recourse_canonical_cost_jpy"
     ] is not None
+    assert result.solver_metadata[
+        "integrated_verified_start_search_bounds"
+    ]["eligible"] is True
+    assert result.solver_metadata[
+        "integrated_verified_start_search_bounds"
+    ]["incumbent_objective_field"] == (
+        "dispatch_fixed_recourse_canonical_cost_jpy"
+    )
+    assert result.solver_metadata[
+        "integrated_verified_start_objective_cap_constraint_count"
+    ] == 1
     phases = result.solver_metadata["integrated_search_profile"]["phases"]
     assert phases[0]["phase"] == "lexicographic_used_vehicle_days"
     assert phases[0]["search_profile"] == "certificate_without_resolve"

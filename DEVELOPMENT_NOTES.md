@@ -1,5 +1,34 @@
 # Development Notes
 
+## 2026-08-13: feed reduced route-band Stage-2 IIS back to Stage 1
+
+- Raised a remaining P1 candidate-search defect from the v4 formal evidence.
+  The sunny 32-BEV constructive dispatch failed fixed-assignment Stage 2, and
+  the later route-band repartition also failed local Stage 2. Although the
+  general two-stage solver already supports IIS-backed exact-assignment
+  no-good cuts, the reduced route-band problem explicitly set
+  `stage2_feedback_max_iterations=0`, so no alternative repartition was tried.
+- Each route-band group still has the same separately declared 90-second
+  maximum and fair sharing. The initial reduced Stage 1 now receives at most
+  half of that group's remaining share. One IIS feedback iteration may use the
+  rest of the same shared deadline to reject only the proven-infeasible exact
+  assignment and rerun the identical all-BEV/count-constrained reduced scope.
+- The retry is not a weather policy, BEV lower bound on the final solve, repair,
+  or fallback. Any candidate must still pass local Stage 2, exact merge checks,
+  the original full-problem Stage 2, independent physical validation, and
+  canonical accounting. The integrated Phase-4 feasible region and formal gap
+  gate are unchanged.
+- Fixed a provenance inconsistency in the sequential integrated solver. The
+  verified canonical-cost upper bound was installed after the exact
+  vehicle-day stage, but metadata retained the earlier ineligible result from
+  when vehicle-days were the active objective. The helper now accepts an
+  explicit certified objective field, and the cost-stage audit reports the
+  canonical field, eligibility, tolerance, and one installed cap row.
+- Focused regression: `45 passed`; complete repository regression:
+  `1364 passed in 68.47s`. Compileall and `git diff --check` also pass.
+  Clean-commit controlled-pair evidence is still pending at this checkpoint;
+  no existing output is relabelled.
+
 ## 2026-08-13: preserve fixed-duty search before route-band re-partitioning
 
 - Executed the normal frontend/BFF controlled pair from clean frozen SHA

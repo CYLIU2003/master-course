@@ -1,5 +1,30 @@
 # Current research release blockers
 
+## 2026-08-13 current code: route-band IIS feedback implemented; rerun pending
+
+The v4 pair remains the latest accepted controlled-PV evidence and formal
+release remains blocked by the sunny 1.574005% canonical-cost gap. Its audit
+also exposed that the reduced route-band solve had an unused feedback path:
+the general Stage-2 IIS/no-good mechanism existed, but the internal candidate
+problem explicitly disabled it and spent most of the 90-second allowance on a
+single Stage 1.
+
+Current code gives the first reduced Stage 1 at most half of each route-band
+group's fair shared allowance and permits one IIS-backed exact-assignment
+no-good retry inside the unchanged deadline. This may find a different
+charging-feasible all-BEV partition; it does not prove that one exists and does
+not change the final integrated feasible region. A candidate remains
+inadmissible until it passes local Stage 2, exact trip/count merge checks, the
+full original Stage 2, independent physical validation, and canonical
+accounting.
+
+The same patch corrects the lexicographic verified-start audit: after minimum
+vehicle-days are certified, the recorded bound now references
+`dispatch_fixed_recourse_canonical_cost_jpy` and reports the cost-cap row that
+was actually installed. This is evidence/provenance repair, not a stronger
+lower bound. A fresh clean-commit frontend/BFF pair is mandatory before either
+change can affect the blocker verdict.
+
 ## 2026-08-13 latest verdict: controlled pair accepted; sunny 1% gap remains
 
 The latest fresh pair at frozen SHA

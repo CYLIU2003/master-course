@@ -1,5 +1,30 @@
 # master-course
 
+## 2026-08-13 route-band Stage-2 feedback correction (fresh evidence pending)
+
+- The v4 formal audit proved that the 90-second reduced route-band allowance
+  stopped after one Stage-1/Stage-2 attempt. `stage2_feedback_max_iterations`
+  was fixed at zero, so a Stage-2 IIS could not exclude the failed exact
+  assignment and return to Stage 1 for a different all-BEV partition.
+- The reduced candidate search now reserves half of each route band's fair
+  wall-clock share for the first Stage 1 and keeps the remainder under the same
+  hard deadline. One existing IIS-backed exact-assignment no-good feedback
+  iteration is enabled. This is candidate generation only: it does not force
+  BEV use or change the full Phase-4 feasible region, objective, tariffs, or
+  acceptance criteria.
+- A successful reduced retry must still preserve the exact trip set and used
+  vehicle count, then pass the original full-problem fixed-assignment Stage 2,
+  independent physical validation, and canonical accounting before it can
+  become a warm start. The audit records the shared deadline, initial Stage-1
+  allowance, and feedback limit.
+- The lexicographic verified-start audit now records the canonical-cost field
+  and the actual cost-cap row installed after the minimum vehicle-day level is
+  certified. Earlier v4 artifacts incorrectly displayed this bound as
+  ineligible/zero rows even though the cost-stage constraint was present.
+- Focused regression passes; a clean-commit 264-trip controlled pair is still
+  required. The latest accepted evidence remains the v4 pair below, and formal
+  release remains blocked by the high-PV 1% gap.
+
 ## 2026-08-13 current sequential formal-pair evidence
 
 - Latest frozen pair `583dced3306f3e27b1de248605b70c51fc72e570`

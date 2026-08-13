@@ -318,9 +318,10 @@ def test_route_band_repartition_is_full_stage2_validated_before_selection(
         assert stage2_enabled is True
         assert diagnostic_mode is False
         assert full_stage2_sources
-        assert _config.time_limit_sec == (
+        assert _config.time_limit_sec >= (
             _config.stage1_time_limit_sec + _config.stage2_time_limit_sec
         )
+        assert reduced_problem.metadata["stage2_feedback_max_iterations"] == 1
         assert {vehicle.vehicle_type for vehicle in reduced_problem.vehicles} == {
             "BEV"
         }
@@ -467,6 +468,13 @@ def test_route_band_repartition_is_full_stage2_validated_before_selection(
             "reduced_stage1_stage2_no_exact_all_bev_incumbent"
         )
     assert audit["weather_strategy_bias_applied"] is False
+    assert audit["route_band_repartition_feedback_max_iterations"] == 1
+    attempt = audit["route_band_repartition_attempts"][0]
+    assert attempt["stage2_feedback_max_iterations"] == 1
+    assert attempt["reduced_total_time_limit_sec"] >= (
+        attempt["reduced_stage1_time_limit_sec"]
+        + attempt["reduced_stage2_time_limit_sec"]
+    )
 
 
 def test_suffix_exchange_can_activate_bev_when_whole_duty_replacement_cannot(

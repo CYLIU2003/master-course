@@ -71,6 +71,7 @@ _DRIVER_OVERTIME_FACTOR = 1.25
 ROLLING_REMAINING_DAY_FIXED_ASSIGNMENT = "remaining_day_fixed_assignment"
 _FEEDBACK_GLOBAL_DEADLINE_KEY = "_stage2_feedback_global_deadline_monotonic"
 _FEEDBACK_GLOBAL_STARTED_KEY = "_stage2_feedback_global_started_monotonic"
+_ROUTE_BAND_REPARTITION_FEEDBACK_MAX_ITERATIONS = 1
 
 
 def _integrated_search_controls(
@@ -121,6 +122,9 @@ def _verified_start_objective_search_bounds(
     feasibility_tolerance: float,
     vehicle_usage_cost_enabled: bool = True,
     canonical_cost_is_primary_objective: bool = True,
+    incumbent_objective_field: str = (
+        "dispatch_fixed_recourse_objective_value"
+    ),
 ) -> Dict[str, Any]:
     """Derive exact search bounds from an independently feasible MIP start.
 
@@ -141,6 +145,7 @@ def _verified_start_objective_search_bounds(
         "objective_upper_bound_jpy": None,
         "objective_upper_bound_tolerance_jpy": None,
         "vehicle_day_upper_bound": None,
+        "incumbent_objective_field": str(incumbent_objective_field),
         "blocking_reasons": [],
     }
     if not canonical_cost_is_primary_objective:
@@ -155,19 +160,17 @@ def _verified_start_objective_search_bounds(
             "integrated_dispatch_fixed_recourse_not_feasible"
         )
         return result
-    raw_objective = warm_start_audit.get(
-        "dispatch_fixed_recourse_objective_value"
-    )
+    raw_objective = warm_start_audit.get(str(incumbent_objective_field))
     try:
         incumbent_objective = float(raw_objective)
     except (TypeError, ValueError):
         result["blocking_reasons"].append(
-            "dispatch_fixed_recourse_objective_missing"
+            f"{incumbent_objective_field}_missing"
         )
         return result
     if not math.isfinite(incumbent_objective) or incumbent_objective < 0.0:
         result["blocking_reasons"].append(
-            "dispatch_fixed_recourse_objective_invalid"
+            f"{incumbent_objective_field}_invalid"
         )
         return result
 
@@ -1835,9 +1838,13 @@ class GurobiMILPAdapter:
             "route_band_repartition_semantics": (
                 "best_validated_fixed_duty_incumbent_anchor;"
                 "separate_explicit_wall_budget;"
-                "reduced_exact_stage1_stage2_candidate_generation_only;"
+                "reduced_exact_stage1_stage2_with_one_iis_no_good_feedback_"
+                "candidate_generation_only;"
                 "full_problem_fixed_assignment_stage2_physical_and_"
                 "canonical_accounting_validation_required"
+            ),
+            "route_band_repartition_feedback_max_iterations": (
+                _ROUTE_BAND_REPARTITION_FEEDBACK_MAX_ITERATIONS
             ),
             "fixed_duty_neighborhood_wall_time_limit_sec": wall_limit_sec,
             "route_band_repartition_wall_time_limit_sec": (
@@ -2366,7 +2373,9 @@ class GurobiMILPAdapter:
                         ),
                         "strict_coverage_precheck": reduced_strict_precheck,
                         "stage1_feasibility_no_good_cuts": (),
-                        "stage2_feedback_max_iterations": 0,
+                        "stage2_feedback_max_iterations": (
+                            _ROUTE_BAND_REPARTITION_FEEDBACK_MAX_ITERATIONS
+                        ),
                         "milp_max_successors_per_trip": None,
                         "phase4_seed_route_band_repartition_candidate": True,
                         "phase4_seed_route_band_repartition_route_band_id": (
@@ -2406,17 +2415,33 @@ class GurobiMILPAdapter:
                 fair_group_budget_sec = (
                     remaining_wall_sec / remaining_group_count
                 )
+                if fair_group_budget_sec < 2.0:
+                    attempt["status"] = "skipped_insufficient_fair_group_budget"
+                    attempt["fair_group_budget_sec"] = fair_group_budget_sec
+                    continue
+                # Keep the first reduced solve bounded to half of the fair
+                # group budget.  The remaining half is available to the
+                # existing IIS-backed Stage-2 feedback recursion, which can
+                # exclude one proven-infeasible assignment and repartition the
+                # same exact all-BEV route-band scope.  Previously Stage 1 used
+                # up to 60 seconds and feedback was disabled, leaving the
+                # declared 90-second route-band budget partly unused.
                 reduced_stage1_time_limit_sec = max(
                     min(
-                        int(
-                            max(
-                                fair_group_budget_sec
-                                - per_solve_sec
-                                - 1.0,
-                                1.0,
-                            )
-                        ),
+                        int(max(fair_group_budget_sec * 0.5, 1.0)),
                         60,
+                    ),
+                    1,
+                )
+                reduced_total_time_limit_sec = max(
+                    int(fair_group_budget_sec),
+                    2,
+                )
+                reduced_stage2_time_limit_sec = max(
+                    min(
+                        per_solve_sec,
+                        reduced_total_time_limit_sec
+                        - reduced_stage1_time_limit_sec,
                     ),
                     1,
                 )
@@ -2435,15 +2460,12 @@ class GurobiMILPAdapter:
                     integrated_actual_cost_upper_bound_delta_ratio=None,
                     phase4_phase3_seed_enabled=False,
                     phase4_phase3_seed_unused_bev_neighborhood_enabled=False,
-                    # The two-stage solver enforces one shared wall-clock
-                    # deadline.  Reserve both explicit stage allowances;
-                    # otherwise a full Stage-1 run leaves zero time for the
-                    # newly required local Stage 2.
-                    time_limit_sec=(
-                        reduced_stage1_time_limit_sec + per_solve_sec
-                    ),
+                    # The two-stage solver enforces this one shared wall-clock
+                    # deadline across the initial Stage 1/2 and any IIS-backed
+                    # feedback retry.
+                    time_limit_sec=reduced_total_time_limit_sec,
                     stage1_time_limit_sec=reduced_stage1_time_limit_sec,
-                    stage2_time_limit_sec=per_solve_sec,
+                    stage2_time_limit_sec=reduced_stage2_time_limit_sec,
                     stage1_stage2_candidate_limit=1,
                     stage1_composition_search_radius=0,
                     stage1_bev_frontier_enabled=False,
@@ -2454,6 +2476,15 @@ class GurobiMILPAdapter:
                 )
                 attempt["reduced_stage1_time_limit_sec"] = (
                     reduced_stage1_time_limit_sec
+                )
+                attempt["reduced_total_time_limit_sec"] = (
+                    reduced_total_time_limit_sec
+                )
+                attempt["reduced_stage2_time_limit_sec"] = (
+                    reduced_stage2_time_limit_sec
+                )
+                attempt["stage2_feedback_max_iterations"] = (
+                    _ROUTE_BAND_REPARTITION_FEEDBACK_MAX_ITERATIONS
                 )
                 attempt["fair_group_budget_sec"] = fair_group_budget_sec
                 reduced_started = time.perf_counter()
@@ -6436,17 +6467,49 @@ class GurobiMILPAdapter:
                     and preflight_objective_value is not None
                 ):
                     try:
+                        # The fixed-recourse solve initially minimizes vehicle
+                        # days under the research lexicographic preset.  Only
+                        # after that integer level is certified and fixed does
+                        # canonical cost become the active scalar objective.
+                        # Re-derive the verified-start bound from the canonical
+                        # cost field here so the recorded audit matches the
+                        # constraint that is actually installed.
+                        verified_start_search_bounds = (
+                            _verified_start_objective_search_bounds(
+                                warm_start_audit=integrated_warm_start_audit,
+                                analytical_floor_blockers=(
+                                    integrated_analytical_objective_floor_blockers
+                                ),
+                                vehicle_usage_weight=vehicle_usage_weight,
+                                vehicle_usage_unit_cost=vehicle_usage_unit_cost,
+                                vehicle_usage_cost_enabled=component_flags.get(
+                                    "vehicle_usage_cost", True
+                                ),
+                                feasibility_tolerance=integrated_feasibility_tol,
+                                canonical_cost_is_primary_objective=True,
+                                incumbent_objective_field=(
+                                    "dispatch_fixed_recourse_canonical_cost_jpy"
+                                ),
+                            )
+                        )
                         preflight_objective = float(preflight_objective_value)
-                        cost_tolerance = max(
-                            1.0e-6,
-                            integrated_feasibility_tol,
+                        verified_cost_upper_bound = float(
+                            verified_start_search_bounds[
+                                "objective_upper_bound_jpy"
+                            ]
                         )
                         model.addConstr(
-                            objective <= preflight_objective + cost_tolerance,
+                            objective <= verified_cost_upper_bound,
                             name=(
                                 "lexicographic_verified_start_canonical_cost_"
                                 "upper_bound"
                             ),
+                        )
+                        integrated_verified_start_objective_cap_constraint_count = 1
+                        cost_tolerance = float(
+                            verified_start_search_bounds[
+                                "objective_upper_bound_tolerance_jpy"
+                            ]
                         )
                         if (
                             not integrated_analytical_objective_floor_blockers
