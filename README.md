@@ -1,5 +1,27 @@
 # master-course
 
+## 2026-08-13 BFF runtime-source attestation (r5 diagnostic only)
+
+- The first post-`e321a3a` pair attempt reached a long-lived BFF process that
+  had loaded the preceding solver implementation. The request-time Git check
+  still observed the repository's new clean HEAD, so the output incorrectly
+  recorded `e321a3a` even though its seed metadata matched v4 and omitted every
+  new route-band feedback field. That r5 directory is retained as
+  `DIAGNOSTIC` and is not evidence for the current solver.
+- Formal preflight now freezes the BFF Git state at process startup and
+  requires the startup SHA, repository root and clean state to match the
+  current clean checkout. The worker repeats this check before and after the
+  solve. Runtime PID, startup time and both SHAs are exported in the preflight,
+  solver metadata and optimization audit.
+- The controlled-pair runner calls this preflight immediately after `/health`
+  and before Prepare. A server without the runtime-attestation fields, a stale
+  process, or a SHA mismatch fails fast with an instruction to restart the
+  BFF. This closes a provenance gap; it does not change the MILP, tariff,
+  feasible region, incumbent, gap calculation or accounting equations.
+- A fresh clean-commit r6 is required to exercise the route-band IIS feedback
+  implementation. Until then, the v4 pair remains the latest accepted
+  controlled-PV evidence and the sunny 1% gap remains the formal blocker.
+
 ## 2026-08-13 route-band Stage-2 feedback correction (fresh evidence pending)
 
 - The v4 formal audit proved that the 90-second reduced route-band allowance

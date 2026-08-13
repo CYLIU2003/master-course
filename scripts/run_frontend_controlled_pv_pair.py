@@ -556,6 +556,46 @@ class HttpJsonClient:
         return dict(loaded), raw
 
 
+def _validate_bff_runtime_preflight(
+    preflight: Mapping[str, Any],
+    *,
+    frozen_git_sha: str,
+) -> None:
+    """Reject stale BFF code before Prepare or any expensive solver work."""
+
+    required_runtime_fields = (
+        "runtime_git_sha",
+        "runtime_git_dirty",
+        "runtime_git_state_matches_current",
+        "runtime_process_id",
+    )
+    missing = [field for field in required_runtime_fields if field not in preflight]
+    if missing:
+        raise RuntimeError(
+            "BFF runtime provenance is unavailable; the server is stale or "
+            "does not implement bff_runtime_git_attestation_v1. Missing: "
+            + ", ".join(missing)
+        )
+    if preflight.get("formal_research_ready") is not True:
+        raise RuntimeError(
+            "BFF rejected formal research readiness: "
+            f"runtime_sha={preflight.get('runtime_git_sha')}, "
+            f"current_sha={preflight.get('git_sha')}, "
+            f"runtime_dirty={preflight.get('runtime_git_dirty')}, "
+            f"current_dirty={preflight.get('git_dirty')}"
+        )
+    if (
+        preflight.get("git_sha") != frozen_git_sha
+        or preflight.get("runtime_git_sha") != frozen_git_sha
+        or preflight.get("runtime_git_dirty") is not False
+        or preflight.get("runtime_git_state_matches_current") is not True
+    ):
+        raise RuntimeError(
+            "BFF runtime Git identity does not match the pair runner's frozen "
+            f"commit {frozen_git_sha}; restart the BFF from that commit"
+        )
+
+
 def _required_positive_number(
     payload: Mapping[str, Any],
     *keys: str,
@@ -4130,6 +4170,17 @@ def main() -> int:
     _write_raw_json_response(output_dir / "bff_health_response.json", health_raw)
     if health.get("status") != "ok":
         raise RuntimeError(f"BFF health check failed: {health}")
+    runtime_preflight, runtime_preflight_raw = client.request_json(
+        "GET", "/api/research/git-preflight"
+    )
+    _write_raw_json_response(
+        output_dir / "bff_runtime_git_preflight_response.json",
+        runtime_preflight_raw,
+    )
+    _validate_bff_runtime_preflight(
+        runtime_preflight,
+        frozen_git_sha=frozen_sha,
+    )
     comparison_name = "same-service-date high-PV/low-PV supply sensitivity"
     if tariff_condition["override_requested"]:
         comparison_name += (
@@ -4150,6 +4201,7 @@ def main() -> int:
         "platform": platform.platform(),
         "base_url": args.base_url,
         "bff_health": health,
+        "bff_runtime_git_preflight": runtime_preflight,
         "gurobi_license_file": os.environ.get("GRB_LICENSE_FILE"),
         "mc_outputs_dir": os.environ.get("MC_OUTPUTS_DIR"),
         "bff_opt_executor": os.environ.get("BFF_OPT_EXECUTOR"),

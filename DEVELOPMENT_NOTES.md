@@ -1,5 +1,32 @@
 # Development Notes
 
+## 2026-08-13: bind formal runs to the code loaded by the BFF process
+
+- Raised a P0 research-provenance defect during the r5 rerun. Port 8000 was
+  owned by a long-lived Windows BFF process. Its request-time Git collector
+  read clean HEAD `e321a3a`, but its loaded Python modules were older: the
+  produced seed audit omitted the newly implemented feedback/budget fields
+  and reproduced the v4 result exactly. The r5 artifacts are retained for
+  diagnosis and must not be cited as evidence for `e321a3a`.
+- The BFF optimization router now captures Git SHA, dirty state, repository
+  root, PID and startup timestamp once at module import. A formal request is
+  accepted only when that startup record is clean and matches the current
+  clean checkout. The same fail-closed check runs synchronously before job
+  creation, again in the worker before model construction, and after solve.
+- Solver metadata and `optimization_audit.json` persist
+  `bff_runtime_git_attestation`; research Git eligibility also requires its
+  match flag. `GET /api/research/git-preflight` exposes the same record so the
+  UI and automated pair runner can explain a stale-process rejection.
+- `run_frontend_controlled_pv_pair.py` now requires attestation schema fields
+  and exact equality between local frozen SHA, current BFF SHA and startup BFF
+  SHA immediately after the health check. A pre-attestation or stale BFF fails
+  before Prepare and before any Gurobi work.
+- Focused provenance/BFF/pair-runner regression passes `52 passed`; the full
+  repository suite passes `1367 passed in 68.57s`. Compileall and
+  `git diff --check` also pass. Clean-commit r6 evidence is still pending at
+  this checkpoint. The change affects evidence validity only; optimization
+  equations and acceptance gap thresholds are unchanged.
+
 ## 2026-08-13: feed reduced route-band Stage-2 IIS back to Stage 1
 
 - Raised a remaining P1 candidate-search defect from the v4 formal evidence.

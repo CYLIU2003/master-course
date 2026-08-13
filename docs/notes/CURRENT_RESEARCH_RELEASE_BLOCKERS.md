@@ -1,5 +1,32 @@
 # Current research release blockers
 
+## 2026-08-13 P0 provenance correction: r5 used a stale BFF runtime
+
+The attempted r5 rerun is not current-code evidence. Although its wrapper and
+request-time provenance recorded clean HEAD `e321a3a`, inspection of the
+solver-native seed audit showed the old v4 field set: there was no
+`route_band_repartition_feedback_max_iterations`, no reduced shared-budget
+telemetry, and the verified-start cost-cap audit retained the old ineligible
+label. Its numerical result was also exactly v4. The BFF listening on port
+8000 had loaded an older solver before the repository advanced.
+
+This is a provenance failure, not a new optimization result. The r5 directory
+remains diagnostic and cannot supersede the accepted v4 pair or support a
+claim about the IIS-feedback implementation.
+
+Current code now captures the BFF's clean Git identity at process startup and
+requires an exact match with the request-time clean checkout at three formal
+boundaries: before job creation, before solver construction, and after solve.
+The automated pair runner independently requires the runtime attestation and
+exact frozen-SHA equality before Prepare. A missing field, old process, dirty
+startup or SHA/root mismatch is a hard failure with no solver job.
+
+Required next evidence remains a fresh r6 after a complete BFF restart from a
+new clean commit. It must show matching runtime/current/frozen SHAs and the new
+route-band feedback plus canonical cost-cap telemetry. The formal research
+verdict remains `BLOCKED` until that run also satisfies the predeclared sunny
+1% cost-gap gate; runtime provenance alone cannot discharge optimality.
+
 ## 2026-08-13 current code: route-band IIS feedback implemented; rerun pending
 
 The v4 pair remains the latest accepted controlled-PV evidence and formal

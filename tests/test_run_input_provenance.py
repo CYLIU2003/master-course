@@ -3,8 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 import pytest
+
+from bff.routers import optimization as optimization_router
 
 from bff.services.optimization_run.input_provenance import (
     CODE_PROVENANCE_FILE,
@@ -335,20 +338,25 @@ def test_research_run_rejects_source_change_during_solve() -> None:
         "git_dirty": False,
         "worktree_patch_sha256": None,
     }
-    assert (
-        _validate_git_state_after_solve(
-            research_run=True,
-            before=before,
-            after=dict(before),
+    with mock.patch.object(
+        optimization_router,
+        "_BFF_RUNTIME_GIT_STATE",
+        before,
+    ):
+        assert (
+            _validate_git_state_after_solve(
+                research_run=True,
+                before=before,
+                after=dict(before),
+            )
+            is True
         )
-        is True
-    )
-    with pytest.raises(ValueError, match="source state changed during solve"):
-        _validate_git_state_after_solve(
-            research_run=True,
-            before=before,
-            after={**before, "git_sha": "commit-b"},
-        )
+        with pytest.raises(ValueError, match="source state changed during solve"):
+            _validate_git_state_after_solve(
+                research_run=True,
+                before=before,
+                after={**before, "git_sha": "commit-b"},
+            )
 
 
 def test_dirty_input_bundle_is_integrity_valid_but_not_research_ready(

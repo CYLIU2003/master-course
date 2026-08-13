@@ -160,6 +160,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["optimization"])
 _OPTIMIZATION_EXECUTOR: Optional[Executor] = None
 
+# Freeze the source identity when this BFF worker imports the optimization
+# router. Reading Git only when a request arrives is insufficient: a stale
+# long-lived Python process can otherwise report the repository's newer HEAD
+# while it is still executing modules loaded from an older commit.
+_BFF_RUNTIME_STARTED_AT_UTC = datetime.now(timezone.utc).isoformat()
+_BFF_RUNTIME_PROCESS_ID = os.getpid()
+_BFF_RUNTIME_GIT_STATE = dict(collect_git_state())
+
 # Interactive BFF/Tk launches are used for comparable research runs.  Keep
 # this policy at the BFF boundary so a stale client payload cannot silently
 # re-enable the Stage 1 early-stop rule or vary Gurobi parallelism.  The formal
@@ -202,20 +210,80 @@ def _research_git_state_is_ready(git_state: Dict[str, Any]) -> bool:
     )
 
 
+def _runtime_git_attestation(
+    current_git_state: Dict[str, Any],
+    *,
+    runtime_git_state: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Compare the code state loaded at BFF startup with the current checkout."""
+
+    startup = dict(runtime_git_state or _BFF_RUNTIME_GIT_STATE)
+    startup_ready = _research_git_state_is_ready(startup)
+    current_ready = _research_git_state_is_ready(current_git_state)
+    state_matches = bool(
+        startup_ready
+        and current_ready
+        and startup.get("git_sha") == current_git_state.get("git_sha")
+        and startup.get("repository_root")
+        == current_git_state.get("repository_root")
+    )
+    return {
+        "schema_version": "bff_runtime_git_attestation_v1",
+        "runtime_started_at_utc": _BFF_RUNTIME_STARTED_AT_UTC,
+        "runtime_process_id": _BFF_RUNTIME_PROCESS_ID,
+        "runtime_git_state_available": bool(
+            startup.get("git_state_available", False)
+        ),
+        "runtime_git_sha": startup.get("git_sha"),
+        "runtime_git_dirty": startup.get("git_dirty"),
+        "runtime_git_state_error": startup.get("git_state_error"),
+        "runtime_repository_root": startup.get("repository_root"),
+        "runtime_git_state_ready": startup_ready,
+        "runtime_git_state_matches_current": state_matches,
+    }
+
+
+def _require_matching_research_runtime_git_state(
+    *,
+    research_run: bool,
+    current_git_state: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Fail closed when a formal request reaches a stale BFF process."""
+
+    attestation = _runtime_git_attestation(current_git_state)
+    if not research_run:
+        return attestation
+    if attestation["runtime_git_state_matches_current"]:
+        return attestation
+    raise ValueError(
+        "formal research run requires the BFF process to have started from "
+        "the same clean Git commit as the current checkout; restart the BFF "
+        f"after committing changes. runtime_sha={attestation.get('runtime_git_sha')}, "
+        f"current_sha={current_git_state.get('git_sha')}, "
+        f"runtime_dirty={attestation.get('runtime_git_dirty')}, "
+        f"current_dirty={current_git_state.get('git_dirty')}"
+    )
+
+
 def _research_git_preflight_payload(
     git_state: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Build the user-facing preflight from the canonical provenance collector."""
 
     state = dict(git_state or collect_git_state())
+    runtime_attestation = _runtime_git_attestation(state)
     return {
-        "formal_research_ready": _research_git_state_is_ready(state),
+        "formal_research_ready": bool(
+            _research_git_state_is_ready(state)
+            and runtime_attestation["runtime_git_state_matches_current"]
+        ),
         "git_state_available": bool(state.get("git_state_available", False)),
         "git_sha": state.get("git_sha"),
         "git_dirty": state.get("git_dirty"),
         "git_state_error": state.get("git_state_error"),
         "uncommitted_changes": list(state.get("status_porcelain") or ()),
         "repository_root": state.get("repository_root"),
+        **runtime_attestation,
     }
 
 
@@ -248,6 +316,10 @@ def _require_research_git_preflight_before_job_creation(
         _require_clean_research_git_state(
             research_run=True,
             git_state=git_state,
+        )
+        _require_matching_research_runtime_git_state(
+            research_run=True,
+            current_git_state=git_state,
         )
     except ValueError as exc:
         preflight = _research_git_preflight_payload(git_state)
@@ -389,6 +461,10 @@ def _validate_git_state_after_solve(
                 f"before_dirty={before.get('git_dirty')}, "
                 f"after_dirty={after.get('git_dirty')}"
             )
+        _require_matching_research_runtime_git_state(
+            research_run=True,
+            current_git_state=after,
+        )
     return unchanged
 
 
@@ -10085,6 +10161,9 @@ def _solver_settings_payload(
         "research_submission_git_provenance_eligible": bool(
             metadata.get("research_submission_git_provenance_eligible", False)
         ),
+        "bff_runtime_git_attestation": dict(
+            metadata.get("bff_runtime_git_attestation") or {}
+        ),
         "source_provenance_exact": bool(metadata.get("source_provenance_exact", False)),
         "derived_source_split": bool(metadata.get("derived_source_split", False)),
         "synthetic_pv_fallback_allowed": bool(metadata.get("synthetic_pv_fallback_allowed", False)),
@@ -10978,6 +11057,10 @@ def _run_optimization(
             research_run=bool(research_run),
             git_state=run_git_state,
         )
+        runtime_git_attestation = _require_matching_research_runtime_git_state(
+            research_run=bool(research_run),
+            current_git_state=run_git_state,
+        )
 
         charging_summary_payload: Optional[Dict[str, Any]] = None
         charging_flow_payload: Optional[Dict[str, Any]] = None
@@ -11326,7 +11409,11 @@ def _run_optimization(
                         run_git_state.get("git_state_available", False)
                         and run_git_state.get("git_dirty") is False
                         and git_state_unchanged_during_solve
+                        and runtime_git_attestation.get(
+                            "runtime_git_state_matches_current"
+                        )
                     ),
+                    "bff_runtime_git_attestation": runtime_git_attestation,
                     "interactive_runtime_controls": interactive_runtime_controls,
                     "interactive_operation_time_window_controls": (
                         interactive_operation_time_window_controls
@@ -12463,6 +12550,7 @@ def _run_optimization(
                 run_git_state.get("git_state_available", False)
             ),
             "git_state_error": run_git_state.get("git_state_error"),
+            "bff_runtime_git_attestation": runtime_git_attestation,
             "source_snapshot": store.get_field(scenario_id, "source_snapshot"),
             "output_dir": output_dir,
             "executed_at": datetime.now(timezone.utc).isoformat(),

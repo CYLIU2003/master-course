@@ -495,6 +495,37 @@ def test_cli_requires_explicit_consent_to_override_frontend_pv_capacity() -> Non
     )
 
 
+def test_pair_runner_requires_matching_bff_runtime_commit() -> None:
+    runner = _load_runner()
+    frozen_sha = "a" * 40
+    matching = {
+        "formal_research_ready": True,
+        "git_sha": frozen_sha,
+        "git_dirty": False,
+        "runtime_git_sha": frozen_sha,
+        "runtime_git_dirty": False,
+        "runtime_git_state_matches_current": True,
+        "runtime_process_id": 1234,
+    }
+
+    runner._validate_bff_runtime_preflight(
+        matching,
+        frozen_git_sha=frozen_sha,
+    )
+
+    with pytest.raises(RuntimeError, match="does not implement"):
+        runner._validate_bff_runtime_preflight(
+            {"formal_research_ready": True, "git_sha": frozen_sha},
+            frozen_git_sha=frozen_sha,
+        )
+
+    with pytest.raises(RuntimeError, match="restart the BFF"):
+        runner._validate_bff_runtime_preflight(
+            {**matching, "runtime_git_sha": "b" * 40},
+            frozen_git_sha=frozen_sha,
+        )
+
+
 def test_uniform_tariff_evidence_requires_every_canonical_slot(
     tmp_path: Path,
 ) -> None:

@@ -1419,6 +1419,11 @@ def test_solver_settings_payload_reports_gap_ratio_and_percent() -> None:
             "stage1_numeric_diagnostics": {
                 "maximum_constraint_violation": 5.0e-7,
             },
+            "bff_runtime_git_attestation": {
+                "schema_version": "bff_runtime_git_attestation_v1",
+                "runtime_git_sha": "abc123",
+                "runtime_git_state_matches_current": True,
+            },
         },
     )
 
@@ -1434,3 +1439,6 @@ def test_solver_settings_payload_reports_gap_ratio_and_percent() -> None:
     assert payload["stage1_numeric_diagnostics"][
         "maximum_constraint_violation"
     ] == pytest.approx(5.0e-7)
+    assert payload["bff_runtime_git_attestation"]["runtime_git_sha"] == (
+        "abc123"
+    )

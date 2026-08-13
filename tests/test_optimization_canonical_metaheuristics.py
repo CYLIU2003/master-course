@@ -455,18 +455,26 @@ def test_run_optimization_endpoint_submits_current_prepared_input_job() -> None:
         scope_summary={"trip_count": 1},
         error=None,
     )
+    clean_git_state = {
+        "git_state_available": True,
+        "git_sha": "clean-commit",
+        "git_dirty": False,
+        "git_state_error": None,
+        "status_porcelain": [],
+        "repository_root": "C:/master-course",
+    }
 
     with (
         mock.patch.object(optimization, "_require_scenario"),
         mock.patch.object(
             optimization,
             "collect_git_state",
-            return_value={
-                "git_state_available": True,
-                "git_sha": "clean-commit",
-                "git_dirty": False,
-                "status_porcelain": [],
-            },
+            return_value=clean_git_state,
+        ),
+        mock.patch.object(
+            optimization,
+            "_BFF_RUNTIME_GIT_STATE",
+            clean_git_state,
         ),
         mock.patch.object(optimization.store, "get_scenario_document_shallow", return_value={}),
         mock.patch.object(optimization, "get_or_build_run_preparation", return_value=prep),
@@ -631,22 +639,32 @@ def test_formal_dirty_request_is_rejected_before_job_creation() -> None:
 
 
 def test_research_git_preflight_reports_clean_and_dirty_states() -> None:
-    with mock.patch.object(
-        optimization,
-        "collect_git_state",
-        return_value={
-            "git_state_available": True,
-            "git_sha": "clean-commit",
-            "git_dirty": False,
-            "git_state_error": None,
-            "status_porcelain": [],
-            "repository_root": "C:/master-course",
-        },
+    clean_git_state = {
+        "git_state_available": True,
+        "git_sha": "clean-commit",
+        "git_dirty": False,
+        "git_state_error": None,
+        "status_porcelain": [],
+        "repository_root": "C:/master-course",
+    }
+    with (
+        mock.patch.object(
+            optimization,
+            "collect_git_state",
+            return_value=clean_git_state,
+        ),
+        mock.patch.object(
+            optimization,
+            "_BFF_RUNTIME_GIT_STATE",
+            clean_git_state,
+        ),
     ):
         clean = optimization.get_research_git_preflight()
 
     assert clean["formal_research_ready"] is True
     assert clean["uncommitted_changes"] == []
+    assert clean["runtime_git_sha"] == "clean-commit"
+    assert clean["runtime_git_state_matches_current"] is True
 
     with mock.patch.object(
         optimization,
@@ -663,6 +681,79 @@ def test_research_git_preflight_reports_clean_and_dirty_states() -> None:
 
     assert dirty["formal_research_ready"] is False
     assert dirty["uncommitted_changes"] == [" M README.md"]
+
+
+def test_research_git_preflight_rejects_stale_clean_bff_runtime() -> None:
+    current = {
+        "git_state_available": True,
+        "git_sha": "new-commit",
+        "git_dirty": False,
+        "git_state_error": None,
+        "status_porcelain": [],
+        "repository_root": "C:/master-course",
+    }
+    stale_runtime = {**current, "git_sha": "old-commit"}
+
+    with (
+        mock.patch.object(
+            optimization,
+            "collect_git_state",
+            return_value=current,
+        ),
+        mock.patch.object(
+            optimization,
+            "_BFF_RUNTIME_GIT_STATE",
+            stale_runtime,
+        ),
+    ):
+        preflight = optimization.get_research_git_preflight()
+
+    assert preflight["formal_research_ready"] is False
+    assert preflight["git_sha"] == "new-commit"
+    assert preflight["runtime_git_sha"] == "old-commit"
+    assert preflight["runtime_git_state_matches_current"] is False
+
+
+def test_formal_request_rejects_stale_runtime_before_job_creation() -> None:
+    current = {
+        "git_state_available": True,
+        "git_sha": "new-commit",
+        "git_dirty": False,
+        "git_state_error": None,
+        "status_porcelain": [],
+        "repository_root": "C:/master-course",
+    }
+    create_job = mock.Mock()
+
+    with (
+        mock.patch.object(optimization, "_require_scenario"),
+        mock.patch.object(
+            optimization,
+            "collect_git_state",
+            return_value=current,
+        ),
+        mock.patch.object(
+            optimization,
+            "_BFF_RUNTIME_GIT_STATE",
+            {**current, "git_sha": "old-commit"},
+        ),
+        mock.patch.object(optimization.job_store, "create_job", create_job),
+        pytest.raises(HTTPException) as exc_info,
+    ):
+        optimization.run_optimization(
+            "scenario-1",
+            optimization.RunOptimizationBody(research_run=True),
+            {
+                "built_ready": True,
+                "built_dir": "data/built/tokyu_full",
+                "routes_df": None,
+            },
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail["runtime_git_sha"] == "old-commit"
+    assert exc_info.value.detail["git_sha"] == "new-commit"
+    create_job.assert_not_called()
 
 
 def test_research_git_preflight_is_available_in_direct_runtime() -> None:
