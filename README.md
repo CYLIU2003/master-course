@@ -1,25 +1,26 @@
 # master-course
 
-## 2026-08-14 time-discretization diagnostic and corrected contract
+## 2026-08-14 corrected time-discretization evidence
 
-- Clean frozen SHA `01986881c8c4c2d69802be482dddf58865eb8535` completed
-  fresh frontend/BFF runs for 60-, 30-, and 15-minute internal energy slots.
-  All three served 264/264 trips, used 32 buses, assigned 91 BEV and 173 ICE
-  trips, and passed physical validation plus the 24-step fixed-assignment
-  Rolling accounting chain.
-- These runs are diagnostic, not accepted sensitivity evidence. All three
-  stopped at the time limit; their certified gaps were 6.550063%, 6.418238%,
-  and 6.352187% against the declared 1% target. The original matrix also
-  requested a 15/30-minute Rolling advance even though the formal BFF contract
-  correctly enforced a 60-minute advance, and the saved raw request had been
-  overwritten by that effective value.
-- The experiment contract now varies only the internal 15/30/60-minute slot
-  resolution and holds the Rolling advance at 60 minutes. Requested and
-  effective controls are recorded separately. `None` and `0` are normalized
-  only as the two documented sentinels for an unlimited successor network,
-  and immutable historical runs can be re-audited into a separate directory
-  without invoking Prepare or a solver. A fresh clean-commit rerun is required
-  before time-step convergence can be claimed.
+- Clean frozen SHA `88f76a9af79a8d46c1502a51ed03778ab99f20e9`
+  completed fresh frontend/BFF runs for 60-, 30-, and 15-minute internal
+  energy slots. Every case submitted, requested, and effectively used a
+  60-minute Rolling advance; raw request provenance, effective controls,
+  immutable artifact hashes, and the common-control fingerprint all match.
+- All three served 264/264 trips, used 32 buses, assigned 91 BEV and 173 ICE
+  trips, passed physical validation, and completed the accepted 24-step
+  fixed-assignment Rolling accounting chain. Executed costs were 58,318.002,
+  58,235.852, and 58,221.043 JPY for 60/30/15 minutes; grid imports were
+  130.949, 128.255, and 127.770 kWh.
+- The corrected evidence remains diagnostic. Each day-ahead solve reached
+  3,600 seconds and missed the predeclared 1% target at certified gaps of
+  6.550063%, 6.418238%, and 6.352187%. The small KPI changes therefore do not
+  certify time-step convergence or global optimality.
+- `scripts/build_time_discretization_reporting.py` now creates a fail-closed
+  JSON/CSV/Markdown and PNG/SVG diagnostic bundle only after revalidating the
+  source payload hash, common controls, physical/accounting gates, and the
+  exact gap-only failure scope. It never upgrades these incumbents to thesis
+  conclusions while the optimality gate remains unmet.
 
 ## 2026-08-13 runtime-attested r7 feedback-budget evidence
 

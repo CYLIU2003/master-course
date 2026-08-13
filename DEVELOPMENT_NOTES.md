@@ -1,5 +1,39 @@
 # Development Notes
 
+## 2026-08-14: corrected time-discretization rerun and diagnostic reporting
+
+- Clean frozen SHA `88f76a9af79a8d46c1502a51ed03778ab99f20e9`
+  completed `TIME_60`, `TIME_30`, and `TIME_15` through fresh Prepare, the
+  normal frontend/BFF Phase-4 path, 24-step Rolling, physical validation, and
+  canonical executed-day accounting. Source directory:
+  `output/thesis_sensitivity_time_low_pv_20260814_corrected_88f76a9`.
+  Manifest payload SHA-256:
+  `5d58aca1284c4dddd33dd070831dbe3d300bf23017547ba17226f46ea9200b20`.
+- All non-varied controls share fingerprint
+  `a78671ce3f4a79ea436893863f4e699393afaaf7537b9b32a50ec16a939c523a`.
+  For every case, submitted/requested/effective Rolling is 60/60/60 minutes;
+  the internal time step alone is 60/30/15 minutes. Git stayed unchanged,
+  source artifacts re-hash, the full successor network is used, and all
+  request/effective provenance checks pass.
+- All cases serve 264/264 trips with 32 buses and 91/173 BEV/ICE trips.
+  For 60/30/15 minutes, executed cost is 58,318.002033 / 58,235.852189 /
+  58,221.042678 JPY; grid import is 130.948752 / 128.255315 / 127.769757
+  kWh; CO2 is 986.112082 / 984.765363 / 984.522584 kg. PV-to-bus rises from
+  293.407649 to 321.032649 and 326.012728 kWh as the slot is refined.
+- All three solves return `time_limit` after about 3,601 solver seconds. Their
+  certified gaps are 6.550063%, 6.418238%, and 6.352187%, so
+  `case_accepted=false` and the matrix remains `BLOCKED`. The corrected run
+  removes the earlier provenance confound but does not discharge the
+  predeclared optimality gate.
+- `time_discretization_reporting.py` and
+  `scripts/build_time_discretization_reporting.py` revalidate the signed
+  source manifest, exact three-case coverage, common controls, full physical
+  and accounting evidence, Rolling controls, Git immutability, and gap-only
+  failure scope. The builder emits immutable JSON/CSV/Markdown plus separate
+  executed-KPI and solver-evidence PNG/SVG figures. Any non-gap failure or
+  source tampering blocks report creation; gap-limited cases are labeled
+  `DIAGNOSTIC_FEASIBLE_NOT_OPTIMALITY_CERTIFIED`.
+
 ## 2026-08-14: time-discretization diagnostic exposed provenance mismatch
 
 - Clean frozen SHA `01986881c8c4c2d69802be482dddf58865eb8535` executed the
@@ -35,8 +69,8 @@
   separately, verifies artifact snapshots, and writes to a new directory
   without HTTP, Prepare, solver, or source overwrite.
 - These changes do not alter the feasible region, objective, tariff, energy
-  equations, assignment, or gap rule. Focused compile and regression checks
-  passed; a fresh clean-commit 15/30/60-minute run remains required.
+  equations, assignment, or gap rule. The fresh corrected clean-commit rerun
+  and its current gap-limited verdict are recorded in the section above.
 
 ## 2026-08-13: verified low-PV M0--M3 comparison and reporting derivatives
 
