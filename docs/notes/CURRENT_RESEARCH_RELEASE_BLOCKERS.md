@@ -1,35 +1,34 @@
 # Current research release blockers
 
-## 2026-08-13 M0--M3 prepared-input provenance blocker
+## 2026-08-13 low-PV M0--M3 gate discharged; broader release blockers remain
 
-- A first low-PV Phase 1/Phase 4 comparison attempt reached physically valid
-  frontend results, but the comparison is correctly `BLOCKED`. The prepared
-  ID, canonical ablation input hash, clean Git SHA and M0 payload match; the
-  original prepared JSON byte hashes do not.
-- The mismatch is not evidence of different trips or controls. Restarting the
-  BFF emptied the in-memory cache, rebuilt the same deterministic prepared ID,
-  and overwrote its source path with a payload whose saved snapshot differs
-  only in `prepared_at`. That made the old Phase 4 source SHA unverifiable and
-  invalidated this M1/M3 pair for research comparison.
-- The implementation now treats each prepared path as immutable: matching
-  persisted input is loaded after restart; a timestamp-only repeated Prepare
-  preserves the original bytes; a real same-ID content difference fails closed
-  as `PREPARED_INPUT_ID_COLLISION`. The comparison gate remains unchanged and
-  is not weakened to accept semantic hashes in place of source bytes.
-- The first clean-commit Prepare then failed closed on a second defect in the
-  preserved v7 artifact: its ID encoded scope hash `404f3679...`, but the JSON
-  stored a separately recomputed `f1e18f25...`. The builder now uses one scope
-  hash for both fields. Independent verification of the first v8 artifact then
-  found that the derived `prepared_scope_audit` changed a re-hash of the stored
-  scope (`f1e18f25...` recorded versus `f1723217...` recomputed). No solver job
-  was submitted. That audit is now excluded from the selection hash and the
-  prepared schema is `v9_immutable_scope_identity`; inconsistent v7/v8 files
-  are not overwritten or relabeled.
-- Post-v9 regression passes `31` focused tests and all `1374` repository tests.
-  Remaining release work is to freeze the clean correction commit, invoke fresh
-  Prepare, run low-PV M1 and M3 against that one immutable source artifact, and
-  regenerate M0--M3. Until then the candidate effect sizes from the rejected
-  pair are diagnostic only and must not enter the thesis.
+- Fresh normal frontend/BFF Phase 1 and Phase 4 jobs completed from clean
+  frozen SHA `f5c8ba7395665493a718423d2232bb28a15e07bd`. They share prepared
+  input `prepared-8331f7eaa9fcb7eb-f1e18f252e336f1f-746edf1f`, exact source
+  SHA-256 `d9e2d63ce2c044d4ee6c2324677e59c9f64a24f792b9b9ee5acb2a3a8b4018c6`
+  and canonical ablation input SHA-256
+  `9693fb2c52952480160b0a455a154bca9b02edb01f28f7ab3695b34ae0fc29c3`.
+  The stored scope hash and independent re-hash also match the ID.
+- Phase 4 run `run_20260813_2317` passes 264/264 trip coverage, 24/24 Rolling,
+  physical validation, canonical accounting and the declared 1% gap through
+  its 0.547009% certificate. Phase 1 run `run_20260813_2337` is the explicit
+  fixed-dispatch charging optimization. The merge validates both final
+  artifact snapshots and returns `READY_FOR_DAY_AHEAD_METHOD_COMPARISON` with
+  zero failed checks.
+- Day-ahead M0/M1 use 13 BEV and 19 ICE buses for 44/220 trips; M2/M3 use
+  21/11 buses for 91/173 trips. M0->M1 reduces cost by 15,725.086173 JPY and
+  CO2 by 257.788298 kg without changing dispatch. M2->M3 reduces cost by
+  28,294.171245 JPY and CO2 by 463.838873 kg. M1->M3 adds eight BEVs and 47
+  BEV trips while reducing cost by 9,200.150294 JPY and CO2 by 158.127709 kg.
+- The first rejected v7 comparison remains historical diagnostic evidence; it
+  was not relabeled. The immutable v9 rerun is the sole adopted low-PV M0--M3
+  source. This discharges item 6 of the 2026-08-12 list for this low-PV,
+  same-input, day-ahead scope only.
+- Formal thesis release is still `BLOCKED`: the controlled high-PV result has
+  a 1.574005% certified gap against the declared 1%, and the 15/30/60-minute
+  plus other predeclared sensitivity experiments remain incomplete. This
+  comparison is not a Rolling-method comparison and is not a global-optimum
+  certificate for the full two-case study.
 
 ## 2026-08-13 latest verdict: r7 verifies feedback evidence; sunny gap is unchanged
 
@@ -446,6 +445,10 @@ declared gap gate is still required.
 
 ## 2026-08-12 model revision: fresh formal evidence required
 
+> Historical checkpoint. Item 6 was later discharged for the low-PV
+> same-input day-ahead comparison by the clean `f5c8ba7` evidence recorded at
+> the top of this document; the other listed items retain their stated scope.
+
 The current worktree changes the canonical feasible region, objective
 hierarchy, charging-power constraints, trip energy/fuel inputs, transition
 aliases, prepared-input schema, and research fingerprints. Consequently, every
@@ -503,7 +506,7 @@ physical validation, and agreement with the integrated Gurobi result. This is
 bounded formulation evidence only; it does not discharge the fresh 264-trip
 formal-run, M1/M0--M3, sensitivity, or pair gates above.
 
-The M1 execution and comparison path is now implemented. The Tk solver list
+The M1 execution and comparison path was implemented at this checkpoint. The Tk solver list
 exposes `phase1_charging_only`, Prepare classifies every explicit thesis phase
 as `milp_exact`, and the existing canonical Stage-2 solver keeps the baseline
 vehicle-trip assignment fixed while optimizing charging, PV, BESS, and grid
@@ -516,9 +519,9 @@ MIP-gap achievement, method physical validity, payload SHA, and identical M0
 are also mandatory. The merge rechecks the immutable hash snapshot recorded in
 each source `artifact_completeness.json`; edits to the candidates, summary,
 solver settings, or run manifest after finalization force `BLOCKED`. The
-implementation is tested, but no fresh full-scale M1
-or M3 frontend job has yet been executed at current HEAD, so item 6 remains an
-evidence blocker rather than an implementation blocker.
+implementation was tested, but no fresh full-scale M1 or M3 frontend job had
+yet been executed at that historical HEAD. The later clean `f5c8ba7` run now
+discharges item 6 for the explicit low-PV day-ahead scope only.
 
 ## 2026-08-11 compact reporting release: progress presentation ready
 

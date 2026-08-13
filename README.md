@@ -1444,6 +1444,19 @@ acceptance, MIP-gap target, and M0 identity all agree. Otherwise it writes a
 BLOCKED artifact with every failed check. Thus a single-run M0/M2/M3 file
 remains a candidate diagnostic, not a complete four-method result or a
 research-release shortcut.
+
+For a READY comparison, the same command also creates a versioned
+`reporting/<comparison-payload-sha-prefix>-<builder-git-sha-prefix>/` directory
+containing
+`method_results.csv`, `method_effects.csv`, an advisor-facing Markdown report,
+and PNG/SVG figures for cost/CO2 effects and dispatch/energy composition. The
+reporting manifest binds every derivative to the immutable comparison payload,
+records both the source-run Git SHA and the clean report-builder Git SHA, and
+stores byte hashes for all published inputs and outputs. Reporting refuses a
+dirty builder worktree. These figures are day-ahead M0--M3 comparisons only;
+they do not mix accepted Rolling accounting into the method effects or change
+the source solver-quality claim.
+
 At merge time the source method-candidate payload, `summary.json`,
 `solver_settings.json`, and `run_manifest.json` are also re-hashed against the
 final `artifact_completeness.json` snapshot. Any post-run edit blocks the

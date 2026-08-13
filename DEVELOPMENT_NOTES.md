@@ -1,5 +1,49 @@
 # Development Notes
 
+## 2026-08-13: verified low-PV M0--M3 comparison and reporting derivatives
+
+- Fresh frontend/BFF Phase 1 and Phase 4 jobs completed from clean frozen SHA
+  `f5c8ba7395665493a718423d2232bb28a15e07bd` against the same immutable v9
+  prepared input
+  `prepared-8331f7eaa9fcb7eb-f1e18f252e336f1f-746edf1f`. Its 251,647,636-byte
+  source SHA-256 is
+  `d9e2d63ce2c044d4ee6c2324677e59c9f64a24f792b9b9ee5acb2a3a8b4018c6`,
+  and the prepared ID, stored scope hash and independently recomputed scope
+  hash all contain `f1e18f252e336f1f`.
+- M3 run `run_20260813_2317` served 264/264 trips with 21 BEVs and 11 ICE
+  buses (91/173 trips), completed 24/24 Rolling, passed physical and canonical
+  accounting validation, and met the declared 1% target through the preserved
+  0.547009% certificate. M1 run `run_20260813_2337` evaluated the fixed
+  baseline dispatch through the explicit charging-only frontend phase. Both
+  source manifests retain the same prepared bytes, canonical input hash and
+  Git SHA.
+- `scripts/build_thesis_ablation_comparison.py` returned
+  `READY_FOR_DAY_AHEAD_METHOD_COMPARISON` with no failed checks. Canonical
+  day-ahead totals are: M0 723,243.238501 JPY / 1,402.028088 kg-CO2; M1
+  707,518.152327 JPY / 1,144.239790 kg-CO2; M2 726,612.173278 JPY /
+  1,449.950955 kg-CO2; and M3 698,318.002033 JPY / 986.112082 kg-CO2.
+  M0/M1 keep 13/19 BEV/ICE buses and 44/220 trips; M2/M3 use 21/11 buses and
+  91/173 trips.
+- The predeclared effects are now evidence-backed: M0->M1 changes cost by
+  -15,725.086173 JPY and CO2 by -257.788298 kg without changing dispatch;
+  M2->M3 changes cost by -28,294.171245 JPY and CO2 by -463.838873 kg;
+  M1->M3 adds eight used BEVs and 47 BEV trips while reducing cost by
+  9,200.150294 JPY and CO2 by 158.127709 kg. M2 alone is 3,368.934778 JPY and
+  47.922866 kg-CO2 worse than M0, so the result supports the joint
+  dispatch-energy interaction rather than a claim that BEV assignment alone
+  is always beneficial.
+- READY comparisons now generate canonical method/effect CSVs, Markdown, and
+  PNG/SVG figures from the verified payload. The reporting manifest records
+  the source-run SHA separately from the clean report-builder SHA and hashes
+  every derivative. The charts use explicit day-ahead scope, units, zero
+  baselines and direct labels; Rolling values remain excluded. Regression
+  tests reject payload tampering, reordered methods, dirty/unattested report
+  provenance and missing artifact hashes.
+- This discharges the low-PV same-input day-ahead M0--M3 evidence item only.
+  It does not cure the high-PV pair's 1.574005% versus 1% gap, establish a
+  global integrated optimum, or discharge the declared time-step and other
+  sensitivity experiments.
+
 ## 2026-08-13: prepared-input immutability across BFF restarts
 
 - The first clean-commit HTTP Prepare after the immutability patch failed
@@ -51,8 +95,8 @@
   before and after the immutability check.
 - Post-v9 focused preparation/provenance/ablation regression:
   `31 passed`; complete repository regression: `1374 passed in 69.77s`.
-  Fresh controlled M1/M3 evidence remains pending the reviewed clean commit;
-  no pre-fix run will be relabeled.
+  The later clean-commit evidence is recorded in the section above; no pre-fix
+  run was relabeled.
 
 ## 2026-08-13: runtime-attested r7 validates feedback budgeting and provenance
 
