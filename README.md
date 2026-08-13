@@ -2,6 +2,21 @@
 
 ## 2026-08-13 current sequential formal-pair evidence
 
+- Latest frozen pair `b06c451b9f89e7930f25b7d7e28cf50af54df21c`
+  completed fresh Prepare, both Phase-4 jobs, 24/24 Rolling, independent
+  physical/accounting validation, pair finalization, the progress bundle and
+  ZIP export. It exactly reproduced the accepted controlled-PV response below:
+  high PV 31/1 BEV/ICE and 248/16 trips at 650,234.729396 JPY, versus low PV
+  21/11 and 91/173 at 698,318.002033 JPY. The pair-level control audit passes;
+  formal submission remains blocked only because high PV has a 1.574005%
+  certified cost gap against the declared 1% target (low PV: 0.547009%).
+- The new duty-suffix neighborhood generated 1,335 sunny crossover attempts;
+  six satisfied both dispatch cross-arcs and 24 all-BEV candidates received
+  exact fixed-assignment Stage-2 evaluation. None was energy/SOC feasible, so
+  it did not change the selected result. The next implementation must
+  re-partition the complete affected route-band trip set instead of relying on
+  one reciprocal suffix exchange. Evidence and report bundle:
+  `output/formal_pair_20260813_suffix_exchange_flat30_pv1000_bess6000_phase4_b06c451_gap01`.
 - Clean frozen SHA `7cb1192cf6278e8854add16b58f04639a6656336` completed the
   ordinary frontend/BFF path for the controlled high/low-PV pair: fresh
   Prepare, Phase 4, 24/24 Rolling, physical validation, canonical executed-day

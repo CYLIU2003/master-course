@@ -2,6 +2,25 @@
 
 ## 2026-08-13 latest verdict: controlled pair accepted; sunny 1% gap remains
 
+The latest fresh pair at frozen SHA
+`b06c451b9f89e7930f25b7d7e28cf50af54df21c` reproduced every canonical KPI
+and release decision from the prior accepted pair. Its pair control audit is
+accepted, all 264 trips and 24 Rolling steps pass in both cases, and canonical
+cost, fuel, CO2, SOC and BESS terminal accounting reconcile. High PV remains
+31 BEV / 1 ICE with a 1.574005% certified cost gap; low PV remains 21/11 with
+a 0.547009% certificate. The only formal pair blocker is still
+`baseline_requested_mip_gap_certified`.
+
+The attempted IIS-motivated suffix neighborhood did not close that blocker.
+For high PV it found six dispatch-valid crossover structures and evaluated 24
+all-BEV fixed assignments; all were Stage-2 energy/SOC infeasible. Because the
+algorithm exchanges only one pair of suffixes, it redistributes two long paths
+but cannot generally create enough depot charging windows across the complete
+affected route band. This is now recorded as negative evidence. Further blind
+single-exchange enumeration is not justified; the next required search is a
+restricted route-band network re-partitioning with exact fixed-assignment
+recourse, followed by another clean pair.
+
 The first clean full pair using sequential scalar lexicographic certification
 completed at frozen SHA `7cb1192cf6278e8854add16b58f04639a6656336`.
 Both cases served 264/264 trips, accepted all 24 Rolling steps, passed physical

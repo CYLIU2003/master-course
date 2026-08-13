@@ -2,6 +2,34 @@
 
 ## 2026-08-13: sequential formal pair, evidence audit, and reporting repair
 
+- Re-ran the full frontend-equivalent controlled pair from clean frozen SHA
+  `b06c451b9f89e7930f25b7d7e28cf50af54df21c` after adding the IIS-motivated
+  duty-suffix neighborhood. Both fresh Prepare records retained the common
+  2025-08-05 `WEEKDAY` 264-trip service, 60-vehicle fleet, ten chargers,
+  30 JPY/kWh energy, zero demand charge, 1,000 kW PV rating and 6,000 kWh BESS.
+  Both cases completed, accepted 24/24 Rolling steps, passed physical and
+  accounting checks, and the pair control hash matched while PV hashes differed.
+- Canonical results were unchanged: high PV used 31 BEVs / 1 ICE for 248/16
+  trips, cost 650,234.729396 JPY and emitted 170.814257 kg-CO2; low PV used
+  21/11 for 91/173 trips, cost 698,318.002033 JPY and emitted 986.112082 kg.
+  Certified cost gaps are 1.574005% and 0.547009%. Pair sensitivity acceptance
+  is true, but formal submission is still blocked only by
+  `baseline_requested_mip_gap_certified`.
+- In high PV, suffix search generated 1,335 raw exchanges; six passed both
+  canonical cross-arc checks. Twenty-four 32-BEV fixed assignments were
+  evaluated and all were Stage-2 infeasible, so the selected seed stayed the
+  earlier 31/1 powertrain-duty-swap result. Low PV evaluated 56 suffix-derived
+  candidates, 13 were feasible, but none beat its 21/11 baseline cost. This is
+  negative experimental evidence: one reciprocal suffix exchange is too local
+  to create the charging windows needed to retire the final sunny ICE duty.
+  The next model change is a route-band restricted re-partitioning MILP, not a
+  larger blind enumeration of the same move.
+- The progress artifact is
+  `output/formal_pair_20260813_suffix_exchange_flat30_pv1000_bess6000_phase4_b06c451_gap01`
+  and its ZIP. `progress_report/` is `READY` for progress-evidence completeness
+  with seven PNG/SVG figure pairs, six tables, ten detailed per-run figures and
+  106 indexed source artifacts. It explicitly displays the formal pair as
+  BLOCKED and does not convert progress readiness into research readiness.
 - Ran the requested high/low-PV pair from clean frozen SHA
   `7cb1192cf6278e8854add16b58f04639a6656336` through the same frontend/BFF
   endpoints used by the application. Both fresh prepared inputs materialized
