@@ -135,7 +135,10 @@ def _plot_executed_kpis(
         ax.set_axisbelow(True)
         ax.bar_label(
             bars,
-            labels=[f"{value:+,.2f}" for value in values],
+            labels=[
+                "" if abs(value) < 1e-12 else f"{value:+,.2f}"
+                for value in values
+            ],
             padding=3,
             fontsize=8,
         )
