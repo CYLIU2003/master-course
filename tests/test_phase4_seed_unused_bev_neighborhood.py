@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import src.optimization.milp.solver_adapter as solver_adapter_module
-from src.dispatch.models import DutyLeg, Trip, VehicleDuty
+from src.dispatch.models import DispatchContext, DutyLeg, Trip, VehicleDuty
 from src.optimization.common.problem import (
     AssignmentPlan,
     CanonicalOptimizationProblem,
@@ -14,6 +14,7 @@ from src.optimization.common.problem import (
 from src.optimization.milp.solver_adapter import (
     GurobiMILPAdapter,
     MILPSolverOutcome,
+    _exchange_duty_suffixes,
     _maximum_bipartite_vehicle_matching,
     _remap_plan_vehicle_ids,
 )
@@ -114,6 +115,205 @@ def test_remap_plan_vehicle_ids_clears_stale_energy_and_preserves_paths() -> Non
     assert all(duty.vehicle_type == "BEV" for duty in remapped.duties)
     assert remapped.charging_slots == ()
     assert remapped.vehicle_soc_kwh_by_vehicle_slot == {}
+
+
+def test_exchange_duty_suffixes_preserves_coverage_and_rebuilds_cross_arcs() -> None:
+    first_trips = (_trip("a-1", "08:00"), _trip("a-2", "10:00"))
+    second_trips = (_trip("b-1", "08:30"), _trip("b-2", "10:30"))
+    plan = AssignmentPlan(
+        duties=(
+            VehicleDuty(
+                duty_id="duty-ice",
+                vehicle_type="ICE",
+                legs=tuple(DutyLeg(trip) for trip in first_trips),
+            ),
+            VehicleDuty(
+                duty_id="duty-bev",
+                vehicle_type="BEV",
+                legs=tuple(DutyLeg(trip) for trip in second_trips),
+            ),
+        ),
+        charging_slots=(),
+        served_trip_ids=("a-1", "a-2", "b-1", "b-2"),
+        metadata={
+            "duty_vehicle_map": {
+                "duty-ice": "ice-1",
+                "duty-bev": "bev-used",
+            }
+        },
+    )
+    context = DispatchContext(
+        service_date="2025-08-05",
+        trips=[*first_trips, *second_trips],
+        turnaround_rules={},
+        deadhead_rules={},
+        vehicle_profiles={},
+        default_turnaround_min=10,
+    )
+
+    exchanged = _exchange_duty_suffixes(
+        plan,
+        first_duty_id="duty-ice",
+        second_duty_id="duty-bev",
+        first_split_index=1,
+        second_split_index=1,
+        vehicle_type_by_id={"ice-1": "ICE", "bev-used": "BEV"},
+        dispatch_context=context,
+        candidate_source="test_suffix_exchange",
+    )
+
+    assert exchanged is not None
+    assert exchanged.vehicle_paths() == {
+        "bev-used": ("b-1", "a-2"),
+        "ice-1": ("a-1", "b-2"),
+    }
+    assert sorted(exchanged.served_trip_ids) == ["a-1", "a-2", "b-1", "b-2"]
+    assert exchanged.charging_slots == ()
+    assert exchanged.vehicle_soc_kwh_by_vehicle_slot == {}
+    exchange = exchanged.metadata["phase4_seed_duty_suffix_exchange"]
+    assert exchange["first_split_index"] == 1
+    assert exchange["second_split_index"] == 1
+
+
+def test_suffix_exchange_can_activate_bev_when_whole_duty_replacement_cannot(
+    monkeypatch,
+) -> None:
+    class _FakeFeasibilityChecker:
+        def evaluate(self, _problem, _plan):
+            return SimpleNamespace(feasible=True, errors=())
+
+    class _FakeCostEvaluator:
+        def evaluate(self, _problem, plan):
+            has_ice = any(
+                duty.vehicle_type == "ICE" for duty in plan.duties
+            )
+            return SimpleNamespace(
+                total_cost=100.0 if has_ice else 80.0,
+                evaluation_feasible=True,
+            )
+
+    trips = (
+        _trip("a-1", "08:00"),
+        _trip("a-2", "10:00"),
+        _trip("b-1", "08:30"),
+        _trip("b-2", "10:30"),
+    )
+    context = DispatchContext(
+        service_date="2025-08-05",
+        trips=list(trips),
+        turnaround_rules={},
+        deadhead_rules={},
+        vehicle_profiles={},
+        default_turnaround_min=10,
+    )
+    seed = AssignmentPlan(
+        duties=(
+            VehicleDuty(
+                duty_id="duty-ice",
+                vehicle_type="ICE",
+                legs=(DutyLeg(trips[0]), DutyLeg(trips[1])),
+            ),
+            VehicleDuty(
+                duty_id="duty-bev",
+                vehicle_type="BEV",
+                legs=(DutyLeg(trips[2]), DutyLeg(trips[3])),
+            ),
+        ),
+        served_trip_ids=tuple(trip.trip_id for trip in trips),
+        metadata={
+            "duty_vehicle_map": {
+                "duty-ice": "ice-1",
+                "duty-bev": "bev-used",
+            },
+            "stage1_feasible": True,
+            "stage2_feasible": True,
+            "stage2_has_feasible_incumbent": True,
+        },
+    )
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="suffix-activation",
+            timestep_min=60,
+        ),
+        dispatch_context=context,
+        trips=(),
+        vehicles=(
+            ProblemVehicle("ice-1", "ICE", "DEPOT"),
+            ProblemVehicle("bev-used", "BEV", "DEPOT"),
+            ProblemVehicle("bev-unused", "BEV", "DEPOT"),
+        ),
+    )
+    monkeypatch.setattr(
+        solver_adapter_module,
+        "FeasibilityChecker",
+        _FakeFeasibilityChecker,
+    )
+    monkeypatch.setattr(
+        solver_adapter_module,
+        "CostEvaluator",
+        _FakeCostEvaluator,
+    )
+    adapter = GurobiMILPAdapter()
+
+    def _fake_stage2(_problem, _config, plan, **_kwargs):
+        paths = plan.vehicle_paths()
+        suffix_reconstructed = set(paths.values()) == {
+            ("a-1", "b-2"),
+            ("b-1", "a-2"),
+        }
+        solved = AssignmentPlan(
+            **{
+                **plan.__dict__,
+                "metadata": {
+                    **dict(plan.metadata or {}),
+                    "stage2_feasible": suffix_reconstructed,
+                    "stage2_has_feasible_incumbent": suffix_reconstructed,
+                },
+            }
+        )
+        return (
+            MILPSolverOutcome(
+                solver_status=(
+                    "optimal" if suffix_reconstructed else "infeasible"
+                ),
+                used_backend="test",
+                supports_exact_milp=True,
+                has_feasible_incumbent=suffix_reconstructed,
+                incumbent_count=1 if suffix_reconstructed else 0,
+            ),
+            solved,
+        )
+
+    monkeypatch.setattr(
+        adapter,
+        "_solve_thesis_stage2_charging_dispatch",
+        _fake_stage2,
+    )
+
+    selected, audit = (
+        adapter.improve_phase4_seed_with_unused_bev_neighborhood(
+            problem,
+            OptimizationConfig(
+                phase4_phase3_seed_unused_bev_neighborhood_enabled=True,
+                phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec=30,
+                phase4_phase3_seed_unused_bev_neighborhood_per_solve_sec=1,
+                phase4_phase3_seed_unused_bev_neighborhood_max_evaluations=20,
+                phase4_phase3_seed_powertrain_duty_swap_rounds=1,
+                phase4_phase3_seed_unused_bev_identity_exchange_rounds=0,
+            ),
+            seed,
+        )
+    )
+
+    assert set(selected.duties_by_vehicle()) == {"bev-used", "bev-unused"}
+    assert audit["selected"] is True
+    assert audit["selected_candidate_kind"] == (
+        "duty_suffix_exchange_activation_round_1"
+    )
+    assert audit["trip_paths_modified"] is True
+    assert audit["selected_used_bev"] == 2
+    assert audit["selected_used_ice"] == 0
+    assert audit["duty_suffix_exchange_candidates_dispatch_feasible"] == 1
 
 
 def test_unused_bev_neighborhood_selects_only_exact_lower_cost_candidate(

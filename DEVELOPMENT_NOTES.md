@@ -49,17 +49,37 @@
   `1357 passed in 69.10s`; compileall and `git diff --check` also pass. None
   of these post-run changes relabels `7cb1192` evidence; a new clean frozen
   SHA is mandatory before another formal pair.
-- Gap diagnosis after the frozen pair showed the sunny canonical-cost solve
-  consumed 3,600 seconds at one root node. The 640,000 JPY analytical bound
-  already makes a <=646,464.65 JPY incumbent sufficient for the 1% stop, but
-  the verified seed was 650,234.73 JPY. The old verified-start profile focused
-  on bound improvement (`MIPFocus=3`, `Heuristics=0.01`, `Presolve=1`). It now
-  uses weather-neutral incumbent-gap closure (`MIPFocus=1`,
-  `Heuristics=0.25`, `Presolve=2`) while preserving all equations, objective
-  priorities, seed validation and the analytical certificate. Focused
-  integrated-search tests pass 61/61; the complete repository regression
-  passes `1357 passed in 67.09s` and compileall succeeds. A fresh pair is
-  required after this search-control change.
+- Tested the proposed weather-neutral incumbent-gap search profile from clean
+  SHA `698ef44622a50a1d5a06368aea6d7fc6914b1457` through the ordinary
+  frontend/BFF pair path. It produced exactly the same high-PV
+  31-BEV/1-ICE, 650,234.729396 JPY incumbent and 1.574005% certificate, again
+  after 3,600 seconds at one root node. Low PV also reproduced its previous
+  result and 0.547009% certificate, but solver time increased to about
+  322.6 seconds. The changed `MIPFocus`, heuristic share and presolve setting
+  therefore provided no benefit and are reverted rather than retained as an
+  unsupported improvement. The frozen output remains at
+  `output/formal_pair_20260813_incumbent_gap_flat30_pv1000_bess6000_phase4_698ef44_gap01`.
+- Candidate-level IIS evidence then isolated the limiting construction. The
+  generated 32-BEV/0-ICE candidate moved a 16-trip 07:26--23:24 duty unchanged
+  to BEV `befc4670-e889-45d9-bd65-23118c02e196`. Its fixed-assignment recourse
+  was infeasible: required energy including the terminal target was
+  362.486315 kWh, usable initial energy was 160.557620 kWh, time-ordered
+  deliverable charging was only 90.642380 kWh, and terminal shortage was
+  111.286315 kWh. This proves that candidate assignment infeasible, not that
+  every 32-BEV schedule is infeasible.
+- The unused-BEV neighborhood now reconstructs paths before activation. For an
+  active ICE duty and same-depot BEV duty (and the same route band when route
+  bands are fixed), it exchanges non-empty suffixes only when both crossover
+  arcs pass the shared turnaround/deadhead feasibility engine. It then replaces
+  the remaining ICE identity with an unused BEV, clears all stale recourse and
+  ledger fields, and accepts the candidate only after exact fixed-assignment
+  Stage 2, physical validation and canonical accounting. The audit schema v2
+  records split points, replacement IDs, path-distance proxies and IIS samples.
+  A focused constructed case verifies that whole-duty replacement can fail
+  while suffix reconstruction yields an exact lower-cost all-BEV candidate.
+  Focused tests pass 75/75; the complete repository regression passes
+  `1359 passed in 73.77s`, compileall succeeds, and `git diff --check` is clean.
+  Fresh formal-pair evidence remains required.
 
 ## 2026-08-12: thesis-model validity contract implementation
 

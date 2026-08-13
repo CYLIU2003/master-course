@@ -44,15 +44,32 @@ post-run code changes, they require a new clean commit and fresh pair and do
 not rewrite the frozen artifacts.
 
 The sunny cost solve explored only its root node for the full 3,600-second
-budget. Its independent analytical lower bound was already 640,000 JPY; the
-1% acceptance threshold was therefore an incumbent of at most approximately
-646,464.65 JPY, while the verified seed remained 650,234.73 JPY. The previous
-verified-start controls (`MIPFocus=3`, `Heuristics=0.01`) concentrated on the
-weak root bound and did not target the quantity that could close this
-certificate. Current code uses the same weather-neutral
-incumbent-focused controls (`MIPFocus=1`, `Heuristics=0.25`, `Presolve=2`) for
-both cases. This does not guarantee success and cannot alter the frozen pair;
-fresh controlled evidence is still required.
+budget. A second clean controlled pair at
+`698ef44622a50a1d5a06368aea6d7fc6914b1457` tested an incumbent-focused
+profile (`MIPFocus=1`, `Heuristics=0.25`, `Presolve=2`). It reproduced exactly
+the same high-PV incumbent and 1.574005% gap and made the low-PV solve slower.
+That experiment did not close the blocker, so current code restores the prior
+bound-certification profile instead of presenting the search-control change as
+an improvement.
+
+The useful diagnosis came from Stage-2 IIS evidence. A generated 32-BEV
+candidate copied one 07:26--23:24, 16-trip ICE path unchanged to an unused
+BEV. Under the configured return-to-initial terminal policy, that path had
+160.557620 kWh usable initial energy and only 90.642380 kWh time-ordered
+deliverable charging against 362.486315 kWh required energy, leaving a
+111.286315 kWh terminal shortage. This is an infeasibility certificate for
+that fixed assignment only; it is not a certificate that every 32-BEV
+assignment is infeasible.
+
+Current code therefore adds an IIS-motivated duty-suffix exchange neighborhood.
+It preserves exact trip coverage, validates both new cross-arcs with the same
+turnaround/deadhead engine as the dispatch graph, respects fixed route bands,
+clears stale energy/SOC/accounting state, and requires exact fixed-assignment
+Stage-2 recourse plus independent validation before a reconstructed candidate
+can become the integrated MIP start. Candidate generation is weather-neutral
+and no BEV count is forced. Until a fresh clean controlled pair exercises this
+code and the high-PV case meets the declared 1% cost gap, formal release
+remains `BLOCKED`.
 
 ## 2026-08-13 sequential cost-gap path implemented; fresh formal evidence pending
 

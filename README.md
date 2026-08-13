@@ -32,13 +32,22 @@
   persists ICE fuel liters for canonical reports. These fixes do not relabel
   the frozen `7cb1192` artifacts; another clean-commit run is required to
   exercise the new schema.
-- The high-PV solve spent 3,600 seconds at one root node with a 640,000 JPY
-  analytical lower bound and a 650,234.729396 JPY incumbent. Because reaching
-  the declared 1% certificate now requires improving the incumbent below the
-  analytical BestObjStop threshold rather than improving that weak LP bound,
-  verified-start Phase 4 runs use a weather-neutral incumbent-focused profile
-  (`MIPFocus=1`, `Heuristics=0.25`, `Presolve=2`). This changes search only,
-  not the objective, feasible region or accounting, and needs a fresh pair.
+- A second clean pair at SHA `698ef44622a50a1d5a06368aea6d7fc6914b1457`
+  tested a weather-neutral incumbent-focused search profile. It reproduced the
+  same high/low assignments, costs and certified gaps; high PV still spent
+  3,600 seconds at one root node, while low-PV solve time increased to about
+  323 seconds. The experiment did not improve evidence and the profile was
+  reverted to the bound-certification controls.
+- IIS review found a separate candidate-generation defect: the attempted
+  32-BEV start copied one continuous 07:26--23:24, 16-trip ICE duty onto one
+  unused BEV. That vehicle could receive only 90.64238 kWh before/during the
+  path and missed its return-to-initial terminal target by 111.286315 kWh.
+  The Phase-4 seed neighborhood now tries deterministic reciprocal duty-suffix
+  exchanges within the permitted route band, validates both crossover arcs
+  with the canonical turnaround/deadhead engine, activates an unused BEV, and
+  sends every candidate through exact fixed-assignment Stage-2 recourse. It
+  never changes weather weights, forces a BEV count, or reuses stale SOC/cost
+  fields. Fresh clean-pair evidence is required before this can affect claims.
 - Evidence directory:
   `output/formal_pair_20260813_sequential_lexgap_flat30_pv1000_bess6000_phase4_7cb1192_gap01`.
   Its `progress_report/` contains seven PNG/SVG figures, six CSV tables and a

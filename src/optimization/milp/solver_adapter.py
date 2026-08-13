@@ -10,9 +10,9 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Protocol, Sequence, Set, Tuple
 
-from src.dispatch.feasibility import evaluate_startup_feasibility
+from src.dispatch.feasibility import FeasibilityEngine, evaluate_startup_feasibility
 from src.dispatch.models import DutyLeg, VehicleDuty
-from src.dispatch.route_band import fragment_transition_diagnostic
+from src.dispatch.route_band import duty_route_band_ids, fragment_transition_diagnostic
 from src.gurobi_runtime import ensure_gurobi, is_gurobi_available
 from src.objective_modes import normalize_objective_mode
 from src.optimization.common.cost_components import normalize_cost_component_flags
@@ -80,12 +80,10 @@ def _integrated_search_controls(
     """Return the weather-neutral Phase 4 search controls.
 
     A complete, independently checked Phase 3 recourse start removes the need
-    to spend the integrated budget rediscovering feasibility.  Sequential
-    certification also supplies an independent integer-valid cost lower bound
-    and a corresponding BestObjStop threshold.  The verified-start profile
-    therefore searches for an incumbent that closes that certified gap instead
-    of spending the whole budget on a weak root relaxation.  Runs without a
-    verified start retain the stronger feasibility-oriented profile.  Both
+    to spend the integrated budget rediscovering feasibility.  Formal runs
+    need a certified lower bound, so the verified-start profile focuses on the
+    bound and keeps only a small weather-neutral heuristic allowance.  Runs
+    without a verified start retain the feasibility-oriented profile.  Both
     profiles use one simplex root method because automatic concurrent methods
     can retain multiple copies of this very large model.  The soft memory
     limit is a termination guard, not a relaxation of any model constraint.
@@ -93,10 +91,10 @@ def _integrated_search_controls(
 
     if verified_feasible_start:
         return {
-            "profile": "close_certified_gap_from_verified_feasible_start",
-            "mip_focus": 1,
-            "heuristics": 0.25,
-            "presolve": 2,
+            "profile": "certify_bound_from_verified_feasible_start",
+            "mip_focus": 3,
+            "heuristics": 0.01,
+            "presolve": 1,
             "nodefile_start_gb": 0.5,
             "root_method": 1,
             "node_method": 1,
@@ -526,6 +524,42 @@ def _stage1_candidate_evaluation_priority_key(
     )
 
 
+def _dispatch_only_plan(
+    plan: AssignmentPlan,
+    *,
+    duties: Sequence[VehicleDuty],
+    duty_vehicle_map: Mapping[str, str],
+    metadata_updates: Mapping[str, Any],
+) -> AssignmentPlan:
+    """Clear solved recourse fields after a dispatch-topology change."""
+
+    return replace(
+        plan,
+        duties=tuple(duties),
+        charging_slots=(),
+        refuel_slots=(),
+        grid_to_bus_kwh_by_depot_slot={},
+        pv_to_bus_kwh_by_depot_slot={},
+        bess_to_bus_kwh_by_depot_slot={},
+        pv_to_bess_kwh_by_depot_slot={},
+        grid_to_bess_kwh_by_depot_slot={},
+        pv_curtail_kwh_by_depot_slot={},
+        bess_soc_kwh_by_depot_slot={},
+        contract_over_limit_kwh_by_depot_slot={},
+        vehicle_soc_kwh_by_vehicle_slot={},
+        vehicle_cost_ledger=(),
+        daily_cost_ledger=(),
+        metadata={
+            **dict(plan.metadata or {}),
+            **dict(metadata_updates or {}),
+            "duty_vehicle_map": {
+                str(duty_id): str(vehicle_id)
+                for duty_id, vehicle_id in duty_vehicle_map.items()
+            },
+        },
+    )
+
+
 def _remap_plan_vehicle_ids(
     plan: AssignmentPlan,
     *,
@@ -570,31 +604,152 @@ def _remap_plan_vehicle_ids(
             )
         )
 
-    metadata = {
-        **dict(plan.metadata or {}),
-        "source": str(candidate_source),
-        "duty_vehicle_map": remapped_duty_vehicle_map,
-        "phase4_seed_unused_bev_candidate_replacements": dict(
-            sorted(normalized_replacements.items())
+    return _dispatch_only_plan(
+        plan,
+        duties=remapped_duties,
+        duty_vehicle_map=remapped_duty_vehicle_map,
+        metadata_updates={
+            "source": str(candidate_source),
+            "phase4_seed_unused_bev_candidate_replacements": dict(
+                sorted(normalized_replacements.items())
+            ),
+        },
+    )
+
+
+def _exchange_duty_suffixes(
+    plan: AssignmentPlan,
+    *,
+    first_duty_id: str,
+    second_duty_id: str,
+    first_split_index: int,
+    second_split_index: int,
+    vehicle_type_by_id: Mapping[str, str],
+    dispatch_context: Any,
+    candidate_source: str,
+) -> Optional[AssignmentPlan]:
+    """Exchange two non-empty duty suffixes when both cross-arcs are valid.
+
+    This is a dispatch candidate generator only.  It preserves exact trip
+    coverage and each duty's vehicle identity, but clears every charging,
+    energy, SOC, and accounting field so exact Stage-2 recourse must rebuild
+    and validate them.  Returning ``None`` means one crossover would violate
+    the same turnaround/deadhead rule used by the canonical dispatch graph.
+    """
+
+    normalized_first_duty_id = str(first_duty_id)
+    normalized_second_duty_id = str(second_duty_id)
+    if normalized_first_duty_id == normalized_second_duty_id:
+        return None
+    duty_by_id = {str(duty.duty_id): duty for duty in plan.duties}
+    first_duty = duty_by_id.get(normalized_first_duty_id)
+    second_duty = duty_by_id.get(normalized_second_duty_id)
+    if first_duty is None or second_duty is None:
+        return None
+    first_legs = tuple(first_duty.legs)
+    second_legs = tuple(second_duty.legs)
+    if not 0 < int(first_split_index) < len(first_legs):
+        return None
+    if not 0 < int(second_split_index) < len(second_legs):
+        return None
+
+    duty_vehicle_map = plan.duty_vehicle_map()
+    first_vehicle_id = str(duty_vehicle_map[normalized_first_duty_id])
+    second_vehicle_id = str(duty_vehicle_map[normalized_second_duty_id])
+    first_vehicle_type = str(
+        vehicle_type_by_id.get(first_vehicle_id, first_duty.vehicle_type)
+    )
+    second_vehicle_type = str(
+        vehicle_type_by_id.get(second_vehicle_id, second_duty.vehicle_type)
+    )
+    first_prefix = first_legs[: int(first_split_index)]
+    first_suffix = first_legs[int(first_split_index) :]
+    second_prefix = second_legs[: int(second_split_index)]
+    second_suffix = second_legs[int(second_split_index) :]
+    if any(
+        first_vehicle_type not in leg.trip.allowed_vehicle_types
+        for leg in second_suffix
+    ) or any(
+        second_vehicle_type not in leg.trip.allowed_vehicle_types
+        for leg in first_suffix
+    ):
+        return None
+
+    engine = FeasibilityEngine()
+    first_cross = engine.can_connect(
+        first_prefix[-1].trip,
+        second_suffix[0].trip,
+        dispatch_context,
+        first_vehicle_type,
+    )
+    second_cross = engine.can_connect(
+        second_prefix[-1].trip,
+        first_suffix[0].trip,
+        dispatch_context,
+        second_vehicle_type,
+    )
+    if not first_cross.feasible or not second_cross.feasible:
+        return None
+
+    first_new_suffix = (
+        replace(
+            second_suffix[0],
+            deadhead_from_prev_min=max(
+                int(first_cross.deadhead_time_min or 0),
+                0,
+            ),
+        ),
+        *second_suffix[1:],
+    )
+    second_new_suffix = (
+        replace(
+            first_suffix[0],
+            deadhead_from_prev_min=max(
+                int(second_cross.deadhead_time_min or 0),
+                0,
+            ),
+        ),
+        *first_suffix[1:],
+    )
+    exchanged_duty_by_id = {
+        normalized_first_duty_id: replace(
+            first_duty,
+            vehicle_type=first_vehicle_type,
+            legs=(*first_prefix, *first_new_suffix),
+        ),
+        normalized_second_duty_id: replace(
+            second_duty,
+            vehicle_type=second_vehicle_type,
+            legs=(*second_prefix, *second_new_suffix),
         ),
     }
-    return replace(
+    exchanged_duties = tuple(
+        exchanged_duty_by_id.get(str(duty.duty_id), duty)
+        for duty in plan.duties
+    )
+    return _dispatch_only_plan(
         plan,
-        duties=tuple(remapped_duties),
-        charging_slots=(),
-        refuel_slots=(),
-        grid_to_bus_kwh_by_depot_slot={},
-        pv_to_bus_kwh_by_depot_slot={},
-        bess_to_bus_kwh_by_depot_slot={},
-        pv_to_bess_kwh_by_depot_slot={},
-        grid_to_bess_kwh_by_depot_slot={},
-        pv_curtail_kwh_by_depot_slot={},
-        bess_soc_kwh_by_depot_slot={},
-        contract_over_limit_kwh_by_depot_slot={},
-        vehicle_soc_kwh_by_vehicle_slot={},
-        vehicle_cost_ledger=(),
-        daily_cost_ledger=(),
-        metadata=metadata,
+        duties=exchanged_duties,
+        duty_vehicle_map=duty_vehicle_map,
+        metadata_updates={
+            "source": str(candidate_source),
+            "phase4_seed_duty_suffix_exchange": {
+                "first_duty_id": normalized_first_duty_id,
+                "second_duty_id": normalized_second_duty_id,
+                "first_vehicle_id": first_vehicle_id,
+                "second_vehicle_id": second_vehicle_id,
+                "first_split_index": int(first_split_index),
+                "second_split_index": int(second_split_index),
+                "first_cross_deadhead_min": max(
+                    int(first_cross.deadhead_time_min or 0),
+                    0,
+                ),
+                "second_cross_deadhead_min": max(
+                    int(second_cross.deadhead_time_min or 0),
+                    0,
+                ),
+            },
+        },
     )
 
 
@@ -1528,13 +1683,16 @@ class GurobiMILPAdapter:
         )
         audit: Dict[str, Any] = {
             "schema_version": (
-                "phase4_seed_unused_bev_activation_neighborhood_v1"
+                "phase4_seed_unused_bev_activation_neighborhood_v2"
             ),
             "enabled": enabled,
             "role": "feasible_upper_bound_candidate_generation_only",
             "global_optimality_claimed": False,
             "weather_strategy_bias_applied": False,
             "trip_paths_modified": False,
+            "candidate_trip_path_reconstruction_enabled": bool(
+                powertrain_duty_swap_round_limit > 0
+            ),
             "wall_time_limit_sec": wall_limit_sec,
             "per_stage2_solve_time_limit_sec": per_solve_sec,
             "maximum_candidate_evaluations": max_evaluations,
@@ -1633,6 +1791,10 @@ class GurobiMILPAdapter:
         evaluation_rows: List[Dict[str, Any]] = audit[
             "candidate_evaluations"
         ]
+        seen_candidate_assignment_hashes: Set[str] = {
+            _assignment_hash(seed_plan)
+        }
+        duplicate_candidate_count = 0
         feasible_candidates: List[
             Tuple[float, int, int, AssignmentPlan, str, Mapping[str, str]]
         ] = [
@@ -1657,11 +1819,18 @@ class GurobiMILPAdapter:
             *,
             candidate_kind: str,
             replacements: Mapping[str, str],
+            candidate_details: Optional[Mapping[str, Any]] = None,
         ) -> Optional[
             Tuple[float, int, int, AssignmentPlan, str, Mapping[str, str]]
         ]:
+            nonlocal duplicate_candidate_count
             if not _budget_available():
                 return None
+            candidate_assignment_hash = _assignment_hash(candidate_plan)
+            if candidate_assignment_hash in seen_candidate_assignment_hashes:
+                duplicate_candidate_count += 1
+                return None
+            seen_candidate_assignment_hashes.add(candidate_assignment_hash)
             evaluation_index = len(evaluation_rows) + 1
             remaining_wall_sec = max(deadline - time.monotonic(), 0.0)
             effective_solve_sec = max(
@@ -1748,11 +1917,33 @@ class GurobiMILPAdapter:
             )
             used_bev, used_ice = _composition(solved_plan)
             assignment_hash = _assignment_hash(solved_plan)
+            iis_constraint_names = tuple(
+                sorted(
+                    str(name)
+                    for name in (
+                        solved_metadata.get("stage2_iis_constraint_names")
+                        or ()
+                    )
+                )
+            )
+            iis_hash = (
+                hashlib.sha256(
+                    json.dumps(
+                        iis_constraint_names,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    ).encode("utf-8")
+                ).hexdigest()
+                if iis_constraint_names
+                else ""
+            )
             evaluation_rows.append(
                 {
                     "candidate_index": evaluation_index,
                     "candidate_kind": str(candidate_kind),
                     "replacements": dict(sorted(replacements.items())),
+                    "candidate_details": dict(candidate_details or {}),
+                    "requested_assignment_hash": candidate_assignment_hash,
                     "assignment_hash": assignment_hash,
                     "stage2_solver_status": str(outcome.solver_status),
                     "stage2_feasible": stage2_feasible,
@@ -1766,6 +1957,13 @@ class GurobiMILPAdapter:
                     ),
                     "feasible": feasible,
                     "canonical_cost_jpy": canonical_cost,
+                    "stage2_iis_constraint_count": len(
+                        iis_constraint_names
+                    ),
+                    "stage2_iis_hash": iis_hash,
+                    "stage2_iis_constraint_sample": list(
+                        iis_constraint_names[:20]
+                    ),
                     "used_bev": used_bev,
                     "used_ice": used_ice,
                     "runtime_sec": runtime_sec,
@@ -1896,6 +2094,290 @@ class GurobiMILPAdapter:
             ),
         )
         completed_powertrain_duty_swap_rounds = 0
+        suffix_exchange_candidates_generated = 0
+        suffix_exchange_candidates_dispatch_feasible = 0
+        completed_suffix_exchange_activation_rounds = 0
+        fixed_route_band_mode = bool(
+            (problem.metadata or {}).get("fixed_route_band_mode", False)
+        )
+
+        def _service_distance_km(duties: Sequence[VehicleDuty]) -> float:
+            return sum(
+                max(float(leg.trip.distance_km or 0.0), 0.0)
+                for duty in duties
+                for leg in duty.legs
+            )
+
+        for round_index in range(
+            1,
+            powertrain_duty_swap_round_limit + 1,
+        ):
+            if not _budget_available():
+                break
+            anchor_plan = best_cost_result[3]
+            anchor_cost = float(best_cost_result[0])
+            duties_by_vehicle = anchor_plan.duties_by_vehicle()
+            anchor_used_ids = set(duties_by_vehicle)
+            selected_bev_ids = sorted(
+                vehicle_id
+                for vehicle_id in anchor_used_ids
+                if _is_electric(vehicle_id)
+            )
+            selected_ice_ids = sorted(
+                vehicle_id
+                for vehicle_id in anchor_used_ids
+                if not _is_electric(vehicle_id)
+            )
+            unused_bev_target_ids = sorted(
+                vehicle_id
+                for vehicle_id, vehicle in vehicle_by_id.items()
+                if bool(getattr(vehicle, "available", True))
+                and _is_electric(vehicle_id)
+                and vehicle_id not in anchor_used_ids
+            )
+            if not selected_ice_ids or not unused_bev_target_ids:
+                break
+
+            remaining_evaluations = max(
+                max_evaluations - len(evaluation_rows),
+                0,
+            )
+            generation_limit = max(
+                min(max(remaining_evaluations, 1) * 4, 4096),
+                1,
+            )
+            generated_hashes: Set[str] = set()
+            ranked_candidates: List[
+                Tuple[
+                    Tuple[float, float, str, str, int, int, str],
+                    AssignmentPlan,
+                    Mapping[str, str],
+                    Mapping[str, Any],
+                ]
+            ] = []
+            generation_limit_reached = False
+            for ice_vehicle_id in selected_ice_ids:
+                ice_vehicle = vehicle_by_id.get(ice_vehicle_id)
+                if ice_vehicle is None:
+                    continue
+                for bev_vehicle_id in selected_bev_ids:
+                    bev_vehicle = vehicle_by_id.get(bev_vehicle_id)
+                    if bev_vehicle is None or str(
+                        bev_vehicle.home_depot_id
+                    ) != str(ice_vehicle.home_depot_id):
+                        continue
+                    for ice_duty in duties_by_vehicle.get(
+                        ice_vehicle_id,
+                        (),
+                    ):
+                        for bev_duty in duties_by_vehicle.get(
+                            bev_vehicle_id,
+                            (),
+                        ):
+                            if (
+                                fixed_route_band_mode
+                                and duty_route_band_ids(ice_duty)
+                                != duty_route_band_ids(bev_duty)
+                            ):
+                                continue
+                            for ice_split_index in range(
+                                1,
+                                len(ice_duty.legs),
+                            ):
+                                for bev_split_index in range(
+                                    1,
+                                    len(bev_duty.legs),
+                                ):
+                                    exchanged_plan = _exchange_duty_suffixes(
+                                        anchor_plan,
+                                        first_duty_id=str(ice_duty.duty_id),
+                                        second_duty_id=str(bev_duty.duty_id),
+                                        first_split_index=ice_split_index,
+                                        second_split_index=bev_split_index,
+                                        vehicle_type_by_id=vehicle_type_by_id,
+                                        dispatch_context=(
+                                            problem.dispatch_context
+                                        ),
+                                        candidate_source=(
+                                            "phase4_seed_duty_suffix_exchange"
+                                        ),
+                                    )
+                                    suffix_exchange_candidates_generated += 1
+                                    if exchanged_plan is None:
+                                        continue
+                                    suffix_exchange_candidates_dispatch_feasible += 1
+                                    for target_vehicle_id in (
+                                        unused_bev_target_ids
+                                    ):
+                                        target_vehicle = vehicle_by_id.get(
+                                            target_vehicle_id
+                                        )
+                                        if target_vehicle is None or str(
+                                            target_vehicle.home_depot_id
+                                        ) != str(ice_vehicle.home_depot_id):
+                                            continue
+                                        replacements = {
+                                            ice_vehicle_id: target_vehicle_id,
+                                        }
+                                        candidate_plan = _remap_plan_vehicle_ids(
+                                            exchanged_plan,
+                                            replacement_by_source_vehicle=(
+                                                replacements
+                                            ),
+                                            vehicle_type_by_id=(
+                                                vehicle_type_by_id
+                                            ),
+                                            candidate_source=(
+                                                "phase4_seed_suffix_exchange_"
+                                                "unused_bev_activation"
+                                            ),
+                                        )
+                                        candidate_hash = _assignment_hash(
+                                            candidate_plan
+                                        )
+                                        if (
+                                            candidate_hash in generated_hashes
+                                            or candidate_hash
+                                            in seen_candidate_assignment_hashes
+                                        ):
+                                            continue
+                                        generated_hashes.add(candidate_hash)
+                                        candidate_duties_by_vehicle = (
+                                            candidate_plan.duties_by_vehicle()
+                                        )
+                                        target_distance_km = (
+                                            _service_distance_km(
+                                                candidate_duties_by_vehicle.get(
+                                                    target_vehicle_id,
+                                                    (),
+                                                )
+                                            )
+                                        )
+                                        partner_distance_km = (
+                                            _service_distance_km(
+                                                candidate_duties_by_vehicle.get(
+                                                    bev_vehicle_id,
+                                                    (),
+                                                )
+                                            )
+                                        )
+                                        candidate_details = {
+                                            "ice_source_vehicle_id": (
+                                                ice_vehicle_id
+                                            ),
+                                            "bev_partner_vehicle_id": (
+                                                bev_vehicle_id
+                                            ),
+                                            "unused_bev_target_vehicle_id": (
+                                                target_vehicle_id
+                                            ),
+                                            "ice_duty_id": str(
+                                                ice_duty.duty_id
+                                            ),
+                                            "bev_duty_id": str(
+                                                bev_duty.duty_id
+                                            ),
+                                            "ice_split_index": (
+                                                ice_split_index
+                                            ),
+                                            "bev_split_index": (
+                                                bev_split_index
+                                            ),
+                                            "target_service_distance_km": (
+                                                target_distance_km
+                                            ),
+                                            "partner_service_distance_km": (
+                                                partner_distance_km
+                                            ),
+                                            "route_band_ids": list(
+                                                duty_route_band_ids(ice_duty)
+                                            ),
+                                        }
+                                        ranked_candidates.append(
+                                            (
+                                                (
+                                                    max(
+                                                        target_distance_km,
+                                                        partner_distance_km,
+                                                    ),
+                                                    abs(
+                                                        target_distance_km
+                                                        - partner_distance_km
+                                                    ),
+                                                    ice_vehicle_id,
+                                                    bev_vehicle_id,
+                                                    ice_split_index,
+                                                    bev_split_index,
+                                                    target_vehicle_id,
+                                                ),
+                                                candidate_plan,
+                                                replacements,
+                                                candidate_details,
+                                            )
+                                        )
+                                        if (
+                                            len(ranked_candidates)
+                                            >= generation_limit
+                                        ):
+                                            generation_limit_reached = True
+                                            break
+                                    if generation_limit_reached:
+                                        break
+                                if generation_limit_reached:
+                                    break
+                            if generation_limit_reached:
+                                break
+                        if generation_limit_reached:
+                            break
+                    if generation_limit_reached:
+                        break
+                if generation_limit_reached:
+                    break
+
+            round_results: List[
+                Tuple[
+                    float,
+                    int,
+                    int,
+                    AssignmentPlan,
+                    str,
+                    Mapping[str, str],
+                ]
+            ] = []
+            for (
+                _priority,
+                candidate_plan,
+                replacements,
+                candidate_details,
+            ) in sorted(ranked_candidates, key=lambda item: item[0]):
+                if not _budget_available():
+                    break
+                result = _evaluate_candidate(
+                    candidate_plan,
+                    candidate_kind=(
+                        f"duty_suffix_exchange_activation_round_{round_index}"
+                    ),
+                    replacements=replacements,
+                    candidate_details=candidate_details,
+                )
+                if result is not None:
+                    round_results.append(result)
+            completed_suffix_exchange_activation_rounds = round_index
+            improving_results = [
+                result
+                for result in round_results
+                if float(result[0]) < anchor_cost - 1.0e-6
+            ]
+            if not improving_results:
+                break
+            best_cost_result = min(
+                improving_results,
+                key=lambda item: (
+                    item[0],
+                    _assignment_hash(item[3]),
+                ),
+            )
+
         for round_index in range(
             1,
             powertrain_duty_swap_round_limit + 1,
@@ -2080,6 +2562,27 @@ class GurobiMILPAdapter:
             else baseline_cost
         )
         selected_used_bev, selected_used_ice = _composition(selected_plan)
+        selected_assignment_hash = _assignment_hash(selected_plan)
+        maximum_bev_assignment_hash = _assignment_hash(
+            maximum_bev_result[3]
+        )
+
+        def _candidate_details_for_hash(
+            assignment_hash: str,
+        ) -> Dict[str, Any]:
+            for row in evaluation_rows:
+                if str(row.get("assignment_hash") or "") == assignment_hash:
+                    return dict(row.get("candidate_details") or {})
+            return {}
+
+        selected_candidate_details = (
+            _candidate_details_for_hash(selected_assignment_hash)
+            if selected_improvement
+            else {}
+        )
+        maximum_bev_candidate_details = _candidate_details_for_hash(
+            maximum_bev_assignment_hash
+        )
         if len(evaluation_rows) >= max_evaluations:
             termination_reason = "maximum_candidate_evaluations_reached"
         elif time.monotonic() >= deadline:
@@ -2101,13 +2604,21 @@ class GurobiMILPAdapter:
                 "selected_candidate_replacements": dict(
                     sorted(best_cost_result[5].items())
                 ) if selected_improvement else {},
+                "selected_candidate_details": selected_candidate_details,
                 "selected_canonical_cost_jpy": selected_cost,
                 "selected_cost_improvement_jpy": (
                     baseline_cost - selected_cost
                 ),
                 "selected_used_bev": selected_used_bev,
                 "selected_used_ice": selected_used_ice,
-                "selected_assignment_hash": _assignment_hash(selected_plan),
+                "selected_assignment_hash": selected_assignment_hash,
+                "trip_paths_modified": bool(
+                    selected_candidate_details.get("ice_duty_id")
+                ),
+                "candidate_trip_paths_modified": any(
+                    bool(row.get("candidate_details"))
+                    for row in evaluation_rows
+                ),
                 "maximum_observed_used_bev": maximum_bev_result[1],
                 "maximum_observed_used_ice": maximum_bev_result[2],
                 "maximum_bev_candidate_canonical_cost_jpy": (
@@ -2117,11 +2628,26 @@ class GurobiMILPAdapter:
                 "maximum_bev_candidate_replacements": dict(
                     sorted(maximum_bev_result[5].items())
                 ),
-                "maximum_bev_candidate_assignment_hash": _assignment_hash(
-                    maximum_bev_result[3]
+                "maximum_bev_candidate_details": (
+                    maximum_bev_candidate_details
+                ),
+                "maximum_bev_candidate_assignment_hash": (
+                    maximum_bev_assignment_hash
                 ),
                 "candidate_evaluation_count": len(evaluation_rows),
+                "duplicate_candidate_assignment_count": (
+                    duplicate_candidate_count
+                ),
                 "feasible_candidate_count": len(feasible_candidates) - 1,
+                "duty_suffix_exchange_candidates_generated": (
+                    suffix_exchange_candidates_generated
+                ),
+                "duty_suffix_exchange_candidates_dispatch_feasible": (
+                    suffix_exchange_candidates_dispatch_feasible
+                ),
+                "completed_duty_suffix_exchange_activation_rounds": (
+                    completed_suffix_exchange_activation_rounds
+                ),
                 "completed_identity_exchange_rounds": (
                     completed_exchange_rounds
                 ),
