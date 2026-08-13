@@ -17,9 +17,28 @@ all-BEV fixed assignments; all were Stage-2 energy/SOC infeasible. Because the
 algorithm exchanges only one pair of suffixes, it redistributes two long paths
 but cannot generally create enough depot charging windows across the complete
 affected route band. This is now recorded as negative evidence. Further blind
-single-exchange enumeration is not justified; the next required search is a
-restricted route-band network re-partitioning with exact fixed-assignment
-recourse, followed by another clean pair.
+single-exchange enumeration is not justified.
+
+Current code now implements the required restricted route-band
+re-partitioning. A reduced exact Stage 1 covers the complete affected
+same-depot route-band trip set using only the already-used same-band BEVs and
+unused available BEVs. If `K` paths served that set before replacement, the
+candidate solve enforces `sum(used_BEV) >= K` and
+`sum(used_vehicle) <= K`; therefore the candidate retires the ICE paths
+one-for-one rather than adding buses. The reduced dispatch is not treated as
+energy-feasible evidence. It must preserve the exact trip set when merged into
+the original plan and then pass the full-problem fixed-assignment Stage 2,
+independent physical validation, and canonical cost evaluation. This remains
+a weather-neutral upper-bound generator, not a hidden BEV policy or an
+optimality certificate.
+
+The implementation postdates frozen SHA `b06c451`. It has passed bounded and
+real-Gurobi regression tests but has not yet been exercised by a clean
+264-trip frontend/BFF pair. Accordingly the only current formal result remains
+the blocked `b06c451` pair. The next evidence step is a fresh frozen-commit
+pair; even if the new search finds a 32-BEV sunny candidate, formal release
+still requires the predeclared 1% cost-gap certificate and every unchanged
+Rolling, physical, accounting, and pair-control gate.
 
 The first clean full pair using sequential scalar lexicographic certification
 completed at frozen SHA `7cb1192cf6278e8854add16b58f04639a6656336`.
@@ -80,15 +99,16 @@ deliverable charging against 362.486315 kWh required energy, leaving a
 that fixed assignment only; it is not a certificate that every 32-BEV
 assignment is infeasible.
 
-Current code therefore adds an IIS-motivated duty-suffix exchange neighborhood.
+The frozen `b06c451` code added an IIS-motivated duty-suffix exchange neighborhood.
 It preserves exact trip coverage, validates both new cross-arcs with the same
 turnaround/deadhead engine as the dispatch graph, respects fixed route bands,
 clears stale energy/SOC/accounting state, and requires exact fixed-assignment
 Stage-2 recourse plus independent validation before a reconstructed candidate
 can become the integrated MIP start. Candidate generation is weather-neutral
-and no BEV count is forced. Until a fresh clean controlled pair exercises this
-code and the high-PV case meets the declared 1% cost gap, formal release
-remains `BLOCKED`.
+and no BEV count is forced. Current code extends that search with the
+route-band re-partitioning described above. Until a fresh clean controlled
+pair exercises the new audit schema and the high-PV case meets the declared
+1% cost gap, formal release remains `BLOCKED`.
 
 ## 2026-08-13 sequential cost-gap path implemented; fresh formal evidence pending
 

@@ -275,6 +275,86 @@ def test_stage1_path_cover_lower_bound_reaches_vehicle_day_cost_bound() -> None:
 
 
 @pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
+def test_stage1_exact_bev_activation_count_policy_is_enforced() -> None:
+    context = DispatchContext(
+        service_date="2026-04-10",
+        trips=[
+            Trip(
+                trip_id=trip_id,
+                route_id="r1",
+                origin="DEPOT",
+                destination=destination,
+                departure_time="08:00",
+                arrival_time="08:30",
+                distance_km=1.0,
+                allowed_vehicle_types=("BEV",),
+            )
+            for trip_id, destination in (("t1", "A"), ("t2", "B"))
+        ],
+        turnaround_rules={},
+        deadhead_rules={},
+        vehicle_profiles={
+            "BEV": VehicleProfile(
+                vehicle_type="BEV",
+                battery_capacity_kwh=300.0,
+                energy_consumption_kwh_per_km=1.0,
+            )
+        },
+    )
+    problem = ProblemBuilder().build_from_dispatch(
+        context,
+        scenario_id="stage1-exact-bev-activation-count",
+        vehicle_counts={"BEV": 3},
+        canonical_depot_id="DEPOT",
+        service_coverage_mode="strict",
+    )
+    unmarked_problem = replace(
+        problem,
+        metadata={
+            **dict(problem.metadata or {}),
+            "minimum_used_bev_count": 2,
+            "phase4_seed_route_band_repartition_"
+            "maximum_used_vehicle_count": 2,
+        },
+    )
+    config = OptimizationConfig(
+        mode=OptimizationMode.MILP,
+        phase="phase2_assignment_only",
+        time_limit_sec=10,
+        mip_gap=0.0,
+    )
+    with pytest.raises(
+        ValueError,
+        match="only for an explicit Phase-4 seed candidate",
+    ):
+        OptimizationEngine().solve(unmarked_problem, config)
+
+    problem = replace(
+        unmarked_problem,
+        metadata={
+            **dict(unmarked_problem.metadata or {}),
+            "phase4_seed_route_band_repartition_candidate": True,
+        },
+    )
+
+    result = OptimizationEngine().solve(
+        problem,
+        config,
+    )
+
+    assert result.feasible is True
+    assert len(result.plan.duties_by_vehicle()) == 2
+    assert result.plan.metadata["minimum_used_bev_count"] == 2
+    assert result.plan.metadata[
+        "phase4_seed_route_band_repartition_maximum_used_vehicle_count"
+    ] == 2
+    assert result.plan.metadata[
+        "phase4_seed_route_band_repartition_"
+        "maximum_used_vehicle_count_policy_enabled"
+    ] is True
+
+
+@pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
 def test_stage1_omits_arc_links_implied_by_node_flow_equalities() -> None:
     context = DispatchContext(
         service_date="2026-04-10",

@@ -17,6 +17,19 @@
   re-partition the complete affected route-band trip set instead of relying on
   one reciprocal suffix exchange. Evidence and report bundle:
   `output/formal_pair_20260813_suffix_exchange_flat30_pv1000_bess6000_phase4_b06c451_gap01`.
+- Current code implements that next step as a weather-neutral, route-band
+  restricted dispatch candidate generator. For each same-depot route band
+  still using ICE, a reduced exact Stage 1 reassigns the complete affected
+  trip set to the already-used same-band BEVs plus unused BEV candidates. It
+  enforces the original affected vehicle count exactly, merges the result only
+  when trip coverage is identical, clears stale recourse, and requires a full
+  264-trip fixed-assignment Stage 2, independent physical validation and
+  canonical accounting before selection. The reduced result is never accepted
+  as energy feasibility or global optimality evidence by itself.
+- This implementation postdates `b06c451`; no current-HEAD formal pair has yet
+  exercised it. The preserved pair remains the authoritative result and stays
+  `BLOCKED` on the sunny 1% gap. Fresh Prepare and a clean frozen-commit pair
+  are required before the new candidate generator may change any KPI claim.
 - Clean frozen SHA `7cb1192cf6278e8854add16b58f04639a6656336` completed the
   ordinary frontend/BFF path for the controlled high/low-PV pair: fresh
   Prepare, Phase 4, 24/24 Rolling, physical validation, canonical executed-day

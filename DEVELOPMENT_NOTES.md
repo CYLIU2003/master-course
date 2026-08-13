@@ -1,5 +1,51 @@
 # Development Notes
 
+## 2026-08-13: route-band restricted BEV duty re-partitioning
+
+- Raised and addressed the next failure exposed by the frozen `b06c451` pair:
+  whole-duty replacement and one reciprocal suffix exchange preserve too much
+  of the long ICE/BEV path structure. They cannot redistribute all trips in the
+  affected route band to create the charging windows needed for a final
+  one-for-one ICE retirement.
+- Added a bounded candidate-generation solve before the existing fixed-duty
+  neighborhood. For each active-ICE `(depot, route band)` group, the solver
+  constructs a reduced canonical problem containing the complete trip set
+  currently served by that ICE group and every used BEV confined to the same
+  route band. Candidate vehicles are those used BEVs plus the depot's unused
+  available BEVs; active ICE vehicles are excluded.
+- The reduced exact Stage 1 applies `sum(used_BEV) >= K` and
+  `sum(used_vehicle) <= K`, where `K` is the number of affected vehicle paths
+  before replacement. Thus it searches a one-for-one all-BEV re-partition
+  without increasing the vehicle-day count. The Stage-1 upper-count constraint
+  is accepted only when the problem is explicitly marked as an internal
+  route-band Phase-4 seed candidate; it cannot silently constrain an ordinary
+  Phase-3 run. It is audited alongside the existing minimum-BEV constraint.
+- The reduced solve is an upper-bound candidate generator only. Its charging
+  relaxation cannot certify full-system energy feasibility because unaffected
+  routes also consume chargers, PV and BESS. The merge therefore fails closed
+  on changed/duplicate trip coverage, duty-ID collision, or reuse of an
+  unaffected vehicle; it clears every energy/SOC/accounting field and then
+  runs exact fixed-assignment Stage 2 on the original full problem. Independent
+  physical validation and canonical accounting remain mandatory, and only a
+  strict actual-cost improvement may become the Phase-4 MIP start.
+- The audit schema is now
+  `phase4_seed_unused_bev_activation_neighborhood_v3`. It records the depot,
+  route band, affected trips/vehicles, exact target count, reduced Stage-1
+  status/runtime, activated BEVs, merged assignment hash, and full Stage-2
+  result. It explicitly records candidate-only semantics, no global-optimum
+  claim, and no weather-specific assignment bias.
+- Added fail-closed merge coverage tests, a real-Gurobi reduced Stage-1 test,
+  a full-Stage-2-before-selection test, and a real-Gurobi exact activation-count
+  constraint test. This changes candidate generation and the feasible upper
+  bound supplied to Phase 4; it does not change tariffs, PV/BESS equations,
+  canonical accounting, or the integrated feasible region. Focused regression
+  passes 76 tests; the complete repository regression passes
+  `1362 passed in 66.95s`; compileall and `git diff --check` also pass.
+- No 264-trip formal run has been executed from this code-changing state. All
+  older outputs retain their frozen SHA and must not be relabelled. A clean
+  commit, fresh Prepare, both frontend/BFF cases, 24/24 Rolling and pair
+  finalization are required next.
+
 ## 2026-08-13: sequential formal pair, evidence audit, and reporting repair
 
 - Re-ran the full frontend-equivalent controlled pair from clean frozen SHA

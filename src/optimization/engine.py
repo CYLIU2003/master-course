@@ -965,7 +965,7 @@ class OptimizationEngine:
         seed_plan = seed_result.plan
         seed_neighborhood_audit: Mapping[str, object] = {
             "schema_version": (
-                "phase4_seed_unused_bev_activation_neighborhood_v2"
+                "phase4_seed_unused_bev_activation_neighborhood_v3"
             ),
             "enabled": False,
             "termination_reason": "disabled",

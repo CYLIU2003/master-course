@@ -753,6 +753,123 @@ def _exchange_duty_suffixes(
     )
 
 
+def _merge_route_band_repartition_plan(
+    plan: AssignmentPlan,
+    *,
+    repartitioned_plan: AssignmentPlan,
+    affected_vehicle_ids: Sequence[str],
+    vehicle_type_by_id: Mapping[str, str],
+    metadata_updates: Mapping[str, Any],
+) -> Optional[AssignmentPlan]:
+    """Merge a reduced route-band dispatch only when coverage is identical.
+
+    The reduced Stage 1 is a candidate generator.  This helper deliberately
+    rejects any proposal that drops, duplicates, or changes the affected trip
+    set, reuses an unaffected vehicle, or collides with an unaffected duty ID.
+    Energy, SOC, charger, BESS, and accounting fields are cleared so the full
+    canonical problem must rebuild recourse before the candidate can be used.
+    """
+
+    affected_ids = {str(vehicle_id) for vehicle_id in affected_vehicle_ids}
+    if not affected_ids:
+        return None
+    original_duty_vehicle_map = plan.duty_vehicle_map()
+    unaffected_duties = tuple(
+        duty
+        for duty in plan.duties
+        if str(original_duty_vehicle_map[str(duty.duty_id)])
+        not in affected_ids
+    )
+    affected_duties = tuple(
+        duty
+        for duty in plan.duties
+        if str(original_duty_vehicle_map[str(duty.duty_id)])
+        in affected_ids
+    )
+    affected_trip_ids = tuple(
+        str(leg.trip.trip_id)
+        for duty in affected_duties
+        for leg in duty.legs
+    )
+    replacement_trip_ids = tuple(
+        str(leg.trip.trip_id)
+        for duty in repartitioned_plan.duties
+        for leg in duty.legs
+    )
+    if (
+        not affected_trip_ids
+        or len(set(affected_trip_ids)) != len(affected_trip_ids)
+        or len(set(replacement_trip_ids)) != len(replacement_trip_ids)
+        or sorted(affected_trip_ids) != sorted(replacement_trip_ids)
+    ):
+        return None
+
+    unaffected_vehicle_ids = {
+        str(original_duty_vehicle_map[str(duty.duty_id)])
+        for duty in unaffected_duties
+    }
+    repartitioned_duty_vehicle_map = repartitioned_plan.duty_vehicle_map()
+    repartitioned_vehicle_ids = {
+        str(repartitioned_duty_vehicle_map[str(duty.duty_id)])
+        for duty in repartitioned_plan.duties
+        if duty.legs
+    }
+    if repartitioned_vehicle_ids.intersection(unaffected_vehicle_ids):
+        return None
+
+    unaffected_duty_ids = {str(duty.duty_id) for duty in unaffected_duties}
+    repartitioned_duty_ids = {
+        str(duty.duty_id) for duty in repartitioned_plan.duties
+    }
+    if unaffected_duty_ids.intersection(repartitioned_duty_ids):
+        return None
+
+    merged_duties = (
+        *unaffected_duties,
+        *tuple(
+            replace(
+                duty,
+                vehicle_type=str(
+                    vehicle_type_by_id.get(
+                        str(
+                            repartitioned_duty_vehicle_map[
+                                str(duty.duty_id)
+                            ]
+                        ),
+                        duty.vehicle_type,
+                    )
+                ),
+            )
+            for duty in repartitioned_plan.duties
+        ),
+    )
+    merged_duty_vehicle_map = {
+        str(duty.duty_id): str(
+            original_duty_vehicle_map[str(duty.duty_id)]
+        )
+        for duty in unaffected_duties
+    }
+    merged_duty_vehicle_map.update(
+        {
+            str(duty.duty_id): str(
+                repartitioned_duty_vehicle_map[str(duty.duty_id)]
+            )
+            for duty in repartitioned_plan.duties
+        }
+    )
+    return _dispatch_only_plan(
+        plan,
+        duties=merged_duties,
+        duty_vehicle_map=merged_duty_vehicle_map,
+        metadata_updates={
+            **dict(metadata_updates or {}),
+            "phase4_seed_route_band_repartition_affected_vehicle_ids": (
+                sorted(affected_ids)
+            ),
+        },
+    )
+
+
 def _maximum_bipartite_vehicle_matching(
     adjacency_by_source: Mapping[str, Sequence[str]],
 ) -> Dict[str, str]:
@@ -1611,12 +1728,14 @@ class GurobiMILPAdapter:
     ) -> Tuple[AssignmentPlan, Dict[str, Any]]:
         """Improve a Phase 4 seed using exact fixed-assignment recourse.
 
-        The neighborhood never changes trip order or the integrated Phase 4
-        objective.  It first measures every admissible active-ICE to unused-BEV
-        whole-duty replacement with Stage 2, then verifies a maximum-cardinality
-        combined activation and bounded BEV identity exchanges.  Only a strict
-        canonical-cost improvement is selected as the MIP start; the highest
-        feasible BEV count is reported separately as sensitivity evidence.
+        The neighborhood never changes the integrated Phase 4 objective.  It
+        first asks a reduced exact Stage 1 to repartition the affected
+        same-depot route band, then measures whole-duty replacement, bounded
+        suffix exchange, powertrain swap, and BEV identity alternatives.
+        Every changed dispatch is rebuilt by the full fixed-assignment Stage 2
+        and independently validated.  Only a strict canonical-cost improvement
+        is selected as the MIP start; the highest feasible BEV count is reported
+        separately as sensitivity evidence.
         """
 
         enabled = bool(
@@ -1681,9 +1800,12 @@ class GurobiMILPAdapter:
             ),
             0,
         )
+        fixed_route_band_mode = bool(
+            (problem.metadata or {}).get("fixed_route_band_mode", False)
+        )
         audit: Dict[str, Any] = {
             "schema_version": (
-                "phase4_seed_unused_bev_activation_neighborhood_v2"
+                "phase4_seed_unused_bev_activation_neighborhood_v3"
             ),
             "enabled": enabled,
             "role": "feasible_upper_bound_candidate_generation_only",
@@ -1692,6 +1814,15 @@ class GurobiMILPAdapter:
             "trip_paths_modified": False,
             "candidate_trip_path_reconstruction_enabled": bool(
                 powertrain_duty_swap_round_limit > 0
+            ),
+            "route_band_repartition_enabled": bool(
+                powertrain_duty_swap_round_limit > 0
+                and fixed_route_band_mode
+            ),
+            "route_band_repartition_semantics": (
+                "reduced_exact_stage1_dispatch_candidate_generation_only;"
+                "full_problem_fixed_assignment_stage2_physical_and_"
+                "canonical_accounting_validation_required"
             ),
             "wall_time_limit_sec": wall_limit_sec,
             "per_stage2_solve_time_limit_sec": per_solve_sec,
@@ -1996,6 +2127,403 @@ class GurobiMILPAdapter:
             and _is_electric(vehicle_id)
             and vehicle_id not in used_vehicle_ids
         )
+        route_band_repartition_attempts: List[Dict[str, Any]] = []
+        route_band_repartition_candidate_count = 0
+        route_band_repartition_full_feasible_count = 0
+
+        def _vehicle_route_band_ids(
+            plan: AssignmentPlan,
+            vehicle_id: str,
+        ) -> Tuple[str, ...]:
+            return tuple(
+                sorted(
+                    {
+                        route_band_id
+                        for duty in plan.duties_by_vehicle().get(
+                            str(vehicle_id),
+                            (),
+                        )
+                        for route_band_id in duty_route_band_ids(duty)
+                        if str(route_band_id or "").strip()
+                    }
+                )
+            )
+
+        def _route_band_repartition_candidates() -> None:
+            nonlocal route_band_repartition_candidate_count
+            nonlocal route_band_repartition_full_feasible_count
+            if (
+                powertrain_duty_swap_round_limit <= 0
+                or not fixed_route_band_mode
+                or not active_ice_ids
+                or not unused_bev_ids
+            ):
+                return
+
+            seed_duties_by_vehicle = seed_plan.duties_by_vehicle()
+            group_ice_ids: Dict[Tuple[str, str], List[str]] = {}
+            for ice_vehicle_id in active_ice_ids:
+                ice_vehicle = vehicle_by_id.get(ice_vehicle_id)
+                route_band_ids = _vehicle_route_band_ids(
+                    seed_plan,
+                    ice_vehicle_id,
+                )
+                if ice_vehicle is None or len(route_band_ids) != 1:
+                    route_band_repartition_attempts.append(
+                        {
+                            "ice_vehicle_ids": [ice_vehicle_id],
+                            "status": "skipped_non_single_route_band_vehicle",
+                            "route_band_ids": list(route_band_ids),
+                        }
+                    )
+                    continue
+                group_ice_ids.setdefault(
+                    (
+                        str(ice_vehicle.home_depot_id),
+                        route_band_ids[0],
+                    ),
+                    [],
+                ).append(ice_vehicle_id)
+
+            problem_trip_by_id = problem.trip_by_id()
+            for (depot_id, route_band_id), ice_vehicle_ids in sorted(
+                group_ice_ids.items()
+            ):
+                attempt: Dict[str, Any] = {
+                    "depot_id": depot_id,
+                    "route_band_id": route_band_id,
+                    "ice_vehicle_ids": sorted(ice_vehicle_ids),
+                    "status": "not_started",
+                    "candidate_generation_only": True,
+                    "full_stage2_validation_required": True,
+                }
+                route_band_repartition_attempts.append(attempt)
+                if not _budget_available():
+                    attempt["status"] = "skipped_neighborhood_budget_exhausted"
+                    continue
+
+                same_band_bev_ids = sorted(
+                    vehicle_id
+                    for vehicle_id in used_vehicle_ids
+                    if _is_electric(vehicle_id)
+                    and str(
+                        getattr(vehicle_by_id.get(vehicle_id), "home_depot_id", "")
+                    )
+                    == depot_id
+                    and _vehicle_route_band_ids(seed_plan, vehicle_id)
+                    == (route_band_id,)
+                )
+                affected_vehicle_ids = tuple(
+                    sorted({*same_band_bev_ids, *ice_vehicle_ids})
+                )
+                target_used_vehicle_count = len(affected_vehicle_ids)
+                depot_unused_bev_ids = sorted(
+                    vehicle_id
+                    for vehicle_id in unused_bev_ids
+                    if str(
+                        getattr(vehicle_by_id.get(vehicle_id), "home_depot_id", "")
+                    )
+                    == depot_id
+                )
+                attempt.update(
+                    {
+                        "same_band_used_bev_ids": same_band_bev_ids,
+                        "affected_vehicle_ids": list(affected_vehicle_ids),
+                        "unused_bev_candidate_ids": depot_unused_bev_ids,
+                        "target_used_vehicle_count": target_used_vehicle_count,
+                    }
+                )
+                if (
+                    not same_band_bev_ids
+                    or len(depot_unused_bev_ids) < len(ice_vehicle_ids)
+                ):
+                    attempt["status"] = "skipped_insufficient_bev_inventory"
+                    continue
+
+                affected_duties = tuple(
+                    duty
+                    for vehicle_id in affected_vehicle_ids
+                    for duty in seed_duties_by_vehicle.get(vehicle_id, ())
+                )
+                affected_trip_ids = tuple(
+                    str(leg.trip.trip_id)
+                    for duty in affected_duties
+                    for leg in duty.legs
+                )
+                affected_trip_id_set = set(affected_trip_ids)
+                if (
+                    not affected_trip_ids
+                    or len(affected_trip_id_set) != len(affected_trip_ids)
+                    or affected_trip_id_set.difference(problem_trip_by_id)
+                ):
+                    attempt["status"] = "skipped_invalid_affected_trip_set"
+                    attempt["affected_trip_count"] = len(affected_trip_ids)
+                    continue
+                attempt["affected_trip_count"] = len(affected_trip_ids)
+
+                reduced_duty_vehicle_map = {
+                    str(duty.duty_id): str(
+                        seed_plan.vehicle_id_for_duty(duty.duty_id)
+                    )
+                    for duty in affected_duties
+                }
+                reduced_baseline = AssignmentPlan(
+                    duties=affected_duties,
+                    served_trip_ids=tuple(sorted(affected_trip_id_set)),
+                    unserved_trip_ids=(),
+                    metadata={
+                        **dict(seed_plan.metadata or {}),
+                        "source": (
+                            "phase4_seed_route_band_repartition_baseline"
+                        ),
+                        "duty_vehicle_map": reduced_duty_vehicle_map,
+                    },
+                )
+                baseline_replacements = dict(
+                    zip(
+                        sorted(ice_vehicle_ids),
+                        depot_unused_bev_ids[: len(ice_vehicle_ids)],
+                    )
+                )
+                reduced_baseline = _remap_plan_vehicle_ids(
+                    reduced_baseline,
+                    replacement_by_source_vehicle=baseline_replacements,
+                    vehicle_type_by_id=vehicle_type_by_id,
+                    candidate_source=(
+                        "phase4_seed_route_band_repartition_warm_start"
+                    ),
+                )
+                reduced_vehicle_ids = tuple(
+                    sorted({*same_band_bev_ids, *depot_unused_bev_ids})
+                )
+                reduced_metadata = {
+                    key: value
+                    for key, value in dict(problem.metadata or {}).items()
+                    if key
+                    not in {
+                        _FEEDBACK_GLOBAL_STARTED_KEY,
+                        _FEEDBACK_GLOBAL_DEADLINE_KEY,
+                    }
+                }
+                reduced_strict_precheck = dict(
+                    reduced_metadata.get("strict_coverage_precheck") or {}
+                )
+                reduced_strict_precheck.update(
+                    {
+                        "relaxed_vehicle_lower_bound": (
+                            target_used_vehicle_count
+                        ),
+                        "trip_count": len(affected_trip_ids),
+                        "scope": "route_band_repartition_candidate",
+                    }
+                )
+                reduced_metadata.update(
+                    {
+                        "minimum_used_bev_count": target_used_vehicle_count,
+                        "phase4_seed_route_band_repartition_"
+                        "maximum_used_vehicle_count": (
+                            target_used_vehicle_count
+                        ),
+                        "strict_coverage_precheck": reduced_strict_precheck,
+                        "stage1_feasibility_no_good_cuts": (),
+                        "stage2_feedback_max_iterations": 0,
+                        "milp_max_successors_per_trip": None,
+                        "phase4_seed_route_band_repartition_candidate": True,
+                        "phase4_seed_route_band_repartition_route_band_id": (
+                            route_band_id
+                        ),
+                    }
+                )
+                reduced_problem = replace(
+                    problem,
+                    trips=tuple(
+                        problem_trip_by_id[trip_id]
+                        for trip_id in sorted(affected_trip_id_set)
+                    ),
+                    vehicles=tuple(
+                        vehicle_by_id[vehicle_id]
+                        for vehicle_id in reduced_vehicle_ids
+                    ),
+                    feasible_connections={
+                        trip_id: tuple(
+                            successor_id
+                            for successor_id in problem.feasible_connections.get(
+                                trip_id,
+                                (),
+                            )
+                            if successor_id in affected_trip_id_set
+                        )
+                        for trip_id in sorted(affected_trip_id_set)
+                    },
+                    baseline_plan=reduced_baseline,
+                    metadata=reduced_metadata,
+                )
+                remaining_wall_sec = max(deadline - time.monotonic(), 0.0)
+                reduced_stage1_time_limit_sec = max(
+                    min(
+                        int(max(remaining_wall_sec - per_solve_sec - 1.0, 1.0)),
+                        max(int(wall_limit_sec / 2), 10),
+                        60,
+                    ),
+                    1,
+                )
+                reduced_config = replace(
+                    config,
+                    phase="phase3_two_stage",
+                    requested_phase=(
+                        "phase3_two_stage_phase4_seed_route_band_repartition"
+                    ),
+                    resolved_phase="phase3_two_stage",
+                    executed_phase="phase3_two_stage",
+                    thesis_mode=True,
+                    integrated_actual_cost_objective=False,
+                    integrated_ev_utilization_mode="disabled",
+                    integrated_actual_cost_upper_bound_jpy=None,
+                    integrated_actual_cost_upper_bound_delta_ratio=None,
+                    phase4_phase3_seed_enabled=False,
+                    phase4_phase3_seed_unused_bev_neighborhood_enabled=False,
+                    time_limit_sec=reduced_stage1_time_limit_sec,
+                    stage1_time_limit_sec=reduced_stage1_time_limit_sec,
+                    stage2_time_limit_sec=1,
+                    stage1_stage2_candidate_limit=1,
+                    stage1_composition_search_radius=0,
+                    stage1_bev_frontier_enabled=False,
+                    fixed_assignment=None,
+                    warm_start=True,
+                    research_run=True,
+                    allow_postsolve_repair=False,
+                )
+                attempt["reduced_stage1_time_limit_sec"] = (
+                    reduced_stage1_time_limit_sec
+                )
+                reduced_started = time.perf_counter()
+                try:
+                    reduced_outcome, repartitioned_plan = (
+                        self._solve_thesis_two_stage(
+                            reduced_problem,
+                            reduced_config,
+                            stage2_enabled=False,
+                        )
+                    )
+                except Exception as exc:  # candidate generator boundary
+                    attempt.update(
+                        {
+                            "status": "reduced_stage1_error",
+                            "error_type": type(exc).__name__,
+                            "error_message": str(exc),
+                            "runtime_sec": (
+                                time.perf_counter() - reduced_started
+                            ),
+                        }
+                    )
+                    continue
+                attempt.update(
+                    {
+                        "reduced_stage1_solver_status": str(
+                            reduced_outcome.solver_status
+                        ),
+                        "reduced_stage1_has_feasible_incumbent": bool(
+                            reduced_outcome.has_feasible_incumbent
+                        ),
+                        "runtime_sec": time.perf_counter() - reduced_started,
+                    }
+                )
+                repartitioned_used_ids = set(
+                    repartitioned_plan.duties_by_vehicle()
+                )
+                if (
+                    not reduced_outcome.has_feasible_incumbent
+                    or len(repartitioned_used_ids)
+                    != target_used_vehicle_count
+                    or any(
+                        not _is_electric(vehicle_id)
+                        for vehicle_id in repartitioned_used_ids
+                    )
+                ):
+                    attempt["status"] = (
+                        "reduced_stage1_no_exact_all_bev_incumbent"
+                    )
+                    attempt["repartitioned_used_vehicle_ids"] = sorted(
+                        repartitioned_used_ids
+                    )
+                    continue
+
+                merged_plan = _merge_route_band_repartition_plan(
+                    seed_plan,
+                    repartitioned_plan=repartitioned_plan,
+                    affected_vehicle_ids=affected_vehicle_ids,
+                    vehicle_type_by_id=vehicle_type_by_id,
+                    metadata_updates={
+                        "source": (
+                            "phase4_seed_route_band_repartition_activation"
+                        ),
+                        "phase4_seed_route_band_repartition": {
+                            "depot_id": depot_id,
+                            "route_band_id": route_band_id,
+                            "target_used_vehicle_count": (
+                                target_used_vehicle_count
+                            ),
+                            "affected_trip_count": len(affected_trip_ids),
+                        },
+                    },
+                )
+                if merged_plan is None:
+                    attempt["status"] = "reduced_plan_merge_rejected"
+                    continue
+                activated_bev_ids = sorted(
+                    repartitioned_used_ids.difference(same_band_bev_ids)
+                )
+                if len(activated_bev_ids) != len(ice_vehicle_ids):
+                    attempt["status"] = (
+                        "reduced_plan_activation_count_mismatch"
+                    )
+                    attempt["activated_bev_ids"] = activated_bev_ids
+                    continue
+                replacements = dict(
+                    zip(sorted(ice_vehicle_ids), activated_bev_ids)
+                )
+                candidate_details = {
+                    "depot_id": depot_id,
+                    "route_band_id": route_band_id,
+                    "retired_ice_vehicle_ids": sorted(ice_vehicle_ids),
+                    "activated_bev_vehicle_ids": activated_bev_ids,
+                    "affected_vehicle_ids": list(affected_vehicle_ids),
+                    "affected_trip_count": len(affected_trip_ids),
+                    "target_used_vehicle_count": target_used_vehicle_count,
+                    "reduced_stage1_solver_status": str(
+                        reduced_outcome.solver_status
+                    ),
+                    "reduced_stage1_time_limit_sec": (
+                        reduced_stage1_time_limit_sec
+                    ),
+                    "candidate_generation_only": True,
+                    "full_stage2_validation_required": True,
+                }
+                route_band_repartition_candidate_count += 1
+                result = _evaluate_candidate(
+                    merged_plan,
+                    candidate_kind="route_band_repartition_activation",
+                    replacements=replacements,
+                    candidate_details=candidate_details,
+                )
+                attempt.update(
+                    {
+                        "status": (
+                            "full_stage2_feasible"
+                            if result is not None
+                            else "full_stage2_infeasible_duplicate_or_budget_limited"
+                        ),
+                        "activated_bev_ids": activated_bev_ids,
+                        "merged_assignment_hash": _assignment_hash(
+                            merged_plan
+                        ),
+                        "full_stage2_feasible": result is not None,
+                    }
+                )
+                if result is not None:
+                    route_band_repartition_full_feasible_count += 1
+
+        _route_band_repartition_candidates()
         adjacency_by_ice: Dict[str, List[str]] = {
             vehicle_id: [] for vehicle_id in active_ice_ids
         }
@@ -2097,10 +2625,6 @@ class GurobiMILPAdapter:
         suffix_exchange_candidates_generated = 0
         suffix_exchange_candidates_dispatch_feasible = 0
         completed_suffix_exchange_activation_rounds = 0
-        fixed_route_band_mode = bool(
-            (problem.metadata or {}).get("fixed_route_band_mode", False)
-        )
-
         def _service_distance_km(duties: Sequence[VehicleDuty]) -> float:
             return sum(
                 max(float(leg.trip.distance_km or 0.0), 0.0)
@@ -2641,6 +3165,15 @@ class GurobiMILPAdapter:
                 "feasible_candidate_count": len(feasible_candidates) - 1,
                 "duty_suffix_exchange_candidates_generated": (
                     suffix_exchange_candidates_generated
+                ),
+                "route_band_repartition_attempts": (
+                    route_band_repartition_attempts
+                ),
+                "route_band_repartition_candidate_count": (
+                    route_band_repartition_candidate_count
+                ),
+                "route_band_repartition_full_feasible_count": (
+                    route_band_repartition_full_feasible_count
                 ),
                 "duty_suffix_exchange_candidates_dispatch_feasible": (
                     suffix_exchange_candidates_dispatch_feasible
@@ -7841,6 +8374,59 @@ class GurobiMILPAdapter:
                 gp.quicksum(available_bev_use_vars) >= minimum_used_bev_count,
                 name="minimum_used_bev_count_policy",
             )
+        route_band_repartition_maximum_used_vehicle_count = max(
+            int(
+                problem.metadata.get(
+                    "phase4_seed_route_band_repartition_"
+                    "maximum_used_vehicle_count"
+                )
+                or 0
+            ),
+            0,
+        )
+        route_band_repartition_candidate = bool(
+            problem.metadata.get(
+                "phase4_seed_route_band_repartition_candidate",
+                False,
+            )
+        )
+        if (
+            route_band_repartition_maximum_used_vehicle_count > 0
+            and not route_band_repartition_candidate
+        ):
+            raise ValueError(
+                "The route-band maximum-used-vehicle constraint is valid "
+                "only for an explicit Phase-4 seed candidate"
+            )
+        if route_band_repartition_maximum_used_vehicle_count > len(
+            used_vehicle
+        ):
+            raise ValueError(
+                "route-band maximum used vehicle count exceeds available "
+                "vehicle inventory: "
+                f"{route_band_repartition_maximum_used_vehicle_count} > "
+                f"{len(used_vehicle)}"
+            )
+        if (
+            route_band_repartition_maximum_used_vehicle_count > 0
+            and minimum_used_bev_count
+            > route_band_repartition_maximum_used_vehicle_count
+        ):
+            raise ValueError(
+                "minimum_used_bev_count exceeds the route-band maximum used "
+                "vehicle count: "
+                f"{minimum_used_bev_count} > "
+                f"{route_band_repartition_maximum_used_vehicle_count}"
+            )
+        if route_band_repartition_maximum_used_vehicle_count > 0:
+            stage1.addConstr(
+                gp.quicksum(used_vehicle.values())
+                <= route_band_repartition_maximum_used_vehicle_count,
+                name=(
+                    "phase4_seed_route_band_repartition_"
+                    "maximum_used_vehicle_count"
+                ),
+            )
         stage1_feasibility_no_good_cuts = tuple(
             problem.metadata.get("stage1_feasibility_no_good_cuts") or ()
         )
@@ -8840,6 +9426,14 @@ class GurobiMILPAdapter:
                     "minimum_used_bev_count_policy_enabled": (
                         minimum_used_bev_count > 0
                     ),
+                    "phase4_seed_route_band_repartition_"
+                    "maximum_used_vehicle_count": (
+                        route_band_repartition_maximum_used_vehicle_count
+                    ),
+                    "phase4_seed_route_band_repartition_"
+                    "maximum_used_vehicle_count_policy_enabled": (
+                        route_band_repartition_maximum_used_vehicle_count > 0
+                    ),
                     "stage1_feasibility_no_good_cut_count": (
                         stage1_feasibility_no_good_cut_count
                     ),
@@ -9080,6 +9674,14 @@ class GurobiMILPAdapter:
                 "minimum_used_bev_count": minimum_used_bev_count,
                 "minimum_used_bev_count_policy_enabled": (
                     minimum_used_bev_count > 0
+                ),
+                "phase4_seed_route_band_repartition_"
+                "maximum_used_vehicle_count": (
+                    route_band_repartition_maximum_used_vehicle_count
+                ),
+                "phase4_seed_route_band_repartition_"
+                "maximum_used_vehicle_count_policy_enabled": (
+                    route_band_repartition_maximum_used_vehicle_count > 0
                 ),
                 "stage1_feasibility_no_good_cut_count": (
                     stage1_feasibility_no_good_cut_count
