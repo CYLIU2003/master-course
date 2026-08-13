@@ -71,6 +71,9 @@ def test_canonical_prepared_payload_uses_the_scope_hash_in_its_id() -> None:
 
     assert payload["prepared_input_id"] == prepared_input_id
     assert payload["scope_hash"] == scope_hash
+    payload["scope"]["prepared_scope_audit"] = {
+        "generated_from_prepared_input": True,
+    }
     assert _scope_hash(payload["scope"]) == scope_hash
 
 

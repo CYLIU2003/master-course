@@ -19,10 +19,13 @@
 - The first clean-commit Prepare then failed closed on a second defect in the
   preserved v7 artifact: its ID encoded scope hash `404f3679...`, but the JSON
   stored a separately recomputed `f1e18f25...`. The builder now uses one scope
-  hash for both fields and bumps the prepared schema to
-  `v8_immutable_scope_identity`; the inconsistent v7 file is not overwritten
-  or relabeled.
-- Post-v8 regression passes `31` focused tests and all `1374` repository tests.
+  hash for both fields. Independent verification of the first v8 artifact then
+  found that the derived `prepared_scope_audit` changed a re-hash of the stored
+  scope (`f1e18f25...` recorded versus `f1723217...` recomputed). No solver job
+  was submitted. That audit is now excluded from the selection hash and the
+  prepared schema is `v9_immutable_scope_identity`; inconsistent v7/v8 files
+  are not overwritten or relabeled.
+- Post-v9 regression passes `31` focused tests and all `1374` repository tests.
   Remaining release work is to freeze the clean correction commit, invoke fresh
   Prepare, run low-PV M1 and M3 against that one immutable source artifact, and
   regenerate M0--M3. Until then the candidate effect sizes from the rejected

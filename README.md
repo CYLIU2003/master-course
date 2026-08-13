@@ -1422,9 +1422,11 @@ PV/BESS, compatibility, or other canonical field differs under the same ID,
 Prepare fails with `PREPARED_INPUT_ID_COLLISION`; it never overwrites the prior
 artifact. This is required for an M1/M3 comparison to share both the prepared
 ID and the exact source byte hash across an application restart. Schema
-`v8_immutable_scope_identity` also uses the same scope hash in the prepared ID
-and inside the payload; older v7 files with the former double-hash mismatch are
-preserved as historical artifacts and are not reused as v8 input.
+`v9_immutable_scope_identity` also uses the same selection-scope hash in the
+prepared ID and inside the payload; the derived `prepared_scope_audit` is
+explicitly excluded from that selection hash. Older v7/v8 files from the
+identity corrections are preserved as historical artifacts and are not reused
+as v9 input.
 
 After both jobs finish, run:
 

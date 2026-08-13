@@ -11,10 +11,15 @@
 - `_scope_cache_payload()` now materializes the stored depot/route/primary-depot
   aliases before hashing. `_build_canonical_input()` receives that certified
   hash used to construct `prepared_input_id`; it no longer recomputes a second
-  hash from an augmented representation. The stored scope object re-hashes to
-  the same value. The prepared schema is bumped to
-  `v8_immutable_scope_identity`, so conflicting v7 files remain preserved and
-  a fresh corrected artifact receives a different ID/path.
+  hash from an augmented representation.
+- The first v8 fresh Prepare served 264 trips, but the independent post-Prepare
+  re-hash found `f1723217...` instead of stored `f1e18f25...` because the
+  derived `prepared_scope_audit` is appended after selection hashing. No solver
+  job was submitted. The audit is now explicitly excluded from the selection
+  scope hash, and the regression adds it before recomputing the stored scope.
+  The final prepared schema is `v9_immutable_scope_identity`; conflicting
+  v7/v8 files remain preserved and a fresh corrected artifact receives a
+  different ID/path.
 - The first controlled low-PV M1/M3 assembly was intentionally rejected by
   `build_thesis_ablation_comparison.py`. Both jobs recorded prepared input ID
   `prepared-8331f7eaa9fcb7eb-404f36795e908d12-d5e8413e`, canonical ablation
@@ -44,8 +49,8 @@
   with only `prepared_at` changed in memory. Its full file SHA-256 remained
   `4A45A62DE369651487C72842D4C14D90F4ED276A6E3CE9651560BFF4797917D5`
   before and after the immutability check.
-- Post-v8 focused preparation/provenance/ablation regression:
-  `31 passed`; complete repository regression: `1374 passed in 69.42s`.
+- Post-v9 focused preparation/provenance/ablation regression:
+  `31 passed`; complete repository regression: `1374 passed in 69.77s`.
   Fresh controlled M1/M3 evidence remains pending the reviewed clean commit;
   no pre-fix run will be relabeled.
 

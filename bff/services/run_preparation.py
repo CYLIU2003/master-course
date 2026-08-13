@@ -31,7 +31,7 @@ log = logging.getLogger("run_prep")
 # canonical solver input.  The schema suffix is part of prepared_input_id, so
 # old prepared files cannot be silently reused after a fleet-contract change.
 PREPARED_INPUT_SCHEMA_VERSION = (
-    "v8_immutable_scope_identity"
+    "v9_immutable_scope_identity"
 )
 
 
@@ -170,6 +170,8 @@ _VOLATILE_HASH_KEYS = {
     "prepared_input_id",
     "preparedInputId",
     "prepared_at",
+    "prepared_scope_audit",
+    "preparedScopeAudit",
     "selectedDepotIds",
     "selectedRouteIds",
     "serviceIds",
