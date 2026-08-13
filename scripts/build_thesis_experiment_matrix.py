@@ -140,6 +140,13 @@ def build_experiment_matrix() -> dict[str, Any]:
                 "series after rated-capacity generation is constructed; it "
                 "does not change pv_capacity_kw."
             ),
+            "trip_energy_sensitivity": (
+                "Multiplies the aggregate BEV kWh and ICE fuel-liter demand "
+                "targets by the same declared factor after the deterministic "
+                "route/direction/time proxy weights are constructed. It does "
+                "not alter trip times, distances, PV, tariff, fleet, or "
+                "charging controls."
+            ),
             "route_band_off": (
                 "fixed_route_band_mode=false together with "
                 "allow_intra_depot_route_swap=true; otherwise the canonical "

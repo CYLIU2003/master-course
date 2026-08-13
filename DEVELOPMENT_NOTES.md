@@ -1,5 +1,16 @@
 # Development Notes
 
+## 2026-08-14: trip-energy sensitivity preflight
+
+- Before launching the next formal tranche, the matrix contract was made
+  explicit: `ENERGY_0.8` through `ENERGY_1.2` multiply both aggregate BEV-kWh
+  and ICE-liter demand targets after deterministic trip-level proxy weights
+  are formed. Trip structure, PV, tariff, fleet, charging, and Rolling
+  controls remain fixed.
+- Parameterized regression now proves exact aggregate scaling at 0.8, 0.9,
+  1.0, 1.1, and 1.2 for both powertrains. This is a clarification and test of
+  the existing mathematics, not a formula change.
+
 ## 2026-08-14: corrected time-discretization rerun and diagnostic reporting
 
 - Clean frozen SHA `88f76a9af79a8d46c1502a51ed03778ab99f20e9`

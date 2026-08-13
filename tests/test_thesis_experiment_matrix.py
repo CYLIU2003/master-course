@@ -60,6 +60,18 @@ def test_experiment_matrix_contains_required_sensitivities() -> None:
     assert payload["parameter_semantics"]["pv_scale"].startswith(
         "Multiplicative alpha"
     )
+    energy_cases = [
+        case
+        for case in payload["cases"]
+        if case["family"] == "trip_energy_sensitivity"
+    ]
+    assert [
+        case["prepare_settings"]["trip_energy_sensitivity_scale"]
+        for case in energy_cases
+    ] == [0.8, 0.9, 1.0, 1.1, 1.2]
+    assert payload["parameter_semantics"][
+        "trip_energy_sensitivity"
+    ].startswith("Multiplies the aggregate BEV")
     time_15 = next(
         case for case in payload["cases"] if case["case_id"] == "TIME_15"
     )

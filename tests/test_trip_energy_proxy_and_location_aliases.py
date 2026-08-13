@@ -56,6 +56,31 @@ def test_literature_proxy_preserves_aggregate_configured_demand() -> None:
     )
 
 
+@pytest.mark.parametrize("scale", [0.8, 0.9, 1.0, 1.1, 1.2])
+def test_literature_proxy_scales_bev_and_ice_aggregate_demand_together(
+    scale: float,
+) -> None:
+    trips = (
+        _trip("morning", "07:00", "07:40", 10.0),
+        _trip("midday", "12:00", "12:20", 20.0),
+    )
+
+    proxy = build_literature_proxy_trip_demands(
+        trips,
+        bev_kwh_per_km=1.316,
+        ice_l_per_km=1.0 / 4.52,
+        sensitivity_scale=scale,
+    )
+
+    assert sum(proxy.energy_kwh_by_trip.values()) == pytest.approx(
+        30.0 * 1.316 * scale
+    )
+    assert sum(proxy.fuel_l_by_trip.values()) == pytest.approx(
+        30.0 / 4.52 * scale
+    )
+    assert proxy.provenance["sensitivity_scale"] == pytest.approx(scale)
+
+
 def test_explicit_trip_vehicle_type_demand_overrides_vehicle_average_rate() -> None:
     problem_trip = ProblemTrip(
         trip_id="trip",
