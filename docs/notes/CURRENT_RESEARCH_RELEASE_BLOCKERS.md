@@ -28,6 +28,11 @@ provenance failure. It labels the current evidence
 `DIAGNOSTIC_FEASIBLE_NOT_OPTIMALITY_CERTIFIED`. A future run must meet the
 predeclared gap requirement before the thesis may claim time-step convergence.
 
+Diagnostic evidence bundle:
+`output/thesis_sensitivity_time_low_pv_20260814_corrected_88f76a9/reporting/5d58aca1284c4ddd-8c3307182c6b`.
+Reporting-manifest SHA-256:
+`58c9cebf6d771c7d5a809044768a8ce8306075e8c4c102e017aed6f6016781ba`.
+
 ## 2026-08-13 low-PV M0--M3 gate discharged; broader release blockers remain
 
 - Fresh normal frontend/BFF Phase 1 and Phase 4 jobs completed from clean

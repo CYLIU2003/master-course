@@ -21,6 +21,12 @@
   source payload hash, common controls, physical/accounting gates, and the
   exact gap-only failure scope. It never upgrades these incumbents to thesis
   conclusions while the optimality gate remains unmet.
+- Audited reporting bundle:
+  `output/thesis_sensitivity_time_low_pv_20260814_corrected_88f76a9/reporting/5d58aca1284c4ddd-8c3307182c6b`.
+  Its reporting-manifest SHA-256 is
+  `58c9cebf6d771c7d5a809044768a8ce8306075e8c4c102e017aed6f6016781ba`;
+  source-run SHA `88f76a9...` and clean report-builder SHA `8c33071...` are
+  recorded separately.
 
 ## 2026-08-13 runtime-attested r7 feedback-budget evidence
 

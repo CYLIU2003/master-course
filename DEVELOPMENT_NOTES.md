@@ -33,6 +33,15 @@
   executed-KPI and solver-evidence PNG/SVG figures. Any non-gap failure or
   source tampering blocks report creation; gap-limited cases are labeled
   `DIAGNOSTIC_FEASIBLE_NOT_OPTIMALITY_CERTIFIED`.
+- The clean builder SHA
+  `8c3307182c6b951a3005050ee63ec9bc7502d1d4` generated seven hashed
+  derivatives under
+  `output/thesis_sensitivity_time_low_pv_20260814_corrected_88f76a9/reporting/5d58aca1284c4ddd-8c3307182c6b`.
+  Manual PNG review found and fixed a zero-reference label/title collision;
+  the corrected bundle was generated into a new immutable version instead of
+  overwriting the first derivative. Reporting-manifest SHA-256:
+  `58c9cebf6d771c7d5a809044768a8ce8306075e8c4c102e017aed6f6016781ba`.
+  Full repository regression before the reporting commits: `1385 passed`.
 
 ## 2026-08-14: time-discretization diagnostic exposed provenance mismatch
 
