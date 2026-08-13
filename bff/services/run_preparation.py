@@ -31,7 +31,7 @@ log = logging.getLogger("run_prep")
 # canonical solver input.  The schema suffix is part of prepared_input_id, so
 # old prepared files cannot be silently reused after a fleet-contract change.
 PREPARED_INPUT_SCHEMA_VERSION = (
-    "v7_transition_compatibility_trip_energy_pv_charge"
+    "v8_immutable_scope_identity"
 )
 
 
@@ -411,6 +411,9 @@ def _scope_cache_payload(scenario: dict, scope) -> dict[str, Any]:
         "operator_id": operator_id,
         "selected_depot_ids": selected_depot_ids,
         "selected_route_ids": selected_route_ids,
+        "depot_ids": selected_depot_ids,
+        "route_ids": selected_route_ids,
+        "primary_depot_id": selected_depot_ids[0] if selected_depot_ids else None,
         "route_selectors": _normalize_scope_list(getattr(scope, "route_selectors", None)),
         "service_ids": service_ids,
         "service_date": _normalize_scope_text(getattr(scope, "service_date", None)),
@@ -1382,6 +1385,7 @@ def _build_canonical_input(
     scenario_id: str,
     dataset_version: str,
     scenario_hash: str,
+    scope_hash: str,
     scope_payload: dict[str, Any],
     scope,
     trips_df: pd.DataFrame,
@@ -1472,8 +1476,6 @@ def _build_canonical_input(
             "primary_depot_id": scope.depot_ids[0] if scope.depot_ids else None,
         }
     )
-    scope_hash = _scope_hash(scope_payload)
-
     return {
         "prepared_input_id": prepared_input_id,
         "prepared_input_schema_version": PREPARED_INPUT_SCHEMA_VERSION,
@@ -2776,6 +2778,7 @@ def _build_run_preparation(
             scenario_id=scenario_id,
             dataset_version=dataset_version,
             scenario_hash=scenario_hash,
+            scope_hash=scope_hash,
             scope_payload=scope_payload,
             scope=scope,
             trips_df=trips_df,

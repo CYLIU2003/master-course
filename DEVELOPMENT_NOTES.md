@@ -2,6 +2,19 @@
 
 ## 2026-08-13: prepared-input immutability across BFF restarts
 
+- The first clean-commit HTTP Prepare after the immutability patch failed
+  before solver submission and exposed a second v7 identity defect: the
+  prepared filename/ID used the pre-materialization scope hash `404f3679...`,
+  while `_build_canonical_input()` augmented the scope payload, recomputed it,
+  and saved `f1e18f25...` inside the JSON. The ID and payload therefore claimed
+  two different scope identities. No optimization job was created.
+- `_scope_cache_payload()` now materializes the stored depot/route/primary-depot
+  aliases before hashing. `_build_canonical_input()` receives that certified
+  hash used to construct `prepared_input_id`; it no longer recomputes a second
+  hash from an augmented representation. The stored scope object re-hashes to
+  the same value. The prepared schema is bumped to
+  `v8_immutable_scope_identity`, so conflicting v7 files remain preserved and
+  a fresh corrected artifact receives a different ID/path.
 - The first controlled low-PV M1/M3 assembly was intentionally rejected by
   `build_thesis_ablation_comparison.py`. Both jobs recorded prepared input ID
   `prepared-8331f7eaa9fcb7eb-404f36795e908d12-d5e8413e`, canonical ablation
@@ -31,10 +44,10 @@
   with only `prepared_at` changed in memory. Its full file SHA-256 remained
   `4A45A62DE369651487C72842D4C14D90F4ED276A6E3CE9651560BFF4797917D5`
   before and after the immutability check.
-- Focused provenance/preparation/ablation regression: `30 passed`; complete
-  repository regression: `1373 passed in 69.10s`. Fresh controlled M1/M3
-  evidence remains pending the reviewed clean commit; no pre-fix run will be
-  relabeled.
+- Post-v8 focused preparation/provenance/ablation regression:
+  `31 passed`; complete repository regression: `1374 passed in 69.42s`.
+  Fresh controlled M1/M3 evidence remains pending the reviewed clean commit;
+  no pre-fix run will be relabeled.
 
 ## 2026-08-13: runtime-attested r7 validates feedback budgeting and provenance
 

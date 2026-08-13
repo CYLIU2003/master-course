@@ -5,12 +5,14 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+import pandas as pd
 import pytest
 
 from bff.routers import optimization
 from bff.services.run_preparation import (
     PREPARED_INPUT_SCHEMA_VERSION,
     PreparedInputIdentityCollisionError,
+    _build_canonical_input,
     _persist_prepared_input_immutably,
     _prepared_input_id,
     _scenario_hash,
@@ -23,6 +25,53 @@ from bff.services.run_preparation import (
     materialize_scenario_from_prepared_input,
     solver_prepare_profile,
 )
+
+
+def test_canonical_prepared_payload_uses_the_scope_hash_in_its_id() -> None:
+    scenario = {
+        "meta": {"id": "scenario-1"},
+        "scenario_overlay": {
+            "dataset_id": "tokyu_full",
+            "dataset_version": "dataset-v1",
+        },
+        "simulation_config": {
+            "solver_mode": "phase4_integrated",
+            "service_dates": ["2025-08-05"],
+        },
+        "depots": [],
+        "routes": [],
+        "vehicles": [],
+        "chargers": [],
+    }
+    scope = SimpleNamespace(
+        depot_ids=[],
+        route_ids=[],
+        service_ids=["WEEKDAY"],
+        service_date="2025-08-05",
+        route_selectors=[],
+    )
+    scope_payload = _scope_cache_payload(scenario, scope)
+    scope_hash = _scope_hash(scope_payload)
+    prepared_input_id = _prepared_input_id("scenario-hash", scope_hash)
+
+    payload = _build_canonical_input(
+        scenario=scenario,
+        prepared_input_id=prepared_input_id,
+        scenario_id="scenario-1",
+        dataset_version="dataset-v1",
+        scenario_hash="scenario-hash",
+        scope_hash=scope_hash,
+        scope_payload=scope_payload,
+        scope=scope,
+        trips_df=pd.DataFrame(),
+        timetables_df=pd.DataFrame(),
+        stops=[],
+        stop_sequences=[],
+    )
+
+    assert payload["prepared_input_id"] == prepared_input_id
+    assert payload["scope_hash"] == scope_hash
+    assert _scope_hash(payload["scope"]) == scope_hash
 
 
 def test_prepared_artifact_reuses_original_bytes_when_only_timestamp_changes(
