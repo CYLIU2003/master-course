@@ -37,10 +37,32 @@
 - Focused regression covers fixed-duty-before-route ordering, required reduced
   Stage 2, local-infeasibility rejection, full-problem Stage-2 validation,
   exact activation counts and pair-control persistence. Older `583dced`
-  artifacts remain frozen and are not relabelled; fresh clean-commit evidence
-  is required for v4. Focused regression passes 65 tests; the complete
+  artifacts remain frozen and are not relabelled. Focused regression passes
+  65 tests; the complete
   repository suite passes `1363 passed in 71.02s`; compileall and
   `git diff --check` also pass.
+- The fresh v4 pair at frozen SHA
+  `ad0d4f2c4c1acb10233516309c11a9a4c00b362d` completed both frontend/BFF
+  cases, 24/24 Rolling, physical/accounting validation, pair finalization and
+  reporting ZIP. High PV recovered the prior best seed exactly:
+  650,234.729396 JPY, 31/1 BEV/ICE buses and 248/16 trips. The fixed-duty
+  neighborhood evaluated 109 candidates in 120.172 seconds and selected
+  `powertrain_duty_swap_round_1` before route-band search started.
+- The high-PV route-band reduced solve used 62.342 seconds and reported local
+  Stage-2 infeasibility, so no full-system candidate evaluation was attempted.
+  Low PV evaluated 210 fixed-duty candidates in 120.594 seconds; its two
+  route-band groups received fair budgets and both failed local Stage 2 within
+  89.520 seconds total. This verifies that v4 preserves the established
+  incumbent and rejects energy-infeasible repartitions earlier.
+- Low PV remains 698,318.002033 JPY, 21/11 buses, 91/173 trips and meets the
+  declared gap at 0.547009%. High PV remains time-limited at a 1.574005%
+  certified gap, so the pair manifest accepts controlled PV sensitivity but
+  formal release remains blocked only by
+  `baseline_requested_mip_gap_certified`. The complete progress bundle is
+  `READY` with seven figures, six tables and a ZIP; this reporting readiness
+  is not promoted to formal research readiness.
+- Evidence:
+  `output/formal_pair_20260813_route_band_v4_flat30_pv1000_bess6000_phase4_ad0d4f2_gap01_r4`.
 
 ## 2026-08-13: first route-band re-partitioning implementation (v3, superseded)
 

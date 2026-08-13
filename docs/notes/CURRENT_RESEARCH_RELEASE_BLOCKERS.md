@@ -23,8 +23,9 @@ and consumed 60--102 seconds from the same 120-second budget. The high-PV
 incumbent therefore regressed by 64.249866 JPY relative to `b06c451`, and its
 certified gap widened by 0.009725 percentage point.
 
-Current v4 code preserves the full 120-second fixed-duty replacement/matching/
-suffix/swap/identity search first. Route-band repartition starts afterwards
+Frozen SHA `ad0d4f2c4c1acb10233516309c11a9a4c00b362d` verifies the v4 behavior.
+It preserves the full 120-second fixed-duty replacement/matching/suffix/swap/
+identity search first. Route-band repartition starts afterwards
 from the cheapest independently validated incumbent and has a separate,
 audited 90-second budget. Its reduced problem now runs both Stage 1 and Stage 2;
 local SOC/charging infeasibility is rejected before full-system evaluation.
@@ -33,10 +34,18 @@ the unchanged full-problem fixed-assignment Stage 2, independent physical
 validation and canonical accounting. No weather-specific objective bias or
 BEV lower bound is introduced into the final integrated solve.
 
-The v4 implementation postdates `583dced`; therefore no v4 KPI is yet formal
-evidence. A fresh clean-commit pair is required. Even a better or 32-BEV sunny
-incumbent will not remove the blocker unless the predeclared 1% canonical-cost
-gap and all unchanged Rolling, physical, accounting and pair-control gates pass.
+The fresh frontend/BFF pair restores high PV to 650,234.729396 JPY, 31/1 buses
+and 248/16 trips. Its fixed-duty search evaluated 109 candidates in 120.172
+seconds and selected the prior best powertrain-swap incumbent. The subsequent
+reduced route-band Stage 2 was infeasible and correctly stopped before a full
+candidate evaluation. Low PV remains 698,318.002033 JPY, 21/11 buses and
+91/173 trips; two route-band groups were fairly budgeted and both failed local
+Stage 2. The controlled comparison and progress bundle pass, but high PV still
+has a 1.574005% certified gap. Formal release therefore remains blocked solely
+by `baseline_requested_mip_gap_certified`.
+
+Evidence:
+`output/formal_pair_20260813_route_band_v4_flat30_pv1000_bess6000_phase4_ad0d4f2_gap01_r4`.
 
 The first clean full pair using sequential scalar lexicographic certification
 completed at frozen SHA `7cb1192cf6278e8854add16b58f04639a6656336`.

@@ -19,17 +19,28 @@
   the proven fixed-duty neighborhood and consumed 60--102 of its 120 seconds;
   the high-PV incumbent regressed by 64.249866 JPY and its gap worsened by
   0.009725 percentage point. This is negative evidence, not an improvement.
-- Current code postdates `583dced` and fixes that regression. Fixed-duty
+- Clean frozen SHA `ad0d4f2c4c1acb10233516309c11a9a4c00b362d` now verifies
+  that regression fix through the same frontend/BFF path. Fixed-duty
   replacement, matching, suffix, swap and identity search retains its full
   120-second budget and runs first. Route-band repartition then receives a
   separate audited 90-second budget, anchors on the cheapest independently
   validated incumbent, and must pass a reduced Stage 1 plus Stage 2 before it
   can reach the unchanged full-problem Stage 2, physical and accounting gates.
   The audit schema is v4 and the total declared Phase-4 solver budget is 4,710
-  seconds. A fresh clean-commit pair is required before this change affects
-  any reported KPI.
+  seconds.
+- The v4 pair restores the high-PV incumbent to 650,234.729396 JPY, 31/1
+  BEV/ICE buses and 248/16 trips. Its fixed-duty search evaluated 109 candidates
+  in 120.17 seconds and recovered the prior powertrain-swap incumbent before
+  route-band work began. The reduced high-PV route-band Stage 1/Stage 2 was
+  locally infeasible and therefore never reached full-problem candidate
+  evaluation. Low PV remains 698,318.002033 JPY, 21/11 buses and 91/173 trips;
+  its two route-band groups were fairly budgeted and both failed local Stage 2.
+- Pair acceptance, all physical/accounting gates and the progress bundle pass,
+  but formal release remains `BLOCKED`: high PV still has a 1.574005% certified
+  gap against the declared 1% target. The v4 change removes the candidate-search
+  regression; it does not solve the remaining lower-bound/optimality gap.
 - Latest evidence and report bundle:
-  `output/formal_pair_20260813_route_band_repartition_flat30_pv1000_bess6000_phase4_583dced_gap01_r3`.
+  `output/formal_pair_20260813_route_band_v4_flat30_pv1000_bess6000_phase4_ad0d4f2_gap01_r4`.
 - Clean frozen SHA `7cb1192cf6278e8854add16b58f04639a6656336` completed the
   ordinary frontend/BFF path for the controlled high/low-PV pair: fresh
   Prepare, Phase 4, 24/24 Rolling, physical validation, canonical executed-day
