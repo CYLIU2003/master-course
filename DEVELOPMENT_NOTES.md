@@ -4540,3 +4540,62 @@ locks this distinction in place.
   and `9be2a8ec70f7ea4e6a5169feb0e288ffda800bd340681dafe84e0b68f139f44d`.
   The earlier `3307f964` directory is retained as immutable historical output;
   the `305b5e3` bundle is the current oracle evidence.
+
+# 2026-08-14 - Vehicle-day-cost sensitivity preflight and accounting gate
+
+- Audited the predeclared `VEHICLE_DAY_0` and `VEHICLE_DAY_20000` cases. Both
+  intentionally use `scalar_total_cost_v1`; using
+  `research_lexicographic_v1` would minimize vehicle days before monetary cost
+  and would therefore make a 0/20,000 JPY coefficient comparison incapable of
+  isolating the coefficient's effect.
+- The existing sensitivity audit checked only that the requested unit cost and
+  objective preset reached model metadata. It could not prove that the cost
+  component was enabled, charged exactly once per used vehicle-day, included
+  in the actual scalar objective, or reconciled in the executed Rolling
+  accounting. A silently disabled or duplicated cost could therefore have
+  passed the parameter check.
+- Added a family-specific fail-closed audit requiring
+  `vehicle_usage_cost=true`, `canonical_actual_cost` as the integrated primary
+  objective, the actual-cost structural contract, identical declared/model/
+  accounting unit cost, one-day vehicle count equal to vehicle-day count,
+  `fixed_vehicle_day_cost` classified as research-eligible, and
+  `vehicle_usage_cost_jpy = used_vehicle_day_count * unit_cost` within
+  `1e-6 JPY`.
+- Added the unit, used vehicle-days, charged cost, formula residual, semantics
+  and research-eligibility flag to every sensitivity row. Non-vehicle-day
+  families record this audit as not applicable and remain unaffected.
+- Focused matrix, vehicle-cost, integrated-objective and literature-figure
+  regression passes `67 passed`; the repository suite passes `1410 passed`.
+  A clean commit, fresh Prepare and the two
+  normal frontend/BFF sensitivity jobs remain required before any numerical
+  effect is reported.
+
+# 2026-08-14 - Literature solve-time audit and current bottleneck diagnosis
+
+- Read the 23 PDFs under `先行文献/` and extracted the reported computation
+  scope, instance size, method, hardware, stopping rule, runtime and gap where
+  available. The evidence table is in
+  `docs/notes/LITERATURE_SOLVE_TIME_COMPARISON_20260814.md`.
+- Confirmed that tens-to-hundreds-of-seconds results are common for fixed
+  vehicle schedules, charging-only MILPs, Lagrangian/dynamic-programming
+  decompositions and near-optimal metaheuristics. The closest integrated
+  comparison, No06, solves 418 trips with ALNS-SA in 202.3 seconds, while
+  Gurobi fails to find a feasible solution for 200 and 418 trips within six
+  hours. No55 reports about five hours for 70 trips using a GA with 120-way
+  parallel chromosome evaluation.
+- Audited frozen formal pair SHA `f46f1e8`. Both cases record 678,600 complete
+  successor arcs, 780,112 fixed-recourse variables, 1,598,973 constraints and
+  726,240 discrete start values. The high-PV case reaches a feasible incumbent
+  immediately but spends 3,600.80 seconds proving only a 1.574% gap; the
+  low-PV case is independently certified to 0.547% in 18.36 seconds.
+- The asymmetry comes from the certified lower bound. Low PV contributes a
+  54,498.14 JPY unavoidable energy/fuel floor. High PV permits all pooled PV
+  to be treated as free in the current optimistic relaxation, so its
+  energy/fuel floor is zero and the bound remains the 640,000 JPY vehicle-day
+  minimum.
+- The next performance change must target formulation size and proof strength,
+  not research-gate relaxation: aggregate vehicle-indexed path symmetry with
+  a certified path-cover/column or decomposition approach, and add only
+  mathematically unavoidable high-PV costs to the lower bound. Any ALNS-style
+  hundreds-of-seconds mode must be labeled near-optimal and kept separate from
+  the full-network formal certificate.

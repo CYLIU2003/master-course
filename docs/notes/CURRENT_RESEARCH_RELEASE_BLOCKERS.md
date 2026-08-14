@@ -1,5 +1,55 @@
 # Current research release blockers
 
+## 2026-08-14 high-PV optimality proof: model-size and lower-bound blocker
+
+The local literature audit is recorded in
+[`LITERATURE_SOLVE_TIME_COMPARISON_20260814.md`](LITERATURE_SOLVE_TIME_COMPARISON_20260814.md).
+Reported tens-to-hundreds-of-seconds results are common, but the closest
+integrated dispatch comparison uses a heuristic for the large instance:
+No06 reports 202.3 seconds for ALNS-SA on 418 trips, while Gurobi found no
+feasible solution for its 200- and 418-trip cases within six hours. Other
+fast examples mainly keep vehicle schedules fixed and optimize charging and
+energy flows.
+
+The frozen `f46f1e8` high-PV run has a feasible incumbent from the start but
+ends at 3,600.80 seconds with a 1.574% certified gap. Its complete network
+contains 678,600 vehicle-indexed successor arcs; the recorded fixed-recourse
+model has 780,112 variables and 1,598,973 constraints. The matching low-PV
+run is certified to 0.547% in 18.36 seconds because its independent
+energy/fuel lower bound contributes 54,498.14 JPY. In the high-PV run, the
+pooled free-PV relaxation makes the energy/fuel floor zero, leaving only the
+640,000 JPY vehicle-day floor.
+
+Therefore this is primarily a proof and formulation-size blocker, not a
+failure to find a physically feasible plan. Do not shorten the time limit and
+relabel the incumbent as optimal. The required performance work is to reduce
+vehicle-indexed arc symmetry through a certified path-cover/column or
+decomposition formulation and to strengthen the high-PV lower bound without
+double counting. A separate ALNS-style operational candidate may target
+hundreds of seconds, but it must remain explicitly near-optimal and cannot
+replace the formal full-network certificate.
+
+## 2026-08-14 vehicle-day-cost sensitivity: execution pending after gate repair
+
+The declared 0 and 20,000 JPY/used-bus-day cases both use
+`scalar_total_cost_v1`, holding the physical/tariff/PV/BESS controls fixed.
+This is the correct experiment for the monetary coefficient: the thesis
+lexicographic preset minimizes vehicle days before cost and would mask the
+coefficient's dispatch effect.
+
+The runner now rejects a case unless the cost component is enabled, the
+integrated primary objective is canonical actual cost, the unit reaches model
+and executed accounting, the saved semantics are a classified
+`fixed_vehicle_day_cost`, one-day used buses equal used vehicle-days, and the
+charged amount equals used vehicle-days times unit within `1e-6 JPY`. These
+checks close the prior evidence gap where a saved coefficient alone could be
+mistaken for an active and correctly accounted objective term.
+
+No current-HEAD numerical sensitivity result exists yet. Fresh Prepare and
+both frontend/BFF jobs must run from one clean frozen commit. Until their
+physical, Rolling, accounting, provenance, and declared gap gates pass, the
+effect of the 20,000 JPY coefficient remains **BLOCKED**.
+
 ## 2026-08-14 energy-demand tranche: evidence complete; 1% gap still blocks
 
 Frozen SHA `735527da7f117f5af894263dcdf4fe55e8226328` completed all five

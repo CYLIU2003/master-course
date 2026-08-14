@@ -970,6 +970,11 @@ frozen commit and every per-run/pair acceptance gate.
 > [!IMPORTANT]
 > **現在の研究公開ステータスは `BLOCKED` です。** 個別ジョブの完了、可行解、Rolling の受理、正式な研究受理は別の判定です。最新の判定理由と必要な証跡は、[研究リリースのブロッカー一覧](docs/notes/CURRENT_RESEARCH_RELEASE_BLOCKERS.md)を確認してください。
 
+先行文献の報告計算時間と現行モデルの規模・gapを同じ軸で確認する場合は、
+[先行文献と現行モデルの求解時間比較](docs/notes/LITERATURE_SOLVE_TIME_COMPARISON_20260814.md)
+を参照してください。数百秒の文献結果について、固定配車の充電問題、分解法、
+近似ヒューリスティクス、厳密MILPを区別しています。
+
 ## まず、目的に合う入口を選ぶ
 
 | やりたいこと | 最初に読む・実行するもの |
@@ -1543,6 +1548,19 @@ acceptance, MIP-gap target, and M0 identity all agree. Otherwise it writes a
 BLOCKED artifact with every failed check. Thus a single-run M0/M2/M3 file
 remains a candidate diagnostic, not a complete four-method result or a
 research-release shortcut.
+
+Vehicle-day-cost sensitivity uses `scalar_total_cost_v1` in both the 0 and
+20,000 JPY/used-bus-day cases. This is intentional: under
+`research_lexicographic_v1`, vehicle days are already the higher-priority
+objective, so changing their yen coefficient would not isolate the monetary
+coefficient's effect. The sensitivity runner now fails closed unless the unit
+cost reaches both the integrated model and executed accounting, the
+`vehicle_usage_cost` component is enabled, the solver reports canonical cost
+as its primary scalar objective, the semantics are
+`fixed_vehicle_day_cost`, and
+`vehicle_usage_cost_jpy = used_vehicle_day_count * unit_cost` within
+`1e-6 JPY`. These fields are exported in the sensitivity CSV; a saved numeric
+coefficient alone is not accepted as evidence that it affected optimization.
 
 For a READY comparison, the same command also creates a versioned
 `reporting/<comparison-payload-sha-prefix>-<builder-git-sha-prefix>/` directory
