@@ -884,6 +884,13 @@ def _exact_ice_clone_problem() -> CanonicalOptimizationProblem:
     ice_b = replace(ice_a, vehicle_id="ICE_002")
     return replace(
         base,
+        dispatch_context=replace(
+            base.dispatch_context,
+            trips=tuple(
+                replace(trip, allowed_vehicle_types=("ICE",))
+                for trip in base.dispatch_context.trips
+            ),
+        ),
         trips=tuple(
             replace(trip, allowed_vehicle_types=("ICE",))
             for trip in base.trips
@@ -971,6 +978,176 @@ def test_exact_ice_clone_flow_audit_rejects_multiday_structure() -> None:
 
     assert audit["certified_candidate_group_count"] == 0
     assert "planning_horizon_is_not_one_day" in audit["groups"][0]["blockers"]
+
+
+def test_phase4_exact_ice_clone_convexification_preserves_objective() -> None:
+    base = _exact_ice_clone_problem()
+    common_metadata = {
+        **dict(base.metadata or {}),
+        "cost_component_flags": {
+            **dict(
+                (base.metadata or {}).get("cost_component_flags") or {}
+            ),
+            "driver_cost": False,
+        },
+        "vehicle_usage_cost_jpy_per_used_bus": 20_000.0,
+    }
+    aggregated_problem = replace(
+        base,
+        metadata={
+            **common_metadata,
+            "exact_combustion_clone_flow_aggregation_enabled": True,
+        },
+    )
+    discrete_problem = replace(
+        base,
+        metadata={
+            **common_metadata,
+            "exact_combustion_clone_flow_aggregation_enabled": False,
+        },
+    )
+    config = OptimizationConfig(
+        mode=OptimizationMode.MILP,
+        phase="phase4_integrated",
+        integrated_actual_cost_objective=True,
+        time_limit_sec=30,
+        mip_gap=0.0,
+        random_seed=42,
+        warm_start=False,
+        allow_postsolve_repair=False,
+        research_run=True,
+    )
+
+    aggregated_outcome, aggregated_plan = GurobiMILPAdapter().solve(
+        aggregated_problem,
+        config,
+    )
+    discrete_outcome, discrete_plan = GurobiMILPAdapter().solve(
+        discrete_problem,
+        config,
+    )
+
+    assert aggregated_outcome.has_feasible_incumbent
+    assert discrete_outcome.has_feasible_incumbent
+    assert aggregated_plan.metadata["objective_value"] == pytest.approx(
+        discrete_plan.metadata["objective_value"]
+    )
+    assert aggregated_plan.served_trip_ids == discrete_plan.served_trip_ids
+    assert len(aggregated_plan.duties) == len(discrete_plan.duties) == 1
+    assert aggregated_plan.metadata[
+        "integrated_exact_combustion_clone_flow_aggregation_audit"
+    ]["applied"] is True
+    aggregation_audit = aggregated_plan.metadata[
+        "integrated_exact_combustion_clone_flow_aggregation_audit"
+    ]
+    assert aggregation_audit["net_binary_variable_reduction"] > 0
+    assert aggregation_audit["recovered_path_count"] == 1
+    assert aggregation_audit["recovered_vehicle_ids"] == ("ICE_001",)
+    discrete_audit = discrete_plan.metadata[
+        "integrated_exact_combustion_clone_flow_aggregation_audit"
+    ]
+    assert discrete_audit["applied"] is False
+    assert "disabled_by_scenario" in discrete_audit[
+        "application_blockers"
+    ]
+
+def test_phase4_exact_ice_clone_convexification_preserves_path_count() -> None:
+    base = _exact_ice_clone_problem()
+    dispatch_trip_1 = replace(
+        base.dispatch_context.trips[0],
+        trip_id="parallel-1",
+    )
+    dispatch_trip_2 = replace(
+        base.dispatch_context.trips[0],
+        trip_id="parallel-2",
+    )
+    problem_trip_1 = replace(base.trips[0], trip_id="parallel-1")
+    problem_trip_2 = replace(base.trips[0], trip_id="parallel-2")
+    problem = replace(
+        base,
+        dispatch_context=replace(
+            base.dispatch_context,
+            trips=(dispatch_trip_1, dispatch_trip_2),
+        ),
+        trips=(problem_trip_1, problem_trip_2),
+        feasible_connections={"parallel-1": (), "parallel-2": ()},
+        metadata={
+            **dict(base.metadata or {}),
+            "cost_component_flags": {"driver_cost": False},
+            "vehicle_usage_cost_jpy_per_used_bus": 20_000.0,
+            "exact_combustion_clone_flow_aggregation_enabled": True,
+        },
+    )
+    outcome, plan = GurobiMILPAdapter().solve(
+        problem,
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            phase="phase4_integrated",
+            integrated_actual_cost_objective=True,
+            time_limit_sec=30,
+            mip_gap=0.0,
+            random_seed=42,
+            warm_start=False,
+            allow_postsolve_repair=False,
+            research_run=True,
+        ),
+    )
+
+    assert outcome.has_feasible_incumbent
+    assert plan.served_trip_ids == ("parallel-1", "parallel-2")
+    assert len(plan.duties) == 2
+    audit = plan.metadata[
+        "integrated_exact_combustion_clone_flow_aggregation_audit"
+    ]
+    assert audit["applied"] is True
+    assert audit["recovered_path_count"] == 2
+    assert audit["recovered_vehicle_ids"] == ("ICE_001", "ICE_002")
+
+
+def test_phase4_exact_ice_clone_convexification_accepts_verified_seed() -> None:
+    base = _exact_ice_clone_problem()
+    problem = replace(
+        base,
+        depot_energy_assets={},
+        metadata={
+            **dict(base.metadata or {}),
+            "cost_component_flags": {"driver_cost": False},
+            "exact_combustion_clone_flow_aggregation_enabled": True,
+        },
+    )
+    result = OptimizationEngine().solve(
+        problem,
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            phase="phase4_integrated",
+            integrated_actual_cost_objective=True,
+            phase4_phase3_seed_enabled=True,
+            phase4_phase3_seed_time_limit_sec=30,
+            stage1_stage2_candidate_limit=1,
+            time_limit_sec=30,
+            mip_gap=0.0,
+            random_seed=42,
+            warm_start=True,
+            allow_postsolve_repair=False,
+            research_run=True,
+            requested_phase_token="phase4_integrated",
+            requested_phase="phase4_integrated",
+            resolved_phase="phase4_integrated",
+            executed_phase="phase4_integrated",
+        ),
+    )
+
+    assert result.feasible, result.infeasibility_reasons
+    aggregation_audit = result.plan.metadata[
+        "integrated_exact_combustion_clone_flow_aggregation_audit"
+    ]
+    assert aggregation_audit["applied"] is True
+    assert aggregation_audit["aggregate_mip_start_complete"] is True, (
+        result.plan.metadata["integrated_warm_start_audit"].get("reason")
+    )
+    assert result.plan.metadata["integrated_warm_start_audit"][
+        "applied"
+    ] is True
 
 
 def test_phase3_records_trip_count_symmetry_audit() -> None:

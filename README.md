@@ -1697,6 +1697,17 @@ clone ICE group, that audit checks equal assignment/transition domains and
 computes the maximum-fuel path in the complete chronological successor DAG,
 including startup, service, inter-trip deadhead and return. A group is a future
 aggregation candidate only when every such path fits within initial fuel minus
-reserve. The current implementation does **not** yet replace vehicle-indexed
-variables: `applied=false` is intentional, and neither a speedup nor a 1% gap
-certificate may be claimed until a clean frozen-commit matched run passes.
+reserve. When driver cost is disabled, Phase 4 now applies the certificate to
+the single largest eligible ICE group: vehicle-label assignment, connection,
+start/end and activation variables become bounded continuous variables, while
+binary aggregate group-flow variables preserve the integral trip path cover.
+The selected aggregate paths are decomposed deterministically back to the
+canonical ICE IDs; this is representation recovery, not post-solve repair.
+The formulation fails closed for path-specific driver cost, multi-day or
+multi-fragment cases, unequal domains, or nonredundant fuel state. Artifacts
+report both the relaxed label-binary count and aggregate integers added.
+
+This exact reformulation is now covered by small-oracle objective and path-count
+tests. It does not by itself establish a full-case runtime improvement: neither
+a speedup nor a 1% gap certificate may be claimed until a clean frozen-commit
+matched 264-trip run passes.

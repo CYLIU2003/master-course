@@ -4838,6 +4838,40 @@ locks this distinction in place.
   clean-commit 264-trip diagnostic remains pending; no runtime or formal-gap
   improvement is claimed yet.
 
+# 2026-08-14 - Exact ICE clone group-flow convexification
+
+- Connected the certified one-day ICE clone group to the integrated Phase 4
+  model. The largest certified group is selected only when `driver_cost=false`.
+  Every label-specific assignment, connection, start/end, `used_vehicle` and
+  vehicle-day variable in that group is relaxed to `[0,1]`, while binary
+  aggregate assignment/connection/start/end variables and one integer path
+  count retain the integral group path cover.
+- The reformulation retains at most one continuous clone group. All remaining
+  vehicle assignment variables are binary, so strict or penalized coverage
+  leaves an integer residual incidence for the selected group. Aggregate node
+  and boundary links then define an integral DAG path cover. The returned paths
+  are decomposed deterministically onto the canonical clone IDs without
+  changing selected trips, connections, path count, fuel cost, deadhead cost,
+  vehicle-day cost or CO2.
+- Per-label ICE fuel/refuelling states are omitted only for the selected group
+  because the preceding longest-duty certificate proves every possible path
+  fits within initial fuel minus reserve. `driver_cost=true`, multi-day,
+  multi-fragment, unequal-domain and insufficient-fuel cases remain on the
+  original integer formulation and record explicit application blockers.
+- Complete Phase 4 MIP starts now populate the aggregate variables, and the
+  fixed-dispatch recourse preflight fixes and verifies them along with the
+  original dispatch variables. Public metadata records application status,
+  blockers, relaxed binary count, aggregate integer count, net binary
+  reduction, recovered path count and recovered vehicle IDs.
+- Added exact small-oracle regressions comparing reformulated and original
+  objectives and verifying that two parallel trips still recover two physical
+  ICE duties. A verified Phase 3 seed also populates and certifies every new
+  aggregate MIP-start variable. These tests prohibit fractional label sharing
+  from understating the vehicle-day count. The focused integrated/research
+  suite passes `70 passed`; the complete repository regression passes
+  `1448 passed in 133.19s`. A clean matched 264-trip runtime comparison remains
+  required before claiming a speedup or improved formal gap.
+
 # 2026-08-14 - Literature-aligned exact-clone aggregation precondition
 
 - Rechecked the local `先行文献` corpus instead of treating every published
@@ -4856,9 +4890,9 @@ locks this distinction in place.
   maximum possible duty consumes no more than initial fuel minus reserve.
   Candidate count, blockers, proof path, fuel margin and the potential binary
   reduction are propagated through the MILP engine and BFF solver settings.
-- The audit changes no feasible set and explicitly records `applied=false`;
-  group variables and deterministic vehicle-ID recovery are not connected yet.
-  This prevents a partial implementation from being reported as a speedup.
+- The audit itself changes no feasible set. Commit `ad1cb9d` first exported it
+  with `applied=false`; the subsequent convexification above consumes only a
+  certified group and records whether the reformulation was actually applied.
 - A read-only reconstruction of the saved 264-trip high-PV Prepared Input
   found one exact 25-ICE group. Its common domain has 264 assignments and
   11,310 successor arcs per vehicle. The maximum reachable 11-trip duty uses
@@ -4871,6 +4905,8 @@ locks this distinction in place.
   heavy root processing and a 100% gap. The automatic policy remains in force.
   Tests cover the successful proof, unequal domains, insufficient initial fuel,
   multi-day rejection, metadata propagation and the integrated search profile.
-  The focused integrated suite passes `56 passed`; the complete repository
-  regression passes `1445 passed in 131.05s`. A matched 264-trip runtime
-  comparison is still required before any performance claim.
+  At the precondition commit, the focused integrated suite passed `56 passed`
+  and the complete repository regression passed `1445 passed in 131.05s`.
+  The convexification test totals are recorded after its final full-suite run;
+  a matched 264-trip runtime comparison is still required before any
+  performance claim.
