@@ -48,6 +48,13 @@
   when available; unrestricted canonical-cost runs retain cost-ranked seed
   selection. A fresh rerun is still required before reporting the corrected
   policy result.
+- Clean-SHA revalidation now confirms the correction: the explicit
+  minimum-ICE-fuel policy serves 264/264 trips with 32 BEVs and 0 ICE buses,
+  and certifies the primary objective at 0 L. Its reported 650,053.899 JPY
+  all-BEV cost is still 117.778 JPY above the best validated 31/1 cost
+  incumbent because the additional 183.387 kWh of grid energy costs slightly
+  more than the avoided diesel under the 30 JPY/kWh tariff. This is policy
+  evidence, not proof of the unrestricted cost optimum.
 
 ## 2026-08-15 formal pair timing result and reporting-contract repair
 

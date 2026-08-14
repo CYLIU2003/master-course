@@ -126,3 +126,22 @@ objective-aware: a minimum-fuel run receives the validated zero-ICE seed,
 whereas the unrestricted cost run continues to receive the cheapest validated
 seed. This is the kind of formulation and incumbent-definition difference that
 must be normalized before comparing raw solve seconds with the literature.
+
+The corrected clean-SHA rerun demonstrates the benefit of the stronger
+incumbent definition. After the same bounded seed work, the 32-BEV/0-ICE MIP
+start gave a 0 L incumbent and 0 L bound; Gurobi certified the primary policy
+objective in 0.209859 seconds without exploring a node. The remaining
+207.226111 seconds were spent on the secondary all-BEV cost objective, which
+did not close its cost bound. Thus a headline such as “the model solved in
+0.21 seconds” would be misleading: only the minimum-fuel primary objective was
+certified in that time, while the lexicographic secondary objective remained
+uncertified and total Phase 4 wall time was 606.771198 seconds including seed,
+model, recourse and reporting work.
+
+Economically, the all-BEV incumbent at 650,053.898604 JPY is 117.778334 JPY
+above the 31-BEV/1-ICE incumbent. The final replacement adds 183.387424 kWh of
+grid purchase: +5,501.622710 JPY electricity versus -5,382.743360 JPY diesel
+and -1.101016 JPY CO2 cost. For these two fixed feasible schedules, the
+measured break-even grid price is 29.357762 JPY/kWh. This explains why abundant
+daily PV and all-BEV feasibility do not imply an all-BEV minimum-cost result at
+30 JPY/kWh: the marginal duty's charging timing still requires grid energy.

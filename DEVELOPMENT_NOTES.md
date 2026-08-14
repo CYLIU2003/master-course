@@ -81,6 +81,22 @@
   objective, and the all-BEV candidate has already passed fixed-assignment
   Stage 2 plus physical validation. The audit now records selection objective,
   zero-ICE availability, and whether that policy seed was selected.
+- Clean-SHA frontend revalidation at `abc9257` (`run_20260815_0705`) selected
+  the validated 32-BEV/0-ICE seed and served all 264 trips with BEVs. The
+  minimum-fuel stage certified incumbent=bound=0 L in 0.209859 seconds and
+  zero nodes, then advanced to the all-BEV canonical-cost tie-break stage. The
+  latter retained 650,053.898604 JPY but timed out after 207.226111 seconds
+  with no useful cost bound, so it is an all-BEV policy incumbent rather than
+  a certified minimum-cost all-BEV schedule. Physical validation was VALID and
+  Git SHA stayed unchanged during solve.
+- Against the physically valid 31-BEV/1-ICE incumbent at 649,936.120270 JPY,
+  the all-BEV policy incumbent is 117.778334 JPY more expensive. The measured
+  delta is +5,501.622710 JPY electricity, -5,382.743360 JPY fuel, -1.101016
+  JPY CO2 and 0 JPY vehicle-day cost. It requires 183.387424 kWh more grid
+  energy, giving a dispatch-specific break-even grid price of about
+  29.357762 JPY/kWh. Therefore 1,000 kW of sunny PV makes all-BEV operation
+  feasible, but does not make this particular marginal replacement cheaper at
+  the configured 30 JPY/kWh. The unrestricted cost optimum remains unproven.
 
 ## 2026-08-15: literature-driven Phase 4 seed restart and budget repair
 

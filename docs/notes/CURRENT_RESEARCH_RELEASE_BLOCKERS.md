@@ -52,6 +52,17 @@ validated zero-ICE seed, while the formal cost-minimization path remains
 unchanged. The correction still requires a fresh clean-SHA rerun; formal pair
 release remains **BLOCKED**.
 
+That policy rerun is now complete at clean SHA `abc9257`. It selected a
+validated 32-BEV/0-ICE seed, served all 264 trips with BEVs, and certified the
+minimum-fuel objective at 0 L in 0.209859 seconds. Physical validation is
+VALID. The subsequent all-BEV cost stage timed out with a 0 JPY raw bound, so
+650,053.898604 JPY is only an all-BEV incumbent. It is 117.778334 JPY above
+the validated 31/1 cost incumbent because +5,501.622710 JPY electricity
+slightly exceeds -5,382.743360 JPY fuel and -1.101016 JPY CO2 savings. This
+resolves the policy-path selection bug but does not certify the unrestricted
+cost optimum or the controlled high/low-PV formal pair. Release remains
+**BLOCKED** pending a fresh unrestricted pair and all pair/Rolling gates.
+
 ## 2026-08-15 formal `79e61ae` pair: low PV certified, high PV still blocked
 
 The controlled pair was executed through fresh Prepare and the normal
