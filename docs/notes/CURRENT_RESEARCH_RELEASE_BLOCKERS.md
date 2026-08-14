@@ -2690,3 +2690,25 @@ Current blocker order is:
 The `ac0115e` pair and the older energy/time sensitivity runs remain useful
 diagnostic evidence for their recorded commits. They do not satisfy this
 ordered ledger and are not thesis-release evidence for current `main`.
+
+## 2026-08-15 clean `8066330` formal Phase-0 reference result
+
+The first clean current-SHA formal reference run completed through fresh
+Prepare, full unpruned Phase 4, 24/24 fixed-assignment Rolling, independent
+physical validation, executed-day accounting, final reconciliation and
+artifact hashing. The canonical run is
+`output/2026-08-15/run_20260815_0143`; the evidence copy is
+`output/formal_phase0_reference_8066330_low_pv/reference_low_pv`.
+
+Every Phase-0 gate passed except the predeclared MIP-gap target. The run served
+264/264 trips with 14 BEVs and 18 ICE buses, passed physical validation,
+accepted all 24 Rolling steps, reconciled 702,184.658838 JPY of executed-day
+accounting, and verified 240/240 required artifacts. Git SHA and dirty state
+were unchanged throughout the solve.
+
+The solver terminated at the time limit. End-to-end wall time was 3,804.389
+seconds, shared Phase-4 wall time was 3,606.030 seconds, and the independently
+certified gap was 1.094658% against the 1% declaration. The Phase-0 audit is
+therefore `BLOCKED` only on `declared_mip_gap_target_met`. This result is a
+formal physically feasible candidate, not an optimality result; no threshold
+or validation rule will be relaxed to promote it.

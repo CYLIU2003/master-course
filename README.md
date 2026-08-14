@@ -26,6 +26,14 @@
   day-ahead-only, nonformal, above the declared 1% gap, and lacks the required
   current-SHA Phase 1/2/4/5/6 evidence. The new ledger records those gaps; it
   does not relabel the pair as thesis-ready.
+- The first clean current-SHA formal reference run at commit `8066330` is
+  preserved under
+  `output/formal_phase0_reference_8066330_low_pv/reference_low_pv`. It served
+  264/264 trips, passed independent physical validation, accepted 24/24
+  fixed-assignment Rolling steps, reconciled executed-day accounting, and
+  verified 240/240 required artifacts. It remains Phase-0 `BLOCKED` because
+  the certified gap was 1.094658% against the predeclared 1% target. This is a
+  validated feasible candidate, not an optimality result.
 
 ## 2026-08-14 Phase 4 shared runtime budget and fresh diagnostic correction
 

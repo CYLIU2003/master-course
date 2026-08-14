@@ -5297,3 +5297,42 @@ locks this distinction in place.
 - Focused pair-runner, manifest and diagnostic-report regression:
   `60 passed in 10.80s`. Final full-suite validation:
   `1464 passed in 143.73s`; changed Python entrypoints also passed `py_compile`.
+
+# 2026-08-15 - Clean `8066330` formal low-PV Phase-0 reference run
+
+- A fresh frontend-equivalent formal run was executed from clean commit
+  `80663305863a31cee1c90c5ffea6ce88eaab16b3` using scenario
+  `b23fd26c-1233-4c73-bb9e-bdb8b1584760`, service date 2025-08-05, low-PV
+  source date 2025-08-10, 264 trips, 60 active vehicles, ten 90 kW chargers,
+  PV 1,000 kW, BESS 6,000 kWh / 900 kW with 3,000 -> 3,000 kWh SOC, flat
+  30 JPY/kWh energy price, zero demand charge, and 20,000 JPY per used
+  vehicle-day. The formal Phase-4 request used four Gurobi threads, seed 42,
+  a 3,600-second shared wall-clock budget and a predeclared 1% gap.
+- Job `61ffd673-932b-4d72-bd73-dfd56f2ff778` completed through
+  Prepare -> `/run-optimization` -> hourly Rolling. The canonical run is
+  `output/2026-08-15/run_20260815_0143`; the immutable evidence copy is
+  `output/formal_phase0_reference_8066330_low_pv/reference_low_pv`.
+  End-to-end wall time was 3,804.389 seconds. Shared Phase-4 wall time was
+  3,606.030 seconds; the integrated solve received 3,042.031 seconds after
+  precheck and verified-start work, and the recorded solve time was
+  2,885.321 seconds. A feasible warm start existed at time zero.
+- The accepted assignment used 14 BEVs and 18 ICE buses for 60 and 204 trips,
+  respectively. All 264 trips were served. Independent physical validation
+  was `VALID`; the 24/24 fixed-assignment Rolling chain was accepted; executed
+  accounting was eligible; final cost reconciliation was `OK`; and artifact
+  completeness verified 240/240 required files. Executed-day accounting was
+  702,184.658838 JPY, including 640,000 JPY vehicle-day cost,
+  61,130.806525 JPY fuel inventory valuation and 1,053.852313 JPY CO2 cost.
+- Gurobi terminated at the time limit. Its raw gap was 8.855884%; the
+  independent certified gap was 1.094658%, still 0.094658 percentage points
+  above the declared 1% target. The formal run is therefore a physically
+  valid feasible candidate but not an optimality result. The Phase-0 ledger
+  fails only `declared_mip_gap_target_met`; no tolerance or release gate was
+  weakened.
+- Local literature evidence was rechecked against the source PDFs. In the
+  closest integrated-dispatch comparison, No06 reports Gurobi at 617.6
+  seconds for 50 trips but no feasible Gurobi solution for 200 or 418 trips
+  within six hours; its 418-trip 202.3-second result is ALNS-SA. Fixed-dispatch
+  charging/PV/ESS studies cannot be treated as equal-scope exact-MILP timing
+  evidence. Future performance reporting will separate feasible-candidate
+  time, best-incumbent time, gap-certification time and end-to-end wall time.
