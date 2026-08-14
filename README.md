@@ -1751,3 +1751,25 @@ single-fragment premise: the effective scenario allows three fragments and
 `applied=false` and the model stayed at 780,112 variables. The diagnostic gap
 was 1.583730% at its 600-second integrated limit. It therefore establishes
 fail-closed behavior, not a runtime improvement or a 1% certificate.
+
+The clean `ecdb0b1` frontend/BFF diagnostic then verified the single shared
+600-second budget on the current 264-trip, 60-vehicle, PV 1000 kW, BESS
+6000 kWh case. The Phase 3 seed completed both stages and independent physical
+validation in 96.23 wall-clock seconds; Phase 4 received the remaining
+498.60 seconds and the complete HTTP execution finished in 630.54 seconds
+including Prepare and report generation. The integrated model still had
+780,112 variables, explored only one node, retained the 13-BEV/19-ICE seed
+(44/220 trips), and stopped at a 9.543% certified gap. This is bounded feasible
+diagnostic evidence, not a research result or a speedup claim.
+
+That run also exposed a reporting mismatch: the MILP used the configured
+per-powertrain trip fuel quantity, while `trip_assignment.csv` reconstructed
+service fuel as distance times the fleet-average rate. The graph ledger was
+therefore 285.58 JPY above the solver fuel term. Canonical assignment export
+now uses the same per-powertrain trip energy/fuel fields as the MILP, with the
+legacy distance-rate formula only as a fallback. Phase 4 also evaluates one
+fully re-solved all-active-ICE-to-unused-BEV duty replacement before the
+pairwise seed neighborhood. A strict canonical-cost improvement is used only
+as a MIP start and short-circuits further directed seed enumeration; the final
+integrated feasible region and objective remain unchanged. A fresh clean-commit
+run is required before claiming that this stronger start improves the pair.

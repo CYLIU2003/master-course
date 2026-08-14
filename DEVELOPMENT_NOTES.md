@@ -4974,3 +4974,50 @@ locks this distinction in place.
   The convexification test totals are recorded after its final full-suite run;
   a matched 264-trip runtime comparison is still required before any
   performance claim.
+
+# 2026-08-14 - Shared-budget feasible run and cost-selected Phase 4 start
+
+- Clean commit `ecdb0b1` was exercised through the same frontend/BFF Prepare
+  and optimization endpoints with scenario
+  `771d115b-75b0-49f7-a7f0-25f259a2cd21`, 264 trips, 60 vehicles, ten
+  chargers, PV rated output 1000 kW, BESS 6000 kWh, flat grid price
+  30 JPY/kWh, demand charge 0 JPY/kW, four Gurobi threads and a 600-second
+  shared Phase 4 limit. The run was deliberately `research_run=false`,
+  day-ahead-only and diagnostic.
+- The repaired Phase 3 seed completed Stage 1, Stage 2 and independent physical
+  validation. Seed wall time was 96.226 seconds; precheck plus seed was
+  101.397 seconds. Integrated Phase 4 received 498.603 seconds and total solver
+  wall time was 605.867 seconds, a 5.867-second finalization overrun within the
+  declared 1% audit tolerance. HTTP submit-to-terminal time was 630.538
+  seconds. This confirms that the earlier duplicated/nested time budgets are
+  closed.
+- The run was feasible without fallback, served 264/264 trips, applied the
+  complete fixed-recourse MIP start and passed artifact completeness. It did
+  not improve the 13-BEV/19-ICE seed (44/220 trips): the 780,112-variable,
+  355,557-constraint integrated model spent 348.048 seconds in its canonical
+  cost phase, explored one node, and stopped at 707,518.152 JPY with a
+  640,000 JPY bound and 9.542957% gap. This is not a 1% result and is not used
+  for research conclusions.
+- Post-run data-flow validation found an independent P1 accounting mismatch.
+  The MILP and `CostEvaluator` used `ProblemTrip.fuel_l_by_vehicle_type`, while
+  the BFF assignment export silently returned to `distance_km * fuel_rate`.
+  Physical fuel was 444.396649 L versus the solver's 442.492750 L, causing a
+  285.584764 JPY fuel residual and 4.923281 kg-CO2 residual. Assignment export
+  now reads the same per-powertrain trip quantity as the model and uses the
+  fleet rate only when no explicit trip quantity exists. ICE rows no longer
+  report BEV drive energy.
+- To strengthen the feasible upper bound without restoring the inventory-wide
+  Phase 3 composition sweep, the existing fixed-assignment neighborhood now
+  tries one deterministic full retirement of all active ICE duties onto unused
+  BEVs first. It accepts the candidate only after exact Stage 2 recourse,
+  independent physical validation and canonical accounting, and short-circuits
+  only when actual cost strictly improves. The unrestricted integrated Phase 4
+  still searches every composition; no weather term, BEV lower bound, hard cut,
+  fallback or post-solve repair is added. Frontend defaults bound this
+  neighborhood to 60 seconds plus at most 60 seconds of route-band repartition,
+  three seconds per fixed solve and 64 evaluations, all inside the same shared
+  request budget.
+- Focused regression: `69 passed in 4.00s`. Complete repository regression:
+  `1452 passed in 133.69s`. A fresh clean-commit high-PV diagnostic is required
+  to determine whether the direct candidate is feasible and improves the
+  incumbent; no improvement is claimed from tests alone.

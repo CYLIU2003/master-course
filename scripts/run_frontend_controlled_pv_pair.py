@@ -2228,12 +2228,13 @@ def _phase4_warm_start_evidence_valid(
 
 
 def _phase4_seed_controls_match(settings: Mapping[str, Any]) -> bool:
-    """Verify the bounded, neutral Phase-4 warm-start contract.
+    """Verify the bounded, cost-selected Phase-4 warm-start contract.
 
     The full integrated MILP is the composition search.  The same-problem
-    Phase-3 hand-off supplies one physical incumbent and shares the single
-    user-facing wall-clock budget with model build, recourse, and branch and
-    bound.
+    Phase-3 hand-off supplies one physical incumbent.  A bounded, explicitly
+    audited ICE-retirement neighborhood may strengthen only that feasible
+    upper bound; every candidate is re-solved and the final integrated model
+    remains unrestricted.  All work shares the user-facing wall-clock budget.
     """
 
     seed_limit = settings.get("phase4_phase3_seed_time_limit_sec")
@@ -2312,13 +2313,34 @@ def _phase4_seed_controls_match(settings: Mapping[str, Any]) -> bool:
         and settings.get(
             "phase4_phase3_seed_unused_bev_neighborhood_enabled"
         )
-        is False
+        is True
         and isinstance(
             settings.get(
                 "phase4_phase3_seed_unused_bev_neighborhood"
             ),
             Mapping,
         )
+        and dict(
+            settings.get(
+                "phase4_phase3_seed_unused_bev_neighborhood"
+            )
+            or {}
+        ).get("role")
+        == "feasible_upper_bound_candidate_generation_only"
+        and dict(
+            settings.get(
+                "phase4_phase3_seed_unused_bev_neighborhood"
+            )
+            or {}
+        ).get("global_optimality_claimed")
+        is False
+        and dict(
+            settings.get(
+                "phase4_phase3_seed_unused_bev_neighborhood"
+            )
+            or {}
+        ).get("weather_strategy_bias_applied")
+        is False
         and settings.get(
             "phase4_integrated_seed_recourse_preflight_enabled"
         )

@@ -2526,3 +2526,30 @@ Remaining blocking work for the requested method comparison:
   are implemented; and
 - every pre-v7 prepared input and every pre-fix result remains evidence for its
   original code only. Fresh Prepare from a clean frozen commit is mandatory.
+
+## 2026-08-14 600-second Phase 4 diagnostic status
+
+The clean `ecdb0b1` high-PV frontend/BFF diagnostic closed the runaway runtime
+defect: precheck, the verified Phase 3 seed, integrated model construction,
+fixed-dispatch recourse and branch-and-bound shared one 600-second budget. The
+solver wall time was 605.867 seconds and HTTP submit-to-terminal time was
+630.538 seconds. It served all 264 trips, applied no fallback, and passed the
+independent physical check.
+
+It remains BLOCKED for research use for two independent reasons:
+
+1. the integrated result retained 13 BEVs and 19 ICE buses, assigned 44/220
+   trips, and stopped at a 9.542957% certified gap against the declared 1%
+   target; and
+2. canonical export reconstructed explicit trip fuel with the fleet-average
+   distance rate, producing a 285.584764 JPY fuel mismatch and an ERROR data
+   flow audit.
+
+The reporting defect is fixed in code by preserving
+`fuel_l_by_vehicle_type`/`energy_kwh_by_vehicle_type` through the public
+assignment ledger. The candidate generator now tests one complete ICE-duty
+retirement first and uses it only when exact Stage 2, physical validation and
+canonical cost all pass with a strict improvement. Neither fix makes the
+`ecdb0b1` result valid retroactively. Required next evidence is a fresh Prepare
+and run from the new clean commit, followed by the rain case and accepted
+24/24 Rolling only after the day-ahead gap and accounting gates pass.

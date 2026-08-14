@@ -217,6 +217,7 @@ def test_bff_canonical_export_counts_each_ice_movement_once(
                 arrival_min=510,
                 distance_km=5.0,
                 allowed_vehicle_types=("ICE",),
+                fuel_l_by_vehicle_type={"ICE": 0.7},
             ),
             ProblemTrip(
                 trip_id="ice-t2",
@@ -227,6 +228,7 @@ def test_bff_canonical_export_counts_each_ice_movement_once(
                 arrival_min=600,
                 distance_km=7.0,
                 allowed_vehicle_types=("ICE",),
+                fuel_l_by_vehicle_type={"ICE": 0.9},
             ),
         ),
         vehicle_types=(
@@ -277,7 +279,7 @@ def test_bff_canonical_export_counts_each_ice_movement_once(
         served_trip_ids=("ice-t1", "ice-t2"),
         metadata={"duty_vehicle_map": {"ice-duty-1": "ice-1"}},
     )
-    expected_fuel_l = (5.0 + 7.0 + 3.0 + 6.0 + 9.0) * 0.2
+    expected_fuel_l = 0.7 + 0.9 + (3.0 + 6.0 + 9.0) * 0.2
     result = OptimizationEngineResult(
         mode=OptimizationMode.MILP,
         solver_status="feasible",

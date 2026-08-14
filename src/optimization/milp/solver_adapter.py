@@ -2741,6 +2741,7 @@ class GurobiMILPAdapter:
             _assignment_hash(seed_plan)
         }
         duplicate_candidate_count = 0
+        direct_full_retirement_improvement_selected = False
         feasible_candidates: List[
             Tuple[float, int, int, AssignmentPlan, str, Mapping[str, str]]
         ] = [
@@ -2756,7 +2757,8 @@ class GurobiMILPAdapter:
 
         def _budget_available() -> bool:
             return bool(
-                len(evaluation_rows) < max_evaluations
+                not direct_full_retirement_improvement_selected
+                and len(evaluation_rows) < max_evaluations
                 and time.monotonic() < deadline
             )
 
@@ -2942,6 +2944,70 @@ class GurobiMILPAdapter:
             and _is_electric(vehicle_id)
             and vehicle_id not in used_vehicle_ids
         )
+        direct_full_retirement_status = "not_attempted"
+        direct_full_retirement_replacements: Dict[str, str] = {}
+        direct_full_retirement_cost_jpy: Optional[float] = None
+        # Try the economically most informative whole-duty candidate first.
+        # This is only a fully re-solved and independently validated MIP start;
+        # the unrestricted integrated MILP remains authoritative.  Evaluating
+        # all retired ICE duties at once avoids an O(|ICE|*|unused BEV|)
+        # sequence of fixed-assignment Stage-2 solves before the matching that
+        # the old implementation eventually constructed from those solves.
+        if (
+            len(active_ice_ids) >= 2
+            and len(unused_bev_ids) >= len(active_ice_ids)
+            and _budget_available()
+        ):
+            direct_full_retirement_replacements = dict(
+                zip(active_ice_ids, unused_bev_ids)
+            )
+            direct_full_retirement_plan = _remap_plan_vehicle_ids(
+                seed_plan,
+                replacement_by_source_vehicle=(
+                    direct_full_retirement_replacements
+                ),
+                vehicle_type_by_id=vehicle_type_by_id,
+                candidate_source=(
+                    "phase4_seed_direct_full_ice_retirement"
+                ),
+            )
+            direct_result = _evaluate_candidate(
+                direct_full_retirement_plan,
+                candidate_kind="direct_full_ice_retirement",
+                replacements=direct_full_retirement_replacements,
+                candidate_details={
+                    "retired_ice_vehicle_count": len(active_ice_ids),
+                    "activated_bev_vehicle_count": len(active_ice_ids),
+                    "candidate_generation_only": True,
+                    "integrated_feasible_region_unchanged": True,
+                },
+            )
+            if direct_result is None:
+                direct_full_retirement_status = (
+                    "infeasible_duplicate_or_budget_limited"
+                )
+            else:
+                direct_full_retirement_cost_jpy = float(direct_result[0])
+                if direct_full_retirement_cost_jpy < baseline_cost - 1.0e-6:
+                    direct_full_retirement_status = (
+                        "feasible_strict_cost_improvement_selected"
+                    )
+                    # Once the complete retirement candidate is a strict
+                    # canonical-cost improvement, further BEV-directed seed
+                    # enumeration is redundant.  Phase 4 still searches every
+                    # mixed composition from this stronger feasible start.
+                    direct_full_retirement_improvement_selected = True
+                else:
+                    direct_full_retirement_status = (
+                        "feasible_without_strict_cost_improvement"
+                    )
+        elif len(active_ice_ids) < 2:
+            direct_full_retirement_status = "skipped_fewer_than_two_active_ice"
+        elif len(unused_bev_ids) < len(active_ice_ids):
+            direct_full_retirement_status = "skipped_insufficient_unused_bev"
+        else:
+            direct_full_retirement_status = "skipped_budget_exhausted"
+
         route_band_repartition_attempts: List[Dict[str, Any]] = []
         route_band_repartition_candidate_count = 0
         route_band_repartition_full_feasible_count = 0
@@ -4004,6 +4070,7 @@ class GurobiMILPAdapter:
             and fixed_route_band_mode
             and powertrain_duty_swap_round_limit > 0
             and len(evaluation_rows) < max_evaluations
+            and not direct_full_retirement_improvement_selected
         ):
             # Preserve the proven fixed-duty search budget.  Route-band
             # repartition starts only afterwards and anchors on the cheapest
@@ -4065,7 +4132,11 @@ class GurobiMILPAdapter:
         maximum_bev_candidate_details = _candidate_details_for_hash(
             maximum_bev_assignment_hash
         )
-        if len(evaluation_rows) >= max_evaluations:
+        if direct_full_retirement_improvement_selected:
+            termination_reason = (
+                "direct_full_ice_retirement_strict_cost_improvement"
+            )
+        elif len(evaluation_rows) >= max_evaluations:
             termination_reason = "maximum_candidate_evaluations_reached"
         elif time.monotonic() >= deadline:
             termination_reason = "wall_time_limit_reached"
@@ -4117,6 +4188,18 @@ class GurobiMILPAdapter:
                     maximum_bev_assignment_hash
                 ),
                 "candidate_evaluation_count": len(evaluation_rows),
+                "direct_full_ice_retirement_status": (
+                    direct_full_retirement_status
+                ),
+                "direct_full_ice_retirement_replacements": dict(
+                    sorted(direct_full_retirement_replacements.items())
+                ),
+                "direct_full_ice_retirement_cost_jpy": (
+                    direct_full_retirement_cost_jpy
+                ),
+                "direct_full_ice_retirement_short_circuit_applied": (
+                    direct_full_retirement_improvement_selected
+                ),
                 "duplicate_candidate_assignment_count": (
                     duplicate_candidate_count
                 ),

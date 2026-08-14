@@ -7291,8 +7291,33 @@ def _canonical_trip_assignment_rows(
                 service_fuel_l = (
                     0.0
                     if is_electric
-                    else max(float(problem_trip.distance_km or 0.0), 0.0)
-                    * fuel_rate
+                    else _canonical_trip_powertrain_quantity(
+                        getattr(
+                            problem_trip,
+                            "fuel_l_by_vehicle_type",
+                            {},
+                        ),
+                        str(getattr(vehicle, "vehicle_type", "") or ""),
+                        fallback=(
+                            max(float(problem_trip.distance_km or 0.0), 0.0)
+                            * fuel_rate
+                        ),
+                    )
+                )
+                service_energy_kwh = (
+                    _canonical_trip_powertrain_quantity(
+                        getattr(
+                            problem_trip,
+                            "energy_kwh_by_vehicle_type",
+                            {},
+                        ),
+                        str(getattr(vehicle, "vehicle_type", "") or ""),
+                        fallback=float(
+                            getattr(problem_trip, "energy_kwh", 0.0) or 0.0
+                        ),
+                    )
+                    if is_electric
+                    else 0.0
                 )
                 rows.append(
                     {
@@ -7315,7 +7340,7 @@ def _canonical_trip_assignment_rows(
                         "assigned_vehicle_band_id": str((primary_band_by_vehicle.get(vehicle_id) or {}).get("band_id") or ""),
                         "served_flag": True,
                         "unserved_reason": "",
-                        "energy_used_kwh": float(getattr(problem_trip, "energy_kwh", 0.0) or 0.0),
+                        "energy_used_kwh": float(service_energy_kwh),
                         "distance_km": float(getattr(problem_trip, "distance_km", 0.0) or 0.0),
                         "fuel_used_l": float(service_fuel_l),
                         "ice_co2_kg": float(service_fuel_l * co2_rate),
@@ -7331,6 +7356,25 @@ def _canonical_trip_assignment_rows(
                 )
     rows.sort(key=lambda row: (str(row.get("assigned_vehicle_id") or ""), int(row.get("vehicle_sequence", 0) or 0), str(row.get("scheduled_departure") or ""), str(row.get("trip_id") or "")))
     return rows
+
+
+def _canonical_trip_powertrain_quantity(
+    values_by_vehicle_type: Mapping[str, Any],
+    vehicle_type: str,
+    *,
+    fallback: float,
+) -> float:
+    """Return the canonical per-powertrain trip quantity used by the MILP."""
+
+    normalized_type = str(vehicle_type or "").strip()
+    for key in (normalized_type, normalized_type.upper()):
+        if key not in values_by_vehicle_type:
+            continue
+        try:
+            return max(float(values_by_vehicle_type[key] or 0.0), 0.0)
+        except (TypeError, ValueError):
+            break
+    return max(float(fallback or 0.0), 0.0)
 
 
 def _canonical_vehicle_fuel_and_co2_rates(problem, vehicle) -> tuple[float, float]:
@@ -11396,15 +11440,21 @@ def _run_optimization(
                 # time limit.  Explicit frontier sensitivities remain Phase 3
                 # experiments and are never injected here.
                 phase4_phase3_seed_bev_frontier_enabled=False,
+                # Candidate generation only: every replacement is re-solved
+                # by fixed-assignment Stage 2 and independently validated,
+                # while the final integrated MILP remains unrestricted.  The
+                # first candidate retires all active ICE duties at once; this
+                # gives abundant-PV cases a useful feasible upper bound without
+                # an inventory-wide composition sweep or hidden objective bias.
                 phase4_phase3_seed_unused_bev_neighborhood_enabled=(
-                    False
+                    phase_token == "phase4_integrated"
                 ),
-                phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec=120,
-                phase4_phase3_seed_unused_bev_neighborhood_per_solve_sec=5,
+                phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec=60,
+                phase4_phase3_seed_unused_bev_neighborhood_per_solve_sec=3,
                 phase4_phase3_seed_unused_bev_neighborhood_max_evaluations=(
-                    512
+                    64
                 ),
-                phase4_phase3_seed_route_band_repartition_time_limit_sec=90,
+                phase4_phase3_seed_route_band_repartition_time_limit_sec=60,
                 phase4_phase3_seed_powertrain_duty_swap_rounds=2,
                 phase4_phase3_seed_unused_bev_identity_exchange_rounds=2,
                 phase4_integrated_seed_recourse_preflight_enabled=(

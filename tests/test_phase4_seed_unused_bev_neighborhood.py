@@ -810,3 +810,143 @@ def test_unused_bev_neighborhood_selects_only_exact_lower_cost_candidate(
     assert expensive_audit["selected_canonical_cost_jpy"] == 100.0
     assert expensive_audit["maximum_observed_used_bev"] == 2
     assert expensive_audit["maximum_bev_candidate_canonical_cost_jpy"] == 120.0
+
+
+def test_unused_bev_neighborhood_tries_full_ice_retirement_first(
+    monkeypatch,
+) -> None:
+    class _FakeFeasibilityChecker:
+        def evaluate(self, _problem, _plan):
+            return SimpleNamespace(feasible=True, errors=())
+
+    class _FakeCostEvaluator:
+        def evaluate(self, _problem, plan):
+            has_ice = any(
+                duty.vehicle_type == "ICE" for duty in plan.duties
+            )
+            return SimpleNamespace(
+                total_cost=100.0 if has_ice else 70.0,
+                evaluation_feasible=True,
+            )
+
+    monkeypatch.setattr(
+        solver_adapter_module,
+        "FeasibilityChecker",
+        _FakeFeasibilityChecker,
+    )
+    monkeypatch.setattr(
+        solver_adapter_module,
+        "CostEvaluator",
+        _FakeCostEvaluator,
+    )
+    adapter = GurobiMILPAdapter()
+    stage2_sources: list[str] = []
+
+    def _fake_stage2(_problem, _config, plan, **_kwargs):
+        stage2_sources.append(str((plan.metadata or {}).get("source") or ""))
+        solved = AssignmentPlan(
+            **{
+                **plan.__dict__,
+                "metadata": {
+                    **dict(plan.metadata or {}),
+                    "stage2_feasible": True,
+                    "stage2_has_feasible_incumbent": True,
+                },
+            }
+        )
+        return (
+            MILPSolverOutcome(
+                solver_status="optimal",
+                used_backend="test",
+                supports_exact_milp=True,
+                has_feasible_incumbent=True,
+                incumbent_count=1,
+            ),
+            solved,
+        )
+
+    monkeypatch.setattr(
+        adapter,
+        "_solve_thesis_stage2_charging_dispatch",
+        _fake_stage2,
+    )
+    trips = (
+        _trip("ice-a-trip", "08:00"),
+        _trip("ice-b-trip", "09:00"),
+        _trip("bev-trip", "10:00"),
+    )
+    seed = AssignmentPlan(
+        duties=(
+            VehicleDuty(
+                duty_id="ice-a-duty",
+                vehicle_type="ICE",
+                legs=(DutyLeg(trips[0]),),
+            ),
+            VehicleDuty(
+                duty_id="ice-b-duty",
+                vehicle_type="ICE",
+                legs=(DutyLeg(trips[1]),),
+            ),
+            VehicleDuty(
+                duty_id="bev-duty",
+                vehicle_type="BEV",
+                legs=(DutyLeg(trips[2]),),
+            ),
+        ),
+        served_trip_ids=tuple(trip.trip_id for trip in trips),
+        metadata={
+            "duty_vehicle_map": {
+                "ice-a-duty": "ice-a",
+                "ice-b-duty": "ice-b",
+                "bev-duty": "bev-used",
+            },
+            "stage1_feasible": True,
+            "stage2_feasible": True,
+            "stage2_has_feasible_incumbent": True,
+        },
+    )
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="direct-full-retirement",
+            timestep_min=60,
+        ),
+        dispatch_context=SimpleNamespace(),
+        trips=(),
+        vehicles=(
+            ProblemVehicle("ice-a", "ICE", "DEPOT"),
+            ProblemVehicle("ice-b", "ICE", "DEPOT"),
+            ProblemVehicle("bev-used", "BEV", "DEPOT"),
+            ProblemVehicle("bev-a", "BEV", "DEPOT"),
+            ProblemVehicle("bev-b", "BEV", "DEPOT"),
+        ),
+    )
+
+    selected, audit = (
+        adapter.improve_phase4_seed_with_unused_bev_neighborhood(
+            problem,
+            OptimizationConfig(
+                phase4_phase3_seed_unused_bev_neighborhood_enabled=True,
+                phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec=30,
+                phase4_phase3_seed_unused_bev_neighborhood_per_solve_sec=1,
+                phase4_phase3_seed_unused_bev_neighborhood_max_evaluations=10,
+                phase4_phase3_seed_powertrain_duty_swap_rounds=2,
+                phase4_phase3_seed_unused_bev_identity_exchange_rounds=2,
+            ),
+            seed,
+        )
+    )
+
+    assert stage2_sources == ["phase4_seed_direct_full_ice_retirement"]
+    assert set(selected.duties_by_vehicle()) == {
+        "bev-a",
+        "bev-b",
+        "bev-used",
+    }
+    assert audit["selected_candidate_kind"] == "direct_full_ice_retirement"
+    assert audit["selected_used_bev"] == 3
+    assert audit["selected_used_ice"] == 0
+    assert audit["candidate_evaluation_count"] == 1
+    assert audit["direct_full_ice_retirement_short_circuit_applied"] is True
+    assert audit["termination_reason"] == (
+        "direct_full_ice_retirement_strict_cost_improvement"
+    )

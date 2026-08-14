@@ -53,16 +53,21 @@ def test_formal_phase4_seed_control_contract_matches_server_profile() -> None:
             "neutral_primary_feasible_candidate_only"
         ),
         "phase4_phase3_seed_bev_frontier_enabled": False,
-        "phase4_phase3_seed_unused_bev_neighborhood_enabled": False,
-        "phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec": 120,
-        "phase4_phase3_seed_unused_bev_neighborhood_per_solve_sec": 5,
-        "phase4_phase3_seed_unused_bev_neighborhood_max_evaluations": 512,
-        "phase4_phase3_seed_route_band_repartition_time_limit_sec": 90,
+        "phase4_phase3_seed_unused_bev_neighborhood_enabled": True,
+        "phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec": 60,
+        "phase4_phase3_seed_unused_bev_neighborhood_per_solve_sec": 3,
+        "phase4_phase3_seed_unused_bev_neighborhood_max_evaluations": 64,
+        "phase4_phase3_seed_route_band_repartition_time_limit_sec": 60,
         "phase4_phase3_seed_powertrain_duty_swap_rounds": 2,
         "phase4_phase3_seed_unused_bev_identity_exchange_rounds": 2,
         "phase4_phase3_seed_unused_bev_neighborhood": {
-            "enabled": False,
-            "termination_reason": "disabled",
+            "enabled": True,
+            "role": "feasible_upper_bound_candidate_generation_only",
+            "global_optimality_claimed": False,
+            "weather_strategy_bias_applied": False,
+            "termination_reason": (
+                "direct_full_ice_retirement_strict_cost_improvement"
+            ),
         },
         "phase4_integrated_seed_recourse_preflight_enabled": True,
         "phase4_integrated_seed_recourse_time_limit_sec": 60,
