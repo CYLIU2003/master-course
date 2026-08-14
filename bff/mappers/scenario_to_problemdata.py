@@ -1781,6 +1781,10 @@ def build_problem_data_from_scenario(
         simulation_cfg.get("default_turnaround_min"),
         10,
     )
+    turnaround_buffer_min = _safe_int(
+        simulation_cfg.get("turnaround_buffer_min"),
+        0,
+    )
 
     trips = _collect_trips_for_scope(
         scenario,
@@ -1894,6 +1898,7 @@ def build_problem_data_from_scenario(
             or ""
         )[:10],
         default_turnaround_min=default_turnaround_min,
+        turnaround_buffer_min=turnaround_buffer_min,
         turnaround_rules=_build_turnaround_rules(scenario),
         deadhead_rules=deadhead_rules,
         deadhead_metrics=deadhead_metrics,

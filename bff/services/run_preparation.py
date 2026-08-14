@@ -9,7 +9,7 @@ import time
 import unicodedata
 from copy import deepcopy
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Optional
 
@@ -31,7 +31,7 @@ log = logging.getLogger("run_prep")
 # canonical solver input.  The schema suffix is part of prepared_input_id, so
 # old prepared files cannot be silently reused after a fleet-contract change.
 PREPARED_INPUT_SCHEMA_VERSION = (
-    "v9_immutable_scope_identity"
+    "v10_turnaround_buffer_sensitivity"
 )
 
 
@@ -1987,6 +1987,21 @@ def _prepared_scope_audit_warnings(audit: dict[str, Any]) -> list[str]:
     if diagnostic_message:
         warnings.append(f"Prepared scope audit: {diagnostic_message}")
 
+    sensitivity = dict(audit.get("turnaround_buffer_sensitivity_audit") or {})
+    if sensitivity and sensitivity.get("status") != "VALID":
+        failed_checks = [
+            name
+            for name, passed in dict(
+                sensitivity.get("monotonic_checks") or {}
+            ).items()
+            if passed is not True
+        ]
+        warnings.append(
+            "Prepared scope audit: turnaround-buffer sensitivity is invalid"
+            + (f" ({', '.join(failed_checks)})" if failed_checks else "")
+            + "."
+        )
+
     blocked_reason_counts = dict(strict_precheck.get("blocked_transition_reason_counts") or {})
     dominant_reason = str(strict_precheck.get("dominant_blocked_transition_reason") or "").strip()
     dominant_count = int(blocked_reason_counts.get(dominant_reason) or 0)
@@ -2215,6 +2230,204 @@ def _build_vehicle_trip_compatibility_audit(
     }
 
 
+def _turnaround_sensitivity_control_sha256(problem: Any) -> str:
+    """Hash every structural input held fixed across buffer levels."""
+
+    context = problem.dispatch_context
+    control_payload = {
+        "service_date": str(context.service_date),
+        "fixed_route_band_mode": bool(
+            problem.metadata.get("fixed_route_band_mode", False)
+        ),
+        "allow_same_day_depot_cycles": bool(
+            problem.metadata.get(
+                "allow_same_day_depot_cycles",
+                getattr(problem.scenario, "allow_same_day_depot_cycles", True),
+            )
+        ),
+        "horizon_start_min": int(context.horizon_start_min),
+        "default_turnaround_min": int(context.default_turnaround_min),
+        "location_aliases": {
+            str(alias): list(targets)
+            for alias, targets in sorted(context.location_aliases.items())
+        },
+        "turnaround_rules": [
+            {
+                "stop_id": str(stop_id),
+                "min_turnaround_min": int(rule.min_turnaround_min),
+            }
+            for stop_id, rule in sorted(context.turnaround_rules.items())
+        ],
+        "deadhead_rules": [
+            {
+                "from_stop": str(from_stop),
+                "to_stop": str(to_stop),
+                "travel_time_min": int(rule.travel_time_min),
+            }
+            for (from_stop, to_stop), rule in sorted(
+                context.deadhead_rules.items()
+            )
+        ],
+        "trips": [
+            {
+                "trip_id": str(trip.trip_id),
+                "route_id": str(trip.route_id),
+                "route_family_code": str(trip.route_family_code),
+                "direction": str(trip.direction),
+                "route_variant_type": str(trip.route_variant_type),
+                "origin": str(trip.origin_stop_id or trip.origin),
+                "destination": str(
+                    trip.destination_stop_id or trip.destination
+                ),
+                "departure_min": int(trip.departure_min),
+                "arrival_min": int(trip.arrival_min),
+                "allowed_vehicle_types": list(
+                    sorted(trip.allowed_vehicle_types)
+                ),
+            }
+            for trip in context.trips
+        ],
+        "vehicles": [
+            {
+                "vehicle_id": str(vehicle.vehicle_id),
+                "vehicle_type": str(vehicle.vehicle_type),
+                "home_depot_id": str(vehicle.home_depot_id),
+                "available": bool(vehicle.available),
+            }
+            for vehicle in problem.vehicles
+        ],
+    }
+    encoded = json.dumps(
+        control_payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _build_turnaround_buffer_sensitivity_audit(
+    problem: Any,
+    *,
+    evaluate_strict_coverage_precheck: Any,
+    levels_minutes: tuple[int, ...] = (5, 10, 15),
+) -> dict[str, Any]:
+    """Rebuild the relaxed path cover under additive operating buffers.
+
+    The caller supplies a route-band-OFF canonical problem so that the
+    sensitivity measures physical transition slack rather than an operating
+    policy lock.  No MILP is solved and no timetable row is rewritten.
+    """
+
+    normalized_levels = tuple(sorted({max(int(level), 0) for level in levels_minutes}))
+    rows: list[dict[str, Any]] = []
+    for buffer_min in normalized_levels:
+        sensitivity_context = replace(
+            problem.dispatch_context,
+            turnaround_buffer_min=buffer_min,
+        )
+        sensitivity_problem = replace(
+            problem,
+            dispatch_context=sensitivity_context,
+        )
+        result = evaluate_strict_coverage_precheck(
+            sensitivity_problem
+        ).to_metadata()
+        rows.append(
+            {
+                "turnaround_buffer_min": buffer_min,
+                "effective_default_turnaround_min": (
+                    int(sensitivity_context.default_turnaround_min)
+                    + buffer_min
+                ),
+                "checked": bool(result.get("checked", False)),
+                "infeasible": bool(result.get("infeasible", False)),
+                "reason": str(result.get("reason") or ""),
+                "trip_count": int(result.get("trip_count") or 0),
+                "available_vehicle_count": int(
+                    result.get("available_vehicle_count") or 0
+                ),
+                "interval_only_lower_bound": int(
+                    result.get("interval_only_lower_bound") or 0
+                ),
+                "relaxed_vehicle_lower_bound": int(
+                    result.get("relaxed_vehicle_lower_bound") or 0
+                ),
+                "interval_feasible_pair_count": int(
+                    result.get("interval_feasible_pair_count") or 0
+                ),
+                "dispatch_feasible_pair_count": int(
+                    result.get("dispatch_feasible_pair_count") or 0
+                ),
+                "blocked_transition_reason_counts": dict(
+                    result.get("blocked_transition_reason_counts") or {}
+                ),
+                "dominant_blocked_transition_reason": str(
+                    result.get("dominant_blocked_transition_reason") or ""
+                ),
+            }
+        )
+
+    dispatch_counts = [
+        int(row["dispatch_feasible_pair_count"]) for row in rows
+    ]
+    interval_counts = [
+        int(row["interval_feasible_pair_count"]) for row in rows
+    ]
+    vehicle_lower_bounds = [
+        int(row["relaxed_vehicle_lower_bound"]) for row in rows
+    ]
+    monotonic_checks = {
+        "dispatch_feasible_pair_count_nonincreasing": all(
+            left >= right
+            for left, right in zip(dispatch_counts, dispatch_counts[1:])
+        ),
+        "interval_feasible_pair_count_constant": len(set(interval_counts)) <= 1,
+        "relaxed_vehicle_lower_bound_nondecreasing": all(
+            left <= right
+            for left, right in zip(
+                vehicle_lower_bounds,
+                vehicle_lower_bounds[1:],
+            )
+        ),
+    }
+    checked = bool(rows) and all(bool(row["checked"]) for row in rows)
+    transition_graph_evaluated_all_levels = bool(rows) and all(
+        int(row["trip_count"]) > 0
+        and str(row["reason"])
+        not in {
+            "no_available_vehicles_for_strict_coverage",
+            "strict_trip_has_no_available_vehicle_type",
+        }
+        for row in rows
+    )
+    formal_ready = bool(
+        normalized_levels == (5, 10, 15)
+        and checked
+        and transition_graph_evaluated_all_levels
+        and all(monotonic_checks.values())
+    )
+    return {
+        "schema_version": "turnaround_buffer_sensitivity_audit_v1",
+        "semantics": "base_turnaround_plus_operational_buffer_before_deadhead",
+        "route_band_mode": "off",
+        "levels_minutes": list(normalized_levels),
+        "base_default_turnaround_min": int(
+            problem.dispatch_context.default_turnaround_min
+        ),
+        "non_turnaround_control_sha256": (
+            _turnaround_sensitivity_control_sha256(problem)
+        ),
+        "rows": rows,
+        "monotonic_checks": monotonic_checks,
+        "transition_graph_evaluated_all_levels": (
+            transition_graph_evaluated_all_levels
+        ),
+        "status": "VALID" if formal_ready else "INVALID",
+        "formal_turnaround_sensitivity_ready": formal_ready,
+    }
+
+
 def _build_prepared_scope_audit(prepared_input: dict[str, Any]) -> dict[str, Any]:
     trip_rows = [
         dict(item)
@@ -2244,6 +2457,7 @@ def _build_prepared_scope_audit(prepared_input: dict[str, Any]) -> dict[str, Any
         "distance_join_diagnosis": dict(distance_join_analysis.get("distance_join_diagnosis") or {}),
         "strict_coverage_precheck": {},
         "route_band_off_transition_audit": {},
+        "turnaround_buffer_sensitivity_audit": {},
         "vehicle_trip_compatibility_audit": vehicle_trip_compatibility,
         "formal_vehicle_trip_compatibility_ready": bool(
             vehicle_trip_compatibility.get(
@@ -2302,6 +2516,14 @@ def _build_prepared_scope_audit(prepared_input: dict[str, Any]) -> dict[str, Any
                     route_band_off_problem
                 ).to_metadata()
             )
+            audit["turnaround_buffer_sensitivity_audit"] = (
+                _build_turnaround_buffer_sensitivity_audit(
+                    route_band_off_problem,
+                    evaluate_strict_coverage_precheck=(
+                        evaluate_strict_coverage_precheck
+                    ),
+                )
+            )
     except Exception as exc:
         audit["strict_coverage_precheck"] = {
             "checked": False,
@@ -2345,16 +2567,37 @@ def _build_prepared_scope_audit(prepared_input: dict[str, Any]) -> dict[str, Any
     audit["route_band_off_deadhead_missing_count"] = (
         route_band_off_deadhead_missing
     )
+    route_band_off_checked = bool(route_band_off_audit.get("checked", False))
+    audit["route_band_off_transition_audit_checked"] = (
+        route_band_off_checked
+    )
     audit["formal_transition_network_ready"] = (
-        route_band_off_deadhead_missing == 0
+        route_band_off_checked and route_band_off_deadhead_missing == 0
+    )
+    turnaround_sensitivity = dict(
+        audit.get("turnaround_buffer_sensitivity_audit") or {}
+    )
+    audit["formal_turnaround_sensitivity_ready"] = bool(
+        turnaround_sensitivity.get(
+            "formal_turnaround_sensitivity_ready",
+            False,
+        )
     )
     if route_band_off_deadhead_missing > 0:
         audit["warning_codes"].append(
             "route_band_off_deadhead_matrix_incomplete"
         )
+    elif not route_band_off_checked:
+        audit["warning_codes"].append(
+            "route_band_off_transition_audit_invalid"
+        )
     if not audit["formal_vehicle_trip_compatibility_ready"]:
         audit["warning_codes"].append(
             "vehicle_trip_compatibility_contract_incomplete"
+        )
+    if not audit["formal_turnaround_sensitivity_ready"]:
+        audit["warning_codes"].append(
+            "turnaround_buffer_sensitivity_invalid"
         )
 
     audit["warning_codes"] = sorted(set(audit.get("warning_codes") or []))
@@ -2426,6 +2669,9 @@ def _log_prepared_scope_audit_details(
     trip_samples = list(prepared_scope_audit.get("trip_distance_samples") or [])
     strict_precheck = dict(prepared_scope_audit.get("strict_coverage_precheck") or {})
     blocked_samples = list(strict_precheck.get("blocked_transition_samples") or [])
+    turnaround_sensitivity = dict(
+        prepared_scope_audit.get("turnaround_buffer_sensitivity_audit") or {}
+    )
 
     log.warning(
         "Prepare scope input audit: depot_ids=%s route_ids=%s route_codes=%s family_ids=%s "
@@ -2463,6 +2709,17 @@ def _log_prepared_scope_audit_details(
         log.warning(
             "Prepare blocked transition sample: %s",
             json.dumps(sample, ensure_ascii=False, default=str),
+        )
+    if turnaround_sensitivity:
+        log.warning(
+            "Prepare turnaround-buffer sensitivity: status=%s control_sha256=%s rows=%s",
+            turnaround_sensitivity.get("status"),
+            turnaround_sensitivity.get("non_turnaround_control_sha256"),
+            json.dumps(
+                turnaround_sensitivity.get("rows") or [],
+                ensure_ascii=False,
+                default=str,
+            ),
         )
 
 

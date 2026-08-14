@@ -381,6 +381,20 @@ def _build_dispatch_context(
         )
     except (TypeError, ValueError):
         deadhead_speed_kmh = 18.0
+    try:
+        default_turnaround_min = max(
+            int(simulation_cfg.get("default_turnaround_min", 10) or 0),
+            0,
+        )
+    except (TypeError, ValueError):
+        default_turnaround_min = 10
+    try:
+        turnaround_buffer_min = max(
+            int(simulation_cfg.get("turnaround_buffer_min", 0) or 0),
+            0,
+        )
+    except (TypeError, ValueError):
+        turnaround_buffer_min = 0
 
     scope = _resolve_dispatch_scope(
         scenario_id,
@@ -719,6 +733,8 @@ def _build_dispatch_context(
         turnaround_rules=turnaround_rules,
         deadhead_rules=deadhead_rules,
         vehicle_profiles=vehicle_profiles,
+        default_turnaround_min=default_turnaround_min,
+        turnaround_buffer_min=turnaround_buffer_min,
         allow_intra_depot_swap=bool(scope.get("allowIntraDepotRouteSwap", False)),
         allow_inter_depot_swap=bool(scope.get("allowInterDepotSwap", False)),
         fixed_route_band_mode=bool(scope.get("fixedRouteBandMode", True)),

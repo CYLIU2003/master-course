@@ -73,6 +73,7 @@
     "rebuild_when_missing": true,
     "force_rebuild_travel_connections": false,
     "default_turnaround_min": 10,
+    "turnaround_buffer_min": 0,
     "turnaround_rules_csv": "data/operations/turnaround_rules.csv",
     "deadhead_rules_csv": "data/operations/deadhead_rules.csv",
     "replace_tasks_from_build_inputs": true

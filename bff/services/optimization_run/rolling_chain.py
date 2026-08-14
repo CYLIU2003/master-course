@@ -907,6 +907,32 @@ def _comparison_case_manifest(
             )
             or 0
         ),
+        "fixed_route_band_mode": bool(
+            dict(getattr(problem, "metadata", {}) or {}).get(
+                "fixed_route_band_mode",
+                False,
+            )
+        ),
+        "default_turnaround_min": int(
+            dict(getattr(problem, "metadata", {}) or {}).get(
+                "default_turnaround_min",
+                10,
+            )
+            or 0
+        ),
+        "turnaround_buffer_min": int(
+            dict(getattr(problem, "metadata", {}) or {}).get(
+                "turnaround_buffer_min",
+                0,
+            )
+            or 0
+        ),
+        "turnaround_time_semantics": str(
+            dict(getattr(problem, "metadata", {}) or {}).get(
+                "turnaround_time_semantics",
+                "base_turnaround_plus_operational_buffer_before_deadhead",
+            )
+        ),
     }
     cost_breakdown = dict(executed_day.get("cost_breakdown") or {})
     return {

@@ -1409,6 +1409,11 @@ class ProblemBuilder:
                 "objective_mode": normalize_objective_mode(objective_mode),
                 "fixed_route_band_mode": bool(fixed_route_band_mode),
                 "fixed_route_band_mode_requested": bool(fixed_route_band_mode_requested),
+                "default_turnaround_min": int(context.default_turnaround_min),
+                "turnaround_buffer_min": int(context.turnaround_buffer_min),
+                "turnaround_time_semantics": (
+                    "base_turnaround_plus_operational_buffer_before_deadhead"
+                ),
                 "allow_intra_depot_route_swap": (
                     bool(allow_intra_depot_route_swap)
                     if allow_intra_depot_route_swap is not None
@@ -2619,6 +2624,12 @@ class ProblemBuilder:
             service_date = "2026-01-01"
         turnaround_value = simulation_cfg.get("default_turnaround_min", 10)
         default_turnaround_min = 10 if turnaround_value is None else max(0, int(turnaround_value))
+        turnaround_buffer_value = simulation_cfg.get("turnaround_buffer_min", 0)
+        turnaround_buffer_min = (
+            0
+            if turnaround_buffer_value is None
+            else max(0, int(turnaround_buffer_value))
+        )
         return DispatchContext(
             service_date=service_date,
             trips=trips,
@@ -2626,6 +2637,7 @@ class ProblemBuilder:
             deadhead_rules=deadhead_rules,
             vehicle_profiles=vehicle_profiles or {"BEV": VehicleProfile(vehicle_type="BEV")},
             default_turnaround_min=default_turnaround_min,
+            turnaround_buffer_min=turnaround_buffer_min,
             location_aliases=self._build_dispatch_location_aliases(
                 scenario=scenario,
                 trips=trips,
@@ -3204,6 +3216,7 @@ class ProblemBuilder:
                 deadhead_rules=context.deadhead_rules,
                 vehicle_profiles=context.vehicle_profiles,
                 default_turnaround_min=context.default_turnaround_min,
+                turnaround_buffer_min=context.turnaround_buffer_min,
                 fixed_route_band_mode=bool(fixed_route_band_mode),
                 location_aliases=dict(getattr(context, "location_aliases", {}) or {}),
             )

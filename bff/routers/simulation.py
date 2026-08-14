@@ -135,6 +135,8 @@ class PrepareSimulationSettingsBody(BaseModel):
     mip_gap: float = Field(default=0.01, ge=0.0)
     include_deadhead: bool = True
     deadhead_speed_kmh: float = Field(default=18.0, gt=0.0)
+    default_turnaround_min: Optional[int] = Field(default=None, ge=0)
+    turnaround_buffer_min: Optional[int] = Field(default=None, ge=0)
     grid_flat_price_per_kwh: Optional[float] = Field(default=None, ge=0.0)
     grid_sell_price_per_kwh: Optional[float] = Field(default=None, ge=0.0)
     demand_charge_cost_per_kw: Optional[float] = Field(default=None, ge=0.0)

@@ -129,6 +129,103 @@ def test_prepared_scope_audit_relaxes_warning_when_vehicle_lower_bound_is_met() 
     assert len(compatibility["compatibility_matrix_sha256"]) == 64
 
 
+def test_prepared_scope_audit_certifies_turnaround_buffer_sensitivity() -> None:
+    payload = _prepared_payload(vehicle_count=2)
+    payload["simulation_config"]["default_turnaround_min"] = 0
+    payload["trips"] = [
+        {
+            "trip_id": "trip-1",
+            "route_id": "route-a",
+            "origin": "A",
+            "destination": "B",
+            "departure": "08:00",
+            "arrival": "09:00",
+            "distance_km": 12.0,
+            "runtime_min": 60.0,
+            "allowed_vehicle_types": ["BEV"],
+        },
+        {
+            "trip_id": "trip-2",
+            "route_id": "route-a",
+            "origin": "B",
+            "destination": "C",
+            "departure": "09:05",
+            "arrival": "10:00",
+            "distance_km": 12.0,
+            "runtime_min": 55.0,
+            "allowed_vehicle_types": ["BEV"],
+        },
+    ]
+
+    audit = _build_prepared_scope_audit(payload)
+
+    sensitivity = audit["turnaround_buffer_sensitivity_audit"]
+    assert sensitivity["schema_version"] == "turnaround_buffer_sensitivity_audit_v1"
+    assert sensitivity["levels_minutes"] == [5, 10, 15]
+    assert sensitivity["route_band_mode"] == "off"
+    assert sensitivity["semantics"] == (
+        "base_turnaround_plus_operational_buffer_before_deadhead"
+    )
+    assert [row["turnaround_buffer_min"] for row in sensitivity["rows"]] == [
+        5,
+        10,
+        15,
+    ]
+    assert [row["dispatch_feasible_pair_count"] for row in sensitivity["rows"]] == [
+        1,
+        0,
+        0,
+    ]
+    assert [row["relaxed_vehicle_lower_bound"] for row in sensitivity["rows"]] == [
+        1,
+        2,
+        2,
+    ]
+    assert sensitivity["monotonic_checks"] == {
+        "dispatch_feasible_pair_count_nonincreasing": True,
+        "interval_feasible_pair_count_constant": True,
+        "relaxed_vehicle_lower_bound_nondecreasing": True,
+    }
+    assert len(sensitivity["non_turnaround_control_sha256"]) == 64
+    assert sensitivity["status"] == "VALID"
+    assert sensitivity["transition_graph_evaluated_all_levels"] is True
+    assert audit["formal_turnaround_sensitivity_ready"] is True
+    assert "turnaround_buffer_sensitivity_invalid" not in audit["warning_codes"]
+
+
+def test_prepared_scope_audit_fails_closed_when_transition_rebuild_fails(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "src.optimization.common.builder.ProblemBuilder.build_from_scenario",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            RuntimeError("synthetic rebuild failure")
+        ),
+    )
+
+    audit = _build_prepared_scope_audit(_prepared_payload(vehicle_count=2))
+
+    assert audit["formal_transition_network_ready"] is False
+    assert audit["route_band_off_transition_audit_checked"] is False
+    assert audit["formal_turnaround_sensitivity_ready"] is False
+    assert "prepared_scope_audit_failed" in audit["warning_codes"]
+    assert "route_band_off_transition_audit_invalid" in audit["warning_codes"]
+    assert "turnaround_buffer_sensitivity_invalid" in audit["warning_codes"]
+
+
+def test_prepared_scope_audit_does_not_certify_buffer_sensitivity_without_trips() -> None:
+    payload = _prepared_payload(vehicle_count=2)
+    payload["trips"] = []
+
+    audit = _build_prepared_scope_audit(payload)
+
+    sensitivity = audit["turnaround_buffer_sensitivity_audit"]
+    assert sensitivity["transition_graph_evaluated_all_levels"] is False
+    assert sensitivity["status"] == "INVALID"
+    assert audit["formal_turnaround_sensitivity_ready"] is False
+    assert "turnaround_buffer_sensitivity_invalid" in audit["warning_codes"]
+
+
 def test_prepared_scope_audit_blocks_implicit_all_powertrain_fallback() -> None:
     payload = _prepared_payload(vehicle_count=2)
     for trip in payload["trips"]:

@@ -21,6 +21,7 @@ Add this block at the top level of config (same level as `mode`, `paths`, `solve
     "rebuild_when_missing": true,
     "force_rebuild_travel_connections": false,
     "default_turnaround_min": 10,
+    "turnaround_buffer_min": 0,
     "turnaround_rules_csv": "data/operations/turnaround_rules.csv",
     "deadhead_rules_csv": "data/operations/deadhead_rules.csv",
     "replace_tasks_from_build_inputs": true
@@ -47,6 +48,12 @@ Add this block at the top level of config (same level as `mode`, `paths`, `solve
 - `default_turnaround_min` (int, default `10`)
   - Fallback turnaround minutes for stops without explicit rule.
   - Used by `dispatch_graph` source.
+
+- `turnaround_buffer_min` (int, default `0`)
+  - Additional non-negative operating margin after the stop-specific/default
+    turnaround and before deadhead travel.
+  - The effective connection rule is
+    `arrival + base_turnaround + turnaround_buffer + deadhead <= next departure`.
 
 - `turnaround_rules_csv` (string, optional)
   - Optional override path for turnaround rule CSV.

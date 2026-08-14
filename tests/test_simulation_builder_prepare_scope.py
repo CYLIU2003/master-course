@@ -35,7 +35,10 @@ def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -
         "chargers": [{"id": "chg-1", "siteId": "dep1", "powerKw": 90}],
         "vehicle_templates": [],
         "scenario_overlay": {},
-        "simulation_config": {},
+        "simulation_config": {
+            "default_turnaround_min": 12,
+            "turnaround_buffer_min": 4,
+        },
         "dispatch_scope": {},
         "calendar": [{"service_id": "WEEKDAY"}],
     }
@@ -125,6 +128,8 @@ def test_apply_builder_configuration_keeps_selected_routes_for_prepare_scope() -
     assert updated["simulation_config"]["cost_component_flags"]["electricity_cost"] is False
     assert updated["simulation_config"]["cost_component_flags"]["fuel_cost"] is True
     assert updated["simulation_config"]["deadhead_speed_kmh"] == 18.0
+    assert updated["simulation_config"]["default_turnaround_min"] == 12
+    assert updated["simulation_config"]["turnaround_buffer_min"] == 4
     assert updated["simulation_config"]["objective_preset"] == "cost"
     assert updated["simulation_config"]["fixed_route_band_mode"] is True
     assert updated["simulation_config"]["milp_max_successors_per_trip"] == 24

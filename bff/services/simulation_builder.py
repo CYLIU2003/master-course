@@ -896,6 +896,20 @@ def apply_builder_configuration(
         ),
         default=30,
     )
+    default_turnaround_min = int(
+        _first_defined(
+            getattr(body.simulation_settings, "default_turnaround_min", None),
+            current_simulation_config.get("default_turnaround_min"),
+            10,
+        )
+    )
+    turnaround_buffer_min = int(
+        _first_defined(
+            getattr(body.simulation_settings, "turnaround_buffer_min", None),
+            current_simulation_config.get("turnaround_buffer_min"),
+            0,
+        )
+    )
     doc["simulation_config"] = {
         "service_date": service_date,
         "service_dates": list(service_dates),
@@ -928,6 +942,8 @@ def apply_builder_configuration(
         "planning_horizon_hours": planning_horizon_hours,
         "time_step_min": timestep_min,
         "timestep_min": timestep_min,
+        "default_turnaround_min": max(default_turnaround_min, 0),
+        "turnaround_buffer_min": max(turnaround_buffer_min, 0),
         "vehicle_template_id": primary_template.get("id"),
         "fleet_templates": [
             {

@@ -749,6 +749,8 @@ class UpdateScenarioBody(BaseModel):
     socMin: Optional[float] = None
     socMax: Optional[float] = None
     deadheadSpeedKmh: Optional[float] = None
+    defaultTurnaroundMin: Optional[int] = Field(default=None, ge=0)
+    turnaroundBufferMin: Optional[int] = Field(default=None, ge=0)
     pvProfileId: Optional[str] = None
     pvMarginalChargeCostYenPerKwh: Optional[float] = None
     pvCurtailPenaltyYenPerKwh: Optional[float] = None
@@ -893,6 +895,8 @@ class UpdateQuickSetupBody(BaseModel):
     costComponentFlags: Optional[Dict[str, bool]] = None
     touPricing: Optional[List[Dict[str, Any]]] = None
     deadheadSpeedKmh: Optional[float] = Field(default=None, gt=0.0)
+    defaultTurnaroundMin: Optional[int] = Field(default=None, ge=0)
+    turnaroundBufferMin: Optional[int] = Field(default=None, ge=0)
     objectivePreset: Optional[str] = None
     tripEnergyModel: Optional[Literal[
         "distance_average_v0",
@@ -1115,6 +1119,14 @@ def _apply_scenario_simulation_settings(
         simulation_config["soc_max"] = float(body.socMax)
     if body.deadheadSpeedKmh is not None:
         simulation_config["deadhead_speed_kmh"] = float(body.deadheadSpeedKmh)
+    if body.defaultTurnaroundMin is not None:
+        simulation_config["default_turnaround_min"] = int(
+            body.defaultTurnaroundMin
+        )
+    if body.turnaroundBufferMin is not None:
+        simulation_config["turnaround_buffer_min"] = int(
+            body.turnaroundBufferMin
+        )
     if body.pvProfileId is not None:
         simulation_config["pv_profile_id"] = str(body.pvProfileId)
     if body.pvMarginalChargeCostYenPerKwh is not None:
@@ -2090,6 +2102,14 @@ def _builder_defaults(
         "maxIceFuelPercent": simulation_config.get("max_ice_fuel_percent", 90.0),
         "defaultIceTankCapacityL": simulation_config.get("default_ice_tank_capacity_l", 300.0),
         "deadheadSpeedKmh": simulation_config.get("deadhead_speed_kmh", 18.0),
+        "defaultTurnaroundMin": simulation_config.get(
+            "default_turnaround_min",
+            10,
+        ),
+        "turnaroundBufferMin": simulation_config.get(
+            "turnaround_buffer_min",
+            0,
+        ),
         "pvProfileId": simulation_config.get("pv_profile_id"),
         "weatherMode": simulation_config.get("weather_mode") or "actual_date_profile",
         "allowFixedWeekdayTimetablePvCounterfactual": bool(
@@ -2741,6 +2761,14 @@ def _build_quick_setup_payload(
             "maxIceFuelPercent": builder_defaults.get("maxIceFuelPercent"),
             "defaultIceTankCapacityL": builder_defaults.get("defaultIceTankCapacityL"),
             "deadheadSpeedKmh": builder_defaults.get("deadheadSpeedKmh"),
+            "defaultTurnaroundMin": builder_defaults.get(
+                "defaultTurnaroundMin",
+                10,
+            ),
+            "turnaroundBufferMin": builder_defaults.get(
+                "turnaroundBufferMin",
+                0,
+            ),
             "pvProfileId": builder_defaults.get("pvProfileId"),
             "weatherMode": builder_defaults.get("weatherMode") or "actual_date_profile",
             "allowFixedWeekdayTimetablePvCounterfactual": bool(
@@ -3421,6 +3449,14 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             )
         if body.deadheadSpeedKmh is not None:
             simulation_config["deadhead_speed_kmh"] = float(body.deadheadSpeedKmh)
+        if body.defaultTurnaroundMin is not None:
+            simulation_config["default_turnaround_min"] = int(
+                body.defaultTurnaroundMin
+            )
+        if body.turnaroundBufferMin is not None:
+            simulation_config["turnaround_buffer_min"] = int(
+                body.turnaroundBufferMin
+            )
         if body.vehicleUsageCostJpyPerUsedBus is not None:
             simulation_config["vehicle_usage_cost_jpy_per_used_bus"] = max(
                 float(body.vehicleUsageCostJpyPerUsedBus),

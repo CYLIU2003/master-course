@@ -226,6 +226,11 @@ class DispatchContext:
     fixed_route_band_mode: bool = False
     location_aliases: Dict[str, Tuple[str, ...]] = field(default_factory=dict)
     horizon_start_min: int = 0
+    # Additional operational margin applied after the stop-specific/default
+    # minimum turnaround and before deadhead travel.  Keeping this separate
+    # preserves the provenance of the base operating rule during sensitivity
+    # analysis.
+    turnaround_buffer_min: int = 0
 
     def __post_init__(self) -> None:
         alias_sets: Dict[str, set[str]] = {}
@@ -282,12 +287,20 @@ class DispatchContext:
                     queue.append(target_text)
         return tuple(ordered)
 
-    def get_turnaround_min(self, stop_id: str) -> int:
+    def get_base_turnaround_min(self, stop_id: str) -> int:
         for candidate in self.resolve_location_ids(stop_id):
             rule = self.turnaround_rules.get(candidate)
             if rule is not None:
-                return rule.min_turnaround_min
-        return self.default_turnaround_min
+                return max(int(rule.min_turnaround_min or 0), 0)
+        return max(int(self.default_turnaround_min or 0), 0)
+
+    def get_turnaround_min(self, stop_id: str) -> int:
+        """Return base turnaround plus the explicit operational buffer."""
+
+        return self.get_base_turnaround_min(stop_id) + max(
+            int(self.turnaround_buffer_min or 0),
+            0,
+        )
 
     def get_deadhead_min(self, from_stop: str, to_stop: str) -> int:
         from_candidates = self.resolve_location_ids(from_stop)

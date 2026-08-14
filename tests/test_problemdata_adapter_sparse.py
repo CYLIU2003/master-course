@@ -37,10 +37,11 @@ def test_build_travel_connections_via_dispatch_returns_only_feasible_edges() -> 
     with mock.patch(
         "src.dispatch.problemdata_adapter.TimetableDispatchPipeline.run",
         return_value=pipeline_result,
-    ):
+    ) as pipeline_run:
         connections, report = build_travel_connections_via_dispatch(
             data=data,
             service_date="2026-03-22",
+            turnaround_buffer_min=7,
         )
 
     assert {(c.from_task_id, c.to_task_id) for c in connections} == {
@@ -49,3 +50,6 @@ def test_build_travel_connections_via_dispatch_returns_only_feasible_edges() -> 
     }
     assert all(c.can_follow for c in connections)
     assert report.generated_connections == 2
+    dispatch_context = pipeline_run.call_args.args[0]
+    assert dispatch_context.turnaround_buffer_min == 7
+    assert dispatch_context.get_turnaround_min("B") == 17

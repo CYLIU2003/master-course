@@ -604,6 +604,7 @@ def load_problem_data(config_path: str | Path) -> ProblemData:
             turnaround_rules = _load_turnaround_rules_csv(turnaround_path)
             deadhead_rules = _load_deadhead_rules_csv(deadhead_path)
             default_turnaround_min = int(dispatch_cfg.get("default_turnaround_min", 10))
+            turnaround_buffer_min = int(dispatch_cfg.get("turnaround_buffer_min", 0))
             service_date = str(
                 dispatch_cfg.get("service_date", cfg.get("service_date", "1970-01-01"))
             )
@@ -612,6 +613,7 @@ def load_problem_data(config_path: str | Path) -> ProblemData:
                 data=data,
                 service_date=service_date,
                 default_turnaround_min=default_turnaround_min,
+                turnaround_buffer_min=turnaround_buffer_min,
                 turnaround_rules=turnaround_rules,
                 deadhead_rules=deadhead_rules,
             )

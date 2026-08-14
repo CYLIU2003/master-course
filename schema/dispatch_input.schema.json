@@ -253,6 +253,12 @@
           "default": 10,
           "description": "Fallback turnaround time in minutes when no stop-specific rule exists."
         },
+        "turnaround_buffer_min": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "Additional operational margin applied after the stop-specific/default turnaround and before deadhead travel."
+        },
         "max_duty_duration_min": {
           "type": "integer",
           "minimum": 1,

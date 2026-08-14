@@ -297,6 +297,70 @@ def test_teacher_release_blocks_incomplete_vehicle_trip_compatibility() -> None:
     ]
 
 
+def test_teacher_release_blocks_invalid_turnaround_buffer_sensitivity() -> None:
+    claim_scope = _research_claim_scope_payload(
+        optimization_result={
+            "run_profile": "day_ahead_and_hourly_rolling",
+            "solver_metadata": {
+                "research_run": True,
+                "research_run_accepted": True,
+                "research_submission_git_provenance_eligible": True,
+                "research_acceptance_checks": {},
+            },
+            "prepared_scope_audit": {
+                "formal_transition_network_ready": True,
+                "formal_vehicle_trip_compatibility_ready": True,
+                "formal_turnaround_sensitivity_ready": False,
+            },
+            "solution_validity": {"validated_feasible": True},
+        },
+        solver_settings={"mip_gap_target_met": True},
+        weather_policy={"enabled": False},
+        rolling_execution={
+            "status": "executed_and_accepted",
+            "rolling_execution_minutes": 60,
+        },
+    )
+
+    assert "turnaround_buffer_sensitivity_invalid" in claim_scope[
+        "teacher_release_failed_checks"
+    ]
+
+
+def test_teacher_release_distinguishes_failed_transition_audit_from_missing_od() -> None:
+    claim_scope = _research_claim_scope_payload(
+        optimization_result={
+            "run_profile": "day_ahead_and_hourly_rolling",
+            "solver_metadata": {
+                "research_run": True,
+                "research_run_accepted": True,
+                "research_submission_git_provenance_eligible": True,
+                "research_acceptance_checks": {},
+            },
+            "prepared_scope_audit": {
+                "formal_transition_network_ready": False,
+                "route_band_off_deadhead_missing_count": 0,
+                "formal_vehicle_trip_compatibility_ready": True,
+                "formal_turnaround_sensitivity_ready": True,
+            },
+            "solution_validity": {"validated_feasible": True},
+        },
+        solver_settings={"mip_gap_target_met": True},
+        weather_policy={"enabled": False},
+        rolling_execution={
+            "status": "executed_and_accepted",
+            "rolling_execution_minutes": 60,
+        },
+    )
+
+    assert "route_band_off_transition_audit_invalid" in claim_scope[
+        "teacher_release_failed_checks"
+    ]
+    assert "route_band_off_deadhead_matrix_incomplete" not in claim_scope[
+        "teacher_release_failed_checks"
+    ]
+
+
 def test_two_stage_formal_release_blocks_unreconciled_or_frozen_composition() -> None:
     claim_scope = _research_claim_scope_payload(
         optimization_result={

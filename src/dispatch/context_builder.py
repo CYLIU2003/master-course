@@ -254,6 +254,7 @@ def load_dispatch_context_from_csv(
     service_type: str | None = None,
     default_vehicle_types: tuple[str, ...] = ("BEV", "ICE"),
     default_trip_distance_km: float = 10.0,
+    turnaround_buffer_min: int = 0,
 ) -> DispatchContext:
     """
     Load DispatchContext from CSV files under *data_dir*.
@@ -341,4 +342,5 @@ def load_dispatch_context_from_csv(
         deadhead_rules=deadhead_rules,
         vehicle_profiles=vehicle_profiles,
         default_turnaround_min=max(0, default_turnaround_min),
+        turnaround_buffer_min=max(0, turnaround_buffer_min),
     )

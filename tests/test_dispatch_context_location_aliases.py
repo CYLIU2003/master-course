@@ -76,6 +76,16 @@ def test_dispatch_context_resolves_location_aliases_from_trip_labels() -> None:
     assert context.get_deadhead_min("Station Bay 1", "Station Bay 2") == 8
 
 
+def test_dispatch_context_adds_operational_buffer_to_turnaround_rules_and_default() -> None:
+    context = _context()
+    context.turnaround_buffer_min = 10
+
+    assert context.get_base_turnaround_min("Station Bay 1") == 5
+    assert context.get_turnaround_min("Station Bay 1") == 15
+    assert context.get_base_turnaround_min("unknown-stop") == 10
+    assert context.get_turnaround_min("unknown-stop") == 20
+
+
 def test_dispatch_generator_preserves_deadhead_minutes_when_graph_uses_stop_ids() -> None:
     context = _context()
     graph = {"t1": ["t2"], "t2": []}

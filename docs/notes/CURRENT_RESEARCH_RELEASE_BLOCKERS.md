@@ -1,5 +1,31 @@
 # Current research release blockers
 
+## 2026-08-14 connection-buffer audit implemented; optimized evidence pending
+
+The canonical connection rule now has a separately auditable operating margin:
+
+`arrival + base_turnaround + turnaround_buffer + deadhead <= next departure`.
+
+`turnaround_buffer_min` defaults to zero, so existing scenario mathematics do
+not change until the input explicitly selects a margin. Prepare recomputes the
+route-band-OFF relaxed transition network at additive 5, 10, and 15 minute
+buffers and exports `turnaround_buffer_sensitivity_audit_v1`. Its control hash,
+connection counts, vehicle lower bounds, and monotonic checks are part of the
+prepared evidence. A failed transition rebuild or invalid sensitivity now
+blocks teacher release; an empty audit can no longer masquerade as zero missing
+deadhead OD entries.
+The same route-band and turnaround fields are now fixed controls in the
+Rolling comparison-case hash; a high/low-PV pair with different transition
+rules fails comparison rather than being accepted as PV-only.
+
+This closes the missing structural audit and the fail-open bug. It does not yet
+close the thesis experiment requirement: the 5/10/15-minute cases have not been
+solved as matched frontend/BFF optimization runs, and no certified effect on
+cost, BEV trips, SOC, or runtime is claimed. Route-band ON/OFF optimized
+comparison also remains pending. Fresh Prepare is mandatory because the
+prepared schema is now `v10_turnaround_buffer_sensitivity`. Research release
+remains **BLOCKED**.
+
 ## 2026-08-14 high-PV optimality proof: model-size and lower-bound blocker
 
 The local literature audit is recorded in

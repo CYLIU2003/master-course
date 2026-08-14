@@ -115,6 +115,8 @@ def test_build_quick_setup_payload_includes_saved_controls_and_zeroes() -> None:
             "max_ice_fuel_percent": 0.0,
             "default_ice_tank_capacity_l": 0.0,
             "deadhead_speed_kmh": 18.0,
+            "default_turnaround_min": 12,
+            "turnaround_buffer_min": 4,
             "objective_weights": {
                 "switch_cost": 2.5,
                 "slack_penalty": 123456.0,
@@ -221,6 +223,8 @@ def test_build_quick_setup_payload_includes_saved_controls_and_zeroes() -> None:
     assert payload["simulationSettings"]["maxIceFuelPercent"] == 0.0
     assert payload["simulationSettings"]["defaultIceTankCapacityL"] == 0.0
     assert payload["simulationSettings"]["deadheadSpeedKmh"] == 18.0
+    assert payload["simulationSettings"]["defaultTurnaroundMin"] == 12
+    assert payload["simulationSettings"]["turnaroundBufferMin"] == 4
     assert payload["simulationSettings"]["vehicleUsageCostSemantics"] == (
         "fixed_vehicle_day_cost"
     )
@@ -338,6 +342,8 @@ def test_update_quick_setup_persists_cost_component_toggles() -> None:
         maxIceFuelPercent=0.0,
         defaultIceTankCapacityL=0.0,
         deadheadSpeedKmh=18.0,
+        defaultTurnaroundMin=12,
+        turnaroundBufferMin=4,
         operationTimeWindowEnabled=False,
         stage1Stage2CandidateLimit=12,
         stage1CompositionSearchRadius=2,
@@ -408,6 +414,8 @@ def test_update_quick_setup_persists_cost_component_toggles() -> None:
     assert simulation_config["max_ice_fuel_percent"] == 0.0
     assert simulation_config["default_ice_tank_capacity_l"] == 0.0
     assert simulation_config["deadhead_speed_kmh"] == 18.0
+    assert simulation_config["default_turnaround_min"] == 12
+    assert simulation_config["turnaround_buffer_min"] == 4
     assert simulation_config["vehicle_usage_cost_semantics"] == (
         "driver_cost_proxy"
     )

@@ -6715,9 +6715,20 @@ def _research_claim_scope_payload(
         and "formal_transition_network_ready" in prepared_scope_audit
         and prepared_scope_audit.get("formal_transition_network_ready") is not True
     ):
-        teacher_release_failed_checks.append(
-            "route_band_off_deadhead_matrix_incomplete"
-        )
+        if int(
+            prepared_scope_audit.get(
+                "route_band_off_deadhead_missing_count",
+                0,
+            )
+            or 0
+        ) > 0:
+            teacher_release_failed_checks.append(
+                "route_band_off_deadhead_matrix_incomplete"
+            )
+        else:
+            teacher_release_failed_checks.append(
+                "route_band_off_transition_audit_invalid"
+            )
     if (
         bool(metadata.get("research_run", False))
         and "formal_vehicle_trip_compatibility_ready" in prepared_scope_audit
@@ -6726,6 +6737,15 @@ def _research_claim_scope_payload(
     ):
         teacher_release_failed_checks.append(
             "vehicle_trip_compatibility_contract_incomplete"
+        )
+    if (
+        bool(metadata.get("research_run", False))
+        and "formal_turnaround_sensitivity_ready" in prepared_scope_audit
+        and prepared_scope_audit.get("formal_turnaround_sensitivity_ready")
+        is not True
+    ):
+        teacher_release_failed_checks.append(
+            "turnaround_buffer_sensitivity_invalid"
         )
     is_two_stage = (
         str(metadata.get("optimization_structure") or "").lower()

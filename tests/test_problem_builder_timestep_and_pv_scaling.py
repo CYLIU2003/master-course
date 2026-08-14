@@ -115,6 +115,26 @@ def test_problem_builder_preserves_explicit_zero_turnaround() -> None:
     assert problem.dispatch_context.default_turnaround_min == 0
 
 
+def test_problem_builder_preserves_additive_turnaround_buffer_and_metadata() -> None:
+    scenario = _scenario(60)
+    scenario["simulation_config"]["turnaround_buffer_min"] = 15
+
+    problem = ProblemBuilder().build_from_scenario(
+        scenario,
+        depot_id="dep-1",
+        service_id="WEEKDAY",
+    )
+
+    assert problem.dispatch_context.default_turnaround_min == 10
+    assert problem.dispatch_context.turnaround_buffer_min == 15
+    assert problem.dispatch_context.get_turnaround_min("B") == 25
+    assert problem.metadata["default_turnaround_min"] == 10
+    assert problem.metadata["turnaround_buffer_min"] == 15
+    assert problem.metadata["turnaround_time_semantics"] == (
+        "base_turnaround_plus_operational_buffer_before_deadhead"
+    )
+
+
 def test_problem_builder_build_from_scenario_forwards_planning_days() -> None:
     problem = ProblemBuilder().build_from_scenario(
         _scenario(60),

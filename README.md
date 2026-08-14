@@ -1464,13 +1464,21 @@ pair-level formal attestation in `pair/pair_manifest.json`.
 
 ## Thesis validity audits after Prepare
 
-Every newly prepared input now materializes two contracts in
+Every newly prepared input now materializes three contracts in
 `prepared_scope_audit.json` before a formal solve is allowed:
 
 - the route-transition audit distinguishes a genuinely missing deadhead OD
   from insufficient turnaround/deadhead time, and recomputes a real
   route-band-OFF sensitivity by clearing both the solver lock and the saved
   intra-depot route-swap lock; and
+- `turnaround_buffer_sensitivity_audit` holds route-band OFF and every other
+  structural input fixed, then recomputes the relaxed connection path cover
+  for additive 5, 10, and 15 minute operating buffers. Feasible connection
+  counts must be nonincreasing, vehicle lower bounds nondecreasing, and
+  interval-only pairs unchanged. The audit stores a SHA-256 of all held-fixed
+  controls. The runtime rule is
+  `arrival + base turnaround + operating buffer + deadhead <= next departure`;
+  the buffer never replaces a stop-specific minimum turnaround; and
 - `vehicle_trip_compatibility_audit` records every trip's allowed vehicle IDs
   and powertrains, the source of that permission, and a SHA-256 of the complete
   vehicle-by-trip matrix. An implicit “all selected powertrains may serve every
@@ -1484,6 +1492,11 @@ lower bound is 32 with route-band ON and 25 with route-band OFF, versus an
 interval-only lower bound of 18. These are structural lower-bound diagnostics,
 not optimized fleet counts; they show why the route-band policy must be
 reported as an explicit operating assumption.
+
+The scenario and Quick Setup APIs expose `defaultTurnaroundMin` and
+`turnaroundBufferMin`; Prepare preserves saved values even when an older UI
+payload omits these optional fields. Graph preview, ProblemData compatibility,
+canonical MILP, and repair paths therefore use one connection-time contract.
 
 `src/optimization/validation/small_exact_oracle.py` supplies an independent
 all-ICE exhaustive oracle for strict one-day cases of at most ten trips. It is
@@ -1549,11 +1562,15 @@ PV/BESS, compatibility, or other canonical field differs under the same ID,
 Prepare fails with `PREPARED_INPUT_ID_COLLISION`; it never overwrites the prior
 artifact. This is required for an M1/M3 comparison to share both the prepared
 ID and the exact source byte hash across an application restart. Schema
-`v9_immutable_scope_identity` also uses the same selection-scope hash in the
+`v10_turnaround_buffer_sensitivity` also uses the same selection-scope hash in the
 prepared ID and inside the payload; the derived `prepared_scope_audit` is
 explicitly excluded from that selection hash. Older v7/v8 files from the
-identity corrections are preserved as historical artifacts and are not reused
-as v9 input.
+identity corrections and v9 files are preserved as historical artifacts and
+are not reused as v10 input. A failed route-band-OFF rebuild or invalid
+5/10/15-minute monotonicity audit blocks teacher release instead of being
+misread as zero missing deadhead pairs. Rolling comparison-case control hashes
+also include route-band mode, base turnaround, operating buffer, and connection
+semantics, so a PV-only pair cannot hide a transition-rule difference.
 
 After both jobs finish, run:
 

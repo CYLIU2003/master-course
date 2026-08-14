@@ -1,5 +1,53 @@
 # Development Notes
 
+## 2026-08-14: additive turnaround buffer and Prepare sensitivity certificate
+
+- Added an explicit non-negative `turnaround_buffer_min` to the canonical
+  dispatch context. It is added to the stop-specific or default minimum
+  turnaround before deadhead travel, so the hard connection rule is now
+  documented and implemented as
+  `arrival + base_turnaround + operating_buffer + deadhead <= next departure`.
+  Existing scenarios retain identical behavior because the default buffer is
+  zero. The base rule remains separately inspectable through
+  `get_base_turnaround_min()`.
+- Propagated the buffer through the canonical `ProblemBuilder`, ProblemData
+  adapter, CSV preprocessing, ALNS repair subcontexts, and public solver
+  metadata. This prevents a repair or compatibility path from silently
+  dropping a nonzero operating margin.
+- Added typed scenario/Quick Setup/Prepare fields and round-trip persistence
+  for `defaultTurnaroundMin` and `turnaroundBufferMin`. Prepare preserves the
+  saved values when an older frontend omits the optional fields, while an
+  explicit API value overrides them. The graph preview reads the same values
+  as the solver instead of silently reverting to 10+0 minutes.
+- Prepare now generates
+  `turnaround_buffer_sensitivity_audit_v1` from the route-band-OFF canonical
+  problem at 5, 10, and 15 minutes. It exports connection counts, relaxed
+  vehicle lower bounds, blocked reasons, infeasibility status, and a SHA-256
+  over all non-buffer structural controls. The certificate is valid only when
+  connection counts are nonincreasing, lower bounds nondecreasing, and
+  interval-only pairs constant.
+- Fixed a fail-open defect found during review: when the route-band-OFF audit
+  rebuild failed, an empty audit could previously be interpreted as
+  `deadhead_missing=0` and therefore READY. Formal readiness now also requires
+  an actually checked audit, and release output distinguishes
+  `route_band_off_transition_audit_invalid` from a complete audit that found
+  missing OD entries.
+- Bumped the prepared input schema from `v9_immutable_scope_identity` to
+  `v10_turnaround_buffer_sensitivity`; old prepared files remain immutable
+  history and must not be reused as current evidence. Formal teacher release
+  now fails closed on an invalid turnaround sensitivity certificate.
+- Added route-band mode, base turnaround, operating buffer, and connection
+  semantics to the Rolling comparison-case control hash. Two cases with
+  different transition feasibility can no longer pass a PV-only pair check
+  merely because their timetable rows are identical.
+- Focused regression covers base-plus-buffer semantics, ProblemBuilder and
+  ProblemData propagation, 5/10/15 structural monotonicity, audit-exception
+  fail-closed behavior, and teacher-release reason codes. This is structural
+  connection evidence only: optimized cost/BEV-trip route-band and buffer
+  comparisons still require fresh clean-commit runs. Final verification:
+  targeted persistence and new-contract tests `60 passed`, broader dispatch/Prepare/pair
+  regression `189 passed`, and full repository regression `1430 passed`.
+
 ## 2026-08-14: trip-energy sensitivity fingerprint bug and fail-closed repair
 
 - Frozen source SHA `735527da7f117f5af894263dcdf4fe55e8226328`
@@ -229,9 +277,10 @@
   derived `prepared_scope_audit` is appended after selection hashing. No solver
   job was submitted. The audit is now explicitly excluded from the selection
   scope hash, and the regression adds it before recomputing the stored scope.
-  The final prepared schema is `v9_immutable_scope_identity`; conflicting
-  v7/v8 files remain preserved and a fresh corrected artifact receives a
-  different ID/path.
+  The prepared schema at this historical checkpoint was
+  `v9_immutable_scope_identity`; conflicting v7/v8 files remained preserved
+  and a fresh corrected artifact received a different ID/path. It is
+  superseded by the v10 schema documented in the 2026-08-14 entry above.
 - The first controlled low-PV M1/M3 assembly was intentionally rejected by
   `build_thesis_ablation_comparison.py`. Both jobs recorded prepared input ID
   `prepared-8331f7eaa9fcb7eb-404f36795e908d12-d5e8413e`, canonical ablation

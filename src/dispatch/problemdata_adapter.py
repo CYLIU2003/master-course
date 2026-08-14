@@ -141,6 +141,7 @@ def _build_dispatch_context_from_problem_data(
     data: ProblemData,
     service_date: str,
     default_turnaround_min: int,
+    turnaround_buffer_min: int,
     turnaround_rules: dict[str, int] | None,
     deadhead_rules: dict[tuple[str, str], int] | None,
 ) -> DispatchContext:
@@ -196,6 +197,7 @@ def _build_dispatch_context_from_problem_data(
         deadhead_rules=dh_rules,
         vehicle_profiles=profiles,
         default_turnaround_min=max(0, int(default_turnaround_min)),
+        turnaround_buffer_min=max(0, int(turnaround_buffer_min)),
     )
 
 
@@ -206,6 +208,7 @@ def build_travel_connections_via_dispatch(
     turnaround_rules: dict[str, int] | None = None,
     deadhead_rules: dict[tuple[str, str], int] | None = None,
     deadhead_metrics: dict[tuple[str, str], DeadheadMetric] | None = None,
+    turnaround_buffer_min: int = 0,
 ) -> tuple[list[TravelConnection], DispatchTravelBuildReport]:
     """
     Build full TravelConnection matrix from dispatch feasibility graph.
@@ -216,6 +219,7 @@ def build_travel_connections_via_dispatch(
         data=data,
         service_date=service_date,
         default_turnaround_min=default_turnaround_min,
+        turnaround_buffer_min=turnaround_buffer_min,
         turnaround_rules=turnaround_rules,
         deadhead_rules=deadhead_rules,
     )

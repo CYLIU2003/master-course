@@ -15,6 +15,8 @@ def test_update_scenario_persists_simulation_settings() -> None:
         initialSoc=0.85,
         socMin=0.2,
         socMax=0.9,
+        defaultTurnaroundMin=12,
+        turnaroundBufferMin=4,
         pvProfileId="meguro_2026-04-13_60min",
         weatherMode="actual_date_profile",
         weatherFactorScalar=0.85,
@@ -79,6 +81,8 @@ def test_update_scenario_persists_simulation_settings() -> None:
     assert simulation_config["initial_soc"] == 0.85
     assert simulation_config["soc_min"] == 0.2
     assert simulation_config["soc_max"] == 0.9
+    assert simulation_config["default_turnaround_min"] == 12
+    assert simulation_config["turnaround_buffer_min"] == 4
     assert simulation_config["pv_profile_id"] == "meguro_2026-04-13_60min"
     assert simulation_config["weather_mode"] == "actual_date_profile"
     assert simulation_config["weather_factor_scalar"] == 0.85
