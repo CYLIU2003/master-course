@@ -10301,6 +10301,9 @@ def _solver_settings_payload(
         "stage1_model_constraint_count": _int_or_none(
             metadata.get("stage1_model_constraint_count")
         ),
+        "fragment_temporal_occupancy_constraint_count": _int_or_none(
+            metadata.get("fragment_temporal_occupancy_constraint_count")
+        ),
         "fragment_pairwise_depot_reset_constraint_count": _int_or_none(
             metadata.get("fragment_pairwise_depot_reset_constraint_count")
         ),
@@ -10309,6 +10312,9 @@ def _solver_settings_payload(
         ),
         "fragment_transition_lazy_separator": dict(
             metadata.get("fragment_transition_lazy_separator") or {}
+        ),
+        "overlap_clique_constraint_count": _int_or_none(
+            metadata.get("overlap_clique_constraint_count")
         ),
         "stage1_vehicle_count_lower_bound": _int_or_none(
             metadata.get("stage1_vehicle_count_lower_bound")
@@ -10501,6 +10507,12 @@ def _solver_settings_payload(
         ),
         "integrated_fragment_transition_lazy_separator": dict(
             metadata.get("integrated_fragment_transition_lazy_separator") or {}
+        ),
+        "integrated_fragment_occupancy_constraint_count": _int_or_none(
+            metadata.get("integrated_fragment_occupancy_constraint_count")
+        ),
+        "integrated_overlap_clique_constraint_count": _int_or_none(
+            metadata.get("integrated_overlap_clique_constraint_count")
         ),
         "integrated_activity_blocking_formulation": metadata.get(
             "integrated_activity_blocking_formulation"

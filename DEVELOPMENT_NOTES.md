@@ -4635,3 +4635,49 @@ locks this distinction in place.
   the integer feasible set or objective. Old outputs remain immutable. A clean
   commit and fresh 264-trip high-PV diagnostic are required before claiming any
   runtime reduction or formal-gap improvement.
+
+# 2026-08-14 - 600-second lazy-fragment diagnostic and metadata repair
+
+- From clean SHA `885bacbec2c5cd19450fae84ef719fb0a1639489`, executed a fresh
+  frontend/BFF high-PV Prepare and diagnostic optimization for scenario
+  `771d115b-75b0-49f7-a7f0-25f259a2cd21`. The request used 264 trips, 60
+  vehicles, 10 chargers, PV 1000 kW, BESS 6000 kWh, flat 30 JPY/kWh,
+  zero demand charge, Phase 4 integrated MILP, seed 42, 1% target gap and a
+  600-second Phase 4 limit. It was deliberately `research_run=false` and did
+  not execute Rolling, so it is diagnostic evidence only.
+- The fixed-recourse model retained 780,112 variables and reduced constraints
+  from the historical 1,598,973 to 355,533. The difference is exactly the
+  1,243,440 explicit fragment-pair rows moved to lazy separation. Fragment
+  occupancy stayed at 24,600 rows and overlap cliques at 9,420 rows.
+- Phase 4 stopped after 601.236881 seconds with the same incumbent
+  650,234.729396 JPY, certified bound 640,000 JPY and certified gap
+  1.574005345% as the historical 3600-second run. The Phase 3 seed wall time
+  was 478.338058 seconds. One MIPSOL callback occurred; the incumbent used one
+  fragment per used vehicle, so zero unique lazy cuts and zero submissions
+  were needed.
+- Added `scripts/build_lazy_fragment_performance_diagnostic.py`. It consumes
+  immutable baseline/candidate run directories and generates
+  `performance_comparison.json`, `.csv` and `.md`. It verifies unique recorded
+  model counts, exact row deltas, separator fail-closed metadata and outcome
+  equality. It refuses a runtime claim when canonical fingerprints, time
+  limits, formal scope or repeated-run eligibility differ. For this pair it
+  correctly reports `runtime_claim.status=NOT_CERTIFIED`: the observed Phase 4
+  time ratio is not a speedup claim.
+- The diagnostic exposed a P1 reporting bug. Separator metadata was correct in
+  `canonical_solver_result.json.metadata`, but absent from the allow-list that
+  copies `plan.metadata` into the public engine `solver_metadata`; therefore
+  the historical diagnostic's `solver_settings.json` contains null/empty
+  separator fields. Added a failing TDD regression, then propagated Stage 1
+  and integrated pairwise mode/count/separator plus occupancy/clique counts
+  through both `src/optimization/milp/engine.py` and
+  `src/optimization/engine.py`. Existing output files remain immutable; only
+  future runs receive the repaired public metadata.
+- Added direct MILP, top-level engine, BFF/README and postprocessing regression
+  coverage. The final focused set passes `30 passed in 1.55s`; the complete
+  repository regression passes `1416 passed in 130.92s`.
+- This diagnostic falsified the hypothesis that explicit fragment-pair rows
+  alone caused the high-PV proof gap. Row count fell 77.8%, but incumbent,
+  bound and gap were unchanged. The next performance tranche must strengthen
+  the valid high-PV lower bound or replace the monolithic vehicle-indexed
+  master with a certified path/column decomposition; research gates will not
+  be relaxed.

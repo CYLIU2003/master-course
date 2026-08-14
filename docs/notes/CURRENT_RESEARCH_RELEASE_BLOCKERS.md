@@ -29,7 +29,7 @@ double counting. A separate ALNS-style operational candidate may target
 hundreds of seconds, but it must remain explicitly near-optimal and cannot
 replace the formal full-network certificate.
 
-### Exact fragment-cut separation implemented; clean-run evidence pending
+### Exact fragment-cut separation: diagnostic complete; formal evidence pending
 
 The constraint-type audit found that 1,243,440 of the recorded 1,598,973
 rows were explicit pairwise depot-reset checks over vehicle, fragment-end and
@@ -42,17 +42,37 @@ unchanged.
 
 The callback fails closed: an exception terminates and invalidates the solve.
 Metadata records the formulation mode, unique cuts, repeated submissions and
-callback error in both canonical results and `solver_settings.json`. A real
-Gurobi regression also guards against suppressing repeated lazy-row
-submissions; Gurobi can present the same invalid incumbent more than once.
+callback error. A real Gurobi regression also guards against suppressing
+repeated lazy-row submissions; Gurobi can present the same invalid incumbent
+more than once.
 
-This closes a code-level model-size defect, not the full-run performance or
-optimality blocker. No current-HEAD 264-trip result exists yet. The next
-evidence step is a clean-commit, fresh-Prepare high-PV diagnostic comparing
-model rows, runtime, incumbent and bound, followed by a new controlled pair if
-the diagnostic passes. Until then, the old 3,600.80-second result remains
-historical evidence for `f46f1e8`, and current-HEAD research release remains
-**BLOCKED**.
+The clean SHA `885bacb` fresh-Prepare high-PV diagnostic completed through the
+frontend/BFF path with `research_run=false`, a 600-second Phase 4 limit and no
+Rolling chain. It retained 780,112 variables and reduced fixed-recourse rows
+from 1,598,973 to 355,533, exactly the 1,243,440 explicit fragment-pair rows.
+At 601.237 seconds it had the same 650,234.729 JPY incumbent, 640,000 JPY
+certified bound and 1.574005% gap as the historical 3,600.801-second run. The
+callback was invoked once; the accepted incumbent used one fragment per used
+vehicle, so no lazy row was required.
+
+This result closes the row-materialization diagnosis but does not certify a
+wall-clock speedup. The two runs use different time limits and formal scopes,
+several canonical input fingerprints differ, and neither side has repeated
+matched executions. The machine-readable comparison therefore records
+`runtime_claim.status=NOT_CERTIFIED` and remains diagnostic-only at
+`output/diagnostic_lazy_fragment_20260814_885bacb/performance_comparison.json`.
+
+The diagnostic also exposed a reporting defect: its canonical plan metadata
+contains the correct separator audit, while the contemporaneous
+`solver_settings.json` has null/empty separator fields. The current code now
+copies these fields through direct MILP and top-level engine metadata, with
+regression coverage; the historical artifact is not rewritten. A new frozen
+commit run is required to prove the corrected public artifact contract.
+
+This closes a code-level model-size defect, not the full-run optimality
+blocker. The next mathematical target is a stronger valid high-PV lower bound
+or a certified path/column decomposition. A fresh controlled formal pair and
+1% certificate remain required, so research release is **BLOCKED**.
 
 ## 2026-08-14 vehicle-day-cost sensitivity: execution pending after gate repair
 

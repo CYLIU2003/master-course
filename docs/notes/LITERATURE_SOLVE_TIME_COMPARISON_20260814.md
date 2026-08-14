@@ -92,6 +92,45 @@ callback が一度でも失敗した場合は solve を停止して失敗扱い�
 Prepare と再実行でのみ判定する。旧 `f46f1e8` 結果を修正後コードの性能
 証拠として再利用しない。
 
+## 2026-08-14 のfresh Prepare診断結果
+
+clean SHA `885bacb` から、同じ晴天シナリオをフロント/BFF経路でfresh
+Prepareし、Phase 4を600秒に限定した診断runを実行した。これは
+`research_run=false`、Rollingなしの診断であり、正式研究runではない。
+
+| 項目 | 旧 `f46f1e8` | lazy分離 `885bacb` |
+|---|---:|---:|
+| Phase 4時間上限 | 3600秒 | 600秒 |
+| Phase 4記録時間 | 3600.801秒 | 601.237秒 |
+| 変数 | 780,112 | 780,112 |
+| 制約 | 1,598,973 | 355,533 |
+| explicit fragment pairwise rows | 1,243,440 | 0 |
+| incumbent | 650,234.729円 | 650,234.729円 |
+| certified bound | 640,000円 | 640,000円 |
+| certified gap | 1.574005% | 1.574005% |
+| explored nodes | 1 | 1 |
+
+制約削減量1,243,440本は旧pairwise行数と一致し、fragment occupancy
+24,600本、overlap clique 9,420本、変数数は変わらなかった。callbackは1回
+呼ばれたが、採用incumbentは全使用車両が1 fragmentだったためlazy cutは
+0本だった。したがって、このincumbentに対して削除した全列挙行は活動して
+いなかった。
+
+一方、目的値、下界、gapは全く改善していない。これにより、行数削減後の
+主ボトルネックは可行解発見ではなく、高PV時に640,000円から上がらない
+下界の強さだと絞り込めた。
+
+観測時間比約5.99倍は高速化主張に使わない。時間上限、formal/diagnostic
+区分、複数のcanonical input fingerprint、反復数が一致しないためである。
+正本`output/diagnostic_lazy_fragment_20260814_885bacb/
+performance_comparison.json`も`runtime_claim.status=NOT_CERTIFIED`としている。
+同一入力・同一上限・同一区分の反復実験を行うまで、性能差は診断値に留める。
+
+また、このrunではseparator監査値がcanonical plan metadataには存在したが、
+当時の`solver_settings.json`への伝播が欠けていた。現在のコードで伝播を修正
+したが、旧成果物は書き換えない。修正後の公開artifact契約は次のfresh runで
+再検証する。
+
 ## 研究上の表示ルール
 
 - `数百秒で可行解` と `数百秒で1%以内を証明` を同一視しない。

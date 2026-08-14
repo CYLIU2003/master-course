@@ -118,6 +118,91 @@ def test_explicit_phase3_contract_preserves_solver_plan_without_postsolve_repair
     assert result.solver_metadata["postsolve_soc_repair_applied"] is False
 
 
+def test_fragment_separator_audit_metadata_reaches_public_solver_metadata() -> None:
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="s-fragment-separator-audit",
+            timestep_min=60,
+        ),
+        dispatch_context=None,
+        trips=(),
+        vehicles=(),
+    )
+    stage1_separator = {
+        "schema_version": "fragment_transition_lazy_separator_v1",
+        "enabled": True,
+        "lazy_constraint_count": 3,
+        "callback_error": None,
+    }
+    integrated_separator = {
+        "schema_version": "fragment_transition_lazy_separator_v1",
+        "enabled": True,
+        "lazy_constraint_count": 7,
+        "callback_error": None,
+    }
+    fake_result = OptimizationEngineResult(
+        mode=OptimizationMode.MILP,
+        solver_status="optimal",
+        objective_value=0.0,
+        plan=AssignmentPlan(
+            metadata={
+                "fragment_pairwise_depot_reset_constraint_count": 0,
+                "fragment_pairwise_depot_reset_constraint_mode": (
+                    "lazy_integer_incumbent_separation"
+                ),
+                "fragment_transition_lazy_separator": stage1_separator,
+                "integrated_fragment_pairwise_constraint_count": 0,
+                "integrated_fragment_pairwise_constraint_mode": (
+                    "lazy_integer_incumbent_separation"
+                ),
+                "integrated_fragment_transition_lazy_separator": (
+                    integrated_separator
+                ),
+                "integrated_fragment_occupancy_constraint_count": 24_600,
+                "integrated_overlap_clique_constraint_count": 17,
+            }
+        ),
+        feasible=True,
+        cost_breakdown={"objective_value": 0.0, "total_cost": 0.0},
+        solver_metadata={},
+    )
+    engine = OptimizationEngine()
+    engine._milp = _FakeMILPOptimizer(fake_result)
+
+    result = engine.solve(
+        problem,
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            phase="phase3_two_stage",
+        ),
+    )
+
+    assert result.solver_metadata[
+        "fragment_pairwise_depot_reset_constraint_count"
+    ] == 0
+    assert result.solver_metadata[
+        "fragment_pairwise_depot_reset_constraint_mode"
+    ] == "lazy_integer_incumbent_separation"
+    assert result.solver_metadata[
+        "fragment_transition_lazy_separator"
+    ] == stage1_separator
+    assert result.solver_metadata[
+        "integrated_fragment_pairwise_constraint_count"
+    ] == 0
+    assert result.solver_metadata[
+        "integrated_fragment_pairwise_constraint_mode"
+    ] == "lazy_integer_incumbent_separation"
+    assert result.solver_metadata[
+        "integrated_fragment_transition_lazy_separator"
+    ] == integrated_separator
+    assert result.solver_metadata[
+        "integrated_fragment_occupancy_constraint_count"
+    ] == 24_600
+    assert result.solver_metadata[
+        "integrated_overlap_clique_constraint_count"
+    ] == 17
+
+
 def test_two_stage_accounting_total_is_not_labelled_as_solver_cost_optimal() -> None:
     problem = CanonicalOptimizationProblem(
         scenario=OptimizationScenario(scenario_id="s-two-stage-objective", timestep_min=60),

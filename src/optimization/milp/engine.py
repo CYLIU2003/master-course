@@ -343,6 +343,21 @@ class MILPOptimizer:
                 "stage1_redundant_arc_link_constraints_omitted": (
                     plan.metadata or {}
                 ).get("stage1_redundant_arc_link_constraints_omitted"),
+                "fragment_temporal_occupancy_constraint_count": (
+                    plan.metadata or {}
+                ).get("fragment_temporal_occupancy_constraint_count"),
+                "fragment_pairwise_depot_reset_constraint_count": (
+                    plan.metadata or {}
+                ).get("fragment_pairwise_depot_reset_constraint_count"),
+                "fragment_pairwise_depot_reset_constraint_mode": (
+                    plan.metadata or {}
+                ).get("fragment_pairwise_depot_reset_constraint_mode"),
+                "fragment_transition_lazy_separator": dict(
+                    (plan.metadata or {}).get(
+                        "fragment_transition_lazy_separator"
+                    )
+                    or {}
+                ),
                 "integrated_redundant_arc_link_constraints_omitted": (
                     plan.metadata or {}
                 ).get("integrated_redundant_arc_link_constraints_omitted"),
@@ -362,6 +377,24 @@ class MILPOptimizer:
                 ).get(
                     "integrated_redundant_endpoint_away_blocking_semantics"
                 ),
+                "integrated_fragment_pairwise_constraint_count": (
+                    plan.metadata or {}
+                ).get("integrated_fragment_pairwise_constraint_count"),
+                "integrated_fragment_pairwise_constraint_mode": (
+                    plan.metadata or {}
+                ).get("integrated_fragment_pairwise_constraint_mode"),
+                "integrated_fragment_transition_lazy_separator": dict(
+                    (plan.metadata or {}).get(
+                        "integrated_fragment_transition_lazy_separator"
+                    )
+                    or {}
+                ),
+                "integrated_fragment_occupancy_constraint_count": (
+                    plan.metadata or {}
+                ).get("integrated_fragment_occupancy_constraint_count"),
+                "integrated_overlap_clique_constraint_count": (
+                    plan.metadata or {}
+                ).get("integrated_overlap_clique_constraint_count"),
                 "stage1_time_limit_sec_effective": (plan.metadata or {}).get(
                     "stage1_time_limit_sec_effective"
                 ),

@@ -80,6 +80,15 @@ def test_milp_fragment_pairwise_reset_cut_blocks_impossible_two_fragment_reuse()
     assert separator["enabled"] is True
     assert separator["callback_error"] is None
     assert separator["explicit_pairwise_rows_materialized"] == 0
+    assert (
+        result.solver_metadata[
+            "fragment_pairwise_depot_reset_constraint_mode"
+        ]
+        == "lazy_integer_incumbent_separation"
+    )
+    assert result.solver_metadata[
+        "fragment_transition_lazy_separator"
+    ] == separator
 
 
 @pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
@@ -240,7 +249,7 @@ def test_phase4_uses_lazy_fragment_separator_for_valid_depot_cycle() -> None:
         service_coverage_mode="strict",
     )
 
-    outcome, plan = GurobiMILPAdapter().solve(
+    result = MILPOptimizer().solve(
         problem,
         OptimizationConfig(
             mode=OptimizationMode.MILP,
@@ -255,7 +264,8 @@ def test_phase4_uses_lazy_fragment_separator_for_valid_depot_cycle() -> None:
         ),
     )
 
-    assert outcome.has_feasible_incumbent, outcome.solver_status
+    assert result.feasible, result.solver_status
+    plan = result.plan
     assert plan.unserved_trip_ids == ()
     assert plan.metadata["integrated_fragment_pairwise_constraint_count"] == 0
     assert (
@@ -268,6 +278,18 @@ def test_phase4_uses_lazy_fragment_separator_for_valid_depot_cycle() -> None:
     assert separator["enabled"] is True
     assert separator["mipsol_callback_count"] >= 1
     assert separator["callback_error"] is None
+    assert result.solver_metadata[
+        "integrated_fragment_pairwise_constraint_count"
+    ] == 0
+    assert (
+        result.solver_metadata[
+            "integrated_fragment_pairwise_constraint_mode"
+        ]
+        == "lazy_integer_incumbent_separation"
+    )
+    assert result.solver_metadata[
+        "integrated_fragment_transition_lazy_separator"
+    ] == separator
 
 
 @pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")

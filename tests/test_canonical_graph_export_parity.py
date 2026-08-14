@@ -1420,6 +1420,7 @@ def test_solver_settings_payload_reports_gap_ratio_and_percent() -> None:
                 "maximum_constraint_violation": 5.0e-7,
             },
             "fragment_pairwise_depot_reset_constraint_count": 0,
+            "fragment_temporal_occupancy_constraint_count": 13,
             "fragment_pairwise_depot_reset_constraint_mode": (
                 "lazy_integer_incumbent_separation"
             ),
@@ -1428,6 +1429,7 @@ def test_solver_settings_payload_reports_gap_ratio_and_percent() -> None:
                 "lazy_constraint_count": 3,
                 "callback_error": None,
             },
+            "overlap_clique_constraint_count": 5,
             "integrated_fragment_pairwise_constraint_count": 0,
             "integrated_fragment_pairwise_constraint_mode": (
                 "lazy_integer_incumbent_separation"
@@ -1437,6 +1439,8 @@ def test_solver_settings_payload_reports_gap_ratio_and_percent() -> None:
                 "lazy_constraint_count": 7,
                 "callback_error": None,
             },
+            "integrated_fragment_occupancy_constraint_count": 24_600,
+            "integrated_overlap_clique_constraint_count": 9_420,
             "bff_runtime_git_attestation": {
                 "schema_version": "bff_runtime_git_attestation_v1",
                 "runtime_git_sha": "abc123",
@@ -1458,6 +1462,7 @@ def test_solver_settings_payload_reports_gap_ratio_and_percent() -> None:
         "maximum_constraint_violation"
     ] == pytest.approx(5.0e-7)
     assert payload["fragment_pairwise_depot_reset_constraint_count"] == 0
+    assert payload["fragment_temporal_occupancy_constraint_count"] == 13
     assert (
         payload["fragment_pairwise_depot_reset_constraint_mode"]
         == "lazy_integer_incumbent_separation"
@@ -1465,6 +1470,7 @@ def test_solver_settings_payload_reports_gap_ratio_and_percent() -> None:
     assert payload["fragment_transition_lazy_separator"][
         "lazy_constraint_count"
     ] == 3
+    assert payload["overlap_clique_constraint_count"] == 5
     assert payload["integrated_fragment_pairwise_constraint_count"] == 0
     assert (
         payload["integrated_fragment_pairwise_constraint_mode"]
@@ -1473,6 +1479,8 @@ def test_solver_settings_payload_reports_gap_ratio_and_percent() -> None:
     assert payload["integrated_fragment_transition_lazy_separator"][
         "lazy_constraint_count"
     ] == 7
+    assert payload["integrated_fragment_occupancy_constraint_count"] == 24_600
+    assert payload["integrated_overlap_clique_constraint_count"] == 9_420
     assert payload["bff_runtime_git_attestation"]["runtime_git_sha"] == (
         "abc123"
     )

@@ -979,8 +979,13 @@ frozen commit and every per-run/pair acceptance gate.
 の営業所リセット可否を全組合せで列挙した行だと判明しました。現行コードは
 後続辺や物理制約を削らず、同じ整数可行領域を保つlazy constraint分離へ
 置き換えています。callback異常時はsolveを失敗させ、cut数と再送回数を
-`solver_settings.json`へ残します。264便での短縮効果はfresh Prepare後の
-clean-commit再実行待ちであり、旧成果物を現行性能の証拠には使いません。
+`solver_settings.json`へ残します。SHA `885bacb` のfresh Prepare診断では、
+変数780,112個を維持したまま制約を1,598,973本から355,533本へ削減し、
+600秒時点で旧3600秒runと同じ目的値650,234.73円、下界640,000円、gap
+1.574%を得ました。ただし時間上限、formal/diagnostic区分、入力fingerprint、
+反復数が一致しないため、観測時間比を速度向上とは認証していません。比較の
+正本は診断フォルダの`performance_comparison.json/csv/md`です。1%証明と
+新しいcontrolled formal pairは引き続き未完了です。
 
 ## まず、目的に合う入口を選ぶ
 
