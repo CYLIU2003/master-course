@@ -4529,3 +4529,14 @@ locks this distinction in place.
   `bbb29244cfc4885bd83e7ade8d5bae7387bfa59a942af0cdea9bfec5cd1e2cd0`.
   This closes the bounded electric-oracle evidence item only. The certificate
   itself remains explicitly ineligible for full-network research conclusions.
+- After the enumeration guard, clean SHA
+  `305b5e3a3493b9198c6d0d8ea612b6f383d326c6` regenerated the superseding
+  bundle at `output/verification/small_electric_oracle/305b5e3/`. Its
+  certificate payload remains byte-identical at
+  `dd797eba2ac3d1d26ea39ab85672bf8d23a349be3b0e362fe04f990df42dd0bf`,
+  showing that the bounded mathematical results did not change. The new
+  manifest payload/file SHA-256 values are
+  `c4e643e6ec5071804c8f6ecaa9ef362bf7ff7aaa60a92b286ba63e8f72bb67bc`
+  and `9be2a8ec70f7ea4e6a5169feb0e288ffda800bd340681dafe84e0b68f139f44d`.
+  The earlier `3307f964` directory is retained as immutable historical output;
+  the `305b5e3` bundle is the current oracle evidence.

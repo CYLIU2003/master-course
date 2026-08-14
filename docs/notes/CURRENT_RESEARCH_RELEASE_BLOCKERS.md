@@ -2233,8 +2233,8 @@ Remaining blocking work for the requested method comparison:
   `research_conclusion_eligible=false`, and M0--M3 comparative effect sizes
   remain blocked until fresh controlled four-method evidence exists;
 - the all-ICE and grid-only electric exact-oracle fixtures are implemented and
-  tested. Clean SHA `3307f964b8992377b166901d474ebbcb899f548a` produced
-  `output/verification/small_electric_oracle/3307f964/` with certificate status
+  tested. Current clean SHA `305b5e3a3493b9198c6d0d8ea612b6f383d326c6`
+  produced `output/verification/small_electric_oracle/305b5e3/` with status
   `VERIFIED`, all ten checks passing, and certificate payload SHA-256
   `dd797eba2ac3d1d26ea39ab85672bf8d23a349be3b0e362fe04f990df42dd0bf`.
   This discharges the bounded electric-oracle fixture item, but not the missing
