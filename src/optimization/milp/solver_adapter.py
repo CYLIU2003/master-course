@@ -3031,6 +3031,33 @@ class GurobiMILPAdapter:
         unused_bev_equivalence_classes.sort(key=lambda group: group[0])
         pairwise_representative_evaluation_count = 0
         inferred_equivalent_adjacency_count = 0
+        # Preserve enough evaluations for one full matching check and a
+        # cumulative prefix check for every active ICE duty.  Without this
+        # reserve, a source-major Cartesian scan can consume the entire cap on
+        # the first few ICE duties and never validate the matching it built.
+        matching_validation_evaluation_reserve = min(
+            len(active_ice_ids) + 1,
+            # Always leave room for at least one pairwise observation when a
+            # candidate slot remains; a matching reserve is useless without
+            # an independently validated edge.
+            max(max_evaluations - len(evaluation_rows) - 1, 0),
+        )
+        pairwise_evaluation_limit = max(
+            max_evaluations - matching_validation_evaluation_reserve,
+            len(evaluation_rows),
+        )
+        matching_validation_wall_reserve_sec = min(
+            max(float(per_solve_sec) * 5.0, float(per_solve_sec)),
+            max(wall_limit_sec * 0.25, float(per_solve_sec)),
+        )
+
+        def _pairwise_budget_available() -> bool:
+            return bool(
+                _budget_available()
+                and len(evaluation_rows) < pairwise_evaluation_limit
+                and time.monotonic()
+                < deadline - matching_validation_wall_reserve_sec
+            )
 
         route_band_repartition_attempts: List[Dict[str, Any]] = []
         route_band_repartition_candidate_count = 0
@@ -3544,17 +3571,62 @@ class GurobiMILPAdapter:
         adjacency_by_ice: Dict[str, List[str]] = {
             vehicle_id: [] for vehicle_id in active_ice_ids
         }
-        for source_vehicle_id in active_ice_ids:
+        eligible_target_classes_by_ice: Dict[
+            str,
+            Tuple[Tuple[str, ...], ...],
+        ] = {}
+        for source_vehicle_index, source_vehicle_id in enumerate(
+            active_ice_ids
+        ):
             source_vehicle = vehicle_by_id.get(source_vehicle_id)
             if source_vehicle is None:
+                eligible_target_classes_by_ice[source_vehicle_id] = ()
                 continue
-            for equivalent_target_ids in unused_bev_equivalence_classes:
-                target_vehicle_id = equivalent_target_ids[0]
-                target_vehicle = vehicle_by_id.get(target_vehicle_id)
-                if target_vehicle is None or str(
-                    target_vehicle.home_depot_id
-                ) != str(source_vehicle.home_depot_id):
+            depot_target_classes = tuple(
+                equivalent_target_ids
+                for equivalent_target_ids in unused_bev_equivalence_classes
+                if str(
+                    getattr(
+                        vehicle_by_id.get(equivalent_target_ids[0]),
+                        "home_depot_id",
+                        "",
+                    )
+                )
+                == str(source_vehicle.home_depot_id)
+            )
+            if depot_target_classes:
+                rotation = source_vehicle_index % len(depot_target_classes)
+                depot_target_classes = (
+                    depot_target_classes[rotation:]
+                    + depot_target_classes[:rotation]
+                )
+            eligible_target_classes_by_ice[source_vehicle_id] = (
+                depot_target_classes
+            )
+
+        maximum_pairwise_round_count = max(
+            (
+                len(target_classes)
+                for target_classes in eligible_target_classes_by_ice.values()
+            ),
+            default=0,
+        )
+        completed_pairwise_round_count = 0
+        for pairwise_round_index in range(maximum_pairwise_round_count):
+            if not _pairwise_budget_available():
+                break
+            completed_pairwise_round_count = pairwise_round_index + 1
+            for source_vehicle_id in active_ice_ids:
+                if not _pairwise_budget_available():
+                    break
+                target_classes = eligible_target_classes_by_ice.get(
+                    source_vehicle_id,
+                    (),
+                )
+                if pairwise_round_index >= len(target_classes):
                     continue
+                equivalent_target_ids = target_classes[pairwise_round_index]
+                target_vehicle_id = equivalent_target_ids[0]
                 replacements = {
                     source_vehicle_id: target_vehicle_id,
                 }
@@ -3587,10 +3659,6 @@ class GurobiMILPAdapter:
                         len(equivalent_target_ids) - 1,
                         0,
                     )
-                if not _budget_available():
-                    break
-            if not _budget_available():
-                break
 
         matching = _maximum_bipartite_vehicle_matching(adjacency_by_ice)
         audit["single_activation_feasibility_graph"] = {
@@ -3619,11 +3687,22 @@ class GurobiMILPAdapter:
             )
             if combined_result is None:
                 cumulative_mapping: Dict[str, str] = {}
+                cumulative_mapping_seeded_from_pairwise_edge = False
                 for source_vehicle_id, target_vehicle_id in sorted(
                     matching.items()
                 ):
                     if not _budget_available():
                         break
+                    if not cumulative_mapping:
+                        # Every matching edge was already solved and validated
+                        # as a single replacement.  Seed the cumulative prefix
+                        # from that certificate instead of asking the duplicate
+                        # filter to solve the same single candidate again.
+                        cumulative_mapping[source_vehicle_id] = (
+                            target_vehicle_id
+                        )
+                        cumulative_mapping_seeded_from_pairwise_edge = True
+                        continue
                     trial_mapping = {
                         **cumulative_mapping,
                         source_vehicle_id: target_vehicle_id,
@@ -3643,6 +3722,9 @@ class GurobiMILPAdapter:
                     )
                     if trial_result is not None:
                         cumulative_mapping = trial_mapping
+                audit["cumulative_mapping_seeded_from_pairwise_edge"] = (
+                    cumulative_mapping_seeded_from_pairwise_edge
+                )
 
         best_cost_result = min(
             feasible_candidates,
@@ -4231,6 +4313,19 @@ class GurobiMILPAdapter:
                 ],
                 "pairwise_representative_evaluation_count": (
                     pairwise_representative_evaluation_count
+                ),
+                "pairwise_candidate_order": (
+                    "round_robin_ice_duties_with_rotated_target_classes"
+                ),
+                "completed_pairwise_round_count": (
+                    completed_pairwise_round_count
+                ),
+                "matching_validation_evaluation_reserve": (
+                    matching_validation_evaluation_reserve
+                ),
+                "pairwise_evaluation_limit": pairwise_evaluation_limit,
+                "matching_validation_wall_reserve_sec": (
+                    matching_validation_wall_reserve_sec
                 ),
                 "inferred_equivalent_adjacency_count": (
                     inferred_equivalent_adjacency_count

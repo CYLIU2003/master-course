@@ -5060,3 +5060,45 @@ locks this distinction in place.
   complete repository regression passed `1452 passed in 137.04s`. A fresh
   clean-commit runtime diagnostic remains required before making any
   performance claim.
+
+# 2026-08-14 - Round-robin ICE-duty coverage and matching-validation reserve
+
+- Clean commit `9db438a` was exercised through fresh frontend/BFF Prepare under
+  the same 264-trip, 1000 kW PV, 6000 kWh BESS, flat 30 JPY/kWh, zero-demand,
+  four-thread and shared-600-second high-PV diagnostic. Job
+  `6430503c-cfdf-47a2-acb2-ce8ba031357c` completed physically valid at
+  `output/2026-08-14/run_20260814_2243`; the portable evidence copy is
+  `output/perf_clone_seed_9db438a_sunny_600s_20260814/sunny`.
+- Solver wall time was 605.912 seconds, including a 5.912-second audited
+  finalization overrun; HTTP submit-to-terminal time was 630.574 seconds. The
+  integrated cost phase received about 302.60 seconds, explored one node and
+  stopped at 702,371.885683 JPY against the 640,000 JPY certified bound. The
+  8.880180% gap misses the declared 1% target.
+- Assignment remained 14 BEVs/18 ICE buses and 60/204 trips. Physical status,
+  artifact completeness and canonical total-cost reconciliation passed; no
+  fallback or Rolling execution was used. This is a bounded diagnostic only.
+- The clone audit correctly inferred zero edges. All 22 unused BEVs were
+  singleton classes because their recorded initial SOC values differ (roughly
+  21.9%--75.1%). Treating those vehicles as interchangeable would have changed
+  fixed-assignment readiness/charging feasibility, so the exact signature was
+  not weakened.
+- The source-major loop spent 63 pairwise evaluations on only the first three
+  of 19 active ICE duties. It found a maximum matching of size three, but the
+  direct candidate plus those pairwise solves exhausted all 64 evaluations;
+  the combined matching was never submitted to Stage 2.
+- Pairwise candidate order is now round-robin over ICE duties with a
+  deterministic per-duty rotation of depot-compatible target classes.
+  Evaluation and wall-clock reserves are held for a full matching candidate
+  and cumulative prefixes. Audit output exposes the strategy, completed
+  rounds, evaluation limit, and both reserves.
+- Fixed a second correctness bug in the cumulative fallback. Its first
+  single-edge prefix was already in the duplicate hash set, so the old code
+  returned `None` and never added that certified edge to the prefix. The new
+  code seeds the prefix from the independently validated pairwise certificate,
+  then re-solves every extension of size two or greater.
+- Added a four-ICE/three-distinct-BEV regression proving broad source coverage,
+  matching-slot reservation, rejection of an infeasible three-BEV combined
+  candidate, and selection of a separately validated two-BEV cumulative
+  candidate. Focused suite: `120 passed`; complete repository regression:
+  `1453 passed in 134.99s` after the final reserve-boundary adjustment. Clean
+  runtime evidence is pending.

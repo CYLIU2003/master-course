@@ -955,3 +955,149 @@ def test_unused_bev_neighborhood_tries_full_ice_retirement_first(
     assert audit["termination_reason"] == (
         "direct_full_ice_retirement_strict_cost_improvement"
     )
+
+
+def test_pairwise_search_reserves_and_validates_cumulative_matching(
+    monkeypatch,
+) -> None:
+    class _FakeFeasibilityChecker:
+        def evaluate(self, _problem, _plan):
+            return SimpleNamespace(feasible=True, errors=())
+
+    class _FakeCostEvaluator:
+        def evaluate(self, _problem, plan):
+            used_bev = sum(
+                duty.vehicle_type == "BEV" for duty in plan.duties
+            )
+            return SimpleNamespace(
+                total_cost=100.0 - 10.0 * used_bev,
+                evaluation_feasible=True,
+            )
+
+    monkeypatch.setattr(
+        solver_adapter_module,
+        "FeasibilityChecker",
+        _FakeFeasibilityChecker,
+    )
+    monkeypatch.setattr(
+        solver_adapter_module,
+        "CostEvaluator",
+        _FakeCostEvaluator,
+    )
+    adapter = GurobiMILPAdapter()
+
+    def _fake_stage2(_problem, _config, plan, **_kwargs):
+        used_bev = sum(duty.vehicle_type == "BEV" for duty in plan.duties)
+        feasible = used_bev <= 2
+        solved = AssignmentPlan(
+            **{
+                **plan.__dict__,
+                "metadata": {
+                    **dict(plan.metadata or {}),
+                    "stage2_feasible": feasible,
+                    "stage2_has_feasible_incumbent": feasible,
+                },
+            }
+        )
+        return (
+            MILPSolverOutcome(
+                solver_status="optimal" if feasible else "infeasible",
+                used_backend="test",
+                supports_exact_milp=True,
+                has_feasible_incumbent=feasible,
+                incumbent_count=1 if feasible else 0,
+            ),
+            solved,
+        )
+
+    monkeypatch.setattr(
+        adapter,
+        "_solve_thesis_stage2_charging_dispatch",
+        _fake_stage2,
+    )
+    trips = tuple(
+        _trip(f"trip-{index}", f"{8 + index:02d}:00")
+        for index in range(4)
+    )
+    seed = AssignmentPlan(
+        duties=tuple(
+            VehicleDuty(
+                duty_id=f"duty-{index}",
+                vehicle_type="ICE",
+                legs=(DutyLeg(trip),),
+            )
+            for index, trip in enumerate(trips)
+        ),
+        served_trip_ids=tuple(trip.trip_id for trip in trips),
+        metadata={
+            "duty_vehicle_map": {
+                f"duty-{index}": f"ice-{index}"
+                for index in range(4)
+            },
+            "stage1_feasible": True,
+            "stage2_feasible": True,
+            "stage2_has_feasible_incumbent": True,
+        },
+    )
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="round-robin-reserved-matching",
+            timestep_min=60,
+        ),
+        dispatch_context=SimpleNamespace(),
+        trips=(),
+        vehicles=tuple(
+            [
+                ProblemVehicle(f"ice-{index}", "ICE", "DEPOT")
+                for index in range(4)
+            ]
+            + [
+                ProblemVehicle(
+                    f"bev-{index}",
+                    "BEV",
+                    "DEPOT",
+                    initial_soc=0.5 + index * 0.1,
+                )
+                for index in range(3)
+            ]
+        ),
+    )
+
+    selected, audit = (
+        adapter.improve_phase4_seed_with_unused_bev_neighborhood(
+            problem,
+            OptimizationConfig(
+                phase4_phase3_seed_unused_bev_neighborhood_enabled=True,
+                phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec=30,
+                phase4_phase3_seed_unused_bev_neighborhood_per_solve_sec=1,
+                phase4_phase3_seed_unused_bev_neighborhood_max_evaluations=9,
+                phase4_phase3_seed_powertrain_duty_swap_rounds=0,
+                phase4_phase3_seed_unused_bev_identity_exchange_rounds=0,
+            ),
+            seed,
+        )
+    )
+
+    assert audit["direct_full_ice_retirement_status"] == (
+        "skipped_insufficient_unused_bev"
+    )
+    assert audit["pairwise_candidate_order"] == (
+        "round_robin_ice_duties_with_rotated_target_classes"
+    )
+    assert audit["matching_validation_evaluation_reserve"] == 5
+    assert audit["pairwise_evaluation_limit"] == 4
+    assert audit["pairwise_representative_evaluation_count"] == 4
+    assert all(
+        audit["single_activation_feasibility_graph"][f"ice-{index}"]
+        for index in range(4)
+    )
+    assert audit["maximum_cardinality_pairwise_matching_size"] == 3
+    assert audit["cumulative_mapping_seeded_from_pairwise_edge"] is True
+    assert audit["selected_candidate_kind"] == (
+        "cumulative_matching_activation"
+    )
+    assert audit["selected_used_bev"] == 2
+    assert audit["selected_used_ice"] == 2
+    assert set(selected.duties_by_vehicle()).issuperset(
+        {"ice-2", "ice-3"}
+    )

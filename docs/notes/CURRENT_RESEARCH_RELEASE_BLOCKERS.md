@@ -2575,3 +2575,21 @@ that inference alone: it must pass Stage 2, independent physical validation
 and canonical accounting. The final integrated feasible region and objective
 are unchanged. A fresh clean-commit diagnostic must verify the effect before
 the rain case or a formal pair is run.
+
+The `9db438a` fresh rerun confirmed that the exact-clone optimization did not
+apply to this fleet: the 22 unused BEVs have different recorded initial SOCs,
+so all equivalence classes were singletons and zero edges were inferred. The
+neighborhood evaluated 63 single replacements, but source-major ordering
+covered only three of 19 ICE duties. Although those edges admitted a matching
+of size three, the direct candidate plus 63 singles exhausted the 64-candidate
+limit before the combined assignment could be solved. Assignment and cost
+therefore remained 14/18, 60/204 trips and 702,371.885683 JPY; the certified
+gap remained 8.880180%.
+
+Current code now rotates target classes across ICE duties in round-robin order
+and reserves candidate count plus wall time for exact combined/cumulative
+Stage-2 validation. It also repairs the cumulative-prefix duplicate bug that
+prevented extensions beyond an already tested single edge. No initial-SOC
+difference is ignored and no inferred multi-vehicle candidate is accepted.
+The 1% gap, formal-run, Rolling and controlled-pair blockers remain until a
+fresh clean-commit run validates this new search order.

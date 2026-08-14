@@ -1794,3 +1794,22 @@ classes, representative solve count, and inferred equivalent edges. This is a
 candidate-search efficiency change only: it does not add a BEV constraint,
 change the final Phase 4 feasible region, or establish a runtime improvement
 until a fresh clean-commit run is completed.
+
+The clean `9db438a` rerun showed why that optimization was deliberately
+fail-closed: all 22 unused BEVs had distinct initial SOC values (about 21.9% to
+75.1%), so every exact-clone class contained one vehicle. No feasibility edge
+was inferred. The neighborhood again used 63 pairwise solves plus the direct
+candidate, found a three-edge matching, but exhausted the 64-evaluation cap
+before validating that matching. The final 14/18, 60/204-trip result and
+8.880% gap were therefore unchanged; solver wall time was 605.912 seconds and
+the frontend/BFF execution took 630.574 seconds.
+
+Candidate ordering now visits all active ICE duties in round-robin order with
+rotated unused-BEV targets, rather than exhausting every target for the first
+ICE duty. It reserves evaluation slots and wall time for one complete matching
+check plus cumulative prefix checks. The cumulative path now seeds its first
+edge from the already validated single-replacement certificate; previously the
+duplicate filter rejected that edge and prevented every larger cumulative
+candidate. All combined candidates still require fresh Stage 2, physical and
+canonical-cost validation. A clean rerun is required before reporting any
+improvement from this ordering fix.

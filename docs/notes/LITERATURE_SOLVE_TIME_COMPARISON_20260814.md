@@ -231,3 +231,25 @@ fixed-assignment Stage 2で評価する。代表edgeが可行な場合、matchin
 start生成の効率化である。最終Phase 4の変数、制約、可行領域、目的関数は変え
 ない。clean commitから同条件を再実行するまで、時間短縮やgap改善は未確認と
 して扱う。
+
+## `9db438a` 実測で判明したcandidate capの律速
+
+`9db438a` のfresh診断はsolver wall 605.912秒、HTTP全体630.574秒で完了した。
+会計・物理検証は通ったが、解は14 BEV/18 ICE、60/204便、702,371.885683円、
+certified gap 8.880180%で前回と同じだった。
+
+厳密clone代表化の推定edgeは0件だった。未使用BEV 22台は初期SOCが約21.9%から
+75.1%まで異なり、全てsingleton classである。初期SOCは出発時可用エネルギーと
+充電時刻へ影響するため、数百秒へ合わせる目的で同一視してはならない。
+
+一方、探索順には実装上の無駄が残っていた。source-major順で63件のpairwise
+評価を行ったため、19本のactive ICE dutyのうち3本しか調べず、matching size 3
+を得た時点で64件上限へ到達した。combined candidateは未評価だった。さらに、
+combinedが不可行な場合のcumulative fallbackは、最初のsingle edgeをduplicate
+として捨てるため2本目以降へ進めないバグを含んでいた。
+
+現在はICE dutyをround-robinで一巡し、target classをdutyごとに回転させる。
+またmatching全体1件と各cumulative prefixを再検証できるevaluation数およびwall
+timeを先に予約する。最初のprefixだけは既にStage 2・物理・会計を通ったsingle
+edgeの証明を再利用し、2本以上の組合せは必ず新たに解く。この変更も最終MILPの
+可行領域・目的関数を変えない。次のclean再実行までは性能改善未確認である。
