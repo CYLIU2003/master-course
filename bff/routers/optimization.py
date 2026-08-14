@@ -10301,6 +10301,15 @@ def _solver_settings_payload(
         "stage1_model_constraint_count": _int_or_none(
             metadata.get("stage1_model_constraint_count")
         ),
+        "fragment_pairwise_depot_reset_constraint_count": _int_or_none(
+            metadata.get("fragment_pairwise_depot_reset_constraint_count")
+        ),
+        "fragment_pairwise_depot_reset_constraint_mode": metadata.get(
+            "fragment_pairwise_depot_reset_constraint_mode"
+        ),
+        "fragment_transition_lazy_separator": dict(
+            metadata.get("fragment_transition_lazy_separator") or {}
+        ),
         "stage1_vehicle_count_lower_bound": _int_or_none(
             metadata.get("stage1_vehicle_count_lower_bound")
         ),
@@ -10483,6 +10492,15 @@ def _solver_settings_payload(
         ),
         "integrated_redundant_arc_link_constraints_omitted": _int_or_none(
             metadata.get("integrated_redundant_arc_link_constraints_omitted")
+        ),
+        "integrated_fragment_pairwise_constraint_count": _int_or_none(
+            metadata.get("integrated_fragment_pairwise_constraint_count")
+        ),
+        "integrated_fragment_pairwise_constraint_mode": metadata.get(
+            "integrated_fragment_pairwise_constraint_mode"
+        ),
+        "integrated_fragment_transition_lazy_separator": dict(
+            metadata.get("integrated_fragment_transition_lazy_separator") or {}
         ),
         "integrated_activity_blocking_formulation": metadata.get(
             "integrated_activity_blocking_formulation"

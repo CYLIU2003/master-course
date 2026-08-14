@@ -1354,6 +1354,253 @@ def _single_path_flow_implies_temporal_exclusivity(
     return True
 
 
+class _FragmentTransitionLazySeparator:
+    """Separate exact fragment-transition cuts only at integer incumbents.
+
+    Materializing every invalid ``end[i] + start[j] <= 1`` row scales as
+    ``vehicles * trips^2``.  The full 264-trip research case previously added
+    more than 1.2 million such rows even though an incumbent uses only a few
+    fragment boundaries.  Gurobi lazy constraints preserve the same integer
+    feasible set while keeping those rows out of the root model.
+
+    The separator deliberately mirrors
+    :meth:`GurobiMILPAdapter._add_fragment_pairwise_depot_reset_cuts`: only
+    same-day, chronologically ordered end/start pairs are checked, and the
+    canonical ``fragment_transition_diagnostic`` remains authoritative.
+    """
+
+    def __init__(
+        self,
+        *,
+        grb: Any,
+        problem: CanonicalOptimizationProblem,
+        trip_by_id: Mapping[str, ProblemTrip],
+        vehicles: Sequence[Any],
+        start_arc: Mapping[Tuple[str, str], Any],
+        end_arc: Mapping[Tuple[str, str], Any],
+        trip_day_index_by_trip_id: Mapping[str, int],
+        departure_min_by_trip_id: Mapping[str, int],
+        arrival_min_by_trip_id: Mapping[str, int],
+        allow_same_day_depot_cycles: bool,
+        fixed_route_band_mode: bool,
+    ) -> None:
+        self._grb = grb
+        self._problem = problem
+        self._trip_by_id = dict(trip_by_id)
+        self._start_arc = dict(start_arc)
+        self._end_arc = dict(end_arc)
+        self._trip_day_index_by_trip_id = {
+            str(trip_id): int(day_index)
+            for trip_id, day_index in trip_day_index_by_trip_id.items()
+        }
+        self._departure_min_by_trip_id = {
+            str(trip_id): int(value)
+            for trip_id, value in departure_min_by_trip_id.items()
+        }
+        self._arrival_min_by_trip_id = {
+            str(trip_id): int(value)
+            for trip_id, value in arrival_min_by_trip_id.items()
+        }
+        self._allow_same_day_depot_cycles = bool(
+            allow_same_day_depot_cycles
+        )
+        self._fixed_route_band_mode = bool(fixed_route_band_mode)
+        self._vehicle_by_id = {
+            str(getattr(vehicle, "vehicle_id", "") or ""): vehicle
+            for vehicle in vehicles
+            if str(getattr(vehicle, "vehicle_id", "") or "")
+        }
+        self._start_entries_by_vehicle: Dict[
+            str, List[Tuple[str, Any]]
+        ] = {}
+        self._end_entries_by_vehicle: Dict[
+            str, List[Tuple[str, Any]]
+        ] = {}
+        for (vehicle_id, trip_id), variable in self._start_arc.items():
+            self._start_entries_by_vehicle.setdefault(
+                str(vehicle_id), []
+            ).append((str(trip_id), variable))
+        for (vehicle_id, trip_id), variable in self._end_arc.items():
+            self._end_entries_by_vehicle.setdefault(
+                str(vehicle_id), []
+            ).append((str(trip_id), variable))
+        self._diagnostic_cache: Dict[
+            Tuple[str, str, str, str, bool, bool], bool
+        ] = {}
+        self._separated_pair_keys: Set[Tuple[str, str, str]] = set()
+        self.solve_count = 0
+        self.mipsol_callback_count = 0
+        self.selected_pair_check_count = 0
+        self.lazy_constraint_count = 0
+        self.lazy_constraint_submission_count = 0
+        self.callback_error = ""
+
+    def begin_solve(self) -> None:
+        """Record one optimize call before per-incumbent row separation."""
+
+        self.solve_count += 1
+
+    def _transition_feasible(
+        self,
+        vehicle_id: str,
+        end_trip_id: str,
+        start_trip_id: str,
+    ) -> bool:
+        vehicle = self._vehicle_by_id.get(str(vehicle_id))
+        end_trip = self._trip_by_id.get(str(end_trip_id))
+        start_trip = self._trip_by_id.get(str(start_trip_id))
+        if vehicle is None or end_trip is None or start_trip is None:
+            raise RuntimeError(
+                "fragment lazy separator received an unknown vehicle/trip: "
+                f"{vehicle_id}:{end_trip_id}:{start_trip_id}"
+            )
+        vehicle_type = str(getattr(vehicle, "vehicle_type", "") or "")
+        home_depot_id = str(
+            getattr(vehicle, "home_depot_id", "") or ""
+        )
+        cache_key = (
+            vehicle_type,
+            home_depot_id,
+            str(end_trip_id),
+            str(start_trip_id),
+            self._fixed_route_band_mode,
+            self._allow_same_day_depot_cycles,
+        )
+        cached = self._diagnostic_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        feasible = fragment_transition_diagnostic(
+            VehicleDuty(
+                duty_id=f"{vehicle_id}__end_probe",
+                vehicle_type=vehicle_type,
+                legs=(DutyLeg(trip=end_trip),),
+            ),
+            VehicleDuty(
+                duty_id=f"{vehicle_id}__start_probe",
+                vehicle_type=vehicle_type,
+                legs=(DutyLeg(trip=start_trip),),
+            ),
+            home_depot_id=home_depot_id,
+            dispatch_context=self._problem.dispatch_context,
+            fixed_route_band_mode=self._fixed_route_band_mode,
+            allow_same_day_depot_cycles=(
+                self._allow_same_day_depot_cycles
+            ),
+        ).feasible
+        self._diagnostic_cache[cache_key] = bool(feasible)
+        return bool(feasible)
+
+    def separate_mipsol(self, model: Any, where: int) -> int:
+        """Add violated transition rows and return the number submitted."""
+
+        if where != self._grb.Callback.MIPSOL:
+            return 0
+        self.mipsol_callback_count += 1
+        added = 0
+        for vehicle_id in sorted(self._vehicle_by_id):
+            start_entries = self._start_entries_by_vehicle.get(
+                vehicle_id, ()
+            )
+            end_entries = self._end_entries_by_vehicle.get(vehicle_id, ())
+            if not start_entries or not end_entries:
+                continue
+            start_values = model.cbGetSolution(
+                [variable for _trip_id, variable in start_entries]
+            )
+            end_values = model.cbGetSolution(
+                [variable for _trip_id, variable in end_entries]
+            )
+            selected_starts = [
+                (trip_id, variable)
+                for (trip_id, variable), value in zip(
+                    start_entries, start_values
+                )
+                if float(value) > 0.5
+            ]
+            selected_ends = [
+                (trip_id, variable)
+                for (trip_id, variable), value in zip(
+                    end_entries, end_values
+                )
+                if float(value) > 0.5
+            ]
+            for end_trip_id, end_variable in selected_ends:
+                for start_trip_id, start_variable in selected_starts:
+                    if end_trip_id == start_trip_id:
+                        continue
+                    if self._trip_day_index_by_trip_id.get(
+                        end_trip_id, 0
+                    ) != self._trip_day_index_by_trip_id.get(
+                        start_trip_id, 0
+                    ):
+                        continue
+                    if self._arrival_min_by_trip_id.get(
+                        end_trip_id, 0
+                    ) > self._departure_min_by_trip_id.get(
+                        start_trip_id, 0
+                    ):
+                        continue
+                    self.selected_pair_check_count += 1
+                    pair_key = (
+                        vehicle_id,
+                        end_trip_id,
+                        start_trip_id,
+                    )
+                    if self._transition_feasible(
+                        vehicle_id,
+                        end_trip_id,
+                        start_trip_id,
+                    ):
+                        continue
+                    # Gurobi may expose the same incumbent more than once
+                    # while presolve or the solution pool is being processed.
+                    # Re-submit the violated lazy row every time; suppressing
+                    # duplicates here can let a later callback occurrence pass
+                    # even though the integer point is invalid.
+                    model.cbLazy(end_variable + start_variable <= 1)
+                    self.lazy_constraint_submission_count += 1
+                    if pair_key not in self._separated_pair_keys:
+                        self._separated_pair_keys.add(pair_key)
+                        self.lazy_constraint_count += 1
+                    added += 1
+        return added
+
+    def callback(self, model: Any, where: int) -> int:
+        """Fail closed if the callback cannot enforce the exact contract."""
+
+        try:
+            return self.separate_mipsol(model, where)
+        except Exception as exc:  # pragma: no cover - Gurobi callback boundary
+            if not self.callback_error:
+                self.callback_error = f"{type(exc).__name__}: {exc}"
+            model.terminate()
+            return 0
+
+    def to_metadata(self) -> Dict[str, Any]:
+        return {
+            "schema_version": "fragment_transition_lazy_separator_v1",
+            "enabled": True,
+            "integer_feasible_set_preserved": not bool(self.callback_error),
+            "explicit_pairwise_rows_materialized": 0,
+            "solve_count": int(self.solve_count),
+            "mipsol_callback_count": int(self.mipsol_callback_count),
+            "selected_pair_check_count": int(
+                self.selected_pair_check_count
+            ),
+            "lazy_constraint_count": int(self.lazy_constraint_count),
+            "lazy_constraint_submission_count": int(
+                self.lazy_constraint_submission_count
+            ),
+            "diagnostic_cache_entry_count": len(self._diagnostic_cache),
+            "callback_error": self.callback_error or None,
+            "semantics": (
+                "same_integer_fragment_transition_constraints_as_explicit_"
+                "pairwise_formulation; separated_at_every_mipsol; callback_"
+                "failure_terminates_and_invalidates_the_solve"
+            ),
+        }
+
+
 def _stage2_slot_indices(
     problem: CanonicalOptimizationProblem,
     config: OptimizationConfig,
@@ -3879,21 +4126,28 @@ class GurobiMILPAdapter:
         )
         integrated_fragment_pairwise_constraint_count = 0
         integrated_fragment_occupancy_constraint_count = 0
+        integrated_fragment_lazy_separator: Optional[
+            _FragmentTransitionLazySeparator
+        ] = None
         if not integrated_single_path_redundancy_elimination_applied:
-            integrated_fragment_pairwise_constraint_count = (
-                self._add_fragment_pairwise_depot_reset_cuts(
-                    model,
+            integrated_fragment_lazy_separator = (
+                self._build_fragment_transition_lazy_separator(
+                    grb=GRB,
+                    problem=problem,
                     trip_by_id=trip_by_id,
                     vehicles=problem.vehicles,
-                    assignment_trip_ids_by_vehicle=assignment_trip_ids_by_vehicle,
                     start_arc=start_arc,
                     end_arc=end_arc,
-                    trip_day_index_by_trip_id=trip_day_index_by_trip_id,
-                    problem=problem,
-                    allow_same_day_depot_cycles=allow_same_day_depot_cycles,
+                    trip_day_index_by_trip_id=(
+                        trip_day_index_by_trip_id
+                    ),
+                    allow_same_day_depot_cycles=(
+                        allow_same_day_depot_cycles
+                    ),
                     fixed_route_band_mode=fixed_route_band_mode,
                 )
             )
+            model.Params.LazyConstraints = 1
             integrated_fragment_occupancy_constraint_count = (
                 self._add_fragment_temporal_occupancy_constraints(
                     model,
@@ -6252,10 +6506,40 @@ class GurobiMILPAdapter:
         def _capture_first_feasible(_model: Any, where: Any) -> None:
             nonlocal first_feasible_sec
             try:
+                if where == GRB.Callback.MIPSOL:
+                    lazy_cut_count = (
+                        integrated_fragment_lazy_separator.callback(
+                            _model, where
+                        )
+                        if integrated_fragment_lazy_separator is not None
+                        else 0
+                    )
+                    if lazy_cut_count > 0:
+                        return
                 if where == GRB.Callback.MIPSOL and first_feasible_sec is None:
                     first_feasible_sec = time.perf_counter() - optimize_started_at
-            except Exception:
-                return
+            except Exception as exc:  # pragma: no cover - callback boundary
+                if (
+                    integrated_fragment_lazy_separator is not None
+                    and not integrated_fragment_lazy_separator.callback_error
+                ):
+                    integrated_fragment_lazy_separator.callback_error = (
+                        f"{type(exc).__name__}: {exc}"
+                    )
+                _model.terminate()
+
+        def _optimize_integrated_with_exact_fragment_callback() -> None:
+            if integrated_fragment_lazy_separator is not None:
+                integrated_fragment_lazy_separator.begin_solve()
+            model.optimize(_capture_first_feasible)
+            if (
+                integrated_fragment_lazy_separator is not None
+                and integrated_fragment_lazy_separator.callback_error
+            ):
+                raise RuntimeError(
+                    "integrated fragment transition lazy separator failed: "
+                    + integrated_fragment_lazy_separator.callback_error
+                )
 
         verified_integrated_start = bool(
             integrated_warm_start_audit.get(
@@ -6398,7 +6682,7 @@ class GurobiMILPAdapter:
                 0.0 if require_exact else max(float(config.mip_gap), 0.0)
             )
             phase_started_at = time.perf_counter()
-            model.optimize(_capture_first_feasible)
+            _optimize_integrated_with_exact_fragment_callback()
             phase_wall_sec = float(time.perf_counter() - phase_started_at)
             _record_integrated_stage(
                 phase=phase,
@@ -6811,7 +7095,7 @@ class GurobiMILPAdapter:
                     )
                     integrated_certified_gap_stop_applied = True
             phase_started_at = time.perf_counter()
-            model.optimize(_capture_first_feasible)
+            _optimize_integrated_with_exact_fragment_callback()
             phase_wall_sec = float(time.perf_counter() - phase_started_at)
             _record_integrated_stage(
                 phase=str(integrated_search_controls["profile"]),
@@ -6863,7 +7147,7 @@ class GurobiMILPAdapter:
             remaining_sec = _remaining_integrated_time_sec()
             if remaining_sec > 1.0e-6:
                 model.Params.TimeLimit = max(remaining_sec, 0.001)
-                model.optimize(_capture_first_feasible)
+                _optimize_integrated_with_exact_fragment_callback()
 
         relaxed_partial_service = False
 
@@ -7898,6 +8182,23 @@ class GurobiMILPAdapter:
                 "integrated_fragment_pairwise_constraint_count": (
                     integrated_fragment_pairwise_constraint_count
                 ),
+                "integrated_fragment_pairwise_constraint_mode": (
+                    "not_required_single_path_flow"
+                    if integrated_single_path_redundancy_elimination_applied
+                    else "lazy_integer_incumbent_separation"
+                ),
+                "integrated_fragment_transition_lazy_separator": (
+                    integrated_fragment_lazy_separator.to_metadata()
+                    if integrated_fragment_lazy_separator is not None
+                    else {
+                        "schema_version": (
+                            "fragment_transition_lazy_separator_v1"
+                        ),
+                        "enabled": False,
+                        "integer_feasible_set_preserved": True,
+                        "reason": "single_path_flow_is_sufficient",
+                    }
+                ),
                 "integrated_fragment_occupancy_constraint_count": (
                     integrated_fragment_occupancy_constraint_count
                 ),
@@ -8872,23 +9173,29 @@ class GurobiMILPAdapter:
         if stage1_single_path_redundancy_elimination_applied:
             fragment_pairwise_depot_reset_constraint_count = 0
             fragment_temporal_occupancy_constraint_count = 0
+            stage1_fragment_lazy_separator = None
         else:
-            fragment_pairwise_depot_reset_constraint_count = (
-                self._add_fragment_pairwise_depot_reset_cuts(
-                    stage1,
+            fragment_pairwise_depot_reset_constraint_count = 0
+            stage1_fragment_lazy_separator = (
+                self._build_fragment_transition_lazy_separator(
+                    grb=GRB,
+                    problem=problem,
                     trip_by_id=trip_by_id,
                     vehicles=problem.vehicles,
-                    assignment_trip_ids_by_vehicle=assignment_trip_ids_by_vehicle,
                     start_arc=start_arc,
                     end_arc=end_arc,
-                    trip_day_index_by_trip_id=trip_day_index_by_trip_id,
-                    problem=problem,
-                    allow_same_day_depot_cycles=allow_same_day_depot_cycles,
+                    trip_day_index_by_trip_id=(
+                        trip_day_index_by_trip_id
+                    ),
+                    allow_same_day_depot_cycles=(
+                        allow_same_day_depot_cycles
+                    ),
                     fixed_route_band_mode=bool(
                         problem.metadata.get("fixed_route_band_mode", False)
                     ),
                 )
             )
+            stage1.Params.LazyConstraints = 1
             fragment_temporal_occupancy_constraint_count = (
                 self._add_fragment_temporal_occupancy_constraints(
                     stage1,
@@ -9454,6 +9761,15 @@ class GurobiMILPAdapter:
         def _stage1_search_callback(model: Any, where: int) -> None:
             try:
                 if where == GRB.Callback.MIPSOL:
+                    lazy_cut_count = (
+                        stage1_fragment_lazy_separator.callback(
+                            model, where
+                        )
+                        if stage1_fragment_lazy_separator is not None
+                        else 0
+                    )
+                    if lazy_cut_count > 0:
+                        return
                     stage1_search_telemetry.record_incumbent(
                         runtime_sec=model.cbGet(GRB.Callback.RUNTIME),
                         incumbent_objective=model.cbGet(GRB.Callback.MIPSOL_OBJ),
@@ -9474,8 +9790,24 @@ class GurobiMILPAdapter:
                     stage1_search_telemetry.callback_error = (
                         f"{type(exc).__name__}: {exc}"
                     )
+                model.terminate()
 
+        if stage1_fragment_lazy_separator is not None:
+            stage1_fragment_lazy_separator.begin_solve()
         stage1.optimize(_stage1_search_callback)
+        if (
+            stage1_fragment_lazy_separator is not None
+            and stage1_fragment_lazy_separator.callback_error
+        ):
+            raise RuntimeError(
+                "stage1 fragment transition lazy separator failed: "
+                + stage1_fragment_lazy_separator.callback_error
+            )
+        if stage1_search_telemetry.callback_error:
+            raise RuntimeError(
+                "stage1 search telemetry callback failed: "
+                + stage1_search_telemetry.callback_error
+            )
 
         stage1_primary_runtime_sec = float(
             getattr(stage1, "Runtime", 0.0) or 0.0
@@ -9682,6 +10014,23 @@ class GurobiMILPAdapter:
                     ),
                     "fragment_pairwise_depot_reset_constraint_count": (
                         fragment_pairwise_depot_reset_constraint_count
+                    ),
+                    "fragment_pairwise_depot_reset_constraint_mode": (
+                        "not_required_single_path_flow"
+                        if stage1_single_path_redundancy_elimination_applied
+                        else "lazy_integer_incumbent_separation"
+                    ),
+                    "fragment_transition_lazy_separator": (
+                        stage1_fragment_lazy_separator.to_metadata()
+                        if stage1_fragment_lazy_separator is not None
+                        else {
+                            "schema_version": (
+                                "fragment_transition_lazy_separator_v1"
+                            ),
+                            "enabled": False,
+                            "integer_feasible_set_preserved": True,
+                            "reason": "single_path_flow_is_sufficient",
+                        }
                     ),
                     "overlap_clique_constraint_count": (
                         overlap_clique_constraint_count
@@ -9931,6 +10280,23 @@ class GurobiMILPAdapter:
                 ),
                 "fragment_pairwise_depot_reset_constraint_count": (
                     fragment_pairwise_depot_reset_constraint_count
+                ),
+                "fragment_pairwise_depot_reset_constraint_mode": (
+                    "not_required_single_path_flow"
+                    if stage1_single_path_redundancy_elimination_applied
+                    else "lazy_integer_incumbent_separation"
+                ),
+                "fragment_transition_lazy_separator": (
+                    stage1_fragment_lazy_separator.to_metadata()
+                    if stage1_fragment_lazy_separator is not None
+                    else {
+                        "schema_version": (
+                            "fragment_transition_lazy_separator_v1"
+                        ),
+                        "enabled": False,
+                        "integer_feasible_set_preserved": True,
+                        "reason": "single_path_flow_is_sufficient",
+                    }
                 ),
                 "overlap_clique_constraint_count": (
                     overlap_clique_constraint_count
@@ -12305,7 +12671,19 @@ class GurobiMILPAdapter:
                     stage1.Params.SolutionLimit = 1
                 composition_started = time.perf_counter()
                 try:
-                    stage1.optimize()
+                    if stage1_fragment_lazy_separator is not None:
+                        stage1_fragment_lazy_separator.begin_solve()
+                        stage1.optimize(
+                            stage1_fragment_lazy_separator.callback
+                        )
+                        if stage1_fragment_lazy_separator.callback_error:
+                            raise RuntimeError(
+                                "stage1 composition fragment transition "
+                                "lazy separator failed: "
+                                + stage1_fragment_lazy_separator.callback_error
+                            )
+                    else:
+                        stage1.optimize()
                     composition_wall_time_sec = float(
                         time.perf_counter() - composition_started
                     )
@@ -13073,7 +13451,17 @@ class GurobiMILPAdapter:
             stage1.Params.PoolSearchMode = 0
             stage1.Params.PoolSolutions = 1
             enumeration_started = time.perf_counter()
-            stage1.optimize()
+            if stage1_fragment_lazy_separator is not None:
+                stage1_fragment_lazy_separator.begin_solve()
+                stage1.optimize(stage1_fragment_lazy_separator.callback)
+                if stage1_fragment_lazy_separator.callback_error:
+                    raise RuntimeError(
+                        "stage1 enumeration fragment transition lazy "
+                        "separator failed: "
+                        + stage1_fragment_lazy_separator.callback_error
+                    )
+            else:
+                stage1.optimize()
             enumeration_wall_time_sec = float(
                 time.perf_counter() - enumeration_started
             )
@@ -18072,6 +18460,43 @@ class GurobiMILPAdapter:
                     variable.Start = GRB.UNDEFINED
 
         return audit
+
+    def _build_fragment_transition_lazy_separator(
+        self,
+        *,
+        grb: Any,
+        problem: CanonicalOptimizationProblem,
+        trip_by_id: Mapping[str, ProblemTrip],
+        vehicles: Sequence[Any],
+        start_arc: Mapping[Tuple[str, str], Any],
+        end_arc: Mapping[Tuple[str, str], Any],
+        trip_day_index_by_trip_id: Mapping[str, int],
+        allow_same_day_depot_cycles: bool,
+        fixed_route_band_mode: bool,
+    ) -> _FragmentTransitionLazySeparator:
+        """Build the exact branch-and-cut separator for multi-fragment paths."""
+
+        return _FragmentTransitionLazySeparator(
+            grb=grb,
+            problem=problem,
+            trip_by_id=trip_by_id,
+            vehicles=vehicles,
+            start_arc=start_arc,
+            end_arc=end_arc,
+            trip_day_index_by_trip_id=trip_day_index_by_trip_id,
+            departure_min_by_trip_id={
+                str(trip_id): self._service_minute(
+                    problem, trip.departure_min
+                )
+                for trip_id, trip in trip_by_id.items()
+            },
+            arrival_min_by_trip_id={
+                str(trip_id): self._trip_service_arrival_min(problem, trip)
+                for trip_id, trip in trip_by_id.items()
+            },
+            allow_same_day_depot_cycles=allow_same_day_depot_cycles,
+            fixed_route_band_mode=fixed_route_band_mode,
+        )
 
     def _add_fragment_pairwise_depot_reset_cuts(
         self,

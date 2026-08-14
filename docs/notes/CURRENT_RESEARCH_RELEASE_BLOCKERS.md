@@ -29,6 +29,31 @@ double counting. A separate ALNS-style operational candidate may target
 hundreds of seconds, but it must remain explicitly near-optimal and cannot
 replace the formal full-network certificate.
 
+### Exact fragment-cut separation implemented; clean-run evidence pending
+
+The constraint-type audit found that 1,243,440 of the recorded 1,598,973
+rows were explicit pairwise depot-reset checks over vehicle, fragment-end and
+fragment-start combinations. The current implementation replaces only those
+materialized rows with exact lazy separation at every integer incumbent. It
+uses the same canonical transition diagnostic and adds the same
+`end + start <= 1` inequality for every violated pair. Complete successor
+arcs, physical constraints, objective terms and acceptance gates are
+unchanged.
+
+The callback fails closed: an exception terminates and invalidates the solve.
+Metadata records the formulation mode, unique cuts, repeated submissions and
+callback error in both canonical results and `solver_settings.json`. A real
+Gurobi regression also guards against suppressing repeated lazy-row
+submissions; Gurobi can present the same invalid incumbent more than once.
+
+This closes a code-level model-size defect, not the full-run performance or
+optimality blocker. No current-HEAD 264-trip result exists yet. The next
+evidence step is a clean-commit, fresh-Prepare high-PV diagnostic comparing
+model rows, runtime, incumbent and bound, followed by a new controlled pair if
+the diagnostic passes. Until then, the old 3,600.80-second result remains
+historical evidence for `f46f1e8`, and current-HEAD research release remains
+**BLOCKED**.
+
 ## 2026-08-14 vehicle-day-cost sensitivity: execution pending after gate repair
 
 The declared 0 and 20,000 JPY/used-bus-day cases both use

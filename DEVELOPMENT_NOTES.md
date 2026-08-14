@@ -4599,3 +4599,39 @@ locks this distinction in place.
   mathematically unavoidable high-PV costs to the lower bound. Any ALNS-style
   hundreds-of-seconds mode must be labeled near-optimal and kept separate from
   the full-network formal certificate.
+
+# 2026-08-14 - Exact lazy separation of fragment-transition constraints
+
+- Decomposed the frozen high-PV model's 1,598,973 rows by formulation source.
+  `integrated_fragment_pairwise_constraint_count` alone was 1,243,440, or
+  about 77.8% of all recorded constraints. These rows enumerated every
+  chronologically ordered vehicle/end-fragment/start-fragment pair before the
+  solve, although one incumbent selects only a small number of boundaries.
+- Replaced this quadratic row materialization in both Stage 1 and integrated
+  Phase 4 with `_FragmentTransitionLazySeparator`. At every integer incumbent
+  it checks only selected same-day chronological boundary pairs using the
+  unchanged canonical `fragment_transition_diagnostic`, then submits the same
+  `end_arc + start_arc <= 1` inequality that the explicit formulation used.
+  Complete successor arcs, fragment occupancy, overlap cliques, route-band,
+  energy, SOC, charger, tariff and accounting semantics are unchanged.
+- The first direct Gurobi regression exposed a correctness issue in the draft:
+  Gurobi may present the same invalid incumbent more than once while presolve
+  or solution processing continues. Suppressing an already-submitted pair let
+  the repeated invalid point survive. The final callback therefore re-submits
+  every currently violated row, while recording unique cut count and total
+  submission count separately.
+- All Stage 1 primary, composition and enumeration optimize calls, plus every
+  integrated search phase, now install the exact callback. Callback exceptions
+  terminate the model and are raised after optimize; they cannot silently
+  produce a research-eligible result. `solver_settings.json` exports the
+  explicit-row count, formulation mode, callback counts and errors for Stage 1
+  and integrated Phase 4.
+- Added real-Gurobi tests for an invalid two-fragment pair, a valid Phase 4
+  depot cycle, repeated lazy enforcement, callback fail-closed behavior and
+  BFF metadata propagation. The focused solver/BFF/README regression passes
+  `80 passed in 3.45s`; the complete repository regression passes
+  `1413 passed in 74.01s`.
+- This patch changes model construction and branch-and-cut execution, but not
+  the integer feasible set or objective. Old outputs remain immutable. A clean
+  commit and fresh 264-trip high-PV diagnostic are required before claiming any
+  runtime reduction or formal-gap improvement.

@@ -58,11 +58,216 @@ def test_milp_fragment_pairwise_reset_cut_blocks_impossible_two_fragment_reuse()
 
     result = MILPOptimizer().solve(
         problem,
-        OptimizationConfig(mode=OptimizationMode.MILP, time_limit_sec=10),
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            time_limit_sec=10,
+            mip_gap=0.0,
+            phase="phase3_two_stage",
+        ),
     )
 
     assert result.feasible is False
     assert result.plan.unserved_trip_ids == ("t1", "t2")
+    assert (
+        result.plan.metadata["fragment_pairwise_depot_reset_constraint_count"]
+        == 0
+    )
+    assert (
+        result.plan.metadata["fragment_pairwise_depot_reset_constraint_mode"]
+        == "lazy_integer_incumbent_separation"
+    )
+    separator = result.plan.metadata["fragment_transition_lazy_separator"]
+    assert separator["enabled"] is True
+    assert separator["callback_error"] is None
+    assert separator["explicit_pairwise_rows_materialized"] == 0
+
+
+@pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
+def test_fragment_transition_lazy_separator_adds_exact_invalid_pair_cut() -> None:
+    import gurobipy as gp
+
+    context = DispatchContext(
+        service_date="2026-04-10",
+        trips=[
+            Trip(
+                trip_id="t1",
+                route_id="r1",
+                origin="A",
+                destination="B",
+                departure_time="08:00",
+                arrival_time="08:10",
+                distance_km=1.0,
+                allowed_vehicle_types=("ICE",),
+            ),
+            Trip(
+                trip_id="t2",
+                route_id="r1",
+                origin="C",
+                destination="D",
+                departure_time="08:30",
+                arrival_time="08:40",
+                distance_km=1.0,
+                allowed_vehicle_types=("ICE",),
+            ),
+        ],
+        turnaround_rules={},
+        deadhead_rules={
+            ("DEPOT", "A"): DeadheadRule("DEPOT", "A", 5),
+            ("DEPOT", "C"): DeadheadRule("DEPOT", "C", 5),
+        },
+        vehicle_profiles={"ICE": VehicleProfile(vehicle_type="ICE")},
+    )
+    problem = ProblemBuilder().build_from_dispatch(
+        context,
+        scenario_id="lazy-reset-cut",
+        vehicle_counts={"ICE": 1},
+        canonical_depot_id="DEPOT",
+        allow_same_day_depot_cycles=True,
+        max_depot_cycles_per_vehicle_per_day=2,
+        max_fragments_per_vehicle_per_day=2,
+        max_start_fragments_per_vehicle=2,
+        max_end_fragments_per_vehicle=2,
+        service_coverage_mode="strict",
+    )
+    vehicle_id = problem.vehicles[0].vehicle_id
+    model = gp.Model("lazy_reset_cut")
+    model.Params.OutputFlag = 0
+    model.Params.LazyConstraints = 1
+    end_t1 = model.addVar(vtype=gp.GRB.BINARY, name="end_t1")
+    start_t2 = model.addVar(vtype=gp.GRB.BINARY, name="start_t2")
+    model.addConstr(end_t1 == 1)
+    model.addConstr(start_t2 == 1)
+    separator = GurobiMILPAdapter()._build_fragment_transition_lazy_separator(
+        grb=gp.GRB,
+        problem=problem,
+        trip_by_id=problem.trip_by_id(),
+        vehicles=problem.vehicles,
+        start_arc={(vehicle_id, "t2"): start_t2},
+        end_arc={(vehicle_id, "t1"): end_t1},
+        trip_day_index_by_trip_id={"t1": 0, "t2": 0},
+        allow_same_day_depot_cycles=True,
+        fixed_route_band_mode=False,
+    )
+
+    separator.begin_solve()
+    model.optimize(separator.callback)
+
+    assert separator.callback_error == ""
+    assert separator.lazy_constraint_count == 1
+    assert model.Status == gp.GRB.INFEASIBLE
+    metadata = separator.to_metadata()
+    assert metadata["integer_feasible_set_preserved"] is True
+    assert metadata["explicit_pairwise_rows_materialized"] == 0
+
+
+def test_fragment_transition_lazy_separator_fails_closed_on_callback_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.optimization.milp import solver_adapter as adapter_module
+
+    separator = object.__new__(
+        adapter_module._FragmentTransitionLazySeparator
+    )
+    separator.callback_error = ""
+
+    def raise_callback_error(_model: object, _where: int) -> int:
+        raise RuntimeError("diagnostic failed")
+
+    monkeypatch.setattr(
+        separator,
+        "separate_mipsol",
+        raise_callback_error,
+    )
+
+    class FakeCallbackModel:
+        terminated = False
+
+        def terminate(self) -> None:
+            self.terminated = True
+
+    model = FakeCallbackModel()
+
+    assert separator.callback(model, 0) == 0
+    assert model.terminated is True
+    assert separator.callback_error == "RuntimeError: diagnostic failed"
+
+
+@pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
+def test_phase4_uses_lazy_fragment_separator_for_valid_depot_cycle() -> None:
+    context = DispatchContext(
+        service_date="2026-04-10",
+        trips=[
+            Trip(
+                trip_id="t1",
+                route_id="r1",
+                origin="A",
+                destination="B",
+                departure_time="08:00",
+                arrival_time="08:10",
+                distance_km=1.0,
+                allowed_vehicle_types=("ICE",),
+            ),
+            Trip(
+                trip_id="t2",
+                route_id="r1",
+                origin="C",
+                destination="D",
+                departure_time="08:30",
+                arrival_time="08:40",
+                distance_km=1.0,
+                allowed_vehicle_types=("ICE",),
+            ),
+        ],
+        turnaround_rules={},
+        deadhead_rules={
+            ("DEPOT", "A"): DeadheadRule("DEPOT", "A", 5),
+            ("B", "DEPOT"): DeadheadRule("B", "DEPOT", 5),
+            ("DEPOT", "C"): DeadheadRule("DEPOT", "C", 5),
+            ("D", "DEPOT"): DeadheadRule("D", "DEPOT", 5),
+        },
+        vehicle_profiles={"ICE": VehicleProfile(vehicle_type="ICE")},
+    )
+    problem = ProblemBuilder().build_from_dispatch(
+        context,
+        scenario_id="phase4-valid-lazy-reset",
+        vehicle_counts={"ICE": 1},
+        canonical_depot_id="DEPOT",
+        allow_same_day_depot_cycles=True,
+        max_depot_cycles_per_vehicle_per_day=2,
+        max_fragments_per_vehicle_per_day=2,
+        max_start_fragments_per_vehicle=2,
+        max_end_fragments_per_vehicle=2,
+        service_coverage_mode="strict",
+    )
+
+    outcome, plan = GurobiMILPAdapter().solve(
+        problem,
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            phase="phase4_integrated",
+            integrated_actual_cost_objective=True,
+            time_limit_sec=10,
+            mip_gap=0.0,
+            random_seed=42,
+            warm_start=False,
+            allow_postsolve_repair=False,
+            research_run=True,
+        ),
+    )
+
+    assert outcome.has_feasible_incumbent, outcome.solver_status
+    assert plan.unserved_trip_ids == ()
+    assert plan.metadata["integrated_fragment_pairwise_constraint_count"] == 0
+    assert (
+        plan.metadata["integrated_fragment_pairwise_constraint_mode"]
+        == "lazy_integer_incumbent_separation"
+    )
+    separator = plan.metadata[
+        "integrated_fragment_transition_lazy_separator"
+    ]
+    assert separator["enabled"] is True
+    assert separator["mipsol_callback_count"] >= 1
+    assert separator["callback_error"] is None
 
 
 @pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")

@@ -1419,6 +1419,24 @@ def test_solver_settings_payload_reports_gap_ratio_and_percent() -> None:
             "stage1_numeric_diagnostics": {
                 "maximum_constraint_violation": 5.0e-7,
             },
+            "fragment_pairwise_depot_reset_constraint_count": 0,
+            "fragment_pairwise_depot_reset_constraint_mode": (
+                "lazy_integer_incumbent_separation"
+            ),
+            "fragment_transition_lazy_separator": {
+                "enabled": True,
+                "lazy_constraint_count": 3,
+                "callback_error": None,
+            },
+            "integrated_fragment_pairwise_constraint_count": 0,
+            "integrated_fragment_pairwise_constraint_mode": (
+                "lazy_integer_incumbent_separation"
+            ),
+            "integrated_fragment_transition_lazy_separator": {
+                "enabled": True,
+                "lazy_constraint_count": 7,
+                "callback_error": None,
+            },
             "bff_runtime_git_attestation": {
                 "schema_version": "bff_runtime_git_attestation_v1",
                 "runtime_git_sha": "abc123",
@@ -1439,6 +1457,22 @@ def test_solver_settings_payload_reports_gap_ratio_and_percent() -> None:
     assert payload["stage1_numeric_diagnostics"][
         "maximum_constraint_violation"
     ] == pytest.approx(5.0e-7)
+    assert payload["fragment_pairwise_depot_reset_constraint_count"] == 0
+    assert (
+        payload["fragment_pairwise_depot_reset_constraint_mode"]
+        == "lazy_integer_incumbent_separation"
+    )
+    assert payload["fragment_transition_lazy_separator"][
+        "lazy_constraint_count"
+    ] == 3
+    assert payload["integrated_fragment_pairwise_constraint_count"] == 0
+    assert (
+        payload["integrated_fragment_pairwise_constraint_mode"]
+        == "lazy_integer_incumbent_separation"
+    )
+    assert payload["integrated_fragment_transition_lazy_separator"][
+        "lazy_constraint_count"
+    ] == 7
     assert payload["bff_runtime_git_attestation"]["runtime_git_sha"] == (
         "abc123"
     )

@@ -66,6 +66,32 @@ SOC、充電器、PV、BESSを同時に扱うことに加え、正式計算で�
    二重計上せず厳密に証明できる下界へ追加する。
 4. 厳密MILPと、ALNS等の300秒運用候補を別モード・別claimで比較する。
 
+## 2026-08-14 の定式化監査と実装修正
+
+上記比較後に `canonical_solver_result.json` を制約種別まで分解したところ、
+高PV側の 1,598,973 制約のうち 1,243,440 件は、複数 duty fragment 間の
+営業所リセット可否を全車両・全終端便・全始端便の組合せで先に列挙した
+pairwise 制約だった。この制約群だけで全制約の約77.8%を占める。
+
+現行実装では、同じ整数可行領域を保ったまま、この全件列挙を Gurobi の
+lazy constraint callback に置き換えた。整数 incumbent に実際に現れた
+fragment 終端・始端の組だけを canonical
+`fragment_transition_diagnostic` で検査し、不正な組へ従来と同じ
+`end + start <= 1` を追加する。後続辺は削減せず、時刻重複、営業所回送、
+route-band、SOC、充電器、PV/BESS、会計の制約も変更していない。
+
+callback が一度でも失敗した場合は solve を停止して失敗扱いにする。
+また、Gurobi が同じ不正 incumbent を複数回提示する場合があることを
+小規模実験で確認したため、同じ lazy row も違反のたびに再送する。
+監査成果物には、一括生成行数、分離モード、MIPSOL 回数、検査組数、
+ユニーク lazy cut 数、送信回数、callback error を別々に保存する。
+
+これは厳密性を落として数百秒に見せる変更ではなく、冗長な root model
+行を branch-and-cut へ移す定式化改善である。ただし、264便高PVケースで
+実際に何秒短縮し、1% gapへ到達するかは、clean frozen commit からの fresh
+Prepare と再実行でのみ判定する。旧 `f46f1e8` 結果を修正後コードの性能
+証拠として再利用しない。
+
 ## 研究上の表示ルール
 
 - `数百秒で可行解` と `数百秒で1%以内を証明` を同一視しない。
