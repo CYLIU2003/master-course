@@ -34,6 +34,14 @@ budget; v6 consequently reserves 32 path-changing evaluations. Research
 release remains **BLOCKED** until a fresh run proves the effect and completes
 the formal Rolling/pair gates.
 
+The clean-SHA 128-candidate measurement subsequently reached 31 BEVs/1 ICE
+bus at 649,936.120270 JPY, but its cost gap was still 1.528784%. A separate
+minimum-ICE-fuel run found 35.884956 L, yet the old multi-objective API path
+did not persist the primary best bound. Neither result proves that one ICE bus
+or that fuel quantity is unavoidable. The policy solver now uses sequential
+scalar stages and stops before secondary cost unless the fuel optimum is
+certified. A fresh run is required; research release remains **BLOCKED**.
+
 ## 2026-08-15 formal `79e61ae` pair: low PV certified, high PV still blocked
 
 The controlled pair was executed through fresh Prepare and the normal

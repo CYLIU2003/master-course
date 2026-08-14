@@ -7866,6 +7866,10 @@ class GurobiMILPAdapter:
                 "research_lexicographic_v1 cannot be combined with a "
                 "powertrain-preference objective"
             )
+        sequential_lexicographic_objective = bool(
+            research_lexicographic_objective
+            or integrated_ev_utilization_mode != "disabled"
+        )
         actual_cost_upper_bound_jpy = getattr(
             config,
             "integrated_actual_cost_upper_bound_jpy",
@@ -7893,24 +7897,13 @@ class GurobiMILPAdapter:
             coverage_objective = gp.quicksum(unserved[trip.trip_id] for trip in problem.trips)
             model.ModelSense = GRB.MINIMIZE
             if integrated_ev_utilization_mode != "disabled":
-                model.setObjectiveN(
-                    coverage_objective,
-                    index=0,
-                    priority=3,
-                    name="coverage",
-                )
-                model.setObjectiveN(
-                    ice_fuel_l_objective,
-                    index=1,
-                    priority=2,
-                    name="primary_ice_fuel_l",
-                )
-                model.setObjectiveN(
-                    objective,
-                    index=2,
-                    priority=1,
-                    name="secondary_canonical_cost",
-                )
+                # Install only the first scalar objective here.  The policy
+                # hierarchy is solved explicitly below so a time-limit run
+                # retains the incumbent and best bound for every completed
+                # level.  Gurobi's setObjectiveN interface does not expose a
+                # reliable per-objective proof bound after an interrupted
+                # multi-objective solve.
+                model.setObjective(coverage_objective, GRB.MINIMIZE)
             else:
                 model.setObjectiveN(
                     coverage_objective,
@@ -7926,18 +7919,7 @@ class GurobiMILPAdapter:
                 )
         elif integrated_ev_utilization_mode != "disabled":
             model.ModelSense = GRB.MINIMIZE
-            model.setObjectiveN(
-                ice_fuel_l_objective,
-                index=0,
-                priority=2,
-                name="primary_ice_fuel_l",
-            )
-            model.setObjectiveN(
-                objective,
-                index=1,
-                priority=1,
-                name="secondary_canonical_cost",
-            )
+            model.setObjective(ice_fuel_l_objective, GRB.MINIMIZE)
         else:
             model.setObjective(objective, GRB.MINIMIZE)
 
@@ -8373,6 +8355,26 @@ class GurobiMILPAdapter:
             )
             return integer_lower_bound >= integer_incumbent
 
+        def _continuous_stage_is_exact(
+            incumbent_value: float,
+            best_bound_value: Optional[float],
+        ) -> bool:
+            if model.Status == GRB.OPTIMAL:
+                return True
+            if best_bound_value is None or not math.isfinite(
+                float(best_bound_value)
+            ):
+                return False
+            tolerance = max(
+                1.0e-7,
+                integrated_feasibility_tol
+                * max(abs(float(incumbent_value)), 1.0),
+            )
+            return (
+                float(incumbent_value) - float(best_bound_value)
+                <= tolerance
+            )
+
         if research_lexicographic_objective:
             lexicographic_sequence_can_continue = True
 
@@ -8709,6 +8711,134 @@ class GurobiMILPAdapter:
                         "certificate": "total_time_budget_exhausted",
                     }
                 )
+        elif integrated_ev_utilization_mode != "disabled":
+            # Solve the policy hierarchy as explicit scalar stages.  This is
+            # intentionally separate from the research cost objective: the
+            # primary quantity is liters of ICE fuel, and canonical cost is
+            # optimized only after the primary optimum is certified and
+            # fixed.  An interrupted primary stage therefore remains an
+            # honest fuel incumbent/bound pair instead of an opaque
+            # multi-objective status with no reusable certificate.
+            lexicographic_sequence_can_continue = True
+            if allow_partial_service:
+                coverage_objective = gp.quicksum(
+                    unserved[trip.trip_id] for trip in problem.trips
+                )
+                if _run_integrated_scalar_stage(
+                    "policy_coverage",
+                    coverage_objective,
+                    require_exact=True,
+                ):
+                    coverage_value = float(coverage_objective.getValue())
+                    coverage_bound = self._model_bound(model)
+                    coverage_certified = _integer_stage_is_exact(
+                        coverage_value,
+                        coverage_bound,
+                    )
+                    if coverage_certified:
+                        lexicographic_completed_objectives.append("coverage")
+                        if _has_tiebreak_time_budget():
+                            _carry_integrated_incumbent_as_start()
+                            model.addConstr(
+                                coverage_objective
+                                == int(round(coverage_value)),
+                                name="policy_optimal_unserved_count",
+                            )
+                        else:
+                            lexicographic_sequence_can_continue = False
+                    else:
+                        lexicographic_sequence_can_continue = False
+                else:
+                    lexicographic_sequence_can_continue = False
+            else:
+                lexicographic_completed_objectives.append("coverage_strict")
+
+            if lexicographic_sequence_can_continue and _run_integrated_scalar_stage(
+                "policy_minimum_ice_fuel_l",
+                ice_fuel_l_objective,
+                require_exact=True,
+            ):
+                lexicographic_primary_value = float(
+                    ice_fuel_l_objective.getValue()
+                )
+                lexicographic_primary_bound = self._model_bound(model)
+                lexicographic_primary_certified = _continuous_stage_is_exact(
+                    lexicographic_primary_value,
+                    lexicographic_primary_bound,
+                )
+                if lexicographic_primary_certified:
+                    lexicographic_primary_certificate = (
+                        "gurobi_continuous_objective_bound_certificate"
+                    )
+                    integrated_search_telemetry[-1]["certificate"] = (
+                        lexicographic_primary_certificate
+                    )
+                    lexicographic_completed_objectives.append(
+                        "minimum_ice_fuel_l"
+                    )
+                    if _has_tiebreak_time_budget():
+                        _carry_integrated_incumbent_as_start()
+                        fuel_fix_tolerance = max(
+                            1.0e-7,
+                            integrated_feasibility_tol
+                            * max(abs(lexicographic_primary_value), 1.0),
+                        )
+                        model.addConstr(
+                            ice_fuel_l_objective
+                            <= lexicographic_primary_value
+                            + fuel_fix_tolerance,
+                            name="policy_optimal_ice_fuel_upper",
+                        )
+                        model.addConstr(
+                            ice_fuel_l_objective
+                            >= lexicographic_primary_value
+                            - fuel_fix_tolerance,
+                            name="policy_optimal_ice_fuel_lower",
+                        )
+                        if _run_integrated_scalar_stage(
+                            "policy_secondary_canonical_operating_cost",
+                            objective,
+                            require_exact=False,
+                        ):
+                            lexicographic_cost_status = status_map.get(
+                                model.Status, f"status_{model.Status}"
+                            )
+                            lexicographic_cost_objective = float(
+                                objective.getValue()
+                            )
+                            lexicographic_cost_best_bound = self._model_bound(
+                                model
+                            )
+                            lexicographic_cost_raw_gap = self._model_gap(model)
+                            lexicographic_completed_objectives.append(
+                                "canonical_operating_cost"
+                            )
+                else:
+                    lexicographic_primary_certificate = (
+                        "primary_ice_fuel_not_certified_before_time_limit"
+                    )
+                    integrated_search_telemetry[-1]["certificate"] = (
+                        lexicographic_primary_certificate
+                    )
+
+            if not integrated_search_telemetry:
+                integrated_search_telemetry.append(
+                    {
+                        "phase": "policy_not_started",
+                        "search_profile": str(
+                            integrated_search_controls["profile"]
+                        ),
+                        "time_limit_sec": 0.0,
+                        "wall_time_sec": 0.0,
+                        "solver_status": "not_run",
+                        "solution_count": 0,
+                        "objective_value": None,
+                        "best_bound": None,
+                        "mip_gap_ratio": None,
+                        "nodes_explored": 0,
+                        "certificate": "total_time_budget_exhausted",
+                    }
+                )
         else:
             if (
                 verified_integrated_start
@@ -8827,10 +8957,18 @@ class GurobiMILPAdapter:
             "initial_num_bin_vars": int(pre_stats.get("num_binary_vars", 0) or 0),
             "initial_num_int_vars": int(pre_stats.get("num_integer_vars", 0) or 0),
         }
-        if research_lexicographic_objective:
+        if sequential_lexicographic_objective:
             best_bound = lexicographic_cost_best_bound
             final_gap = lexicographic_cost_raw_gap
-            incumbent_objective = lexicographic_cost_objective
+            incumbent_objective = (
+                lexicographic_cost_objective
+                if lexicographic_cost_objective is not None
+                else (
+                    float(objective.getValue())
+                    if has_feasible_incumbent
+                    else None
+                )
+            )
         else:
             best_bound = self._model_bound(model)
             final_gap = (
@@ -8843,16 +8981,24 @@ class GurobiMILPAdapter:
         certified_gap = final_gap
         certified_gap_semantics = (
             (
-                "sequential_lexicographic_canonical_cost_obj_bound_and_"
-                "mip_gap_after_exact_vehicle_day_fix"
+                (
+                    "sequential_lexicographic_canonical_cost_obj_bound_and_"
+                    "mip_gap_after_exact_vehicle_day_fix"
+                )
                 if research_lexicographic_objective
-                else "gurobi_raw_obj_bound_and_mip_gap"
+                else (
+                    "sequential_policy_canonical_cost_obj_bound_and_mip_gap_"
+                    "after_exact_minimum_ice_fuel_fix"
+                    if lexicographic_primary_certified
+                    and lexicographic_cost_objective is not None
+                    else ""
+                )
             )
             if (
                 has_feasible_incumbent
                 and incumbent_objective is not None
                 and (
-                    not research_lexicographic_objective
+                    not sequential_lexicographic_objective
                     or lexicographic_primary_certified
                 )
             )
@@ -8862,7 +9008,7 @@ class GurobiMILPAdapter:
             has_feasible_incumbent
             and incumbent_objective is not None
             and (
-                not research_lexicographic_objective
+                not sequential_lexicographic_objective
                 or lexicographic_primary_certified
             )
             and not integrated_analytical_objective_floor_blockers
@@ -8917,8 +9063,10 @@ class GurobiMILPAdapter:
                     )
                     if research_lexicographic_objective
                     else (
-                        "maximum_of_gurobi_raw_obj_bound_and_independent_"
-                        "integer_valid_analytical_objective_lower_bound"
+                        "sequential_policy_exact_minimum_ice_fuel_then_"
+                        "maximum_of_canonical_cost_gurobi_bound_and_"
+                        "independent_integer_valid_analytical_cost_lower_"
+                        "bound"
                     )
                 )
         nodes_explored = None
@@ -9525,18 +9673,23 @@ class GurobiMILPAdapter:
                 "status": solver_status,
                 "objective_value": (
                     float(objective.getValue())
-                    if research_lexicographic_objective
+                    if sequential_lexicographic_objective
                     else float(model.ObjVal)
                 ),
                 "raw_solver_primary_objective_value": (
                     lexicographic_primary_value
-                    if research_lexicographic_objective
+                    if sequential_lexicographic_objective
                     else float(model.ObjVal)
                 ),
                 "objective_value_semantics": (
                     "canonical_operating_cost_after_exact_vehicle_day_fix"
                     if research_lexicographic_objective
-                    else "configured_solver_objective"
+                    else (
+                        "canonical_operating_cost_kpi_after_minimum_ice_fuel_"
+                        "policy_search"
+                        if integrated_ev_utilization_mode != "disabled"
+                        else "configured_solver_objective"
+                    )
                 ),
                 "assignment_energy_coupling_mode": (
                     "phase4_integrated_slot_energy_recourse"
@@ -9551,7 +9704,15 @@ class GurobiMILPAdapter:
                         "charge_session_count",
                     ]
                     if research_lexicographic_objective
-                    else ["configured_objective"]
+                    else (
+                        [
+                            "coverage_if_partial",
+                            "minimum_ice_fuel_l",
+                            "canonical_operating_cost_if_primary_certified",
+                        ]
+                        if integrated_ev_utilization_mode != "disabled"
+                        else ["configured_objective"]
+                    )
                 ),
                 "co2_emissions_cap_kg": co2_emissions_cap_kg,
                 "co2_epsilon_constraint_enabled": (
@@ -9583,7 +9744,7 @@ class GurobiMILPAdapter:
                 "integrated_search_profile": {
                     "schema_version": (
                         "phase4_integrated_search_profile_v3"
-                        if research_lexicographic_objective
+                        if sequential_lexicographic_objective
                         else "phase4_integrated_search_profile_v2"
                     ),
                     "verified_feasible_start": verified_integrated_start,
@@ -9613,7 +9774,7 @@ class GurobiMILPAdapter:
                             "weather_neutral_sequential_lexicographic_scalar_"
                             "solves_with_one_shared_wall_clock_budget"
                         )
-                        if research_lexicographic_objective
+                        if sequential_lexicographic_objective
                         else (
                             "weather_neutral_uninterrupted_integrated_branch_"
                             "and_bound_search"
@@ -9622,7 +9783,7 @@ class GurobiMILPAdapter:
                 },
                 "integrated_lexicographic_solve_mode": (
                     "sequential_scalar_certification_v1"
-                    if research_lexicographic_objective
+                    if sequential_lexicographic_objective
                     else "not_applicable"
                 ),
                 "integrated_lexicographic_primary_value": (

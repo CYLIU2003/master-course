@@ -2571,3 +2571,49 @@ def test_phase4_ev_utilization_enforces_canonical_cost_cap() -> None:
         "integrated_actual_cost_upper_bound_verified"
     ] is True
     assert result.solver_metadata["integrated_primary_ice_fuel_l"] >= 0.0
+    assert result.solver_metadata["integrated_lexicographic_solve_mode"] == (
+        "sequential_scalar_certification_v1"
+    )
+    assert result.solver_metadata[
+        "integrated_lexicographic_primary_value"
+    ] == pytest.approx(
+        result.solver_metadata["integrated_primary_ice_fuel_l"]
+    )
+    assert result.solver_metadata[
+        "integrated_lexicographic_primary_best_bound"
+    ] is not None
+    assert result.solver_metadata[
+        "integrated_lexicographic_primary_certified"
+    ] is True
+    assert "minimum_ice_fuel_l" in result.solver_metadata[
+        "integrated_lexicographic_completed_objectives"
+    ]
+    assert result.solver_metadata[
+        "integrated_lexicographic_primary_certificate"
+    ] == "gurobi_continuous_objective_bound_certificate"
+    policy_primary_stage = next(
+        stage
+        for stage in result.solver_metadata["integrated_search_profile"][
+            "phases"
+        ]
+        if stage["phase"] == "policy_minimum_ice_fuel_l"
+    )
+    assert policy_primary_stage["best_bound"] is not None
+    assert policy_primary_stage["certificate"] == (
+        "gurobi_continuous_objective_bound_certificate"
+    )
+    assert result.solver_metadata[
+        "integrated_lexicographic_cost_status"
+    ] == "optimal"
+    assert result.solver_metadata[
+        "integrated_lexicographic_cost_objective_jpy"
+    ] is not None
+    assert "canonical_operating_cost" in result.solver_metadata[
+        "integrated_lexicographic_completed_objectives"
+    ]
+    assert any(
+        stage["phase"] == "policy_secondary_canonical_operating_cost"
+        for stage in result.solver_metadata["integrated_search_profile"][
+            "phases"
+        ]
+    )

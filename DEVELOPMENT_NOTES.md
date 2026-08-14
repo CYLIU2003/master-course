@@ -45,6 +45,26 @@
   ranking, and remains wall-clock bounded. This is a generic search-budget
   correction applied identically to both weather cases, not a BEV count
   constraint or weather-specific setting.
+- The clean-SHA 128-candidate rerun at `f2f800e` evaluated 94 candidates,
+  found a validated 31-BEV/1-ICE incumbent at 649,936.120270 JPY, served
+  248/16 trips by powertrain, and passed physical validation in 606.804350
+  seconds of Phase 4 wall time. Its bound remained 640,000 JPY and the gap was
+  1.528784%, so the 1% cost certificate is still blocked. This establishes
+  31/1 feasibility but not 32/0 infeasibility or global cost optimality.
+- A separate clean-SHA minimum-ICE-fuel policy diagnostic returned the same
+  31/1 composition with 35.884956 L ICE fuel and 649,936.120270 JPY canonical
+  cost. It did not export a primary best bound, because the former
+  `setObjectiveN` path exposed only an overall time-limit state after the
+  interrupted multi-objective solve. The 35.884956 L value is therefore an
+  incumbent, not a lower-bound certificate.
+- Raised and fixed that P1 evidence defect. The EV-utilization hierarchy is
+  now executed as explicit scalar stages under the same shared wall clock:
+  coverage when partial service is permitted, minimum ICE fuel, and canonical
+  cost only after the fuel optimum is certified and fixed within numeric
+  tolerance. Every stage records status, incumbent, best bound, gap, wall
+  time and certificate. An unproven fuel stage stops the hierarchy and leaves
+  cost-bound fields empty. The unconstrained cost-minimization formulation and
+  high/low-PV comparison objective are unchanged.
 
 ## 2026-08-15: literature-driven Phase 4 seed restart and budget repair
 

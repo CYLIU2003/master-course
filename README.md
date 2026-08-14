@@ -29,6 +29,18 @@
   candidate ceiling is raised to 128. Under v6 this also reserves 32 candidate
   slots for path-changing search. The failed 64-candidate rerun remains
   diagnostic evidence and is not hidden or selected as the reported result.
+- With the 128-candidate ceiling, a third clean-SHA 600-second diagnostic
+  reached 31 BEVs/1 ICE bus and 248/16 trips at 649,936.120 JPY. This proves
+  31/1 feasibility, but the 640,000 JPY cost lower bound still leaves a
+  1.528784% gap. A separate minimum-ICE-fuel run found a 35.884956 L incumbent
+  but exported no primary best bound under the previous Gurobi multi-objective
+  call, so it could not prove that fuel was unavoidable.
+- The EV-utilization policy path now uses explicit sequential scalar solves:
+  minimize ICE fuel and persist its incumbent/bound; only if that primary
+  optimum is certified is it fixed before minimizing canonical cost. A
+  time-limit primary run no longer masquerades as a completed lexicographic
+  result. The cost-minimization path is unchanged; fresh diagnostic evidence
+  is required before using a fuel certificate to strengthen any cost bound.
 
 ## 2026-08-15 formal pair timing result and reporting-contract repair
 

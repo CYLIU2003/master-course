@@ -105,3 +105,12 @@ to add seconds. The ceiling is raised to 128 inside the same 120-second
 neighborhood allowance, which lets the v6 reserve grow from 16 to 32
 path-changing evaluations. The result must again be measured before any
 performance claim.
+
+The 128-candidate rerun found 31/1 at 649,936.120 JPY in 606.804 seconds, but
+the unchanged 640,000 JPY bound still left 1.528784%. A separate minimum-ICE-
+fuel run found 35.884956 L without a primary best bound, so it could not prove
+an unavoidable positive fuel cost. The implementation now solves that policy
+hierarchy as explicit scalar stages and records each stage's incumbent and
+bound. This follows the same reporting distinction used for the literature:
+finding a strong heuristic/policy incumbent in hundreds of seconds is not the
+same as certifying its primary objective or the unrestricted cost optimum.
