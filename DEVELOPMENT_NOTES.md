@@ -5102,3 +5102,43 @@ locks this distinction in place.
   candidate. Focused suite: `120 passed`; complete repository regression:
   `1453 passed in 134.99s` after the final reserve-boundary adjustment. Clean
   runtime evidence is pending.
+
+# 2026-08-14 - Validated 30-BEV start and suffix-round restart
+
+- Clean commit `fb72281` completed the same frontend/BFF high-PV diagnostic as
+  job `8ef9eb6c-acb5-4455-840f-0ddf68b6c249`. Canonical artifacts are under
+  `output/2026-08-14/run_20260814_2306`; the portable evidence copy is
+  `output/perf_round_robin_seed_fb72281_sunny_600s_20260814/sunny`.
+- HTTP submit-to-terminal time was 630.499 seconds and shared Phase 4 solver
+  wall time was 606.003 seconds. All 264 trips were served, physical status was
+  `VALID`, artifact completeness was `OK`, data-flow validation had 62 `OK`,
+  one intentional `SKIPPED`, and zero failures, and canonical accounting
+  reconciled. Rolling was not run and this was not a formal research run.
+- Pairwise evaluation used the declared round-robin order: 43 single
+  replacements across all 19 ICE duties, with 16 duties having at least one
+  feasible edge. The maximum matching size increased from three to 16. Its
+  complete fixed assignment was separately solved in 0.921 seconds and was
+  feasible at 29 BEVs/3 ICE buses, cost 655,689.265969 JPY.
+- A duty-suffix exchange then produced a validated 30-BEV/2-ICE start with
+  232/32 trips and canonical cost 650,542.999324 JPY. This improves the
+  `9db438a` result by 51,828.886359 JPY and the original 13/19 Phase 3 seed by
+  56,975.153003 JPY. The integrated model retained that start, explored one
+  node, and ended with a 640,000 JPY bound and 1.620646% certified gap. It is
+  materially closer but still not a 1% optimality result.
+- The fixed-duty audit ended after 62.012 seconds with only suffix round one
+  complete. Candidate 46 was already a strict 30/2 improvement, but another 14
+  round-one 30/2 candidates were evaluated while the second configured round
+  never started. Route-band candidate generation used another 41.944 seconds
+  but produced no fully validated repartition candidate.
+- Suffix local search now records the first strict improvement, evaluates at
+  most eight additional candidates for within-composition cost comparison,
+  selects the best validated result in that bounded window, and restarts from
+  the improved anchor when another suffix round is configured. The final round
+  may use the remaining budget. Audit fields record per-round anchor cost,
+  evaluation count, improving count, first-improvement index, restart index and
+  restart count.
+- A regression with two ICE duties, one active BEV and ten distinct unused
+  BEVs proves that round one terminates at the bounded patience and round two
+  reaches the all-BEV validated result. Focused suite: `121 passed`; complete
+  repository regression: `1454 passed in 135.38s` after the final audit-count
+  correction. Clean runtime evidence remains pending.

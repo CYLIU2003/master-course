@@ -1101,3 +1101,161 @@ def test_pairwise_search_reserves_and_validates_cumulative_matching(
     assert set(selected.duties_by_vehicle()).issuperset(
         {"ice-2", "ice-3"}
     )
+
+
+def test_suffix_exchange_restarts_from_first_round_improvement(
+    monkeypatch,
+) -> None:
+    class _FakeFeasibilityChecker:
+        def evaluate(self, _problem, _plan):
+            return SimpleNamespace(feasible=True, errors=())
+
+    class _FakeCostEvaluator:
+        def evaluate(self, _problem, plan):
+            used_bev = sum(
+                duty.vehicle_type == "BEV" for duty in plan.duties
+            )
+            return SimpleNamespace(
+                total_cost=100.0 - 10.0 * used_bev,
+                evaluation_feasible=True,
+            )
+
+    monkeypatch.setattr(
+        solver_adapter_module,
+        "FeasibilityChecker",
+        _FakeFeasibilityChecker,
+    )
+    monkeypatch.setattr(
+        solver_adapter_module,
+        "CostEvaluator",
+        _FakeCostEvaluator,
+    )
+    adapter = GurobiMILPAdapter()
+
+    def _fake_stage2(_problem, _config, plan, **_kwargs):
+        source = str((plan.metadata or {}).get("source") or "")
+        feasible = source == (
+            "phase4_seed_suffix_exchange_unused_bev_activation"
+        )
+        solved = AssignmentPlan(
+            **{
+                **plan.__dict__,
+                "metadata": {
+                    **dict(plan.metadata or {}),
+                    "stage2_feasible": feasible,
+                    "stage2_has_feasible_incumbent": feasible,
+                },
+            }
+        )
+        return (
+            MILPSolverOutcome(
+                solver_status="optimal" if feasible else "infeasible",
+                used_backend="test",
+                supports_exact_milp=True,
+                has_feasible_incumbent=feasible,
+                incumbent_count=1 if feasible else 0,
+            ),
+            solved,
+        )
+
+    monkeypatch.setattr(
+        adapter,
+        "_solve_thesis_stage2_charging_dispatch",
+        _fake_stage2,
+    )
+    trips = (
+        _trip("ice-a-1", "08:00"),
+        _trip("ice-a-2", "11:00"),
+        _trip("ice-b-1", "08:20"),
+        _trip("ice-b-2", "11:20"),
+        _trip("bev-1", "08:40"),
+        _trip("bev-2", "11:40"),
+    )
+    context = DispatchContext(
+        service_date="2025-08-05",
+        trips=list(trips),
+        turnaround_rules={},
+        deadhead_rules={},
+        vehicle_profiles={},
+        default_turnaround_min=10,
+    )
+    seed = AssignmentPlan(
+        duties=(
+            VehicleDuty(
+                duty_id="ice-a-duty",
+                vehicle_type="ICE",
+                legs=(DutyLeg(trips[0]), DutyLeg(trips[1])),
+            ),
+            VehicleDuty(
+                duty_id="ice-b-duty",
+                vehicle_type="ICE",
+                legs=(DutyLeg(trips[2]), DutyLeg(trips[3])),
+            ),
+            VehicleDuty(
+                duty_id="bev-duty",
+                vehicle_type="BEV",
+                legs=(DutyLeg(trips[4]), DutyLeg(trips[5])),
+            ),
+        ),
+        served_trip_ids=tuple(trip.trip_id for trip in trips),
+        metadata={
+            "duty_vehicle_map": {
+                "ice-a-duty": "ice-a",
+                "ice-b-duty": "ice-b",
+                "bev-duty": "bev-used",
+            },
+            "stage1_feasible": True,
+            "stage2_feasible": True,
+            "stage2_has_feasible_incumbent": True,
+        },
+    )
+    problem = CanonicalOptimizationProblem(
+        scenario=OptimizationScenario(
+            scenario_id="suffix-round-restart",
+            timestep_min=60,
+        ),
+        dispatch_context=context,
+        trips=(),
+        vehicles=(
+            ProblemVehicle("ice-a", "ICE", "DEPOT"),
+            ProblemVehicle("ice-b", "ICE", "DEPOT"),
+            ProblemVehicle("bev-used", "BEV", "DEPOT"),
+            *tuple(
+                ProblemVehicle(
+                    f"bev-unused-{index}",
+                    "BEV",
+                    "DEPOT",
+                    initial_soc=0.3 + index * 0.01,
+                )
+                for index in range(10)
+            ),
+        ),
+    )
+
+    selected, audit = (
+        adapter.improve_phase4_seed_with_unused_bev_neighborhood(
+            problem,
+            OptimizationConfig(
+                phase4_phase3_seed_unused_bev_neighborhood_enabled=True,
+                phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec=30,
+                phase4_phase3_seed_unused_bev_neighborhood_per_solve_sec=1,
+                phase4_phase3_seed_unused_bev_neighborhood_max_evaluations=50,
+                phase4_phase3_seed_powertrain_duty_swap_rounds=2,
+                phase4_phase3_seed_unused_bev_identity_exchange_rounds=0,
+            ),
+            seed,
+        )
+    )
+
+    assert audit["suffix_exchange_restart_patience_evaluations"] == 8
+    assert audit["suffix_exchange_round_restart_count"] == 1
+    assert audit["completed_duty_suffix_exchange_activation_rounds"] == 2
+    assert len(audit["suffix_exchange_round_audits"]) == 2
+    assert audit["suffix_exchange_round_audits"][0][
+        "restarted_from_improved_anchor"
+    ] is True
+    assert audit["selected_used_bev"] == 3
+    assert audit["selected_used_ice"] == 0
+    assert all(
+        duty.vehicle_type == "BEV" for duty in selected.duties
+    )

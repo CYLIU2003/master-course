@@ -72,6 +72,7 @@ ROLLING_REMAINING_DAY_FIXED_ASSIGNMENT = "remaining_day_fixed_assignment"
 _FEEDBACK_GLOBAL_DEADLINE_KEY = "_stage2_feedback_global_deadline_monotonic"
 _FEEDBACK_GLOBAL_STARTED_KEY = "_stage2_feedback_global_started_monotonic"
 _ROUTE_BAND_REPARTITION_FEEDBACK_MAX_ITERATIONS = 1
+_SUFFIX_EXCHANGE_RESTART_PATIENCE_EVALUATIONS = 8
 
 
 def _add_assignment_pattern_no_good_cuts(
@@ -3737,6 +3738,8 @@ class GurobiMILPAdapter:
         suffix_exchange_candidates_generated = 0
         suffix_exchange_candidates_dispatch_feasible = 0
         completed_suffix_exchange_activation_rounds = 0
+        suffix_exchange_round_restart_count = 0
+        suffix_exchange_round_audits: List[Dict[str, Any]] = []
         def _service_distance_km(duties: Sequence[VehicleDuty]) -> float:
             return sum(
                 max(float(leg.trip.distance_km or 0.0), 0.0)
@@ -3980,6 +3983,10 @@ class GurobiMILPAdapter:
                     Mapping[str, str],
                 ]
             ] = []
+            round_evaluation_start_count = len(evaluation_rows)
+            first_improvement_evaluation_index: Optional[int] = None
+            restart_after_evaluation_index: Optional[int] = None
+            round_restarted_early = False
             for (
                 _priority,
                 candidate_plan,
@@ -3998,12 +4005,54 @@ class GurobiMILPAdapter:
                 )
                 if result is not None:
                     round_results.append(result)
+                    if (
+                        float(result[0]) < anchor_cost - 1.0e-6
+                        and first_improvement_evaluation_index is None
+                    ):
+                        first_improvement_evaluation_index = len(
+                            evaluation_rows
+                        )
+                        if round_index < powertrain_duty_swap_round_limit:
+                            restart_after_evaluation_index = (
+                                first_improvement_evaluation_index
+                                + _SUFFIX_EXCHANGE_RESTART_PATIENCE_EVALUATIONS
+                            )
+                if (
+                    restart_after_evaluation_index is not None
+                    and len(evaluation_rows)
+                    >= restart_after_evaluation_index
+                ):
+                    suffix_exchange_round_restart_count += 1
+                    round_restarted_early = True
+                    break
             completed_suffix_exchange_activation_rounds = round_index
             improving_results = [
                 result
                 for result in round_results
                 if float(result[0]) < anchor_cost - 1.0e-6
             ]
+            suffix_exchange_round_audits.append(
+                {
+                    "round_index": round_index,
+                    "anchor_cost_jpy": anchor_cost,
+                    "evaluated_candidate_count": (
+                        len(evaluation_rows) - round_evaluation_start_count
+                    ),
+                    "feasible_candidate_count": len(round_results),
+                    "feasible_improving_candidate_count": len(
+                        improving_results
+                    ),
+                    "first_improvement_evaluation_index": (
+                        first_improvement_evaluation_index
+                    ),
+                    "restart_after_evaluation_index": (
+                        restart_after_evaluation_index
+                    ),
+                    "restarted_from_improved_anchor": bool(
+                        improving_results and round_restarted_early
+                    ),
+                }
+            )
             if not improving_results:
                 break
             best_cost_result = min(
@@ -4363,6 +4412,15 @@ class GurobiMILPAdapter:
                 ),
                 "completed_duty_suffix_exchange_activation_rounds": (
                     completed_suffix_exchange_activation_rounds
+                ),
+                "suffix_exchange_restart_patience_evaluations": (
+                    _SUFFIX_EXCHANGE_RESTART_PATIENCE_EVALUATIONS
+                ),
+                "suffix_exchange_round_restart_count": (
+                    suffix_exchange_round_restart_count
+                ),
+                "suffix_exchange_round_audits": (
+                    suffix_exchange_round_audits
                 ),
                 "completed_identity_exchange_rounds": (
                     completed_exchange_rounds

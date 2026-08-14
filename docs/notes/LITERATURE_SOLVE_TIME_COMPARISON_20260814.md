@@ -253,3 +253,23 @@ combinedが不可行な場合のcumulative fallbackは、最初のsingle edgeを
 timeを先に予約する。最初のprefixだけは既にStage 2・物理・会計を通ったsingle
 edgeの証明を再利用し、2本以上の組合せは必ず新たに解く。この変更も最終MILPの
 可行領域・目的関数を変えない。次のclean再実行までは性能改善未確認である。
+
+## `fb72281` の600秒結果
+
+round-robin修正後のclean診断では、19本全てのICE dutyがpairwise探索対象となり、
+16本で少なくとも1台の未使用BEVへの置換が可行だった。size 16のmaximum
+matchingを固定割当Stage 2で再求解すると0.921秒で可行となり、29 BEV/3 ICE、
+655,689.265969円を得た。さらにsuffix exchangeで30/2、232/32便、
+650,542.999324円へ改善した。
+
+solver wallは606.003秒、HTTP全体は630.499秒である。物理・会計検証は通った。
+一方、下界は640,000円、certified gapは1.620646%であり、1%目標には届かない。
+これは「600秒で大幅に良い可行上界を得た」結果であり、「600秒で1%以内を
+証明した」結果ではない。No06のALNS-SA等と比較する場合も、この区別を維持する。
+
+新しい律速はsuffix local searchのanchor更新である。round 1の最初の候補で既に
+30/2へ改善していたが、同じroundの別ID・別split候補をさらに14件評価して60秒を
+使い、設定済みround 2へ入らなかった。現在は最初のstrict-cost improvement後に
+8件だけ比較し、その範囲の最良可行候補を次roundのanchorにする。これは局所探索
+順序の変更であり、Phase 4厳密モデルの定式化やgap定義は変えない。効果は次の
+clean 600秒runで検証する。

@@ -1813,3 +1813,20 @@ duplicate filter rejected that edge and prevented every larger cumulative
 candidate. All combined candidates still require fresh Stage 2, physical and
 canonical-cost validation. A clean rerun is required before reporting any
 improvement from this ordering fix.
+
+Clean commit `fb72281` validated the ordering fix on the same 600-second sunny
+diagnostic. Pairwise search covered all 19 ICE duties, found feasible edges for
+16, and validated the complete 16-vehicle matching in 0.92 seconds. That start
+used 29 BEVs/3 ICE buses. A validated duty-suffix exchange then reached
+30/2 with 232/32 trips and 650,542.999 JPY. Relative to `9db438a`, this adds
+16 BEVs and 172 BEV trips while reducing cost by 51,828.886 JPY. Physical,
+accounting, and artifact gates passed, but the 1.620646% certified gap still
+misses the declared 1% target.
+
+The audit also exposed that the suffix local search found its first 30/2
+improvement immediately, then spent the remaining fixed-neighborhood time on
+other 30/2 candidates and never started round two. It now keeps a bounded
+eight-evaluation comparison window after the first strict-cost improvement,
+updates the anchor, and continues to the next configured suffix round. This is
+again limited to MIP-start generation; the integrated objective and feasible
+region are unchanged, and a fresh clean run is required.

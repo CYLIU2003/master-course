@@ -2593,3 +2593,22 @@ prevented extensions beyond an already tested single edge. No initial-SOC
 difference is ignored and no inferred multi-vehicle candidate is accepted.
 The 1% gap, formal-run, Rolling and controlled-pair blockers remain until a
 fresh clean-commit run validates this new search order.
+
+Clean commit `fb72281` validated the search order. It covered all 19 ICE duties,
+found feasible single-replacement edges for 16, and separately validated the
+size-16 matching. Subsequent suffix exchange reached 30 BEVs/2 ICE buses,
+232/32 trips and 650,542.999324 JPY. Physical, accounting and artifact gates
+passed. This is a real feasible-start improvement, not an inferred assignment.
+
+Research release remains BLOCKED. The integrated solve retained the 30/2 start
+but ended at a 1.620646% certified gap against the 1% declaration. It was also
+a nonformal day-ahead diagnostic with no Rolling or rain pair. The remaining
+two ICE duties cannot yet be called necessary or optimal.
+
+The current implementation also fixes the next measured seed bottleneck:
+suffix round one found a strict improvement at its first evaluated candidate
+but consumed the rest of the 60-second local-search budget comparing the same
+30/2 composition. A bounded eight-evaluation patience now selects a low-cost
+round-one result and restarts from it in round two. The final integrated model
+is unchanged. Fresh clean evidence is required to determine whether this
+reaches 31/1 or 32/0 and whether the 1% gap gate closes.
