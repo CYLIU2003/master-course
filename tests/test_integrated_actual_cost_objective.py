@@ -32,10 +32,13 @@ from src.optimization.engine import (
     _phase4_seed_composition_search_limits,
     _phase4_seed_inventory_span_truncated,
     _phase4_seed_model_build_overhead_allowance_sec,
+    _phase4_seed_stage2_iis_assignment_guidance,
     actual_cost_objective_reconciles,
 )
 from src.gurobi_runtime import ensure_gurobi
 from src.optimization.milp.solver_adapter import (
+    _add_assignment_pattern_no_good_cuts,
+    _apply_assignment_pattern_branch_priorities,
     _composition_target_continuation_priority_key,
     _composition_target_time_limit_sec,
     GurobiMILPAdapter,
@@ -47,6 +50,185 @@ from src.optimization.milp.solver_adapter import (
     _verified_start_objective_search_bounds,
 )
 from test_post_return_soc_target import _dispatch_context
+
+
+def test_phase4_seed_extracts_only_certified_iis_guidance_patterns() -> None:
+    patterns = _phase4_seed_stage2_iis_assignment_guidance(
+        [
+            {
+                "candidate_hash": "local-candidate",
+                "stage2_solver_status": "infeasible",
+                "iis_hash": "local-iis",
+                "stage2_iis_assignment_cut_type": (
+                    "vehicle_local_exact_assignment_pattern_no_good_cut"
+                ),
+                "stage2_iis_assignment_cut_scope": (
+                    "vehicle_local_exact_assignment_pattern"
+                ),
+                "stage2_iis_assignment_cut_vehicle_ids": ["bev-1"],
+                "vehicle_trip_assignments": [
+                    {"vehicle_id": "bev-1", "trip_id": "trip-1"},
+                    {"vehicle_id": "bev-1", "trip_id": "trip-2"},
+                    {"vehicle_id": "bev-2", "trip_id": "trip-3"},
+                ],
+            },
+            {
+                "candidate_hash": "feasible-candidate",
+                "stage2_solver_status": "optimal",
+                "stage2_iis_assignment_cut_type": (
+                    "full_assignment_no_good_cut"
+                ),
+                "vehicle_trip_assignments": [
+                    {"vehicle_id": "bev-2", "trip_id": "trip-3"},
+                ],
+            },
+        ]
+    )
+
+    assert patterns == (
+        {
+            "assignment_pairs": [
+                ["bev-1", "trip-1"],
+                ["bev-1", "trip-2"],
+            ],
+            "exact_pattern_vehicle_ids": ["bev-1"],
+            "cut_type": (
+                "vehicle_local_exact_assignment_pattern_no_good_cut"
+            ),
+            "cut_scope": "vehicle_local_exact_assignment_pattern",
+            "source_candidate_hash": "local-candidate",
+            "stage2_iis_hash": "local-iis",
+        },
+    )
+
+
+def test_vehicle_local_iis_cut_forbids_only_the_exact_assignment_pattern() -> None:
+    gp, GRB = ensure_gurobi()
+
+    def solve_with_fixed_pattern(
+        fixed_values: dict[tuple[str, str], int],
+    ) -> tuple[int, dict[str, object]]:
+        model = gp.Model("vehicle_local_exact_iis_cut_contract")
+        model.Params.OutputFlag = 0
+        assignment_vars = {
+            ("bev-1", trip_id): model.addVar(
+                vtype=GRB.BINARY,
+                name=f"y_bev_1_{trip_id}",
+            )
+            for trip_id in ("trip-1", "trip-2", "trip-3")
+        }
+        audit = _add_assignment_pattern_no_good_cuts(
+            model=model,
+            gp=gp,
+            assignment_vars=assignment_vars,
+            raw_cuts=(
+                {
+                    "assignment_pairs": (
+                        ("bev-1", "trip-1"),
+                        ("bev-1", "trip-2"),
+                    ),
+                    "exact_pattern_vehicle_ids": ("bev-1",),
+                    "source_candidate_hash": "candidate-a",
+                },
+            ),
+            name_prefix="test_iis_cut",
+        )
+        for pair, value in fixed_values.items():
+            model.addConstr(assignment_vars[pair] == value)
+        model.setObjective(0.0, GRB.MINIMIZE)
+        model.optimize()
+        return int(model.Status), audit
+
+    exact_status, exact_audit = solve_with_fixed_pattern(
+        {
+            ("bev-1", "trip-1"): 1,
+            ("bev-1", "trip-2"): 1,
+            ("bev-1", "trip-3"): 0,
+        }
+    )
+    superset_status, superset_audit = solve_with_fixed_pattern(
+        {
+            ("bev-1", "trip-1"): 1,
+            ("bev-1", "trip-2"): 1,
+            ("bev-1", "trip-3"): 1,
+        }
+    )
+
+    assert exact_status == GRB.INFEASIBLE
+    assert superset_status == GRB.OPTIMAL
+    assert exact_audit == superset_audit
+    assert exact_audit["constraint_count"] == 1
+    assert exact_audit["source_candidate_hashes"] == ("candidate-a",)
+    assert "integer_feasible_set_unchanged" in exact_audit["semantics"]
+
+
+def test_phase4_iis_guidance_is_non_directional_and_keeps_pattern_feasible() -> None:
+    gp, GRB = ensure_gurobi()
+    model = gp.Model("phase4_iis_nondirectional_guidance_contract")
+    model.Params.OutputFlag = 0
+    assignment_vars = {
+        ("bev-1", trip_id): model.addVar(
+            vtype=GRB.BINARY,
+            name=f"y_bev_1_{trip_id}",
+        )
+        for trip_id in ("trip-1", "trip-2", "trip-3")
+    }
+    audit = _apply_assignment_pattern_branch_priorities(
+        assignment_vars=assignment_vars,
+        raw_patterns=(
+            {
+                "assignment_pairs": (
+                    ("bev-1", "trip-1"),
+                    ("bev-1", "trip-2"),
+                ),
+                "exact_pattern_vehicle_ids": ("bev-1",),
+                "source_candidate_hash": "candidate-a",
+            },
+        ),
+    )
+    for pair, value in {
+        ("bev-1", "trip-1"): 1,
+        ("bev-1", "trip-2"): 1,
+        ("bev-1", "trip-3"): 0,
+    }.items():
+        model.addConstr(assignment_vars[pair] == value)
+    model.setObjective(0.0, GRB.MINIMIZE)
+    model.optimize()
+
+    assert model.Status == GRB.OPTIMAL
+    assert assignment_vars[("bev-1", "trip-1")].BranchPriority == 1
+    assert assignment_vars[("bev-1", "trip-2")].BranchPriority == 1
+    assert assignment_vars[("bev-1", "trip-3")].BranchPriority == 0
+    assert audit["pattern_count"] == 1
+    assert audit["promoted_assignment_variable_count"] == 2
+    assert "non_directional_branch_priority" in audit["semantics"]
+
+
+def test_phase4_seed_keeps_full_assignment_cut_conservative() -> None:
+    patterns = _phase4_seed_stage2_iis_assignment_guidance(
+        [
+            {
+                "candidate_hash": "shared-candidate",
+                "stage2_solver_status": "infeasible",
+                "iis_hash": "shared-iis",
+                "stage2_iis_assignment_cut_type": (
+                    "full_assignment_no_good_cut"
+                ),
+                "stage2_iis_assignment_cut_scope": "full_assignment",
+                "stage2_iis_assignment_cut_vehicle_ids": [],
+                "vehicle_trip_assignments": [
+                    {"vehicle_id": "bev-1", "trip_id": "trip-1"},
+                    {"vehicle_id": "ice-1", "trip_id": "trip-2"},
+                ],
+            }
+        ]
+    )
+
+    assert patterns[0]["assignment_pairs"] == [
+        ["bev-1", "trip-1"],
+        ["ice-1", "trip-2"],
+    ]
+    assert patterns[0]["exact_pattern_vehicle_ids"] == []
 
 
 def test_verified_integrated_start_uses_bound_certification_profile() -> None:
@@ -974,6 +1156,50 @@ def _phase4_seed_problem(
             "service_calendar_validation": {"status": "OK"},
         },
     )
+
+
+def test_integrated_phase4_applies_iis_branch_guidance_without_cutting_plan() -> None:
+    base_problem = _phase4_seed_problem("phase4-iis-branch-guidance")
+    problem = replace(
+        base_problem,
+        metadata={
+            **dict(base_problem.metadata or {}),
+            "phase4_seed_stage2_iis_assignment_guidance": (
+                {
+                    "assignment_pairs": (("BEV_001", "t1"),),
+                    "exact_pattern_vehicle_ids": ("BEV_001",),
+                    "source_candidate_hash": "candidate-a",
+                },
+            ),
+        },
+    )
+
+    outcome, plan = GurobiMILPAdapter().solve(
+        problem,
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            phase="phase4_integrated",
+            integrated_actual_cost_objective=True,
+            time_limit_sec=30,
+            mip_gap=0.0,
+            random_seed=42,
+            warm_start=False,
+            allow_postsolve_repair=False,
+            research_run=True,
+        ),
+    )
+
+    assert outcome.has_feasible_incumbent, outcome.solver_status
+    assert plan.served_trip_ids == ("t1",)
+    assert plan.metadata[
+        "integrated_phase3_iis_assignment_guidance_pattern_count"
+    ] == 1
+    assert plan.metadata[
+        "integrated_phase3_iis_assignment_guidance_variable_count"
+    ] == 1
+    assert plan.metadata[
+        "integrated_phase3_iis_assignment_guidance_branch_priority"
+    ] == 1
 
 
 def test_phase4_uses_verified_same_problem_phase3_plan_as_complete_mip_start() -> None:

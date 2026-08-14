@@ -987,6 +987,17 @@ frozen commit and every per-run/pair acceptance gate.
 正本は診断フォルダの`performance_comparison.json/csv/md`です。1%証明と
 新しいcontrolled formal pairは引き続き未完了です。
 
+Phase 3で固定配車のStage 2が`INFEASIBLE`となり、IISが得られた場合、現行
+コードはその割当変数をPhase 4の非方向的branch priorityへ利用します。
+Stage 2とPhase 4は別の数理定式化なので、Stage 2 IISだけからPhase 4の
+hard cutは作りません。変数値のhint、目的関数bias、BEV/ICEの上下限制約も
+追加せず、該当binaryを早く分岐する順序だけをGurobiへ渡します。
+`TIME_LIMIT`やIISのない失敗はguidance対象外です。pattern数・hash、元候補
+hash、対象変数数、priority、意味論は`solver_settings.json`と
+`phase4_iis_assignment_guidance_audit.json`へ出力されます。目的関数と可行
+領域は不変です。264便での時間・gap改善は、clean frozen commitからの
+fresh runが完了するまで未認証です。
+
 ## まず、目的に合う入口を選ぶ
 
 | やりたいこと | 最初に読む・実行するもの |

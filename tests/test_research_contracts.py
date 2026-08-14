@@ -211,6 +211,19 @@ def test_solver_settings_persists_integrated_search_profile() -> None:
             ],
             "integrated_identical_vehicle_group_count": 1,
             "integrated_identical_vehicle_activation_prefix_constraint_count": 1,
+            "integrated_phase3_iis_assignment_guidance_pattern_count": 2,
+            "integrated_phase3_iis_assignment_guidance_pattern_hashes": [
+                "pattern-a",
+                "pattern-b",
+            ],
+            "integrated_phase3_iis_assignment_guidance_source_candidate_hashes": [
+                "candidate-a"
+            ],
+            "integrated_phase3_iis_assignment_guidance_variable_count": 12,
+            "integrated_phase3_iis_assignment_guidance_branch_priority": 1,
+            "integrated_phase3_iis_assignment_guidance_semantics": (
+                "non_directional_branch_priority"
+            ),
         },
     )
 
@@ -243,6 +256,21 @@ def test_solver_settings_persists_integrated_search_profile() -> None:
     assert payload[
         "integrated_identical_vehicle_activation_prefix_constraint_count"
     ] == 1
+    assert payload[
+        "integrated_phase3_iis_assignment_guidance_pattern_count"
+    ] == 2
+    assert payload[
+        "integrated_phase3_iis_assignment_guidance_pattern_hashes"
+    ] == [
+        "pattern-a",
+        "pattern-b",
+    ]
+    assert payload[
+        "integrated_phase3_iis_assignment_guidance_source_candidate_hashes"
+    ] == ["candidate-a"]
+    assert payload[
+        "integrated_phase3_iis_assignment_guidance_variable_count"
+    ] == 12
 
 
 def test_solver_settings_persists_phase4_seed_and_total_time_budget() -> None:
@@ -263,6 +291,14 @@ def test_solver_settings_persists_phase4_seed_and_total_time_budget() -> None:
                     "candidate_priority_cost_ascending_then_candidate_hash"
                 ),
                 "seed_stage1_stage2_candidate_evaluation_initial_budget_sec": 25.0,
+                "seed_stage2_iis_assignment_guidance_pattern_count": 3,
+                "seed_stage2_iis_assignment_guidance_source_candidate_hashes": [
+                    "candidate-a",
+                    "candidate-b",
+                ],
+                "seed_stage2_iis_assignment_guidance_semantics": (
+                    "non_directional_branch_priority"
+                ),
                 "seed_cost_ranked_composition_budget_enabled": True,
                 "seed_cost_ranked_composition_budget_semantics": (
                     "cost_order_changes_search_only"
@@ -301,6 +337,12 @@ def test_solver_settings_persists_phase4_seed_and_total_time_budget() -> None:
     assert payload[
         "phase4_phase3_seed_candidate_evaluation_initial_budget_sec"
     ] == pytest.approx(25.0)
+    assert payload[
+        "phase4_phase3_seed_stage2_iis_assignment_guidance_pattern_count"
+    ] == 3
+    assert payload[
+        "phase4_phase3_seed_stage2_iis_assignment_guidance_source_candidate_hashes"
+    ] == ["candidate-a", "candidate-b"]
     assert payload[
         "phase4_phase3_seed_cost_ranked_composition_budget_enabled"
     ] is True

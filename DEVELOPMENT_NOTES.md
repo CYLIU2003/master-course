@@ -4681,3 +4681,48 @@ locks this distinction in place.
   the valid high-PV lower bound or replace the monolithic vehicle-indexed
   master with a certified path/column decomposition; research gates will not
   be relaxed.
+
+# 2026-08-14 - Use Phase-3 Stage-2 IIS as non-directional Phase-4 guidance
+
+- Re-read the clean `885bacb` 600-second high-PV diagnostic. Phase 3 did not
+  omit the all-BEV composition: candidate `32 BEV / 0 ICE` was evaluated first
+  and Stage 2 proved it infeasible in 1.545 seconds. The `31/1` through `28/4`
+  candidates were also Stage-2 infeasible; `27/5` was the first feasible seed.
+  Integrated Phase 4 later found a better `31/1` incumbent, so those fixed
+  assignment failures do not prove an infeasible composition.
+- The all-BEV candidate IIS contained 63 constraints and one variable bound.
+  Its named constraints and optimistic path-energy audit isolated a
+  vehicle-local SOC/charging/terminal-SOC conflict, including one vehicle with
+  a 111.286315 kWh optimistic terminal shortfall. The historical piecewise
+  charge rows appeared as opaque `R####` names, which prevented the existing
+  scope classifier from safely treating the IIS as vehicle-local.
+- Every piecewise charge/session constraint now has a stable semantic name.
+  The IIS classifier recognizes vehicle-local SOC, charge power, charge-on and
+  piecewise variable bounds. Shared charger, depot, grid, unknown constraints,
+  or unknown bounds remain explicitly classified as shared/unknown evidence.
+- Phase-3 candidate evaluation now exports the cut type, scope, implicated
+  vehicle IDs and classification reason. The Phase-4 seed handoff discards
+  time-limit/no-IIS rows and deduplicates certified Stage-2 patterns.
+- MIT review found a P1 correctness defect in the first draft: Phase 3 Stage 2
+  and integrated Phase 4 are different mathematical formulations. A Stage-2
+  IIS cannot, without an integrated fixed-dispatch infeasibility proof, remove
+  a Phase-4 assignment. The draft hard-cut transfer was therefore deleted
+  before commit.
+- The final implementation sets only `BranchPriority=1` on assignment binaries
+  implicated by certified Stage-2 IIS patterns. It sets no `VarHintVal`, no
+  constraint, no BEV/ICE preference and no objective term. The solver chooses
+  both branch direction and final value; Phase-4 objective and feasible set are
+  unchanged.
+- Public evidence now includes pattern count and hashes, source candidate
+  hashes, promoted variable count, priority and semantics in
+  `solver_settings.json`, plus
+  `phase4_iis_assignment_guidance_audit.json`. The audit explicitly records
+  `objective_changed=false`, `feasible_set_changed=false`,
+  `preferred_assignment_value=null` and `phase4_hard_cut_applied=false`.
+- Focused tests cover extraction, rejection of uncertified failures, local vs
+  shared IIS classification, the existing exact Phase-3 feedback cut, and an
+  actual Gurobi counterexample proving that the same Stage-2 pattern remains
+  feasible under Phase-4 guidance. Engine metadata and BFF propagation are
+  covered. The repository regression passes `1422 passed in 130.60s`. A fresh
+  clean-commit 264-trip diagnostic remains pending; no runtime or formal-gap
+  improvement is claimed yet.

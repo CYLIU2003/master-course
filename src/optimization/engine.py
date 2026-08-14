@@ -46,6 +46,111 @@ _PHASE4_SEED_MODEL_BUILD_ALLOWANCE_SEC_PER_TARGET = 10
 _PHASE4_SEED_MODEL_BUILD_ALLOWANCE_SEC_MAX = 600
 
 
+def _phase4_seed_stage2_iis_assignment_guidance(
+    candidate_evaluations: object,
+) -> tuple[dict[str, object], ...]:
+    """Extract Stage-2 IIS patterns for non-directional Phase-4 guidance.
+
+    A Stage-2 IIS certifies its fixed-assignment subproblem, but Stage 2 and
+    integrated Phase 4 are different formulations.  The returned patterns may
+    therefore inform non-directional branch priorities only; they are not
+    Phase-4 feasibility cuts.
+    """
+
+    if not isinstance(candidate_evaluations, (list, tuple)):
+        return ()
+    cuts: list[dict[str, object]] = []
+    seen_patterns: set[tuple[tuple[str, str], tuple[str, ...]]] = set()
+    supported_types = {
+        "vehicle_local_exact_assignment_pattern_no_good_cut",
+        "full_assignment_no_good_cut",
+    }
+    for raw_evaluation in candidate_evaluations:
+        if not isinstance(raw_evaluation, Mapping):
+            continue
+        if str(raw_evaluation.get("stage2_solver_status") or "").lower() != (
+            "infeasible"
+        ):
+            continue
+        cut_type = str(
+            raw_evaluation.get("stage2_iis_assignment_cut_type") or ""
+        )
+        if cut_type not in supported_types:
+            continue
+        assignments = raw_evaluation.get("vehicle_trip_assignments") or ()
+        if not isinstance(assignments, (list, tuple)):
+            continue
+        assignment_pairs = tuple(
+            sorted(
+                {
+                    (
+                        str(row.get("vehicle_id") or ""),
+                        str(row.get("trip_id") or ""),
+                    )
+                    for row in assignments
+                    if isinstance(row, Mapping)
+                    and str(row.get("vehicle_id") or "")
+                    and str(row.get("trip_id") or "")
+                }
+            )
+        )
+        exact_pattern_vehicle_ids = tuple(
+            sorted(
+                {
+                    str(value)
+                    for value in (
+                        raw_evaluation.get(
+                            "stage2_iis_assignment_cut_vehicle_ids"
+                        )
+                        or ()
+                    )
+                    if str(value)
+                }
+            )
+        )
+        if cut_type == "vehicle_local_exact_assignment_pattern_no_good_cut":
+            if not exact_pattern_vehicle_ids:
+                continue
+            exact_vehicle_id_set = set(exact_pattern_vehicle_ids)
+            assignment_pairs = tuple(
+                pair
+                for pair in assignment_pairs
+                if pair[0] in exact_vehicle_id_set
+            )
+            if not assignment_pairs or {
+                vehicle_id for vehicle_id, _trip_id in assignment_pairs
+            } != exact_vehicle_id_set:
+                continue
+        else:
+            exact_pattern_vehicle_ids = ()
+        if not assignment_pairs:
+            continue
+        pattern_key = (assignment_pairs, exact_pattern_vehicle_ids)
+        if pattern_key in seen_patterns:
+            continue
+        seen_patterns.add(pattern_key)
+        cuts.append(
+            {
+                "assignment_pairs": [list(pair) for pair in assignment_pairs],
+                "exact_pattern_vehicle_ids": list(
+                    exact_pattern_vehicle_ids
+                ),
+                "cut_type": cut_type,
+                "cut_scope": str(
+                    raw_evaluation.get("stage2_iis_assignment_cut_scope")
+                    or ""
+                ),
+                "source_candidate_hash": str(
+                    raw_evaluation.get("candidate_hash") or ""
+                ),
+                "stage2_iis_hash": str(
+                    raw_evaluation.get("iis_hash") or ""
+                ),
+            }
+        )
+    return tuple(cuts)
+
+
 def _phase4_seed_inventory_span_truncated(
     available_vehicle_count: int,
 ) -> bool:
@@ -1312,12 +1417,38 @@ class OptimizationEngine:
                 False,
             )
         )
-        acceptance["seed_stage1_stage2_candidate_evaluation"] = list(
+        seed_candidate_evaluations = list(
             seed_metadata.get("stage1_stage2_candidate_evaluation")
             or seed_result.solver_metadata.get(
                 "stage1_stage2_candidate_evaluation"
             )
             or ()
+        )
+        acceptance["seed_stage1_stage2_candidate_evaluation"] = (
+            seed_candidate_evaluations
+        )
+        seed_stage2_iis_assignment_guidance = (
+            _phase4_seed_stage2_iis_assignment_guidance(
+                seed_candidate_evaluations
+            )
+        )
+        acceptance["seed_stage2_iis_assignment_guidance_pattern_count"] = len(
+            seed_stage2_iis_assignment_guidance
+        )
+        acceptance[
+            "seed_stage2_iis_assignment_guidance_source_candidate_hashes"
+        ] = (
+            sorted(
+                {
+                    str(pattern.get("source_candidate_hash") or "")
+                    for pattern in seed_stage2_iis_assignment_guidance
+                    if str(pattern.get("source_candidate_hash") or "")
+                }
+            )
+        )
+        acceptance["seed_stage2_iis_assignment_guidance_semantics"] = (
+            "stage2_iis_patterns_are_non_directional_phase4_branch_"
+            "priorities_only_not_phase4_feasibility_cuts"
         )
         acceptance[
             "seed_stage1_stage2_candidate_evaluation_order"
@@ -1389,6 +1520,9 @@ class OptimizationEngine:
                 metadata={
                     **dict(problem.metadata or {}),
                     "phase4_phase3_seed_audit": acceptance,
+                    "phase4_seed_stage2_iis_assignment_guidance": (
+                        seed_stage2_iis_assignment_guidance
+                    ),
                 },
             )
 
@@ -1413,6 +1547,9 @@ class OptimizationEngine:
             metadata={
                 **dict(problem.metadata or {}),
                 "phase4_phase3_seed_audit": acceptance,
+                "phase4_seed_stage2_iis_assignment_guidance": (
+                    seed_stage2_iis_assignment_guidance
+                ),
             },
         )
 

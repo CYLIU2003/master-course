@@ -55,6 +55,26 @@ def test_vehicle_local_iis_uses_exact_vehicle_assignment_pattern_cut() -> None:
     }
 
 
+def test_vehicle_local_piecewise_iis_and_soc_bound_stay_local() -> None:
+    scope = GurobiMILPAdapter._classify_stage2_iis_assignment_cut_scope(
+        iis_constraint_names=(
+            "soc_initial__bev-1",
+            "stage2_charge_band_select__bev-1__slot_7",
+            "stage2_charge_taper_power_upper__bev-1__slot_7",
+            "terminal_soc__bev-1__target",
+        ),
+        iis_variable_bound_names=("soc_bev-1_7",),
+        assigned_vehicle_ids=("bev-1", "bev-2"),
+    )
+
+    assert scope == {
+        "cut_type": "vehicle_local_exact_assignment_pattern_no_good_cut",
+        "cut_scope": "vehicle_local_exact_assignment_pattern",
+        "vehicle_ids": ("bev-1",),
+        "reason": "iis_contains_only_vehicle_local_constraints_and_bounds",
+    }
+
+
 @pytest.mark.parametrize(
     ("constraint_names", "variable_bound_names", "expected_reason"),
     (
@@ -65,8 +85,8 @@ def test_vehicle_local_iis_uses_exact_vehicle_assignment_pattern_cut() -> None:
         ),
         (
             ("soc_initial__bev-1", "terminal_soc__bev-1__target"),
-            ("soc_bev-1_7:IISLB",),
-            "iis_contains_variable_bounds",
+            ("shared_grid_import_7",),
+            "iis_contains_shared_or_unknown_variable_bounds",
         ),
         ((), (), "iis_constraint_list_empty"),
     ),

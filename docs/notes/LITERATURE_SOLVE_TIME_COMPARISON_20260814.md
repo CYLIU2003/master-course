@@ -131,6 +131,26 @@ performance_comparison.json`も`runtime_claim.status=NOT_CERTIFIED`としてい�
 したが、旧成果物は書き換えない。修正後の公開artifact契約は次のfresh runで
 再検証する。
 
+## Phase 3 IISをPhase 4の非方向的探索guidanceへ利用する
+
+600秒診断のPhase 3候補を再監査すると、`32 BEV / 0 ICE`は未探索ではなく、
+最初に評価されStage 2が1.545秒で`INFEASIBLE`を証明していた。`31/1`から
+`28/4`も固定割当Stage 2では不可行で、`27/5`が最初の可行seedだった。
+ただし統合Phase 4は別割当の`31/1`可行解を得ているため、これは動力構成の
+不可行証明ではない。
+
+Stage 2と統合Phase 4は別の数理定式化である。したがって、Stage 2 IISを
+そのままPhase 4のhard cutへ変換する案はMITレビューで棄却した。現行コード
+は、IISに含まれた割当binaryへ非方向的`BranchPriority=1`を設定するだけで
+ある。値のhint、BEV/ICE bias、制約、目的項は追加しない。`TIME_LIMIT`、IIS
+欠落、推定エネルギー不足はguidance対象外である。
+
+pattern数・hash、元候補hash、対象変数数、priorityは`solver_settings.json`
+および`phase4_iis_assignment_guidance_audit.json`へ記録される。小規模Gurobi
+反例テストでは、Stage 2で否定された完全一致patternもPhase 4側では可行領域
+に残ることを確認した。264便高PVケースの求解時間とgapへの効果はまだ再計測
+していないため、文献の数百秒結果との性能比較には使用しない。
+
 ## 研究上の表示ルール
 
 - `数百秒で可行解` と `数百秒で1%以内を証明` を同一視しない。

@@ -74,6 +74,34 @@ blocker. The next mathematical target is a stronger valid high-PV lower bound
 or a certified path/column decomposition. A fresh controlled formal pair and
 1% certificate remain required, so research release is **BLOCKED**.
 
+### Phase-3 IIS branch guidance: implemented; runtime evidence pending
+
+The `885bacb` high-PV diagnostic confirms that Phase 3 evaluated the all-BEV
+candidate before mixed compositions. Fixed-assignment Stage 2 proved `32/0`,
+`31/1`, `30/2`, `29/3`, and `28/4` candidates infeasible; `27/5` was the first
+feasible seed. Integrated Phase 4 nevertheless found a feasible `31/1` plan,
+so no composition-level infeasibility claim is permitted.
+
+The all-BEV IIS was vehicle-local but included formerly unnamed piecewise
+charge constraints. Current code gives those rows stable names and classifies
+vehicle-local SOC/charging bounds. MIT review then rejected the draft hard-cut
+transfer: Phase 3 Stage 2 and Phase 4 are different mathematical formulations,
+so Stage-2 infeasibility alone cannot remove a Phase-4 assignment. The final
+implementation uses only non-directional Gurobi branch priorities for the
+implicated assignment binaries. It sets no preferred value, constraint, or
+objective bias. Time limits, missing IIS data, or heuristic shortages never
+generate guidance.
+
+The public artifacts expose pattern count, hashes, source candidate hashes,
+promoted variable count, branch priority and semantics in
+`solver_settings.json` and `phase4_iis_assignment_guidance_audit.json`. A
+real-Gurobi counterexample proves that the formerly disproved Stage-2 pattern
+remains feasible in Phase 4 guidance because no hard cut is added. This is
+code-level evidence only: no current frozen-commit 264-trip run has measured
+its effect. A matched fresh diagnostic and then the controlled formal pair are
+still required. The high-PV 1% optimality and research release remain
+**BLOCKED**.
+
 ## 2026-08-14 vehicle-day-cost sensitivity: execution pending after gate repair
 
 The declared 0 and 20,000 JPY/used-bus-day cases both use

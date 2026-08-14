@@ -74,6 +74,201 @@ _FEEDBACK_GLOBAL_STARTED_KEY = "_stage2_feedback_global_started_monotonic"
 _ROUTE_BAND_REPARTITION_FEEDBACK_MAX_ITERATIONS = 1
 
 
+def _add_assignment_pattern_no_good_cuts(
+    *,
+    model: Any,
+    gp: Any,
+    assignment_vars: Mapping[Tuple[str, str], Any],
+    raw_cuts: Sequence[Any],
+    name_prefix: str,
+) -> Dict[str, Any]:
+    """Add exact IIS-backed assignment-pattern cuts and return an audit.
+
+    A vehicle-local cut includes negative terms for every assignment omitted
+    from the proven-infeasible vehicle pattern.  This forbids only the exact
+    path: adding a trip can change deadhead and charging opportunities and is
+    therefore not cut.  A full-assignment cut has no exact-pattern vehicle IDs
+    and forbids the complete selected assignment only.
+    """
+
+    cut_hashes: List[str] = []
+    source_candidate_hashes: List[str] = []
+    for cut_index, raw_cut in enumerate(raw_cuts):
+        if not isinstance(raw_cut, Mapping):
+            raise ValueError("assignment no-good cut entries must be mappings")
+        raw_pairs = tuple(raw_cut.get("assignment_pairs") or ())
+        cut_pairs = tuple(
+            (str(pair[0]), str(pair[1]))
+            for pair in raw_pairs
+            if isinstance(pair, (list, tuple)) and len(pair) == 2
+        )
+        if len(cut_pairs) != len(raw_pairs) or not cut_pairs:
+            raise ValueError(
+                "Assignment no-good cut must contain non-empty "
+                "(vehicle_id, trip_id) assignment pairs"
+            )
+        if len(set(cut_pairs)) != len(cut_pairs):
+            raise ValueError("Assignment no-good cut contains duplicate pairs")
+        missing_pairs = tuple(
+            pair for pair in cut_pairs if pair not in assignment_vars
+        )
+        if missing_pairs:
+            raise ValueError(
+                "Assignment no-good cut references pairs absent from the "
+                f"current full model: {missing_pairs[:5]}"
+            )
+        exact_pattern_vehicle_ids = tuple(
+            sorted(
+                {
+                    str(vehicle_id)
+                    for vehicle_id in (
+                        raw_cut.get("exact_pattern_vehicle_ids") or ()
+                    )
+                }
+            )
+        )
+        cut_vehicle_ids = {vehicle_id for vehicle_id, _ in cut_pairs}
+        if exact_pattern_vehicle_ids and cut_vehicle_ids != set(
+            exact_pattern_vehicle_ids
+        ):
+            raise ValueError(
+                "Exact-pattern no-good cut vehicle IDs must match the "
+                "included assignment-pair vehicle IDs"
+            )
+        included_pair_set = set(cut_pairs)
+        excluded_pairs = tuple(
+            pair
+            for pair in assignment_vars
+            if pair[0] in exact_pattern_vehicle_ids
+            and pair not in included_pair_set
+        )
+        model.addConstr(
+            gp.quicksum(assignment_vars[pair] for pair in cut_pairs)
+            - gp.quicksum(assignment_vars[pair] for pair in excluded_pairs)
+            <= len(cut_pairs) - 1,
+            name=f"{name_prefix}__{cut_index}",
+        )
+        normalized_payload = {
+            "assignment_pairs": [list(pair) for pair in sorted(cut_pairs)],
+            "exact_pattern_vehicle_ids": list(exact_pattern_vehicle_ids),
+        }
+        cut_hashes.append(
+            hashlib.sha256(
+                json.dumps(
+                    normalized_payload,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest()
+        )
+        source_candidate_hash = str(
+            raw_cut.get("source_candidate_hash") or ""
+        )
+        if source_candidate_hash:
+            source_candidate_hashes.append(source_candidate_hash)
+    return {
+        "constraint_count": len(cut_hashes),
+        "cut_hashes": tuple(cut_hashes),
+        "source_candidate_hashes": tuple(sorted(set(source_candidate_hashes))),
+        "semantics": (
+            "redundant_exact_iis_backed_assignment_pattern_cuts_from_same_"
+            "canonical_problem; objective_and_integer_feasible_set_unchanged"
+        ),
+    }
+
+
+def _apply_assignment_pattern_branch_priorities(
+    *,
+    assignment_vars: Mapping[Tuple[str, str], Any],
+    raw_patterns: Sequence[Any],
+    branch_priority: int = 1,
+) -> Dict[str, Any]:
+    """Promote IIS-implicated assignment variables without directing values.
+
+    Phase 3 Stage 2 and integrated Phase 4 are different formulations, so a
+    Stage-2 IIS is not a valid Phase-4 hard cut by itself.  Branch priorities
+    only ask Gurobi to resolve implicated assignment binaries earlier.  They
+    set neither a preferred value nor a constraint and therefore preserve the
+    Phase-4 objective and feasible set.
+    """
+
+    normalized_priority = max(int(branch_priority), 0)
+    pattern_hashes: List[str] = []
+    source_candidate_hashes: Set[str] = set()
+    promoted_pairs: Set[Tuple[str, str]] = set()
+    for raw_pattern in raw_patterns:
+        if not isinstance(raw_pattern, Mapping):
+            raise ValueError(
+                "assignment branch-priority patterns must be mappings"
+            )
+        raw_pairs = tuple(raw_pattern.get("assignment_pairs") or ())
+        pattern_pairs = tuple(
+            (str(pair[0]), str(pair[1]))
+            for pair in raw_pairs
+            if isinstance(pair, (list, tuple)) and len(pair) == 2
+        )
+        if len(pattern_pairs) != len(raw_pairs) or not pattern_pairs:
+            raise ValueError(
+                "Assignment branch-priority pattern must contain non-empty "
+                "(vehicle_id, trip_id) pairs"
+            )
+        if len(set(pattern_pairs)) != len(pattern_pairs):
+            raise ValueError(
+                "Assignment branch-priority pattern contains duplicate pairs"
+            )
+        missing_pairs = tuple(
+            pair for pair in pattern_pairs if pair not in assignment_vars
+        )
+        if missing_pairs:
+            raise ValueError(
+                "Assignment branch-priority pattern references pairs absent "
+                f"from the current full model: {missing_pairs[:5]}"
+            )
+        normalized_payload = {
+            "assignment_pairs": [
+                list(pair) for pair in sorted(pattern_pairs)
+            ],
+            "exact_pattern_vehicle_ids": sorted(
+                {
+                    str(vehicle_id)
+                    for vehicle_id in (
+                        raw_pattern.get("exact_pattern_vehicle_ids") or ()
+                    )
+                }
+            ),
+        }
+        pattern_hashes.append(
+            hashlib.sha256(
+                json.dumps(
+                    normalized_payload,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest()
+        )
+        promoted_pairs.update(pattern_pairs)
+        source_candidate_hash = str(
+            raw_pattern.get("source_candidate_hash") or ""
+        )
+        if source_candidate_hash:
+            source_candidate_hashes.add(source_candidate_hash)
+
+    for pair in promoted_pairs:
+        assignment_vars[pair].BranchPriority = normalized_priority
+    return {
+        "pattern_count": len(pattern_hashes),
+        "pattern_hashes": tuple(pattern_hashes),
+        "source_candidate_hashes": tuple(sorted(source_candidate_hashes)),
+        "promoted_assignment_variable_count": len(promoted_pairs),
+        "branch_priority": normalized_priority,
+        "semantics": (
+            "non_directional_branch_priority_from_phase3_stage2_iis_patterns;"
+            " no_variable_hint_no_constraint_objective_and_feasible_set_"
+            "unchanged"
+        ),
+    }
+
+
 @dataclass(frozen=True)
 class _RouteBandRepartitionRetryBudget:
     """Wall-clock allocation for one route-band repartition attempt."""
@@ -3888,6 +4083,19 @@ class GurobiMILPAdapter:
         y: Dict[Tuple[str, str], Any] = {}
         for vehicle_id, trip_id in assignment_pairs:
             y[(vehicle_id, trip_id)] = model.addVar(vtype=GRB.BINARY)
+
+        integrated_seed_iis_assignment_guidance = tuple(
+            problem.metadata.get(
+                "phase4_seed_stage2_iis_assignment_guidance"
+            )
+            or ()
+        )
+        integrated_seed_iis_assignment_guidance_audit = (
+            _apply_assignment_pattern_branch_priorities(
+                assignment_vars=y,
+                raw_patterns=integrated_seed_iis_assignment_guidance,
+            )
+        )
 
         x: Dict[Tuple[str, str, str], Any] = {
             (vehicle_id, from_trip_id, to_trip_id): model.addVar(vtype=GRB.BINARY)
@@ -8012,6 +8220,38 @@ class GurobiMILPAdapter:
                     "relevant vehicle fields equal and baseline-active IDs_"
                     "ordered first"
                 ),
+                "integrated_phase3_iis_assignment_guidance_pattern_count": int(
+                    integrated_seed_iis_assignment_guidance_audit[
+                        "pattern_count"
+                    ]
+                ),
+                "integrated_phase3_iis_assignment_guidance_pattern_hashes": tuple(
+                    integrated_seed_iis_assignment_guidance_audit[
+                        "pattern_hashes"
+                    ]
+                ),
+                "integrated_phase3_iis_assignment_guidance_source_candidate_hashes": (
+                    tuple(
+                        integrated_seed_iis_assignment_guidance_audit[
+                            "source_candidate_hashes"
+                        ]
+                    )
+                ),
+                "integrated_phase3_iis_assignment_guidance_variable_count": int(
+                    integrated_seed_iis_assignment_guidance_audit[
+                        "promoted_assignment_variable_count"
+                    ]
+                ),
+                "integrated_phase3_iis_assignment_guidance_branch_priority": int(
+                    integrated_seed_iis_assignment_guidance_audit[
+                        "branch_priority"
+                    ]
+                ),
+                "integrated_phase3_iis_assignment_guidance_semantics": str(
+                    integrated_seed_iis_assignment_guidance_audit[
+                        "semantics"
+                    ]
+                ),
                 "duty_vehicle_map": duty_vehicle_map,
                 "integrated_unmodeled_vehicle_discharge_forbidden": True,
                 "integrated_vehicle_discharge_semantics": (
@@ -9020,61 +9260,16 @@ class GurobiMILPAdapter:
         stage1_feasibility_no_good_cuts = tuple(
             problem.metadata.get("stage1_feasibility_no_good_cuts") or ()
         )
-        stage1_feasibility_no_good_cut_count = 0
-        for cut_index, raw_cut in enumerate(stage1_feasibility_no_good_cuts):
-            if not isinstance(raw_cut, Mapping):
-                raise ValueError(
-                    "stage1_feasibility_no_good_cuts entries must be mappings"
-                )
-            raw_pairs = tuple(raw_cut.get("assignment_pairs") or ())
-            cut_pairs = tuple(
-                (str(pair[0]), str(pair[1]))
-                for pair in raw_pairs
-                if isinstance(pair, (list, tuple)) and len(pair) == 2
-            )
-            if len(cut_pairs) != len(raw_pairs) or not cut_pairs:
-                raise ValueError(
-                    "Stage 1 feasibility no-good cut must contain non-empty "
-                    "(vehicle_id, trip_id) assignment pairs"
-                )
-            missing_pairs = tuple(pair for pair in cut_pairs if pair not in y)
-            if missing_pairs:
-                raise ValueError(
-                    "Stage 1 feasibility no-good cut references assignment "
-                    f"pairs absent from the current full model: {missing_pairs[:5]}"
-                )
-            exact_pattern_vehicle_ids = tuple(
-                sorted(
-                    {
-                        str(vehicle_id)
-                        for vehicle_id in (
-                            raw_cut.get("exact_pattern_vehicle_ids") or ()
-                        )
-                    }
-                )
-            )
-            cut_vehicle_ids = {vehicle_id for vehicle_id, _ in cut_pairs}
-            if exact_pattern_vehicle_ids and cut_vehicle_ids != set(
-                exact_pattern_vehicle_ids
-            ):
-                raise ValueError(
-                    "Exact-pattern Stage 1 no-good cut vehicle IDs must match "
-                    "the included assignment-pair vehicle IDs"
-                )
-            included_pair_set = set(cut_pairs)
-            excluded_pairs = tuple(
-                pair
-                for pair in y
-                if pair[0] in exact_pattern_vehicle_ids
-                and pair not in included_pair_set
-            )
-            stage1.addConstr(
-                gp.quicksum(y[pair] for pair in cut_pairs)
-                - gp.quicksum(y[pair] for pair in excluded_pairs)
-                <= len(cut_pairs) - 1,
-                name=f"stage1_stage2_nogood__{cut_index}",
-            )
-            stage1_feasibility_no_good_cut_count += 1
+        stage1_no_good_cut_audit = _add_assignment_pattern_no_good_cuts(
+            model=stage1,
+            gp=gp,
+            assignment_vars=y,
+            raw_cuts=stage1_feasibility_no_good_cuts,
+            name_prefix="stage1_stage2_nogood",
+        )
+        stage1_feasibility_no_good_cut_count = int(
+            stage1_no_good_cut_audit["constraint_count"]
+        )
 
         for vehicle in problem.vehicles:
             vehicle_id = vehicle.vehicle_id
@@ -14051,6 +14246,33 @@ class GurobiMILPAdapter:
                     )
                 )
             )
+            iis_variable_bound_names = tuple(
+                sorted(
+                    str(name)
+                    for name in (
+                        candidate_plan_metadata.get(
+                            "stage2_iis_variable_bound_names"
+                        )
+                        or ()
+                    )
+                )
+            )
+            iis_assignment_cut_scope = (
+                self._classify_stage2_iis_assignment_cut_scope(
+                    iis_constraint_names=iis_names,
+                    iis_variable_bound_names=iis_variable_bound_names,
+                    assigned_vehicle_ids=tuple(
+                        candidate_final_plan.vehicle_paths()
+                    ),
+                )
+                if iis_names or iis_variable_bound_names
+                else {
+                    "cut_type": "none",
+                    "cut_scope": "none",
+                    "vehicle_ids": (),
+                    "reason": "stage2_iis_not_available",
+                }
+            )
             iis_hash = (
                 hashlib.sha256(
                     json.dumps(
@@ -14144,6 +14366,18 @@ class GurobiMILPAdapter:
                         physical_validation_errors
                     ),
                     "iis_hash": iis_hash,
+                    "stage2_iis_assignment_cut_type": str(
+                        iis_assignment_cut_scope["cut_type"]
+                    ),
+                    "stage2_iis_assignment_cut_scope": str(
+                        iis_assignment_cut_scope["cut_scope"]
+                    ),
+                    "stage2_iis_assignment_cut_vehicle_ids": list(
+                        iis_assignment_cut_scope["vehicle_ids"]
+                    ),
+                    "stage2_iis_assignment_cut_reason": str(
+                        iis_assignment_cut_scope["reason"]
+                    ),
                     "used_bev": used_bev,
                     "used_ice": used_ice,
                     "bev_trips": bev_trips,
@@ -16707,9 +16941,10 @@ class GurobiMILPAdapter:
 
         A vehicle-local IIS proves only that vehicle's *exact* assignment
         pattern infeasible.  It must not cut supersets of that path because an
-        inserted trip can change deadhead structure.  Shared charger, depot,
-        grid, or variable-bound IIS members require the conservative full-plan
-        cut used historically.
+        inserted trip can change deadhead structure.  Vehicle-local SOC,
+        charging, and piecewise-charge variable bounds remain local evidence;
+        shared charger, depot, grid, or unknown IIS members require the
+        conservative full-plan cut used historically.
         """
         names = tuple(str(name) for name in iis_constraint_names if str(name))
         variable_bounds = tuple(
@@ -16726,15 +16961,44 @@ class GurobiMILPAdapter:
             "charge_availability__",
             "charge_power_vehicle__",
         )
+        local_piecewise_prefix = "stage2_charge_"
+        local_variable_prefixes = (
+            "soc_",
+            "c_",
+            "charge_on_",
+            "stage2_charge_",
+        )
 
         def constraint_vehicle_id(name: str) -> Optional[str]:
-            if not name.startswith(local_prefixes):
+            if not (
+                name.startswith(local_prefixes)
+                or name.startswith(local_piecewise_prefix)
+            ):
                 return None
             for vehicle_id in vehicle_ids:
                 if any(
                     name.startswith(f"{prefix}{vehicle_id}__")
                     or name == f"{prefix}{vehicle_id}"
                     for prefix in local_prefixes
+                ) or (
+                    name.startswith(local_piecewise_prefix)
+                    and f"__{vehicle_id}__" in name
+                ):
+                    return vehicle_id
+            return None
+
+        def variable_vehicle_id(name: str) -> Optional[str]:
+            if not name.startswith(local_variable_prefixes):
+                return None
+            for vehicle_id in vehicle_ids:
+                if (
+                    name.startswith(f"soc_{vehicle_id}_")
+                    or name.startswith(f"c_{vehicle_id}_")
+                    or name.startswith(f"charge_on_{vehicle_id}_")
+                    or (
+                        name.startswith(local_piecewise_prefix)
+                        and f"__{vehicle_id}__" in name
+                    )
                 ):
                     return vehicle_id
             return None
@@ -16752,20 +17016,40 @@ class GurobiMILPAdapter:
         all_constraints_vehicle_local = bool(names) and all(
             constraint_vehicle_id(name) is not None for name in names
         )
+        bound_vehicle_ids = tuple(
+            sorted(
+                {
+                    vehicle_id
+                    for name in variable_bounds
+                    for vehicle_id in (variable_vehicle_id(name),)
+                    if vehicle_id is not None
+                }
+            )
+        )
+        all_variable_bounds_vehicle_local = all(
+            variable_vehicle_id(name) is not None for name in variable_bounds
+        )
+        all_implicated_vehicle_ids = tuple(
+            sorted(set(implicated_vehicle_ids).union(bound_vehicle_ids))
+        )
         if (
             all_constraints_vehicle_local
-            and implicated_vehicle_ids
-            and not variable_bounds
+            and all_implicated_vehicle_ids
+            and all_variable_bounds_vehicle_local
         ):
             return {
                 "cut_type": "vehicle_local_exact_assignment_pattern_no_good_cut",
                 "cut_scope": "vehicle_local_exact_assignment_pattern",
-                "vehicle_ids": implicated_vehicle_ids,
-                "reason": "iis_contains_only_vehicle_local_constraints",
+                "vehicle_ids": all_implicated_vehicle_ids,
+                "reason": (
+                    "iis_contains_only_vehicle_local_constraints_and_bounds"
+                    if variable_bounds
+                    else "iis_contains_only_vehicle_local_constraints"
+                ),
             }
 
-        if variable_bounds:
-            reason = "iis_contains_variable_bounds"
+        if variable_bounds and not all_variable_bounds_vehicle_local:
+            reason = "iis_contains_shared_or_unknown_variable_bounds"
         elif not names:
             reason = "iis_constraint_list_empty"
         elif not all_constraints_vehicle_local:
@@ -22809,21 +23093,75 @@ class GurobiMILPAdapter:
                 # shortens a continuous session at the boundary and can turn a
                 # previously feasible remaining-day plan infeasible.
                 if initial_session_active:
-                    model.addConstr(start == 0)
+                    model.addConstr(
+                        start == 0,
+                        name=(
+                            f"{name_prefix}_start_boundary_continuation__"
+                            f"{vehicle_id}__slot_{slot_idx}"
+                        ),
+                    )
                 else:
-                    model.addConstr(start == on_var)
+                    model.addConstr(
+                        start == on_var,
+                        name=(
+                            f"{name_prefix}_start_boundary__{vehicle_id}__"
+                            f"slot_{slot_idx}"
+                        ),
+                    )
             else:
                 previous_on = charge_on_var[(vehicle_id, slot_indices[pos - 1])]
-                model.addConstr(start >= on_var - previous_on)
-                model.addConstr(start <= on_var)
-                model.addConstr(start <= 1 - previous_on)
+                model.addConstr(
+                    start >= on_var - previous_on,
+                    name=(
+                        f"{name_prefix}_start_lower__{vehicle_id}__"
+                        f"slot_{slot_idx}"
+                    ),
+                )
+                model.addConstr(
+                    start <= on_var,
+                    name=(
+                        f"{name_prefix}_start_on_upper__{vehicle_id}__"
+                        f"slot_{slot_idx}"
+                    ),
+                )
+                model.addConstr(
+                    start <= 1 - previous_on,
+                    name=(
+                        f"{name_prefix}_start_previous_upper__{vehicle_id}__"
+                        f"slot_{slot_idx}"
+                    ),
+                )
             if pos == len(slot_indices) - 1:
-                model.addConstr(end == on_var)
+                model.addConstr(
+                    end == on_var,
+                    name=(
+                        f"{name_prefix}_end_boundary__{vehicle_id}__"
+                        f"slot_{slot_idx}"
+                    ),
+                )
             else:
                 next_on = charge_on_var[(vehicle_id, slot_indices[pos + 1])]
-                model.addConstr(end >= on_var - next_on)
-                model.addConstr(end <= on_var)
-                model.addConstr(end <= 1 - next_on)
+                model.addConstr(
+                    end >= on_var - next_on,
+                    name=(
+                        f"{name_prefix}_end_lower__{vehicle_id}__"
+                        f"slot_{slot_idx}"
+                    ),
+                )
+                model.addConstr(
+                    end <= on_var,
+                    name=(
+                        f"{name_prefix}_end_on_upper__{vehicle_id}__"
+                        f"slot_{slot_idx}"
+                    ),
+                )
+                model.addConstr(
+                    end <= 1 - next_on,
+                    name=(
+                        f"{name_prefix}_end_next_upper__{vehicle_id}__"
+                        f"slot_{slot_idx}"
+                    ),
+                )
 
             low_band = model.addVar(
                 vtype=GRB.BINARY,
@@ -22837,8 +23175,20 @@ class GurobiMILPAdapter:
                 vtype=GRB.BINARY,
                 name=f"{name_prefix}_soc_ge90__{vehicle_id}__{slot_idx}",
             )
-            model.addConstr(low_band + middle_band + high_band == on_var)
-            model.addConstr(charge_power_var[key] >= 1.0e-4 * on_var)
+            model.addConstr(
+                low_band + middle_band + high_band == on_var,
+                name=(
+                    f"{name_prefix}_band_select__{vehicle_id}__"
+                    f"slot_{slot_idx}"
+                ),
+            )
+            model.addConstr(
+                charge_power_var[key] >= 1.0e-4 * on_var,
+                name=(
+                    f"{name_prefix}_active_power_lower__{vehicle_id}__"
+                    f"slot_{slot_idx}"
+                ),
+            )
             soc = soc_var[key]
             cap = max(float(capacity_kwh), 1.0)
             band_epsilon_kwh = 1.0e-4
@@ -22846,20 +23196,48 @@ class GurobiMILPAdapter:
                 soc
                 <= 0.80 * cap
                 - band_epsilon_kwh
-                + cap * (1 - low_band)
+                + cap * (1 - low_band),
+                name=(
+                    f"{name_prefix}_soc_low_upper__{vehicle_id}__"
+                    f"slot_{slot_idx}"
+                ),
             )
-            model.addConstr(soc >= 0.80 * cap - cap * (1 - middle_band))
+            model.addConstr(
+                soc >= 0.80 * cap - cap * (1 - middle_band),
+                name=(
+                    f"{name_prefix}_soc_middle_lower__{vehicle_id}__"
+                    f"slot_{slot_idx}"
+                ),
+            )
             model.addConstr(
                 soc
                 <= 0.90 * cap
                 - band_epsilon_kwh
-                + cap * (1 - middle_band)
+                + cap * (1 - middle_band),
+                name=(
+                    f"{name_prefix}_soc_middle_upper__{vehicle_id}__"
+                    f"slot_{slot_idx}"
+                ),
             )
-            model.addConstr(soc >= 0.90 * cap - cap * (1 - high_band))
+            model.addConstr(
+                soc >= 0.90 * cap - cap * (1 - high_band),
+                name=(
+                    f"{name_prefix}_soc_high_lower__{vehicle_id}__"
+                    f"slot_{slot_idx}"
+                ),
+            )
             model.addConstr(
                 charge_power_var[key]
                 <= max(float(charge_max_kw), 0.0)
-                * (low_band + (2.0 / 3.0) * middle_band + (1.0 / 3.0) * high_band)
+                * (
+                    low_band
+                    + (2.0 / 3.0) * middle_band
+                    + (1.0 / 3.0) * high_band
+                ),
+                name=(
+                    f"{name_prefix}_taper_power_upper__{vehicle_id}__"
+                    f"slot_{slot_idx}"
+                ),
             )
             model.addConstr(
                 charge_power_var[key] * timestep_h
@@ -22868,7 +23246,11 @@ class GurobiMILPAdapter:
                     timestep_h * on_var
                     - setup_h * start
                     - teardown_h * end
-                )
+                ),
+                name=(
+                    f"{name_prefix}_session_net_time__{vehicle_id}__"
+                    f"slot_{slot_idx}"
+                ),
             )
 
         if required_slots <= 1:
@@ -22876,14 +23258,24 @@ class GurobiMILPAdapter:
         for pos, slot_idx in enumerate(slot_indices):
             key = (vehicle_id, slot_idx)
             if pos + required_slots > len(slot_indices):
-                model.addConstr(start_vars[key] == 0)
+                model.addConstr(
+                    start_vars[key] == 0,
+                    name=(
+                        f"{name_prefix}_minimum_session_horizon__"
+                        f"{vehicle_id}__slot_{slot_idx}"
+                    ),
+                )
                 continue
             model.addConstr(
                 gp.quicksum(
                     charge_on_var[(vehicle_id, candidate_slot)]
                     for candidate_slot in slot_indices[pos : pos + required_slots]
                 )
-                >= required_slots * start_vars[key]
+                >= required_slots * start_vars[key],
+                name=(
+                    f"{name_prefix}_minimum_session_continuity__"
+                    f"{vehicle_id}__slot_{slot_idx}"
+                ),
             )
 
     def _vehicle_energy_rate_kwh_per_km(

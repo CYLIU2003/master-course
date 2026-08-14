@@ -908,6 +908,38 @@ class MILPOptimizer:
                         "integrated_identical_vehicle_symmetry_semantics"
                     )
                 ),
+                "integrated_phase3_iis_assignment_guidance_pattern_count": (
+                    (plan.metadata or {}).get(
+                        "integrated_phase3_iis_assignment_guidance_pattern_count"
+                    )
+                ),
+                "integrated_phase3_iis_assignment_guidance_pattern_hashes": list(
+                    (plan.metadata or {}).get(
+                        "integrated_phase3_iis_assignment_guidance_pattern_hashes"
+                    )
+                    or ()
+                ),
+                "integrated_phase3_iis_assignment_guidance_source_candidate_hashes": list(
+                    (plan.metadata or {}).get(
+                        "integrated_phase3_iis_assignment_guidance_source_candidate_hashes"
+                    )
+                    or ()
+                ),
+                "integrated_phase3_iis_assignment_guidance_variable_count": (
+                    (plan.metadata or {}).get(
+                        "integrated_phase3_iis_assignment_guidance_variable_count"
+                    )
+                ),
+                "integrated_phase3_iis_assignment_guidance_branch_priority": (
+                    (plan.metadata or {}).get(
+                        "integrated_phase3_iis_assignment_guidance_branch_priority"
+                    )
+                ),
+                "integrated_phase3_iis_assignment_guidance_semantics": (
+                    (plan.metadata or {}).get(
+                        "integrated_phase3_iis_assignment_guidance_semantics"
+                    )
+                ),
                 "best_bound": outcome.best_bound,
                 "raw_best_bound": outcome.best_bound,
                 "certified_best_bound": outcome.certified_best_bound,

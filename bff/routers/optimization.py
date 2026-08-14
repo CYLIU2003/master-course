@@ -3521,6 +3521,54 @@ def _persist_rich_run_outputs(
     (run_dir / "solver_settings.json").write_text(
         json.dumps(solver_settings, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+    phase4_iis_guidance_audit = {
+        "schema_version": "phase4_iis_assignment_guidance_audit_v1",
+        "seed_stage2_iis_pattern_count": solver_settings.get(
+            "phase4_phase3_seed_stage2_iis_assignment_guidance_pattern_count"
+        ),
+        "seed_stage2_iis_source_candidate_hashes": list(
+            solver_settings.get(
+                "phase4_phase3_seed_stage2_iis_assignment_guidance_source_candidate_hashes"
+            )
+            or ()
+        ),
+        "integrated_guidance_pattern_count": solver_settings.get(
+            "integrated_phase3_iis_assignment_guidance_pattern_count"
+        ),
+        "integrated_guidance_pattern_hashes": list(
+            solver_settings.get(
+                "integrated_phase3_iis_assignment_guidance_pattern_hashes"
+            )
+            or ()
+        ),
+        "integrated_source_candidate_hashes": list(
+            solver_settings.get(
+                "integrated_phase3_iis_assignment_guidance_source_candidate_hashes"
+            )
+            or ()
+        ),
+        "promoted_assignment_variable_count": solver_settings.get(
+            "integrated_phase3_iis_assignment_guidance_variable_count"
+        ),
+        "branch_priority": solver_settings.get(
+            "integrated_phase3_iis_assignment_guidance_branch_priority"
+        ),
+        "semantics": solver_settings.get(
+            "integrated_phase3_iis_assignment_guidance_semantics"
+        ),
+        "objective_changed": False,
+        "feasible_set_changed": False,
+        "preferred_assignment_value": None,
+        "phase4_hard_cut_applied": False,
+        "research_interpretation": (
+            "Stage-2 IIS patterns receive non-directional assignment branch "
+            "priorities; they are not treated as Phase-4 infeasibility proofs"
+        ),
+    }
+    (run_dir / "phase4_iis_assignment_guidance_audit.json").write_text(
+        json.dumps(phase4_iis_guidance_audit, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     assignment_economic_audit = _assignment_economic_audit_payload(
         canonical_problem=canonical_problem,
         optimization_result=optimization_result,
@@ -10487,6 +10535,36 @@ def _solver_settings_payload(
         "integrated_identical_vehicle_symmetry_semantics": metadata.get(
             "integrated_identical_vehicle_symmetry_semantics"
         ),
+        "integrated_phase3_iis_assignment_guidance_pattern_count": _int_or_none(
+            metadata.get(
+                "integrated_phase3_iis_assignment_guidance_pattern_count"
+            )
+        ),
+        "integrated_phase3_iis_assignment_guidance_pattern_hashes": list(
+            metadata.get(
+                "integrated_phase3_iis_assignment_guidance_pattern_hashes"
+            )
+            or ()
+        ),
+        "integrated_phase3_iis_assignment_guidance_source_candidate_hashes": list(
+            metadata.get(
+                "integrated_phase3_iis_assignment_guidance_source_candidate_hashes"
+            )
+            or ()
+        ),
+        "integrated_phase3_iis_assignment_guidance_variable_count": _int_or_none(
+            metadata.get(
+                "integrated_phase3_iis_assignment_guidance_variable_count"
+            )
+        ),
+        "integrated_phase3_iis_assignment_guidance_branch_priority": _int_or_none(
+            metadata.get(
+                "integrated_phase3_iis_assignment_guidance_branch_priority"
+            )
+        ),
+        "integrated_phase3_iis_assignment_guidance_semantics": metadata.get(
+            "integrated_phase3_iis_assignment_guidance_semantics"
+        ),
         "integrated_root_method": _int_or_none(
             metadata.get("integrated_root_method")
         ),
@@ -10581,6 +10659,22 @@ def _solver_settings_payload(
                 phase4_seed_audit.get(
                     "seed_stage1_stage2_candidate_evaluation_initial_budget_sec"
                 )
+            )
+        ),
+        "phase4_phase3_seed_stage2_iis_assignment_guidance_pattern_count": _int_or_none(
+            phase4_seed_audit.get(
+                "seed_stage2_iis_assignment_guidance_pattern_count"
+            )
+        ),
+        "phase4_phase3_seed_stage2_iis_assignment_guidance_source_candidate_hashes": list(
+            phase4_seed_audit.get(
+                "seed_stage2_iis_assignment_guidance_source_candidate_hashes"
+            )
+            or ()
+        ),
+        "phase4_phase3_seed_stage2_iis_assignment_guidance_semantics": (
+            phase4_seed_audit.get(
+                "seed_stage2_iis_assignment_guidance_semantics"
             )
         ),
         "phase4_phase3_seed_cost_ranked_composition_budget_enabled": bool(
