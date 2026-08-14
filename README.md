@@ -1,5 +1,28 @@
 # master-course
 
+## 2026-08-15 high-PV 600-second incumbent diagnostic
+
+- A fresh frontend/BFF Day-ahead diagnostic at clean SHA `3353318` verified
+  the v6 wall-time reserve. In 607.039 seconds of Phase 4 wall time it served
+  264/264 trips, passed physical checks, and found 30 BEVs/2 ICE buses for
+  231/33 trips at 650,390.859 JPY. The certified bound remained 640,000 JPY,
+  so the 1% target was not met (1.597633%). This run is explicitly
+  progress-only because it used the Day-ahead exploratory profile and did not
+  execute Rolling.
+- The v6 seed generated 7,305 suffix-exchange candidates, evaluated 57 total
+  candidates, and selected a round-3 suffix exchange. This beats the prior
+  v5 3,600-second high-PV incumbent by 9,315.999 JPY while using two more BEVs
+  and two fewer ICE buses. It establishes that the former missing sunny-day
+  BEV response was partly an incumbent-generation defect, not evidence that
+  28 BEVs were optimal.
+- All three executed suffix rounds strictly improved the validated canonical
+  cost, but the production profile stopped at the configured three rounds.
+  The unchanged 120-second seed-neighborhood budget is therefore reallocated
+  from 75/45 seconds (fixed-duty/route-band) to 105/15 seconds and permits up
+  to eight improving rounds. This is neutral cost-selected candidate
+  generation only; no BEV lower bound, weather bias, objective change, or
+  feasibility relaxation is introduced. Fresh evidence is required.
+
 ## 2026-08-15 formal pair timing result and reporting-contract repair
 
 - A fresh formal frontend/BFF pair was executed from clean commit `79e61ae`.

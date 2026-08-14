@@ -1,5 +1,31 @@
 # Current research release blockers
 
+## 2026-08-15 clean-SHA high-PV v6 diagnostic: incumbent improved, 1% still blocked
+
+A fresh frontend/BFF Day-ahead diagnostic at clean SHA `3353318` used the
+saved 1,000 kW PV and 6,000 kWh BESS controls with the same 264-trip scope,
+flat 30 JPY/kWh tariff and zero demand charge. It passed independent physical
+checks and returned 30 BEVs/2 ICE buses for 231/33 trips at 650,390.858978 JPY
+in 607.038977 seconds. The 640,000 JPY certified lower bound left a 1.597633%
+gap, so it does not satisfy the predeclared 1% target and did not execute the
+required 24-step Rolling chain. Release remains **BLOCKED**.
+
+The run does validate the v6 correction. It generated 7,305 suffix-exchange
+candidates, evaluated 57 candidates, retained 28.614860 seconds when local
+search began, and strictly improved the incumbent in each of three permitted
+suffix rounds. The selected 30/2 candidate is 9,315.999165 JPY cheaper than
+the previous v5 3,600-second high-PV incumbent. Thus the previous 28/4 result
+cannot be treated as evidence of a stable sunny-day optimum.
+
+The remaining immediate defect is now explicit: the server stopped after the
+configured third improving round, then spent 23.873713 seconds on route-band
+repartition without generating a candidate. The same 120-second allowance is
+rebalanced to 105 seconds of fixed-duty/path-changing search, 15 seconds of
+route-band search and at most eight improving rounds. No weather bias, BEV
+minimum, objective change, lower-bound change or extra runtime is introduced.
+A new clean-SHA diagnostic is required before deciding whether a stronger
+lower bound is still necessary.
+
 ## 2026-08-15 formal `79e61ae` pair: low PV certified, high PV still blocked
 
 The controlled pair was executed through fresh Prepare and the normal

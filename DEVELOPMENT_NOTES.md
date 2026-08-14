@@ -1,5 +1,37 @@
 # Development Notes
 
+## 2026-08-15: high-PV v6 runtime evidence and seed-budget reallocation
+
+- Executed a fresh high-PV case through frontend-equivalent HTTP Prepare and
+  `/run-optimization` from clean SHA
+  `335331836393c58a1334639e37bbca1ca7f55976`. The saved frontend controls were
+  retained: 1,000 kW PV, 6,000 kWh/900 kW BESS with 3,000 -> 3,000 kWh SOC,
+  flat 30 JPY/kWh grid energy, zero demand charge, and 20,000 JPY per used bus
+  day. Fresh Prepare materialized 264 trips, 60 vehicles, ten chargers and the
+  complete 11,310-arc successor network.
+- The 600-second Day-ahead exploratory run completed physically feasible with
+  30 BEVs/2 ICE buses, 231/33 trips, and 650,390.858978 JPY canonical cost.
+  Phase 4 wall time was 607.038977 seconds, the independent bound stayed at
+  640,000 JPY, and the certified gap was 1.597633%; therefore it remains a
+  diagnostic feasible candidate, not a 1% certificate or formal pair result.
+- The v6 neighborhood behaved as designed: 16 candidate slots and 30 seconds
+  were reserved, local search began with 28.614860 seconds remaining, 7,305
+  suffix candidates were generated, and 57 candidates were evaluated. Suffix
+  rounds 1, 2 and 3 successively produced 28/4, 29/3 and 30/2 used-powertrain
+  compositions; round 3 was selected. The old v5 high-PV run generated zero
+  suffix candidates and stopped at 659,706.858143 JPY after 3,606.883660
+  seconds, so v6 improved the incumbent by 9,315.999165 JPY in a much shorter
+  diagnostic budget.
+- Raised a follow-on P1 search-profile defect: every allowed suffix round
+  strictly improved cost, but the server capped the search at three rounds.
+  The following route-band phase consumed 23.873713 seconds and generated no
+  candidate. The total neighborhood allowance remains exactly 120 seconds,
+  but the server profile now allocates 105 seconds to fixed-duty/path-changing
+  candidates, 15 seconds to route-band repartition, and up to eight improving
+  suffix/swap rounds. This changes only the verified MIP-start upper bound;
+  integrated constraints, objective, lower bound, total wall budget, tariff,
+  and 1% gate are unchanged.
+
 ## 2026-08-15: literature-driven Phase 4 seed restart and budget repair
 
 - Reviewed the local `先行文献` corpus instead of assuming that reported

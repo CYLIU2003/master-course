@@ -179,6 +179,21 @@ INTERACTIVE_STAGE1_BEST_OBJ_STOP_ENABLED = False
 INTERACTIVE_GUROBI_THREADS = 4
 INTERACTIVE_TERMINAL_SOC_POLICY_VERSION = "interactive_terminal_soc_controls_v1"
 INTERACTIVE_BEV_TERMINAL_SOC_POLICY = "return_to_initial"
+# Phase 4 keeps one bounded 120-second verified-incumbent neighborhood.  The
+# split is part of the reproducible interactive profile: fixed-duty suffix
+# reconstruction receives the larger share because it produced consecutive
+# strict cost improvements in the 264-trip high-PV audit, while route-band
+# repartition remains available as a smaller independent path search.
+PHASE4_SEED_NEIGHBORHOOD_TOTAL_WALL_SEC = 120
+PHASE4_SEED_FIXED_DUTY_WALL_SEC = 105
+PHASE4_SEED_ROUTE_BAND_WALL_SEC = 15
+PHASE4_SEED_POWERTRAIN_ROUND_LIMIT = 8
+if (
+    PHASE4_SEED_FIXED_DUTY_WALL_SEC
+    + PHASE4_SEED_ROUTE_BAND_WALL_SEC
+    != PHASE4_SEED_NEIGHBORHOOD_TOTAL_WALL_SEC
+):
+    raise RuntimeError("Phase 4 seed-neighborhood wall budget is inconsistent")
 INTERACTIVE_OPERATION_TIME_WINDOW_CONTROLS_VERSION = (
     "interactive_operation_time_window_controls_v1"
 )
@@ -11449,13 +11464,28 @@ def _run_optimization(
                 phase4_phase3_seed_unused_bev_neighborhood_enabled=(
                     phase_token == "phase4_integrated"
                 ),
-                phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec=75,
+                # Keep the total Phase-4 seed-neighborhood allowance at
+                # 120 seconds, but spend it where the recorded 264-trip high-
+                # PV audit found validated improvements.  Suffix exchange
+                # improved the incumbent in every executed round (28 -> 29 ->
+                # 30 used BEVs), while the following route-band repartition
+                # consumed its budget without producing a candidate.  The
+                # integrated MILP remains unrestricted and every seed
+                # candidate still needs exact fixed-assignment recourse,
+                # physical validation, and a strict canonical-cost reduction.
+                phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec=(
+                    PHASE4_SEED_FIXED_DUTY_WALL_SEC
+                ),
                 phase4_phase3_seed_unused_bev_neighborhood_per_solve_sec=3,
                 phase4_phase3_seed_unused_bev_neighborhood_max_evaluations=(
                     64
                 ),
-                phase4_phase3_seed_route_band_repartition_time_limit_sec=45,
-                phase4_phase3_seed_powertrain_duty_swap_rounds=3,
+                phase4_phase3_seed_route_band_repartition_time_limit_sec=(
+                    PHASE4_SEED_ROUTE_BAND_WALL_SEC
+                ),
+                phase4_phase3_seed_powertrain_duty_swap_rounds=(
+                    PHASE4_SEED_POWERTRAIN_ROUND_LIMIT
+                ),
                 phase4_phase3_seed_unused_bev_identity_exchange_rounds=2,
                 phase4_integrated_seed_recourse_preflight_enabled=(
                     phase_token == "phase4_integrated"

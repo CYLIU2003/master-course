@@ -5,11 +5,29 @@ from types import SimpleNamespace
 
 import pytest
 
-from bff.routers.optimization import _solver_settings_payload
+from bff.routers.optimization import (
+    PHASE4_SEED_FIXED_DUTY_WALL_SEC,
+    PHASE4_SEED_NEIGHBORHOOD_TOTAL_WALL_SEC,
+    PHASE4_SEED_POWERTRAIN_ROUND_LIMIT,
+    PHASE4_SEED_ROUTE_BAND_WALL_SEC,
+    _solver_settings_payload,
+)
 from src.dispatch.models import DutyLeg, Trip, VehicleDuty
 from src.optimization.accounting.aggregators import build_accounting_summary
 from src.optimization.common.problem import AssignmentPlan
 from bff.services.optimization_run.canonical_graph import canonical_output_base_date
+
+
+def test_phase4_seed_profile_reallocates_but_does_not_extend_wall_budget() -> None:
+    assert PHASE4_SEED_FIXED_DUTY_WALL_SEC == 105
+    assert PHASE4_SEED_ROUTE_BAND_WALL_SEC == 15
+    assert PHASE4_SEED_POWERTRAIN_ROUND_LIMIT == 8
+    assert (
+        PHASE4_SEED_FIXED_DUTY_WALL_SEC
+        + PHASE4_SEED_ROUTE_BAND_WALL_SEC
+        == PHASE4_SEED_NEIGHBORHOOD_TOTAL_WALL_SEC
+        == 120
+    )
 
 
 def _trip(trip_id: str, departure: str, arrival: str) -> Trip:

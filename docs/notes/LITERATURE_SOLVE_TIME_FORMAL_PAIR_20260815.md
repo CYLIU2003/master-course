@@ -77,3 +77,22 @@ seconds and 16 evaluations are retained for path-changing candidates. This is
 a necessary incumbent-quality correction, but it does not strengthen the
 640,000 JPY lower bound. If the corrected start remains above 1%, a certified
 lower-bound/decomposition method is still required.
+
+## Fresh 600-second v6 diagnostic
+
+The clean-SHA high-PV diagnostic at `3353318` confirms that the comparison to
+hundreds-second literature should not begin by assuming the incumbent is
+fixed. The complete frontend/BFF Phase 4 wall time was 607.039 seconds. The
+run found 30 BEVs/2 ICE buses and 650,390.859 JPY, versus the old v5 formal
+incumbent of 28/4 and 659,706.858 JPY after 3,606.884 seconds. Its certified
+gap improved from 2.987214% to 1.597633%, although it still missed 1%.
+
+The mechanism is auditable: v6 generated 7,305 suffix-exchange candidates and
+successively improved 28/4 to 29/3 and 30/2 over its three configured rounds.
+Because every round improved and the next route-band phase produced zero
+candidates, the unchanged 120-second seed-neighborhood allowance is now split
+105/15 seconds instead of 75/45, with at most eight improving rounds. This is
+an upper-bound engineering change comparable to published heuristic warm
+starts; it is not a claim that the exact lower bound or global certificate has
+improved. A fresh rerun must determine whether 31/1 or 32/0 is feasible and
+cost-improving before lower-bound reformulation is justified.
