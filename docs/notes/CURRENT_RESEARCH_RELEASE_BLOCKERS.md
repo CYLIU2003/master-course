@@ -21,6 +21,12 @@ are time-limited and miss the declared 1% target. The immutable runs must be
 re-audited from a clean fix commit and any report must remain diagnostic unless
 the predeclared gap requirement is later met.
 
+The re-audit now treats minimum SOC as an executed-chain quantity. It verifies
+the prepared vehicle capacities, 00:00/24:00 cyclic boundary and every
+01:00--23:00 Rolling state handoff against the final artifact hashes. This
+closes the reporting ambiguity between day-ahead SOC and executed SOC, but it
+does not change any source solution or its gap status.
+
 ## 2026-08-14 corrected time-step tranche: provenance fixed; 1% gap still blocks
 
 Frozen SHA `88f76a9af79a8d46c1502a51ed03778ab99f20e9` completed fresh

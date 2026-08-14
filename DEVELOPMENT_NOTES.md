@@ -30,6 +30,12 @@
   regression: `71 passed`; full repository regression: `1394 passed`. A
   clean-commit immutable re-audit is still required before generating the
   thesis-facing energy-sensitivity report.
+- The re-audit now also computes each case's minimum executed BEV SOC from
+  the active vehicles' 00:00 cyclic target, 01:00--23:00 Rolling state
+  handoffs, and 24:00 terminal target. Battery capacity and minimum-SOC limits
+  come from the prepared vehicle inventory. The snapshot, chain summary, and
+  all 23 state files must match the final artifact hash ledger; a mismatch
+  fails the case instead of falling back to the day-ahead SOC series.
 
 ## 2026-08-14: trip-energy sensitivity preflight
 

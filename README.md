@@ -22,6 +22,11 @@
   row hash, `1c382c9c3dc6eec41173c1c451d790a66ae41ffef5c4bd10d2caabc7826511f9`.
   Re-audit and reporting must still be generated from a clean commit; the
   current raw incumbents are not upgraded to optimality conclusions.
+- Sensitivity re-audit now derives minimum BEV SOC only from the accepted
+  Rolling execution chain: the active-fleet cyclic boundary at 00:00/24:00
+  and the 23 persisted hourly state handoffs. Every source JSON is checked
+  against `artifact_completeness.json`; day-ahead SOC CSVs are not mixed into
+  this executed KPI.
 
 ## 2026-08-14 corrected time-discretization evidence
 

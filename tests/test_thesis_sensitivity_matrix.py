@@ -5,6 +5,8 @@ from hashlib import sha256
 import json
 from pathlib import Path
 
+import pytest
+
 from bff.routers.simulation import PrepareSimulationSettingsBody
 from scripts import run_thesis_sensitivity_matrix as sensitivity_runner
 from scripts.build_thesis_experiment_matrix import build_experiment_matrix
@@ -12,6 +14,7 @@ from scripts.run_thesis_sensitivity_matrix import (
     _artifact_snapshot_matches,
     _case_parameter_matches,
     _declared_controls_match,
+    _rolling_min_bev_soc_evidence,
     _submitted_request_matches_provenance,
     _stable_control_fingerprint,
     _verified_prepared_trip_input_hash,
@@ -261,6 +264,154 @@ def test_persisted_prepared_trip_hash_requires_schema_and_count_match() -> None:
         prepare_audit=prepare_audit,
         input_validation={},
     ) == (None, None)
+
+
+def test_rolling_min_soc_uses_verified_executed_state_handoffs(
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / "run"
+    chain_dir = run_dir / "rolling_hourly_chain"
+    chain_dir.mkdir(parents=True)
+    scenario = {
+        "prepared_inventory": {
+            "vehicles": [
+                {
+                    "id": "bev-a",
+                    "type": "BEV",
+                    "batteryKwh": 100.0,
+                    "minSoc": 0.2,
+                },
+                {
+                    "id": "bev-unused",
+                    "type": "BEV",
+                    "batteryKwh": 100.0,
+                    "minSoc": 0.2,
+                },
+            ]
+        }
+    }
+    steps = []
+    for index in range(24):
+        current_time = f"{index:02d}:00"
+        step = {
+            "step_index": index,
+            "current_time": current_time,
+            "bev_terminal_soc_target_kwh_by_vehicle": {"bev-a": 50.0},
+        }
+        steps.append(step)
+        if index == 23:
+            continue
+        step_dir = chain_dir / f"step_{index:02d}_{index:02d}00"
+        step_dir.mkdir()
+        state = {
+            "current_time": f"{index + 1:02d}:00",
+            "actual_vehicle_soc_kwh": {
+                "bev-a": 22.0 if index == 10 else 50.0
+            },
+            "state_semantics": {"vehicle_soc": "start_of_next_slot"},
+        }
+        (step_dir / "state_for_next_hour.json").write_text(
+            json.dumps(state), encoding="utf-8"
+        )
+    rolling = {"steps": steps}
+    (run_dir / "scenario_input_snapshot.json").write_text(
+        json.dumps(scenario), encoding="utf-8"
+    )
+    (chain_dir / "rolling_chain_summary.json").write_text(
+        json.dumps(rolling), encoding="utf-8"
+    )
+    artifacts = {}
+    for path in run_dir.rglob("*.json"):
+        relative = path.relative_to(run_dir).as_posix()
+        artifacts[relative] = {
+            "size_bytes": path.stat().st_size,
+            "sha256": sha256(path.read_bytes()).hexdigest(),
+        }
+
+    evidence = _rolling_min_bev_soc_evidence(
+        run_dir=run_dir,
+        completeness={"artifacts": artifacts},
+        scenario_snapshot=scenario,
+        rolling_summary=rolling,
+    )
+
+    assert evidence["source_artifacts_verified"] is True
+    assert evidence["active_bev_count"] == 1
+    assert evidence["timepoint_count"] == 25
+    assert evidence["minimum_soc_kwh"] == 22.0
+    assert evidence["minimum_soc_percent"] == 22.0
+    assert evidence["minimum_margin_above_vehicle_limit_percent"] == 2.0
+    assert evidence["time"] == "11:00"
+    assert evidence["vehicle_id"] == "bev-a"
+
+
+def test_rolling_min_soc_rejects_tampered_state_artifact(
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / "run"
+    chain_dir = run_dir / "rolling_hourly_chain"
+    chain_dir.mkdir(parents=True)
+    scenario = {
+        "prepared_inventory": {
+            "vehicles": [
+                {
+                    "id": "bev-a",
+                    "type": "BEV",
+                    "batteryKwh": 100.0,
+                    "minSoc": 0.2,
+                }
+            ]
+        }
+    }
+    steps = [
+        {
+            "step_index": index,
+            "current_time": f"{index:02d}:00",
+            "bev_terminal_soc_target_kwh_by_vehicle": {"bev-a": 50.0},
+        }
+        for index in range(24)
+    ]
+    rolling = {"steps": steps}
+    for index in range(23):
+        step_dir = chain_dir / f"step_{index:02d}_{index:02d}00"
+        step_dir.mkdir()
+        (step_dir / "state_for_next_hour.json").write_text(
+            json.dumps(
+                {
+                    "current_time": f"{index + 1:02d}:00",
+                    "actual_vehicle_soc_kwh": {"bev-a": 50.0},
+                    "state_semantics": {
+                        "vehicle_soc": "start_of_next_slot"
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+    (run_dir / "scenario_input_snapshot.json").write_text(
+        json.dumps(scenario), encoding="utf-8"
+    )
+    (chain_dir / "rolling_chain_summary.json").write_text(
+        json.dumps(rolling), encoding="utf-8"
+    )
+    artifacts = {
+        path.relative_to(run_dir).as_posix(): {
+            "size_bytes": path.stat().st_size,
+            "sha256": sha256(path.read_bytes()).hexdigest(),
+        }
+        for path in run_dir.rglob("*.json")
+    }
+    tampered = chain_dir / "step_05_0500" / "state_for_next_hour.json"
+    tampered.write_text(
+        tampered.read_text(encoding="utf-8") + "\n", encoding="utf-8"
+    )
+
+    with pytest.raises(ValueError, match="artifact hash mismatch"):
+        _rolling_min_bev_soc_evidence(
+            run_dir=run_dir,
+            completeness={"artifacts": artifacts},
+            scenario_snapshot=scenario,
+            rolling_summary=rolling,
+        )
 
 
 def test_submitted_request_provenance_detects_server_overwrite() -> None:

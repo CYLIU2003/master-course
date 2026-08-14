@@ -68,6 +68,11 @@ CSV_COLUMNS = (
     "pv_to_bus_kwh",
     "pv_to_bess_kwh",
     "bess_to_bus_kwh",
+    "rolling_min_bev_soc_kwh",
+    "rolling_min_bev_soc_percent",
+    "rolling_min_bev_soc_margin_percent",
+    "rolling_min_bev_soc_vehicle_id",
+    "rolling_min_bev_soc_time",
     "source_run_dir",
 )
 
@@ -299,7 +304,9 @@ def _audit_case(
             "physical_schedule_validation.json",
             "artifact_completeness.json",
             "assignment_economic_audit.json",
+            "scenario_input_snapshot.json",
             "rolling_hourly_chain/executed_day_accounting.json",
+            "rolling_hourly_chain/rolling_chain_summary.json",
         )
     }
     input_validation = validate_run_input_provenance(
@@ -323,6 +330,14 @@ def _audit_case(
     accounting = required[
         "rolling_hourly_chain/executed_day_accounting.json"
     ]
+    rolling_soc = _rolling_min_bev_soc_evidence(
+        run_dir=run_dir,
+        completeness=completeness,
+        scenario_snapshot=required["scenario_input_snapshot.json"],
+        rolling_summary=required[
+            "rolling_hourly_chain/rolling_chain_summary.json"
+        ],
+    )
     parameter_match = _case_parameter_matches(
         case=case,
         parameters=required["optimization_parameters.json"],
@@ -368,6 +383,9 @@ def _audit_case(
             and physical.get("accepted") is True
         ),
         "rolling_accounting_eligible": accounting.get("eligible") is True,
+        "rolling_soc_evidence_verified": (
+            rolling_soc.get("source_artifacts_verified") is True
+        ),
         "declared_case_parameter_effective": parameter_match,
         "declared_common_controls_effective": declared_controls_match,
         "submitted_request_provenance_matches": request_provenance_match,
@@ -435,7 +453,210 @@ def _audit_case(
         "pv_to_bus_kwh": costs.get("pv_to_bus_kwh"),
         "pv_to_bess_kwh": costs.get("pv_to_bess_kwh"),
         "bess_to_bus_kwh": costs.get("bess_to_bus_kwh"),
+        "rolling_min_bev_soc_kwh": rolling_soc.get("minimum_soc_kwh"),
+        "rolling_min_bev_soc_percent": rolling_soc.get(
+            "minimum_soc_percent"
+        ),
+        "rolling_min_bev_soc_margin_percent": rolling_soc.get(
+            "minimum_margin_above_vehicle_limit_percent"
+        ),
+        "rolling_min_bev_soc_vehicle_id": rolling_soc.get("vehicle_id"),
+        "rolling_min_bev_soc_time": rolling_soc.get("time"),
+        "rolling_soc_evidence": rolling_soc,
     }
+
+
+def _rolling_min_bev_soc_evidence(
+    *,
+    run_dir: Path,
+    completeness: Mapping[str, Any],
+    scenario_snapshot: Mapping[str, Any],
+    rolling_summary: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Return the minimum executed BEV SOC from hash-verified Rolling states.
+
+    The day-ahead SOC CSV is intentionally excluded.  The evidence sequence is
+    the active fleet's 00:00 cyclic target, the 23 persisted hourly state
+    handoffs (01:00 through 23:00), and the same validated terminal target at
+    24:00.  This keeps the reported minimum on the canonical executed Rolling
+    trajectory while preserving the cyclic end-of-day boundary.
+    """
+
+    inventory = dict(scenario_snapshot.get("prepared_inventory") or {})
+    vehicles = inventory.get("vehicles")
+    if not isinstance(vehicles, list):
+        raise ValueError("scenario snapshot has no prepared vehicle inventory")
+    bev_parameters: dict[str, tuple[float, float]] = {}
+    for raw_vehicle in vehicles:
+        if not isinstance(raw_vehicle, Mapping):
+            raise ValueError("prepared vehicle inventory contains a non-object")
+        if str(raw_vehicle.get("type") or "").upper() != "BEV":
+            continue
+        vehicle_id = str(raw_vehicle.get("id") or "").strip()
+        capacity = _finite_number(raw_vehicle.get("batteryKwh"))
+        minimum_fraction = _finite_number(raw_vehicle.get("minSoc"))
+        if (
+            not vehicle_id
+            or capacity <= 0.0
+            or minimum_fraction < 0.0
+            or minimum_fraction > 1.0
+        ):
+            raise ValueError("invalid BEV capacity or minimum SOC in snapshot")
+        bev_parameters[vehicle_id] = (capacity, minimum_fraction)
+    if not bev_parameters:
+        raise ValueError("scenario snapshot contains no BEV parameters")
+
+    steps = rolling_summary.get("steps")
+    if not isinstance(steps, list) or len(steps) != 24:
+        raise ValueError("Rolling summary must contain exactly 24 hourly steps")
+    first_step = steps[0]
+    if not isinstance(first_step, Mapping):
+        raise ValueError("Rolling step 0 is not an object")
+    terminal_targets = first_step.get(
+        "bev_terminal_soc_target_kwh_by_vehicle"
+    )
+    if not isinstance(terminal_targets, Mapping):
+        raise ValueError("Rolling summary has no active-BEV cyclic SOC target")
+    active_ids = {str(vehicle_id) for vehicle_id in terminal_targets}
+    if not active_ids.issubset(bev_parameters):
+        raise ValueError("Rolling active BEV is missing from prepared inventory")
+
+    source_paths = [
+        "scenario_input_snapshot.json",
+        "rolling_hourly_chain/rolling_chain_summary.json",
+    ]
+    samples: list[dict[str, Any]] = []
+    _append_soc_samples(
+        samples=samples,
+        time_label="00:00",
+        soc_by_vehicle=terminal_targets,
+        active_ids=active_ids,
+        bev_parameters=bev_parameters,
+    )
+    for step_index in range(23):
+        step = steps[step_index]
+        expected_time = f"{step_index:02d}:00"
+        if (
+            not isinstance(step, Mapping)
+            or int(step.get("step_index", -1)) != step_index
+            or step.get("current_time") != expected_time
+        ):
+            raise ValueError(f"Rolling step ordering mismatch at {step_index}")
+        current_time = expected_time.replace(":", "")
+        relative_path = (
+            "rolling_hourly_chain/"
+            f"step_{step_index:02d}_{current_time}/state_for_next_hour.json"
+        )
+        state = _read_json(run_dir / relative_path)
+        semantics = dict(state.get("state_semantics") or {})
+        if semantics.get("vehicle_soc") != "start_of_next_slot":
+            raise ValueError(f"unsupported vehicle SOC semantics: {relative_path}")
+        next_time = str(state.get("current_time") or "").strip()
+        soc_by_vehicle = state.get("actual_vehicle_soc_kwh")
+        if (
+            next_time != f"{step_index + 1:02d}:00"
+            or not isinstance(soc_by_vehicle, Mapping)
+        ):
+            raise ValueError(f"invalid Rolling SOC state: {relative_path}")
+        _append_soc_samples(
+            samples=samples,
+            time_label=next_time,
+            soc_by_vehicle=soc_by_vehicle,
+            active_ids=active_ids,
+            bev_parameters=bev_parameters,
+        )
+        source_paths.append(relative_path)
+    _append_soc_samples(
+        samples=samples,
+        time_label="24:00",
+        soc_by_vehicle=terminal_targets,
+        active_ids=active_ids,
+        bev_parameters=bev_parameters,
+    )
+    if not _artifact_snapshot_matches(
+        run_dir=run_dir,
+        completeness=completeness,
+        relative_paths=tuple(source_paths),
+    ):
+        raise ValueError("Rolling SOC source artifact hash mismatch")
+
+    source_hashes = {
+        relative_path: sha256((run_dir / relative_path).read_bytes()).hexdigest()
+        for relative_path in source_paths
+    }
+    minimum = (
+        min(samples, key=lambda row: float(row["soc_percent"]))
+        if samples
+        else None
+    )
+    return {
+        "schema_version": "rolling_min_bev_soc_evidence_v1",
+        "source_semantics": "executed_hourly_state_handoffs_with_cyclic_boundaries",
+        "source_artifacts_verified": True,
+        "applicable": bool(active_ids),
+        "active_bev_count": len(active_ids),
+        "timepoint_count": 25,
+        "sample_count": len(samples),
+        "minimum_soc_kwh": minimum["soc_kwh"] if minimum else None,
+        "minimum_soc_percent": minimum["soc_percent"] if minimum else None,
+        "minimum_margin_above_vehicle_limit_percent": (
+            minimum["margin_above_vehicle_limit_percent"]
+            if minimum
+            else None
+        ),
+        "vehicle_id": minimum["vehicle_id"] if minimum else None,
+        "time": minimum["time"] if minimum else None,
+        "battery_capacity_kwh": (
+            minimum["battery_capacity_kwh"] if minimum else None
+        ),
+        "vehicle_minimum_soc_percent": (
+            minimum["vehicle_minimum_soc_percent"] if minimum else None
+        ),
+        "source_artifact_sha256": source_hashes,
+        "source_bundle_sha256": _canonical_hash(source_hashes),
+    }
+
+
+def _append_soc_samples(
+    *,
+    samples: list[dict[str, Any]],
+    time_label: str,
+    soc_by_vehicle: Mapping[str, Any],
+    active_ids: set[str],
+    bev_parameters: Mapping[str, tuple[float, float]],
+) -> None:
+    observed_ids = {str(vehicle_id) for vehicle_id in soc_by_vehicle}
+    if observed_ids != active_ids:
+        raise ValueError("Rolling SOC vehicle set differs from active BEV set")
+    for vehicle_id in sorted(active_ids):
+        soc_kwh = _finite_number(soc_by_vehicle[vehicle_id])
+        capacity, minimum_fraction = bev_parameters[vehicle_id]
+        if soc_kwh < -1.0e-6 or soc_kwh > capacity + 1.0e-6:
+            raise ValueError("Rolling BEV SOC is outside physical capacity")
+        soc_percent = 100.0 * soc_kwh / capacity
+        minimum_percent = 100.0 * minimum_fraction
+        samples.append(
+            {
+                "time": time_label,
+                "vehicle_id": vehicle_id,
+                "soc_kwh": soc_kwh,
+                "soc_percent": soc_percent,
+                "battery_capacity_kwh": capacity,
+                "vehicle_minimum_soc_percent": minimum_percent,
+                "margin_above_vehicle_limit_percent": (
+                    soc_percent - minimum_percent
+                ),
+            }
+        )
+
+
+def _finite_number(value: Any) -> float:
+    if isinstance(value, bool) or value is None:
+        raise ValueError(f"expected finite numeric value, got {value!r}")
+    number = float(value)
+    if number != number or number in (float("inf"), float("-inf")):
+        raise ValueError(f"expected finite numeric value, got {value!r}")
+    return number
 
 
 def _case_parameter_matches(
