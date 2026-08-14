@@ -2,6 +2,12 @@
 
 Status: implementation traceability draft, 2026-08-12.
 
+Phase completion is now evaluated by
+`scripts/audit_thesis_model_phase_gates.py`. This document remains a draft and
+does not produce `thesis_equation_code_test_map_audit_v1`; Phase 7 therefore
+must remain blocked until every required addition below is closed and a
+same-Git-SHA signed completion artifact is generated.
+
 This file maps the thesis-facing model to the currently reachable Phase 4
 integrated implementation. `docs/constant/formulation.md` remains the notation
 reference. This map is deliberately explicit about tests that are still

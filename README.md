@@ -1,5 +1,32 @@
 # master-course
 
+## 2026-08-15 thesis Phase 0--7 completion audit
+
+- `scripts/audit_thesis_model_phase_gates.py` now composes the existing
+  frontend/BFF provenance, physical validation, accepted Rolling accounting,
+  final cost reconciliation, artifact hashes, sensitivity manifests, M0--M3
+  comparison, and equation/test evidence into one fail-closed Phase 0--7
+  ledger. It never invokes a solver or upgrades the source artifacts.
+- A phase is `COMPLETE` only when every declared local check passes and every
+  preceding phase is already complete. Missing evidence remains `BLOCKED`;
+  valid later evidence is `BLOCKED_BY_PREVIOUS_PHASE` until the earlier gate
+  is cleared. Sensitivity and ablation artifacts must have valid payload
+  hashes and the same frozen Git SHA as the reference run.
+- Example for the 264-trip thesis scope:
+
+  ```powershell
+  .\.venv\Scripts\python.exe scripts\audit_thesis_model_phase_gates.py `
+    --run-dir <accepted-frontend-run> `
+    --expected-trip-count 264 `
+    --sensitivity-manifest <sensitivity_execution_manifest.json> `
+    --ablation-comparison <day_ahead_method_comparison.json>
+  ```
+
+- The existing `ac0115e` sunny/rain diagnostic pair remains blocked: it is
+  day-ahead-only, nonformal, above the declared 1% gap, and lacks the required
+  current-SHA Phase 1/2/4/5/6 evidence. The new ledger records those gaps; it
+  does not relabel the pair as thesis-ready.
+
 ## 2026-08-14 Phase 4 shared runtime budget and fresh diagnostic correction
 
 - A fresh frontend/BFF diagnostic at clean SHA `102546170dc8a07fa91e0b71beaa8c71ca1ea327`

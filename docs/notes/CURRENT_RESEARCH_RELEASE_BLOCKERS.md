@@ -2663,3 +2663,30 @@ The progress bundle
 `DIAGNOSTIC`, `research_submission_ready=false` and
 `teacher_release_status=BLOCKED`. It is suitable as progress evidence with its
 limitations visible, but must not be used as the thesis's final formal pair.
+
+## 2026-08-15 Phase-ledger enforcement
+
+The repository now has a single fail-closed Phase 0--7 evidence ledger:
+`scripts/audit_thesis_model_phase_gates.py`. It composes, but never replaces,
+the source run's own provenance, physical, Rolling, accounting, artifact,
+sensitivity, ablation, and release gates.
+
+Current blocker order is:
+
+1. obtain one clean current-SHA formal reference run with 264/264 coverage,
+   accepted 24/24 fixed-assignment Rolling, independent physical validity,
+   executed-day accounting/final reconciliation, complete artifact hashes,
+   and the predeclared MIP-gap target;
+2. execute same-SHA accepted route-band ON/OFF and 5/10/15-minute turnaround
+   comparisons; structural Prepare audits alone do not complete Phase 1;
+3. execute accepted trip-energy, vehicle-day, and 15/30/60-minute families;
+4. complete the same-input M0--M3 comparison;
+5. add and execute the still-missing electricity-price, diesel-price,
+   charger-capacity, initial/terminal-SOC, and PV-by-tariff experiment families,
+   together with the existing PV-scale and CO2-cap families; and
+6. issue a same-SHA final equation-code-test-figure audit only after all prior
+   phases pass.
+
+The `ac0115e` pair and the older energy/time sensitivity runs remain useful
+diagnostic evidence for their recorded commits. They do not satisfy this
+ordered ledger and are not thesis-release evidence for current `main`.

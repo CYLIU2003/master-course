@@ -1,5 +1,55 @@
 # Development Notes
 
+## 2026-08-15: fail-closed thesis Phase 0--7 ledger
+
+- Raised a P1 research-governance defect: provenance, physical validation,
+  accounting, sensitivity, ablation, and equation/test evidence were each
+  independently audited, but there was no single machine-readable decision
+  enforcing the required Phase 0 -> Phase 7 order. A physically valid or
+  visually complete result could therefore be discussed without an explicit
+  list of earlier incomplete research gates.
+- Added
+  `bff/services/optimization_run/thesis_phase_gate_audit.py` and the read-only
+  CLI `scripts/audit_thesis_model_phase_gates.py`. The audit re-hashes the
+  materialized prepared input through the canonical provenance validator,
+  verifies every file recorded by `artifact_completeness.json`, and requires
+  clean/unchanged Git state, a formal accepted run, no successor pruning,
+  zero fallback/post-solve repair, complete trip coverage, independent
+  physical validity, 24-step accepted Rolling, executed-day accounting,
+  final cost reconciliation, and the declared MIP-gap target for Phase 0.
+- Phase 1 combines the structural route-band-OFF/deadhead, additive 5/10/15
+  minute turnaround, explicit compatibility-matrix, and independent event
+  checks with fresh accepted optimized route-band and turnaround manifests.
+  Structural readiness alone is deliberately insufficient. Later phases
+  similarly require the declared energy, vehicle-day, time-step, M0--M3, PV,
+  price/infrastructure/SOC, CO2, and final equation-code-test evidence.
+- Every sensitivity or ablation artifact must have a valid canonical payload
+  SHA-256 and the same frozen Git SHA as the reference run. Evidence from
+  different commits cannot be unioned into a completion claim. Unknown or
+  missing Phase 6 experiment families fail closed rather than being silently
+  ignored.
+- The mathematical model and feasible region are unchanged. This is an
+  evidence-composition and claim-scope change: `COMPLETE` now means all local
+  checks and all earlier phase dependencies pass; otherwise the ledger emits
+  `BLOCKED` or `BLOCKED_BY_PREVIOUS_PHASE` with exact check names.
+- Added nine focused tests for the Phase 0 baseline, Phase 1 evidence,
+  payload tampering, cross-SHA evidence, post-finalization artifact mutation,
+  inconsistent sensitivity case identity, run-manifest SHA mismatch,
+  independent trip-count mismatch, and compact prepare-snapshot compatibility.
+  Focused verification: `9 passed`; related research-contract regression:
+  `88 passed`; complete repository regression after the final refactor:
+  `1473 passed in 143.70s`.
+- Read-only application to the `ac0115e` day-ahead diagnostic correctly leaves
+  Phase 0 blocked because the run is nonformal, lacks Rolling/standalone
+  physical/final-reconciliation artifacts, and misses the 1% gap. Application
+  to the older time-discretization execution revalidates all 240 snapshotted
+  files but still blocks Phase 0 on the recorded gap and later phases on
+  missing/current-SHA experiments. No old artifact is upgraded.
+- Remaining work is intentionally explicit: fresh accepted Phase 0 evidence,
+  then same-SHA route-band ON/OFF and turnaround runs, followed in order by
+  energy, objective, time-step, M0--M3, full Phase 6, and final equation/report
+  integration. The active thesis goal is not complete.
+
 ## 2026-08-14: Phase 4 shared wall-clock budget and seed-scope correction
 
 - Raised a P1 runtime-contract defect from a fresh Prepare and normal
