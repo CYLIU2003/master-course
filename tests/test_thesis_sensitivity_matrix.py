@@ -13,6 +13,8 @@ from scripts.run_thesis_sensitivity_matrix import (
     _case_parameter_matches,
     _declared_controls_match,
     _submitted_request_matches_provenance,
+    _stable_control_fingerprint,
+    _verified_prepared_trip_input_hash,
     _successor_limits_match,
     _snapshotted_artifact_paths,
     _write_manifest,
@@ -160,6 +162,105 @@ def test_successor_control_normalizes_only_unlimited_sentinels() -> None:
     assert _successor_limits_match(32, 32)
     assert not _successor_limits_match(0, 32)
     assert not _successor_limits_match(32, None)
+
+
+def test_energy_stable_fingerprint_excludes_intentional_demand_hash() -> None:
+    case = _case("ENERGY_1.0")
+    common = {
+        "scenario_id": "scenario-a",
+        "canonical_input_dimensions": {
+            "trip_ids_sha256": "trips",
+            "vehicle_ids_sha256": "vehicles",
+            "vehicle_input_sha256": "vehicle-input",
+            "charger_input_sha256": "chargers",
+            "vehicle_type_input_sha256": "vehicle-types",
+            "depot_input_sha256": "depots",
+            "price_value_set_sha256": "prices",
+            "energy_asset_control_input_sha256": "assets",
+            "objective_weights_sha256": "objective",
+        },
+        "effective_model_metadata": {
+            "service_date": "2025-08-05",
+            "scenario_fleet_contract_hash": "fleet",
+        },
+        "effective_problem_scenario": {},
+    }
+    low = json.loads(json.dumps(common))
+    high = json.loads(json.dumps(common))
+    low["canonical_input_dimensions"]["trip_structure_input_sha256"] = "low"
+    high["canonical_input_dimensions"]["trip_structure_input_sha256"] = "high"
+
+    low_hash = _stable_control_fingerprint(
+        case=case,
+        parameters=low,
+        economic_audit={},
+        prepared_trip_input_sha256="prepared-trips",
+    )
+    high_hash = _stable_control_fingerprint(
+        case=case,
+        parameters=high,
+        economic_audit={},
+        prepared_trip_input_sha256="prepared-trips",
+    )
+
+    assert low_hash == high_hash
+    high["canonical_input_dimensions"]["vehicle_input_sha256"] = "drift"
+    assert low_hash != _stable_control_fingerprint(
+        case=case,
+        parameters=high,
+        economic_audit={},
+        prepared_trip_input_sha256="prepared-trips",
+    )
+
+
+def test_legacy_prepared_trip_hash_requires_verified_source(tmp_path: Path) -> None:
+    source = tmp_path / "prepared-test.json"
+    source.write_text(
+        json.dumps({"trips": [{"trip_id": "trip-a"}]}),
+        encoding="utf-8",
+    )
+    prepare_audit = {"prepare_snapshot": {"trip_count": 1}}
+    validation = {
+        "valid": True,
+        "checks": {
+            "prepared_source_exists": True,
+            "prepared_source_size": True,
+            "prepared_source_sha256": True,
+        },
+        "details": {"prepared_source_path_checked": str(source)},
+    }
+
+    value, provenance = _verified_prepared_trip_input_hash(
+        prepare_audit=prepare_audit,
+        input_validation=validation,
+    )
+
+    assert value
+    assert provenance == "verified_prepared_source_legacy_fallback"
+    validation["checks"]["prepared_source_sha256"] = False
+    assert _verified_prepared_trip_input_hash(
+        prepare_audit=prepare_audit,
+        input_validation=validation,
+    ) == (None, None)
+
+
+def test_persisted_prepared_trip_hash_requires_schema_and_count_match() -> None:
+    prepare_audit = {
+        "prepared_trip_input_schema": "prepared_trip_rows_v1",
+        "prepared_trip_count": 1,
+        "prepared_trip_input_sha256": "a" * 64,
+        "prepare_snapshot": {"trip_count": 1},
+    }
+
+    assert _verified_prepared_trip_input_hash(
+        prepare_audit=prepare_audit,
+        input_validation={},
+    ) == ("a" * 64, "prepare_input_audit")
+    prepare_audit["prepared_trip_count"] = 2
+    assert _verified_prepared_trip_input_hash(
+        prepare_audit=prepare_audit,
+        input_validation={},
+    ) == (None, None)
 
 
 def test_submitted_request_provenance_detects_server_overwrite() -> None:

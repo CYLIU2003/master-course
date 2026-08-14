@@ -1,5 +1,28 @@
 # master-course
 
+## 2026-08-14 trip-energy sensitivity provenance correction
+
+- Clean frozen SHA `735527da7f117f5af894263dcdf4fe55e8226328`
+  completed fresh frontend/BFF runs at 0.8, 0.9, 1.0, 1.1, and 1.2 times
+  the declared trip-energy demand. All five reached finalized physical and
+  Rolling-accounting artifacts without changing the worktree.
+- The original execution manifest correctly stayed `BLOCKED`, but for two
+  reasons: every solve missed the predeclared 1% MIP-gap target, and the
+  supposed non-varied-control fingerprint included
+  `required_soc_departure_percent`, which is itself derived from the varied
+  energy demand. That second failure is a provenance-definition defect, not
+  evidence that the timetable, fleet, chargers, tariff, or PV/BESS controls
+  changed.
+- Run-input provenance now labels the trip-structure hash explicitly and
+  excludes all energy-derived fields, including the departure-SOC
+  requirement. It also persists a compact hash of the 264 prepared trip rows.
+  Legacy sensitivity runs may use that hash only after the complete prepared
+  source file passes its stored size and SHA-256 checks.
+- The five immutable prepared artifacts independently produce the same trip
+  row hash, `1c382c9c3dc6eec41173c1c451d790a66ae41ffef5c4bd10d2caabc7826511f9`.
+  Re-audit and reporting must still be generated from a clean commit; the
+  current raw incumbents are not upgraded to optimality conclusions.
+
 ## 2026-08-14 corrected time-discretization evidence
 
 - Clean frozen SHA `88f76a9af79a8d46c1502a51ed03778ab99f20e9`

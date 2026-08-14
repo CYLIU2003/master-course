@@ -1,5 +1,36 @@
 # Development Notes
 
+## 2026-08-14: trip-energy sensitivity fingerprint bug and fail-closed repair
+
+- Frozen source SHA `735527da7f117f5af894263dcdf4fe55e8226328`
+  completed the five low-PV `ENERGY_0.8`--`ENERGY_1.2` cases through fresh
+  Prepare, frontend/BFF Phase 4, physical validation, 24-step Rolling, and
+  canonical executed-day accounting. Git remained clean and unchanged.
+- The source manifest was `BLOCKED` because all certified gaps exceeded 1%
+  and because each case had a different stable-control fingerprint. A field
+  audit showed that every canonical dimension matched except
+  `trip_structure_input_sha256`. Its old definition removed direct kWh/liter
+  fields but retained `required_soc_departure_percent`, even though that value
+  is derived from trip demand and therefore changes with the sensitivity
+  multiplier.
+- The mathematical/provenance correction is
+  `H_schedule = SHA256(trip fields excluding energy, fuel, energy-model
+  provenance, type-specific demand, and derived departure-SOC requirement)`.
+  This changes no feasible-region constraint, coefficient, objective,
+  assignment, Rolling result, or accounting value. It changes only which
+  fields are legitimately classified as non-varied controls.
+- New runs persist `prepared_trip_input_sha256` while the already-loaded
+  prepared payload is available. For legacy runs, re-audit may reconstruct it
+  only from a prepared source whose existence, byte size, and full SHA-256
+  have all been validated. Missing or invalid provenance fails the case.
+- Independent read-only hashing of all five 264-row prepared trip arrays gave
+  the same SHA-256:
+  `1c382c9c3dc6eec41173c1c451d790a66ae41ffef5c4bd10d2caabc7826511f9`.
+  Focused provenance, sensitivity, time-reporting, ablation, and frontend-pair
+  regression: `71 passed`; full repository regression: `1394 passed`. A
+  clean-commit immutable re-audit is still required before generating the
+  thesis-facing energy-sensitivity report.
+
 ## 2026-08-14: trip-energy sensitivity preflight
 
 - Before launching the next formal tranche, the matrix contract was made

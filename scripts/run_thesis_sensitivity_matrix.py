@@ -23,6 +23,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from bff.services.optimization_run.input_provenance import (  # noqa: E402
+    PREPARED_TRIP_INPUT_SCHEMA,
     validate_run_input_provenance,
 )
 from scripts.build_thesis_experiment_matrix import (  # noqa: E402
@@ -305,6 +306,17 @@ def _audit_case(
         run_dir,
         verify_prepared_source=True,
     )
+    prepare_audit = _read_json(run_dir / "prepare_input_audit.json")
+    prepared_trip_input_sha256 = None
+    prepared_trip_input_hash_source = None
+    if str(case.get("family") or "") == "trip_energy_sensitivity":
+        (
+            prepared_trip_input_sha256,
+            prepared_trip_input_hash_source,
+        ) = _verified_prepared_trip_input_hash(
+            prepare_audit=prepare_audit,
+            input_validation=input_validation,
+        )
     settings = required["solver_settings.json"]
     physical = required["physical_schedule_validation.json"]
     completeness = required["artifact_completeness.json"]
@@ -359,6 +371,10 @@ def _audit_case(
         "declared_case_parameter_effective": parameter_match,
         "declared_common_controls_effective": declared_controls_match,
         "submitted_request_provenance_matches": request_provenance_match,
+        "prepared_trip_structure_verified": bool(
+            str(case.get("family") or "") != "trip_energy_sensitivity"
+            or prepared_trip_input_sha256
+        ),
     }
     failed = [name for name, passed in checks.items() if not passed]
     summary = required["summary.json"]
@@ -378,9 +394,13 @@ def _audit_case(
         "checks": checks,
         "failed_checks": failed,
         "stable_control_fingerprint": _stable_control_fingerprint(
+            case=case,
             parameters=required["optimization_parameters.json"],
             economic_audit=required["assignment_economic_audit.json"],
+            prepared_trip_input_sha256=prepared_trip_input_sha256,
         ),
+        "prepared_trip_input_sha256": prepared_trip_input_sha256,
+        "prepared_trip_input_hash_source": prepared_trip_input_hash_source,
         "input_validation": input_validation,
         "solver_status": summary.get("solver_status"),
         "mip_gap_target_met": summary.get("mip_gap_target_met"),
@@ -864,20 +884,27 @@ def _snapshotted_artifact_paths(
 
 def _stable_control_fingerprint(
     *,
+    case: Mapping[str, Any],
     parameters: Mapping[str, Any],
     economic_audit: Mapping[str, Any],
+    prepared_trip_input_sha256: str | None = None,
 ) -> str:
     dimensions = dict(parameters.get("canonical_input_dimensions") or {})
     scenario = dict(parameters.get("effective_problem_scenario") or {})
     metadata = dict(parameters.get("effective_model_metadata") or {})
     marginal = dict(economic_audit.get("marginal_cost_assumptions") or {})
+    family = str(case.get("family") or "")
+    trip_structure_control_sha256 = (
+        prepared_trip_input_sha256
+        if family == "trip_energy_sensitivity"
+        else dimensions.get("trip_structure_input_sha256")
+    )
     payload = {
+        "schema_version": "sensitivity_stable_controls_v2_family_aware",
         "scenario_id": parameters.get("scenario_id"),
         "service_date": metadata.get("service_date"),
         "trip_ids_sha256": dimensions.get("trip_ids_sha256"),
-        "trip_structure_input_sha256": dimensions.get(
-            "trip_structure_input_sha256"
-        ),
+        "trip_structure_control_sha256": trip_structure_control_sha256,
         "vehicle_ids_sha256": dimensions.get("vehicle_ids_sha256"),
         "vehicle_input_sha256": dimensions.get("vehicle_input_sha256"),
         "charger_input_sha256": dimensions.get("charger_input_sha256"),
@@ -907,6 +934,72 @@ def _stable_control_fingerprint(
         ),
     }
     return _canonical_hash(payload)
+
+
+def _verified_prepared_trip_input_hash(
+    *,
+    prepare_audit: Mapping[str, Any],
+    input_validation: Mapping[str, Any],
+) -> tuple[str | None, str | None]:
+    """Return a verified, energy-scale-independent prepared-trip hash.
+
+    New runs persist this compact hash before solving.  Legacy runs can be
+    re-audited without re-solving by reading the already hash-verified
+    prepared artifact.  The fallback is permitted only when the complete run
+    input provenance validation passed, including prepared source size/hash.
+    """
+
+    declared = str(
+        prepare_audit.get("prepared_trip_input_sha256") or ""
+    ).strip()
+    if declared:
+        declared_count = prepare_audit.get("prepared_trip_count")
+        expected_count = dict(
+            prepare_audit.get("prepare_snapshot") or {}
+        ).get("trip_count")
+        if (
+            prepare_audit.get("prepared_trip_input_schema")
+            != PREPARED_TRIP_INPUT_SCHEMA
+            or len(declared) != 64
+            or any(character not in "0123456789abcdef" for character in declared)
+            or declared_count is None
+            or (
+                expected_count is not None
+                and int(declared_count) != int(expected_count)
+            )
+        ):
+            return None, None
+        return declared, "prepare_input_audit"
+
+    checks = dict(input_validation.get("checks") or {})
+    required_checks = (
+        "prepared_source_exists",
+        "prepared_source_size",
+        "prepared_source_sha256",
+    )
+    if not (
+        input_validation.get("valid") is True
+        and all(checks.get(name) is True for name in required_checks)
+    ):
+        return None, None
+    source_text = str(
+        dict(input_validation.get("details") or {}).get(
+            "prepared_source_path_checked"
+        )
+        or ""
+    ).strip()
+    if not source_text:
+        return None, None
+    prepared = _read_json(Path(source_text))
+    trips = prepared.get("trips")
+    if not isinstance(trips, list):
+        return None, None
+    expected_count = dict(prepare_audit.get("prepare_snapshot") or {}).get(
+        "trip_count"
+    )
+    if expected_count is not None and len(trips) != int(expected_count):
+        return None, None
+    return _canonical_hash(trips), "verified_prepared_source_legacy_fallback"
 
 
 def _json_copy(value: Mapping[str, Any]) -> dict[str, Any]:

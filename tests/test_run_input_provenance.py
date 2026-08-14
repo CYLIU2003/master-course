@@ -17,6 +17,7 @@ from bff.services.optimization_run.input_provenance import (
     SCENARIO_SNAPSHOT_FILE,
     SUMMARY_FILE,
     VALIDATION_FILE,
+    _trip_structure_input,
     persist_run_input_provenance,
     validate_run_input_provenance,
 )
@@ -171,6 +172,8 @@ def test_frontend_run_input_bundle_is_self_verifying(tmp_path: Path) -> None:
         (run_dir / PREPARE_AUDIT_FILE).read_text(encoding="utf-8")
     )
     assert prepare_audit["source_artifact"]["sha256"]
+    assert prepare_audit["prepared_trip_count"] == 1
+    assert prepare_audit["prepared_trip_input_sha256"]
     assert "trips" in prepare_audit["omitted_large_payload_fields"]
     parameters = json.loads(
         (run_dir / PARAMETERS_FILE).read_text(encoding="utf-8")
@@ -182,6 +185,9 @@ def test_frontend_run_input_bundle_is_self_verifying(tmp_path: Path) -> None:
     assert parameters["canonical_input_dimensions"][
         "trip_structure_input_sha256"
     ]
+    assert parameters["canonical_input_dimensions"][
+        "trip_structure_input_schema"
+    ] == "canonical_trip_structure_v2_energy_demand_excluded"
     assert parameters["canonical_input_dimensions"]["vehicle_input_sha256"]
     assert parameters["canonical_input_dimensions"]["charger_input_sha256"]
     assert parameters["canonical_input_dimensions"]["price_input_sha256"]
@@ -223,6 +229,33 @@ def test_frontend_run_input_bundle_is_self_verifying(tmp_path: Path) -> None:
     )
     assert changed_source["valid"] is False
     assert "prepared_source_sha256" in changed_source["failed_checks"]
+
+
+def test_trip_structure_hash_input_excludes_energy_derived_soc_requirement() -> None:
+    common = {
+        "trip_id": "trip-a",
+        "route_id": "route-a",
+        "departure_min": 60,
+        "arrival_min": 90,
+        "distance_km": 5.0,
+        "allowed_vehicle_types": ["BEV", "ICE"],
+    }
+    low = {
+        **common,
+        "energy_kwh": 5.0,
+        "fuel_l": 1.0,
+        "required_soc_departure_percent": 12.0,
+        "energy_model_provenance": {"sensitivity_scale": 0.8},
+    }
+    high = {
+        **common,
+        "energy_kwh": 7.5,
+        "fuel_l": 1.5,
+        "required_soc_departure_percent": 18.0,
+        "energy_model_provenance": {"sensitivity_scale": 1.2},
+    }
+
+    assert _trip_structure_input([low]) == _trip_structure_input([high])
 
 
 def test_frontend_run_input_bundle_rejects_posthoc_tampering(tmp_path: Path) -> None:

@@ -1,5 +1,26 @@
 # Current research release blockers
 
+## 2026-08-14 energy-demand tranche: runs complete; re-audit and gap gate remain
+
+Frozen SHA `735527da7f117f5af894263dcdf4fe55e8226328` completed all five
+0.8--1.2 trip-energy demand cases with fresh prepared inputs, 264/264 served
+trips, physical validation, and accepted 24-step Rolling accounting. The
+source execution is
+`output/thesis_sensitivity_energy_low_pv_20260814_735527d`.
+
+The original manifest remains `BLOCKED`. Its common-control fingerprint
+incorrectly treated the energy-derived departure-SOC requirement as immutable
+trip structure. All genuinely non-varied dimensions match, and the full
+prepared trip arrays independently share SHA-256
+`1c382c9c3dc6eec41173c1c451d790a66ae41ffef5c4bd10d2caabc7826511f9`.
+The provenance implementation now separates schedule structure from demand
+and fails closed unless the prepared source is fully hash-verified.
+
+This repair does not discharge the optimality blocker. The five source solves
+are time-limited and miss the declared 1% target. The immutable runs must be
+re-audited from a clean fix commit and any report must remain diagnostic unless
+the predeclared gap requirement is later met.
+
 ## 2026-08-14 corrected time-step tranche: provenance fixed; 1% gap still blocks
 
 Frozen SHA `88f76a9af79a8d46c1502a51ed03778ab99f20e9` completed fresh

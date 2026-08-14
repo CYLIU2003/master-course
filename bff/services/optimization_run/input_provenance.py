@@ -25,6 +25,8 @@ SUMMARY_FILE = "run_input_summary.md"
 CODE_PROVENANCE_FILE = "code_provenance.json"
 MANIFEST_FILE = "run_input_manifest.json"
 VALIDATION_FILE = "run_input_validation.json"
+TRIP_STRUCTURE_SCHEMA = "canonical_trip_structure_v2_energy_demand_excluded"
+PREPARED_TRIP_INPUT_SCHEMA = "prepared_trip_rows_v1"
 CORE_ARTIFACTS = (
     SCENARIO_SNAPSHOT_FILE,
     PREPARE_AUDIT_FILE,
@@ -425,6 +427,7 @@ def _prepare_audit(
     omitted_fields = sorted(
         set(str(key) for key in prepared_input).difference(snapshot)
     )
+    prepared_trips = list(prepared_input.get("trips") or ())
     return {
         "schema_version": SCHEMA_VERSION,
         "scenario_id": str(prepared_input.get("scenario_id") or ""),
@@ -440,6 +443,9 @@ def _prepare_audit(
             ).isoformat(),
             "sha256": prepared_sha256,
         },
+        "prepared_trip_input_schema": PREPARED_TRIP_INPUT_SCHEMA,
+        "prepared_trip_count": len(prepared_trips),
+        "prepared_trip_input_sha256": _inventory_hash(prepared_trips),
         "prepare_snapshot": snapshot,
         "omitted_large_payload_fields": omitted_fields,
         "omission_semantics": (
@@ -448,6 +454,35 @@ def _prepare_audit(
             "counts, profile, and audit make later identity checks fail-closed."
         ),
     }
+
+
+def _trip_structure_input(trip_input: Sequence[Any]) -> list[Any]:
+    """Remove every demand-derived field from canonical trip structure.
+
+    ``required_soc_departure_percent`` is derived from the selected trip
+    energy model and its sensitivity scale.  Keeping it in a structure hash
+    made a controlled energy-demand sensitivity look like timetable drift.
+    """
+
+    demand_derived_fields = {
+        "energy_kwh",
+        "fuel_l",
+        "energy_kwh_by_vehicle_type",
+        "fuel_l_by_vehicle_type",
+        "energy_model_id",
+        "energy_model_provenance",
+        "required_soc_departure_percent",
+    }
+    return [
+        {
+            key: value
+            for key, value in dict(item).items()
+            if key not in demand_derived_fields
+        }
+        if isinstance(item, Mapping)
+        else item
+        for item in trip_input
+    ]
 
 
 def _optimization_parameters(
@@ -473,24 +508,7 @@ def _optimization_parameters(
     price_slots = tuple(getattr(canonical_problem, "price_slots", ()) or ())
     pv_slots = tuple(getattr(canonical_problem, "pv_slots", ()) or ())
     trip_input = [_json_safe(item) for item in trips]
-    trip_structure_input = [
-        {
-            key: value
-            for key, value in dict(item).items()
-            if key
-            not in {
-                "energy_kwh",
-                "fuel_l",
-                "energy_kwh_by_vehicle_type",
-                "fuel_l_by_vehicle_type",
-                "energy_model_id",
-                "energy_model_provenance",
-            }
-        }
-        if isinstance(item, Mapping)
-        else item
-        for item in trip_input
-    ]
+    trip_structure_input = _trip_structure_input(trip_input)
     vehicle_input = [_json_safe(item) for item in vehicles]
     charger_input = [_json_safe(item) for item in chargers]
     depot_input = [_json_safe(item) for item in depots]
@@ -601,6 +619,7 @@ def _optimization_parameters(
             "trip_input_sha256": hashlib.sha256(
                 _canonical_json_bytes(trip_input)
             ).hexdigest(),
+            "trip_structure_input_schema": TRIP_STRUCTURE_SCHEMA,
             "trip_structure_input_sha256": hashlib.sha256(
                 _canonical_json_bytes(trip_structure_input)
             ).hexdigest(),
