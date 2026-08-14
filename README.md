@@ -41,6 +41,13 @@
   time-limit primary run no longer masquerades as a completed lexicographic
   result. The cost-minimization path is unchanged; fresh diagnostic evidence
   is required before using a fuel certificate to strengthen any cost bound.
+- The first sequential rerun exposed a second issue in the warm-start boundary:
+  its candidate audit contained physically feasible 32-BEV/0-ICE schedules,
+  but the selector still chose the cheaper 31/1 schedule even for the explicit
+  minimum-ICE-fuel policy. Policy runs now select a validated zero-ICE seed
+  when available; unrestricted canonical-cost runs retain cost-ranked seed
+  selection. A fresh rerun is still required before reporting the corrected
+  policy result.
 
 ## 2026-08-15 formal pair timing result and reporting-contract repair
 

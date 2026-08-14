@@ -2524,9 +2524,10 @@ class GurobiMILPAdapter:
         reduced exact Stage 1/Stage 2 model to repartition the affected
         same-depot route band from the best validated incumbent.
         Every changed dispatch is rebuilt by the full fixed-assignment Stage 2
-        and independently validated.  Only a strict canonical-cost improvement
-        is selected as the MIP start; the highest feasible BEV count is reported
-        separately as sensitivity evidence.
+        and independently validated.  Canonical-cost runs select only a strict
+        cost improvement.  A minimum-ICE-fuel policy run instead selects a
+        validated zero-ICE candidate when one exists, because zero is the
+        analytical lower bound of its nonnegative primary objective.
         """
 
         enabled = bool(
@@ -2536,6 +2537,10 @@ class GurobiMILPAdapter:
                 False,
             )
         )
+        integrated_ev_utilization_mode = str(
+            getattr(config, "integrated_ev_utilization_mode", "disabled")
+            or "disabled"
+        ).strip().lower()
         wall_limit_sec = max(
             int(
                 getattr(
@@ -4585,17 +4590,60 @@ class GurobiMILPAdapter:
                 _assignment_hash(item[3]),
             ),
         )
-        selected_improvement = bool(
+        cost_improvement_available = bool(
             float(best_cost_result[0]) < baseline_cost - 1.0e-6
         )
-        selected_plan = best_cost_result[3] if selected_improvement else seed_plan
-        selected_cost = (
-            float(best_cost_result[0])
-            if selected_improvement
-            else baseline_cost
+        zero_ice_policy_candidates = [
+            candidate
+            for candidate in feasible_candidates
+            if int(candidate[2]) == 0
+        ]
+        zero_ice_policy_result = (
+            min(
+                zero_ice_policy_candidates,
+                key=lambda item: (
+                    item[0],
+                    _assignment_hash(item[3]),
+                ),
+            )
+            if zero_ice_policy_candidates
+            else None
         )
+        zero_ice_policy_candidate_available = bool(
+            integrated_ev_utilization_mode
+            == "minimum_ice_fuel_lexicographic"
+            and zero_ice_policy_result is not None
+        )
+        if zero_ice_policy_candidate_available:
+            assert zero_ice_policy_result is not None
+            selected_result = zero_ice_policy_result
+            selection_semantics = (
+                "minimum_ice_fuel_policy_selects_validated_zero_ice_seed;"
+                "zero_liters_is_global_primary_lower_bound;"
+                "canonical_cost_is_secondary_only"
+            )
+            selection_objective = "minimum_ice_fuel_l"
+        elif cost_improvement_available:
+            selected_result = best_cost_result
+            selection_semantics = (
+                "strict_minimum_canonical_actual_cost_improvement_only;"
+                "maximum_bev_candidate_is_reported_separately"
+            )
+            selection_objective = "canonical_operating_cost_jpy"
+        else:
+            selected_result = feasible_candidates[0]
+            selection_semantics = (
+                "baseline_retained_without_strict_canonical_cost_improvement;"
+                "maximum_bev_candidate_is_reported_separately"
+            )
+            selection_objective = "canonical_operating_cost_jpy"
+        selected_plan = selected_result[3]
+        selected_cost = float(selected_result[0])
         selected_used_bev, selected_used_ice = _composition(selected_plan)
         selected_assignment_hash = _assignment_hash(selected_plan)
+        selected_candidate_changed = bool(
+            selected_assignment_hash != _assignment_hash(seed_plan)
+        )
         maximum_bev_assignment_hash = _assignment_hash(
             maximum_bev_result[3]
         )
@@ -4610,7 +4658,7 @@ class GurobiMILPAdapter:
 
         selected_candidate_details = (
             _candidate_details_for_hash(selected_assignment_hash)
-            if selected_improvement
+            if selected_candidate_changed
             else {}
         )
         maximum_bev_candidate_details = _candidate_details_for_hash(
@@ -4628,19 +4676,24 @@ class GurobiMILPAdapter:
             termination_reason = "neighborhood_exhausted"
         audit.update(
             {
-                "selected": selected_improvement,
-                "selection_semantics": (
-                    "strict_minimum_canonical_actual_cost_improvement_only;"
-                    "maximum_bev_candidate_is_reported_separately"
+                "selected": selected_candidate_changed,
+                "selection_semantics": selection_semantics,
+                "selection_objective": selection_objective,
+                "zero_ice_policy_candidate_available": (
+                    zero_ice_policy_candidate_available
+                ),
+                "zero_ice_policy_seed_selected": bool(
+                    zero_ice_policy_candidate_available
+                    and selected_candidate_changed
                 ),
                 "selected_candidate_kind": (
-                    best_cost_result[4]
-                    if selected_improvement
+                    selected_result[4]
+                    if selected_candidate_changed
                     else "baseline"
                 ),
                 "selected_candidate_replacements": dict(
-                    sorted(best_cost_result[5].items())
-                ) if selected_improvement else {},
+                    sorted(selected_result[5].items())
+                ) if selected_candidate_changed else {},
                 "selected_candidate_details": selected_candidate_details,
                 "selected_canonical_cost_jpy": selected_cost,
                 "selected_cost_improvement_jpy": (

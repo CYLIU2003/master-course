@@ -65,6 +65,22 @@
   time and certificate. An unproven fuel stage stops the hierarchy and leaves
   cost-bound fields empty. The unconstrained cost-minimization formulation and
   high/low-PV comparison objective are unchanged.
+- The clean-SHA sequential rerun at `0dbdc7d` confirmed that contract: the
+  minimum-fuel stage ran for 209.645384 seconds, retained the 35.884956 L
+  incumbent, exported a 0 L best bound and 100% primary gap, stopped before
+  secondary cost, and preserved the physically valid 31-BEV/1-ICE result.
+  Inspection of the same run's seed audit then exposed a separate P1 selection
+  bug: several suffix-exchange candidates were already physically feasible at
+  32 BEVs/0 ICE and 650,053.898604 JPY, but the seed selector still passed the
+  cheaper 31/1 candidate to an explicitly minimum-ICE-fuel solve.
+- Fixed the objective mismatch at the seed boundary. Canonical-cost runs keep
+  the existing strict-cost-improvement rule. A
+  `minimum_ice_fuel_lexicographic` run now selects an independently validated
+  zero-ICE seed whenever one exists. This is not a BEV lower-bound constraint:
+  zero liters is the analytical lower bound of the nonnegative policy
+  objective, and the all-BEV candidate has already passed fixed-assignment
+  Stage 2 plus physical validation. The audit now records selection objective,
+  zero-ICE availability, and whether that policy seed was selected.
 
 ## 2026-08-15: literature-driven Phase 4 seed restart and budget repair
 

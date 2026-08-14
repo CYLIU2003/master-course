@@ -855,6 +855,39 @@ def test_unused_bev_neighborhood_selects_only_exact_lower_cost_candidate(
     assert expensive_audit["maximum_observed_used_bev"] == 2
     assert expensive_audit["maximum_bev_candidate_canonical_cost_jpy"] == 120.0
 
+    policy_adapter = GurobiMILPAdapter()
+    monkeypatch.setattr(
+        policy_adapter,
+        "_solve_thesis_stage2_charging_dispatch",
+        _fake_stage2,
+    )
+    policy_selected, policy_audit = (
+        policy_adapter.improve_phase4_seed_with_unused_bev_neighborhood(
+            _problem(),
+            OptimizationConfig(
+                phase4_phase3_seed_unused_bev_neighborhood_enabled=True,
+                phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec=30,
+                phase4_phase3_seed_unused_bev_neighborhood_per_solve_sec=1,
+                phase4_phase3_seed_unused_bev_neighborhood_max_evaluations=20,
+                phase4_phase3_seed_unused_bev_identity_exchange_rounds=2,
+                integrated_ev_utilization_mode=(
+                    "minimum_ice_fuel_lexicographic"
+                ),
+            ),
+            _seed_plan(),
+        )
+    )
+
+    policy_vehicle_ids = set(policy_selected.duties_by_vehicle())
+    assert len(policy_vehicle_ids) == 2
+    assert "ice-1" not in policy_vehicle_ids
+    assert policy_audit["selected"] is True
+    assert policy_audit["selection_objective"] == "minimum_ice_fuel_l"
+    assert policy_audit["zero_ice_policy_candidate_available"] is True
+    assert policy_audit["zero_ice_policy_seed_selected"] is True
+    assert policy_audit["selected_canonical_cost_jpy"] == 120.0
+    assert policy_audit["selected_cost_improvement_jpy"] == -20.0
+
 
 def test_unused_bev_neighborhood_tries_full_ice_retirement_first(
     monkeypatch,

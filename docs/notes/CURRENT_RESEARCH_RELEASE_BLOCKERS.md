@@ -42,6 +42,16 @@ or that fuel quantity is unavoidable. The policy solver now uses sequential
 scalar stages and stops before secondary cost unless the fuel optimum is
 certified. A fresh run is required; research release remains **BLOCKED**.
 
+The first sequential diagnostic at clean SHA `0dbdc7d` correctly exported a
+0 L primary bound, 100% fuel gap, and no secondary-cost solve. Its seed audit
+also proved that multiple 32-BEV/0-ICE fixed-assignment candidates were already
+Stage-2 and physically feasible. They were not selected because the seed
+neighborhood always ranked by canonical cost, even under the minimum-fuel
+policy. That P1 objective-boundary bug is fixed: only the policy path selects a
+validated zero-ICE seed, while the formal cost-minimization path remains
+unchanged. The correction still requires a fresh clean-SHA rerun; formal pair
+release remains **BLOCKED**.
+
 ## 2026-08-15 formal `79e61ae` pair: low PV certified, high PV still blocked
 
 The controlled pair was executed through fresh Prepare and the normal

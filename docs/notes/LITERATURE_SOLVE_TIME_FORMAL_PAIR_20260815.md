@@ -114,3 +114,15 @@ hierarchy as explicit scalar stages and records each stage's incumbent and
 bound. This follows the same reporting distinction used for the literature:
 finding a strong heuristic/policy incumbent in hundreds of seconds is not the
 same as certifying its primary objective or the unrestricted cost optimum.
+
+The clean-SHA sequential measurement made that distinction concrete. Within
+the same 600-second frontend budget, the exact primary stage received about
+209.5 seconds after seed/model work and ended with a 35.884956 L incumbent but
+a 0 L lower bound. However, the bounded seed neighborhood had already found
+several physically feasible 32-BEV/0-ICE schedules at about 650,053.899 JPY.
+The runtime problem was therefore compounded by an objective mismatch at the
+MIP-start selector, not by proven all-BEV infeasibility. The selector is now
+objective-aware: a minimum-fuel run receives the validated zero-ICE seed,
+whereas the unrestricted cost run continues to receive the cheapest validated
+seed. This is the kind of formulation and incumbent-definition difference that
+must be normalized before comparing raw solve seconds with the literature.
