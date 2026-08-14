@@ -2334,6 +2334,188 @@ def _phase4_warm_start_evidence_valid(
     )
 
 
+def _phase4_legacy_seed_candidate_controls_match(
+    settings: Mapping[str, Any],
+) -> bool:
+    """Return whether the retired Phase-3 candidate-order contract matches."""
+
+    return bool(
+        settings.get("phase4_phase3_seed_candidate_evaluation_order")
+        == "candidate_priority_cost_ascending_then_candidate_hash"
+        and (
+            _number(
+                settings.get(
+                    "phase4_phase3_seed_candidate_evaluation_initial_budget_sec"
+                )
+            )
+            or 0.0
+        )
+        > 0.0
+    )
+
+
+def _phase4_v5_seed_neighborhood_controls_match(
+    settings: Mapping[str, Any],
+) -> bool:
+    """Verify the current bounded v5 incumbent-neighborhood audit.
+
+    Phase 4 no longer enumerates a Phase-3 composition candidate list.  It
+    starts from one neutral feasible plan and may improve that upper bound via
+    the separately bounded v5 neighborhood.  This validator checks the
+    configured budgets against the emitted audit instead of requiring legacy
+    candidate-order telemetry that is intentionally empty in this mode.
+    """
+
+    raw_audit = settings.get("phase4_phase3_seed_unused_bev_neighborhood")
+    if not isinstance(raw_audit, Mapping):
+        return False
+    audit = dict(raw_audit)
+    candidate_evaluations = audit.get("candidate_evaluations")
+    if not isinstance(candidate_evaluations, list):
+        return False
+
+    fixed_wall = _number(
+        audit.get("fixed_duty_neighborhood_wall_time_limit_sec")
+    )
+    route_wall = _number(
+        audit.get("route_band_repartition_wall_time_limit_sec")
+    )
+    total_wall = _number(audit.get("total_wall_time_limit_sec"))
+    per_solve = _number(audit.get("per_stage2_solve_time_limit_sec"))
+    runtime = _number(audit.get("wall_runtime_sec"))
+    fixed_limit = _number(
+        audit.get("fixed_duty_maximum_candidate_evaluations")
+    )
+    configured_limit = _number(audit.get("maximum_candidate_evaluations"))
+    route_limit = _number(
+        audit.get("route_band_additional_evaluation_limit")
+    )
+    total_limit = _number(audit.get("total_candidate_evaluation_limit"))
+    candidate_count = _number(audit.get("candidate_evaluation_count"))
+    local_search_reserve = _number(
+        audit.get("local_search_evaluation_reserve")
+    )
+    route_enabled = audit.get("route_band_repartition_enabled") is True
+    powertrain_rounds = _number(audit.get("powertrain_duty_swap_round_limit"))
+    identity_rounds = _number(audit.get("identity_exchange_round_limit"))
+
+    numeric_values = (
+        fixed_wall,
+        route_wall,
+        total_wall,
+        per_solve,
+        runtime,
+        fixed_limit,
+        configured_limit,
+        route_limit,
+        total_limit,
+        candidate_count,
+        local_search_reserve,
+        powertrain_rounds,
+        identity_rounds,
+    )
+    if any(value is None for value in numeric_values):
+        return False
+    assert fixed_wall is not None
+    assert route_wall is not None
+    assert total_wall is not None
+    assert per_solve is not None
+    assert runtime is not None
+    assert fixed_limit is not None
+    assert configured_limit is not None
+    assert route_limit is not None
+    assert total_limit is not None
+    assert candidate_count is not None
+    assert local_search_reserve is not None
+    assert powertrain_rounds is not None
+    assert identity_rounds is not None
+
+    configured_fixed_wall = _number(
+        settings.get(
+            "phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec"
+        )
+    )
+    configured_route_wall = _number(
+        settings.get("phase4_phase3_seed_route_band_repartition_time_limit_sec")
+    )
+    configured_per_solve = _number(
+        settings.get(
+            "phase4_phase3_seed_unused_bev_neighborhood_per_solve_sec"
+        )
+    )
+    configured_max_evaluations = _number(
+        settings.get(
+            "phase4_phase3_seed_unused_bev_neighborhood_max_evaluations"
+        )
+    )
+    configured_powertrain_rounds = _number(
+        settings.get("phase4_phase3_seed_powertrain_duty_swap_rounds")
+    )
+    configured_identity_rounds = _number(
+        settings.get(
+            "phase4_phase3_seed_unused_bev_identity_exchange_rounds"
+        )
+    )
+
+    return bool(
+        audit.get("schema_version")
+        == "phase4_seed_unused_bev_activation_neighborhood_v5"
+        and audit.get("enabled") is True
+        and audit.get("role")
+        == "feasible_upper_bound_candidate_generation_only"
+        and audit.get("global_optimality_claimed") is False
+        and audit.get("weather_strategy_bias_applied") is False
+        and fixed_wall > 0.0
+        and route_wall >= 0.0
+        and math.isclose(total_wall, fixed_wall + route_wall, abs_tol=1.0e-9)
+        and per_solve > 0.0
+        and runtime >= 0.0
+        and runtime <= total_wall + max(5.0, 0.01 * total_wall)
+        and fixed_limit > 0.0
+        and fixed_limit == configured_limit
+        and route_limit >= 0.0
+        and total_limit == fixed_limit + route_limit
+        and candidate_count == len(candidate_evaluations)
+        and 0.0 <= candidate_count <= total_limit
+        and 0.0 <= local_search_reserve <= fixed_limit
+        and powertrain_rounds >= 0.0
+        and identity_rounds >= 0.0
+        and (
+            powertrain_rounds == 0.0 and identity_rounds == 0.0
+            or local_search_reserve > 0.0
+        )
+        and (not route_enabled or route_wall > 0.0 and route_limit > 0.0)
+        and configured_fixed_wall == fixed_wall
+        and configured_route_wall == route_wall
+        and configured_per_solve == per_solve
+        and configured_max_evaluations == fixed_limit
+        and configured_powertrain_rounds == powertrain_rounds
+        and configured_identity_rounds == identity_rounds
+        and isinstance(audit.get("termination_reason"), str)
+        and bool(str(audit.get("termination_reason")).strip())
+    )
+
+
+def _phase4_seed_candidate_controls_match(
+    settings: Mapping[str, Any],
+) -> bool:
+    """Select the validator from the emitted neighborhood schema.
+
+    A v5 payload must pass the v5 validator even if stale legacy telemetry is
+    also present.  This prevents a valid old field pair from masking a
+    malformed or biased current neighborhood audit.
+    """
+
+    raw_audit = settings.get("phase4_phase3_seed_unused_bev_neighborhood")
+    if (
+        isinstance(raw_audit, Mapping)
+        and raw_audit.get("schema_version")
+        == "phase4_seed_unused_bev_activation_neighborhood_v5"
+    ):
+        return _phase4_v5_seed_neighborhood_controls_match(settings)
+    return _phase4_legacy_seed_candidate_controls_match(settings)
+
+
 def _phase4_seed_controls_match(settings: Mapping[str, Any]) -> bool:
     """Verify the bounded, cost-selected Phase-4 warm-start contract.
 
@@ -2386,17 +2568,7 @@ def _phase4_seed_controls_match(settings: Mapping[str, Any]) -> bool:
         == 0
         and settings.get("phase4_phase3_seed_wall_clock_budget_sec")
         == seed_limit
-        and settings.get("phase4_phase3_seed_candidate_evaluation_order")
-        == "candidate_priority_cost_ascending_then_candidate_hash"
-        and (
-            _number(
-                settings.get(
-                    "phase4_phase3_seed_candidate_evaluation_initial_budget_sec"
-                )
-            )
-            or 0.0
-        )
-        > 0.0
+        and _phase4_seed_candidate_controls_match(settings)
         and settings.get("phase4_phase3_seed_candidate_limit") == 1
         and settings.get(
             "phase4_phase3_seed_required_candidate_limit"

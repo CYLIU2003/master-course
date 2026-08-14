@@ -145,6 +145,95 @@ def test_formal_phase4_seed_control_contract_matches_server_profile() -> None:
     assert runner._phase4_seed_controls_match(settings) is False
 
 
+def test_formal_phase4_seed_control_contract_accepts_v5_neighborhood() -> None:
+    runner = _load_runner()
+    candidate_evaluations = [
+        {"candidate_kind": "pairwise_unused_bev_activation"},
+        {"candidate_kind": "powertrain_duty_swap_round_1"},
+    ]
+    settings = {
+        "phase4_phase3_seed_enabled": True,
+        "phase4_phase3_seed_composition_search_enabled": False,
+        "phase4_phase3_seed_composition_search_not_required_for_integrated_phase4": True,
+        "phase4_phase3_seed_time_limit_sec": 100,
+        "phase4_phase3_seed_wall_clock_budget_sec": 100,
+        "phase4_phase3_seed_model_build_overhead_allowance_sec": 0,
+        "phase4_phase3_seed_stage1_time_limit_sec": 80,
+        "phase4_phase3_seed_stage2_time_limit_sec": 20,
+        "phase4_phase3_seed_candidate_limit": 1,
+        "phase4_phase3_seed_candidate_evaluation_order": "",
+        "phase4_phase3_seed_candidate_evaluation_initial_budget_sec": 0.0,
+        "phase4_phase3_seed_composition_search_radius": 0,
+        "phase4_phase3_seed_required_candidate_limit": 1,
+        "phase4_phase3_seed_required_composition_search_radius": 0,
+        "phase4_phase3_seed_composition_search_scope": (
+            "primary_feasible_candidate_only_phase4_warm_start"
+        ),
+        "phase4_phase3_seed_inventory_span_truncated": False,
+        "phase4_phase3_seed_search_directionality": (
+            "neutral_primary_feasible_candidate_only"
+        ),
+        "phase4_phase3_seed_bev_frontier_enabled": False,
+        "phase4_phase3_seed_unused_bev_neighborhood_enabled": True,
+        "phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec": 75,
+        "phase4_phase3_seed_unused_bev_neighborhood_per_solve_sec": 3,
+        "phase4_phase3_seed_unused_bev_neighborhood_max_evaluations": 64,
+        "phase4_phase3_seed_route_band_repartition_time_limit_sec": 45,
+        "phase4_phase3_seed_powertrain_duty_swap_rounds": 3,
+        "phase4_phase3_seed_unused_bev_identity_exchange_rounds": 2,
+        "phase4_phase3_seed_unused_bev_neighborhood": {
+            "schema_version": (
+                "phase4_seed_unused_bev_activation_neighborhood_v5"
+            ),
+            "enabled": True,
+            "role": "feasible_upper_bound_candidate_generation_only",
+            "global_optimality_claimed": False,
+            "weather_strategy_bias_applied": False,
+            "route_band_repartition_enabled": True,
+            "fixed_duty_neighborhood_wall_time_limit_sec": 75,
+            "route_band_repartition_wall_time_limit_sec": 45,
+            "total_wall_time_limit_sec": 120,
+            "per_stage2_solve_time_limit_sec": 3,
+            "maximum_candidate_evaluations": 64,
+            "powertrain_duty_swap_round_limit": 3,
+            "identity_exchange_round_limit": 2,
+            "candidate_evaluations": candidate_evaluations,
+            "candidate_evaluation_count": 2,
+            "fixed_duty_maximum_candidate_evaluations": 64,
+            "route_band_additional_evaluation_limit": 4,
+            "total_candidate_evaluation_limit": 68,
+            "local_search_evaluation_reserve": 16,
+            "wall_runtime_sec": 95.0,
+            "termination_reason": "neighborhood_exhausted",
+        },
+        "phase4_integrated_seed_recourse_preflight_enabled": True,
+        "phase4_integrated_seed_recourse_preflight_requested": True,
+        "phase4_integrated_seed_recourse_preflight_feasible": True,
+        "phase4_total_solver_time_budget_sec": 600,
+        "phase4_shared_wall_clock_budget_enabled": True,
+        "phase4_shared_wall_clock_budget_sec": 600.0,
+        "phase4_total_wall_runtime_sec": 598.0,
+        "phase4_wall_clock_budget_overrun_sec": 0.0,
+    }
+
+    assert runner._phase4_seed_controls_match(settings) is True
+
+    neighborhood = settings["phase4_phase3_seed_unused_bev_neighborhood"]
+    assert isinstance(neighborhood, dict)
+    neighborhood["candidate_evaluation_count"] = 3
+    assert runner._phase4_seed_controls_match(settings) is False
+
+    neighborhood["candidate_evaluation_count"] = 2
+    neighborhood["weather_strategy_bias_applied"] = True
+    assert runner._phase4_seed_controls_match(settings) is False
+
+    settings["phase4_phase3_seed_candidate_evaluation_order"] = (
+        "candidate_priority_cost_ascending_then_candidate_hash"
+    )
+    settings["phase4_phase3_seed_candidate_evaluation_initial_budget_sec"] = 25.0
+    assert runner._phase4_seed_controls_match(settings) is False
+
+
 def test_phase4_actual_cost_contract_accepts_certified_lexicographic_level() -> None:
     runner = _load_runner()
     settings = {

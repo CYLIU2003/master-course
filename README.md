@@ -1,5 +1,29 @@
 # master-course
 
+## 2026-08-15 formal pair timing result and reporting-contract repair
+
+- A fresh formal frontend/BFF pair was executed from clean commit `79e61ae`.
+  The low-PV case reached the predeclared 1% certified gap in 794.542 seconds
+  of Phase 4 wall time (certified gap 0.420907%). The high-PV case used
+  3,606.884 seconds and stopped at 2.987214%, so the current bottleneck is the
+  high-PV lower bound/certification search rather than feasibility in every
+  case.
+- Both cases served 264/264 trips, passed independent physical validation,
+  accepted 24/24 fixed-assignment Rolling steps, and reconciled executed-day
+  accounting. High PV used 28 BEVs/4 ICE buses for 202/62 trips; low PV used
+  15 BEVs/17 ICE buses for 75/189 trips. The pair is still `BLOCKED` because
+  the high-PV gap exceeds 1%; these values are progress evidence, not a formal
+  optimality claim.
+- The pair runner incorrectly rejected the otherwise valid v5 seed controls
+  because it still required retired Phase-3 candidate-order telemetry. It now
+  validates either the legacy contract or the current bounded v5 neighborhood
+  audit, including wall/candidate budgets, emitted evaluation counts, no
+  weather bias, and consistency with the requested controls. Existing
+  `79e61ae` artifacts are not relabelled after this code change; a fresh
+  clean-commit run remains necessary for release.
+- Timing interpretation and the local literature comparison are recorded in
+  [the formal-pair timing note](docs/notes/LITERATURE_SOLVE_TIME_FORMAL_PAIR_20260815.md).
+
 ## 2026-08-15 literature-driven Phase 4 seed restart
 
 - The local literature audit confirms that tens-to-hundreds of seconds are

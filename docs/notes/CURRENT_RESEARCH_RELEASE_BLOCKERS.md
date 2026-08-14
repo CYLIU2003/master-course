@@ -1,5 +1,39 @@
 # Current research release blockers
 
+## 2026-08-15 formal `79e61ae` pair: low PV certified, high PV still blocked
+
+The controlled pair was executed through fresh Prepare and the normal
+frontend/BFF formal path from clean SHA
+`79e61ae8cd43acb350c452e7f9eed68bf79507c1`. Both cases used the same
+2025-08-05 WEEKDAY timetable, 264 trips, 60 active vehicles, ten chargers,
+flat 30 JPY/kWh energy price, zero demand charge, 1,000 kW PV rating,
+6,000 kWh BESS, four Gurobi threads, seed 42 and a predeclared 1% gap. Only
+the hashed PV curve differed.
+
+Low PV completed Phase 4 in 794.541743 seconds with a 0.420907% independent
+certificate. It used 15 BEVs and 17 ICE buses for 75 and 189 trips. High PV
+used 3,606.883660 seconds but stopped at 2.987214%; it used 28 BEVs and four
+ICE buses for 202 and 62 trips. Both served 264/264 trips, passed physical
+validation, accepted 24/24 Rolling steps and reconciled executed-day
+accounting. Therefore the controlled response is physically observed, but
+formal pair release remains **BLOCKED** by the high-PV gap.
+
+The run also exposed an independent reporting P1: the case gate required the
+retired Phase-3 candidate-order and initial-candidate-budget fields even when
+the current v5 incumbent neighborhood was present and fully audited. This made
+`solver_controls_match_formal_request=false` for both cases and was the only
+case-gate failure for low PV. The runner now validates the v5 schema, requested
+and emitted budgets, evaluation counts, termination evidence, and absence of
+weather bias. Because this fix changes the Git SHA, it does not retroactively
+upgrade the `79e61ae` artifacts. A new clean-commit run is required before the
+low-PV case or the pair can be marked current-SHA accepted.
+
+The complete progress-only bundle, including seven figures and six CSV tables,
+is `output/formal_pair_20260815_seed_restart_79e61ae_flat30_pv1000_bess6000_gap01_r1`.
+Its ZIP is adjacent to that directory. The literature/timing interpretation is
+documented in
+`docs/notes/LITERATURE_SOLVE_TIME_FORMAL_PAIR_20260815.md`.
+
 ## 2026-08-15 stronger seed found diagnostically; fresh formal run pending
 
 The literature audit confirms that many published hundreds-of-seconds results

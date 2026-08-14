@@ -5385,3 +5385,43 @@ locks this distinction in place.
   charging/PV/ESS studies cannot be treated as equal-scope exact-MILP timing
   evidence. Future performance reporting will separate feasible-candidate
   time, best-incumbent time, gap-certification time and end-to-end wall time.
+
+# 2026-08-15 - Formal `79e61ae` pair timing and v5 control-gate correction
+
+- Ran the controlled high/low-PV pair through fresh Prepare and the normal
+  frontend/BFF formal route from clean commit
+  `79e61ae8cd43acb350c452e7f9eed68bf79507c1`. Frozen and ending SHAs matched
+  and the worktree stayed clean. Shared controls were 2025-08-05 WEEKDAY,
+  Tsurumaki, 264 trips, 60 vehicles, ten 90 kW chargers, flat 30 JPY/kWh,
+  zero demand charge, PV rating 1,000 kW, BESS 6,000 kWh / 900 kW with
+  3,000 -> 3,000 kWh, four threads, seed 42, 3,600 seconds and 1% gap.
+- High-PV job `3eab15a6-7b19-49e0-8b39-bdee64fa67ea` is under
+  `output/2026-08-15/run_20260815_0330`. Phase 4 wall time was
+  3,606.883660 seconds; the feasible assignment used 28 BEVs/4 ICE buses and
+  202/62 trips. Executed-day cost was 659,706.858143 JPY and the certified gap
+  was 2.987214%, so the declared 1% gate failed.
+- Low-PV job `835dbdb0-0a2f-44eb-bea2-4ebd6b1890e3` is under
+  `output/2026-08-15/run_20260815_0434`. Phase 4 wall time was 794.541743
+  seconds; the assignment used 15 BEVs/17 ICE buses and 75/189 trips.
+  Executed-day cost was 697,433.686483 JPY and the independent certified gap
+  was 0.420907%, meeting the declared 1% target.
+- Both cases served 264/264 trips, passed independent physical checks,
+  accepted all 24 fixed-assignment Rolling steps, reconciled executed-day
+  accounting and generated the complete report set. The pair remains
+  `BLOCKED` because high PV missed its gap certificate. The progress-only
+  bundle contains seven PNG/SVG figure pairs and six CSV tables at
+  `output/formal_pair_20260815_seed_restart_79e61ae_flat30_pv1000_bess6000_gap01_r1`.
+- Found a separate P1 reporting defect in
+  `scripts/run_frontend_controlled_pv_pair.py::_phase4_seed_controls_match`.
+  It required the legacy Phase-3 candidate sort order and a positive initial
+  candidate budget even though v5 deliberately emits an empty order and zero
+  initial budget. The gate now accepts either the legacy contract or a fully
+  consistent `phase4_seed_unused_bev_activation_neighborhood_v5` audit. The
+  v5 path verifies requested/emitted wall limits, per-solve limit, candidate
+  caps/counts, local-search reserve, termination evidence, and that neither a
+  global-optimality claim nor weather bias was applied.
+- Added regression coverage for a valid current v5 payload and tampered count
+  and weather-bias failures. The focused pair-runner suite passed 40 tests.
+  Both preserved `79e61ae` `solver_settings.json` files pass the corrected
+  helper when replayed read-only. They are not rewritten or relabelled because
+  this code fix changes the SHA; a fresh formal run is still required.
