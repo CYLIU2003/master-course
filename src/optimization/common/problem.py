@@ -417,6 +417,8 @@ class OptimizationConfig:
     integrated_actual_cost_objective: bool = False
     trip_energy_model: str = "distance_average_v0"
     trip_energy_sensitivity_scale: float = 1.0
+    bev_trip_energy_sensitivity_scale: float = 1.0
+    ice_trip_fuel_sensitivity_scale: float = 1.0
     # Optional Phase 4 policy frontiers.  Both retain the same canonical-cost
     # structural contract, but optimize ICE fuel first and total cost second.
     # ``integrated_actual_cost_upper_bound_jpy`` turns the unconstrained

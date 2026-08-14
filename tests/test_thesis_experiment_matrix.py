@@ -20,6 +20,8 @@ def test_experiment_matrix_contains_required_sensitivities() -> None:
     assert {
         "time_discretization",
         "trip_energy_sensitivity",
+        "bev_trip_energy_sensitivity",
+        "ice_trip_fuel_sensitivity",
         "pv_supply_transition",
         "route_band_ablation",
         "turnaround_buffer_sensitivity",
@@ -85,7 +87,33 @@ def test_experiment_matrix_contains_required_sensitivities() -> None:
     ] == [0.8, 0.9, 1.0, 1.1, 1.2]
     assert payload["parameter_semantics"][
         "trip_energy_sensitivity"
-    ].startswith("Multiplies the aggregate BEV")
+    ].startswith("Backward-compatible common")
+    bev_energy_cases = [
+        case
+        for case in payload["cases"]
+        if case["family"] == "bev_trip_energy_sensitivity"
+    ]
+    assert [
+        case["prepare_settings"]["bev_trip_energy_sensitivity_scale"]
+        for case in bev_energy_cases
+    ] == [0.8, 0.9, 1.0, 1.1, 1.2]
+    assert all(
+        case["prepare_settings"]["ice_trip_fuel_sensitivity_scale"] == 1.0
+        for case in bev_energy_cases
+    )
+    ice_fuel_cases = [
+        case
+        for case in payload["cases"]
+        if case["family"] == "ice_trip_fuel_sensitivity"
+    ]
+    assert [
+        case["prepare_settings"]["ice_trip_fuel_sensitivity_scale"]
+        for case in ice_fuel_cases
+    ] == [0.8, 0.9, 1.0, 1.1, 1.2]
+    assert all(
+        case["prepare_settings"]["bev_trip_energy_sensitivity_scale"] == 1.0
+        for case in ice_fuel_cases
+    )
     time_15 = next(
         case for case in payload["cases"] if case["case_id"] == "TIME_15"
     )

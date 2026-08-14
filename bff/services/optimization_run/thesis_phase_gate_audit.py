@@ -18,10 +18,12 @@ from typing import Any, Iterable, Mapping, Sequence
 from bff.services.optimization_run.input_provenance import (
     validate_run_input_provenance,
 )
+from bff.services.optimization_run.sensitivity_execution_contract import (
+    is_supported_sensitivity_execution_schema,
+)
 
 
 SCHEMA_VERSION = "thesis_model_phase_gate_audit_v1"
-SENSITIVITY_SCHEMA_VERSION = "thesis_sensitivity_execution_v2"
 ABLATION_SCHEMA_VERSION = "thesis_day_ahead_ablation_comparison_v1"
 EQUATION_MAP_SCHEMA_VERSION = "thesis_equation_code_test_map_audit_v1"
 
@@ -49,6 +51,20 @@ _FAMILY_CASES: dict[str, tuple[str, ...]] = {
         "ENERGY_1.0",
         "ENERGY_1.1",
         "ENERGY_1.2",
+    ),
+    "bev_trip_energy_sensitivity": (
+        "BEV_ENERGY_0.8",
+        "BEV_ENERGY_0.9",
+        "BEV_ENERGY_1.0",
+        "BEV_ENERGY_1.1",
+        "BEV_ENERGY_1.2",
+    ),
+    "ice_trip_fuel_sensitivity": (
+        "ICE_FUEL_0.8",
+        "ICE_FUEL_0.9",
+        "ICE_FUEL_1.0",
+        "ICE_FUEL_1.1",
+        "ICE_FUEL_1.2",
     ),
     "vehicle_day_cost_sensitivity": (
         "VEHICLE_DAY_0",
@@ -447,6 +463,18 @@ def _phase2_checks(context: _PhaseContext) -> dict[str, bool]:
             context.sensitivity_evidence,
             "trip_energy_sensitivity",
         ),
+        "bev_energy_80_to_120_percent_one_factor_sensitivity_accepted": (
+            _family_passed(
+                context.sensitivity_evidence,
+                "bev_trip_energy_sensitivity",
+            )
+        ),
+        "ice_fuel_80_to_120_percent_one_factor_sensitivity_accepted": (
+            _family_passed(
+                context.sensitivity_evidence,
+                "ice_trip_fuel_sensitivity",
+            )
+        ),
     }
 
 
@@ -703,7 +731,9 @@ def _load_sensitivity_evidence(
                 )
             )
             common_valid = bool(
-                payload.get("schema_version") == SENSITIVITY_SCHEMA_VERSION
+                is_supported_sensitivity_execution_schema(
+                    payload.get("schema_version")
+                )
                 and payload_hash_valid
                 and expected_git_sha
                 and payload.get("frozen_git_sha") == expected_git_sha

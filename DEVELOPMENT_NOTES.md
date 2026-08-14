@@ -1,5 +1,47 @@
 # Development Notes
 
+## 2026-08-15: independent powertrain energy sensitivities
+
+- Raised a Phase-2 identifiability defect during self-review. The existing
+  `trip_energy_sensitivity_scale` multiplied BEV kWh and ICE liters by the
+  same factor. A dispatch response from that family cannot distinguish BEV
+  consumption-model sensitivity from ICE fuel-model sensitivity.
+- Added `bev_trip_energy_sensitivity_scale` and
+  `ice_trip_fuel_sensitivity_scale` through the typed scenario overlay,
+  Quick Setup save/load, Tk input controls, Prepare request, canonical
+  `ProblemBuilder`, `OptimizationConfig`, trip-demand provenance and
+  optimization metadata. For common factor `s_c`, the model now applies
+  `s_BEV = s_c * s_BEV-specific` and
+  `s_ICE = s_c * s_ICE-specific` independently.
+- Preserved the common factor for immutable historical experiments and for a
+  shared distance/demand calibration. It is no longer described as evidence
+  for either powertrain coefficient in isolation. The current
+  `literature_proxy_v1` remains a deterministic literature proxy: BEV weights
+  use distance and duration, ICE weights use distance and declared peak-time
+  bands. No unobserved route/direction empirical coefficient was invented.
+- Added separate `BEV_ENERGY_0.8`--`1.2` and
+  `ICE_FUEL_0.8`--`1.2` frontend/BFF experiment families. Each case fixes the
+  other powertrain factor, PV/BESS, timetable, fleet, tariff, solver and
+  Rolling controls. The Phase-2 completion gate now requires both one-factor
+  families in addition to the legacy common-demand family.
+- Fixed a pre-existing schema-boundary P1 found during this work. The runner
+  emitted `thesis_sensitivity_execution_v3_turnaround_buffer`, while the
+  phase audit and time/energy reporting accepted only v2. A shared contract
+  now accepts immutable v2, v3 and current
+  `thesis_sensitivity_execution_v4_powertrain_coefficients`, and rejects
+  undeclared versions. The matrix schema is
+  `thesis_experiment_matrix_v5_powertrain_coefficients`.
+- Bumped prepared input to
+  `v11_powertrain_coefficient_sensitivity`; pre-change prepared inputs remain
+  immutable history and cannot serve as current-SHA execution evidence.
+- Added proxy isolation, ProblemBuilder propagation, Quick Setup persistence,
+  Prepare payload, one-factor matrix, runner parameter/control audit, schema
+  compatibility, reporting, phase-gate and controlled-PV-pair regressions.
+  Focused verification: `212 passed`; prepared-input/README regression:
+  `192 passed`; full repository regression: `1484 passed` in 155.67 seconds.
+  No optimizer was invoked, so the two independent 0.8--1.2 tranches and
+  Phase-2 research evidence remain pending.
+
 ## 2026-08-15: high-PV v6 runtime evidence and seed-budget reallocation
 
 - Executed a fresh high-PV case through frontend-equivalent HTTP Prepare and

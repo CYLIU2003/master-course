@@ -129,6 +129,8 @@ class SolverConfig(BaseModel):
         "literature_proxy_v1",
     ] = "distance_average_v0"
     trip_energy_sensitivity_scale: float = Field(default=1.0, ge=0.0)
+    bev_trip_energy_sensitivity_scale: float = Field(default=1.0, ge=0.0)
+    ice_trip_fuel_sensitivity_scale: float = Field(default=1.0, ge=0.0)
     fixed_route_band_mode: bool = False
     max_start_fragments_per_vehicle: int = Field(default=100, ge=1)
     max_end_fragments_per_vehicle: int = Field(default=100, ge=1)

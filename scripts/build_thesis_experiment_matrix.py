@@ -20,6 +20,8 @@ def build_experiment_matrix() -> dict[str, Any]:
         "objective_preset": "research_lexicographic_v1",
         "trip_energy_model": "literature_proxy_v1",
         "trip_energy_sensitivity_scale": 1.0,
+        "bev_trip_energy_sensitivity_scale": 1.0,
+        "ice_trip_fuel_sensitivity_scale": 1.0,
         "charging_power_model": "piecewise_soc_taper_v1",
         "charge_setup_minutes": 5,
         "charge_teardown_minutes": 5,
@@ -91,6 +93,16 @@ def build_experiment_matrix() -> dict[str, Any]:
             "trip_energy_sensitivity",
             {"trip_energy_sensitivity_scale": scale},
         )
+        add(
+            f"BEV_ENERGY_{scale:.1f}",
+            "bev_trip_energy_sensitivity",
+            {"bev_trip_energy_sensitivity_scale": scale},
+        )
+        add(
+            f"ICE_FUEL_{scale:.1f}",
+            "ice_trip_fuel_sensitivity",
+            {"ice_trip_fuel_sensitivity_scale": scale},
+        )
     for pv_scale in (0.0, 0.25, 0.5, 0.75, 1.0):
         add(
             f"PV_{pv_scale:.2f}",
@@ -136,7 +148,9 @@ def build_experiment_matrix() -> dict[str, Any]:
         )
 
     return {
-        "schema_version": "thesis_experiment_matrix_v4_turnaround_buffer",
+        "schema_version": (
+            "thesis_experiment_matrix_v5_powertrain_coefficients"
+        ),
         "execution_semantics": "frontend_bff_only_no_direct_solver",
         "common_control_contract": common,
         "parameter_semantics": {
@@ -151,11 +165,22 @@ def build_experiment_matrix() -> dict[str, Any]:
                 "does not change pv_capacity_kw."
             ),
             "trip_energy_sensitivity": (
-                "Multiplies the aggregate BEV kWh and ICE fuel-liter demand "
-                "targets by the same declared factor after the deterministic "
-                "route/direction/time proxy weights are constructed. It does "
-                "not alter trip times, distances, PV, tariff, fleet, or "
-                "charging controls."
+                "Backward-compatible common demand multiplier. It moves BEV "
+                "kWh and ICE fuel liters together and is interpreted as a "
+                "shared trip-demand or distance calibration sensitivity, not "
+                "as evidence for either powertrain coefficient in isolation."
+            ),
+            "bev_trip_energy_sensitivity": (
+                "Multiplies only aggregate BEV trip kWh after deterministic "
+                "distance/duration/time weights are normalized. ICE liters, "
+                "trip times, distances, PV, tariff, fleet and charging "
+                "controls remain fixed."
+            ),
+            "ice_trip_fuel_sensitivity": (
+                "Multiplies only aggregate ICE trip fuel liters after the "
+                "deterministic time-band weights are normalized. BEV kWh, "
+                "trip times, distances, PV, tariff, fleet and charging "
+                "controls remain fixed."
             ),
             "route_band_off": (
                 "fixed_route_band_mode=false together with "

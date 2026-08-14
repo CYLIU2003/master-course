@@ -90,6 +90,8 @@ def test_build_quick_setup_payload_includes_saved_controls_and_zeroes() -> None:
                 "stage1_bev_frontier_target_time_limit_seconds": 90,
                 "integrated_actual_cost_objective": True,
                 "integrated_ev_utilization_mode": "disabled",
+                "bev_trip_energy_sensitivity_scale": 1.2,
+                "ice_trip_fuel_sensitivity_scale": 0.8,
             },
             "cost_coefficients": {
                 "grid_flat_price_per_kwh": 0.0,
@@ -208,6 +210,8 @@ def test_build_quick_setup_payload_includes_saved_controls_and_zeroes() -> None:
     )
     assert payload["solverSettings"]["integratedActualCostObjective"] is True
     assert payload["solverSettings"]["integratedEvUtilizationMode"] == "disabled"
+    assert payload["solverSettings"]["bevTripEnergySensitivityScale"] == 1.2
+    assert payload["solverSettings"]["iceTripFuelSensitivityScale"] == 0.8
     assert payload["solverSettings"]["randomSeed"] == 0
     assert payload["simulationSettings"]["unservedPenalty"] == 0.0
     assert payload["simulationSettings"]["gridFlatPricePerKwh"] == 0.0
@@ -353,6 +357,8 @@ def test_update_quick_setup_persists_cost_component_toggles() -> None:
         stage1BevFrontierTargetTimeLimitSeconds=90,
         integratedActualCostObjective=True,
         integratedEvUtilizationMode="disabled",
+        bevTripEnergySensitivityScale=1.2,
+        iceTripFuelSensitivityScale=0.8,
     )
 
     with (
@@ -391,6 +397,12 @@ def test_update_quick_setup_persists_cost_component_toggles() -> None:
     )
     assert scenario_overlay["solver_config"]["integrated_actual_cost_objective"] is True
     assert scenario_overlay["solver_config"]["integrated_ev_utilization_mode"] == "disabled"
+    assert scenario_overlay["solver_config"][
+        "bev_trip_energy_sensitivity_scale"
+    ] == 1.2
+    assert scenario_overlay["solver_config"][
+        "ice_trip_fuel_sensitivity_scale"
+    ] == 0.8
     assert scenario_overlay["cost_coefficients"]["pv_marginal_charge_cost_yen_per_kwh"] == 4.25
     assert scenario_overlay["cost_coefficients"]["pv_curtail_penalty_yen_per_kwh"] == 7.5
     assert scenario_overlay["cost_coefficients"]["vehicle_usage_cost_jpy_per_used_bus"] == 25000.0
@@ -416,6 +428,8 @@ def test_update_quick_setup_persists_cost_component_toggles() -> None:
     assert simulation_config["deadhead_speed_kmh"] == 18.0
     assert simulation_config["default_turnaround_min"] == 12
     assert simulation_config["turnaround_buffer_min"] == 4
+    assert simulation_config["bev_trip_energy_sensitivity_scale"] == 1.2
+    assert simulation_config["ice_trip_fuel_sensitivity_scale"] == 0.8
     assert simulation_config["vehicle_usage_cost_semantics"] == (
         "driver_cost_proxy"
     )

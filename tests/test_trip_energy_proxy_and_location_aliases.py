@@ -81,6 +81,43 @@ def test_literature_proxy_scales_bev_and_ice_aggregate_demand_together(
     assert proxy.provenance["sensitivity_scale"] == pytest.approx(scale)
 
 
+def test_literature_proxy_scales_bev_and_ice_demands_independently() -> None:
+    trips = (
+        _trip("morning", "07:00", "07:40", 10.0),
+        _trip("midday", "12:00", "12:20", 20.0),
+    )
+
+    bev_high = build_literature_proxy_trip_demands(
+        trips,
+        bev_kwh_per_km=1.316,
+        ice_l_per_km=1.0 / 4.52,
+        bev_sensitivity_scale=1.2,
+        ice_sensitivity_scale=1.0,
+    )
+    ice_high = build_literature_proxy_trip_demands(
+        trips,
+        bev_kwh_per_km=1.316,
+        ice_l_per_km=1.0 / 4.52,
+        bev_sensitivity_scale=1.0,
+        ice_sensitivity_scale=1.2,
+    )
+
+    assert sum(bev_high.energy_kwh_by_trip.values()) == pytest.approx(
+        30.0 * 1.316 * 1.2
+    )
+    assert sum(bev_high.fuel_l_by_trip.values()) == pytest.approx(30.0 / 4.52)
+    assert sum(ice_high.energy_kwh_by_trip.values()) == pytest.approx(
+        30.0 * 1.316
+    )
+    assert sum(ice_high.fuel_l_by_trip.values()) == pytest.approx(
+        30.0 / 4.52 * 1.2
+    )
+    assert bev_high.provenance["effective_bev_trip_energy_scale"] == 1.2
+    assert bev_high.provenance["effective_ice_trip_fuel_scale"] == 1.0
+    assert ice_high.provenance["effective_bev_trip_energy_scale"] == 1.0
+    assert ice_high.provenance["effective_ice_trip_fuel_scale"] == 1.2
+
+
 def test_explicit_trip_vehicle_type_demand_overrides_vehicle_average_rate() -> None:
     problem_trip = ProblemTrip(
         trip_id="trip",

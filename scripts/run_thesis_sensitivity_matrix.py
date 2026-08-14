@@ -26,6 +26,9 @@ from bff.services.optimization_run.input_provenance import (  # noqa: E402
     PREPARED_TRIP_INPUT_SCHEMA,
     validate_run_input_provenance,
 )
+from bff.services.optimization_run.sensitivity_execution_contract import (  # noqa: E402
+    LATEST_SENSITIVITY_EXECUTION_SCHEMA_VERSION,
+)
 from scripts.build_thesis_experiment_matrix import (  # noqa: E402
     build_experiment_matrix,
 )
@@ -40,7 +43,14 @@ from scripts.run_frontend_controlled_pv_pair import (  # noqa: E402
 )
 
 
-SCHEMA_VERSION = "thesis_sensitivity_execution_v3_turnaround_buffer"
+SCHEMA_VERSION = LATEST_SENSITIVITY_EXECUTION_SCHEMA_VERSION
+TRIP_DEMAND_SENSITIVITY_FAMILIES = frozenset(
+    {
+        "trip_energy_sensitivity",
+        "bev_trip_energy_sensitivity",
+        "ice_trip_fuel_sensitivity",
+    }
+)
 CSV_COLUMNS = (
     "case_id",
     "family",
@@ -54,6 +64,9 @@ CSV_COLUMNS = (
     "wall_time_seconds",
     "timestep_min",
     "turnaround_buffer_min",
+    "trip_energy_sensitivity_scale",
+    "bev_trip_energy_sensitivity_scale",
+    "ice_trip_fuel_sensitivity_scale",
     "rolling_execution_minutes_submitted",
     "rolling_execution_minutes_requested",
     "rolling_execution_minutes_effective",
@@ -323,7 +336,7 @@ def _audit_case(
     prepare_audit = _read_json(run_dir / "prepare_input_audit.json")
     prepared_trip_input_sha256 = None
     prepared_trip_input_hash_source = None
-    if str(case.get("family") or "") == "trip_energy_sensitivity":
+    if str(case.get("family") or "") in TRIP_DEMAND_SENSITIVITY_FAMILIES:
         (
             prepared_trip_input_sha256,
             prepared_trip_input_hash_source,
@@ -408,7 +421,8 @@ def _audit_case(
         "declared_common_controls_effective": declared_controls_match,
         "submitted_request_provenance_matches": request_provenance_match,
         "prepared_trip_structure_verified": bool(
-            str(case.get("family") or "") != "trip_energy_sensitivity"
+            str(case.get("family") or "")
+            not in TRIP_DEMAND_SENSITIVITY_FAMILIES
             or prepared_trip_input_sha256
         ),
         "vehicle_day_cost_semantics_and_formula_valid": bool(
@@ -424,6 +438,12 @@ def _audit_case(
     raw_frontend_body = dict(frontend_request.get("raw_frontend_body") or {})
     effective_rolling = dict(
         frontend_request.get("effective_rolling_controls") or {}
+    )
+    effective_metadata = dict(
+        required["optimization_parameters.json"].get(
+            "effective_model_metadata"
+        )
+        or {}
     )
     return {
         "case_id": case_id,
@@ -452,12 +472,18 @@ def _audit_case(
             )
             or {}
         ).get("timestep_min"),
-        "turnaround_buffer_min": dict(
-            required["optimization_parameters.json"].get(
-                "effective_model_metadata"
-            )
-            or {}
-        ).get("turnaround_buffer_min"),
+        "turnaround_buffer_min": effective_metadata.get(
+            "turnaround_buffer_min"
+        ),
+        "trip_energy_sensitivity_scale": effective_metadata.get(
+            "trip_energy_sensitivity_scale"
+        ),
+        "bev_trip_energy_sensitivity_scale": effective_metadata.get(
+            "bev_trip_energy_sensitivity_scale"
+        ),
+        "ice_trip_fuel_sensitivity_scale": effective_metadata.get(
+            "ice_trip_fuel_sensitivity_scale"
+        ),
         "rolling_execution_minutes_submitted": dict(
             submitted_optimization_request or {}
         ).get("rolling_execution_minutes"),
@@ -830,6 +856,16 @@ def _case_parameter_matches(
             metadata.get("trip_energy_sensitivity_scale"),
             expected.get("trip_energy_sensitivity_scale"),
         )
+    if family == "bev_trip_energy_sensitivity":
+        return _numbers_equal(
+            metadata.get("bev_trip_energy_sensitivity_scale"),
+            expected.get("bev_trip_energy_sensitivity_scale"),
+        )
+    if family == "ice_trip_fuel_sensitivity":
+        return _numbers_equal(
+            metadata.get("ice_trip_fuel_sensitivity_scale"),
+            expected.get("ice_trip_fuel_sensitivity_scale"),
+        )
     if family == "pv_supply_transition":
         scales = dict(metadata.get("pv_supply_scale_by_depot") or {})
         return bool(scales) and all(
@@ -889,6 +925,18 @@ def _declared_controls_match(
         scenario.get("objective_mode") == expected.get("objective_mode"),
         metadata.get("objective_preset") == expected.get("objective_preset"),
         metadata.get("trip_energy_model") == expected.get("trip_energy_model"),
+        _numbers_equal(
+            metadata.get("trip_energy_sensitivity_scale"),
+            expected.get("trip_energy_sensitivity_scale"),
+        ),
+        _numbers_equal(
+            metadata.get("bev_trip_energy_sensitivity_scale"),
+            expected.get("bev_trip_energy_sensitivity_scale"),
+        ),
+        _numbers_equal(
+            metadata.get("ice_trip_fuel_sensitivity_scale"),
+            expected.get("ice_trip_fuel_sensitivity_scale"),
+        ),
         metadata.get("charging_power_model")
         == expected.get("charging_power_model"),
         metadata.get("charge_setup_minutes")
@@ -1278,7 +1326,7 @@ def _stable_control_fingerprint(
     family = str(case.get("family") or "")
     trip_structure_control_sha256 = (
         prepared_trip_input_sha256
-        if family == "trip_energy_sensitivity"
+        if family in TRIP_DEMAND_SENSITIVITY_FAMILIES
         else dimensions.get("trip_structure_input_sha256")
     )
     payload = {

@@ -6,6 +6,10 @@ from hashlib import sha256
 import json
 from typing import Any, Mapping, Sequence
 
+from bff.services.optimization_run.sensitivity_execution_contract import (
+    is_supported_sensitivity_execution_schema,
+)
+
 
 REPORTING_SCHEMA_VERSION = "trip_energy_sensitivity_reporting_v1"
 REQUIRED_CASE_SCALES = {
@@ -53,8 +57,9 @@ def build_trip_energy_sensitivity_report(
     _record(
         failed_checks,
         "source_manifest_schema_supported",
-        source_manifest.get("schema_version")
-        == "thesis_sensitivity_execution_v2",
+        is_supported_sensitivity_execution_schema(
+            source_manifest.get("schema_version")
+        ),
     )
     expected_ids = set(REQUIRED_CASE_SCALES)
     _record(

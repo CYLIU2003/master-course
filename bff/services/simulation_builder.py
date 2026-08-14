@@ -521,6 +521,12 @@ def apply_builder_configuration(
     overlay.solver_config.trip_energy_sensitivity_scale = float(
         body.simulation_settings.trip_energy_sensitivity_scale
     )
+    overlay.solver_config.bev_trip_energy_sensitivity_scale = float(
+        body.simulation_settings.bev_trip_energy_sensitivity_scale
+    )
+    overlay.solver_config.ice_trip_fuel_sensitivity_scale = float(
+        body.simulation_settings.ice_trip_fuel_sensitivity_scale
+    )
     overlay.solver_config.fixed_route_band_mode = bool(
         body.simulation_settings.fixed_route_band_mode
     )
@@ -978,6 +984,12 @@ def apply_builder_configuration(
         "trip_energy_model": overlay.solver_config.trip_energy_model,
         "trip_energy_sensitivity_scale": (
             overlay.solver_config.trip_energy_sensitivity_scale
+        ),
+        "bev_trip_energy_sensitivity_scale": (
+            overlay.solver_config.bev_trip_energy_sensitivity_scale
+        ),
+        "ice_trip_fuel_sensitivity_scale": (
+            overlay.solver_config.ice_trip_fuel_sensitivity_scale
         ),
         "fixed_route_band_mode": overlay.solver_config.fixed_route_band_mode,
         "milp_max_successors_per_trip": overlay.solver_config.milp_max_successors_per_trip,

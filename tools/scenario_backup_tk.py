@@ -2118,6 +2118,8 @@ class App:
         self.objective_preset_var = tk.StringVar(value="cost")
         self.trip_energy_model_var = tk.StringVar(value="literature_proxy_v1")
         self.trip_energy_sensitivity_scale_var = tk.StringVar(value="1.0")
+        self.bev_trip_energy_sensitivity_scale_var = tk.StringVar(value="1.0")
+        self.ice_trip_fuel_sensitivity_scale_var = tk.StringVar(value="1.0")
         self.charging_power_model_var = tk.StringVar(
             value="piecewise_soc_taper_v1"
         )
@@ -2771,6 +2773,21 @@ class App:
             label1="消費量感度倍率",
             var1=self.trip_energy_sensitivity_scale_var,
             tip1="0.8～1.2等の決定論的感度分析に使用します。",
+        )
+        self._param_row2(
+            optim_grp,
+            "BEV電費感度倍率",
+            self.bev_trip_energy_sensitivity_scale_var,
+            tip0=(
+                "BEVの便別kWhだけを0.8～1.2倍します。ICE燃料需要は固定し、"
+                "BEV電費係数の一要因感度を評価します。"
+            ),
+            label1="ICE燃費感度倍率",
+            var1=self.ice_trip_fuel_sensitivity_scale_var,
+            tip1=(
+                "ICEの便別燃料Lだけを0.8～1.2倍します。BEV電力需要は固定し、"
+                "ICE燃費係数の一要因感度を評価します。"
+            ),
         )
         self._param_row2(
             optim_grp,
@@ -7096,6 +7113,20 @@ class App:
                     else sim.get("tripEnergySensitivityScale", 1.0)
                 )
             )
+            self.bev_trip_energy_sensitivity_scale_var.set(
+                str(
+                    solver.get("bevTripEnergySensitivityScale")
+                    if solver.get("bevTripEnergySensitivityScale") is not None
+                    else sim.get("bevTripEnergySensitivityScale", 1.0)
+                )
+            )
+            self.ice_trip_fuel_sensitivity_scale_var.set(
+                str(
+                    solver.get("iceTripFuelSensitivityScale")
+                    if solver.get("iceTripFuelSensitivityScale") is not None
+                    else sim.get("iceTripFuelSensitivityScale", 1.0)
+                )
+            )
             self.charging_power_model_var.set(
                 str(
                     sim.get("chargingPowerModel")
@@ -7443,6 +7474,12 @@ class App:
             ),
             "tripEnergySensitivityScale": self._parse_float(
                 self.trip_energy_sensitivity_scale_var.get(), 1.0
+            ),
+            "bevTripEnergySensitivityScale": self._parse_float(
+                self.bev_trip_energy_sensitivity_scale_var.get(), 1.0
+            ),
+            "iceTripFuelSensitivityScale": self._parse_float(
+                self.ice_trip_fuel_sensitivity_scale_var.get(), 1.0
             ),
             "chargingPowerModel": (
                 self.charging_power_model_var.get().strip()
@@ -8866,6 +8903,12 @@ class App:
                 ),
                 "trip_energy_sensitivity_scale": self._parse_float(
                     self.trip_energy_sensitivity_scale_var.get(), 1.0
+                ),
+                "bev_trip_energy_sensitivity_scale": self._parse_float(
+                    self.bev_trip_energy_sensitivity_scale_var.get(), 1.0
+                ),
+                "ice_trip_fuel_sensitivity_scale": self._parse_float(
+                    self.ice_trip_fuel_sensitivity_scale_var.get(), 1.0
                 ),
                 "charging_power_model": (
                     self.charging_power_model_var.get().strip()

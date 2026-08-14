@@ -1,5 +1,31 @@
 # master-course
 
+## 2026-08-15 independent BEV/ICE coefficient sensitivity
+
+- The former `trip_energy_sensitivity_scale` changes BEV kWh and ICE fuel
+  liters together. It remains available as a backward-compatible common
+  trip-demand calibration, but it cannot identify which powertrain
+  coefficient caused a dispatch transition.
+- Quick Setup and Prepare now expose two independent non-negative controls:
+  `bev_trip_energy_sensitivity_scale` changes only BEV trip kWh, and
+  `ice_trip_fuel_sensitivity_scale` changes only ICE trip liters. The
+  canonical effective factors are
+  `common_scale * bev_scale` and `common_scale * ice_scale`; both are stored
+  in optimization metadata and trip-demand provenance.
+- The thesis matrix adds five one-factor cases for each coefficient at
+  0.8/0.9/1.0/1.1/1.2 while fixing the other powertrain factor at 1.0. The
+  frontend/BFF runner audits the effective values, prepared trip structure,
+  non-varied controls, physical schedule, Rolling accounting, Git SHA and
+  artifact hashes before accepting a case.
+- Prepared inputs now use
+  `v11_powertrain_coefficient_sensitivity`. The experiment and execution
+  contracts are `thesis_experiment_matrix_v5_powertrain_coefficients` and
+  `thesis_sensitivity_execution_v4_powertrain_coefficients`. Immutable v2/v3
+  execution manifests remain auditable; unknown versions fail closed.
+- This change adds execution support only. No independent 0.8--1.2 solve
+  tranche has yet been completed at the current SHA, so thesis Phase 2 and
+  research release remain `BLOCKED`.
+
 ## 2026-08-15 high-PV 600-second incumbent diagnostic
 
 - A fresh frontend/BFF Day-ahead diagnostic at clean SHA `3353318` verified
@@ -1792,12 +1818,15 @@ keeps the original file and byte SHA-256 when every solver-input field matches
 PV/BESS, compatibility, or other canonical field differs under the same ID,
 Prepare fails with `PREPARED_INPUT_ID_COLLISION`; it never overwrites the prior
 artifact. This is required for an M1/M3 comparison to share both the prepared
-ID and the exact source byte hash across an application restart. Schema
-`v10_turnaround_buffer_sensitivity` also uses the same selection-scope hash in the
-prepared ID and inside the payload; the derived `prepared_scope_audit` is
+ID and the exact source byte hash across an application restart. Current
+schema `v11_powertrain_coefficient_sensitivity` inherits the selection-scope
+and turnaround audit contract introduced by
+`v10_turnaround_buffer_sensitivity`. It uses the same selection-scope hash in
+the prepared ID and inside the payload; the derived `prepared_scope_audit` is
 explicitly excluded from that selection hash. Older v7/v8 files from the
 identity corrections and v9 files are preserved as historical artifacts and
-are not reused as v10 input. A failed route-band-OFF rebuild or invalid
+are not reused as current input; v10 files likewise remain immutable history
+after the independent coefficient fields were added. A failed route-band-OFF rebuild or invalid
 5/10/15-minute monotonicity audit blocks teacher release instead of being
 misread as zero missing deadhead pairs. Rolling comparison-case control hashes
 also include route-band mode, base turnaround, operating buffer, and connection

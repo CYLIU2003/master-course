@@ -32,9 +32,15 @@ def _case(case_id: str) -> dict:
 
 
 def test_pv_scale_is_a_validated_prepare_api_parameter() -> None:
-    settings = PrepareSimulationSettingsBody(pv_scale=0.25)
+    settings = PrepareSimulationSettingsBody(
+        pv_scale=0.25,
+        bev_trip_energy_sensitivity_scale=1.2,
+        ice_trip_fuel_sensitivity_scale=0.8,
+    )
 
     assert settings.pv_scale == 0.25
+    assert settings.bev_trip_energy_sensitivity_scale == 1.2
+    assert settings.ice_trip_fuel_sensitivity_scale == 0.8
 
 
 def test_case_request_compiler_uses_fresh_prepare_and_declared_overrides() -> None:
@@ -74,6 +80,32 @@ def test_time_case_compiles_matching_prepare_optimization_and_rolling_steps() ->
     assert optimization["time_step_min"] == 15
     assert optimization["timestep_min"] == 15
     assert optimization["rolling_execution_minutes"] == 60
+
+
+def test_powertrain_energy_cases_change_only_one_declared_coefficient() -> None:
+    bev_prepare, _ = build_case_requests(
+        case=_case("BEV_ENERGY_1.2"),
+        base_prepare_request={"simulation_settings": {}},
+        base_optimization_request={},
+    )
+    ice_prepare, _ = build_case_requests(
+        case=_case("ICE_FUEL_0.8"),
+        base_prepare_request={"simulation_settings": {}},
+        base_optimization_request={},
+    )
+
+    assert bev_prepare["simulation_settings"][
+        "bev_trip_energy_sensitivity_scale"
+    ] == 1.2
+    assert bev_prepare["simulation_settings"][
+        "ice_trip_fuel_sensitivity_scale"
+    ] == 1.0
+    assert ice_prepare["simulation_settings"][
+        "bev_trip_energy_sensitivity_scale"
+    ] == 1.0
+    assert ice_prepare["simulation_settings"][
+        "ice_trip_fuel_sensitivity_scale"
+    ] == 0.8
 
 
 def test_turnaround_case_compiles_only_declared_prepare_margin() -> None:
@@ -172,6 +204,33 @@ def test_vehicle_day_cost_audit_reconciles_one_time_activation() -> None:
 
 def test_parameter_audit_distinguishes_pv_scale_and_route_band_lock() -> None:
     assert _case_parameter_matches(
+        case=_case("BEV_ENERGY_1.2"),
+        parameters={
+            "effective_model_metadata": {
+                "bev_trip_energy_sensitivity_scale": 1.2,
+            }
+        },
+        economic_audit={},
+    )
+    assert not _case_parameter_matches(
+        case=_case("BEV_ENERGY_1.2"),
+        parameters={
+            "effective_model_metadata": {
+                "bev_trip_energy_sensitivity_scale": 1.0,
+            }
+        },
+        economic_audit={},
+    )
+    assert _case_parameter_matches(
+        case=_case("ICE_FUEL_0.8"),
+        parameters={
+            "effective_model_metadata": {
+                "ice_trip_fuel_sensitivity_scale": 0.8,
+            }
+        },
+        economic_audit={},
+    )
+    assert _case_parameter_matches(
         case=_case("PV_0.25"),
         parameters={
             "effective_model_metadata": {
@@ -231,6 +290,15 @@ def test_declared_control_audit_rejects_hidden_prepare_override() -> None:
         "effective_model_metadata": {
             "objective_preset": expected["objective_preset"],
             "trip_energy_model": expected["trip_energy_model"],
+            "trip_energy_sensitivity_scale": expected[
+                "trip_energy_sensitivity_scale"
+            ],
+            "bev_trip_energy_sensitivity_scale": expected[
+                "bev_trip_energy_sensitivity_scale"
+            ],
+            "ice_trip_fuel_sensitivity_scale": expected[
+                "ice_trip_fuel_sensitivity_scale"
+            ],
             "charging_power_model": expected["charging_power_model"],
             "charge_setup_minutes": expected["charge_setup_minutes"],
             "charge_teardown_minutes": expected["charge_teardown_minutes"],

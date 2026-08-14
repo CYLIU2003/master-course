@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from src.optimization.common.builder import ProblemBuilder
 
 
@@ -158,3 +160,45 @@ def test_problem_builder_disables_pv_without_depot_area() -> None:
     assert asset.pv_enabled is False
     assert asset.pv_capacity_kw == 0.0
     assert asset.pv_generation_kwh_by_slot == (0.0, 0.0)
+
+
+def test_problem_builder_applies_independent_powertrain_demand_scales() -> None:
+    baseline_scenario = _scenario(60)
+    baseline_scenario["scenario_overlay"]["solver_config"].update(
+        {
+            "trip_energy_model": "literature_proxy_v1",
+            "trip_energy_sensitivity_scale": 1.0,
+        }
+    )
+    scaled_scenario = _scenario(60)
+    scaled_scenario["scenario_overlay"]["solver_config"].update(
+        {
+            "trip_energy_model": "literature_proxy_v1",
+            "trip_energy_sensitivity_scale": 1.0,
+            "bev_trip_energy_sensitivity_scale": 1.2,
+            "ice_trip_fuel_sensitivity_scale": 0.8,
+        }
+    )
+
+    baseline = ProblemBuilder().build_from_scenario(
+        baseline_scenario,
+        depot_id="dep-1",
+        service_id="WEEKDAY",
+    )
+    scaled = ProblemBuilder().build_from_scenario(
+        scaled_scenario,
+        depot_id="dep-1",
+        service_id="WEEKDAY",
+    )
+
+    assert scaled.trips[0].energy_kwh == pytest.approx(
+        baseline.trips[0].energy_kwh * 1.2
+    )
+    assert scaled.trips[0].fuel_l == pytest.approx(
+        baseline.trips[0].fuel_l * 0.8
+    )
+    assert scaled.metadata["bev_trip_energy_sensitivity_scale"] == 1.2
+    assert scaled.metadata["ice_trip_fuel_sensitivity_scale"] == 0.8
+    provenance = scaled.metadata["trip_energy_model_provenance"]
+    assert provenance["effective_bev_trip_energy_scale"] == 1.2
+    assert provenance["effective_ice_trip_fuel_scale"] == 0.8

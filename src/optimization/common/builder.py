@@ -577,6 +577,28 @@ class ProblemBuilder:
         )
         if trip_energy_sensitivity_scale < 0.0:
             raise ValueError("trip_energy_sensitivity_scale must be non-negative")
+        bev_trip_energy_sensitivity_scale = float(
+            self._first_present(
+                solver_cfg.get("bev_trip_energy_sensitivity_scale"),
+                simulation_cfg.get("bev_trip_energy_sensitivity_scale"),
+                1.0,
+            )
+        )
+        if bev_trip_energy_sensitivity_scale < 0.0:
+            raise ValueError(
+                "bev_trip_energy_sensitivity_scale must be non-negative"
+            )
+        ice_trip_fuel_sensitivity_scale = float(
+            self._first_present(
+                solver_cfg.get("ice_trip_fuel_sensitivity_scale"),
+                simulation_cfg.get("ice_trip_fuel_sensitivity_scale"),
+                1.0,
+            )
+        )
+        if ice_trip_fuel_sensitivity_scale < 0.0:
+            raise ValueError(
+                "ice_trip_fuel_sensitivity_scale must be non-negative"
+            )
         return self.build_from_dispatch(
             context,
             scenario_id=str((scenario.get("meta") or {}).get("id") or ""),
@@ -661,6 +683,12 @@ class ProblemBuilder:
             allow_synthetic_pv_fallback=allow_synthetic_pv_fallback,
             trip_energy_model=trip_energy_model,
             trip_energy_sensitivity_scale=trip_energy_sensitivity_scale,
+            bev_trip_energy_sensitivity_scale=(
+                bev_trip_energy_sensitivity_scale
+            ),
+            ice_trip_fuel_sensitivity_scale=(
+                ice_trip_fuel_sensitivity_scale
+            ),
             objective_preset=solver_cfg.get("objective_preset"),
             charging_power_model=str(
                 charging_cfg.get("charging_power_model")
@@ -765,6 +793,8 @@ class ProblemBuilder:
         allow_synthetic_pv_fallback: bool = False,
         trip_energy_model: str = "distance_average_v0",
         trip_energy_sensitivity_scale: float = 1.0,
+        bev_trip_energy_sensitivity_scale: float = 1.0,
+        ice_trip_fuel_sensitivity_scale: float = 1.0,
         objective_preset: Optional[str] = None,
         charging_power_model: str = "piecewise_soc_taper_v1",
         charge_setup_minutes: int = 5,
@@ -882,6 +912,8 @@ class ProblemBuilder:
                 bev_kwh_per_km=self._reference_bev_energy_rate(context),
                 ice_l_per_km=self._reference_ice_fuel_rate(context),
                 sensitivity_scale=trip_energy_sensitivity_scale,
+                bev_sensitivity_scale=bev_trip_energy_sensitivity_scale,
+                ice_sensitivity_scale=ice_trip_fuel_sensitivity_scale,
             )
         trip_nodes_list: List[ProblemTrip] = []
         for trip in context.trips:
@@ -1509,6 +1541,12 @@ class ProblemBuilder:
                 "trip_energy_model": normalized_trip_energy_model,
                 "trip_energy_sensitivity_scale": float(
                     trip_energy_sensitivity_scale
+                ),
+                "bev_trip_energy_sensitivity_scale": float(
+                    bev_trip_energy_sensitivity_scale
+                ),
+                "ice_trip_fuel_sensitivity_scale": float(
+                    ice_trip_fuel_sensitivity_scale
                 ),
                 "trip_energy_model_provenance": (
                     dict(trip_demand_proxy.provenance)

@@ -692,6 +692,19 @@ def test_timestep_payload_fields_are_wired() -> None:
     assert '"timestepMin": self._timestep_min_value()' in quick_setup_source
 
 
+def test_powertrain_specific_energy_sensitivity_fields_are_wired() -> None:
+    load_source = inspect.getsource(App.load_quick_setup)
+    prepare_source = inspect.getsource(App._prepare_payload)
+    quick_setup_source = inspect.getsource(App.save_quick_setup)
+
+    assert "bevTripEnergySensitivityScale" in load_source
+    assert "iceTripFuelSensitivityScale" in load_source
+    assert '"bev_trip_energy_sensitivity_scale"' in prepare_source
+    assert '"ice_trip_fuel_sensitivity_scale"' in prepare_source
+    assert '"bevTripEnergySensitivityScale"' in quick_setup_source
+    assert '"iceTripFuelSensitivityScale"' in quick_setup_source
+
+
 def test_depot_charger_manager_exposes_bess_buffer_fields() -> None:
     manager_source = inspect.getsource(App.open_vehicle_depot_manager)
     sync_source = inspect.getsource(App._sync_depot_manager_energy_asset_row)

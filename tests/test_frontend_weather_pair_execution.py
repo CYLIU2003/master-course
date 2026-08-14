@@ -429,6 +429,8 @@ def test_prepare_payload_separates_service_date_from_pv_source() -> None:
         ("objective_preset", "research_lexicographic_v1"),
         ("trip_energy_model", "literature_proxy_v1"),
         ("trip_energy_sensitivity_scale", 1.0),
+        ("bev_trip_energy_sensitivity_scale", 1.0),
+        ("ice_trip_fuel_sensitivity_scale", 1.0),
         ("charging_power_model", "piecewise_soc_taper_v1"),
         ("charge_setup_minutes", 5),
         ("charge_teardown_minutes", 5),

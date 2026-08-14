@@ -903,6 +903,8 @@ class UpdateQuickSetupBody(BaseModel):
         "literature_proxy_v1",
     ]] = None
     tripEnergySensitivityScale: Optional[float] = Field(default=None, ge=0.0)
+    bevTripEnergySensitivityScale: Optional[float] = Field(default=None, ge=0.0)
+    iceTripFuelSensitivityScale: Optional[float] = Field(default=None, ge=0.0)
     chargingPowerModel: Optional[Literal[
         "constant_power_v0",
         "piecewise_soc_taper_v1",
@@ -1960,6 +1962,20 @@ def _builder_defaults(
                 default=1.0,
             )
         ),
+        "bevTripEnergySensitivityScale": float(
+            _first_present_value(
+                simulation_config.get("bev_trip_energy_sensitivity_scale"),
+                overlay_solver.get("bev_trip_energy_sensitivity_scale"),
+                default=1.0,
+            )
+        ),
+        "iceTripFuelSensitivityScale": float(
+            _first_present_value(
+                simulation_config.get("ice_trip_fuel_sensitivity_scale"),
+                overlay_solver.get("ice_trip_fuel_sensitivity_scale"),
+                default=1.0,
+            )
+        ),
         "chargingPowerModel": str(
             simulation_config.get("charging_power_model")
             or "piecewise_soc_taper_v1"
@@ -2621,6 +2637,18 @@ def _build_quick_setup_payload(
                     default=1.0,
                 )
             ),
+            "bevTripEnergySensitivityScale": float(
+                _first_present_value(
+                    builder_defaults.get("bevTripEnergySensitivityScale"),
+                    default=1.0,
+                )
+            ),
+            "iceTripFuelSensitivityScale": float(
+                _first_present_value(
+                    builder_defaults.get("iceTripFuelSensitivityScale"),
+                    default=1.0,
+                )
+            ),
             "chargingPowerModel": builder_defaults.get("chargingPowerModel") or "piecewise_soc_taper_v1",
             "chargeSetupMinutes": int(
                 _first_present_value(
@@ -3241,6 +3269,14 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
             solver_config["trip_energy_sensitivity_scale"] = float(
                 body.tripEnergySensitivityScale
             )
+        if body.bevTripEnergySensitivityScale is not None:
+            solver_config["bev_trip_energy_sensitivity_scale"] = float(
+                body.bevTripEnergySensitivityScale
+            )
+        if body.iceTripFuelSensitivityScale is not None:
+            solver_config["ice_trip_fuel_sensitivity_scale"] = float(
+                body.iceTripFuelSensitivityScale
+            )
         try:
             _validate_effective_quick_setup_solver_controls(solver_config)
         except ValueError as exc:
@@ -3473,6 +3509,14 @@ def update_quick_setup(scenario_id: str, body: UpdateQuickSetupBody) -> Dict[str
         if body.tripEnergySensitivityScale is not None:
             simulation_config["trip_energy_sensitivity_scale"] = float(
                 body.tripEnergySensitivityScale
+            )
+        if body.bevTripEnergySensitivityScale is not None:
+            simulation_config["bev_trip_energy_sensitivity_scale"] = float(
+                body.bevTripEnergySensitivityScale
+            )
+        if body.iceTripFuelSensitivityScale is not None:
+            simulation_config["ice_trip_fuel_sensitivity_scale"] = float(
+                body.iceTripFuelSensitivityScale
             )
         if body.chargingPowerModel is not None:
             simulation_config["charging_power_model"] = str(

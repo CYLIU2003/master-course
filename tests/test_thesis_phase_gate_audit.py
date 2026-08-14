@@ -8,6 +8,9 @@ from typing import Any
 import pytest
 
 from bff.services.optimization_run import thesis_phase_gate_audit as audit_module
+from bff.services.optimization_run.sensitivity_execution_contract import (
+    LATEST_SENSITIVITY_EXECUTION_SCHEMA_VERSION,
+)
 
 
 def _write_json(path: Path, payload: Any) -> None:
@@ -208,9 +211,10 @@ def _sensitivity_manifest(
     family: str,
     case_ids: tuple[str, ...],
     git_sha: str = "a" * 40,
+    schema_version: str = "thesis_sensitivity_execution_v2",
 ) -> Path:
     payload: dict[str, Any] = {
-        "schema_version": "thesis_sensitivity_execution_v2",
+        "schema_version": schema_version,
         "frozen_git_sha": git_sha,
         "audit_builder_git_sha": git_sha,
         "selected_case_ids": list(case_ids),
@@ -265,6 +269,7 @@ def test_phase1_completes_with_same_sha_accepted_family_manifests(
         tmp_path / "route-band.json",
         family="route_band_ablation",
         case_ids=("ROUTE_BAND_ON", "ROUTE_BAND_OFF"),
+        schema_version=LATEST_SENSITIVITY_EXECUTION_SCHEMA_VERSION,
     )
     turnaround = _sensitivity_manifest(
         tmp_path / "turnaround.json",

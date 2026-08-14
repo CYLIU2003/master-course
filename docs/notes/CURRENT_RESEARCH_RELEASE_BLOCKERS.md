@@ -1,5 +1,32 @@
 # Current research release blockers
 
+## 2026-08-15 independent coefficient sensitivity implemented; solves pending
+
+Phase 2 previously relied on a common `trip_energy_sensitivity_scale` that
+multiplied both BEV kWh and ICE liters. The observed BEV/ICE response therefore
+could not identify whether the BEV coefficient, the ICE coefficient, or their
+shared distance/demand basis caused the change.
+
+The frontend, Prepare contract and canonical problem now carry independent
+`bev_trip_energy_sensitivity_scale` and
+`ice_trip_fuel_sensitivity_scale` values. The thesis matrix declares five
+one-factor levels (0.8--1.2) for each powertrain and fixes the other factor at
+1.0. The execution auditor checks the effective coefficient, common controls,
+prepared trip structure, accepted physical/Rolling/accounting evidence, Git
+SHA and artifact hashes. The Phase-2 gate requires both independent families;
+the legacy common-demand family alone can no longer complete it.
+
+No new route/direction empirical coefficients were invented. The current
+`literature_proxy_v1` is still a deterministic proxy whose BEV allocation uses
+distance and duration and whose ICE allocation uses distance and peak-time
+bands. Empirical route/direction calibration remains unavailable and must be
+described as a limitation or replaced by sourced input data.
+
+The prepared schema is now `v11_powertrain_coefficient_sensitivity`; fresh
+Prepare is mandatory. The independent matrices have not been optimized at the
+current clean SHA. Consequently, this is implementation evidence only and
+Phase 2 plus the overall research release remain **BLOCKED**.
+
 ## 2026-08-15 clean-SHA high-PV v6 diagnostic: incumbent improved, 1% still blocked
 
 A fresh frontend/BFF Day-ahead diagnostic at clean SHA `3353318` used the
@@ -958,7 +985,8 @@ it is not evidence for the revised model. Current-HEAD research release is
 1. fresh Prepare for both controlled PV cases;
 2. route-band-OFF transition audit with `deadhead_missing = 0`, or an explicit
    non-READY result listing the still-missing matrix entries;
-3. 15/30/60-minute, trip-demand, route-band, and vehicle-day-cost sensitivity;
+3. 15/30/60-minute, common trip-demand, independent BEV-energy, independent
+   ICE-fuel, route-band, and vehicle-day-cost sensitivity;
 4. accepted Phase 4 plus 24/24 Rolling, physical validation, canonical
    accounting, and immutable pair verification;
 5. a fresh frontend/BFF ablation matrix (the bounded all-ICE and grid-only

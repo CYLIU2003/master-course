@@ -8,6 +8,9 @@ from bff.services.optimization_run.trip_energy_sensitivity_reporting import (
     build_trip_energy_sensitivity_report,
     render_trip_energy_sensitivity_markdown,
 )
+from bff.services.optimization_run.sensitivity_execution_contract import (
+    LATEST_SENSITIVITY_EXECUTION_SCHEMA_VERSION,
+)
 
 
 def _hash(payload: dict) -> str:
@@ -103,9 +106,13 @@ def _outcome(
     }
 
 
-def _manifest(*, gap_met: bool = False) -> dict:
+def _manifest(
+    *,
+    gap_met: bool = False,
+    schema_version: str = "thesis_sensitivity_execution_v2",
+) -> dict:
     payload = {
-        "schema_version": "thesis_sensitivity_execution_v2",
+        "schema_version": schema_version,
         "frozen_git_sha": "source-sha",
         "audit_builder_git_sha": "audit-sha",
         "source_execution_manifest_sha256": "original-manifest",
@@ -144,6 +151,17 @@ def test_reports_gap_limited_energy_cases_as_diagnostic() -> None:
         for row in report["observed_dispatch_transition_intervals"]
     ] == [(0.8, 0.9), (1.0, 1.1)]
     assert "do not certify" in render_trip_energy_sensitivity_markdown(report)
+
+
+def test_accepts_latest_powertrain_coefficient_execution_schema() -> None:
+    report = build_trip_energy_sensitivity_report(
+        _manifest(
+            schema_version=LATEST_SENSITIVITY_EXECUTION_SCHEMA_VERSION
+        )
+    )
+
+    assert report["failed_checks"] == []
+    assert report["reporting_eligible"] is True
 
 
 def test_blocks_tampered_source_manifest() -> None:

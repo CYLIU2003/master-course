@@ -29,6 +29,8 @@ def build_literature_proxy_trip_demands(
     bev_kwh_per_km: float,
     ice_l_per_km: float,
     sensitivity_scale: float = 1.0,
+    bev_sensitivity_scale: float = 1.0,
+    ice_sensitivity_scale: float = 1.0,
 ) -> TripDemandProxy:
     """Allocate fleet-average demand to individual trips deterministically.
 
@@ -39,10 +41,22 @@ def build_literature_proxy_trip_demands(
     demand before the explicit sensitivity multiplier is applied.
     """
 
-    scale = max(float(sensitivity_scale), 0.0)
+    common_scale = max(float(sensitivity_scale), 0.0)
+    bev_scale = max(float(bev_sensitivity_scale), 0.0)
+    ice_scale = max(float(ice_sensitivity_scale), 0.0)
+    effective_bev_scale = common_scale * bev_scale
+    effective_ice_scale = common_scale * ice_scale
     total_distance_km = sum(max(float(trip.distance_km), 0.0) for trip in trips)
-    bev_target_kwh = total_distance_km * max(float(bev_kwh_per_km), 0.0) * scale
-    ice_target_l = total_distance_km * max(float(ice_l_per_km), 0.0) * scale
+    bev_target_kwh = (
+        total_distance_km
+        * max(float(bev_kwh_per_km), 0.0)
+        * effective_bev_scale
+    )
+    ice_target_l = (
+        total_distance_km
+        * max(float(ice_l_per_km), 0.0)
+        * effective_ice_scale
+    )
 
     bev_weights: dict[str, float] = {}
     ice_weights: dict[str, float] = {}
@@ -72,7 +86,15 @@ def build_literature_proxy_trip_demands(
             "ice_peak_multiplier": peak_ratio,
             "peak_windows_local": ["05:00-10:00", "16:00-20:00"],
             "aggregate_normalization": "configured_fleet_average_demand",
-            "sensitivity_scale": scale,
+            # ``sensitivity_scale`` remains the backward-compatible common
+            # multiplier.  The powertrain-specific factors make one-factor
+            # sensitivity experiments identifiable instead of moving BEV
+            # electricity and ICE fuel demand together.
+            "sensitivity_scale": common_scale,
+            "bev_trip_energy_sensitivity_scale": bev_scale,
+            "ice_trip_fuel_sensitivity_scale": ice_scale,
+            "effective_bev_trip_energy_scale": effective_bev_scale,
+            "effective_ice_trip_fuel_scale": effective_ice_scale,
             "source_doi": "10.1016/j.commtr.2022.100069",
             "model_role": "deterministic_literature_proxy_not_measured_trip_data",
         },

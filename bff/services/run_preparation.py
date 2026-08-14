@@ -31,7 +31,7 @@ log = logging.getLogger("run_prep")
 # canonical solver input.  The schema suffix is part of prepared_input_id, so
 # old prepared files cannot be silently reused after a fleet-contract change.
 PREPARED_INPUT_SCHEMA_VERSION = (
-    "v10_turnaround_buffer_sensitivity"
+    "v11_powertrain_coefficient_sensitivity"
 )
 
 

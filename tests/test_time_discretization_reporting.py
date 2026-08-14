@@ -7,6 +7,9 @@ from bff.services.optimization_run.time_discretization_reporting import (
     build_time_discretization_report,
     render_time_discretization_markdown,
 )
+from bff.services.optimization_run.sensitivity_execution_contract import (
+    LATEST_SENSITIVITY_EXECUTION_SCHEMA_VERSION,
+)
 
 
 def _hash(payload: dict) -> str:
@@ -77,9 +80,13 @@ def _outcome(case_id: str, timestep: int, *, gap_met: bool = False) -> dict:
     }
 
 
-def _manifest(*, gap_met: bool = False) -> dict:
+def _manifest(
+    *,
+    gap_met: bool = False,
+    schema_version: str = "thesis_sensitivity_execution_v2",
+) -> dict:
     payload = {
-        "schema_version": "thesis_sensitivity_execution_v2",
+        "schema_version": schema_version,
         "frozen_git_sha": "abc123",
         "selected_case_ids": ["TIME_15", "TIME_30", "TIME_60"],
         "completed_case_ids": ["TIME_15", "TIME_30", "TIME_60"],
@@ -108,6 +115,17 @@ def test_reports_physically_valid_gap_limited_cases_as_diagnostic() -> None:
     assert report["rows"][0]["cost_delta_vs_60_jpy"] == 0.0
     assert report["rows"][2]["cost_delta_vs_60_jpy"] == -45.0
     assert "does not certify" in render_time_discretization_markdown(report)
+
+
+def test_accepts_latest_powertrain_coefficient_execution_schema() -> None:
+    report = build_time_discretization_report(
+        _manifest(
+            schema_version=LATEST_SENSITIVITY_EXECUTION_SCHEMA_VERSION
+        )
+    )
+
+    assert report["failed_checks"] == []
+    assert report["reporting_eligible"] is True
 
 
 def test_blocks_tampered_source_manifest() -> None:
