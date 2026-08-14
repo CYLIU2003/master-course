@@ -2553,3 +2553,25 @@ canonical cost all pass with a strict improvement. Neither fix makes the
 `ecdb0b1` result valid retroactively. Required next evidence is a fresh Prepare
 and run from the new clean commit, followed by the rain case and accepted
 24/24 Rolling only after the day-ahead gap and accounting gates pass.
+
+Clean commit `4f6a808` supplied that next high-PV diagnostic. Canonical
+assignment, fuel, CO2 and total-cost accounting reconciled with zero failed
+data-flow checks. The validated seed improved from 13 BEVs/19 ICE buses and
+44/220 trips to 14/18 and 60/204 trips, lowering canonical daily cost by
+5,146.266645 JPY. The complete all-ICE-duty retirement candidate was
+infeasible, and integrated Phase 4 retained the 14/18 seed.
+
+This run is still BLOCKED for research release. It stopped after one search
+node at an 8.880180% certified gap against the declared 1% target. It was also
+`research_run=false`, day-ahead only, and had no accepted 24/24 Rolling chain
+or controlled rain pair. The result is evidence that the cost-selected seed
+can change BEV adoption, not evidence that 14/18 is optimal.
+
+The neighborhood then exhausted its 64-evaluation cap by testing equivalent
+unused BEV IDs. The current code collapses only exact solver-clone IDs to one
+representative fixed-assignment solve and expands a feasible representative
+edge for matching. A combined or cumulative candidate is never accepted from
+that inference alone: it must pass Stage 2, independent physical validation
+and canonical accounting. The final integrated feasible region and objective
+are unchanged. A fresh clean-commit diagnostic must verify the effect before
+the rain case or a formal pair is run.

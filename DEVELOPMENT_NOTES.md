@@ -5021,3 +5021,42 @@ locks this distinction in place.
   `1452 passed in 133.69s`. A fresh clean-commit high-PV diagnostic is required
   to determine whether the direct candidate is feasible and improves the
   incumbent; no improvement is claimed from tests alone.
+
+# 2026-08-14 - Validated BEV seed improvement and exact-clone representative search
+
+- Clean commit `4f6a808` was rerun through fresh frontend/BFF Prepare with the
+  same 264-trip high-PV diagnostic controls: 1000 kW PV, 6000 kWh BESS,
+  30 JPY/kWh flat energy price, zero demand charge, four threads and one shared
+  600-second Phase 4 budget. Solver wall time was 605.836 seconds and HTTP
+  submit-to-terminal time was 631.299 seconds. This remained a
+  `research_run=false`, day-ahead-only diagnostic.
+- Canonical assignment export now reconciles. The final data-flow validation
+  reported 62 `OK`, one `SKIPPED`, and zero failed checks; solver objective and
+  accounting total matched. This fixes the earlier fuel/CO2 ledger defect but
+  does not retroactively change the `ecdb0b1` artifacts.
+- The fixed-assignment seed neighborhood found an independently validated
+  one-duty ICE-to-unused-BEV replacement. The selected seed improved from
+  13 BEVs/19 ICE buses and 44/220 trips to 14/18 and 60/204 trips. Canonical
+  daily cost decreased by 5,146.266645 JPY to 702,371.885683 JPY. The direct
+  all-active-ICE retirement candidate was infeasible.
+- Integrated Phase 4 retained that seed but explored one node and stopped with
+  an 8.880180% certified gap. It therefore proves neither 14/18 optimal nor a
+  literature-comparable exact solution in hundreds of seconds.
+- Post-run audit showed 64/64 candidate evaluations had been exhausted while
+  repeatedly testing exact-clone unused BEV identifiers. Candidate generation
+  now reuses `_ordered_identical_vehicle_groups`: one representative per exact
+  unused-BEV symmetry class is evaluated for each active ICE duty, and a
+  feasible edge is expanded to its clone IDs for maximum-cardinality matching.
+  The symmetry signature includes powertrain, home depot, initial state,
+  capacity/reserve, availability, fuel/energy parameters, fixed cost, maximum
+  charge power and compatible charger IDs.
+- Edge expansion alone cannot select a result. The maximum matching and every
+  cumulative replacement still undergo exact fixed-assignment Stage 2,
+  independent physical validation and canonical cost comparison. Public audit
+  fields record exact-clone classes, representative solve count and inferred
+  edges. The unrestricted integrated Phase 4 model is unchanged; no BEV lower
+  bound, weather bias, hard feasibility cut or post-solve repair was added.
+- Focused regression for the representative search passed `108 passed`;
+  complete repository regression passed `1452 passed in 137.04s`. A fresh
+  clean-commit runtime diagnostic remains required before making any
+  performance claim.

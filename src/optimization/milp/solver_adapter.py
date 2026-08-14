@@ -3008,6 +3008,30 @@ class GurobiMILPAdapter:
         else:
             direct_full_retirement_status = "skipped_budget_exhausted"
 
+        # Fixed-assignment feasibility is invariant under an exact clone-ID
+        # permutation.  Evaluate one unused BEV representative per certified
+        # symmetry class and expand a feasible edge to all members.  This keeps
+        # the matching exact while avoiding repeated Stage-2 solves whose only
+        # difference is an otherwise solver-identical vehicle identifier.
+        unused_bev_id_set = set(unused_bev_ids)
+        unused_bev_equivalence_classes: List[Tuple[str, ...]] = []
+        grouped_unused_bev_ids: Set[str] = set()
+        for exact_clone_group in _ordered_identical_vehicle_groups(problem):
+            unused_members = tuple(
+                sorted(unused_bev_id_set.intersection(exact_clone_group))
+            )
+            if not unused_members:
+                continue
+            unused_bev_equivalence_classes.append(unused_members)
+            grouped_unused_bev_ids.update(unused_members)
+        for vehicle_id in sorted(
+            unused_bev_id_set.difference(grouped_unused_bev_ids)
+        ):
+            unused_bev_equivalence_classes.append((vehicle_id,))
+        unused_bev_equivalence_classes.sort(key=lambda group: group[0])
+        pairwise_representative_evaluation_count = 0
+        inferred_equivalent_adjacency_count = 0
+
         route_band_repartition_attempts: List[Dict[str, Any]] = []
         route_band_repartition_candidate_count = 0
         route_band_repartition_full_feasible_count = 0
@@ -3524,7 +3548,8 @@ class GurobiMILPAdapter:
             source_vehicle = vehicle_by_id.get(source_vehicle_id)
             if source_vehicle is None:
                 continue
-            for target_vehicle_id in unused_bev_ids:
+            for equivalent_target_ids in unused_bev_equivalence_classes:
+                target_vehicle_id = equivalent_target_ids[0]
                 target_vehicle = vehicle_by_id.get(target_vehicle_id)
                 if target_vehicle is None or str(
                     target_vehicle.home_depot_id
@@ -3545,10 +3570,22 @@ class GurobiMILPAdapter:
                     candidate_plan,
                     candidate_kind="single_ice_to_unused_bev",
                     replacements=replacements,
+                    candidate_details={
+                        "evaluated_target_vehicle_id": target_vehicle_id,
+                        "exact_clone_equivalent_target_vehicle_ids": list(
+                            equivalent_target_ids
+                        ),
+                        "exact_clone_edge_expansion": True,
+                    },
                 )
+                pairwise_representative_evaluation_count += 1
                 if result is not None:
-                    adjacency_by_ice[source_vehicle_id].append(
-                        target_vehicle_id
+                    adjacency_by_ice[source_vehicle_id].extend(
+                        equivalent_target_ids
+                    )
+                    inferred_equivalent_adjacency_count += max(
+                        len(equivalent_target_ids) - 1,
+                        0,
                     )
                 if not _budget_available():
                     break
@@ -4188,6 +4225,16 @@ class GurobiMILPAdapter:
                     maximum_bev_assignment_hash
                 ),
                 "candidate_evaluation_count": len(evaluation_rows),
+                "unused_bev_exact_clone_equivalence_classes": [
+                    list(group)
+                    for group in unused_bev_equivalence_classes
+                ],
+                "pairwise_representative_evaluation_count": (
+                    pairwise_representative_evaluation_count
+                ),
+                "inferred_equivalent_adjacency_count": (
+                    inferred_equivalent_adjacency_count
+                ),
                 "direct_full_ice_retirement_status": (
                     direct_full_retirement_status
                 ),

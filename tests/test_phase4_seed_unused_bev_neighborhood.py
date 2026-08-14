@@ -770,6 +770,11 @@ def test_unused_bev_neighborhood_selects_only_exact_lower_cost_candidate(
     assert audit["maximum_observed_used_bev"] == 2
     assert audit["weather_strategy_bias_applied"] is False
     assert audit["global_optimality_claimed"] is False
+    assert audit["unused_bev_exact_clone_equivalence_classes"] == [
+        ["bev-a", "bev-b"]
+    ]
+    assert audit["pairwise_representative_evaluation_count"] == 1
+    assert audit["inferred_equivalent_adjacency_count"] == 1
 
     class _ExpensiveBevCostEvaluator:
         def evaluate(self, _problem, plan):

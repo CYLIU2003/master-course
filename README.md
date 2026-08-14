@@ -1773,3 +1773,24 @@ pairwise seed neighborhood. A strict canonical-cost improvement is used only
 as a MIP start and short-circuits further directed seed enumeration; the final
 integrated feasible region and objective remain unchanged. A fresh clean-commit
 run is required before claiming that this stronger start improves the pair.
+
+A subsequent clean diagnostic at commit `4f6a808` verified the reporting fix:
+the public data-flow audit had zero failed checks and the solver objective
+reconciled with canonical accounting. The fixed-assignment neighborhood found
+a strictly cheaper, independently validated 14-BEV/18-ICE start with 60/204
+trips, improving the earlier 13/19, 44/220 start by 5,146.27 JPY. The direct
+all-ICE-duty retirement candidate was infeasible. Phase 4 retained the improved
+start but still stopped at an 8.880% certified gap, so this remains diagnostic
+evidence and not a research-ready result.
+
+That run also showed that all 64 neighborhood evaluations were being consumed
+by vehicle-ID permutations of otherwise identical unused BEVs. Candidate
+generation now partitions unused BEVs by the existing exact solver-symmetry
+signature and solves one fixed-assignment recourse problem per representative.
+A feasible representative edge is expanded to the other exact-clone IDs only
+for bipartite matching; the combined replacement is still solved and validated
+normally before it can become a MIP start. Audit output records the equivalence
+classes, representative solve count, and inferred equivalent edges. This is a
+candidate-search efficiency change only: it does not add a BEV constraint,
+change the final Phase 4 feasible region, or establish a runtime improvement
+until a fresh clean-commit run is completed.
