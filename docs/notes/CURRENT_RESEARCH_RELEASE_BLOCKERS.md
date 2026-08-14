@@ -2612,3 +2612,20 @@ but consumed the rest of the 60-second local-search budget comparing the same
 round-one result and restarts from it in round two. The final integrated model
 is unchanged. Fresh clean evidence is required to determine whether this
 reaches 31/1 or 32/0 and whether the 1% gap gate closes.
+
+Clean commit `6755213` reached a separately validated 31-BEV/1-ICE start,
+248/16 trips and 648,332.208836 JPY. Suffix round one evaluated nine candidates
+and round two evaluated six after the bounded restart. Physical, accounting,
+artifact and data-flow gates passed. The remaining ICE duty contains 16 `渋23`
+trips and 149.109944 service kilometres; it has not been proved unavoidable.
+
+Research release remains BLOCKED because the integrated certified gap is
+1.285176% against the declared 1% threshold. This run was also diagnostic,
+nonformal and day-ahead only; it did not execute Rolling or the controlled rain
+case. The next bounded search keeps the overall 600-second Phase 4 budget and
+the 120-second seed-neighborhood allocation fixed, reallocates that neighborhood
+to 75 seconds of fixed-duty search and 45 seconds of route-band repartition,
+and permits a third suffix round. Round-two restart patience is reduced to four
+evaluations so a final round can be attempted. These are candidate-order and
+budget controls only; no BEV lower bound, weather bias, acceptance bypass or
+feasible-region change is introduced.

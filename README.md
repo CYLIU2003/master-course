@@ -1830,3 +1830,21 @@ eight-evaluation comparison window after the first strict-cost improvement,
 updates the anchor, and continues to the next configured suffix round. This is
 again limited to MIP-start generation; the integrated objective and feasible
 region are unchanged, and a fresh clean run is required.
+
+Clean commit `6755213` confirmed the restart behavior on the same high-PV,
+600-second frontend/BFF diagnostic. Suffix round one evaluated nine candidates
+and round two evaluated six; the validated start reached 31 BEVs/1 ICE bus,
+248/16 trips and 648,332.209 JPY. That is 2,210.790 JPY below the preceding
+30/2 start and 59,185.943 JPY below the original 13/19 Phase 3 seed. Physical,
+accounting, artifact and data-flow checks passed. The remaining ICE duty has
+16 trips and 149.110 service kilometres. The certified gap was 1.285176%, so
+this is still a feasible diagnostic incumbent rather than a declared 1%
+optimality result.
+
+The bounded suffix search now allows three rounds and reduces restart patience
+from eight evaluations in round one to four in round two. Within the unchanged
+120-second seed-neighborhood allocation, fixed-duty search receives 75 seconds
+and route-band repartition receives 45 seconds; the 600-second Phase 4 budget
+and 64-candidate cap are unchanged. This only changes which independently
+validated MIP starts are attempted. It does not force BEV use or change the
+integrated feasible region, objective, physical gates or certified-gap rule.

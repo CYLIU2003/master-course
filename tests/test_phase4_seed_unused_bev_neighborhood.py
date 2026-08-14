@@ -1254,6 +1254,12 @@ def test_suffix_exchange_restarts_from_first_round_improvement(
     assert audit["suffix_exchange_round_audits"][0][
         "restarted_from_improved_anchor"
     ] is True
+    assert audit["suffix_exchange_round_audits"][0][
+        "restart_patience_evaluations"
+    ] == 8
+    assert audit["suffix_exchange_round_audits"][1][
+        "restart_patience_evaluations"
+    ] == 4
     assert audit["selected_used_bev"] == 3
     assert audit["selected_used_ice"] == 0
     assert all(

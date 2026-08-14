@@ -5142,3 +5142,38 @@ locks this distinction in place.
   reaches the all-BEV validated result. Focused suite: `121 passed`; complete
   repository regression: `1454 passed in 135.38s` after the final audit-count
   correction. Clean runtime evidence remains pending.
+
+# 2026-08-14 - Validated 31-BEV start and funded final suffix round
+
+- Clean commit `6755213` completed the same frontend/BFF high-PV diagnostic as
+  job `ccb69bf7-4fd0-41c0-a28e-dadf3105e65a`. Canonical artifacts are under
+  `output/2026-08-14/run_20260814_2328`; the portable evidence copy is
+  `output/perf_suffix_restart_6755213_sunny_600s_20260814/sunny`.
+- HTTP submit-to-terminal time was 631.631 seconds and shared Phase 4 solver
+  wall time was 606.092 seconds. All 264 trips were served, physical status was
+  `VALID`, artifact completeness was `OK`, data-flow validation had 62 `OK`,
+  one intentional `SKIPPED`, and zero failures, and canonical accounting
+  reconciled. Rolling was not run and this was not a formal research run.
+- Suffix round one evaluated nine candidates and found five strict-cost
+  improvements. After restarting from the best validated anchor, round two
+  evaluated six and found three improvements. The selected start used 31 BEVs
+  and one ICE bus, assigned 248/16 trips, and cost 648,332.208836 JPY. It is
+  2,210.790488 JPY below the preceding 30/2 start and 59,185.943491 JPY below
+  the original 13/19 Phase 3 seed.
+- The remaining ICE duty belongs to vehicle
+  `b46f03c3-cfd6-4398-ad6a-a3bbfac7528f`: 16 `渋23` trips, 149.109944 service
+  kilometres and 32.566372 litres of service fuel. This is a measured
+  constraint-search target, not evidence that one ICE duty is necessary.
+- The integrated solve retained the 31/1 start. Its canonical ledger contains
+  2,809.840081 JPY electricity, 5,382.743360 JPY fuel, 640,000 JPY vehicle-use
+  cost and 139.625396 JPY CO2 cost. Against the 640,000 JPY bound, the certified
+  gap is 1.285176%; the declared 1% optimality gate therefore remains blocked.
+- The next bounded experiment keeps the overall 600-second Phase 4 budget and
+  120-second seed-neighborhood allocation unchanged. Fixed-duty search receives
+  75 seconds, route-band repartition receives 45 seconds, suffix search allows
+  three rounds, and restart patience is eight evaluations in round one and
+  four in round two. The 64-candidate cap remains. These settings affect MIP
+  start search only and do not change the integrated model or acceptance gates.
+- Focused policy and suffix-search regression: `113 passed in 4.00s`. Complete
+  repository regression: `1454 passed in 141.89s`. Fresh clean-commit runtime
+  evidence is pending.

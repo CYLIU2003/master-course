@@ -11449,13 +11449,13 @@ def _run_optimization(
                 phase4_phase3_seed_unused_bev_neighborhood_enabled=(
                     phase_token == "phase4_integrated"
                 ),
-                phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec=60,
+                phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec=75,
                 phase4_phase3_seed_unused_bev_neighborhood_per_solve_sec=3,
                 phase4_phase3_seed_unused_bev_neighborhood_max_evaluations=(
                     64
                 ),
-                phase4_phase3_seed_route_band_repartition_time_limit_sec=60,
-                phase4_phase3_seed_powertrain_duty_swap_rounds=2,
+                phase4_phase3_seed_route_band_repartition_time_limit_sec=45,
+                phase4_phase3_seed_powertrain_duty_swap_rounds=3,
                 phase4_phase3_seed_unused_bev_identity_exchange_rounds=2,
                 phase4_integrated_seed_recourse_preflight_enabled=(
                     phase_token == "phase4_integrated"

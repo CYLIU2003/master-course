@@ -3987,6 +3987,11 @@ class GurobiMILPAdapter:
             first_improvement_evaluation_index: Optional[int] = None
             restart_after_evaluation_index: Optional[int] = None
             round_restarted_early = False
+            round_restart_patience_evaluations = max(
+                2,
+                _SUFFIX_EXCHANGE_RESTART_PATIENCE_EVALUATIONS
+                // round_index,
+            )
             for (
                 _priority,
                 candidate_plan,
@@ -4015,7 +4020,7 @@ class GurobiMILPAdapter:
                         if round_index < powertrain_duty_swap_round_limit:
                             restart_after_evaluation_index = (
                                 first_improvement_evaluation_index
-                                + _SUFFIX_EXCHANGE_RESTART_PATIENCE_EVALUATIONS
+                                + round_restart_patience_evaluations
                             )
                 if (
                     restart_after_evaluation_index is not None
@@ -4035,6 +4040,9 @@ class GurobiMILPAdapter:
                 {
                     "round_index": round_index,
                     "anchor_cost_jpy": anchor_cost,
+                    "restart_patience_evaluations": (
+                        round_restart_patience_evaluations
+                    ),
                     "evaluated_candidate_count": (
                         len(evaluation_rows) - round_evaluation_start_count
                     ),
