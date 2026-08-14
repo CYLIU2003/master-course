@@ -4837,3 +4837,40 @@ locks this distinction in place.
   covered. The repository regression passes `1422 passed in 130.60s`. A fresh
   clean-commit 264-trip diagnostic remains pending; no runtime or formal-gap
   improvement is claimed yet.
+
+# 2026-08-14 - Literature-aligned exact-clone aggregation precondition
+
+- Rechecked the local `先行文献` corpus instead of treating every published
+  runtime as a like-for-like benchmark. No06 is the closest dispatch/charging
+  comparison: Gurobi takes 617.6 seconds at 50 trips and does not obtain a
+  feasible 200/418-trip solution within six hours, while its 418-trip 202.3
+  second result is ALNS-SA and near-optimal. No16/No61/No63 mainly fix vehicle
+  operation or assignment; No64 uses up to 80 Xeon cores and 314 GB RAM.
+- Added an exact-clone ICE aggregation precondition audit before attempting a
+  group-flow reformulation. It fails closed unless the horizon has one day and
+  one fragment per vehicle, all clone assignment and transition domains match,
+  and the chronological successor network is acyclic.
+- For each candidate group, a longest-path dynamic program accounts for
+  startup deadhead, every service trip, inter-trip deadhead and return-to-depot
+  fuel. Per-vehicle fuel state/refuelling is certified redundant only when the
+  maximum possible duty consumes no more than initial fuel minus reserve.
+  Candidate count, blockers, proof path, fuel margin and the potential binary
+  reduction are propagated through the MILP engine and BFF solver settings.
+- The audit changes no feasible set and explicitly records `applied=false`;
+  group variables and deterministic vehicle-ID recovery are not connected yet.
+  This prevents a partial implementation from being reported as a speedup.
+- A read-only reconstruction of the saved 264-trip high-PV Prepared Input
+  found one exact 25-ICE group. Its common domain has 264 assignments and
+  11,310 successor arcs per vehicle. The maximum reachable 11-trip duty uses
+  46.036430 L against 144.0 L of usable initial inventory, leaving a
+  97.963570 L margin. The certified group-flow target would remove an
+  estimated 290,448 binary variables. This is structural diagnostic evidence,
+  not a solve-time result; no optimization was run from the dirty worktree.
+- MIT self-review rejected the draft change that re-enabled Gurobi
+  `Symmetry=2`: clean run `run_20260808_1300` had already shown 3,600 seconds,
+  heavy root processing and a 100% gap. The automatic policy remains in force.
+  Tests cover the successful proof, unequal domains, insufficient initial fuel,
+  multi-day rejection, metadata propagation and the integrated search profile.
+  The focused integrated suite passes `56 passed`; the complete repository
+  regression passes `1445 passed in 131.05s`. A matched 264-trip runtime
+  comparison is still required before any performance claim.

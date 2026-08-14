@@ -4547,6 +4547,27 @@ class GurobiMILPAdapter:
             problem.metadata.get("max_end_fragments_per_vehicle"),
             default=1,
         )
+        integrated_exact_clone_flow_aggregation_audit = (
+            self._exact_combustion_clone_flow_aggregation_audit(
+                problem=problem,
+                identical_vehicle_groups=(
+                    integrated_identical_vehicle_groups
+                ),
+                assignment_pairs=assignment_pairs,
+                arc_pairs=arc_pairs,
+                startup_energy_precheck_by_assignment=(
+                    startup_energy_precheck_by_assignment
+                ),
+                planning_days=planning_days,
+                daily_fragment_limit=daily_fragment_limit,
+                max_start_fragments_per_vehicle=(
+                    max_start_fragments_per_vehicle
+                ),
+                max_end_fragments_per_vehicle=(
+                    max_end_fragments_per_vehicle
+                ),
+            )
+        )
 
         # Arc-flow constraints: one predecessor/successor with explicit start/end indicators.
         for vehicle in problem.vehicles:
@@ -7857,6 +7878,9 @@ class GurobiMILPAdapter:
                     "integrated_warm_start_audit": (
                         integrated_warm_start_audit
                     ),
+                    "integrated_exact_combustion_clone_flow_aggregation_audit": (
+                        integrated_exact_clone_flow_aggregation_audit
+                    ),
                     "startup_infeasible_vehicle_ids": tuple(sorted(startup_infeasible_vehicle_ids)),
                     "arc_pruning_summary": arc_pruning_summary,
                     "successor_pruning_enabled": bool(arc_pruning_summary.get("successor_pruning_enabled", False)),
@@ -8496,6 +8520,9 @@ class GurobiMILPAdapter:
                     "transition domains equal; activation prefix and "
                     "nonincreasing assigned-trip count preserve at least one "
                     "representative per exact vehicle-label orbit"
+                ),
+                "integrated_exact_combustion_clone_flow_aggregation_audit": (
+                    integrated_exact_clone_flow_aggregation_audit
                 ),
                 "integrated_phase3_iis_assignment_guidance_pattern_count": int(
                     integrated_seed_iis_assignment_guidance_audit[
@@ -23637,6 +23664,469 @@ class GurobiMILPAdapter:
         if fuel_rate > 0.0:
             return max(float(trip.distance_km or 0.0), 0.0) * fuel_rate
         return max(float(trip.fuel_l or 0.0), 0.0)
+
+    def _effective_combustion_fuel_inventory(
+        self,
+        problem: CanonicalOptimizationProblem,
+        vehicle: Any,
+    ) -> Dict[str, float]:
+        """Mirror the integrated finite-fuel initialization contract."""
+
+        initial_ratio = self._percent_to_ratio(
+            problem.metadata.get("initial_ice_fuel_percent")
+        )
+        minimum_ratio = self._percent_to_ratio(
+            problem.metadata.get("min_ice_fuel_percent")
+        )
+        maximum_ratio = self._percent_to_ratio(
+            problem.metadata.get("max_ice_fuel_percent")
+        )
+        default_capacity_l = self._safe_nonnegative_float(
+            problem.metadata.get("default_ice_tank_capacity_l"),
+            default=300.0,
+        )
+        capacity_l = max(
+            float(getattr(vehicle, "fuel_tank_capacity_l", 0.0) or 0.0),
+            0.0,
+        )
+        if capacity_l <= 0.0:
+            capacity_l = default_capacity_l
+        reserve_l = max(
+            float(getattr(vehicle, "fuel_reserve_l", 0.0) or 0.0),
+            0.0,
+        )
+        if minimum_ratio is not None:
+            reserve_l = max(reserve_l, minimum_ratio * capacity_l)
+        reserve_l = min(reserve_l, capacity_l)
+        initial_l = (
+            initial_ratio * capacity_l
+            if initial_ratio is not None
+            else float(
+                getattr(vehicle, "initial_fuel_l", 0.0) or capacity_l
+            )
+        )
+        initial_l = min(max(initial_l, reserve_l), capacity_l)
+        return {
+            "capacity_l": capacity_l,
+            "reserve_l": reserve_l,
+            "initial_l": initial_l,
+            "usable_initial_l": max(initial_l - reserve_l, 0.0),
+            "refuel_upper_buffer_l": (
+                maximum_ratio * capacity_l
+                if maximum_ratio is not None
+                else capacity_l
+            ),
+        }
+
+    def _longest_combustion_duty_fuel_audit(
+        self,
+        *,
+        problem: CanonicalOptimizationProblem,
+        vehicle: Any,
+        assignment_trip_ids: Set[str],
+        transition_pairs: Set[Tuple[str, str]],
+        startup_energy_precheck_by_assignment: Mapping[
+            Tuple[str, str], StartupEnergyPrecheck
+        ],
+    ) -> Dict[str, Any]:
+        """Compute the maximum-fuel path in one chronological successor DAG."""
+
+        trip_by_id = problem.trip_by_id()
+        missing_trip_ids = tuple(
+            sorted(assignment_trip_ids - set(trip_by_id))
+        )
+        if missing_trip_ids:
+            return {
+                "blockers": ("assignment_domain_references_missing_trip",),
+                "missing_trip_ids": missing_trip_ids,
+                "fuel_l": None,
+                "trip_ids": (),
+            }
+        ordered_trip_ids = tuple(
+            sorted(
+                assignment_trip_ids,
+                key=lambda trip_id: (
+                    int(trip_by_id[trip_id].departure_min),
+                    int(trip_by_id[trip_id].arrival_min),
+                    trip_id,
+                ),
+            )
+        )
+        rank = {
+            trip_id: index
+            for index, trip_id in enumerate(ordered_trip_ids)
+        }
+        outgoing: Dict[str, List[str]] = {}
+        for from_trip_id, to_trip_id in transition_pairs:
+            if (
+                from_trip_id not in rank
+                or to_trip_id not in rank
+                or rank[to_trip_id] <= rank[from_trip_id]
+            ):
+                return {
+                    "blockers": (
+                        "transition_domain_is_not_acyclic_chronological",
+                    ),
+                    "fuel_l": None,
+                    "trip_ids": (),
+                }
+            outgoing.setdefault(from_trip_id, []).append(to_trip_id)
+
+        fuel_rate = max(
+            float(
+                getattr(vehicle, "fuel_consumption_l_per_km", 0.0)
+                or 0.0
+            ),
+            0.0,
+        )
+        best_fuel_to = {
+            trip_id: float("-inf") for trip_id in ordered_trip_ids
+        }
+        best_path_to: Dict[str, Tuple[str, ...]] = {}
+        for trip_id in ordered_trip_ids:
+            startup = startup_energy_precheck_by_assignment.get(
+                (str(vehicle.vehicle_id), trip_id)
+            )
+            if startup is not None and bool(startup.path_feasible):
+                startup_fuel_l = self._deadhead_distance_km(
+                    problem, int(startup.startup_deadhead_min or 0)
+                ) * fuel_rate
+                start_total = startup_fuel_l + self._trip_fuel_l(
+                    problem, vehicle, trip_id
+                )
+                if start_total > best_fuel_to[trip_id]:
+                    best_fuel_to[trip_id] = start_total
+                    best_path_to[trip_id] = (trip_id,)
+
+            current_fuel_l = best_fuel_to[trip_id]
+            if not math.isfinite(current_fuel_l):
+                continue
+            for to_trip_id in outgoing.get(trip_id, ()):
+                candidate_fuel_l = (
+                    current_fuel_l
+                    + self._deadhead_fuel_l(
+                        problem, vehicle, trip_id, to_trip_id
+                    )
+                    + self._trip_fuel_l(problem, vehicle, to_trip_id)
+                )
+                if candidate_fuel_l > best_fuel_to[to_trip_id]:
+                    best_fuel_to[to_trip_id] = candidate_fuel_l
+                    best_path_to[to_trip_id] = (
+                        best_path_to[trip_id] + (to_trip_id,)
+                    )
+
+        longest_fuel_l = 0.0
+        longest_trip_ids: Tuple[str, ...] = ()
+        for trip_id in ordered_trip_ids:
+            path_fuel_l = best_fuel_to[trip_id]
+            if not math.isfinite(path_fuel_l):
+                continue
+            return_exists, return_deadhead_min = return_deadhead_min_to_home(
+                problem, vehicle, trip_by_id[trip_id]
+            )
+            if return_exists:
+                path_fuel_l += self._deadhead_distance_km(
+                    problem, int(return_deadhead_min or 0)
+                ) * fuel_rate
+            if path_fuel_l > longest_fuel_l:
+                longest_fuel_l = path_fuel_l
+                longest_trip_ids = best_path_to.get(trip_id, ())
+        return {
+            "blockers": (
+                () if longest_trip_ids else ("no_startup_reachable_trip",)
+            ),
+            "fuel_l": longest_fuel_l,
+            "trip_ids": longest_trip_ids,
+        }
+
+    def _exact_combustion_clone_flow_aggregation_audit(
+        self,
+        *,
+        problem: CanonicalOptimizationProblem,
+        identical_vehicle_groups: Sequence[Sequence[str]],
+        assignment_pairs: Sequence[Tuple[str, str]],
+        arc_pairs: Sequence[Tuple[str, str, str]],
+        startup_energy_precheck_by_assignment: Mapping[
+            Tuple[str, str], StartupEnergyPrecheck
+        ],
+        planning_days: int,
+        daily_fragment_limit: int,
+        max_start_fragments_per_vehicle: int,
+        max_end_fragments_per_vehicle: int,
+    ) -> Dict[str, Any]:
+        """Prove which exact-clone ICE groups are safe aggregation targets.
+
+        The current Phase 4 model still instantiates vehicle-indexed flow
+        variables.  This audit is the fail-closed contract for replacing an
+        exact-clone group by one capacitated path-flow network in a later
+        tranche.  In particular, it proves that every possible single-day
+        duty in the complete successor DAG fits inside the initial usable
+        fuel inventory.  When that proof holds, the per-vehicle fuel-state and
+        refuelling constraints are redundant for dispatch feasibility.
+
+        No variable or constraint is removed here.  ``applied`` therefore
+        remains false even when candidate groups are certified.
+        """
+
+        audit_started_at = time.perf_counter()
+        vehicle_by_id = {
+            str(vehicle.vehicle_id): vehicle
+            for vehicle in problem.vehicles
+        }
+        normalized_groups = tuple(
+            tuple(str(item) for item in raw_group)
+            for raw_group in identical_vehicle_groups
+        )
+        group_index_by_vehicle = {
+            vehicle_id: group_index
+            for group_index, vehicle_ids in enumerate(normalized_groups)
+            for vehicle_id in vehicle_ids
+        }
+        candidate_vehicle_ids = set(group_index_by_vehicle)
+        assignment_domain_by_vehicle: Dict[str, Set[str]] = {}
+        for vehicle_id, trip_id in assignment_pairs:
+            if str(vehicle_id) not in candidate_vehicle_ids:
+                continue
+            assignment_domain_by_vehicle.setdefault(
+                str(vehicle_id), set()
+            ).add(str(trip_id))
+
+        reference_vehicle_by_group = {
+            group_index: vehicle_ids[0]
+            for group_index, vehicle_ids in enumerate(normalized_groups)
+            if vehicle_ids
+        }
+        reference_transition_domain_by_group: Dict[
+            int, Set[Tuple[str, str]]
+        ] = {
+            group_index: set()
+            for group_index in reference_vehicle_by_group
+        }
+        for vehicle_id, from_trip_id, to_trip_id in arc_pairs:
+            normalized_vehicle_id = str(vehicle_id)
+            group_index = group_index_by_vehicle.get(
+                normalized_vehicle_id
+            )
+            if (
+                group_index is not None
+                and normalized_vehicle_id
+                == reference_vehicle_by_group.get(group_index)
+            ):
+                reference_transition_domain_by_group[group_index].add(
+                    (str(from_trip_id), str(to_trip_id))
+                )
+        transition_count_by_vehicle = {
+            vehicle_id: 0 for vehicle_id in candidate_vehicle_ids
+        }
+        transition_domain_mismatch_vehicle_ids: Set[str] = set()
+        for vehicle_id, from_trip_id, to_trip_id in arc_pairs:
+            normalized_vehicle_id = str(vehicle_id)
+            group_index = group_index_by_vehicle.get(
+                normalized_vehicle_id
+            )
+            if group_index is None:
+                continue
+            transition_count_by_vehicle[normalized_vehicle_id] += 1
+            if (
+                (str(from_trip_id), str(to_trip_id))
+                not in reference_transition_domain_by_group[group_index]
+            ):
+                transition_domain_mismatch_vehicle_ids.add(
+                    normalized_vehicle_id
+                )
+
+        shared_structural_blockers: List[str] = []
+        if int(planning_days) != 1:
+            shared_structural_blockers.append(
+                "planning_horizon_is_not_one_day"
+            )
+        if int(daily_fragment_limit) != 1:
+            shared_structural_blockers.append(
+                "daily_fragment_limit_is_not_one"
+            )
+        if int(max_start_fragments_per_vehicle) != 1:
+            shared_structural_blockers.append(
+                "max_start_fragments_per_vehicle_is_not_one"
+            )
+        if int(max_end_fragments_per_vehicle) != 1:
+            shared_structural_blockers.append(
+                "max_end_fragments_per_vehicle_is_not_one"
+            )
+
+        group_records: List[Dict[str, Any]] = []
+        certified_group_count = 0
+        potential_binary_reduction = 0
+        for group_index, vehicle_ids in enumerate(normalized_groups):
+            blockers = list(shared_structural_blockers)
+            representative = vehicle_by_id.get(vehicle_ids[0]) if vehicle_ids else None
+            if representative is None:
+                blockers.append("representative_vehicle_missing")
+            elif str(
+                getattr(representative, "vehicle_type", "") or ""
+            ).upper() in {"BEV", "PHEV", "FCEV"}:
+                blockers.append("group_is_not_combustion_powertrain")
+
+            assignment_domains = {
+                vehicle_id: assignment_domain_by_vehicle.get(
+                    vehicle_id, set()
+                )
+                for vehicle_id in vehicle_ids
+            }
+            reference_assignment_domain = (
+                assignment_domains.get(vehicle_ids[0], set())
+                if vehicle_ids
+                else set()
+            )
+            reference_transition_domain = (
+                reference_transition_domain_by_group.get(group_index, set())
+            )
+            if not reference_assignment_domain:
+                blockers.append("empty_assignment_domain")
+            elif any(
+                domain != reference_assignment_domain
+                for domain in assignment_domains.values()
+            ):
+                blockers.append("assignment_domain_mismatch")
+            if any(
+                vehicle_id in transition_domain_mismatch_vehicle_ids
+                or transition_count_by_vehicle.get(vehicle_id, 0)
+                != len(reference_transition_domain)
+                for vehicle_id in vehicle_ids
+            ):
+                blockers.append("transition_domain_mismatch")
+
+            tank_capacity_l = 0.0
+            reserve_l = 0.0
+            initial_l = 0.0
+            usable_initial_fuel_l = 0.0
+            longest_path_fuel_l: Optional[float] = None
+            longest_path_trip_ids: Tuple[str, ...] = ()
+            fuel_margin_l: Optional[float] = None
+            refuel_upper_buffer_l = 0.0
+            if representative is not None:
+                fuel_rate = max(
+                    float(
+                        getattr(
+                            representative,
+                            "fuel_consumption_l_per_km",
+                            0.0,
+                        )
+                        or 0.0
+                    ),
+                    0.0,
+                )
+                if fuel_rate <= 0.0:
+                    blockers.append("nonpositive_fuel_consumption_rate")
+                inventory = self._effective_combustion_fuel_inventory(
+                    problem, representative
+                )
+                tank_capacity_l = inventory["capacity_l"]
+                if tank_capacity_l <= 0.0:
+                    blockers.append("nonpositive_fuel_tank_capacity")
+                reserve_l = inventory["reserve_l"]
+                initial_l = inventory["initial_l"]
+                usable_initial_fuel_l = inventory["usable_initial_l"]
+                refuel_upper_buffer_l = inventory[
+                    "refuel_upper_buffer_l"
+                ]
+
+            if not blockers and representative is not None:
+                longest_path_audit = (
+                    self._longest_combustion_duty_fuel_audit(
+                        problem=problem,
+                        vehicle=representative,
+                        assignment_trip_ids=reference_assignment_domain,
+                        transition_pairs=reference_transition_domain,
+                        startup_energy_precheck_by_assignment=(
+                            startup_energy_precheck_by_assignment
+                        ),
+                    )
+                )
+                blockers.extend(longest_path_audit["blockers"])
+                longest_path_fuel_l = longest_path_audit["fuel_l"]
+                longest_path_trip_ids = longest_path_audit["trip_ids"]
+                if longest_path_fuel_l is not None:
+                    fuel_margin_l = (
+                        usable_initial_fuel_l - longest_path_fuel_l
+                    )
+                    if fuel_margin_l < -1.0e-9:
+                        blockers.append(
+                            "longest_possible_duty_exceeds_usable_initial_fuel"
+                        )
+
+            certified = not blockers
+            group_assignment_count = len(reference_assignment_domain)
+            group_transition_count = len(reference_transition_domain)
+            group_potential_reduction = (
+                max(len(vehicle_ids) - 1, 0)
+                * (3 * group_assignment_count + group_transition_count)
+                if certified
+                else 0
+            )
+            if certified:
+                certified_group_count += 1
+                potential_binary_reduction += group_potential_reduction
+            group_records.append(
+                {
+                    "group_index": int(group_index),
+                    "vehicle_ids": vehicle_ids,
+                    "vehicle_count": len(vehicle_ids),
+                    "representative_vehicle_id": (
+                        str(representative.vehicle_id)
+                        if representative is not None
+                        else None
+                    ),
+                    "certified_candidate": certified,
+                    "blockers": tuple(dict.fromkeys(blockers)),
+                    "assignment_trip_count_per_vehicle": (
+                        group_assignment_count
+                    ),
+                    "transition_arc_count_per_vehicle": (
+                        group_transition_count
+                    ),
+                    "initial_fuel_l": initial_l,
+                    "reserve_fuel_l": reserve_l,
+                    "usable_initial_fuel_l": usable_initial_fuel_l,
+                    "longest_possible_duty_fuel_l": longest_path_fuel_l,
+                    "longest_possible_duty_trip_ids": (
+                        longest_path_trip_ids
+                    ),
+                    "fuel_redundancy_margin_l": fuel_margin_l,
+                    "configured_refuel_upper_buffer_l": (
+                        refuel_upper_buffer_l
+                    ),
+                    "finite_fuel_constraints_proved_redundant": certified,
+                    "potential_binary_variable_reduction": (
+                        group_potential_reduction
+                    ),
+                }
+            )
+
+        return {
+            "schema_version": (
+                "exact_combustion_clone_flow_aggregation_audit_v1"
+            ),
+            "enabled": True,
+            "applied": False,
+            "integer_feasible_set_changed": False,
+            "certified_candidate_group_count": certified_group_count,
+            "potential_binary_variable_reduction": (
+                potential_binary_reduction
+            ),
+            "groups": tuple(group_records),
+            "reason_not_applied": (
+                "candidate_certificate_only_group_flow_reformulation_not_"
+                "yet_connected_to_phase4_solution_recovery"
+            ),
+            "proof_semantics": (
+                "exact_clone_domains_equal; one_day_single_path; longest_"
+                "chronological_duty_including_start_service_connection_and_"
+                "return_fuel_fits_initial_fuel_minus_reserve"
+            ),
+            "wall_runtime_sec": float(
+                time.perf_counter() - audit_started_at
+            ),
+        }
 
     @staticmethod
     def _lookup_powertrain_quantity(

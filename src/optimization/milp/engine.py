@@ -771,6 +771,12 @@ class MILPOptimizer:
                 "integrated_symmetry": (plan.metadata or {}).get(
                     "integrated_symmetry"
                 ),
+                "integrated_exact_combustion_clone_flow_aggregation_audit": dict(
+                    (plan.metadata or {}).get(
+                        "integrated_exact_combustion_clone_flow_aggregation_audit"
+                    )
+                    or {}
+                ),
                 "integrated_root_method": (plan.metadata or {}).get(
                     "integrated_root_method"
                 ),

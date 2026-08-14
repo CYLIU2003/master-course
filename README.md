@@ -1681,3 +1681,22 @@ either a direct transition or a depot reset is temporally feasible, but it does
 not persist which alternative supplied the inter-fragment energy. Until that
 choice is solver-native, replaying SOC across fragments would be ambiguous and
 must not be presented as physically certified.
+
+### Phase 4 solve-time evidence
+
+The local literature/runtime comparison is maintained in
+`docs/notes/LITERATURE_SOLVE_TIME_COMPARISON_20260814.md`. Reported
+hundreds-of-seconds results are not assumed to be directly comparable: the
+closest large integrated example uses a near-optimal heuristic, while several
+fast MILPs fix the vehicle schedule and optimize only charging/energy.
+
+Phase 4 retains Gurobi's automatic symmetry policy because the recorded clean
+`Symmetry=2` sensitivity regressed to a 100% gap. It now emits
+`integrated_exact_combustion_clone_flow_aggregation_audit`. For every exact
+clone ICE group, that audit checks equal assignment/transition domains and
+computes the maximum-fuel path in the complete chronological successor DAG,
+including startup, service, inter-trip deadhead and return. A group is a future
+aggregation candidate only when every such path fits within initial fuel minus
+reserve. The current implementation does **not** yet replace vehicle-indexed
+variables: `applied=false` is intentional, and neither a speedup nor a 1% gap
+certificate may be claimed until a clean frozen-commit matched run passes.

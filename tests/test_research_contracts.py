@@ -186,6 +186,14 @@ def test_solver_settings_persists_integrated_search_profile() -> None:
             "integrated_mip_focus": 1,
             "integrated_heuristics": 0.5,
             "integrated_symmetry": -1,
+            "integrated_exact_combustion_clone_flow_aggregation_audit": {
+                "schema_version": (
+                    "exact_combustion_clone_flow_aggregation_audit_v1"
+                ),
+                "applied": False,
+                "certified_candidate_group_count": 1,
+                "potential_binary_variable_reduction": 42,
+            },
             "integrated_root_method": 1,
             "integrated_node_method": 1,
             "integrated_soft_mem_limit_gb": 32.0,
@@ -230,6 +238,9 @@ def test_solver_settings_persists_integrated_search_profile() -> None:
     assert payload["integrated_mip_focus"] == 1
     assert payload["integrated_heuristics"] == pytest.approx(0.5)
     assert payload["integrated_symmetry"] == -1
+    assert payload[
+        "integrated_exact_combustion_clone_flow_aggregation_audit"
+    ]["potential_binary_variable_reduction"] == 42
     assert payload["integrated_root_method"] == 1
     assert payload["integrated_node_method"] == 1
     assert payload["integrated_soft_mem_limit_gb"] == pytest.approx(32.0)

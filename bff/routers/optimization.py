@@ -10485,6 +10485,12 @@ def _solver_settings_payload(
         "integrated_symmetry": _int_or_none(
             metadata.get("integrated_symmetry")
         ),
+        "integrated_exact_combustion_clone_flow_aggregation_audit": dict(
+            metadata.get(
+                "integrated_exact_combustion_clone_flow_aggregation_audit"
+            )
+            or {}
+        ),
         "integrated_search_profile": dict(
             metadata.get("integrated_search_profile") or {}
         ),

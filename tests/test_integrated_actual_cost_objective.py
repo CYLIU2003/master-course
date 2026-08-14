@@ -37,6 +37,7 @@ from src.optimization.engine import (
     actual_cost_objective_reconciles,
 )
 from src.gurobi_runtime import ensure_gurobi
+from src.optimization.milp.model_builder import MILPModelBuilder
 from src.optimization.milp.solver_adapter import (
     _add_assignment_pattern_no_good_cuts,
     _add_identical_vehicle_trip_count_symmetry,
@@ -822,6 +823,154 @@ def test_phase4_trip_count_symmetry_preserves_exact_objective() -> None:
     assert symmetric_plan.metadata[
         "integrated_identical_vehicle_trip_count_ordering_constraint_count"
     ] == 1
+
+
+def _exact_ice_clone_audit(
+    problem: CanonicalOptimizationProblem,
+    *,
+    assignment_pairs=None,
+    arc_pairs=None,
+):
+    adapter = GurobiMILPAdapter()
+    builder = MILPModelBuilder()
+    effective_assignment_pairs = (
+        builder.enumerate_assignment_pairs(problem)
+        if assignment_pairs is None
+        else assignment_pairs
+    )
+    effective_arc_pairs = (
+        builder.enumerate_arc_pairs(problem, problem.trip_by_id())
+        if arc_pairs is None
+        else arc_pairs
+    )
+    dispatch_trip_by_id = problem.dispatch_context.trips_by_id()
+    startup_prechecks = {
+        (vehicle_id, trip_id): adapter._startup_energy_precheck(
+            problem,
+            next(
+                vehicle
+                for vehicle in problem.vehicles
+                if vehicle.vehicle_id == vehicle_id
+            ),
+            problem.trip_by_id()[trip_id],
+            dispatch_trip_by_id=dispatch_trip_by_id,
+        )
+        for vehicle_id, trip_id in effective_assignment_pairs
+    }
+    return adapter._exact_combustion_clone_flow_aggregation_audit(
+        problem=problem,
+        identical_vehicle_groups=_ordered_identical_vehicle_groups(problem),
+        assignment_pairs=effective_assignment_pairs,
+        arc_pairs=effective_arc_pairs,
+        startup_energy_precheck_by_assignment=startup_prechecks,
+        planning_days=1,
+        daily_fragment_limit=1,
+        max_start_fragments_per_vehicle=1,
+        max_end_fragments_per_vehicle=1,
+    )
+
+
+def _exact_ice_clone_problem() -> CanonicalOptimizationProblem:
+    base = _phase4_seed_problem("exact-ice-clone-flow-audit")
+    ice_a = ProblemVehicle(
+        vehicle_id="ICE_001",
+        vehicle_type="ICE",
+        home_depot_id="DEPOT",
+        initial_fuel_l=100.0,
+        fuel_tank_capacity_l=100.0,
+        fuel_reserve_l=10.0,
+        fuel_consumption_l_per_km=0.25,
+    )
+    ice_b = replace(ice_a, vehicle_id="ICE_002")
+    return replace(
+        base,
+        trips=tuple(
+            replace(trip, allowed_vehicle_types=("ICE",))
+            for trip in base.trips
+        ),
+        vehicles=(ice_a, ice_b),
+        baseline_plan=None,
+    )
+
+
+def test_exact_ice_clone_flow_audit_certifies_redundant_fuel_state() -> None:
+    audit = _exact_ice_clone_audit(_exact_ice_clone_problem())
+
+    assert audit["applied"] is False
+    assert audit["integer_feasible_set_changed"] is False
+    assert audit["certified_candidate_group_count"] == 1
+    assert audit["potential_binary_variable_reduction"] == 3
+    group = audit["groups"][0]
+    assert group["certified_candidate"] is True
+    assert group["finite_fuel_constraints_proved_redundant"] is True
+    assert group["fuel_redundancy_margin_l"] >= 0.0
+    assert group["longest_possible_duty_trip_ids"] == ("t1",)
+
+
+def test_exact_ice_clone_flow_audit_rejects_assignment_domain_mismatch() -> None:
+    problem = _exact_ice_clone_problem()
+    assignment_pairs = MILPModelBuilder().enumerate_assignment_pairs(problem)
+
+    audit = _exact_ice_clone_audit(
+        problem,
+        assignment_pairs=assignment_pairs[:-1],
+    )
+
+    assert audit["certified_candidate_group_count"] == 0
+    assert "assignment_domain_mismatch" in audit["groups"][0]["blockers"]
+
+
+def test_exact_ice_clone_flow_audit_rejects_insufficient_initial_fuel() -> None:
+    base = _exact_ice_clone_problem()
+    problem = replace(
+        base,
+        trips=tuple(
+            replace(trip, distance_km=500.0)
+            for trip in base.trips
+        ),
+    )
+
+    audit = _exact_ice_clone_audit(problem)
+
+    assert audit["certified_candidate_group_count"] == 0
+    assert (
+        "longest_possible_duty_exceeds_usable_initial_fuel"
+        in audit["groups"][0]["blockers"]
+    )
+
+
+def test_exact_ice_clone_flow_audit_rejects_multiday_structure() -> None:
+    problem = _exact_ice_clone_problem()
+    adapter = GurobiMILPAdapter()
+    builder = MILPModelBuilder()
+    assignment_pairs = builder.enumerate_assignment_pairs(problem)
+    startup_prechecks = {
+        (vehicle_id, trip_id): adapter._startup_energy_precheck(
+            problem,
+            next(
+                vehicle
+                for vehicle in problem.vehicles
+                if vehicle.vehicle_id == vehicle_id
+            ),
+            problem.trip_by_id()[trip_id],
+        )
+        for vehicle_id, trip_id in assignment_pairs
+    }
+
+    audit = adapter._exact_combustion_clone_flow_aggregation_audit(
+        problem=problem,
+        identical_vehicle_groups=_ordered_identical_vehicle_groups(problem),
+        assignment_pairs=assignment_pairs,
+        arc_pairs=builder.enumerate_arc_pairs(problem, problem.trip_by_id()),
+        startup_energy_precheck_by_assignment=startup_prechecks,
+        planning_days=2,
+        daily_fragment_limit=1,
+        max_start_fragments_per_vehicle=1,
+        max_end_fragments_per_vehicle=1,
+    )
+
+    assert audit["certified_candidate_group_count"] == 0
+    assert "planning_horizon_is_not_one_day" in audit["groups"][0]["blockers"]
 
 
 def test_phase3_records_trip_count_symmetry_audit() -> None:

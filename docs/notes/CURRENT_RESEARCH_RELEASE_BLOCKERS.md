@@ -58,6 +58,35 @@ double counting. A separate ALNS-style operational candidate may target
 hundreds of seconds, but it must remain explicitly near-optimal and cannot
 replace the formal full-network certificate.
 
+### Exact-clone ICE aggregation precondition: implemented; aggregation pending
+
+Phase 4 continues to use Gurobi's automatic symmetry policy; the existing clean
+`Symmetry=2` sensitivity regressed to a 100% gap and must not be reintroduced
+without new controlled evidence. Phase 4 now exports
+`integrated_exact_combustion_clone_flow_aggregation_audit`. The audit
+does not assume that equal vehicle fields alone permit aggregation. It also
+requires identical assignment and complete-transition domains, a one-day
+single-fragment structure, and an acyclic chronological successor network.
+For each candidate ICE clone group it solves a longest-path dynamic program
+over startup, service, connection-deadhead and return fuel. Only a group whose
+worst possible duty fits inside initial fuel minus reserve receives
+`finite_fuel_constraints_proved_redundant=true`.
+
+This is a necessary certificate for removing duplicated per-vehicle ICE flow
+and fuel variables, not the removal itself. Current artifacts deliberately say
+`applied=false` and expose the estimated binary reduction separately. The
+saved 264-trip high-PV Prepared Input was reconstructed read-only with the
+current audit: its exact 25-ICE group has 264 assignment nodes and 11,310 arcs
+per vehicle; the longest reachable duty consumes 46.036430 L versus 144.0 L
+usable initial fuel, so the fuel-redundancy margin is 97.963570 L and the
+estimated binary reduction is 290,448. No optimization was run in this dirty
+diagnostic, so these figures are not runtime evidence. The
+group-flow master, exact integer-flow decomposition back to canonical vehicle
+IDs, warm-start conversion and small-oracle objective equivalence remain to be
+implemented before enabling aggregation. Therefore the 780,112-variable model
+size and the historical 1.574005% high-PV gap remain the latest evidence;
+research release is **BLOCKED**.
+
 ### Exact identical-vehicle trip-count ordering: implemented; timing pending
 
 Phase 3 Stage 1 and integrated Phase 4 now add an exact label-symmetry cut for
