@@ -17,6 +17,7 @@ from scripts.run_thesis_sensitivity_matrix import (
     _rolling_min_bev_soc_evidence,
     _submitted_request_matches_provenance,
     _stable_control_fingerprint,
+    _vehicle_day_cost_case_audit,
     _verified_prepared_trip_input_hash,
     _successor_limits_match,
     _snapshotted_artifact_paths,
@@ -73,6 +74,85 @@ def test_time_case_compiles_matching_prepare_optimization_and_rolling_steps() ->
     assert optimization["time_step_min"] == 15
     assert optimization["timestep_min"] == 15
     assert optimization["rolling_execution_minutes"] == 60
+
+
+def test_vehicle_day_cases_compile_only_declared_cost_change() -> None:
+    zero_prepare, zero_optimization = build_case_requests(
+        case=_case("VEHICLE_DAY_0"),
+        base_prepare_request={"simulation_settings": {}},
+        base_optimization_request={},
+    )
+    paid_prepare, paid_optimization = build_case_requests(
+        case=_case("VEHICLE_DAY_20000"),
+        base_prepare_request={"simulation_settings": {}},
+        base_optimization_request={},
+    )
+
+    assert zero_prepare["simulation_settings"][
+        "vehicle_usage_cost_jpy_per_used_bus"
+    ] == 0.0
+    assert paid_prepare["simulation_settings"][
+        "vehicle_usage_cost_jpy_per_used_bus"
+    ] == 20_000.0
+    for prepare in (zero_prepare, paid_prepare):
+        assert prepare["simulation_settings"]["objective_preset"] == (
+            "scalar_total_cost_v1"
+        )
+        assert prepare["simulation_settings"][
+            "vehicle_usage_cost_semantics"
+        ] == "fixed_vehicle_day_cost"
+    assert zero_optimization == paid_optimization
+
+
+def test_vehicle_day_cost_audit_reconciles_one_time_activation() -> None:
+    case = _case("VEHICLE_DAY_20000")
+    metadata = {
+        "objective_preset": "scalar_total_cost_v1",
+        "cost_component_flags": {"vehicle_usage_cost": True},
+        "vehicle_usage_cost_jpy_per_used_bus": 20_000.0,
+        "vehicle_usage_cost_semantics": "fixed_vehicle_day_cost",
+        "vehicle_usage_cost_semantics_classified": True,
+        "vehicle_usage_cost_semantics_research_eligible": True,
+        "research_economic_claim_blocked_by_vehicle_usage_cost_semantics": False,
+    }
+    accounting = {
+        "cost_breakdown": {
+            "vehicle_usage_cost_jpy_per_used_bus": 20_000.0,
+            "used_vehicle_day_count": 32,
+            "vehicle_usage_cost_jpy": 640_000.0,
+        }
+    }
+
+    audit = _vehicle_day_cost_case_audit(
+        case=case,
+        parameters={"effective_model_metadata": metadata},
+        solver_settings={
+            "integrated_primary_objective_kind": "canonical_actual_cost",
+            "integrated_actual_cost_objective_requested": True,
+            "integrated_actual_cost_contract_applied": True,
+            "actual_cost_objective_structural_contract_passed": True,
+        },
+        accounting=accounting,
+        summary={"vehicle_count_used": 32},
+    )
+    assert audit["passed"] is True
+    assert audit["formula_residual_jpy"] == pytest.approx(0.0)
+
+    accounting["cost_breakdown"]["vehicle_usage_cost_jpy"] = 1_280_000.0
+    broken = _vehicle_day_cost_case_audit(
+        case=case,
+        parameters={"effective_model_metadata": metadata},
+        solver_settings={
+            "integrated_primary_objective_kind": "canonical_actual_cost",
+            "integrated_actual_cost_objective_requested": True,
+            "integrated_actual_cost_contract_applied": True,
+            "actual_cost_objective_structural_contract_passed": True,
+        },
+        accounting=accounting,
+        summary={"vehicle_count_used": 32},
+    )
+    assert broken["passed"] is False
+    assert "accounting_formula_reconciles" in broken["failed_checks"]
 
 
 def test_parameter_audit_distinguishes_pv_scale_and_route_band_lock() -> None:

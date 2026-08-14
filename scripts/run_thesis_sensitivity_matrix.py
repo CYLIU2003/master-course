@@ -59,6 +59,12 @@ CSV_COLUMNS = (
     "trip_count_served",
     "trip_count_unserved",
     "vehicle_count_used",
+    "used_vehicle_day_count",
+    "vehicle_usage_cost_jpy_per_used_bus",
+    "vehicle_usage_cost_jpy",
+    "vehicle_usage_cost_formula_residual_jpy",
+    "vehicle_usage_cost_semantics",
+    "vehicle_usage_cost_semantics_research_eligible",
     "bev_trip_count",
     "ice_trip_count",
     "total_cost_jpy",
@@ -352,6 +358,17 @@ def _audit_case(
         submitted_request=submitted_optimization_request,
         parameters=required["optimization_parameters.json"],
     )
+    summary = required["summary.json"]
+    accounting = required[
+        "rolling_hourly_chain/executed_day_accounting.json"
+    ]
+    vehicle_day_cost_audit = _vehicle_day_cost_case_audit(
+        case=case,
+        parameters=required["optimization_parameters.json"],
+        solver_settings=settings,
+        accounting=accounting,
+        summary=summary,
+    )
     checks = {
         "frontend_job_completed": terminal.get("status") == "completed",
         "run_input_valid": input_validation.get("valid") is True,
@@ -393,9 +410,11 @@ def _audit_case(
             str(case.get("family") or "") != "trip_energy_sensitivity"
             or prepared_trip_input_sha256
         ),
+        "vehicle_day_cost_semantics_and_formula_valid": bool(
+            vehicle_day_cost_audit.get("passed") is True
+        ),
     }
     failed = [name for name, passed in checks.items() if not passed]
-    summary = required["summary.json"]
     costs = dict(accounting.get("cost_breakdown") or {})
     trip_types = dict(summary.get("trip_count_by_type") or {})
     frontend_request = dict(
@@ -444,6 +463,21 @@ def _audit_case(
         "trip_count_served": summary.get("trip_count_served"),
         "trip_count_unserved": summary.get("trip_count_unserved"),
         "vehicle_count_used": summary.get("vehicle_count_used"),
+        "used_vehicle_day_count": costs.get("used_vehicle_day_count"),
+        "vehicle_usage_cost_jpy_per_used_bus": costs.get(
+            "vehicle_usage_cost_jpy_per_used_bus"
+        ),
+        "vehicle_usage_cost_jpy": costs.get("vehicle_usage_cost_jpy"),
+        "vehicle_usage_cost_formula_residual_jpy": (
+            vehicle_day_cost_audit.get("formula_residual_jpy")
+        ),
+        "vehicle_usage_cost_semantics": vehicle_day_cost_audit.get(
+            "effective_semantics"
+        ),
+        "vehicle_usage_cost_semantics_research_eligible": (
+            vehicle_day_cost_audit.get("research_eligible")
+        ),
+        "vehicle_day_cost_audit": vehicle_day_cost_audit,
         "bev_trip_count": trip_types.get("BEV", 0),
         "ice_trip_count": trip_types.get("ICE", 0),
         "total_cost_jpy": costs.get("total_cost"),
@@ -463,6 +497,119 @@ def _audit_case(
         "rolling_min_bev_soc_vehicle_id": rolling_soc.get("vehicle_id"),
         "rolling_min_bev_soc_time": rolling_soc.get("time"),
         "rolling_soc_evidence": rolling_soc,
+    }
+
+
+def _vehicle_day_cost_case_audit(
+    *,
+    case: Mapping[str, Any],
+    parameters: Mapping[str, Any],
+    solver_settings: Mapping[str, Any],
+    accounting: Mapping[str, Any],
+    summary: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Verify one-time vehicle-day activation cost for its sensitivity family."""
+
+    if str(case.get("family") or "") != "vehicle_day_cost_sensitivity":
+        return {
+            "applicable": False,
+            "passed": True,
+            "reason": "not_vehicle_day_cost_sensitivity",
+        }
+
+    expected = dict(case.get("prepare_settings") or {})
+    metadata = dict(parameters.get("effective_model_metadata") or {})
+    flags = dict(metadata.get("cost_component_flags") or {})
+    costs = dict(accounting.get("cost_breakdown") or {})
+    expected_unit = expected.get("vehicle_usage_cost_jpy_per_used_bus")
+    effective_unit = metadata.get("vehicle_usage_cost_jpy_per_used_bus")
+    accounting_unit = costs.get("vehicle_usage_cost_jpy_per_used_bus")
+    used_vehicle_days = costs.get("used_vehicle_day_count")
+    vehicle_count_used = summary.get("vehicle_count_used")
+    accounting_cost = costs.get("vehicle_usage_cost_jpy")
+
+    formula_residual: float | None = None
+    try:
+        formula_residual = float(accounting_cost) - (
+            float(used_vehicle_days) * float(accounting_unit)
+        )
+    except (TypeError, ValueError):
+        pass
+    checks = {
+        "objective_preset_is_scalar_total_cost": (
+            metadata.get("objective_preset") == "scalar_total_cost_v1"
+        ),
+        "integrated_primary_objective_is_canonical_cost": (
+            solver_settings.get("integrated_primary_objective_kind")
+            == "canonical_actual_cost"
+            and solver_settings.get("integrated_actual_cost_objective_requested")
+            is True
+        ),
+        "actual_cost_structural_contract_applied": (
+            solver_settings.get("integrated_actual_cost_contract_applied") is True
+            and solver_settings.get(
+                "actual_cost_objective_structural_contract_passed"
+            )
+            is True
+        ),
+        "vehicle_usage_cost_component_enabled": (
+            flags.get("vehicle_usage_cost") is True
+        ),
+        "declared_unit_reaches_model": _numbers_equal(
+            effective_unit, expected_unit
+        ),
+        "declared_unit_reaches_accounting": _numbers_equal(
+            accounting_unit, expected_unit
+        ),
+        "one_day_vehicle_count_matches_vehicle_days": _numbers_equal(
+            vehicle_count_used, used_vehicle_days
+        ),
+        "accounting_formula_reconciles": bool(
+            formula_residual is not None
+            and abs(formula_residual) <= 1.0e-6
+        ),
+        "semantics_is_fixed_vehicle_day_cost": (
+            metadata.get("vehicle_usage_cost_semantics")
+            == "fixed_vehicle_day_cost"
+        ),
+        "semantics_classified": (
+            metadata.get("vehicle_usage_cost_semantics_classified") is True
+        ),
+        "semantics_research_eligible": (
+            metadata.get("vehicle_usage_cost_semantics_research_eligible")
+            is True
+        ),
+        "economic_claim_not_blocked_by_semantics": (
+            metadata.get(
+                "research_economic_claim_blocked_by_vehicle_usage_cost_semantics",
+                False,
+            )
+            is False
+        ),
+    }
+    failed = [name for name, passed in checks.items() if not passed]
+    return {
+        "applicable": True,
+        "passed": not failed,
+        "checks": checks,
+        "failed_checks": failed,
+        "expected_unit_jpy_per_vehicle_day": expected_unit,
+        "effective_unit_jpy_per_vehicle_day": effective_unit,
+        "accounting_unit_jpy_per_vehicle_day": accounting_unit,
+        "used_vehicle_day_count": used_vehicle_days,
+        "summary_vehicle_count_used": vehicle_count_used,
+        "accounting_vehicle_usage_cost_jpy": accounting_cost,
+        "formula_residual_jpy": formula_residual,
+        "effective_semantics": metadata.get("vehicle_usage_cost_semantics"),
+        "semantics_classified": metadata.get(
+            "vehicle_usage_cost_semantics_classified"
+        ),
+        "research_eligible": metadata.get(
+            "vehicle_usage_cost_semantics_research_eligible"
+        ),
+        "integrated_primary_objective_kind": solver_settings.get(
+            "integrated_primary_objective_kind"
+        ),
     }
 
 
