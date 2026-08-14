@@ -27,6 +27,23 @@ Prepare is mandatory. The independent matrices have not been optimized at the
 current clean SHA. Consequently, this is implementation evidence only and
 Phase 2 plus the overall research release remain **BLOCKED**.
 
+A first clean-commit execution at `b9e5234` now provides one diagnostic point.
+The low-PV `BEV_ENERGY_1.2` case correctly held the common and ICE factors at
+1.0, served 264/264 trips, assigned 74 BEV and 190 ICE trips, used 15 BEVs and
+17 ICE buses, passed physical validation, accepted 24/24 Rolling steps and
+reconciled executed accounting. It did not clear the Phase-2 gate: status was
+`time_limit`, certified gap was 6.296823%, and full runner wall time was
+3,824.702 seconds. The manifest therefore remains `BLOCKED` solely by
+`mip_gap_target_met` after every other case check passed.
+
+This result makes the next blocker concrete. Completing the other nine
+one-factor runs with the same 3,600-second control would require hours and
+would still not certify a transition boundary if their gaps remain above 1%.
+The next action is to diagnose and strengthen the Phase-2 lower bound or exact
+formulation without changing the feasible region, objective, coefficients or
+acceptance threshold. The single diagnostic must not be compared as a
+same-SHA 1.0/1.2 effect until the matching current-SHA baseline exists.
+
 ## 2026-08-15 clean-SHA high-PV v6 diagnostic: incumbent improved, 1% still blocked
 
 A fresh frontend/BFF Day-ahead diagnostic at clean SHA `3353318` used the

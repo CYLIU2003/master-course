@@ -41,6 +41,30 @@
   `192 passed`; full repository regression: `1484 passed` in 155.67 seconds.
   No optimizer was invoked, so the two independent 0.8--1.2 tranches and
   Phase-2 research evidence remain pending.
+- After freezing clean commit `b9e5234eede192526b5442cc4bf26b0b96981a0a`,
+  restarted only the port-8000 BFF and executed the low-PV
+  `BEV_ENERGY_1.2` case through fresh frontend/BFF Prepare, Phase 4, 24-step
+  Rolling, physical validation, accounting, immutable-copy and case-audit
+  paths. Prepared input was
+  `prepared-4df75af5493bd446-f1e18f252e336f1f-8acc7b3a`; source run was
+  `output/2026-08-15/run_20260815_0747`.
+- The audit proved the intended one-factor contract: common scale 1.0, BEV
+  scale 1.2, ICE scale 1.0, unchanged prepared trip-structure hash
+  `1c382c9c3dc6eec41173c1c451d790a66ae41ffef5c4bd10d2caabc7826511f9`,
+  unchanged Git SHA, complete artifacts, and matching submitted/effective
+  controls. It served 264/264 trips with 74 BEV and 190 ICE trips, used 15
+  BEVs and 17 ICE buses, passed independent physical validation, accepted all
+  24 Rolling steps, and produced accounting-eligible executed cost
+  61,883.346234 JPY and CO2 1,046.678340 kg. Minimum executed BEV SOC was
+  20.389317%, only 0.389317 percentage points above the vehicle limit.
+- The solver ended at `time_limit`; solve time was 2,814.453791 seconds,
+  certified gap was 6.296823% against the 1% target, and complete runner wall
+  time was 3,824.702382 seconds. The signed execution-manifest payload is
+  `b9a70a09c44668f3fab949012087ddc40c13c383c21b7e791e7fa37033d3fa2b`
+  under
+  `output/thesis_sensitivity_powertrain_low_pv_20260815_b9e5234_bev12`.
+  Its `BLOCKED` status is correct; the remaining nine independent cases were
+  not launched blindly after this proof/runtime blocker became explicit.
 
 ## 2026-08-15: high-PV v6 runtime evidence and seed-budget reallocation
 

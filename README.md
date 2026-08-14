@@ -25,6 +25,14 @@
 - This change adds execution support only. No independent 0.8--1.2 solve
   tranche has yet been completed at the current SHA, so thesis Phase 2 and
   research release remain `BLOCKED`.
+- A first clean-commit low-PV smoke run at `b9e5234` varied only the BEV
+  factor to 1.2. It served 264/264 trips with 74 BEV and 190 ICE trips, used
+  15 BEVs and 17 ICE buses, passed physical validation and all 24 Rolling
+  steps, and reconciled executed accounting. The case still failed the
+  declared research gate: solver status was `time_limit`, certified gap was
+  6.296823%, and total frontend-runner wall time was 3,824.702 seconds.
+  This is a complete feasible diagnostic, not an accepted sensitivity point
+  or evidence for an exact transition boundary.
 
 ## 2026-08-15 high-PV 600-second incumbent diagnostic
 
