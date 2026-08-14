@@ -2230,9 +2230,12 @@ Remaining blocking work for the requested method comparison:
   `research_conclusion_eligible=false`, and M0--M3 comparative effect sizes
   remain blocked until fresh controlled four-method evidence exists;
 - the all-ICE and grid-only electric exact-oracle fixtures are implemented and
-  tested. A clean-worktree certificate builder now publishes their electric
-  boundary evidence with canonical and integrated-Gurobi reconciliation, but
-  this does not discharge the missing full-network M0--M3 evidence;
+  tested. Clean SHA `3307f964b8992377b166901d474ebbcb899f548a` produced
+  `output/verification/small_electric_oracle/3307f964/` with certificate status
+  `VERIFIED`, all ten checks passing, and certificate payload SHA-256
+  `dd797eba2ac3d1d26ea39ab85672bf8d23a349be3b0e362fe04f990df42dd0bf`.
+  This discharges the bounded electric-oracle fixture item, but not the missing
+  full-network M0--M3 evidence;
 - a multi-fragment electric assignment is now rejected with `SOC_FRAGMENT`.
   Stage 2 does not yet persist whether the feasible fragment transition is
   direct or a depot reset, so its transition energy cannot be independently

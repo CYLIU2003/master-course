@@ -4509,6 +4509,17 @@ locks this distinction in place.
 - Focused regression after implementation passes `15 passed`, including both
   exact oracles, canonical reconciliation, scope rejection, bundle hashing,
   tamper detection and integrated Gurobi agreement. The complete repository
-  regression passes `1406 passed in 73.20s`. A clean-commit certificate
-  generation remains to be completed before this note is finalized with
-  artifact hashes.
+  regression passes `1406 passed in 73.20s`.
+- Committed the implementation as clean SHA
+  `3307f964b8992377b166901d474ebbcb899f548a`, then generated
+  `output/verification/small_electric_oracle/3307f964/`. The source worktree
+  was clean, certificate status and integrated-Gurobi comparison are both
+  `VERIFIED`, and all ten declared checks pass. The deterministic certificate
+  payload SHA-256 is
+  `dd797eba2ac3d1d26ea39ab85672bf8d23a349be3b0e362fe04f990df42dd0bf`;
+  the bundle-manifest payload SHA-256 is
+  `92abe15b903529cf20ea478de586d33cd4f5c9a2e4a87eaf368a41b4e46b3604`
+  and its file SHA-256 is
+  `bbb29244cfc4885bd83e7ade8d5bae7387bfa59a942af0cdea9bfec5cd1e2cd0`.
+  This closes the bounded electric-oracle evidence item only. The certificate
+  itself remains explicitly ineligible for full-network research conclusions.
