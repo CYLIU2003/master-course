@@ -614,7 +614,15 @@ def test_suffix_exchange_can_activate_bev_when_whole_duty_replacement_cannot(
         vehicles=(
             ProblemVehicle("ice-1", "ICE", "DEPOT"),
             ProblemVehicle("bev-used", "BEV", "DEPOT"),
-            ProblemVehicle("bev-unused", "BEV", "DEPOT"),
+            *tuple(
+                ProblemVehicle(
+                    f"bev-unused-{index}",
+                    "BEV",
+                    "DEPOT",
+                    initial_soc=0.3 + index * 0.01,
+                )
+                for index in range(10)
+            ),
         ),
     )
     monkeypatch.setattr(
@@ -628,8 +636,20 @@ def test_suffix_exchange_can_activate_bev_when_whole_duty_replacement_cannot(
         _FakeCostEvaluator,
     )
     adapter = GurobiMILPAdapter()
+    clock = {"now": 0.0}
+    monkeypatch.setattr(
+        solver_adapter_module.time,
+        "monotonic",
+        lambda: clock["now"],
+    )
+    monkeypatch.setattr(
+        solver_adapter_module.time,
+        "perf_counter",
+        lambda: clock["now"],
+    )
 
     def _fake_stage2(_problem, _config, plan, **_kwargs):
+        clock["now"] += 1.0
         paths = plan.vehicle_paths()
         suffix_reconstructed = set(paths.values()) == {
             ("a-1", "b-2"),
@@ -669,7 +689,7 @@ def test_suffix_exchange_can_activate_bev_when_whole_duty_replacement_cannot(
             problem,
             OptimizationConfig(
                 phase4_phase3_seed_unused_bev_neighborhood_enabled=True,
-                phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec=30,
+                phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec=10,
                 phase4_phase3_seed_unused_bev_neighborhood_per_solve_sec=1,
                 phase4_phase3_seed_unused_bev_neighborhood_max_evaluations=20,
                 phase4_phase3_seed_powertrain_duty_swap_rounds=1,
@@ -679,7 +699,9 @@ def test_suffix_exchange_can_activate_bev_when_whole_duty_replacement_cannot(
         )
     )
 
-    assert set(selected.duties_by_vehicle()) == {"bev-used", "bev-unused"}
+    assert all(
+        duty.vehicle_type == "BEV" for duty in selected.duties
+    )
     assert audit["selected"] is True
     assert audit["selected_candidate_kind"] == (
         "duty_suffix_exchange_activation_round_1"
@@ -688,6 +710,17 @@ def test_suffix_exchange_can_activate_bev_when_whole_duty_replacement_cannot(
     assert audit["selected_used_bev"] == 2
     assert audit["selected_used_ice"] == 0
     assert audit["duty_suffix_exchange_candidates_dispatch_feasible"] == 1
+    assert audit["schema_version"] == (
+        "phase4_seed_unused_bev_activation_neighborhood_v6"
+    )
+    assert audit["local_search_wall_reserve_sec"] == 4.0
+    assert audit["local_search_remaining_wall_sec_at_start"] >= 3.0
+    assert any(
+        str(row["candidate_kind"]).startswith(
+            "duty_suffix_exchange_activation_round_"
+        )
+        for row in audit["candidate_evaluations"]
+    )
 
 
 def test_unused_bev_neighborhood_selects_only_exact_lower_cost_candidate(

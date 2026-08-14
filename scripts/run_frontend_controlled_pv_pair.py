@@ -2354,10 +2354,10 @@ def _phase4_legacy_seed_candidate_controls_match(
     )
 
 
-def _phase4_v5_seed_neighborhood_controls_match(
+def _phase4_versioned_seed_neighborhood_controls_match(
     settings: Mapping[str, Any],
 ) -> bool:
-    """Verify the current bounded v5 incumbent-neighborhood audit.
+    """Verify a bounded versioned incumbent-neighborhood audit.
 
     Phase 4 no longer enumerates a Phase-3 composition candidate list.  It
     starts from one neutral feasible plan and may improve that upper bound via
@@ -2456,10 +2456,42 @@ def _phase4_v5_seed_neighborhood_controls_match(
             "phase4_phase3_seed_unused_bev_identity_exchange_rounds"
         )
     )
+    schema_version = str(audit.get("schema_version") or "")
+    v6_wall_reserve_valid = True
+    if schema_version == "phase4_seed_unused_bev_activation_neighborhood_v6":
+        local_wall_reserve = _number(
+            audit.get("local_search_wall_reserve_sec")
+        )
+        pre_local_wall_budget = _number(
+            audit.get("pre_local_search_wall_budget_sec")
+        )
+        local_wall_remaining = _number(
+            audit.get("local_search_remaining_wall_sec_at_start")
+        )
+        v6_wall_reserve_valid = bool(
+            local_wall_reserve is not None
+            and pre_local_wall_budget is not None
+            and local_wall_remaining is not None
+            and 0.0 <= local_wall_reserve <= fixed_wall
+            and math.isclose(
+                pre_local_wall_budget + local_wall_reserve,
+                fixed_wall,
+                abs_tol=1.0e-9,
+            )
+            and 0.0 <= local_wall_remaining <= fixed_wall
+            and (
+                powertrain_rounds == 0.0 and identity_rounds == 0.0
+                or local_wall_reserve > 0.0
+                and local_wall_remaining
+                >= max(local_wall_reserve - per_solve - 1.0, 0.0)
+            )
+        )
 
     return bool(
-        audit.get("schema_version")
-        == "phase4_seed_unused_bev_activation_neighborhood_v5"
+        schema_version in {
+            "phase4_seed_unused_bev_activation_neighborhood_v5",
+            "phase4_seed_unused_bev_activation_neighborhood_v6",
+        }
         and audit.get("enabled") is True
         and audit.get("role")
         == "feasible_upper_bound_candidate_generation_only"
@@ -2491,6 +2523,7 @@ def _phase4_v5_seed_neighborhood_controls_match(
         and configured_max_evaluations == fixed_limit
         and configured_powertrain_rounds == powertrain_rounds
         and configured_identity_rounds == identity_rounds
+        and v6_wall_reserve_valid
         and isinstance(audit.get("termination_reason"), str)
         and bool(str(audit.get("termination_reason")).strip())
     )
@@ -2509,10 +2542,12 @@ def _phase4_seed_candidate_controls_match(
     raw_audit = settings.get("phase4_phase3_seed_unused_bev_neighborhood")
     if (
         isinstance(raw_audit, Mapping)
-        and raw_audit.get("schema_version")
-        == "phase4_seed_unused_bev_activation_neighborhood_v5"
+        and raw_audit.get("schema_version") in {
+            "phase4_seed_unused_bev_activation_neighborhood_v5",
+            "phase4_seed_unused_bev_activation_neighborhood_v6",
+        }
     ):
-        return _phase4_v5_seed_neighborhood_controls_match(settings)
+        return _phase4_versioned_seed_neighborhood_controls_match(settings)
     return _phase4_legacy_seed_candidate_controls_match(settings)
 
 

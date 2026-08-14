@@ -5428,3 +5428,37 @@ locks this distinction in place.
   Both preserved `79e61ae` `solver_settings.json` files pass the corrected
   helper when replayed read-only. They are not rewritten or relabelled because
   this code fix changes the SHA; a fresh formal run is still required.
+
+# 2026-08-15 - Phase 4 seed v6 wall-time reserve
+
+- Audited the high-PV `79e61ae` neighborhood rather than attributing the
+  28-BEV/4-ICE incumbent only to Gurobi. The v5 audit evaluated 53 candidates:
+  one direct retirement, 27 pairwise replacements, one combined matching and
+  24 sequential whole-duty candidates. It generated zero suffix-exchange,
+  powertrain-swap or identity-exchange candidates. The fixed-duty search used
+  its wall window before those enabled neighborhoods were reached.
+- The root cause was two-dimensional starvation. The code reserved 16
+  evaluation slots for local path search, but had no corresponding wall-time
+  reserve. A later sequential-search calculation then replaced that 16-slot
+  reserve with four slots. Count-only regression tests therefore passed while
+  the production wall-clock path still skipped the search that previously
+  produced 30/2 and 31/1 high-PV starts.
+- `phase4_seed_unused_bev_activation_neighborhood_v6` keeps the same total
+  75-second fixed-duty and 45-second route-band budgets. Under current formal
+  controls it reserves 30 seconds and 16 candidate evaluations for suffix and
+  powertrain path changes. Pairwise search additionally preserves its matching
+  validation allowance. Sequential whole-duty activation receives at least
+  one evaluation but cannot consume the post-sequential reserve.
+- Added a deterministic fake-clock regression with ten distinct unused BEVs.
+  Whole-duty replacements consume the early budget and remain infeasible;
+  v6 must still start suffix exchange within the reserved tail and select the
+  independently feasible lower-cost all-BEV candidate. Formal runner checks
+  accept v5 for preserved artifacts and require the new wall-reserve evidence
+  for v6, including requested/remaining wall consistency.
+- This is feasible-upper-bound generation only. It does not alter the Phase 4
+  integrated feasible set, canonical accounting, lower bound, objective or
+  acceptance gap. A fresh frontend-equivalent run is required before any
+  performance or solution-quality claim.
+- Focused Phase 4 seed, formal-runner and research-contract regression passed
+  126 tests. The complete repository suite passed 1,474 tests in 153.79
+  seconds; changed entrypoints passed `py_compile` and `git diff --check`.

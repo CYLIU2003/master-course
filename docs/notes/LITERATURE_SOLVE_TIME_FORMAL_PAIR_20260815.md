@@ -66,3 +66,14 @@ bias or BEV lower bounds are prohibited: they can improve an incumbent while
 invalidating the causal comparison. The `79e61ae` pair remains progress-only
 because high PV missed 1% and a later reporting-contract fix changed the code
 SHA; no existing artifact is retroactively upgraded.
+
+Before changing the lower-bound formulation, the high-PV v5 seed audit exposed
+an upper-bound search defect: all 75 fixed-duty seconds could be consumed by
+whole-duty exploration despite a nominal 16-candidate local-search reserve.
+The run consequently generated no suffix or powertrain path-change candidate
+and returned 28 BEVs/4 ICE buses, worse than earlier diagnostic 31/1 starts.
+Version v6 partitions the existing budget rather than increasing it: 30 of 75
+seconds and 16 evaluations are retained for path-changing candidates. This is
+a necessary incumbent-quality correction, but it does not strengthen the
+640,000 JPY lower bound. If the corrected start remains above 1%, a certified
+lower-bound/decomposition method is still required.

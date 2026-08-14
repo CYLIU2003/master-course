@@ -34,6 +34,24 @@ Its ZIP is adjacent to that directory. The literature/timing interpretation is
 documented in
 `docs/notes/LITERATURE_SOLVE_TIME_FORMAL_PAIR_20260815.md`.
 
+The high-PV v5 audit also proves an incumbent-search defect. It recorded 53
+candidate evaluations and 99.853669 seconds total neighborhood time, but
+`duty_suffix_exchange_candidates_generated=0`, zero powertrain-swap rounds and
+zero identity-exchange rounds. Candidate-count reserve existed, while the
+75-second fixed-duty wall deadline was exhausted by pairwise/matching and two
+sequential activation rounds. Moreover, the sequential limit retained only
+four downstream evaluations instead of the declared 16 local-search slots.
+
+The v6 implementation reserves both resources. With the production controls,
+16 evaluations and 30 of the existing 75 seconds are reserved for suffix and
+powertrain path changes. Pairwise search stops before a separate matching
+reserve, and matching/sequential search stops before the local-search wall
+boundary. No new solver time, fleet restriction, BEV minimum, weather bias or
+feasibility cut is introduced. Regression tests reproduce the old starvation
+with a synthetic ten-second budget and prove that suffix exchange is reached
+under v6. Fresh clean-SHA runtime evidence remains required; release is still
+**BLOCKED**.
+
 ## 2026-08-15 stronger seed found diagnostically; fresh formal run pending
 
 The literature audit confirms that many published hundreds-of-seconds results

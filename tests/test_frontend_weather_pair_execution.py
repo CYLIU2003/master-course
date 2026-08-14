@@ -145,7 +145,7 @@ def test_formal_phase4_seed_control_contract_matches_server_profile() -> None:
     assert runner._phase4_seed_controls_match(settings) is False
 
 
-def test_formal_phase4_seed_control_contract_accepts_v5_neighborhood() -> None:
+def test_formal_phase4_seed_control_contract_accepts_versioned_neighborhood() -> None:
     runner = _load_runner()
     candidate_evaluations = [
         {"candidate_kind": "pairwise_unused_bev_activation"},
@@ -220,6 +220,14 @@ def test_formal_phase4_seed_control_contract_accepts_v5_neighborhood() -> None:
 
     neighborhood = settings["phase4_phase3_seed_unused_bev_neighborhood"]
     assert isinstance(neighborhood, dict)
+    neighborhood["schema_version"] = (
+        "phase4_seed_unused_bev_activation_neighborhood_v6"
+    )
+    neighborhood["local_search_wall_reserve_sec"] = 30.0
+    neighborhood["pre_local_search_wall_budget_sec"] = 45.0
+    neighborhood["local_search_remaining_wall_sec_at_start"] = 29.0
+    assert runner._phase4_seed_controls_match(settings) is True
+
     neighborhood["candidate_evaluation_count"] = 3
     assert runner._phase4_seed_controls_match(settings) is False
 
@@ -227,10 +235,20 @@ def test_formal_phase4_seed_control_contract_accepts_v5_neighborhood() -> None:
     neighborhood["weather_strategy_bias_applied"] = True
     assert runner._phase4_seed_controls_match(settings) is False
 
+    neighborhood["weather_strategy_bias_applied"] = False
+    local_wall_remaining = neighborhood.pop(
+        "local_search_remaining_wall_sec_at_start"
+    )
+    assert runner._phase4_seed_controls_match(settings) is False
+    neighborhood["local_search_remaining_wall_sec_at_start"] = (
+        local_wall_remaining
+    )
+
     settings["phase4_phase3_seed_candidate_evaluation_order"] = (
         "candidate_priority_cost_ascending_then_candidate_hash"
     )
     settings["phase4_phase3_seed_candidate_evaluation_initial_budget_sec"] = 25.0
+    neighborhood["weather_strategy_bias_applied"] = True
     assert runner._phase4_seed_controls_match(settings) is False
 
 

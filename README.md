@@ -23,6 +23,15 @@
   clean-commit run remains necessary for release.
 - Timing interpretation and the local literature comparison are recorded in
   [the formal-pair timing note](docs/notes/LITERATURE_SOLVE_TIME_FORMAL_PAIR_20260815.md).
+- Follow-up audit of the high-PV seed found that v5 reserved candidate count
+  but not wall time: sequential whole-duty activation consumed the complete
+  75-second fixed-duty window, so suffix exchange and powertrain swap each ran
+  zero candidates. The v6 neighborhood now reserves both 16 candidate slots
+  and 30 seconds of the existing 75-second budget for path-changing search.
+  This changes only feasible MIP-start generation; it adds no runtime and does
+  not alter the integrated objective, constraints, lower bound or gap gate.
+  A clean frontend diagnostic/formal rerun is required before claiming an
+  incumbent or timing improvement.
 
 ## 2026-08-15 literature-driven Phase 4 seed restart
 

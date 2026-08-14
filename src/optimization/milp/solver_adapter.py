@@ -2607,7 +2607,7 @@ class GurobiMILPAdapter:
         )
         audit: Dict[str, Any] = {
             "schema_version": (
-                "phase4_seed_unused_bev_activation_neighborhood_v5"
+                "phase4_seed_unused_bev_activation_neighborhood_v6"
             ),
             "enabled": enabled,
             "role": "feasible_upper_bound_candidate_generation_only",
@@ -3072,6 +3072,36 @@ class GurobiMILPAdapter:
                 max(remaining_candidate_slots - 2, 0),
             )
 
+        # Candidate-count reserves do not protect a later neighborhood from
+        # wall-clock starvation.  The v5 search could retain 16 candidate
+        # slots but spend the complete fixed-duty wall budget on pairwise and
+        # sequential whole-duty activation, leaving suffix reconstruction and
+        # powertrain swaps with zero evaluations.  Reserve a bounded share of
+        # the existing fixed-duty budget for path-changing neighborhoods.  No
+        # additional runtime is introduced and the unrestricted integrated
+        # MILP remains unchanged.
+        local_search_wall_reserve_sec = 0.0
+        if local_search_evaluation_reserve > 0:
+            requested_local_search_wall_sec = max(
+                float(per_solve_sec) * 4.0,
+                min(
+                    float(per_solve_sec)
+                    * float(local_search_evaluation_reserve),
+                    float(wall_limit_sec) * 0.4,
+                ),
+            )
+            local_search_wall_reserve_sec = min(
+                requested_local_search_wall_sec,
+                max(
+                    float(wall_limit_sec)
+                    - 2.0 * float(per_solve_sec),
+                    0.0,
+                ),
+            )
+        pre_local_search_deadline = (
+            fixed_duty_deadline - local_search_wall_reserve_sec
+        )
+
         # Preserve enough evaluations for one full matching check and a
         # cumulative prefix check for every active ICE duty.  Without this
         # reserve, a source-major Cartesian scan can consume the pairwise
@@ -3101,12 +3131,19 @@ class GurobiMILPAdapter:
             max(wall_limit_sec * 0.25, float(per_solve_sec)),
         )
 
-        def _pairwise_budget_available() -> bool:
+        def _pre_local_search_budget_available() -> bool:
             return bool(
                 _budget_available()
+                and time.monotonic() < pre_local_search_deadline
+            )
+
+        def _pairwise_budget_available() -> bool:
+            return bool(
+                _pre_local_search_budget_available()
                 and len(evaluation_rows) < pairwise_evaluation_limit
                 and time.monotonic()
-                < deadline - matching_validation_wall_reserve_sec
+                < pre_local_search_deadline
+                - matching_validation_wall_reserve_sec
             )
 
         route_band_repartition_attempts: List[Dict[str, Any]] = []
@@ -3721,7 +3758,7 @@ class GurobiMILPAdapter:
             sorted(matching.items())
         )
         audit["maximum_cardinality_pairwise_matching_size"] = len(matching)
-        if matching and _budget_available():
+        if matching and _pre_local_search_budget_available():
             combined_plan = _remap_plan_vehicle_ids(
                 seed_plan,
                 replacement_by_source_vehicle=matching,
@@ -3741,7 +3778,7 @@ class GurobiMILPAdapter:
                 for source_vehicle_id, target_vehicle_id in sorted(
                     matching.items()
                 ):
-                    if not _budget_available():
+                    if not _pre_local_search_budget_available():
                         break
                     if not cumulative_mapping:
                         # Every matching edge was already solved and validated
@@ -3791,19 +3828,19 @@ class GurobiMILPAdapter:
         # search can discover a beneficial 13->14 BEV move but can never test
         # the economically distinct 14->15 move in the same formal run.
         downstream_neighborhood_evaluation_reserve = min(
-            4,
+            local_search_evaluation_reserve,
             max(max_evaluations - len(evaluation_rows) - 1, 0),
         )
         sequential_activation_evaluation_limit = max(
             max_evaluations - downstream_neighborhood_evaluation_reserve,
-            len(evaluation_rows),
+            min(len(evaluation_rows) + 1, max_evaluations),
         )
         for round_index in range(
             1,
             powertrain_duty_swap_round_limit + 1,
         ):
             if (
-                not _budget_available()
+                not _pre_local_search_budget_available()
                 or len(evaluation_rows)
                 >= sequential_activation_evaluation_limit
             ):
@@ -3886,7 +3923,7 @@ class GurobiMILPAdapter:
                     if target_round_index >= len(target_classes):
                         continue
                     if (
-                        not _budget_available()
+                        not _pre_local_search_budget_available()
                         or len(evaluation_rows)
                         >= sequential_activation_evaluation_limit
                     ):
@@ -3982,6 +4019,11 @@ class GurobiMILPAdapter:
                 ),
             )
 
+        local_search_started = time.monotonic()
+        local_search_remaining_wall_sec_at_start = max(
+            fixed_duty_deadline - local_search_started,
+            0.0,
+        )
         completed_powertrain_duty_swap_rounds = 0
         suffix_exchange_candidates_generated = 0
         suffix_exchange_candidates_dispatch_feasible = 0
@@ -4667,6 +4709,16 @@ class GurobiMILPAdapter:
                 ),
                 "local_search_evaluation_reserve": (
                     local_search_evaluation_reserve
+                ),
+                "local_search_wall_reserve_sec": (
+                    local_search_wall_reserve_sec
+                ),
+                "pre_local_search_wall_budget_sec": max(
+                    float(wall_limit_sec) - local_search_wall_reserve_sec,
+                    0.0,
+                ),
+                "local_search_remaining_wall_sec_at_start": (
+                    local_search_remaining_wall_sec_at_start
                 ),
                 "pairwise_evaluation_limit": pairwise_evaluation_limit,
                 "matching_validation_wall_reserve_sec": (
