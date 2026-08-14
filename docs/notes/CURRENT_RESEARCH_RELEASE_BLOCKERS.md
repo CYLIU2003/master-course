@@ -28,10 +28,26 @@ fails closed. The model remained at 780,112 variables and ended at
 slightly worse than the historical 600-second diagnostic and is not evidence
 of a performance gain.
 
-Code and focused tests now enforce the shared budget, but no post-repair clean
-frozen-commit full-size run exists yet. End-to-end runtime, objective, physical
-validation, accounting, and the 1% gap must be remeasured through fresh
-Prepare. Research release remains **BLOCKED**.
+Code and focused tests enforce the shared budget. The first post-repair clean
+full-size run below failed before producing a valid integrated incumbent, so
+objective, physical validation, accounting, and the 1% gap must still be
+remeasured through fresh Prepare. Research release remains **BLOCKED**.
+
+The first post-repair run at SHA `6b090e4` measured 628.656745 seconds from
+HTTP submit to terminal and 604.204202 seconds inside optimization for a
+600-second request, proving that the former 1200-second solver duplication was
+removed. It did **not** produce a valid optimization result. The one-candidate
+seed spent 142.768869 seconds because Stage 1 received an 80-second Gurobi
+limit before about 60 seconds of model build, then Stage 2 had no remaining
+time. Phase 4 received no verified start, found no incumbent in its remaining
+451.735358 seconds, and nonresearch fallback was rejected by artifact
+completeness due to absent SOC evidence. This is a valid fail-closed outcome,
+not a result to report.
+
+The nested Stage-1 budget is now recalculated immediately before Gurobi and
+the requested Stage-1/Stage-2 split is proportionally scaled over the actual
+remaining wall time. This follow-up code has focused tests but has not yet been
+measured on 264 trips. The blocker therefore remains open.
 
 ## 2026-08-14 connection-buffer audit implemented; optimized evidence pending
 

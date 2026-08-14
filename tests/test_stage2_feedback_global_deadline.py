@@ -14,6 +14,7 @@ from src.optimization.milp.solver_adapter import (
     _FEEDBACK_GLOBAL_STARTED_KEY,
     _remaining_stage_budget_sec,
     _resolve_stage2_feedback_global_budget,
+    _stage1_solver_budget_with_stage2_reserve,
 )
 
 
@@ -80,6 +81,29 @@ def test_expired_retry_budget_is_zero() -> None:
         requested_sec=20.0,
         now_monotonic=131.0,
     ) == 0.0
+
+
+def test_stage1_model_build_time_cannot_consume_stage2_reserve() -> None:
+    assert _stage1_solver_budget_with_stage2_reserve(
+        remaining_shared_budget_sec=40.0,
+        requested_stage1_sec=80.0,
+        requested_stage2_sec=20.0,
+    ) == pytest.approx(32.0)
+    assert _stage1_solver_budget_with_stage2_reserve(
+        remaining_shared_budget_sec=15.0,
+        requested_stage1_sec=80.0,
+        requested_stage2_sec=20.0,
+    ) == pytest.approx(12.0)
+    assert _stage1_solver_budget_with_stage2_reserve(
+        remaining_shared_budget_sec=30.0,
+        requested_stage1_sec=30.0,
+        requested_stage2_sec=30.0,
+    ) == pytest.approx(15.0)
+    assert _stage1_solver_budget_with_stage2_reserve(
+        remaining_shared_budget_sec=40.0,
+        requested_stage1_sec=80.0,
+        requested_stage2_sec=0.0,
+    ) == pytest.approx(40.0)
 
 
 def test_invalid_internal_deadline_is_replaced_deterministically() -> None:

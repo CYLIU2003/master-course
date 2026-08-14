@@ -13,7 +13,11 @@ computational timeと比較できる共通の実時間上限ではなかった�
 fixed-dispatch recourse、branch-and-boundを一つのwall-clock budgetへ含める。
 Phase 4本体が全動力構成を探索するため、seed側の全構成探索は正式なPhase 4の
 最適性証明には不要であり、Phase 3感度実験として分離する。この変更後の
-264便実測は未完了であり、現時点では文献比の高速化を主張しない。
+最初の264便実測はHTTP終端628.656745秒、最適化604.204202秒となり、旧来の
+SeedとPhase 4の二重600秒は解消した。ただしStage 1がモデル構築後にも80秒を
+消費してStage 2の時間を失い、Phase 4は初期解なしで可行解を得られなかった。
+このrunは求解時間短縮の証拠ではなく、fail-closed診断である。Stage 1/2の
+残時間按分を追加修正した後の再計測が必要である。
 
 同じ診断では、単一fragmentを仮定したICE clone集約も実入力へ適用されなかった。
 実効条件は1台3fragment、start/end上限100で、変数数は780,112のまま、

@@ -1495,6 +1495,36 @@ def _remaining_stage_budget_sec(
     return min(max(float(requested_sec), 0.0), remaining)
 
 
+def _stage1_solver_budget_with_stage2_reserve(
+    *,
+    remaining_shared_budget_sec: float,
+    requested_stage1_sec: float,
+    requested_stage2_sec: float,
+) -> float:
+    """Keep a proportional Stage-2 share after Stage-1 model construction.
+
+    Phase 3 builds the Stage-1 model in Python before Gurobi starts.  The
+    original implementation fixed ``TimeLimit`` before that build, allowing
+    Stage 1 to consume its full solver allowance after the shared wall clock
+    had already spent substantial construction time.  When the requested
+    stage limits no longer fit, scale their split over the *remaining* wall
+    budget immediately before optimization.
+    """
+
+    remaining_sec = max(float(remaining_shared_budget_sec), 0.0)
+    stage1_requested_sec = max(float(requested_stage1_sec), 0.0)
+    stage2_requested_sec = max(float(requested_stage2_sec), 0.0)
+    requested_total_sec = stage1_requested_sec + stage2_requested_sec
+    if requested_total_sec <= remaining_sec:
+        return stage1_requested_sec
+    if requested_total_sec <= 0.0:
+        return 0.0
+    return min(
+        stage1_requested_sec,
+        remaining_sec * stage1_requested_sec / requested_total_sec,
+    )
+
+
 def _best_objective_stop_from_certified_lower_bound(
     certified_lower_bound: Optional[float],
     relative_gap: float,
@@ -10863,6 +10893,25 @@ class GurobiMILPAdapter:
 
         if stage1_fragment_lazy_separator is not None:
             stage1_fragment_lazy_separator.begin_solve()
+        remaining_before_stage1_optimize_sec = max(
+            float(feedback_global_deadline) - time.monotonic(),
+            0.0,
+        )
+        stage_time_limit = _stage1_solver_budget_with_stage2_reserve(
+            remaining_shared_budget_sec=(
+                remaining_before_stage1_optimize_sec
+            ),
+            requested_stage1_sec=_resolved_stage_time_limit_sec(
+                config,
+                stage=1,
+            ),
+            requested_stage2_sec=(
+                _resolved_stage_time_limit_sec(config, stage=2)
+                if stage2_enabled
+                else 0.0
+            ),
+        )
+        stage1.Params.TimeLimit = max(stage_time_limit, 0.001)
         stage1.optimize(_stage1_search_callback)
         if (
             stage1_fragment_lazy_separator is not None

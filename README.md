@@ -26,9 +26,16 @@
   780,112 variables. It ended with a 650,298.979 JPY incumbent, 640,000 JPY
   certified bound, and 1.583730% gap. These are diagnostic values, not a
   speedup or a formal research result.
-- The shared-budget implementation and artifact fields are regression tested,
-  but a new clean frozen-commit frontend run is still required to measure the
-  corrected end-to-end duration and gap. Research release remains blocked.
+- A clean post-change diagnostic at SHA `6b090e4` confirmed the outer budget:
+  HTTP submit-to-terminal time was 628.657 seconds, optimization wall time was
+  604.204 seconds, and the audited overrun was 4.204 seconds. It also exposed
+  an inner Phase-3 defect: the Stage-1 Gurobi limit was fixed before roughly
+  60 seconds of Python model construction, so the 100-second seed still took
+  142.769 seconds and left no Stage-2 candidate. Phase 4 consequently had no
+  verified start, found no incumbent, and diagnostic fallback was correctly
+  rejected when its SOC graph was empty. The inner Stage-1/Stage-2 limits now
+  scale over the wall time remaining after model construction. Another clean
+  run is required; research release remains blocked.
 
 ## 2026-08-14 exact vehicle-label symmetry reduction
 

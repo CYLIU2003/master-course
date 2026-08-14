@@ -41,6 +41,28 @@
   regression passed (`126 passed`), followed by the complete repository suite
   (`1450 passed` in 136.86 seconds). A fresh clean-commit 264-trip diagnostic is still
   required before claiming a runtime improvement; no old output is relabelled.
+- The subsequent fresh frontend/BFF diagnostic at that commit
+  (`output/2026-08-14/run_20260814_2138`, job
+  `8a27c63e-27d5-4d84-9a16-dd06bfd588ff`) verified the outer deadline but
+  failed the solve contract. Submit-to-terminal was 628.656745 seconds;
+  `phase4_shared_wall_clock_budget_v1` recorded 600 seconds requested,
+  604.204202 seconds optimization wall time, and 4.204202 seconds overrun.
+  The primary-only seed nevertheless took 142.768869 seconds because Stage 1
+  set its 80-second Gurobi limit before approximately 60 seconds of model
+  construction. It returned a Stage-1 incumbent but no Stage-2 candidate.
+- With no verified seed, integrated Phase 4 used its remaining 451.735358
+  seconds, found no incumbent, and the nonresearch call produced a diagnostic
+  baseline fallback. Artifact completeness then failed on the intentionally
+  absent `graph/vehicle_soc_timeseries.csv`; generating fake SOC rows would be
+  wrong, so the artifact gate is retained.
+- Raised and fixed the nested P1 budget defect: immediately before Stage-1
+  optimization, the adapter recomputes the shared time remaining after model
+  construction. If the configured Stage-1 and Stage-2 limits no longer fit,
+  it scales their split proportionally, so neither stage can claim its old
+  full solver allowance after Python construction has consumed the deadline.
+  Focused deadline and integrated tests passed (`112 passed`), followed by the
+  complete repository suite (`1451 passed` in 160.67 seconds). A second clean
+  diagnostic remains required.
 
 ## 2026-08-14: exact vehicle-label symmetry reduction
 
