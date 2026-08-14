@@ -40,7 +40,7 @@ from scripts.run_frontend_controlled_pv_pair import (  # noqa: E402
 )
 
 
-SCHEMA_VERSION = "thesis_sensitivity_execution_v2"
+SCHEMA_VERSION = "thesis_sensitivity_execution_v3_turnaround_buffer"
 CSV_COLUMNS = (
     "case_id",
     "family",
@@ -53,6 +53,7 @@ CSV_COLUMNS = (
     "solve_time_seconds",
     "wall_time_seconds",
     "timestep_min",
+    "turnaround_buffer_min",
     "rolling_execution_minutes_submitted",
     "rolling_execution_minutes_requested",
     "rolling_execution_minutes_effective",
@@ -451,6 +452,12 @@ def _audit_case(
             )
             or {}
         ).get("timestep_min"),
+        "turnaround_buffer_min": dict(
+            required["optimization_parameters.json"].get(
+                "effective_model_metadata"
+            )
+            or {}
+        ).get("turnaround_buffer_min"),
         "rolling_execution_minutes_submitted": dict(
             submitted_optimization_request or {}
         ).get("rolling_execution_minutes"),
@@ -837,6 +844,11 @@ def _case_parameter_matches(
             and metadata.get("allow_intra_depot_route_swap")
             is request.get("allow_intra_depot_route_swap")
         )
+    if family == "turnaround_buffer_sensitivity":
+        return _numbers_equal(
+            metadata.get("turnaround_buffer_min"),
+            expected.get("turnaround_buffer_min"),
+        )
     if family == "vehicle_day_cost_sensitivity":
         return bool(
             _numbers_equal(
@@ -885,6 +897,8 @@ def _declared_controls_match(
         == expected.get("charge_teardown_minutes"),
         metadata.get("minimum_charge_session_minutes")
         == expected.get("minimum_charge_session_minutes"),
+        metadata.get("turnaround_buffer_min")
+        == expected.get("turnaround_buffer_min"),
         metadata.get("allow_partial_service")
         is expected.get("allow_partial_service"),
         _successor_limits_match(

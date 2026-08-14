@@ -22,6 +22,7 @@ def test_experiment_matrix_contains_required_sensitivities() -> None:
         "trip_energy_sensitivity",
         "pv_supply_transition",
         "route_band_ablation",
+        "turnaround_buffer_sensitivity",
         "vehicle_day_cost_sensitivity",
         "cost_co2_epsilon_frontier",
     } <= families
@@ -57,6 +58,19 @@ def test_experiment_matrix_contains_required_sensitivities() -> None:
     assert route_band_cases["ROUTE_BAND_OFF"][
         "prepare_request_overrides"
     ] == {"allow_intra_depot_route_swap": True}
+    turnaround_cases = [
+        case
+        for case in payload["cases"]
+        if case["family"] == "turnaround_buffer_sensitivity"
+    ]
+    assert [
+        case["prepare_settings"]["turnaround_buffer_min"]
+        for case in turnaround_cases
+    ] == [5, 10, 15]
+    assert payload["common_control_contract"]["turnaround_buffer_min"] == 0
+    assert payload["parameter_semantics"][
+        "turnaround_buffer_sensitivity"
+    ].startswith("Adds a declared 5/10/15-minute")
     assert payload["parameter_semantics"]["pv_scale"].startswith(
         "Multiplicative alpha"
     )

@@ -76,6 +76,21 @@ def test_time_case_compiles_matching_prepare_optimization_and_rolling_steps() ->
     assert optimization["rolling_execution_minutes"] == 60
 
 
+def test_turnaround_case_compiles_only_declared_prepare_margin() -> None:
+    prepare, optimization = build_case_requests(
+        case=_case("TURNAROUND_BUFFER_15"),
+        base_prepare_request={
+            "simulation_settings": {"unrelated_control": "preserved"}
+        },
+        base_optimization_request={"unrelated_control": "preserved"},
+    )
+
+    assert prepare["simulation_settings"]["turnaround_buffer_min"] == 15
+    assert prepare["simulation_settings"]["unrelated_control"] == "preserved"
+    assert "turnaround_buffer_min" not in optimization
+    assert optimization["unrelated_control"] == "preserved"
+
+
 def test_vehicle_day_cases_compile_only_declared_cost_change() -> None:
     zero_prepare, zero_optimization = build_case_requests(
         case=_case("VEHICLE_DAY_0"),
@@ -165,6 +180,20 @@ def test_parameter_audit_distinguishes_pv_scale_and_route_band_lock() -> None:
         },
         economic_audit={},
     )
+    assert _case_parameter_matches(
+        case=_case("TURNAROUND_BUFFER_10"),
+        parameters={
+            "effective_model_metadata": {"turnaround_buffer_min": 10}
+        },
+        economic_audit={},
+    )
+    assert not _case_parameter_matches(
+        case=_case("TURNAROUND_BUFFER_10"),
+        parameters={
+            "effective_model_metadata": {"turnaround_buffer_min": 5}
+        },
+        economic_audit={},
+    )
     assert not _case_parameter_matches(
         case=_case("PV_0.25"),
         parameters={
@@ -208,6 +237,7 @@ def test_declared_control_audit_rejects_hidden_prepare_override() -> None:
             "minimum_charge_session_minutes": expected[
                 "minimum_charge_session_minutes"
             ],
+            "turnaround_buffer_min": expected["turnaround_buffer_min"],
             "allow_partial_service": expected["allow_partial_service"],
             "milp_max_successors_per_trip": expected[
                 "milp_max_successors_per_trip"

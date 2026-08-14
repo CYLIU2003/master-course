@@ -1,5 +1,29 @@
 # Development Notes
 
+## 2026-08-14: literature runtime verification and buffer sensitivity runner
+
+- Rechecked the local prior-work PDFs rather than comparing headline times.
+  No06's Table 5 shows 617.6 seconds for Gurobi at 50 trips, no feasible
+  Gurobi result for 200/418 trips within six hours, and 202.3 seconds for the
+  418-trip ALNS-SA heuristic. No16's 1.5-second result optimizes charging and
+  ESS dispatch for a fixed 49-bus/275-trip schedule with 9,946 continuous and
+  9,506 binary variables. No64 ranges from 52.41 to 3002.07 seconds on
+  31,883--98,784 variables, with a 7200-second/0.5% stop and 80 Xeon cores.
+  These findings preserve separate claims for feasible candidates, certified
+  gaps, decomposition methods, and heuristics.
+- Added a formal `turnaround_buffer_sensitivity` family to the frontend/BFF
+  thesis matrix with additive 5, 10, and 15 minute cases. The matrix keeps
+  all other families at the current zero-buffer baseline and does not alter
+  timetable rows or replace stop-specific base turnaround rules.
+- The execution auditor now verifies the effective margin from canonical
+  optimization metadata and exports it in JSON/CSV outcomes. Schema versions
+  are `thesis_experiment_matrix_v4_turnaround_buffer` and
+  `thesis_sensitivity_execution_v3_turnaround_buffer`.
+- Focused matrix and execution-contract regression: `23 passed`; broader
+  turnaround/Prepare/README regression: `46 passed`; full repository
+  regression: `1431 passed`. No solver was invoked by this change, so no
+  solve-time improvement or optimized 5/10/15-minute result is claimed.
+
 ## 2026-08-14: additive turnaround buffer and Prepare sensitivity certificate
 
 - Added an explicit non-negative `turnaround_buffer_min` to the canonical

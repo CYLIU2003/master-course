@@ -1,5 +1,29 @@
 # master-course
 
+## 2026-08-14 literature runtime audit and turnaround optimization tranche
+
+- The local literature PDFs confirm that tens-to-hundreds of seconds are
+  common only after solver semantics are separated. The closest integrated
+  comparison, No06, reports Gurobi at 617.6 seconds for 50 trips but no
+  feasible Gurobi solution for 200 or 418 trips within six hours; its
+  418-trip 202.3-second result is ALNS-SA, not an exact Gurobi certificate.
+  No16's 275-trip 1.5-second result keeps bus assignments fixed and solves a
+  19,452-variable charging/ESS problem. See
+  `docs/notes/LITERATURE_SOLVE_TIME_COMPARISON_20260814.md` for the
+  source-page comparison.
+- The thesis experiment matrix now declares
+  `TURNAROUND_BUFFER_5`, `TURNAROUND_BUFFER_10`, and
+  `TURNAROUND_BUFFER_15`. Each case uses fresh Prepare and the normal
+  frontend/BFF Phase-4 path; only the additive operational margin in
+  `arrival + base_turnaround + buffer + deadhead <= next departure` changes.
+- Unrelated sensitivity families explicitly preserve the current zero-buffer
+  baseline. Effective `turnaround_buffer_min` is checked in the run bundle
+  and exported to the sensitivity CSV. A hidden reset or stale prepared input
+  therefore blocks acceptance rather than being reported as a matched case.
+- This is execution-contract support, not runtime or optimality evidence. The
+  three optimization cases and route-band ON/OFF pair remain unexecuted, and
+  the high-PV 1% proof blocker remains open.
+
 ## 2026-08-14 trip-energy sensitivity provenance correction
 
 - Clean frozen SHA `735527da7f117f5af894263dcdf4fe55e8226328`

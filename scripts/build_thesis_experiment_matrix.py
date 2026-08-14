@@ -24,6 +24,10 @@ def build_experiment_matrix() -> dict[str, Any]:
         "charge_setup_minutes": 5,
         "charge_teardown_minutes": 5,
         "minimum_charge_session_minutes": 15,
+        # Preserve the current zero-buffer model for every unrelated
+        # sensitivity.  The dedicated family below is the only place where
+        # this physical connection margin is varied.
+        "turnaround_buffer_min": 0,
         "pv_input_semantics": "available_surplus_after_depot_load",
         "allow_partial_service": False,
         "milp_max_successors_per_trip": None,
@@ -104,6 +108,12 @@ def build_experiment_matrix() -> dict[str, Any]:
                 "allow_intra_depot_route_swap": not route_band,
             },
         )
+    for turnaround_buffer_min in (5, 10, 15):
+        add(
+            f"TURNAROUND_BUFFER_{turnaround_buffer_min}",
+            "turnaround_buffer_sensitivity",
+            {"turnaround_buffer_min": turnaround_buffer_min},
+        )
     for usage_cost in (0.0, 20_000.0):
         add(
             f"VEHICLE_DAY_{int(usage_cost)}",
@@ -126,7 +136,7 @@ def build_experiment_matrix() -> dict[str, Any]:
         )
 
     return {
-        "schema_version": "thesis_experiment_matrix_v3",
+        "schema_version": "thesis_experiment_matrix_v4_turnaround_buffer",
         "execution_semantics": "frontend_bff_only_no_direct_solver",
         "common_control_contract": common,
         "parameter_semantics": {
@@ -151,6 +161,11 @@ def build_experiment_matrix() -> dict[str, Any]:
                 "fixed_route_band_mode=false together with "
                 "allow_intra_depot_route_swap=true; otherwise the canonical "
                 "scope lock forces route-band ON."
+            ),
+            "turnaround_buffer_sensitivity": (
+                "Adds a declared 5/10/15-minute operational margin to each "
+                "base turnaround before deadhead time. It does not replace "
+                "the stop-specific base turnaround or alter timetable rows."
             ),
             "vehicle_day_cost_sensitivity": (
                 "Uses scalar_total_cost_v1 for both 0 and 20000 JPY cases. "

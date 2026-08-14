@@ -18,9 +18,12 @@ The same route-band and turnaround fields are now fixed controls in the
 Rolling comparison-case hash; a high/low-PV pair with different transition
 rules fails comparison rather than being accepted as PV-only.
 
-This closes the missing structural audit and the fail-open bug. It does not yet
-close the thesis experiment requirement: the 5/10/15-minute cases have not been
-solved as matched frontend/BFF optimization runs, and no certified effect on
+This closes the missing structural audit and the fail-open bug. The thesis
+experiment runner now also declares `TURNAROUND_BUFFER_5`,
+`TURNAROUND_BUFFER_10`, and `TURNAROUND_BUFFER_15`, submits each through fresh
+Prepare and the frontend/BFF Phase-4 path, verifies the effective buffer in
+canonical metadata, and exports it in the comparison CSV. This is runner
+support only: the three cases have not been solved, and no certified effect on
 cost, BEV trips, SOC, or runtime is claimed. Route-band ON/OFF optimized
 comparison also remains pending. Fresh Prepare is mandatory because the
 prepared schema is now `v10_turnaround_buffer_sensitivity`. Research release
