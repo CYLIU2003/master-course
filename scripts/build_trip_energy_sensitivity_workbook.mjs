@@ -407,7 +407,7 @@ const sourceRows = [...payload.rows].sort(
   sheet.getRange("B11:E15").format.numberFormat = "#,##0";
   sheet.getRange("F11:F15").format.numberFormat = "#,##0.00";
   sheet.getRange("G11:H15").format.numberFormat = "#,##0.000";
-  setWidths(sheet, { A: 14, B: 12, C: 12, D: 12, E: 12, F: 18, G: 14, H: 15 });
+  setWidths(sheet, { A: 24, B: 12, C: 12, D: 12, E: 12, F: 18, G: 14, H: 15 });
 
   const dispatchChart = sheet.charts.add("line", sheet.getRange("A10:C15"));
   dispatchChart.title = "Observed BEV/ICE trip response";
@@ -495,7 +495,7 @@ const previewRanges = {
   "Executed KPIs": "A1:U8",
   "Energy Flows": "A1:J28",
   "Solver Evidence": "A1:J8",
-  Provenance: "A1:C24",
+  Provenance: "A1:C26",
 };
 const previewRecords = [];
 for (let index = 0; index < sheetNames.length; index += 1) {

@@ -238,7 +238,10 @@ def _plot_executed_kpis(
         ax.axhline(0.0, color=INK, linewidth=0.8)
         ax.bar_label(
             bars,
-            labels=[f"{value:+,.1f}" for value in values],
+            labels=[
+                "" if abs(value) < 1.0e-12 else f"{value:+,.1f}"
+                for value in values
+            ],
             padding=3,
             fontsize=8,
         )
