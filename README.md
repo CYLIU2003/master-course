@@ -1490,6 +1490,10 @@ agreement. The bundle is explicitly
 `research_conclusion_eligible=false`: it verifies the bounded formulation and
 does not replace a fresh frontend 264-trip run, positive-PV/BESS validation,
 Rolling execution, or the declared full-model gap gate.
+Both independent oracles also cap the complete Cartesian assignment space at
+1,000,000 candidates (callers may request a lower cap but not a higher one).
+They fail before enumeration when the bound would be exceeded; the ten-trip
+limit alone is not treated as a sufficient runtime bound for a large fleet.
 The current equation-to-code-to-test traceability table is maintained in
 `docs/notes/THESIS_EQUATION_CODE_TEST_MAP.md`.
 

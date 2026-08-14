@@ -4506,10 +4506,16 @@ locks this distinction in place.
   `--allow-dirty-git` is explicitly diagnostic. Every bundle remains
   `research_conclusion_eligible=false` and cannot substitute for a full
   network, positive-PV/BESS, Rolling, or formal gap certificate.
-- Focused regression after implementation passes `15 passed`, including both
+- Final code review found that the ten-trip limit did not by itself bound the
+  Cartesian assignment count: ten trips against a large fleet could still
+  make the test-only oracle run effectively forever. Both all-ICE and electric
+  oracles now hard-cap complete enumeration at 1,000,000 assignments and allow
+  callers to choose only a lower cap. Regression tests prove that a 16-case
+  fixture is rejected before enumeration when the declared cap is 15.
+- Focused regression after final review passes `17 passed`, including both
   exact oracles, canonical reconciliation, scope rejection, bundle hashing,
   tamper detection and integrated Gurobi agreement. The complete repository
-  regression passes `1406 passed in 73.20s`.
+  regression passes `1408 passed in 73.27s`.
 - Committed the implementation as clean SHA
   `3307f964b8992377b166901d474ebbcb899f548a`, then generated
   `output/verification/small_electric_oracle/3307f964/`. The source worktree

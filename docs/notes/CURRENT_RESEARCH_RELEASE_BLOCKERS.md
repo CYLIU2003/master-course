@@ -2214,6 +2214,9 @@ return-to-initial SOC and charger-port concurrency. It verifies PV=0, BESS=0,
 the 23.956344 JPY/kWh tariff break-even, no-charger infeasibility and one-port
 shortage. These are bounded formulation checks only; positive PV/BESS and the
 full 264-trip network remain outside this oracle scope.
+Both oracles now fail closed before Cartesian enumeration exceeds 1,000,000
+assignments; the bounded verification path cannot silently expand into a
+production-size exhaustive search.
 
 Remaining blocking work for the requested method comparison:
 

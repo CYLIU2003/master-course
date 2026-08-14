@@ -290,6 +290,13 @@ def test_grid_only_tariff_crosses_hand_calculated_break_even() -> None:
     assert "zero_pv_zero_bess" in certificate["scope"]
 
 
+def test_electric_oracle_rejects_excessive_assignment_space() -> None:
+    problem = _mixed_break_even_problem(grid_price_jpy_per_kwh=20.0)
+
+    with pytest.raises(ValueError, match="assignment space 16 exceeds hard limit 15"):
+        solve_small_exact_electric_oracle(problem, max_assignments=15)
+
+
 @pytest.mark.parametrize("grid_price_jpy_per_kwh", [20.0, 30.0])
 def test_oracle_plan_reconciles_with_canonical_physics_and_accounting(
     grid_price_jpy_per_kwh: float,

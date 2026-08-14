@@ -156,6 +156,13 @@ def test_small_exact_oracle_matches_hand_calculated_optimum() -> None:
     assert oracle.assignment_by_trip["high-in"] == efficient_vehicle
 
 
+def test_small_exact_oracle_rejects_excessive_assignment_space() -> None:
+    problem = _four_trip_two_vehicle_problem()
+
+    with pytest.raises(ValueError, match="assignment space 16 exceeds hard limit 15"):
+        solve_small_exact_assignment_oracle(problem, max_assignments=15)
+
+
 @pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi is required")
 def test_integrated_milp_matches_independent_small_exact_oracle() -> None:
     problem = _four_trip_two_vehicle_problem()

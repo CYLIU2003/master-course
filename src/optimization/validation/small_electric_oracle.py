@@ -37,6 +37,7 @@ from src.optimization.common.problem import (
 
 
 MAX_EXACT_TRIPS = 10
+MAX_EXACT_ASSIGNMENTS = 1_000_000
 CHARGE_EFFICIENCY = 0.95
 TOLERANCE = 1.0e-7
 _ELECTRIC_POWERTRAINS = frozenset({"BEV"})
@@ -163,6 +164,7 @@ def solve_small_exact_electric_oracle(
     problem: CanonicalOptimizationProblem,
     *,
     max_trips: int = MAX_EXACT_TRIPS,
+    max_assignments: int = MAX_EXACT_ASSIGNMENTS,
 ) -> SmallElectricOracleResult:
     """Return the globally best plan inside the documented bounded scope."""
 
@@ -207,6 +209,11 @@ def solve_small_exact_electric_oracle(
                 f"small electric oracle trip {trip.trip_id!r} has no compatible vehicle"
             )
         eligible_vehicle_ids_by_trip.append(eligible)
+
+    _validate_assignment_space(
+        eligible_vehicle_ids_by_trip,
+        max_assignments=max_assignments,
+    )
 
     best: _CandidateEvaluation | None = None
     best_signature = ""
@@ -273,6 +280,25 @@ def solve_small_exact_electric_oracle(
         terminal_soc_kwh_by_vehicle=dict(best.terminal_soc_kwh_by_vehicle),
         objective_tuple=best.objective_tuple,
     )
+
+
+def _validate_assignment_space(
+    eligible_vehicle_ids_by_trip: Sequence[Sequence[str]],
+    *,
+    max_assignments: int,
+) -> None:
+    hard_limit = min(
+        max(int(max_assignments), 1),
+        MAX_EXACT_ASSIGNMENTS,
+    )
+    assignment_count = 1
+    for eligible in eligible_vehicle_ids_by_trip:
+        assignment_count *= len(eligible)
+        if assignment_count > hard_limit:
+            raise ValueError(
+                "small electric oracle assignment space "
+                f"{assignment_count} exceeds hard limit {hard_limit}"
+            )
 
 
 def _validate_supported_problem(
