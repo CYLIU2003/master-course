@@ -29,29 +29,31 @@ def test_formal_phase4_seed_control_contract_matches_server_profile() -> None:
     runner = _load_runner()
     settings = {
         "phase4_phase3_seed_enabled": True,
-        "phase4_phase3_seed_time_limit_sec": 600,
-        "phase4_phase3_seed_wall_clock_budget_sec": 620,
-        "phase4_phase3_seed_model_build_overhead_allowance_sec": 20,
-        "phase4_phase3_seed_stage1_time_limit_sec": 480,
-        "phase4_phase3_seed_stage2_time_limit_sec": 120,
-        "phase4_phase3_seed_candidate_limit": 21,
+        "phase4_phase3_seed_composition_search_enabled": False,
+        "phase4_phase3_seed_composition_search_not_required_for_integrated_phase4": True,
+        "phase4_phase3_seed_time_limit_sec": 100,
+        "phase4_phase3_seed_wall_clock_budget_sec": 100,
+        "phase4_phase3_seed_model_build_overhead_allowance_sec": 0,
+        "phase4_phase3_seed_stage1_time_limit_sec": 80,
+        "phase4_phase3_seed_stage2_time_limit_sec": 20,
+        "phase4_phase3_seed_candidate_limit": 1,
         "phase4_phase3_seed_candidate_evaluation_order": (
             "candidate_priority_cost_ascending_then_candidate_hash"
         ),
         "phase4_phase3_seed_candidate_evaluation_initial_budget_sec": 25.0,
-        "phase4_phase3_seed_composition_search_radius": 10,
-        "phase4_phase3_seed_available_vehicle_count": 2,
-        "phase4_phase3_seed_required_candidate_limit": 21,
-        "phase4_phase3_seed_required_composition_search_radius": 10,
+        "phase4_phase3_seed_composition_search_radius": 0,
+        "phase4_phase3_seed_available_vehicle_count": 60,
+        "phase4_phase3_seed_required_candidate_limit": 1,
+        "phase4_phase3_seed_required_composition_search_radius": 0,
         "phase4_phase3_seed_composition_search_scope": (
-            "selected_available_vehicle_inventory_symmetric_span"
+            "primary_feasible_candidate_only_phase4_warm_start"
         ),
         "phase4_phase3_seed_inventory_span_truncated": False,
         "phase4_phase3_seed_search_directionality": (
-            "primary_plus_symmetric_adjacent_compositions"
+            "neutral_primary_feasible_candidate_only"
         ),
         "phase4_phase3_seed_bev_frontier_enabled": False,
-        "phase4_phase3_seed_unused_bev_neighborhood_enabled": True,
+        "phase4_phase3_seed_unused_bev_neighborhood_enabled": False,
         "phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec": 120,
         "phase4_phase3_seed_unused_bev_neighborhood_per_solve_sec": 5,
         "phase4_phase3_seed_unused_bev_neighborhood_max_evaluations": 512,
@@ -59,26 +61,26 @@ def test_formal_phase4_seed_control_contract_matches_server_profile() -> None:
         "phase4_phase3_seed_powertrain_duty_swap_rounds": 2,
         "phase4_phase3_seed_unused_bev_identity_exchange_rounds": 2,
         "phase4_phase3_seed_unused_bev_neighborhood": {
-            "enabled": True,
-            "termination_reason": "neighborhood_exhausted",
+            "enabled": False,
+            "termination_reason": "disabled",
         },
         "phase4_integrated_seed_recourse_preflight_enabled": True,
-        "phase4_integrated_seed_recourse_time_limit_sec": 300,
+        "phase4_integrated_seed_recourse_time_limit_sec": 60,
         "phase4_integrated_seed_recourse_preflight_requested": True,
         "phase4_integrated_seed_recourse_preflight_feasible": True,
-        "phase4_total_solver_time_budget_sec": 4710,
+        "phase4_total_solver_time_budget_sec": 600,
+        "phase4_shared_wall_clock_budget_enabled": True,
+        "phase4_shared_wall_clock_budget_sec": 600.0,
+        "phase4_total_wall_runtime_sec": 598.0,
+        "phase4_wall_clock_budget_overrun_sec": 0.0,
     }
 
     assert runner._phase4_seed_controls_match(settings) is True
-    settings["phase4_phase3_seed_composition_search_radius"] = 5
+    settings["phase4_phase3_seed_composition_search_radius"] = 1
     assert runner._phase4_seed_controls_match(settings) is False
 
-    settings["phase4_phase3_seed_composition_search_radius"] = 60
-    settings["phase4_phase3_seed_required_composition_search_radius"] = 60
-    settings["phase4_phase3_seed_candidate_limit"] = 61
-    settings["phase4_phase3_seed_required_candidate_limit"] = 61
-    assert runner._phase4_seed_controls_match(settings) is True
-    settings["phase4_phase3_seed_inventory_span_truncated"] = True
+    settings["phase4_phase3_seed_composition_search_radius"] = 0
+    settings["phase4_wall_clock_budget_overrun_sec"] = 7.0
     assert runner._phase4_seed_controls_match(settings) is False
 
 

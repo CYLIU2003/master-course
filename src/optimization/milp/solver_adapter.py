@@ -4148,6 +4148,14 @@ class GurobiMILPAdapter:
     ) -> Tuple[MILPSolverOutcome, AssignmentPlan]:
         raw_phase = str(getattr(config, "phase", "") or "").strip()
         phase = normalize_phase(raw_phase) if raw_phase else ""
+        integrated_wall_clock_started_at: Optional[float] = None
+        integrated_wall_clock_deadline: Optional[float] = None
+        if phase == "phase4_integrated":
+            integrated_wall_clock_started_at = time.perf_counter()
+            integrated_wall_clock_deadline = (
+                integrated_wall_clock_started_at
+                + max(float(config.time_limit_sec), 0.001)
+            )
 
         if phase == "phase1_charging_only":
             return self._solve_charging_only(problem, config)
@@ -7272,10 +7280,49 @@ class GurobiMILPAdapter:
         else:
             model.setObjective(objective, GRB.MINIMIZE)
 
+        remaining_before_recourse_preflight_sec = max(
+            float(integrated_wall_clock_deadline or time.perf_counter())
+            - time.perf_counter(),
+            0.0,
+        )
+        configured_recourse_limit_sec = max(
+            int(
+                getattr(
+                    config,
+                    "phase4_integrated_seed_recourse_time_limit_sec",
+                    300,
+                )
+                or 300
+            ),
+            1,
+        )
+        recourse_budget_exhausted = bool(
+            remaining_before_recourse_preflight_sec < 1.0
+        )
+        recourse_config = replace(
+            config,
+            phase4_integrated_seed_recourse_preflight_enabled=(
+                bool(
+                    getattr(
+                        config,
+                        "phase4_integrated_seed_recourse_preflight_enabled",
+                        True,
+                    )
+                )
+                and not recourse_budget_exhausted
+            ),
+            phase4_integrated_seed_recourse_time_limit_sec=max(
+                min(
+                    configured_recourse_limit_sec,
+                    int(math.floor(remaining_before_recourse_preflight_sec)),
+                ),
+                1,
+            ),
+        )
         integrated_warm_start_audit = (
             self._certify_integrated_dispatch_fixed_recourse(
                 model,
-                config=config,
+                config=recourse_config,
                 GRB=GRB,
                 integrated_warm_start_audit=integrated_warm_start_audit,
                 canonical_cost_expression=objective,
@@ -7311,6 +7358,23 @@ class GurobiMILPAdapter:
                 ),
             )
         )
+        integrated_warm_start_audit.update(
+            {
+                "dispatch_fixed_recourse_configured_time_limit_sec": (
+                    configured_recourse_limit_sec
+                ),
+                "shared_wall_clock_remaining_before_recourse_sec": (
+                    remaining_before_recourse_preflight_sec
+                ),
+                "shared_wall_clock_budget_exhausted_before_recourse": (
+                    recourse_budget_exhausted
+                ),
+            }
+        )
+        if recourse_budget_exhausted:
+            integrated_warm_start_audit[
+                "dispatch_fixed_recourse_reason"
+            ] = "shared_wall_clock_budget_exhausted_before_recourse"
 
         # The recourse preflight above is an independent feasibility
         # certificate for the exact integrated model.  Feed its canonical
@@ -7393,6 +7457,11 @@ class GurobiMILPAdapter:
             status_map[user_objective_limit_status] = "objective_limit"
         
         # Pre-optimization diagnostics
+        integrated_search_budget_sec = max(
+            float(integrated_wall_clock_deadline or time.perf_counter())
+            - time.perf_counter(),
+            0.001,
+        )
         pre_stats = {
             "num_vars": model.NumVars,
             "num_constrs": model.NumConstrs,
@@ -7406,6 +7475,9 @@ class GurobiMILPAdapter:
             "num_trips": len(problem.trips),
             "num_vehicles": len(problem.vehicles),
             "time_limit_sec": config.time_limit_sec,
+            "time_limit_sec_effective_at_optimization": (
+                integrated_search_budget_sec
+            ),
             "mip_gap": config.mip_gap,
         }
         if enable_milp_diagnostics:
@@ -7478,7 +7550,7 @@ class GurobiMILPAdapter:
         integrated_search_controls = _integrated_search_controls(
             verified_feasible_start=verified_integrated_start
         )
-        model.Params.TimeLimit = max(float(config.time_limit_sec), 0.001)
+        model.Params.TimeLimit = integrated_search_budget_sec
         model.Params.MIPFocus = int(
             integrated_search_controls["mip_focus"]
         )
@@ -7524,8 +7596,8 @@ class GurobiMILPAdapter:
 
         def _remaining_integrated_time_sec() -> float:
             return max(
-                float(config.time_limit_sec)
-                - float(time.perf_counter() - optimize_started_at),
+                float(integrated_wall_clock_deadline or time.perf_counter())
+                - time.perf_counter(),
                 0.0,
             )
 
@@ -8858,6 +8930,19 @@ class GurobiMILPAdapter:
                         integrated_search_controls["profile"]
                     ),
                     "total_time_limit_sec": float(config.time_limit_sec),
+                    "effective_search_time_limit_sec_at_optimization": (
+                        integrated_search_budget_sec
+                    ),
+                    "integrated_wall_runtime_sec": (
+                        max(
+                            time.perf_counter()
+                            - float(
+                                integrated_wall_clock_started_at
+                                or time.perf_counter()
+                            ),
+                            0.0,
+                        )
+                    ),
                     "phase_count_executed": len(
                         integrated_search_telemetry
                     ),

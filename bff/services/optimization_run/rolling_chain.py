@@ -730,6 +730,16 @@ def _day_ahead_solver_control_payload(
         "phase4_phase3_seed_enabled": solver_settings.get(
             "phase4_phase3_seed_enabled"
         ),
+        "phase4_phase3_seed_composition_search_enabled": (
+            solver_settings.get(
+                "phase4_phase3_seed_composition_search_enabled"
+            )
+        ),
+        "phase4_phase3_seed_composition_search_not_required_for_integrated_phase4": (
+            solver_settings.get(
+                "phase4_phase3_seed_composition_search_not_required_for_integrated_phase4"
+            )
+        ),
         "phase4_phase3_seed_time_limit_sec": solver_settings.get(
             "phase4_phase3_seed_time_limit_sec"
         ),
@@ -778,6 +788,12 @@ def _day_ahead_solver_control_payload(
         ),
         "phase4_phase3_seed_bev_frontier_enabled": solver_settings.get(
             "phase4_phase3_seed_bev_frontier_enabled"
+        ),
+        "phase4_shared_wall_clock_budget_enabled": solver_settings.get(
+            "phase4_shared_wall_clock_budget_enabled"
+        ),
+        "phase4_shared_wall_clock_budget_sec": solver_settings.get(
+            "phase4_shared_wall_clock_budget_sec"
         ),
         "phase4_phase3_seed_unused_bev_neighborhood_enabled": (
             solver_settings.get(

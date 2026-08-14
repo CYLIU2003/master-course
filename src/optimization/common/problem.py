@@ -433,6 +433,11 @@ class OptimizationConfig:
     # as a Phase 4 result or treated as integrated optimality evidence.
     phase4_phase3_seed_enabled: bool = False
     phase4_phase3_seed_time_limit_sec: int = 600
+    # Phase 4 needs one physically verified same-problem incumbent, not a
+    # separate exhaustive proof over Stage-1 powertrain compositions.  The
+    # integrated MILP itself keeps every feasible composition in scope.
+    # Retain the wider Phase-3 search as an explicit diagnostic option only.
+    phase4_phase3_seed_composition_search_enabled: bool = True
     phase4_phase3_seed_bev_frontier_enabled: bool = False
     # After the neutral Phase 3 seed search, a bounded fixed-assignment
     # neighborhood may activate currently unused BEVs and exchange BEV

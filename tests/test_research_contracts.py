@@ -291,13 +291,15 @@ def test_solver_settings_persists_phase4_seed_and_total_time_budget() -> None:
         solver_metadata={
             "phase4_phase3_seed_audit": {
                 "requested": True,
-                "seed_time_limit_sec": 600,
-                "seed_wall_clock_budget_sec": 700,
-                "seed_wall_runtime_sec": 650.0,
-                "seed_model_build_overhead_allowance_sec": 100,
-                "seed_stage1_time_limit_sec": 480,
-                "seed_stage2_time_limit_sec": 120,
-                "seed_stage1_stage2_candidate_limit": 10,
+                "seed_composition_search_enabled": False,
+                "seed_composition_search_not_required_for_integrated_phase4": True,
+                "seed_time_limit_sec": 100,
+                "seed_wall_clock_budget_sec": 100,
+                "seed_wall_runtime_sec": 90.0,
+                "seed_model_build_overhead_allowance_sec": 0,
+                "seed_stage1_time_limit_sec": 80,
+                "seed_stage2_time_limit_sec": 20,
+                "seed_stage1_stage2_candidate_limit": 1,
                 "seed_stage1_stage2_candidate_evaluation_order": (
                     "candidate_priority_cost_ascending_then_candidate_hash"
                 ),
@@ -314,14 +316,22 @@ def test_solver_settings_persists_phase4_seed_and_total_time_budget() -> None:
                 "seed_cost_ranked_composition_budget_semantics": (
                     "cost_order_changes_search_only"
                 ),
-                "seed_stage1_composition_search_radius": 2,
+                "seed_stage1_composition_search_radius": 0,
                 "seed_search_directionality": (
-                    "primary_plus_symmetric_adjacent_compositions"
+                    "neutral_primary_feasible_candidate_only"
                 ),
                 "seed_bev_frontier_enabled": False,
                 "integrated_seed_recourse_preflight_enabled": True,
                 "integrated_seed_recourse_time_limit_sec": 300,
-                "total_solver_time_budget_sec": 4500,
+                "total_solver_time_budget_sec": 600,
+            },
+            "phase4_shared_wall_clock_budget_audit": {
+                "enabled": True,
+                "requested_total_wall_clock_budget_sec": 600.0,
+                "precheck_and_seed_wall_runtime_sec": 90.0,
+                "integrated_wall_clock_budget_sec": 510.0,
+                "total_wall_runtime_sec": 599.0,
+                "wall_clock_budget_overrun_sec": 0.0,
             },
             "integrated_warm_start_audit": {
                 "dispatch_fixed_recourse_requested": True,
@@ -331,17 +341,21 @@ def test_solver_settings_persists_phase4_seed_and_total_time_budget() -> None:
     )
 
     assert payload["phase4_phase3_seed_enabled"] is True
-    assert payload["phase4_phase3_seed_time_limit_sec"] == 600
-    assert payload["phase4_phase3_seed_wall_clock_budget_sec"] == 700
+    assert payload["phase4_phase3_seed_composition_search_enabled"] is False
+    assert payload[
+        "phase4_phase3_seed_composition_search_not_required_for_integrated_phase4"
+    ] is True
+    assert payload["phase4_phase3_seed_time_limit_sec"] == 100
+    assert payload["phase4_phase3_seed_wall_clock_budget_sec"] == 100
     assert payload["phase4_phase3_seed_wall_runtime_sec"] == pytest.approx(
-        650.0
+        90.0
     )
     assert payload[
         "phase4_phase3_seed_model_build_overhead_allowance_sec"
-    ] == 100
-    assert payload["phase4_phase3_seed_stage1_time_limit_sec"] == 480
-    assert payload["phase4_phase3_seed_stage2_time_limit_sec"] == 120
-    assert payload["phase4_phase3_seed_candidate_limit"] == 10
+    ] == 0
+    assert payload["phase4_phase3_seed_stage1_time_limit_sec"] == 80
+    assert payload["phase4_phase3_seed_stage2_time_limit_sec"] == 20
+    assert payload["phase4_phase3_seed_candidate_limit"] == 1
     assert payload["phase4_phase3_seed_candidate_evaluation_order"] == (
         "candidate_priority_cost_ascending_then_candidate_hash"
     )
@@ -360,7 +374,7 @@ def test_solver_settings_persists_phase4_seed_and_total_time_budget() -> None:
     assert payload[
         "phase4_phase3_seed_cost_ranked_composition_budget_semantics"
     ] == "cost_order_changes_search_only"
-    assert payload["phase4_phase3_seed_composition_search_radius"] == 2
+    assert payload["phase4_phase3_seed_composition_search_radius"] == 0
     assert payload["phase4_phase3_seed_bev_frontier_enabled"] is False
     assert payload[
         "phase4_integrated_seed_recourse_preflight_enabled"
@@ -372,7 +386,19 @@ def test_solver_settings_persists_phase4_seed_and_total_time_budget() -> None:
     assert payload[
         "phase4_integrated_seed_recourse_preflight_feasible"
     ] is True
-    assert payload["phase4_total_solver_time_budget_sec"] == 4500
+    assert payload["phase4_total_solver_time_budget_sec"] == 600
+    assert payload["phase4_shared_wall_clock_budget_enabled"] is True
+    assert payload["phase4_shared_wall_clock_budget_sec"] == pytest.approx(
+        600.0
+    )
+    assert payload["phase4_precheck_and_seed_wall_runtime_sec"] == pytest.approx(
+        90.0
+    )
+    assert payload["phase4_integrated_wall_clock_budget_sec"] == pytest.approx(
+        510.0
+    )
+    assert payload["phase4_total_wall_runtime_sec"] == pytest.approx(599.0)
+    assert payload["phase4_wall_clock_budget_overrun_sec"] == pytest.approx(0.0)
 
 
 def test_infeasible_accounting_has_distinct_cost_fields_and_null_validated_cost() -> None:

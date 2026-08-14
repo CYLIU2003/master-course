@@ -10122,6 +10122,9 @@ def _solver_settings_payload(
     phase4_seed_audit = dict(
         metadata.get("phase4_phase3_seed_audit") or {}
     )
+    phase4_shared_budget_audit = dict(
+        metadata.get("phase4_shared_wall_clock_budget_audit") or {}
+    )
     integrated_start_audit = dict(
         metadata.get("integrated_warm_start_audit") or {}
     )
@@ -10138,6 +10141,16 @@ def _solver_settings_payload(
     effective_time_limit = _int_or_none(
         effective_limits.get("time_limit_sec", metadata.get("time_limit_sec", time_limit_seconds_requested))
     )
+    if phase4_shared_budget_audit.get("enabled") is True:
+        shared_requested_limit = _int_or_none(
+            phase4_shared_budget_audit.get(
+                "requested_total_wall_clock_budget_sec"
+            )
+        )
+        if shared_requested_limit is not None:
+            # The remaining integrated allocation is outcome-dependent and
+            # must not replace the matched user-facing control in a PV pair.
+            effective_time_limit = shared_requested_limit
     stage1_best_obj_stop_enabled = metadata.get("stage1_best_obj_stop_enabled")
     stage1_best_obj_stop_applied = metadata.get("stage1_best_obj_stop_applied")
     stage1_certified_gap = _float_or_none(
@@ -10650,6 +10663,18 @@ def _solver_settings_payload(
         "phase4_phase3_seed_enabled": bool(
             phase4_seed_audit.get("requested", False)
         ),
+        "phase4_phase3_seed_composition_search_enabled": bool(
+            phase4_seed_audit.get(
+                "seed_composition_search_enabled",
+                False,
+            )
+        ),
+        "phase4_phase3_seed_composition_search_not_required_for_integrated_phase4": bool(
+            phase4_seed_audit.get(
+                "seed_composition_search_not_required_for_integrated_phase4",
+                False,
+            )
+        ),
         "phase4_phase3_seed_time_limit_sec": _int_or_none(
             phase4_seed_audit.get("seed_time_limit_sec")
         ),
@@ -10826,6 +10851,35 @@ def _solver_settings_payload(
         ),
         "phase4_total_solver_time_budget_sec": _int_or_none(
             phase4_seed_audit.get("total_solver_time_budget_sec")
+        ),
+        "phase4_shared_wall_clock_budget_audit": (
+            phase4_shared_budget_audit
+        ),
+        "phase4_shared_wall_clock_budget_enabled": bool(
+            phase4_shared_budget_audit.get("enabled", False)
+        ),
+        "phase4_shared_wall_clock_budget_sec": _float_or_none(
+            phase4_shared_budget_audit.get(
+                "requested_total_wall_clock_budget_sec"
+            )
+        ),
+        "phase4_precheck_and_seed_wall_runtime_sec": _float_or_none(
+            phase4_shared_budget_audit.get(
+                "precheck_and_seed_wall_runtime_sec"
+            )
+        ),
+        "phase4_integrated_wall_clock_budget_sec": _float_or_none(
+            phase4_shared_budget_audit.get(
+                "integrated_wall_clock_budget_sec"
+            )
+        ),
+        "phase4_total_wall_runtime_sec": _float_or_none(
+            phase4_shared_budget_audit.get("total_wall_runtime_sec")
+        ),
+        "phase4_wall_clock_budget_overrun_sec": _float_or_none(
+            phase4_shared_budget_audit.get(
+                "wall_clock_budget_overrun_sec"
+            )
         ),
         "integrated_warm_start_audit": integrated_start_audit,
         "integrated_primary_objective_kind": metadata.get(
@@ -11330,6 +11384,12 @@ def _run_optimization(
                     if phase_token == "phase4_integrated"
                     else 600
                 ),
+                # The integrated MILP already explores every powertrain
+                # composition.  Its Phase-3 hand-off is only a same-problem,
+                # physically verified incumbent; an inventory-wide Stage-1
+                # composition sweep duplicates the main search and previously
+                # expanded a 600-second request beyond twenty minutes.
+                phase4_phase3_seed_composition_search_enabled=False,
                 # Formal actual-cost Phase 4 uses a neutral feasible start.
                 # A one-sided ``used BEV >= K`` frontier would be a directed
                 # search policy and could survive as the final incumbent at a
@@ -11337,7 +11397,7 @@ def _run_optimization(
                 # experiments and are never injected here.
                 phase4_phase3_seed_bev_frontier_enabled=False,
                 phase4_phase3_seed_unused_bev_neighborhood_enabled=(
-                    phase_token == "phase4_integrated"
+                    False
                 ),
                 phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec=120,
                 phase4_phase3_seed_unused_bev_neighborhood_per_solve_sec=5,

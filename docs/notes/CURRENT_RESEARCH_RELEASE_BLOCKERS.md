@@ -1,5 +1,38 @@
 # Current research release blockers
 
+## 2026-08-14 Phase 4 time-limit defect repaired; fresh timing evidence pending
+
+The clean-SHA diagnostic
+`output/2026-08-14/run_20260814_2056` used fresh Prepare and the normal
+frontend/BFF route with a displayed 600-second limit. It revealed two separate
+budgets: the Phase 3 seed consumed 607.319707 wall seconds and the integrated
+solve then consumed 601.350376 seconds. The job therefore took more than
+twenty minutes before reporting finalization even though the UI said 600
+seconds. The seed's Gurobi runtime was only 61.586327 seconds; repeated
+composition-model construction and the unused-BEV neighborhood caused the
+excess wall time.
+
+The reachable Phase 4 path now uses one shared wall-clock budget. The neutral
+Phase 3 hand-off searches one physical incumbent only, and the remaining time
+is passed to an integrated adapter that also charges model construction and
+fixed-dispatch recourse against the same deadline. This is not a heuristic
+fleet restriction: all powertrain compositions remain present in the
+integrated MILP. Separate Phase 3 composition-sensitivity experiments still
+require adjacent alternatives or infeasibility certificates.
+
+The diagnostic also showed that exact ICE clone-flow aggregation does not
+apply to the current multi-fragment contract. With `daily_fragment_limit=3`
+and start/end fragment limits of 100, its single-fragment proof correctly
+fails closed. The model remained at 780,112 variables and ended at
+650,298.979 JPY with a 640,000 JPY bound and 1.583730% certified gap. This is
+slightly worse than the historical 600-second diagnostic and is not evidence
+of a performance gain.
+
+Code and focused tests now enforce the shared budget, but no post-repair clean
+frozen-commit full-size run exists yet. End-to-end runtime, objective, physical
+validation, accounting, and the 1% gap must be remeasured through fresh
+Prepare. Research release remains **BLOCKED**.
+
 ## 2026-08-14 connection-buffer audit implemented; optimized evidence pending
 
 The canonical connection rule now has a separately auditable operating margin:
@@ -58,7 +91,7 @@ double counting. A separate ALNS-style operational candidate may target
 hundreds of seconds, but it must remain explicitly near-optimal and cannot
 replace the formal full-network certificate.
 
-### Exact-clone ICE group-flow convexification: implemented; timing pending
+### Exact-clone ICE group-flow convexification: implemented; inapplicable to current multi-fragment case
 
 Phase 4 continues to use Gurobi's automatic symmetry policy; the existing clean
 `Symmetry=2` sensitivity regressed to a 100% gap and must not be reintroduced
@@ -90,11 +123,20 @@ trip case. The saved 264-trip high-PV Prepared Input was reconstructed
 read-only before implementation: its exact 25-ICE group has 264 assignment
 nodes and 11,310 arcs per vehicle; the longest reachable duty consumes
 46.036430 L versus 144.0 L usable initial fuel, leaving 97.963570 L. That
-diagnostic estimated a 290,448 binary reduction, but it is not solve-time
-evidence. A fresh clean-commit matched run must verify the actual binary count,
-objective, physical schedule, accounting and gap before any speed claim. Until
-then the historical 1.574005% high-PV gap remains the latest full-case evidence
-and research release is **BLOCKED**.
+read-only diagnostic forced single-fragment parameters and estimated a 290,448
+binary reduction; it was not evidence for the actual frontend contract.
+
+The fresh SHA `1025461` frontend/BFF diagnostic resolved that uncertainty. Its
+effective scenario has `daily_fragment_limit=3`,
+`max_start_fragments_per_vehicle=100`, and
+`max_end_fragments_per_vehicle=100`. The audit therefore recorded blockers
+`daily_fragment_limit_is_not_one`,
+`max_start_fragments_per_vehicle_is_not_one`, and
+`max_end_fragments_per_vehicle_is_not_one`, with `applied=false`. The model
+retained 780,112 variables, the incumbent was 650,298.979 JPY, and the
+certified gap was 1.583730%. The formulation is exact but does not accelerate
+this current case. A different exact multi-fragment aggregation or path/column
+decomposition is still required; research release is **BLOCKED**.
 
 ### Exact identical-vehicle trip-count ordering: implemented; timing pending
 

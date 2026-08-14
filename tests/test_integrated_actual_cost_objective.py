@@ -34,6 +34,7 @@ from src.optimization.engine import (
     _phase4_seed_inventory_span_truncated,
     _phase4_seed_model_build_overhead_allowance_sec,
     _phase4_seed_stage2_iis_assignment_guidance,
+    _phase4_seed_time_limit_with_shared_budget,
     actual_cost_objective_reconciles,
 )
 from src.gurobi_runtime import ensure_gurobi
@@ -430,6 +431,21 @@ def test_phase4_seed_wall_allowance_preserves_stage2_solver_budget() -> None:
         available_vehicle_count=60,
         candidate_limit=1,
     ) == 0
+
+
+def test_phase4_seed_reserves_half_of_shared_budget_for_integrated_search() -> None:
+    assert _phase4_seed_time_limit_with_shared_budget(
+        requested_seed_time_limit_sec=600,
+        total_time_limit_sec=600.0,
+    ) == 300
+    assert _phase4_seed_time_limit_with_shared_budget(
+        requested_seed_time_limit_sec=100,
+        total_time_limit_sec=600.0,
+    ) == 100
+    assert _phase4_seed_time_limit_with_shared_budget(
+        requested_seed_time_limit_sec=60,
+        total_time_limit_sec=30.0,
+    ) == 15
 
 
 def test_stage2_candidates_prioritize_weather_aware_relaxed_cost() -> None:
@@ -2069,6 +2085,59 @@ def test_phase4_uses_verified_same_problem_phase3_plan_as_complete_mip_start() -
     assert result.solver_metadata["research_acceptance_checks"][
         "phase4_no_hidden_bev_directed_seed"
     ] is True
+
+
+def test_phase4_primary_seed_and_integrated_search_share_one_wall_budget() -> None:
+    base_problem = _phase4_seed_problem("shared-phase4-wall-budget")
+    problem = replace(
+        base_problem,
+        metadata={
+            **dict(base_problem.metadata or {}),
+            "vehicle_usage_cost_jpy_per_used_bus": 20_000.0,
+        },
+    )
+
+    result = OptimizationEngine().solve(
+        problem,
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            phase="phase4_integrated",
+            integrated_actual_cost_objective=True,
+            phase4_phase3_seed_enabled=True,
+            phase4_phase3_seed_time_limit_sec=10,
+            phase4_phase3_seed_composition_search_enabled=False,
+            phase4_phase3_seed_unused_bev_neighborhood_enabled=False,
+            stage1_stage2_candidate_limit=10,
+            stage1_composition_search_radius=2,
+            time_limit_sec=20,
+            mip_gap=0.0,
+            random_seed=42,
+            warm_start=True,
+            allow_postsolve_repair=False,
+            research_run=True,
+            requested_phase_token="phase4_integrated",
+            requested_phase="phase4_integrated",
+            resolved_phase="phase4_integrated",
+            executed_phase="phase4_integrated",
+        ),
+    )
+
+    assert result.feasible, result.infeasibility_reasons
+    seed_audit = result.solver_metadata["phase4_phase3_seed_audit"]
+    assert seed_audit["seed_composition_search_enabled"] is False
+    assert seed_audit["seed_stage1_stage2_candidate_limit"] == 1
+    assert seed_audit["seed_stage1_composition_search_radius"] == 0
+    assert seed_audit["seed_model_build_overhead_allowance_sec"] == 0
+    assert seed_audit["unused_bev_activation_neighborhood_enabled"] is False
+    budget = result.solver_metadata[
+        "phase4_shared_wall_clock_budget_audit"
+    ]
+    assert budget["requested_total_wall_clock_budget_sec"] == pytest.approx(
+        20.0
+    )
+    assert budget["integrated_wall_clock_budget_sec"] < 20.0
+    assert budget["precheck_and_seed_wall_runtime_sec"] > 0.0
+    assert budget["total_wall_runtime_sec"] <= 21.0
 
 
 def test_research_lexicographic_seed_certifies_vehicle_days_before_cost() -> None:

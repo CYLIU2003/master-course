@@ -235,6 +235,26 @@ def _phase4_seed_model_build_overhead_allowance_sec(
     )
 
 
+def _phase4_seed_time_limit_with_shared_budget(
+    *,
+    requested_seed_time_limit_sec: int,
+    total_time_limit_sec: float,
+) -> int:
+    """Reserve at least half of a Phase-4 request for the integrated MILP.
+
+    The seed is an incumbent generator, not a second optimization claim.  A
+    user-facing Phase-4 time limit therefore owns the whole Seed + Phase-4
+    search, and the seed may never consume the complete request by itself.
+    """
+
+    total_sec = max(float(total_time_limit_sec), 2.0)
+    maximum_seed_sec = max(int(math.floor(total_sec / 2.0)), 1)
+    return max(
+        min(int(requested_seed_time_limit_sec), maximum_seed_sec),
+        1,
+    )
+
+
 def actual_cost_objective_reconciles(
     *,
     raw_objective_jpy: float,
@@ -911,6 +931,18 @@ class OptimizationEngine:
         config: OptimizationConfig,
     ) -> OptimizationEngineResult:
         problem, config = self._apply_phase_contract(problem, config)
+        phase4_shared_budget_started_at: float | None = None
+        phase4_requested_time_limit_sec: float | None = None
+        if (
+            config.mode == OptimizationMode.MILP
+            and str(getattr(config, "phase", "") or "")
+            == "phase4_integrated"
+        ):
+            phase4_shared_budget_started_at = time.perf_counter()
+            phase4_requested_time_limit_sec = max(
+                float(config.time_limit_sec),
+                0.001,
+            )
         precheck = evaluate_strict_coverage_precheck(problem)
         if precheck.infeasible and not bool(getattr(config, "debug_mode", False)):
             result = self._strict_precheck_infeasible_result(problem, config, precheck)
@@ -942,16 +974,87 @@ class OptimizationEngine:
                 config,
             )
 
-        if config.mode == OptimizationMode.MILP:
-            result = self._milp.solve(problem, config)
-        elif config.mode == OptimizationMode.ALNS:
-            result = self._alns.solve(problem, config)
-        elif config.mode == OptimizationMode.GA:
-            result = self._ga.solve(problem, config)
-        elif config.mode == OptimizationMode.ABC:
-            result = self._abc.solve(problem, config)
+        solver_config = config
+        phase4_shared_budget_audit: dict[str, object] = {}
+        if (
+            phase4_shared_budget_started_at is not None
+            and phase4_requested_time_limit_sec is not None
+        ):
+            elapsed_before_integrated_sec = max(
+                time.perf_counter() - phase4_shared_budget_started_at,
+                0.0,
+            )
+            integrated_budget_sec = max(
+                phase4_requested_time_limit_sec
+                - elapsed_before_integrated_sec,
+                0.001,
+            )
+            solver_config = replace(
+                config,
+                time_limit_sec=integrated_budget_sec,
+            )
+            phase4_shared_budget_audit = {
+                "schema_version": "phase4_shared_wall_clock_budget_v1",
+                "enabled": True,
+                "requested_total_wall_clock_budget_sec": (
+                    phase4_requested_time_limit_sec
+                ),
+                "precheck_and_seed_wall_runtime_sec": (
+                    elapsed_before_integrated_sec
+                ),
+                "integrated_wall_clock_budget_sec": integrated_budget_sec,
+                "budget_exhausted_before_integrated_build": bool(
+                    elapsed_before_integrated_sec
+                    >= phase4_requested_time_limit_sec
+                ),
+                "semantics": (
+                    "one_shared_precheck_seed_integrated_build_recourse_and_"
+                    "branch_and_bound_wall_clock_budget"
+                ),
+            }
+            problem = replace(
+                problem,
+                metadata={
+                    **dict(problem.metadata or {}),
+                    "phase4_shared_wall_clock_budget_audit": (
+                        phase4_shared_budget_audit
+                    ),
+                },
+            )
+
+        if solver_config.mode == OptimizationMode.MILP:
+            result = self._milp.solve(problem, solver_config)
+        elif solver_config.mode == OptimizationMode.ALNS:
+            result = self._alns.solve(problem, solver_config)
+        elif solver_config.mode == OptimizationMode.GA:
+            result = self._ga.solve(problem, solver_config)
+        elif solver_config.mode == OptimizationMode.ABC:
+            result = self._abc.solve(problem, solver_config)
         else:
-            result = self._hybrid.solve(problem, config)
+            result = self._hybrid.solve(problem, solver_config)
+        if phase4_shared_budget_started_at is not None:
+            total_wall_runtime_sec = max(
+                time.perf_counter() - phase4_shared_budget_started_at,
+                0.0,
+            )
+            phase4_shared_budget_audit = {
+                **phase4_shared_budget_audit,
+                "total_wall_runtime_sec": total_wall_runtime_sec,
+                "wall_clock_budget_overrun_sec": max(
+                    total_wall_runtime_sec
+                    - float(phase4_requested_time_limit_sec or 0.0),
+                    0.0,
+                ),
+            }
+            result = replace(
+                result,
+                solver_metadata={
+                    **dict(result.solver_metadata or {}),
+                    "phase4_shared_wall_clock_budget_audit": (
+                        phase4_shared_budget_audit
+                    ),
+                },
+            )
         return self._finalize_result(problem, result, config)
 
     def _with_verified_phase4_phase3_seed(
@@ -968,7 +1071,7 @@ class OptimizationEngine:
         those controls.
         """
 
-        seed_limit_sec = max(
+        requested_seed_limit_sec = max(
             int(
                 getattr(
                     config,
@@ -977,30 +1080,54 @@ class OptimizationEngine:
                 )
                 or 600
             ),
-            120,
+            1,
         )
-        stage2_limit_sec = min(max(seed_limit_sec // 5, 60), 180)
-        stage1_limit_sec = max(seed_limit_sec - stage2_limit_sec, 60)
+        seed_limit_sec = _phase4_seed_time_limit_with_shared_budget(
+            requested_seed_time_limit_sec=requested_seed_limit_sec,
+            total_time_limit_sec=float(config.time_limit_sec),
+        )
+        stage2_limit_sec = min(max(seed_limit_sec // 5, 1), 180)
+        stage1_limit_sec = max(seed_limit_sec - stage2_limit_sec, 1)
         available_vehicle_count = sum(
             1
             for vehicle in problem.vehicles
             if bool(getattr(vehicle, "available", True))
         )
-        (
-            seed_candidate_limit,
-            seed_composition_search_radius,
-        ) = _phase4_seed_composition_search_limits(
-            available_vehicle_count=available_vehicle_count,
-            requested_candidate_limit=int(
-                config.stage1_stage2_candidate_limit
-            ),
-            requested_radius=int(config.stage1_composition_search_radius),
+        seed_composition_search_enabled = bool(
+            getattr(
+                config,
+                "phase4_phase3_seed_composition_search_enabled",
+                True,
+            )
         )
+        if seed_composition_search_enabled:
+            (
+                seed_candidate_limit,
+                seed_composition_search_radius,
+            ) = _phase4_seed_composition_search_limits(
+                available_vehicle_count=available_vehicle_count,
+                requested_candidate_limit=int(
+                    config.stage1_stage2_candidate_limit
+                ),
+                requested_radius=int(
+                    config.stage1_composition_search_radius
+                ),
+            )
+        else:
+            # Phase 4 itself explores every feasible powertrain composition.
+            # Its Phase-3 hand-off only needs one independently verified
+            # physical incumbent; rebuilding an adjacent-composition model for
+            # every selected vehicle duplicates work without strengthening the
+            # integrated optimality certificate.
+            seed_candidate_limit = 1
+            seed_composition_search_radius = 0
         seed_model_build_overhead_allowance_sec = (
             _phase4_seed_model_build_overhead_allowance_sec(
                 available_vehicle_count=available_vehicle_count,
                 candidate_limit=seed_candidate_limit,
             )
+            if seed_composition_search_enabled
+            else 0
         )
         seed_wall_clock_budget_sec = (
             seed_limit_sec + seed_model_build_overhead_allowance_sec
@@ -1108,6 +1235,13 @@ class OptimizationEngine:
             "accepted": False,
             "role": "mip_start_only",
             "same_canonical_problem": True,
+            "seed_composition_search_enabled": (
+                seed_composition_search_enabled
+            ),
+            "seed_composition_search_not_required_for_integrated_phase4": (
+                not seed_composition_search_enabled
+            ),
+            "requested_seed_time_limit_sec": requested_seed_limit_sec,
             "seed_time_limit_sec": seed_limit_sec,
             "seed_wall_clock_budget_sec": seed_wall_clock_budget_sec,
             "seed_model_build_overhead_allowance_sec": (
@@ -1209,72 +1343,12 @@ class OptimizationEngine:
                 ),
                 1,
             ),
-            "total_solver_time_budget_sec": (
-                seed_limit_sec
-                + (
-                    max(
-                        int(
-                            getattr(
-                                config,
-                                "phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec",
-                                120,
-                            )
-                            or 120
-                        ),
-                        1,
-                    )
-                    if bool(
-                        getattr(
-                            config,
-                            "phase4_phase3_seed_unused_bev_neighborhood_enabled",
-                            False,
-                        )
-                    )
-                    else 0
-                )
-                + (
-                    max(
-                        int(
-                            getattr(
-                                config,
-                                "phase4_phase3_seed_route_band_repartition_time_limit_sec",
-                                90,
-                            )
-                            or 0
-                        ),
-                        0,
-                    )
-                    if bool(
-                        getattr(
-                            config,
-                            "phase4_phase3_seed_unused_bev_neighborhood_enabled",
-                            False,
-                        )
-                    )
-                    else 0
-                )
-                + (
-                    max(
-                        int(
-                            getattr(
-                                config,
-                                "phase4_integrated_seed_recourse_time_limit_sec",
-                                300,
-                            )
-                            or 300
-                        ),
-                        1,
-                    )
-                    if bool(
-                        getattr(
-                            config,
-                            "phase4_integrated_seed_recourse_preflight_enabled",
-                            True,
-                        )
-                    )
-                    else 0
-                )
-                + max(int(config.time_limit_sec), 0)
+            "total_solver_time_budget_sec": max(
+                float(config.time_limit_sec),
+                0.0,
+            ),
+            "total_solver_time_budget_semantics": (
+                "shared_phase4_request_not_sum_of_subphase_limits"
             ),
             "seed_stage1_stage2_candidate_limit": int(
                 seed_config.stage1_stage2_candidate_limit
@@ -1291,16 +1365,23 @@ class OptimizationEngine:
             ),
             "seed_composition_search_scope": (
                 "selected_available_vehicle_inventory_symmetric_span"
+                if seed_composition_search_enabled
+                else "primary_feasible_candidate_only_phase4_warm_start"
             ),
             "seed_composition_search_inventory_span_truncated": bool(
-                _phase4_seed_inventory_span_truncated(
+                seed_composition_search_enabled
+                and _phase4_seed_inventory_span_truncated(
                     available_vehicle_count
                 )
             ),
             "seed_search_directionality": (
                 "explicit_minimum_bev_frontier_sensitivity"
                 if seed_config.stage1_bev_frontier_enabled
-                else "primary_plus_symmetric_adjacent_compositions"
+                else (
+                    "primary_plus_symmetric_adjacent_compositions"
+                    if seed_composition_search_enabled
+                    else "neutral_primary_feasible_candidate_only"
+                )
             ),
             "seed_bev_frontier_enabled": bool(
                 seed_config.stage1_bev_frontier_enabled

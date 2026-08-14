@@ -1,5 +1,35 @@
 # master-course
 
+## 2026-08-14 Phase 4 shared runtime budget and fresh diagnostic correction
+
+- A fresh frontend/BFF diagnostic at clean SHA `102546170dc8a07fa91e0b71beaa8c71ca1ea327`
+  showed that the displayed 600-second limit did not cap the complete Phase 4
+  calculation. The same-problem Phase 3 seed consumed 607.320 wall seconds,
+  including inventory-wide composition-model rebuilds, and the integrated
+  solve then received a separate 600-second Gurobi limit and ran 601.350
+  seconds. The canonical diagnostic is
+  `output/2026-08-14/run_20260814_2056`; copied request/response evidence is
+  under `output/perf_exact_clone_1025461_sunny_600s_20260814/sunny`.
+- The frontend Phase 4 path now treats the user-entered time limit as one
+  shared wall-clock budget covering the strict precheck, Phase 3 incumbent,
+  integrated model construction, fixed-dispatch recourse preflight, and the
+  unrestricted branch-and-bound search. The Phase 3 hand-off generates one
+  neutral, independently verified physical incumbent. Inventory-wide adjacent
+  composition search and the unused-BEV neighborhood remain available for
+  explicit Phase 3 sensitivity work, but are no longer duplicated inside the
+  integrated Phase 4 warm-start path. Phase 4 itself retains every feasible
+  powertrain composition.
+- The same fresh run also invalidated the earlier single-fragment performance
+  estimate for exact ICE clone aggregation. The effective scenario permits
+  three daily fragments and up to 100 start/end fragments per vehicle, so the
+  aggregation correctly reported `applied=false`; the model remained at
+  780,112 variables. It ended with a 650,298.979 JPY incumbent, 640,000 JPY
+  certified bound, and 1.583730% gap. These are diagnostic values, not a
+  speedup or a formal research result.
+- The shared-budget implementation and artifact fields are regression tested,
+  but a new clean frozen-commit frontend run is still required to measure the
+  corrected end-to-end duration and gap. Research release remains blocked.
+
 ## 2026-08-14 exact vehicle-label symmetry reduction
 
 - Phase 3 Stage 1 and Phase 4 now remove one exact source of branch-and-bound
@@ -1707,7 +1737,10 @@ The formulation fails closed for path-specific driver cost, multi-day or
 multi-fragment cases, unequal domains, or nonredundant fuel state. Artifacts
 report both the relaxed label-binary count and aggregate integers added.
 
-This exact reformulation is now covered by small-oracle objective and path-count
-tests. It does not by itself establish a full-case runtime improvement: neither
-a speedup nor a 1% gap certificate may be claimed until a clean frozen-commit
-matched 264-trip run passes.
+This exact reformulation is covered by small-oracle objective and path-count
+tests. A subsequent fresh 264-trip diagnostic did not satisfy its
+single-fragment premise: the effective scenario allows three fragments and
+100 start/end fragments per vehicle, so the audit correctly reported
+`applied=false` and the model stayed at 780,112 variables. The diagnostic gap
+was 1.583730% at its 600-second integrated limit. It therefore establishes
+fail-closed behavior, not a runtime improvement or a 1% certificate.

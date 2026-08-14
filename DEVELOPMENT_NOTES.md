@@ -1,5 +1,47 @@
 # Development Notes
 
+## 2026-08-14: Phase 4 shared wall-clock budget and seed-scope correction
+
+- Raised a P1 runtime-contract defect from a fresh Prepare and normal
+  frontend/BFF diagnostic at SHA
+  `102546170dc8a07fa91e0b71beaa8c71ca1ea327`. A requested 600-second Phase 4
+  run first spent 607.319707 wall seconds in the Phase 3 hand-off and then
+  spent another 601.350376 seconds in the integrated Gurobi solve. The Phase 3
+  solver itself recorded only 61.586327 seconds; most of its wall time came
+  from rebuilding exact used-powertrain-composition models under a 600-second
+  Python-side construction allowance. This proves that the prior UI limit was
+  not an end-to-end optimization budget.
+- The reachable BFF Phase 4 path now disables the inventory-wide Phase 3
+  composition sweep and unused-BEV neighborhood for warm-start generation.
+  It requests one neutral primary candidate, still requiring Stage 1, exact
+  Stage 2, exact trip-set equality, a nonempty plan fingerprint, and an
+  independent physical-feasibility pass. This does not freeze the final fleet
+  mix: the unrestricted integrated MILP still contains all assignment and
+  activation decisions. Explicit Phase 3 experiments retain the wider
+  composition and neighborhood controls.
+- `OptimizationEngine` now starts one Phase 4 wall clock before the strict
+  precheck, subtracts precheck/seed time from the integrated allocation, and
+  exports `phase4_shared_wall_clock_budget_v1`. The integrated adapter further
+  charges model construction and fixed-dispatch recourse against that
+  remaining allocation before setting Gurobi `TimeLimit`. An exhausted budget
+  fails closed instead of silently granting another full solver interval.
+- `solver_settings.json` now exposes the requested shared budget, precheck and
+  seed wall time, remaining integrated budget, total optimization wall time,
+  and overrun. The controlled-pair runner rejects the former summed-subphase
+  contract and accepts only the bounded primary-seed contract with a small
+  audited overrun tolerance.
+- The same diagnostic disproved applicability of the new exact ICE clone-flow
+  convexification to the current full scenario. Effective
+  `daily_fragment_limit=3` and start/end limits of 100 violate its certified
+  single-fragment precondition, so `applied=false`, variable count stayed
+  780,112, and the final 1.583730% gap was slightly worse than the historical
+  1.574005% matched-limit diagnostic. The previous 290,448-binary estimate was
+  a hypothetical single-fragment audit and is not runtime evidence.
+- Focused shared-budget, integrated-cost, research-contract, and frontend-pair
+  regression passed (`126 passed`), followed by the complete repository suite
+  (`1450 passed` in 136.86 seconds). A fresh clean-commit 264-trip diagnostic is still
+  required before claiming a runtime improvement; no old output is relabelled.
+
 ## 2026-08-14: exact vehicle-label symmetry reduction
 
 - Added non-increasing total assigned-trip-count ordering for adjacent

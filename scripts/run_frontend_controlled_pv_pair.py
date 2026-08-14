@@ -2228,50 +2228,56 @@ def _phase4_warm_start_evidence_valid(
 
 
 def _phase4_seed_controls_match(settings: Mapping[str, Any]) -> bool:
-    """Verify the server-authoritative neutral Phase 4 seed contract."""
+    """Verify the bounded, neutral Phase-4 warm-start contract.
 
-    candidate_limit = settings.get("phase4_phase3_seed_candidate_limit")
-    required_candidate_limit = settings.get(
-        "phase4_phase3_seed_required_candidate_limit"
+    The full integrated MILP is the composition search.  The same-problem
+    Phase-3 hand-off supplies one physical incumbent and shares the single
+    user-facing wall-clock budget with model build, recourse, and branch and
+    bound.
+    """
+
+    seed_limit = settings.get("phase4_phase3_seed_time_limit_sec")
+    stage1_limit = settings.get(
+        "phase4_phase3_seed_stage1_time_limit_sec"
     )
-    radius = settings.get(
-        "phase4_phase3_seed_composition_search_radius"
+    stage2_limit = settings.get(
+        "phase4_phase3_seed_stage2_time_limit_sec"
     )
-    required_radius = settings.get(
-        "phase4_phase3_seed_required_composition_search_radius"
+    total_budget = _number(
+        settings.get("phase4_shared_wall_clock_budget_sec")
     )
-    available_vehicle_count = settings.get(
-        "phase4_phase3_seed_available_vehicle_count"
+    total_runtime = _number(
+        settings.get("phase4_total_wall_runtime_sec")
     )
-    expected_model_build_allowance_sec = (
-        min(
-            min(
-                max(candidate_limit - 1, 0),
-                max(available_vehicle_count, 0),
-            )
-            * 10,
-            600,
-        )
-        if isinstance(candidate_limit, int)
-        and isinstance(available_vehicle_count, int)
-        else None
+    overrun = _number(
+        settings.get("phase4_wall_clock_budget_overrun_sec")
     )
-    expected_seed_wall_budget_sec = (
-        600 + expected_model_build_allowance_sec
-        if expected_model_build_allowance_sec is not None
+    overrun_tolerance_sec = (
+        max(5.0, 0.01 * total_budget)
+        if total_budget is not None
         else None
     )
     return bool(
         settings.get("phase4_phase3_seed_enabled") is True
-        and settings.get("phase4_phase3_seed_time_limit_sec") == 600
-        and settings.get("phase4_phase3_seed_stage1_time_limit_sec") == 480
-        and settings.get("phase4_phase3_seed_stage2_time_limit_sec") == 120
+        and settings.get(
+            "phase4_phase3_seed_composition_search_enabled"
+        )
+        is False
+        and settings.get(
+            "phase4_phase3_seed_composition_search_not_required_for_integrated_phase4"
+        )
+        is True
+        and isinstance(seed_limit, int)
+        and seed_limit > 0
+        and isinstance(stage1_limit, int)
+        and isinstance(stage2_limit, int)
+        and stage1_limit + stage2_limit == seed_limit
         and settings.get(
             "phase4_phase3_seed_model_build_overhead_allowance_sec"
         )
-        == expected_model_build_allowance_sec
+        == 0
         and settings.get("phase4_phase3_seed_wall_clock_budget_sec")
-        == expected_seed_wall_budget_sec
+        == seed_limit
         and settings.get("phase4_phase3_seed_candidate_evaluation_order")
         == "candidate_priority_cost_ascending_then_candidate_hash"
         and (
@@ -2283,47 +2289,30 @@ def _phase4_seed_controls_match(settings: Mapping[str, Any]) -> bool:
             or 0.0
         )
         > 0.0
-        and isinstance(candidate_limit, int)
-        and isinstance(required_candidate_limit, int)
-        and candidate_limit >= required_candidate_limit >= 21
-        and isinstance(radius, int)
-        and isinstance(required_radius, int)
-        and radius >= required_radius >= 10
+        and settings.get("phase4_phase3_seed_candidate_limit") == 1
+        and settings.get(
+            "phase4_phase3_seed_required_candidate_limit"
+        )
+        == 1
+        and settings.get(
+            "phase4_phase3_seed_composition_search_radius"
+        )
+        == 0
+        and settings.get(
+            "phase4_phase3_seed_required_composition_search_radius"
+        )
+        == 0
         and settings.get("phase4_phase3_seed_composition_search_scope")
-        == "selected_available_vehicle_inventory_symmetric_span"
+        == "primary_feasible_candidate_only_phase4_warm_start"
         and settings.get("phase4_phase3_seed_inventory_span_truncated")
         is False
         and settings.get("phase4_phase3_seed_search_directionality")
-        == "primary_plus_symmetric_adjacent_compositions"
+        == "neutral_primary_feasible_candidate_only"
         and settings.get("phase4_phase3_seed_bev_frontier_enabled") is False
         and settings.get(
             "phase4_phase3_seed_unused_bev_neighborhood_enabled"
         )
-        is True
-        and settings.get(
-            "phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec"
-        )
-        == 120
-        and settings.get(
-            "phase4_phase3_seed_unused_bev_neighborhood_per_solve_sec"
-        )
-        == 5
-        and settings.get(
-            "phase4_phase3_seed_unused_bev_neighborhood_max_evaluations"
-        )
-        == 512
-        and settings.get(
-            "phase4_phase3_seed_route_band_repartition_time_limit_sec"
-        )
-        == 90
-        and settings.get(
-            "phase4_phase3_seed_powertrain_duty_swap_rounds"
-        )
-        == 2
-        and settings.get(
-            "phase4_phase3_seed_unused_bev_identity_exchange_rounds"
-        )
-        == 2
+        is False
         and isinstance(
             settings.get(
                 "phase4_phase3_seed_unused_bev_neighborhood"
@@ -2335,10 +2324,6 @@ def _phase4_seed_controls_match(settings: Mapping[str, Any]) -> bool:
         )
         is True
         and settings.get(
-            "phase4_integrated_seed_recourse_time_limit_sec"
-        )
-        == 300
-        and settings.get(
             "phase4_integrated_seed_recourse_preflight_requested"
         )
         is True
@@ -2346,7 +2331,15 @@ def _phase4_seed_controls_match(settings: Mapping[str, Any]) -> bool:
             "phase4_integrated_seed_recourse_preflight_feasible"
         )
         is True
-        and settings.get("phase4_total_solver_time_budget_sec") == 4710
+        and settings.get("phase4_shared_wall_clock_budget_enabled") is True
+        and total_budget is not None
+        and total_budget > seed_limit
+        and _number(settings.get("phase4_total_solver_time_budget_sec"))
+        == total_budget
+        and total_runtime is not None
+        and overrun is not None
+        and overrun_tolerance_sec is not None
+        and overrun <= overrun_tolerance_sec
     )
 
 
@@ -3560,6 +3553,8 @@ def _build_pair_control_audit(
     else:
         day_ahead_control_fields += (
             "phase4_phase3_seed_enabled",
+            "phase4_phase3_seed_composition_search_enabled",
+            "phase4_phase3_seed_composition_search_not_required_for_integrated_phase4",
             "phase4_phase3_seed_time_limit_sec",
             "phase4_phase3_seed_wall_clock_budget_sec",
             "phase4_phase3_seed_model_build_overhead_allowance_sec",
@@ -3585,6 +3580,8 @@ def _build_pair_control_audit(
             "phase4_integrated_seed_recourse_preflight_enabled",
             "phase4_integrated_seed_recourse_time_limit_sec",
             "phase4_total_solver_time_budget_sec",
+            "phase4_shared_wall_clock_budget_enabled",
+            "phase4_shared_wall_clock_budget_sec",
         )
     rolling_control_fields = (
         "gurobi_threads",
