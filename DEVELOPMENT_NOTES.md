@@ -31,6 +31,20 @@
   suffix/swap rounds. This changes only the verified MIP-start upper bound;
   integrated constraints, objective, lower bound, total wall budget, tariff,
   and 1% gate are unchanged.
+- The first clean-SHA rerun of that 105/15-second profile at `41250f7` was
+  intentionally retained even though it regressed. It served all 264 trips
+  and passed physical validation, but exhausted exactly 64 candidate
+  evaluations after two suffix rounds, selected 29 BEVs/3 ICE buses at
+  655,537.125622 JPY, and ended with a 2.370137% certified gap. The extra
+  pre-local wall time let sequential activation consume more of the fixed
+  candidate count, so only 17 suffix evaluations remained; the second round's
+  truncated candidate-generation list contained no feasible improvement.
+- Raised the production candidate ceiling from 64 to 128 without changing the
+  105+15=120 second wall allowance. The existing v6 rule therefore reserves
+  32 candidate slots for path-changing search, expands suffix candidate
+  ranking, and remains wall-clock bounded. This is a generic search-budget
+  correction applied identically to both weather cases, not a BEV count
+  constraint or weather-specific setting.
 
 ## 2026-08-15: literature-driven Phase 4 seed restart and budget repair
 

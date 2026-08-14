@@ -22,6 +22,13 @@
   to eight improving rounds. This is neutral cost-selected candidate
   generation only; no BEV lower bound, weather bias, objective change, or
   feasibility relaxation is introduced. Fresh evidence is required.
+- The first 105/15-second rerun exposed the next bounded-search limiter rather
+  than improving the result: it exhausted all 64 candidate evaluations after
+  only two suffix rounds and returned 29 BEVs/3 ICE buses at 655,537.126 JPY
+  (2.370137% gap). The total wall allowance stays 120 seconds, while the
+  candidate ceiling is raised to 128. Under v6 this also reserves 32 candidate
+  slots for path-changing search. The failed 64-candidate rerun remains
+  diagnostic evidence and is not hidden or selected as the reported result.
 
 ## 2026-08-15 formal pair timing result and reporting-contract repair
 

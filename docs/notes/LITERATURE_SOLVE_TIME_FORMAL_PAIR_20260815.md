@@ -96,3 +96,12 @@ an upper-bound engineering change comparable to published heuristic warm
 starts; it is not a claim that the exact lower bound or global certificate has
 improved. A fresh rerun must determine whether 31/1 or 32/0 is feasible and
 cost-improving before lower-bound reformulation is justified.
+
+The first rerun of the 105/15-second allocation exposed a candidate-count
+rather than wall-time limit: all 64 evaluations were exhausted after two
+suffix rounds, producing 29/3 and 655,537.126 JPY (2.370137%). Because the
+literature comparison is about bounded end-to-end runtime, the response is not
+to add seconds. The ceiling is raised to 128 inside the same 120-second
+neighborhood allowance, which lets the v6 reserve grow from 16 to 32
+path-changing evaluations. The result must again be measured before any
+performance claim.

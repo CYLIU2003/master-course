@@ -188,6 +188,7 @@ PHASE4_SEED_NEIGHBORHOOD_TOTAL_WALL_SEC = 120
 PHASE4_SEED_FIXED_DUTY_WALL_SEC = 105
 PHASE4_SEED_ROUTE_BAND_WALL_SEC = 15
 PHASE4_SEED_POWERTRAIN_ROUND_LIMIT = 8
+PHASE4_SEED_MAX_CANDIDATE_EVALUATIONS = 128
 if (
     PHASE4_SEED_FIXED_DUTY_WALL_SEC
     + PHASE4_SEED_ROUTE_BAND_WALL_SEC
@@ -11478,7 +11479,7 @@ def _run_optimization(
                 ),
                 phase4_phase3_seed_unused_bev_neighborhood_per_solve_sec=3,
                 phase4_phase3_seed_unused_bev_neighborhood_max_evaluations=(
-                    64
+                    PHASE4_SEED_MAX_CANDIDATE_EVALUATIONS
                 ),
                 phase4_phase3_seed_route_band_repartition_time_limit_sec=(
                     PHASE4_SEED_ROUTE_BAND_WALL_SEC

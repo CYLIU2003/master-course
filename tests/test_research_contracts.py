@@ -7,6 +7,7 @@ import pytest
 
 from bff.routers.optimization import (
     PHASE4_SEED_FIXED_DUTY_WALL_SEC,
+    PHASE4_SEED_MAX_CANDIDATE_EVALUATIONS,
     PHASE4_SEED_NEIGHBORHOOD_TOTAL_WALL_SEC,
     PHASE4_SEED_POWERTRAIN_ROUND_LIMIT,
     PHASE4_SEED_ROUTE_BAND_WALL_SEC,
@@ -22,6 +23,7 @@ def test_phase4_seed_profile_reallocates_but_does_not_extend_wall_budget() -> No
     assert PHASE4_SEED_FIXED_DUTY_WALL_SEC == 105
     assert PHASE4_SEED_ROUTE_BAND_WALL_SEC == 15
     assert PHASE4_SEED_POWERTRAIN_ROUND_LIMIT == 8
+    assert PHASE4_SEED_MAX_CANDIDATE_EVALUATIONS == 128
     assert (
         PHASE4_SEED_FIXED_DUTY_WALL_SEC
         + PHASE4_SEED_ROUTE_BAND_WALL_SEC

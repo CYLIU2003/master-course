@@ -26,6 +26,14 @@ minimum, objective change, lower-bound change or extra runtime is introduced.
 A new clean-SHA diagnostic is required before deciding whether a stronger
 lower bound is still necessary.
 
+The first 105/15-second rerun did not clear the blocker. It exhausted its
+64-candidate ceiling before the expanded wall window, returned 29 BEVs/3 ICE
+buses at 655,537.125622 JPY, and left a 2.370137% gap. This negative result is
+retained. The candidate ceiling is now 128 under the same 120-second wall
+budget; v6 consequently reserves 32 path-changing evaluations. Research
+release remains **BLOCKED** until a fresh run proves the effect and completes
+the formal Rolling/pair gates.
+
 ## 2026-08-15 formal `79e61ae` pair: low PV certified, high PV still blocked
 
 The controlled pair was executed through fresh Prepare and the normal
