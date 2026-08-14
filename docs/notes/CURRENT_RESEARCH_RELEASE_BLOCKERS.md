@@ -2629,3 +2629,37 @@ and permits a third suffix round. Round-two restart patience is reduced to four
 evaluations so a final round can be attempted. These are candidate-order and
 budget controls only; no BEV lower bound, weather bias, acceptance bypass or
 feasible-region change is introduced.
+
+## 2026-08-15 `ac0115e` PV-response diagnostic pair
+
+The funded third suffix round was exercised from clean commit `ac0115e` on the
+same frontend/BFF path. High PV reached 31 BEVs/1 ICE bus and 248/16 trips;
+low PV with the same non-PV controls reached 14/18 and 60/204 trips. High PV
+reduced canonical day-ahead cost from 702,184.658838 to 648,332.208836 JPY and
+operational CO2 from 1,053.852313 to 139.625396 kg. Both served all 264 trips,
+passed physical checks and reconciled canonical accounting.
+
+This does not clear the release. High PV ended at a 1.285176% certified gap and
+low PV at 1.094658%, both above the predeclared 1% threshold. Both were
+nonformal day-ahead diagnostics and neither executed 24/24 Rolling. There is
+no accepted executed-day accounting pair or formal pair manifest. The only
+allowed pair-level statement is that the two physically valid incumbents show
+a strong descriptive dispatch response under recorded controls.
+
+The first low-PV attempt is explicitly invalid for comparison because its
+saved frontend scenario reset the used-vehicle-day cost to 0 JPY while high PV
+used 20,000 JPY. The runner now detects that mismatch before Prepare/solve and
+requires an explicit shared override if saved values differ. No artifact from
+that invalid attempt may be mixed into the corrected pair.
+
+All evaluated high-PV 32-BEV candidates were infeasible in the bounded suffix
+round, and IIS samples implicated charger availability, vehicle location and
+SOC transitions. That is a binding-constraint report only. It does not certify
+31 BEVs as the fleet-composition optimum or prove that one ICE duty is
+unavoidable.
+
+The progress bundle
+`output/progress_report_ac0115e_day_ahead_pair_20260815/` is deliberately
+`DIAGNOSTIC`, `research_submission_ready=false` and
+`teacher_release_status=BLOCKED`. It is suitable as progress evidence with its
+limitations visible, but must not be used as the thesis's final formal pair.

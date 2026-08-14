@@ -95,6 +95,100 @@ def _validate_pv_capacity_override_request(
         )
 
 
+def _frontend_vehicle_usage_cost_control(
+    bootstrap: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Read the persisted vehicle-day control shown by editor bootstrap."""
+
+    defaults = bootstrap.get("builderDefaults")
+    if not isinstance(defaults, Mapping):
+        raise ValueError("Frontend editor-bootstrap omitted builderDefaults")
+    raw_cost = defaults.get(
+        "vehicleUsageCostJpyPerUsedBus",
+        defaults.get("vehicle_usage_cost_jpy_per_used_bus"),
+    )
+    try:
+        cost = float(raw_cost)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "Frontend editor-bootstrap omitted a numeric vehicle usage cost"
+        ) from exc
+    if not math.isfinite(cost) or cost < 0.0:
+        raise ValueError(
+            "Frontend vehicle usage cost must be finite and nonnegative"
+        )
+    semantics = str(
+        defaults.get(
+            "vehicleUsageCostSemantics",
+            defaults.get("vehicle_usage_cost_semantics", ""),
+        )
+        or ""
+    ).strip()
+    return {
+        "vehicle_usage_cost_jpy_per_used_bus": cost,
+        "vehicle_usage_cost_semantics": semantics,
+    }
+
+
+def _build_vehicle_usage_cost_control_preflight(
+    *,
+    sunny_bootstrap: Mapping[str, Any],
+    rain_bootstrap: Mapping[str, Any],
+    explicit_cost_jpy_per_used_bus: float | None,
+    requested_semantics: str,
+) -> dict[str, Any]:
+    """Fail closed before solving when the two saved non-PV costs diverge."""
+
+    sunny_saved = _frontend_vehicle_usage_cost_control(sunny_bootstrap)
+    rain_saved = _frontend_vehicle_usage_cost_control(rain_bootstrap)
+    if explicit_cost_jpy_per_used_bus is not None:
+        effective_cost = float(explicit_cost_jpy_per_used_bus)
+        if not math.isfinite(effective_cost) or effective_cost < 0.0:
+            raise ValueError(
+                "--vehicle-usage-cost-yen-per-used-bus must be finite and "
+                "nonnegative"
+            )
+        sunny_effective = effective_cost
+        rain_effective = effective_cost
+        source = "explicit_pair_control"
+    else:
+        sunny_effective = float(
+            sunny_saved["vehicle_usage_cost_jpy_per_used_bus"]
+        )
+        rain_effective = float(
+            rain_saved["vehicle_usage_cost_jpy_per_used_bus"]
+        )
+        source = "frontend_saved_values"
+    saved_costs_match = math.isclose(
+        float(sunny_saved["vehicle_usage_cost_jpy_per_used_bus"]),
+        float(rain_saved["vehicle_usage_cost_jpy_per_used_bus"]),
+        rel_tol=0.0,
+        abs_tol=1.0e-9,
+    )
+    effective_costs_match = math.isclose(
+        sunny_effective,
+        rain_effective,
+        rel_tol=0.0,
+        abs_tol=1.0e-9,
+    )
+    return {
+        "schema_version": "pair_vehicle_usage_cost_preflight_v1",
+        "accepted": effective_costs_match,
+        "source": source,
+        "saved_controls_match": saved_costs_match,
+        "sunny_saved": sunny_saved,
+        "rain_saved": rain_saved,
+        "sunny_effective_cost_jpy_per_used_bus": sunny_effective,
+        "rain_effective_cost_jpy_per_used_bus": rain_effective,
+        "requested_semantics": requested_semantics,
+        "blocking_reason": (
+            None
+            if effective_costs_match
+            else "frontend_vehicle_usage_cost_mismatch"
+        ),
+    }
+
+
 CONTROLLED_COST_COMPONENT_FLAGS = {
     "vehicle_fixed_cost": False,
     "vehicle_usage_cost": True,
@@ -268,6 +362,7 @@ def build_prepare_payload(
     pv_source_date: str,
     comparison_role: str,
     vehicle_usage_cost_semantics: str = "unclassified",
+    vehicle_usage_cost_jpy_per_used_bus: float | None = None,
     grid_energy_price_yen_per_kwh: float | None = None,
     demand_charge_yen_per_kw: float | None = None,
     solver_mode: str = "phase3_two_stage",
@@ -288,6 +383,17 @@ def build_prepare_payload(
         grid_energy_price_yen_per_kwh=grid_energy_price_yen_per_kwh,
         demand_charge_yen_per_kw=demand_charge_yen_per_kw,
     )
+    vehicle_usage_cost_settings: dict[str, float] = {}
+    if vehicle_usage_cost_jpy_per_used_bus is not None:
+        vehicle_usage_cost = float(vehicle_usage_cost_jpy_per_used_bus)
+        if not math.isfinite(vehicle_usage_cost) or vehicle_usage_cost < 0.0:
+            raise ValueError(
+                "vehicle_usage_cost_jpy_per_used_bus must be finite and "
+                "nonnegative"
+            )
+        vehicle_usage_cost_settings[
+            "vehicle_usage_cost_jpy_per_used_bus"
+        ] = vehicle_usage_cost
     tariff_note = ""
     if tariff_settings:
         tariff_note = (
@@ -333,6 +439,7 @@ def build_prepare_payload(
                 CONTROLLED_COST_COMPONENT_FLAGS
             ),
             "vehicle_usage_cost_semantics": vehicle_usage_cost_semantics,
+            **vehicle_usage_cost_settings,
             **tariff_settings,
             "solver_mode": solver_mode,
             "objective_mode": "total_cost",
@@ -4076,6 +4183,16 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--vehicle-usage-cost-yen-per-used-bus",
+        type=float,
+        default=None,
+        help=(
+            "Apply one explicit nonnegative vehicle-day cost to both cases. "
+            "When omitted, the two frontend-saved values must match or the "
+            "runner stops before Prepare and solver execution."
+        ),
+    )
+    parser.add_argument(
         "--vehicle-usage-cost-semantics",
         choices=(
             "unclassified",
@@ -4200,6 +4317,41 @@ def main() -> int:
         runtime_preflight,
         frozen_git_sha=frozen_sha,
     )
+    sunny_bootstrap, _ = client.request_json(
+        "GET",
+        f"/api/scenarios/{args.sunny_scenario_id}/editor-bootstrap",
+    )
+    rain_bootstrap, _ = client.request_json(
+        "GET",
+        f"/api/scenarios/{args.rain_scenario_id}/editor-bootstrap",
+    )
+    vehicle_usage_cost_preflight = (
+        _build_vehicle_usage_cost_control_preflight(
+            sunny_bootstrap=sunny_bootstrap,
+            rain_bootstrap=rain_bootstrap,
+            explicit_cost_jpy_per_used_bus=(
+                args.vehicle_usage_cost_yen_per_used_bus
+            ),
+            requested_semantics=args.vehicle_usage_cost_semantics,
+        )
+    )
+    _write_json(
+        output_dir / "vehicle_usage_cost_control_preflight.json",
+        vehicle_usage_cost_preflight,
+    )
+    if vehicle_usage_cost_preflight.get("accepted") is not True:
+        sunny_effective_cost = vehicle_usage_cost_preflight.get(
+            "sunny_effective_cost_jpy_per_used_bus"
+        )
+        rain_effective_cost = vehicle_usage_cost_preflight.get(
+            "rain_effective_cost_jpy_per_used_bus"
+        )
+        raise RuntimeError(
+            "Controlled PV pair vehicle usage costs differ before Prepare: "
+            f"sunny={sunny_effective_cost}, rain={rain_effective_cost}. "
+            "Align the frontend scenarios or pass "
+            "--vehicle-usage-cost-yen-per-used-bus explicitly."
+        )
     comparison_name = "same-service-date high-PV/low-PV supply sensitivity"
     if tariff_condition["override_requested"]:
         comparison_name += (
@@ -4237,6 +4389,12 @@ def main() -> int:
         "vehicle_usage_cost_semantics": (
             args.vehicle_usage_cost_semantics
         ),
+        "vehicle_usage_cost_jpy_per_used_bus": (
+            args.vehicle_usage_cost_yen_per_used_bus
+        ),
+        "vehicle_usage_cost_control_preflight": (
+            vehicle_usage_cost_preflight
+        ),
         "pv_curve_delivery": (
             "Each Prepare request carries a date-specific, explicitly "
             "materialized depot-energy asset generated from the frontend "
@@ -4270,6 +4428,9 @@ def main() -> int:
                 vehicle_usage_cost_semantics=(
                     args.vehicle_usage_cost_semantics
                 ),
+                vehicle_usage_cost_jpy_per_used_bus=(
+                    args.vehicle_usage_cost_yen_per_used_bus
+                ),
                 grid_energy_price_yen_per_kwh=(
                     args.grid_energy_price_yen_per_kwh
                 ),
@@ -4296,6 +4457,9 @@ def main() -> int:
                 comparison_role="pv_curve_counterfactual",
                 vehicle_usage_cost_semantics=(
                     args.vehicle_usage_cost_semantics
+                ),
+                vehicle_usage_cost_jpy_per_used_bus=(
+                    args.vehicle_usage_cost_yen_per_used_bus
                 ),
                 grid_energy_price_yen_per_kwh=(
                     args.grid_energy_price_yen_per_kwh

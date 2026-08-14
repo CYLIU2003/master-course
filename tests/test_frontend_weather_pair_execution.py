@@ -25,6 +25,62 @@ def _load_runner() -> ModuleType:
     return module
 
 
+def _bootstrap_with_vehicle_usage_cost(
+    cost: float,
+    semantics: str,
+) -> dict[str, object]:
+    return {
+        "builderDefaults": {
+            "vehicleUsageCostJpyPerUsedBus": cost,
+            "vehicleUsageCostSemantics": semantics,
+        }
+    }
+
+
+def test_pair_vehicle_usage_cost_preflight_rejects_saved_mismatch() -> None:
+    runner = _load_runner()
+
+    audit = runner._build_vehicle_usage_cost_control_preflight(
+        sunny_bootstrap=_bootstrap_with_vehicle_usage_cost(
+            20_000.0,
+            "fixed_vehicle_day_cost",
+        ),
+        rain_bootstrap=_bootstrap_with_vehicle_usage_cost(
+            0.0,
+            "provisional_sensitivity",
+        ),
+        explicit_cost_jpy_per_used_bus=None,
+        requested_semantics="fixed_vehicle_day_cost",
+    )
+
+    assert audit["accepted"] is False
+    assert audit["blocking_reason"] == "frontend_vehicle_usage_cost_mismatch"
+    assert audit["source"] == "frontend_saved_values"
+
+
+def test_pair_vehicle_usage_cost_preflight_accepts_explicit_control() -> None:
+    runner = _load_runner()
+
+    audit = runner._build_vehicle_usage_cost_control_preflight(
+        sunny_bootstrap=_bootstrap_with_vehicle_usage_cost(
+            20_000.0,
+            "fixed_vehicle_day_cost",
+        ),
+        rain_bootstrap=_bootstrap_with_vehicle_usage_cost(
+            0.0,
+            "provisional_sensitivity",
+        ),
+        explicit_cost_jpy_per_used_bus=20_000.0,
+        requested_semantics="fixed_vehicle_day_cost",
+    )
+
+    assert audit["accepted"] is True
+    assert audit["saved_controls_match"] is False
+    assert audit["sunny_effective_cost_jpy_per_used_bus"] == 20_000.0
+    assert audit["rain_effective_cost_jpy_per_used_bus"] == 20_000.0
+    assert audit["source"] == "explicit_pair_control"
+
+
 def test_formal_phase4_seed_control_contract_matches_server_profile() -> None:
     runner = _load_runner()
     settings = {
@@ -312,6 +368,40 @@ def test_prepare_payload_replaces_inherited_tou_with_uniform_tariff() -> None:
     assert "fixed at 30 JPY/kWh for every clock slot" in settings[
         "experiment_notes"
     ]
+
+
+def test_prepare_payload_sets_explicit_pair_vehicle_usage_cost() -> None:
+    runner = _load_runner()
+
+    payload = runner.build_prepare_payload(
+        depot_id="tsurumaki",
+        service_id="WEEKDAY",
+        service_date="2025-08-05",
+        pv_source_date="2025-08-05",
+        comparison_role="baseline",
+        vehicle_usage_cost_semantics="fixed_vehicle_day_cost",
+        vehicle_usage_cost_jpy_per_used_bus=20_000.0,
+    )
+
+    settings = payload["simulation_settings"]
+    assert settings["vehicle_usage_cost_jpy_per_used_bus"] == 20_000.0
+    assert settings["vehicle_usage_cost_semantics"] == (
+        "fixed_vehicle_day_cost"
+    )
+
+
+def test_prepare_payload_rejects_negative_vehicle_usage_cost() -> None:
+    runner = _load_runner()
+
+    with pytest.raises(ValueError, match="finite and nonnegative"):
+        runner.build_prepare_payload(
+            depot_id="tsurumaki",
+            service_id="WEEKDAY",
+            service_date="2025-08-05",
+            pv_source_date="2025-08-05",
+            comparison_role="baseline",
+            vehicle_usage_cost_jpy_per_used_bus=-1.0,
+        )
 
 
 def test_prepare_payload_records_phase4_effective_solver_controls() -> None:

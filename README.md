@@ -1848,3 +1848,33 @@ and route-band repartition receives 45 seconds; the 600-second Phase 4 budget
 and 64-candidate cap are unchanged. This only changes which independently
 validated MIP starts are attempted. It does not force BEV use or change the
 integrated feasible region, objective, physical gates or certified-gap rule.
+
+### 2026-08-15 controlled day-ahead diagnostic pair
+
+Clean commit `ac0115e` was exercised through the same frontend/BFF Prepare and
+job-polling path for the 2025-08-05 service day. Both cases used 264 trips,
+60 active vehicles, 10 chargers, the complete 11,310-arc successor network,
+flat grid energy at 30 JPY/kWh, zero demand charge, PV rated at 1,000 kW,
+BESS 6,000 kWh / 900 kW with 3,000 kWh initial and terminal SOC, and a
+20,000 JPY used-vehicle-day cost. Only the separately recorded PV curve changed
+from the 2025-08-05 source to the 2025-08-10 source.
+
+The high-PV incumbent used 31 BEVs and one ICE bus for 248/16 trips. It cost
+648,332.208836 JPY, emitted 139.625396 kg-CO2, completed through HTTP in
+631.746 seconds, and ended at a 1.285176% certified gap. The low-PV incumbent
+used 14 BEVs and 18 ICE buses for 60/204 trips. It cost 702,184.658838 JPY,
+emitted 1,053.852313 kg-CO2, completed in 630.879 seconds, and ended at a
+1.094658% certified gap. All 264 trips and day-ahead physical/accounting checks
+passed in both cases. The strong dispatch response is diagnostic evidence that
+PV/BESS value now reaches assignment, but neither case met the declared 1%
+certificate and neither executed Rolling. They are not formal pair results.
+
+The pair runner now performs a pre-Prepare vehicle-day-cost control audit. The
+first low-PV attempt inherited a saved frontend value of 0 JPY while the
+high-PV scenario retained 20,000 JPY; that run is excluded from comparison.
+When saved values differ, the runner stops before Prepare or solver execution
+unless one explicit shared `--vehicle-usage-cost-yen-per-used-bus` value is
+provided. The progress bundle under
+`output/progress_report_ac0115e_day_ahead_pair_20260815/` is explicitly marked
+`DIAGNOSTIC`, contains the canonical comparison CSVs, seven PNG/SVG figures and
+a five-sheet workbook, and does not upgrade the research-release status.

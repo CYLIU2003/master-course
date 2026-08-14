@@ -5177,3 +5177,73 @@ locks this distinction in place.
 - Focused policy and suffix-search regression: `113 passed in 4.00s`. Complete
   repository regression: `1454 passed in 141.89s`. Fresh clean-commit runtime
   evidence is pending.
+
+# 2026-08-15 - `ac0115e` high/low-PV diagnostic pair and fail-fast control audit
+
+- Clean commit `ac0115e40c392b9e99e461f1c7263a27d75c1571` was started through
+  `run_app.py`/BFF and fresh frontend-equivalent Prepare. Both runs used the
+  2025-08-05 WEEKDAY service day, Tsurumaki, 264 trips, 60 active vehicles,
+  ten 90 kW chargers, complete 11,310 feasible successor arcs, four Gurobi
+  threads, seed 42, shared Phase 4 limit 600 seconds and requested gap 1%.
+  Energy controls were flat 30 JPY/kWh, demand charge 0, PV rated 1,000 kW,
+  BESS 6,000 kWh / 900 kW, 3,000 -> 3,000 kWh, and used-vehicle-day cost
+  20,000 JPY.
+- High-PV job `319ffc0b-6dd9-42c1-9aa3-9e25336df087` used prepared input
+  `prepared-41562dd0dfb91577-453c50ff177c277b-8fa1f41d`. Canonical artifacts
+  are at `output/2026-08-14/run_20260814_2351`; the portable evidence copy is
+  `output/perf_final_suffix_ac0115e_sunny_600s_20260814/sunny`. It used
+  31 BEVs/1 ICE bus and assigned 248/16 trips. Canonical total cost was
+  648,332.208836 JPY: electricity 2,809.840081, fuel 5,382.743360,
+  vehicle-day 640,000 and CO2 accounting 139.625396 JPY. PV generation was
+  6,056.25 kWh and operational CO2 was 139.625396 kg. HTTP wall time was
+  631.745774 seconds; certified gap was 1.285176%.
+- Its third suffix round evaluated five 32-BEV/0-ICE candidates and found none
+  feasible. The direct full ICE-retirement candidate was also infeasible.
+  IIS samples identify charge-availability while in service/not at depot,
+  charge power and SOC transition constraints. This is measured binding
+  evidence, not a proof that 31 BEVs are optimal or that one ICE duty is
+  structurally necessary.
+- An initial low-PV attempt exposed a frontend-control bug: the saved rain
+  scenario carried `vehicle_usage_cost_jpy_per_used_bus=0` with provisional
+  semantics while the sunny scenario carried 20,000 JPY with fixed-day
+  semantics. That run is preserved only as a diagnostic and is excluded from
+  every pair comparison. Previously, the runner discovered the effective
+  control mismatch only after paying for both solver runs.
+- The corrected low-PV job `fc3103df-b04f-42e4-b92f-38c0fbfde61f` explicitly
+  sent the shared 20,000 JPY value in Prepare and used prepared input
+  `prepared-7d5cb8da296d5499-f1e18f252e336f1f-8fa1f41d`. Canonical artifacts
+  are at `output/2026-08-15/run_20260815_0019`; the portable evidence copy is
+  `output/perf_final_suffix_ac0115e_rain_vehicle_cost_20000_600s_20260815/rain`.
+  It used 14 BEVs/18 ICE buses for 60/204 trips. Cost was 702,184.658838 JPY:
+  effectively zero grid electricity, 61,130.806525 JPY fuel, 640,000 JPY
+  vehicle-day and 1,053.852313 JPY CO2 accounting. PV generation was
+  996.2 kWh and operational CO2 was 1,053.852313 kg. HTTP wall time was
+  630.878637 seconds; independently certified gap was 1.094658%.
+- Both cases served 264/264 trips with physical status `VALID`, accounting
+  equality, artifact completeness and data-flow validation. Both were
+  `research_run=false`, both missed the requested 1% certificate, and neither
+  ran the 24-hour Rolling chain. The observed +17 used BEVs and +188 BEV trips
+  in high PV is therefore a descriptive day-ahead incumbent comparison, not a
+  formal causal or global-optimality result.
+- `run_frontend_controlled_pv_pair.py` now fetches both editor bootstraps before
+  Prepare, records `vehicle_usage_cost_control_preflight.json`, rejects saved
+  cross-scenario cost differences before any solver work, and supports one
+  explicit shared `--vehicle-usage-cost-yen-per-used-bus` override. Prepare
+  carries that value explicitly, preventing a scenario-save regression from
+  silently changing the controlled pair.
+- Added `build_day_ahead_diagnostic_pair_report.py`. It accepts only matching
+  clean-SHA, physically valid, accounting-reconciled day-ahead cases with an
+  accepted artifact-completeness gate and no failed data-flow checks; rejects
+  non-PV control differences; and emits one immutable diagnostic snapshot,
+  comparison/cost/energy/solver/hourly CSVs, a technical Markdown report, and
+  seven figures in PNG and SVG. Cost reconciliation reads every component from
+  `summary.json::canonical_cost_components_jpy`; non-primary components are
+  retained as `other_cost_jpy` instead of being silently omitted. The generated
+  five-sheet `results.xlsx`
+  separates summary, case results, hourly energy, controls and provenance;
+  formulas were scanned with zero errors and every sheet was rendered for
+  visual QA. Current bundle:
+  `output/progress_report_ac0115e_day_ahead_pair_20260815/`.
+- Focused pair-runner, manifest and diagnostic-report regression:
+  `60 passed in 10.80s`. Final full-suite validation:
+  `1464 passed in 143.73s`; changed Python entrypoints also passed `py_compile`.
