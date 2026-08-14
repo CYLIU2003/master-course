@@ -5422,6 +5422,9 @@ locks this distinction in place.
   global-optimality claim nor weather bias was applied.
 - Added regression coverage for a valid current v5 payload and tampered count
   and weather-bias failures. The focused pair-runner suite passed 40 tests.
+  The final complete repository regression passed 1,474 tests in 154.74
+  seconds; changed Python entrypoints also passed `py_compile` and
+  `git diff --check`.
   Both preserved `79e61ae` `solver_settings.json` files pass the corrected
   helper when replayed read-only. They are not rewritten or relabelled because
   this code fix changes the SHA; a fresh formal run is still required.
