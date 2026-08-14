@@ -1473,6 +1473,23 @@ initial SOC. The fixtures certify the hand-calculated 23.9563 JPY/kWh
 BEV/ICE break-even, charger-port shortage, terminal-SOC infeasibility, canonical
 accounting, and agreement with the integrated MILP. Unsupported physics fail
 closed and infeasible enumeration has a machine-readable certificate.
+For a citeable bounded verification bundle, run the following from a clean
+worktree after committing the implementation:
+
+```powershell
+python scripts/build_small_electric_oracle_certificate.py `
+  --output-dir output/verification/small_electric_oracle/<RUN_LABEL>
+```
+
+The command writes a self-hashed JSON certificate, a compact CSV table,
+advisor-facing Markdown, and a file-hash manifest. It compares the independent
+enumeration/SciPy-HiGHS result with the canonical feasibility/accounting
+checks and the integrated Gurobi model. Symmetric exchanges of otherwise
+identical vehicle IDs are recorded separately from trip-powertrain and cost
+agreement. The bundle is explicitly
+`research_conclusion_eligible=false`: it verifies the bounded formulation and
+does not replace a fresh frontend 264-trip run, positive-PV/BESS validation,
+Rolling execution, or the declared full-model gap gate.
 The current equation-to-code-to-test traceability table is maintained in
 `docs/notes/THESIS_EQUATION_CODE_TEST_MAP.md`.
 

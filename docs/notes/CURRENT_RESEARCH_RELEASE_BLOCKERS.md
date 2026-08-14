@@ -2205,10 +2205,15 @@ implicit all-powertrain fallback, or contains same-powertrain vehicle-specific
 restrictions that the current solver would project away, is blocked with
 `vehicle_trip_compatibility_contract_incomplete`.
 
-The bounded four-trip exact-oracle test now matches integrated MILP assignment,
-vehicle-specific fuel consumption, canonical fuel cost, and CO2. This is a
-unit-level mathematical check only. It neither validates PV/BESS/SOC equations
-nor substitutes for a fresh full frontend/BFF formal run.
+The bounded exact-oracle suite now has two independent scopes. The all-ICE
+four-trip oracle matches integrated assignment, vehicle-specific fuel,
+canonical fuel cost, and CO2. The complementary grid-only electric oracle
+independently enumerates BEV/ICE assignments and solves fixed-assignment
+charging with SciPy/HiGHS, including slot SOC, departure readiness, terminal
+return-to-initial SOC and charger-port concurrency. It verifies PV=0, BESS=0,
+the 23.956344 JPY/kWh tariff break-even, no-charger infeasibility and one-port
+shortage. These are bounded formulation checks only; positive PV/BESS and the
+full 264-trip network remain outside this oracle scope.
 
 Remaining blocking work for the requested method comparison:
 
@@ -2224,8 +2229,10 @@ Remaining blocking work for the requested method comparison:
 - therefore the emitted M0/M2/M3 partial artifact is explicitly
   `research_conclusion_eligible=false`, and M0--M3 comparative effect sizes
   remain blocked until fresh controlled four-method evidence exists;
-- the exact oracle v1 covers all-ICE cases only; electric SOC, charger shortage,
-  PV=0, BESS=0, and tariff-break-even oracle fixtures remain to be added;
+- the all-ICE and grid-only electric exact-oracle fixtures are implemented and
+  tested. A clean-worktree certificate builder now publishes their electric
+  boundary evidence with canonical and integrated-Gurobi reconciliation, but
+  this does not discharge the missing full-network M0--M3 evidence;
 - a multi-fragment electric assignment is now rejected with `SOC_FRAGMENT`.
   Stage 2 does not yet persist whether the feasible fragment transition is
   direct or a depot reset, so its transition energy cannot be independently

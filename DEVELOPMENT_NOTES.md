@@ -4475,3 +4475,40 @@ locks this distinction in place.
   energy balance, tariff or accounting equations. The frozen `e4ddd3f` pair is
   not relabeled. Current-HEAD formal evidence remains pending a clean commit,
   fresh Prepare, both full Phase 4 runs, Rolling and pair finalization.
+
+# 2026-08-14 - Publishable bounded electric exact-oracle certificate
+
+- Audited the existing `small_exact_electric_oracle_v1` implementation instead
+  of duplicating it. The independent oracle already covers complete assignment
+  enumeration, BEV slot SOC, departure readiness, terminal return-to-initial
+  SOC, charger-port concurrency, grid import, canonical electricity/fuel cost,
+  the 23.956344 JPY/kWh hand break-even boundary, PV=0, and BESS=0.
+- Added `small_electric_oracle_verification_v1` and
+  `scripts/build_small_electric_oracle_certificate.py`. The fixed benchmark
+  matrix publishes five cases: tariff below/above break-even, terminal SOC with
+  no charger, one port for two simultaneous BEVs, and the corresponding
+  feasible two-port case. Positive PV and hidden positive BESS capacity are
+  independently exercised as fail-closed scope guards.
+- Every feasible independent-oracle result is replayed through the canonical
+  `FeasibilityChecker` and `CostEvaluator`. When building publishable evidence,
+  the same input is also solved by the production integrated Gurobi path with
+  zero requested MIP gap. The certificate records costs, assignments,
+  enumeration counts, terminal SOC, scope guards, solver status and numerical
+  residuals under one deterministic payload SHA-256.
+- The first integrated two-port regression exposed a legitimate symmetric
+  alternative solution: the two identical BEV IDs were exchanged while the
+  trip-powertrain assignment, cost, energy and feasibility were identical.
+  The comparison now records exact vehicle-ID equality separately and accepts
+  only exact trip-powertrain plus canonical-cost equality. It does not hide or
+  relabel the ID permutation.
+- The bundle writer emits JSON, CSV, Markdown and a manifest containing source
+  Git provenance and byte hashes. Its normal CLI refuses a dirty worktree;
+  `--allow-dirty-git` is explicitly diagnostic. Every bundle remains
+  `research_conclusion_eligible=false` and cannot substitute for a full
+  network, positive-PV/BESS, Rolling, or formal gap certificate.
+- Focused regression after implementation passes `15 passed`, including both
+  exact oracles, canonical reconciliation, scope rejection, bundle hashing,
+  tamper detection and integrated Gurobi agreement. The complete repository
+  regression passes `1406 passed in 73.20s`. A clean-commit certificate
+  generation remains to be completed before this note is finalized with
+  artifact hashes.
