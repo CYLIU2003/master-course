@@ -20,8 +20,11 @@
   source file passes its stored size and SHA-256 checks.
 - The five immutable prepared artifacts independently produce the same trip
   row hash, `1c382c9c3dc6eec41173c1c451d790a66ae41ffef5c4bd10d2caabc7826511f9`.
-  Re-audit and reporting must still be generated from a clean commit; the
-  current raw incumbents are not upgraded to optimality conclusions.
+  Clean re-audit builder SHA
+  `2a4da8b6ad48c8ffc297b784c616dabd83ba1281` now certifies the common
+  non-varied-control fingerprint and every run-input, physical, Rolling,
+  accounting, artifact, and executed-SOC gate. Re-audit payload SHA-256 is
+  `b5736dec1edfd1ddb2c0b7861f2127b77dd6a74a2dc59375f3d88b73175a75e4`.
 - Sensitivity re-audit now derives minimum BEV SOC only from the accepted
   Rolling execution chain: the active-fleet cyclic boundary at 00:00/24:00
   and the 23 persisted hourly state handoffs. Every source JSON is checked
@@ -33,6 +36,19 @@
   it generates CSV/Markdown, an audited Excel workbook, and PNG/SVG figures
   for dispatch, executed KPI deltas, energy flows, solver quality, wall time,
   and minimum SOC. Gap-limited rows remain diagnostic.
+- The observed gap-limited incumbents for demand scales 0.8/0.9/1.0/1.1/1.2
+  assigned 105/91/91/77/77 BEV trips and 159/173/173/187/187 ICE trips.
+  Executed cost was 43,887.59 / 50,635.72 / 58,318.00 / 64,864.89 /
+  72,450.67 JPY; minimum executed BEV SOC was 27.566% / 27.086% /
+  26.607% / 26.127% / 22.063%. Every case served 264/264 trips but missed
+  the 1% gap target at 8.246% / 6.446% / 6.550% / 4.952% / 5.020%.
+- Final audited progress bundle:
+  `output/thesis_sensitivity_energy_low_pv_20260814_735527d/reaudit/8e98b34aa295a88f-2a4da8b/reporting/b5736dec1edfd1dd-d26a0f23d152`.
+  Its reporting-manifest payload SHA-256 is
+  `d7633210d18dc35519522e32cae3975adc0cfd2098c13212f315a3c36c37383d`;
+  the Excel workbook SHA-256 is
+  `e6e9661dc40801b50a0ecd79e4e3aad9ec365ff1fab7f9b3f0a72295db97d24f`.
+  Status remains `DIAGNOSTIC_FEASIBLE_NOT_OPTIMALITY_CERTIFIED`.
 
 ## 2026-08-14 corrected time-discretization evidence
 

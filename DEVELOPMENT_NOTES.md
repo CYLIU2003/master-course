@@ -27,9 +27,8 @@
   the same SHA-256:
   `1c382c9c3dc6eec41173c1c451d790a66ae41ffef5c4bd10d2caabc7826511f9`.
   Focused provenance, sensitivity, time-reporting, ablation, and frontend-pair
-  regression: `71 passed`; full repository regression: `1394 passed`. A
-  clean-commit immutable re-audit is still required before generating the
-  thesis-facing energy-sensitivity report.
+  regression: `71 passed`; full repository regression at that repair point:
+  `1394 passed`.
 - The re-audit now also computes each case's minimum executed BEV SOC from
   the active vehicles' 00:00 cyclic target, 01:00--23:00 Rolling state
   handoffs, and 24:00 terminal target. Battery capacity and minimum-SOC limits
@@ -44,6 +43,36 @@
   `DIAGNOSTIC_FEASIBLE_NOT_OPTIMALITY_CERTIFIED`; it never becomes a certified
   demand transition. JSON, CSV, Markdown, Excel, workbook QA previews and four
   PNG/SVG figure pairs are all hashed by one reporting manifest.
+- Clean re-audit builder SHA
+  `2a4da8b6ad48c8ffc297b784c616dabd83ba1281` reprocessed the immutable
+  `735527d` source cases without Prepare, HTTP, or solver calls. Re-audit
+  payload SHA-256 is
+  `b5736dec1edfd1ddb2c0b7861f2127b77dd6a74a2dc59375f3d88b73175a75e4`;
+  its independent canonical-hash check matches. All five cases share control
+  fingerprint
+  `d19d1c70780ced02def96f2edfde8a2ccdc7fbd9da15b9bd7329933af3c43252`
+  and fail only `mip_gap_target_met`.
+- At demand scale 0.8/0.9/1.0/1.1/1.2, the gap-limited feasible incumbents
+  assign 105/91/91/77/77 BEV trips, use 22/21/21/20/20 BEVs, and record
+  43,887.594 / 50,635.719 / 58,318.002 / 64,864.887 / 72,450.669 JPY
+  executed cost. Operational CO2 is 741.944 / 857.382 / 986.112 /
+  1,098.804 / 1,226.171 kg. Minimum executed SOC is 27.566% / 27.086% /
+  26.607% / 26.127% / 22.063%, with all margins above the 20% vehicle limit.
+- The observed incumbent BEV-trip steps are 105 to 91 between 0.8 and 0.9,
+  and 91 to 77 between 1.0 and 1.1. They are not certified transition
+  thresholds because the gaps are 8.246% / 6.446% / 6.550% / 4.952% /
+  5.020% against the declared 1% target.
+- Final report-builder SHA `d26a0f23d152bc54b0cf9ce3a8432ae3b2e0bdfc`
+  generated the immutable bundle under
+  `output/thesis_sensitivity_energy_low_pv_20260814_735527d/reaudit/8e98b34aa295a88f-2a4da8b/reporting/b5736dec1edfd1dd-d26a0f23d152`.
+  Reporting snapshot SHA-256 is
+  `66eda171d30a04db76727f1b344a3eba2e4bb24c1b7fe8991e4b4a9928c8160e`;
+  reporting-manifest payload SHA-256 is
+  `d7633210d18dc35519522e32cae3975adc0cfd2098c13212f315a3c36c37383d`.
+  All 18 registered derivatives re-hash, the five-sheet Excel workbook has
+  zero detected formula errors, and every sheet plus all four public figures
+  passed visual QA. Workbook SHA-256 is
+  `e6e9661dc40801b50a0ecd79e4e3aad9ec365ff1fab7f9b3f0a72295db97d24f`.
 
 ## 2026-08-14: trip-energy sensitivity preflight
 

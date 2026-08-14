@@ -1,6 +1,6 @@
 # Current research release blockers
 
-## 2026-08-14 energy-demand tranche: runs complete; re-audit and gap gate remain
+## 2026-08-14 energy-demand tranche: evidence complete; 1% gap still blocks
 
 Frozen SHA `735527da7f117f5af894263dcdf4fe55e8226328` completed all five
 0.8--1.2 trip-energy demand cases with fresh prepared inputs, 264/264 served
@@ -8,18 +8,21 @@ trips, physical validation, and accepted 24-step Rolling accounting. The
 source execution is
 `output/thesis_sensitivity_energy_low_pv_20260814_735527d`.
 
-The original manifest remains `BLOCKED`. Its common-control fingerprint
+The original manifest remains `BLOCKED`. Its initial common-control fingerprint
 incorrectly treated the energy-derived departure-SOC requirement as immutable
 trip structure. All genuinely non-varied dimensions match, and the full
 prepared trip arrays independently share SHA-256
 `1c382c9c3dc6eec41173c1c451d790a66ae41ffef5c4bd10d2caabc7826511f9`.
 The provenance implementation now separates schedule structure from demand
-and fails closed unless the prepared source is fully hash-verified.
+and fails closed unless the prepared source is fully hash-verified. Clean
+re-audit SHA `2a4da8b6ad48c8ffc297b784c616dabd83ba1281` now closes that
+provenance defect: all five cases share control fingerprint
+`d19d1c70780ced02def96f2edfde8a2ccdc7fbd9da15b9bd7329933af3c43252`.
 
 This repair does not discharge the optimality blocker. The five source solves
-are time-limited and miss the declared 1% target. The immutable runs must be
-re-audited from a clean fix commit and any report must remain diagnostic unless
-the predeclared gap requirement is later met.
+are time-limited and miss the declared 1% target at 8.246%, 6.446%, 6.550%,
+4.952%, and 5.020%. All other case checks pass, so the rows are physically
+valid, Rolling/accounting-eligible feasible incumbents, not certified optima.
 
 The re-audit now treats minimum SOC as an executed-chain quantity. It verifies
 the prepared vehicle capacities, 00:00/24:00 cyclic boundary and every
@@ -33,6 +36,15 @@ control, prepared-input, physical, accounting, Rolling and SOC evidence passes;
 the only tolerated failed case gate is `mip_gap_target_met`. Its observed
 0.8--0.9 and 1.0--1.1 dispatch steps must remain labeled as gap-limited
 incumbent changes until certified solves establish the transition boundaries.
+
+The final progress-report bundle is
+`output/thesis_sensitivity_energy_low_pv_20260814_735527d/reaudit/8e98b34aa295a88f-2a4da8b/reporting/b5736dec1edfd1dd-d26a0f23d152`.
+It includes one signed JSON snapshot, CSV, Markdown, a five-sheet Excel
+workbook, four PNG/SVG figure pairs, workbook QA evidence and previews. The
+reporting-manifest payload SHA-256 is
+`d7633210d18dc35519522e32cae3975adc0cfd2098c13212f315a3c36c37383d`.
+This bundle is eligible for progress presentation only; both
+`research_conclusion_eligible` and `transition_boundary_certified` are false.
 
 ## 2026-08-14 corrected time-step tranche: provenance fixed; 1% gap still blocks
 
