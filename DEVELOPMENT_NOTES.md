@@ -36,6 +36,14 @@
   come from the prepared vehicle inventory. The snapshot, chain summary, and
   all 23 state files must match the final artifact hash ledger; a mismatch
   fails the case instead of falling back to the day-ahead SOC series.
+- Added a dedicated trip-energy reporting snapshot and immutable builder. It
+  accepts the five-case tranche only when the signed source manifest, common
+  controls, prepared-trip hash, exact case coverage, 264/264 service,
+  frontend/BFF provenance, physical/accounting gates, and executed SOC ledger
+  all pass. A sole MIP-gap failure is emitted as
+  `DIAGNOSTIC_FEASIBLE_NOT_OPTIMALITY_CERTIFIED`; it never becomes a certified
+  demand transition. JSON, CSV, Markdown, Excel, workbook QA previews and four
+  PNG/SVG figure pairs are all hashed by one reporting manifest.
 
 ## 2026-08-14: trip-energy sensitivity preflight
 

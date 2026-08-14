@@ -27,6 +27,13 @@ the prepared vehicle capacities, 00:00/24:00 cyclic boundary and every
 closes the reporting ambiguity between day-ahead SOC and executed SOC, but it
 does not change any source solution or its gap status.
 
+The energy-sensitivity reporting builder is also fail-closed. It may publish
+the five feasible incumbents for progress reporting only when the complete
+control, prepared-input, physical, accounting, Rolling and SOC evidence passes;
+the only tolerated failed case gate is `mip_gap_target_met`. Its observed
+0.8--0.9 and 1.0--1.1 dispatch steps must remain labeled as gap-limited
+incumbent changes until certified solves establish the transition boundaries.
+
 ## 2026-08-14 corrected time-step tranche: provenance fixed; 1% gap still blocks
 
 Frozen SHA `88f76a9af79a8d46c1502a51ed03778ab99f20e9` completed fresh

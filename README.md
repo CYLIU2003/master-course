@@ -27,6 +27,12 @@
   and the 23 persisted hourly state handoffs. Every source JSON is checked
   against `artifact_completeness.json`; day-ahead SOC CSVs are not mixed into
   this executed KPI.
+- `scripts/build_trip_energy_sensitivity_reporting.py` fail-closes on a
+  modified manifest, control/hash drift, any non-gap case failure, incomplete
+  264-trip coverage, or invalid Rolling SOC evidence. From one signed snapshot
+  it generates CSV/Markdown, an audited Excel workbook, and PNG/SVG figures
+  for dispatch, executed KPI deltas, energy flows, solver quality, wall time,
+  and minimum SOC. Gap-limited rows remain diagnostic.
 
 ## 2026-08-14 corrected time-discretization evidence
 
