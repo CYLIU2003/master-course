@@ -58,6 +58,37 @@ double counting. A separate ALNS-style operational candidate may target
 hundreds of seconds, but it must remain explicitly near-optimal and cannot
 replace the formal full-network certificate.
 
+### Exact identical-vehicle trip-count ordering: implemented; timing pending
+
+Phase 3 Stage 1 and integrated Phase 4 now add an exact label-symmetry cut for
+vehicle clones. Within a group whose complete `ProblemVehicle` signature and
+assignment and transition-arc domains match, adjacent identifiers satisfy
+non-increasing total assigned-trip count. The transition check prevents a
+baseline-preserved arc in a successor-pruned diagnostic from being mistaken
+for exact symmetry. Every original feasible solution has an identifier
+permutation satisfying this order, so the cut preserves at least one member
+of each exact symmetry orbit and does not alter the optimal objective value.
+
+The initially considered earliest-fragment prefix formulation was rejected
+before commit because it would add roughly 15,840 continuous states and tens
+of thousands of rows in the all-identical 60-vehicle/264-trip upper-bound
+fixture. The retained
+formulation adds zero variables and 58 adjacent-pair rows for 35 identical
+BEVs plus 25 identical ICE buses in the structural upper-bound fixture. The
+historical high-PV artifact itself records only one exact 25-ICE group; its 35
+BEVs have distinct initial SOC and are correctly excluded. The current data
+would therefore add 24 rows. If assignment or transition domains differ, the
+group is reported as skipped and no activation or count ordering is imposed.
+Warm-start vehicle labels are sorted by used state and assigned-trip count so
+the cuts do not intentionally invalidate the incumbent seed.
+
+Small exact Gurobi regressions confirm objective invariance and retention of a
+canonical label representative. The full-scope structural test confirms the
+zero-variable/58-row bound. No matched 264-trip runtime comparison has yet
+been executed, so this is not evidence of a speedup and does not close the
+high-PV 1% certificate. A fresh frozen-commit diagnostic followed by the
+controlled formal pair remains required. Research release is **BLOCKED**.
+
 ### Exact fragment-cut separation: diagnostic complete; formal evidence pending
 
 The constraint-type audit found that 1,243,440 of the recorded 1,598,973

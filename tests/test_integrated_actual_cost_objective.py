@@ -7,6 +7,7 @@ import src.optimization.engine as optimization_engine_module
 from src.dispatch.models import (
     DeadheadRule,
     DispatchContext,
+    DutyLeg,
     Trip,
     VehicleDuty,
     VehicleProfile,
@@ -38,6 +39,7 @@ from src.optimization.engine import (
 from src.gurobi_runtime import ensure_gurobi
 from src.optimization.milp.solver_adapter import (
     _add_assignment_pattern_no_good_cuts,
+    _add_identical_vehicle_trip_count_symmetry,
     _apply_assignment_pattern_branch_priorities,
     _composition_target_continuation_priority_key,
     _composition_target_time_limit_sec,
@@ -459,6 +461,20 @@ def test_identical_vehicle_prefix_remap_preserves_duty_choice() -> None:
     assert remap == {"ice-c": "ice-a"}
 
 
+def test_identical_vehicle_prefix_remap_orders_partial_start_by_trip_count() -> None:
+    remap = _identical_vehicle_prefix_remap(
+        {"ice-a", "ice-c"},
+        (("ice-a", "ice-b", "ice-c"),),
+        {
+            ("ice-a", "trip-1"),
+            ("ice-c", "trip-2"),
+            ("ice-c", "trip-3"),
+        },
+    )
+
+    assert remap == {"ice-c": "ice-a", "ice-a": "ice-b"}
+
+
 def test_identical_vehicle_group_keeps_baseline_active_identifier_first() -> None:
     base = _phase4_seed_problem("identical-vehicle-symmetry")
     identical_a = ProblemVehicle(
@@ -489,6 +505,361 @@ def test_identical_vehicle_group_keeps_baseline_active_identifier_first() -> Non
     assert _ordered_identical_vehicle_groups(problem) == (
         ("ice-b", "ice-a"),
     )
+
+
+def test_vehicle_group_does_not_ignore_distinct_initial_soc() -> None:
+    base = _phase4_seed_problem("vehicle-symmetry-initial-soc")
+    bev_a = replace(base.vehicles[0], vehicle_id="bev-a", initial_soc=0.4)
+    bev_b = replace(base.vehicles[0], vehicle_id="bev-b", initial_soc=0.8)
+    problem = replace(
+        base,
+        vehicles=(bev_a, bev_b),
+        baseline_plan=None,
+    )
+
+    assert _ordered_identical_vehicle_groups(problem) == ()
+
+
+def test_identical_vehicle_group_orders_active_warm_start_by_first_fragment() -> None:
+    base = _phase4_seed_problem("identical-vehicle-start-order")
+    early_dispatch_trip = replace(
+        base.dispatch_context.trips[0],
+        trip_id="trip-early",
+        departure_time="08:00",
+        arrival_time="09:00",
+    )
+    late_dispatch_trip = replace(
+        base.dispatch_context.trips[0],
+        trip_id="trip-late",
+        departure_time="10:00",
+        arrival_time="11:00",
+    )
+    early_trip = replace(
+        base.trips[0],
+        trip_id="trip-early",
+        departure_min=8 * 60,
+        arrival_min=9 * 60,
+    )
+    late_trip = replace(
+        base.trips[0],
+        trip_id="trip-late",
+        departure_min=10 * 60,
+        arrival_min=11 * 60,
+    )
+    identical_a = ProblemVehicle(
+        vehicle_id="ice-a",
+        vehicle_type="ICE",
+        home_depot_id="DEPOT",
+        initial_fuel_l=100.0,
+        fuel_tank_capacity_l=120.0,
+        fuel_reserve_l=12.0,
+        fuel_consumption_l_per_km=0.2,
+    )
+    identical_b = replace(identical_a, vehicle_id="ice-b")
+    baseline = AssignmentPlan(
+        duties=(
+            VehicleDuty("duty-a", "ICE", (DutyLeg(late_dispatch_trip),)),
+            VehicleDuty("duty-b", "ICE", (DutyLeg(early_dispatch_trip),)),
+        ),
+        metadata={
+            "duty_vehicle_map": {
+                "duty-a": "ice-a",
+                "duty-b": "ice-b",
+            }
+        },
+    )
+    problem = replace(
+        base,
+        trips=(late_trip, early_trip),
+        vehicles=(identical_a, identical_b),
+        baseline_plan=baseline,
+    )
+
+    assert _ordered_identical_vehicle_groups(problem) == (
+        ("ice-b", "ice-a"),
+    )
+
+
+def test_identical_vehicle_group_prioritizes_warm_start_trip_count() -> None:
+    base = _phase4_seed_problem("identical-vehicle-trip-count-order")
+    dispatch_trips = tuple(
+        replace(
+            base.dispatch_context.trips[0],
+            trip_id=f"trip-{index}",
+            departure_time=f"{7 + index:02d}:00",
+            arrival_time=f"{8 + index:02d}:00",
+        )
+        for index in range(1, 4)
+    )
+    problem_trips = tuple(
+        replace(
+            base.trips[0],
+            trip_id=trip.trip_id,
+            departure_min=(7 + index) * 60,
+            arrival_min=(8 + index) * 60,
+        )
+        for index, trip in enumerate(dispatch_trips, start=1)
+    )
+    identical_a = ProblemVehicle(
+        vehicle_id="ice-a",
+        vehicle_type="ICE",
+        home_depot_id="DEPOT",
+        initial_fuel_l=100.0,
+        fuel_tank_capacity_l=120.0,
+        fuel_reserve_l=12.0,
+        fuel_consumption_l_per_km=0.2,
+    )
+    identical_b = replace(identical_a, vehicle_id="ice-b")
+    baseline = AssignmentPlan(
+        duties=(
+            VehicleDuty("duty-a", "ICE", (DutyLeg(dispatch_trips[0]),)),
+            VehicleDuty(
+                "duty-b",
+                "ICE",
+                (DutyLeg(dispatch_trips[1]), DutyLeg(dispatch_trips[2])),
+            ),
+        ),
+        metadata={
+            "duty_vehicle_map": {
+                "duty-a": "ice-a",
+                "duty-b": "ice-b",
+            }
+        },
+    )
+    problem = replace(
+        base,
+        trips=problem_trips,
+        vehicles=(identical_a, identical_b),
+        baseline_plan=baseline,
+    )
+
+    assert _ordered_identical_vehicle_groups(problem) == (("ice-b", "ice-a"),)
+
+
+def test_trip_count_symmetry_keeps_one_exact_clone_orbit_representative() -> None:
+    gp, GRB = ensure_gurobi()
+
+    def solve(
+        selected_starts: set[tuple[str, str]],
+    ) -> tuple[int, dict[str, object]]:
+        model = gp.Model("trip_count_symmetry")
+        model.Params.OutputFlag = 0
+        start_arc = {
+            (vehicle_id, trip_id): model.addVar(
+                vtype=GRB.BINARY,
+                name=f"start_{vehicle_id}_{trip_id}",
+            )
+            for vehicle_id in ("vehicle-a", "vehicle-b")
+            for trip_id in ("trip-1", "trip-2", "trip-3", "trip-4")
+        }
+        audit = _add_identical_vehicle_trip_count_symmetry(
+            model=model,
+            assignment_arc=start_arc,
+            identical_vehicle_groups=(("vehicle-a", "vehicle-b"),),
+            name_prefix="test_trip_count",
+        )
+        for key, variable in start_arc.items():
+            model.addConstr(variable == (1 if key in selected_starts else 0))
+        model.setObjective(0.0, GRB.MINIMIZE)
+        model.optimize()
+        return int(model.Status), audit
+
+    canonical_status, audit = solve(
+        {
+            ("vehicle-a", "trip-1"),
+            ("vehicle-a", "trip-2"),
+            ("vehicle-a", "trip-4"),
+            ("vehicle-b", "trip-3"),
+        }
+    )
+    swapped_status, _ = solve(
+        {
+            ("vehicle-a", "trip-3"),
+            ("vehicle-b", "trip-1"),
+            ("vehicle-b", "trip-2"),
+            ("vehicle-b", "trip-4"),
+        }
+    )
+
+    assert canonical_status == GRB.OPTIMAL
+    assert swapped_status == GRB.INFEASIBLE
+    assert audit["integer_feasible_orbit_preserved"] is True
+    assert audit["eligible_group_count"] == 1
+    assert audit["transition_domain_check_mode"] == "not_present"
+    assert audit["additional_variable_count"] == 0
+    assert audit["ordering_constraint_count"] == 1
+    assert "nonincreasing_total_assigned_trip_count" in audit["semantics"]
+
+
+def test_trip_count_symmetry_skips_nonidentical_assignment_domains() -> None:
+    gp, GRB = ensure_gurobi()
+    model = gp.Model("trip_count_symmetry_domain_guard")
+    model.Params.OutputFlag = 0
+    start_arc = {
+        ("vehicle-a", "trip-1"): model.addVar(vtype=GRB.BINARY),
+        ("vehicle-a", "trip-2"): model.addVar(vtype=GRB.BINARY),
+        ("vehicle-b", "trip-1"): model.addVar(vtype=GRB.BINARY),
+    }
+
+    audit = _add_identical_vehicle_trip_count_symmetry(
+        model=model,
+        assignment_arc=start_arc,
+        identical_vehicle_groups=(("vehicle-a", "vehicle-b"),),
+        name_prefix="test_domain_guard",
+    )
+
+    assert audit["enabled"] is False
+    assert audit["eligible_group_count"] == 0
+    assert audit["skipped_group_count"] == 1
+    assert audit["groups"][0]["reason"] == "assignment_domain_mismatch"
+    assert audit["additional_variable_count"] == 0
+    assert audit["ordering_constraint_count"] == 0
+
+
+def test_trip_count_symmetry_skips_nonidentical_transition_domains() -> None:
+    gp, GRB = ensure_gurobi()
+    model = gp.Model("trip_count_symmetry_transition_domain_guard")
+    model.Params.OutputFlag = 0
+    assignment_arc = {
+        (vehicle_id, trip_id): model.addVar(vtype=GRB.BINARY)
+        for vehicle_id in ("vehicle-a", "vehicle-b")
+        for trip_id in ("trip-1", "trip-2")
+    }
+    transition_arc = {
+        ("vehicle-a", "trip-1", "trip-2"): model.addVar(vtype=GRB.BINARY),
+    }
+
+    audit = _add_identical_vehicle_trip_count_symmetry(
+        model=model,
+        assignment_arc=assignment_arc,
+        transition_arc=transition_arc,
+        identical_vehicle_groups=(("vehicle-a", "vehicle-b"),),
+        name_prefix="test_transition_domain_guard",
+    )
+
+    assert audit["enabled"] is False
+    assert audit["skipped_group_count"] == 1
+    assert audit["groups"][0]["reason"] == "transition_domain_mismatch"
+    assert audit["groups"][0]["transition_domain_sizes"] == {
+        "vehicle-a": 1,
+        "vehicle-b": 0,
+    }
+    assert audit["ordering_constraint_count"] == 0
+
+
+def test_trip_count_symmetry_full_scope_adds_only_adjacent_group_rows() -> None:
+    gp, GRB = ensure_gurobi()
+    model = gp.Model("trip_count_symmetry_full_scope_size")
+    model.Params.OutputFlag = 0
+    bev_ids = tuple(f"bev-{index:02d}" for index in range(35))
+    ice_ids = tuple(f"ice-{index:02d}" for index in range(25))
+    trip_ids = tuple(f"trip-{index:03d}" for index in range(264))
+    assignment_arc = {
+        (vehicle_id, trip_id): model.addVar(vtype=GRB.BINARY)
+        for vehicle_id in bev_ids + ice_ids
+        for trip_id in trip_ids
+    }
+    model.update()
+    variable_count_before = int(model.NumVars)
+
+    audit = _add_identical_vehicle_trip_count_symmetry(
+        model=model,
+        assignment_arc=assignment_arc,
+        identical_vehicle_groups=(bev_ids, ice_ids),
+        name_prefix="test_full_scope_trip_count",
+    )
+    model.update()
+
+    assert audit["eligible_group_count"] == 2
+    assert audit["ordering_constraint_count"] == 58
+    assert audit["additional_variable_count"] == 0
+    assert int(model.NumVars) == variable_count_before
+    assert int(model.NumConstrs) == 58
+
+
+def test_phase4_trip_count_symmetry_preserves_exact_objective() -> None:
+    base = _phase4_seed_problem("phase4-trip-count-symmetry")
+    config = OptimizationConfig(
+        mode=OptimizationMode.MILP,
+        phase="phase4_integrated",
+        integrated_actual_cost_objective=True,
+        time_limit_sec=30,
+        mip_gap=0.0,
+        random_seed=42,
+        warm_start=False,
+        allow_postsolve_repair=False,
+        research_run=True,
+    )
+    base_outcome, base_plan = GurobiMILPAdapter().solve(base, config)
+    clone = replace(base.vehicles[0], vehicle_id="BEV_002")
+    symmetric_problem = replace(
+        base,
+        vehicles=(base.vehicles[0], clone),
+        baseline_plan=None,
+    )
+
+    symmetric_outcome, symmetric_plan = GurobiMILPAdapter().solve(
+        symmetric_problem,
+        config,
+    )
+
+    assert base_outcome.has_feasible_incumbent, base_outcome.solver_status
+    assert symmetric_outcome.has_feasible_incumbent, symmetric_outcome.solver_status
+    assert symmetric_plan.metadata["objective_value"] == pytest.approx(
+        base_plan.metadata["objective_value"]
+    )
+    audit = symmetric_plan.metadata[
+        "integrated_identical_vehicle_trip_count_symmetry"
+    ]
+    assert audit["enabled"] is True
+    assert audit["integer_feasible_orbit_preserved"] is True
+    assert audit["eligible_group_count"] == 1
+    assert audit["transition_domain_check_mode"] == (
+        "complete_successor_network_proof"
+    )
+    assert audit["additional_variable_count"] == 0
+    assert audit["ordering_constraint_count"] == 1
+    assert symmetric_plan.metadata[
+        "integrated_identical_vehicle_trip_count_ordering_constraint_count"
+    ] == 1
+
+
+def test_phase3_records_trip_count_symmetry_audit() -> None:
+    base = _phase4_seed_problem("phase3-trip-count-symmetry")
+    clone = replace(base.vehicles[0], vehicle_id="BEV_002")
+    problem = replace(
+        base,
+        vehicles=(base.vehicles[0], clone),
+        baseline_plan=None,
+    )
+
+    outcome, plan = GurobiMILPAdapter().solve(
+        problem,
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            phase="phase3_two_stage",
+            time_limit_sec=30,
+            stage1_time_limit_sec=30,
+            stage2_time_limit_sec=30,
+            mip_gap=0.0,
+            random_seed=42,
+            warm_start=False,
+            allow_postsolve_repair=False,
+            research_run=True,
+        ),
+    )
+
+    assert outcome.has_feasible_incumbent, outcome.solver_status
+    audit = plan.metadata["stage1_identical_vehicle_trip_count_symmetry"]
+    assert audit["enabled"] is True
+    assert audit["eligible_group_count"] == 1
+    assert audit["transition_domain_check_mode"] == (
+        "complete_successor_network_proof"
+    )
+    assert audit["ordering_constraint_count"] == 1
+    assert plan.metadata[
+        "stage1_identical_vehicle_trip_count_ordering_constraint_count"
+    ] == 1
 
 
 def test_phase4_seed_composition_search_scales_with_selected_fleet() -> None:

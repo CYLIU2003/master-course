@@ -550,19 +550,44 @@ def _problem_vehicle_symmetry_signature(vehicle: Any) -> Tuple[Any, ...]:
     )
 
 
+def _canonical_trip_ids_for_vehicle_symmetry(
+    problem: CanonicalOptimizationProblem,
+) -> Tuple[str, ...]:
+    """Order trips by their physical service chronology for symmetry cuts."""
+
+    return tuple(
+        str(trip.trip_id)
+        for trip in sorted(
+            problem.trips,
+            key=lambda trip: (
+                int(trip.departure_min),
+                int(trip.arrival_min),
+                str(trip.trip_id),
+            ),
+        )
+    )
+
+
 def _ordered_identical_vehicle_groups(
     problem: CanonicalOptimizationProblem,
 ) -> Tuple[Tuple[str, ...], ...]:
-    """Return exact vehicle-symmetry groups with the warm start first.
+    """Return exact vehicle-symmetry groups in warm-start-compatible order.
 
     Permuting vehicles inside one returned group cannot change any solver
-    coefficient.  Ordering vehicles used by the baseline before unused group
-    members keeps a complete MIP start compatible with activation-prefix
-    symmetry breaking.  Only identifiers are reordered; the selected fleet
-    inventory and all vehicle records remain unchanged.
+    coefficient.  Baseline-active vehicles are ordered by descending assigned
+    trip count, then by earliest fragment start, before unused group members.
+    This keeps a complete MIP start compatible with activation-prefix and
+    trip-count symmetry breaking.  Only identifiers are reordered; the
+    selected fleet inventory and all vehicle records remain unchanged.
     """
 
     baseline_active_vehicle_ids: Set[str] = set()
+    baseline_trip_count_by_vehicle: Dict[str, int] = {}
+    baseline_first_start_rank_by_vehicle: Dict[str, int] = {}
+    canonical_trip_ids = _canonical_trip_ids_for_vehicle_symmetry(problem)
+    trip_rank = {
+        trip_id: rank for rank, trip_id in enumerate(canonical_trip_ids)
+    }
     baseline = problem.baseline_plan
     if baseline is not None:
         for duty in baseline.duties:
@@ -571,6 +596,23 @@ def _ordered_identical_vehicle_groups(
             )
             if vehicle_id:
                 baseline_active_vehicle_ids.add(vehicle_id)
+                baseline_trip_count_by_vehicle[vehicle_id] = (
+                    baseline_trip_count_by_vehicle.get(vehicle_id, 0)
+                    + len(duty.trip_ids)
+                )
+                represented_trip_ranks = [
+                    trip_rank[str(trip_id)]
+                    for trip_id in duty.trip_ids
+                    if str(trip_id) in trip_rank
+                ]
+                if represented_trip_ranks:
+                    baseline_first_start_rank_by_vehicle[vehicle_id] = min(
+                        baseline_first_start_rank_by_vehicle.get(
+                            vehicle_id,
+                            len(canonical_trip_ids),
+                        ),
+                        min(represented_trip_ranks),
+                    )
 
     grouped: Dict[Tuple[Any, ...], List[str]] = {}
     for vehicle in problem.vehicles:
@@ -592,6 +634,11 @@ def _ordered_identical_vehicle_groups(
                         0
                         if vehicle_id in baseline_active_vehicle_ids
                         else 1,
+                        -baseline_trip_count_by_vehicle.get(vehicle_id, 0),
+                        baseline_first_start_rank_by_vehicle.get(
+                            vehicle_id,
+                            len(canonical_trip_ids),
+                        ),
                         vehicle_id,
                     ),
                 )
@@ -600,9 +647,165 @@ def _ordered_identical_vehicle_groups(
     return tuple(sorted(ordered_groups, key=lambda group: group[0]))
 
 
+def _add_identical_vehicle_trip_count_symmetry(
+    *,
+    model: Any,
+    assignment_arc: Mapping[Tuple[str, str], Any],
+    transition_arc: Optional[Mapping[Tuple[str, str, str], Any]] = None,
+    transition_domains_proven_equal: bool = False,
+    identical_vehicle_groups: Sequence[Sequence[str]],
+    name_prefix: str,
+) -> Dict[str, Any]:
+    """Order exact-clone vehicles by non-increasing assigned-trip count.
+
+    Every feasible solution has an equivalent identifier permutation whose
+    exact-clone vehicles are sorted by trip count, so the added inequalities
+    remove only label symmetry.  A group is skipped when assignment or
+    transition domains differ because compatibility rules or baseline-
+    preserving successor pruning may make vehicle identifiers solver-relevant
+    even when their recorded vehicle fields are equal.
+    """
+
+    trip_ids_by_vehicle: Dict[str, Set[str]] = {}
+    for vehicle_id, trip_id in assignment_arc:
+        trip_ids_by_vehicle.setdefault(str(vehicle_id), set()).add(str(trip_id))
+    transitions_by_vehicle: Dict[str, Set[Tuple[str, str]]] = {}
+    for vehicle_id, from_trip_id, to_trip_id in transition_arc or {}:
+        transitions_by_vehicle.setdefault(str(vehicle_id), set()).add(
+            (str(from_trip_id), str(to_trip_id))
+        )
+    transition_domain_check_mode = (
+        "explicit_arc_domain"
+        if transition_arc is not None
+        else (
+            "complete_successor_network_proof"
+            if transition_domains_proven_equal
+            else "not_present"
+        )
+    )
+
+    audit_groups: List[Dict[str, Any]] = []
+    ordering_constraint_count = 0
+    eligible_group_count = 0
+    skipped_group_count = 0
+
+    for group_index, raw_vehicle_ids in enumerate(identical_vehicle_groups):
+        vehicle_ids = tuple(str(vehicle_id) for vehicle_id in raw_vehicle_ids)
+        domains = {
+            vehicle_id: trip_ids_by_vehicle.get(vehicle_id, set())
+            for vehicle_id in vehicle_ids
+        }
+        reference_domain = domains[vehicle_ids[0]] if vehicle_ids else set()
+        domain_match = bool(reference_domain) and all(
+            domain == reference_domain for domain in domains.values()
+        )
+        transition_domains = {
+            vehicle_id: transitions_by_vehicle.get(vehicle_id, set())
+            for vehicle_id in vehicle_ids
+        }
+        reference_transition_domain = (
+            transition_domains[vehicle_ids[0]] if vehicle_ids else set()
+        )
+        transition_domain_match = transition_arc is None or all(
+            domain == reference_transition_domain
+            for domain in transition_domains.values()
+        )
+        if not domain_match or not transition_domain_match:
+            skipped_group_count += 1
+            audit_groups.append(
+                {
+                    "group_index": group_index,
+                    "vehicle_count": len(vehicle_ids),
+                    "eligible": False,
+                    "reason": (
+                        "empty_assignment_domain"
+                        if not reference_domain
+                        else (
+                            "assignment_domain_mismatch"
+                            if not domain_match
+                            else "transition_domain_mismatch"
+                        )
+                    ),
+                    "assignment_domain_sizes": {
+                        vehicle_id: len(domain)
+                        for vehicle_id, domain in sorted(domains.items())
+                    },
+                    "transition_domain_sizes": {
+                        vehicle_id: len(domain)
+                        for vehicle_id, domain in sorted(
+                            transition_domains.items()
+                        )
+                    },
+                }
+            )
+            continue
+
+        ordered_domain = tuple(sorted(reference_domain))
+        domain_hash = hashlib.sha256(
+            json.dumps(
+                ordered_domain,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        transition_domain_hash = hashlib.sha256(
+            json.dumps(
+                sorted(reference_transition_domain),
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        for position, (previous_vehicle_id, next_vehicle_id) in enumerate(
+            zip(vehicle_ids, vehicle_ids[1:])
+        ):
+            model.addConstr(
+                sum(
+                    assignment_arc[(previous_vehicle_id, trip_id)]
+                    for trip_id in ordered_domain
+                )
+                >= sum(
+                    assignment_arc[(next_vehicle_id, trip_id)]
+                    for trip_id in ordered_domain
+                ),
+                name=f"{name_prefix}__g{group_index}__p{position}",
+            )
+            ordering_constraint_count += 1
+
+        eligible_group_count += 1
+        audit_groups.append(
+            {
+                "group_index": group_index,
+                "vehicle_count": len(vehicle_ids),
+                "eligible": True,
+                "assignment_trip_count": len(ordered_domain),
+                "assignment_domain_hash": domain_hash,
+                "transition_arc_count": len(reference_transition_domain),
+                "transition_domain_hash": transition_domain_hash,
+            }
+        )
+
+    return {
+        "schema_version": "identical_vehicle_trip_count_symmetry_v1",
+        "enabled": bool(eligible_group_count),
+        "integer_feasible_orbit_preserved": True,
+        "eligible_group_count": eligible_group_count,
+        "skipped_group_count": skipped_group_count,
+        "transition_domain_check_mode": transition_domain_check_mode,
+        "additional_variable_count": 0,
+        "ordering_constraint_count": ordering_constraint_count,
+        "groups": audit_groups,
+        "semantics": (
+            "exact_identifier_permutation_symmetry_only; adjacent_exact_clone_"
+            "vehicles_ordered_by_nonincreasing_total_assigned_trip_count; "
+            "assignment_or_transition_domain_mismatch_is_skipped"
+        ),
+    }
+
+
 def _identical_vehicle_prefix_remap(
     selected_vehicle_ids: Iterable[str],
     identical_vehicle_groups: Sequence[Sequence[str]],
+    selected_assignment_pairs: Optional[Iterable[Tuple[str, str]]] = None,
 ) -> Dict[str, str]:
     """Map an equivalent active set onto each exact group's ordered prefix.
 
@@ -611,27 +814,64 @@ def _identical_vehicle_prefix_remap(
     only to remove exact symmetry.  Conflating the two made the neighbourhood
     retire whichever active identifier happened to be last, even when another
     identical vehicle carried the much easier duty.  This bijection preserves
-    every coefficient while letting the duty choice remain meaningful.
+    every coefficient while letting the duty choice remain meaningful.  When
+    assignments are supplied, active sources are sorted by descending trip
+    count so the remapped start also satisfies trip-count symmetry cuts.
     """
 
     selected = {str(vehicle_id) for vehicle_id in selected_vehicle_ids}
+    assignment_count_by_vehicle: Dict[str, int] = {}
+    for vehicle_id, _trip_id in selected_assignment_pairs or ():
+        normalized_vehicle_id = str(vehicle_id)
+        assignment_count_by_vehicle[normalized_vehicle_id] = (
+            assignment_count_by_vehicle.get(normalized_vehicle_id, 0) + 1
+        )
     remap: Dict[str, str] = {}
     for raw_group in identical_vehicle_groups:
         group = tuple(str(vehicle_id) for vehicle_id in raw_group)
-        active = tuple(vehicle_id for vehicle_id in group if vehicle_id in selected)
-        prefix = group[: len(active)]
-        active_outside_prefix = tuple(
-            vehicle_id for vehicle_id in active if vehicle_id not in prefix
-        )
-        inactive_inside_prefix = tuple(
-            vehicle_id for vehicle_id in prefix if vehicle_id not in active
-        )
-        if len(active_outside_prefix) != len(inactive_inside_prefix):
-            raise RuntimeError(
-                "identical vehicle prefix remap is not bijective: "
-                f"group={group!r} active={active!r}"
+        group_rank = {
+            vehicle_id: position
+            for position, vehicle_id in enumerate(group)
+        }
+        if selected_assignment_pairs is None:
+            active = tuple(
+                vehicle_id for vehicle_id in group if vehicle_id in selected
             )
-        remap.update(zip(active_outside_prefix, inactive_inside_prefix))
+            prefix = group[: len(active)]
+            active_outside_prefix = tuple(
+                vehicle_id for vehicle_id in active if vehicle_id not in prefix
+            )
+            inactive_inside_prefix = tuple(
+                vehicle_id for vehicle_id in prefix if vehicle_id not in active
+            )
+            if len(active_outside_prefix) != len(inactive_inside_prefix):
+                raise RuntimeError(
+                    "identical vehicle prefix remap is not bijective: "
+                    f"group={group!r} active={active!r}"
+                )
+            remap.update(zip(active_outside_prefix, inactive_inside_prefix))
+            continue
+        active = tuple(
+            sorted(
+                (
+                    vehicle_id
+                    for vehicle_id in group
+                    if vehicle_id in selected
+                ),
+                key=lambda vehicle_id: (
+                    -assignment_count_by_vehicle.get(vehicle_id, 0),
+                    group_rank[vehicle_id],
+                ),
+            )
+        )
+        prefix = group[: len(active)]
+        remap.update(
+            {
+                source_vehicle_id: target_vehicle_id
+                for source_vehicle_id, target_vehicle_id in zip(active, prefix)
+                if source_vehicle_id != target_vehicle_id
+            }
+        )
     return remap
 
 
@@ -4154,10 +4394,35 @@ class GurobiMILPAdapter:
         integrated_identical_vehicle_groups = (
             _ordered_identical_vehicle_groups(problem)
         )
+        integrated_successor_pruning_enabled = bool(
+            arc_pruning_summary.get("successor_pruning_enabled", False)
+        )
+        integrated_identical_vehicle_trip_count_symmetry = (
+            _add_identical_vehicle_trip_count_symmetry(
+                model=model,
+                assignment_arc=y,
+                transition_arc=x if integrated_successor_pruning_enabled else None,
+                transition_domains_proven_equal=(
+                    not integrated_successor_pruning_enabled
+                ),
+                identical_vehicle_groups=integrated_identical_vehicle_groups,
+                name_prefix="integrated_identical_vehicle_trip_count",
+            )
+        )
+        integrated_symmetry_eligible_group_indices = {
+            int(record["group_index"])
+            for record in integrated_identical_vehicle_trip_count_symmetry.get(
+                "groups",
+                (),
+            )
+            if bool(record.get("eligible"))
+        }
         integrated_identical_vehicle_activation_prefix_constraint_count = 0
         for group_index, vehicle_ids in enumerate(
             integrated_identical_vehicle_groups
         ):
+            if group_index not in integrated_symmetry_eligible_group_indices:
+                continue
             for position, (previous_vehicle_id, next_vehicle_id) in enumerate(
                 zip(vehicle_ids, vehicle_ids[1:])
             ):
@@ -8215,10 +8480,22 @@ class GurobiMILPAdapter:
                 "integrated_identical_vehicle_activation_prefix_constraint_count": (
                     integrated_identical_vehicle_activation_prefix_constraint_count
                 ),
+                "integrated_identical_vehicle_trip_count_symmetry": dict(
+                    integrated_identical_vehicle_trip_count_symmetry
+                ),
+                "integrated_identical_vehicle_trip_count_ordering_constraint_count": int(
+                    integrated_identical_vehicle_trip_count_symmetry.get(
+                        "ordering_constraint_count",
+                        0,
+                    )
+                    or 0
+                ),
                 "integrated_identical_vehicle_symmetry_semantics": (
                     "exact_identifier_permutation_symmetry_only; all solver_"
-                    "relevant vehicle fields equal and baseline-active IDs_"
-                    "ordered first"
+                    "relevant vehicle fields, assignment domains, and "
+                    "transition domains equal; activation prefix and "
+                    "nonincreasing assigned-trip count preserve at least one "
+                    "representative per exact vehicle-label orbit"
                 ),
                 "integrated_phase3_iis_assignment_guidance_pattern_count": int(
                     integrated_seed_iis_assignment_guidance_audit[
@@ -9130,6 +9407,29 @@ class GurobiMILPAdapter:
         stage1_identical_vehicle_groups = _ordered_identical_vehicle_groups(
             problem
         )
+        stage1_successor_pruning_enabled = bool(
+            arc_pruning_summary.get("successor_pruning_enabled", False)
+        )
+        stage1_identical_vehicle_trip_count_symmetry = (
+            _add_identical_vehicle_trip_count_symmetry(
+                model=stage1,
+                assignment_arc=y,
+                transition_arc=x if stage1_successor_pruning_enabled else None,
+                transition_domains_proven_equal=(
+                    not stage1_successor_pruning_enabled
+                ),
+                identical_vehicle_groups=stage1_identical_vehicle_groups,
+                name_prefix="stage1_identical_vehicle_trip_count",
+            )
+        )
+        stage1_symmetry_eligible_group_indices = {
+            int(record["group_index"])
+            for record in stage1_identical_vehicle_trip_count_symmetry.get(
+                "groups",
+                (),
+            )
+            if bool(record.get("eligible"))
+        }
         stage1_vehicle_symmetry_rank = {
             vehicle_id: (group_index, position)
             for group_index, vehicle_ids in enumerate(
@@ -9141,6 +9441,8 @@ class GurobiMILPAdapter:
         for group_index, vehicle_ids in enumerate(
             stage1_identical_vehicle_groups
         ):
+            if group_index not in stage1_symmetry_eligible_group_indices:
+                continue
             for position, (previous_vehicle_id, next_vehicle_id) in enumerate(
                 zip(vehicle_ids, vehicle_ids[1:])
             ):
@@ -10252,6 +10554,16 @@ class GurobiMILPAdapter:
                     "stage1_identical_vehicle_activation_prefix_constraint_count": (
                         stage1_identical_vehicle_activation_prefix_constraint_count
                     ),
+                    "stage1_identical_vehicle_trip_count_symmetry": dict(
+                        stage1_identical_vehicle_trip_count_symmetry
+                    ),
+                    "stage1_identical_vehicle_trip_count_ordering_constraint_count": int(
+                        stage1_identical_vehicle_trip_count_symmetry.get(
+                            "ordering_constraint_count",
+                            0,
+                        )
+                        or 0
+                    ),
                     "stage1_vehicle_count_lower_bound_semantics": (
                         "relaxed_dispatch_feasible_minimum_path_cover_vehicle_day_lb"
                     ),
@@ -10517,6 +10829,16 @@ class GurobiMILPAdapter:
                 ),
                 "stage1_identical_vehicle_activation_prefix_constraint_count": (
                     stage1_identical_vehicle_activation_prefix_constraint_count
+                ),
+                "stage1_identical_vehicle_trip_count_symmetry": dict(
+                    stage1_identical_vehicle_trip_count_symmetry
+                ),
+                "stage1_identical_vehicle_trip_count_ordering_constraint_count": int(
+                    stage1_identical_vehicle_trip_count_symmetry.get(
+                        "ordering_constraint_count",
+                        0,
+                    )
+                    or 0
                 ),
                 "stage1_vehicle_count_lower_bound_semantics": (
                     "relaxed_dispatch_feasible_minimum_path_cover_vehicle_day_lb"
@@ -11507,6 +11829,7 @@ class GurobiMILPAdapter:
                 vehicle_id_remap = _identical_vehicle_prefix_remap(
                     start.get("selected_used") or (),
                     stage1_identical_vehicle_groups,
+                    start.get("selected_y") or (),
                 )
                 normalized = dict(start)
                 if not vehicle_id_remap:

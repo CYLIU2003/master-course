@@ -1,5 +1,43 @@
 # Development Notes
 
+## 2026-08-14: exact vehicle-label symmetry reduction
+
+- Added non-increasing total assigned-trip-count ordering for adjacent
+  vehicles only when every `ProblemVehicle` solver field and the complete
+  assignment and transition-arc domains match. This is an exact relabelling
+  cut: any feasible solution can permute identical vehicle IDs into the
+  retained order without changing its constraints or objective.
+- The first draft used a canonical earliest-fragment prefix state. Review
+  rejected it before commit because the all-identical 35-BEV/25-ICE,
+  264-trip upper-bound fixture would add about 15,840 continuous variables
+  and tens of thousands of constraints while the observed bottleneck is root
+  processing. The final formulation
+  adds no variables and one dense inequality per adjacent clone pair. Its
+  all-identical 35+25 upper-bound fixture adds 58 rows.
+- Read-only verification of the historical high-PV `solver_settings.json`
+  found one exact 25-ICE group and no BEV group: the 35 BEVs have distinct
+  initial SOC, which is solver-relevant. Therefore the actual recorded fleet
+  would receive 24 trip-count rows, not 58. The code deliberately does not
+  manufacture BEV symmetry by ignoring initial state.
+- Symmetry groups fail safe. Unequal/empty assignment domains or unequal
+  transition domains receive an explicit skipped audit record, and neither
+  trip-count nor activation-prefix cuts are added for that group. The
+  transition check is required because successor pruning may preserve a
+  baseline arc for only one vehicle ID. Public Phase 3/Phase 4 metadata records
+  the schema, eligible/skipped groups, both domain hashes, added rows, zero
+  added variables, and orbit-preservation semantics.
+- Baseline vehicle labels are ordered by used state, descending assigned-trip
+  count, earliest represented trip, then ID. Composition-neighbourhood MIP
+  starts apply the same count ordering while remapping all assignment, path,
+  activation, and vehicle-day keys consistently.
+- Tests cover canonical/swapped label feasibility, unequal-domain skipping,
+  partial-start relabelling, warm-start ordering, exact Phase-4 objective
+  invariance, Phase-3 metadata, and current full-scope model size. This change
+  does not support a runtime claim until a clean frozen-commit matched
+  diagnostic is run; the high-PV 1% gap blocker remains open.
+- Verification: focused integrated/Stage-1/weather/exactness regression
+  `84 passed`; full repository regression `1441 passed`.
+
 ## 2026-08-14: literature runtime verification and buffer sensitivity runner
 
 - Rechecked the local prior-work PDFs rather than comparing headline times.

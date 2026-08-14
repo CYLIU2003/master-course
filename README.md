@@ -1,5 +1,27 @@
 # master-course
 
+## 2026-08-14 exact vehicle-label symmetry reduction
+
+- Phase 3 Stage 1 and Phase 4 now remove one exact source of branch-and-bound
+  duplication: vehicles whose complete solver-relevant records, assignment
+  domains, and transition-arc domains are identical are ordered by
+  non-increasing assigned-trip count.
+  This preserves at least one representative of every vehicle-identifier
+  permutation orbit; it does not change tariffs, PV/BESS/SOC mathematics,
+  fleet composition, trip coverage, or the accounting objective.
+- A production-size upper-bound regression with two fully identical groups
+  (35 BEVs, 25 ICE buses, 264 trips) adds zero variables and 58 adjacent-pair
+  inequalities. In the historical high-PV artifact, the 35 BEVs have distinct
+  initial SOC and are correctly not treated as symmetric; only the identical
+  25-ICE group is eligible, implying 24 new rows. A group with unequal
+  assignment or transition domains is skipped and reported rather than
+  assumed symmetric. Warm starts are relabelled by trip count before
+  submission.
+- This is an exact formulation-strengthening candidate, not measured runtime
+  evidence. The current high-PV run still lacks the declared 1% certificate;
+  a clean frozen-commit matched diagnostic is required before claiming any
+  speedup or using new results for research conclusions.
+
 ## 2026-08-14 literature runtime audit and turnaround optimization tranche
 
 - The local literature PDFs confirm that tens-to-hundreds of seconds are
