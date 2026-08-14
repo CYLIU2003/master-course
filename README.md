@@ -1,5 +1,29 @@
 # master-course
 
+## 2026-08-15 literature-driven Phase 4 seed restart
+
+- The local literature audit confirms that tens-to-hundreds of seconds are
+  common for fixed-assignment energy dispatch, decomposition, and heuristic
+  methods. The closest integrated large-instance comparison, No06, reports
+  202.3 seconds for ALNS-SA on 418 trips, while its exact Gurobi model found no
+  feasible solution for 200 and 418 trips within six hours. These timings are
+  reported separately from exact-gap certification.
+- A code audit found that the frontend's 64-candidate Phase 4 seed setting
+  could consume every evaluation on direct and pairwise vehicle-ID
+  replacement. Enabled suffix exchange, powertrain duty swap, sequential
+  whole-duty activation, and route-band repartition could therefore be
+  unreachable. The seed search now reserves explicit evaluation capacity for
+  trip-chain neighborhoods, restarts whole-duty activation from each improved
+  incumbent, and gives route-band repartition its documented separate wall
+  and candidate budgets.
+- This is candidate-generation only. It does not change the integrated MILP
+  objective, feasible region, PV/BESS accounting, 1% acceptance target, or
+  research guardrails. A reconstruction of the `8066330` low-PV seed reduced
+  the validated canonical incumbent from 707,518.152327 JPY to
+  697,433.686483 JPY in 32.179 seconds and improved the independent certified
+  gap to 0.420907%. This replay is diagnostic evidence, not a fresh formal run;
+  current-SHA frontend execution is still required.
+
 ## 2026-08-15 thesis Phase 0--7 completion audit
 
 - `scripts/audit_thesis_model_phase_gates.py` now composes the existing

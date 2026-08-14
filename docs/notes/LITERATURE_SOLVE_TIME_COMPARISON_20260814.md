@@ -1,5 +1,26 @@
 # 先行文献と現行モデルの求解時間比較（2026-08-14）
 
+## 2026-08-15 追補：文献比較から発見したseed探索予算の不整合
+
+文献の数百秒級結果と比較する際、現行Phase 4では本体MILPより前のseed品質も
+確認した。frontendの正式設定は固定-duty近傍を最大64候補に制限するが、従来は
+direct/pairwise探索とmatching検証が全枠を消費し、enabledである
+suffix exchange、powertrain duty swap、identity exchangeが0回のまま終了し得た。
+さらにroute-band再分割は45秒の別wall budgetを表示しながら、共通64候補上限に
+達すると一度も開始されなかった。
+
+これを、局所近傍用の明示的reserve、改善解からのwhole-duty activation restart、
+route-band専用の有限候補枠に修正した。保持済み`8066330`低PV入力の診断再構成では、
+元の13 BEV/19 ICE seed 707,518.152327円を完全再現した後、32.178553秒で
+15 BEV/17 ICE、697,433.686483円の候補を得た。独立下界694,498.136390円に対する
+認証gapは0.420907%である。
+
+この値は、過去入力を用いたseed候補生成の診断であり、現在SHAの正式runではない。
+また、文献の厳密MILPが数百秒で認証されたことを意味しない。次の比較では
+`first feasible incumbent time`、`best incumbent time`、`declared gap certification
+time`、`frontend submit-to-terminal time`を別々に記録し、clean commitからのfresh
+Prepareと正式実行でのみ性能改善を判定する。
+
 ## 2026-08-14 600秒診断で判明した予算二重計上
 
 clean SHA `102546170dc8a07fa91e0b71beaa8c71ca1ea327`からfresh Prepareし、

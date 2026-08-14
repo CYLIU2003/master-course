@@ -483,7 +483,10 @@ def test_route_band_repartition_is_full_stage2_validated_before_selection(
                 phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec=30,
                 phase4_phase3_seed_route_band_repartition_time_limit_sec=30,
                 phase4_phase3_seed_unused_bev_neighborhood_per_solve_sec=1,
-                phase4_phase3_seed_unused_bev_neighborhood_max_evaluations=10,
+                # Exhaust the fixed-duty allowance on the first candidate.
+                # Route-band repartition has a separate wall and candidate
+                # budget and therefore must still execute afterwards.
+                phase4_phase3_seed_unused_bev_neighborhood_max_evaluations=1,
                 phase4_phase3_seed_powertrain_duty_swap_rounds=1,
                 phase4_phase3_seed_unused_bev_identity_exchange_rounds=0,
             ),
@@ -521,6 +524,9 @@ def test_route_band_repartition_is_full_stage2_validated_before_selection(
         )
     assert audit["weather_strategy_bias_applied"] is False
     assert audit["route_band_repartition_feedback_max_iterations"] == 1
+    assert audit["fixed_duty_maximum_candidate_evaluations"] == 1
+    assert audit["route_band_additional_evaluation_limit"] == 1
+    assert audit["total_candidate_evaluation_limit"] == 2
     attempt = audit["route_band_repartition_attempts"][0]
     assert attempt["stage2_feedback_max_iterations"] == 1
     assert attempt["stage2_feedback_solve_pass_count"] == 2
@@ -1100,6 +1106,39 @@ def test_pairwise_search_reserves_and_validates_cumulative_matching(
     assert audit["selected_used_ice"] == 2
     assert set(selected.duties_by_vehicle()).issuperset(
         {"ice-2", "ice-3"}
+    )
+
+    local_search_selected, local_search_audit = (
+        adapter.improve_phase4_seed_with_unused_bev_neighborhood(
+            problem,
+            OptimizationConfig(
+                phase4_phase3_seed_unused_bev_neighborhood_enabled=True,
+                phase4_phase3_seed_unused_bev_neighborhood_time_limit_sec=30,
+                phase4_phase3_seed_unused_bev_neighborhood_per_solve_sec=1,
+                phase4_phase3_seed_unused_bev_neighborhood_max_evaluations=9,
+                phase4_phase3_seed_powertrain_duty_swap_rounds=1,
+                phase4_phase3_seed_unused_bev_identity_exchange_rounds=0,
+            ),
+            seed,
+        )
+    )
+
+    assert local_search_audit["local_search_evaluation_reserve"] == 7
+    assert local_search_audit["pairwise_evaluation_limit"] == 1
+    assert local_search_audit["completed_sequential_activation_rounds"] == 1
+    assert local_search_audit["selected_used_bev"] == 2
+    assert len(local_search_selected.duties_by_vehicle()) == 4
+    assert any(
+        str(row["candidate_kind"]).startswith(
+            "sequential_whole_duty_activation_round_"
+        )
+        for row in local_search_audit["candidate_evaluations"]
+    )
+    assert any(
+        str(row["candidate_kind"]).startswith(
+            "powertrain_duty_swap_round_"
+        )
+        for row in local_search_audit["candidate_evaluations"]
     )
 
 

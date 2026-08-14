@@ -1,5 +1,31 @@
 # Current research release blockers
 
+## 2026-08-15 stronger seed found diagnostically; fresh formal run pending
+
+The literature audit confirms that many published hundreds-of-seconds results
+solve fixed-assignment energy dispatch, a decomposed relaxation, or a heuristic
+rather than the current complete individual-trip integrated MILP. Nevertheless,
+the comparison exposed a local implementation defect: the production
+64-candidate seed budget could be exhausted before enabled trip-chain and
+route-band neighborhoods were reached.
+
+The seed search now reserves fixed-duty local-search capacity, restarts
+whole-duty BEV activation from a newly improved incumbent, and gives route-band
+repartition a separate finite candidate allowance consistent with its separate
+wall-clock budget. All candidates still require exact fixed-assignment Stage 2,
+independent physical validation, and canonical accounting. The integrated
+feasible region, objective, full successor network, and declared 1% gap remain
+unchanged.
+
+A diagnostic reconstruction of the preserved `8066330` low-PV seed reproduced
+707,518.152327 JPY at 13 BEVs/19 ICEs. The revised fixed-duty neighborhood found
+697,433.686483 JPY at 15 BEVs/17 ICEs in 32.178553 seconds. Against the unchanged
+694,498.136390 JPY independent lower bound, this candidate is within 0.420907%.
+This is not a current-SHA formal run and cannot clear Phase 0. A clean commit,
+fresh Prepare, normal frontend/BFF formal execution, accepted 24-step Rolling,
+physical validation, accounting reconciliation, and artifact completeness are
+still required. Research release remains **BLOCKED** until that evidence exists.
+
 ## 2026-08-14 Phase 4 time-limit defect repaired; fresh timing evidence pending
 
 The clean-SHA diagnostic

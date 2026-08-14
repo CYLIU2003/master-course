@@ -2607,7 +2607,7 @@ class GurobiMILPAdapter:
         )
         audit: Dict[str, Any] = {
             "schema_version": (
-                "phase4_seed_unused_bev_activation_neighborhood_v4"
+                "phase4_seed_unused_bev_activation_neighborhood_v5"
             ),
             "enabled": enabled,
             "role": "feasible_upper_bound_candidate_generation_only",
@@ -2755,11 +2755,12 @@ class GurobiMILPAdapter:
                 {},
             )
         ]
+        candidate_evaluation_limit = max_evaluations
 
         def _budget_available() -> bool:
             return bool(
                 not direct_full_retirement_improvement_selected
-                and len(evaluation_rows) < max_evaluations
+                and len(evaluation_rows) < candidate_evaluation_limit
                 and time.monotonic() < deadline
             )
 
@@ -3014,37 +3015,85 @@ class GurobiMILPAdapter:
         # symmetry class and expand a feasible edge to all members.  This keeps
         # the matching exact while avoiding repeated Stage-2 solves whose only
         # difference is an otherwise solver-identical vehicle identifier.
-        unused_bev_id_set = set(unused_bev_ids)
-        unused_bev_equivalence_classes: List[Tuple[str, ...]] = []
-        grouped_unused_bev_ids: Set[str] = set()
-        for exact_clone_group in _ordered_identical_vehicle_groups(problem):
-            unused_members = tuple(
-                sorted(unused_bev_id_set.intersection(exact_clone_group))
-            )
-            if not unused_members:
-                continue
-            unused_bev_equivalence_classes.append(unused_members)
-            grouped_unused_bev_ids.update(unused_members)
-        for vehicle_id in sorted(
-            unused_bev_id_set.difference(grouped_unused_bev_ids)
-        ):
-            unused_bev_equivalence_classes.append((vehicle_id,))
-        unused_bev_equivalence_classes.sort(key=lambda group: group[0])
+        def _unused_bev_clone_classes(
+            used_vehicle_id_set: Set[str],
+        ) -> List[Tuple[str, ...]]:
+            unused_bev_id_set = {
+                vehicle_id
+                for vehicle_id, vehicle in vehicle_by_id.items()
+                if bool(getattr(vehicle, "available", True))
+                and _is_electric(vehicle_id)
+                and vehicle_id not in used_vehicle_id_set
+            }
+            equivalence_classes: List[Tuple[str, ...]] = []
+            grouped_unused_bev_ids: Set[str] = set()
+            for exact_clone_group in _ordered_identical_vehicle_groups(
+                problem
+            ):
+                unused_members = tuple(
+                    sorted(
+                        unused_bev_id_set.intersection(exact_clone_group)
+                    )
+                )
+                if not unused_members:
+                    continue
+                equivalence_classes.append(unused_members)
+                grouped_unused_bev_ids.update(unused_members)
+            for vehicle_id in sorted(
+                unused_bev_id_set.difference(grouped_unused_bev_ids)
+            ):
+                equivalence_classes.append((vehicle_id,))
+            equivalence_classes.sort(key=lambda group: group[0])
+            return equivalence_classes
+
+        unused_bev_equivalence_classes = _unused_bev_clone_classes(
+            used_vehicle_ids
+        )
         pairwise_representative_evaluation_count = 0
         inferred_equivalent_adjacency_count = 0
+        # Preserve an explicit tail budget for the duty-path neighborhoods.
+        # The former split reserved the entire remainder for matching
+        # validation.  With the frontend's 64-evaluation setting that made the
+        # suffix-exchange, powertrain-swap, and identity-exchange loops
+        # unreachable even when they were enabled.  Those neighborhoods are
+        # the only ones that can change trip chains instead of merely replacing
+        # a whole-duty vehicle ID, so starving them materially weakens the
+        # feasible upper bound supplied to Phase 4.
+        local_search_evaluation_reserve = 0
+        if powertrain_duty_swap_round_limit > 0:
+            remaining_candidate_slots = max(
+                max_evaluations - len(evaluation_rows),
+                0,
+            )
+            local_search_evaluation_reserve = min(
+                max(8, max_evaluations // 4),
+                # Leave at least one representative edge and one matching
+                # validation slot whenever the remaining budget permits it.
+                max(remaining_candidate_slots - 2, 0),
+            )
+
         # Preserve enough evaluations for one full matching check and a
         # cumulative prefix check for every active ICE duty.  Without this
-        # reserve, a source-major Cartesian scan can consume the entire cap on
-        # the first few ICE duties and never validate the matching it built.
+        # reserve, a source-major Cartesian scan can consume the pairwise
+        # budget on the first few ICE duties and never validate the matching
+        # it built.
+        matching_reservable_slots = max(
+            max_evaluations
+            - len(evaluation_rows)
+            - local_search_evaluation_reserve,
+            0,
+        )
         matching_validation_evaluation_reserve = min(
             len(active_ice_ids) + 1,
             # Always leave room for at least one pairwise observation when a
             # candidate slot remains; a matching reserve is useless without
             # an independently validated edge.
-            max(max_evaluations - len(evaluation_rows) - 1, 0),
+            max(matching_reservable_slots - 1, 0),
         )
         pairwise_evaluation_limit = max(
-            max_evaluations - matching_validation_evaluation_reserve,
+            max_evaluations
+            - matching_validation_evaluation_reserve
+            - local_search_evaluation_reserve,
             len(evaluation_rows),
         )
         matching_validation_wall_reserve_sec = min(
@@ -3734,6 +3783,205 @@ class GurobiMILPAdapter:
                 _assignment_hash(item[3]),
             ),
         )
+        completed_sequential_activation_rounds = 0
+        sequential_activation_round_audits: List[Dict[str, Any]] = []
+        # Pairwise replacement above is anchored to the original Stage-3
+        # solution.  Once it finds an improvement, evaluate another whole-duty
+        # activation from that improved anchor.  Without this restart the
+        # search can discover a beneficial 13->14 BEV move but can never test
+        # the economically distinct 14->15 move in the same formal run.
+        downstream_neighborhood_evaluation_reserve = min(
+            4,
+            max(max_evaluations - len(evaluation_rows) - 1, 0),
+        )
+        sequential_activation_evaluation_limit = max(
+            max_evaluations - downstream_neighborhood_evaluation_reserve,
+            len(evaluation_rows),
+        )
+        for round_index in range(
+            1,
+            powertrain_duty_swap_round_limit + 1,
+        ):
+            if (
+                not _budget_available()
+                or len(evaluation_rows)
+                >= sequential_activation_evaluation_limit
+            ):
+                break
+            anchor_plan = best_cost_result[3]
+            anchor_cost = float(best_cost_result[0])
+            anchor_used_ids = set(anchor_plan.duties_by_vehicle())
+            anchor_active_ice_ids = sorted(
+                vehicle_id
+                for vehicle_id in anchor_used_ids
+                if not _is_electric(vehicle_id)
+            )
+            anchor_unused_bev_classes = _unused_bev_clone_classes(
+                anchor_used_ids
+            )
+            if not anchor_active_ice_ids or not anchor_unused_bev_classes:
+                break
+
+            round_results: List[
+                Tuple[
+                    float,
+                    int,
+                    int,
+                    AssignmentPlan,
+                    str,
+                    Mapping[str, str],
+                ]
+            ] = []
+            round_evaluation_start_count = len(evaluation_rows)
+            first_improvement_evaluation_index: Optional[int] = None
+            restart_after_evaluation_index: Optional[int] = None
+            target_classes_by_source: Dict[
+                str,
+                Tuple[Tuple[str, ...], ...],
+            ] = {}
+            for source_vehicle_index, source_vehicle_id in enumerate(
+                anchor_active_ice_ids
+            ):
+                source_vehicle = vehicle_by_id.get(source_vehicle_id)
+                if source_vehicle is None:
+                    continue
+                depot_target_classes = tuple(
+                    target_class
+                    for target_class in anchor_unused_bev_classes
+                    if str(
+                        getattr(
+                            vehicle_by_id.get(target_class[0]),
+                            "home_depot_id",
+                            "",
+                        )
+                    )
+                    == str(source_vehicle.home_depot_id)
+                )
+                if depot_target_classes:
+                    rotation = source_vehicle_index % len(
+                        depot_target_classes
+                    )
+                    depot_target_classes = (
+                        depot_target_classes[rotation:]
+                        + depot_target_classes[:rotation]
+                    )
+                target_classes_by_source[source_vehicle_id] = (
+                    depot_target_classes
+                )
+
+            maximum_target_round_count = max(
+                (
+                    len(target_classes)
+                    for target_classes in target_classes_by_source.values()
+                ),
+                default=0,
+            )
+            stop_round = False
+            for target_round_index in range(maximum_target_round_count):
+                for source_vehicle_id in anchor_active_ice_ids:
+                    target_classes = target_classes_by_source.get(
+                        source_vehicle_id,
+                        (),
+                    )
+                    if target_round_index >= len(target_classes):
+                        continue
+                    if (
+                        not _budget_available()
+                        or len(evaluation_rows)
+                        >= sequential_activation_evaluation_limit
+                    ):
+                        stop_round = True
+                        break
+                    target_class = target_classes[target_round_index]
+                    target_vehicle_id = target_class[0]
+                    replacements = {
+                        source_vehicle_id: target_vehicle_id,
+                    }
+                    candidate_plan = _remap_plan_vehicle_ids(
+                        anchor_plan,
+                        replacement_by_source_vehicle=replacements,
+                        vehicle_type_by_id=vehicle_type_by_id,
+                        candidate_source=(
+                            "phase4_seed_sequential_unused_bev_activation"
+                        ),
+                    )
+                    result = _evaluate_candidate(
+                        candidate_plan,
+                        candidate_kind=(
+                            "sequential_whole_duty_activation_round_"
+                            f"{round_index}"
+                        ),
+                        replacements=replacements,
+                        candidate_details={
+                            "anchor_cost_jpy": anchor_cost,
+                            "evaluated_target_vehicle_id": (
+                                target_vehicle_id
+                            ),
+                            "exact_clone_equivalent_target_vehicle_ids": (
+                                list(target_class)
+                            ),
+                            "restart_from_improved_anchor": True,
+                        },
+                    )
+                    if result is not None:
+                        round_results.append(result)
+                        if (
+                            float(result[0]) < anchor_cost - 1.0e-6
+                            and first_improvement_evaluation_index is None
+                        ):
+                            first_improvement_evaluation_index = len(
+                                evaluation_rows
+                            )
+                            restart_after_evaluation_index = min(
+                                first_improvement_evaluation_index
+                                + _SUFFIX_EXCHANGE_RESTART_PATIENCE_EVALUATIONS,
+                                sequential_activation_evaluation_limit,
+                            )
+                    if (
+                        restart_after_evaluation_index is not None
+                        and len(evaluation_rows)
+                        >= restart_after_evaluation_index
+                    ):
+                        stop_round = True
+                        break
+                if stop_round:
+                    break
+
+            completed_sequential_activation_rounds = round_index
+            improving_results = [
+                result
+                for result in round_results
+                if float(result[0]) < anchor_cost - 1.0e-6
+            ]
+            sequential_activation_round_audits.append(
+                {
+                    "round_index": round_index,
+                    "anchor_cost_jpy": anchor_cost,
+                    "evaluated_candidate_count": (
+                        len(evaluation_rows) - round_evaluation_start_count
+                    ),
+                    "feasible_candidate_count": len(round_results),
+                    "feasible_improving_candidate_count": len(
+                        improving_results
+                    ),
+                    "first_improvement_evaluation_index": (
+                        first_improvement_evaluation_index
+                    ),
+                    "restart_after_evaluation_index": (
+                        restart_after_evaluation_index
+                    ),
+                }
+            )
+            if not improving_results:
+                break
+            best_cost_result = min(
+                improving_results,
+                key=lambda item: (
+                    item[0],
+                    _assignment_hash(item[3]),
+                ),
+            )
+
         completed_powertrain_duty_swap_rounds = 0
         suffix_exchange_candidates_generated = 0
         suffix_exchange_candidates_dispatch_feasible = 0
@@ -4241,11 +4489,26 @@ class GurobiMILPAdapter:
             fixed_duty_termination_reason = "neighborhood_exhausted"
 
         route_band_started: Optional[float] = None
+        # Route-band repartition has an explicit wall-clock budget separate
+        # from the fixed-duty neighborhood.  It must also have a separate
+        # candidate budget: otherwise a fixed-duty search that exactly reaches
+        # ``max_evaluations`` silently disables route-band repartition despite
+        # the audit reporting it as enabled.  One full Stage-2 validation can
+        # be produced per active ICE route-band group, so the active ICE count
+        # is a conservative finite upper bound.
+        route_band_additional_evaluation_limit = (
+            len(active_ice_ids)
+            if (
+                route_band_wall_limit_sec > 0
+                and fixed_route_band_mode
+                and powertrain_duty_swap_round_limit > 0
+            )
+            else 0
+        )
         if (
             route_band_wall_limit_sec > 0
             and fixed_route_band_mode
             and powertrain_duty_swap_round_limit > 0
-            and len(evaluation_rows) < max_evaluations
             and not direct_full_retirement_improvement_selected
         ):
             # Preserve the proven fixed-duty search budget.  Route-band
@@ -4259,6 +4522,9 @@ class GurobiMILPAdapter:
                 ),
             )
             route_band_started = time.monotonic()
+            candidate_evaluation_limit = (
+                max_evaluations + route_band_additional_evaluation_limit
+            )
             deadline = route_band_started + float(route_band_wall_limit_sec)
             _route_band_repartition_candidates(best_cost_result[3])
 
@@ -4312,7 +4578,7 @@ class GurobiMILPAdapter:
             termination_reason = (
                 "direct_full_ice_retirement_strict_cost_improvement"
             )
-        elif len(evaluation_rows) >= max_evaluations:
+        elif len(evaluation_rows) >= candidate_evaluation_limit:
             termination_reason = "maximum_candidate_evaluations_reached"
         elif time.monotonic() >= deadline:
             termination_reason = "wall_time_limit_reached"
@@ -4364,6 +4630,13 @@ class GurobiMILPAdapter:
                     maximum_bev_assignment_hash
                 ),
                 "candidate_evaluation_count": len(evaluation_rows),
+                "fixed_duty_maximum_candidate_evaluations": max_evaluations,
+                "route_band_additional_evaluation_limit": (
+                    route_band_additional_evaluation_limit
+                ),
+                "total_candidate_evaluation_limit": (
+                    candidate_evaluation_limit
+                ),
                 "unused_bev_exact_clone_equivalence_classes": [
                     list(group)
                     for group in unused_bev_equivalence_classes
@@ -4377,8 +4650,23 @@ class GurobiMILPAdapter:
                 "completed_pairwise_round_count": (
                     completed_pairwise_round_count
                 ),
+                "completed_sequential_activation_rounds": (
+                    completed_sequential_activation_rounds
+                ),
+                "sequential_activation_evaluation_limit": (
+                    sequential_activation_evaluation_limit
+                ),
+                "downstream_neighborhood_evaluation_reserve": (
+                    downstream_neighborhood_evaluation_reserve
+                ),
+                "sequential_activation_round_audits": (
+                    sequential_activation_round_audits
+                ),
                 "matching_validation_evaluation_reserve": (
                     matching_validation_evaluation_reserve
+                ),
+                "local_search_evaluation_reserve": (
+                    local_search_evaluation_reserve
                 ),
                 "pairwise_evaluation_limit": pairwise_evaluation_limit,
                 "matching_validation_wall_reserve_sec": (

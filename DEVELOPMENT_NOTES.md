@@ -1,5 +1,54 @@
 # Development Notes
 
+## 2026-08-15: literature-driven Phase 4 seed restart and budget repair
+
+- Reviewed the local `先行文献` corpus instead of assuming that reported
+  computational times were directly comparable. No16, No61, and No63 obtain
+  seconds-to-hundreds-of-seconds results mainly with fixed vehicle operations;
+  No63's fastest results use decomposition. No06 is the closest integrated
+  dispatch comparison: exact Gurobi took 617.6 seconds for 50 trips and found
+  no feasible solution for 200/418 trips within six hours, while ALNS-SA solved
+  418 trips in 202.3 seconds. The current exact model has 780,112 variables and
+  678,600 vehicle-indexed successor arcs, so candidate time, incumbent time,
+  certification time, and end-to-end time must remain separate metrics.
+- Raised and fixed a P1 candidate-budget defect. With the production
+  `maximum_candidate_evaluations=64`, direct/pairwise checks plus matching
+  validation could exhaust all 64 slots. The enabled suffix-exchange,
+  powertrain-swap, and identity-exchange loops then executed zero candidates.
+  The fixed-duty search now reserves a bounded local-search tail before
+  allocating pairwise/matching work.
+- Added sequential whole-duty activation restarts. After an exact
+  fixed-assignment Stage-2/physical/accounting validation improves the seed,
+  the next activation round is anchored on that new incumbent, allowing the
+  search to evaluate 13->14->15 BEV transitions rather than only alternatives
+  to the original 13-BEV seed. Exact clone classes and depot compatibility are
+  preserved, and the final unrestricted Phase 4 MILP remains authoritative.
+- Raised and fixed a second P1 budget-contract defect. Route-band repartition
+  advertised a separate wall-clock budget, but the shared candidate limit
+  silently disabled it whenever fixed-duty search reached the cap. It now has
+  a finite additional candidate allowance bounded by the number of active ICE
+  duties, and a regression test exhausts the fixed-duty limit before proving
+  that route-band repartition still executes and receives full Stage-2
+  validation.
+- Diagnostic reconstruction of the exact `8066330` low-PV pre-neighborhood
+  13-BEV/19-ICE seed reproduced 707,518.152327 JPY. Under the frontend
+  75-second/3-second/64-candidate controls, the revised fixed-duty search used
+  32.178553 seconds and selected a validated 15-BEV/17-ICE incumbent at
+  697,433.686483 JPY. Against the unchanged independent lower bound of
+  694,498.136390 JPY, the certified gap is 0.420907%. This is a diagnostic
+  replay from preserved input, not fresh formal evidence; no older output is
+  relabelled and a clean current-SHA frontend run remains mandatory.
+- Mathematical scope is unchanged: no weather bias, BEV lower bound,
+  post-solve repair, objective change, feasibility relaxation, or 1% gate
+  relaxation was introduced. The audit schema is now
+  `phase4_seed_unused_bev_activation_neighborhood_v5` and records all reserved
+  limits, sequential rounds, route-band allowance, and evaluated candidates.
+- Focused neighborhood and integrated-cost regression passed (`75 passed`).
+  The first complete-suite attempt had one transient missing-metadata failure
+  in an unrelated tiny MILP consistency test; that test passed immediately in
+  isolation and the complete suite then passed cleanly (`1473 passed in
+  144.20s`). No failure is suppressed or xfailed.
+
 ## 2026-08-15: fail-closed thesis Phase 0--7 ledger
 
 - Raised a P1 research-governance defect: provenance, physical validation,
