@@ -1,5 +1,32 @@
 # master-course
 
+## 2026-08-15 pure layered ICE-clone network
+
+- Removed the remaining vehicle-labelled continuous assignment, connection,
+  start, and end extension for a certified exact ICE-clone group. Trip coverage
+  now consumes the binary group assignment directly; direct connections and
+  canonical depot resets are represented only by the integral layered network.
+  The complete successor network, route-band policy, startup feasibility,
+  path count, fuel, CO2, fixed/vehicle-day cost, and objective coefficients are
+  unchanged.
+- Individual clone activation variables remain binary only to select a
+  canonical prefix of IDs. The solved integral paths are decomposed onto that
+  same prefix, so representation recovery changes no selected trip,
+  connection, fragment, used-vehicle count, or cost. Phase-3 warm starts now
+  seed aggregate/layer/reset variables directly instead of requiring removed
+  label-flow variables. A certified group is selected only when the audit
+  proves a strictly positive binary-variable reduction; small groups whose
+  layered network would be no smaller remain on the original formulation.
+- A one-trip exact comparison reduces the actual initial model from 398 to 300
+  variables and from 58 to 55 binaries while matching the discrete objective,
+  duty count, served trips, and recovered vehicle ID. Single- and two-fragment
+  exact-clone tests pass; the integrated file passes (`68 passed`), the focused
+  research/fragment/oracle/accounting set passes (`130 passed`), and the full
+  regression passes (`1491 passed` in 153.92 seconds).
+- This is formulation and regression evidence only. No 264-trip runtime or gap
+  improvement is claimed until a fresh frontend/BFF run from the frozen clean
+  commit completes. Research release remains `BLOCKED`.
+
 ## 2026-08-15 literature-checked layered ICE-clone aggregation
 
 - The local literature folder was rechecked against the PDF tables rather than

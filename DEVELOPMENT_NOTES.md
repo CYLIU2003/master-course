@@ -1,5 +1,48 @@
 # Development Notes
 
+## 2026-08-15: removed continuous exact-clone label extension
+
+- Raised the next P1 performance defect from the `f1690c6` negative run: the
+  layered aggregate network reduced binaries and rows but retained all 302,600
+  vehicle-labelled assignment/connection/boundary variables as a continuous
+  extension, increasing the 264-trip model to 848,980 variables and leaving
+  the root proof unchanged.
+- Replaced that extended formulation with a pure integral group network for
+  the one certified ICE-clone group. The four vehicle-labelled flow families
+  are not instantiated for those members. Strict coverage includes the group
+  assignment variable directly; single-fragment and layered flow equations
+  enforce exact path cover, and canonical depot-reset arcs connect successive
+  fragments.
+- Preserved every omitted label-specific coefficient through the certified
+  representative: trip fuel, connection deadhead fuel/distance, startup and
+  terminal-return fuel, CO2, weather-policy coefficient, and return-leg term.
+  Driver cost still blocks aggregation because it is path-label-specific.
+  Per-vehicle fuel state remains omitted only under the existing conservative
+  `K * longest_fragment_fuel <= usable_initial_fuel` proof.
+- Retained binary clone activation only for canonical ID selection, added an
+  activation prefix, and tied its sum to the integral root-path count. Recovery
+  assigns every layered path to the same canonical prefix. Phase-3 warm-start
+  initialization now treats those duties as aggregate-represented, seeds all
+  aggregate/layer/reset decisions, and overwrites activation starts with the
+  canonical prefix before fixed-dispatch recourse certification.
+- Updated the audit to
+  `exact_combustion_clone_flow_aggregation_audit_v3`. It distinguishes removed
+  label-flow variables from retained activation binaries and reports pure
+  aggregate semantics; it no longer describes the labelled feasible region as
+  relaxed. Application now additionally requires a strictly positive audited
+  binary-variable reduction, preventing the layered representation from
+  increasing small models.
+- Exact regression compares the pure and discrete formulations' objective,
+  served trips, path count and recovered IDs, and verifies actual model-size
+  reduction (398 -> 300 variables; 58 -> 55 binaries) on the one-trip fixture.
+  Two-fragment recovery and complete Phase-3-to-Phase-4 starts also pass. The
+  integrated test file passes (`68 passed`), the focused fragment/oracle/
+  feedback/research/accounting set passes (`130 passed`), and the full suite
+  passes (`1491 passed` in 153.92 seconds).
+- This entry records implementation evidence, not 264-trip performance. A
+  frozen clean commit and fresh frontend/BFF diagnostic are required before
+  updating solve-time or gap claims. Research release remains `BLOCKED`.
+
 ## 2026-08-15: literature-checked multi-fragment exact clone network
 
 - Re-read the computation-time tables in `先行文献/No06.pdf`, `No16.pdf`,

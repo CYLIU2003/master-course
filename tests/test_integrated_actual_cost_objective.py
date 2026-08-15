@@ -1099,13 +1099,14 @@ def test_exact_ice_clone_flow_audit_certifies_redundant_fuel_state() -> None:
     assert audit["applied"] is False
     assert audit["integer_feasible_set_changed"] is False
     assert audit["certified_candidate_group_count"] == 1
-    assert audit["potential_binary_variable_reduction"] == 6
+    assert audit["potential_binary_variable_reduction"] == 2
     group = audit["groups"][0]
     assert group["certified_candidate"] is True
     assert group["finite_fuel_constraints_proved_redundant"] is True
     assert group["fuel_redundancy_margin_l"] >= 0.0
     assert group["longest_possible_duty_trip_ids"] == ("t1",)
     assert group["fragment_layer_count"] == 1
+    assert group["vehicle_label_flow_variable_count_removed"] == 6
     assert group["conservative_max_daily_fuel_l"] == pytest.approx(
         group["longest_possible_duty_fuel_l"]
     )
@@ -1277,6 +1278,18 @@ def test_phase4_exact_ice_clone_convexification_preserves_objective() -> None:
 
     assert aggregated_outcome.has_feasible_incumbent
     assert discrete_outcome.has_feasible_incumbent
+    assert (
+        aggregated_outcome.presolve_reduction_summary["initial_num_vars"]
+        < discrete_outcome.presolve_reduction_summary["initial_num_vars"]
+    )
+    assert (
+        aggregated_outcome.presolve_reduction_summary[
+            "initial_num_bin_vars"
+        ]
+        < discrete_outcome.presolve_reduction_summary[
+            "initial_num_bin_vars"
+        ]
+    )
     assert aggregated_plan.metadata["objective_value"] == pytest.approx(
         discrete_plan.metadata["objective_value"]
     )
@@ -1289,6 +1302,18 @@ def test_phase4_exact_ice_clone_convexification_preserves_objective() -> None:
         "integrated_exact_combustion_clone_flow_aggregation_audit"
     ]
     assert aggregation_audit["net_binary_variable_reduction"] > 0
+    assert aggregation_audit["binary_label_variable_count_relaxed"] == 0
+    assert (
+        aggregation_audit["vehicle_label_flow_variable_count_removed"]
+        > 0
+    )
+    assert (
+        aggregation_audit["labeled_extended_feasible_region_relaxed"]
+        is False
+    )
+    assert aggregation_audit["formulation_semantics"].startswith(
+        "pure_binary_group_assignment_connection_boundary_flow"
+    )
     assert aggregation_audit["recovered_path_count"] == 1
     assert aggregation_audit["recovered_vehicle_ids"] == ("ICE_001",)
     discrete_audit = discrete_plan.metadata[
@@ -1354,6 +1379,10 @@ def test_phase4_exact_ice_clone_convexification_preserves_path_count() -> None:
 
 def test_phase4_exact_ice_clone_convexification_preserves_two_fragment_duty() -> None:
     base = _exact_ice_clone_problem()
+    two_fragment_vehicles = tuple(
+        replace(base.vehicles[0], vehicle_id=f"ICE_{index:03d}")
+        for index in range(1, 5)
+    )
     first_dispatch_trip = replace(
         base.dispatch_context.trips[0],
         trip_id="fragment-1",
@@ -1399,6 +1428,7 @@ def test_phase4_exact_ice_clone_convexification_preserves_two_fragment_duty() ->
             trips=(first_dispatch_trip, second_dispatch_trip),
         ),
         trips=(first_problem_trip, second_problem_trip),
+        vehicles=two_fragment_vehicles,
         feasible_connections={"fragment-1": (), "fragment-2": ()},
         metadata=common_metadata,
     )
@@ -1453,6 +1483,7 @@ def test_phase4_exact_ice_clone_convexification_preserves_two_fragment_duty() ->
         "integrated_exact_combustion_clone_flow_aggregation_audit"
     ]
     assert aggregation_audit["applied"] is True
+    assert aggregation_audit["net_binary_variable_reduction"] > 0
     assert aggregation_audit["fragment_layer_count"] == 2
     assert aggregation_audit["fragment_reset_variable_count"] > 0
     assert aggregation_audit["recovered_path_count"] == 1

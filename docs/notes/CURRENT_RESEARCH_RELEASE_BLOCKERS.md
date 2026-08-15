@@ -1,5 +1,30 @@
 # Current research release blockers
 
+## 2026-08-15 pure aggregate implementation complete; measurement pending
+
+The continuous vehicle-label extension identified by the `f1690c6` negative
+run has now been removed for the certified exact ICE-clone group. Its
+assignment, direct connection, start and end decisions exist only in the
+integral group/layer/reset network. Strict coverage and all representative
+fuel, deadhead, CO2, fixed-cost and vehicle-day coefficients are attached
+directly to that network; canonical vehicle IDs are recovered from integral
+paths, not repaired. The optimization applies this representation only when
+the certificate also shows a strictly positive binary-variable reduction, so
+nonreducing small groups retain their original discrete flow.
+
+Small exact comparisons match the original discrete objective, coverage,
+path count and used IDs while reducing the one-trip model from 398 to 300
+variables. Single- and two-fragment recovery, complete warm starts, focused
+research-contract tests and all 1,491 repository tests pass. The audit schema
+is now `exact_combustion_clone_flow_aggregation_audit_v3` and explicitly
+records that zero continuous label-flow variables remain.
+
+This closes the implementation defect but not the research proof gate. The
+264-trip effect on variables, construction time, solve time, incumbent and
+certified gap has not yet been measured from a frozen clean commit. Until that
+fresh frontend/BFF diagnostic meets the declared 1% target and all downstream
+gates, research release remains **BLOCKED**.
+
 ## 2026-08-15 exact proof-performance repairs measured; proof blocker remains
 
 The first independent BEV-coefficient run established a valid schedule but

@@ -5370,16 +5370,28 @@ class GurobiMILPAdapter:
             exact_clone_application_blockers.append(
                 "driver_cost_requires_path_specific_integer_labels"
             )
-        certified_clone_group_records = tuple(
+        all_certified_clone_group_records = tuple(
             record
             for record in integrated_exact_clone_flow_aggregation_audit.get(
                 "groups", ()
             )
             if bool(record.get("certified_candidate"))
         )
-        if not certified_clone_group_records:
+        certified_clone_group_records = tuple(
+            record
+            for record in all_certified_clone_group_records
+            if int(
+                record.get("potential_binary_variable_reduction", 0) or 0
+            )
+            > 0
+        )
+        if not all_certified_clone_group_records:
             exact_clone_application_blockers.append(
                 "no_certified_combustion_clone_group"
+            )
+        elif not certified_clone_group_records:
+            exact_clone_application_blockers.append(
+                "no_certified_clone_group_with_positive_binary_reduction"
             )
         selected_clone_group_record: Optional[Mapping[str, Any]] = None
         if not exact_clone_application_blockers:
@@ -5407,15 +5419,32 @@ class GurobiMILPAdapter:
             )
         )
 
+        # A certified exact-clone group is represented only by the integral
+        # layered aggregate network below.  Do not retain a vehicle-labelled
+        # continuous extension: it duplicates the dominant connection family
+        # and makes the root relaxation larger without adding physical
+        # information.  Canonical vehicle IDs are restored by deterministic
+        # integral path decomposition after the solve.
+        integrated_assignment_variable_keys = tuple(
+            key
+            for key in assignment_pairs
+            if str(key[0]) not in exact_clone_convexified_vehicle_ids
+        )
+        integrated_connection_variable_keys = tuple(
+            key
+            for key in arc_pairs
+            if str(key[0]) not in exact_clone_convexified_vehicle_ids
+        )
+
         integrated_bulk_variable_build_started_at = time.perf_counter()
         integrated_bulk_variable_build_audit = {"api_call_count": 0}
         y: Dict[Tuple[str, str], Any] = (
             _add_vehicle_indexed_unit_interval_vars(
                 model=model,
-                keys=assignment_pairs,
+                keys=integrated_assignment_variable_keys,
                 binary_vtype=GRB.BINARY,
                 continuous_vtype=GRB.CONTINUOUS,
-                continuous_vehicle_ids=exact_clone_convexified_vehicle_ids,
+                continuous_vehicle_ids=(),
                 audit=integrated_bulk_variable_build_audit,
             )
         )
@@ -5436,10 +5465,10 @@ class GurobiMILPAdapter:
         x: Dict[Tuple[str, str, str], Any] = (
             _add_vehicle_indexed_unit_interval_vars(
                 model=model,
-                keys=arc_pairs,
+                keys=integrated_connection_variable_keys,
                 binary_vtype=GRB.BINARY,
                 continuous_vtype=GRB.CONTINUOUS,
-                continuous_vehicle_ids=exact_clone_convexified_vehicle_ids,
+                continuous_vehicle_ids=(),
                 audit=integrated_bulk_variable_build_audit,
             )
         )
@@ -5447,20 +5476,20 @@ class GurobiMILPAdapter:
         start_arc: Dict[Tuple[str, str], Any] = (
             _add_vehicle_indexed_unit_interval_vars(
                 model=model,
-                keys=assignment_pairs,
+                keys=integrated_assignment_variable_keys,
                 binary_vtype=GRB.BINARY,
                 continuous_vtype=GRB.CONTINUOUS,
-                continuous_vehicle_ids=exact_clone_convexified_vehicle_ids,
+                continuous_vehicle_ids=(),
                 audit=integrated_bulk_variable_build_audit,
             )
         )
         end_arc: Dict[Tuple[str, str], Any] = (
             _add_vehicle_indexed_unit_interval_vars(
                 model=model,
-                keys=assignment_pairs,
+                keys=integrated_assignment_variable_keys,
                 binary_vtype=GRB.BINARY,
                 continuous_vtype=GRB.CONTINUOUS,
-                continuous_vehicle_ids=exact_clone_convexified_vehicle_ids,
+                continuous_vehicle_ids=(),
                 audit=integrated_bulk_variable_build_audit,
             )
         )
@@ -5503,22 +5532,16 @@ class GurobiMILPAdapter:
         used_vehicle_day: Dict[Tuple[str, int], Any] = {}
         for vehicle in problem.vehicles:
             vehicle_id = str(vehicle.vehicle_id)
-            is_convexified_label = (
-                vehicle_id in exact_clone_convexified_vehicle_ids
-            )
-            variable_type = (
-                GRB.CONTINUOUS if is_convexified_label else GRB.BINARY
-            )
             used_vehicle[vehicle_id] = model.addVar(
                 lb=0.0,
                 ub=1.0,
-                vtype=variable_type,
+                vtype=GRB.BINARY,
             )
             for day_idx in day_indices:
                 used_vehicle_day[(vehicle_id, day_idx)] = model.addVar(
                     lb=0.0,
                     ub=1.0,
-                    vtype=variable_type,
+                    vtype=GRB.BINARY,
                 )
 
         exact_clone_aggregate_assignment: Dict[str, Any] = {}
@@ -5641,39 +5664,21 @@ class GurobiMILPAdapter:
                         f"g{selected_group_index}__{trip_id}"
                     ),
                 )
-                model.addConstr(
-                    exact_clone_aggregate_assignment[trip_id]
-                    == gp.quicksum(
-                        y[(vehicle_id, trip_id)]
-                        for vehicle_id in selected_member_ids
-                    ),
-                    name=(
-                        "exact_clone_group_assignment_link__"
-                        f"g{selected_group_index}__{trip_id}"
-                    ),
+                representative_assignment_key = (
+                    representative_vehicle_id,
+                    trip_id,
                 )
-                model.addConstr(
-                    exact_clone_aggregate_start[trip_id]
-                    == gp.quicksum(
-                        start_arc[(vehicle_id, trip_id)]
-                        for vehicle_id in selected_member_ids
-                    ),
-                    name=(
-                        "exact_clone_group_start_link__"
-                        f"g{selected_group_index}__{trip_id}"
-                    ),
-                )
-                model.addConstr(
-                    exact_clone_aggregate_end[trip_id]
-                    == gp.quicksum(
-                        end_arc[(vehicle_id, trip_id)]
-                        for vehicle_id in selected_member_ids
-                    ),
-                    name=(
-                        "exact_clone_group_end_link__"
-                        f"g{selected_group_index}__{trip_id}"
-                    ),
-                )
+                if not startup_feasible_by_assignment.get(
+                    representative_assignment_key,
+                    True,
+                ):
+                    model.addConstr(
+                        exact_clone_aggregate_start[trip_id] == 0,
+                        name=(
+                            "exact_clone_group_startup_feasible__"
+                            f"g{selected_group_index}__{trip_id}"
+                        ),
+                    )
             for from_trip_id, to_trip_id in selected_transition_pairs:
                 key = (from_trip_id, to_trip_id)
                 exact_clone_aggregate_connection[key] = model.addVar(
@@ -5684,18 +5689,42 @@ class GurobiMILPAdapter:
                         f"{to_trip_id}"
                     ),
                 )
-                model.addConstr(
-                    exact_clone_aggregate_connection[key]
-                    == gp.quicksum(
-                        x[(vehicle_id, from_trip_id, to_trip_id)]
-                        for vehicle_id in selected_member_ids
-                    ),
-                    name=(
-                        "exact_clone_group_connection_link__"
-                        f"g{selected_group_index}__{from_trip_id}__"
-                        f"{to_trip_id}"
-                    ),
-                )
+            if selected_fragment_layer_count == 1:
+                aggregate_incoming: Dict[str, List[Any]] = {}
+                aggregate_outgoing: Dict[str, List[Any]] = {}
+                for (
+                    from_trip_id,
+                    to_trip_id,
+                ), variable in exact_clone_aggregate_connection.items():
+                    aggregate_outgoing.setdefault(
+                        from_trip_id, []
+                    ).append(variable)
+                    aggregate_incoming.setdefault(
+                        to_trip_id, []
+                    ).append(variable)
+                for trip_id in selected_trip_ids:
+                    model.addConstr(
+                        gp.quicksum(
+                            aggregate_incoming.get(trip_id, ())
+                        )
+                        + exact_clone_aggregate_start[trip_id]
+                        == exact_clone_aggregate_assignment[trip_id],
+                        name=(
+                            "exact_clone_group_inflow__"
+                            f"g{selected_group_index}__{trip_id}"
+                        ),
+                    )
+                    model.addConstr(
+                        gp.quicksum(
+                            aggregate_outgoing.get(trip_id, ())
+                        )
+                        + exact_clone_aggregate_end[trip_id]
+                        == exact_clone_aggregate_assignment[trip_id],
+                        name=(
+                            "exact_clone_group_outflow__"
+                            f"g{selected_group_index}__{trip_id}"
+                        ),
+                    )
             if selected_fragment_layer_count > 1:
                 layer_indices = tuple(
                     range(selected_fragment_layer_count)
@@ -5999,12 +6028,29 @@ class GurobiMILPAdapter:
                     f"g{selected_group_index}"
                 ),
             )
-            relaxed_binary_count = len(selected_member_ids) * (
+            exact_clone_activation_prefix_constraint_count = 0
+            for member_index, (
+                previous_vehicle_id,
+                next_vehicle_id,
+            ) in enumerate(
+                zip(selected_member_ids, selected_member_ids[1:])
+            ):
+                model.addConstr(
+                    used_vehicle[previous_vehicle_id]
+                    >= used_vehicle[next_vehicle_id],
+                    name=(
+                        "exact_clone_group_activation_prefix__"
+                        f"g{selected_group_index}__p{member_index}"
+                    ),
+                )
+                exact_clone_activation_prefix_constraint_count += 1
+            removed_label_variable_count = len(selected_member_ids) * (
                 3 * len(selected_trip_ids)
                 + len(selected_transition_pairs)
-                + 1
-                + len(day_indices)
             )
+            retained_activation_label_binary_count = len(
+                selected_member_ids
+            ) * (1 + len(day_indices))
             added_integer_count = (
                 3 * len(selected_trip_ids)
                 + len(selected_transition_pairs)
@@ -6022,16 +6068,23 @@ class GurobiMILPAdapter:
                 "application_blockers": (),
                 "selected_group_index": selected_group_index,
                 "selected_vehicle_ids": selected_member_ids,
-                "binary_label_variable_count_relaxed": (
-                    relaxed_binary_count
+                "vehicle_label_flow_variable_count_removed": (
+                    removed_label_variable_count
+                ),
+                "binary_label_variable_count_relaxed": 0,
+                "activation_label_binary_variable_count_retained": (
+                    retained_activation_label_binary_count
+                ),
+                "activation_prefix_constraint_count": (
+                    exact_clone_activation_prefix_constraint_count
                 ),
                 "aggregate_integer_variable_count_added": (
                     added_integer_count
                 ),
                 "net_binary_variable_reduction": (
-                    relaxed_binary_count - added_integer_count
+                    removed_label_variable_count - added_integer_count
                 ),
-                "labeled_extended_feasible_region_relaxed": True,
+                "labeled_extended_feasible_region_relaxed": False,
                 "recoverable_physical_dispatch_set_changed": False,
                 "recovery_required": True,
                 "recovery_semantics": (
@@ -6039,16 +6092,15 @@ class GurobiMILPAdapter:
                     "canonical_exact_clone_vehicle_ids"
                 ),
                 "formulation_semantics": (
-                    "continuous_vehicle_label_extended_formulation_with_"
-                    "binary_group_assignment_connection_boundary_flow_and_"
-                    "integral_layered_fragment_reset_path_network"
+                    "pure_binary_group_assignment_connection_boundary_"
+                    "flow_with_integral_layered_fragment_reset_path_"
+                    "network_and_postsolve_canonical_label_recovery"
                 ),
                 "exactness_guard": (
-                    "one_continuous_clone_group_only; all_other_trip_"
-                    "coverage_decisions_binary; aggregate_layered_DAG_path_"
-                    "flow_integral; configured_worst_case_fragment_fuel_"
-                    "fits_initial_inventory; path_specific_driver_cost_"
-                    "disabled"
+                    "one_pure_aggregate_clone_group_only; all_trip_coverage_"
+                    "decisions_binary; aggregate_layered_DAG_path_flow_"
+                    "integral; configured_worst_case_fragment_fuel_fits_"
+                    "initial_inventory; path_specific_driver_cost_disabled"
                 ),
                 "fragment_layer_count": selected_fragment_layer_count,
                 "layer_assignment_variable_count": len(
@@ -6072,6 +6124,101 @@ class GurobiMILPAdapter:
                     dict.fromkeys(exact_clone_application_blockers)
                 ),
             }
+
+        exact_clone_representative_vehicle = (
+            vehicle_by_id.get(
+                str(
+                    selected_clone_group_record.get(
+                        "representative_vehicle_id", ""
+                    )
+                )
+            )
+            if selected_clone_group_record is not None
+            else None
+        )
+        exact_clone_trip_fuel_l: Dict[str, float] = {}
+        exact_clone_connection_fuel_l: Dict[
+            Tuple[str, str], float
+        ] = {}
+        exact_clone_connection_deadhead_km: Dict[
+            Tuple[str, str], float
+        ] = {}
+        exact_clone_startup_fuel_l: Dict[str, float] = {}
+        exact_clone_return_fuel_l: Dict[str, float] = {}
+        if exact_clone_representative_vehicle is not None:
+            representative_vehicle_id = str(
+                exact_clone_representative_vehicle.vehicle_id
+            )
+            representative_fuel_rate = max(
+                float(
+                    getattr(
+                        exact_clone_representative_vehicle,
+                        "fuel_consumption_l_per_km",
+                        0.0,
+                    )
+                    or 0.0
+                ),
+                0.0,
+            )
+            for trip_id in exact_clone_aggregate_assignment:
+                exact_clone_trip_fuel_l[trip_id] = self._trip_fuel_l(
+                    problem,
+                    exact_clone_representative_vehicle,
+                    trip_id,
+                )
+                startup_precheck = (
+                    startup_energy_precheck_by_assignment.get(
+                        (representative_vehicle_id, trip_id)
+                    )
+                )
+                startup_deadhead_min = int(
+                    getattr(
+                        startup_precheck,
+                        "startup_deadhead_min",
+                        0,
+                    )
+                    or 0
+                )
+                exact_clone_startup_fuel_l[trip_id] = (
+                    self._deadhead_distance_km(
+                        problem,
+                        startup_deadhead_min,
+                    )
+                    * representative_fuel_rate
+                )
+                trip = trip_by_id[trip_id]
+                return_exists, return_deadhead_min = (
+                    return_deadhead_min_to_home(
+                        problem,
+                        exact_clone_representative_vehicle,
+                        trip,
+                    )
+                )
+                exact_clone_return_fuel_l[trip_id] = (
+                    self._deadhead_distance_km(
+                        problem,
+                        int(return_deadhead_min),
+                    )
+                    * representative_fuel_rate
+                    if return_exists
+                    else 0.0
+                )
+            for connection_key in exact_clone_aggregate_connection:
+                from_trip_id, to_trip_id = connection_key
+                deadhead_min = problem.dispatch_context.get_deadhead_min(
+                    trip_by_id[from_trip_id].destination,
+                    trip_by_id[to_trip_id].origin,
+                )
+                deadhead_km = self._deadhead_distance_km(
+                    problem,
+                    deadhead_min,
+                )
+                exact_clone_connection_deadhead_km[
+                    connection_key
+                ] = deadhead_km
+                exact_clone_connection_fuel_l[
+                    connection_key
+                ] = deadhead_km * representative_fuel_rate
 
         integrated_successor_pruning_enabled = bool(
             arc_pruning_summary.get("successor_pruning_enabled", False)
@@ -6153,7 +6300,18 @@ class GurobiMILPAdapter:
         # Strict coverage is a hard equality; diagnostics may relax it with an
         # explicit unserved decision variable.
         for trip in problem.trips:
-            assign_terms = [y[(vehicle_id, trip.trip_id)] for vehicle_id in assignment_vehicle_ids_by_trip.get(trip.trip_id, [])]
+            assign_terms = [
+                y[(vehicle_id, trip.trip_id)]
+                for vehicle_id in assignment_vehicle_ids_by_trip.get(
+                    trip.trip_id, []
+                )
+                if (vehicle_id, trip.trip_id) in y
+            ]
+            aggregate_assignment_var = (
+                exact_clone_aggregate_assignment.get(trip.trip_id)
+            )
+            if aggregate_assignment_var is not None:
+                assign_terms.append(aggregate_assignment_var)
             if allow_partial_service:
                 model.addConstr(gp.quicksum(assign_terms) + unserved[trip.trip_id] == 1)
             else:
@@ -6189,6 +6347,19 @@ class GurobiMILPAdapter:
         # Per-day vehicle usage linkage for multi-day constraints.
         for vehicle in problem.vehicles:
             vehicle_id = vehicle.vehicle_id
+            if vehicle_id in exact_clone_convexified_vehicle_ids:
+                # The clone certificate is one-day only.  Individual binary
+                # activations merely choose the canonical prefix onto which
+                # the integral aggregate paths will be recovered.
+                for day_idx in day_indices:
+                    day_var = used_vehicle_day[(vehicle_id, day_idx)]
+                    if day_idx == day_indices[0]:
+                        model.addConstr(
+                            day_var == used_vehicle[vehicle_id]
+                        )
+                    else:
+                        model.addConstr(day_var == 0)
+                continue
             for day_idx in day_indices:
                 day_var = used_vehicle_day[(vehicle_id, day_idx)]
                 day_trip_vars = [
@@ -7813,6 +7984,15 @@ class GurobiMILPAdapter:
                 problem,
                 deadhead_min,
             ) * var
+        for connection_key, var in (
+            exact_clone_aggregate_connection.items()
+        ):
+            deadhead_distance_objective += (
+                exact_clone_connection_deadhead_km.get(
+                    connection_key, 0.0
+                )
+                * var
+            )
         # O2: electricity cost based on actual charging source flows.
         price_by_slot = {slot.slot_index: slot.grid_buy_yen_per_kwh for slot in problem.price_slots}
         grid_to_bus_priority_penalty = self._safe_nonnegative_float(
@@ -7944,6 +8124,36 @@ class GurobiMILPAdapter:
                     * fuel_l
                     * end_arc[assignment_key]
                 )
+            for trip_id, var in (
+                exact_clone_aggregate_assignment.items()
+            ):
+                fuel_l = exact_clone_trip_fuel_l.get(trip_id, 0.0)
+                ice_fuel_l_objective += fuel_l * var
+                objective += (
+                    fuel_weight * diesel_price * fuel_l * var
+                )
+            for connection_key, var in (
+                exact_clone_aggregate_connection.items()
+            ):
+                fuel_l = exact_clone_connection_fuel_l.get(
+                    connection_key, 0.0
+                )
+                ice_fuel_l_objective += fuel_l * var
+                objective += (
+                    fuel_weight * diesel_price * fuel_l * var
+                )
+            for trip_id, var in exact_clone_aggregate_start.items():
+                fuel_l = exact_clone_startup_fuel_l.get(trip_id, 0.0)
+                ice_fuel_l_objective += fuel_l * var
+                objective += (
+                    fuel_weight * diesel_price * fuel_l * var
+                )
+            for trip_id, var in exact_clone_aggregate_end.items():
+                fuel_l = exact_clone_return_fuel_l.get(trip_id, 0.0)
+                ice_fuel_l_objective += fuel_l * var
+                objective += (
+                    fuel_weight * diesel_price * fuel_l * var
+                )
 
         # O3: demand charge cost.
         if (
@@ -8026,6 +8236,13 @@ class GurobiMILPAdapter:
                 if vehicle is None:
                     continue
                 objective += weather_bias_by_vehicle_type.get(str(vehicle.vehicle_type), 0.0) * var
+            if exact_clone_representative_vehicle is not None:
+                aggregate_weather_bias = weather_bias_by_vehicle_type.get(
+                    str(exact_clone_representative_vehicle.vehicle_type),
+                    0.0,
+                )
+                for var in exact_clone_aggregate_assignment.values():
+                    objective += aggregate_weather_bias * var
 
         # CO₂ objective/cost: in CO2 mode, co2_price_per_kg is treated as a
         # positive scaling factor (defaulted to 1.0 upstream when omitted).
@@ -8101,6 +8318,44 @@ class GurobiMILPAdapter:
                     * fuel_l
                     * end_arc[assignment_key]
                 )
+            if exact_clone_representative_vehicle is not None:
+                aggregate_co2_kg_per_l = (
+                    _ice_co2_kg_per_l_for_vehicle(
+                        exact_clone_representative_vehicle
+                    )
+                )
+                for trip_id, var in (
+                    exact_clone_aggregate_assignment.items()
+                ):
+                    co2_emissions_objective += (
+                        aggregate_co2_kg_per_l
+                        * exact_clone_trip_fuel_l.get(trip_id, 0.0)
+                        * var
+                    )
+                for connection_key, var in (
+                    exact_clone_aggregate_connection.items()
+                ):
+                    co2_emissions_objective += (
+                        aggregate_co2_kg_per_l
+                        * exact_clone_connection_fuel_l.get(
+                            connection_key, 0.0
+                        )
+                        * var
+                    )
+                for trip_id, var in (
+                    exact_clone_aggregate_start.items()
+                ):
+                    co2_emissions_objective += (
+                        aggregate_co2_kg_per_l
+                        * exact_clone_startup_fuel_l.get(trip_id, 0.0)
+                        * var
+                    )
+                for trip_id, var in exact_clone_aggregate_end.items():
+                    co2_emissions_objective += (
+                        aggregate_co2_kg_per_l
+                        * exact_clone_return_fuel_l.get(trip_id, 0.0)
+                        * var
+                    )
             # BEV electricity CO₂ (grid-sourced only, based on actual depot flows when available).
             co2_by_slot = {slot.slot_index: slot.co2_factor for slot in problem.price_slots}
             if g2bus_var or g2bess_var:
@@ -8272,6 +8527,12 @@ class GurobiMILPAdapter:
                 bonus = turnaround_pairs.get((from_trip_id, to_trip_id), 0.0)
                 if bonus > 0.0:
                     objective -= _return_leg_bonus_weight * bonus * var
+            for connection_key, var in (
+                exact_clone_aggregate_connection.items()
+            ):
+                bonus = turnaround_pairs.get(connection_key, 0.0)
+                if bonus > 0.0:
+                    objective -= _return_leg_bonus_weight * bonus * var
 
         # Add an integer-valid objective floor before branch-and-bound.  The
         # strict path-cover precheck proves the vehicle-day component, while
@@ -8438,6 +8699,9 @@ class GurobiMILPAdapter:
             bess_discharge_mode_var=bess_discharge_mode_var,
             bess_terminal_soc_deviation_var=(
                 bess_terminal_soc_deviation_var
+            ),
+            aggregate_represented_vehicle_ids=(
+                tuple(exact_clone_convexified_vehicle_ids)
             ),
         )
         exact_clone_aggregate_start_complete = False
@@ -8651,6 +8915,26 @@ class GurobiMILPAdapter:
                     exact_clone_aggregate_used_count.Start = float(
                         len(selected_group_vehicle_ids)
                     )
+                selected_group_vehicle_count = len(
+                    selected_group_vehicle_ids
+                )
+                for member_index, vehicle_id in enumerate(
+                    selected_member_ids
+                ):
+                    canonical_active = (
+                        1.0
+                        if member_index < selected_group_vehicle_count
+                        else 0.0
+                    )
+                    used_vehicle[vehicle_id].Start = canonical_active
+                    for day_idx in day_indices:
+                        used_vehicle_day[
+                            (vehicle_id, day_idx)
+                        ].Start = (
+                            canonical_active
+                            if day_idx == day_indices[0]
+                            else 0.0
+                        )
                 exact_clone_aggregate_start_complete = True
             integrated_exact_clone_flow_aggregation_audit = {
                 **dict(integrated_exact_clone_flow_aggregation_audit),
@@ -20363,6 +20647,7 @@ class GurobiMILPAdapter:
         used_vehicle: Mapping[str, Any],
         used_vehicle_day: Mapping[Tuple[str, int], Any],
         trip_day_index_by_trip_id: Mapping[str, int],
+        aggregate_represented_vehicle_ids: Sequence[str] = (),
     ) -> Tuple[bool, str, str]:
         """Submit a complete, representable path-cover baseline as MIP start."""
         baseline = preferred_plan or problem.baseline_plan
@@ -20391,6 +20676,11 @@ class GurobiMILPAdapter:
         selected_used_vehicle: Set[str] = set()
         selected_used_vehicle_day: Set[Tuple[str, int]] = set()
         assigned_vehicle_by_trip: Dict[str, str] = {}
+        aggregate_vehicle_ids = {
+            str(vehicle_id)
+            for vehicle_id in aggregate_represented_vehicle_ids
+        }
+        aggregate_represented_trip_ids: Set[str] = set()
 
         for duty in baseline.duties:
             trip_ids = tuple(str(trip_id) for trip_id in duty.trip_ids)
@@ -20400,9 +20690,12 @@ class GurobiMILPAdapter:
             if not vehicle_id or vehicle_id not in used_vehicle:
                 return False, source, f"baseline_vehicle_missing:{vehicle_id or duty.duty_id}"
             selected_used_vehicle.add(vehicle_id)
+            is_aggregate_represented = (
+                vehicle_id in aggregate_vehicle_ids
+            )
             for trip_id in trip_ids:
                 key = (vehicle_id, trip_id)
-                if key not in y:
+                if not is_aggregate_represented and key not in y:
                     return False, source, f"baseline_assignment_not_representable:{vehicle_id}:{trip_id}"
                 previous_vehicle_id = assigned_vehicle_by_trip.get(trip_id)
                 if previous_vehicle_id is not None:
@@ -20411,13 +20704,18 @@ class GurobiMILPAdapter:
                         f"{trip_id}:{previous_vehicle_id}:{vehicle_id}"
                     )
                 assigned_vehicle_by_trip[trip_id] = vehicle_id
-                selected_y.add(key)
+                if is_aggregate_represented:
+                    aggregate_represented_trip_ids.add(trip_id)
+                else:
+                    selected_y.add(key)
                 day_idx = int(trip_day_index_by_trip_id.get(trip_id, 0))
                 day_key = (vehicle_id, day_idx)
                 if day_key not in used_vehicle_day:
                     return False, source, f"baseline_vehicle_day_missing:{vehicle_id}:{day_idx}"
                 selected_used_vehicle_day.add(day_key)
 
+            if is_aggregate_represented:
+                continue
             start_key = (vehicle_id, trip_ids[0])
             end_key = (vehicle_id, trip_ids[-1])
             if start_key not in start_arc or end_key not in end_arc:
@@ -20433,7 +20731,10 @@ class GurobiMILPAdapter:
                     )
                 selected_x.add(arc_key)
 
-        if {trip_id for _vehicle_id, trip_id in selected_y} != expected_trip_ids:
+        if (
+            {trip_id for _vehicle_id, trip_id in selected_y}
+            | aggregate_represented_trip_ids
+        ) != expected_trip_ids:
             return False, source, "baseline_selected_trip_set_mismatch"
 
         for key, var in y.items():
@@ -20495,6 +20796,7 @@ class GurobiMILPAdapter:
         bess_charge_mode_var: Mapping[Tuple[str, int], Any],
         bess_discharge_mode_var: Mapping[Tuple[str, int], Any],
         bess_terminal_soc_deviation_var: Mapping[str, Any],
+        aggregate_represented_vehicle_ids: Sequence[str] = (),
     ) -> Dict[str, Any]:
         """Submit every integrated binary and the physical energy trace.
 
@@ -20672,6 +20974,9 @@ class GurobiMILPAdapter:
                 used_vehicle_day=used_vehicle_day,
                 trip_day_index_by_trip_id=(
                     trip_day_index_by_trip_id
+                ),
+                aggregate_represented_vehicle_ids=(
+                    aggregate_represented_vehicle_ids
                 ),
             )
         )
@@ -26678,15 +26983,15 @@ class GurobiMILPAdapter:
     ) -> Dict[str, Any]:
         """Prove which exact-clone ICE groups are safe aggregation targets.
 
-        The current Phase 4 model still instantiates vehicle-indexed flow
-        variables.  This audit is the fail-closed contract for convexifying an
-        exact-clone group behind an integral layered fragment network.  It
-        proves that even the configured maximum number of worst-case fragments
-        fits inside initial usable fuel.  Refuelling and per-label fuel state
-        are then redundant for every recoverable clone duty.
+        This audit is the fail-closed contract for replacing an exact-clone
+        vehicle-labelled flow family with an integral layered fragment
+        network.  It proves that even the configured maximum number of
+        worst-case fragments fits inside initial usable fuel.  Refuelling,
+        per-label fuel state, and the labelled assignment/connection flow are
+        then redundant for every recoverable clone duty.
 
-        No variable or constraint is removed here.  ``applied`` therefore
-        remains false even when candidate groups are certified.
+        The audit itself is side-effect free. ``applied`` therefore remains
+        false until the certified candidate is connected to Phase 4.
         """
 
         audit_started_at = time.perf_counter()
@@ -26902,11 +27207,9 @@ class GurobiMILPAdapter:
             certified = not blockers
             group_assignment_count = len(reference_assignment_domain)
             group_transition_count = len(reference_transition_domain)
-            relaxed_label_binary_count = len(vehicle_ids) * (
+            removed_label_flow_variable_count = len(vehicle_ids) * (
                 3 * group_assignment_count
                 + group_transition_count
-                + 1
-                + int(planning_days)
             )
             aggregate_integer_count = (
                 3 * group_assignment_count
@@ -26925,7 +27228,7 @@ class GurobiMILPAdapter:
                 )
             group_potential_reduction = (
                 max(
-                    relaxed_label_binary_count
+                    removed_label_flow_variable_count
                     - aggregate_integer_count,
                     0,
                 )
@@ -26978,6 +27281,9 @@ class GurobiMILPAdapter:
                         refuel_upper_buffer_l
                     ),
                     "finite_fuel_constraints_proved_redundant": certified,
+                    "vehicle_label_flow_variable_count_removed": (
+                        removed_label_flow_variable_count
+                    ),
                     "potential_binary_variable_reduction": (
                         group_potential_reduction
                     ),
@@ -26986,7 +27292,7 @@ class GurobiMILPAdapter:
 
         return {
             "schema_version": (
-                "exact_combustion_clone_flow_aggregation_audit_v2"
+                "exact_combustion_clone_flow_aggregation_audit_v3"
             ),
             "enabled": True,
             "applied": False,
