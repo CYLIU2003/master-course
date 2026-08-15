@@ -74,6 +74,26 @@
   timing evidence remains necessary.
 - Focused solver/oracle/feedback regression passes (`83 passed`), followed by
   the full repository regression (`1487 passed` in 158.02 seconds).
+- Froze `7fe44ebdee8a211c47704d79b066685582ef72be`, restarted the frontend/BFF
+  execution path and repeated the same low-PV `BEV_ENERGY_1.2` 900-second
+  diagnostic. The source run is `output/2026-08-15/run_20260815_0948`; its
+  immutable bundle is
+  `output/thesis_sensitivity_powertrain_low_pv_20260815_7fe44eb_bev12_900s`.
+  The model exported 24 trip-count rows, 24 equal-count assignment-rank rows,
+  zero start-rank rows and 48 total exact duty-order rows. The zero start-row
+  count is expected because the fragment limit remains 100.
+- The matched result is a negative performance finding. It retained the exact
+  same 61,883.346234 JPY incumbent, 57,986.661708 JPY bound, 6.296823% gap,
+  74/190 BEV/ICE trip split and one explored node. Solve time changed from
+  467.776 seconds at `5d0a1c5` to 470.404 seconds; complete runner wall time
+  changed from 1,122.977 to 1,123.794 seconds. One pair cannot estimate a
+  stable runtime distribution, but it disproves a material improvement in this
+  diagnostic and gives no basis for a speedup claim.
+- The rank-sum row is retained because it is exact and tested, but further
+  row-only clone symmetry tuning is stopped. The remaining engineering work is
+  to reduce Python/model-construction overhead without changing mathematics,
+  then replace or aggregate the 678,600 labelled connection binaries through
+  an exact path/network formulation if proof time remains dominant.
 
 ## 2026-08-15: independent powertrain energy sensitivities
 

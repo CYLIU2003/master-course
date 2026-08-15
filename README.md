@@ -25,7 +25,13 @@
   mismatches fail closed. The current 25-ICE group therefore receives 24
   rank-sum rows even though its maximum fragment count is 100.
 - The rank-sum extension passes the full repository regression (`1487 passed`
-  in 158.02 seconds). Its runtime effect still requires clean-commit evidence.
+  in 158.02 seconds). A clean-SHA matched diagnostic at `7fe44eb` confirmed
+  that all 24 rank-sum rows were installed, in addition to 24 trip-count rows.
+  The result, however, was unchanged at 61,883.346234 JPY and 6.296823% gap
+  after one explored node. Reported solve time was 470.404 seconds versus
+  467.776 seconds for the preceding `5d0a1c5` control; full runner wall time
+  was 1,123.794 versus 1,122.977 seconds. This single matched pair supports no
+  speedup claim and closes further row-only symmetry tuning for this case.
 - These changes are formulation-equivalent performance repairs, not new
   numerical evidence. The full repository regression passes (`1487 passed` in
   155.40 seconds). The clean-commit diagnostic below measures their runtime and
@@ -42,6 +48,13 @@
   credited for a speedup. The result proves accurate bound propagation, not a
   solved performance problem; reducing the 678,600 labelled connection
   binaries remains necessary.
+- The follow-on `7fe44eb` run is stored at
+  `output/2026-08-15/run_20260815_0948`, with immutable bundle
+  `output/thesis_sensitivity_powertrain_low_pv_20260815_7fe44eb_bev12_900s`.
+  It passed 264/264 coverage, physical validation, 24/24 Rolling and canonical
+  accounting, but remains `BLOCKED` solely because the declared 1% gap was not
+  met. Its equal outcome and timing are treated as a negative formulation
+  experiment, not as accepted sensitivity evidence.
 
 ## 2026-08-15 independent BEV/ICE coefficient sensitivity
 

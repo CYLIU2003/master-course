@@ -1,6 +1,6 @@
 # Current research release blockers
 
-## 2026-08-15 exact proof-performance repairs implemented; rerun pending
+## 2026-08-15 exact proof-performance repairs measured; proof blocker remains
 
 The first independent BEV-coefficient run established a valid schedule but
 also exposed an exact-proof bottleneck: 678,600 vehicle-labelled connection
@@ -41,13 +41,24 @@ is 100 rather than one. The next exact performance change must address the
 running the other nine cases with longer limits is not accepted as a remedy.
 Research release remains **BLOCKED**.
 
-The follow-on assignment-rank symmetry is implemented but not yet measured at
-a frozen commit. It gives the current 25-ICE clone group 24 additional exact
-rows even with a fragment limit of 100. It does not remove connection binaries,
-so it is a bounded performance experiment rather than a claim that the main
-formulation problem is solved.
-The full regression passes (`1487 passed` in 158.02 seconds); only fresh
-runtime evidence remains pending for this bounded change.
+The follow-on assignment-rank symmetry was measured at frozen commit
+`7fe44ebdee8a211c47704d79b066685582ef72be`. It gave the current 25-ICE clone
+group 24 additional exact rows even with a fragment limit of 100, for 48 total
+duty-order rows. The matched run retained the same incumbent, bound, 6.296823%
+gap and one explored node. Solve time was 470.404 seconds versus 467.776
+seconds for the preceding control, and complete wall time was 1,123.794 versus
+1,122.977 seconds. This single pair is not a runtime distribution, but it
+provides no evidence of a speedup and rules out treating the added rows as the
+solution to the bottleneck. The run remains `BLOCKED` solely by the 1% gap
+target despite complete coverage, physical validity, 24/24 Rolling and
+accounting reconciliation.
+
+Further row-only clone symmetry tuning is no longer the next action. The
+immediate safe step is to reduce model-construction overhead while preserving
+the exact variable set and formulation. If the root proof remains dominant,
+the required architectural change is an exact duty/path or aggregated network
+formulation that removes vehicle-labelled connection binaries without
+successor pruning, fallback, or post-solve repair.
 
 ## 2026-08-15 independent coefficient sensitivity implemented; solves pending
 
