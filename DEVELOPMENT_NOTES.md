@@ -1,5 +1,63 @@
 # Development Notes
 
+## 2026-08-15: frozen pure-aggregate 264-trip diagnostic completed
+
+- Stopped new optimization work at the requested checkpoint after completing
+  one frozen frontend/BFF run from clean `main` commit
+  `94ce217a4daab48b08646be85e18c388289bf026`. The authoritative result is
+  `output/2026-08-15/run_20260815_1155` (job
+  `947648c9-1024-47bb-84b8-45bff2b41f3b`). The polling client hit its own
+  short shell timeout after submission, but the persisted BFF job continued
+  without restart and completed normally; the partially populated
+  `output/thesis_sensitivity_powertrain_low_pv_20260815_94ce217_bev12_900s`
+  directory is therefore not the result authority.
+- The BFF performed fresh Prepare for the same controlled low-PV sensitivity
+  input: 264 trips, 60 active vehicles, 10 chargers, 11,310 complete feasible
+  successor arcs, service date 2025-08-05, PV source date 2025-08-10,
+  1,000 kW rated PV, 6,000 kWh / 900 kW BESS with 3,000 -> 3,000 kWh terminal
+  target, flat 30 JPY/kWh grid energy, zero demand charge, BEV trip-energy
+  scale 1.2, four Gurobi threads, 1% requested gap and a 900-second shared
+  Phase-4 budget.
+- Relative to the original labelled flow (`10a6621`) and the layered network
+  with continuous labels (`f1690c6`), the pure network produced the following
+  frozen measurements:
+
+  | Metric | `10a6621` labelled | `f1690c6` layered + labels | `94ce217` pure aggregate |
+  |---|---:|---:|---:|
+  | Initial variables | 780,113 | 848,980 | 536,180 |
+  | Initial binary variables | 739,728 | 507,194 | 507,244 |
+  | Initial constraints | 355,581 | 286,282 | 233,579 |
+  | Pre-optimize wall time | 166.509116 s | 165.812070 s | 130.419562 s |
+  | Gurobi optimize time | 474.988037 s | 474.744153 s | 505.784332 s |
+  | Integrated wall time | 644.478106 s | 642.979000 s | 637.485161 s |
+  | Shared Phase-4 wall time | 906.442815 s | 905.939554 s | 903.051735 s |
+  | Incumbent | 61,883.346234 JPY | 61,883.346234 JPY | 61,883.346234 JPY |
+  | Certified bound | 57,986.661708 JPY | 57,986.661708 JPY | 57,986.661708 JPY |
+  | Certified gap | 6.296823% | 6.296823% | 6.296823% |
+  | Explored nodes | 1 | 1 | 1 |
+
+- The v3 certificate removed 302,550 vehicle-labelled flow variables, added
+  70,067 aggregate/layer/reset integer variables, and reports a net 232,483
+  binary-variable reduction. The extra 50 binaries relative to v2 are the
+  intentionally retained canonical activation labels. Model construction is
+  35.39 seconds faster than `f1690c6`, but Gurobi optimization is 31.04
+  seconds slower; total integrated time improves by only 5.49 seconds and the
+  bound/gap are unchanged. This is a useful negative result: removing the
+  continuous extension reduces model size and construction cost, but does not
+  resolve the root-proof bottleneck.
+- The incumbent remains useful only as a feasible candidate: 264/264 trips,
+  74 BEV and 190 ICE trips, 32 used vehicles, physical validation `VALID`,
+  24/24 accepted Rolling steps, accepted executed-day accounting, exact
+  solver/accounting reconciliation, and 240/240 required artifacts. The solve
+  stopped at `time_limit`; `mip_gap_target_met=false`,
+  `research_submission_ready=false`, and teacher release remains `BLOCKED`.
+  No integrated-global-optimality or controlled-PV-pair claim is permitted.
+- Resume point: do not repeat this 900-second formulation run. The next
+  performance investigation should target the root lower bound/decomposition
+  (or introduce a separately labelled approximate method comparable to No06
+  or No63), while preserving the exact formulation and claim boundary as the
+  baseline. No further solve was started after this checkpoint.
+
 ## 2026-08-15: removed continuous exact-clone label extension
 
 - Raised the next P1 performance defect from the `f1690c6` negative run: the
@@ -39,9 +97,8 @@
   integrated test file passes (`68 passed`), the focused fragment/oracle/
   feedback/research/accounting set passes (`130 passed`), and the full suite
   passes (`1491 passed` in 153.92 seconds).
-- This entry records implementation evidence, not 264-trip performance. A
-  frozen clean commit and fresh frontend/BFF diagnostic are required before
-  updating solve-time or gap claims. Research release remains `BLOCKED`.
+- The subsequently completed frozen diagnostic and its negative performance
+  result are recorded immediately above. Research release remains `BLOCKED`.
 
 ## 2026-08-15: literature-checked multi-fragment exact clone network
 

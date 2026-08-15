@@ -1,5 +1,28 @@
 # Current research release blockers
 
+## 2026-08-15 pure aggregate measured; root-proof blocker remains
+
+The frozen frontend/BFF diagnostic at clean commit `94ce217` is complete in
+`output/2026-08-15/run_20260815_1155`. It reduced the initial formulation from
+848,980 to 536,180 variables and the pre-optimize wall time from 165.812070 to
+130.419562 seconds relative to `f1690c6`. It also reduced constraints from
+286,282 to 233,579 while retaining all 11,310 feasible successor arcs.
+
+This did not improve the proof. Gurobi optimize time increased from 474.744153
+to 505.784332 seconds, the explored node count remained one, and the incumbent,
+certified bound and certified gap remained respectively 61,883.346234 JPY,
+57,986.661708 JPY and 6.296823%. The requested 1% gap is not established.
+Consequently the smaller exact formulation is retained as an implementation
+improvement, but it is not evidence of global optimality or of a
+hundreds-of-seconds 1% certificate.
+
+The candidate itself is physically valid: all 264 trips are served, 24/24
+Rolling steps are accepted, executed-day accounting is eligible, and artifact
+completeness is 240/240. These gates do not override
+`mip_gap_target_met=false`; `research_submission_ready=false` and teacher
+release remains **BLOCKED**. The next exact-work target is the root lower
+bound/decomposition rather than another unchanged 900-second rerun.
+
 ## 2026-08-15 pure aggregate implementation complete; measurement pending
 
 The continuous vehicle-label extension identified by the `f1690c6` negative
@@ -19,11 +42,8 @@ research-contract tests and all 1,491 repository tests pass. The audit schema
 is now `exact_combustion_clone_flow_aggregation_audit_v3` and explicitly
 records that zero continuous label-flow variables remain.
 
-This closes the implementation defect but not the research proof gate. The
-264-trip effect on variables, construction time, solve time, incumbent and
-certified gap has not yet been measured from a frozen clean commit. Until that
-fresh frontend/BFF diagnostic meets the declared 1% target and all downstream
-gates, research release remains **BLOCKED**.
+The frozen measurement is now recorded above. It confirms the implementation
+benefit but leaves the research proof gate **BLOCKED**.
 
 ## 2026-08-15 exact proof-performance repairs measured; proof blocker remains
 

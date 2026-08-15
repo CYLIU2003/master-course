@@ -23,9 +23,13 @@
   exact-clone tests pass; the integrated file passes (`68 passed`), the focused
   research/fragment/oracle/accounting set passes (`130 passed`), and the full
   regression passes (`1491 passed` in 153.92 seconds).
-- This is formulation and regression evidence only. No 264-trip runtime or gap
-  improvement is claimed until a fresh frontend/BFF run from the frozen clean
-  commit completes. Research release remains `BLOCKED`.
+- Frozen run `output/2026-08-15/run_20260815_1155` from clean `94ce217`
+  reduced the initial model to 536,180 variables and pre-optimize time to
+  130.42 seconds. However, Gurobi time increased to 505.78 seconds and the
+  certified gap remained 6.296823% (61,883.35 JPY incumbent versus
+  57,986.66 JPY certified bound). Physical validation and 24/24 Rolling pass,
+  but the 1% proof target does not. Research release remains `BLOCKED`; see
+  `DEVELOPMENT_NOTES.md` for the controlled comparison and resume point.
 
 ## 2026-08-15 literature-checked layered ICE-clone aggregation
 
