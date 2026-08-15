@@ -124,6 +124,8 @@ def test_publishable_certificate_matches_integrated_gurobi() -> None:
     assert cases["tariff_above_break_even"]["integrated_milp"][
         "exact_vehicle_assignment_match"
     ] is True
+    # Equal-count exact-clone duty ordering now canonicalizes the vehicle-ID
+    # permutation as well as preserving the aggregate optimal schedule.
     assert cases["two_ports_for_two_simultaneous_bevs"]["integrated_milp"][
         "exact_vehicle_assignment_match"
-    ] is False
+    ] is True

@@ -10479,6 +10479,25 @@ def _solver_settings_payload(
                 "stage1_identical_vehicle_activation_prefix_constraint_count"
             )
         ),
+        "stage1_identical_vehicle_trip_count_symmetry": dict(
+            metadata.get("stage1_identical_vehicle_trip_count_symmetry")
+            or {}
+        ),
+        "stage1_identical_vehicle_trip_count_ordering_constraint_count": _int_or_none(
+            metadata.get(
+                "stage1_identical_vehicle_trip_count_ordering_constraint_count"
+            )
+        ),
+        "stage1_identical_vehicle_equal_count_start_ordering_constraint_count": _int_or_none(
+            metadata.get(
+                "stage1_identical_vehicle_equal_count_start_ordering_constraint_count"
+            )
+        ),
+        "stage1_identical_vehicle_duty_ordering_constraint_count": _int_or_none(
+            metadata.get(
+                "stage1_identical_vehicle_duty_ordering_constraint_count"
+            )
+        ),
         "stage1_energy_cost_proxy_used_in_objective": bool(
             metadata.get("stage1_energy_cost_proxy_used_in_objective", False)
         ),
@@ -10591,6 +10610,11 @@ def _solver_settings_payload(
                 "integrated_analytical_objective_floor_constraint_count"
             )
         ),
+        "integrated_analytical_objective_proxy_variable_count": _int_or_none(
+            metadata.get(
+                "integrated_analytical_objective_proxy_variable_count"
+            )
+        ),
         "integrated_analytical_objective_floor_certificate_eligible": bool(
             metadata.get(
                 "integrated_analytical_objective_floor_certificate_eligible",
@@ -10629,6 +10653,27 @@ def _solver_settings_payload(
         "integrated_identical_vehicle_activation_prefix_constraint_count": _int_or_none(
             metadata.get(
                 "integrated_identical_vehicle_activation_prefix_constraint_count"
+            )
+        ),
+        "integrated_identical_vehicle_trip_count_symmetry": dict(
+            metadata.get(
+                "integrated_identical_vehicle_trip_count_symmetry"
+            )
+            or {}
+        ),
+        "integrated_identical_vehicle_trip_count_ordering_constraint_count": _int_or_none(
+            metadata.get(
+                "integrated_identical_vehicle_trip_count_ordering_constraint_count"
+            )
+        ),
+        "integrated_identical_vehicle_equal_count_start_ordering_constraint_count": _int_or_none(
+            metadata.get(
+                "integrated_identical_vehicle_equal_count_start_ordering_constraint_count"
+            )
+        ),
+        "integrated_identical_vehicle_duty_ordering_constraint_count": _int_or_none(
+            metadata.get(
+                "integrated_identical_vehicle_duty_ordering_constraint_count"
             )
         ),
         "integrated_identical_vehicle_symmetry_semantics": metadata.get(

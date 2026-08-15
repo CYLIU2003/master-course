@@ -340,6 +340,27 @@ class MILPOptimizer:
                 ).get(
                     "stage1_identical_vehicle_activation_prefix_constraint_count"
                 ),
+                "stage1_identical_vehicle_trip_count_symmetry": dict(
+                    (plan.metadata or {}).get(
+                        "stage1_identical_vehicle_trip_count_symmetry"
+                    )
+                    or {}
+                ),
+                "stage1_identical_vehicle_trip_count_ordering_constraint_count": (
+                    plan.metadata or {}
+                ).get(
+                    "stage1_identical_vehicle_trip_count_ordering_constraint_count"
+                ),
+                "stage1_identical_vehicle_equal_count_start_ordering_constraint_count": (
+                    plan.metadata or {}
+                ).get(
+                    "stage1_identical_vehicle_equal_count_start_ordering_constraint_count"
+                ),
+                "stage1_identical_vehicle_duty_ordering_constraint_count": (
+                    plan.metadata or {}
+                ).get(
+                    "stage1_identical_vehicle_duty_ordering_constraint_count"
+                ),
                 "stage1_redundant_arc_link_constraints_omitted": (
                     plan.metadata or {}
                 ).get("stage1_redundant_arc_link_constraints_omitted"),
@@ -876,6 +897,11 @@ class MILPOptimizer:
                         "integrated_analytical_objective_floor_constraint_count"
                     )
                 ),
+                "integrated_analytical_objective_proxy_variable_count": (
+                    (plan.metadata or {}).get(
+                        "integrated_analytical_objective_proxy_variable_count"
+                    )
+                ),
                 "integrated_analytical_objective_floor_certificate_eligible": bool(
                     (plan.metadata or {}).get(
                         "integrated_analytical_objective_floor_certificate_eligible",
@@ -907,6 +933,27 @@ class MILPOptimizer:
                 "integrated_identical_vehicle_activation_prefix_constraint_count": (
                     (plan.metadata or {}).get(
                         "integrated_identical_vehicle_activation_prefix_constraint_count"
+                    )
+                ),
+                "integrated_identical_vehicle_trip_count_symmetry": dict(
+                    (plan.metadata or {}).get(
+                        "integrated_identical_vehicle_trip_count_symmetry"
+                    )
+                    or {}
+                ),
+                "integrated_identical_vehicle_trip_count_ordering_constraint_count": (
+                    (plan.metadata or {}).get(
+                        "integrated_identical_vehicle_trip_count_ordering_constraint_count"
+                    )
+                ),
+                "integrated_identical_vehicle_equal_count_start_ordering_constraint_count": (
+                    (plan.metadata or {}).get(
+                        "integrated_identical_vehicle_equal_count_start_ordering_constraint_count"
+                    )
+                ),
+                "integrated_identical_vehicle_duty_ordering_constraint_count": (
+                    (plan.metadata or {}).get(
+                        "integrated_identical_vehicle_duty_ordering_constraint_count"
                     )
                 ),
                 "integrated_identical_vehicle_symmetry_semantics": (

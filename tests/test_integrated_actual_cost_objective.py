@@ -42,6 +42,7 @@ from src.optimization.milp.model_builder import MILPModelBuilder
 from src.optimization.milp.solver_adapter import (
     _add_assignment_pattern_no_good_cuts,
     _add_identical_vehicle_trip_count_symmetry,
+    _apply_best_objective_stop_from_certified_lower_bound,
     _apply_assignment_pattern_branch_priorities,
     _composition_target_continuation_priority_key,
     _composition_target_time_limit_sec,
@@ -708,6 +709,98 @@ def test_trip_count_symmetry_keeps_one_exact_clone_orbit_representative() -> Non
     assert "nonincreasing_total_assigned_trip_count" in audit["semantics"]
 
 
+def test_equal_count_symmetry_orders_exact_clone_start_trips() -> None:
+    gp, GRB = ensure_gurobi()
+
+    def solve(*, later_duty_on_first_vehicle: bool) -> tuple[int, dict[str, object]]:
+        model = gp.Model("equal_count_start_symmetry")
+        model.Params.OutputFlag = 0
+        vehicle_ids = ("vehicle-a", "vehicle-b")
+        trip_ids = ("trip-1", "trip-2", "trip-3", "trip-4")
+        assignment_arc = {
+            (vehicle_id, trip_id): model.addVar(vtype=GRB.BINARY)
+            for vehicle_id in vehicle_ids
+            for trip_id in trip_ids
+        }
+        start_arc = {
+            (vehicle_id, trip_id): model.addVar(vtype=GRB.BINARY)
+            for vehicle_id in vehicle_ids
+            for trip_id in trip_ids
+        }
+        audit = _add_identical_vehicle_trip_count_symmetry(
+            model=model,
+            assignment_arc=assignment_arc,
+            path_start_arc=start_arc,
+            path_start_count_limit=1,
+            ordered_trip_ids=trip_ids,
+            identical_vehicle_groups=(vehicle_ids,),
+            name_prefix="test_equal_count_start",
+        )
+        early_vehicle = "vehicle-b" if later_duty_on_first_vehicle else "vehicle-a"
+        late_vehicle = "vehicle-a" if later_duty_on_first_vehicle else "vehicle-b"
+        selected_assignments = {
+            (early_vehicle, "trip-1"),
+            (early_vehicle, "trip-2"),
+            (late_vehicle, "trip-3"),
+            (late_vehicle, "trip-4"),
+        }
+        selected_starts = {
+            (early_vehicle, "trip-1"),
+            (late_vehicle, "trip-3"),
+        }
+        for key, variable in assignment_arc.items():
+            model.addConstr(variable == (1 if key in selected_assignments else 0))
+        for key, variable in start_arc.items():
+            model.addConstr(variable == (1 if key in selected_starts else 0))
+        model.setObjective(0.0, GRB.MINIMIZE)
+        model.optimize()
+        return int(model.Status), audit
+
+    canonical_status, audit = solve(later_duty_on_first_vehicle=False)
+    label_swapped_status, _ = solve(later_duty_on_first_vehicle=True)
+
+    assert canonical_status == GRB.OPTIMAL
+    assert label_swapped_status == GRB.INFEASIBLE
+    assert audit["integer_feasible_orbit_preserved"] is True
+    assert audit["equal_count_start_ordering_constraint_count"] == 1
+    assert audit["total_constraint_count"] == 2
+    assert "equal_count_chronological_start_trip" in audit["semantics"]
+
+
+def test_equal_count_start_symmetry_fails_closed_for_multiple_fragments() -> None:
+    gp, GRB = ensure_gurobi()
+    model = gp.Model("multi_fragment_start_symmetry_guard")
+    model.Params.OutputFlag = 0
+    vehicle_ids = ("vehicle-a", "vehicle-b")
+    trip_ids = ("trip-1", "trip-2")
+    assignment_arc = {
+        (vehicle_id, trip_id): model.addVar(vtype=GRB.BINARY)
+        for vehicle_id in vehicle_ids
+        for trip_id in trip_ids
+    }
+    start_arc = {
+        (vehicle_id, trip_id): model.addVar(vtype=GRB.BINARY)
+        for vehicle_id in vehicle_ids
+        for trip_id in trip_ids
+    }
+
+    audit = _add_identical_vehicle_trip_count_symmetry(
+        model=model,
+        assignment_arc=assignment_arc,
+        path_start_arc=start_arc,
+        path_start_count_limit=2,
+        ordered_trip_ids=trip_ids,
+        identical_vehicle_groups=(vehicle_ids,),
+        name_prefix="test_multi_fragment_guard",
+    )
+
+    assert audit["enabled"] is True
+    assert audit["one_start_path_proven"] is False
+    assert audit["ordering_constraint_count"] == 1
+    assert audit["equal_count_start_ordering_constraint_count"] == 0
+    assert audit["total_constraint_count"] == 1
+
+
 def test_trip_count_symmetry_skips_nonidentical_assignment_domains() -> None:
     gp, GRB = ensure_gurobi()
     model = gp.Model("trip_count_symmetry_domain_guard")
@@ -839,6 +932,12 @@ def test_phase4_trip_count_symmetry_preserves_exact_objective() -> None:
     assert symmetric_plan.metadata[
         "integrated_identical_vehicle_trip_count_ordering_constraint_count"
     ] == 1
+    assert symmetric_plan.metadata[
+        "integrated_identical_vehicle_equal_count_start_ordering_constraint_count"
+    ] == 1
+    assert symmetric_plan.metadata[
+        "integrated_identical_vehicle_duty_ordering_constraint_count"
+    ] == 2
 
 
 def _exact_ice_clone_audit(
@@ -1810,6 +1909,9 @@ def test_phase4_objective_floor_is_disabled_for_negative_bonus_term() -> None:
         "integrated_analytical_objective_floor_constraint_count"
     ] == 0
     assert plan.metadata[
+        "integrated_analytical_objective_proxy_variable_count"
+    ] == 0
+    assert plan.metadata[
         "integrated_analytical_objective_floor_certificate_eligible"
     ] is False
     assert "negative_return_leg_bonus_term" in plan.metadata[
@@ -2046,6 +2148,9 @@ def test_phase4_uses_verified_same_problem_phase3_plan_as_complete_mip_start() -
         "integrated_analytical_objective_floor_constraint_count"
     ] == 1
     assert result.solver_metadata[
+        "integrated_analytical_objective_proxy_variable_count"
+    ] == 1
+    assert result.solver_metadata[
         "integrated_verified_start_objective_cap_constraint_count"
     ] == 1
     assert result.solver_metadata[
@@ -2216,6 +2321,24 @@ def test_research_lexicographic_seed_certifies_vehicle_days_before_cost() -> Non
     assert result.solver_metadata[
         "integrated_lexicographic_cost_raw_mip_gap_ratio"
     ] == pytest.approx(0.0)
+
+
+def test_certified_gap_stop_is_installed_before_incumbent_reaches_threshold() -> None:
+    class _Params:
+        BestObjStop: float | None = None
+
+    class _Model:
+        Params = _Params()
+
+    model = _Model()
+    threshold = _apply_best_objective_stop_from_certified_lower_bound(
+        model=model,
+        certified_lower_bound=100.0,
+        relative_gap=0.1,
+    )
+
+    assert threshold == pytest.approx(100.0 / 0.9)
+    assert model.Params.BestObjStop == pytest.approx(threshold)
 
 
 def test_phase4_stops_after_verified_start_already_certifies_requested_gap() -> None:

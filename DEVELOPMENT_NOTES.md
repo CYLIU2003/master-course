@@ -1,5 +1,43 @@
 # Development Notes
 
+## 2026-08-15: exact bound propagation and complete clone-duty ordering
+
+- Self-review of `run_20260815_0747` isolated the proof bottleneck from the
+  feasible-schedule path. The integrated model had 780,112 variables,
+  including 678,600 vehicle-labelled connection binaries, and 355,557 rows.
+  It retained a verified 61,883.346234 JPY incumbent but spent 2,814 seconds
+  at one root node with raw Gurobi bound 0 JPY. The independent certified
+  analytical floor was already 57,986.661708 JPY (6.296823% certified gap).
+- Raised and fixed a P1 `BestObjStop` defect. Both integrated scalar-cost paths
+  computed a valid stop threshold but installed it only if the fixed-recourse
+  start already crossed that threshold. `BestObjStop` is now installed whenever
+  the certified lower bound yields a finite threshold; later incumbents can
+  trigger it. The parameter remains disabled for invalid/blocked certificates
+  and is cleared before objectives with different units.
+- Replaced the standalone analytical inequality with one continuous
+  `integrated_canonical_cost_with_certified_floor` variable. Its lower bound is
+  the same integer-valid certificate and an equality ties it to the unchanged
+  canonical cost expression. Cost objectives use this proxy; recourse,
+  accounting, caps and reported cost continue to use the original expression.
+  This changes neither feasible integer schedules nor monetary semantics, but
+  prevents an eligible objective from presenting an initial 0-JPY domain.
+- Strengthened exact-clone symmetry without successor pruning. Adjacent
+  identical vehicles remain ordered by assigned-trip count; equal-count duties
+  are additionally ordered by chronological start-trip rank. With strict path
+  flow, each used vehicle has exactly one start and each trip is uniquely
+  covered, so every unlabeled duty set has a label permutation satisfying the
+  rows. Groups with unequal assignment, start or transition domains are
+  skipped. Equal-count start ordering is also disabled unless the configured
+  maximum start-fragment count is exactly one. The formulation adds no
+  variables and at most two rows per adjacent eligible clone pair.
+- Added unit/integration regressions for pre-threshold stop installation,
+  equal-count label-orbit selection, exact-objective preservation, disabled
+  certificate behavior and exported telemetry. Focused Phase-4 tests pass
+  (`64 passed`); adjacent lower-bound/research/weather telemetry tests pass
+  (`54 passed`). The full repository regression passes (`1487 passed` in
+  155.40 seconds). Fresh clean-SHA runtime evidence is still required before
+  this repair can change the research release decision.
+
 ## 2026-08-15: independent powertrain energy sensitivities
 
 - Raised a Phase-2 identifiability defect during self-review. The existing

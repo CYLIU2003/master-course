@@ -652,19 +652,24 @@ def _add_identical_vehicle_trip_count_symmetry(
     *,
     model: Any,
     assignment_arc: Mapping[Tuple[str, str], Any],
+    path_start_arc: Optional[Mapping[Tuple[str, str], Any]] = None,
+    path_start_count_limit: Optional[int] = None,
+    ordered_trip_ids: Optional[Sequence[str]] = None,
     transition_arc: Optional[Mapping[Tuple[str, str, str], Any]] = None,
     transition_domains_proven_equal: bool = False,
     identical_vehicle_groups: Sequence[Sequence[str]],
     name_prefix: str,
 ) -> Dict[str, Any]:
-    """Order exact-clone vehicles by non-increasing assigned-trip count.
+    """Order exact-clone duties by trip count, then first service trip.
 
     Every feasible solution has an equivalent identifier permutation whose
-    exact-clone vehicles are sorted by trip count, so the added inequalities
-    remove only label symmetry.  A group is skipped when assignment or
-    transition domains differ because compatibility rules or baseline-
-    preserving successor pruning may make vehicle identifiers solver-relevant
-    even when their recorded vehicle fields are equal.
+    exact-clone vehicles are sorted first by non-increasing trip count and,
+    for equal counts, by non-decreasing chronological start-trip rank. Strict
+    one-path flow gives every used vehicle exactly one start trip, so this
+    selects one representative of each label orbit without removing an
+    unlabeled duty set. The start-order rows fail closed unless a one-start
+    limit is explicit. A group is skipped when assignment, start, or
+    transition domains differ.
     """
 
     trip_ids_by_vehicle: Dict[str, Set[str]] = {}
@@ -675,6 +680,9 @@ def _add_identical_vehicle_trip_count_symmetry(
         transitions_by_vehicle.setdefault(str(vehicle_id), set()).add(
             (str(from_trip_id), str(to_trip_id))
         )
+    starts_by_vehicle: Dict[str, Set[str]] = {}
+    for vehicle_id, trip_id in path_start_arc or {}:
+        starts_by_vehicle.setdefault(str(vehicle_id), set()).add(str(trip_id))
     transition_domain_check_mode = (
         "explicit_arc_domain"
         if transition_arc is not None
@@ -684,9 +692,13 @@ def _add_identical_vehicle_trip_count_symmetry(
             else "not_present"
         )
     )
+    one_start_path_proven = bool(
+        path_start_arc is not None and path_start_count_limit == 1
+    )
 
     audit_groups: List[Dict[str, Any]] = []
     ordering_constraint_count = 0
+    equal_count_start_ordering_constraint_count = 0
     eligible_group_count = 0
     skipped_group_count = 0
 
@@ -711,7 +723,25 @@ def _add_identical_vehicle_trip_count_symmetry(
             domain == reference_transition_domain
             for domain in transition_domains.values()
         )
-        if not domain_match or not transition_domain_match:
+        start_domains = {
+            vehicle_id: starts_by_vehicle.get(vehicle_id, set())
+            for vehicle_id in vehicle_ids
+        }
+        reference_start_domain = (
+            start_domains[vehicle_ids[0]] if vehicle_ids else set()
+        )
+        start_domain_match = path_start_arc is None or (
+            bool(reference_start_domain)
+            and all(
+                domain == reference_start_domain
+                for domain in start_domains.values()
+            )
+        )
+        if (
+            not domain_match
+            or not transition_domain_match
+            or not start_domain_match
+        ):
             skipped_group_count += 1
             audit_groups.append(
                 {
@@ -724,7 +754,11 @@ def _add_identical_vehicle_trip_count_symmetry(
                         else (
                             "assignment_domain_mismatch"
                             if not domain_match
-                            else "transition_domain_mismatch"
+                            else (
+                                "transition_domain_mismatch"
+                                if not transition_domain_match
+                                else "start_domain_mismatch"
+                            )
                         )
                     ),
                     "assignment_domain_sizes": {
@@ -735,6 +769,12 @@ def _add_identical_vehicle_trip_count_symmetry(
                         vehicle_id: len(domain)
                         for vehicle_id, domain in sorted(
                             transition_domains.items()
+                        )
+                    },
+                    "start_domain_sizes": {
+                        vehicle_id: len(domain)
+                        for vehicle_id, domain in sorted(
+                            start_domains.items()
                         )
                     },
                 }
@@ -756,21 +796,72 @@ def _add_identical_vehicle_trip_count_symmetry(
                 separators=(",", ":"),
             ).encode("utf-8")
         ).hexdigest()
+        supplied_trip_order = tuple(
+            str(trip_id) for trip_id in (ordered_trip_ids or ())
+        )
+        ordered_start_domain: Tuple[str, ...] = ()
+        if one_start_path_proven:
+            ordered_start_domain = tuple(
+                trip_id
+                for trip_id in supplied_trip_order
+                if trip_id in reference_start_domain
+            )
+            ordered_start_domain += tuple(
+                sorted(
+                    set(reference_start_domain) - set(ordered_start_domain)
+                )
+            )
+        start_rank = {
+            trip_id: rank
+            for rank, trip_id in enumerate(ordered_start_domain, start=1)
+        }
+        inactive_start_rank = len(ordered_start_domain) + 1
         for position, (previous_vehicle_id, next_vehicle_id) in enumerate(
             zip(vehicle_ids, vehicle_ids[1:])
         ):
+            previous_trip_count = sum(
+                assignment_arc[(previous_vehicle_id, trip_id)]
+                for trip_id in ordered_domain
+            )
+            next_trip_count = sum(
+                assignment_arc[(next_vehicle_id, trip_id)]
+                for trip_id in ordered_domain
+            )
             model.addConstr(
-                sum(
-                    assignment_arc[(previous_vehicle_id, trip_id)]
-                    for trip_id in ordered_domain
-                )
-                >= sum(
-                    assignment_arc[(next_vehicle_id, trip_id)]
-                    for trip_id in ordered_domain
-                ),
+                previous_trip_count >= next_trip_count,
                 name=f"{name_prefix}__g{group_index}__p{position}",
             )
             ordering_constraint_count += 1
+            if path_start_arc is not None and ordered_start_domain:
+                previous_start_count = sum(
+                    path_start_arc[(previous_vehicle_id, trip_id)]
+                    for trip_id in ordered_start_domain
+                )
+                next_start_count = sum(
+                    path_start_arc[(next_vehicle_id, trip_id)]
+                    for trip_id in ordered_start_domain
+                )
+                previous_start_rank = sum(
+                    start_rank[trip_id]
+                    * path_start_arc[(previous_vehicle_id, trip_id)]
+                    for trip_id in ordered_start_domain
+                ) + inactive_start_rank * (1 - previous_start_count)
+                next_start_rank = sum(
+                    start_rank[trip_id]
+                    * path_start_arc[(next_vehicle_id, trip_id)]
+                    for trip_id in ordered_start_domain
+                ) + inactive_start_rank * (1 - next_start_count)
+                model.addConstr(
+                    previous_start_rank
+                    <= next_start_rank
+                    + inactive_start_rank
+                    * (previous_trip_count - next_trip_count),
+                    name=(
+                        f"{name_prefix}_equal_count_start__g{group_index}"
+                        f"__p{position}"
+                    ),
+                )
+                equal_count_start_ordering_constraint_count += 1
 
         eligible_group_count += 1
         audit_groups.append(
@@ -782,23 +873,38 @@ def _add_identical_vehicle_trip_count_symmetry(
                 "assignment_domain_hash": domain_hash,
                 "transition_arc_count": len(reference_transition_domain),
                 "transition_domain_hash": transition_domain_hash,
+                "start_arc_count": len(reference_start_domain),
+                "equal_count_start_ordering_enabled": bool(
+                    one_start_path_proven and ordered_start_domain
+                ),
             }
         )
 
     return {
-        "schema_version": "identical_vehicle_trip_count_symmetry_v1",
+        "schema_version": "identical_vehicle_duty_order_symmetry_v2",
         "enabled": bool(eligible_group_count),
         "integer_feasible_orbit_preserved": True,
         "eligible_group_count": eligible_group_count,
         "skipped_group_count": skipped_group_count,
         "transition_domain_check_mode": transition_domain_check_mode,
+        "path_start_count_limit": path_start_count_limit,
+        "one_start_path_proven": one_start_path_proven,
         "additional_variable_count": 0,
         "ordering_constraint_count": ordering_constraint_count,
+        "equal_count_start_ordering_constraint_count": (
+            equal_count_start_ordering_constraint_count
+        ),
+        "total_constraint_count": (
+            ordering_constraint_count
+            + equal_count_start_ordering_constraint_count
+        ),
         "groups": audit_groups,
         "semantics": (
             "exact_identifier_permutation_symmetry_only; adjacent_exact_clone_"
-            "vehicles_ordered_by_nonincreasing_total_assigned_trip_count; "
-            "assignment_or_transition_domain_mismatch_is_skipped"
+            "vehicles_ordered_by_nonincreasing_total_assigned_trip_count_"
+            "then_equal_count_chronological_start_trip_when_one_start_path_"
+            "is_proven; assignment_start_or_transition_domain_mismatch_is_"
+            "skipped"
         ),
     }
 
@@ -1545,6 +1651,31 @@ def _best_objective_stop_from_certified_lower_bound(
     if not math.isfinite(lower_bound) or lower_bound < 0.0 or gap >= 1.0:
         return None
     return lower_bound / (1.0 - gap)
+
+
+def _apply_best_objective_stop_from_certified_lower_bound(
+    *,
+    model: Any,
+    certified_lower_bound: Optional[float],
+    relative_gap: float,
+) -> Optional[float]:
+    """Install an incumbent stop whenever an independent floor is valid.
+
+    ``BestObjStop`` is an incumbent threshold, not a statement about the
+    current MIP start. Installing it only when the start already crossed the
+    threshold prevented Gurobi from stopping when a later incumbent reached
+    the predeclared certified gap. The parameter changes termination only; it
+    does not change the objective or feasible region.
+    """
+
+    threshold = _best_objective_stop_from_certified_lower_bound(
+        certified_lower_bound,
+        relative_gap,
+    )
+    if threshold is None:
+        return None
+    model.Params.BestObjStop = float(threshold)
+    return float(threshold)
 
 
 def _stage1_termination_reason(
@@ -5463,6 +5594,11 @@ class GurobiMILPAdapter:
             _add_identical_vehicle_trip_count_symmetry(
                 model=model,
                 assignment_arc=y,
+                path_start_arc=start_arc,
+                path_start_count_limit=max_start_fragments_per_vehicle,
+                ordered_trip_ids=(
+                    _canonical_trip_ids_for_vehicle_symmetry(problem)
+                ),
                 transition_arc=x if integrated_successor_pruning_enabled else None,
                 transition_domains_proven_equal=(
                     not integrated_successor_pruning_enabled
@@ -7750,16 +7886,24 @@ class GurobiMILPAdapter:
             + integrated_weather_energy_fuel_analytical_lower_bound
         )
         integrated_analytical_objective_floor_constraint_count = 0
+        integrated_analytical_objective_proxy_variable_count = 0
+        integrated_canonical_cost_objective = objective
         if (
             not integrated_analytical_objective_floor_blockers
             and math.isfinite(integrated_analytical_objective_lower_bound)
             and integrated_analytical_objective_lower_bound > 0.0
         ):
+            integrated_canonical_cost_objective = model.addVar(
+                lb=float(integrated_analytical_objective_lower_bound),
+                vtype=GRB.CONTINUOUS,
+                name="integrated_canonical_cost_with_certified_floor",
+            )
             model.addConstr(
-                objective >= integrated_analytical_objective_lower_bound,
-                name="integrated_analytical_total_cost_lower_bound",
+                integrated_canonical_cost_objective == objective,
+                name="integrated_canonical_cost_definition_with_floor",
             )
             integrated_analytical_objective_floor_constraint_count = 1
+            integrated_analytical_objective_proxy_variable_count = 1
 
         integrated_warm_start_audit = self._apply_integrated_plan_warm_start(
             problem,
@@ -7965,7 +8109,7 @@ class GurobiMILPAdapter:
                     name="coverage",
                 )
                 model.setObjectiveN(
-                    objective,
+                    integrated_canonical_cost_objective,
                     index=1,
                     priority=1,
                     name="secondary_cost",
@@ -7974,7 +8118,10 @@ class GurobiMILPAdapter:
             model.ModelSense = GRB.MINIMIZE
             model.setObjective(ice_fuel_l_objective, GRB.MINIMIZE)
         else:
-            model.setObjective(objective, GRB.MINIMIZE)
+            model.setObjective(
+                integrated_canonical_cost_objective,
+                GRB.MINIMIZE,
+            )
 
         remaining_before_recourse_preflight_sec = max(
             float(integrated_wall_clock_deadline or time.perf_counter())
@@ -8606,11 +8753,6 @@ class GurobiMILPAdapter:
                             ),
                         )
                         integrated_verified_start_objective_cap_constraint_count = 1
-                        cost_tolerance = float(
-                            verified_start_search_bounds[
-                                "objective_upper_bound_tolerance_jpy"
-                            ]
-                        )
                         if (
                             not integrated_analytical_objective_floor_blockers
                             and integrated_analytical_objective_lower_bound
@@ -8624,29 +8766,27 @@ class GurobiMILPAdapter:
                                 0.0,
                             ) / max(abs(preflight_objective), 1.0e-9)
                             integrated_certified_gap_stop_threshold = (
-                                _best_objective_stop_from_certified_lower_bound(
-                                    analytical_lower_bound,
-                                    max(float(config.mip_gap), 0.0),
+                                _apply_best_objective_stop_from_certified_lower_bound(
+                                    model=model,
+                                    certified_lower_bound=(
+                                        analytical_lower_bound
+                                    ),
+                                    relative_gap=max(
+                                        float(config.mip_gap), 0.0
+                                    ),
                                 )
                             )
-                            if (
-                                preflight_objective
-                                <= float(
-                                    integrated_certified_gap_stop_threshold
-                                )
-                                + cost_tolerance
-                            ):
-                                model.Params.BestObjStop = float(
-                                    integrated_certified_gap_stop_threshold
-                                )
-                                integrated_certified_gap_stop_applied = True
+                            integrated_certified_gap_stop_applied = bool(
+                                integrated_certified_gap_stop_threshold
+                                is not None
+                            )
                     except (TypeError, ValueError, OverflowError):
                         integrated_certified_gap_at_verified_start = None
                         integrated_certified_gap_stop_threshold = None
 
                 if _run_integrated_scalar_stage(
                     "lexicographic_canonical_operating_cost",
-                    objective,
+                    integrated_canonical_cost_objective,
                     require_exact=False,
                 ):
                     lexicographic_cost_status = status_map.get(
@@ -8850,7 +8990,7 @@ class GurobiMILPAdapter:
                         )
                         if _run_integrated_scalar_stage(
                             "policy_secondary_canonical_operating_cost",
-                            objective,
+                            integrated_canonical_cost_objective,
                             require_exact=False,
                         ):
                             lexicographic_cost_status = status_map.get(
@@ -8910,29 +9050,19 @@ class GurobiMILPAdapter:
                         0.0,
                     ) / max(abs(preflight_objective), 1.0e-9)
                     integrated_certified_gap_stop_threshold = (
-                        _best_objective_stop_from_certified_lower_bound(
-                            analytical_lower_bound,
-                            max(float(config.mip_gap), 0.0),
+                        _apply_best_objective_stop_from_certified_lower_bound(
+                            model=model,
+                            certified_lower_bound=analytical_lower_bound,
+                            relative_gap=max(float(config.mip_gap), 0.0),
                         )
+                    )
+                    integrated_certified_gap_stop_applied = bool(
+                        integrated_certified_gap_stop_threshold is not None
                     )
                 except (TypeError, ValueError, OverflowError):
                     integrated_certified_gap_at_verified_start = None
                     integrated_certified_gap_stop_threshold = None
-                if (
-                    integrated_certified_gap_stop_threshold is not None
-                    and math.isfinite(preflight_objective)
-                    and preflight_objective
-                    <= float(integrated_certified_gap_stop_threshold)
-                    + max(
-                        1.0e-6,
-                        integrated_feasibility_tol
-                        * max(abs(preflight_objective), 1.0),
-                    )
-                ):
-                    model.Params.BestObjStop = float(
-                        integrated_certified_gap_stop_threshold
-                    )
-                    integrated_certified_gap_stop_applied = True
+                    integrated_certified_gap_stop_applied = False
             phase_started_at = time.perf_counter()
             _optimize_integrated_with_exact_fragment_callback()
             phase_wall_sec = float(time.perf_counter() - phase_started_at)
@@ -9881,6 +10011,9 @@ class GurobiMILPAdapter:
                 "integrated_analytical_objective_floor_constraint_count": (
                     integrated_analytical_objective_floor_constraint_count
                 ),
+                "integrated_analytical_objective_proxy_variable_count": (
+                    integrated_analytical_objective_proxy_variable_count
+                ),
                 "integrated_analytical_objective_floor_certificate_eligible": (
                     not integrated_analytical_objective_floor_blockers
                 ),
@@ -9889,7 +10022,8 @@ class GurobiMILPAdapter:
                 ),
                 "integrated_analytical_objective_lower_bound_semantics": (
                     "integer_valid_sum_of_strict_path_cover_vehicle_day_"
-                    "cost_floor_and_optimistic_weather_energy_fuel_floor"
+                    "cost_floor_and_optimistic_weather_energy_fuel_floor_"
+                    "propagated_as_active_canonical_cost_variable_lower_bound"
                 ),
                 "integrated_gurobi_raw_best_bound": best_bound,
                 "integrated_gurobi_raw_mip_gap_ratio": final_gap,
@@ -9934,11 +10068,26 @@ class GurobiMILPAdapter:
                     )
                     or 0
                 ),
+                "integrated_identical_vehicle_equal_count_start_ordering_constraint_count": int(
+                    integrated_identical_vehicle_trip_count_symmetry.get(
+                        "equal_count_start_ordering_constraint_count",
+                        0,
+                    )
+                    or 0
+                ),
+                "integrated_identical_vehicle_duty_ordering_constraint_count": int(
+                    integrated_identical_vehicle_trip_count_symmetry.get(
+                        "total_constraint_count",
+                        0,
+                    )
+                    or 0
+                ),
                 "integrated_identical_vehicle_symmetry_semantics": (
                     "exact_identifier_permutation_symmetry_only; all solver_"
                     "relevant vehicle fields, assignment domains, and "
-                    "transition domains equal; activation prefix and "
-                    "nonincreasing assigned-trip count preserve at least one "
+                    "transition domains equal; activation prefix, "
+                    "nonincreasing assigned-trip count, and equal-count "
+                    "chronological start order preserve at least one "
                     "representative per exact vehicle-label orbit"
                 ),
                 "integrated_exact_combustion_clone_flow_aggregation_audit": (
@@ -12030,6 +12179,20 @@ class GurobiMILPAdapter:
                         )
                         or 0
                     ),
+                    "stage1_identical_vehicle_equal_count_start_ordering_constraint_count": int(
+                        stage1_identical_vehicle_trip_count_symmetry.get(
+                            "equal_count_start_ordering_constraint_count",
+                            0,
+                        )
+                        or 0
+                    ),
+                    "stage1_identical_vehicle_duty_ordering_constraint_count": int(
+                        stage1_identical_vehicle_trip_count_symmetry.get(
+                            "total_constraint_count",
+                            0,
+                        )
+                        or 0
+                    ),
                     "stage1_vehicle_count_lower_bound_semantics": (
                         "relaxed_dispatch_feasible_minimum_path_cover_vehicle_day_lb"
                     ),
@@ -12302,6 +12465,20 @@ class GurobiMILPAdapter:
                 "stage1_identical_vehicle_trip_count_ordering_constraint_count": int(
                     stage1_identical_vehicle_trip_count_symmetry.get(
                         "ordering_constraint_count",
+                        0,
+                    )
+                    or 0
+                ),
+                "stage1_identical_vehicle_equal_count_start_ordering_constraint_count": int(
+                    stage1_identical_vehicle_trip_count_symmetry.get(
+                        "equal_count_start_ordering_constraint_count",
+                        0,
+                    )
+                    or 0
+                ),
+                "stage1_identical_vehicle_duty_ordering_constraint_count": int(
+                    stage1_identical_vehicle_trip_count_symmetry.get(
+                        "total_constraint_count",
                         0,
                     )
                     or 0

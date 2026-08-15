@@ -1,5 +1,34 @@
 # master-course
 
+## 2026-08-15 exact Phase-4 bound propagation and clone-duty symmetry
+
+- A runtime audit of the first independent BEV-coefficient case found that
+  the integrated model spent 2,814 seconds at one root node with Gurobi's raw
+  best bound still at 0 JPY, although the independent certified cost floor was
+  57,986.662 JPY. The model contained 678,600 connection binaries; 25 exact
+  ICE clones formed the dominant vehicle-label symmetry group.
+- Fixed a P1 termination bug: the certified `BestObjStop` threshold was
+  installed only when the initial feasible solution already met the requested
+  gap. It is now installed whenever the independent lower-bound certificate is
+  valid, so a later qualifying incumbent can terminate immediately. This does
+  not alter the objective, feasible region, or declared gap.
+- The certified analytical floor is now the explicit lower bound of a
+  continuous canonical-cost objective variable tied by equality to the
+  unchanged accounting expression. This exposes the nonzero certified floor
+  to Gurobi before the full root relaxation has been solved; invalid or blocked
+  certificates continue to omit the proxy entirely.
+- Exact-identical vehicles are ordered by non-increasing assigned-trip count
+  and, when counts tie, by chronological first-trip rank. Strict path flow
+  gives each used bus one start trip, so the extra adjacent-group rows retain
+  one representative of every unlabeled duty set while removing vehicle-ID
+  permutations. The tie rows are enabled only when the model proves a
+  one-start-per-vehicle limit; multi-fragment and assignment/start/transition
+  domain mismatches fail closed.
+- These changes are formulation-equivalent performance repairs, not new
+  numerical evidence. The full repository regression passes (`1487 passed` in
+  155.40 seconds). A fresh clean-commit frontend/BFF run must still demonstrate
+  runtime and certified-gap effects before any thesis comparison is accepted.
+
 ## 2026-08-15 independent BEV/ICE coefficient sensitivity
 
 - The former `trip_energy_sensitivity_scale` changes BEV kWh and ICE fuel

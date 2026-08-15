@@ -1,5 +1,32 @@
 # Current research release blockers
 
+## 2026-08-15 exact proof-performance repairs implemented; rerun pending
+
+The first independent BEV-coefficient run established a valid schedule but
+also exposed an exact-proof bottleneck: 678,600 vehicle-labelled connection
+binaries, one explored root node, a raw Gurobi bound of 0 JPY after 2,814
+seconds, and a separate valid analytical floor of 57,986.661708 JPY. This is
+not evidence that the feasible incumbent is optimal.
+
+Three formulation-equivalent repairs are now implemented. First, the
+certified `BestObjStop` threshold is installed before search whenever its
+lower-bound certificate is valid, rather than only when the initial incumbent
+already meets it. Second, the certified cost floor is the explicit lower bound
+of an equality-linked canonical-cost objective variable, so it is visible in
+the objective domain before root relaxation completes. Third, exact-identical
+vehicle duties are ordered by assigned-trip count and, only when one start per
+vehicle is proven, by equal-count chronological start trip. This eliminates
+vehicle-ID permutations while preserving one member of every unlabeled duty
+orbit. Multi-fragment or domain-mismatch cases skip the stronger symmetry rows.
+
+None of these repairs changes trip coverage, successor arcs, SOC, charging,
+PV/BESS flows, objective coefficients, canonical accounting, or the 1% target.
+They also do not retroactively certify `run_20260815_0747`. The full repository
+regression passes (`1487 passed`), but a fresh frozen-commit frontend/BFF
+execution is still required. The research release and Phase 2 therefore remain
+**BLOCKED** until the rerun shows its actual wall time, incumbent, raw bound and
+certified gap.
+
 ## 2026-08-15 independent coefficient sensitivity implemented; solves pending
 
 Phase 2 previously relied on a common `trip_energy_sensitivity_scale` that
