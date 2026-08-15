@@ -109,7 +109,34 @@
   validates the telemetry. Focused integrated/exactness/
   research-contract regression passes (`134 passed`). The full repository
   regression also passes (`1489 passed` in 164.85 seconds). A frozen-commit
-  matched timing run remains required before claiming any speedup.
+  matched timing run was then performed as recorded below.
+- Froze clean commit `10a662159d4b0cd2a26caf8bc162816f67848a22` and
+  reran the identical low-PV `BEV_ENERGY_1.2` frontend/BFF case with fresh
+  Prepare, the same 900-second/4-thread/1% controls, Phase 4 and 24-step
+  Rolling. The source run is `output/2026-08-15/run_20260815_1018`; bundle is
+  `output/thesis_sensitivity_powertrain_low_pv_20260815_10a6621_bev12_900s`.
+  The prepared input ID and all reported dispatch, energy, cost, CO2 and SOC
+  KPIs exactly match the `7fe44eb` comparator.
+- Telemetry confirms that 726,120 assignment/connection/start/end variables
+  were created with four `addVars` calls in 1.748726 seconds. Complete
+  pre-optimization time was 166.509116 seconds versus a derivable 168.229836
+  seconds in the prior profile, a 1.720720-second reduction. The cost-stage
+  solve instead varied from 469.005764 to 473.556456 seconds; total reported
+  solve time varied from 470.403739 to 474.988037 seconds. The incumbent,
+  57,986.661708 JPY bound, 6.296823% gap and one explored node were unchanged.
+- Complete frontend-runner wall time decreased from 1,123.793917 to
+  1,117.950286 seconds, but one unmatched-noise timing pair cannot attribute
+  that difference to the batching change, especially because solve time moved
+  in the opposite direction. No runtime speedup is claimed. The batching code
+  is retained as exact, simpler boundary use with explicit telemetry; the
+  experiment shows that the dominant remaining costs are constraint/model
+  construction and the labelled root relaxation.
+- The `10a6621` run passed 264/264 coverage, physical validation, all 24
+  Rolling steps, accounting and clean-SHA provenance. It remains `BLOCKED`
+  solely by `mip_gap_target_met`. Further micro-optimization of variable
+  creation or row-only symmetry is stopped; the next model work must remove or
+  aggregate vehicle-labelled connection variables through an exact duty/path
+  formulation while preserving the full successor network.
 
 ## 2026-08-15: independent powertrain energy sensitivities
 

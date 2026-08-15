@@ -63,9 +63,24 @@
   type, preserving every key, bound and variable type. The search profile now
   records the API-call count, variable count, family-build time and complete
   pre-optimization wall time. This is construction-only and does not alter the
-  MILP or make a runtime claim until a frozen-commit comparison is completed.
+  MILP. A frozen-SHA comparison at `10a6621` created 726,120 variables through
+  four API calls in 1.749 seconds, but complete pre-optimization time improved
+  only from a derived 168.230 seconds to a measured 166.509 seconds. Gurobi
+  solve time increased from 470.404 to 474.988 seconds, with the same incumbent,
+  bound, 6.296823% gap and one explored node. Complete runner wall time changed
+  from 1,123.794 to 1,117.950 seconds. This single pair supports no end-to-end
+  speedup claim; it shows that per-variable API calls were not the dominant
+  blocker.
   Focused regression passes (`134 passed`) and the full repository regression
   passes (`1489 passed` in 164.85 seconds).
+- The `10a6621` source run is `output/2026-08-15/run_20260815_1018`; its
+  immutable bundle is
+  `output/thesis_sensitivity_powertrain_low_pv_20260815_10a6621_bev12_900s`.
+  All 264 trips, physical validation, 24/24 Rolling, accounting and clean-SHA
+  provenance passed. It remains `BLOCKED` only by the declared 1% gap target.
+  The next optimization change must address constraint construction and the
+  labelled connection formulation itself, not add more row-only symmetry or
+  Python variable-creation tuning.
 
 ## 2026-08-15 independent BEV/ICE coefficient sensitivity
 

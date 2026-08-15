@@ -59,11 +59,20 @@ indexed unit-interval families through Gurobi `addVars` while preserving every
 key, bound and variable type. The search profile exports its variable count,
 actual API-call count, batch-build wall time and full pre-optimization wall
 time. Focused tests (`134 passed`) and the full regression (`1489 passed` in
-164.85 seconds) succeed. This implementation has not yet been measured at a
-frozen commit, so no speedup is claimed. If the root proof remains dominant,
-the required architectural change is an exact duty/path or aggregated network
-formulation that removes vehicle-labelled connection binaries without
-successor pruning, fallback, or post-solve repair.
+164.85 seconds) succeed. The frozen `10a6621` comparison created 726,120 such
+variables with four calls in 1.748726 seconds, but pre-optimization time only
+changed from a derived 168.229836 to a measured 166.509116 seconds. Solve time
+changed from 470.403739 to 474.988037 seconds with identical incumbent, bound,
+6.296823% gap and one node. Complete wall time changed from 1,123.793917 to
+1,117.950286 seconds; this single noisy pair does not support a speedup claim.
+
+The run nevertheless passed all non-optimality gates: 264/264 coverage,
+physical validity, 24/24 Rolling, accounting and clean-SHA provenance. It is
+`BLOCKED` solely by `mip_gap_target_met`. Variable batching is retained as an
+exact implementation cleanup, but the evidence rules it out as the main
+bottleneck. The required architectural change is now an exact duty/path or
+aggregated network formulation that removes vehicle-labelled connection
+binaries without successor pruning, fallback, or post-solve repair.
 
 ## 2026-08-15 independent coefficient sensitivity implemented; solves pending
 
