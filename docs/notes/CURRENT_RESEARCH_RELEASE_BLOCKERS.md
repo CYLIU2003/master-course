@@ -15,9 +15,10 @@ already meets it. Second, the certified cost floor is the explicit lower bound
 of an equality-linked canonical-cost objective variable, so it is visible in
 the objective domain before root relaxation completes. Third, exact-identical
 vehicle duties are ordered by assigned-trip count and, only when one start per
-vehicle is proven, by equal-count chronological start trip. This eliminates
-vehicle-ID permutations while preserving one member of every unlabeled duty
-orbit. Multi-fragment or domain-mismatch cases skip the stronger symmetry rows.
+vehicle is proven, by equal-count chronological start trip. A multi-fragment-
+safe row also orders equal-count duties by the sum of chronological assignment
+ranks. This eliminates vehicle-ID permutations while preserving one member of
+every unlabeled duty orbit. Domain-mismatch cases skip the stronger rows.
 
 None of these repairs changes trip coverage, successor arcs, SOC, charging,
 PV/BESS flows, objective coefficients, canonical accounting, or the 1% target.
@@ -39,6 +40,14 @@ is 100 rather than one. The next exact performance change must address the
 678,600 vehicle-labelled connection binaries or strengthen their relaxation;
 running the other nine cases with longer limits is not accepted as a remedy.
 Research release remains **BLOCKED**.
+
+The follow-on assignment-rank symmetry is implemented but not yet measured at
+a frozen commit. It gives the current 25-ICE clone group 24 additional exact
+rows even with a fragment limit of 100. It does not remove connection binaries,
+so it is a bounded performance experiment rather than a claim that the main
+formulation problem is solved.
+The full regression passes (`1487 passed` in 158.02 seconds); only fresh
+runtime evidence remains pending for this bounded change.
 
 ## 2026-08-15 independent coefficient sensitivity implemented; solves pending
 

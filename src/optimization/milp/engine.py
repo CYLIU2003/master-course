@@ -351,6 +351,11 @@ class MILPOptimizer:
                 ).get(
                     "stage1_identical_vehicle_trip_count_ordering_constraint_count"
                 ),
+                "stage1_identical_vehicle_equal_count_assignment_rank_ordering_constraint_count": (
+                    plan.metadata or {}
+                ).get(
+                    "stage1_identical_vehicle_equal_count_assignment_rank_ordering_constraint_count"
+                ),
                 "stage1_identical_vehicle_equal_count_start_ordering_constraint_count": (
                     plan.metadata or {}
                 ).get(
@@ -944,6 +949,11 @@ class MILPOptimizer:
                 "integrated_identical_vehicle_trip_count_ordering_constraint_count": (
                     (plan.metadata or {}).get(
                         "integrated_identical_vehicle_trip_count_ordering_constraint_count"
+                    )
+                ),
+                "integrated_identical_vehicle_equal_count_assignment_rank_ordering_constraint_count": (
+                    (plan.metadata or {}).get(
+                        "integrated_identical_vehicle_equal_count_assignment_rank_ordering_constraint_count"
                     )
                 ),
                 "integrated_identical_vehicle_equal_count_start_ordering_constraint_count": (

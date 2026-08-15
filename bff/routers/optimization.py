@@ -10488,6 +10488,11 @@ def _solver_settings_payload(
                 "stage1_identical_vehicle_trip_count_ordering_constraint_count"
             )
         ),
+        "stage1_identical_vehicle_equal_count_assignment_rank_ordering_constraint_count": _int_or_none(
+            metadata.get(
+                "stage1_identical_vehicle_equal_count_assignment_rank_ordering_constraint_count"
+            )
+        ),
         "stage1_identical_vehicle_equal_count_start_ordering_constraint_count": _int_or_none(
             metadata.get(
                 "stage1_identical_vehicle_equal_count_start_ordering_constraint_count"
@@ -10664,6 +10669,11 @@ def _solver_settings_payload(
         "integrated_identical_vehicle_trip_count_ordering_constraint_count": _int_or_none(
             metadata.get(
                 "integrated_identical_vehicle_trip_count_ordering_constraint_count"
+            )
+        ),
+        "integrated_identical_vehicle_equal_count_assignment_rank_ordering_constraint_count": _int_or_none(
+            metadata.get(
+                "integrated_identical_vehicle_equal_count_assignment_rank_ordering_constraint_count"
             )
         ),
         "integrated_identical_vehicle_equal_count_start_ordering_constraint_count": _int_or_none(

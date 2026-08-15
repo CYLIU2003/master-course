@@ -584,6 +584,7 @@ def _ordered_identical_vehicle_groups(
 
     baseline_active_vehicle_ids: Set[str] = set()
     baseline_trip_count_by_vehicle: Dict[str, int] = {}
+    baseline_trip_rank_sum_by_vehicle: Dict[str, int] = {}
     baseline_first_start_rank_by_vehicle: Dict[str, int] = {}
     canonical_trip_ids = _canonical_trip_ids_for_vehicle_symmetry(problem)
     trip_rank = {
@@ -600,6 +601,14 @@ def _ordered_identical_vehicle_groups(
                 baseline_trip_count_by_vehicle[vehicle_id] = (
                     baseline_trip_count_by_vehicle.get(vehicle_id, 0)
                     + len(duty.trip_ids)
+                )
+                baseline_trip_rank_sum_by_vehicle[vehicle_id] = (
+                    baseline_trip_rank_sum_by_vehicle.get(vehicle_id, 0)
+                    + sum(
+                        trip_rank[str(trip_id)] + 1
+                        for trip_id in duty.trip_ids
+                        if str(trip_id) in trip_rank
+                    )
                 )
                 represented_trip_ranks = [
                     trip_rank[str(trip_id)]
@@ -636,6 +645,10 @@ def _ordered_identical_vehicle_groups(
                         if vehicle_id in baseline_active_vehicle_ids
                         else 1,
                         -baseline_trip_count_by_vehicle.get(vehicle_id, 0),
+                        baseline_trip_rank_sum_by_vehicle.get(
+                            vehicle_id,
+                            sum(range(1, len(canonical_trip_ids) + 1)) + 1,
+                        ),
                         baseline_first_start_rank_by_vehicle.get(
                             vehicle_id,
                             len(canonical_trip_ids),
@@ -698,6 +711,7 @@ def _add_identical_vehicle_trip_count_symmetry(
 
     audit_groups: List[Dict[str, Any]] = []
     ordering_constraint_count = 0
+    equal_count_assignment_rank_ordering_constraint_count = 0
     equal_count_start_ordering_constraint_count = 0
     eligible_group_count = 0
     skipped_group_count = 0
@@ -782,6 +796,30 @@ def _add_identical_vehicle_trip_count_symmetry(
             continue
 
         ordered_domain = tuple(sorted(reference_domain))
+        supplied_trip_order = tuple(
+            str(trip_id) for trip_id in (ordered_trip_ids or ())
+        )
+        ordered_assignment_domain: Tuple[str, ...] = ()
+        if supplied_trip_order:
+            ordered_assignment_domain = tuple(
+                trip_id
+                for trip_id in supplied_trip_order
+                if trip_id in reference_domain
+            )
+            ordered_assignment_domain += tuple(
+                sorted(
+                    set(reference_domain)
+                    - set(ordered_assignment_domain)
+                )
+            )
+        assignment_rank = {
+            trip_id: rank
+            for rank, trip_id in enumerate(
+                ordered_assignment_domain,
+                start=1,
+            )
+        }
+        maximum_assignment_rank_sum = sum(assignment_rank.values())
         domain_hash = hashlib.sha256(
             json.dumps(
                 ordered_domain,
@@ -796,9 +834,6 @@ def _add_identical_vehicle_trip_count_symmetry(
                 separators=(",", ":"),
             ).encode("utf-8")
         ).hexdigest()
-        supplied_trip_order = tuple(
-            str(trip_id) for trip_id in (ordered_trip_ids or ())
-        )
         ordered_start_domain: Tuple[str, ...] = ()
         if one_start_path_proven:
             ordered_start_domain = tuple(
@@ -832,6 +867,28 @@ def _add_identical_vehicle_trip_count_symmetry(
                 name=f"{name_prefix}__g{group_index}__p{position}",
             )
             ordering_constraint_count += 1
+            if ordered_assignment_domain:
+                previous_assignment_rank_sum = sum(
+                    assignment_rank[trip_id]
+                    * assignment_arc[(previous_vehicle_id, trip_id)]
+                    for trip_id in ordered_assignment_domain
+                )
+                next_assignment_rank_sum = sum(
+                    assignment_rank[trip_id]
+                    * assignment_arc[(next_vehicle_id, trip_id)]
+                    for trip_id in ordered_assignment_domain
+                )
+                model.addConstr(
+                    previous_assignment_rank_sum
+                    <= next_assignment_rank_sum
+                    + maximum_assignment_rank_sum
+                    * (previous_trip_count - next_trip_count),
+                    name=(
+                        f"{name_prefix}_equal_count_rank_sum__g{group_index}"
+                        f"__p{position}"
+                    ),
+                )
+                equal_count_assignment_rank_ordering_constraint_count += 1
             if path_start_arc is not None and ordered_start_domain:
                 previous_start_count = sum(
                     path_start_arc[(previous_vehicle_id, trip_id)]
@@ -874,6 +931,9 @@ def _add_identical_vehicle_trip_count_symmetry(
                 "transition_arc_count": len(reference_transition_domain),
                 "transition_domain_hash": transition_domain_hash,
                 "start_arc_count": len(reference_start_domain),
+                "equal_count_assignment_rank_ordering_enabled": bool(
+                    ordered_assignment_domain
+                ),
                 "equal_count_start_ordering_enabled": bool(
                     one_start_path_proven and ordered_start_domain
                 ),
@@ -881,7 +941,7 @@ def _add_identical_vehicle_trip_count_symmetry(
         )
 
     return {
-        "schema_version": "identical_vehicle_duty_order_symmetry_v2",
+        "schema_version": "identical_vehicle_duty_order_symmetry_v3",
         "enabled": bool(eligible_group_count),
         "integer_feasible_orbit_preserved": True,
         "eligible_group_count": eligible_group_count,
@@ -891,20 +951,24 @@ def _add_identical_vehicle_trip_count_symmetry(
         "one_start_path_proven": one_start_path_proven,
         "additional_variable_count": 0,
         "ordering_constraint_count": ordering_constraint_count,
+        "equal_count_assignment_rank_ordering_constraint_count": (
+            equal_count_assignment_rank_ordering_constraint_count
+        ),
         "equal_count_start_ordering_constraint_count": (
             equal_count_start_ordering_constraint_count
         ),
         "total_constraint_count": (
             ordering_constraint_count
+            + equal_count_assignment_rank_ordering_constraint_count
             + equal_count_start_ordering_constraint_count
         ),
         "groups": audit_groups,
         "semantics": (
             "exact_identifier_permutation_symmetry_only; adjacent_exact_clone_"
             "vehicles_ordered_by_nonincreasing_total_assigned_trip_count_"
-            "then_equal_count_chronological_start_trip_when_one_start_path_"
-            "is_proven; assignment_start_or_transition_domain_mismatch_is_"
-            "skipped"
+            "then_equal_count_chronological_assignment_rank_sum_then_start_"
+            "trip_when_one_start_path_is_proven; assignment_start_or_"
+            "transition_domain_mismatch_is_skipped"
         ),
     }
 
@@ -10068,6 +10132,13 @@ class GurobiMILPAdapter:
                     )
                     or 0
                 ),
+                "integrated_identical_vehicle_equal_count_assignment_rank_ordering_constraint_count": int(
+                    integrated_identical_vehicle_trip_count_symmetry.get(
+                        "equal_count_assignment_rank_ordering_constraint_count",
+                        0,
+                    )
+                    or 0
+                ),
                 "integrated_identical_vehicle_equal_count_start_ordering_constraint_count": int(
                     integrated_identical_vehicle_trip_count_symmetry.get(
                         "equal_count_start_ordering_constraint_count",
@@ -12179,6 +12250,13 @@ class GurobiMILPAdapter:
                         )
                         or 0
                     ),
+                    "stage1_identical_vehicle_equal_count_assignment_rank_ordering_constraint_count": int(
+                        stage1_identical_vehicle_trip_count_symmetry.get(
+                            "equal_count_assignment_rank_ordering_constraint_count",
+                            0,
+                        )
+                        or 0
+                    ),
                     "stage1_identical_vehicle_equal_count_start_ordering_constraint_count": int(
                         stage1_identical_vehicle_trip_count_symmetry.get(
                             "equal_count_start_ordering_constraint_count",
@@ -12465,6 +12543,13 @@ class GurobiMILPAdapter:
                 "stage1_identical_vehicle_trip_count_ordering_constraint_count": int(
                     stage1_identical_vehicle_trip_count_symmetry.get(
                         "ordering_constraint_count",
+                        0,
+                    )
+                    or 0
+                ),
+                "stage1_identical_vehicle_equal_count_assignment_rank_ordering_constraint_count": int(
+                    stage1_identical_vehicle_trip_count_symmetry.get(
+                        "equal_count_assignment_rank_ordering_constraint_count",
                         0,
                     )
                     or 0

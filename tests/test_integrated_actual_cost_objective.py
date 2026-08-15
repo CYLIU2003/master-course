@@ -762,9 +762,13 @@ def test_equal_count_symmetry_orders_exact_clone_start_trips() -> None:
     assert canonical_status == GRB.OPTIMAL
     assert label_swapped_status == GRB.INFEASIBLE
     assert audit["integer_feasible_orbit_preserved"] is True
+    assert audit[
+        "equal_count_assignment_rank_ordering_constraint_count"
+    ] == 1
     assert audit["equal_count_start_ordering_constraint_count"] == 1
-    assert audit["total_constraint_count"] == 2
-    assert "equal_count_chronological_start_trip" in audit["semantics"]
+    assert audit["total_constraint_count"] == 3
+    assert "chronological_assignment_rank_sum" in audit["semantics"]
+    assert "then_start_trip_when_one_start_path" in audit["semantics"]
 
 
 def test_equal_count_start_symmetry_fails_closed_for_multiple_fragments() -> None:
@@ -797,8 +801,11 @@ def test_equal_count_start_symmetry_fails_closed_for_multiple_fragments() -> Non
     assert audit["enabled"] is True
     assert audit["one_start_path_proven"] is False
     assert audit["ordering_constraint_count"] == 1
+    assert audit[
+        "equal_count_assignment_rank_ordering_constraint_count"
+    ] == 1
     assert audit["equal_count_start_ordering_constraint_count"] == 0
-    assert audit["total_constraint_count"] == 1
+    assert audit["total_constraint_count"] == 2
 
 
 def test_trip_count_symmetry_skips_nonidentical_assignment_domains() -> None:
@@ -933,11 +940,14 @@ def test_phase4_trip_count_symmetry_preserves_exact_objective() -> None:
         "integrated_identical_vehicle_trip_count_ordering_constraint_count"
     ] == 1
     assert symmetric_plan.metadata[
+        "integrated_identical_vehicle_equal_count_assignment_rank_ordering_constraint_count"
+    ] == 1
+    assert symmetric_plan.metadata[
         "integrated_identical_vehicle_equal_count_start_ordering_constraint_count"
     ] == 1
     assert symmetric_plan.metadata[
         "integrated_identical_vehicle_duty_ordering_constraint_count"
-    ] == 2
+    ] == 3
 
 
 def _exact_ice_clone_audit(

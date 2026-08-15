@@ -18,12 +18,14 @@
   to Gurobi before the full root relaxation has been solved; invalid or blocked
   certificates continue to omit the proxy entirely.
 - Exact-identical vehicles are ordered by non-increasing assigned-trip count
-  and, when counts tie, by chronological first-trip rank. Strict path flow
-  gives each used bus one start trip, so the extra adjacent-group rows retain
-  one representative of every unlabeled duty set while removing vehicle-ID
-  permutations. The tie rows are enabled only when the model proves a
-  one-start-per-vehicle limit; multi-fragment and assignment/start/transition
-  domain mismatches fail closed.
+  and, when counts tie, by the sum of chronological assigned-trip ranks. Every
+  unlabeled duty set can be relabelled into that order even with multiple
+  fragments. A further first-trip tie order is enabled only when the model
+  proves a one-start-per-vehicle limit; assignment/start/transition domain
+  mismatches fail closed. The current 25-ICE group therefore receives 24
+  rank-sum rows even though its maximum fragment count is 100.
+- The rank-sum extension passes the full repository regression (`1487 passed`
+  in 158.02 seconds). Its runtime effect still requires clean-commit evidence.
 - These changes are formulation-equivalent performance repairs, not new
   numerical evidence. The full repository regression passes (`1487 passed` in
   155.40 seconds). The clean-commit diagnostic below measures their runtime and

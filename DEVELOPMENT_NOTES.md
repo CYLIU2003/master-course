@@ -23,13 +23,13 @@
   prevents an eligible objective from presenting an initial 0-JPY domain.
 - Strengthened exact-clone symmetry without successor pruning. Adjacent
   identical vehicles remain ordered by assigned-trip count; equal-count duties
-  are additionally ordered by chronological start-trip rank. With strict path
-  flow, each used vehicle has exactly one start and each trip is uniquely
-  covered, so every unlabeled duty set has a label permutation satisfying the
-  rows. Groups with unequal assignment, start or transition domains are
-  skipped. Equal-count start ordering is also disabled unless the configured
-  maximum start-fragment count is exactly one. The formulation adds no
-  variables and at most two rows per adjacent eligible clone pair.
+  are additionally ordered by the sum of chronological assignment ranks. Any
+  unlabeled duty set can be sorted by this tuple, including multi-fragment
+  duties, so the rows preserve an orbit representative. A further start-trip
+  order is enabled only when the configured maximum start-fragment count is
+  exactly one. Groups with unequal assignment, start or transition domains are
+  skipped. The formulation adds no variables and at most three rows per
+  adjacent eligible clone pair.
 - Added unit/integration regressions for pre-threshold stop installation,
   equal-count label-orbit selection, exact-objective preservation, disabled
   certificate behavior and exported telemetry. Focused Phase-4 tests pass
@@ -64,6 +64,16 @@
   24 trip-count rows remained. The next performance work must therefore reduce
   or aggregate the 678,600 vehicle-labelled connection binaries using an exact
   duty/path formulation; simply extending wall time is not justified.
+- A follow-on exact symmetry row now covers that multi-fragment case without
+  changing its fragment allowance. For adjacent exact clones with equal trip
+  counts, it orders the sum of chronological assigned-trip ranks. The Big-M is
+  the sum of all ranks, which fully relaxes the row whenever the preceding
+  clone has at least one more trip. Thus the existing unlabeled feasible set is
+  preserved while the current 25-ICE group gains 24 applicable rows. This may
+  reduce label symmetry but does not reduce the 678,600 binary count; fresh
+  timing evidence remains necessary.
+- Focused solver/oracle/feedback regression passes (`83 passed`), followed by
+  the full repository regression (`1487 passed` in 158.02 seconds).
 
 ## 2026-08-15: independent powertrain energy sensitivities
 
