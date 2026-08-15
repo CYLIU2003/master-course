@@ -22,10 +22,23 @@ orbit. Multi-fragment or domain-mismatch cases skip the stronger symmetry rows.
 None of these repairs changes trip coverage, successor arcs, SOC, charging,
 PV/BESS flows, objective coefficients, canonical accounting, or the 1% target.
 They also do not retroactively certify `run_20260815_0747`. The full repository
-regression passes (`1487 passed`), but a fresh frozen-commit frontend/BFF
-execution is still required. The research release and Phase 2 therefore remain
-**BLOCKED** until the rerun shows its actual wall time, incumbent, raw bound and
-certified gap.
+regression passes (`1487 passed`); the required frozen-commit frontend/BFF
+diagnostic and its still-blocked result are recorded below.
+
+The clean-SHA rerun at `5d0a1c5` has now measured those fields. With a
+900-second Day-ahead diagnostic request, Gurobi used a 466.355-second
+integrated cost stage and the full frontend/Prepare/Rolling runner took
+1,122.977 seconds. Raw and certified bounds both equal 57,986.661708 JPY,
+`BestObjStop` was active at 58,572.385564 JPY, and all physical/Rolling/
+accounting checks passed. The incumbent nevertheless remained
+61,883.346234 JPY at one explored node, leaving the same 6.296823% gap.
+
+This resolves the false 0-JPY raw-bound evidence but not Phase 2. The stronger
+start-trip symmetry also added zero rows because the configured fragment limit
+is 100 rather than one. The next exact performance change must address the
+678,600 vehicle-labelled connection binaries or strengthen their relaxation;
+running the other nine cases with longer limits is not accepted as a remedy.
+Research release remains **BLOCKED**.
 
 ## 2026-08-15 independent coefficient sensitivity implemented; solves pending
 

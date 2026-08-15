@@ -35,8 +35,35 @@
   certificate behavior and exported telemetry. Focused Phase-4 tests pass
   (`64 passed`); adjacent lower-bound/research/weather telemetry tests pass
   (`54 passed`). The full repository regression passes (`1487 passed` in
-  155.40 seconds). Fresh clean-SHA runtime evidence is still required before
-  this repair can change the research release decision.
+  155.40 seconds). A fresh clean-SHA diagnostic was then required before this
+  repair could change the research release decision; its result is recorded
+  below.
+- Restarted only the port-8000 BFF from clean commit
+  `5d0a1c5ed7cb99fb01aa7c036f8e06f65d844273` and reran the low-PV
+  `BEV_ENERGY_1.2` case through fresh frontend Prepare, Phase 4, 24 Rolling
+  steps, physical validation and accounting with a 900-second Day-ahead
+  diagnostic limit. The source run is `output/2026-08-15/run_20260815_0921`;
+  the immutable execution bundle is
+  `output/thesis_sensitivity_powertrain_low_pv_20260815_5d0a1c5_bev12_900s`.
+- The intended proof telemetry changed exactly as designed. Raw Gurobi best
+  bound is now 57,986.661708 JPY instead of 0 JPY, equal to the independent
+  analytical certificate. The objective proxy count is one, its defining row
+  count is one, the certified stop threshold is 58,572.385564 JPY, and
+  `integrated_certified_gap_stop_applied=true` even though the initial gap
+  exceeded 1%.
+- The performance blocker remains. The integrated cost stage used 466.355
+  seconds, explored one node, found no better incumbent and retained
+  61,883.346234 JPY / 6.296823%. Complete runner wall time was 1,122.977
+  seconds. Dispatch, physical, Rolling, cost, CO2 and minimum-SOC results are
+  identical to the prior 3,600-second case. This is a valid negative result:
+  lower-bound visibility and termination semantics were repaired, but they do
+  not tighten the relaxation or improve the incumbent.
+- The new chronological-start tie order was not applied: the active model
+  declares `max_start_fragments_per_vehicle=100`, so the one-start proof is
+  unavailable and its row count is zero. Only the existing 24 activation and
+  24 trip-count rows remained. The next performance work must therefore reduce
+  or aggregate the 678,600 vehicle-labelled connection binaries using an exact
+  duty/path formulation; simply extending wall time is not justified.
 
 ## 2026-08-15: independent powertrain energy sensitivities
 

@@ -26,8 +26,20 @@
   domain mismatches fail closed.
 - These changes are formulation-equivalent performance repairs, not new
   numerical evidence. The full repository regression passes (`1487 passed` in
-  155.40 seconds). A fresh clean-commit frontend/BFF run must still demonstrate
-  runtime and certified-gap effects before any thesis comparison is accepted.
+  155.40 seconds). The clean-commit diagnostic below measures their runtime and
+  gap effects without upgrading the sensitivity case to an accepted result.
+- A clean-SHA 900-second diagnostic at `5d0a1c5` now verifies the propagation
+  repair. Gurobi's raw bound is 57,986.661708 JPY instead of 0 JPY, the same as
+  the independent certificate, and `BestObjStop=58,572.385564 JPY` was active.
+  The run still explored only one root node, retained the same 61,883.346234
+  JPY incumbent and ended at a 6.296823% gap. The requested 900-second shared
+  budget yielded 467.776 seconds of reported solve time and 1,122.977 seconds
+  of complete frontend/Prepare/Rolling wall time.
+- The stronger start-trip tie order correctly failed closed in this run because
+  `max_start_fragments_per_vehicle=100`, so it added zero rows and cannot be
+  credited for a speedup. The result proves accurate bound propagation, not a
+  solved performance problem; reducing the 678,600 labelled connection
+  binaries remains necessary.
 
 ## 2026-08-15 independent BEV/ICE coefficient sensitivity
 
