@@ -55,6 +55,17 @@
   accounting, but remains `BLOCKED` solely because the declared 1% gap was not
   met. Its equal outcome and timing are treated as a negative formulation
   experiment, not as accepted sensitivity evidence.
+- Phase 4 now batches the four dominant vehicle-indexed unit-interval families
+  (`assignment`, `connection`, `start`, and `end`) through Gurobi `addVars`.
+  The all-binary research case therefore crosses the Python/Gurobi variable-
+  creation boundary four times instead of once per variable. Certified exact-
+  clone convexification still partitions each family by binary/continuous
+  type, preserving every key, bound and variable type. The search profile now
+  records the API-call count, variable count, family-build time and complete
+  pre-optimization wall time. This is construction-only and does not alter the
+  MILP or make a runtime claim until a frozen-commit comparison is completed.
+  Focused regression passes (`134 passed`) and the full repository regression
+  passes (`1489 passed` in 164.85 seconds).
 
 ## 2026-08-15 independent BEV/ICE coefficient sensitivity
 

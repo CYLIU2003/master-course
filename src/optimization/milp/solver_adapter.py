@@ -75,6 +75,75 @@ _ROUTE_BAND_REPARTITION_FEEDBACK_MAX_ITERATIONS = 1
 _SUFFIX_EXCHANGE_RESTART_PATIENCE_EVALUATIONS = 8
 
 
+def _add_vehicle_indexed_unit_interval_vars(
+    *,
+    model: Any,
+    keys: Sequence[Tuple[Any, ...]],
+    binary_vtype: Any,
+    continuous_vtype: Any,
+    continuous_vehicle_ids: Iterable[str] = (),
+    audit: Optional[Dict[str, int]] = None,
+) -> Dict[Tuple[Any, ...], Any]:
+    """Create vehicle-indexed [0, 1] variables with bounded API calls.
+
+    Gurobi's Python API can construct an indexed family in one ``addVars``
+    call.  The integrated model previously crossed that boundary once per
+    variable, including hundreds of thousands of connection variables.  This
+    helper preserves the exact key set, bounds, and variable types while
+    batching the all-binary case and splitting only when certified clone-flow
+    convexification requires continuous vehicle labels.
+    """
+
+    normalized_keys = tuple(tuple(key) for key in keys)
+    if not normalized_keys:
+        return {}
+
+    continuous_ids = frozenset(
+        str(vehicle_id) for vehicle_id in continuous_vehicle_ids
+    )
+    if not continuous_ids:
+        variables = model.addVars(
+            normalized_keys,
+            lb=0.0,
+            ub=1.0,
+            vtype=binary_vtype,
+        )
+        if audit is not None:
+            audit["api_call_count"] = int(audit.get("api_call_count", 0)) + 1
+        return dict(variables)
+
+    binary_keys = tuple(
+        key for key in normalized_keys if str(key[0]) not in continuous_ids
+    )
+    continuous_keys = tuple(
+        key for key in normalized_keys if str(key[0]) in continuous_ids
+    )
+    created: Dict[Tuple[Any, ...], Any] = {}
+    if binary_keys:
+        created.update(
+            model.addVars(
+                binary_keys,
+                lb=0.0,
+                ub=1.0,
+                vtype=binary_vtype,
+            )
+        )
+        if audit is not None:
+            audit["api_call_count"] = int(audit.get("api_call_count", 0)) + 1
+    if continuous_keys:
+        created.update(
+            model.addVars(
+                continuous_keys,
+                lb=0.0,
+                ub=1.0,
+                vtype=continuous_vtype,
+            )
+        )
+        if audit is not None:
+            audit["api_call_count"] = int(audit.get("api_call_count", 0)) + 1
+    return {key: created[key] for key in normalized_keys}
+
+
 def _add_assignment_pattern_no_good_cuts(
     *,
     model: Any,
@@ -5338,18 +5407,18 @@ class GurobiMILPAdapter:
             )
         )
 
-        y: Dict[Tuple[str, str], Any] = {}
-        for vehicle_id, trip_id in assignment_pairs:
-            is_convexified_label = (
-                str(vehicle_id) in exact_clone_convexified_vehicle_ids
+        integrated_bulk_variable_build_started_at = time.perf_counter()
+        integrated_bulk_variable_build_audit = {"api_call_count": 0}
+        y: Dict[Tuple[str, str], Any] = (
+            _add_vehicle_indexed_unit_interval_vars(
+                model=model,
+                keys=assignment_pairs,
+                binary_vtype=GRB.BINARY,
+                continuous_vtype=GRB.CONTINUOUS,
+                continuous_vehicle_ids=exact_clone_convexified_vehicle_ids,
+                audit=integrated_bulk_variable_build_audit,
             )
-            y[(vehicle_id, trip_id)] = model.addVar(
-                lb=0.0,
-                ub=1.0,
-                vtype=(
-                    GRB.CONTINUOUS if is_convexified_label else GRB.BINARY
-                ),
-            )
+        )
 
         integrated_seed_iis_assignment_guidance = tuple(
             problem.metadata.get(
@@ -5364,38 +5433,43 @@ class GurobiMILPAdapter:
             )
         )
 
-        x: Dict[Tuple[str, str, str], Any] = {}
-        for vehicle_id, from_trip_id, to_trip_id in arc_pairs:
-            is_convexified_label = (
-                str(vehicle_id) in exact_clone_convexified_vehicle_ids
+        x: Dict[Tuple[str, str, str], Any] = (
+            _add_vehicle_indexed_unit_interval_vars(
+                model=model,
+                keys=arc_pairs,
+                binary_vtype=GRB.BINARY,
+                continuous_vtype=GRB.CONTINUOUS,
+                continuous_vehicle_ids=exact_clone_convexified_vehicle_ids,
+                audit=integrated_bulk_variable_build_audit,
             )
-            x[(vehicle_id, from_trip_id, to_trip_id)] = model.addVar(
-                lb=0.0,
-                ub=1.0,
-                vtype=(
-                    GRB.CONTINUOUS if is_convexified_label else GRB.BINARY
-                ),
-            )
+        )
 
-        start_arc: Dict[Tuple[str, str], Any] = {}
-        end_arc: Dict[Tuple[str, str], Any] = {}
-        for vehicle_id, trip_id in assignment_pairs:
-            is_convexified_label = (
-                str(vehicle_id) in exact_clone_convexified_vehicle_ids
+        start_arc: Dict[Tuple[str, str], Any] = (
+            _add_vehicle_indexed_unit_interval_vars(
+                model=model,
+                keys=assignment_pairs,
+                binary_vtype=GRB.BINARY,
+                continuous_vtype=GRB.CONTINUOUS,
+                continuous_vehicle_ids=exact_clone_convexified_vehicle_ids,
+                audit=integrated_bulk_variable_build_audit,
             )
-            variable_type = (
-                GRB.CONTINUOUS if is_convexified_label else GRB.BINARY
+        )
+        end_arc: Dict[Tuple[str, str], Any] = (
+            _add_vehicle_indexed_unit_interval_vars(
+                model=model,
+                keys=assignment_pairs,
+                binary_vtype=GRB.BINARY,
+                continuous_vtype=GRB.CONTINUOUS,
+                continuous_vehicle_ids=exact_clone_convexified_vehicle_ids,
+                audit=integrated_bulk_variable_build_audit,
             )
-            start_arc[(vehicle_id, trip_id)] = model.addVar(
-                lb=0.0,
-                ub=1.0,
-                vtype=variable_type,
-            )
-            end_arc[(vehicle_id, trip_id)] = model.addVar(
-                lb=0.0,
-                ub=1.0,
-                vtype=variable_type,
-            )
+        )
+        integrated_bulk_variable_build_seconds = float(
+            time.perf_counter() - integrated_bulk_variable_build_started_at
+        )
+        integrated_bulk_variable_api_call_count = int(
+            integrated_bulk_variable_build_audit["api_call_count"]
+        )
         final_target_enabled = final_soc_target_enabled(problem)
         if final_target_enabled:
             for (vehicle_id, trip_id), var in end_arc.items():
@@ -8396,6 +8470,11 @@ class GurobiMILPAdapter:
                 json.dump(pre_stats, f, indent=2)
         
         optimize_started_at = time.perf_counter()
+        integrated_pre_optimize_wall_time_sec = max(
+            optimize_started_at
+            - float(integrated_wall_clock_started_at or optimize_started_at),
+            0.0,
+        )
         first_feasible_sec: Optional[float] = (
             0.0
             if integrated_warm_start_audit.get(
@@ -10002,6 +10081,30 @@ class GurobiMILPAdapter:
                     "effective_search_time_limit_sec_at_optimization": (
                         integrated_search_budget_sec
                     ),
+                    "pre_optimize_wall_time_sec": (
+                        integrated_pre_optimize_wall_time_sec
+                    ),
+                    "vehicle_indexed_variable_build": {
+                        "mode": (
+                            "gurobi_addvars_partitioned_by_vehicle_vtype"
+                        ),
+                        "variable_count": int(
+                            len(y) + len(x) + len(start_arc) + len(end_arc)
+                        ),
+                        "api_call_count": int(
+                            integrated_bulk_variable_api_call_count
+                        ),
+                        "continuous_vehicle_count": int(
+                            len(exact_clone_convexified_vehicle_ids)
+                        ),
+                        "wall_time_sec": (
+                            integrated_bulk_variable_build_seconds
+                        ),
+                        "semantics": (
+                            "exact_key_bound_and_vtype_preserving_batch_"
+                            "construction_only"
+                        ),
+                    },
                     "integrated_wall_runtime_sec": (
                         max(
                             time.perf_counter()

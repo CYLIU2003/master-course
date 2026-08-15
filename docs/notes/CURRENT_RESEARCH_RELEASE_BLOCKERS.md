@@ -54,8 +54,13 @@ target despite complete coverage, physical validity, 24/24 Rolling and
 accounting reconciliation.
 
 Further row-only clone symmetry tuning is no longer the next action. The
-immediate safe step is to reduce model-construction overhead while preserving
-the exact variable set and formulation. If the root proof remains dominant,
+immediate safe construction change now batches the four dominant vehicle-
+indexed unit-interval families through Gurobi `addVars` while preserving every
+key, bound and variable type. The search profile exports its variable count,
+actual API-call count, batch-build wall time and full pre-optimization wall
+time. Focused tests (`134 passed`) and the full regression (`1489 passed` in
+164.85 seconds) succeed. This implementation has not yet been measured at a
+frozen commit, so no speedup is claimed. If the root proof remains dominant,
 the required architectural change is an exact duty/path or aggregated network
 formulation that removes vehicle-labelled connection binaries without
 successor pruning, fallback, or post-solve repair.

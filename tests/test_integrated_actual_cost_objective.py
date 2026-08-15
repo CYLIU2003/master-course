@@ -42,6 +42,7 @@ from src.optimization.milp.model_builder import MILPModelBuilder
 from src.optimization.milp.solver_adapter import (
     _add_assignment_pattern_no_good_cuts,
     _add_identical_vehicle_trip_count_symmetry,
+    _add_vehicle_indexed_unit_interval_vars,
     _apply_best_objective_stop_from_certified_lower_bound,
     _apply_assignment_pattern_branch_priorities,
     _composition_target_continuation_priority_key,
@@ -55,6 +56,73 @@ from src.optimization.milp.solver_adapter import (
     _verified_start_objective_search_bounds,
 )
 from test_post_return_soc_target import _dispatch_context
+
+
+def test_bulk_vehicle_indexed_vars_preserve_keys_bounds_and_types() -> None:
+    class FakeModel:
+        def __init__(self) -> None:
+            self.calls = []
+
+        def addVars(self, keys, **kwargs):
+            normalized_keys = tuple(tuple(key) for key in keys)
+            self.calls.append((normalized_keys, dict(kwargs)))
+            return {
+                key: SimpleNamespace(key=key, **kwargs)
+                for key in normalized_keys
+            }
+
+    model = FakeModel()
+    keys = (
+        ("ice-1", "trip-1"),
+        ("bev-1", "trip-1"),
+        ("ice-1", "trip-2"),
+    )
+
+    variables = _add_vehicle_indexed_unit_interval_vars(
+        model=model,
+        keys=keys,
+        binary_vtype="B",
+        continuous_vtype="C",
+        continuous_vehicle_ids={"ice-1"},
+    )
+
+    assert tuple(variables) == keys
+    assert len(model.calls) == 2
+    assert model.calls[0][0] == (("bev-1", "trip-1"),)
+    assert model.calls[0][1] == {"lb": 0.0, "ub": 1.0, "vtype": "B"}
+    assert model.calls[1][0] == (
+        ("ice-1", "trip-1"),
+        ("ice-1", "trip-2"),
+    )
+    assert model.calls[1][1] == {"lb": 0.0, "ub": 1.0, "vtype": "C"}
+    assert variables[("bev-1", "trip-1")].vtype == "B"
+    assert variables[("ice-1", "trip-2")].vtype == "C"
+
+
+def test_bulk_vehicle_indexed_vars_use_one_call_for_binary_family() -> None:
+    class FakeModel:
+        def __init__(self) -> None:
+            self.calls = []
+
+        def addVars(self, keys, **kwargs):
+            normalized_keys = tuple(tuple(key) for key in keys)
+            self.calls.append((normalized_keys, dict(kwargs)))
+            return {key: object() for key in normalized_keys}
+
+    model = FakeModel()
+    keys = (("bev-1", "trip-1"), ("bev-2", "trip-2"))
+
+    variables = _add_vehicle_indexed_unit_interval_vars(
+        model=model,
+        keys=keys,
+        binary_vtype="B",
+        continuous_vtype="C",
+    )
+
+    assert tuple(variables) == keys
+    assert model.calls == [
+        (keys, {"lb": 0.0, "ub": 1.0, "vtype": "B"})
+    ]
 
 
 def test_phase4_seed_extracts_only_certified_iis_guidance_patterns() -> None:
@@ -2093,6 +2161,20 @@ def test_phase4_uses_verified_same_problem_phase3_plan_as_complete_mip_start() -
     assert result.solver_metadata["phase4_phase3_seed_audit"][
         "seed_stage1_stage2_candidate_limit"
     ] == 21
+    integrated_profile = result.solver_metadata["integrated_search_profile"]
+    bulk_build = integrated_profile["vehicle_indexed_variable_build"]
+    assert bulk_build["mode"] == (
+        "gurobi_addvars_partitioned_by_vehicle_vtype"
+    )
+    # This one-trip fixture has no connection-arc family, so only assignment,
+    # start, and end cross the API boundary.
+    assert bulk_build["api_call_count"] == 3
+    assert bulk_build["continuous_vehicle_count"] == 0
+    assert bulk_build["variable_count"] > 0
+    assert bulk_build["wall_time_sec"] >= 0.0
+    assert integrated_profile["pre_optimize_wall_time_sec"] >= (
+        bulk_build["wall_time_sec"]
+    )
     assert result.solver_metadata["phase4_phase3_seed_audit"][
         "seed_stage1_composition_search_radius"
     ] == 10

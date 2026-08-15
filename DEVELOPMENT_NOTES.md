@@ -94,6 +94,22 @@
   to reduce Python/model-construction overhead without changing mathematics,
   then replace or aggregate the 678,600 labelled connection binaries through
   an exact path/network formulation if proof time remains dominant.
+- Raised a separate Python/Gurobi construction bottleneck. The four integrated
+  unit-interval families were created with one `model.addVar` call per key;
+  the measured case therefore made hundreds of thousands of Python API calls
+  before optimization. Added a single batching helper that uses `addVars` once
+  per family in the all-binary case and partitions a family only when the
+  certified exact-clone convexification needs continuous labels. It returns an
+  ordinary dictionary in original key order and preserves `[0,1]` bounds and
+  the exact binary/continuous classification.
+- Added search-profile evidence for the number of batched variables, actual
+  API calls, batch-build wall time and full pre-optimization wall time. Unit
+  tests cover all-binary and mixed-type families; the Phase-4 integration test
+  checks that only its three non-empty families cross the API boundary and
+  validates the telemetry. Focused integrated/exactness/
+  research-contract regression passes (`134 passed`). The full repository
+  regression also passes (`1489 passed` in 164.85 seconds). A frozen-commit
+  matched timing run remains required before claiming any speedup.
 
 ## 2026-08-15: independent powertrain energy sensitivities
 
