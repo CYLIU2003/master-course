@@ -1,5 +1,57 @@
 # Development Notes
 
+## 2026-08-15: literature-checked multi-fragment exact clone network
+
+- Re-read the computation-time tables in `先行文献/No06.pdf`, `No16.pdf`,
+  `No63.pdf`, and `No64.pdf`. The fast exact cases mainly optimize charging
+  for predetermined vehicle schedules or use at most 98,784 variables. The
+  closest assignment-plus-charging study (No06) reports Gurobi 617.6 seconds
+  for 50 trips and no feasible Gurobi solution for 200 or 418 trips within six
+  hours; the 418-trip 202.3-second value belongs to ALNS-SA. This confirms that
+  the current 264-trip complete-network model must reduce its vehicle-labelled
+  combinatorics before a comparable exact runtime can be expected.
+- Raised and fixed the structural blocker that kept exact ICE-clone flow
+  aggregation disabled whenever more than one same-day duty fragment was
+  permitted. The audit now derives the exact layer count as the minimum of the
+  daily, start, and end fragment limits and certifies fuel redundancy against
+  `layer_count * longest_single_fragment_fuel`, including startup, service,
+  connection deadhead, and terminal return.
+- Added canonical depot-reset enumeration using the same
+  `fragment_transition_diagnostic` as physical validation. Reset pairs exclude
+  route-band-blocked or time-infeasible fragment boundaries and are hashed;
+  the model reconstruction must reproduce both count and hash or it fails
+  before optimization.
+- Added an integral layered group network. Each layer has binary assignment,
+  direct-connection, start, and end variables. A higher-layer start equals its
+  incoming reset flow; each prior-layer end has at most one reset successor.
+  Aggregate assignment/connection/boundary variables remain linked to the
+  continuous exact-clone label extension, and used clone count equals both the
+  number of layer-0 roots and final fragment ends net of resets. The recovered
+  physical dispatch set and objective are unchanged.
+- Complete MIP starts now map all fragments of one Phase-3 vehicle onto
+  successive layers and populate reset variables. Solution recovery traces
+  each layered path through its reset chain and assigns one canonical clone ID
+  to every fragment on that path. Missing trips, shared vertices, cycles,
+  non-root fragments without reset predecessors, or unrecovered reset arcs
+  raise an error rather than invoking repair.
+- The saved 264-trip audit has 25 exact ICE clones, 264 assignment nodes and
+  11,310 direct arcs per clone. Its maximum one-fragment fuel is 46.036430 L;
+  three fragments require at most 138.109290 L versus 144 L usable initial
+  fuel. There are 10,829 valid depot-reset pairs. The projected integer count
+  changes from 302,600 vehicle-label binaries to 70,067 aggregate/layer
+  binaries, a net reduction of 232,533. Because the label extension remains as
+  continuous variables, this is a binary reduction rather than a total-
+  variable reduction; controlled runtime evidence is still pending.
+- Added exact small-instance regressions for the multiplied fuel bound,
+  discrete-versus-aggregated objective equality, two fragments on one vehicle,
+  layered recovery, and a complete verified two-fragment MIP start. The full
+  integrated actual-cost test file passes (`68 passed`), the focused solver,
+  fragment, oracle, feedback, and research-contract set passes (`128 passed`),
+  and the repository regression passes (`1491 passed` in 160.65 seconds). No
+  older result is attributed to this formulation; a clean commit and fresh
+  frontend/BFF run are required before updating the performance or research
+  decision.
+
 ## 2026-08-15: exact bound propagation and complete clone-duty ordering
 
 - Self-review of `run_20260815_0747` isolated the proof bottleneck from the

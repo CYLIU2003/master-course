@@ -1099,12 +1099,16 @@ def test_exact_ice_clone_flow_audit_certifies_redundant_fuel_state() -> None:
     assert audit["applied"] is False
     assert audit["integer_feasible_set_changed"] is False
     assert audit["certified_candidate_group_count"] == 1
-    assert audit["potential_binary_variable_reduction"] == 3
+    assert audit["potential_binary_variable_reduction"] == 6
     group = audit["groups"][0]
     assert group["certified_candidate"] is True
     assert group["finite_fuel_constraints_proved_redundant"] is True
     assert group["fuel_redundancy_margin_l"] >= 0.0
     assert group["longest_possible_duty_trip_ids"] == ("t1",)
+    assert group["fragment_layer_count"] == 1
+    assert group["conservative_max_daily_fuel_l"] == pytest.approx(
+        group["longest_possible_duty_fuel_l"]
+    )
 
 
 def test_exact_ice_clone_flow_audit_rejects_assignment_domain_mismatch() -> None:
@@ -1134,9 +1138,60 @@ def test_exact_ice_clone_flow_audit_rejects_insufficient_initial_fuel() -> None:
 
     assert audit["certified_candidate_group_count"] == 0
     assert (
-        "longest_possible_duty_exceeds_usable_initial_fuel"
+        "configured_worst_case_fragments_exceed_usable_initial_fuel"
         in audit["groups"][0]["blockers"]
     )
+
+
+def test_exact_ice_clone_flow_audit_multiplies_worst_fragment_fuel() -> None:
+    base = _exact_ice_clone_problem()
+    problem = replace(
+        base,
+        trips=tuple(
+            replace(trip, distance_km=200.0)
+            for trip in base.trips
+        ),
+    )
+    adapter = GurobiMILPAdapter()
+    builder = MILPModelBuilder()
+    assignment_pairs = builder.enumerate_assignment_pairs(problem)
+    startup_prechecks = {
+        (vehicle_id, trip_id): adapter._startup_energy_precheck(
+            problem,
+            next(
+                vehicle
+                for vehicle in problem.vehicles
+                if vehicle.vehicle_id == vehicle_id
+            ),
+            problem.trip_by_id()[trip_id],
+        )
+        for vehicle_id, trip_id in assignment_pairs
+    }
+
+    audit = adapter._exact_combustion_clone_flow_aggregation_audit(
+        problem=problem,
+        identical_vehicle_groups=_ordered_identical_vehicle_groups(problem),
+        assignment_pairs=assignment_pairs,
+        arc_pairs=builder.enumerate_arc_pairs(problem, problem.trip_by_id()),
+        startup_energy_precheck_by_assignment=startup_prechecks,
+        planning_days=1,
+        daily_fragment_limit=2,
+        max_start_fragments_per_vehicle=2,
+        max_end_fragments_per_vehicle=2,
+    )
+
+    group = audit["groups"][0]
+    assert group["longest_possible_duty_fuel_l"] < group[
+        "usable_initial_fuel_l"
+    ]
+    assert group["conservative_max_daily_fuel_l"] > group[
+        "usable_initial_fuel_l"
+    ]
+    assert (
+        "configured_worst_case_fragments_exceed_usable_initial_fuel"
+        in group["blockers"]
+    )
+    assert group["certified_candidate"] is False
 
 
 def test_exact_ice_clone_flow_audit_rejects_multiday_structure() -> None:
@@ -1295,6 +1350,149 @@ def test_phase4_exact_ice_clone_convexification_preserves_path_count() -> None:
     assert audit["applied"] is True
     assert audit["recovered_path_count"] == 2
     assert audit["recovered_vehicle_ids"] == ("ICE_001", "ICE_002")
+
+
+def test_phase4_exact_ice_clone_convexification_preserves_two_fragment_duty() -> None:
+    base = _exact_ice_clone_problem()
+    first_dispatch_trip = replace(
+        base.dispatch_context.trips[0],
+        trip_id="fragment-1",
+        departure_time="08:00",
+        arrival_time="09:00",
+    )
+    second_dispatch_trip = replace(
+        base.dispatch_context.trips[0],
+        trip_id="fragment-2",
+        departure_time="11:00",
+        arrival_time="12:00",
+    )
+    first_problem_trip = replace(
+        base.trips[0],
+        trip_id="fragment-1",
+        departure_min=8 * 60,
+        arrival_min=9 * 60,
+    )
+    second_problem_trip = replace(
+        base.trips[0],
+        trip_id="fragment-2",
+        departure_min=11 * 60,
+        arrival_min=12 * 60,
+    )
+    common_metadata = {
+        **dict(base.metadata or {}),
+        "cost_component_flags": {"driver_cost": False},
+        "vehicle_usage_cost_jpy_per_used_bus": 20_000.0,
+        "daily_fragment_limit": 2,
+        "max_start_fragments_per_vehicle": 2,
+        "max_end_fragments_per_vehicle": 2,
+        "allow_same_day_depot_cycles": True,
+        "fixed_route_band_mode": False,
+    }
+    common_problem = replace(
+        base,
+        scenario=replace(
+            base.scenario,
+            allow_same_day_depot_cycles=True,
+        ),
+        dispatch_context=replace(
+            base.dispatch_context,
+            trips=(first_dispatch_trip, second_dispatch_trip),
+        ),
+        trips=(first_problem_trip, second_problem_trip),
+        feasible_connections={"fragment-1": (), "fragment-2": ()},
+        metadata=common_metadata,
+    )
+    aggregated_problem = replace(
+        common_problem,
+        metadata={
+            **common_metadata,
+            "exact_combustion_clone_flow_aggregation_enabled": True,
+        },
+    )
+    discrete_problem = replace(
+        common_problem,
+        metadata={
+            **common_metadata,
+            "exact_combustion_clone_flow_aggregation_enabled": False,
+        },
+    )
+    config = OptimizationConfig(
+        mode=OptimizationMode.MILP,
+        phase="phase4_integrated",
+        integrated_actual_cost_objective=True,
+        time_limit_sec=30,
+        mip_gap=0.0,
+        random_seed=42,
+        warm_start=False,
+        allow_postsolve_repair=False,
+        research_run=True,
+    )
+
+    aggregated_outcome, aggregated_plan = GurobiMILPAdapter().solve(
+        aggregated_problem,
+        config,
+    )
+    discrete_outcome, discrete_plan = GurobiMILPAdapter().solve(
+        discrete_problem,
+        config,
+    )
+
+    assert aggregated_outcome.has_feasible_incumbent
+    assert discrete_outcome.has_feasible_incumbent
+    assert aggregated_plan.served_trip_ids == (
+        "fragment-1",
+        "fragment-2",
+    )
+    assert aggregated_plan.metadata["objective_value"] == pytest.approx(
+        discrete_plan.metadata["objective_value"]
+    )
+    assert len(aggregated_plan.duties) == len(discrete_plan.duties) == 2
+    assert len(set(aggregated_plan.duty_vehicle_map().values())) == 1
+    assert len(set(discrete_plan.duty_vehicle_map().values())) == 1
+    aggregation_audit = aggregated_plan.metadata[
+        "integrated_exact_combustion_clone_flow_aggregation_audit"
+    ]
+    assert aggregation_audit["applied"] is True
+    assert aggregation_audit["fragment_layer_count"] == 2
+    assert aggregation_audit["fragment_reset_variable_count"] > 0
+    assert aggregation_audit["recovered_path_count"] == 1
+    assert (
+        aggregation_audit["recoverable_physical_dispatch_set_changed"]
+        is False
+    )
+
+    seeded_result = OptimizationEngine().solve(
+        replace(aggregated_problem, depot_energy_assets={}),
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            phase="phase4_integrated",
+            integrated_actual_cost_objective=True,
+            phase4_phase3_seed_enabled=True,
+            phase4_phase3_seed_time_limit_sec=30,
+            stage1_stage2_candidate_limit=1,
+            time_limit_sec=30,
+            mip_gap=0.0,
+            random_seed=42,
+            warm_start=True,
+            allow_postsolve_repair=False,
+            research_run=True,
+            requested_phase_token="phase4_integrated",
+            requested_phase="phase4_integrated",
+            resolved_phase="phase4_integrated",
+            executed_phase="phase4_integrated",
+        ),
+    )
+
+    assert seeded_result.feasible, seeded_result.infeasibility_reasons
+    seeded_aggregation_audit = seeded_result.plan.metadata[
+        "integrated_exact_combustion_clone_flow_aggregation_audit"
+    ]
+    assert seeded_aggregation_audit["aggregate_mip_start_complete"] is True
+    assert seeded_result.plan.metadata["integrated_warm_start_audit"][
+        "applied"
+    ] is True
+    assert len(seeded_result.plan.duties) == 2
+    assert len(set(seeded_result.plan.duty_vehicle_map().values())) == 1
 
 
 def test_phase4_exact_ice_clone_convexification_accepts_verified_seed() -> None:

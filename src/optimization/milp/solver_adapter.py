@@ -5525,6 +5525,21 @@ class GurobiMILPAdapter:
         exact_clone_aggregate_connection: Dict[Tuple[str, str], Any] = {}
         exact_clone_aggregate_start: Dict[str, Any] = {}
         exact_clone_aggregate_end: Dict[str, Any] = {}
+        exact_clone_fragment_layer_assignment: Dict[
+            Tuple[int, str], Any
+        ] = {}
+        exact_clone_fragment_layer_connection: Dict[
+            Tuple[int, str, str], Any
+        ] = {}
+        exact_clone_fragment_layer_start: Dict[
+            Tuple[int, str], Any
+        ] = {}
+        exact_clone_fragment_layer_end: Dict[
+            Tuple[int, str], Any
+        ] = {}
+        exact_clone_fragment_reset: Dict[
+            Tuple[int, str, str], Any
+        ] = {}
         exact_clone_aggregate_used_count = None
         exact_clone_aggregate_used_count_by_group: Dict[int, Any] = {}
         if selected_clone_group_record is not None:
@@ -5551,6 +5566,58 @@ class GurobiMILPAdapter:
                 (str(from_trip_id), str(to_trip_id))
                 for vehicle_id, from_trip_id, to_trip_id in arc_pairs
                 if str(vehicle_id) == representative_vehicle_id
+            )
+            selected_fragment_layer_count = max(
+                int(
+                    selected_clone_group_record.get(
+                        "fragment_layer_count", 1
+                    )
+                    or 1
+                ),
+                1,
+            )
+            representative_vehicle = vehicle_by_id[
+                representative_vehicle_id
+            ]
+            selected_reset_transition_audit = (
+                self._exact_clone_depot_reset_transition_audit(
+                    problem=problem,
+                    vehicle=representative_vehicle,
+                    assignment_trip_ids=set(selected_trip_ids),
+                )
+            )
+            if selected_reset_transition_audit["blockers"]:
+                raise RuntimeError(
+                    "Certified exact-clone reset domain could not be "
+                    "reconstructed: "
+                    + ",".join(
+                        selected_reset_transition_audit["blockers"]
+                    )
+                )
+            if (
+                int(selected_reset_transition_audit["pair_count"])
+                != int(
+                    selected_clone_group_record.get(
+                        "valid_depot_reset_transition_count", 0
+                    )
+                    or 0
+                )
+                or str(
+                    selected_reset_transition_audit["pair_sha256"] or ""
+                )
+                != str(
+                    selected_clone_group_record.get(
+                        "depot_reset_transition_sha256"
+                    )
+                    or ""
+                )
+            ):
+                raise RuntimeError(
+                    "Certified exact-clone reset domain changed between "
+                    "audit and model construction"
+                )
+            selected_reset_transition_pairs = tuple(
+                selected_reset_transition_audit["pairs"]
             )
             for trip_id in selected_trip_ids:
                 exact_clone_aggregate_assignment[trip_id] = model.addVar(
@@ -5629,6 +5696,240 @@ class GurobiMILPAdapter:
                         f"{to_trip_id}"
                     ),
                 )
+            if selected_fragment_layer_count > 1:
+                layer_indices = tuple(
+                    range(selected_fragment_layer_count)
+                )
+                layer_assignment_keys = tuple(
+                    (layer_index, trip_id)
+                    for layer_index in layer_indices
+                    for trip_id in selected_trip_ids
+                )
+                layer_connection_keys = tuple(
+                    (layer_index, from_trip_id, to_trip_id)
+                    for layer_index in layer_indices
+                    for from_trip_id, to_trip_id in (
+                        selected_transition_pairs
+                    )
+                )
+                reset_keys = tuple(
+                    (layer_index, from_trip_id, to_trip_id)
+                    for layer_index in layer_indices[:-1]
+                    for from_trip_id, to_trip_id in (
+                        selected_reset_transition_pairs
+                    )
+                )
+                exact_clone_fragment_layer_assignment = dict(
+                    model.addVars(
+                        layer_assignment_keys,
+                        vtype=GRB.BINARY,
+                        name=(
+                            "exact_clone_fragment_layer_assignment__"
+                            f"g{selected_group_index}"
+                        ),
+                    )
+                )
+                exact_clone_fragment_layer_connection = dict(
+                    model.addVars(
+                        layer_connection_keys,
+                        vtype=GRB.BINARY,
+                        name=(
+                            "exact_clone_fragment_layer_connection__"
+                            f"g{selected_group_index}"
+                        ),
+                    )
+                )
+                exact_clone_fragment_layer_start = dict(
+                    model.addVars(
+                        layer_assignment_keys,
+                        vtype=GRB.BINARY,
+                        name=(
+                            "exact_clone_fragment_layer_start__"
+                            f"g{selected_group_index}"
+                        ),
+                    )
+                )
+                exact_clone_fragment_layer_end = dict(
+                    model.addVars(
+                        layer_assignment_keys,
+                        vtype=GRB.BINARY,
+                        name=(
+                            "exact_clone_fragment_layer_end__"
+                            f"g{selected_group_index}"
+                        ),
+                    )
+                )
+                exact_clone_fragment_reset = dict(
+                    model.addVars(
+                        reset_keys,
+                        vtype=GRB.BINARY,
+                        name=(
+                            "exact_clone_fragment_reset__"
+                            f"g{selected_group_index}"
+                        ),
+                    )
+                )
+
+                layer_incoming: Dict[
+                    Tuple[int, str], List[Any]
+                ] = {}
+                layer_outgoing: Dict[
+                    Tuple[int, str], List[Any]
+                ] = {}
+                for (
+                    layer_index,
+                    from_trip_id,
+                    to_trip_id,
+                ), variable in (
+                    exact_clone_fragment_layer_connection.items()
+                ):
+                    layer_outgoing.setdefault(
+                        (layer_index, from_trip_id), []
+                    ).append(variable)
+                    layer_incoming.setdefault(
+                        (layer_index, to_trip_id), []
+                    ).append(variable)
+
+                reset_incoming: Dict[
+                    Tuple[int, str], List[Any]
+                ] = {}
+                reset_outgoing: Dict[
+                    Tuple[int, str], List[Any]
+                ] = {}
+                for (
+                    layer_index,
+                    from_trip_id,
+                    to_trip_id,
+                ), variable in exact_clone_fragment_reset.items():
+                    reset_outgoing.setdefault(
+                        (layer_index, from_trip_id), []
+                    ).append(variable)
+                    reset_incoming.setdefault(
+                        (layer_index + 1, to_trip_id), []
+                    ).append(variable)
+
+                for trip_id in selected_trip_ids:
+                    model.addConstr(
+                        exact_clone_aggregate_assignment[trip_id]
+                        == gp.quicksum(
+                            exact_clone_fragment_layer_assignment[
+                                (layer_index, trip_id)
+                            ]
+                            for layer_index in layer_indices
+                        ),
+                        name=(
+                            "exact_clone_fragment_assignment_link__"
+                            f"g{selected_group_index}__{trip_id}"
+                        ),
+                    )
+                    model.addConstr(
+                        exact_clone_aggregate_start[trip_id]
+                        == gp.quicksum(
+                            exact_clone_fragment_layer_start[
+                                (layer_index, trip_id)
+                            ]
+                            for layer_index in layer_indices
+                        ),
+                        name=(
+                            "exact_clone_fragment_start_link__"
+                            f"g{selected_group_index}__{trip_id}"
+                        ),
+                    )
+                    model.addConstr(
+                        exact_clone_aggregate_end[trip_id]
+                        == gp.quicksum(
+                            exact_clone_fragment_layer_end[
+                                (layer_index, trip_id)
+                            ]
+                            for layer_index in layer_indices
+                        ),
+                        name=(
+                            "exact_clone_fragment_end_link__"
+                            f"g{selected_group_index}__{trip_id}"
+                        ),
+                    )
+                    for layer_index in layer_indices:
+                        layer_key = (layer_index, trip_id)
+                        model.addConstr(
+                            gp.quicksum(
+                                layer_incoming.get(layer_key, ())
+                            )
+                            + exact_clone_fragment_layer_start[layer_key]
+                            == exact_clone_fragment_layer_assignment[
+                                layer_key
+                            ],
+                            name=(
+                                "exact_clone_fragment_inflow__"
+                                f"g{selected_group_index}__l{layer_index}__"
+                                f"{trip_id}"
+                            ),
+                        )
+                        model.addConstr(
+                            gp.quicksum(
+                                layer_outgoing.get(layer_key, ())
+                            )
+                            + exact_clone_fragment_layer_end[layer_key]
+                            == exact_clone_fragment_layer_assignment[
+                                layer_key
+                            ],
+                            name=(
+                                "exact_clone_fragment_outflow__"
+                                f"g{selected_group_index}__l{layer_index}__"
+                                f"{trip_id}"
+                            ),
+                        )
+                        if layer_index > 0:
+                            model.addConstr(
+                                exact_clone_fragment_layer_start[
+                                    layer_key
+                                ]
+                                == gp.quicksum(
+                                    reset_incoming.get(layer_key, ())
+                                ),
+                                name=(
+                                    "exact_clone_fragment_reset_in__"
+                                    f"g{selected_group_index}__"
+                                    f"l{layer_index}__{trip_id}"
+                                ),
+                            )
+                        if layer_index < layer_indices[-1]:
+                            model.addConstr(
+                                gp.quicksum(
+                                    reset_outgoing.get(layer_key, ())
+                                )
+                                <= exact_clone_fragment_layer_end[
+                                    layer_key
+                                ],
+                                name=(
+                                    "exact_clone_fragment_reset_out__"
+                                    f"g{selected_group_index}__"
+                                    f"l{layer_index}__{trip_id}"
+                                ),
+                            )
+
+                for from_trip_id, to_trip_id in (
+                    selected_transition_pairs
+                ):
+                    model.addConstr(
+                        exact_clone_aggregate_connection[
+                            (from_trip_id, to_trip_id)
+                        ]
+                        == gp.quicksum(
+                            exact_clone_fragment_layer_connection[
+                                (
+                                    layer_index,
+                                    from_trip_id,
+                                    to_trip_id,
+                                )
+                            ]
+                            for layer_index in layer_indices
+                        ),
+                        name=(
+                            "exact_clone_fragment_connection_link__"
+                            f"g{selected_group_index}__{from_trip_id}__"
+                            f"{to_trip_id}"
+                        ),
+                    )
             exact_clone_aggregate_used_count = model.addVar(
                 lb=0.0,
                 ub=float(len(selected_member_ids)),
@@ -5646,16 +5947,46 @@ class GurobiMILPAdapter:
                 ),
                 name=f"exact_clone_group_used_link__g{selected_group_index}",
             )
-            model.addConstr(
-                exact_clone_aggregate_used_count
-                == gp.quicksum(exact_clone_aggregate_start.values()),
-                name=f"exact_clone_group_start_count__g{selected_group_index}",
-            )
-            model.addConstr(
-                exact_clone_aggregate_used_count
-                == gp.quicksum(exact_clone_aggregate_end.values()),
-                name=f"exact_clone_group_end_count__g{selected_group_index}",
-            )
+            if selected_fragment_layer_count == 1:
+                model.addConstr(
+                    exact_clone_aggregate_used_count
+                    == gp.quicksum(exact_clone_aggregate_start.values()),
+                    name=(
+                        "exact_clone_group_start_count__"
+                        f"g{selected_group_index}"
+                    ),
+                )
+                model.addConstr(
+                    exact_clone_aggregate_used_count
+                    == gp.quicksum(exact_clone_aggregate_end.values()),
+                    name=(
+                        "exact_clone_group_end_count__"
+                        f"g{selected_group_index}"
+                    ),
+                )
+            else:
+                model.addConstr(
+                    exact_clone_aggregate_used_count
+                    == gp.quicksum(
+                        exact_clone_fragment_layer_start[(0, trip_id)]
+                        for trip_id in selected_trip_ids
+                    ),
+                    name=(
+                        "exact_clone_group_layered_vehicle_start_count__"
+                        f"g{selected_group_index}"
+                    ),
+                )
+                model.addConstr(
+                    exact_clone_aggregate_used_count
+                    == gp.quicksum(
+                        exact_clone_fragment_layer_end.values()
+                    )
+                    - gp.quicksum(exact_clone_fragment_reset.values()),
+                    name=(
+                        "exact_clone_group_layered_vehicle_end_count__"
+                        f"g{selected_group_index}"
+                    ),
+                )
             model.addConstr(
                 exact_clone_aggregate_used_count
                 == gp.quicksum(
@@ -5678,6 +6009,11 @@ class GurobiMILPAdapter:
                 3 * len(selected_trip_ids)
                 + len(selected_transition_pairs)
                 + 1
+                + len(exact_clone_fragment_layer_assignment)
+                + len(exact_clone_fragment_layer_connection)
+                + len(exact_clone_fragment_layer_start)
+                + len(exact_clone_fragment_layer_end)
+                + len(exact_clone_fragment_reset)
             )
             integrated_exact_clone_flow_aggregation_audit = {
                 **dict(integrated_exact_clone_flow_aggregation_audit),
@@ -5704,12 +6040,29 @@ class GurobiMILPAdapter:
                 ),
                 "formulation_semantics": (
                     "continuous_vehicle_label_extended_formulation_with_"
-                    "binary_group_assignment_connection_and_boundary_flow"
+                    "binary_group_assignment_connection_boundary_flow_and_"
+                    "integral_layered_fragment_reset_path_network"
                 ),
                 "exactness_guard": (
                     "one_continuous_clone_group_only; all_other_trip_"
-                    "coverage_decisions_binary; aggregate_DAG_path_flow_"
-                    "integral; path_specific_driver_cost_disabled"
+                    "coverage_decisions_binary; aggregate_layered_DAG_path_"
+                    "flow_integral; configured_worst_case_fragment_fuel_"
+                    "fits_initial_inventory; path_specific_driver_cost_"
+                    "disabled"
+                ),
+                "fragment_layer_count": selected_fragment_layer_count,
+                "layer_assignment_variable_count": len(
+                    exact_clone_fragment_layer_assignment
+                ),
+                "layer_connection_variable_count": len(
+                    exact_clone_fragment_layer_connection
+                ),
+                "layer_boundary_variable_count": (
+                    len(exact_clone_fragment_layer_start)
+                    + len(exact_clone_fragment_layer_end)
+                ),
+                "fragment_reset_variable_count": len(
+                    exact_clone_fragment_reset
                 ),
             }
         else:
@@ -8104,7 +8457,10 @@ class GurobiMILPAdapter:
             selected_group_connections: Set[Tuple[str, str]] = set()
             selected_group_start_trip_ids: Set[str] = set()
             selected_group_end_trip_ids: Set[str] = set()
-            selected_group_path_count = 0
+            selected_group_vehicle_ids: Set[str] = set()
+            selected_group_fragments_by_vehicle: Dict[
+                str, List[Tuple[str, ...]]
+            ] = {}
             baseline_duty_vehicle_map = (
                 problem.baseline_plan.duty_vehicle_map()
             )
@@ -8119,13 +8475,87 @@ class GurobiMILPAdapter:
                 )
                 if not duty_trip_ids:
                     continue
-                selected_group_path_count += 1
+                selected_group_vehicle_ids.add(duty_vehicle_id)
+                selected_group_fragments_by_vehicle.setdefault(
+                    duty_vehicle_id, []
+                ).append(duty_trip_ids)
                 selected_group_trip_ids.update(duty_trip_ids)
                 selected_group_start_trip_ids.add(duty_trip_ids[0])
                 selected_group_end_trip_ids.add(duty_trip_ids[-1])
                 selected_group_connections.update(
                     zip(duty_trip_ids, duty_trip_ids[1:])
                 )
+            selected_layer_trip_keys: Set[Tuple[int, str]] = set()
+            selected_layer_connection_keys: Set[
+                Tuple[int, str, str]
+            ] = set()
+            selected_layer_start_keys: Set[Tuple[int, str]] = set()
+            selected_layer_end_keys: Set[Tuple[int, str]] = set()
+            selected_fragment_reset_keys: Set[
+                Tuple[int, str, str]
+            ] = set()
+            layered_start_representable = True
+            if exact_clone_fragment_layer_assignment:
+                trip_by_id_for_seed = problem.trip_by_id()
+                for duty_vehicle_id in sorted(
+                    selected_group_fragments_by_vehicle
+                ):
+                    ordered_fragments = sorted(
+                        selected_group_fragments_by_vehicle[
+                            duty_vehicle_id
+                        ],
+                        key=lambda trip_ids: (
+                            self._service_minute(
+                                problem,
+                                trip_by_id_for_seed[
+                                    trip_ids[0]
+                                ].departure_min,
+                            ),
+                            trip_ids[0],
+                        ),
+                    )
+                    for layer_index, duty_trip_ids in enumerate(
+                        ordered_fragments
+                    ):
+                        if layer_index >= int(
+                            selected_clone_group_record.get(
+                                "fragment_layer_count", 1
+                            )
+                            or 1
+                        ):
+                            layered_start_representable = False
+                            break
+                        selected_layer_trip_keys.update(
+                            (layer_index, trip_id)
+                            for trip_id in duty_trip_ids
+                        )
+                        selected_layer_start_keys.add(
+                            (layer_index, duty_trip_ids[0])
+                        )
+                        selected_layer_end_keys.add(
+                            (layer_index, duty_trip_ids[-1])
+                        )
+                        selected_layer_connection_keys.update(
+                            (
+                                layer_index,
+                                from_trip_id,
+                                to_trip_id,
+                            )
+                            for from_trip_id, to_trip_id in zip(
+                                duty_trip_ids, duty_trip_ids[1:]
+                            )
+                        )
+                        if layer_index > 0:
+                            previous_fragment = ordered_fragments[
+                                layer_index - 1
+                            ]
+                            selected_fragment_reset_keys.add(
+                                (
+                                    layer_index - 1,
+                                    previous_fragment[-1],
+                                    duty_trip_ids[0],
+                                )
+                            )
             aggregate_domains_complete = bool(
                 selected_group_trip_ids.issubset(
                     exact_clone_aggregate_assignment
@@ -8138,6 +8568,22 @@ class GurobiMILPAdapter:
                 )
                 and selected_group_end_trip_ids.issubset(
                     exact_clone_aggregate_end
+                )
+                and layered_start_representable
+                and selected_layer_trip_keys.issubset(
+                    exact_clone_fragment_layer_assignment
+                )
+                and selected_layer_connection_keys.issubset(
+                    exact_clone_fragment_layer_connection
+                )
+                and selected_layer_start_keys.issubset(
+                    exact_clone_fragment_layer_start
+                )
+                and selected_layer_end_keys.issubset(
+                    exact_clone_fragment_layer_end
+                )
+                and selected_fragment_reset_keys.issubset(
+                    exact_clone_fragment_reset
                 )
             )
             if aggregate_domains_complete:
@@ -8169,9 +8615,41 @@ class GurobiMILPAdapter:
                     aggregate_var.Start = (
                         1.0 if key in selected_group_connections else 0.0
                     )
+                for key, layer_var in (
+                    exact_clone_fragment_layer_assignment.items()
+                ):
+                    layer_var.Start = (
+                        1.0 if key in selected_layer_trip_keys else 0.0
+                    )
+                for key, layer_var in (
+                    exact_clone_fragment_layer_connection.items()
+                ):
+                    layer_var.Start = (
+                        1.0
+                        if key in selected_layer_connection_keys
+                        else 0.0
+                    )
+                for key, layer_var in (
+                    exact_clone_fragment_layer_start.items()
+                ):
+                    layer_var.Start = (
+                        1.0 if key in selected_layer_start_keys else 0.0
+                    )
+                for key, layer_var in (
+                    exact_clone_fragment_layer_end.items()
+                ):
+                    layer_var.Start = (
+                        1.0 if key in selected_layer_end_keys else 0.0
+                    )
+                for key, reset_var in exact_clone_fragment_reset.items():
+                    reset_var.Start = (
+                        1.0
+                        if key in selected_fragment_reset_keys
+                        else 0.0
+                    )
                 if exact_clone_aggregate_used_count is not None:
                     exact_clone_aggregate_used_count.Start = float(
-                        selected_group_path_count
+                        len(selected_group_vehicle_ids)
                     )
                 exact_clone_aggregate_start_complete = True
             integrated_exact_clone_flow_aggregation_audit = {
@@ -8332,6 +8810,26 @@ class GurobiMILPAdapter:
                     (
                         "exact_clone_aggregate_used_count",
                         exact_clone_aggregate_used_count_by_group,
+                    ),
+                    (
+                        "exact_clone_fragment_layer_assignment",
+                        exact_clone_fragment_layer_assignment,
+                    ),
+                    (
+                        "exact_clone_fragment_layer_connection",
+                        exact_clone_fragment_layer_connection,
+                    ),
+                    (
+                        "exact_clone_fragment_layer_start",
+                        exact_clone_fragment_layer_start,
+                    ),
+                    (
+                        "exact_clone_fragment_layer_end",
+                        exact_clone_fragment_layer_end,
+                    ),
+                    (
+                        "exact_clone_fragment_reset",
+                        exact_clone_fragment_reset,
                     ),
                     ("unserved", unserved),
                     ("used_vehicle", used_vehicle),
@@ -9789,6 +10287,19 @@ class GurobiMILPAdapter:
                 exact_clone_aggregate_connection
             ),
             exact_clone_aggregate_start=exact_clone_aggregate_start,
+            exact_clone_fragment_layer_assignment=(
+                exact_clone_fragment_layer_assignment
+            ),
+            exact_clone_fragment_layer_connection=(
+                exact_clone_fragment_layer_connection
+            ),
+            exact_clone_fragment_layer_start=(
+                exact_clone_fragment_layer_start
+            ),
+            exact_clone_fragment_layer_end=(
+                exact_clone_fragment_layer_end
+            ),
+            exact_clone_fragment_reset=exact_clone_fragment_reset,
         )
         if selected_clone_group_record is not None:
             recovered_vehicle_ids = tuple(
@@ -24235,6 +24746,21 @@ class GurobiMILPAdapter:
         exact_clone_aggregate_start: Optional[
             Mapping[str, Any]
         ] = None,
+        exact_clone_fragment_layer_assignment: Optional[
+            Mapping[Tuple[int, str], Any]
+        ] = None,
+        exact_clone_fragment_layer_connection: Optional[
+            Mapping[Tuple[int, str, str], Any]
+        ] = None,
+        exact_clone_fragment_layer_start: Optional[
+            Mapping[Tuple[int, str], Any]
+        ] = None,
+        exact_clone_fragment_layer_end: Optional[
+            Mapping[Tuple[int, str], Any]
+        ] = None,
+        exact_clone_fragment_reset: Optional[
+            Mapping[Tuple[int, str, str], Any]
+        ] = None,
     ) -> Tuple[List[VehicleDuty], List[str], Dict[str, str]]:
         exact_clone_member_ids = {
             str(vehicle_id)
@@ -24268,25 +24794,48 @@ class GurobiMILPAdapter:
             )
         }
         if exact_clone_member_ids:
-            (
-                recovered_y,
-                recovered_x,
-                recovered_start,
-            ) = self._decompose_exact_clone_aggregate_solution(
-                problem=problem,
-                member_vehicle_ids=tuple(
-                    str(vehicle_id)
-                    for vehicle_id in exact_clone_member_vehicle_ids
-                ),
-                aggregate_assignment=(
-                    exact_clone_aggregate_assignment or {}
-                ),
-                aggregate_connection=(
-                    exact_clone_aggregate_connection or {}
-                ),
-                aggregate_start=exact_clone_aggregate_start or {},
-                use_pool_solution=use_pool_solution,
-            )
+            if exact_clone_fragment_layer_assignment:
+                (
+                    recovered_y,
+                    recovered_x,
+                    recovered_start,
+                ) = self._decompose_exact_clone_layered_aggregate_solution(
+                    problem=problem,
+                    member_vehicle_ids=tuple(
+                        str(vehicle_id)
+                        for vehicle_id in exact_clone_member_vehicle_ids
+                    ),
+                    layer_assignment=(
+                        exact_clone_fragment_layer_assignment
+                    ),
+                    layer_connection=(
+                        exact_clone_fragment_layer_connection or {}
+                    ),
+                    layer_start=exact_clone_fragment_layer_start or {},
+                    layer_end=exact_clone_fragment_layer_end or {},
+                    fragment_reset=exact_clone_fragment_reset or {},
+                    use_pool_solution=use_pool_solution,
+                )
+            else:
+                (
+                    recovered_y,
+                    recovered_x,
+                    recovered_start,
+                ) = self._decompose_exact_clone_aggregate_solution(
+                    problem=problem,
+                    member_vehicle_ids=tuple(
+                        str(vehicle_id)
+                        for vehicle_id in exact_clone_member_vehicle_ids
+                    ),
+                    aggregate_assignment=(
+                        exact_clone_aggregate_assignment or {}
+                    ),
+                    aggregate_connection=(
+                        exact_clone_aggregate_connection or {}
+                    ),
+                    aggregate_start=exact_clone_aggregate_start or {},
+                    use_pool_solution=use_pool_solution,
+                )
             selected_y.update(recovered_y)
             selected_x.update(recovered_x)
             selected_start.update(recovered_start)
@@ -24298,6 +24847,192 @@ class GurobiMILPAdapter:
             selected_x=selected_x,
             selected_start=selected_start,
         )
+
+    def _decompose_exact_clone_layered_aggregate_solution(
+        self,
+        *,
+        problem: CanonicalOptimizationProblem,
+        member_vehicle_ids: Sequence[str],
+        layer_assignment: Mapping[Tuple[int, str], Any],
+        layer_connection: Mapping[Tuple[int, str, str], Any],
+        layer_start: Mapping[Tuple[int, str], Any],
+        layer_end: Mapping[Tuple[int, str], Any],
+        fragment_reset: Mapping[Tuple[int, str, str], Any],
+        use_pool_solution: bool = False,
+    ) -> Tuple[
+        Set[Tuple[str, str]],
+        Set[Tuple[str, str, str]],
+        Set[Tuple[str, str]],
+    ]:
+        """Recover clone IDs from an integral layered fragment network."""
+
+        selected_layer_trips = {
+            (int(layer_index), str(trip_id))
+            for (layer_index, trip_id), variable in layer_assignment.items()
+            if self._binary_value(
+                variable,
+                use_pool_solution=use_pool_solution,
+            )
+        }
+        selected_layer_connections = {
+            (int(layer_index), str(from_trip_id), str(to_trip_id))
+            for (
+                layer_index,
+                from_trip_id,
+                to_trip_id,
+            ), variable in layer_connection.items()
+            if self._binary_value(
+                variable,
+                use_pool_solution=use_pool_solution,
+            )
+        }
+        selected_layer_starts = {
+            (int(layer_index), str(trip_id))
+            for (layer_index, trip_id), variable in layer_start.items()
+            if self._binary_value(
+                variable,
+                use_pool_solution=use_pool_solution,
+            )
+        }
+        selected_layer_ends = {
+            (int(layer_index), str(trip_id))
+            for (layer_index, trip_id), variable in layer_end.items()
+            if self._binary_value(
+                variable,
+                use_pool_solution=use_pool_solution,
+            )
+        }
+        selected_resets = {
+            (int(layer_index), str(from_trip_id), str(to_trip_id))
+            for (
+                layer_index,
+                from_trip_id,
+                to_trip_id,
+            ), variable in fragment_reset.items()
+            if self._binary_value(
+                variable,
+                use_pool_solution=use_pool_solution,
+            )
+        }
+
+        direct_successor: Dict[Tuple[int, str], str] = {}
+        direct_predecessor: Dict[Tuple[int, str], str] = {}
+        for layer_index, from_trip_id, to_trip_id in (
+            selected_layer_connections
+        ):
+            from_key = (layer_index, from_trip_id)
+            to_key = (layer_index, to_trip_id)
+            if (
+                from_key not in selected_layer_trips
+                or to_key not in selected_layer_trips
+                or from_key in direct_successor
+                or to_key in direct_predecessor
+            ):
+                raise RuntimeError(
+                    "Exact-clone layered direct flow is not a vertex-"
+                    "disjoint path cover"
+                )
+            direct_successor[from_key] = to_trip_id
+            direct_predecessor[to_key] = from_trip_id
+
+        reset_successor: Dict[Tuple[int, str], Tuple[int, str]] = {}
+        reset_predecessor: Dict[Tuple[int, str], Tuple[int, str]] = {}
+        for layer_index, from_trip_id, to_trip_id in selected_resets:
+            from_key = (layer_index, from_trip_id)
+            to_key = (layer_index + 1, to_trip_id)
+            if (
+                from_key not in selected_layer_ends
+                or to_key not in selected_layer_starts
+                or from_key in reset_successor
+                or to_key in reset_predecessor
+            ):
+                raise RuntimeError(
+                    "Exact-clone fragment reset flow is not one-to-one"
+                )
+            reset_successor[from_key] = to_key
+            reset_predecessor[to_key] = from_key
+
+        root_starts = sorted(
+            (
+                key
+                for key in selected_layer_starts
+                if key[0] == 0
+            ),
+            key=lambda key: (
+                self._service_minute(
+                    problem,
+                    problem.trip_by_id()[key[1]].departure_min,
+                ),
+                key[1],
+            ),
+        )
+        canonical_member_ids = tuple(
+            str(vehicle_id) for vehicle_id in member_vehicle_ids
+        )
+        if len(root_starts) > len(canonical_member_ids):
+            raise RuntimeError(
+                "Exact-clone layered path count exceeds group capacity"
+            )
+
+        recovered_y: Set[Tuple[str, str]] = set()
+        recovered_x: Set[Tuple[str, str, str]] = set()
+        recovered_start: Set[Tuple[str, str]] = set()
+        visited_layer_trips: Set[Tuple[int, str]] = set()
+        visited_resets: Set[Tuple[int, str, str]] = set()
+        for vehicle_id, root_start in zip(
+            canonical_member_ids,
+            root_starts,
+        ):
+            fragment_start = root_start
+            while fragment_start is not None:
+                layer_index, start_trip_id = fragment_start
+                recovered_start.add((vehicle_id, start_trip_id))
+                current_key = (layer_index, start_trip_id)
+                while True:
+                    if current_key in visited_layer_trips:
+                        raise RuntimeError(
+                            "Exact-clone layered flow contains a cycle or "
+                            "shared trip"
+                        )
+                    visited_layer_trips.add(current_key)
+                    recovered_y.add((vehicle_id, current_key[1]))
+                    next_trip_id = direct_successor.get(current_key)
+                    if next_trip_id is None:
+                        break
+                    recovered_x.add(
+                        (vehicle_id, current_key[1], next_trip_id)
+                    )
+                    current_key = (layer_index, next_trip_id)
+                if current_key not in selected_layer_ends:
+                    raise RuntimeError(
+                        "Exact-clone layered fragment has no selected end"
+                    )
+                next_fragment = reset_successor.get(current_key)
+                if next_fragment is not None:
+                    visited_resets.add(
+                        (layer_index, current_key[1], next_fragment[1])
+                    )
+                fragment_start = next_fragment
+
+        if visited_layer_trips != selected_layer_trips:
+            raise RuntimeError(
+                "Exact-clone layered decomposition did not recover every "
+                "selected trip"
+            )
+        if visited_resets != selected_resets:
+            raise RuntimeError(
+                "Exact-clone layered decomposition did not recover every "
+                "fragment reset"
+            )
+        if any(
+            key[0] > 0 and key not in reset_predecessor
+            for key in selected_layer_starts
+        ):
+            raise RuntimeError(
+                "Exact-clone layered flow has a non-root fragment without "
+                "a reset predecessor"
+            )
+        return recovered_y, recovered_x, recovered_start
 
     def _decompose_exact_clone_aggregate_solution(
         self,
@@ -25817,6 +26552,115 @@ class GurobiMILPAdapter:
             "trip_ids": longest_trip_ids,
         }
 
+    def _exact_clone_depot_reset_transition_audit(
+        self,
+        *,
+        problem: CanonicalOptimizationProblem,
+        vehicle: Any,
+        assignment_trip_ids: Set[str],
+    ) -> Dict[str, Any]:
+        """Enumerate exact same-day depot-reset transitions for one clone.
+
+        These arcs connect the end of fragment ``k`` to the start of fragment
+        ``k + 1``.  They are deliberately distinct from direct successor arcs:
+        the vehicle returns to its home depot and starts again, so the existing
+        return/start deadhead costs remain attached to the boundary variables.
+        """
+
+        trip_by_id = problem.trip_by_id()
+        missing_trip_ids = tuple(
+            sorted(assignment_trip_ids - set(trip_by_id))
+        )
+        if missing_trip_ids:
+            return {
+                "blockers": ("assignment_domain_references_missing_trip",),
+                "pairs": (),
+                "pair_count": 0,
+                "pair_sha256": None,
+                "reason_counts": {},
+                "missing_trip_ids": missing_trip_ids,
+            }
+
+        ordered_trip_ids = tuple(
+            sorted(
+                assignment_trip_ids,
+                key=lambda trip_id: (
+                    self._service_minute(
+                        problem, trip_by_id[trip_id].departure_min
+                    ),
+                    self._trip_service_arrival_min(
+                        problem, trip_by_id[trip_id]
+                    ),
+                    trip_id,
+                ),
+            )
+        )
+        fixed_route_band_mode = bool(
+            problem.metadata.get("fixed_route_band_mode", False)
+        )
+        allow_same_day_depot_cycles = bool(
+            problem.metadata.get("allow_same_day_depot_cycles", True)
+        )
+        vehicle_type = str(getattr(vehicle, "vehicle_type", "") or "")
+        home_depot_id = str(
+            getattr(vehicle, "home_depot_id", "") or ""
+        )
+        reset_pairs: List[Tuple[str, str]] = []
+        reason_counts: Dict[str, int] = {}
+        for from_position, from_trip_id in enumerate(ordered_trip_ids):
+            from_trip = trip_by_id[from_trip_id]
+            from_arrival_min = self._trip_service_arrival_min(
+                problem, from_trip
+            )
+            from_duty = VehicleDuty(
+                duty_id=f"{vehicle.vehicle_id}__reset_from",
+                vehicle_type=vehicle_type,
+                legs=(DutyLeg(trip=from_trip),),
+            )
+            for to_trip_id in ordered_trip_ids[from_position + 1 :]:
+                to_trip = trip_by_id[to_trip_id]
+                if from_arrival_min > self._service_minute(
+                    problem, to_trip.departure_min
+                ):
+                    continue
+                diagnostic = fragment_transition_diagnostic(
+                    from_duty,
+                    VehicleDuty(
+                        duty_id=f"{vehicle.vehicle_id}__reset_to",
+                        vehicle_type=vehicle_type,
+                        legs=(DutyLeg(trip=to_trip),),
+                    ),
+                    home_depot_id=home_depot_id,
+                    dispatch_context=problem.dispatch_context,
+                    fixed_route_band_mode=fixed_route_band_mode,
+                    allow_same_day_depot_cycles=(
+                        allow_same_day_depot_cycles
+                    ),
+                )
+                reason_counts[diagnostic.reason_code] = (
+                    reason_counts.get(diagnostic.reason_code, 0) + 1
+                )
+                if (
+                    diagnostic.depot_reset_ok
+                    and not diagnostic.route_band_blocked
+                ):
+                    reset_pairs.append((from_trip_id, to_trip_id))
+
+        normalized_pairs = tuple(reset_pairs)
+        pair_payload = json.dumps(
+            normalized_pairs,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        return {
+            "blockers": (),
+            "pairs": normalized_pairs,
+            "pair_count": len(normalized_pairs),
+            "pair_sha256": hashlib.sha256(pair_payload).hexdigest(),
+            "reason_counts": dict(sorted(reason_counts.items())),
+            "missing_trip_ids": (),
+        }
+
     def _exact_combustion_clone_flow_aggregation_audit(
         self,
         *,
@@ -25835,12 +26679,11 @@ class GurobiMILPAdapter:
         """Prove which exact-clone ICE groups are safe aggregation targets.
 
         The current Phase 4 model still instantiates vehicle-indexed flow
-        variables.  This audit is the fail-closed contract for replacing an
-        exact-clone group by one capacitated path-flow network in a later
-        tranche.  In particular, it proves that every possible single-day
-        duty in the complete successor DAG fits inside the initial usable
-        fuel inventory.  When that proof holds, the per-vehicle fuel-state and
-        refuelling constraints are redundant for dispatch feasibility.
+        variables.  This audit is the fail-closed contract for convexifying an
+        exact-clone group behind an integral layered fragment network.  It
+        proves that even the configured maximum number of worst-case fragments
+        fits inside initial usable fuel.  Refuelling and per-label fuel state
+        are then redundant for every recoverable clone duty.
 
         No variable or constraint is removed here.  ``applied`` therefore
         remains false even when candidate groups are certified.
@@ -25918,17 +26761,14 @@ class GurobiMILPAdapter:
             shared_structural_blockers.append(
                 "planning_horizon_is_not_one_day"
             )
-        if int(daily_fragment_limit) != 1:
+        fragment_layer_count = min(
+            int(daily_fragment_limit),
+            int(max_start_fragments_per_vehicle),
+            int(max_end_fragments_per_vehicle),
+        )
+        if fragment_layer_count <= 0:
             shared_structural_blockers.append(
-                "daily_fragment_limit_is_not_one"
-            )
-        if int(max_start_fragments_per_vehicle) != 1:
-            shared_structural_blockers.append(
-                "max_start_fragments_per_vehicle_is_not_one"
-            )
-        if int(max_end_fragments_per_vehicle) != 1:
-            shared_structural_blockers.append(
-                "max_end_fragments_per_vehicle_is_not_one"
+                "nonpositive_fragment_layer_count"
             )
 
         group_records: List[Dict[str, Any]] = []
@@ -25980,7 +26820,11 @@ class GurobiMILPAdapter:
             longest_path_fuel_l: Optional[float] = None
             longest_path_trip_ids: Tuple[str, ...] = ()
             fuel_margin_l: Optional[float] = None
+            conservative_max_daily_fuel_l: Optional[float] = None
             refuel_upper_buffer_l = 0.0
+            reset_transition_count = 0
+            reset_transition_sha256: Optional[str] = None
+            reset_transition_reason_counts: Dict[str, int] = {}
             if representative is not None:
                 fuel_rate = max(
                     float(
@@ -26024,20 +26868,67 @@ class GurobiMILPAdapter:
                 longest_path_fuel_l = longest_path_audit["fuel_l"]
                 longest_path_trip_ids = longest_path_audit["trip_ids"]
                 if longest_path_fuel_l is not None:
+                    conservative_max_daily_fuel_l = (
+                        float(fragment_layer_count)
+                        * longest_path_fuel_l
+                    )
                     fuel_margin_l = (
-                        usable_initial_fuel_l - longest_path_fuel_l
+                        usable_initial_fuel_l
+                        - conservative_max_daily_fuel_l
                     )
                     if fuel_margin_l < -1.0e-9:
                         blockers.append(
-                            "longest_possible_duty_exceeds_usable_initial_fuel"
+                            "configured_worst_case_fragments_exceed_"
+                            "usable_initial_fuel"
                         )
+                reset_transition_audit = (
+                    self._exact_clone_depot_reset_transition_audit(
+                        problem=problem,
+                        vehicle=representative,
+                        assignment_trip_ids=reference_assignment_domain,
+                    )
+                )
+                blockers.extend(reset_transition_audit["blockers"])
+                reset_transition_count = int(
+                    reset_transition_audit["pair_count"]
+                )
+                reset_transition_sha256 = reset_transition_audit[
+                    "pair_sha256"
+                ]
+                reset_transition_reason_counts = dict(
+                    reset_transition_audit["reason_counts"]
+                )
 
             certified = not blockers
             group_assignment_count = len(reference_assignment_domain)
             group_transition_count = len(reference_transition_domain)
+            relaxed_label_binary_count = len(vehicle_ids) * (
+                3 * group_assignment_count
+                + group_transition_count
+                + 1
+                + int(planning_days)
+            )
+            aggregate_integer_count = (
+                3 * group_assignment_count
+                + group_transition_count
+                + 1
+            )
+            if fragment_layer_count > 1:
+                aggregate_integer_count += (
+                    fragment_layer_count
+                    * (
+                        3 * group_assignment_count
+                        + group_transition_count
+                    )
+                    + (fragment_layer_count - 1)
+                    * reset_transition_count
+                )
             group_potential_reduction = (
-                max(len(vehicle_ids) - 1, 0)
-                * (3 * group_assignment_count + group_transition_count)
+                max(
+                    relaxed_label_binary_count
+                    - aggregate_integer_count,
+                    0,
+                )
                 if certified
                 else 0
             )
@@ -26065,11 +26956,24 @@ class GurobiMILPAdapter:
                     "initial_fuel_l": initial_l,
                     "reserve_fuel_l": reserve_l,
                     "usable_initial_fuel_l": usable_initial_fuel_l,
+                    "fragment_layer_count": int(fragment_layer_count),
                     "longest_possible_duty_fuel_l": longest_path_fuel_l,
                     "longest_possible_duty_trip_ids": (
                         longest_path_trip_ids
                     ),
                     "fuel_redundancy_margin_l": fuel_margin_l,
+                    "conservative_max_daily_fuel_l": (
+                        conservative_max_daily_fuel_l
+                    ),
+                    "valid_depot_reset_transition_count": (
+                        reset_transition_count
+                    ),
+                    "depot_reset_transition_sha256": (
+                        reset_transition_sha256
+                    ),
+                    "depot_reset_transition_reason_counts": (
+                        reset_transition_reason_counts
+                    ),
                     "configured_refuel_upper_buffer_l": (
                         refuel_upper_buffer_l
                     ),
@@ -26082,7 +26986,7 @@ class GurobiMILPAdapter:
 
         return {
             "schema_version": (
-                "exact_combustion_clone_flow_aggregation_audit_v1"
+                "exact_combustion_clone_flow_aggregation_audit_v2"
             ),
             "enabled": True,
             "applied": False,
@@ -26097,9 +27001,11 @@ class GurobiMILPAdapter:
                 "yet_connected_to_phase4_solution_recovery"
             ),
             "proof_semantics": (
-                "exact_clone_domains_equal; one_day_single_path; longest_"
-                "chronological_duty_including_start_service_connection_and_"
-                "return_fuel_fits_initial_fuel_minus_reserve"
+                "exact_clone_domains_equal; one_day_layered_fragment_path;_"
+                "configured_fragment_limit_times_longest_chronological_"
+                "single_fragment_fuel_including_start_service_connection_"
+                "and_return_fits_initial_fuel_minus_reserve; depot_reset_"
+                "arcs_use_canonical_transition_diagnostic"
             ),
             "wall_runtime_sec": float(
                 time.perf_counter() - audit_started_at

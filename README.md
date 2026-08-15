@@ -1,5 +1,40 @@
 # master-course
 
+## 2026-08-15 literature-checked layered ICE-clone aggregation
+
+- The local literature folder was rechecked against the PDF tables rather than
+  headline runtime claims. No16 solves a fixed vehicle schedule with 19,452
+  variables in 1.5 seconds; No63 reports 44.5--1,058.9 seconds for fixed-
+  schedule charging and 7.5--93.4 seconds for its Lagrangian/DP method. The
+  closest joint assignment paper, No06, needs 617.6 seconds for only 50 trips
+  and reports no Gurobi feasible solution for 200 or 418 trips within six
+  hours; its 418-trip 202.3-second result is ALNS-SA. Therefore a
+  hundreds-of-seconds target is reasonable only after formulation reduction
+  or as an explicitly approximate mode, not by relabelling an uncertified
+  full MILP incumbent.
+- Extended the exact 25-ICE-clone convexification from one fragment to the
+  actual one-day, at-most-three-fragment contract. A binary layered path
+  network represents direct successor arcs within a fragment and canonical
+  depot-reset arcs between fragments. Higher-layer starts require one valid
+  reset predecessor, reset exits are one-to-one, and the number of layer-0
+  roots is the exact used-vehicle count. Integral paths are recovered onto the
+  unchanged canonical vehicle IDs; this is exact representation recovery, not
+  post-solve repair.
+- The fail-closed fuel certificate now multiplies the longest possible single-
+  fragment fuel by the configured fragment count. For the saved 264-trip
+  case, `3 * 46.036430 = 138.109290 L` remains below the 144 L usable initial
+  inventory, and 10,829 canonical reset pairs are available. The projected
+  reformulation relaxes 302,600 vehicle-label binaries and adds 70,067 group/
+  layer binaries, a net reduction of 232,533 binary variables. Total variables
+  may increase because the label-flow extension remains continuous, so no
+  runtime benefit is claimed before a frozen-commit frontend/BFF measurement.
+- Exact objective/path-count/two-fragment recovery, insufficient-fuel rejection,
+  and complete two-fragment Phase-3-to-Phase-4 MIP-start regressions pass. A
+  focused 128-test set and the full repository regression (`1491 passed` in
+  160.65 seconds) pass. A clean fresh-Prepare run is still required; research
+  release remains `BLOCKED` until the declared gap and every downstream gate
+  pass.
+
 ## 2026-08-15 exact Phase-4 bound propagation and clone-duty symmetry
 
 - A runtime audit of the first independent BEV-coefficient case found that

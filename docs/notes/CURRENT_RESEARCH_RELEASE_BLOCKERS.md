@@ -366,52 +366,51 @@ double counting. A separate ALNS-style operational candidate may target
 hundreds of seconds, but it must remain explicitly near-optimal and cannot
 replace the formal full-network certificate.
 
-### Exact-clone ICE group-flow convexification: implemented; inapplicable to current multi-fragment case
+### Exact-clone ICE layered group-flow convexification: implemented; fresh timing evidence pending
 
 Phase 4 continues to use Gurobi's automatic symmetry policy; the existing clean
 `Symmetry=2` sensitivity regressed to a 100% gap and must not be reintroduced
-without new controlled evidence. Phase 4 now exports
-`integrated_exact_combustion_clone_flow_aggregation_audit`. The audit
-does not assume that equal vehicle fields alone permit aggregation. It also
-requires identical assignment and complete-transition domains, a one-day
-single-fragment structure, and an acyclic chronological successor network.
-For each candidate ICE clone group it solves a longest-path dynamic program
-over startup, service, connection-deadhead and return fuel. Only a group whose
-worst possible duty fits inside initial fuel minus reserve receives
-`finite_fuel_constraints_proved_redundant=true`.
+without new controlled evidence. The exported
+`integrated_exact_combustion_clone_flow_aggregation_audit` does not assume
+that equal vehicle fields alone permit aggregation. It requires identical
+assignment and complete-transition domains, a one-day acyclic chronological
+successor network, and a conservative fuel proof. The proof now covers the
+actual multi-fragment contract: the configured fragment-layer count multiplied
+by the worst single-fragment startup, service, connection-deadhead and return
+fuel must fit inside initial fuel minus reserve.
 
-The integrated model now consumes the certificate when `driver_cost=false`.
-For the single largest certified group, per-vehicle-label flow and activation
-variables are continuous while binary aggregate assignment, connection and
-boundary variables retain an integral group path cover. One integer aggregate
-path-count variable is linked to label activation, start/end and vehicle-day
-counts. The integral aggregate paths are decomposed deterministically back to
-the canonical vehicle IDs. Fuel-state variables are omitted only because the
-certificate proves them redundant; this is exact representation recovery and
-not post-solve feasibility repair. Complete MIP starts and the fixed-dispatch
-recourse preflight include the aggregate variables.
+The integrated model consumes the certificate when `driver_cost=false`. For
+the single largest certified group, per-vehicle-label flow and activation
+variables are continuous while binary aggregate and fragment-layer variables
+retain an integral group path cover. Direct arcs stay inside a layer. Canonical
+depot-reset arcs connect each fragment end only to the next layer; every
+higher-layer start requires one reset predecessor and each end can feed at
+most one reset. Used count is the layer-0 root count and also the number of
+final fragment ends net of resets. Integral paths are decomposed
+deterministically back to canonical vehicle IDs. Fuel state is redundant only
+under the conservative certificate. This is exact representation recovery,
+not post-solve feasibility repair.
 
 The reformulation fails closed when path-specific driver cost is active or any
-structural/fuel proof fails. Small exact regressions show objective equivalence
-with the original binary-label model and preserve a two-path/two-bus parallel
-trip case. The saved 264-trip high-PV Prepared Input was reconstructed
-read-only before implementation: its exact 25-ICE group has 264 assignment
-nodes and 11,310 arcs per vehicle; the longest reachable duty consumes
-46.036430 L versus 144.0 L usable initial fuel, leaving 97.963570 L. That
-read-only diagnostic forced single-fragment parameters and estimated a 290,448
-binary reduction; it was not evidence for the actual frontend contract.
+structural/fuel/reset proof fails. Small exact regressions show objective
+equivalence with the original binary-label model, preserve a two-path/two-bus
+parallel case, recover two fragments on one vehicle, and accept a complete
+two-fragment Phase-3 MIP start. The saved 264-trip input has an exact 25-ICE
+group with 264 assignment nodes and 11,310 direct arcs per clone. Its longest
+single fragment consumes 46.036430 L. The actual three-fragment limit therefore
+requires at most 138.109290 L, below 144.0 L usable initial fuel. Canonical
+enumeration produces 10,829 valid depot-reset pairs.
 
-The fresh SHA `1025461` frontend/BFF diagnostic resolved that uncertainty. Its
-effective scenario has `daily_fragment_limit=3`,
-`max_start_fragments_per_vehicle=100`, and
-`max_end_fragments_per_vehicle=100`. The audit therefore recorded blockers
-`daily_fragment_limit_is_not_one`,
-`max_start_fragments_per_vehicle_is_not_one`, and
-`max_end_fragments_per_vehicle_is_not_one`, with `applied=false`. The model
-retained 780,112 variables, the incumbent was 650,298.979 JPY, and the
-certified gap was 1.583730%. The formulation is exact but does not accelerate
-this current case. A different exact multi-fragment aggregation or path/column
-decomposition is still required; research release is **BLOCKED**.
+For that group, the projected formulation relaxes 302,600 labelled binary
+variables and adds 70,067 aggregate/layer/reset binaries, reducing the binary
+count by 232,533. It retains the label extension as continuous variables, so
+the total variable count may rise and no speedup follows from the count alone.
+The earlier fresh SHA `1025461` result predates this layered implementation and
+must not be reused as performance evidence. A clean commit, fresh Prepare, and
+frontend/BFF run must measure model construction, presolve, root relaxation,
+incumbent, bound, nodes, gap, physical validation, Rolling, and accounting.
+Until that run meets the declared 1% gap and all downstream gates, research
+release remains **BLOCKED**.
 
 ### Exact identical-vehicle trip-count ordering: implemented; timing pending
 
