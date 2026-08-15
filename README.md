@@ -26,14 +26,24 @@
   inventory, and 10,829 canonical reset pairs are available. The projected
   reformulation relaxes 302,600 vehicle-label binaries and adds 70,067 group/
   layer binaries, a net reduction of 232,533 binary variables. Total variables
-  may increase because the label-flow extension remains continuous, so no
-  runtime benefit is claimed before a frozen-commit frontend/BFF measurement.
+  increase because the label-flow extension remains continuous.
+- The frozen-commit frontend/BFF measurement at `f1690c6` confirms the exact
+  trade-off. Initial binaries fell from 739,728 to 507,194 and rows from
+  355,581 to 286,282, but total variables rose from 780,113 to 848,980.
+  Pre-optimization time was 165.812 seconds, the cost-stage solve was 474.744
+  seconds, and the run retained the identical 61,883.346234 JPY incumbent,
+  57,986.661708 JPY bound, 6.296823% gap and one explored node. Thus this
+  extended formulation provides no measured proof-speed benefit. The next
+  exact formulation must remove the continuous vehicle-label extension itself;
+  a decomposition/heuristic mode must carry a separate approximation claim.
 - Exact objective/path-count/two-fragment recovery, insufficient-fuel rejection,
   and complete two-fragment Phase-3-to-Phase-4 MIP-start regressions pass. A
   focused 128-test set and the full repository regression (`1491 passed` in
-  160.65 seconds) pass. A clean fresh-Prepare run is still required; research
-  release remains `BLOCKED` until the declared gap and every downstream gate
-  pass.
+  160.65 seconds) pass. The fresh run served 264/264 trips and passed physical
+  validation, 24/24 Rolling, accounting, and clean-SHA provenance. It remains
+  `BLOCKED` solely because the declared 1% gap was not met. The source run is
+  `output/2026-08-15/run_20260815_1109`; its immutable sensitivity bundle is
+  `output/thesis_sensitivity_powertrain_low_pv_20260815_f1690c6_bev12_900s`.
 
 ## 2026-08-15 exact Phase-4 bound propagation and clone-duty symmetry
 

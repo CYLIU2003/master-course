@@ -74,6 +74,25 @@ bottleneck. The required architectural change is now an exact duty/path or
 aggregated network formulation that removes vehicle-labelled connection
 binaries without successor pruning, fallback, or post-solve repair.
 
+That first exact aggregated network has now been measured at frozen commit
+`f1690c6a9a6145086a96df05193794065e6c2f40`. Its three-layer clone network was
+correctly applied to the 25-ICE group and reduced initial binary variables
+from 739,728 to 507,194 and rows from 355,581 to 286,282. However, retaining
+the labelled flow as continuous variables increased total variables from
+780,113 to 848,980. Pre-optimization time was 165.812070 seconds and the
+cost-stage solve was 474.744153 seconds, essentially equal to the `10a6621`
+control. Incumbent, bound, gap, and node count were exactly unchanged at
+61,883.346234 JPY, 57,986.661708 JPY, 6.296823%, and one node.
+
+The run served 264/264 trips and passed physical validation, 24/24 Rolling,
+accounting and clean-SHA provenance, but `mip_gap_target_met` failed. Therefore
+the exact layered representation is retained for correctness evidence but is
+not a performance solution. The active proof blocker is now the continuous
+vehicle-labelled extended flow/root relaxation itself. Research release stays
+**BLOCKED**; the next implementation must remove that extension or introduce a
+certified decomposition. Any ALNS/Lagrangian/heuristic alternative must remain
+a separately labelled approximation result.
+
 ## 2026-08-15 independent coefficient sensitivity implemented; solves pending
 
 Phase 2 previously relied on a common `trip_energy_sensitivity_scale` that

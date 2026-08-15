@@ -41,16 +41,42 @@
   changes from 302,600 vehicle-label binaries to 70,067 aggregate/layer
   binaries, a net reduction of 232,533. Because the label extension remains as
   continuous variables, this is a binary reduction rather than a total-
-  variable reduction; controlled runtime evidence is still pending.
+  variable reduction.
 - Added exact small-instance regressions for the multiplied fuel bound,
   discrete-versus-aggregated objective equality, two fragments on one vehicle,
   layered recovery, and a complete verified two-fragment MIP start. The full
   integrated actual-cost test file passes (`68 passed`), the focused solver,
   fragment, oracle, feedback, and research-contract set passes (`128 passed`),
   and the repository regression passes (`1491 passed` in 160.65 seconds). No
-  older result is attributed to this formulation; a clean commit and fresh
-  frontend/BFF run are required before updating the performance or research
-  decision.
+  older result is attributed to this formulation.
+- Froze commit `f1690c6a9a6145086a96df05193794065e6c2f40`, restarted the
+  port-8000 BFF, and reran the identical low-PV `BEV_ENERGY_1.2` case through
+  fresh frontend Prepare, Phase 4, 24-step Rolling, physical validation and
+  accounting under the same 900-second shared budget, four threads, seed 42,
+  and 1% target. The source run is
+  `output/2026-08-15/run_20260815_1109`; the immutable bundle is
+  `output/thesis_sensitivity_powertrain_low_pv_20260815_f1690c6_bev12_900s`.
+- The reformulation was applied to all 25 exact ICE clones with three fragment
+  layers and 10,829 certified depot-reset pairs. It relaxed 302,600 labelled
+  binaries and added 70,067 aggregate integer variables. Relative to the
+  `10a6621` control, initial binary variables fell 739,728 -> 507,194 and rows
+  fell 355,581 -> 286,282, while total variables increased 780,113 -> 848,980
+  because the labelled extension remained continuous. Pre-optimization wall
+  time changed 166.509116 -> 165.812070 seconds and cost-stage solve time
+  474.988037 -> 474.744153 seconds.
+- The incumbent, bound, gap and tree were numerically unchanged:
+  61,883.346234 JPY, 57,986.661708 JPY, 6.296823%, and one explored node.
+  Complete shared Phase-4 wall time changed 906.442815 -> 905.939554 seconds,
+  and complete frontend-runner wall time was 1,122.593744 seconds. This matched
+  negative result disproves a material benefit from binary-only reduction in
+  this extended formulation. It does not justify longer limits or a speedup
+  claim.
+- All 264 trips, physical validation, 24/24 Rolling, canonical accounting and
+  clean-SHA provenance passed. `mip_gap_target_met` alone failed, so the case
+  and research release remain `BLOCKED`. The next exact change must eliminate
+  the continuous vehicle-label connection extension, for example through an
+  exact column/duty master with certified recourse. A Lagrangian, ALNS or other
+  approximate path is permitted only as a separately labelled comparison mode.
 
 ## 2026-08-15: exact bound propagation and complete clone-duty ordering
 
