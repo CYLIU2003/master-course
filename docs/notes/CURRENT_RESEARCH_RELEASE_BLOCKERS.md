@@ -1,5 +1,28 @@
 # Current research release blockers
 
+## 2026-08-21 same-SHA A/B harness ready; measurement is diagnostic only
+
+The exact ICE-clone discrete/pure-aggregate selector is internal to the solver
+process and reuses the pre-existing aggregation flag. It does not change the
+public BFF/frontend/scenario contracts. The A/B harness invokes the normal BFF
+worker synchronously with the same canonical prepared input and controls,
+including 24 hourly Rolling steps, physical validation, and canonical
+accounting. Audit artifacts identify the representation actually used and
+count vehicle-labelled versus aggregate-network variables.
+
+The required small exact parity test passes for objective, coverage,
+vehicle-ID-independent duties, fuel, deadhead, CO2, vehicle-days, and canonical
+ID recovery. This is necessary correctness evidence but is not a performance
+claim. The 264-trip result must come from one run per representation on the
+same clean commit, with no change to gap, budget, seed, threads, arcs, costs,
+or feasibility rules. Until that generated bundle exists and passes its
+control, physical, Rolling, and accounting checks, performance remains
+unclassified.
+
+This checkpoint does not authorize a research release or a formal PV-pair
+claim. Column generation, set partitioning, high/low-PV reruns, M0-M3,
+sensitivity sweeps, and time-step comparisons remain out of scope.
+
 ## 2026-08-15 pure aggregate measured; root-proof blocker remains
 
 The frozen frontend/BFF diagnostic at clean commit `94ce217` is complete in

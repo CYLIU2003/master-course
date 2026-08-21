@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import csv
+import contextvars
 import hashlib
 import json
 import math
 import tempfile
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Protocol, Sequence, Set, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, Literal, Mapping, Optional, Protocol, Sequence, Set, Tuple
 
 from src.dispatch.feasibility import FeasibilityEngine, evaluate_startup_feasibility
 from src.dispatch.models import DutyLeg, VehicleDuty
@@ -73,6 +75,36 @@ _FEEDBACK_GLOBAL_DEADLINE_KEY = "_stage2_feedback_global_deadline_monotonic"
 _FEEDBACK_GLOBAL_STARTED_KEY = "_stage2_feedback_global_started_monotonic"
 _ROUTE_BAND_REPARTITION_FEEDBACK_MAX_ITERATIONS = 1
 _SUFFIX_EXCHANGE_RESTART_PATIENCE_EVALUATIONS = 8
+_EXACT_ICE_CLONE_REPRESENTATION_OVERRIDE: contextvars.ContextVar[
+    Optional[Literal["discrete", "pure_aggregate"]]
+] = contextvars.ContextVar(
+    "exact_ice_clone_representation_override",
+    default=None,
+)
+
+
+@contextmanager
+def _diagnostic_exact_ice_clone_representation(
+    representation: Literal["discrete", "pure_aggregate"],
+) -> Iterator[None]:
+    """Select the exact ICE-clone representation for one diagnostic run.
+
+    The production default and public scenario contract remain unchanged. The
+    A/B harness enters this process-local context only while invoking the
+    normal BFF worker synchronously, so representation is the sole model
+    difference between the two cases.
+    """
+
+    if representation not in {"discrete", "pure_aggregate"}:
+        raise ValueError(
+            "exact ICE clone representation must be 'discrete' or "
+            "'pure_aggregate'"
+        )
+    token = _EXACT_ICE_CLONE_REPRESENTATION_OVERRIDE.set(representation)
+    try:
+        yield
+    finally:
+        _EXACT_ICE_CLONE_REPRESENTATION_OVERRIDE.reset(token)
 
 
 def _add_vehicle_indexed_unit_interval_vars(
@@ -2554,6 +2586,9 @@ class _Stage1SearchTelemetry:
     progress_samples: List[Dict[str, Any]] = field(default_factory=list)
     incumbent_events: List[Dict[str, Any]] = field(default_factory=list)
     first_incumbent_runtime_sec: Optional[float] = None
+    first_incumbent_objective: Optional[float] = None
+    root_relaxation_bound: Optional[float] = None
+    root_relaxation_runtime_sec: Optional[float] = None
     requested_gap_reached_runtime_sec: Optional[float] = None
     incumbent_notification_count: int = 0
     dropped_incumbent_event_count: int = 0
@@ -2647,6 +2682,13 @@ class _Stage1SearchTelemetry:
         )
         self.progress_samples.append(event)
         self._last_progress_runtime_sec = runtime
+        if (
+            self.root_relaxation_bound is None
+            and event.get("best_bound") is not None
+            and int(event.get("explored_node_count") or 0) == 0
+        ):
+            self.root_relaxation_bound = float(event["best_bound"])
+            self.root_relaxation_runtime_sec = float(runtime)
         self._record_requested_gap_time(event)
 
     def record_incumbent(
@@ -2669,6 +2711,10 @@ class _Stage1SearchTelemetry:
         runtime = event.get("runtime_sec")
         if self.first_incumbent_runtime_sec is None and runtime is not None:
             self.first_incumbent_runtime_sec = float(runtime)
+            incumbent = event.get("incumbent_objective")
+            self.first_incumbent_objective = (
+                None if incumbent is None else float(incumbent)
+            )
         if len(self.incumbent_events) < max(int(self.max_incumbent_events), 0):
             self.incumbent_events.append(event)
         else:
@@ -2699,6 +2745,11 @@ class _Stage1SearchTelemetry:
             "sample_interval_sec": float(self.sample_interval_sec),
             "requested_gap_ratio": max(float(self.requested_gap_ratio), 0.0),
             "first_incumbent_runtime_sec": self.first_incumbent_runtime_sec,
+            "first_incumbent_objective": self.first_incumbent_objective,
+            "root_relaxation_bound": self.root_relaxation_bound,
+            "root_relaxation_runtime_sec": (
+                self.root_relaxation_runtime_sec
+            ),
             "requested_gap_reached_runtime_sec": (
                 self.requested_gap_reached_runtime_sec
             ),
@@ -5357,12 +5408,28 @@ class GurobiMILPAdapter:
                 ),
             )
         )
-        exact_clone_convexification_requested = bool(
-            problem.metadata.get(
-                "exact_combustion_clone_flow_aggregation_enabled",
-                True,
-            )
+        diagnostic_representation_override = (
+            _EXACT_ICE_CLONE_REPRESENTATION_OVERRIDE.get()
         )
+        if diagnostic_representation_override is None:
+            exact_clone_convexification_requested = bool(
+                problem.metadata.get(
+                    "exact_combustion_clone_flow_aggregation_enabled",
+                    True,
+                )
+            )
+            requested_exact_clone_representation = (
+                "pure_aggregate"
+                if exact_clone_convexification_requested
+                else "discrete"
+            )
+        else:
+            requested_exact_clone_representation = (
+                diagnostic_representation_override
+            )
+            exact_clone_convexification_requested = (
+                requested_exact_clone_representation == "pure_aggregate"
+            )
         exact_clone_application_blockers: List[str] = []
         if not exact_clone_convexification_requested:
             exact_clone_application_blockers.append("disabled_by_scenario")
@@ -5394,11 +5461,9 @@ class GurobiMILPAdapter:
                 "no_certified_clone_group_with_positive_binary_reduction"
             )
         selected_clone_group_record: Optional[Mapping[str, Any]] = None
-        if not exact_clone_application_blockers:
-            # Relax at most one clone group.  All remaining assignment
-            # variables stay binary, so strict/penalized coverage forces the
-            # selected group's aggregate trip incidence to be integral.
-            selected_clone_group_record = max(
+        diagnostic_candidate_group_record: Optional[Mapping[str, Any]] = None
+        if certified_clone_group_records:
+            diagnostic_candidate_group_record = max(
                 certified_clone_group_records,
                 key=lambda record: (
                     int(
@@ -5410,6 +5475,11 @@ class GurobiMILPAdapter:
                     -int(record.get("group_index", 0) or 0),
                 ),
             )
+        if not exact_clone_application_blockers:
+            # Relax at most one clone group.  All remaining assignment
+            # variables stay binary, so strict/penalized coverage forces the
+            # selected group's aggregate trip incidence to be integral.
+            selected_clone_group_record = diagnostic_candidate_group_record
         exact_clone_convexified_vehicle_ids = set(
             str(vehicle_id)
             for vehicle_id in (
@@ -6064,6 +6134,13 @@ class GurobiMILPAdapter:
             integrated_exact_clone_flow_aggregation_audit = {
                 **dict(integrated_exact_clone_flow_aggregation_audit),
                 "applied": True,
+                "requested_representation": (
+                    requested_exact_clone_representation
+                ),
+                "representation": "pure_aggregate",
+                "diagnostic_override_active": bool(
+                    diagnostic_representation_override is not None
+                ),
                 "reason_not_applied": None,
                 "application_blockers": (),
                 "selected_group_index": selected_group_index,
@@ -6079,6 +6156,10 @@ class GurobiMILPAdapter:
                     exact_clone_activation_prefix_constraint_count
                 ),
                 "aggregate_integer_variable_count_added": (
+                    added_integer_count
+                ),
+                "vehicle_label_flow_variable_count_created": 0,
+                "aggregate_network_variable_count_created": (
                     added_integer_count
                 ),
                 "net_binary_variable_reduction": (
@@ -6118,8 +6199,27 @@ class GurobiMILPAdapter:
                 ),
             }
         else:
+            discrete_label_variable_count = 0
+            if diagnostic_candidate_group_record is not None:
+                discrete_label_variable_count = int(
+                    diagnostic_candidate_group_record.get(
+                        "vehicle_label_flow_variable_count_removed", 0
+                    )
+                    or 0
+                )
             integrated_exact_clone_flow_aggregation_audit = {
                 **dict(integrated_exact_clone_flow_aggregation_audit),
+                "requested_representation": (
+                    requested_exact_clone_representation
+                ),
+                "representation": "discrete",
+                "diagnostic_override_active": bool(
+                    diagnostic_representation_override is not None
+                ),
+                "vehicle_label_flow_variable_count_created": (
+                    discrete_label_variable_count
+                ),
+                "aggregate_network_variable_count_created": 0,
                 "application_blockers": tuple(
                     dict.fromkeys(exact_clone_application_blockers)
                 ),
@@ -9232,6 +9332,7 @@ class GurobiMILPAdapter:
             "num_integer_vars": model.NumIntVars,
             # Gurobi's NumIntVars already includes binary variables.
             "num_continuous_vars": model.NumVars - model.NumIntVars,
+            "num_nonzero_coefficients": model.NumNZs,
             "num_assignment_pairs": len(assignment_pairs),
             "num_arc_pairs": len(arc_pairs),
             "arc_pruning_summary": arc_pruning_summary,
@@ -9265,6 +9366,9 @@ class GurobiMILPAdapter:
             )
             else None
         )
+        integrated_mip_telemetry = _Stage1SearchTelemetry(
+            requested_gap_ratio=max(float(config.mip_gap), 0.0)
+        )
 
         def _capture_first_feasible(_model: Any, where: Any) -> None:
             nonlocal first_feasible_sec
@@ -9279,8 +9383,37 @@ class GurobiMILPAdapter:
                     )
                     if lazy_cut_count > 0:
                         return
-                if where == GRB.Callback.MIPSOL and first_feasible_sec is None:
-                    first_feasible_sec = time.perf_counter() - optimize_started_at
+                    integrated_mip_telemetry.record_incumbent(
+                        runtime_sec=_model.cbGet(GRB.Callback.RUNTIME),
+                        incumbent_objective=_model.cbGet(
+                            GRB.Callback.MIPSOL_OBJ
+                        ),
+                        best_bound=_model.cbGet(GRB.Callback.MIPSOL_OBJBND),
+                        explored_node_count=_model.cbGet(
+                            GRB.Callback.MIPSOL_NODCNT
+                        ),
+                        solution_count=_model.cbGet(
+                            GRB.Callback.MIPSOL_SOLCNT
+                        ),
+                    )
+                    if first_feasible_sec is None:
+                        first_feasible_sec = (
+                            time.perf_counter() - optimize_started_at
+                        )
+                elif where == GRB.Callback.MIP:
+                    integrated_mip_telemetry.record_progress(
+                        runtime_sec=_model.cbGet(GRB.Callback.RUNTIME),
+                        incumbent_objective=_model.cbGet(
+                            GRB.Callback.MIP_OBJBST
+                        ),
+                        best_bound=_model.cbGet(GRB.Callback.MIP_OBJBND),
+                        explored_node_count=_model.cbGet(
+                            GRB.Callback.MIP_NODCNT
+                        ),
+                        solution_count=_model.cbGet(
+                            GRB.Callback.MIP_SOLCNT
+                        ),
+                    )
             except Exception as exc:  # pragma: no cover - callback boundary
                 if (
                     integrated_fragment_lazy_separator is not None
@@ -10050,6 +10183,17 @@ class GurobiMILPAdapter:
         # deliberately continue the same model under a second search profile,
         # so the canonical runtime must cover both calls.
         runtime_sec = float(time.perf_counter() - optimize_started_at)
+        integrated_mip_telemetry_payload = integrated_mip_telemetry.to_dict(
+            final_runtime_sec=getattr(model, "Runtime", runtime_sec),
+            final_incumbent_objective=(
+                getattr(model, "ObjVal", None) if model.SolCount > 0 else None
+            ),
+            final_best_bound=getattr(model, "ObjBound", None),
+            final_node_count=getattr(model, "NodeCount", None),
+            final_solution_count=getattr(model, "SolCount", None),
+            final_simplex_iteration_count=getattr(model, "IterCount", None),
+            final_barrier_iteration_count=getattr(model, "BarIterCount", None),
+        )
         has_feasible_incumbent = bool(model.SolCount > 0)
         incumbent_unserved_count = 0 if has_feasible_incumbent and not allow_partial_service else None
         if has_feasible_incumbent:
@@ -10064,6 +10208,12 @@ class GurobiMILPAdapter:
             "initial_num_constrs": int(pre_stats.get("num_constrs", 0) or 0),
             "initial_num_bin_vars": int(pre_stats.get("num_binary_vars", 0) or 0),
             "initial_num_int_vars": int(pre_stats.get("num_integer_vars", 0) or 0),
+            "initial_num_continuous_vars": int(
+                pre_stats.get("num_continuous_vars", 0) or 0
+            ),
+            "initial_num_nonzero_coefficients": int(
+                pre_stats.get("num_nonzero_coefficients", 0) or 0
+            ),
         }
         if sequential_lexicographic_objective:
             best_bound = lexicographic_cost_best_bound
@@ -10914,6 +11064,9 @@ class GurobiMILPAdapter:
                         integrated_search_telemetry
                     ),
                     "phases": integrated_search_telemetry,
+                    "mip_callback_telemetry": (
+                        integrated_mip_telemetry_payload
+                    ),
                     "semantics": (
                         (
                             "weather_neutral_sequential_lexicographic_scalar_"

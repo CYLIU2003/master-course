@@ -5,7 +5,9 @@ from pathlib import Path
 
 from scripts.build_lazy_fragment_performance_diagnostic import (
     build_comparison,
+    build_pure_ice_ab_comparison,
     write_comparison_outputs,
+    write_pure_ice_ab_outputs,
 )
 
 
@@ -206,3 +208,146 @@ def test_build_comparison_treats_missing_fingerprints_as_not_comparable(
         "mismatched_fingerprints"
     ]
     assert comparison["runtime_claim"]["eligible"] is False
+
+
+def _pure_ice_metrics(
+    *,
+    representation: str,
+    total_variables: int,
+    binary_variables: int,
+    certified_gap: float,
+    root_bound: float,
+    wall_time: float,
+) -> dict:
+    is_aggregate = representation == "pure_aggregate"
+    return {
+        "provenance": {
+            "git_sha": "same-sha",
+            "git_dirty": False,
+            "representation": representation,
+            "audit_representation": representation,
+            "prepared_input_id": "prepared-same",
+            "input_hashes": {"prepared_source_sha256": "same-input"},
+            "random_seed": 42,
+            "gurobi_threads": 4,
+            "time_limit_sec": 900,
+            "requested_gap_ratio": 0.01,
+            "gurobi_version": "13.0.1",
+            "phase3_seed_time_limit_sec": 150,
+            "rolling_step_time_limit_sec": 30,
+            "gurobi_parameters": {"integrated_mip_focus": 3},
+        },
+        "model_size": {
+            "total_variables": total_variables,
+            "binary_variables": binary_variables,
+            "integer_variables": 1,
+            "continuous_variables": 10,
+        },
+        "timing": {
+            "complete_model_build_time_sec": 100.0,
+            "runner_wall_time_sec": wall_time,
+        },
+        "solve_outcome": {
+            "root_relaxation_bound_jpy": root_bound,
+            "certified_gap_ratio": certified_gap,
+            "requested_gap_reached_time_sec": None,
+        },
+        "validity": {
+            "served_trips": 264,
+            "total_trips": 264,
+            "duplicate_coverage_count": 0,
+            "vehicle_overlap_count": 0,
+            "invalid_transition_count": 0,
+            "bev_soc_violation_count": 0,
+            "ice_fuel_violation_count": 0,
+            "charger_violation_count": 0,
+            "bess_terminal_error_kwh": 0.0,
+            "physical_validation_accepted": True,
+            "rolling_step_count": 24,
+            "rolling_chain_accepted": True,
+            "accounting_eligible": True,
+            "accounting_reconciliation_status": "OK",
+            "fallback_used": False,
+            "post_solve_repair_used": False,
+            "reported_total_cost_jpy": 61_000.0,
+        },
+        "representation_audit": {
+            "representation": representation,
+            "vehicle_label_flow_variable_count_created": (
+                0 if is_aggregate else 100
+            ),
+            "aggregate_network_variable_count_created": (
+                40 if is_aggregate else 0
+            ),
+        },
+    }
+
+
+def test_pure_ice_ab_reports_structural_only_when_gap_does_not_improve(
+    tmp_path: Path,
+) -> None:
+    case_a = _pure_ice_metrics(
+        representation="discrete",
+        total_variables=780_000,
+        binary_variables=739_000,
+        certified_gap=0.06,
+        root_bound=58_000.0,
+        wall_time=900.0,
+    )
+    case_b = _pure_ice_metrics(
+        representation="pure_aggregate",
+        total_variables=536_000,
+        binary_variables=507_000,
+        certified_gap=0.06,
+        root_bound=58_000.0,
+        wall_time=902.0,
+    )
+
+    comparison = build_pure_ice_ab_comparison(
+        case_a,
+        case_b,
+        small_exact_parity_passed=True,
+    )
+    write_pure_ice_ab_outputs(comparison, tmp_path)
+
+    assert comparison["correctness"]["passed"] is True
+    assert comparison["changes"]["total_variable_reduction"] == 244_000
+    assert comparison["changes"]["binary_variable_reduction"] == 232_000
+    assert comparison["verdict"] == "PASS_STRUCTURAL_ONLY"
+    assert (tmp_path / "case_A_discrete_metrics.json").is_file()
+    assert (tmp_path / "case_B_pure_aggregate_metrics.json").is_file()
+    header = (tmp_path / "comparison.csv").read_text(
+        encoding="utf-8-sig"
+    ).splitlines()[0]
+    assert header == (
+        "metric,A_discrete,B_pure_aggregate,absolute_change,relative_change"
+    )
+
+
+def test_pure_ice_ab_fails_when_controls_differ() -> None:
+    case_a = _pure_ice_metrics(
+        representation="discrete",
+        total_variables=100,
+        binary_variables=90,
+        certified_gap=0.05,
+        root_bound=10.0,
+        wall_time=10.0,
+    )
+    case_b = _pure_ice_metrics(
+        representation="pure_aggregate",
+        total_variables=80,
+        binary_variables=60,
+        certified_gap=0.04,
+        root_bound=10.0,
+        wall_time=9.0,
+    )
+    case_b["provenance"]["random_seed"] = 7
+
+    comparison = build_pure_ice_ab_comparison(
+        case_a,
+        case_b,
+        small_exact_parity_passed=True,
+    )
+
+    assert comparison["correctness"]["control_contract_match"] is False
+    assert comparison["verdict"] == "FAIL_CORRECTNESS"

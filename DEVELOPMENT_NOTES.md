@@ -1,5 +1,36 @@
 # Development Notes
 
+## 2026-08-21: same-SHA pure ICE aggregation A/B harness
+
+- Added a diagnostic-only, process-local representation selector around the
+  existing `exact_combustion_clone_flow_aggregation_enabled` implementation.
+  The default remains `pure_aggregate`; the selector is not part of the BFF,
+  frontend, public API, prepared-input schema, or scenario JSON. Both cases
+  therefore reuse the same objective, costs, constraints, successor network,
+  canonical prepared input, and normal BFF/24-step Rolling finalization path.
+- Extended the exact small fixture so discrete and pure-aggregate runs must
+  match objective, full coverage, normalized duties, ICE fuel, deadhead, CO2,
+  vehicle-days, and canonical-ID recovery without duplicates or missing
+  duties. The audit now records the requested and actual representation plus
+  vehicle-labelled and aggregate-network variable counts.
+- Added read-only integrated MIP telemetry for root-bound availability,
+  first-incumbent objective/time, requested-gap time, and final LP iteration
+  count. Initial continuous-variable and nonzero-coefficient counts are also
+  persisted. These callbacks do not terminate search or change parameters.
+- Extended `scripts/build_lazy_fragment_performance_diagnostic.py` with a
+  synchronous BFF A/B mode. It executes A=`discrete` once and
+  B=`pure_aggregate` once, then writes provenance, model-size, timing, solver,
+  physical-validation, Rolling, accounting, logs, comparison, and artifact
+  hashes to `output/diagnostics/pure_ice_aggregation_ab_<short-sha>/`.
+- Focused regression using the project environment passed:
+  `.venv/Scripts/python.exe -m pytest -q tests/test_lazy_fragment_performance_diagnostic.py tests/test_integrated_actual_cost_objective.py`
+  -> `72 passed`. The system Python 3.14 executable has no `pytest`; it was not
+  used as test evidence.
+- Claim scope remains diagnostic. No column generation, set partitioning,
+  high/low-PV formal pair, M0-M3 comparison, sensitivity sweep, or time-step
+  comparison is authorized in this checkpoint. The 264-trip A/B outcome is
+  recorded only in the generated bundle after the clean commit.
+
 ## 2026-08-15: frozen pure-aggregate 264-trip diagnostic completed
 
 - Stopped new optimization work at the requested checkpoint after completing

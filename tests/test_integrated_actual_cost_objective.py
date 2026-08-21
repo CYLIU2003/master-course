@@ -1,3 +1,5 @@
+import hashlib
+import json
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -25,6 +27,7 @@ from src.optimization.common.problem import (
     ProblemVehicle,
 )
 from src.optimization.common.builder import ProblemBuilder
+from src.optimization.common.evaluator import CostEvaluator
 from src.optimization.common.seed_fingerprint import (
     phase4_seed_plan_fingerprint,
 )
@@ -47,6 +50,7 @@ from src.optimization.milp.solver_adapter import (
     _apply_assignment_pattern_branch_priorities,
     _composition_target_continuation_priority_key,
     _composition_target_time_limit_sec,
+    _diagnostic_exact_ice_clone_representation,
     GurobiMILPAdapter,
     _actual_bess_terminal_soc_deviation_by_depot,
     _identical_vehicle_prefix_remap,
@@ -1241,19 +1245,9 @@ def test_phase4_exact_ice_clone_convexification_preserves_objective() -> None:
         },
         "vehicle_usage_cost_jpy_per_used_bus": 20_000.0,
     }
-    aggregated_problem = replace(
+    common_problem = replace(
         base,
-        metadata={
-            **common_metadata,
-            "exact_combustion_clone_flow_aggregation_enabled": True,
-        },
-    )
-    discrete_problem = replace(
-        base,
-        metadata={
-            **common_metadata,
-            "exact_combustion_clone_flow_aggregation_enabled": False,
-        },
+        metadata=common_metadata,
     )
     config = OptimizationConfig(
         mode=OptimizationMode.MILP,
@@ -1267,14 +1261,16 @@ def test_phase4_exact_ice_clone_convexification_preserves_objective() -> None:
         research_run=True,
     )
 
-    aggregated_outcome, aggregated_plan = GurobiMILPAdapter().solve(
-        aggregated_problem,
-        config,
-    )
-    discrete_outcome, discrete_plan = GurobiMILPAdapter().solve(
-        discrete_problem,
-        config,
-    )
+    with _diagnostic_exact_ice_clone_representation("pure_aggregate"):
+        aggregated_outcome, aggregated_plan = GurobiMILPAdapter().solve(
+            common_problem,
+            config,
+        )
+    with _diagnostic_exact_ice_clone_representation("discrete"):
+        discrete_outcome, discrete_plan = GurobiMILPAdapter().solve(
+            common_problem,
+            config,
+        )
 
     assert aggregated_outcome.has_feasible_incumbent
     assert discrete_outcome.has_feasible_incumbent
@@ -1295,12 +1291,110 @@ def test_phase4_exact_ice_clone_convexification_preserves_objective() -> None:
     )
     assert aggregated_plan.served_trip_ids == discrete_plan.served_trip_ids
     assert len(aggregated_plan.duties) == len(discrete_plan.duties) == 1
+    assert sorted(tuple(duty.trip_ids) for duty in aggregated_plan.duties) == (
+        sorted(tuple(duty.trip_ids) for duty in discrete_plan.duties)
+    )
+    assert len(aggregated_plan.served_trip_ids) == len(
+        set(aggregated_plan.served_trip_ids)
+    )
+    assert len(discrete_plan.served_trip_ids) == len(
+        set(discrete_plan.served_trip_ids)
+    )
+    assert len(aggregated_plan.duty_vehicle_map()) == len(
+        aggregated_plan.duties
+    )
+    assert len(discrete_plan.duty_vehicle_map()) == len(
+        discrete_plan.duties
+    )
+
+    aggregated_cost = CostEvaluator().evaluate(
+        common_problem, aggregated_plan
+    ).to_dict()
+    discrete_cost = CostEvaluator().evaluate(
+        common_problem, discrete_plan
+    ).to_dict()
+    for field in (
+        "ice_fuel_consumed_l",
+        "ice_co2_kg",
+        "used_vehicle_day_count",
+    ):
+        assert aggregated_cost[field] == pytest.approx(discrete_cost[field])
+    adapter = GurobiMILPAdapter()
+    aggregated_deadhead_km = sum(
+        adapter._deadhead_distance_km(
+            common_problem, leg.deadhead_from_prev_min
+        )
+        for duty in aggregated_plan.duties
+        for leg in duty.legs
+    )
+    discrete_deadhead_km = sum(
+        adapter._deadhead_distance_km(
+            common_problem, leg.deadhead_from_prev_min
+        )
+        for duty in discrete_plan.duties
+        for leg in duty.legs
+    )
+    assert aggregated_deadhead_km == pytest.approx(discrete_deadhead_km)
+
+    def _sha256(payload: object) -> str:
+        return hashlib.sha256(
+            json.dumps(
+                payload,
+                ensure_ascii=False,
+                sort_keys=True,
+                default=str,
+            ).encode("utf-8")
+        ).hexdigest()
+
+    shared_hashes = {
+        "input": _sha256(
+            {
+                "trips": common_problem.trips,
+                "vehicles": common_problem.vehicles,
+                "price_slots": common_problem.price_slots,
+            }
+        ),
+        "objective": _sha256(
+            {
+                "weights": common_problem.objective_weights,
+                "cost_component_flags": common_metadata[
+                    "cost_component_flags"
+                ],
+                "vehicle_usage_cost_jpy_per_used_bus": common_metadata[
+                    "vehicle_usage_cost_jpy_per_used_bus"
+                ],
+            }
+        ),
+        "connections": _sha256(common_problem.feasible_connections),
+    }
+    case_a_contract = {**shared_hashes, "representation": "discrete"}
+    case_b_contract = {
+        **shared_hashes,
+        "representation": "pure_aggregate",
+    }
+    assert {
+        key: value
+        for key, value in case_a_contract.items()
+        if key != "representation"
+    } == {
+        key: value
+        for key, value in case_b_contract.items()
+        if key != "representation"
+    }
+    assert case_a_contract["representation"] != case_b_contract[
+        "representation"
+    ]
     assert aggregated_plan.metadata[
         "integrated_exact_combustion_clone_flow_aggregation_audit"
     ]["applied"] is True
     aggregation_audit = aggregated_plan.metadata[
         "integrated_exact_combustion_clone_flow_aggregation_audit"
     ]
+    assert aggregation_audit["requested_representation"] == "pure_aggregate"
+    assert aggregation_audit["representation"] == "pure_aggregate"
+    assert aggregation_audit["diagnostic_override_active"] is True
+    assert aggregation_audit["vehicle_label_flow_variable_count_created"] == 0
+    assert aggregation_audit["aggregate_network_variable_count_created"] > 0
     assert aggregation_audit["net_binary_variable_reduction"] > 0
     assert aggregation_audit["binary_label_variable_count_relaxed"] == 0
     assert (
@@ -1320,6 +1414,11 @@ def test_phase4_exact_ice_clone_convexification_preserves_objective() -> None:
         "integrated_exact_combustion_clone_flow_aggregation_audit"
     ]
     assert discrete_audit["applied"] is False
+    assert discrete_audit["requested_representation"] == "discrete"
+    assert discrete_audit["representation"] == "discrete"
+    assert discrete_audit["diagnostic_override_active"] is True
+    assert discrete_audit["vehicle_label_flow_variable_count_created"] > 0
+    assert discrete_audit["aggregate_network_variable_count_created"] == 0
     assert "disabled_by_scenario" in discrete_audit[
         "application_blockers"
     ]
