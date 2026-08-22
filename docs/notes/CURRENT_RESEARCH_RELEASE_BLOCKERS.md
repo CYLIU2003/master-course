@@ -25,6 +25,14 @@ weather claim. The audit now restores only explicit prepared contract fields
 and rejects a conflicting non-empty scenario value. A fresh clean-commit
 8/12/24 execution is still required.
 
+The subsequent clean execution exposed a second objective-boundary defect:
+the frozen `research_lexicographic_v1` preset caused the Phase-4 reference to
+minimize vehicle-days before canonical cost. Its artifact correctly reported
+`integrated_actual_cost_objective_requested=false`, so the certificate stayed
+blocked. The reference now explicitly uses scalar canonical actual cost while
+Phase 3 retains its deployed policy and is compared by final accounting cost.
+The clean failed bundle is retained; a new clean execution is required.
+
 ## 2026-08-21 same-SHA A/B complete; structural benefit only
 
 The exact ICE-clone discrete/pure-aggregate selector is internal to the solver

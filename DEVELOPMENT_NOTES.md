@@ -28,8 +28,18 @@
   conflicting non-empty current value. A strict build-only check records
   `comparison_type=counterfactual_weather_profile`, no calendar errors, and
   preserves the 2025-08-05 service date with the frozen 2025-08-10 PV source.
+- The resulting 8/12/24 run then exposed the next fail-closed boundary: the
+  prepared `research_lexicographic_v1` preset caused Phase 4 to optimize used
+  vehicle-days before canonical cost, so its own metadata correctly reported
+  `integrated_actual_cost_objective_requested=false`. The reference-only
+  Phase-4 path now clears that preset and records
+  `scalar_canonical_actual_cost`; Phase 3 retains its deployed policy and its
+  final canonical accounting cost is the comparison quantity. The blocked
+  `output/verification/small_integrated_oracle_scale/37a1fad/` bundle is kept
+  as diagnostic evidence and will not be relabelled.
 - Focused oracle gate, scale aggregation, immutability, and input-validation
-  tests pass (`19 passed`). A fresh clean-commit scale execution is required;
+  tests plus integrated-cost regressions pass (`88 passed`). A fresh clean-
+  commit scale execution is required;
   no archived 10-trip result is relabelled by this implementation change.
 
 ## 2026-08-21: same-SHA pure ICE aggregation A/B harness

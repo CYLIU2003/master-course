@@ -11,6 +11,7 @@ from scripts.audit_small_integrated_weather_milp import (
     _day_spanning_trip_subset,
     _five_minute_sensitivity_comparison,
     _is_integrated_exact_oracle_case,
+    _integrated_actual_cost_oracle_problem,
     _restore_prepared_weather_comparison_contract,
     _sensitivity_summary,
 )
@@ -110,6 +111,24 @@ def test_small_oracle_disables_non_accounting_preference_terms() -> None:
         "validated_accounting_cost_components_only"
     )
     assert aligned.metadata["bev_terminal_soc_policy"] == "return_to_initial"
+
+
+def test_integrated_reference_uses_scalar_actual_cost_not_vehicle_day_policy() -> None:
+    @dataclass(frozen=True)
+    class ProblemStub:
+        metadata: dict
+
+    problem = ProblemStub(metadata={"objective_preset": "research_lexicographic_v1"})
+
+    reference = _integrated_actual_cost_oracle_problem(problem)
+
+    assert reference.metadata["objective_preset"] is None
+    assert reference.metadata["small_integrated_phase4_reference_objective"] == (
+        "scalar_canonical_actual_cost"
+    )
+    assert reference.metadata["small_integrated_original_objective_preset"] == (
+        "research_lexicographic_v1"
+    )
 
 
 def test_integrated_oracle_gate_fails_closed_on_accounting_residual() -> None:

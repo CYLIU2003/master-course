@@ -21,6 +21,10 @@
   already frozen in the prepared input. A non-empty conflicting current
   scenario value is rejected; neither the service date, timetable, nor PV
   curve is rewritten.
+- Its Phase-4 reference clears the production `research_lexicographic_v1`
+  preset and minimizes scalar canonical actual cost. Phase 3 retains its
+  deployed two-stage policy and is compared by its final canonical accounting
+  cost; a lexicographic vehicle-day policy is not mislabelled as a cost oracle.
 
 ## 2026-08-21 same-SHA pure ICE aggregation A/B diagnostic
 

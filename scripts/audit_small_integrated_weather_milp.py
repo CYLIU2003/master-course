@@ -220,6 +220,32 @@ def _align_objective_with_accounting(
     )
 
 
+def _integrated_actual_cost_oracle_problem(
+    problem: CanonicalOptimizationProblem,
+) -> CanonicalOptimizationProblem:
+    """Remove the production lexicographic policy from the reference MILP.
+
+    Phase 3 retains its deployed policy and is evaluated by final canonical
+    accounting.  The Phase-4 reference must instead minimize that scalar
+    canonical actual cost directly; otherwise a minimum-vehicle-days policy
+    would answer a different research question despite using the same costs.
+    """
+
+    metadata = dict(problem.metadata or {})
+    original_preset = metadata.get("objective_preset")
+    return replace(
+        problem,
+        metadata={
+            **metadata,
+            "objective_preset": None,
+            "small_integrated_phase4_reference_objective": (
+                "scalar_canonical_actual_cost"
+            ),
+            "small_integrated_original_objective_preset": original_preset,
+        },
+    )
+
+
 def _configure_small_discretization(
     scenario: dict[str, Any],
     *,
@@ -364,6 +390,8 @@ def _run_case(
     random_seed: int,
 ) -> dict[str, Any]:
     is_two_stage = phase == "phase3_two_stage"
+    if not is_two_stage:
+        problem = _integrated_actual_cost_oracle_problem(problem)
     config = OptimizationConfig(
         mode=OptimizationMode.MILP,
         phase=phase,
@@ -544,6 +572,12 @@ def _run_case(
         ),
         "weather_comparison_contract": dict(
             problem.metadata.get("weather_comparison_contract") or {}
+        ),
+        "small_integrated_phase4_reference_objective": problem.metadata.get(
+            "small_integrated_phase4_reference_objective"
+        ),
+        "small_integrated_original_objective_preset": problem.metadata.get(
+            "small_integrated_original_objective_preset"
         ),
         "used_vehicle_trace": used_vehicle_trace,
         "assignment_rows": assignment_rows,
