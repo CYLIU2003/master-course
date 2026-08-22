@@ -114,6 +114,7 @@ def test_stage1_gurobi_search_profiles_are_explicit_and_validated() -> None:
         "mip_focus": 0,
         "heuristics": 0.05,
         "presolve": -1,
+        "cuts": -1,
         "root_method": -1,
         "node_method": -1,
         "symmetry": -1,
@@ -125,6 +126,19 @@ def test_stage1_gurobi_search_profiles_are_explicit_and_validated() -> None:
         "mip_focus": 3,
         "heuristics": 0.05,
         "presolve": 2,
+        "cuts": -1,
+        "root_method": -1,
+        "node_method": -1,
+        "symmetry": -1,
+    }
+    assert _configured_stage1_gurobi_search_controls(
+        OptimizationConfig(stage1_gurobi_search_profile="root_cut_focus")
+    ) == {
+        "profile": "root_cut_focus",
+        "mip_focus": 3,
+        "heuristics": 0.05,
+        "presolve": 2,
+        "cuts": 3,
         "root_method": -1,
         "node_method": -1,
         "symmetry": -1,

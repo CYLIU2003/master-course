@@ -153,6 +153,7 @@ def test_gurobi_plan_with_startup_deadhead_roundtrips_through_validator() -> Non
         "mip_focus": 3,
         "heuristics": 0.05,
         "presolve": 2,
+        "cuts": -1,
         "root_method": -1,
         "node_method": -1,
         "symmetry": -1,

@@ -857,7 +857,9 @@ class RunOptimizationBody(BaseModel):
     # older client cannot restore the early stop or a machine-dependent thread
     # count through a request body.
     stage1_best_obj_stop_enabled: bool = INTERACTIVE_STAGE1_BEST_OBJ_STOP_ENABLED
-    stage1_gurobi_search_profile: Literal["default", "bound_focus"] = "default"
+    stage1_gurobi_search_profile: Literal[
+        "default", "bound_focus", "root_cut_focus"
+    ] = "default"
     stage1_fragment_transition_cut_mode: Literal[
         "lazy", "lifted_root", "lazy_root_cuts", "explicit_root"
     ] = "lazy"

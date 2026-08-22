@@ -1894,6 +1894,7 @@ def _configured_stage1_gurobi_search_controls(
         "mip_focus": 0,
         "heuristics": 0.05,
         "presolve": -1,
+        "cuts": -1,
         "root_method": -1,
         "node_method": -1,
         "symmetry": -1,
@@ -1907,8 +1908,17 @@ def _configured_stage1_gurobi_search_controls(
             "mip_focus": 3,
             "presolve": 2,
         }
+    if profile == "root_cut_focus":
+        return {
+            **default_controls,
+            "profile": "root_cut_focus",
+            "mip_focus": 3,
+            "presolve": 2,
+            "cuts": 3,
+        }
     raise ValueError(
-        "stage1_gurobi_search_profile must be 'default' or 'bound_focus'"
+        "stage1_gurobi_search_profile must be 'default', 'bound_focus', "
+        "or 'root_cut_focus'"
     )
 
 
@@ -12001,6 +12011,7 @@ class GurobiMILPAdapter:
         stage1.Params.MIPFocus = int(stage1_search_controls["mip_focus"])
         stage1.Params.Heuristics = float(stage1_search_controls["heuristics"])
         stage1.Params.Presolve = int(stage1_search_controls["presolve"])
+        stage1.Params.Cuts = int(stage1_search_controls["cuts"])
         stage1.Params.Method = int(stage1_search_controls["root_method"])
         stage1.Params.NodeMethod = int(stage1_search_controls["node_method"])
         stage1.Params.Symmetry = int(stage1_search_controls["symmetry"])
@@ -14063,6 +14074,7 @@ class GurobiMILPAdapter:
                         "mip_focus": int(stage1.Params.MIPFocus),
                         "heuristics": float(stage1.Params.Heuristics),
                         "presolve": int(stage1.Params.Presolve),
+                        "cuts": int(stage1.Params.Cuts),
                         "root_method": int(stage1.Params.Method),
                         "node_method": int(stage1.Params.NodeMethod),
                         "symmetry": int(stage1.Params.Symmetry),
@@ -14424,6 +14436,7 @@ class GurobiMILPAdapter:
                     "mip_focus": int(stage1.Params.MIPFocus),
                     "heuristics": float(stage1.Params.Heuristics),
                     "presolve": int(stage1.Params.Presolve),
+                    "cuts": int(stage1.Params.Cuts),
                     "root_method": int(stage1.Params.Method),
                     "node_method": int(stage1.Params.NodeMethod),
                     "symmetry": int(stage1.Params.Symmetry),
@@ -19292,6 +19305,7 @@ class GurobiMILPAdapter:
                 "mip_focus": int(stage1.Params.MIPFocus),
                 "heuristics": float(stage1.Params.Heuristics),
                 "presolve": int(stage1.Params.Presolve),
+                "cuts": int(stage1.Params.Cuts),
                 "root_method": int(stage1.Params.Method),
                 "node_method": int(stage1.Params.NodeMethod),
                 "symmetry": int(stage1.Params.Symmetry),

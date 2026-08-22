@@ -48,6 +48,12 @@ the short diagnostic budget before physical validation. It is **DIAGNOSTIC,
 NOT USED FOR RESEARCH CONCLUSIONS**; fragment-boundary strengthening is not
 the next certificate path.
 
+The opt-in `root_cut_focus` Stage-1 profile is the remaining bounded
+solver-control diagnostic: it holds the model fixed and requests `MIPFocus=3`,
+aggressive presolve, and Gurobi generic `Cuts=3`. It is not a formulation
+change or a research result until a frozen 264-trip artifact reports the
+effective controls, bound, incumbent, and every acceptance gate.
+
 ## 2026-08-23 electricity-price sensitivity status
 
 The fresh three-point Phase-3 frontend/BFF bundle at

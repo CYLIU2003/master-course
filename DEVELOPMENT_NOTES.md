@@ -91,6 +91,13 @@
   before physical validation, so the runner correctly reported
   `source_artifact_validation_failed`. This is diagnostic only and rejects
   fragment-boundary LP strengthening as the next certificate path.
+- Added the opt-in `root_cut_focus` Stage-1 Gurobi profile. It preserves every
+  model coefficient, variable, and constraint while explicitly recording
+  `MIPFocus=3`, `Presolve=2`, and generic `Cuts=3`; `default` and
+  `bound_focus` retain Gurobi's automatic cut setting (`Cuts=-1`). The BFF
+  schema accepts the profile and solver metadata persists the effective value.
+  Focused contract/round-trip/artifact verification: `39 passed`. No full-case
+  result exists yet, so it is not a performance or research claim.
 
 ## 2026-08-23: Electricity-price Phase-3 tranche completed as a diagnostic
 
