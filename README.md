@@ -30,6 +30,13 @@
   numerical tolerance. Zero-cost reference cases retain the raw cost delta but
   are labelled `not_identifiable_zero_reference_cost`; solver noise is never
   converted into a signed performance claim.
+- The fresh clean-commit certificate at
+  `output/verification/small_integrated_oracle_scale/242f35e/` verifies the
+  8-, 12-, and 24-trip cases at `242f35e3698052d3e6e314ff8a377100b515e437`.
+  Phase 4 is optimal with zero final gap for all three; the 24-trip approximate
+  gap is `0.0` within tolerance, while 8 and 12 are correctly non-identifiable
+  because both costs are numerically zero. This is bounded formulation
+  evidence, not a 264-trip global-optimality or runtime claim.
 
 ## 2026-08-21 same-SHA pure ICE aggregation A/B diagnostic
 

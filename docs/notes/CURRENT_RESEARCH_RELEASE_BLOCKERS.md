@@ -1,6 +1,6 @@
 # Current research release blockers
 
-## 2026-08-22 small integrated-oracle evidence requires a fresh corrected run
+## 2026-08-22 bounded small integrated-oracle evidence verified; release remains blocked
 
 The existing July 10-trip weather audits cannot support an integrated
 actual-cost oracle claim. Their stored Phase-4 cases have
@@ -13,9 +13,12 @@ The runner now fails closed on the explicit request, structural contract,
 actual-cost flag, accounting equality, terminal energy balance, exact solver
 status, complete coverage, and hard physical checks. A new scale certificate
 runs 8, 12, and 24 trips in isolated processes and records the Phase-3 cost
-deviation from each eligible integrated optimum. Until that clean-commit
-certificate completes, the corrected small-oracle gate is implementation and
-test evidence only. It is not a full-network optimality result.
+deviation from each eligible integrated optimum. The fresh certificate at
+`output/verification/small_integrated_oracle_scale/242f35e/` completed at
+clean SHA `242f35e3698052d3e6e314ff8a377100b515e437`: 8/12/24 all have exact
+Phase-4 status `optimal`, zero final gap, complete feasible schedules, and no
+certificate blockers. This establishes bounded small-instance formulation
+evidence only. It is not a full-network optimality result.
 
 The first corrected-run attempt also exposed, and failed closed on, a separate
 prepared-input materialization defect: an empty current `comparison_type`
@@ -31,7 +34,16 @@ minimize vehicle-days before canonical cost. Its artifact correctly reported
 `integrated_actual_cost_objective_requested=false`, so the certificate stayed
 blocked. The reference now explicitly uses scalar canonical actual cost while
 Phase 3 retains its deployed policy and is compared by final accounting cost.
-The clean failed bundle is retained; a new clean execution is required.
+The clean failed bundle is retained as diagnostic history. The scalar-cost
+reference was then run at the SHA above; no failed artifact was relabelled.
+
+The successful run also showed that the 8- and 12-trip exact costs are
+numerically zero. Relative gap is therefore intentionally
+`not_identifiable_zero_reference_cost` for those sizes; their raw accounting
+deltas remain in the artifact. The 24-trip gap is `0.0` within the documented
+`1e-5 JPY` tolerance. Neither result establishes a 264-trip cost gap or
+runtime-performance claim, so the broader release remains blocked pending
+the separate full-scale and sensitivity gates.
 
 ## 2026-08-21 same-SHA A/B complete; structural benefit only
 

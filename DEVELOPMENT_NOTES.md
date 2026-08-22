@@ -45,10 +45,18 @@
   `1e-5 JPY`, and marks zero-reference cases `not_identifiable_zero_reference_cost`.
   That `7b5a392` bundle remains diagnostic for its own SHA; a new clean run is
   required after this reporting correction.
+- The required fresh execution completed at clean commit
+  `242f35e3698052d3e6e314ff8a377100b515e437` in
+  `output/verification/small_integrated_oracle_scale/242f35e/`: all 8/12/24
+  Phase-4 references reached `optimal` with zero final gap and all certificate
+  gates passed. The 24-trip Phase-3/Phase-4 cost delta is within tolerance and
+  reports approximate gap `0.0`; 8 and 12 retain their raw near-zero deltas
+  but are explicitly not identifiable as relative gaps. The scope remains
+  bounded small-instance formulation evidence only, not 264-trip global
+  optimality, production cost performance, or a release-ready conclusion.
 - Focused oracle gate, scale aggregation, immutability, and input-validation
-  tests plus integrated-cost regressions pass (`88 passed`). A fresh clean-
-  commit scale execution is required;
-  no archived 10-trip result is relabelled by this implementation change.
+  tests plus integrated-cost regressions pass (`133 passed`). No archived
+  10-trip result is relabelled by this implementation change.
 
 ## 2026-08-21: same-SHA pure ICE aggregation A/B harness
 
