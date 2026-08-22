@@ -11,6 +11,14 @@ is adopted only when Gurobi proves it optimal, so an unfinished diagnostic
 cannot raise the certified lower bound. This is a lower-bound strengthening,
 not a claim that Phase 3 is an integrated global total-cost optimum.
 
+The clean-SHA 264-trip diagnostic at
+`output/2026-08-23/run_20260823_0507/` (commit `93608f4`) proves that this
+certificate is correct but insufficient for the current case: it solved in
+0.637 seconds and raised the analytical floor from 52,712.318101 to
+52,724.471363 JPY, while Gurobi's root bound was already 52,749.163582 JPY.
+The certified gap therefore remained 19.227307%; Stage 2 time-limited without
+a physical candidate. It is **DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS**.
+
 The frozen 30-JPY/kWh duration escalation at
 `output/thesis_phase3_gap_escalation_f9b83ad_20260823_r1/` gave Stage 1 1650
 seconds (rather than the prior approximately 405-second primary search) while

@@ -122,6 +122,17 @@ ignored rather than being used as a bound. A fresh clean-SHA 264-trip run must
 measure its lower-bound effect, Stage-1 gap, physical/rolling/accounting gates,
 and compare it to the matched baseline before any release or performance claim.
 
+That clean-SHA measurement is now at
+`output/2026-08-23/run_20260823_0507/` (commit `93608f4`). The certificate
+reached `optimal` in 0.637 seconds at 154 nodes and raised the analytical
+weather-energy/fuel floor from 52,712.318101 to 52,724.471363 JPY. This is
+strictly stronger than the LP floor but remains below the already available
+52,749.163582-JPY Gurobi root bound, so the certified Stage-1 gap stayed
+19.227307%. Stage 2 time-limited without a physical candidate and Rolling did
+not start. The artifact passes input-provenance and clean-SHA checks but is
+**DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS**; this valid lower-bound
+tightening is not the remaining certificate path.
+
 The reusable pure-ICE A/B harness was also corrected before any further
 measurement: it now explicitly forwards every Stage-1 profile/diagnostic/cut
 argument to the synchronous BFF worker. This prevents a positional-argument

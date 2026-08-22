@@ -11,8 +11,19 @@
   on the full Stage-1 model. It is used only if Gurobi returns `optimal` within
   30 seconds; any time-limit or error leaves the existing lower bound intact.
   Focused Gurobi regression verifies that this certificate dominates the LP
-  floor for both sunny and rain cases. A clean-SHA 264-trip measurement is
-  pending; no gap-improvement claim is made here.
+  floor for both sunny and rain cases. The clean `93608f4` 264-trip frontend
+  diagnostic at `output/2026-08-23/run_20260823_0507/` solved the certificate
+  to optimality in 0.637 seconds (154 nodes) and raised its own floor from
+  52,712.318101 to 52,724.471363 JPY. Gurobi's native root bound was already
+  52,749.163582 JPY, so the certified 19.227307% Stage-1 gap did not change;
+  Stage 2 time-limited without a physical candidate. This is
+  `DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS`. Verification command:
+  `python -m pytest -q tests/test_weather_coupled_assignment.py
+  tests/test_milp_strict_coverage_metadata.py
+  tests/test_canonical_graph_export_parity.py
+  tests/test_frontend_artifact_completeness.py tests/test_readme_navigation.py`
+  (`79 passed`), plus `python scripts/verify_run_input_provenance.py --run-dir
+  output/2026-08-23/run_20260823_0507` (all checks valid).
 
 - Added opt-in `stage1_root_lp_diagnostic_enabled`. When requested, Stage 1
   clones its fully constructed model with all discrete variables relaxed and
