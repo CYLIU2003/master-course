@@ -2,6 +2,18 @@
 
 ## 2026-08-22 current evidence checkpoint: baseline and bounded checks pass; release remains blocked
 
+The first fresh Phase-3 A/B discrete child on
+`64c4a5a3ff1358e2f4b9397c51c5dfa078702a38` completed the underlying 264-trip
+solve, physical validation, Rolling, and accounting, but its finalizer
+incorrectly rejected the representation evidence. The discrete audit derived
+its labelled-flow count only from clone groups eligible for the aggregate
+network's stricter single-fragment condition; the target has a certified
+three-fragment group and therefore yielded a false zero. The partial bundle
+`output/diagnostics/pure_ice_aggregation_phase3_ab_64c4a5a_20260822/` is
+**DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS**: it has no aggregate child or
+comparison report. The counter and a two-fragment Phase-3 regression are
+corrected, but the clean-SHA AB/BA x5 gate remains open and must be rerun.
+
 At clean SHA `a49716638a1d15567c190798f37b60e3b7920743`, the 264-trip Phase-3
 baseline at `output/2026-08-22/run_20260822_2125/` passed 264/264 service,
 independent physical validation, 24/24 Rolling, executed-day accounting, and

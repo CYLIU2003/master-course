@@ -2,6 +2,18 @@
 
 ## 2026-08-22 verification checkpoint
 
+- The first fresh 264-trip Phase-3 A/B child at
+  `output/diagnostics/pure_ice_aggregation_phase3_ab_64c4a5a_20260822/`
+  completed the discrete solve, physical validation, Rolling, and accounting,
+  but the parent correctly stopped before comparison publication. Its
+  representation-audit counter considered only aggregation-eligible
+  single-fragment groups, so the valid multi-fragment discrete flow was
+  falsely reported as absent. This partial bundle is `DIAGNOSTIC`, `NOT USED
+  FOR RESEARCH CONCLUSIONS`; it is neither an A/B result nor evidence of
+  aggregation performance. The audit counter and its multi-fragment regression
+  are corrected on the subsequent commit; a new clean-SHA AB/BA x5 run remains
+  required.
+
 - A clean-SHA 264-trip Phase-3 baseline at
   `output/2026-08-22/run_20260822_2125/` passed coverage, independent
   physical validation, 24/24 Rolling, and final accounting. Its authoritative

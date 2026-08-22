@@ -14081,15 +14081,25 @@ class GurobiMILPAdapter:
                 ),
             },
         )
+        # The discrete-side representation audit must describe the labelled
+        # formulation that was actually built, independently of whether that
+        # group is eligible for the stricter single-fragment aggregation.
+        # Otherwise a valid discrete A/B case with a multi-fragment clone
+        # group is falsely reported as having no labelled flow variables.
+        stage1_discrete_audit_candidates = tuple(
+            record
+            for record in stage1_exact_clone_audit.get("groups", ())
+            if bool(record.get("certified_candidate"))
+        )
         stage1_audit_candidate = (
             max(
-                stage1_clone_candidates,
+                stage1_discrete_audit_candidates,
                 key=lambda record: (
                     int(record.get("potential_binary_variable_reduction", 0) or 0),
                     -int(record.get("group_index", 0) or 0),
                 ),
             )
-            if stage1_clone_candidates
+            if stage1_discrete_audit_candidates
             else None
         )
         stage1_label_variable_count = 0

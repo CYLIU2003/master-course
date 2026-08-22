@@ -1770,6 +1770,50 @@ def test_phase3_exact_ice_clone_aggregation_preserves_recovered_dispatch() -> No
     assert discrete_audit["aggregate_network_variable_count_created"] == 0
 
 
+def test_phase3_discrete_audit_counts_multi_fragment_clone_labels() -> None:
+    """A failed aggregation precondition cannot erase discrete evidence."""
+
+    base = _exact_ice_clone_problem()
+    problem = replace(
+        base,
+        metadata={
+            **dict(base.metadata or {}),
+            "cost_component_flags": {"driver_cost": False},
+            "vehicle_usage_cost_jpy_per_used_bus": 20_000.0,
+            "daily_fragment_limit": 2,
+            "max_start_fragments_per_vehicle": 2,
+            "max_end_fragments_per_vehicle": 2,
+        },
+    )
+    config = OptimizationConfig(
+        mode=OptimizationMode.MILP,
+        phase="phase3_two_stage",
+        time_limit_sec=30,
+        stage1_time_limit_sec=30,
+        stage2_time_limit_sec=30,
+        mip_gap=0.0,
+        random_seed=42,
+        warm_start=False,
+        allow_postsolve_repair=False,
+        research_run=True,
+        stage1_stage2_candidate_limit=1,
+    )
+
+    with _diagnostic_exact_ice_clone_representation("discrete"):
+        outcome, plan = GurobiMILPAdapter().solve(problem, config)
+
+    assert outcome.has_feasible_incumbent
+    audit = plan.metadata["stage1_exact_combustion_clone_flow_aggregation_audit"]
+    assert audit["representation"] == "discrete"
+    assert audit["applied"] is False
+    assert "no_single_fragment_certified_combustion_clone_group" in audit[
+        "application_blockers"
+    ]
+    assert audit["groups"][0]["fragment_layer_count"] == 2
+    assert audit["vehicle_label_flow_variable_count_created"] > 0
+    assert audit["aggregate_network_variable_count_created"] == 0
+
+
 def test_phase4_seed_composition_search_scales_with_selected_fleet() -> None:
     candidate_limit, radius = _phase4_seed_composition_search_limits(
         available_vehicle_count=60,

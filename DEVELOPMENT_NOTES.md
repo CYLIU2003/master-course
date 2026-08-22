@@ -1,5 +1,30 @@
 # Development Notes
 
+## 2026-08-22: Phase-3 A/B discrete-audit false rejection corrected
+
+- The first clean-SHA 264-trip Phase-3 discrete child under
+  `output/diagnostics/pure_ice_aggregation_phase3_ab_64c4a5a_20260822/`
+  completed its solve and the physical, Rolling, and accounting paths, but the
+  child finalizer rejected it before writing a comparison artifact. The
+  counter used as proof of the discrete vehicle-labelled flow was incorrectly
+  restricted to clone groups eligible for the aggregate network's stricter
+  single-fragment precondition. The target group has three fragment layers,
+  so that value was zero even though the discrete Stage-1 model was used.
+- The representation telemetry now derives the discrete variable count from
+  every certified clone group, independently of aggregate eligibility. The
+  aggregate remains restricted to a certified single-fragment group; this
+  correction neither enables a relaxation nor changes normal frontend Phase 3.
+  Added a Gurobi Phase-3 regression for a two-fragment group that must remain
+  discrete while reporting positive labelled-flow evidence. Verification:
+  `C:\master-course\.venv\Scripts\python.exe -m pytest -q
+  tests\test_integrated_actual_cost_objective.py
+  tests\test_lazy_fragment_performance_diagnostic.py` (`79 passed`), plus
+  `python -m py_compile src/optimization/milp/solver_adapter.py
+  scripts/build_lazy_fragment_performance_diagnostic.py` and `git diff --check`.
+- The interrupted bundle is `DIAGNOSTIC`, `NOT USED FOR RESEARCH
+  CONCLUSIONS`; it contains no aggregate counterpart and no comparison report.
+  A new frozen-SHA AB/BA x5 execution is required after this correction.
+
 ## 2026-08-22: Phase-3 single-fragment pure-ICE aggregation is now wired and tested
 
 - `src/optimization/milp/solver_adapter.py` now connects the pre-existing
