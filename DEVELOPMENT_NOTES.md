@@ -12,8 +12,15 @@
   certificate input hash now includes the retained capacity rows and fleet
   counts; audits expose their count. A two-concurrent-trip, one-BEV/one-ICE
   regression proves that the cheaper BEV cannot be selected twice. This code
-  change has no 264-trip result yet and is not research evidence until a fresh
-  clean-SHA frontend artifact and all acceptance checks exist.
+  tightening was measured by the clean `98916ff` 264-trip frontend artifact at
+  `output/2026-08-23/run_20260823_0520/`: its 35-BEV/25-ICE fleet produced
+  zero capacity rows, so the LP/MIP floors stayed 52,712.318101/
+  52,724.471363 JPY. The Gurobi bound (52,749.163582 JPY), incumbent
+  (65,305.688576 JPY), and certified gap (19.227307%) were unchanged; Stage 2
+  time-limited without a physical candidate and Rolling correctly did not
+  start. The artifact has clean-SHA and input-provenance validation, but is
+  `DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS`; this aggregate capacity
+  condition is not a gap-closing path.
 
 - Added the bounded `path_powertrain_source_flow_mip` certificate to the
   existing weather-aware Stage-1 analytical lower bound. It reuses the

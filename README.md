@@ -18,8 +18,13 @@ relaxation—vehicle identity, deadhead occupancy, SOC, chargers, depot, and
 energy-time coupling are still omitted—but it no longer permits simultaneous
 BEV or ICE service beyond the actual powertrain fleet. These deterministic rows
 and fleet counts are included in the certificate input hash and audit. A new
-264-trip clean-SHA diagnostic is required before assigning any performance,
-gap, or research-acceptance meaning to this tightening.
+264-trip clean-SHA diagnostic at `output/2026-08-23/run_20260823_0520/`
+(commit `98916ff`) generated zero such rows for the 35-BEV/25-ICE fleet. Its
+LP/MIP floors consequently remained 52,712.318101/52,724.471363 JPY, below the
+same 52,749.163582-JPY Gurobi bound; the certified gap remained 19.227307% and
+Stage 2 had no feasible candidate. It is **DIAGNOSTIC, NOT USED FOR RESEARCH
+CONCLUSIONS** and rejects this aggregate capacity condition as the current
+gap-closing path.
 
 The clean-SHA 264-trip diagnostic at
 `output/2026-08-23/run_20260823_0507/` (commit `93608f4`) proves that this

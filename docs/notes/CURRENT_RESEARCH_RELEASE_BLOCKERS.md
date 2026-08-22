@@ -139,8 +139,15 @@ service instant, selected trips of a powertrain cannot exceed its available
 fleet count. Vehicle identity, deadhead occupancy, SOC, chargers, depot
 allocation, and time-indexed source coupling remain relaxed, so this is still
 only a lower bound. The rows and fleet counts are hashed and audited. Its
-small two-concurrent-trip regression passes, but it has no 264-trip clean-SHA
-artifact yet; therefore it is **PENDING, NOT USED FOR RESEARCH CONCLUSIONS**.
+small two-concurrent-trip regression passes. The clean-SHA 264-trip artifact
+at `output/2026-08-23/run_20260823_0520/` (commit `98916ff`) generated zero
+capacity rows for the available 35-BEV/25-ICE fleet; its LP/MIP floors stayed
+52,712.318101/52,724.471363 JPY, while the native Gurobi bound remained
+52,749.163582 JPY. The incumbent and 19.227307% certified gap were unchanged,
+and Stage 2 had no feasible candidate, so Rolling did not start. Input
+provenance and clean-SHA checks pass, but this is **DIAGNOSTIC, NOT USED FOR
+RESEARCH CONCLUSIONS** and rejects aggregate concurrent-service capacity as
+the current gap-closing path.
 
 The reusable pure-ICE A/B harness was also corrected before any further
 measurement: it now explicitly forwards every Stage-1 profile/diagnostic/cut
