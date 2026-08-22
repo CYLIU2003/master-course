@@ -91,6 +91,27 @@
   tests\\test_thesis_sensitivity_matrix.py
   tests\\test_run_input_provenance.py` (`58 passed`), plus `git diff --check`.
   A fresh clean-commit 6/8/10 Phase-3 run remains required.
+## 2026-08-22: fixed-decision stress evaluator added without reoptimization
+
+- Added `src/optimization/validation/fixed_solution_stress.py`. It applies
+  only declared input changes to a copied canonical problem and retains the
+  serialized day-ahead decision unchanged. The standard catalog covers BEV
+  energy +10%/+20%, travel time +10%, PV -20%, one *actually used* charger
+  outage, initial SOC -5 percentage points, and their combined case.
+- Every case is independently reconstructed with
+  `validate_physical_event_schedule`. A PV-source flow above the perturbed
+  per-slot supply is an explicit violation. If any physical/PV gate fails,
+  `fixed_decision_cost_jpy` and `additional_cost_jpy` are `null`; an
+  infeasible fixed schedule is never turned into a fabricated realized-cost
+  comparison. The artifact explicitly records `reoptimization_performed=false`.
+- Added `tests/test_fixed_solution_stress.py`. Focused verification:
+  `C:\\master-course\\.venv\\Scripts\\python.exe -m pytest -q
+  tests\\test_fixed_solution_stress.py
+  tests\\test_canonical_graph_export_parity.py -k
+  "fixed_solution_stress or result_serializer_restores_complete"` (`6
+  passed`). A run-level CLI still needs to materialize the exact prepared
+  problem and write these outputs beside the frozen source run.
+
 ## 2026-08-22: canonical fixed-decision plan restoration added
 
 - Added `ResultSerializer.deserialize_plan(problem, serialized_plan)` as the
