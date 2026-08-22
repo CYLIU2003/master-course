@@ -1,5 +1,25 @@
 # Current research release blockers
 
+## 2026-08-23: Diesel-price term is active; economic-response release gate remains blocked
+
+At frozen tag `phase3-diesel-sensitivity-b505c7a`, the frontend/BFF-only
+three-point bundle
+`output/thesis_sensitivity_diesel_b505c7a_20260823_r1/` completed fresh
+Prepare and Phase-3/Rolling runs for 116, 145, and 174 JPY/L. The manifest
+SHA-256 is `ad3380032e561435b2fcabb94aa8c4543232090abe5650b35705910e4a9a223f`;
+its non-varied-control fingerprint is shared by all three cases. Every source
+run has valid/research-ready provenance, 264/264 coverage, physical validity,
+24/24 Rolling, accounting, and a 240-artifact verification result.
+
+The price input is not a no-op: the same 436.508457111-L fuel use produces
+51,763.746062 / 64,422.491318 / 77,081.236574 JPY at 116 / 145 / 174 JPY/L.
+The candidates retain 32 used vehicles and 48/216 BEV/ICE trips, so the
+observed response is the exact ledger cost change rather than a dispatch
+change. Each case failed only `mip_gap_target_met` at 19.227307%, making the
+bundle `BLOCKED`. It cannot support a claim about optimal economic dispatch
+response, but it does rule out an inactive diesel-price coefficient in these
+candidate runs.
+
 ## 2026-08-23: Current-HEAD bounded oracle refresh is verified but does not release the full case
 
 `output/verification/small_integrated_oracle_scale/e3fe904_20260823/` records

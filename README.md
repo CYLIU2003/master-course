@@ -1,5 +1,24 @@
 # master-course
 
+## 2026-08-23 current-SHA diesel-price diagnostic: active cost term, unchanged candidate dispatch
+
+Frozen tag `phase3-diesel-sensitivity-b505c7a` ran the existing frontend/BFF
+matrix at 116, 145, and 174 JPY/L from fresh Prepare inputs. The complete
+bundle is `output/thesis_sensitivity_diesel_b505c7a_20260823_r1/` (manifest
+SHA-256 `ad3380032e561435b2fcabb94aa8c4543232090abe5650b35705910e4a9a223f`).
+All three cases share one non-varied-control fingerprint, serve 264/264 trips,
+pass physical validation, 24/24 Rolling, accounting, input provenance, and
+240/240 finalized-artifact verification. The fuel term is active: the same
+436.508457-L ICE consumption yields final costs of 51,763.746062,
+64,422.491318, and 77,081.236574 JPY, respectively. Each 29-JPY/L increase
+changes cost by 12,658.745256 JPY, as the ledger requires.
+
+The recorded time-limit incumbents retain 32 used vehicles and 48/216 BEV/ICE
+trips at all three prices. Since every case misses the declared 1% Stage-1
+gap (19.227307%), this is an active-coefficient and candidate-cost response
+diagnostic, not evidence of an optimal dispatch response or an accepted
+economic sensitivity result.
+
 ## 2026-08-23 current-SHA bounded integrated-oracle certificate
 
 The existing isolated-process oracle CLI was rerun from clean commit

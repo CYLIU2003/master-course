@@ -1,5 +1,33 @@
 # Development Notes
 
+## 2026-08-23: Current-SHA diesel-price response tranche
+
+- Restarted the port-8000 BFF before the run because its runtime Git
+  attestation still named `19bb780`; the replacement runtime attested clean
+  SHA `b505c7acd7b0c7daf678cd86e9cae69119a37bba`. Tagged that commit
+  `phase3-diesel-sensitivity-b505c7a`, then executed the existing HTTP-only
+  matrix runner with case IDs `DIESEL_PRICE_116`, `DIESEL_PRICE_145`, and
+  `DIESEL_PRICE_174`, seed 42, four threads, a 900-second request, 1% target,
+  and 60-minute Rolling. The bundle is
+  `output/thesis_sensitivity_diesel_b505c7a_20260823_r1/`; its manifest SHA-256
+  is `ad3380032e561435b2fcabb94aa8c4543232090abe5650b35705910e4a9a223f`.
+- All cases completed Fresh Prepare and passed valid/research-ready input
+  provenance, 264/264 coverage, physical validation, accepted 24/24 Rolling,
+  executed-day accounting, and 240 finalized artifact hashes. The shared
+  non-varied-control fingerprint is
+  `be00dff409d09358f8ccfc5d0b861049e75f0069c90b1da82da640bd96ece673`.
+  Independent provenance and artifact commands also pass for each source run
+  (`run_20260823_0813`, `0824`, and `0836`).
+- The diesel coefficient is demonstrably active. All three candidates consume
+  436.508457111 L ICE fuel and retain 32 used vehicles with 48 BEV / 216 ICE
+  trips; final costs are 51,763.746062 / 64,422.491318 / 77,081.236574 JPY at
+  116 / 145 / 174 JPY/L. The 12,658.745256-JPY step is fuel litres times the
+  29-JPY/L price change. No dispatch change was observed in these same
+  time-limit incumbents. Every case is therefore `BLOCKED` solely by the
+  unchanged 19.227307% certified Stage-1 gap, not by a silent/no-op price
+  input. It is a diagnostic cost-response result, not an accepted optimal
+  dispatch-response claim.
+
 ## 2026-08-23: Current-SHA bounded Phase-3 versus integrated actual-cost oracle
 
 - Reran the existing fail-closed, isolated-process scale certificate at clean
