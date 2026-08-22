@@ -281,6 +281,19 @@
   current code and is not a 264-trip global-optimality, full-scale gap,
   sensitivity, or M0--M3 release claim.
 
+## 2026-08-23: Fixed-decision stress remains correctly SHA-bound
+
+- Rechecked `scripts/run_fixed_solution_stress.py` and its contract regression:
+  `python -m pytest -q tests/test_fixed_solution_stress.py tests/test_small_exact_electric_oracle.py tests/test_weather_coupled_assignment.py tests/test_canonical_graph_export_parity.py tests/test_frontend_artifact_completeness.py tests/test_readme_navigation.py`
+  (`81 passed`). The CLI rejects a source result whose recorded SHA differs
+  from the evaluator SHA and records `reoptimization_performed=false`; it must
+  not be weakened to reuse the old `a497166` stress artifact after the current
+  code changes.
+- A current-SHA fixed-plan stress execution is therefore pending a fresh,
+  complete 264-trip Phase-3 candidate at the same frozen SHA. The
+  `0e9413c`/`0c651d1` BFF diagnostic has no Stage-2 feasible candidate and no
+  Rolling plan to fix, so it is intentionally not used as stress input.
+
 ## 2026-08-23: Phase-3 A/B time-allocation control failure and fail-fast repair
 
 - The clean-SHA, isolated-process AB/BA x5 diagnostic at

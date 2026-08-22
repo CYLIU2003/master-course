@@ -12,6 +12,16 @@ blocker: it is neither a 264-trip integrated-global-optimum certificate nor a
 substitute for the 1% Stage-1 gap, accepted economic/stress studies, or formal
 M0--M3 evidence.
 
+## 2026-08-23: Current-SHA fixed-plan stress is pending a complete 264-trip candidate
+
+The fixed-decision stress CLI is intentionally fail-closed: evaluator SHA must
+equal the source-result SHA and it records `reoptimization_performed=false`.
+The existing `a497166` stress bundle cannot be relabelled as current-code
+evidence. The current `0e9413c` 264-trip diagnostic has no Stage-2 feasible
+candidate or Rolling plan, so it cannot be a fixed-plan source. A new stress
+bundle is required only after a fresh same-SHA complete Phase-3 candidate is
+available; no SHA check or stress rule may be relaxed to fill this gap.
+
 ## 2026-08-23: Analytical concurrent-service certificate corrected for overnight trips
 
 The powertrain path/source LP and selector-MIP certificate now derives service
