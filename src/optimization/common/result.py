@@ -1,9 +1,18 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Mapping
+
+from src.dispatch.models import DutyLeg, VehicleDuty
 
 from .energy_flow_accounting import normalize_pv_energy_breakdown
-from .problem import AssignmentPlan, OptimizationEngineResult
+from .problem import (
+    AssignmentPlan,
+    ChargingSlot,
+    DailyCostLedgerEntry,
+    OptimizationEngineResult,
+    RefuelSlot,
+    VehicleCostLedgerEntry,
+)
 
 
 class ResultSerializer:
@@ -145,6 +154,202 @@ class ResultSerializer:
             ],
             "metadata": metadata,
         }
+
+    @staticmethod
+    def deserialize_plan(
+        problem: Any,
+        serialized_plan: Mapping[str, Any],
+    ) -> AssignmentPlan:
+        """Restore a complete persisted canonical plan without re-optimizing.
+
+        ``canonical_solver_result.json`` is the authoritative decision record
+        for post-solve audits.  Reconstructing only duties (as the rolling
+        reoptimizer intentionally does) drops charging and energy-source
+        decisions, which makes fixed-decision stress accounting impossible.
+        This inverse accepts only canonical trips from ``problem`` and keeps
+        every serialized charging, fuel, flow, and ledger decision unchanged.
+        """
+        if not isinstance(serialized_plan, Mapping):
+            raise ValueError("serialized plan must be a mapping")
+        dispatch_context = getattr(problem, "dispatch_context", None)
+        trip_lookup = (
+            dispatch_context.trips_by_id()
+            if dispatch_context is not None
+            and callable(getattr(dispatch_context, "trips_by_id", None))
+            else {}
+        )
+        if not trip_lookup:
+            raise ValueError("cannot restore plan without canonical dispatch trips")
+
+        duties: list[VehicleDuty] = []
+        for raw_duty in list(serialized_plan.get("duties") or []):
+            if not isinstance(raw_duty, Mapping):
+                raise ValueError("serialized plan contains an invalid duty")
+            duty_id = str(raw_duty.get("duty_id") or "").strip()
+            if not duty_id:
+                raise ValueError("serialized plan contains an empty duty_id")
+            raw_legs = list(raw_duty.get("legs") or [])
+            if not raw_legs:
+                raw_legs = [
+                    {"trip_id": trip_id, "deadhead_from_prev_min": 0}
+                    for trip_id in list(raw_duty.get("trip_ids") or [])
+                ]
+            if not raw_legs:
+                raise ValueError(f"serialized duty {duty_id!r} contains no legs")
+            legs: list[DutyLeg] = []
+            for raw_leg in raw_legs:
+                if not isinstance(raw_leg, Mapping):
+                    raise ValueError(f"serialized duty {duty_id!r} has an invalid leg")
+                trip_id = str(raw_leg.get("trip_id") or "").strip()
+                trip = trip_lookup.get(trip_id)
+                if trip is None:
+                    raise ValueError(
+                        f"serialized duty {duty_id!r} references unknown trip {trip_id!r}"
+                    )
+                deadhead_min = int(raw_leg.get("deadhead_from_prev_min") or 0)
+                if deadhead_min < 0:
+                    raise ValueError(
+                        f"serialized duty {duty_id!r} has negative deadhead time"
+                    )
+                legs.append(DutyLeg(trip=trip, deadhead_from_prev_min=deadhead_min))
+            duties.append(
+                VehicleDuty(
+                    duty_id=duty_id,
+                    vehicle_type=str(raw_duty.get("vehicle_type") or ""),
+                    legs=tuple(legs),
+                )
+            )
+
+        def _float(value: Any) -> float:
+            return float(value or 0.0)
+
+        def _slot_mapping(name: str) -> dict[str, dict[int, float]]:
+            raw = serialized_plan.get(name) or {}
+            if not isinstance(raw, Mapping):
+                raise ValueError(f"serialized {name} must be a mapping")
+            result: dict[str, dict[int, float]] = {}
+            for depot_id, slot_values in raw.items():
+                if not isinstance(slot_values, Mapping):
+                    raise ValueError(f"serialized {name}[{depot_id!r}] must be a mapping")
+                result[str(depot_id)] = {
+                    int(slot_index): _float(value)
+                    for slot_index, value in slot_values.items()
+                }
+            return result
+
+        charging_slots = []
+        for raw in list(serialized_plan.get("charging_schedule") or []):
+            if not isinstance(raw, Mapping):
+                raise ValueError("serialized charging_schedule contains an invalid slot")
+            charging_slots.append(
+                ChargingSlot(
+                    vehicle_id=str(raw.get("vehicle_id") or ""),
+                    slot_index=int(raw.get("slot_index") or 0),
+                    charger_id=(
+                        str(raw["charger_id"])
+                        if raw.get("charger_id") is not None
+                        else None
+                    ),
+                    energy_source=(
+                        str(raw["energy_source"])
+                        if raw.get("energy_source") is not None
+                        else None
+                    ),
+                    charge_kw=_float(raw.get("charge_kw")),
+                    discharge_kw=_float(raw.get("discharge_kw")),
+                    charging_depot_id=(
+                        str(raw["charging_depot_id"])
+                        if raw.get("charging_depot_id") is not None
+                        else None
+                    ),
+                    charging_latitude=(
+                        _float(raw.get("charging_latitude"))
+                        if raw.get("charging_latitude") is not None
+                        else None
+                    ),
+                    charging_longitude=(
+                        _float(raw.get("charging_longitude"))
+                        if raw.get("charging_longitude") is not None
+                        else None
+                    ),
+                )
+            )
+        refuel_slots = []
+        for raw in list(serialized_plan.get("refueling_schedule") or []):
+            if not isinstance(raw, Mapping):
+                raise ValueError("serialized refueling_schedule contains an invalid slot")
+            refuel_slots.append(
+                RefuelSlot(
+                    vehicle_id=str(raw.get("vehicle_id") or ""),
+                    slot_index=int(raw.get("slot_index") or 0),
+                    refuel_liters=_float(raw.get("refuel_liters")),
+                    location_id=(
+                        str(raw["location_id"])
+                        if raw.get("location_id") is not None
+                        else None
+                    ),
+                )
+            )
+
+        def _optional_float(raw: Mapping[str, Any], name: str) -> float | None:
+            return _float(raw.get(name)) if raw.get(name) is not None else None
+
+        vehicle_ledger = tuple(
+            VehicleCostLedgerEntry(
+                vehicle_id=str(raw.get("vehicle_id") or ""),
+                day_index=int(raw.get("day_index") or 0),
+                provisional_drive_cost_jpy=_float(raw.get("provisional_drive_cost_jpy")),
+                provisional_leftover_cost_jpy=_float(raw.get("provisional_leftover_cost_jpy")),
+                realized_charge_cost_jpy=_float(raw.get("realized_charge_cost_jpy")),
+                realized_refuel_cost_jpy=_float(raw.get("realized_refuel_cost_jpy")),
+                realized_bess_discharge_cost_jpy=_float(raw.get("realized_bess_discharge_cost_jpy")),
+                contract_overage_allocated_jpy=_float(raw.get("contract_overage_allocated_jpy")),
+                start_soc_kwh=_optional_float(raw, "start_soc_kwh"),
+                end_soc_kwh=_optional_float(raw, "end_soc_kwh"),
+                start_fuel_l=_optional_float(raw, "start_fuel_l"),
+                end_fuel_l=_optional_float(raw, "end_fuel_l"),
+            )
+            for raw in list(serialized_plan.get("vehicle_cost_ledger") or [])
+            if isinstance(raw, Mapping)
+        )
+        daily_ledger = tuple(
+            DailyCostLedgerEntry(
+                day_index=int(raw.get("day_index") or 0),
+                service_date=(str(raw["service_date"]) if raw.get("service_date") is not None else None),
+                ev_provisional_drive_cost_jpy=_float(raw.get("ev_provisional_drive_cost_jpy")),
+                ev_realized_charge_cost_jpy=_float(raw.get("ev_realized_charge_cost_jpy")),
+                ev_leftover_provisional_cost_jpy=_float(raw.get("ev_leftover_provisional_cost_jpy")),
+                ice_provisional_drive_cost_jpy=_float(raw.get("ice_provisional_drive_cost_jpy")),
+                ice_realized_refuel_cost_jpy=_float(raw.get("ice_realized_refuel_cost_jpy")),
+                ice_leftover_provisional_cost_jpy=_float(raw.get("ice_leftover_provisional_cost_jpy")),
+                demand_charge_jpy=_float(raw.get("demand_charge_jpy")),
+                total_cost_jpy=_float(raw.get("total_cost_jpy")),
+            )
+            for raw in list(serialized_plan.get("daily_cost_ledger") or [])
+            if isinstance(raw, Mapping)
+        )
+        metadata = serialized_plan.get("metadata") or {}
+        if not isinstance(metadata, Mapping):
+            raise ValueError("serialized metadata must be a mapping")
+        return AssignmentPlan(
+            duties=tuple(duties),
+            charging_slots=tuple(charging_slots),
+            refuel_slots=tuple(refuel_slots),
+            grid_to_bus_kwh_by_depot_slot=_slot_mapping("grid_to_bus_kwh_by_depot_slot"),
+            pv_to_bus_kwh_by_depot_slot=_slot_mapping("pv_to_bus_kwh_by_depot_slot"),
+            bess_to_bus_kwh_by_depot_slot=_slot_mapping("bess_to_bus_kwh_by_depot_slot"),
+            pv_to_bess_kwh_by_depot_slot=_slot_mapping("pv_to_bess_kwh_by_depot_slot"),
+            grid_to_bess_kwh_by_depot_slot=_slot_mapping("grid_to_bess_kwh_by_depot_slot"),
+            pv_curtail_kwh_by_depot_slot=_slot_mapping("pv_curtail_kwh_by_depot_slot"),
+            bess_soc_kwh_by_depot_slot=_slot_mapping("bess_soc_kwh_by_depot_slot"),
+            contract_over_limit_kwh_by_depot_slot=_slot_mapping("contract_over_limit_kwh_by_depot_slot"),
+            vehicle_soc_kwh_by_vehicle_slot=_slot_mapping("vehicle_soc_kwh_by_vehicle_slot"),
+            vehicle_cost_ledger=vehicle_ledger,
+            daily_cost_ledger=daily_ledger,
+            served_trip_ids=tuple(str(item) for item in list(serialized_plan.get("served_trip_ids") or [])),
+            unserved_trip_ids=tuple(str(item) for item in list(serialized_plan.get("unserved_trip_ids") or [])),
+            metadata=dict(metadata),
+        )
 
     @classmethod
     def serialize_result(cls, result: OptimizationEngineResult) -> Dict[str, Any]:
