@@ -87,6 +87,18 @@ FOR RESEARCH CONCLUSIONS**. The tested generic-cut control is rejected as a
 certificate path; the remaining blocker is structural, not the tested solver
 profile.
 
+The next bounded diagnostic is `stage1_root_lp_diagnostic_enabled`. It solves
+a separate continuous copy of the fully built Stage-1 model and records only
+aggregate fractional assignment and vehicle-activation evidence. It cannot
+alter the production MIP's rows, bounds, starts, objective, or result. A
+clean-SHA 264-trip run must first establish the actual fractional structure;
+only then may a separately proved valid inequality be proposed.
+
+The reusable pure-ICE A/B harness was also corrected before any further
+measurement: it now explicitly forwards every Stage-1 profile/diagnostic/cut
+argument to the synchronous BFF worker. This prevents a positional-argument
+shift from invalidating the required AB/BA controlled comparison.
+
 ## 2026-08-23: Three-point electricity-price tranche is physically valid but not research-accepted
 
 The clean-SHA frontend/BFF Phase-3 tranche at

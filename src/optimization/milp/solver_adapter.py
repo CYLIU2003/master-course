@@ -1922,6 +1922,157 @@ def _configured_stage1_gurobi_search_controls(
     )
 
 
+def _stage1_root_lp_diagnostic(
+    *,
+    model: Any,
+    grb: Any,
+    assignment_vars: Mapping[Tuple[str, str], Any],
+    used_vehicle_vars: Mapping[str, Any],
+    vehicle_type_by_id: Mapping[str, str],
+    time_limit_sec: float = 300.0,
+) -> Dict[str, Any]:
+    """Solve and summarize an isolated Stage-1 continuous relaxation.
+
+    The cloned model is read-only with respect to the production MIP.  The
+    summary intentionally reports aggregate fractional assignment evidence
+    instead of a million-variable solution dump, making it useful for a
+    formulation diagnosis without changing any research result.
+    """
+
+    diagnostic: Dict[str, Any] = {
+        "enabled": True,
+        "semantics": (
+            "separate_continuous_relaxation_of_the_completed_stage1_model; "
+            "diagnostic_only_and_never_used_for_mip_rows_bounds_or_starts"
+        ),
+        "status": "not_run",
+        "time_limit_sec": max(float(time_limit_sec), 0.001),
+    }
+    relaxed_model: Any = None
+    started = time.perf_counter()
+    try:
+        model.update()
+        relaxed_model = model.relax()
+        relaxed_model.Params.OutputFlag = 0
+        relaxed_model.Params.Threads = 1
+        relaxed_model.Params.TimeLimit = diagnostic["time_limit_sec"]
+        relaxed_model.optimize()
+        status = int(getattr(relaxed_model, "Status", 0) or 0)
+        status_names = {
+            int(grb.OPTIMAL): "optimal",
+            int(grb.TIME_LIMIT): "time_limit",
+            int(grb.INFEASIBLE): "infeasible",
+            int(grb.INF_OR_UNBD): "inf_or_unbd",
+            int(grb.UNBOUNDED): "unbounded",
+        }
+        diagnostic.update(
+            {
+                "status": status_names.get(status, f"gurobi_status_{status}"),
+                "variable_count": int(getattr(relaxed_model, "NumVars", 0) or 0),
+                "constraint_count": int(
+                    getattr(relaxed_model, "NumConstrs", 0) or 0
+                ),
+                "solution_count": int(getattr(relaxed_model, "SolCount", 0) or 0),
+                "objective_jpy": (
+                    float(relaxed_model.ObjVal)
+                    if int(getattr(relaxed_model, "SolCount", 0) or 0) > 0
+                    else None
+                ),
+            }
+        )
+        if int(getattr(relaxed_model, "SolCount", 0) or 0) <= 0:
+            return diagnostic
+
+        epsilon = 1.0e-6
+        assignment_by_trip: Dict[str, List[Tuple[str, float]]] = {}
+        powertrain_trip_equivalents: Dict[str, float] = {}
+        fractional_assignments: List[Dict[str, Any]] = []
+        for (vehicle_id, trip_id), original_var in assignment_vars.items():
+            relaxed_var = relaxed_model.getVarByName(str(original_var.VarName))
+            if relaxed_var is None:
+                raise RuntimeError(
+                    "Stage-1 relaxation did not preserve assignment variable "
+                    f"{original_var.VarName}"
+                )
+            value = float(relaxed_var.X)
+            assignment_by_trip.setdefault(str(trip_id), []).append(
+                (str(vehicle_id), value)
+            )
+            vehicle_type = str(vehicle_type_by_id.get(str(vehicle_id), "UNKNOWN"))
+            powertrain_trip_equivalents[vehicle_type] = (
+                powertrain_trip_equivalents.get(vehicle_type, 0.0) + value
+            )
+            if epsilon < value < 1.0 - epsilon:
+                fractional_assignments.append(
+                    {
+                        "vehicle_id": str(vehicle_id),
+                        "trip_id": str(trip_id),
+                        "vehicle_type": vehicle_type,
+                        "value": value,
+                    }
+                )
+
+        used_vehicle_values: List[float] = []
+        for vehicle_id, original_var in used_vehicle_vars.items():
+            relaxed_var = relaxed_model.getVarByName(str(original_var.VarName))
+            if relaxed_var is None:
+                raise RuntimeError(
+                    "Stage-1 relaxation did not preserve used-vehicle variable "
+                    f"{original_var.VarName}"
+                )
+            used_vehicle_values.append(float(relaxed_var.X))
+
+        split_trip_count = sum(
+            1
+            for values in assignment_by_trip.values()
+            if sum(value > epsilon for _, value in values) > 1
+        )
+        diagnostic.update(
+            {
+                "assignment_summary": {
+                    "trip_count": len(assignment_by_trip),
+                    "fractional_assignment_variable_count": len(
+                        fractional_assignments
+                    ),
+                    "trips_split_across_multiple_vehicle_labels": split_trip_count,
+                    "powertrain_trip_equivalents": dict(
+                        sorted(powertrain_trip_equivalents.items())
+                    ),
+                    "fractional_assignment_sample": sorted(
+                        fractional_assignments,
+                        key=lambda item: (
+                            str(item["trip_id"]),
+                            str(item["vehicle_id"]),
+                        ),
+                    )[:50],
+                },
+                "vehicle_activation_summary": {
+                    "vehicle_count": len(used_vehicle_values),
+                    "activation_sum": sum(used_vehicle_values),
+                    "fractional_activation_count": sum(
+                        epsilon < value < 1.0 - epsilon
+                        for value in used_vehicle_values
+                    ),
+                },
+            }
+        )
+    except Exception as exc:
+        diagnostic.update(
+            {
+                "status": "error",
+                "error": f"{type(exc).__name__}:{exc}",
+            }
+        )
+    finally:
+        diagnostic["wall_runtime_sec"] = float(time.perf_counter() - started)
+        if relaxed_model is not None:
+            try:
+                relaxed_model.dispose()
+            except Exception:
+                pass
+    return diagnostic
+
+
 def _configured_gurobi_feasibility_tol(
     config: OptimizationConfig,
     *,
@@ -13817,6 +13968,24 @@ class GurobiMILPAdapter:
             used_vehicle_day=used_vehicle_day,
             trip_day_index_by_trip_id=trip_day_index_by_trip_id,
         )
+        stage1_root_lp_diagnostic = {
+            "enabled": False,
+            "status": "disabled_by_config",
+            "semantics": (
+                "separate_continuous_relaxation_is_not_part_of_the_stage1_mip"
+            ),
+        }
+        if bool(getattr(config, "stage1_root_lp_diagnostic_enabled", False)):
+            stage1_root_lp_diagnostic = _stage1_root_lp_diagnostic(
+                model=stage1,
+                grb=GRB,
+                assignment_vars=y,
+                used_vehicle_vars=used_vehicle,
+                vehicle_type_by_id={
+                    vehicle_id: str(vehicle.vehicle_type)
+                    for vehicle_id, vehicle in vehicle_by_id.items()
+                },
+            )
         stage1_pre_optimize_seconds = float(time.perf_counter() - total_started)
         stage1_search_telemetry = _Stage1SearchTelemetry(
             requested_gap_ratio=float(config.mip_gap),
@@ -14087,6 +14256,7 @@ class GurobiMILPAdapter:
                         _configured_gurobi_integrality_tol(config, stage=2)
                     ),
                     "stage1_numeric_diagnostics": stage1_numeric_diagnostics,
+                    "stage1_root_lp_diagnostic": stage1_root_lp_diagnostic,
                     "stage1_mip_gap_ratio": stage1_gap,
                     "stage1_runtime_seconds": float(time.perf_counter() - total_started),
                     "stage1_pre_optimize_seconds": stage1_pre_optimize_seconds,
@@ -14449,6 +14619,7 @@ class GurobiMILPAdapter:
                     _configured_gurobi_integrality_tol(config, stage=2)
                 ),
                 "stage1_numeric_diagnostics": stage1_numeric_diagnostics,
+                "stage1_root_lp_diagnostic": stage1_root_lp_diagnostic,
                 "stage1_mip_gap_ratio": stage1_gap,
                 "stage1_runtime_seconds": float(
                     getattr(stage1, "Runtime", 0.0) or 0.0
@@ -19310,6 +19481,7 @@ class GurobiMILPAdapter:
                 "node_method": int(stage1.Params.NodeMethod),
                 "symmetry": int(stage1.Params.Symmetry),
             },
+            "stage1_root_lp_diagnostic": stage1_root_lp_diagnostic,
             "stage1_runtime_seconds": stage1_total_solver_runtime_sec,
             "stage1_primary_runtime_seconds": stage1_primary_runtime_sec,
             "stage1_primary_search_time_limit_seconds": (

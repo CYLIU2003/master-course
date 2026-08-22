@@ -1572,6 +1572,20 @@ def _run_pure_ice_case(
                     request.get("stage1_time_limit_seconds"),
                     request.get("stage2_time_limit_seconds"),
                     bool(request.get("stage1_best_obj_stop_enabled", False)),
+                    str(
+                        request.get("stage1_gurobi_search_profile")
+                        or "default"
+                    ),
+                    bool(
+                        request.get(
+                            "stage1_root_lp_diagnostic_enabled",
+                            False,
+                        )
+                    ),
+                    str(
+                        request.get("stage1_fragment_transition_cut_mode")
+                        or "lazy"
+                    ),
                     int(request.get("gurobi_threads") or 4),
                     str(
                         request.get("run_profile")

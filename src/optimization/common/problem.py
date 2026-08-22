@@ -374,6 +374,11 @@ class OptimizationConfig:
     # generic cut setting.  Neither changes a model variable, constraint, or
     # objective; every effective control is persisted in run metadata.
     stage1_gurobi_search_profile: str = "default"
+    # An opt-in research diagnostic solves a separate continuous relaxation
+    # after Stage 1 is fully built.  It records aggregate fractional-assignment
+    # evidence and never feeds rows, starts, bounds, or decisions back into
+    # the production Stage-1 MIP.
+    stage1_root_lp_diagnostic_enabled: bool = False
     # The default lazy separator keeps exact fragment-transition rows out of
     # the root LP. ``lifted_root`` adds compact, integer-equivalent lifted
     # aggregates; ``lazy_root_cuts`` submits violated rows at fractional nodes;

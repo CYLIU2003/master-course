@@ -2,6 +2,22 @@
 
 ## 2026-08-23: Phase-3 gap-control telemetry and search-control falsification
 
+- Added opt-in `stage1_root_lp_diagnostic_enabled`. When requested, Stage 1
+  clones its fully constructed model with all discrete variables relaxed and
+  records the isolated LP objective, solution status, aggregate powertrain
+  trip equivalents, split-trip count, fractional assignment count, and
+  fractional vehicle activations. It cannot add cuts, alter the original MIP,
+  or reuse any diagnostic solution. The BFF request and final solver metadata
+  persist the flag and result. Focused verification: `py_compile` and `43
+  passed` across strict-coverage, SOC round-trip, and artifact tests. No
+  264-trip root-LP result exists yet.
+- Code review found and fixed a P1 A/B-harness integration defect: its
+  positional synchronous-worker call omitted the existing Stage-1 profile and
+  fragment-cut fields. It now forwards the profile, root-LP diagnostic flag,
+  fragment-cut mode, then thread count in the worker's exact signature order.
+  Harness/pairwise-cut verification adds `18 passed`; this does not alter the
+  represented model or any completed A/B artifact.
+
 - The frozen `phase3-gap-escalation-f9b83ad` frontend/BFF run is retained at
   `output/thesis_phase3_gap_escalation_f9b83ad_20260823_r1/`. Command used
   the existing sensitivity runner with the 30-JPY/kWh case, fresh Prepare,

@@ -28,6 +28,7 @@ from src.optimization.milp.solver_adapter import (
     _has_exact_mip_optimality_certificate,
     _single_path_flow_implies_temporal_exclusivity,
     _stage1_termination_reason,
+    _stage1_root_lp_diagnostic,
 )
 from src.optimization.engine import OptimizationEngine
 
@@ -147,6 +148,36 @@ def test_stage1_gurobi_search_profiles_are_explicit_and_validated() -> None:
         _configured_stage1_gurobi_search_controls(
             OptimizationConfig(stage1_gurobi_search_profile="unsupported")
         )
+
+
+@pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
+def test_root_lp_diagnostic_reports_fractional_assignment_without_mutating_mip() -> None:
+    from src.gurobi_runtime import ensure_gurobi
+
+    gp, grb = ensure_gurobi()
+    model = gp.Model("root_lp_diagnostic")
+    model.Params.OutputFlag = 0
+    assignment = model.addVar(vtype=grb.BINARY, name="assign__bev__trip")
+    used = model.addVar(vtype=grb.BINARY, name="used__bev")
+    model.addConstr(assignment == 0.5)
+    model.addConstr(used == assignment)
+    model.setObjective(assignment, grb.MINIMIZE)
+
+    diagnostic = _stage1_root_lp_diagnostic(
+        model=model,
+        grb=grb,
+        assignment_vars={("bev", "trip"): assignment},
+        used_vehicle_vars={"bev": used},
+        vehicle_type_by_id={"bev": "BEV"},
+        time_limit_sec=5,
+    )
+
+    assert diagnostic["status"] == "optimal"
+    assert diagnostic["objective_jpy"] == pytest.approx(0.5)
+    assert diagnostic["assignment_summary"]["fractional_assignment_variable_count"] == 1
+    assert diagnostic["assignment_summary"]["trips_split_across_multiple_vehicle_labels"] == 0
+    assert diagnostic["vehicle_activation_summary"]["fractional_activation_count"] == 1
+    assert model.NumBinVars == 2
 
 
 def test_gurobi_feasibility_tolerances_are_stage_specific_and_validated() -> None:
