@@ -250,6 +250,12 @@
   are compared within each declared family, so intentionally varied price,
   PV, demand, or vehicle-day controls cannot cause a false cross-family pass.
   No current-SHA price sensitivity solve has been run yet.
+- A first 24 JPY/kWh attempt correctly failed closed because its saved request
+  still carried a 30 JPY/kWh explicit TOU band, which takes precedence over
+  the flat-price field. Price-family requests now rewrite a *uniform* TOU band
+  to the declared price and reject a non-uniform tariff rather than silently
+  flattening it. The failed attempt is diagnostic only and is not used as a
+  price-response result.
 - This change adds execution support only. No independent 0.8--1.2 solve
   tranche has yet been completed at the current SHA, so thesis Phase 2 and
   research release remain `BLOCKED`.

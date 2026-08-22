@@ -255,6 +255,14 @@ to the result table. These cases are not a price-response claim until all
 three points per family complete from a clean frozen SHA with their existing
 physical, Rolling, accounting, provenance, and gap gates.
 
+The first attempted 24 JPY/kWh point is explicitly invalidated: the saved
+request's 30 JPY/kWh TOU band took precedence over the changed flat-price
+field, so the artifact's effective price remained 30 and its parameter gate
+failed. The compiler now synchronizes a uniform TOU band with the declared
+flat price and rejects non-uniform tariffs. A fresh clean-SHA three-point run
+is required; the cancelled remainder and the failed 24 JPY/kWh artifact are
+diagnostic only.
+
 A first clean-commit execution at `b9e5234` now provides one diagnostic point.
 The low-PV `BEV_ENERGY_1.2` case correctly held the common and ICE factors at
 1.0, served 264/264 trips, assigned 74 BEV and 190 ICE trips, used 15 BEVs and

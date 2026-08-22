@@ -46,21 +46,51 @@ def test_pv_scale_is_a_validated_prepare_api_parameter() -> None:
 def test_economic_price_cases_change_only_the_declared_price() -> None:
     electricity_prepare, _ = build_case_requests(
         case=_case("ELECTRICITY_PRICE_36"),
-        base_prepare_request={"simulation_settings": {}},
+        base_prepare_request={
+            "simulation_settings": {
+                "tou_pricing": [
+                    {"start_hour": 0, "end_hour": 24, "price_per_kwh": 30.0}
+                ]
+            }
+        },
         base_optimization_request={},
     )
     diesel_prepare, _ = build_case_requests(
         case=_case("DIESEL_PRICE_116"),
-        base_prepare_request={"simulation_settings": {}},
+        base_prepare_request={
+            "simulation_settings": {
+                "tou_pricing": [
+                    {"start_hour": 0, "end_hour": 24, "price_per_kwh": 30.0}
+                ]
+            }
+        },
         base_optimization_request={},
     )
 
     electricity = electricity_prepare["simulation_settings"]
     diesel = diesel_prepare["simulation_settings"]
     assert electricity["grid_flat_price_per_kwh"] == 36.0
+    assert electricity["tou_pricing"][0]["price_per_kwh"] == 36.0
     assert electricity["diesel_price_per_l"] == 145.0
     assert diesel["grid_flat_price_per_kwh"] == 30.0
+    assert diesel["tou_pricing"][0]["price_per_kwh"] == 30.0
     assert diesel["diesel_price_per_l"] == 116.0
+
+
+def test_electricity_price_case_rejects_nonuniform_source_tariff() -> None:
+    with pytest.raises(ValueError, match="uniform source tariff"):
+        build_case_requests(
+            case=_case("ELECTRICITY_PRICE_24"),
+            base_prepare_request={
+                "simulation_settings": {
+                    "tou_pricing": [
+                        {"start_hour": 0, "end_hour": 12, "price_per_kwh": 20.0},
+                        {"start_hour": 12, "end_hour": 24, "price_per_kwh": 40.0},
+                    ]
+                }
+            },
+            base_optimization_request={},
+        )
 
 
 def test_case_request_compiler_uses_fresh_prepare_and_declared_overrides() -> None:

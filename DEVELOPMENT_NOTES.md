@@ -463,6 +463,14 @@
   sensitivity families, excluding only each family’s declared varied input.
   This is execution support; no price sensitivity result is claimed until a
   fresh clean-SHA BFF run completes.
+- The first clean `ELECTRICITY_PRICE_24` execution exposed a P1 request
+  precedence defect: its base payload retained a one-band 30 JPY/kWh TOU
+  schedule, which canonical construction prioritizes over
+  `grid_flat_price_per_kwh`; the audit correctly observed 30 rather than 24
+  and blocked the case. Price-family request compilation now rewrites an
+  explicitly uniform TOU schedule to the declared price and fails closed for
+  a non-uniform source tariff. The runner and BFF were stopped before the
+  remaining invalid cases could be used. Focused tests: `27 passed`.
 - Bumped prepared input to
   `v11_powertrain_coefficient_sensitivity`; pre-change prepared inputs remain
   immutable history and cannot serve as current-SHA execution evidence.

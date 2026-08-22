@@ -112,6 +112,11 @@ def build_case_requests(
     if not isinstance(settings, dict):
         raise ValueError("base Prepare request must contain simulation_settings")
     settings.update(dict(case.get("prepare_settings") or {}))
+    if str(case.get("family") or "") == "electricity_price_sensitivity":
+        _apply_flat_tariff_price_to_time_of_use_bands(
+            settings,
+            grid_price=float(settings["grid_flat_price_per_kwh"]),
+        )
     prepare.update(dict(case.get("prepare_request_overrides") or {}))
 
     optimization = _json_copy(base_optimization_request)
@@ -121,6 +126,41 @@ def build_case_requests(
     optimization.pop("prepared_input_id", None)
     optimization.pop("preparedInputId", None)
     return prepare, optimization
+
+
+def _apply_flat_tariff_price_to_time_of_use_bands(
+    settings: dict[str, Any],
+    *,
+    grid_price: float,
+) -> None:
+    """Keep a declared flat-price sensitivity effective in an explicit TOU input.
+
+    A saved frontend request can contain both ``grid_flat_price_per_kwh`` and
+    a one-band ``tou_pricing`` list.  The canonical builder gives the latter
+    precedence, so changing only the former silently produces a no-op.  This
+    family is defined only for a uniform tariff; a non-uniform source tariff
+    must use a separately declared TOU sensitivity instead of being flattened.
+    """
+
+    raw_bands = settings.get("tou_pricing")
+    if raw_bands in (None, []):
+        return
+    if not isinstance(raw_bands, list) or not all(
+        isinstance(band, Mapping) for band in raw_bands
+    ):
+        raise ValueError("electricity price sensitivity requires valid tou_pricing")
+    prices = {
+        float(band.get("price_per_kwh"))
+        for band in raw_bands
+        if band.get("price_per_kwh") is not None
+    }
+    if not prices or len(prices) != 1:
+        raise ValueError(
+            "electricity price sensitivity requires a uniform source tariff"
+        )
+    settings["tou_pricing"] = [
+        {**dict(band), "price_per_kwh": grid_price} for band in raw_bands
+    ]
 
 
 def execute_sensitivity_matrix(
