@@ -91,6 +91,26 @@
   tests\\test_thesis_sensitivity_matrix.py
   tests\\test_run_input_provenance.py` (`58 passed`), plus `git diff --check`.
   A fresh clean-commit 6/8/10 Phase-3 run remains required.
+## 2026-08-22: fixed-decision stress CLI made reproducible
+
+- Added `scripts/run_fixed_solution_stress.py`. It reuses the source run's
+  frozen `effective_scenario.json`, `canonical_solver_result.json`, and
+  frontend request; `ProblemBuilder` rebuilds the canonical 264-trip problem
+  without a solver invocation. It writes a hash manifest plus JSON/CSV stress
+  results only into a new output directory.
+- The CLI requires a clean worktree and exactly matching source/evaluator Git
+  SHA. It also rejects a non-Phase-3 source and a reconstructed trip scope
+  that differs from the saved canonical assignment. This prevents a later
+  code revision or mismatched prepared input from being relabelled as a
+  post-solve stress result.
+- Verification: `python -m py_compile scripts/run_fixed_solution_stress.py`
+  and `pytest -q tests/test_fixed_solution_stress.py
+  tests/test_canonical_graph_export_parity.py` (`28 passed`). A deliberate
+  execution from the dirty implementation worktree returned
+  `RuntimeError: fixed-decision stress requires a clean Git worktree` and did
+  not create an output directory. A new same-SHA source baseline remains
+  required before this CLI may produce evidence.
+
 ## 2026-08-22: fixed-decision stress evaluator added without reoptimization
 
 - Added `src/optimization/validation/fixed_solution_stress.py`. It applies
