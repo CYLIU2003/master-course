@@ -1,5 +1,26 @@
 # Development Notes
 
+## 2026-08-22: full-scale sensitivity matrix corrected to Phase 3
+
+- During execution review, the new `CHARGER_COUNT_6` request was found to
+  force `phase4_integrated` on the 264-trip case. The process and its local
+  BFF were stopped before completion; no artifact from that attempt is used as
+  a result. The thesis target is the deployed `phase3_two_stage` method;
+  Phase 4 remains limited to the separately bounded integrated-oracle scale
+  certificate.
+- Changed `scripts/build_thesis_experiment_matrix.py` to prepare and submit
+  `phase3_two_stage`, updated the matrix schema, and changed
+  `scripts/run_thesis_sensitivity_matrix.py` to fail closed unless the solver
+  records Phase 3 as requested, resolved, and executed. The vehicle-day
+  sensitivity audit now checks the same model identity instead of the
+  Phase-4-only actual-cost contract.
+- Updated `tests/test_thesis_experiment_matrix.py` and
+  `tests/test_thesis_sensitivity_matrix.py`. Pending verification command:
+  `.venv\\Scripts\\python.exe -m pytest -q
+  tests\\test_thesis_experiment_matrix.py
+  tests\\test_thesis_sensitivity_matrix.py`. A fresh clean-commit Phase-3
+  charger-capacity execution remains required after this change.
+
 ## 2026-08-22: charger-capacity sensitivity made executable and auditable
 
 - Extended the existing frontend-only thesis matrix with 6/8/10 port cases.

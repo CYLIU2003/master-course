@@ -113,7 +113,7 @@ def test_case_request_compiler_uses_fresh_prepare_and_declared_overrides() -> No
     assert prepare["simulation_settings"]["fixed_route_band_mode"] is False
     assert prepare["simulation_settings"]["custom_control"] == "preserved"
     assert "prepared_input_id" not in optimization
-    assert optimization["mode"] == "phase4_integrated"
+    assert optimization["mode"] == "phase3_two_stage"
     assert optimization["research_run"] is True
     assert optimization["custom_control"] == "preserved"
 
@@ -265,10 +265,9 @@ def test_vehicle_day_cost_audit_reconciles_one_time_activation() -> None:
         case=case,
         parameters={"effective_model_metadata": metadata},
         solver_settings={
-            "integrated_primary_objective_kind": "canonical_actual_cost",
-            "integrated_actual_cost_objective_requested": True,
-            "integrated_actual_cost_contract_applied": True,
-            "actual_cost_objective_structural_contract_passed": True,
+            "requested_phase": "phase3_two_stage",
+            "resolved_phase": "phase3_two_stage",
+            "executed_phase": "phase3_two_stage",
         },
         accounting=accounting,
         summary={"vehicle_count_used": 32},
@@ -281,10 +280,9 @@ def test_vehicle_day_cost_audit_reconciles_one_time_activation() -> None:
         case=case,
         parameters={"effective_model_metadata": metadata},
         solver_settings={
-            "integrated_primary_objective_kind": "canonical_actual_cost",
-            "integrated_actual_cost_objective_requested": True,
-            "integrated_actual_cost_contract_applied": True,
-            "actual_cost_objective_structural_contract_passed": True,
+            "requested_phase": "phase3_two_stage",
+            "resolved_phase": "phase3_two_stage",
+            "executed_phase": "phase3_two_stage",
         },
         accounting=accounting,
         summary={"vehicle_count_used": 32},

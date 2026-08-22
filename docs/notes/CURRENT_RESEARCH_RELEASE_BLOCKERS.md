@@ -1,5 +1,15 @@
 # Current research release blockers
 
+## 2026-08-22 Phase-3 sensitivity correction; no charger result yet
+
+The first charger-capacity command was stopped before it completed because its
+saved request forced `phase4_integrated` on 264 trips. That mode is reserved
+for the bounded 8/12/24-trip integrated oracle and cannot be accepted as a
+Phase-3 economic or charger response result. No partial output from that
+attempt is used. The matrix and its fail-closed audit now require
+`phase3_two_stage` at requested, resolved, and executed phase; a fresh clean
+Phase-3 execution is still required for all `CHARGER_COUNT_6/8/10` cases.
+
 ## 2026-08-22 charger sensitivity executable; SOC and stress paths remain blocked
 
 `CHARGER_COUNT_6/8/10` is now an audited frontend/BFF family: all cases use a

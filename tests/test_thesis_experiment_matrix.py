@@ -135,9 +135,8 @@ def test_experiment_matrix_contains_required_sensitivities() -> None:
         case for case in payload["cases"] if case["case_id"] == "TIME_15"
     )
     assert time_15["optimization_request_overrides"] == {
-        "mode": "phase4_integrated",
+        "mode": "phase3_two_stage",
         "research_run": True,
-        "integrated_actual_cost_objective": True,
         "stage1_best_obj_stop_enabled": False,
         "run_profile": "day_ahead_and_hourly_rolling",
         "run_hourly_rolling": True,
@@ -145,6 +144,7 @@ def test_experiment_matrix_contains_required_sensitivities() -> None:
         "timestep_min": 15,
         "rolling_execution_minutes": 60,
     }
+    assert payload["common_control_contract"]["solver_mode"] == "phase3_two_stage"
     assert payload["parameter_semantics"]["time_discretization"].startswith(
         "Varies the internal"
     )

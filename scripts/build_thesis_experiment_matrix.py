@@ -15,7 +15,11 @@ from typing import Any
 
 def build_experiment_matrix() -> dict[str, Any]:
     common = {
-        "solver_mode": "phase4_integrated",
+        # The thesis-scale sensitivity population is the deployed Phase 3
+        # two-stage method.  Phase 4 is reserved for the separately bounded
+        # small-instance integrated oracle; running it on 264 trips would
+        # answer a different research question.
+        "solver_mode": "phase3_two_stage",
         "objective_mode": "total_cost",
         "objective_preset": "research_lexicographic_v1",
         "trip_energy_model": "literature_proxy_v1",
@@ -52,9 +56,8 @@ def build_experiment_matrix() -> dict[str, Any]:
         prepare_settings = {**common, **changes}
         timestep_min = int(prepare_settings.get("timestep_min") or 60)
         optimization_overrides: dict[str, Any] = {
-            "mode": "phase4_integrated",
+            "mode": "phase3_two_stage",
             "research_run": True,
-            "integrated_actual_cost_objective": True,
             "stage1_best_obj_stop_enabled": False,
             "run_profile": "day_ahead_and_hourly_rolling",
             "run_hourly_rolling": True,
@@ -178,7 +181,7 @@ def build_experiment_matrix() -> dict[str, Any]:
 
     return {
         "schema_version": (
-            "thesis_experiment_matrix_v7_charger_capacity_sensitivity"
+            "thesis_experiment_matrix_v8_phase3_two_stage_sensitivities"
         ),
         "execution_semantics": "frontend_bff_only_no_direct_solver",
         "common_control_contract": common,

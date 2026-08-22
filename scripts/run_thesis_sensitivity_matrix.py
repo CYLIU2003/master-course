@@ -441,10 +441,10 @@ def _audit_case(
             completeness=completeness,
             relative_paths=_snapshotted_artifact_paths(tuple(required)),
         ),
-        "explicit_phase4_integrated": bool(
-            settings.get("requested_phase") == "phase4_integrated"
-            and settings.get("resolved_phase") == "phase4_integrated"
-            and settings.get("executed_phase") == "phase4_integrated"
+        "explicit_phase3_two_stage": bool(
+            settings.get("requested_phase") == "phase3_two_stage"
+            and settings.get("resolved_phase") == "phase3_two_stage"
+            and settings.get("executed_phase") == "phase3_two_stage"
         ),
         "research_run_accepted": settings.get("research_run_accepted") is True,
         "mip_gap_target_met": settings.get("mip_gap_target_met") is True,
@@ -626,18 +626,10 @@ def _vehicle_day_cost_case_audit(
         "objective_preset_is_scalar_total_cost": (
             metadata.get("objective_preset") == "scalar_total_cost_v1"
         ),
-        "integrated_primary_objective_is_canonical_cost": (
-            solver_settings.get("integrated_primary_objective_kind")
-            == "canonical_actual_cost"
-            and solver_settings.get("integrated_actual_cost_objective_requested")
-            is True
-        ),
-        "actual_cost_structural_contract_applied": (
-            solver_settings.get("integrated_actual_cost_contract_applied") is True
-            and solver_settings.get(
-                "actual_cost_objective_structural_contract_passed"
-            )
-            is True
+        "explicit_phase3_two_stage": (
+            solver_settings.get("requested_phase") == "phase3_two_stage"
+            and solver_settings.get("resolved_phase") == "phase3_two_stage"
+            and solver_settings.get("executed_phase") == "phase3_two_stage"
         ),
         "vehicle_usage_cost_component_enabled": (
             flags.get("vehicle_usage_cost") is True
@@ -694,9 +686,7 @@ def _vehicle_day_cost_case_audit(
         "research_eligible": metadata.get(
             "vehicle_usage_cost_semantics_research_eligible"
         ),
-        "integrated_primary_objective_kind": solver_settings.get(
-            "integrated_primary_objective_kind"
-        ),
+        "executed_phase": solver_settings.get("executed_phase"),
     }
 
 

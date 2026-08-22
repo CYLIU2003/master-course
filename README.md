@@ -1,5 +1,18 @@
 # master-course
 
+## 2026-08-22 Phase-3 sensitivity-mode correction
+
+- The full-scale thesis sensitivity matrix now explicitly submits
+  `phase3_two_stage`, matching the method under evaluation. The bounded
+  8/12/24-trip `phase4_integrated` runs remain a separate integrated-oracle
+  reference only. A started 264-trip charger-capacity run was stopped before
+  completion after its submitted request was found to force
+  `phase4_integrated`; it is not an experimental result and is not used for
+  research conclusions.
+- The sensitivity audit now requires the solver artifact to confirm requested,
+  resolved, and executed Phase 3. This prevents a Phase-4 result from being
+  silently accepted as evidence about the deployed two-stage method.
+
 ## 2026-08-22 charger-capacity sensitivity contract
 
 - The frontend/BFF thesis matrix now declares `CHARGER_COUNT_6`, `_8`, and
