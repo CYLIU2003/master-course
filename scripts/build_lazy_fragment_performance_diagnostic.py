@@ -58,6 +58,9 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 def compile_phase3_pure_ice_ab_request(
     source_request: Mapping[str, Any],
+    *,
+    stage1_time_limit_seconds: int | None = None,
+    stage2_time_limit_seconds: int | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Compile the explicit Phase-3 request used by every isolated A/B child.
 
@@ -65,6 +68,9 @@ def compile_phase3_pure_ice_ab_request(
     A/B study evaluates the deployed two-stage method, so this narrowly changes
     the mode and removes only Phase-4-only controls; all other supplied
     controls remain byte-for-byte equivalent in the frozen request artifact.
+    When supplied, the two explicit stage limits are also frozen.  This is
+    required for a fair A/B run because Phase 3 otherwise allocates Stage 2
+    time from the candidate pool, which can differ by representation.
     """
 
     request = dict(source_request)
@@ -75,6 +81,17 @@ def compile_phase3_pure_ice_ab_request(
     for field in removed_fields:
         request.pop(field)
     request["mode"] = PURE_ICE_AB_TARGET_PHASE
+    fixed_stage_limits: dict[str, int] = {}
+    for field, value in (
+        ("stage1_time_limit_seconds", stage1_time_limit_seconds),
+        ("stage2_time_limit_seconds", stage2_time_limit_seconds),
+    ):
+        if value is None:
+            continue
+        if int(value) < 1:
+            raise ValueError(f"{field} must be at least one second")
+        request[field] = int(value)
+        fixed_stage_limits[field] = int(value)
     transformation = {
         "source_mode": source_mode or None,
         "target_mode": PURE_ICE_AB_TARGET_PHASE,
@@ -82,7 +99,9 @@ def compile_phase3_pure_ice_ab_request(
         "only_intended_request_changes": [
             "mode",
             *removed_fields,
+            *fixed_stage_limits,
         ],
+        "fixed_stage_time_limits": fixed_stage_limits,
     }
     return request, transformation
 
@@ -1927,6 +1946,8 @@ def run_pure_ice_aggregation_ab(
     output_dir: Path,
     small_exact_parity_passed: bool,
     repetitions: int = 5,
+    stage1_time_limit_seconds: int | None = None,
+    stage2_time_limit_seconds: int | None = None,
 ) -> dict[str, Any]:
     if _git_output("status", "--porcelain"):
         raise RuntimeError("A/B diagnostic requires a clean Git worktree")
@@ -1948,8 +1969,15 @@ def run_pure_ice_aggregation_ab(
         raise FileNotFoundError(
             f"canonical prepared input is missing: {prepared_path}"
         )
+    if stage1_time_limit_seconds is None or stage2_time_limit_seconds is None:
+        raise ValueError(
+            "pure-ICE A/B requires explicit fixed --stage1-time-limit-seconds "
+            "and --stage2-time-limit-seconds controls"
+        )
     request, request_transformation = compile_phase3_pure_ice_ab_request(
-        source_request
+        source_request,
+        stage1_time_limit_seconds=stage1_time_limit_seconds,
+        stage2_time_limit_seconds=stage2_time_limit_seconds,
     )
     if str(request.get("prepared_input_id") or "") != prepared_input_id:
         raise ValueError(
@@ -1993,6 +2021,8 @@ def run_pure_ice_aggregation_ab(
             "target_phase": PURE_ICE_AB_TARGET_PHASE,
             "phase4_execution_forbidden": True,
             "hourly_rolling_required": True,
+            "stage1_time_limit_seconds": int(stage1_time_limit_seconds),
+            "stage2_time_limit_seconds": int(stage2_time_limit_seconds),
             "public_api_or_schema_changed": False,
         },
     }
@@ -2118,6 +2148,8 @@ def main() -> int:
     parser.add_argument("--prepared-input-id")
     parser.add_argument("--optimization-request", type=Path)
     parser.add_argument("--ab-repetitions", type=int, default=5)
+    parser.add_argument("--stage1-time-limit-seconds", type=int)
+    parser.add_argument("--stage2-time-limit-seconds", type=int)
     parser.add_argument("--child-representation", choices=("discrete", "pure_aggregate"))
     parser.add_argument("--child-result-path", type=Path)
     parser.add_argument("--expected-git-sha")
@@ -2176,6 +2208,8 @@ def main() -> int:
             output_dir=args.output_dir,
             small_exact_parity_passed=True,
             repetitions=int(args.ab_repetitions),
+            stage1_time_limit_seconds=args.stage1_time_limit_seconds,
+            stage2_time_limit_seconds=args.stage2_time_limit_seconds,
         )
         print(
             json.dumps(

@@ -1,5 +1,23 @@
 # Current research release blockers
 
+## 2026-08-23: Phase-3 aggregation A/B is blocked pending a fixed-stage-time rerun
+
+The completed AB/BA x5 bundle at
+`output/diagnostics/pure_ice_aggregation_phase3_ab_81561d5_20260822/` is
+**DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS**. All ten children individually
+served 264/264 trips and passed physical, Rolling, accounting, no-fallback, and
+no-repair gates, but `repeated_comparison.json` correctly reports
+`FAIL_CORRECTNESS`: the effective Stage 1/2 limits drifted between
+representations (discrete 434/30 seconds; aggregate 435/329 seconds). Thus no
+speed, gap, cost, or structural comparison may cite this bundle.
+
+The A/B harness now fails before execution unless both explicit Stage 1 and
+Stage 2 time limits are provided and frozen into its request/manifest. Rerun
+only from a clean commit with the exact same scenario, prepared input, SHA,
+seed, threads, gap, and these explicit stage limits. Do not run downstream
+formal comparison or sensitivity claims until the resulting repeated verdict is
+not `FAIL_CORRECTNESS`.
+
 ## 2026-08-22 current evidence checkpoint: baseline and bounded checks pass; release remains blocked
 
 The first fresh Phase-3 A/B discrete child on

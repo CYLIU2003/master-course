@@ -1,5 +1,20 @@
 # master-course
 
+## 2026-08-23 A/B verification status
+
+The first completed 264-trip isolated-process Phase-3 aggregation AB/BA x5
+bundle is diagnostic only:
+`output/diagnostics/pure_ice_aggregation_phase3_ab_81561d5_20260822/`.
+Although every child passed coverage, physical validation, Rolling and final
+accounting without fallback or repair, its comparison verdict is
+`FAIL_CORRECTNESS`. The effective Stage-1/Stage-2 limits differed between the
+two representations because Stage 2 was not explicitly frozen. It is not
+evidence of a speedup, an improved gap, or an accepted structural result.
+
+The A/B command now requires explicit `--stage1-time-limit-seconds` and
+`--stage2-time-limit-seconds`, records them in the frozen request/manifest, and
+fails before running if either is missing. A clean-SHA rerun remains required.
+
 ## 2026-08-22 verification checkpoint
 
 - The first fresh 264-trip Phase-3 A/B child at

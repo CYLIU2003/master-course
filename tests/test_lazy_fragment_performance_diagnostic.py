@@ -325,6 +325,21 @@ def test_compile_phase3_pure_ice_ab_request_removes_only_phase4_controls() -> No
     ]
 
 
+def test_compile_phase3_pure_ice_ab_request_freezes_explicit_stage_limits() -> None:
+    compiled, transformation = compile_phase3_pure_ice_ab_request(
+        {"mode": "phase3_two_stage", "prepared_input_id": "prepared-same"},
+        stage1_time_limit_seconds=435,
+        stage2_time_limit_seconds=30,
+    )
+
+    assert compiled["stage1_time_limit_seconds"] == 435
+    assert compiled["stage2_time_limit_seconds"] == 30
+    assert transformation["fixed_stage_time_limits"] == {
+        "stage1_time_limit_seconds": 435,
+        "stage2_time_limit_seconds": 30,
+    }
+
+
 def test_pure_ice_ab_reports_structural_only_when_gap_does_not_improve(
     tmp_path: Path,
 ) -> None:

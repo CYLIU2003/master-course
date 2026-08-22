@@ -1,5 +1,28 @@
 # Development Notes
 
+## 2026-08-23: Phase-3 A/B time-allocation control failure and fail-fast repair
+
+- The clean-SHA, isolated-process AB/BA x5 diagnostic at
+  `output/diagnostics/pure_ice_aggregation_phase3_ab_81561d5_20260822/`
+  completed all ten individual 264-trip cases. Every child served 264/264
+  trips, passed independent physical validation, 24/24 Rolling, and accounting,
+  and used neither fallback nor post-solve repair. It is nevertheless
+  `FAIL_CORRECTNESS`, `DIAGNOSTIC`, and **not usable for a performance or
+  formulation claim**.
+- The comparison artifact correctly caught a control-contract violation:
+  discrete children reported effective Stage 1/2 limits of 434/30 seconds,
+  while aggregate children reported 435/329 seconds. Phase 3 dynamically
+  distributes Stage-2 time across the available candidate pool when no explicit
+  Stage-2 value is frozen; the two representations exposed different pool
+  shapes. Identical total request limits alone are therefore insufficient.
+- `build_lazy_fragment_performance_diagnostic.py` now requires explicit
+  `--stage1-time-limit-seconds` and `--stage2-time-limit-seconds` for the
+  264-trip A/B command, writes those values into the frozen request and manifest,
+  and refuses execution before creating an output directory when either control
+  is absent. This fixes experiment control only; it does not alter the Phase-3
+  objective, feasible region, solver formulation, physical checks, or release
+  thresholds. Focused diagnostic regression: `10 passed`.
+
 ## 2026-08-22: Phase-3 A/B discrete-audit false rejection corrected
 
 - The first clean-SHA 264-trip Phase-3 discrete child under
