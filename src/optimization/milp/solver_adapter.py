@@ -13783,7 +13783,12 @@ class GurobiMILPAdapter:
 
         def _stage1_search_callback(model: Any, where: int) -> None:
             try:
-                if where == GRB.Callback.MIPSOL:
+                if (
+                    where == GRB.Callback.MIPNODE
+                    and stage1_fragment_lazy_separator is not None
+                ):
+                    stage1_fragment_lazy_separator.callback(model, where)
+                elif where == GRB.Callback.MIPSOL:
                     lazy_cut_count = (
                         stage1_fragment_lazy_separator.callback(
                             model, where

@@ -53,6 +53,12 @@ end/start restriction; it does not yet prove any 264-trip bound improvement.
 No release or sensitivity conclusion may use it until its own frozen artifact
 passes every gate.
 
+The initial `8181622` trial is not valid evidence for this diagnostic because
+the outer Stage-1 callback did not forward MIPNODE events, so no root user cut
+could be considered. This routing defect is corrected and requires a new
+clean-SHA execution; neither the zero-cut result nor its time-limited artifact
+may be used for any formulation conclusion.
+
 ## 2026-08-23: Three-point electricity-price tranche is physically valid but not research-accepted
 
 The clean-SHA frontend/BFF Phase-3 tranche at

@@ -68,6 +68,12 @@
   selected row; the existing fail-closed callback regression caught and then
   verified a missing test-double guard. Verification: `96 passed`. No
   full-case result exists yet.
+- The first `lazy_root_cuts` artifact on `8181622` is invalid for evaluating
+  user cuts: although the separator supported MIPNODE, the outer Stage-1
+  callback forwarded only MIPSOL events, yielding zero MIPNODE callbacks and
+  zero cuts. The exact callback-routing defect is repaired by forwarding
+  MIPNODE to the same fail-closed separator; focused verification remains
+  `96 passed`. A new clean-SHA run is required before any conclusion.
 
 ## 2026-08-23: Electricity-price Phase-3 tranche completed as a diagnostic
 

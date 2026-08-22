@@ -31,6 +31,9 @@ The next pending diagnostic retains lazy enforcement for integer incumbents
 but adds only violated instances of those same exact rows at fractional LP
 nodes (`lazy_root_cuts`). It is not a model, performance, or gap-improvement
 claim until a clean-SHA 264-trip artifact completes every acceptance gate.
+The first `8181622` trial did not invoke its MIPNODE branch because the outer
+Stage-1 callback forwarded only MIPSOL events; it is invalid for evaluating
+this mode and was superseded by a dedicated callback-routing fix.
 
 ## 2026-08-23 electricity-price sensitivity status
 
