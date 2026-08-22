@@ -12,15 +12,24 @@ blocker: it is neither a 264-trip integrated-global-optimum certificate nor a
 substitute for the 1% Stage-1 gap, accepted economic/stress studies, or formal
 M0--M3 evidence.
 
-## 2026-08-23: Current-SHA fixed-plan stress is pending a complete 264-trip candidate
+## 2026-08-23: Current-SHA feasible candidate and fixed-plan stress are complete
 
-The fixed-decision stress CLI is intentionally fail-closed: evaluator SHA must
-equal the source-result SHA and it records `reoptimization_performed=false`.
-The existing `a497166` stress bundle cannot be relabelled as current-code
-evidence. The current `0e9413c` 264-trip diagnostic has no Stage-2 feasible
-candidate or Rolling plan, so it cannot be a fixed-plan source. A new stress
-bundle is required only after a fresh same-SHA complete Phase-3 candidate is
-available; no SHA check or stress rule may be relaxed to fill this gap.
+The frozen `phase3-current-candidate-5ee35f7` normal-BFF run at
+`output/2026-08-23/run_20260823_0605/` has clean SHA `5ee35f7`, valid prepared
+input provenance, complete successors, 264/264 coverage, physical validation,
+24/24 Rolling, executed-day accounting, and all 240 finalized artifact hashes.
+Its final cost is 64,422.491318 JPY, while its 19.227307% certified Stage-1
+gap remains above the declared 1% target. It is a feasible/accounting
+candidate, **not** an optimality or integrated-global-optimum result.
+
+The same-SHA fixed-decision stress artifact at
+`output/diagnostics/fixed_solution_stress_5ee35f7_20260823/` has matching
+source/evaluator SHA and `reoptimization_performed=false`. Only initial SOC
+minus five percentage points is physically valid (0 JPY delta); the remaining
+six prescribed stresses have recorded physical violations and null costs.
+This resolves the current-SHA stress-input gap but does not clear the 1% gap,
+accepted economic sensitivities, M0--M3 comparison, or explicit Phase-4
+integration gates.
 
 ## 2026-08-23: Aggregate path-start certificate tightening awaits 264-trip measurement
 

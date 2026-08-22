@@ -156,6 +156,25 @@ claim—median solver time increased from 465.531 to 480.192 seconds, and all
 `--stage1-time-limit-seconds` and `--stage2-time-limit-seconds` so an unfrozen
 comparison fails before execution.
 
+## 2026-08-23 current-SHA Phase-3 feasibility and fixed-plan stress checkpoint
+
+The frozen tag `phase3-current-candidate-5ee35f7` produced a fresh 264-trip
+normal-BFF candidate at `output/2026-08-23/run_20260823_0605/`. Its recorded
+clean SHA is `5ee35f7`; input provenance, complete-successor scope, 264/264
+coverage, physical validation, 24/24 hourly Rolling, executed-day accounting,
+and all 240 finalized artifact hashes passed independent verification. The
+authoritative final cost is 64,422.491318 JPY. The 19.227307% certified
+Stage-1 gap remains above the requested 1%, so this is a physically feasible,
+cost-accounted candidate—not an optimality result or a 264-trip integrated
+global optimum.
+
+Its same-SHA, no-reoptimization fixed-plan stress artifact is
+`output/diagnostics/fixed_solution_stress_5ee35f7_20260823/`. Only initial
+SOC minus five percentage points remained physically valid, with a zero JPY
+delta; the other six prescribed stresses have explicit physical violations and
+therefore null cost fields. This documents fixed-plan fragility honestly; it
+does not clear the remaining economic sensitivity, M0--M3, or 1%-gap gates.
+
 ## 2026-08-22 verification checkpoint
 
 - The first fresh 264-trip Phase-3 A/B child at

@@ -315,10 +315,27 @@
   from the evaluator SHA and records `reoptimization_performed=false`; it must
   not be weakened to reuse the old `a497166` stress artifact after the current
   code changes.
-- A current-SHA fixed-plan stress execution is therefore pending a fresh,
-  complete 264-trip Phase-3 candidate at the same frozen SHA. The
-  `0e9413c`/`0c651d1` BFF diagnostic has no Stage-2 feasible candidate and no
-  Rolling plan to fix, so it is intentionally not used as stress input.
+- Froze clean commit `5ee35f70543fc9ff4962a5f396d34ade6a41a7a2` as
+  `phase3-current-candidate-5ee35f7`, then ran the normal BFF path with the
+  historical 900-second control (`seed=42`, `threads=4`, 1% request, same
+  prepared input). Job `ddb36963-81fa-49a3-b3e8-5309d89b91c3` wrote
+  `output/2026-08-23/run_20260823_0605/`: 264/264 coverage, independent
+  physical validation, 24/24 Rolling, executed-day accounting and the 240-file
+  artifact bundle all pass. `verify_run_input_provenance.py` and
+  `verify_frontend_run_artifacts.py --research-run --require-rolling` pass.
+  The final cost is 64,422.491318 JPY; the certified Stage-1 gap is still
+  19.227307%, so the candidate is feasible/accounted but not optimality or
+  release evidence.
+- Executed the unchanged-plan CLI at the matching SHA:
+  `python scripts/run_fixed_solution_stress.py --source-run
+  output/2026-08-23/run_20260823_0605 --optimization-request
+  output/diagnostics/thesis_phase_gate_5ee35f7_20260823/current_candidate_optimization_request.json
+  --output-dir output/diagnostics/fixed_solution_stress_5ee35f7_20260823`.
+  The manifest records matching source/evaluator SHA, frozen artifact hashes,
+  and `reoptimization_performed=false`. Only `initial_soc_minus_5pp` is
+  physically accepted (0 JPY delta); the other six stresses have physical
+  violations and null costs. This is valid stress evidence, not an economic
+  reoptimization result.
 
 ## 2026-08-23: Phase-3 A/B time-allocation control failure and fail-fast repair
 
