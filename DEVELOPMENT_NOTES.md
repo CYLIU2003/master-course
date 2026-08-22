@@ -1,5 +1,27 @@
 # Development Notes
 
+## 2026-08-23: Bounded M0--M3 actual-cost-oracle protocol
+
+- Extended `scripts/audit_small_integrated_weather_milp.py` with the opt-in
+  `--run-small-m0-m3` path. It runs exactly four 15-minute, deterministic
+  day-spanning-subset cases: M0 is available-ICE-only with PV/BESS disabled;
+  M1 is the mixed fleet with PV/BESS disabled; M2 is the deployed Phase-3
+  two-stage method; and M3 is the same mixed-fleet/PV/BESS input under the
+  scalar canonical-actual-cost Phase-4 oracle. M0 and M3 must independently
+  satisfy the existing exact-oracle gate; all four must be feasible and
+  complete before the artifact can be `PASS_SMALL_SCOPE_ONLY`.
+- PV/BESS removal changes both `depot_energy_assets` and `pv_slots`, preventing
+  the no-PV/BESS ablation from retaining a hidden source representation. The
+  result records each method contract, exact-oracle eligibility, descriptive
+  deltas, and an M2--M3 same-input/lower-bound check. It fails closed when any
+  method is absent, incomplete, non-exact where exactness is required, or when
+  the M2--M3 pair is not comparable.
+- The path is intentionally separate from the full frontend M0--M3 assembly:
+  full `phase4_integrated` uses the production lexicographic policy, whereas
+  this M3 explicitly requires the scalar actual-cost oracle. The implementation
+  and 14 focused tests are present; no run result is claimed until it is
+  executed from a new clean frozen commit.
+
 ## 2026-08-23: Current-SHA diesel-price response tranche
 
 - Restarted the port-8000 BFF before the run because its runtime Git

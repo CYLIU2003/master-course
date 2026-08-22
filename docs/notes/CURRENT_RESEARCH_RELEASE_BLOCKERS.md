@@ -1,5 +1,17 @@
 # Current research release blockers
 
+## 2026-08-23: Bounded M0--M3 protocol exists; no result is released yet
+
+The opt-in `--run-small-m0-m3` path in
+`scripts/audit_small_integrated_weather_milp.py` now defines a small-subset
+M0--M3 matrix with an all-ICE M0, no-PV/BESS mixed M1, deployed Phase-3 M2,
+and scalar actual-cost-oracle M3. The protocol is designed to fail closed and
+marks its output `small_subset_only_not_full_264_trip_evidence`. It has not
+yet been executed from its own clean frozen commit, so it clears no blocker.
+Even after a successful bounded execution it cannot discharge the 264-trip
+Phase-3 gap, full-scale M0--M3, economic-sensitivity, or global-optimality
+release gates.
+
 ## 2026-08-23: Diesel-price term is active; economic-response release gate remains blocked
 
 At frozen tag `phase3-diesel-sensitivity-b505c7a`, the frontend/BFF-only

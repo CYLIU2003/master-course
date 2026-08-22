@@ -1,5 +1,20 @@
 # master-course
 
+## 2026-08-23 bounded M0--M3 protocol: small-scale only, execution pending
+
+`scripts/audit_small_integrated_weather_milp.py --run-small-m0-m3` now creates
+one explicitly bounded four-method comparison from the same deterministic
+day-spanning subset: M0 is an all-ICE, no-PV/BESS exact-cost baseline; M1 is a
+mixed BEV/ICE Phase-3 run with PV/BESS disabled at both asset and time-slot
+layers; M2 is the existing mixed-fleet Phase-3 run; and M3 is the matching
+mixed-fleet Phase-4 scalar actual-cost oracle. Only M2--M3 retains identical
+fleet and energy assets and is therefore an algorithmic oracle comparison.
+The emitted artifact is hard-labelled
+`small_subset_only_not_full_264_trip_evidence`; M0/M1/M2/M3 deltas are not
+full-network method effects, global-optimality evidence, or release readiness.
+The protocol itself is committed and tested before any execution artifact is
+cited below.
+
 ## 2026-08-23 current-SHA diesel-price diagnostic: active cost term, unchanged candidate dispatch
 
 Frozen tag `phase3-diesel-sensitivity-b505c7a` ran the existing frontend/BFF

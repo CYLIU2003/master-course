@@ -14,6 +14,7 @@ from scripts.audit_small_integrated_weather_milp import (
     _integrated_actual_cost_oracle_problem,
     _restore_prepared_weather_comparison_contract,
     _primary_oracle_comparison,
+    _small_m0_m3_comparison,
     _sensitivity_summary,
 )
 from src.optimization.common.cost_components import normalize_cost_component_flags
@@ -183,6 +184,71 @@ def test_primary_oracle_comparison_does_not_normalize_zero_cost_noise() -> None:
     assert comparison["two_stage_approx_gap_status"] == (
         "not_identifiable_zero_reference_cost"
     )
+
+
+def test_small_m0_m3_comparison_is_bounded_and_requires_exact_m0_m3() -> None:
+    exact_integrated = {
+        "phase": "phase4_integrated",
+        "feasible": True,
+        "trip_count_unserved": 0,
+        "solver_status": "optimal",
+        "raw_plan_solver_status": "optimal",
+        "supports_integrated_exact_milp": True,
+        "final_gap_ratio": 0.0,
+        "integrated_actual_cost_objective_requested": True,
+        "integrated_actual_cost_contract_applied": True,
+        "objective_is_actual_cost": True,
+        "objective_matches_accounting": True,
+        "ev_energy_inventory_balanced": True,
+        "validation_metrics": {"all_required_validation_checks_passed": True},
+    }
+    common = {
+        "analysis_label": "small_m0_m3",
+        "feasible": True,
+        "trip_count_unserved": 0,
+    }
+    cases = [
+        {
+            **common,
+            **exact_integrated,
+            "small_m0_m3_method_id": "M0",
+            "accounted_total_cost_jpy": 100.0,
+            "small_m0_m3_fleet_contract": "available_ice_only",
+            "small_m0_m3_pv_bess_contract": "disabled_at_asset_and_slot_layers",
+        },
+        {
+            **common,
+            "phase": "phase3_two_stage",
+            "small_m0_m3_method_id": "M1",
+            "accounted_total_cost_jpy": 80.0,
+            "small_m0_m3_pv_bess_contract": "disabled_at_asset_and_slot_layers",
+        },
+        {
+            **common,
+            "phase": "phase3_two_stage",
+            "small_m0_m3_method_id": "M2",
+            "accounted_total_cost_jpy": 70.0,
+            "declared_problem_input_hash": "same-input",
+        },
+        {
+            **common,
+            **exact_integrated,
+            "small_m0_m3_method_id": "M3",
+            "accounted_total_cost_jpy": 65.0,
+            "declared_problem_input_hash": "same-input",
+        },
+    ]
+
+    comparison = _small_m0_m3_comparison(cases)
+
+    assert comparison["comparison_status"] == "PASS_SMALL_SCOPE_ONLY"
+    assert comparison["claim_scope"] == "small_subset_only_not_full_264_trip_evidence"
+    assert comparison["m2_m3_same_input_algorithmic_pair"] is True
+    assert comparison["descriptive_cost_deltas_jpy"]["M1_minus_M0"] == -20.0
+
+    cases[-1]["objective_matches_accounting"] = False
+    blocked = _small_m0_m3_comparison(cases)
+    assert blocked["comparison_status"] == "BLOCKED_SMALL_SCOPE"
 
 
 def test_integrated_oracle_gate_requires_actual_cost_contract() -> None:

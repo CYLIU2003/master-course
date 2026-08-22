@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import argparse
 from copy import deepcopy
-from dataclasses import replace
+from dataclasses import asdict, replace
 import hashlib
 import json
 from pathlib import Path
@@ -175,6 +175,152 @@ def _small_problem(
         baseline_plan=None,
         metadata=metadata,
     )
+
+
+def _without_pv_bess_problem(
+    problem: CanonicalOptimizationProblem,
+) -> CanonicalOptimizationProblem:
+    """Return a bounded ablation input with PV and BESS unavailable.
+
+    The helper changes both representations consumed by the solver: the
+    depot-level asset configuration and the time-indexed PV supply.  Leaving
+    either nonzero would make an ostensibly ``no PV/BESS`` comparison depend
+    on a hidden energy source.
+    """
+
+    assets = {
+        str(depot_id): replace(
+            asset,
+            pv_enabled=False,
+            pv_generation_kwh_by_slot=tuple(
+                0.0 for _ in asset.pv_generation_kwh_by_slot
+            ),
+            available_pv_surplus_kwh_by_slot=tuple(
+                0.0 for _ in asset.available_pv_surplus_kwh_by_slot
+            ),
+            capacity_factor_by_slot=tuple(
+                0.0 for _ in asset.capacity_factor_by_slot
+            ),
+            pv_case_id="small_m0_m3_no_pv",
+            pv_capacity_kw=0.0,
+            pv_supply_scale=0.0,
+            bess_enabled=False,
+            bess_energy_kwh=0.0,
+            bess_power_kw=0.0,
+            bess_initial_soc_kwh=0.0,
+            bess_soc_min_kwh=0.0,
+            bess_soc_max_kwh=0.0,
+            bess_terminal_soc_min_kwh=0.0,
+            bess_terminal_soc_target_kwh=0.0,
+            allow_pv_to_bess=False,
+            allow_grid_to_bess=False,
+            allow_bess_to_bus=False,
+        )
+        for depot_id, asset in problem.depot_energy_assets.items()
+    }
+    return replace(
+        problem,
+        depot_energy_assets=assets,
+        pv_slots=tuple(
+            replace(slot, pv_available_kw=0.0) for slot in problem.pv_slots
+        ),
+        metadata={
+            **dict(problem.metadata or {}),
+            "small_m0_m3_pv_bess_contract": "disabled_at_asset_and_slot_layers",
+        },
+    )
+
+
+def _all_ice_baseline_problem(
+    problem: CanonicalOptimizationProblem,
+) -> CanonicalOptimizationProblem:
+    """Restrict a small comparison input to its available ICE fleet only."""
+
+    vehicles = tuple(
+        vehicle
+        for vehicle in problem.vehicles
+        if bool(vehicle.available)
+        and str(vehicle.vehicle_type).upper() == "ICE"
+    )
+    if not vehicles:
+        raise ValueError("small M0 baseline requires at least one available ICE vehicle")
+    vehicle_types = tuple(
+        vehicle_type
+        for vehicle_type in problem.vehicle_types
+        if str(vehicle_type.powertrain_type).upper() == "ICE"
+    )
+    return replace(
+        problem,
+        vehicles=vehicles,
+        vehicle_types=vehicle_types,
+        metadata={
+            **dict(problem.metadata or {}),
+            "small_m0_m3_fleet_contract": "available_ice_only",
+        },
+    )
+
+
+def _with_small_m0_m3_method_contract(
+    problem: CanonicalOptimizationProblem,
+    *,
+    method_id: str,
+    method_definition: str,
+) -> CanonicalOptimizationProblem:
+    """Attach claim-scope metadata without changing the mathematical input."""
+
+    return replace(
+        problem,
+        metadata={
+            **dict(problem.metadata or {}),
+            "sensitivity_analysis_label": "small_m0_m3",
+            "small_m0_m3_method_id": method_id,
+            "small_m0_m3_method_definition": method_definition,
+            "small_m0_m3_claim_scope": "small_subset_only_not_full_264_trip_evidence",
+        },
+    )
+
+
+def _small_m0_m3_solver_input_hash(problem: CanonicalOptimizationProblem) -> str:
+    """Hash model-relevant inputs while excluding comparison-only labels."""
+
+    metadata = {
+        key: value
+        for key, value in dict(problem.metadata or {}).items()
+        if not key.startswith("small_m0_m3_")
+        and key != "sensitivity_analysis_label"
+    }
+    payload = {
+        "scenario": asdict(problem.scenario),
+        "trips": [asdict(trip) for trip in problem.trips],
+        "vehicles": [asdict(vehicle) for vehicle in problem.vehicles],
+        "vehicle_types": [asdict(vehicle_type) for vehicle_type in problem.vehicle_types],
+        "chargers": [asdict(charger) for charger in problem.chargers],
+        "price_slots": [asdict(slot) for slot in problem.price_slots],
+        "pv_slots": [asdict(slot) for slot in problem.pv_slots],
+        "depot_energy_assets": {
+            str(depot_id): asdict(asset)
+            for depot_id, asset in sorted(problem.depot_energy_assets.items())
+        },
+        "feasible_connections": {
+            str(trip_id): list(connection_ids)
+            for trip_id, connection_ids in sorted(problem.feasible_connections.items())
+        },
+        "objective_weights": asdict(problem.objective_weights),
+        "metadata": metadata,
+    }
+    return hashlib.sha256(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()
+
+
+def _input_vehicle_count_by_type(
+    problem: CanonicalOptimizationProblem,
+) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for vehicle in problem.vehicles:
+        vehicle_type = str(vehicle.vehicle_type).upper()
+        counts[vehicle_type] = counts.get(vehicle_type, 0) + 1
+    return dict(sorted(counts.items()))
 
 
 def _align_objective_with_accounting(
@@ -390,6 +536,13 @@ def _run_case(
     random_seed: int,
 ) -> dict[str, Any]:
     is_two_stage = phase == "phase3_two_stage"
+    declared_problem_input_hash = _small_m0_m3_solver_input_hash(problem)
+    input_pv_available_kw_total = sum(
+        float(slot.pv_available_kw or 0.0) for slot in problem.pv_slots
+    )
+    input_bess_enabled = any(
+        bool(asset.bess_enabled) for asset in problem.depot_energy_assets.values()
+    )
     if not is_two_stage:
         problem = _integrated_actual_cost_oracle_problem(problem)
     config = OptimizationConfig(
@@ -496,6 +649,23 @@ def _run_case(
         "analysis_label": str(
             problem.metadata.get("sensitivity_analysis_label") or "primary"
         ),
+        "small_m0_m3_method_id": problem.metadata.get("small_m0_m3_method_id"),
+        "small_m0_m3_method_definition": problem.metadata.get(
+            "small_m0_m3_method_definition"
+        ),
+        "small_m0_m3_claim_scope": problem.metadata.get(
+            "small_m0_m3_claim_scope"
+        ),
+        "small_m0_m3_pv_bess_contract": problem.metadata.get(
+            "small_m0_m3_pv_bess_contract"
+        ),
+        "small_m0_m3_fleet_contract": problem.metadata.get(
+            "small_m0_m3_fleet_contract"
+        ),
+        "declared_problem_input_hash": declared_problem_input_hash,
+        "input_vehicle_count_by_type": _input_vehicle_count_by_type(problem),
+        "input_pv_available_kw_total": input_pv_available_kw_total,
+        "input_bess_enabled": input_bess_enabled,
         "pv_uncertainty_scale": float(
             problem.metadata.get("pv_uncertainty_scale", 1.0) or 1.0
         ),
@@ -766,6 +936,99 @@ def _primary_oracle_comparison(cases: list[dict[str, Any]]) -> dict[str, Any]:
     return comparison
 
 
+def _small_m0_m3_comparison(cases: list[dict[str, Any]]) -> dict[str, Any]:
+    """Summarize the bounded M0--M3 study without promoting it to full scale.
+
+    M0/M1 deliberately alter the fleet or energy-asset treatment, whereas
+    M2/M3 share the same mixed-fleet, PV/BESS-enabled input.  Consequently,
+    only M2--M3 is an algorithmic comparison against the exact integrated
+    oracle; the other deltas are descriptive small-scope ablations.
+    """
+
+    by_method = {
+        str(case.get("small_m0_m3_method_id")): case
+        for case in cases
+        if case.get("analysis_label") == "small_m0_m3"
+        and case.get("small_m0_m3_method_id") in {"M0", "M1", "M2", "M3"}
+    }
+    expected_methods = ("M0", "M1", "M2", "M3")
+    missing_methods = [
+        method for method in expected_methods if method not in by_method
+    ]
+    comparison: dict[str, Any] = {
+        "claim_scope": "small_subset_only_not_full_264_trip_evidence",
+        "expected_methods": list(expected_methods),
+        "missing_methods": missing_methods,
+        "all_methods_present": not missing_methods,
+        "method_contracts": {
+            method: {
+                "definition": case.get("small_m0_m3_method_definition"),
+                "phase": case.get("phase"),
+                "pv_bess_contract": case.get("small_m0_m3_pv_bess_contract"),
+                "fleet_contract": case.get("small_m0_m3_fleet_contract"),
+            }
+            for method, case in by_method.items()
+        },
+    }
+    if missing_methods:
+        comparison["comparison_status"] = "BLOCKED_MISSING_METHODS"
+        return comparison
+
+    def is_feasible_complete(case: dict[str, Any]) -> bool:
+        return bool(case.get("feasible")) and int(
+            case.get("trip_count_unserved") or 0
+        ) == 0
+
+    m0, m1, m2, m3 = (by_method[method] for method in expected_methods)
+    exact_oracle_eligibility = {
+        "M0": _is_integrated_exact_oracle_case(m0),
+        "M3": _is_integrated_exact_oracle_case(m3),
+    }
+    method_feasibility = {
+        method: is_feasible_complete(by_method[method]) for method in expected_methods
+    }
+    costs = {
+        method: float(by_method[method]["accounted_total_cost_jpy"])
+        for method in expected_methods
+    }
+    comparison.update(
+        {
+            "method_feasible_and_complete": method_feasibility,
+            "exact_oracle_eligibility": exact_oracle_eligibility,
+            "accounted_total_cost_jpy": costs,
+            "descriptive_cost_deltas_jpy": {
+                "M1_minus_M0": costs["M1"] - costs["M0"],
+                "M2_minus_M1": costs["M2"] - costs["M1"],
+                "M3_minus_M2": costs["M3"] - costs["M2"],
+            },
+            "m2_m3_same_input_algorithmic_pair": bool(
+                m2.get("small_m0_m3_pv_bess_contract") is None
+                and m3.get("small_m0_m3_pv_bess_contract") is None
+                and m2.get("small_m0_m3_fleet_contract") is None
+                and m3.get("small_m0_m3_fleet_contract") is None
+                and bool(m2.get("declared_problem_input_hash"))
+                and m2.get("declared_problem_input_hash")
+                == m3.get("declared_problem_input_hash")
+            ),
+            "m2_declared_problem_input_hash": m2.get("declared_problem_input_hash"),
+            "m3_declared_problem_input_hash": m3.get("declared_problem_input_hash"),
+            "m2_minus_m3_cost_jpy": costs["M2"] - costs["M3"],
+            "m2_m3_lower_bound_consistent": (
+                costs["M2"] - costs["M3"] >= -1.0e-5
+            ),
+        }
+    )
+    comparison["comparison_status"] = (
+        "PASS_SMALL_SCOPE_ONLY"
+        if all(method_feasibility.values())
+        and all(exact_oracle_eligibility.values())
+        and comparison["m2_m3_same_input_algorithmic_pair"]
+        and comparison["m2_m3_lower_bound_consistent"]
+        else "BLOCKED_SMALL_SCOPE"
+    )
+    return comparison
+
+
 def _five_minute_sensitivity_comparison(
     cases: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -873,21 +1136,57 @@ def run(args: argparse.Namespace) -> int:
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     problem_15 = _build_problem(args, 15)
-    problem_5 = None if args.skip_five_minute else _build_problem(args, 5)
-    case_specs: list[tuple[CanonicalOptimizationProblem, str, int, int]] = []
-    if not args.integrated_only:
-        case_specs.append(
-            (problem_15, "phase3_two_stage", args.time_limit_sec, args.random_seed)
-        )
-    case_specs.append(
-        (problem_15, "phase4_integrated", args.time_limit_sec, args.random_seed)
+    if args.run_small_m0_m3 and args.allowed_vehicle_type != "ALL":
+        raise ValueError("--run-small-m0-m3 requires --allowed-vehicle-type ALL")
+    problem_5 = (
+        None
+        if args.skip_five_minute or args.run_small_m0_m3
+        else _build_problem(args, 5)
     )
-    if not args.skip_five_minute:
-        assert problem_5 is not None
-        case_specs.append(
-            (problem_5, "phase4_integrated", args.time_limit_sec, args.random_seed)
+    case_specs: list[tuple[CanonicalOptimizationProblem, str, int, int]] = []
+    if args.run_small_m0_m3:
+        m0_problem = _with_small_m0_m3_method_contract(
+            _all_ice_baseline_problem(_without_pv_bess_problem(problem_15)),
+            method_id="M0",
+            method_definition="all_ICE_small_exact_cost_baseline_no_PV_or_BESS",
         )
-    if args.run_seed_time_sensitivity:
+        m1_problem = _with_small_m0_m3_method_contract(
+            _without_pv_bess_problem(problem_15),
+            method_id="M1",
+            method_definition="mixed_BEV_ICE_phase3_without_PV_or_BESS",
+        )
+        m2_problem = _with_small_m0_m3_method_contract(
+            problem_15,
+            method_id="M2",
+            method_definition="mixed_BEV_ICE_deployed_phase3_two_stage",
+        )
+        m3_problem = _with_small_m0_m3_method_contract(
+            problem_15,
+            method_id="M3",
+            method_definition="mixed_BEV_ICE_integrated_scalar_actual_cost_oracle",
+        )
+        case_specs.extend(
+            (
+                (m0_problem, "phase4_integrated", args.time_limit_sec, args.random_seed),
+                (m1_problem, "phase3_two_stage", args.time_limit_sec, args.random_seed),
+                (m2_problem, "phase3_two_stage", args.time_limit_sec, args.random_seed),
+                (m3_problem, "phase4_integrated", args.time_limit_sec, args.random_seed),
+            )
+        )
+    else:
+        if not args.integrated_only:
+            case_specs.append(
+                (problem_15, "phase3_two_stage", args.time_limit_sec, args.random_seed)
+            )
+        case_specs.append(
+            (problem_15, "phase4_integrated", args.time_limit_sec, args.random_seed)
+        )
+        if not args.skip_five_minute:
+            assert problem_5 is not None
+            case_specs.append(
+                (problem_5, "phase4_integrated", args.time_limit_sec, args.random_seed)
+            )
+    if args.run_seed_time_sensitivity and not args.run_small_m0_m3:
         for seed in (17, 42, 73):
             for limit in (5, 15, 60):
                 sensitivity_problem = replace(
@@ -900,7 +1199,7 @@ def run(args: argparse.Namespace) -> int:
                 case_specs.append(
                     (sensitivity_problem, "phase3_two_stage", limit, seed)
                 )
-    if args.run_uncertainty_sensitivity:
+    if args.run_uncertainty_sensitivity and not args.run_small_m0_m3:
         for pv_scale in (0.8, 1.0, 1.2):
             for consumption_scale in (0.9, 1.0, 1.1):
                 sensitivity_problem = _scaled_uncertainty_problem(
@@ -942,6 +1241,7 @@ def run(args: argparse.Namespace) -> int:
             )
         )
     primary_comparison = _primary_oracle_comparison(cases)
+    small_m0_m3_comparison = _small_m0_m3_comparison(cases)
     five_minute_comparison = _five_minute_sensitivity_comparison(cases)
     seed_time_summary = _sensitivity_summary(
         cases,
@@ -952,7 +1252,11 @@ def run(args: argparse.Namespace) -> int:
         analysis_label="small_phase3_pv_consumption",
     )
     payload = {
-        "purpose": "small_integrated_oracle_and_five_minute_sensitivity",
+        "purpose": (
+            "small_m0_m3_method_comparison"
+            if args.run_small_m0_m3
+            else "small_integrated_oracle_and_five_minute_sensitivity"
+        ),
         "scope_warning": (
             "Deterministic day-spanning subset only; do not generalize these KPIs "
             "to the full 264-trip service day."
@@ -964,6 +1268,7 @@ def run(args: argparse.Namespace) -> int:
         "vehicles_per_type": args.vehicles_per_type,
         "allowed_vehicle_type": args.allowed_vehicle_type,
         "primary_comparison": primary_comparison,
+        "small_m0_m3_comparison": small_m0_m3_comparison,
         "five_minute_comparison": five_minute_comparison,
         "seed_time_sensitivity_summary": seed_time_summary,
         "pv_consumption_sensitivity_summary": uncertainty_summary,
@@ -976,6 +1281,13 @@ def run(args: argparse.Namespace) -> int:
     print(json.dumps(payload, ensure_ascii=False, indent=2, default=str), flush=True)
     if not all(case["feasible"] and case["trip_count_unserved"] == 0 for case in cases):
         return 2
+    if args.run_small_m0_m3:
+        return (
+            0
+            if small_m0_m3_comparison["comparison_status"]
+            == "PASS_SMALL_SCOPE_ONLY"
+            else 3
+        )
     if not primary_comparison["integrated_exact_oracle_eligible"]:
         return 3
     return 0
@@ -1005,6 +1317,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--skip-five-minute", action="store_true")
     parser.add_argument("--run-seed-time-sensitivity", action="store_true")
     parser.add_argument("--run-uncertainty-sensitivity", action="store_true")
+    parser.add_argument(
+        "--run-small-m0-m3",
+        action="store_true",
+        help=(
+            "Run the bounded M0--M3 comparison only: M0 all-ICE exact baseline, "
+            "M1 mixed Phase 3 without PV/BESS, M2 deployed Phase 3, and M3 "
+            "integrated scalar-actual-cost oracle. This is never full-day evidence."
+        ),
+    )
     return parser
 
 
