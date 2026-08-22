@@ -162,7 +162,11 @@ comparison fails before execution.
   performs no reoptimization and leaves costs null whenever the unchanged
   plan fails physical/PV validation.
 - The bounded 8/12/24/40-trip integrated-oracle certificate at
-  `output/verification/small_integrated_oracle_scale/a497166/` is small-scale
+  `output/verification/small_integrated_oracle_scale/0e9413c/` was regenerated
+  at clean commit `0e9413c`: all four Phase-4 cases are exact (`optimal`, zero
+  solver gap) and Phase 3 is complete. ApproxGap is zero within numerical
+  tolerance for 24/40 trips; it is not identifiable at 8/12 trips because the
+  exact reference cost is numerically zero. This is bounded small-scale
   evidence only. It does not establish a 264-trip global optimum, a full-scale
   1% gap, an economic response conclusion, or a full M0--M3 comparison.
 

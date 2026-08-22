@@ -1,5 +1,17 @@
 # Current research release blockers
 
+## 2026-08-23: Bounded integrated-oracle comparison reproduced on the current code
+
+The isolated-process 8/12/24/40-trip certificate at
+`output/verification/small_integrated_oracle_scale/0e9413c/scale_certificate.json`
+has `VERIFIED_BOUNDED_SMALL_INSTANCES` at clean SHA `0e9413c`, with exact
+zero-gap Phase-4 results at every scale. The 24/40 Phase-3 ApproxGap values are
+zero within numerical tolerance; the 8/12 ratios are correctly not identified
+because their reference costs are numerically zero. This removes no full-scale
+blocker: it is neither a 264-trip integrated-global-optimum certificate nor a
+substitute for the 1% Stage-1 gap, accepted economic/stress studies, or formal
+M0--M3 evidence.
+
 ## 2026-08-23: Analytical concurrent-service certificate corrected for overnight trips
 
 The powertrain path/source LP and selector-MIP certificate now derives service

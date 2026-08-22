@@ -265,6 +265,22 @@
   correctly not started. This remains **DIAGNOSTIC, NOT USED FOR RESEARCH
   CONCLUSIONS** and is not a gap-improvement or release claim.
 
+## 2026-08-23: Current-SHA 8/12/24/40 integrated-oracle scale certificate
+
+- Executed the existing fail-closed CLI in isolated Python child processes:
+  `python scripts/build_small_integrated_oracle_scale_certificate.py --scenario-id b23fd26c-1233-4c73-bb9e-bdb8b1584760 --prepared-input-id prepared-ee27696fc37f0c7a-f1e18f252e336f1f-8acc7b3a --output-dir output/verification/small_integrated_oracle_scale/0e9413c --trip-counts 8 12 24 40 --depot-id tsurumaki --service-id WEEKDAY --vehicles-per-type 5 --time-limit-sec 300 --random-seed 42`.
+  The certificate at
+  `output/verification/small_integrated_oracle_scale/0e9413c/scale_certificate.json`
+  records clean pre/post SHA `0e9413c`, the same prepared-input SHA-256, seed
+  42, 300 seconds per phase, and `VERIFIED_BOUNDED_SMALL_INSTANCES`.
+- Every Phase-4 run reached `optimal` with zero solver gap and every Phase-3
+  run completed. For 24/40 trips, Phase-3 minus integrated cost is within
+  numerical tolerance (`ApproxGap=0`); for 8/12 trips the exact integrated
+  reference cost is numerically zero, so relative gap is intentionally marked
+  not identifiable. This revalidates only the bounded oracle comparison on the
+  current code and is not a 264-trip global-optimality, full-scale gap,
+  sensitivity, or M0--M3 release claim.
+
 ## 2026-08-23: Phase-3 A/B time-allocation control failure and fail-fast repair
 
 - The clean-SHA, isolated-process AB/BA x5 diagnostic at
