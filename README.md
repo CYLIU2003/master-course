@@ -1,5 +1,17 @@
 # master-course
 
+## 2026-08-23 electricity-price sensitivity status
+
+The fresh three-point Phase-3 frontend/BFF bundle at
+`output/thesis_sensitivity_electricity_19bb780_20260823_r1/` is diagnostic
+only. At 24, 30, and 36 JPY/kWh, each run served 264/264 trips and passed
+physical validation, 24-step Rolling, final accounting, provenance, and
+complete-successor checks. Each also stopped with the same 19.227307%
+certified Stage-1 MIP gap, above the 1% research threshold; none is an
+accepted sensitivity or optimality result. The identical 64,422.491318-JPY
+ledger values reflect 0.0-kWh grid import in these candidates, not a general
+claim that electricity price is irrelevant.
+
 ## 2026-08-23 A/B verification status
 
 The first bundle at

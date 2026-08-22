@@ -1,5 +1,24 @@
 # Current research release blockers
 
+## 2026-08-23: Three-point electricity-price tranche is physically valid but not research-accepted
+
+The clean-SHA frontend/BFF Phase-3 tranche at
+`output/thesis_sensitivity_electricity_19bb780_20260823_r1/` completed fresh
+Prepare and solve/rolling runs for 24, 30, and 36 JPY/kWh at commit
+`19bb78003cf6f44396093ca85022c2b58e56ce5f`. Every case served 264/264 trips,
+passed the physical schedule, 24/24 Rolling, accounting, provenance, and
+complete-successor checks without a SHA change. Each is nevertheless
+**DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS**: its only failed acceptance
+check is `mip_gap_target_met`, with the same certified Stage-1 gap of
+19.227307%, above the predeclared 1% target.
+
+All three diagnostic ledgers report zero grid import and the same final cost
+of 64,422.491318 JPY. This is not accepted evidence that electricity price has
+no effect; under this particular time-limited candidate PV/BESS dispatch,
+there was no imported grid energy to price. No economic-response, optimality,
+or thesis sensitivity claim may be made from this tranche. The accepted
+multi-point electricity-price sensitivity blocker remains open.
+
 ## 2026-08-23: Phase-3 aggregation A/B passed only its structural claim gate
 
 The first completed bundle at

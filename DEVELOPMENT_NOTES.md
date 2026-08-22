@@ -1,5 +1,21 @@
 # Development Notes
 
+## 2026-08-23: Electricity-price Phase-3 tranche completed as a diagnostic
+
+- Executed the frontend/BFF sensitivity runner at clean commit
+  `19bb78003cf6f44396093ca85022c2b58e56ce5f` using a fresh Prepare for each
+  declared price: 24, 30, and 36 JPY/kWh. The immutable result bundle is
+  `output/thesis_sensitivity_electricity_19bb780_20260823_r1/` and its three
+  `case_execution_audit.json` files record 264/264 served trips, valid
+  physical schedules, accepted 24-step Rolling/accounting, verified request
+  provenance, complete successor networks, and an unchanged SHA.
+- The runner correctly rejects every case for one reason only:
+  `mip_gap_target_met=false` (certified gap 19.227307%, versus the 1% target).
+  The cases are therefore `DIAGNOSTIC`, not thesis economic-response evidence.
+  Their final ledgers each contain 0.0 kWh grid import and 64,422.491318 JPY;
+  that equality must not be generalized into a no-price-effect claim because
+  it comes from this time-limited candidate's zero-import dispatch.
+
 ## 2026-08-23: Accepted fixed-stage Phase-3 aggregation AB/BA x5 result
 
 - Clean commit `817d9385976a70e50fbc48aa72d34e02f5c13552` was tagged
