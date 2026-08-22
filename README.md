@@ -17,7 +17,10 @@ cannot outnumber available vehicles of that powertrain. It remains a
 relaxation—vehicle identity, deadhead occupancy, SOC, chargers, depot, and
 energy-time coupling are still omitted—but it no longer permits simultaneous
 BEV or ICE service beyond the actual powertrain fleet. These deterministic rows
-and fleet counts are included in the certificate input hash and audit. A new
+and fleet counts are included in the certificate input hash and audit. Service
+intervals use the canonical service-day convention, including trips that cross
+wall-clock midnight; the lower-bound capacity condition therefore cannot omit
+an overnight overlap. A new
 264-trip clean-SHA diagnostic at `output/2026-08-23/run_20260823_0520/`
 (commit `98916ff`) generated zero such rows for the 35-BEV/25-ICE fleet. Its
 LP/MIP floors consequently remained 52,712.318101/52,724.471363 JPY, below the

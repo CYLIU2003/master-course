@@ -238,6 +238,25 @@
   audit is an inventory only and does not promote the old candidate or any
   diagnostic run to a research conclusion.
 
+## 2026-08-23: Overnight service is included in the analytical fleet-capacity lower bound
+
+- Corrected `src/optimization/milp/solver_adapter.py` so the analytical
+  powertrain path/source LP and selector MIP derive simultaneous-service rows
+  from `_trip_interval_bounds`, not raw wall-clock arrival/departure values.
+  A trip ending after midnight previously made the capacity condition weaker by
+  being omitted; this did not invalidate the lower bound, but it was an
+  incomplete necessary condition. The canonical service-day interval is now
+  hashed through the resulting deterministic rows.
+- Added the Gurobi regression
+  `test_weather_energy_fuel_certificate_counts_overnight_overlap_capacity` in
+  `tests/test_weather_coupled_assignment.py`. Two 23:00-to-after-midnight trips
+  with one BEV and one ICE produce both powertrain capacity rows and a 10-JPY
+  LP floor. Command:
+  `python -m pytest -q tests/test_weather_coupled_assignment.py tests/test_milp_strict_coverage_metadata.py tests/test_canonical_graph_export_parity.py tests/test_frontend_artifact_completeness.py tests/test_readme_navigation.py`
+  (`80 passed`). This is a correctness repair for future certificates; it has
+  not yet been measured on a fresh 264-trip clean-SHA diagnostic and makes no
+  gap-improvement or release claim.
+
 ## 2026-08-23: Phase-3 A/B time-allocation control failure and fail-fast repair
 
 - The clean-SHA, isolated-process AB/BA x5 diagnostic at

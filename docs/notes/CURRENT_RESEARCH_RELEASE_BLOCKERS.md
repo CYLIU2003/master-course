@@ -1,5 +1,16 @@
 # Current research release blockers
 
+## 2026-08-23: Analytical concurrent-service certificate corrected for overnight trips
+
+The powertrain path/source LP and selector-MIP certificate now derives service
+occupancy from the canonical `_trip_interval_bounds` convention. Thus a trip
+whose wall-clock arrival is earlier than its departure is represented through
+the service-day boundary rather than silently omitted from the fleet-capacity
+necessary condition. The focused two-trip Gurobi regression passes (LP floor
+10 JPY; capacity rows for both powertrains). This correction only strengthens
+future lower-bound certificates; no fresh 264-trip artifact exists yet and it
+does not alter the current 19.227307% gap or release status.
+
 ## 2026-08-23: Independent phase-gate audit confirms the remaining evidence gaps
 
 `scripts/audit_thesis_model_phase_gates.py` was rerun without waivers against

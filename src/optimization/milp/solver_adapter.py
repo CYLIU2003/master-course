@@ -24964,21 +24964,33 @@ class GurobiMILPAdapter:
                 seen_concurrent_service_capacity_rows: Set[
                     Tuple[str, Tuple[str, ...], int]
                 ] = set()
+                # Use the canonical service-day interval convention.  A trip
+                # ending after midnight has ``arrival_min < departure_min`` in
+                # wall-clock time, but it still occupies its powertrain across
+                # the service-day boundary.  Raw comparisons would silently
+                # omit it from this necessary fleet-capacity condition.
+                trip_service_bounds_by_id = {
+                    str(trip.trip_id): self._trip_interval_bounds(trip)
+                    for trip in problem.trips
+                }
                 service_start_minutes = sorted(
                     {
-                        int(trip.departure_min)
-                        for trip in problem.trips
-                        if int(trip.arrival_min) > int(trip.departure_min)
+                        departure_min
+                        for departure_min, arrival_min in (
+                            trip_service_bounds_by_id.values()
+                        )
+                        if arrival_min > departure_min
                     }
                 )
                 for service_minute in service_start_minutes:
                     active_trip_ids = tuple(
                         sorted(
-                            str(trip.trip_id)
-                            for trip in problem.trips
-                            if int(trip.departure_min)
-                            <= service_minute
-                            < int(trip.arrival_min)
+                            trip_id
+                            for trip_id, (
+                                departure_min,
+                                arrival_min,
+                            ) in trip_service_bounds_by_id.items()
+                            if departure_min <= service_minute < arrival_min
                         )
                     )
                     for powertrain in ("ELECTRIC", "COMBUSTION"):

@@ -876,6 +876,74 @@ def test_weather_energy_fuel_certificate_is_a_pv_sensitive_lower_bound() -> None
     )
 
 
+def test_weather_energy_fuel_certificate_counts_overnight_overlap_capacity() -> None:
+    """An overnight service interval remains active after wall-clock midnight."""
+    adapter = GurobiMILPAdapter()
+    base = _full_phase3_counterexample(sunny_midday_pv_kwh=25.0)
+    overnight_trip_specs = (
+        ("midday-return", "23:00", "00:30", 1380, 30),
+        ("away-through-midday", "23:00", "01:00", 1380, 60),
+    )
+    overnight_problem_trips = tuple(
+        replace(
+            trip,
+            departure_min=departure_min,
+            arrival_min=arrival_min,
+        )
+        for trip, (
+            _trip_id,
+            _departure_time,
+            _arrival_time,
+            departure_min,
+            arrival_min,
+        ) in zip(base.trips, overnight_trip_specs, strict=True)
+    )
+    overnight_dispatch_trips = [
+        replace(
+            trip,
+            departure_time=departure_time,
+            arrival_time=arrival_time,
+        )
+        for trip, (
+            _trip_id,
+            departure_time,
+            arrival_time,
+            _departure_min,
+            _arrival_min,
+        ) in zip(base.dispatch_context.trips, overnight_trip_specs, strict=True)
+    ]
+    problem = replace(
+        base,
+        trips=overnight_problem_trips,
+        dispatch_context=replace(base.dispatch_context, trips=overnight_dispatch_trips),
+    )
+    vehicle_by_id = {
+        str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles
+    }
+    compatible_by_trip = {
+        str(trip.trip_id): [str(vehicle.vehicle_id) for vehicle in problem.vehicles]
+        for trip in problem.trips
+    }
+
+    certificate = adapter._stage1_analytical_weather_energy_fuel_lower_bound(
+        problem=problem,
+        assignment_vehicle_ids_by_trip=compatible_by_trip,
+        vehicle_by_id=vehicle_by_id,
+        component_flags=normalize_cost_component_flags(
+            problem.metadata["cost_component_flags"]
+        ),
+    )
+
+    path_lp = dict(certificate["path_powertrain_source_flow_lp"])
+    path_mip = dict(certificate["path_powertrain_source_flow_mip"])
+    assert path_lp["status"] == "optimal"
+    assert path_lp["powertrain_concurrent_service_capacity_constraint_count"] == 2
+    assert float(path_lp["lower_bound_jpy"]) == pytest.approx(10.0)
+    assert path_mip["status"] == "optimal"
+    assert path_mip["powertrain_concurrent_service_capacity_constraint_count"] == 2
+    assert float(path_mip["lower_bound_jpy"]) >= float(path_lp["lower_bound_jpy"])
+
+
 def test_total_analytical_bound_fails_closed_for_negative_fixed_cost() -> None:
     problem = _full_phase3_counterexample(
         sunny_midday_pv_kwh=25.0
