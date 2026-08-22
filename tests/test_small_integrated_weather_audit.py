@@ -80,6 +80,9 @@ def test_integrated_oracle_gate_fails_closed_on_accounting_residual() -> None:
         "raw_plan_solver_status": "optimal",
         "supports_integrated_exact_milp": True,
         "final_gap_ratio": 0.0,
+        "integrated_actual_cost_objective_requested": True,
+        "integrated_actual_cost_contract_applied": True,
+        "objective_is_actual_cost": True,
         "objective_matches_accounting": True,
         "ev_energy_inventory_balanced": True,
         "validation_metrics": {"all_required_validation_checks_passed": True},
@@ -88,6 +91,34 @@ def test_integrated_oracle_gate_fails_closed_on_accounting_residual() -> None:
     assert _is_integrated_exact_oracle_case(case) is True
     case["objective_matches_accounting"] = False
     assert _is_integrated_exact_oracle_case(case) is False
+
+
+def test_integrated_oracle_gate_requires_actual_cost_contract() -> None:
+    case = {
+        "phase": "phase4_integrated",
+        "feasible": True,
+        "trip_count_unserved": 0,
+        "solver_status": "optimal",
+        "raw_plan_solver_status": "optimal",
+        "supports_integrated_exact_milp": True,
+        "final_gap_ratio": 0.0,
+        "integrated_actual_cost_objective_requested": True,
+        "integrated_actual_cost_contract_applied": True,
+        "objective_is_actual_cost": True,
+        "objective_matches_accounting": True,
+        "ev_energy_inventory_balanced": True,
+        "validation_metrics": {"all_required_validation_checks_passed": True},
+    }
+
+    assert _is_integrated_exact_oracle_case(case) is True
+    for required_field in (
+        "integrated_actual_cost_objective_requested",
+        "integrated_actual_cost_contract_applied",
+        "objective_is_actual_cost",
+    ):
+        invalid = dict(case)
+        invalid[required_field] = False
+        assert _is_integrated_exact_oracle_case(invalid) is False
 
 
 def test_integrated_oracle_accepts_optimal_multiobjective_without_scalar_gap() -> None:
@@ -99,6 +130,9 @@ def test_integrated_oracle_accepts_optimal_multiobjective_without_scalar_gap() -
         "raw_plan_solver_status": "optimal",
         "supports_integrated_exact_milp": True,
         "final_gap_ratio": None,
+        "integrated_actual_cost_objective_requested": True,
+        "integrated_actual_cost_contract_applied": True,
+        "objective_is_actual_cost": True,
         "objective_matches_accounting": True,
         "ev_energy_inventory_balanced": True,
         "validation_metrics": {"all_required_validation_checks_passed": True},
@@ -119,6 +153,9 @@ def test_integrated_oracle_verifies_declared_lexicographic_primary() -> None:
         "raw_plan_solver_status": "optimal",
         "supports_integrated_exact_milp": True,
         "final_gap_ratio": None,
+        "integrated_actual_cost_objective_requested": True,
+        "integrated_actual_cost_contract_applied": True,
+        "objective_is_actual_cost": True,
         "objective_matches_accounting": True,
         "ev_energy_inventory_balanced": True,
         "validation_metrics": {"all_required_validation_checks_passed": True},
@@ -151,6 +188,9 @@ def test_five_minute_comparison_requires_both_exact_integrated_cases() -> None:
             "raw_plan_solver_status": "optimal",
             "supports_integrated_exact_milp": True,
             "final_gap_ratio": 0.0,
+            "integrated_actual_cost_objective_requested": True,
+            "integrated_actual_cost_contract_applied": True,
+            "objective_is_actual_cost": True,
             "objective_matches_accounting": True,
             "ev_energy_inventory_balanced": True,
             "validation_metrics": {"all_required_validation_checks_passed": True},

@@ -1,6 +1,23 @@
 # Current research release blockers
 
-## 2026-08-21 same-SHA A/B harness ready; measurement is diagnostic only
+## 2026-08-22 small integrated-oracle evidence requires a fresh corrected run
+
+The existing July 10-trip weather audits cannot support an integrated
+actual-cost oracle claim. Their stored Phase-4 cases have
+`objective_is_actual_cost=false`: the audit aligned cost flags in the problem
+but did not request the engine's explicit integrated actual-cost contract. The
+old predicate checked objective/accounting equality but omitted the exported
+actual-cost flag, allowing a false-positive exact-oracle label.
+
+The runner now fails closed on the explicit request, structural contract,
+actual-cost flag, accounting equality, terminal energy balance, exact solver
+status, complete coverage, and hard physical checks. A new scale certificate
+runs 8, 12, and 24 trips in isolated processes and records the Phase-3 cost
+deviation from each eligible integrated optimum. Until that clean-commit
+certificate completes, the corrected small-oracle gate is implementation and
+test evidence only. It is not a full-network optimality result.
+
+## 2026-08-21 same-SHA A/B complete; structural benefit only
 
 The exact ICE-clone discrete/pure-aggregate selector is internal to the solver
 process and reuses the pre-existing aggregation flag. It does not change the
@@ -12,12 +29,27 @@ count vehicle-labelled versus aggregate-network variables.
 
 The required small exact parity test passes for objective, coverage,
 vehicle-ID-independent duties, fuel, deadhead, CO2, vehicle-days, and canonical
-ID recovery. This is necessary correctness evidence but is not a performance
-claim. The 264-trip result must come from one run per representation on the
-same clean commit, with no change to gap, budget, seed, threads, arcs, costs,
-or feasibility rules. Until that generated bundle exists and passes its
-control, physical, Rolling, and accounting checks, performance remains
-unclassified.
+ID recovery. The 264-trip A/B measurement is also complete at clean commit
+`a145cf3a8b9cba0e4d97c48f800fba9ff07a1e69`. Both cases used the same
+canonical prepared input and Phase-4 integrated request, seed 42, four threads,
+900-second budget, requested 1% gap, complete successor network, and costs;
+only the ICE representation changed.
+
+Both cases served 264/264 trips with 17 ICE buses, returned the identical
+61,970.856672 JPY incumbent and 57,986.661708 JPY certified bound, and passed
+physical validation, 24/24 Rolling, accounting reconciliation, and the
+fallback/repair exclusions. Pure aggregation reduced total variables from
+780,113 to 536,180, binaries from 739,728 to 507,244, constraints from 355,581
+to 233,579, and nonzero coefficients from 3,409,213 to 2,044,502. Complete
+model-build time fell by 25.55%.
+
+This structural reduction did not improve the solve. Total solver time rose
+from 476.701 to 517.938 seconds (+8.65%), and both cases stopped at the time
+limit with the same 6.429143% certified gap. The verdict is therefore
+`PASS_STRUCTURAL_ONLY`: exact representation equivalence and formulation-size
+reduction are supported, but a speedup, a 1% certificate, and global optimality
+are not. The authoritative bundle is
+`output/diagnostics/pure_ice_aggregation_ab_a145cf3/`.
 
 This checkpoint does not authorize a research release or a formal PV-pair
 claim. Column generation, set partitioning, high/low-PV reruns, M0-M3,

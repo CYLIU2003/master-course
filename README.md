@@ -1,5 +1,48 @@
 # master-course
 
+## 2026-08-22 bounded integrated-oracle scale runner
+
+- Corrected the small weather-oracle contract so a Phase-4 reference case is
+  eligible only when `integrated_actual_cost_objective` was explicitly
+  requested, its structural contract was applied, and canonical accounting
+  confirms `objective_is_actual_cost=true`. The runner disables the Phase-3
+  seed for the reference solve; Phase 3 remains the separately measured
+  comparison method.
+- The archived July 10-trip audits recorded
+  `objective_is_actual_cost=false`. Their feasibility and accounting traces
+  remain diagnostic history, but they no longer qualify as integrated
+  actual-cost oracle evidence under the corrected fail-closed gate.
+- Added `scripts/build_small_integrated_oracle_scale_certificate.py` to run
+  8-, 12-, and 24-trip day-spanning cases in separate processes and publish
+  exact eligibility, Phase-3 cost deviation, fleet/assignment comparisons,
+  Git/input provenance, and artifact hashes. It refuses a dirty worktree and
+  never upgrades bounded evidence to a 264-trip optimality claim.
+
+## 2026-08-21 same-SHA pure ICE aggregation A/B diagnostic
+
+- Prompt A is complete at clean commit
+  `a145cf3a8b9cba0e4d97c48f800fba9ff07a1e69`. The normal BFF path ran the
+  same canonical 264-trip Phase-4 integrated request once with the labelled
+  discrete ICE representation and once with the pure aggregate
+  representation. Prepared input, request, objective, successor network,
+  seed 42, four threads, 900-second limit, and requested 1% gap were fixed.
+- Both cases served 264/264 trips with 17 ICE buses, returned the identical
+  61,970.856672 JPY incumbent and 57,986.661708 JPY certified bound, and
+  passed physical validation, 24/24 Rolling, accounting reconciliation, and
+  fallback/repair exclusion. The certified gap was 6.429143% in both cases,
+  so neither run met the requested 1% proof target.
+- Pure aggregation reduced total variables by 31.27%, binaries by 31.43%,
+  constraints by 34.31%, nonzeros by 40.03%, and complete model-build time by
+  25.55%. It did not improve solve performance: total solver time increased
+  from 476.701 to 517.938 seconds (+8.65%). The bounded verdict is therefore
+  `PASS_STRUCTURAL_ONLY`, not a speedup or global-optimality claim.
+- The authoritative diagnostic bundle is
+  `output/diagnostics/pure_ice_aggregation_ab_a145cf3/`. Its seven recorded
+  artifact hashes and the source prepared-input/request hashes were
+  reverified, and the focused suite passes (`72 passed`). No decomposition,
+  small integrated oracle, sensitivity sweep, M0--M3 comparison, or formal
+  PV rerun was performed at this checkpoint.
+
 ## 2026-08-15 pure layered ICE-clone network
 
 - Removed the remaining vehicle-labelled continuous assignment, connection,

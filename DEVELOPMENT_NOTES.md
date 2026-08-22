@@ -1,5 +1,29 @@
 # Development Notes
 
+## 2026-08-22: fail-closed integrated-oracle scale certificate
+
+- Audited `scripts/audit_small_integrated_weather_milp.py` before extending
+  its 10-trip workflow. The Phase-4 case did not request
+  `integrated_actual_cost_objective`, while the exact-oracle predicate omitted
+  the already exported `objective_is_actual_cost` field. Archived sunny and
+  rain audits consequently reported exact eligibility even though both stored
+  `objective_is_actual_cost=false`.
+- Phase-4 oracle cases now explicitly request the canonical actual-cost
+  contract and disable their Phase-3 seed. Eligibility requires the request,
+  structural application, actual-cost flag, accounting-objective equality,
+  balanced EV energy inventory, exact solver termination, complete coverage,
+  and all hard validation checks. Phase-3 comparison behavior is unchanged.
+- Added `scripts/build_small_integrated_oracle_scale_certificate.py`. It runs
+  the existing audit in a separate process for each requested trip count
+  (default 8, 12, and 24), rejects a dirty or drifting Git state, refuses to
+  overwrite an output bundle, hashes the prepared input and artifacts, and
+  emits JSON/CSV/Markdown evidence. Any missing size, non-optimal integrated
+  solve, incomplete Phase-3 schedule, accounting-contract failure, or negative
+  comparison delta blocks the entire certificate.
+- Focused oracle gate, scale aggregation, immutability, and input-validation
+  tests pass (`16 passed`). A fresh clean-commit scale execution is required;
+  no archived 10-trip result is relabelled by this implementation change.
+
 ## 2026-08-21: same-SHA pure ICE aggregation A/B harness
 
 - Added a diagnostic-only, process-local representation selector around the
@@ -28,8 +52,26 @@
   used as test evidence.
 - Claim scope remains diagnostic. No column generation, set partitioning,
   high/low-PV formal pair, M0-M3 comparison, sensitivity sweep, or time-step
-  comparison is authorized in this checkpoint. The 264-trip A/B outcome is
-  recorded only in the generated bundle after the clean commit.
+  comparison is authorized in this checkpoint.
+- The clean-commit A/B measurement is complete at
+  `a145cf3a8b9cba0e4d97c48f800fba9ff07a1e69`, using the canonical prepared
+  input `prepared-4df75af5493bd446-f1e18f252e336f1f-8acc7b3a` and the unchanged
+  low-PV `BEV_ENERGY_1.2` Phase-4 integrated request. Both runs used seed 42,
+  four threads, a 900-second limit, and a requested 1% gap.
+- A=`discrete` and B=`pure_aggregate` both served 264/264 trips with 17 ICE
+  buses, produced the same 61,970.856672 JPY incumbent and 57,986.661708 JPY
+  certified bound, and passed physical validation, 24/24 Rolling, accounting,
+  and fallback/repair checks. Their certified gaps were equal at 6.429143%,
+  so the 1% target was not met.
+- B reduced total variables from 780,113 to 536,180, binaries from 739,728 to
+  507,244, constraints from 355,581 to 233,579, and nonzero coefficients from
+  3,409,213 to 2,044,502. Complete model-build time fell from 167.473 to
+  124.684 seconds, but total solver time increased from 476.701 to 517.938
+  seconds. The only supported verdict is `PASS_STRUCTURAL_ONLY`.
+- The authoritative bundle is
+  `output/diagnostics/pure_ice_aggregation_ab_a145cf3/`. Its seven recorded
+  hashes and both source-input hashes were reverified; the focused regression
+  remains `72 passed`. Prompt B and all broader experiments remain unexecuted.
 
 ## 2026-08-15: frozen pure-aggregate 264-trip diagnostic completed
 

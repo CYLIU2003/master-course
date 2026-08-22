@@ -337,6 +337,8 @@ def _run_case(
         thesis_mode=is_two_stage,
         research_run=True,
         allow_postsolve_repair=False,
+        integrated_actual_cost_objective=not is_two_stage,
+        phase4_phase3_seed_enabled=False,
     )
     started = time.perf_counter()
     result = OptimizationEngine().solve(problem, config)
@@ -484,6 +486,12 @@ def _run_case(
         "objective_is_actual_cost": bool(
             cost_breakdown.get("objective_is_actual_cost", False)
         ),
+        "integrated_actual_cost_objective_requested": bool(
+            metadata.get("integrated_actual_cost_objective_requested", False)
+        ),
+        "integrated_actual_cost_contract_applied": bool(
+            metadata.get("integrated_actual_cost_contract_applied", False)
+        ),
         "termination_reason": metadata.get("termination_reason"),
         "validation_metrics": dict(metadata.get("validation_metrics") or {}),
         "research_acceptance_checks": dict(
@@ -540,6 +548,9 @@ def _is_integrated_exact_oracle_case(case: dict[str, Any]) -> bool:
         and case.get("supports_integrated_exact_milp")
         and exact_gap_or_optimal_multiobjective
         and lexicographic_contract_valid
+        and case.get("integrated_actual_cost_objective_requested")
+        and case.get("integrated_actual_cost_contract_applied")
+        and case.get("objective_is_actual_cost")
         and case.get("objective_matches_accounting")
         and case.get("ev_energy_inventory_balanced")
         and validation.get("all_required_validation_checks_passed")
