@@ -1435,6 +1435,12 @@ def test_solver_settings_payload_reports_gap_ratio_and_percent() -> None:
             "stage1_numeric_diagnostics": {
                 "maximum_constraint_violation": 5.0e-7,
             },
+            "stage1_root_lp_diagnostic": {
+                "enabled": True,
+                "status": "time_limit",
+                "time_limit_sec": 30.0,
+                "solution_count": 0,
+            },
             "fragment_pairwise_depot_reset_constraint_count": 0,
             "fragment_temporal_occupancy_constraint_count": 13,
             "fragment_pairwise_depot_reset_constraint_mode": (
@@ -1477,6 +1483,12 @@ def test_solver_settings_payload_reports_gap_ratio_and_percent() -> None:
     assert payload["stage1_numeric_diagnostics"][
         "maximum_constraint_violation"
     ] == pytest.approx(5.0e-7)
+    assert payload["stage1_root_lp_diagnostic"] == {
+        "enabled": True,
+        "status": "time_limit",
+        "time_limit_sec": 30.0,
+        "solution_count": 0,
+    }
     assert payload["fragment_pairwise_depot_reset_constraint_count"] == 0
     assert payload["fragment_temporal_occupancy_constraint_count"] == 13
     assert (

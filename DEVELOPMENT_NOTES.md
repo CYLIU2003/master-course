@@ -13,9 +13,13 @@
   consume an unbounded extra solver budget. The original 264-trip diagnostic
   at `output/2026-08-23/run_20260823_0441/` timed out after 300.234 seconds
   with no LP solution and is retained only as non-comparable diagnostic
-  evidence because it predated that cap. Focused verification: `py_compile`
-  and `74 passed` across the Stage-1, BFF-worker, artifact, harness, and
-  documentation checks.
+  evidence because it predated that cap. The bounded clean-SHA rerun at
+  `output/2026-08-23/run_20260823_0452/` (commit `562fe2f`) likewise timed
+  out after 30.239 seconds with no LP solution; it left 156 seconds for the
+  primary Stage-1 search, which retained the 19.227307% gap but yielded no
+  Stage-2 physical candidate. It is diagnostic only. Focused verification:
+  `py_compile` and `74 passed` across the Stage-1, BFF-worker, artifact,
+  harness, and documentation checks.
 - Code review found and fixed a P1 A/B-harness integration defect: its
   positional synchronous-worker call omitted the existing Stage-1 profile and
   fragment-cut fields. It now forwards the profile, root-LP diagnostic flag,

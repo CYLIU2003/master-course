@@ -102,9 +102,14 @@ early implementation let a diagnostic exceed the declared 240-second shared
 Phase-3 budget, it is **DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS** and
 not comparable with the matched Phase-3 runs. The implementation now records
 the diagnostic in `solver_settings.json`, defaults it to 30 seconds, and caps
-it by the remaining shared deadline. A new clean-SHA bounded run is required;
-the unresolved blocker remains that neither the native MIP root nor a separate
-full-model LP relaxation has yielded an actionable fractional solution.
+it by the remaining shared deadline. The bounded rerun at
+`output/2026-08-23/run_20260823_0452/` (commit `562fe2f`) held the prepared
+input and all ordinary controls fixed, used a 30-second LP cap, and again
+timed out without an LP solution after 30.239 seconds. It retained the
+19.227307% Stage-1 gap, did not produce a Stage-2 physical candidate, and is
+**DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS**. The unresolved blocker
+remains that neither the native MIP root nor a separate full-model LP
+relaxation has yielded an actionable fractional solution.
 
 The reusable pure-ICE A/B harness was also corrected before any further
 measurement: it now explicitly forwards every Stage-1 profile/diagnostic/cut

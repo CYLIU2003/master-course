@@ -11174,6 +11174,9 @@ def _solver_settings_payload(
         "stage1_numeric_diagnostics": dict(
             metadata.get("stage1_numeric_diagnostics") or {}
         ),
+        "stage1_root_lp_diagnostic": dict(
+            metadata.get("stage1_root_lp_diagnostic") or {}
+        ),
         "stage2_numeric_diagnostics": dict(
             metadata.get("stage2_numeric_diagnostics") or {}
         ),
