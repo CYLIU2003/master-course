@@ -91,6 +91,25 @@
   tests\\test_thesis_sensitivity_matrix.py
   tests\\test_run_input_provenance.py` (`58 passed`), plus `git diff --check`.
   A fresh clean-commit 6/8/10 Phase-3 run remains required.
+## 2026-08-22: canonical fixed-decision plan restoration added
+
+- Added `ResultSerializer.deserialize_plan(problem, serialized_plan)` as the
+  inverse of the existing canonical plan serializer. It restores duties,
+  charging/refueling sessions, source-flow maps, SOC trajectories, cost
+  ledgers, and metadata from `canonical_solver_result.json` without invoking
+  any optimizer. This is the reusable foundation for the required
+  fixed-decision stress checks; the rolling reoptimizer remains intentionally
+  unsuitable because it drops charging decisions before re-solving.
+- Added a lossless serializer round-trip regression test. Verified with
+  `C:\\master-course\\.venv\\Scripts\\python.exe -m pytest -q
+  tests\\test_canonical_graph_export_parity.py -k
+  result_serializer_restores_complete` (`1 passed`) and
+  `python -m py_compile src/optimization/common/result.py`.
+- This change does not yet claim a stress result or change Phase-3 behavior.
+  The next change must apply explicitly declared perturbations to a copied
+  canonical problem, preserve the saved decision, independently validate it,
+  and label the unmodified-plan cost as unavailable when a physical violation
+  prevents an honest realized-cost claim.
 
 ## 2026-08-22: run-provenance environment snapshot expanded
 

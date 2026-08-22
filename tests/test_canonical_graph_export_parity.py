@@ -158,6 +158,20 @@ def _problem_and_result() -> tuple[CanonicalOptimizationProblem, OptimizationEng
     return problem, result, scenario
 
 
+def test_result_serializer_restores_complete_persisted_plan_without_reoptimization() -> None:
+    problem, result, _scenario = _problem_and_result()
+
+    serialized = ResultSerializer.serialize_plan(result.plan)
+    restored = ResultSerializer.deserialize_plan(problem, serialized)
+
+    assert ResultSerializer.serialize_plan(restored) == serialized
+    assert restored.charging_slots == result.plan.charging_slots
+    assert restored.grid_to_bus_kwh_by_depot_slot == result.plan.grid_to_bus_kwh_by_depot_slot
+    assert restored.pv_to_bus_kwh_by_depot_slot == result.plan.pv_to_bus_kwh_by_depot_slot
+    assert restored.vehicle_soc_kwh_by_vehicle_slot == result.plan.vehicle_soc_kwh_by_vehicle_slot
+    assert restored.metadata == result.plan.metadata
+
+
 def test_bff_canonical_export_counts_each_ice_movement_once(
     tmp_path: Path,
 ) -> None:
