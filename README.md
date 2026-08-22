@@ -27,6 +27,11 @@ no physical-schedule artifact was produced. It is **DIAGNOSTIC, NOT USED FOR
 RESEARCH CONCLUSIONS** and rejects full explicit materialization as the next
 certificate path.
 
+The next pending diagnostic retains lazy enforcement for integer incumbents
+but adds only violated instances of those same exact rows at fractional LP
+nodes (`lazy_root_cuts`). It is not a model, performance, or gap-improvement
+claim until a clean-SHA 264-trip artifact completes every acceptance gate.
+
 ## 2026-08-23 electricity-price sensitivity status
 
 The fresh three-point Phase-3 frontend/BFF bundle at

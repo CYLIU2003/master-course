@@ -59,6 +59,15 @@
   exists. This is `DIAGNOSTIC`, not a feasible, performance, or bound-improving
   result. Full explicit root materialization is rejected as the next release
   path.
+- Added the opt-in `stage1_fragment_transition_cut_mode="lazy_root_cuts"`
+  diagnostic. It keeps the default MIPSOL lazy separation and, at a Gurobi
+  optimal MIPNODE relaxation, adds at most 100 currently violated instances
+  of the same proven-valid `end_arc + start_arc <= 1` row. The callback fails
+  closed, records node/user-cut counts, and leaves the objective and integer
+  feasible set unchanged. A focused fake-MIPNODE regression checks the exact
+  selected row; the existing fail-closed callback regression caught and then
+  verified a missing test-double guard. Verification: `96 passed`. No
+  full-case result exists yet.
 
 ## 2026-08-23: Electricity-price Phase-3 tranche completed as a diagnostic
 

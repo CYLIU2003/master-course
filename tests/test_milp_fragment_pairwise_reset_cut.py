@@ -169,6 +169,99 @@ def test_fragment_transition_lazy_separator_adds_exact_invalid_pair_cut() -> Non
     assert metadata["explicit_pairwise_rows_materialized"] == 0
 
 
+@pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
+def test_fragment_transition_root_user_cut_adds_only_a_violated_exact_row() -> None:
+    """Fractional-node cuts use the same valid row as lazy incumbents."""
+    import gurobipy as gp
+
+    context = DispatchContext(
+        service_date="2026-04-10",
+        trips=[
+            Trip(
+                trip_id="t1",
+                route_id="r1",
+                origin="A",
+                destination="B",
+                departure_time="08:00",
+                arrival_time="08:10",
+                distance_km=1.0,
+                allowed_vehicle_types=("ICE",),
+            ),
+            Trip(
+                trip_id="t2",
+                route_id="r1",
+                origin="C",
+                destination="D",
+                departure_time="08:30",
+                arrival_time="08:40",
+                distance_km=1.0,
+                allowed_vehicle_types=("ICE",),
+            ),
+        ],
+        turnaround_rules={},
+        deadhead_rules={
+            ("DEPOT", "A"): DeadheadRule("DEPOT", "A", 5),
+            ("DEPOT", "C"): DeadheadRule("DEPOT", "C", 5),
+        },
+        vehicle_profiles={"ICE": VehicleProfile(vehicle_type="ICE")},
+    )
+    problem = ProblemBuilder().build_from_dispatch(
+        context,
+        scenario_id="root-user-cut",
+        vehicle_counts={"ICE": 1},
+        canonical_depot_id="DEPOT",
+        allow_same_day_depot_cycles=True,
+        max_depot_cycles_per_vehicle_per_day=2,
+        max_fragments_per_vehicle_per_day=2,
+        max_start_fragments_per_vehicle=2,
+        max_end_fragments_per_vehicle=2,
+        service_coverage_mode="strict",
+    )
+    vehicle_id = problem.vehicles[0].vehicle_id
+    model = gp.Model("root_user_cut")
+    model.Params.OutputFlag = 0
+    end_t1 = model.addVar(vtype=gp.GRB.BINARY, name="end_t1")
+    start_t2 = model.addVar(vtype=gp.GRB.BINARY, name="start_t2")
+    separator = GurobiMILPAdapter()._build_fragment_transition_lazy_separator(
+        grb=gp.GRB,
+        problem=problem,
+        trip_by_id=problem.trip_by_id(),
+        vehicles=problem.vehicles,
+        start_arc={(vehicle_id, "t2"): start_t2},
+        end_arc={(vehicle_id, "t1"): end_t1},
+        trip_day_index_by_trip_id={"t1": 0, "t2": 0},
+        allow_same_day_depot_cycles=True,
+        fixed_route_band_mode=False,
+        root_user_cuts=True,
+    )
+
+    class FakeMipNode:
+        def __init__(self) -> None:
+            self.cuts: list[object] = []
+
+        def cbGet(self, _attribute: int) -> int:
+            return gp.GRB.OPTIMAL
+
+        def cbGetNodeRel(self, variables: list[object]) -> list[float]:
+            return [0.75] * len(variables)
+
+        def cbCut(self, constraint: object) -> None:
+            self.cuts.append(constraint)
+
+    callback_model = FakeMipNode()
+    added = separator.separate_mipnode(
+        callback_model,
+        gp.GRB.Callback.MIPNODE,
+    )
+
+    assert added == 1
+    assert len(callback_model.cuts) == 1
+    metadata = separator.to_metadata()
+    assert metadata["root_user_cuts_enabled"] is True
+    assert metadata["root_user_cut_count"] == 1
+    assert metadata["lazy_constraint_count"] == 0
+
+
 def test_fragment_transition_lazy_separator_fails_closed_on_callback_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -45,6 +45,14 @@ correctly reports `source_artifact_validation_failed`. This is **DIAGNOSTIC,
 NOT USED FOR RESEARCH CONCLUSIONS**, not a feasible candidate or lower-bound
 improvement. Do not use full explicit row materialization for the release run.
 
+A narrower pending diagnostic, `lazy_root_cuts`, keeps the lazy rows for
+integer incumbents and submits only currently violated copies of those same
+valid rows at fractional MIPNODE relaxations (maximum 100 per callback). The
+small callback regression proves the submitted row is the existing exact
+end/start restriction; it does not yet prove any 264-trip bound improvement.
+No release or sensitivity conclusion may use it until its own frozen artifact
+passes every gate.
+
 ## 2026-08-23: Three-point electricity-price tranche is physically valid but not research-accepted
 
 The clean-SHA frontend/BFF Phase-3 tranche at

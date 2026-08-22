@@ -2176,6 +2176,8 @@ class _FragmentTransitionLazySeparator:
         arrival_min_by_trip_id: Mapping[str, int],
         allow_same_day_depot_cycles: bool,
         fixed_route_band_mode: bool,
+        root_user_cuts: bool = False,
+        max_root_user_cuts_per_node: int = 100,
     ) -> None:
         self._grb = grb
         self._problem = problem
@@ -2198,6 +2200,10 @@ class _FragmentTransitionLazySeparator:
             allow_same_day_depot_cycles
         )
         self._fixed_route_band_mode = bool(fixed_route_band_mode)
+        self._root_user_cuts = bool(root_user_cuts)
+        self._max_root_user_cuts_per_node = max(
+            int(max_root_user_cuts_per_node), 1
+        )
         self._vehicle_by_id = {
             str(getattr(vehicle, "vehicle_id", "") or ""): vehicle
             for vehicle in vehicles
@@ -2226,6 +2232,9 @@ class _FragmentTransitionLazySeparator:
         self.selected_pair_check_count = 0
         self.lazy_constraint_count = 0
         self.lazy_constraint_submission_count = 0
+        self.mipnode_callback_count = 0
+        self.root_user_cut_count = 0
+        self.root_user_cut_submission_count = 0
         self.callback_error = ""
 
     def begin_solve(self) -> None:
@@ -2358,10 +2367,83 @@ class _FragmentTransitionLazySeparator:
                     added += 1
         return added
 
+    def separate_mipnode(self, model: Any, where: int) -> int:
+        """Add only violated exact transition rows to fractional LP nodes."""
+
+        if not self._root_user_cuts or where != self._grb.Callback.MIPNODE:
+            return 0
+        self.mipnode_callback_count += 1
+        if model.cbGet(self._grb.Callback.MIPNODE_STATUS) != self._grb.OPTIMAL:
+            return 0
+        added = 0
+        for vehicle_id in sorted(self._vehicle_by_id):
+            start_entries = self._start_entries_by_vehicle.get(vehicle_id, ())
+            end_entries = self._end_entries_by_vehicle.get(vehicle_id, ())
+            if not start_entries or not end_entries:
+                continue
+            start_values = model.cbGetNodeRel(
+                [variable for _trip_id, variable in start_entries]
+            )
+            end_values = model.cbGetNodeRel(
+                [variable for _trip_id, variable in end_entries]
+            )
+            positive_starts = [
+                (trip_id, variable, float(value))
+                for (trip_id, variable), value in zip(start_entries, start_values)
+                if float(value) > 1.0e-7
+            ]
+            positive_ends = [
+                (trip_id, variable, float(value))
+                for (trip_id, variable), value in zip(end_entries, end_values)
+                if float(value) > 1.0e-7
+            ]
+            violated_pairs: List[Tuple[float, str, Any, str, Any]] = []
+            for end_trip_id, end_variable, end_value in positive_ends:
+                for start_trip_id, start_variable, start_value in positive_starts:
+                    if end_trip_id == start_trip_id:
+                        continue
+                    if self._trip_day_index_by_trip_id.get(end_trip_id, 0) != self._trip_day_index_by_trip_id.get(start_trip_id, 0):
+                        continue
+                    if self._arrival_min_by_trip_id.get(end_trip_id, 0) > self._departure_min_by_trip_id.get(start_trip_id, 0):
+                        continue
+                    violation = end_value + start_value - 1.0
+                    if violation <= 1.0e-7:
+                        continue
+                    self.selected_pair_check_count += 1
+                    if self._transition_feasible(
+                        vehicle_id, end_trip_id, start_trip_id
+                    ):
+                        continue
+                    violated_pairs.append(
+                        (
+                            violation,
+                            end_trip_id,
+                            end_variable,
+                            start_trip_id,
+                            start_variable,
+                        )
+                    )
+            for _violation, _end_trip_id, end_variable, _start_trip_id, start_variable in sorted(
+                violated_pairs,
+                key=lambda item: (-item[0], item[1], item[3]),
+            )[: self._max_root_user_cuts_per_node - added]:
+                model.cbCut(end_variable + start_variable <= 1)
+                self.root_user_cut_submission_count += 1
+                self.root_user_cut_count += 1
+                added += 1
+                if added >= self._max_root_user_cuts_per_node:
+                    return added
+        return added
+
     def callback(self, model: Any, where: int) -> int:
         """Fail closed if the callback cannot enforce the exact contract."""
 
         try:
+            if (
+                bool(getattr(self, "_root_user_cuts", False))
+                and where == self._grb.Callback.MIPNODE
+            ):
+                return self.separate_mipnode(model, where)
             return self.separate_mipsol(model, where)
         except Exception as exc:  # pragma: no cover - Gurobi callback boundary
             if not self.callback_error:
@@ -2384,12 +2466,19 @@ class _FragmentTransitionLazySeparator:
             "lazy_constraint_submission_count": int(
                 self.lazy_constraint_submission_count
             ),
+            "root_user_cuts_enabled": bool(self._root_user_cuts),
+            "mipnode_callback_count": int(self.mipnode_callback_count),
+            "root_user_cut_count": int(self.root_user_cut_count),
+            "root_user_cut_submission_count": int(
+                self.root_user_cut_submission_count
+            ),
             "diagnostic_cache_entry_count": len(self._diagnostic_cache),
             "callback_error": self.callback_error or None,
             "semantics": (
                 "same_integer_fragment_transition_constraints_as_explicit_"
-                "pairwise_formulation; separated_at_every_mipsol; callback_"
-                "failure_terminates_and_invalidates_the_solve"
+                "pairwise_formulation; lazy_rows_separated_at_every_mipsol; "
+                "optional_valid_user_cuts_separated_at_fractional_nodes; "
+                "callback_failure_terminates_and_invalidates_the_solve"
             ),
         }
 
@@ -12990,10 +13079,14 @@ class GurobiMILPAdapter:
             getattr(config, "stage1_fragment_transition_cut_mode", "lazy")
             or ""
         ).strip().lower()
-        if stage1_fragment_transition_cut_mode not in {"lazy", "explicit_root"}:
+        if stage1_fragment_transition_cut_mode not in {
+            "lazy",
+            "lazy_root_cuts",
+            "explicit_root",
+        }:
             raise ValueError(
-                "stage1_fragment_transition_cut_mode must be 'lazy' or "
-                "'explicit_root'"
+                "stage1_fragment_transition_cut_mode must be 'lazy', "
+                "'lazy_root_cuts', or 'explicit_root'"
             )
         if stage1_single_path_redundancy_elimination_applied:
             fragment_pairwise_depot_reset_constraint_count = 0
@@ -13042,6 +13135,10 @@ class GurobiMILPAdapter:
                         ),
                         fixed_route_band_mode=bool(
                             problem.metadata.get("fixed_route_band_mode", False)
+                        ),
+                        root_user_cuts=(
+                            stage1_fragment_transition_cut_mode
+                            == "lazy_root_cuts"
                         ),
                     )
                 )
@@ -14000,7 +14097,12 @@ class GurobiMILPAdapter:
                         else (
                             "explicit_root_relaxation_strengthening"
                             if stage1_fragment_transition_cut_mode == "explicit_root"
-                            else "lazy_integer_incumbent_separation"
+                            else (
+                                "lazy_integer_incumbent_and_root_user_cuts"
+                                if stage1_fragment_transition_cut_mode
+                                == "lazy_root_cuts"
+                                else "lazy_integer_incumbent_separation"
+                            )
                         )
                     ),
                     "fragment_transition_lazy_separator": (
@@ -14346,7 +14448,12 @@ class GurobiMILPAdapter:
                     else (
                         "explicit_root_relaxation_strengthening"
                         if stage1_fragment_transition_cut_mode == "explicit_root"
-                        else "lazy_integer_incumbent_separation"
+                        else (
+                            "lazy_integer_incumbent_and_root_user_cuts"
+                            if stage1_fragment_transition_cut_mode
+                            == "lazy_root_cuts"
+                            else "lazy_integer_incumbent_separation"
+                        )
                     )
                 ),
                 "fragment_transition_lazy_separator": (
@@ -22903,6 +23010,7 @@ class GurobiMILPAdapter:
         trip_day_index_by_trip_id: Mapping[str, int],
         allow_same_day_depot_cycles: bool,
         fixed_route_band_mode: bool,
+        root_user_cuts: bool = False,
     ) -> _FragmentTransitionLazySeparator:
         """Build the exact branch-and-cut separator for multi-fragment paths."""
 
@@ -22926,6 +23034,7 @@ class GurobiMILPAdapter:
             },
             allow_same_day_depot_cycles=allow_same_day_depot_cycles,
             fixed_route_band_mode=fixed_route_band_mode,
+            root_user_cuts=root_user_cuts,
         )
 
     def _add_fragment_pairwise_depot_reset_cuts(
