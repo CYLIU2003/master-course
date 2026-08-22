@@ -337,6 +337,27 @@
   violations and null costs. This is valid stress evidence, not an economic
   reoptimization result.
 
+## 2026-08-23: Current-SHA electricity-price tranche is diagnostic only
+
+- Froze clean commit `43112a3ba5b82558c3f32f94a9c121191cbcb85a` as
+  `phase3-economic-sensitivity-43112a3` and used the normal frontend/BFF
+  runner to execute fresh Prepare -> Phase-3 -> 60-minute Rolling cases at
+  24, 30, and 36 JPY/kWh. The evidence bundle is
+  `output/thesis_sensitivity_electricity_43112a3_20260823_r2/`; its execution
+  manifest records unchanged pre/post SHA, a common non-varied-control
+  fingerprint, and fresh prepared-input provenance for every case.
+- All three cases served 264/264 trips and passed input provenance, complete
+  artifact, physical schedule, 24/24 Rolling, accounting, complete-successor,
+  and declared-control checks. Each has the same 19.227307% certified Stage-1
+  gap, above the predeclared 1% target, so `case_accepted=false` solely because
+  `mip_gap_target_met=false`.
+- The three candidates have zero grid import and therefore the same recorded
+  64,422.491318-JPY cost, BEV/ICE trip counts, and executed energy flows. This
+  is an expected inactive-price condition for the recorded PV/BESS dispatch,
+  not evidence of a zero price effect. The manifest remains `BLOCKED`; the
+  tranche must not be cited as an accepted economic response, optimality, or
+  thesis sensitivity conclusion.
+
 ## 2026-08-23: Phase-3 A/B time-allocation control failure and fail-fast repair
 
 - The clean-SHA, isolated-process AB/BA x5 diagnostic at

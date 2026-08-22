@@ -31,6 +31,25 @@ This resolves the current-SHA stress-input gap but does not clear the 1% gap,
 accepted economic sensitivities, M0--M3 comparison, or explicit Phase-4
 integration gates.
 
+## 2026-08-23: Current-SHA electricity-price tranche is complete but blocked
+
+The frozen `phase3-economic-sensitivity-43112a3` normal-frontend/BFF bundle at
+`output/thesis_sensitivity_electricity_43112a3_20260823_r2/` completed fresh
+Prepare, Phase-3, and 60-minute Rolling for 24, 30, and 36 JPY/kWh at clean SHA
+`43112a3`. Its one stable non-varied-control fingerprint, matching pre/post
+SHA, valid/research-ready inputs, complete successors, 264/264 coverage,
+physical validation, 24/24 Rolling, accounting, and finalized-artifact hashes
+show that the three diagnostic candidates are comparable on the declared
+controls.
+
+Every case nevertheless has `case_accepted=false` because the 19.227307%
+certified Stage-1 gap exceeds the declared 1% target. The recorded candidates
+also import 0 kWh from the grid, so varying only grid price leaves the observed
+cost (64,422.491318 JPY), assignment, and energy flows unchanged. This is not
+evidence that electricity price has no effect; it only identifies an
+inactive-price dispatch for these time-limited candidates. The full manifest is
+`BLOCKED`, and the accepted multi-point economic-sensitivity gate remains open.
+
 ## 2026-08-23: Aggregate path-start certificate tightening awaits 264-trip measurement
 
 The analytical path/source LP and selector MIP now add the necessary aggregate

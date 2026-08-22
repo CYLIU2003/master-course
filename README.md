@@ -175,6 +175,24 @@ delta; the other six prescribed stresses have explicit physical violations and
 therefore null cost fields. This documents fixed-plan fragility honestly; it
 does not clear the remaining economic sensitivity, M0--M3, or 1%-gap gates.
 
+## 2026-08-23 electricity-price diagnostic: zero grid import means no observed response
+
+The frozen `phase3-economic-sensitivity-43112a3` three-point frontend/BFF
+tranche is stored in
+`output/thesis_sensitivity_electricity_43112a3_20260823_r2/`. It reran fresh
+Prepare and Phase-3/Rolling jobs at 24, 30, and 36 JPY/kWh while preserving one
+non-varied-control fingerprint, clean SHA `43112a3`, the 264-trip scope, and
+all declared solver controls. Every case served 264/264 trips and passed input,
+physical, Rolling, accounting, and finalized-artifact checks, but each missed
+the 1% certified-gap target (19.227307%).
+
+All three recorded candidates have 0 kWh grid import, so their identical
+64,422.491318-JPY cost is expected under this candidate's PV/BESS dispatch. It
+is **not** evidence that electricity price has no effect, nor an accepted
+economic sensitivity or optimality result. The manifest deliberately remains
+`BLOCKED`; a price-sensitive, accepted case set and the remaining release gates
+are still required.
+
 ## 2026-08-22 verification checkpoint
 
 - The first fresh 264-trip Phase-3 A/B child at
