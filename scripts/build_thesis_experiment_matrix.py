@@ -33,6 +33,10 @@ def build_experiment_matrix() -> dict[str, Any]:
         "pv_input_semantics": "available_surplus_after_depot_load",
         "allow_partial_service": False,
         "milp_max_successors_per_trip": None,
+        # The thesis sensitivity baseline is a declared flat-price case. A
+        # price family below changes exactly one of these economic inputs.
+        "grid_flat_price_per_kwh": 30.0,
+        "diesel_price_per_l": 145.0,
         "vehicle_usage_cost_jpy_per_used_bus": 0.0,
         "vehicle_usage_cost_semantics": "provisional_sensitivity",
     }
@@ -109,6 +113,18 @@ def build_experiment_matrix() -> dict[str, Any]:
             "pv_supply_transition",
             {"pv_scale": pv_scale},
         )
+    for grid_price in (24.0, 30.0, 36.0):
+        add(
+            f"ELECTRICITY_PRICE_{int(grid_price)}",
+            "electricity_price_sensitivity",
+            {"grid_flat_price_per_kwh": grid_price},
+        )
+    for diesel_price in (116.0, 145.0, 174.0):
+        add(
+            f"DIESEL_PRICE_{int(diesel_price)}",
+            "diesel_price_sensitivity",
+            {"diesel_price_per_l": diesel_price},
+        )
     for route_band in (True, False):
         add(
             f"ROUTE_BAND_{'ON' if route_band else 'OFF'}",
@@ -149,7 +165,7 @@ def build_experiment_matrix() -> dict[str, Any]:
 
     return {
         "schema_version": (
-            "thesis_experiment_matrix_v5_powertrain_coefficients"
+            "thesis_experiment_matrix_v6_economic_price_sensitivity"
         ),
         "execution_semantics": "frontend_bff_only_no_direct_solver",
         "common_control_contract": common,
@@ -163,6 +179,16 @@ def build_experiment_matrix() -> dict[str, Any]:
                 "Multiplicative alpha applied to the available PV energy "
                 "series after rated-capacity generation is constructed; it "
                 "does not change pv_capacity_kw."
+            ),
+            "electricity_price_sensitivity": (
+                "Sets a flat grid purchase price of 24, 30, or 36 JPY/kWh "
+                "through Prepare while holding diesel price, tariff shape, "
+                "PV/BESS, timetable, fleet, and solver controls fixed."
+            ),
+            "diesel_price_sensitivity": (
+                "Sets the ICE fuel price to 116, 145, or 174 JPY/L through "
+                "Prepare while holding grid price, trip fuel quantities, "
+                "PV/BESS, timetable, fleet, and solver controls fixed."
             ),
             "trip_energy_sensitivity": (
                 "Backward-compatible common demand multiplier. It moves BEV "

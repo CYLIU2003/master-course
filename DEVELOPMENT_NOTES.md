@@ -452,8 +452,17 @@
   phase audit and time/energy reporting accepted only v2. A shared contract
   now accepts immutable v2, v3 and current
   `thesis_sensitivity_execution_v4_powertrain_coefficients`, and rejects
-  undeclared versions. The matrix schema is
-  `thesis_experiment_matrix_v5_powertrain_coefficients`.
+  undeclared versions. The matrix schema was later extended to
+  `thesis_experiment_matrix_v6_economic_price_sensitivity`.
+- Added explicit, frontend-only economic price families: flat grid purchase
+  price 24/30/36 JPY/kWh and diesel price 116/145/174 JPY/L. Each case fixes
+  the other price, PV/BESS, fleet, timetable, energy factors, solver controls
+  and Rolling controls. The runner rejects a case unless the corresponding
+  canonical marginal price matches and includes both observed prices in the
+  CSV. Stable-control hashes are now checked within, rather than across,
+  sensitivity families, excluding only each family’s declared varied input.
+  This is execution support; no price sensitivity result is claimed until a
+  fresh clean-SHA BFF run completes.
 - Bumped prepared input to
   `v11_powertrain_coefficient_sensitivity`; pre-change prepared inputs remain
   immutable history and cannot serve as current-SHA execution evidence.

@@ -43,6 +43,26 @@ def test_pv_scale_is_a_validated_prepare_api_parameter() -> None:
     assert settings.ice_trip_fuel_sensitivity_scale == 0.8
 
 
+def test_economic_price_cases_change_only_the_declared_price() -> None:
+    electricity_prepare, _ = build_case_requests(
+        case=_case("ELECTRICITY_PRICE_36"),
+        base_prepare_request={"simulation_settings": {}},
+        base_optimization_request={},
+    )
+    diesel_prepare, _ = build_case_requests(
+        case=_case("DIESEL_PRICE_116"),
+        base_prepare_request={"simulation_settings": {}},
+        base_optimization_request={},
+    )
+
+    electricity = electricity_prepare["simulation_settings"]
+    diesel = diesel_prepare["simulation_settings"]
+    assert electricity["grid_flat_price_per_kwh"] == 36.0
+    assert electricity["diesel_price_per_l"] == 145.0
+    assert diesel["grid_flat_price_per_kwh"] == 30.0
+    assert diesel["diesel_price_per_l"] == 116.0
+
+
 def test_case_request_compiler_uses_fresh_prepare_and_declared_overrides() -> None:
     prepare, optimization = build_case_requests(
         case=_case("ROUTE_BAND_OFF"),
@@ -271,6 +291,22 @@ def test_parameter_audit_distinguishes_pv_scale_and_route_band_lock() -> None:
             }
         },
         economic_audit={},
+    )
+    assert _case_parameter_matches(
+        case=_case("ELECTRICITY_PRICE_36"),
+        parameters={},
+        economic_audit={
+            "marginal_cost_assumptions": {
+                "uniform_grid_price_jpy_per_kwh": 36.0
+            }
+        },
+    )
+    assert not _case_parameter_matches(
+        case=_case("DIESEL_PRICE_116"),
+        parameters={},
+        economic_audit={
+            "marginal_cost_assumptions": {"diesel_price_jpy_per_l": 145.0}
+        },
     )
 
 
@@ -722,6 +758,47 @@ def test_manifest_blocks_cross_case_control_drift(tmp_path: Path) -> None:
     assert payload["status"] == "BLOCKED"
     assert payload["stable_nonvaried_controls_match"] is False
     assert payload["research_matrix_complete"] is False
+
+
+def test_manifest_compares_nonvaried_controls_within_each_family(
+    tmp_path: Path,
+) -> None:
+    matrix = {
+        "schema_version": "test",
+        "cases": [
+            {"case_id": "E24", "family": "electricity_price_sensitivity"},
+            {"case_id": "D116", "family": "diesel_price_sensitivity"},
+        ],
+    }
+    outcomes = [
+        {
+            "case_id": "E24",
+            "family": "electricity_price_sensitivity",
+            "case_accepted": True,
+            "stable_control_fingerprint": "electricity-controls",
+        },
+        {
+            "case_id": "D116",
+            "family": "diesel_price_sensitivity",
+            "case_accepted": True,
+            "stable_control_fingerprint": "diesel-controls",
+        },
+    ]
+
+    payload = _write_manifest(
+        output_dir=tmp_path,
+        matrix=matrix,
+        frozen_sha="sha",
+        selected_ids={"E24", "D116"},
+        outcomes=outcomes,
+    )
+
+    assert payload["status"] == "READY_FOR_SENSITIVITY_ANALYSIS"
+    assert payload["stable_nonvaried_controls_match"] is True
+    assert payload["stable_control_fingerprints_by_family"] == {
+        "diesel_price_sensitivity": ["diesel-controls"],
+        "electricity_price_sensitivity": ["electricity-controls"],
+    }
 
 
 def test_reaudit_preserves_source_sha_and_records_builder_sha(

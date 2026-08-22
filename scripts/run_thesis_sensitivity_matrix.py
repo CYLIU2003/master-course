@@ -67,6 +67,8 @@ CSV_COLUMNS = (
     "trip_energy_sensitivity_scale",
     "bev_trip_energy_sensitivity_scale",
     "ice_trip_fuel_sensitivity_scale",
+    "grid_price_jpy_per_kwh",
+    "diesel_price_jpy_per_l",
     "rolling_execution_minutes_submitted",
     "rolling_execution_minutes_requested",
     "rolling_execution_minutes_effective",
@@ -484,6 +486,18 @@ def _audit_case(
         "ice_trip_fuel_sensitivity_scale": effective_metadata.get(
             "ice_trip_fuel_sensitivity_scale"
         ),
+        "grid_price_jpy_per_kwh": dict(
+            required["assignment_economic_audit.json"].get(
+                "marginal_cost_assumptions"
+            )
+            or {}
+        ).get("uniform_grid_price_jpy_per_kwh"),
+        "diesel_price_jpy_per_l": dict(
+            required["assignment_economic_audit.json"].get(
+                "marginal_cost_assumptions"
+            )
+            or {}
+        ).get("diesel_price_jpy_per_l"),
         "rolling_execution_minutes_submitted": dict(
             submitted_optimization_request or {}
         ).get("rolling_execution_minutes"),
@@ -872,6 +886,18 @@ def _case_parameter_matches(
             _numbers_equal(value, expected.get("pv_scale"))
             for value in scales.values()
         )
+    if family == "electricity_price_sensitivity":
+        marginal = dict(economic_audit.get("marginal_cost_assumptions") or {})
+        return _numbers_equal(
+            marginal.get("uniform_grid_price_jpy_per_kwh"),
+            expected.get("grid_flat_price_per_kwh"),
+        )
+    if family == "diesel_price_sensitivity":
+        marginal = dict(economic_audit.get("marginal_cost_assumptions") or {})
+        return _numbers_equal(
+            marginal.get("diesel_price_jpy_per_l"),
+            expected.get("diesel_price_per_l"),
+        )
     if family == "route_band_ablation":
         request = dict(case.get("prepare_request_overrides") or {})
         return bool(
@@ -1192,14 +1218,15 @@ def _write_manifest(
     all_selected_accepted = all(
         row.get("case_accepted") is True for row in outcomes
     ) and len(outcomes) == len(selected_ids)
-    control_fingerprints = {
-        str(row.get("stable_control_fingerprint") or "")
-        for row in outcomes
-    }
-    stable_controls_match = bool(
-        control_fingerprints
-        and "" not in control_fingerprints
-        and len(control_fingerprints) == 1
+    control_fingerprints_by_family: dict[str, set[str]] = {}
+    for row in outcomes:
+        family = str(row.get("family") or "")
+        control_fingerprints_by_family.setdefault(family, set()).add(
+            str(row.get("stable_control_fingerprint") or "")
+        )
+    stable_controls_match = bool(control_fingerprints_by_family) and all(
+        fingerprints and "" not in fingerprints and len(fingerprints) == 1
+        for fingerprints in control_fingerprints_by_family.values()
     )
     full_matrix = selected_ids == declared_ids
     payload: dict[str, Any] = {
@@ -1219,6 +1246,12 @@ def _write_manifest(
         "all_selected_cases_completed": all_selected_completed,
         "all_selected_cases_accepted": all_selected_accepted,
         "stable_nonvaried_controls_match": stable_controls_match,
+        "stable_control_fingerprints_by_family": {
+            family: sorted(fingerprints)
+            for family, fingerprints in sorted(
+                control_fingerprints_by_family.items()
+            )
+        },
         "full_matrix_selected": full_matrix,
         "research_matrix_complete": bool(
             full_matrix
@@ -1329,6 +1362,24 @@ def _stable_control_fingerprint(
         if family in TRIP_DEMAND_SENSITIVITY_FAMILIES
         else dimensions.get("trip_structure_input_sha256")
     )
+    price_value_set_sha256 = dimensions.get("price_value_set_sha256")
+    vehicle_input_sha256 = dimensions.get("vehicle_input_sha256")
+    energy_asset_control_input_sha256 = dimensions.get(
+        "energy_asset_control_input_sha256"
+    )
+    objective_weights_sha256 = dimensions.get("objective_weights_sha256")
+    grid_price = marginal.get("uniform_grid_price_jpy_per_kwh")
+    diesel_price = marginal.get("diesel_price_jpy_per_l")
+    if family == "electricity_price_sensitivity":
+        price_value_set_sha256 = None
+        grid_price = None
+    if family == "diesel_price_sensitivity":
+        diesel_price = None
+        vehicle_input_sha256 = None
+    if family == "pv_supply_transition":
+        energy_asset_control_input_sha256 = None
+    if family == "vehicle_day_cost_sensitivity":
+        objective_weights_sha256 = None
     payload = {
         "schema_version": "sensitivity_stable_controls_v2_family_aware",
         "scenario_id": parameters.get("scenario_id"),
@@ -1336,26 +1387,20 @@ def _stable_control_fingerprint(
         "trip_ids_sha256": dimensions.get("trip_ids_sha256"),
         "trip_structure_control_sha256": trip_structure_control_sha256,
         "vehicle_ids_sha256": dimensions.get("vehicle_ids_sha256"),
-        "vehicle_input_sha256": dimensions.get("vehicle_input_sha256"),
+        "vehicle_input_sha256": vehicle_input_sha256,
         "charger_input_sha256": dimensions.get("charger_input_sha256"),
         "vehicle_type_input_sha256": dimensions.get(
             "vehicle_type_input_sha256"
         ),
         "depot_input_sha256": dimensions.get("depot_input_sha256"),
-        "price_value_set_sha256": dimensions.get("price_value_set_sha256"),
-        "energy_asset_control_input_sha256": dimensions.get(
-            "energy_asset_control_input_sha256"
-        ),
-        "objective_weights_sha256": dimensions.get(
-            "objective_weights_sha256"
-        ),
+        "price_value_set_sha256": price_value_set_sha256,
+        "energy_asset_control_input_sha256": energy_asset_control_input_sha256,
+        "objective_weights_sha256": objective_weights_sha256,
         "scenario_fleet_contract_hash": metadata.get(
             "scenario_fleet_contract_hash"
         ),
-        "grid_price_jpy_per_kwh": marginal.get(
-            "uniform_grid_price_jpy_per_kwh"
-        ),
-        "diesel_price_jpy_per_l": marginal.get("diesel_price_jpy_per_l"),
+        "grid_price_jpy_per_kwh": grid_price,
+        "diesel_price_jpy_per_l": diesel_price,
         "demand_charge_on_peak_yen_per_kw": scenario.get(
             "demand_charge_on_peak_yen_per_kw"
         ),

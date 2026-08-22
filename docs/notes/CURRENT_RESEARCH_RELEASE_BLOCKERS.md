@@ -248,6 +248,13 @@ Prepare is mandatory. The independent matrices have not been optimized at the
 current clean SHA. Consequently, this is implementation evidence only and
 Phase 2 plus the overall research release remain **BLOCKED**.
 
+Phase 6 also now has declared but unexecuted economic price families: flat
+grid purchase price 24/30/36 JPY/kWh and diesel price 116/145/174 JPY/L. The
+runner verifies each effective canonical marginal price and writes both values
+to the result table. These cases are not a price-response claim until all
+three points per family complete from a clean frozen SHA with their existing
+physical, Rolling, accounting, provenance, and gap gates.
+
 A first clean-commit execution at `b9e5234` now provides one diagnostic point.
 The low-PV `BEV_ENERGY_1.2` case correctly held the common and ICE factors at
 1.0, served 264/264 trips, assigned 74 BEV and 190 ICE trips, used 15 BEVs and

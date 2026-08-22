@@ -240,9 +240,16 @@
   artifact hashes before accepting a case.
 - Prepared inputs now use
   `v11_powertrain_coefficient_sensitivity`. The experiment and execution
-  contracts are `thesis_experiment_matrix_v5_powertrain_coefficients` and
+  contracts are `thesis_experiment_matrix_v6_economic_price_sensitivity` and
   `thesis_sensitivity_execution_v4_powertrain_coefficients`. Immutable v2/v3
   execution manifests remain auditable; unknown versions fail closed.
+- The same matrix now declares economic one-factor families at flat grid
+  prices 24/30/36 JPY/kWh and diesel prices 116/145/174 JPY/L. The execution
+  audit verifies the effective marginal price in the canonical economic
+  artifact and writes it to the results CSV. Non-varied-control fingerprints
+  are compared within each declared family, so intentionally varied price,
+  PV, demand, or vehicle-day controls cannot cause a false cross-family pass.
+  No current-SHA price sensitivity solve has been run yet.
 - This change adds execution support only. No independent 0.8--1.2 solve
   tranche has yet been completed at the current SHA, so thesis Phase 2 and
   research release remain `BLOCKED`.
