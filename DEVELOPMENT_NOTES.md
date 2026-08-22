@@ -98,6 +98,17 @@
   schema accepts the profile and solver metadata persists the effective value.
   Focused contract/round-trip/artifact verification: `39 passed`. No full-case
   result exists yet, so it is not a performance or research claim.
+- The clean-SHA 264-trip result is now retained at
+  `output/2026-08-23/run_20260823_0428/` from commit
+  `5665102c238e0ba519a402b567f6504dc371fb1e`. With the same prepared input,
+  complete successor network, seed 42, four threads, 240-second total budget,
+  Stage 1=210 seconds, Stage 2=30 seconds, candidate policy, and 1% target,
+  `root_cut_focus` changed only Gurobi `Cuts` from automatic to `3`. Its
+  certified bound (52,749.163582 JPY), primary incumbent (65,305.688576 JPY),
+  certified gap (19.227307%), and one explored node were identical to the
+  matched baseline. Stage 2 had no valid physical candidate, so Rolling did
+  not start and the runner rejected the artifact. This is diagnostic only and
+  rejects the tested generic-cut control as a certificate path.
 
 ## 2026-08-23: Electricity-price Phase-3 tranche completed as a diagnostic
 

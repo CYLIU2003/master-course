@@ -74,13 +74,18 @@ before physical validation (`source_artifact_validation_failed`). It is
 **DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS**. Fragment-boundary
 strengthening is not the current release path.
 
-The bounded `root_cut_focus` control diagnostic now keeps that same
-mathematical model and asks Gurobi for `MIPFocus=3`, `Presolve=2`, and generic
-`Cuts=3`; the request and effective controls are persisted in solver metadata.
-It is a falsifiable solver-control test, not a relaxation strengthening or a
-research result. A clean-SHA 264-trip artifact must show a better certified
-bound while passing all applicable gates before it can affect the release
-assessment.
+The bounded `root_cut_focus` control diagnostic kept that same mathematical
+model and asked Gurobi for `MIPFocus=3`, `Presolve=2`, and generic `Cuts=3`.
+The clean-SHA 264-trip artifact at `output/2026-08-23/run_20260823_0428/`
+(commit `5665102c238e0ba519a402b567f6504dc371fb1e`) kept the prepared input,
+complete successor network, seed, four threads, 240-second budget, candidate
+policy, and 1% target fixed. Its certified bound (52,749.163582 JPY), primary
+incumbent (65,305.688576 JPY), gap (19.227307%), and one explored node were
+identical to the matched baseline. Stage 2 produced no valid physical
+candidate and Rolling did not start, so the artifact is **DIAGNOSTIC, NOT USED
+FOR RESEARCH CONCLUSIONS**. The tested generic-cut control is rejected as a
+certificate path; the remaining blocker is structural, not the tested solver
+profile.
 
 ## 2026-08-23: Three-point electricity-price tranche is physically valid but not research-accepted
 

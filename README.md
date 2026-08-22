@@ -48,11 +48,15 @@ the short diagnostic budget before physical validation. It is **DIAGNOSTIC,
 NOT USED FOR RESEARCH CONCLUSIONS**; fragment-boundary strengthening is not
 the next certificate path.
 
-The opt-in `root_cut_focus` Stage-1 profile is the remaining bounded
-solver-control diagnostic: it holds the model fixed and requests `MIPFocus=3`,
-aggressive presolve, and Gurobi generic `Cuts=3`. It is not a formulation
-change or a research result until a frozen 264-trip artifact reports the
-effective controls, bound, incumbent, and every acceptance gate.
+The frozen `root_cut_focus` diagnostic at
+`output/2026-08-23/run_20260823_0428/` used clean commit `5665102`, the same
+prepared input, full successor network, seed, threads, 240-second budget, and
+candidate policy; only `Cuts=3` was added to the prior bound-focused controls.
+It retained the 52,749.163582-JPY bound, 65,305.688576-JPY primary incumbent,
+19.227307% gap, and one explored node. Stage 2 produced no valid physical
+candidate, so Rolling did not start. This is **DIAGNOSTIC, NOT USED FOR
+RESEARCH CONCLUSIONS** and rejects the tested generic-cut control as a
+certificate path.
 
 ## 2026-08-23 electricity-price sensitivity status
 
