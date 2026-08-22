@@ -1,5 +1,23 @@
 # master-course
 
+## 2026-08-22 verification checkpoint
+
+- A clean-SHA 264-trip Phase-3 baseline at
+  `output/2026-08-22/run_20260822_2125/` passed coverage, independent
+  physical validation, 24/24 Rolling, and final accounting. Its authoritative
+  final cost is 64,422.491318 JPY from
+  `rolling_hourly_chain/executed_day_accounting.json`; Stage 1 stopped at a
+  19.227307% certified gap, so this is not an optimality claim.
+- Same-SHA fixed-decision stress results are at
+  `output/diagnostics/fixed_solution_stress_a497166_20260822/`. The evaluator
+  performs no reoptimization and leaves costs null whenever the unchanged
+  plan fails physical/PV validation.
+- The bounded 8/12/24/40-trip integrated-oracle certificate at
+  `output/verification/small_integrated_oracle_scale/a497166/` is small-scale
+  evidence only. It does not establish a 264-trip global optimum, a full-scale
+  1% gap, an economic response conclusion, or the still-blocked Phase-3
+  pure-ICE A/B comparison.
+
 ## 2026-08-22 Phase-3 sensitivity-mode correction
 
 - The full-scale thesis sensitivity matrix now explicitly submits

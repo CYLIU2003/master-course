@@ -1,5 +1,36 @@
 # Current research release blockers
 
+## 2026-08-22 current evidence checkpoint: baseline and bounded checks pass; release remains blocked
+
+At clean SHA `a49716638a1d15567c190798f37b60e3b7920743`, the 264-trip Phase-3
+baseline at `output/2026-08-22/run_20260822_2125/` passed 264/264 service,
+independent physical validation, 24/24 Rolling, executed-day accounting, and
+clean-SHA/fallback/repair gates. Its unique final cost source records
+64,422.491318 JPY. Its Stage-1 certified gap is 19.227307% after the
+900-second limit; therefore it is a feasible, cost-accounting baseline, not
+an optimality or sensitivity-acceptance result.
+
+The same-SHA fixed-decision stress artifact is complete at
+`output/diagnostics/fixed_solution_stress_a497166_20260822/`. With no
+reoptimization, only initial-SOC minus 5 percentage points remains physically
+valid (0 JPY cost delta). The other six prescribed perturbations violate at
+least one physical/PV constraint and have deliberately null cost fields. This
+meets the reporting requirement, but it demonstrates limited fixed-plan
+robustness rather than clearing the release gate.
+
+The bounded small integrated-oracle certificate at
+`output/verification/small_integrated_oracle_scale/a497166/` verifies
+8/12/24/40 trips: Phase 4 reached `optimal` with zero solver gap at each
+scale, and the 24/40 Phase-3 cost differences are within 1e-5 JPY. The 8/12
+relative gaps are not identifiable because the reference cost is numerically
+zero. This is not a proof of the 264-trip global optimum, a 1% full-scale
+gap, or a full M0--M3 comparison.
+
+The release is still **BLOCKED** by the genuine Phase-3 pure-ICE aggregation
+implementation and its AB/BA x5 evidence, accepted multi-point economic and
+charger sensitivities, and the formal M0/M1/M2/M3 comparison. No historical
+Phase-4 representation measurement is used to fill any of those gaps.
+
 ## 2026-08-22 Phase-3 sensitivity correction; charger matrix remains blocked
 
 The first charger-capacity command was stopped before it completed because its

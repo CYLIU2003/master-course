@@ -1,5 +1,45 @@
 # Development Notes
 
+## 2026-08-22: same-SHA Phase-3 baseline, fixed-decision stress, and 40-trip oracle completed
+
+- A clean `a49716638a1d15567c190798f37b60e3b7920743` Phase-3 run completed at
+  `output/2026-08-22/run_20260822_2125/`. It served 264/264 trips and passed
+  independent physical validation, 24/24 hourly Rolling, executed-day
+  accounting, SHA consistency, and the no-fallback/no-post-solve-repair gates.
+  The sole final-cost source is
+  `rolling_hourly_chain/executed_day_accounting.json`, which reports
+  `64,422.491318 JPY`. Stage 1 ended at its 900-second limit with a certified
+  `19.227307%` gap, so this is an accepted feasible/cost-accounting result,
+  not an optimality result.
+- `scripts/run_fixed_solution_stress.py` was executed without reoptimization
+  against that exact same-SHA source, writing
+  `output/diagnostics/fixed_solution_stress_a497166_20260822/`. The stress
+  manifest fixes the 264-trip scope, 60 vehicles, six chargers, seed 42,
+  four Gurobi threads, 900-second limit, and all source-artifact hashes.
+  Initial-SOC minus five percentage points remained physically valid and had
+  a 0 JPY fixed-decision delta. BEV-energy +10%/+20%, travel time +10%,
+  PV -20%, one used-charger outage, and the combined case all failed the
+  independent fixed-decision physical/PV checks. Their cost fields are
+  correctly `null`; no infeasible fixed schedule was assigned an invented
+  additional cost.
+- The bounded integrated oracle was rerun from the same clean SHA with
+  `--trip-counts 8 12 24 40`, producing
+  `output/verification/small_integrated_oracle_scale/a497166/`. Each Phase-4
+  reference reached `optimal` with zero final MIP gap. The 24- and 40-trip
+  Phase-3 accounting deltas are within the documented 1e-5 JPY tolerance
+  (ApproxGap `0.0`); the 8- and 12-trip exact costs are numerically zero, so
+  relative gaps remain intentionally `not_identifiable_zero_reference_cost`.
+  The 40-trip run has a different optimal powertrain-assignment hash, while
+  cost equality remains within tolerance. This certificate is bounded
+  small-instance evidence only and is not evidence of 264-trip optimality.
+- Commands run:
+  `C:\master-course\.venv\Scripts\python.exe scripts\run_fixed_solution_stress.py --source-run output/2026-08-22/run_20260822_2125 --optimization-request output/thesis_sensitivity_charger_capacity_20260822_359cd36/cases/CHARGER_COUNT_6/frontend_optimization_request.json --output-dir output/diagnostics/fixed_solution_stress_a497166_20260822`
+  and
+  `C:\master-course\.venv\Scripts\python.exe scripts\build_small_integrated_oracle_scale_certificate.py --scenario-id b23fd26c-1233-4c73-bb9e-bdb8b1584760 --prepared-input-id prepared-ee27696fc37f0c7a-f1e18f252e336f1f-8acc7b3a --output-dir output/verification/small_integrated_oracle_scale/a497166 --trip-counts 8 12 24 40 --depot-id tsurumaki --service-id WEEKDAY --vehicles-per-type 5 --time-limit-sec 300 --random-seed 42`.
+  The focused implementation/regression suite remains
+  `49 passed` for the stress, serializer, A/B harness, and strict-coverage
+  metadata tests; no model code was changed while these two executions ran.
+
 ## 2026-08-22: Phase-3 pure-ICE A/B stopped on missing representation evidence
 
 - The first fresh Phase-3 child at clean `c80fc26` completed 264/264 service,
