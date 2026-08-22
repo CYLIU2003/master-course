@@ -254,8 +254,16 @@
   LP floor. Command:
   `python -m pytest -q tests/test_weather_coupled_assignment.py tests/test_milp_strict_coverage_metadata.py tests/test_canonical_graph_export_parity.py tests/test_frontend_artifact_completeness.py tests/test_readme_navigation.py`
   (`80 passed`). This is a correctness repair for future certificates; it has
-  not yet been measured on a fresh 264-trip clean-SHA diagnostic and makes no
-  gap-improvement or release claim.
+  now been measured through the normal BFF path at clean commit
+  `9a286772c8b8a2580832fc021a8074ad4f69845a`:
+  `output/2026-08-23/run_20260823_0538/` (job
+  `caebed4d-1e0f-416b-84af-6052d3d7bdc4`). The saved input provenance is valid
+  and research-ready; the 264-trip prepared input generated zero capacity rows
+  for both LP/MIP, as it has no relevant overnight overlap. Stage 1 retained
+  52,749.163582 JPY bound, 65,305.688576 JPY incumbent, one explored node, and
+  19.227307% certified gap; Stage 2 had no feasible candidate, so Rolling was
+  correctly not started. This remains **DIAGNOSTIC, NOT USED FOR RESEARCH
+  CONCLUSIONS** and is not a gap-improvement or release claim.
 
 ## 2026-08-23: Phase-3 A/B time-allocation control failure and fail-fast repair
 

@@ -20,14 +20,15 @@ BEV or ICE service beyond the actual powertrain fleet. These deterministic rows
 and fleet counts are included in the certificate input hash and audit. Service
 intervals use the canonical service-day convention, including trips that cross
 wall-clock midnight; the lower-bound capacity condition therefore cannot omit
-an overnight overlap. A new
-264-trip clean-SHA diagnostic at `output/2026-08-23/run_20260823_0520/`
-(commit `98916ff`) generated zero such rows for the 35-BEV/25-ICE fleet. Its
-LP/MIP floors consequently remained 52,712.318101/52,724.471363 JPY, below the
-same 52,749.163582-JPY Gurobi bound; the certified gap remained 19.227307% and
-Stage 2 had no feasible candidate. It is **DIAGNOSTIC, NOT USED FOR RESEARCH
-CONCLUSIONS** and rejects this aggregate capacity condition as the current
-gap-closing path.
+an overnight overlap. The fresh 264-trip clean-SHA diagnostic at
+`output/2026-08-23/run_20260823_0538/` (commit `9a28677`) generated zero such
+rows for the 35-BEV/25-ICE fleet, confirming that the corrected service-day
+logic is inactive for this particular input. Its LP/MIP floors were
+52,712.318101/52,724.471297 JPY, below the unchanged 52,749.163582-JPY Gurobi
+bound; the incumbent and certified gap remained 65,305.688576 JPY and
+19.227307%. Stage 2 had no feasible candidate. It is **DIAGNOSTIC, NOT USED
+FOR RESEARCH CONCLUSIONS** and rejects this aggregate capacity condition as the
+current gap-closing path.
 
 The clean-SHA 264-trip diagnostic at
 `output/2026-08-23/run_20260823_0507/` (commit `93608f4`) proves that this

@@ -8,8 +8,13 @@ whose wall-clock arrival is earlier than its departure is represented through
 the service-day boundary rather than silently omitted from the fleet-capacity
 necessary condition. The focused two-trip Gurobi regression passes (LP floor
 10 JPY; capacity rows for both powertrains). This correction only strengthens
-future lower-bound certificates; no fresh 264-trip artifact exists yet and it
-does not alter the current 19.227307% gap or release status.
+future lower-bound certificates. The fresh normal-BFF 264-trip artifact at
+`output/2026-08-23/run_20260823_0538/` (clean commit `9a28677`) produces zero
+such rows, because this prepared input has no relevant overnight overlap. Its
+Stage-1 bound, incumbent, one explored node, and 19.227307% certified gap are
+unchanged; Stage 2 has no feasible candidate and Rolling is correctly not
+started. It is **DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS** and does not
+alter release status.
 
 ## 2026-08-23: Independent phase-gate audit confirms the remaining evidence gaps
 
