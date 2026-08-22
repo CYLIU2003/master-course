@@ -16,8 +16,17 @@
   prove that free electricity cannot fund two BEV path starts; both certificates
   retain a 10-JPY floor. Focused verification is `81 passed` across the
   Stage-1 certificate, coverage, graph parity, artifact, and README tests.
-  No 264-trip run has yet used this code, so it is a mathematical tightening
-  only, **not a gap, performance, or research-release claim**.
+  The fresh normal-BFF 264-trip diagnostic at clean commit
+  `763c7adabdd2012e15c455001dcb038d149e2f5c` is retained at
+  `output/2026-08-23/run_20260823_0555/` (job
+  `17b028be-8750-49e1-a699-7e4b261d9de7`). The prepared-input validation is
+  valid/research-ready; the two rows have a per-vehicle limit of 3 and
+  capacities 105 BEV / 75 ICE. LP/MIP were optimal at 52,712.318101 /
+  52,724.471363 JPY, but the native Gurobi bound (52,749.163582 JPY),
+  incumbent (65,305.688576 JPY), one explored node, and certified gap
+  (19.227307%) were unchanged. Stage 2 had no valid candidate and Rolling did
+  not start. This is **DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS**; the
+  aggregate start-capacity condition is not the current gap-closing path.
 
 - Tightened the analytical `path_powertrain_source_flow_lp` and its integral
   selector-MIP companion with a necessary powertrain-level concurrent-service

@@ -33,9 +33,14 @@ input; they retain the lower-bound relaxation because every full Stage-1
 solution obeys the underlying per-vehicle constraints. A focused Gurobi test
 uses two sequential but intentionally disconnected trips with one BEV and one
 ICE, proving a 10-JPY LP/MIP floor when the free BEV otherwise could begin both
-paths. This correct, unmeasured strengthening is not evidence of a 264-trip
-bound improvement, a feasible candidate, or release readiness. A fresh normal
-BFF run from a clean commit remains required.
+paths. The fresh normal-BFF run at clean commit `763c7ad` is retained at
+`output/2026-08-23/run_20260823_0555/`: it records two rows, per-vehicle limit
+3, capacities 105 BEV / 75 ICE, and optimal LP/MIP floors 52,712.318101 /
+52,724.471363 JPY. The native Gurobi bound (52,749.163582 JPY), incumbent
+(65,305.688576 JPY), one explored node, and 19.227307% certified gap are
+unchanged. Stage 2 has no valid candidate and Rolling is correctly not
+started. It is **DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS** and rejects
+this aggregate start-capacity condition as the current gap-closing path.
 
 ## 2026-08-23: Analytical concurrent-service certificate corrected for overnight trips
 

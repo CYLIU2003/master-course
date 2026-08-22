@@ -40,8 +40,15 @@ satisfies both underlying per-vehicle limits. The capacity, per-vehicle limit,
 and two new deterministic rows are in the certificate input hash and audits.
 A focused sequential two-trip, one-BEV/one-ICE test with all connections
 withheld proves that the free BEV cannot start both paths; LP/MIP both retain a
-10-JPY lower bound. This is an unmeasured mathematical tightening, **not a
-264-trip gap or release claim**, until a fresh clean-SHA BFF artifact exists.
+10-JPY lower bound. The fresh normal-BFF 264-trip artifact at
+`output/2026-08-23/run_20260823_0555/` (clean commit `763c7ad`) materialized
+the two rows with per-vehicle limit 3 and BEV/ICE capacities 105/75. Both
+certificates proved optimal (LP 52,712.318101 JPY; MIP 52,724.471363 JPY),
+but Gurobi's 52,749.163582-JPY bound, 65,305.688576-JPY incumbent, one
+explored node, and 19.227307% certified gap were unchanged. Stage 2 had no
+valid candidate, so Rolling was not started. It is **DIAGNOSTIC, NOT USED FOR
+RESEARCH CONCLUSIONS** and rejects this aggregate start-capacity condition as
+the current gap-closing path.
 
 The clean-SHA 264-trip diagnostic at
 `output/2026-08-23/run_20260823_0507/` (commit `93608f4`) proves that this
