@@ -1,5 +1,25 @@
 # Development Notes
 
+## 2026-08-22: disabled Phase-3 composition search no longer breaks finalization
+
+- The first corrected 264-trip `CHARGER_COUNT_6` run at clean SHA
+  `8044ab8995939382d68e1a1600ca6d3853df3435` completed feasible Stage 1,
+  optimal Stage 2, and accepted Rolling, but the BFF then failed finalization:
+  it required `stage1_used_powertrain_composition_search.{json,csv}` even
+  though the solver correctly recorded that optional search as disabled and
+  emitted no such files. The bundle remains a failed diagnostic and is not
+  used as sensitivity evidence; the queued 8/10 cases were stopped.
+- Added `_requires_two_stage_composition_certificate` so the artifact contract
+  requires this evidence only for a research two-stage run whose solver
+  metadata explicitly says the composition search was enabled. This preserves
+  the strict validation when the claim is made without inventing disabled-mode
+  artifacts. Focused verification:
+  `.venv\\Scripts\\python.exe -m pytest -q
+  tests\\test_frontend_artifact_completeness.py
+  tests\\test_thesis_sensitivity_matrix.py
+  tests\\test_run_input_provenance.py` (`58 passed`), plus `git diff --check`.
+  A fresh clean-commit 6/8/10 Phase-3 run remains required.
+
 ## 2026-08-22: run-provenance environment snapshot expanded
 
 - Reused the existing pre-solve `optimization_parameters.json` provenance

@@ -1,6 +1,6 @@
 # Current research release blockers
 
-## 2026-08-22 Phase-3 sensitivity correction; no charger result yet
+## 2026-08-22 Phase-3 sensitivity correction; charger matrix remains blocked
 
 The first charger-capacity command was stopped before it completed because its
 saved request forced `phase4_integrated` on 264 trips. That mode is reserved
@@ -9,9 +9,26 @@ Phase-3 economic or charger response result. No partial output from that
 attempt is used. The matrix and its fail-closed audit now require
 `phase3_two_stage` at requested, resolved, and executed phase; a fresh clean
 Phase-3 execution is still required for all `CHARGER_COUNT_6/8/10` cases.
-The same replacement run must use the expanded pre-solve runtime snapshot in
-`optimization_parameters.json`; earlier partial Phase-3 output lacks the
-required CPU/RAM and gurobipy version evidence and is not used.
+The first replacement `CHARGER_COUNT_6` run at clean SHA
+`8044ab8995939382d68e1a1600ca6d3853df3435` reached feasible Stage 1, optimal
+Stage 2, and accepted Rolling, but correctly failed closed in final reporting:
+the artifact contract required the optional
+`stage1_used_powertrain_composition_search.{json,csv}` despite solver metadata
+recording that the composition search was disabled. This is a finalizer defect,
+not an accepted sensitivity outcome. The 6-case bundle is `DIAGNOSTIC`, `NOT
+USED FOR RESEARCH CONCLUSIONS`; the runner was stopped before 8/10 could
+produce results. The contract now requires those artifacts only when the
+solver explicitly enabled that search. A fresh clean-commit Phase-3 execution
+for 6/8/10 remains required and must include the expanded pre-solve runtime
+snapshot in `optimization_parameters.json`.
+
+## 2026-08-22 Phase-3 A/B gate remains open
+
+The archived ten-run pure-ICE aggregation bundle used `phase4_integrated`, not
+the deployed `phase3_two_stage` method. It is retained only as a historical
+structural diagnostic and cannot satisfy the requested Phase-3 A/B evidence
+gate. A fresh same-SHA Phase-3-only AB/BA execution is required before making
+any representation claim about the thesis method.
 
 ## 2026-08-22 charger sensitivity executable; SOC and stress paths remain blocked
 

@@ -24,7 +24,24 @@
   its count; they are not comparisons against persisted charger IDs. The run
   audit fails closed unless the solver artifact reports the requested effective
   charger count, while the frozen Prepare request retains the source/power
-  declaration. No full-scale charger result has yet been run from this change.
+  declaration.
+- The first corrected `CHARGER_COUNT_6` Phase-3 attempt reached feasible
+  Stage 1, optimal Stage 2, and accepted Rolling, but its final artifact gate
+  incorrectly required a composition-search certificate although that optional
+  search was disabled. It therefore ended `failed` and is retained only as a
+  diagnostic bundle at
+  `output/thesis_sensitivity_charger_capacity_20260822_8044ab8/`; it is not a
+  charger-capacity result. The artifact gate now requires that certificate
+  only when the solver records the search as enabled. A fresh frozen-commit
+  run is still required for all three counts.
+
+## 2026-08-22 Phase-3 aggregation A/B status correction
+
+- The archived repeated pure-ICE aggregation A/B bundle was submitted in
+  `phase4_integrated` mode. Its structural measurements remain historical
+  Phase-4 diagnostics only; they do not meet the Phase-3 A/B gate and must not
+  be cited as a result for the deployed two-stage method. A new same-SHA,
+  Phase-3-only AB/BA experiment remains required.
 
 ## 2026-08-22 repeated same-SHA pure-ICE aggregation A/B result
 

@@ -14,6 +14,7 @@ from bff.services.optimization_run.artifact_completeness import (
     required_frontend_artifacts,
     validate_stage1_used_powertrain_composition_search,
 )
+from bff.routers.optimization import _requires_two_stage_composition_certificate
 
 
 _ROOT_REFUEL_EVENT_FIELDS = (
@@ -650,6 +651,34 @@ def test_two_stage_formal_contract_requires_valid_composition_certificate(
 
     assert audit["status"] == "OK"
     assert audit["accepted"] is True
+
+
+def test_two_stage_composition_certificate_is_required_only_when_enabled() -> None:
+    """A normal Phase 3 run must not require an intentionally absent artifact."""
+
+    disabled_metadata = {
+        "optimization_structure": "two_stage",
+        "stage1_used_powertrain_composition_search": {"enabled": False},
+    }
+    assert (
+        _requires_two_stage_composition_certificate(
+            disabled_metadata,
+            research_run=True,
+        )
+        is False
+    )
+
+    enabled_metadata = {
+        "optimization_structure": "two_stage",
+        "stage1_used_powertrain_composition_search": {"enabled": True},
+    }
+    assert (
+        _requires_two_stage_composition_certificate(
+            enabled_metadata,
+            research_run=True,
+        )
+        is True
+    )
 
 
 def test_composition_certificate_rejects_status_only_infeasibility() -> None:

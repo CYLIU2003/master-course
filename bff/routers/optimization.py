@@ -5198,6 +5198,30 @@ def _persist_rich_run_outputs(
     return reporting_finalizer_result
 
 
+def _requires_two_stage_composition_certificate(
+    solver_metadata: Mapping[str, Any],
+    *,
+    research_run: bool,
+) -> bool:
+    """Return whether this run actually claims Stage-1 composition search.
+
+    Ordinary Phase 3 runs remain two-stage even when the optional explicit
+    BEV/ICE used-vehicle composition search is disabled.  In that case the
+    solver deliberately emits no search certificate, so requiring its files
+    would turn a completed run into a reporting failure.
+    """
+
+    composition_search = dict(
+        solver_metadata.get("stage1_used_powertrain_composition_search") or {}
+    )
+    return bool(
+        research_run
+        and str(solver_metadata.get("optimization_structure") or "").lower()
+        == "two_stage"
+        and composition_search.get("enabled") is True
+    )
+
+
 def _enforce_frontend_run_artifact_contract(
     *,
     run_dir: Path,
@@ -5217,10 +5241,11 @@ def _enforce_frontend_run_artifact_contract(
     run_dir = Path(run_dir)
     raw_dir = run_dir / "raw"
     solver_metadata = dict(optimization_result.get("solver_metadata") or {})
-    require_two_stage_composition_certificate = bool(
-        research_run
-        and str(solver_metadata.get("optimization_structure") or "").lower()
-        == "two_stage"
+    require_two_stage_composition_certificate = (
+        _requires_two_stage_composition_certificate(
+            solver_metadata,
+            research_run=research_run,
+        )
     )
     artifact_audit = persist_frontend_run_artifact_audit(
         run_dir,
