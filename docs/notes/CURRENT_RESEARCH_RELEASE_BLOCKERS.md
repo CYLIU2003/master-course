@@ -1,5 +1,15 @@
 # Current research release blockers
 
+## 2026-08-22 charger sensitivity executable; SOC and stress paths remain blocked
+
+`CHARGER_COUNT_6/8/10` is now an audited frontend/BFF family: all cases use a
+generated 90-kW single-port inventory and vary the effective charger count.
+No full-scale result has yet been run. The current BFF `initial_soc_percent`
+is only a fallback when a vehicle lacks explicit SOC; it cannot support an
+honest uniform -5-point initial-SOC sensitivity. A dedicated explicit policy
+and fixed-solution stress evaluator remain required before those release gates
+can be cleared.
+
 ## 2026-08-22 repeated pure-ICE A/B completed: structural benefit only
 
 The required ten-run measurement completed at clean frozen commit

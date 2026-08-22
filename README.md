@@ -1,5 +1,14 @@
 # master-course
 
+## 2026-08-22 charger-capacity sensitivity contract
+
+- The frontend/BFF thesis matrix now declares `CHARGER_COUNT_6`, `_8`, and
+  `_10`. All three use the generated 90-kW single-port inventory and vary only
+  its count; they are not comparisons against persisted charger IDs. The run
+  audit fails closed unless the solver artifact reports the requested effective
+  charger count, while the frozen Prepare request retains the source/power
+  declaration. No full-scale charger result has yet been run from this change.
+
 ## 2026-08-22 repeated same-SHA pure-ICE aggregation A/B result
 
 - The clean frozen commit `7ae60bef01cd6c30d7c82befcae28c3de692d2df`

@@ -173,6 +173,47 @@ def test_turnaround_case_compiles_only_declared_prepare_margin() -> None:
     assert optimization["unrelated_control"] == "preserved"
 
 
+def test_charger_capacity_case_uses_generated_inventory_and_declared_count() -> None:
+    prepare, optimization = build_case_requests(
+        case=_case("CHARGER_COUNT_6"),
+        base_prepare_request={
+            "simulation_settings": {
+                "use_selected_depot_charger_inventory": True,
+                "charger_count": 10,
+                "charger_power_kw": 90.0,
+            }
+        },
+        base_optimization_request={"unrelated_control": "preserved"},
+    )
+
+    settings = prepare["simulation_settings"]
+    assert settings["use_selected_depot_charger_inventory"] is False
+    assert settings["charger_count"] == 6
+    assert settings["charger_power_kw"] == 90.0
+    assert optimization["unrelated_control"] == "preserved"
+
+
+def test_charger_capacity_effect_audit_requires_effective_count() -> None:
+    parameters = {
+        "effective_problem_scenario": {},
+        "effective_model_metadata": {
+            "charger_count": 8,
+        },
+    }
+
+    assert sensitivity_runner._case_parameter_matches(
+        case=_case("CHARGER_COUNT_8"),
+        parameters=parameters,
+        economic_audit={},
+    )
+    parameters["effective_model_metadata"]["charger_count"] = 10
+    assert not sensitivity_runner._case_parameter_matches(
+        case=_case("CHARGER_COUNT_8"),
+        parameters=parameters,
+        economic_audit={},
+    )
+
+
 def test_vehicle_day_cases_compile_only_declared_cost_change() -> None:
     zero_prepare, zero_optimization = build_case_requests(
         case=_case("VEHICLE_DAY_0"),

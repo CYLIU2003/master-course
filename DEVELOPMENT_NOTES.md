@@ -1,5 +1,20 @@
 # Development Notes
 
+## 2026-08-22: charger-capacity sensitivity made executable and auditable
+
+- Extended the existing frontend-only thesis matrix with 6/8/10 port cases.
+  Every member explicitly selects the generated 90-kW single-port inventory;
+  this avoids silently ignoring `charger_count` when the persisted selected
+  inventory is active. The solver-visible effective count is fail-closed in
+  `run_thesis_sensitivity_matrix.py`; source/power remain in the frozen Prepare
+  request because the existing result metadata does not export those fields.
+- Updated `tests/test_thesis_experiment_matrix.py` and
+  `tests/test_thesis_sensitivity_matrix.py`; focused result: `29 passed`.
+  No formal run was started from this dirty worktree. Initial-SOC sensitivity
+  remains deliberately unimplemented here: the existing global setting is only
+  a fallback behind explicit vehicle SOC and cannot honestly represent -5
+  points without an explicit BFF policy path.
+
 ## 2026-08-22: repeated isolated-process pure-ICE A/B measurement completed
 
 - Executed the existing harness from clean frozen commit

@@ -23,6 +23,7 @@ def test_experiment_matrix_contains_required_sensitivities() -> None:
         "bev_trip_energy_sensitivity",
         "ice_trip_fuel_sensitivity",
         "pv_supply_transition",
+        "charger_capacity_sensitivity",
         "route_band_ablation",
         "turnaround_buffer_sensitivity",
         "vehicle_day_cost_sensitivity",
@@ -75,6 +76,22 @@ def test_experiment_matrix_contains_required_sensitivities() -> None:
     ].startswith("Adds a declared 5/10/15-minute")
     assert payload["parameter_semantics"]["pv_scale"].startswith(
         "Multiplicative alpha"
+    )
+    charger_cases = [
+        case
+        for case in payload["cases"]
+        if case["family"] == "charger_capacity_sensitivity"
+    ]
+    assert [case["prepare_settings"]["charger_count"] for case in charger_cases] == [
+        6,
+        8,
+        10,
+    ]
+    assert all(
+        case["prepare_settings"]["use_selected_depot_charger_inventory"]
+        is False
+        and case["prepare_settings"]["charger_power_kw"] == 90.0
+        for case in charger_cases
     )
     energy_cases = [
         case

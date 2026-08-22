@@ -125,6 +125,19 @@ def build_experiment_matrix() -> dict[str, Any]:
             "diesel_price_sensitivity",
             {"diesel_price_per_l": diesel_price},
         )
+    for charger_count in (6, 8, 10):
+        add(
+            f"CHARGER_COUNT_{charger_count}",
+            "charger_capacity_sensitivity",
+            {
+                # The selected inventory ignores charger_count. Fix the
+                # generated-inventory source for every family member and vary
+                # only the number of 90-kW single-port chargers.
+                "use_selected_depot_charger_inventory": False,
+                "charger_count": charger_count,
+                "charger_power_kw": 90.0,
+            },
+        )
     for route_band in (True, False):
         add(
             f"ROUTE_BAND_{'ON' if route_band else 'OFF'}",
@@ -165,7 +178,7 @@ def build_experiment_matrix() -> dict[str, Any]:
 
     return {
         "schema_version": (
-            "thesis_experiment_matrix_v6_economic_price_sensitivity"
+            "thesis_experiment_matrix_v7_charger_capacity_sensitivity"
         ),
         "execution_semantics": "frontend_bff_only_no_direct_solver",
         "common_control_contract": common,
@@ -189,6 +202,11 @@ def build_experiment_matrix() -> dict[str, Any]:
                 "Sets the ICE fuel price to 116, 145, or 174 JPY/L through "
                 "Prepare while holding grid price, trip fuel quantities, "
                 "PV/BESS, timetable, fleet, and solver controls fixed."
+            ),
+            "charger_capacity_sensitivity": (
+                "Uses the deterministic 90-kW generated charger inventory "
+                "for every family member and varies only its port count "
+                "across 6, 8, and 10. It does not compare persisted charger IDs."
             ),
             "trip_energy_sensitivity": (
                 "Backward-compatible common demand multiplier. It moves BEV "

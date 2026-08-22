@@ -938,6 +938,14 @@ def _case_parameter_matches(
             marginal.get("diesel_price_jpy_per_l"),
             expected.get("diesel_price_per_l"),
         )
+    if family == "charger_capacity_sensitivity":
+        # The run artifact currently publishes the effective charger count but
+        # not the inventory-source flag or per-port power. The frozen Prepare
+        # request preserves those declared controls; fail closed here on the
+        # solver-visible count rather than requiring nonexistent metadata.
+        return _numbers_equal(
+            metadata.get("charger_count"), expected.get("charger_count")
+        )
     if family == "route_band_ablation":
         request = dict(case.get("prepare_request_overrides") or {})
         return bool(
