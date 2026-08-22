@@ -1,5 +1,21 @@
 # Current research release blockers
 
+## 2026-08-23: Independent phase-gate audit confirms the remaining evidence gaps
+
+`scripts/audit_thesis_model_phase_gates.py` was rerun without waivers against
+the complete 264-trip candidate
+`output/2026-08-22/run_20260822_2125/`; the immutable result is retained at
+`output/diagnostics/thesis_phase_gate_5cf5e7f_20260823/a497166_phase_gate_audit.json`
+(payload SHA-256 `f6f925ce4c3fd137d8c33f8598ad9dc2b7b03f7ccafb23a4c6c8450bc9be4165`).
+It verifies the candidate's prepared-input provenance, clean SHA, 264/264
+coverage, physical schedule, 24/24 Rolling, final accounting, and all 240
+finalized artifact hashes. It nevertheless returns `BLOCKED`: the 1% certified
+gap is not met and the evidence set lacks an explicit Phase-4 integrated run,
+accepted route-band/turnaround/energy/time studies, formal M0--M3 comparison,
+and the required accepted economic, charger, SOC, PV, and CO2 sensitivity
+families. This audit composes recorded gates only; it does not upgrade the
+older candidate or any diagnostic output to a research conclusion.
+
 ## 2026-08-23: Longer Phase-3 budget does not close the certified-gap gate
 
 The one-case duration escalation at frozen tag

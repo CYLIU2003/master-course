@@ -224,6 +224,20 @@
   current release blockers remain the 1% certified-gap gate, accepted
   multi-point economic/charger sensitivities, and formal M0/M1/M2/M3 evidence.
 
+## 2026-08-23: Phase-gate evidence inventory rerun
+
+- `scripts/audit_thesis_model_phase_gates.py` was run without waivers against
+  the fully accounted 264-trip candidate
+  `output/2026-08-22/run_20260822_2125/`; output:
+  `output/diagnostics/thesis_phase_gate_5cf5e7f_20260823/a497166_phase_gate_audit.json`.
+  It validates prepared-input provenance, frozen SHA, 264/264 coverage,
+  physical validation, 24/24 Rolling, canonical accounting, and 240 finalized
+  artifact hashes. Its `BLOCKED` verdict is therefore not an artifact-read
+  failure: the remaining gates are the 1% MIP gap, explicit Phase-4 integration,
+  accepted controlled studies/sensitivities, and formal M0--M3 evidence. The
+  audit is an inventory only and does not promote the old candidate or any
+  diagnostic run to a research conclusion.
+
 ## 2026-08-23: Phase-3 A/B time-allocation control failure and fail-fast repair
 
 - The clean-SHA, isolated-process AB/BA x5 diagnostic at
