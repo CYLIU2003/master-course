@@ -12,6 +12,10 @@
 - The sensitivity audit now requires the solver artifact to confirm requested,
   resolved, and executed Phase 3. This prevents a Phase-4 result from being
   silently accepted as evidence about the deployed two-stage method.
+- Each new frontend run's `optimization_parameters.json` now carries a
+  machine-readable runtime-environment snapshot (Python, Gurobi/gurobipy, OS,
+  logical CPU count, and RAM where probeable), together with its existing
+  frozen Git and canonical-input provenance.
 
 ## 2026-08-22 charger-capacity sensitivity contract
 

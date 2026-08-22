@@ -181,6 +181,12 @@ def test_frontend_run_input_bundle_is_self_verifying(tmp_path: Path) -> None:
     assert parameters["frontend_request"]["mip_gap"] == 0.025
     assert parameters["effective_problem_scenario"]["timestep_min"] == 15
     assert parameters["runtime_environment"]["python_version"]
+    assert parameters["runtime_environment"]["schema_version"] == (
+        "runtime_environment_v2"
+    )
+    assert parameters["runtime_environment"]["cpu_logical_count"]
+    assert "memory_total_bytes" in parameters["runtime_environment"]
+    assert "gurobipy_version" in parameters["runtime_environment"]
     assert parameters["canonical_input_dimensions"]["trip_input_sha256"]
     assert parameters["canonical_input_dimensions"][
         "trip_structure_input_sha256"

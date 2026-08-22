@@ -260,23 +260,48 @@ def collect_git_state(*, repo_root: Path | None = None) -> dict[str, Any]:
 
 
 def _runtime_environment() -> dict[str, Any]:
+    """Capture the executable and host properties needed to reproduce a run.
+
+    This snapshot is written into ``optimization_parameters.json`` before the
+    solve.  Optional memory probing must never make a formal run fail merely
+    because ``psutil`` is not installed.
+    """
+
     gurobi_available = False
     gurobi_version: str | None = None
+    gurobipy_version: str | None = None
     try:
         import gurobipy as gp
 
         gurobi_available = True
         version = gp.gurobi.version()
         gurobi_version = ".".join(str(item) for item in version)
+        gurobipy_version = str(getattr(gp, "__version__", "") or "") or None
     except (ImportError, AttributeError, RuntimeError):
         pass
+    memory_total_bytes: int | None = None
+    memory_probe_error: str | None = None
+    try:
+        import psutil
+
+        memory_total_bytes = int(psutil.virtual_memory().total)
+    except (ImportError, AttributeError, OSError) as exc:
+        memory_probe_error = f"{type(exc).__name__}: {exc}"
     return {
+        "schema_version": "runtime_environment_v2",
         "python_version": platform.python_version(),
         "python_implementation": platform.python_implementation(),
         "python_executable": sys.executable,
         "platform": platform.platform(),
+        "operating_system": platform.system(),
+        "operating_system_release": platform.release(),
+        "cpu_logical_count": os.cpu_count(),
+        "cpu_processor": platform.processor() or None,
+        "memory_total_bytes": memory_total_bytes,
+        "memory_probe_error": memory_probe_error,
         "gurobi_available": gurobi_available,
         "gurobi_version": gurobi_version,
+        "gurobipy_version": gurobipy_version,
     }
 
 

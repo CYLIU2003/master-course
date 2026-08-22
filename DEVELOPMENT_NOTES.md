@@ -1,5 +1,17 @@
 # Development Notes
 
+## 2026-08-22: run-provenance environment snapshot expanded
+
+- Reused the existing pre-solve `optimization_parameters.json` provenance
+  writer instead of adding a parallel artifact. Its `runtime_environment`
+  snapshot now records the OS, logical CPU count, processor label, total RAM
+  when probeable, Gurobi version, and `gurobipy` version alongside the already
+  recorded Python executable/version. An unavailable RAM probe is recorded as
+  an explicit error rather than failing or inventing a value.
+- The first Phase-3 charger run was stopped before completion because this
+  pre-solve environment contract was incomplete. A fresh clean-commit run is
+  required; no partial output is evidence.
+
 ## 2026-08-22: full-scale sensitivity matrix corrected to Phase 3
 
 - During execution review, the new `CHARGER_COUNT_6` request was found to

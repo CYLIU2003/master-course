@@ -9,6 +9,9 @@ Phase-3 economic or charger response result. No partial output from that
 attempt is used. The matrix and its fail-closed audit now require
 `phase3_two_stage` at requested, resolved, and executed phase; a fresh clean
 Phase-3 execution is still required for all `CHARGER_COUNT_6/8/10` cases.
+The same replacement run must use the expanded pre-solve runtime snapshot in
+`optimization_parameters.json`; earlier partial Phase-3 output lacks the
+required CPU/RAM and gurobipy version evidence and is not used.
 
 ## 2026-08-22 charger sensitivity executable; SOC and stress paths remain blocked
 
