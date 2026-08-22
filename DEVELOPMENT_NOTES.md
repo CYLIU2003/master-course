@@ -25,6 +25,13 @@
   96,841,728 bytes. Focused tests and integrated actual-cost regressions:
   `75 passed`. No 264-trip repeated formal run has started yet; the old
   one-pair `a145cf3` artifact remains historical `PASS_STRUCTURAL_ONLY` only.
+- The first frozen `af452a3` launch stopped before any solver call: the hidden
+  child CLI inherited the parent parser's required `--output-dir` contract but
+  the parent command omitted that syntactic argument. The failure is retained
+  in `output/diagnostics/pure_ice_aggregation_ab_repeated_af452a3/`; no case
+  metric or research conclusion exists. The child now receives its own
+  run-directory output argument, and parser/focused regression checks pass
+  (`10 passed`) before a new frozen commit is made.
 
 ## 2026-08-22: corrected electricity-price diagnostic tranche completed
 

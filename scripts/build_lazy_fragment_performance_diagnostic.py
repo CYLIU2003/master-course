@@ -1633,6 +1633,8 @@ def _run_pure_ice_case_in_child_process(
         sys.executable,
         str(Path(__file__).resolve()),
         "--run-pure-ice-aggregation-child",
+        "--output-dir",
+        str(run_directory.resolve()),
         "--scenario-id",
         scenario_id,
         "--prepared-input-id",
