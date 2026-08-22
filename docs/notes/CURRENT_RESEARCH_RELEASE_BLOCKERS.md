@@ -94,6 +94,18 @@ alter the production MIP's rows, bounds, starts, objective, or result. A
 clean-SHA 264-trip run must first establish the actual fractional structure;
 only then may a separately proved valid inequality be proposed.
 
+The first clean-SHA trial at
+`output/2026-08-23/run_20260823_0441/` (commit `7c090bb`) establishes a
+negative but useful result: the 762,906-variable, 108,062-row completed LP
+relaxation timed out after 300.234 seconds with no LP solution. Because that
+early implementation let a diagnostic exceed the declared 240-second shared
+Phase-3 budget, it is **DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS** and
+not comparable with the matched Phase-3 runs. The implementation now records
+the diagnostic in `solver_settings.json`, defaults it to 30 seconds, and caps
+it by the remaining shared deadline. A new clean-SHA bounded run is required;
+the unresolved blocker remains that neither the native MIP root nor a separate
+full-model LP relaxation has yielded an actionable fractional solution.
+
 The reusable pure-ICE A/B harness was also corrected before any further
 measurement: it now explicitly forwards every Stage-1 profile/diagnostic/cut
 argument to the synchronous BFF worker. This prevents a positional-argument

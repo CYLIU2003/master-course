@@ -8,9 +8,14 @@
   trip equivalents, split-trip count, fractional assignment count, and
   fractional vehicle activations. It cannot add cuts, alter the original MIP,
   or reuse any diagnostic solution. The BFF request and final solver metadata
-  persist the flag and result. Focused verification: `py_compile` and `43
-  passed` across strict-coverage, SOC round-trip, and artifact tests. No
-  264-trip root-LP result exists yet.
+  persist the flag and result. The diagnostic has an explicit 30-second
+  default and is capped by the remaining shared Phase-3 deadline; it cannot
+  consume an unbounded extra solver budget. The original 264-trip diagnostic
+  at `output/2026-08-23/run_20260823_0441/` timed out after 300.234 seconds
+  with no LP solution and is retained only as non-comparable diagnostic
+  evidence because it predated that cap. Focused verification: `py_compile`
+  and `74 passed` across the Stage-1, BFF-worker, artifact, harness, and
+  documentation checks.
 - Code review found and fixed a P1 A/B-harness integration defect: its
   positional synchronous-worker call omitted the existing Stage-1 profile and
   fragment-cut fields. It now forwards the profile, root-LP diagnostic flag,

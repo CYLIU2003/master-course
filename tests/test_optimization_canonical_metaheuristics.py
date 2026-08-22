@@ -506,11 +506,12 @@ def test_run_optimization_endpoint_submits_current_prepared_input_job() -> None:
     assert submitted_args[2] == "prepared-current"
     assert submitted_args[4] == "mode_milp_only"
     assert submitted_args[18] is True
-    assert submitted_args[23] == "day_ahead_and_hourly_rolling"
-    assert submitted_args[24] is True
-    assert submitted_args[25] == 60
-    assert submitted_args[26]["run_hourly_rolling"] is True
-    assert submitted_args[26]["rolling_execution_minutes"] == 60
+    assert submitted_args[24] == 30
+    assert submitted_args[27] == "day_ahead_and_hourly_rolling"
+    assert submitted_args[28] is True
+    assert submitted_args[29] == 60
+    assert submitted_args[30]["run_hourly_rolling"] is True
+    assert submitted_args[30]["rolling_execution_minutes"] == 60
 
 
 def test_run_optimization_endpoint_only_allows_day_ahead_with_explicit_profile() -> None:
@@ -586,11 +587,12 @@ def test_run_optimization_endpoint_only_allows_day_ahead_with_explicit_profile()
     submitted_args = submit_job.call_args.kwargs["args"]
     collect_git_state.assert_not_called()
     assert submitted_args[18] is False
-    assert submitted_args[23] == "day_ahead_exploratory"
-    assert submitted_args[24] is False
-    assert submitted_args[25] == 60
-    assert submitted_args[26]["rolling_execution_minutes"] == 15
-    assert "rolling_controls_server_enforced" not in submitted_args[26]
+    assert submitted_args[24] == 30
+    assert submitted_args[27] == "day_ahead_exploratory"
+    assert submitted_args[28] is False
+    assert submitted_args[29] == 60
+    assert submitted_args[30]["rolling_execution_minutes"] == 15
+    assert "rolling_controls_server_enforced" not in submitted_args[30]
 
 
 def test_formal_dirty_request_is_rejected_before_job_creation() -> None:

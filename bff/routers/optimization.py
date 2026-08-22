@@ -861,6 +861,11 @@ class RunOptimizationBody(BaseModel):
         "default", "bound_focus", "root_cut_focus"
     ] = "default"
     stage1_root_lp_diagnostic_enabled: bool = False
+    stage1_root_lp_diagnostic_time_limit_seconds: int = Field(
+        default=30,
+        ge=1,
+        le=300,
+    )
     stage1_fragment_transition_cut_mode: Literal[
         "lazy", "lifted_root", "lazy_root_cuts", "explicit_root"
     ] = "lazy"
@@ -11249,6 +11254,7 @@ def _run_optimization(
     stage1_best_obj_stop_enabled: bool = INTERACTIVE_STAGE1_BEST_OBJ_STOP_ENABLED,
     stage1_gurobi_search_profile: str = "default",
     stage1_root_lp_diagnostic_enabled: bool = False,
+    stage1_root_lp_diagnostic_time_limit_seconds: int = 30,
     stage1_fragment_transition_cut_mode: str = "lazy",
     gurobi_threads: Optional[int] = INTERACTIVE_GUROBI_THREADS,
     run_profile: str = DEFAULT_FRONTEND_RUN_PROFILE,
@@ -11483,6 +11489,9 @@ def _run_optimization(
                 ),
                 stage1_root_lp_diagnostic_enabled=bool(
                     stage1_root_lp_diagnostic_enabled
+                ),
+                stage1_root_lp_diagnostic_time_limit_sec=max(
+                    int(stage1_root_lp_diagnostic_time_limit_seconds), 1
                 ),
                 stage1_fragment_transition_cut_mode=str(
                     stage1_fragment_transition_cut_mode or "lazy"
@@ -13911,6 +13920,7 @@ def run_optimization(
             request.stage1_best_obj_stop_enabled,
             request.stage1_gurobi_search_profile,
             request.stage1_root_lp_diagnostic_enabled,
+            request.stage1_root_lp_diagnostic_time_limit_seconds,
             request.stage1_fragment_transition_cut_mode,
             request.gurobi_threads,
             run_profile,

@@ -379,6 +379,10 @@ class OptimizationConfig:
     # evidence and never feeds rows, starts, bounds, or decisions back into
     # the production Stage-1 MIP.
     stage1_root_lp_diagnostic_enabled: bool = False
+    # The diagnostic runs under the same shared Phase-3 wall-clock deadline.
+    # This small default prevents an opt-in observation from consuming the
+    # declared Stage-1/Stage-2 research budget.
+    stage1_root_lp_diagnostic_time_limit_sec: int = 30
     # The default lazy separator keeps exact fragment-transition rows out of
     # the root LP. ``lifted_root`` adds compact, integer-equivalent lifted
     # aggregates; ``lazy_root_cuts`` submits violated rows at fractional nodes;

@@ -13976,6 +13976,21 @@ class GurobiMILPAdapter:
             ),
         }
         if bool(getattr(config, "stage1_root_lp_diagnostic_enabled", False)):
+            remaining_before_root_lp_diagnostic_sec = max(
+                float(feedback_global_deadline) - time.monotonic(),
+                0.0,
+            )
+            requested_root_lp_diagnostic_sec = max(
+                float(
+                    getattr(
+                        config,
+                        "stage1_root_lp_diagnostic_time_limit_sec",
+                        30,
+                    )
+                    or 30
+                ),
+                0.001,
+            )
             stage1_root_lp_diagnostic = _stage1_root_lp_diagnostic(
                 model=stage1,
                 grb=GRB,
@@ -13985,6 +14000,10 @@ class GurobiMILPAdapter:
                     vehicle_id: str(vehicle.vehicle_type)
                     for vehicle_id, vehicle in vehicle_by_id.items()
                 },
+                time_limit_sec=min(
+                    requested_root_lp_diagnostic_sec,
+                    remaining_before_root_lp_diagnostic_sec,
+                ),
             )
         stage1_pre_optimize_seconds = float(time.perf_counter() - total_started)
         stage1_search_telemetry = _Stage1SearchTelemetry(

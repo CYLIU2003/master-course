@@ -1582,6 +1582,13 @@ def _run_pure_ice_case(
                             False,
                         )
                     ),
+                    int(
+                        request.get(
+                            "stage1_root_lp_diagnostic_time_limit_seconds",
+                            30,
+                        )
+                        or 30
+                    ),
                     str(
                         request.get("stage1_fragment_transition_cut_mode")
                         or "lazy"
