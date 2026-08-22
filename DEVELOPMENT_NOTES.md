@@ -1,5 +1,23 @@
 # Development Notes
 
+## 2026-08-23: Current-SHA bounded Phase-3 versus integrated actual-cost oracle
+
+- Reran the existing fail-closed, isolated-process scale certificate at clean
+  commit `e3fe904ba4afb6e2890aec7a7011e082f3aa20a0` against the frozen prepared
+  input `prepared-ee27696fc37f0c7a-f1e18f252e336f1f` (SHA-256
+  `639b6754cccd1aef7758454b56640f968b6b1c277ec32c1c142f53f670ade558`). The
+  artifact is `output/verification/small_integrated_oracle_scale/e3fe904_20260823/`.
+  Each 8/12/24/40-trip child ran in a separate Python process; every Phase-4
+  actual-cost oracle is `optimal` with zero gap and every Phase-3 case is
+  feasible and complete. The certificate is
+  `VERIFIED_BOUNDED_SMALL_INSTANCES` with no blockers.
+- ApproxGap is identifiable at 24 and 40 trips and is zero within numerical
+  tolerance; its 8/12-trip denominator is numerically zero and is explicitly
+  labelled `not_identifiable_zero_reference_cost`. This refreshes the bounded
+  RQ2 formulation evidence on the current code only. It neither validates the
+  264-trip Phase-3 global cost optimum nor clears the 1% Stage-1 gap,
+  sensitivity, stress, or full-scale method-comparison gates.
+
 ## 2026-08-23: Phase-3 gap-control telemetry and search-control falsification
 
 - Tightened the analytical `path_powertrain_source_flow_lp` and its integral

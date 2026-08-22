@@ -1,5 +1,20 @@
 # master-course
 
+## 2026-08-23 current-SHA bounded integrated-oracle certificate
+
+The existing isolated-process oracle CLI was rerun from clean commit
+`e3fe904ba4afb6e2890aec7a7011e082f3aa20a0` using the fixed prepared input
+`prepared-ee27696fc37f0c7a-f1e18f252e336f1f` (SHA-256
+`639b6754cccd1aef7758454b56640f968b6b1c277ec32c1c142f53f670ade558`). The
+certificate at `output/verification/small_integrated_oracle_scale/e3fe904_20260823/`
+has status `VERIFIED_BOUNDED_SMALL_INSTANCES`: Phase 4 reached `optimal` with
+zero gap at 8, 12, 24, and 40 trips, and Phase 3 completed each paired case.
+At 24 and 40 trips the Phase-3-minus-integrated cost is zero within numerical
+tolerance; 8 and 12 trips have a numerically zero reference cost, so their
+relative ApproxGap is correctly reported as not identifiable. This is bounded
+formulation/approximation evidence only—not a 264-trip global-optimality,
+runtime, sensitivity, or full M0--M3 claim.
+
 ## 2026-08-23 Phase-3 certified-gap status
 
 Stage 1 now computes two independent weather-aware analytical cost floors. In

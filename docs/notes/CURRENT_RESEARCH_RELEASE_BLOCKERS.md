@@ -1,5 +1,20 @@
 # Current research release blockers
 
+## 2026-08-23: Current-HEAD bounded oracle refresh is verified but does not release the full case
+
+`output/verification/small_integrated_oracle_scale/e3fe904_20260823/` records
+a clean pre/post SHA `e3fe904ba4afb6e2890aec7a7011e082f3aa20a0`, the frozen
+prepared-input SHA-256 `639b6754cccd1aef7758454b56640f968b6b1c277ec32c1c142f53f670ade558`,
+and isolated 8/12/24/40-trip Phase-3 versus Phase-4 actual-cost oracle runs.
+All four Phase-4 cases are exact zero-gap optima and the certificate is
+`VERIFIED_BOUNDED_SMALL_INSTANCES`. Phase-3 ApproxGap is zero within numerical
+tolerance where identifiable (24/40 trips); it is correctly not identifiable
+at 8/12 because the reference cost is numerically zero.
+
+This removes no 264-trip release blocker. In particular, it is not evidence of
+a full-network integrated optimum, a 1% Phase-3 global-cost guarantee, an
+economic response, a runtime gain, or an accepted M0--M3 effect.
+
 ## 2026-08-23: Bounded integrated-oracle comparison reproduced on the current code
 
 The isolated-process 8/12/24/40-trip certificate at
