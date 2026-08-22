@@ -24676,7 +24676,24 @@ class GurobiMILPAdapter:
             "free_source_used_kwh": None,
             "grid_source_used_kwh": None,
         }
+        path_source_mip_audit: Dict[str, Any] = {
+            "status": "not_run",
+            "valid": False,
+            "lower_bound_jpy": None,
+            "time_limit_sec": 30.0,
+            "runtime_sec": 0.0,
+            "wall_runtime_sec": 0.0,
+            "node_count": None,
+            "mip_gap_ratio": None,
+            "solution_count": 0,
+            "selector_variable_count": 0,
+            "semantics": (
+                "integral_powertrain_path_selection_with_vehicle_identity_"
+                "soc_charger_and_time_source_coupling_relaxed"
+            ),
+        }
         path_source_lp_lower_bound_jpy: Optional[float] = None
+        path_source_mip_lower_bound_jpy: Optional[float] = None
         if (
             not trip_without_compatible_assignment
             and is_gurobi_available()
@@ -25136,13 +25153,84 @@ class GurobiMILPAdapter:
                         ),
                     }
                 )
-            except Exception as exc:
-                path_source_lp_audit.update(
+
+                # The continuous path/source LP remains a valid lower bound,
+                # but it can fractionally mix incompatible paths.  Reusing the
+                # same relaxation with only path selectors integral removes
+                # that artifact while deliberately retaining every omitted
+                # vehicle-identity, SOC, charger, and temporal source coupling.
+                # Hence an *optimal* result is still a lower bound for the full
+                # Stage-1 model; any unfinished MIP is ignored fail-closed.
+                path_source_mip_started = time.perf_counter()
+                selector_variables = (
+                    tuple(assignment_var.values())
+                    + tuple(start_var.values())
+                    + tuple(end_var.values())
+                    + tuple(connection_var.values())
+                )
+                for variable in selector_variables:
+                    variable.VType = grb.BINARY
+                path_source_model.update()
+                path_source_model.Params.TimeLimit = float(
+                    path_source_mip_audit["time_limit_sec"]
+                )
+                path_source_model.Params.MIPGap = 0.0
+                path_source_model.optimize()
+                path_source_mip_status = int(
+                    getattr(path_source_model, "Status", 0) or 0
+                )
+                path_source_mip_audit.update(
                     {
-                        "status": "error",
-                        "error": f"{type(exc).__name__}:{exc}",
+                        "status": (
+                            "optimal"
+                            if path_source_mip_status == grb.OPTIMAL
+                            else f"gurobi_status_{path_source_mip_status}"
+                        ),
+                        "runtime_sec": float(
+                            getattr(path_source_model, "Runtime", 0.0) or 0.0
+                        ),
+                        "node_count": float(
+                            getattr(path_source_model, "NodeCount", 0.0) or 0.0
+                        ),
+                        "mip_gap_ratio": (
+                            float(getattr(path_source_model, "MIPGap", 0.0) or 0.0)
+                            if int(
+                                getattr(path_source_model, "SolCount", 0) or 0
+                            )
+                            > 0
+                            else None
+                        ),
+                        "solution_count": int(
+                            getattr(path_source_model, "SolCount", 0) or 0
+                        ),
+                        "selector_variable_count": len(selector_variables),
                     }
                 )
+                if path_source_mip_status == grb.OPTIMAL:
+                    candidate_lower_bound = max(
+                        float(path_source_model.ObjVal),
+                        0.0,
+                    )
+                    if math.isfinite(candidate_lower_bound):
+                        path_source_mip_lower_bound_jpy = candidate_lower_bound
+                        path_source_mip_audit.update(
+                            {
+                                "valid": True,
+                                "lower_bound_jpy": candidate_lower_bound,
+                            }
+                        )
+                path_source_mip_audit["wall_runtime_sec"] = float(
+                    time.perf_counter() - path_source_mip_started
+                )
+            except Exception as exc:
+                error_payload = {
+                    "status": "error",
+                    "error": f"{type(exc).__name__}:{exc}",
+                }
+                if path_source_lp_audit["status"] == "not_run":
+                    path_source_lp_audit.update(error_payload)
+                else:
+                    path_source_mip_audit.update(error_payload)
             finally:
                 path_source_lp_audit["wall_runtime_sec"] = float(
                     time.perf_counter() - path_source_lp_started
@@ -25156,6 +25244,7 @@ class GurobiMILPAdapter:
         lower_bound_jpy = max(
             independent_trip_lower_bound_jpy,
             float(path_source_lp_lower_bound_jpy or 0.0),
+            float(path_source_mip_lower_bound_jpy or 0.0),
         )
         certificate_input = {
             "charge_efficiency": charge_efficiency,
@@ -25189,6 +25278,16 @@ class GurobiMILPAdapter:
                 ],
                 "input_hash": path_source_lp_audit["input_hash"],
             },
+            "path_powertrain_source_flow_mip": {
+                "status": path_source_mip_audit["status"],
+                "valid": path_source_mip_audit["valid"],
+                "lower_bound_jpy": path_source_mip_audit[
+                    "lower_bound_jpy"
+                ],
+                "selector_variable_count": path_source_mip_audit[
+                    "selector_variable_count"
+                ],
+            },
         }
         certificate_hash = hashlib.sha256(
             json.dumps(
@@ -25205,6 +25304,7 @@ class GurobiMILPAdapter:
                 independent_trip_lower_bound_jpy
             ),
             "path_powertrain_source_flow_lp": path_source_lp_audit,
+            "path_powertrain_source_flow_mip": path_source_mip_audit,
             "trip_option_cost_floor_before_free_source_credit_jpy": (
                 trip_option_cost_floor
             ),

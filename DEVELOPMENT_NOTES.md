@@ -2,6 +2,18 @@
 
 ## 2026-08-23: Phase-3 gap-control telemetry and search-control falsification
 
+- Added the bounded `path_powertrain_source_flow_mip` certificate to the
+  existing weather-aware Stage-1 analytical lower bound. It reuses the
+  continuous powertrain path/source-flow model but makes only assignment,
+  start, end, and chronological connection selectors binary. The certificate
+  still relaxes vehicle identity, vehicle-count allocation, SOC, charger, and
+  time-indexed source coupling, so its proven optimum is a valid lower bound
+  on the full Stage-1 model. It is used only if Gurobi returns `optimal` within
+  30 seconds; any time-limit or error leaves the existing lower bound intact.
+  Focused Gurobi regression verifies that this certificate dominates the LP
+  floor for both sunny and rain cases. A clean-SHA 264-trip measurement is
+  pending; no gap-improvement claim is made here.
+
 - Added opt-in `stage1_root_lp_diagnostic_enabled`. When requested, Stage 1
   clones its fully constructed model with all discrete variables relaxed and
   records the isolated LP objective, solution status, aggregate powertrain

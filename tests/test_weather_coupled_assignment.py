@@ -448,6 +448,15 @@ def test_full_phase3_assignment_changes_from_physical_pv_timing() -> None:
     assert sunny_metadata["stage1_accounting_objective_components"][
         "arbitrary_weather_assignment_bias"
     ] is False
+    for metadata in (sunny_metadata, rain_metadata):
+        certificate = dict(
+            metadata["stage1_analytical_weather_energy_fuel_lower_bound_details"]
+        )
+        path_mip = dict(certificate["path_powertrain_source_flow_mip"])
+        assert path_mip["valid"] is True
+        assert float(path_mip["lower_bound_jpy"]) <= float(
+            metadata["stage1_objective"]
+        ) + 1.0e-6
 
 
 def test_full_phase3_same_input_and_pv_reproduces_assignment() -> None:
@@ -815,6 +824,8 @@ def test_weather_energy_fuel_certificate_is_a_pv_sensitive_lower_bound() -> None
     )
     sunny_path_lp = dict(sunny["path_powertrain_source_flow_lp"])
     rain_path_lp = dict(rain["path_powertrain_source_flow_lp"])
+    sunny_path_mip = dict(sunny["path_powertrain_source_flow_mip"])
+    rain_path_mip = dict(rain["path_powertrain_source_flow_mip"])
     assert sunny_path_lp["status"] == "optimal"
     assert sunny_path_lp["valid"] is True
     assert len(str(sunny_path_lp["input_hash"])) == 64
@@ -822,6 +833,17 @@ def test_weather_energy_fuel_certificate_is_a_pv_sensitive_lower_bound() -> None
     assert sunny_path_lp["input_hash"] == dict(
         sunny_repeat["path_powertrain_source_flow_lp"]
     )["input_hash"]
+    assert sunny_path_mip["status"] == "optimal"
+    assert sunny_path_mip["valid"] is True
+    assert sunny_path_mip["selector_variable_count"] > 0
+    assert float(sunny_path_mip["lower_bound_jpy"]) >= float(
+        sunny_path_lp["lower_bound_jpy"]
+    )
+    assert rain_path_mip["status"] == "optimal"
+    assert rain_path_mip["valid"] is True
+    assert float(rain_path_mip["lower_bound_jpy"]) >= float(
+        rain_path_lp["lower_bound_jpy"]
+    )
     assert float(sunny["lower_bound_jpy"]) > float(
         sunny["independent_trip_lower_bound_jpy"]
     )

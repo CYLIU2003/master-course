@@ -111,6 +111,17 @@ timed out without an LP solution after 30.239 seconds. It retained the
 remains that neither the native MIP root nor a separate full-model LP
 relaxation has yielded an actionable fractional solution.
 
+The next mathematical tightening is deliberately narrower than a reformulated
+full solver: `path_powertrain_source_flow_mip` reuses the analytical
+powertrain path/source LP but makes its trip/powertrain path selectors
+integral. Vehicle identity, vehicle-count allocation, SOC, charger, and
+time-indexed source coupling remain relaxed, so the proven objective is a
+valid lower bound for every complete Stage-1 solution. It is adopted only when
+the small certificate MIP reaches `optimal` within 30 seconds; a time limit is
+ignored rather than being used as a bound. A fresh clean-SHA 264-trip run must
+measure its lower-bound effect, Stage-1 gap, physical/rolling/accounting gates,
+and compare it to the matched baseline before any release or performance claim.
+
 The reusable pure-ICE A/B harness was also corrected before any further
 measurement: it now explicitly forwards every Stage-1 profile/diagnostic/cut
 argument to the synchronous BFF worker. This prevents a positional-argument

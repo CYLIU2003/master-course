@@ -2,6 +2,15 @@
 
 ## 2026-08-23 Phase-3 certified-gap status
 
+Stage 1 now computes two independent weather-aware analytical cost floors. In
+addition to the existing continuous powertrain path/source flow LP, it solves a
+bounded, exact powertrain-path selector MIP. Only trip/powertrain assignment,
+path start/end, and compatible chronological connections are integral; vehicle
+identity, SOC, charger, and time-source coupling remain relaxed. An MIP result
+is adopted only when Gurobi proves it optimal, so an unfinished diagnostic
+cannot raise the certified lower bound. This is a lower-bound strengthening,
+not a claim that Phase 3 is an integrated global total-cost optimum.
+
 The frozen 30-JPY/kWh duration escalation at
 `output/thesis_phase3_gap_escalation_f9b83ad_20260823_r1/` gave Stage 1 1650
 seconds (rather than the prior approximately 405-second primary search) while
