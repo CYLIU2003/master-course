@@ -669,15 +669,44 @@ def _primary_oracle_comparison(cases: list[dict[str, Any]]) -> dict[str, Any]:
     integrated_cost = float(integrated["accounted_total_cost_jpy"])
     two_stage_cost = float(two_stage["accounted_total_cost_jpy"])
     cost_delta = two_stage_cost - integrated_cost
+    cost_comparison_tolerance_jpy = 1.0e-5
+    cost_delta_within_tolerance = abs(cost_delta) <= cost_comparison_tolerance_jpy
+    # A relative gap is undefined when the exact reference cost is numerically
+    # zero.  Dividing by an arbitrary JPY floor would turn solver noise into a
+    # misleading signed performance claim, so retain the raw delta and mark
+    # the relative metric as not identifiable instead.
+    approximate_gap_identifiable = (
+        abs(integrated_cost) > cost_comparison_tolerance_jpy
+    )
+    approximate_gap_ratio = (
+        0.0
+        if cost_delta_within_tolerance and approximate_gap_identifiable
+        else (
+            cost_delta / abs(integrated_cost)
+            if approximate_gap_identifiable
+            else None
+        )
+    )
     comparison.update(
         {
             "two_stage_comparison_available": True,
             "integrated_accounted_total_cost_jpy": integrated_cost,
             "two_stage_accounted_total_cost_jpy": two_stage_cost,
             "two_stage_minus_integrated_cost_jpy": cost_delta,
-            "two_stage_cost_gap_ratio": cost_delta
-            / max(abs(integrated_cost), 1.0),
-            "two_stage_matches_integrated_cost": abs(cost_delta) <= 1.0e-5,
+            "cost_comparison_tolerance_jpy": cost_comparison_tolerance_jpy,
+            "two_stage_cost_delta_within_tolerance": cost_delta_within_tolerance,
+            "two_stage_approx_gap_identifiable": approximate_gap_identifiable,
+            "two_stage_approx_gap_ratio": approximate_gap_ratio,
+            "two_stage_approx_gap_status": (
+                "within_numerical_tolerance"
+                if cost_delta_within_tolerance and approximate_gap_identifiable
+                else (
+                    "not_identifiable_zero_reference_cost"
+                    if not approximate_gap_identifiable
+                    else "computed"
+                )
+            ),
+            "two_stage_matches_integrated_cost": cost_delta_within_tolerance,
             "used_vehicle_count_delta": int(two_stage["used_vehicle_count"])
             - int(integrated["used_vehicle_count"]),
             "used_vehicle_type_mix_matches": dict(
@@ -708,7 +737,9 @@ def _primary_oracle_comparison(cases: list[dict[str, Any]]) -> dict[str, Any]:
             "integrated_assignment_powertrain_hash": integrated.get(
                 "assignment_powertrain_hash"
             ),
-            "comparison_lower_bound_consistent": cost_delta >= -1.0e-5,
+            "comparison_lower_bound_consistent": (
+                cost_delta >= -cost_comparison_tolerance_jpy
+            ),
         }
     )
     stage1_objective = two_stage.get("stage1_objective")

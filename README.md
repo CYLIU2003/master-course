@@ -25,6 +25,11 @@
   preset and minimizes scalar canonical actual cost. Phase 3 retains its
   deployed two-stage policy and is compared by its final canonical accounting
   cost; a lexicographic vehicle-day policy is not mislabelled as a cost oracle.
+- Approximate cost gap is reported as `(Phase 3 - Phase 4) / abs(Phase 4)`
+  only when the exact Phase-4 cost exceeds the documented `1e-5 JPY`
+  numerical tolerance. Zero-cost reference cases retain the raw cost delta but
+  are labelled `not_identifiable_zero_reference_cost`; solver noise is never
+  converted into a signed performance claim.
 
 ## 2026-08-21 same-SHA pure ICE aggregation A/B diagnostic
 

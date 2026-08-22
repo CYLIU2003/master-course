@@ -37,6 +37,14 @@
   final canonical accounting cost is the comparison quantity. The blocked
   `output/verification/small_integrated_oracle_scale/37a1fad/` bundle is kept
   as diagnostic evidence and will not be relabelled.
+- A subsequent clean `7b5a392` scale run made all three Phase-4 cases exact,
+  but the 8- and 12-trip reference costs were numerically zero. The former
+  reporting denominator floor of 1 JPY made floating-point noise appear as a
+  small signed relative advantage. The report now preserves the raw delta,
+  emits an approximate gap only when the exact reference cost is above
+  `1e-5 JPY`, and marks zero-reference cases `not_identifiable_zero_reference_cost`.
+  That `7b5a392` bundle remains diagnostic for its own SHA; a new clean run is
+  required after this reporting correction.
 - Focused oracle gate, scale aggregation, immutability, and input-validation
   tests plus integrated-cost regressions pass (`88 passed`). A fresh clean-
   commit scale execution is required;

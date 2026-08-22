@@ -13,6 +13,7 @@ from scripts.audit_small_integrated_weather_milp import (
     _is_integrated_exact_oracle_case,
     _integrated_actual_cost_oracle_problem,
     _restore_prepared_weather_comparison_contract,
+    _primary_oracle_comparison,
     _sensitivity_summary,
 )
 from src.optimization.common.cost_components import normalize_cost_component_flags
@@ -151,6 +152,37 @@ def test_integrated_oracle_gate_fails_closed_on_accounting_residual() -> None:
     assert _is_integrated_exact_oracle_case(case) is True
     case["objective_matches_accounting"] = False
     assert _is_integrated_exact_oracle_case(case) is False
+
+
+def test_primary_oracle_comparison_does_not_normalize_zero_cost_noise() -> None:
+    common = {
+        "analysis_label": "primary",
+        "timestep_min": 15,
+        "used_vehicle_count": 1,
+        "used_vehicle_count_by_type": {"ICE": 1},
+        "served_trip_count_by_vehicle_type": {"ICE": 8},
+        "assignment_hash": "assignment",
+        "assignment_powertrain_hash": "powertrain",
+    }
+    two_stage = {
+        **common,
+        "phase": "phase3_two_stage",
+        "accounted_total_cost_jpy": -7.0e-12,
+    }
+    integrated = {
+        **common,
+        "phase": "phase4_integrated",
+        "accounted_total_cost_jpy": 0.0,
+    }
+
+    comparison = _primary_oracle_comparison([two_stage, integrated])
+
+    assert comparison["two_stage_matches_integrated_cost"] is True
+    assert comparison["two_stage_approx_gap_identifiable"] is False
+    assert comparison["two_stage_approx_gap_ratio"] is None
+    assert comparison["two_stage_approx_gap_status"] == (
+        "not_identifiable_zero_reference_cost"
+    )
 
 
 def test_integrated_oracle_gate_requires_actual_cost_contract() -> None:

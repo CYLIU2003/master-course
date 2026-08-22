@@ -147,9 +147,13 @@ def _result_row(result: Mapping[str, Any]) -> dict[str, Any]:
         "two_stage_minus_integrated_cost_jpy": comparison.get(
             "two_stage_minus_integrated_cost_jpy"
         ),
-        "two_stage_cost_gap_ratio": comparison.get(
-            "two_stage_cost_gap_ratio"
+        "two_stage_approx_gap_identifiable": comparison.get(
+            "two_stage_approx_gap_identifiable"
         ),
+        "two_stage_approx_gap_ratio": comparison.get(
+            "two_stage_approx_gap_ratio"
+        ),
+        "two_stage_approx_gap_status": comparison.get("two_stage_approx_gap_status"),
         "used_vehicle_count_delta": comparison.get(
             "used_vehicle_count_delta"
         ),
@@ -196,10 +200,11 @@ def build_scale_certificate(
         global_blockers.extend(
             f"trip_{row['trip_count']}:{blocker}" for blocker in row["blockers"]
         )
-    gap_ratios = [
-        float(row["two_stage_cost_gap_ratio"])
+    identifiable_gap_ratios = [
+        float(row["two_stage_approx_gap_ratio"])
         for row in rows
-        if row.get("two_stage_cost_gap_ratio") is not None
+        if row.get("two_stage_approx_gap_identifiable") is True
+        and row.get("two_stage_approx_gap_ratio") is not None
     ]
     verified = not global_blockers and len(rows) == len(expected)
     certificate: dict[str, Any] = {
@@ -222,9 +227,28 @@ def build_scale_certificate(
         ],
         "all_sizes_verified": verified,
         "blockers": global_blockers,
-        "maximum_two_stage_cost_gap_ratio": max(gap_ratios) if gap_ratios else None,
-        "mean_two_stage_cost_gap_ratio": (
-            sum(gap_ratios) / len(gap_ratios) if gap_ratios else None
+        "approx_gap_definition": (
+            "(Phase 3 canonical accounting cost - Phase 4 exact canonical "
+            "actual-cost optimum) / abs(Phase 4 cost); undefined when the "
+            "exact reference cost is within the numerical cost tolerance"
+        ),
+        "approx_gap_identifiable_trip_counts": [
+            row["trip_count"]
+            for row in rows
+            if row.get("two_stage_approx_gap_identifiable") is True
+        ],
+        "approx_gap_not_identifiable_trip_counts": [
+            row["trip_count"]
+            for row in rows
+            if row.get("two_stage_approx_gap_identifiable") is not True
+        ],
+        "maximum_two_stage_approx_gap_ratio": (
+            max(identifiable_gap_ratios) if identifiable_gap_ratios else None
+        ),
+        "mean_two_stage_approx_gap_ratio": (
+            sum(identifiable_gap_ratios) / len(identifiable_gap_ratios)
+            if identifiable_gap_ratios
+            else None
         ),
         "provenance": dict(provenance),
         "sizes": rows,
@@ -248,7 +272,9 @@ def _write_certificate(output_dir: Path, certificate: Mapping[str, Any]) -> None
         "integrated_accounted_total_cost_jpy",
         "two_stage_accounted_total_cost_jpy",
         "two_stage_minus_integrated_cost_jpy",
-        "two_stage_cost_gap_ratio",
+        "two_stage_approx_gap_identifiable",
+        "two_stage_approx_gap_ratio",
+        "two_stage_approx_gap_status",
         "used_vehicle_count_delta",
         "used_vehicle_type_mix_matches",
         "served_trip_type_mix_matches",
@@ -273,7 +299,7 @@ def _write_certificate(output_dir: Path, certificate: Mapping[str, Any]) -> None
         f"- all sizes verified: `{certificate['all_sizes_verified']}`",
         "- scope: bounded deterministic small instances; not a 264-trip proof",
         "",
-        "| Trips | Verified | Phase 3 cost | Integrated optimum | Gap ratio | Phase 4 status |",
+        "| Trips | Verified | Phase 3 cost | Integrated optimum | Approx. gap | Phase 4 status |",
         "|---:|:---:|---:|---:|---:|---|",
     ]
     for row in rows:
@@ -284,7 +310,7 @@ def _write_certificate(output_dir: Path, certificate: Mapping[str, Any]) -> None
                 verified=row.get("verified"),
                 two_stage=row.get("two_stage_accounted_total_cost_jpy"),
                 integrated=row.get("integrated_accounted_total_cost_jpy"),
-                gap=row.get("two_stage_cost_gap_ratio"),
+                gap=row.get("two_stage_approx_gap_ratio"),
                 status=row.get("phase4_solver_status"),
             )
         )

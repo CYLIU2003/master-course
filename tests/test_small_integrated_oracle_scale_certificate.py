@@ -56,7 +56,9 @@ def _result(trip_count: int, *, gap_ratio: float = 0.0) -> dict:
                 "two_stage_minus_integrated_cost_jpy": (
                     two_stage_cost - integrated_cost
                 ),
-                "two_stage_cost_gap_ratio": gap_ratio,
+                "two_stage_approx_gap_identifiable": True,
+                "two_stage_approx_gap_ratio": gap_ratio,
+                "two_stage_approx_gap_status": "computed",
                 "used_vehicle_count_delta": 0,
                 "used_vehicle_type_mix_matches": True,
                 "served_trip_type_mix_matches": True,
@@ -80,8 +82,9 @@ def test_scale_certificate_accepts_complete_exact_series() -> None:
     assert certificate["status"] == "VERIFIED_BOUNDED_SMALL_INSTANCES"
     assert certificate["all_sizes_verified"] is True
     assert certificate["verified_trip_counts"] == [8, 12, 24]
-    assert certificate["maximum_two_stage_cost_gap_ratio"] == pytest.approx(0.02)
-    assert certificate["mean_two_stage_cost_gap_ratio"] == pytest.approx(0.01)
+    assert certificate["maximum_two_stage_approx_gap_ratio"] == pytest.approx(0.02)
+    assert certificate["mean_two_stage_approx_gap_ratio"] == pytest.approx(0.01)
+    assert certificate["approx_gap_not_identifiable_trip_counts"] == []
     assert certificate["formal_full_network_optimality_substitute"] is False
     assert len(certificate["payload_sha256"]) == 64
     assert certificate["sizes"][0]["command"][-1] == "8"
@@ -139,6 +142,30 @@ def test_scale_certificate_does_not_mutate_child_audit() -> None:
     )
 
     assert result == original
+
+
+def test_scale_certificate_excludes_zero_cost_reference_from_approx_gap() -> None:
+    result = _result(8)
+    comparison = result["audit"]["primary_comparison"]
+    comparison.update(
+        {
+            "integrated_accounted_total_cost_jpy": 0.0,
+            "two_stage_accounted_total_cost_jpy": 0.0,
+            "two_stage_minus_integrated_cost_jpy": 0.0,
+            "two_stage_approx_gap_identifiable": False,
+            "two_stage_approx_gap_ratio": None,
+            "two_stage_approx_gap_status": "not_identifiable_zero_reference_cost",
+        }
+    )
+
+    certificate = build_scale_certificate(
+        [result], expected_trip_counts=(8,), provenance={"git_sha_before": "a" * 40}
+    )
+
+    assert certificate["status"] == "VERIFIED_BOUNDED_SMALL_INSTANCES"
+    assert certificate["approx_gap_identifiable_trip_counts"] == []
+    assert certificate["approx_gap_not_identifiable_trip_counts"] == [8]
+    assert certificate["maximum_two_stage_approx_gap_ratio"] is None
 
 
 @pytest.mark.parametrize("counts", [(), (0,), (8, 8)])
