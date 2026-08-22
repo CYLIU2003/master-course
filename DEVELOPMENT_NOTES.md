@@ -108,8 +108,10 @@
   tests/test_canonical_graph_export_parity.py` (`28 passed`). A deliberate
   execution from the dirty implementation worktree returned
   `RuntimeError: fixed-decision stress requires a clean Git worktree` and did
-  not create an output directory. A new same-SHA source baseline remains
-  required before this CLI may produce evidence.
+  not create an output directory. After committing at `4194c24`, the same
+  historical source also failed closed on its different SHA
+  (`359cd36` vs `4194c24`) and again created no output. A new same-SHA source
+  baseline remains required before this CLI may produce evidence.
 
 ## 2026-08-22: fixed-decision stress evaluator added without reoptimization
 
