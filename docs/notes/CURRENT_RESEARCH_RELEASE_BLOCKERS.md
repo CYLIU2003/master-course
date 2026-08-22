@@ -1,20 +1,27 @@
 # Current research release blockers
 
-## 2026-08-22 repeated pure-ICE A/B implementation is ready; measurement pending
+## 2026-08-22 repeated pure-ICE A/B completed: structural benefit only
 
-The old `a145cf3` bundle is a valid one-pair structural diagnostic, but it
-does not meet the thesis requirement of independent processes and at least five
-AB/BA-alternating repetitions. The existing diagnostic CLI now implements that
-contract as ten isolated children, five per representation, with clean-SHA
-pre/post gates, run-level solver/correctness metrics, and measured maximum
-concurrent RSS across each child-process tree. It produces median, Q1/Q3,
-minimum and maximum statistics and can issue a speed conclusion only from
-those medians after every correctness gate passes.
+The required ten-run measurement completed at clean frozen commit
+`7ae60bef01cd6c30d7c82befcae28c3de692d2df`, saved at
+`output/diagnostics/pure_ice_aggregation_ab_repeated_7ae60be/`. It uses five
+AB/BA-alternating pairs, isolated child processes, fixed seed 42/four threads/
+900 seconds/requested 1% gap, and the same prepared-input SHA-256
+`aa101b4b95364929d2683776b03a4347f06fe7157a8a9ed7e31138968a9fd5f6` for all
+ten runs. Every case passed 264/264 coverage, physical validation, 24/24
+Rolling, accounting, SHA/control checks, and fallback/repair exclusion.
 
-This is implementation-and-test evidence, not a new measurement. A fresh
-clean-commit 264-trip command is required before the A/B release gate can be
-cleared; any `FAIL_CORRECTNESS` must stop the remaining research evaluations
-and be repaired before continuation.
+The median aggregate representation reduces total variables from 780,113 to
+536,180 and constraints from 355,581 to 233,579, with complete model-build
+time 80.547 to 60.066 seconds. However, its median solver time is 644.374
+seconds versus 624.566 seconds for discrete, with essentially unchanged
+process-tree RSS. Both medians have 59,466.604450 JPY incumbent,
+56,086.529926 JPY certified bound, and 5.683988% certified gap. The
+machine-readable verdict is `PASS_STRUCTURAL_ONLY`: the result supports only
+the checked formulation-size reduction, not a speedup, 1%-gap certificate, or
+264-trip global-optimality claim. Presolve time is explicitly unavailable in
+the Gurobi artifact, not inferred. The broader release remains blocked by the
+separate sensitivity, stress, and formal-comparison gates.
 
 ## 2026-08-22 corrected electricity-price tranche is diagnostic, not accepted
 

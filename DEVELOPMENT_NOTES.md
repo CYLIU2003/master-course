@@ -1,5 +1,38 @@
 # Development Notes
 
+## 2026-08-22: repeated isolated-process pure-ICE A/B measurement completed
+
+- Executed the existing harness from clean frozen commit
+  `7ae60bef01cd6c30d7c82befcae28c3de692d2df`:
+  `.venv\\Scripts\\python.exe scripts\\build_lazy_fragment_performance_diagnostic.py
+  --run-pure-ice-aggregation-ab --scenario-id
+  b23fd26c-1233-4c73-bb9e-bdb8b1584760 --prepared-input-id
+  prepared-4df75af5493bd446-f1e18f252e336f1f-8acc7b3a
+  --optimization-request
+  output\\thesis_sensitivity_powertrain_low_pv_20260815_94ce217_bev12_900s\\cases\\BEV_ENERGY_1.2\\frontend_optimization_request.json
+  --output-dir output\\diagnostics\\pure_ice_aggregation_ab_repeated_7ae60be
+  --ab-repetitions 5 --small-exact-parity-passed`.
+- The resulting `repeated_comparison.json` records AB/BA/AB/BA/AB, five
+  isolated processes per representation, same SHA and prepared-input hash for
+  every case, and ten passing individual correctness checks: 264/264 coverage,
+  physical validation, 24-hour Rolling, accounting, and no fallback/repair.
+- Median discrete/aggregate model sizes are 780,113/536,180 variables and
+  355,581/233,579 constraints. Median complete model-build time falls from
+  80.547 to 60.066 seconds, but median solver time rises from 624.566 to
+  644.374 seconds. The two medians have the same incumbent (59,466.604450 JPY),
+  certified bound (56,086.529926 JPY), and 5.683988% certified gap. Measured
+  process-tree RSS medians are 3,699,630,080 and 3,698,847,744 bytes.
+- Verdict: `PASS_STRUCTURAL_ONLY`. This verifies the bounded formulation-size
+  reduction but explicitly rejects a runtime-speedup claim. Separate presolve
+  time remains `null` with availability metadata because the Gurobi artifact
+  does not publish it. The 1% target remains unmet, so these data are not a
+  formal full-network optimality or research-release certificate.
+- Verification after the run will use
+  `.venv\\Scripts\\python.exe -m pytest -q tests\\test_lazy_fragment_performance_diagnostic.py
+  tests\\test_integrated_actual_cost_objective.py tests\\test_readme_navigation.py`
+  and `git diff --check`; subsequent sensitivity/stress work must start from a
+  new clean commit rather than modify this measured SHA.
+
 ## 2026-08-22: repeated isolated-process pure-ICE A/B harness
 
 - Extended the existing `scripts/build_lazy_fragment_performance_diagnostic.py`
@@ -23,8 +56,8 @@
   Windows. The implementation now enumerates descendants and samples their
   concurrent working sets; a live 80 MB child allocation test observed
   96,841,728 bytes. Focused tests and integrated actual-cost regressions:
-  `75 passed`. No 264-trip repeated formal run has started yet; the old
-  one-pair `a145cf3` artifact remains historical `PASS_STRUCTURAL_ONLY` only.
+  `75 passed`. The completed repeated run is recorded above; the old one-pair
+  `a145cf3` artifact remains historical `PASS_STRUCTURAL_ONLY` only.
 - The first frozen `af452a3` launch stopped before any solver call: the hidden
   child CLI inherited the parent parser's required `--output-dir` contract but
   the parent command omitted that syntactic argument. The failure is retained

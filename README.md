@@ -1,5 +1,30 @@
 # master-course
 
+## 2026-08-22 repeated same-SHA pure-ICE aggregation A/B result
+
+- The clean frozen commit `7ae60bef01cd6c30d7c82befcae28c3de692d2df`
+  completed the required ten isolated child-process measurements in alternating
+  AB/BA/AB/BA/AB order (five runs per representation). Every run used the
+  same prepared-input SHA-256
+  `aa101b4b95364929d2683776b03a4347f06fe7157a8a9ed7e31138968a9fd5f6`,
+  seed 42, four threads, 900-second limit, and requested 1% gap.
+- All ten cases served 264/264 trips, passed physical validation, 24/24
+  Rolling and canonical accounting, and recorded no fallback or post-solve
+  repair. The parent measured concurrent RSS across each complete child process
+  tree. Gurobi does not expose a separate presolve time in this artifact, so
+  that field remains explicitly unavailable rather than estimated.
+- Median discrete versus aggregate results were 780,113 versus 536,180 total
+  variables, 355,581 versus 233,579 constraints, and 80.547 versus 60.066 s
+  complete model-build time. The identical median incumbent was 59,466.604450
+  JPY and certified bound 56,086.529926 JPY (5.683988% gap). Aggregate median
+  solver time was **slower**, 644.374 versus 624.566 s; median process-tree
+  RSS was effectively unchanged (3.699 vs 3.699 GB).
+- The authoritative bundle is
+  `output/diagnostics/pure_ice_aggregation_ab_repeated_7ae60be/` and its
+  verdict is `PASS_STRUCTURAL_ONLY`. It supports exact checked representation
+  equivalence and formulation-size reduction only; it does **not** support a
+  solver-speedup, 1%-gap, or 264-trip global-optimality claim.
+
 ## 2026-08-22 bounded integrated-oracle scale runner
 
 - Corrected the small weather-oracle contract so a Phase-4 reference case is
@@ -45,8 +70,8 @@
   isolated child processes), records per-run input/solver controls, and has
   the parent measure maximum concurrent RSS across each child-process tree.
   It publishes run-level metrics plus median, Q1/Q3, minimum, and maximum
-  summaries. A fresh clean-commit ten-run execution is still pending; no
-  new performance conclusion has been made from this implementation change.
+  summaries. The fresh clean-commit ten-run result is recorded above; no
+  speedup conclusion is made because its median solver time regressed.
 
 - Prompt A is complete at clean commit
   `a145cf3a8b9cba0e4d97c48f800fba9ff07a1e69`. The normal BFF path ran the
