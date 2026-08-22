@@ -2,18 +2,22 @@
 
 ## 2026-08-23 A/B verification status
 
-The first completed 264-trip isolated-process Phase-3 aggregation AB/BA x5
-bundle is diagnostic only:
-`output/diagnostics/pure_ice_aggregation_phase3_ab_81561d5_20260822/`.
-Although every child passed coverage, physical validation, Rolling and final
-accounting without fallback or repair, its comparison verdict is
-`FAIL_CORRECTNESS`. The effective Stage-1/Stage-2 limits differed between the
-two representations because Stage 2 was not explicitly frozen. It is not
-evidence of a speedup, an improved gap, or an accepted structural result.
+The first bundle at
+`output/diagnostics/pure_ice_aggregation_phase3_ab_81561d5_20260822/` remains
+diagnostic because its effective Stage-1/Stage-2 limits differed. The corrected
+clean-SHA bundle is
+`output/diagnostics/pure_ice_aggregation_phase3_ab_817d938_20260823/`: AB/BA
+isolated processes, five repetitions each, equal SHA/input/seed/threads and
+explicit Stage 1=435 / Stage 2=30 seconds. All ten cases passed coverage,
+physical validation, 24-step Rolling and final accounting with no fallback or
+repair.
 
-The A/B command now requires explicit `--stage1-time-limit-seconds` and
-`--stage2-time-limit-seconds`, records them in the frozen request/manifest, and
-fails before running if either is missing. A clean-SHA rerun remains required.
+Its result is `PASS_STRUCTURAL_ONLY`: median variables fell from 762,906 to
+520,173 and constraints from 108,062 to 82,035. It is not a speed or optimality
+claim—median solver time increased from 465.531 to 480.192 seconds, and all
+264-trip cases remain time-limited. The A/B CLI now requires explicit
+`--stage1-time-limit-seconds` and `--stage2-time-limit-seconds` so an unfrozen
+comparison fails before execution.
 
 ## 2026-08-22 verification checkpoint
 

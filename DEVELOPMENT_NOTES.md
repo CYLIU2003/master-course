@@ -1,5 +1,30 @@
 # Development Notes
 
+## 2026-08-23: Accepted fixed-stage Phase-3 aggregation AB/BA x5 result
+
+- Clean commit `817d9385976a70e50fbc48aa72d34e02f5c13552` was tagged
+  `phase3-ab-fixed-stage-817d938` and executed through the normal BFF worker
+  as ten isolated child processes (AB/BA alternating, five per
+  representation). The frozen controls are the same 264-trip prepared input
+  `prepared-ee27696fc37f0c7a-f1e18f252e336f1f-8acc7b3a`, seed 42, four Gurobi
+  threads, 900-second request, 1% requested gap, explicit Stage 1=435 seconds
+  and Stage 2=30 seconds, and hourly Rolling. Command:
+  `python -u scripts/build_lazy_fragment_performance_diagnostic.py --run-pure-ice-aggregation-ab --output-dir output/diagnostics/pure_ice_aggregation_phase3_ab_817d938_20260823 --scenario-id b23fd26c-1233-4c73-bb9e-bdb8b1584760 --prepared-input-id prepared-ee27696fc37f0c7a-f1e18f252e336f1f-8acc7b3a --optimization-request output/thesis_sensitivity_charger_capacity_20260822_359cd36/cases/CHARGER_COUNT_6/frontend_optimization_request.json --expected-git-sha 817d9385976a70e50fbc48aa72d34e02f5c13552 --ab-repetitions 5 --stage1-time-limit-seconds 435 --stage2-time-limit-seconds 30 --small-exact-parity-passed`.
+- `repeated_comparison.json` reports `PASS_STRUCTURAL_ONLY`: all ten children
+  served 264/264 trips, passed independent physical validation, accepted all
+  24 Rolling steps, reconciled final accounting, had matching input/control
+  contracts, and used neither fallback nor post-solve repair. The aggregate
+  median is 520,173 variables, 493,756 binary variables, 82,035 constraints,
+  and 3,021,668,352-byte peak RSS versus discrete 762,906, 726,240, 108,062,
+  and 3,657,289,728 bytes. This supports a formulation-size and sampled-RSS
+  reduction only.
+- No speedup is claimed. Aggregate median solver time was 480.192 seconds
+  versus 465.531 seconds (+14.661 seconds); its runner wall median was 617.899
+  versus 646.931 seconds, but the harness requires an improved solver-time
+  median for `PASS_PERFORMANCE`. Gurobi did not expose separate presolve time
+  in any child. The 264-trip results remain time-limited feasible candidates,
+  not an integrated global-optimality or 1%-gap result.
+
 ## 2026-08-23: Phase-3 A/B time-allocation control failure and fail-fast repair
 
 - The clean-SHA, isolated-process AB/BA x5 diagnostic at

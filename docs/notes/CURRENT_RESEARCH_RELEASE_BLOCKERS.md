@@ -1,22 +1,25 @@
 # Current research release blockers
 
-## 2026-08-23: Phase-3 aggregation A/B is blocked pending a fixed-stage-time rerun
+## 2026-08-23: Phase-3 aggregation A/B passed only its structural claim gate
 
-The completed AB/BA x5 bundle at
-`output/diagnostics/pure_ice_aggregation_phase3_ab_81561d5_20260822/` is
-**DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS**. All ten children individually
-served 264/264 trips and passed physical, Rolling, accounting, no-fallback, and
-no-repair gates, but `repeated_comparison.json` correctly reports
-`FAIL_CORRECTNESS`: the effective Stage 1/2 limits drifted between
-representations (discrete 434/30 seconds; aggregate 435/329 seconds). Thus no
-speed, gap, cost, or structural comparison may cite this bundle.
+The first completed bundle at
+`output/diagnostics/pure_ice_aggregation_phase3_ab_81561d5_20260822/` remains
+**DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS** because its effective Stage
+1/2 limits drifted between representations. The fixed-control rerun at clean
+commit `817d9385976a70e50fbc48aa72d34e02f5c13552` is the authoritative A/B
+bundle: `output/diagnostics/pure_ice_aggregation_phase3_ab_817d938_20260823/`.
 
-The A/B harness now fails before execution unless both explicit Stage 1 and
-Stage 2 time limits are provided and frozen into its request/manifest. Rerun
-only from a clean commit with the exact same scenario, prepared input, SHA,
-seed, threads, gap, and these explicit stage limits. Do not run downstream
-formal comparison or sensitivity claims until the resulting repeated verdict is
-not `FAIL_CORRECTNESS`.
+It completed alternating AB/BA isolated processes, five runs per
+representation, with equal SHA/input hashes, seed, threads, request/gap, and
+explicit Stage 1=435 / Stage 2=30 second limits. All ten cases served 264/264,
+passed physical, 24/24 Rolling, and accounting gates without fallback or
+repair. Its verdict is `PASS_STRUCTURAL_ONLY`: aggregate median size/RSS fell
+from 762,906 variables / 108,062 constraints / 3,657,289,728 bytes to 520,173
+/ 82,035 / 3,021,668,352 bytes. It is **not a speed claim**, because aggregate
+median solver time was 480.192 seconds versus 465.531 seconds for discrete.
+Presolve timing is unavailable from Gurobi. The A/B blocker is closed only for
+the limited formulation-size conclusion; all release, sensitivity, and formal
+comparison blockers remain.
 
 ## 2026-08-22 current evidence checkpoint: baseline and bounded checks pass; release remains blocked
 
