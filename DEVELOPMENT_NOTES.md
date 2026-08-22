@@ -20,8 +20,16 @@
   emits JSON/CSV/Markdown evidence. Any missing size, non-optimal integrated
   solve, incomplete Phase-3 schedule, accounting-contract failure, or negative
   comparison delta blocks the entire certificate.
+- The first clean execution exposed a separate provenance defect before any
+  solve: materialization let an empty current `comparison_type` erase the
+  prepared input's explicit `same_service_date_pv_counterfactual` contract,
+  causing an `actual_weather_date_differs_from_service_date` rejection. The
+  audit now restores only explicit prepared comparison fields and rejects any
+  conflicting non-empty current value. A strict build-only check records
+  `comparison_type=counterfactual_weather_profile`, no calendar errors, and
+  preserves the 2025-08-05 service date with the frozen 2025-08-10 PV source.
 - Focused oracle gate, scale aggregation, immutability, and input-validation
-  tests pass (`16 passed`). A fresh clean-commit scale execution is required;
+  tests pass (`19 passed`). A fresh clean-commit scale execution is required;
   no archived 10-trip result is relabelled by this implementation change.
 
 ## 2026-08-21: same-SHA pure ICE aggregation A/B harness

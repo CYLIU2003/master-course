@@ -17,6 +17,14 @@ deviation from each eligible integrated optimum. Until that clean-commit
 certificate completes, the corrected small-oracle gate is implementation and
 test evidence only. It is not a full-network optimality result.
 
+The first corrected-run attempt also exposed, and failed closed on, a separate
+prepared-input materialization defect: an empty current `comparison_type`
+erased the frozen `same_service_date_pv_counterfactual` declaration and caused
+the calendar validator to treat the 2025-08-10 PV source as an actual-service
+weather claim. The audit now restores only explicit prepared contract fields
+and rejects a conflicting non-empty scenario value. A fresh clean-commit
+8/12/24 execution is still required.
+
 ## 2026-08-21 same-SHA A/B complete; structural benefit only
 
 The exact ICE-clone discrete/pure-aggregate selector is internal to the solver

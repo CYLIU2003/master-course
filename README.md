@@ -17,6 +17,10 @@
   exact eligibility, Phase-3 cost deviation, fleet/assignment comparisons,
   Git/input provenance, and artifact hashes. It refuses a dirty worktree and
   never upgrades bounded evidence to a 264-trip optimality claim.
+- The oracle restores only the explicit PV-counterfactual/calendar contract
+  already frozen in the prepared input. A non-empty conflicting current
+  scenario value is rejected; neither the service date, timetable, nor PV
+  curve is rewritten.
 
 ## 2026-08-21 same-SHA pure ICE aggregation A/B diagnostic
 

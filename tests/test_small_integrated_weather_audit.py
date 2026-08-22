@@ -3,12 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from types import SimpleNamespace
 
+import pytest
+
 from scripts.audit_small_integrated_weather_milp import (
     _available_vehicle_subset,
     _align_objective_with_accounting,
     _day_spanning_trip_subset,
     _five_minute_sensitivity_comparison,
     _is_integrated_exact_oracle_case,
+    _restore_prepared_weather_comparison_contract,
     _sensitivity_summary,
 )
 from src.optimization.common.cost_components import normalize_cost_component_flags
@@ -39,6 +42,44 @@ def test_vehicle_subset_can_isolate_ice_accounting_path() -> None:
     )
 
     assert [vehicle.vehicle_id for vehicle in selected] == ["ice-1", "ice-2"]
+
+
+def test_small_oracle_restores_explicit_prepared_counterfactual_contract() -> None:
+    scenario = {
+        "simulation_config": {
+            "comparison_type": None,
+            "comparison_role": "pv_curve_counterfactual",
+        }
+    }
+    prepared = {
+        "simulation_config": {
+            "comparison_type": "same_service_date_pv_counterfactual",
+            "comparison_role": "pv_curve_counterfactual",
+            "counterfactual_pv_source_date": "2025-08-10",
+            "weather_observation_date": "2025-08-10",
+        }
+    }
+
+    _restore_prepared_weather_comparison_contract(scenario, prepared)
+
+    assert scenario["simulation_config"]["comparison_type"] == (
+        "same_service_date_pv_counterfactual"
+    )
+    assert scenario["simulation_config"]["weather_observation_date"] == (
+        "2025-08-10"
+    )
+
+
+def test_small_oracle_rejects_conflicting_current_counterfactual_contract() -> None:
+    scenario = {"simulation_config": {"comparison_type": "actual_service_day"}}
+    prepared = {
+        "simulation_config": {
+            "comparison_type": "same_service_date_pv_counterfactual"
+        }
+    }
+
+    with pytest.raises(ValueError, match="contract conflicts"):
+        _restore_prepared_weather_comparison_contract(scenario, prepared)
 
 
 def test_small_oracle_disables_non_accounting_preference_terms() -> None:

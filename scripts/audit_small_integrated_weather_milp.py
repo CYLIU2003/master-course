@@ -47,6 +47,47 @@ from src.preprocess.weather.operation_policy import (  # noqa: E402
 )
 
 
+_PREPARED_WEATHER_COMPARISON_KEYS = (
+    "comparison_type",
+    "comparison_role",
+    "counterfactual_pv_source_date",
+    "weather_observation_date",
+    "weather_profile_source",
+    "calendar_policy",
+    "allow_fixed_weekday_timetable_pv_counterfactual",
+)
+
+
+def _restore_prepared_weather_comparison_contract(
+    scenario: dict[str, Any],
+    prepared_payload: dict[str, Any],
+) -> None:
+    """Restore explicit prepared comparison metadata without changing inputs.
+
+    Materialization merges the current scenario document with the frozen
+    prepared input.  An empty current `comparison_type` must not erase the
+    explicit counterfactual contract saved by Prepare.  Conversely, a
+    conflicting non-empty current declaration is provenance drift and fails
+    closed rather than being overwritten.
+    """
+
+    prepared_config = dict(prepared_payload.get("simulation_config") or {})
+    scenario_config = dict(scenario.get("simulation_config") or {})
+    for key in _PREPARED_WEATHER_COMPARISON_KEYS:
+        prepared_value = prepared_config.get(key)
+        if prepared_value in (None, ""):
+            continue
+        scenario_value = scenario_config.get(key)
+        if scenario_value not in (None, "") and scenario_value != prepared_value:
+            raise ValueError(
+                "prepared weather comparison contract conflicts with current "
+                f"scenario for {key}: prepared={prepared_value!r}, "
+                f"scenario={scenario_value!r}"
+            )
+        scenario_config[key] = prepared_value
+    scenario["simulation_config"] = scenario_config
+
+
 def _day_spanning_trip_subset(problem: CanonicalOptimizationProblem, count: int) -> tuple[Any, ...]:
     ordered = sorted(
         problem.trips,
@@ -277,6 +318,7 @@ def _build_problem(args: argparse.Namespace, timestep_min: int) -> CanonicalOpti
             prepared_payload,
         )
     )
+    _restore_prepared_weather_comparison_contract(scenario, prepared_payload)
     _configure_small_discretization(scenario, timestep_min=timestep_min)
     enforce_research_phase3_single_continuous_duty(scenario)
     scenario, forecast, profile = _prepare_weather_policy_for_scenario(
@@ -496,6 +538,12 @@ def _run_case(
         "validation_metrics": dict(metadata.get("validation_metrics") or {}),
         "research_acceptance_checks": dict(
             metadata.get("research_acceptance_checks") or {}
+        ),
+        "service_calendar_validation": dict(
+            problem.metadata.get("service_calendar_validation") or {}
+        ),
+        "weather_comparison_contract": dict(
+            problem.metadata.get("weather_comparison_contract") or {}
         ),
         "used_vehicle_trace": used_vehicle_trace,
         "assignment_rows": assignment_rows,
