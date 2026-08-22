@@ -13081,12 +13081,13 @@ class GurobiMILPAdapter:
         ).strip().lower()
         if stage1_fragment_transition_cut_mode not in {
             "lazy",
+            "lifted_root",
             "lazy_root_cuts",
             "explicit_root",
         }:
             raise ValueError(
                 "stage1_fragment_transition_cut_mode must be 'lazy', "
-                "'lazy_root_cuts', or 'explicit_root'"
+                "'lifted_root', 'lazy_root_cuts', or 'explicit_root'"
             )
         if stage1_single_path_redundancy_elimination_applied:
             fragment_pairwise_depot_reset_constraint_count = 0
@@ -13118,7 +13119,36 @@ class GurobiMILPAdapter:
                 )
                 stage1_fragment_lazy_separator = None
             else:
-                fragment_pairwise_depot_reset_constraint_count = 0
+                fragment_pairwise_depot_reset_constraint_count = (
+                    self._add_fragment_lifted_depot_reset_cuts(
+                        stage1,
+                        trip_by_id=trip_by_id,
+                        vehicles=problem.vehicles,
+                        assignment_trip_ids_by_vehicle=(
+                            assignment_trip_ids_by_vehicle
+                        ),
+                        start_arc=start_arc,
+                        end_arc=end_arc,
+                        trip_day_index_by_trip_id=(
+                            trip_day_index_by_trip_id
+                        ),
+                        problem=problem,
+                        allow_same_day_depot_cycles=(
+                            allow_same_day_depot_cycles
+                        ),
+                        fixed_route_band_mode=bool(
+                            problem.metadata.get("fixed_route_band_mode", False)
+                        ),
+                        max_start_fragments_per_vehicle=(
+                            max_start_fragments_per_vehicle
+                        ),
+                        max_end_fragments_per_vehicle=(
+                            max_end_fragments_per_vehicle
+                        ),
+                    )
+                    if stage1_fragment_transition_cut_mode == "lifted_root"
+                    else 0
+                )
                 stage1_fragment_lazy_separator = (
                     self._build_fragment_transition_lazy_separator(
                         grb=GRB,
@@ -14103,10 +14133,16 @@ class GurobiMILPAdapter:
                             "explicit_root_relaxation_strengthening"
                             if stage1_fragment_transition_cut_mode == "explicit_root"
                             else (
+                                "lifted_root_relaxation_strengthening_plus_"
+                                "lazy_exact_separation"
+                                if stage1_fragment_transition_cut_mode
+                                == "lifted_root"
+                                else (
                                 "lazy_integer_incumbent_and_root_user_cuts"
                                 if stage1_fragment_transition_cut_mode
                                 == "lazy_root_cuts"
                                 else "lazy_integer_incumbent_separation"
+                                )
                             )
                         )
                     ),
@@ -14454,10 +14490,16 @@ class GurobiMILPAdapter:
                         "explicit_root_relaxation_strengthening"
                         if stage1_fragment_transition_cut_mode == "explicit_root"
                         else (
+                            "lifted_root_relaxation_strengthening_plus_"
+                            "lazy_exact_separation"
+                            if stage1_fragment_transition_cut_mode
+                            == "lifted_root"
+                            else (
                             "lazy_integer_incumbent_and_root_user_cuts"
                             if stage1_fragment_transition_cut_mode
                             == "lazy_root_cuts"
                             else "lazy_integer_incumbent_separation"
+                            )
                         )
                     )
                 ),
@@ -23123,6 +23165,107 @@ class GurobiMILPAdapter:
                         continue
                     model.addConstr(end_arc[end_key] + start_arc[start_key] <= 1)
                     cut_count += 1
+        return cut_count
+
+    def _add_fragment_lifted_depot_reset_cuts(
+        self,
+        model: Any,
+        *,
+        trip_by_id: Mapping[str, ProblemTrip],
+        vehicles: Tuple[Any, ...],
+        assignment_trip_ids_by_vehicle: Mapping[str, List[str]],
+        start_arc: Mapping[Tuple[str, str], Any],
+        end_arc: Mapping[Tuple[str, str], Any],
+        trip_day_index_by_trip_id: Mapping[str, int],
+        problem: CanonicalOptimizationProblem,
+        allow_same_day_depot_cycles: bool,
+        fixed_route_band_mode: bool,
+        max_start_fragments_per_vehicle: int,
+        max_end_fragments_per_vehicle: int,
+    ) -> int:
+        """Add compact LP-strengthening aggregates of exact pairwise rows.
+
+        For binary endpoint variables, ``end_i=1`` forbids every incompatible
+        start in its set, while ``end_i=0`` leaves the existing fragment-count
+        bound unchanged. Thus the forward aggregate is integer-equivalent to
+        the corresponding pairwise rows. The symmetric aggregate for starts
+        is likewise valid. Both are stronger on fractional relaxations.
+        """
+        cut_count = 0
+        feasible_cache: Dict[Tuple[str, str, str, str, bool, bool], bool] = {}
+        for vehicle in vehicles:
+            vehicle_id = str(getattr(vehicle, "vehicle_id", "") or "")
+            vehicle_type = str(getattr(vehicle, "vehicle_type", "") or "")
+            home_depot_id = str(getattr(vehicle, "home_depot_id", "") or "")
+            trip_ids = tuple(assignment_trip_ids_by_vehicle.get(vehicle_id, ()))
+            invalid_starts_by_end: Dict[str, List[Any]] = {}
+            invalid_ends_by_start: Dict[str, List[Any]] = {}
+            for end_trip_id in trip_ids:
+                end_trip = trip_by_id.get(end_trip_id)
+                end_key = (vehicle_id, end_trip_id)
+                if end_trip is None or end_key not in end_arc:
+                    continue
+                for start_trip_id in trip_ids:
+                    start_trip = trip_by_id.get(start_trip_id)
+                    start_key = (vehicle_id, start_trip_id)
+                    if (
+                        start_trip is None
+                        or start_key not in start_arc
+                        or end_trip_id == start_trip_id
+                        or int(trip_day_index_by_trip_id.get(end_trip_id, 0))
+                        != int(trip_day_index_by_trip_id.get(start_trip_id, 0))
+                        or self._trip_service_arrival_min(problem, end_trip)
+                        > self._service_minute(problem, start_trip.departure_min)
+                    ):
+                        continue
+                    cache_key = (
+                        vehicle_type,
+                        home_depot_id,
+                        str(end_trip_id),
+                        str(start_trip_id),
+                        fixed_route_band_mode,
+                        allow_same_day_depot_cycles,
+                    )
+                    feasible = feasible_cache.get(cache_key)
+                    if feasible is None:
+                        feasible = fragment_transition_diagnostic(
+                            VehicleDuty(
+                                duty_id=f"{vehicle_id}__end_probe",
+                                vehicle_type=vehicle_type,
+                                legs=(DutyLeg(trip=end_trip),),
+                            ),
+                            VehicleDuty(
+                                duty_id=f"{vehicle_id}__start_probe",
+                                vehicle_type=vehicle_type,
+                                legs=(DutyLeg(trip=start_trip),),
+                            ),
+                            home_depot_id=home_depot_id,
+                            dispatch_context=problem.dispatch_context,
+                            fixed_route_band_mode=fixed_route_band_mode,
+                            allow_same_day_depot_cycles=allow_same_day_depot_cycles,
+                        ).feasible
+                        feasible_cache[cache_key] = feasible
+                    if not feasible:
+                        invalid_starts_by_end.setdefault(end_trip_id, []).append(
+                            start_arc[start_key]
+                        )
+                        invalid_ends_by_start.setdefault(start_trip_id, []).append(
+                            end_arc[end_key]
+                        )
+            for end_trip_id, invalid_starts in invalid_starts_by_end.items():
+                model.addConstr(
+                    sum(invalid_starts)
+                    <= max_start_fragments_per_vehicle
+                    * (1 - end_arc[(vehicle_id, end_trip_id)])
+                )
+                cut_count += 1
+            for start_trip_id, invalid_ends in invalid_ends_by_start.items():
+                model.addConstr(
+                    sum(invalid_ends)
+                    <= max_end_fragments_per_vehicle
+                    * (1 - start_arc[(vehicle_id, start_trip_id)])
+                )
+                cut_count += 1
         return cut_count
 
     def _add_fragment_temporal_occupancy_constraints(

@@ -859,7 +859,7 @@ class RunOptimizationBody(BaseModel):
     stage1_best_obj_stop_enabled: bool = INTERACTIVE_STAGE1_BEST_OBJ_STOP_ENABLED
     stage1_gurobi_search_profile: Literal["default", "bound_focus"] = "default"
     stage1_fragment_transition_cut_mode: Literal[
-        "lazy", "lazy_root_cuts", "explicit_root"
+        "lazy", "lifted_root", "lazy_root_cuts", "explicit_root"
     ] = "lazy"
     stage1_stage2_candidate_limit: int = Field(default=1, ge=1, le=100)
     stage1_composition_search_radius: int = Field(default=0, ge=0, le=100)

@@ -373,10 +373,10 @@ class OptimizationConfig:
     # dual bound without changing any variable, constraint, or objective.
     stage1_gurobi_search_profile: str = "default"
     # The default lazy separator keeps exact fragment-transition rows out of
-    # the root LP. ``lazy_root_cuts`` submits only violated instances of those
-    # same valid rows at fractional nodes; ``explicit_root`` materializes every
-    # row before the solve. All modes preserve the integer feasible set and are
-    # recorded for controlled diagnostics.
+    # the root LP. ``lifted_root`` adds compact, integer-equivalent lifted
+    # aggregates; ``lazy_root_cuts`` submits violated rows at fractional nodes;
+    # ``explicit_root`` materializes every row. All modes preserve the integer
+    # feasible set and are recorded for controlled diagnostics.
     stage1_fragment_transition_cut_mode: str = "lazy"
     # Stage 1 is the runtime-dominant assignment MILP and uses Gurobi's
     # documented default.  Stage 2 uses stricter primal and integrality

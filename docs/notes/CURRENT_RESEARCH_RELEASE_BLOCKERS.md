@@ -59,6 +59,13 @@ could be considered. This routing defect is corrected and requires a new
 clean-SHA execution; neither the zero-cut result nor its time-limited artifact
 may be used for any formulation conclusion.
 
+The routed rerun confirms zero MIPNODE events, so dynamic root user cuts are
+not a viable strengthening in this Stage-1 execution path. The next pending
+candidate is `lifted_root`: compact forward/reverse aggregates of the same
+exact forbidden pairs, derived from the existing maximum fragment counts.
+They are integer-equivalent to the pairwise restrictions but may strengthen
+the fractional LP. No 264-trip conclusion exists yet.
+
 ## 2026-08-23: Three-point electricity-price tranche is physically valid but not research-accepted
 
 The clean-SHA frontend/BFF Phase-3 tranche at

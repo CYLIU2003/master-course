@@ -74,6 +74,13 @@
   zero cuts. The exact callback-routing defect is repaired by forwarding
   MIPNODE to the same fail-closed separator; focused verification remains
   `96 passed`. A new clean-SHA run is required before any conclusion.
+- The routed rerun still received no MIPNODE callbacks, so `lazy_root_cuts`
+  added zero rows and is not viable for the current Stage-1 root path. Added
+  pending `lifted_root` aggregates instead: for every endpoint, the sum of
+  incompatible opposite endpoints is bounded by the existing maximum fragment
+  count times `(1 - endpoint)`. At binary endpoints this is equivalent to the
+  exact pairwise restrictions; on fractional endpoints it is stronger and
+  requires O(vehicle × trip) rows. Focused verification: `47 passed`.
 
 ## 2026-08-23: Electricity-price Phase-3 tranche completed as a diagnostic
 

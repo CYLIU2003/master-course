@@ -607,3 +607,20 @@ def test_fragment_reset_cuts_cache_diagnostic_but_keep_per_vehicle_cuts(
 
     assert calls == 1
     assert cut_count == 2
+    lifted_count = GurobiMILPAdapter()._add_fragment_lifted_depot_reset_cuts(
+        model,
+        trip_by_id=problem.trip_by_id(),
+        vehicles=problem.vehicles,
+        assignment_trip_ids_by_vehicle={
+            vehicle_id: ["t1", "t2"] for vehicle_id in vehicle_ids
+        },
+        start_arc=start_arc,
+        end_arc=end_arc,
+        trip_day_index_by_trip_id={"t1": 0, "t2": 0},
+        problem=problem,
+        allow_same_day_depot_cycles=True,
+        fixed_route_band_mode=False,
+        max_start_fragments_per_vehicle=2,
+        max_end_fragments_per_vehicle=2,
+    )
+    assert lifted_count == 4

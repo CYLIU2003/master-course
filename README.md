@@ -35,6 +35,11 @@ The first `8181622` trial did not invoke its MIPNODE branch because the outer
 Stage-1 callback forwarded only MIPSOL events; it is invalid for evaluating
 this mode and was superseded by a dedicated callback-routing fix.
 
+The next pending `lifted_root` diagnostic replaces neither the lazy exact
+separator nor its integer contract: it adds compact forward/reverse aggregates
+of the same forbidden pairs, using the existing maximum fragment counts. It
+is an LP-strengthening hypothesis only until a clean-SHA 264-trip audit exists.
+
 ## 2026-08-23 electricity-price sensitivity status
 
 The fresh three-point Phase-3 frontend/BFF bundle at
