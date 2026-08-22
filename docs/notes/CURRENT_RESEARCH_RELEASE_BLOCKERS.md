@@ -41,7 +41,18 @@ gate. A fresh same-SHA Phase-3-only AB/BA execution is required before making
 any representation claim about the thesis method. The reused harness now
 persists the Phase-3 request transformation, refuses a child whose
 requested/resolved/executed mode differs from Phase 3, and records Stage-1
-model/solve/bound/gap/node telemetry. No new 10-run artifact exists yet.
+model/solve/bound/gap/node telemetry. The first fresh Phase-3 discrete child
+at `c80fc260546a80a81622918029c1bdb3f0de6835` completed its physical and
+accounting gates but had an empty representation audit. Source inspection
+shows that the exact ICE-clone aggregate formulation is currently wired only
+to the Phase-4 integrated builder, so this Phase-3 request did not prove that
+the requested representation reached Stage 1. The parent was stopped before
+the aggregate child completed. This partial bundle is `DIAGNOSTIC`, `NOT USED
+FOR RESEARCH CONCLUSIONS`; it must not be compared with the historical
+Phase-4 bundle. The harness now fails immediately when the Stage-1
+representation audit is missing or mismatched. A genuine Phase-3 aggregation
+implementation with an exact Stage-1 recovery/audit contract is required
+before rerunning AB/BA x 5.
 
 ## 2026-08-22 charger sensitivity executable; SOC and stress paths remain blocked
 

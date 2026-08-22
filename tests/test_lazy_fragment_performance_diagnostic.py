@@ -491,3 +491,31 @@ def test_repeated_pure_ice_ab_fails_when_any_child_control_drifts() -> None:
 
     assert comparison["correctness"]["control_contract_match"] is False
     assert comparison["verdict"] == "FAIL_CORRECTNESS"
+
+
+def test_repeated_pure_ice_ab_fails_when_representation_audit_is_missing() -> None:
+    plan = build_pure_ice_alternating_case_plan(5)
+    runs = []
+    for item in plan:
+        metrics = _pure_ice_metrics(
+            representation=item["representation"],
+            total_variables=536_000
+            if item["representation"] == "pure_aggregate"
+            else 780_000,
+            binary_variables=507_000
+            if item["representation"] == "pure_aggregate"
+            else 739_000,
+            certified_gap=0.06,
+            root_bound=58_000.0,
+            wall_time=900.0,
+        )
+        runs.append({**item, "metrics": metrics})
+    runs[0]["metrics"]["representation_audit"] = {}
+
+    comparison = build_repeated_pure_ice_ab_comparison(
+        runs,
+        small_exact_parity_passed=True,
+    )
+
+    assert comparison["correctness"]["individual_run_checks"][0]["passed"] is False
+    assert comparison["verdict"] == "FAIL_CORRECTNESS"

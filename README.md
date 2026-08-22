@@ -56,6 +56,13 @@
 
 ## 2026-08-22 repeated same-SHA pure-ICE aggregation A/B result
 
+The current Phase-3 A/B gate is blocked: the aggregate ICE-clone formulation
+is presently available only in the integrated Phase-4 builder, not in the
+deployed Phase-3 Stage-1 model. A stopped partial Phase-3 attempt at
+`output/diagnostics/pure_ice_aggregation_phase3_ab_c80fc26_20260822/` lacks
+the required representation audit and is diagnostic only. It cannot support
+a Phase-3 structural or runtime claim.
+
 - The clean frozen commit `7ae60bef01cd6c30d7c82befcae28c3de692d2df`
   completed the required ten isolated child-process measurements in alternating
   AB/BA/AB/BA/AB order (five runs per representation). Every run used the

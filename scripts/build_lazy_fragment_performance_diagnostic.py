@@ -884,6 +884,27 @@ def _pure_ice_case_valid(metrics: Mapping[str, Any]) -> bool:
     )
 
 
+def _pure_ice_representation_audit_valid(
+    metrics: Mapping[str, Any],
+    representation: str,
+) -> bool:
+    """Require evidence that the requested representation reached Stage 1."""
+    audit = dict(metrics.get("representation_audit") or {})
+    if audit.get("representation") != representation:
+        return False
+    vehicle_label_count = int(
+        audit.get("vehicle_label_flow_variable_count_created") or 0
+    )
+    aggregate_network_count = int(
+        audit.get("aggregate_network_variable_count_created") or 0
+    )
+    if representation == "discrete":
+        return vehicle_label_count > 0 and aggregate_network_count == 0
+    if representation == "pure_aggregate":
+        return vehicle_label_count == 0 and aggregate_network_count > 0
+    raise ValueError(f"unsupported pure-ICE representation: {representation!r}")
+
+
 def build_pure_ice_ab_comparison(
     case_a: Mapping[str, Any],
     case_b: Mapping[str, Any],
@@ -894,19 +915,9 @@ def build_pure_ice_ab_comparison(
     validity_a = dict(case_a.get("validity") or {})
     validity_b = dict(case_b.get("validity") or {})
 
-    audit_a = dict(case_a.get("representation_audit") or {})
-    audit_b = dict(case_b.get("representation_audit") or {})
     representation_correct = bool(
-        audit_a.get("representation") == "discrete"
-        and int(audit_a.get("vehicle_label_flow_variable_count_created") or 0)
-        > 0
-        and int(audit_a.get("aggregate_network_variable_count_created") or 0)
-        == 0
-        and audit_b.get("representation") == "pure_aggregate"
-        and int(audit_b.get("vehicle_label_flow_variable_count_created") or 0)
-        == 0
-        and int(audit_b.get("aggregate_network_variable_count_created") or 0)
-        > 0
+        _pure_ice_representation_audit_valid(case_a, "discrete")
+        and _pure_ice_representation_audit_valid(case_b, "pure_aggregate")
     )
     correctness = bool(
         small_exact_parity_passed
@@ -1279,17 +1290,10 @@ def build_repeated_pure_ice_ab_comparison(
     )
 
     def _case_correct(metrics: Mapping[str, Any], representation: str) -> bool:
-        audit = dict(metrics.get("representation_audit") or {})
-        expected_audit = (
-            audit.get("representation") == representation
-            and (
-                int(audit.get("vehicle_label_flow_variable_count_created") or 0) > 0
-                if representation == "discrete"
-                else int(audit.get("vehicle_label_flow_variable_count_created") or 0) == 0
-                and int(audit.get("aggregate_network_variable_count_created") or 0) > 0
-            )
+        return bool(
+            _pure_ice_representation_audit_valid(metrics, representation)
+            and _pure_ice_case_valid(metrics)
         )
-        return bool(expected_audit and _pure_ice_case_valid(metrics))
 
     individual_checks = [
         {
@@ -1874,6 +1878,13 @@ def run_pure_ice_aggregation_child(
         representation=representation,
         runner_wall_time_sec=wall_time,
     )
+    if not _pure_ice_representation_audit_valid(metrics, representation):
+        observed_audit = dict(metrics.get("representation_audit") or {})
+        raise RuntimeError(
+            "pure-ICE A/B representation audit is missing or does not match "
+            f"the requested child representation {representation!r}: "
+            f"{observed_audit!r}"
+        )
     phase_provenance = dict(metrics.get("provenance") or {})
     observed_phases = {
         key: phase_provenance.get(key)

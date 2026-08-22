@@ -1,5 +1,25 @@
 # Development Notes
 
+## 2026-08-22: Phase-3 pure-ICE A/B stopped on missing representation evidence
+
+- The first fresh Phase-3 child at clean `c80fc26` completed 264/264 service,
+  independent physical validation, 24/24 Rolling, and accounting, but its
+  canonical metadata contained no
+  `integrated_exact_combustion_clone_flow_aggregation_audit`. Code inspection
+  confirmed the clone aggregate model is currently built only in the
+  integrated Phase-4 path; the Phase-3 Stage-1 formulation therefore did not
+  change representation. The parent and incomplete second child were stopped
+  rather than spending the remaining nine runs on an invalid A/B.
+- `build_lazy_fragment_performance_diagnostic.py` now requires a matching
+  representation audit in every child immediately after collection, as well
+  as at comparison finalization. `tests/test_lazy_fragment_performance_diagnostic.py`
+  now covers a missing audit and requires `FAIL_CORRECTNESS`.
+- The partial directory
+  `output/diagnostics/pure_ice_aggregation_phase3_ab_c80fc26_20260822/` is
+  diagnostic only. It is not a Phase-3 A/B result. A Stage-1 exact aggregate
+  implementation and recovery proof are required before retrying the
+  AB/BA x 5 experiment.
+
 ## 2026-08-22: pure-ICE A/B harness is now Phase-3-only
 
 - The previous repeated A/B artifact was discovered to have executed
