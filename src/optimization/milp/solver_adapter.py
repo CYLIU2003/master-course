@@ -24401,9 +24401,12 @@ class GurobiMILPAdapter:
         source.  A stronger continuous path-cover relaxation also includes
         optimistic startup, inter-trip, and return deadhead quantities while
         limiting free-source credit to energy assigned to electric paths.
-        Vehicle identity, path-count, timing, charger, and depot coupling stay
-        relaxed, so both values remain lower bounds rather than dispatch
-        estimates.
+        Vehicle identity, path-count, charger, and depot coupling stay
+        relaxed.  The path formulation nevertheless retains the necessary
+        powertrain-level concurrent-service capacity: at any service minute,
+        assigned trips of a powertrain cannot exceed the available fleet count
+        for that powertrain.  Both values therefore remain lower bounds rather
+        than dispatch estimates.
         """
 
         electric_types = {"BEV", "PHEV", "FCEV"}
@@ -24673,6 +24676,8 @@ class GurobiMILPAdapter:
             "variable_count": 0,
             "constraint_count": 0,
             "powertrain_arc_count": 0,
+            "powertrain_concurrent_service_capacity_constraint_count": 0,
+            "available_vehicle_count_by_powertrain": {},
             "free_source_used_kwh": None,
             "grid_source_used_kwh": None,
         }
@@ -24687,9 +24692,12 @@ class GurobiMILPAdapter:
             "mip_gap_ratio": None,
             "solution_count": 0,
             "selector_variable_count": 0,
+            "powertrain_concurrent_service_capacity_constraint_count": 0,
+            "available_vehicle_count_by_powertrain": {},
             "semantics": (
-                "integral_powertrain_path_selection_with_vehicle_identity_"
-                "soc_charger_and_time_source_coupling_relaxed"
+                "integral_powertrain_path_selection_with_powertrain_level_"
+                "concurrent_service_capacity_and_vehicle_identity_soc_charger_"
+                "and_time_source_coupling_relaxed"
             ),
         }
         path_source_lp_lower_bound_jpy: Optional[float] = None
@@ -24940,6 +24948,70 @@ class GurobiMILPAdapter:
                         quantity,
                     )
 
+                available_vehicle_count_by_powertrain = {
+                    powertrain: sum(
+                        1
+                        for vehicle_id, vehicle in vehicle_by_id.items()
+                        if bool(getattr(vehicle, "available", True))
+                        and powertrain_by_vehicle_id.get(
+                            str(vehicle_id)
+                        )
+                        == powertrain
+                    )
+                    for powertrain in ("ELECTRIC", "COMBUSTION")
+                }
+                concurrent_service_capacity_rows: List[Dict[str, Any]] = []
+                seen_concurrent_service_capacity_rows: Set[
+                    Tuple[str, Tuple[str, ...], int]
+                ] = set()
+                service_start_minutes = sorted(
+                    {
+                        int(trip.departure_min)
+                        for trip in problem.trips
+                        if int(trip.arrival_min) > int(trip.departure_min)
+                    }
+                )
+                for service_minute in service_start_minutes:
+                    active_trip_ids = tuple(
+                        sorted(
+                            str(trip.trip_id)
+                            for trip in problem.trips
+                            if int(trip.departure_min)
+                            <= service_minute
+                            < int(trip.arrival_min)
+                        )
+                    )
+                    for powertrain in ("ELECTRIC", "COMBUSTION"):
+                        active_compatible_trip_ids = tuple(
+                            trip_id
+                            for trip_id in active_trip_ids
+                            if (trip_id, powertrain)
+                            in allowed_trip_powertrains
+                        )
+                        capacity = int(
+                            available_vehicle_count_by_powertrain[powertrain]
+                        )
+                        row_key = (
+                            powertrain,
+                            active_compatible_trip_ids,
+                            capacity,
+                        )
+                        if (
+                            len(active_compatible_trip_ids) <= capacity
+                            or row_key in seen_concurrent_service_capacity_rows
+                        ):
+                            continue
+                        seen_concurrent_service_capacity_rows.add(row_key)
+                        concurrent_service_capacity_rows.append(
+                            {
+                                "powertrain": powertrain,
+                                "active_trip_ids": list(
+                                    active_compatible_trip_ids
+                                ),
+                                "capacity": capacity,
+                            }
+                        )
+
                 path_source_lp_input = {
                     "minimum_grid_unit_cost_yen_per_kwh": (
                         minimum_grid_unit_cost
@@ -24973,6 +25045,12 @@ class GurobiMILPAdapter:
                             arc_quantity_by_powertrain.items()
                         )
                     ],
+                    "available_vehicle_count_by_powertrain": (
+                        available_vehicle_count_by_powertrain
+                    ),
+                    "concurrent_service_capacity_rows": (
+                        concurrent_service_capacity_rows
+                    ),
                 }
                 path_source_lp_audit["input_hash"] = hashlib.sha256(
                     json.dumps(
@@ -25059,6 +25137,15 @@ class GurobiMILPAdapter:
                             if (trip_id, powertrain) in assignment_var
                         )
                         == 1.0
+                    )
+                for row in concurrent_service_capacity_rows:
+                    powertrain = str(row["powertrain"])
+                    path_source_model.addConstr(
+                        gp.quicksum(
+                            assignment_var[(str(trip_id), powertrain)]
+                            for trip_id in row["active_trip_ids"]
+                        )
+                        <= int(row["capacity"])
                     )
 
                 electric_source_requirement = gp.quicksum(
@@ -25147,6 +25234,12 @@ class GurobiMILPAdapter:
                         "powertrain_arc_count": len(
                             arc_quantity_by_powertrain
                         ),
+                        "powertrain_concurrent_service_capacity_constraint_count": (
+                            len(concurrent_service_capacity_rows)
+                        ),
+                        "available_vehicle_count_by_powertrain": (
+                            available_vehicle_count_by_powertrain
+                        ),
                         "runtime_sec": float(
                             getattr(path_source_model, "Runtime", 0.0)
                             or 0.0
@@ -25204,6 +25297,12 @@ class GurobiMILPAdapter:
                             getattr(path_source_model, "SolCount", 0) or 0
                         ),
                         "selector_variable_count": len(selector_variables),
+                        "powertrain_concurrent_service_capacity_constraint_count": (
+                            len(concurrent_service_capacity_rows)
+                        ),
+                        "available_vehicle_count_by_powertrain": (
+                            available_vehicle_count_by_powertrain
+                        ),
                     }
                 )
                 if path_source_mip_status == grb.OPTIMAL:
@@ -25287,6 +25386,11 @@ class GurobiMILPAdapter:
                 "selector_variable_count": path_source_mip_audit[
                     "selector_variable_count"
                 ],
+                "powertrain_concurrent_service_capacity_constraint_count": (
+                    path_source_mip_audit[
+                        "powertrain_concurrent_service_capacity_constraint_count"
+                    ]
+                ),
             },
         }
         certificate_hash = hashlib.sha256(

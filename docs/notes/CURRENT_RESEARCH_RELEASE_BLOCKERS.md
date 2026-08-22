@@ -133,6 +133,15 @@ not start. The artifact passes input-provenance and clean-SHA checks but is
 **DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS**; this valid lower-bound
 tightening is not the remaining certificate path.
 
+The next deliberately bounded certificate tightening retains one additional
+necessary condition without changing the production Stage-1 model: at each
+service instant, selected trips of a powertrain cannot exceed its available
+fleet count. Vehicle identity, deadhead occupancy, SOC, chargers, depot
+allocation, and time-indexed source coupling remain relaxed, so this is still
+only a lower bound. The rows and fleet counts are hashed and audited. Its
+small two-concurrent-trip regression passes, but it has no 264-trip clean-SHA
+artifact yet; therefore it is **PENDING, NOT USED FOR RESEARCH CONCLUSIONS**.
+
 The reusable pure-ICE A/B harness was also corrected before any further
 measurement: it now explicitly forwards every Stage-1 profile/diagnostic/cut
 argument to the synchronous BFF worker. This prevents a positional-argument

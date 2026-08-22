@@ -2,6 +2,19 @@
 
 ## 2026-08-23: Phase-3 gap-control telemetry and search-control falsification
 
+- Tightened the analytical `path_powertrain_source_flow_lp` and its integral
+  selector-MIP companion with a necessary powertrain-level concurrent-service
+  capacity row. At every trip departure instant, the selected active BEV/PHEV/
+  FCEV or combustion trips cannot exceed the count of available vehicles in
+  that powertrain. This is valid for every full Stage-1 solution and remains a
+  lower-bound relaxation because it omits vehicle identity, deadhead occupancy,
+  SOC, chargers, depot allocation, and time-indexed energy sources. The
+  certificate input hash now includes the retained capacity rows and fleet
+  counts; audits expose their count. A two-concurrent-trip, one-BEV/one-ICE
+  regression proves that the cheaper BEV cannot be selected twice. This code
+  change has no 264-trip result yet and is not research evidence until a fresh
+  clean-SHA frontend artifact and all acceptance checks exist.
+
 - Added the bounded `path_powertrain_source_flow_mip` certificate to the
   existing weather-aware Stage-1 analytical lower bound. It reuses the
   continuous powertrain path/source-flow model but makes only assignment,

@@ -11,6 +11,16 @@ is adopted only when Gurobi proves it optimal, so an unfinished diagnostic
 cannot raise the certified lower bound. This is a lower-bound strengthening,
 not a claim that Phase 3 is an integrated global total-cost optimum.
 
+The same certificate now also retains the necessary fleet-count condition for
+simultaneous service: for each powertrain and service instant, selected trips
+cannot outnumber available vehicles of that powertrain. It remains a
+relaxation—vehicle identity, deadhead occupancy, SOC, chargers, depot, and
+energy-time coupling are still omitted—but it no longer permits simultaneous
+BEV or ICE service beyond the actual powertrain fleet. These deterministic rows
+and fleet counts are included in the certificate input hash and audit. A new
+264-trip clean-SHA diagnostic is required before assigning any performance,
+gap, or research-acceptance meaning to this tightening.
+
 The clean-SHA 264-trip diagnostic at
 `output/2026-08-23/run_20260823_0507/` (commit `93608f4`) proves that this
 certificate is correct but insufficient for the current case: it solved in

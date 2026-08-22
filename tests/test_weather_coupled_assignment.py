@@ -833,9 +833,22 @@ def test_weather_energy_fuel_certificate_is_a_pv_sensitive_lower_bound() -> None
     assert sunny_path_lp["input_hash"] == dict(
         sunny_repeat["path_powertrain_source_flow_lp"]
     )["input_hash"]
+    assert sunny_path_lp[
+        "powertrain_concurrent_service_capacity_constraint_count"
+    ] == 2
+    assert sunny_path_lp["available_vehicle_count_by_powertrain"] == {
+        "ELECTRIC": 1,
+        "COMBUSTION": 1,
+    }
+    # The two trips overlap.  With one BEV and one ICE, the lower-bound
+    # formulation cannot assign both trips to the cheaper BEV powertrain.
+    assert float(sunny_path_lp["lower_bound_jpy"]) == pytest.approx(10.0)
     assert sunny_path_mip["status"] == "optimal"
     assert sunny_path_mip["valid"] is True
     assert sunny_path_mip["selector_variable_count"] > 0
+    assert sunny_path_mip[
+        "powertrain_concurrent_service_capacity_constraint_count"
+    ] == 2
     assert float(sunny_path_mip["lower_bound_jpy"]) >= float(
         sunny_path_lp["lower_bound_jpy"]
     )
