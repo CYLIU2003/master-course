@@ -66,6 +66,14 @@ exact forbidden pairs, derived from the existing maximum fragment counts.
 They are integer-equivalent to the pairwise restrictions but may strengthen
 the fractional LP. No 264-trip conclusion exists yet.
 
+The `lifted_root` 264-trip diagnostic at clean commit
+`b484024e2ace6272b5a7cace4785887fa762925d` is also negative: 31,140 compact
+rows raised Stage-1 constraints from 108,062 to 139,202, but the certified
+bound, incumbent, and 19.227307% gap were identical. Its short budget ended
+before physical validation (`source_artifact_validation_failed`). It is
+**DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS**. Fragment-boundary
+strengthening is not the current release path.
+
 ## 2026-08-23: Three-point electricity-price tranche is physically valid but not research-accepted
 
 The clean-SHA frontend/BFF Phase-3 tranche at

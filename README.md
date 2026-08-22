@@ -40,6 +40,14 @@ separator nor its integer contract: it adds compact forward/reverse aggregates
 of the same forbidden pairs, using the existing maximum fragment counts. It
 is an LP-strengthening hypothesis only until a clean-SHA 264-trip audit exists.
 
+That `lifted_root` diagnostic at
+`output/thesis_phase3_lifted_root_b484024_20260823_r1/` added 31,140 rows
+(139,202 Stage-1 constraints total) but retained the identical 52,749.163582
+JPY bound, 65,305.688576-JPY incumbent, and 19.227307% gap. It also exhausted
+the short diagnostic budget before physical validation. It is **DIAGNOSTIC,
+NOT USED FOR RESEARCH CONCLUSIONS**; fragment-boundary strengthening is not
+the next certificate path.
+
 ## 2026-08-23 electricity-price sensitivity status
 
 The fresh three-point Phase-3 frontend/BFF bundle at

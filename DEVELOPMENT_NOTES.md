@@ -81,6 +81,16 @@
   count times `(1 - endpoint)`. At binary endpoints this is equivalent to the
   exact pairwise restrictions; on fractional endpoints it is stronger and
   requires O(vehicle × trip) rows. Focused verification: `47 passed`.
+- The frozen `lifted_root` 264-trip diagnostic at commit
+  `b484024e2ace6272b5a7cace4785887fa762925d` is stored at
+  `output/thesis_phase3_lifted_root_b484024_20260823_r1/`. It added 31,140
+  rows (108,062 to 139,202 constraints) while retaining the same prepared
+  input, full successor network, seed, threads, objective, and 240-second
+  budget. Its certified bound (52,749.163582 JPY), primary incumbent
+  (65,305.688576 JPY), and 19.227307% gap were unchanged. Stage 2 time-limited
+  before physical validation, so the runner correctly reported
+  `source_artifact_validation_failed`. This is diagnostic only and rejects
+  fragment-boundary LP strengthening as the next certificate path.
 
 ## 2026-08-23: Electricity-price Phase-3 tranche completed as a diagnostic
 
