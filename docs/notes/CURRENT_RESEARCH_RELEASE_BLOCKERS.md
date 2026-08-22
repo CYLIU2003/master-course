@@ -50,6 +50,25 @@ evidence that electricity price has no effect; it only identifies an
 inactive-price dispatch for these time-limited candidates. The full manifest is
 `BLOCKED`, and the accepted multi-point economic-sensitivity gate remains open.
 
+## 2026-08-23: Current-SHA M0--M3 source pair is complete but blocked
+
+The frozen `phase3-method-comparison-406d02c` bundle has explicit M1 and M3
+normal-frontend/BFF runs at `output/2026-08-23/run_20260823_0658/` and
+`output/2026-08-23/run_20260823_0700/`. They share the same nonempty prepared
+input and source SHA-256, clean SHA `406d02c`, 264-trip scope, seed, threads,
+and declared solver controls. Each has valid/research-ready input provenance,
+complete successors, 264/264 coverage, physical validation, 24/24 Rolling,
+accounting, and a verified 240-artifact bundle.
+
+The M1 requested gap is met. M3 is a physical/accounting-valid 3,600-second
+time-limit incumbent with a 5.205591% certified gap, not a certified integrated
+optimum. The fail-closed comparison at
+`output/diagnostics/method_comparison_406d02c_20260823/comparison/` verifies
+all common-input, phase-identity, source-acceptance, and M0-identity checks,
+but reports `BLOCKED` solely because `both_source_mip_gap_targets_met=false`.
+Its M0--M3 candidate costs are diagnostic only; no formal method-effect or
+release claim is cleared.
+
 ## 2026-08-23: Aggregate path-start certificate tightening awaits 264-trip measurement
 
 The analytical path/source LP and selector MIP now add the necessary aggregate

@@ -193,6 +193,23 @@ economic sensitivity or optimality result. The manifest deliberately remains
 `BLOCKED`; a price-sensitive, accepted case set and the remaining release gates
 are still required.
 
+## 2026-08-23 current-SHA M0--M3 comparison: comparable but not research-accepted
+
+At frozen `phase3-method-comparison-406d02c`, explicit M1
+(`phase1_charging_only`) and M3 (`phase4_integrated`) frontend/BFF runs shared
+the same prepared-input ID and byte hash, clean SHA `406d02c`, 264-trip scope,
+and solver controls. Both passed provenance and 240/240 artifact checks,
+physical validation, and 24/24 Rolling. The M1 gap target passed; M3 finished
+with a feasible incumbent but a 5.205591% certified gap after its 3,600-second
+budget.
+
+The fail-closed comparison at
+`output/diagnostics/method_comparison_406d02c_20260823/comparison/` verifies
+all input, phase, rule-baseline identity, and source-acceptance checks, but is
+`BLOCKED` solely because both source gap targets are not met. Its recorded
+M0/M1/M2/M3 day-ahead costs are diagnostic candidate values only—not a formal
+method-effect or global-optimality conclusion.
+
 ## 2026-08-22 verification checkpoint
 
 - The first fresh 264-trip Phase-3 A/B child at

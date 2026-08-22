@@ -358,6 +358,30 @@
   tranche must not be cited as an accepted economic response, optimality, or
   thesis sensitivity conclusion.
 
+## 2026-08-23: Current-SHA M0--M3 source pair is comparable but blocked
+
+- Froze clean commit `406d02ca0fcd66e229fa739f057a158f7a30389c` as
+  `phase3-method-comparison-406d02c`, prepared the 264-trip scenario once, and
+  executed explicit M1 (`phase1_charging_only`) and M3
+  (`phase4_integrated`) frontend/BFF jobs. M1 is
+  `output/2026-08-23/run_20260823_0658/`; M3 is
+  `output/2026-08-23/run_20260823_0700/`. Both share prepared input
+  `prepared-ee27696fc37f0c7a-f1e18f252e336f1f-8acc7b3a`, its source SHA-256,
+  clean code SHA, seed 42, four threads, 60-minute Rolling, and a 1% target.
+- Both input-provenance checks returned valid/research-ready and both
+  `verify_frontend_run_artifacts.py --research-run --require-rolling` checks
+  verified 240/240 required artifacts. The M1 job met its requested gap. M3
+  served all trips and passed physical/Rolling/accounting gates, but its
+  time-limit incumbent retained a 5.205591% certified gap after 3,600 seconds.
+- `build_thesis_ablation_comparison.py` wrote
+  `output/diagnostics/method_comparison_406d02c_20260823/comparison/`. It
+  verified phase identity, exact common inputs, clean provenance, source
+  acceptance, and M0 identity; the only failed check is
+  `both_source_mip_gap_targets_met`. Its `BLOCKED` artifact records M0/M1/M2/M3
+  day-ahead candidate costs of 81,030.774749 / 65,305.688576 / 84,078.282216 /
+  55,619.811284 JPY, respectively. These are not accepted method effects or
+  optimality evidence.
+
 ## 2026-08-23: Phase-3 A/B time-allocation control failure and fail-fast repair
 
 - The clean-SHA, isolated-process AB/BA x5 diagnostic at
