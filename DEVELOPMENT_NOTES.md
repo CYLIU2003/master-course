@@ -1,5 +1,31 @@
 # Development Notes
 
+## 2026-08-23: Phase-3 gap-control telemetry and duration falsification
+
+- The frozen `phase3-gap-escalation-f9b83ad` frontend/BFF run is retained at
+  `output/thesis_phase3_gap_escalation_f9b83ad_20260823_r1/`. Command used
+  the existing sensitivity runner with the 30-JPY/kWh case, fresh Prepare,
+  1800-second total budget, explicit Stage 1=1650 seconds, Stage 2=120
+  seconds, seed 42, four threads, and 1% requested MIP gap. It completed
+  264/264 coverage, physical validation, 24-step Rolling/accounting and
+  provenance checks, but failed only `mip_gap_target_met`: 19.227307% after
+  1680.778 solver seconds. The primary incumbent 65,305.688576 JPY, certified
+  bound 52,749.163582 JPY, and final node count 1 were unchanged from the
+  900-second trial. This falsifies time allocation alone as a sufficient fix;
+  it is diagnostic, not accepted research evidence.
+- `OptimizationConfig.stage1_gurobi_search_profile` now makes the Stage-1
+  Gurobi controls explicit: `default` reproduces documented defaults and
+  `bound_focus` uses `MIPFocus=3` and aggressive presolve. The BFF request and
+  `solver_settings.json` persist profile, MIPFocus, Heuristics, Presolve,
+  Method, NodeMethod and Symmetry. The profile changes search controls only;
+  it does not alter the objective, variables, constraints, inputs, validation,
+  or 1% acceptance threshold. Verification: `python -m py_compile
+  src/optimization/common/problem.py src/optimization/milp/solver_adapter.py
+  src/optimization/milp/engine.py bff/routers/optimization.py`; `python -m
+  pytest -q tests/test_milp_strict_coverage_metadata.py
+  tests/test_canonical_graph_export_parity.py tests/test_thesis_sensitivity_matrix.py
+  tests/test_frontend_artifact_completeness.py` (`87 passed`).
+
 ## 2026-08-23: Electricity-price Phase-3 tranche completed as a diagnostic
 
 - Executed the frontend/BFF sensitivity runner at clean commit

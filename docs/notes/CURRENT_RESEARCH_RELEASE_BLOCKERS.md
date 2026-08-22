@@ -1,5 +1,25 @@
 # Current research release blockers
 
+## 2026-08-23: Longer Phase-3 budget does not close the certified-gap gate
+
+The one-case duration escalation at frozen tag
+`phase3-gap-escalation-f9b83ad` is stored at
+`output/thesis_phase3_gap_escalation_f9b83ad_20260823_r1/`. It held the
+30-JPY/kWh prepared-scenario controls, complete successor network, seed 42,
+four Gurobi threads, and 1% target fixed while increasing the requested budget
+to Stage 1=1650 and Stage 2=120 seconds. It again served 264/264 and passed
+physical, Rolling, accounting, provenance, and clean-SHA gates, but remains
+**DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS** because the certified gap is
+still 19.227307%.
+
+The Stage-1 incumbent (65,305.688576 JPY), certified bound
+(52,749.163582 JPY), and final explored-node count (1) were unchanged from
+the prior short run. Thus merely granting more wall time has not strengthened
+the root relaxation; it is not evidence that a still longer identical run will
+meet the 1% gate. The next controlled diagnostic changes only an explicit,
+recorded Gurobi bound-focus search profile. It does not change the mathematical
+model, objective, physical constraints, input, or research threshold.
+
 ## 2026-08-23: Three-point electricity-price tranche is physically valid but not research-accepted
 
 The clean-SHA frontend/BFF Phase-3 tranche at

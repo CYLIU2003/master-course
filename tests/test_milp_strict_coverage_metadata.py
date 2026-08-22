@@ -24,6 +24,7 @@ from src.optimization.milp.solver_adapter import (
     _configured_gurobi_feasibility_tol,
     _configured_gurobi_integrality_tol,
     _configured_gurobi_threads,
+    _configured_stage1_gurobi_search_controls,
     _has_exact_mip_optimality_certificate,
     _single_path_flow_implies_temporal_exclusivity,
     _stage1_termination_reason,
@@ -105,6 +106,33 @@ def test_explicit_gurobi_threads_must_be_positive() -> None:
     assert _configured_gurobi_threads(OptimizationConfig(gurobi_threads=1)) == 1
     with pytest.raises(ValueError, match="positive integer"):
         _configured_gurobi_threads(OptimizationConfig(gurobi_threads=0))
+
+
+def test_stage1_gurobi_search_profiles_are_explicit_and_validated() -> None:
+    assert _configured_stage1_gurobi_search_controls(OptimizationConfig()) == {
+        "profile": "default",
+        "mip_focus": 0,
+        "heuristics": 0.05,
+        "presolve": -1,
+        "root_method": -1,
+        "node_method": -1,
+        "symmetry": -1,
+    }
+    assert _configured_stage1_gurobi_search_controls(
+        OptimizationConfig(stage1_gurobi_search_profile="bound_focus")
+    ) == {
+        "profile": "bound_focus",
+        "mip_focus": 3,
+        "heuristics": 0.05,
+        "presolve": 2,
+        "root_method": -1,
+        "node_method": -1,
+        "symmetry": -1,
+    }
+    with pytest.raises(ValueError, match="stage1_gurobi_search_profile"):
+        _configured_stage1_gurobi_search_controls(
+            OptimizationConfig(stage1_gurobi_search_profile="unsupported")
+        )
 
 
 def test_gurobi_feasibility_tolerances_are_stage_specific_and_validated() -> None:

@@ -288,6 +288,12 @@ class MILPOptimizer:
                     "stage1_termination_reason"
                 ),
                 "gurobi_threads": (plan.metadata or {}).get("gurobi_threads"),
+                "stage1_gurobi_search_controls": dict(
+                    (plan.metadata or {}).get(
+                        "stage1_gurobi_search_controls"
+                    )
+                    or {}
+                ),
                 "stage1_gurobi_feasibility_tol": (
                     plan.metadata or {}
                 ).get("stage1_gurobi_feasibility_tol"),

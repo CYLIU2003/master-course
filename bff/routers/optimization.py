@@ -857,6 +857,7 @@ class RunOptimizationBody(BaseModel):
     # older client cannot restore the early stop or a machine-dependent thread
     # count through a request body.
     stage1_best_obj_stop_enabled: bool = INTERACTIVE_STAGE1_BEST_OBJ_STOP_ENABLED
+    stage1_gurobi_search_profile: Literal["default", "bound_focus"] = "default"
     stage1_stage2_candidate_limit: int = Field(default=1, ge=1, le=100)
     stage1_composition_search_radius: int = Field(default=0, ge=0, le=100)
     stage1_bev_frontier_enabled: bool = False
@@ -11150,6 +11151,9 @@ def _solver_settings_payload(
         "stage1_gurobi_feasibility_tol": _float_or_none(
             metadata.get("stage1_gurobi_feasibility_tol")
         ),
+        "stage1_gurobi_search_controls": dict(
+            metadata.get("stage1_gurobi_search_controls") or {}
+        ),
         "stage2_gurobi_feasibility_tol": _float_or_none(
             metadata.get("stage2_gurobi_feasibility_tol")
         ),
@@ -11237,6 +11241,7 @@ def _run_optimization(
     stage1_time_limit_seconds: Optional[int] = None,
     stage2_time_limit_seconds: Optional[int] = None,
     stage1_best_obj_stop_enabled: bool = INTERACTIVE_STAGE1_BEST_OBJ_STOP_ENABLED,
+    stage1_gurobi_search_profile: str = "default",
     gurobi_threads: Optional[int] = INTERACTIVE_GUROBI_THREADS,
     run_profile: str = DEFAULT_FRONTEND_RUN_PROFILE,
     run_hourly_rolling: bool = True,
@@ -11465,6 +11470,9 @@ def _run_optimization(
                 stage1_time_limit_sec=stage1_time_limit_seconds,
                 stage2_time_limit_sec=stage2_time_limit_seconds,
                 stage1_best_obj_stop_enabled=bool(stage1_best_obj_stop_enabled),
+                stage1_gurobi_search_profile=str(
+                    stage1_gurobi_search_profile or "default"
+                ),
                 stage1_stage2_candidate_limit=(
                     max(int(stage1_stage2_candidate_limit), 10)
                     if bool(research_run)
@@ -13887,6 +13895,7 @@ def run_optimization(
             request.stage1_time_limit_seconds,
             request.stage2_time_limit_seconds,
             request.stage1_best_obj_stop_enabled,
+            request.stage1_gurobi_search_profile,
             request.gurobi_threads,
             run_profile,
             effective_run_hourly_rolling,

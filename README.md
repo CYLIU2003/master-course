@@ -1,5 +1,17 @@
 # master-course
 
+## 2026-08-23 Phase-3 certified-gap status
+
+The frozen 30-JPY/kWh duration escalation at
+`output/thesis_phase3_gap_escalation_f9b83ad_20260823_r1/` gave Stage 1 1650
+seconds (rather than the prior approximately 405-second primary search) while
+holding the model and formal controls fixed. It still ended at the same
+19.227307% certified Stage-1 gap, with the same incumbent, bound, and one
+explored node. It is a valid physical/accounting candidate but not an accepted
+optimality or sensitivity result. Stage-1 Gurobi profiles are now explicit and
+saved in `solver_settings.json`; `bound_focus` is a pending controlled search
+diagnostic, not a claimed model improvement.
+
 ## 2026-08-23 electricity-price sensitivity status
 
 The fresh three-point Phase-3 frontend/BFF bundle at

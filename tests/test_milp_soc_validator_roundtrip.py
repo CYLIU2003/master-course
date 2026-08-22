@@ -134,6 +134,7 @@ def test_gurobi_plan_with_startup_deadhead_roundtrips_through_validator() -> Non
             random_seed=42,
             warm_start=False,
             stage1_best_obj_stop_enabled=False,
+            stage1_gurobi_search_profile="bound_focus",
             gurobi_threads=1,
         ),
     )
@@ -147,6 +148,15 @@ def test_gurobi_plan_with_startup_deadhead_roundtrips_through_validator() -> Non
     assert result.solver_metadata[
         "stage1_gurobi_feasibility_tol"
     ] == pytest.approx(1.0e-6)
+    assert result.solver_metadata["stage1_gurobi_search_controls"] == {
+        "profile": "bound_focus",
+        "mip_focus": 3,
+        "heuristics": 0.05,
+        "presolve": 2,
+        "root_method": -1,
+        "node_method": -1,
+        "symmetry": -1,
+    }
     assert result.solver_metadata[
         "stage2_gurobi_feasibility_tol"
     ] == pytest.approx(1.0e-9)

@@ -1881,6 +1881,37 @@ def _configured_gurobi_threads(config: OptimizationConfig) -> Optional[int]:
     return threads
 
 
+def _configured_stage1_gurobi_search_controls(
+    config: OptimizationConfig,
+) -> Dict[str, Any]:
+    """Return the fully specified, reproducible Stage-1 Gurobi profile."""
+
+    profile = str(
+        getattr(config, "stage1_gurobi_search_profile", "default") or ""
+    ).strip().lower()
+    default_controls = {
+        "profile": "default",
+        "mip_focus": 0,
+        "heuristics": 0.05,
+        "presolve": -1,
+        "root_method": -1,
+        "node_method": -1,
+        "symmetry": -1,
+    }
+    if profile == "default":
+        return default_controls
+    if profile == "bound_focus":
+        return {
+            **default_controls,
+            "profile": "bound_focus",
+            "mip_focus": 3,
+            "presolve": 2,
+        }
+    raise ValueError(
+        "stage1_gurobi_search_profile must be 'default' or 'bound_focus'"
+    )
+
+
 def _configured_gurobi_feasibility_tol(
     config: OptimizationConfig,
     *,
@@ -11835,6 +11866,9 @@ class GurobiMILPAdapter:
                         "stage1_best_obj_stop_applied": False,
                         "stage1_termination_reason": "gurobi_unavailable",
                         "gurobi_threads": _configured_gurobi_threads(config),
+                        "stage1_gurobi_search_controls": dict(
+                            _configured_stage1_gurobi_search_controls(config)
+                        ),
                         "stage1_gurobi_feasibility_tol": (
                             _configured_gurobi_feasibility_tol(config, stage=1)
                         ),
@@ -11872,6 +11906,15 @@ class GurobiMILPAdapter:
         stage1.Params.TimeLimit = max(stage_time_limit, 0.001)
         stage1.Params.MIPGap = max(float(config.mip_gap), 0.0)
         stage1.Params.Seed = int(config.random_seed)
+        stage1_search_controls = _configured_stage1_gurobi_search_controls(
+            config
+        )
+        stage1.Params.MIPFocus = int(stage1_search_controls["mip_focus"])
+        stage1.Params.Heuristics = float(stage1_search_controls["heuristics"])
+        stage1.Params.Presolve = int(stage1_search_controls["presolve"])
+        stage1.Params.Method = int(stage1_search_controls["root_method"])
+        stage1.Params.NodeMethod = int(stage1_search_controls["node_method"])
+        stage1.Params.Symmetry = int(stage1_search_controls["symmetry"])
         stage1_feasibility_tol = _configured_gurobi_feasibility_tol(
             config, stage=1
         )
@@ -13849,6 +13892,15 @@ class GurobiMILPAdapter:
                     ),
                     "stage1_termination_reason": stage1_termination_reason,
                     "gurobi_threads": configured_threads,
+                    "stage1_gurobi_search_controls": {
+                        "profile": str(stage1_search_controls["profile"]),
+                        "mip_focus": int(stage1.Params.MIPFocus),
+                        "heuristics": float(stage1.Params.Heuristics),
+                        "presolve": int(stage1.Params.Presolve),
+                        "root_method": int(stage1.Params.Method),
+                        "node_method": int(stage1.Params.NodeMethod),
+                        "symmetry": int(stage1.Params.Symmetry),
+                    },
                     "stage1_gurobi_feasibility_tol": stage1_feasibility_tol,
                     "stage2_gurobi_feasibility_tol": (
                         _configured_gurobi_feasibility_tol(config, stage=2)
@@ -14179,6 +14231,15 @@ class GurobiMILPAdapter:
                 ),
                 "stage1_termination_reason": stage1_termination_reason,
                 "gurobi_threads": configured_threads,
+                "stage1_gurobi_search_controls": {
+                    "profile": str(stage1_search_controls["profile"]),
+                    "mip_focus": int(stage1.Params.MIPFocus),
+                    "heuristics": float(stage1.Params.Heuristics),
+                    "presolve": int(stage1.Params.Presolve),
+                    "root_method": int(stage1.Params.Method),
+                    "node_method": int(stage1.Params.NodeMethod),
+                    "symmetry": int(stage1.Params.Symmetry),
+                },
                 "stage1_gurobi_feasibility_tol": stage1_feasibility_tol,
                 "stage2_gurobi_feasibility_tol": (
                     _configured_gurobi_feasibility_tol(config, stage=2)
@@ -19016,6 +19077,15 @@ class GurobiMILPAdapter:
             "stage1_primary_incumbent_objective_jpy": (
                 stage1_objective_value
             ),
+            "stage1_gurobi_search_controls": {
+                "profile": str(stage1_search_controls["profile"]),
+                "mip_focus": int(stage1.Params.MIPFocus),
+                "heuristics": float(stage1.Params.Heuristics),
+                "presolve": int(stage1.Params.Presolve),
+                "root_method": int(stage1.Params.Method),
+                "node_method": int(stage1.Params.NodeMethod),
+                "symmetry": int(stage1.Params.Symmetry),
+            },
             "stage1_runtime_seconds": stage1_total_solver_runtime_sec,
             "stage1_primary_runtime_seconds": stage1_primary_runtime_sec,
             "stage1_primary_search_time_limit_seconds": (

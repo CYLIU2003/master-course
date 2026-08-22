@@ -367,6 +367,11 @@ class OptimizationConfig:
     # ``None`` leaves Gurobi's default thread selection intact.  Experiments
     # that compare solve time should set this explicitly and record it.
     gurobi_threads: Optional[int] = None
+    # Stage-1 search controls are an explicit, auditable solver profile rather
+    # than an implicit performance tweak. ``default`` reproduces Gurobi's
+    # documented defaults; ``bound_focus`` directs search effort toward the
+    # dual bound without changing any variable, constraint, or objective.
+    stage1_gurobi_search_profile: str = "default"
     # Stage 1 is the runtime-dominant assignment MILP and uses Gurobi's
     # documented default.  Stage 2 uses stricter primal and integrality
     # tolerances because its terminal SOC equality and physical charger
