@@ -372,6 +372,11 @@ class OptimizationConfig:
     # documented defaults; ``bound_focus`` directs search effort toward the
     # dual bound without changing any variable, constraint, or objective.
     stage1_gurobi_search_profile: str = "default"
+    # The default lazy separator keeps exact fragment-transition rows out of
+    # the root LP. ``explicit_root`` materializes those same rows before the
+    # solve, strengthening only the relaxation; it must therefore preserve the
+    # integer feasible set exactly and is recorded for controlled diagnostics.
+    stage1_fragment_transition_cut_mode: str = "lazy"
     # Stage 1 is the runtime-dominant assignment MILP and uses Gurobi's
     # documented default.  Stage 2 uses stricter primal and integrality
     # tolerances because its terminal SOC equality and physical charger

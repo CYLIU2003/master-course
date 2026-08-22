@@ -39,6 +39,15 @@
   node. Therefore the tested bound-focused profile is not a sufficient
   certificate fix; this bundle is `DIAGNOSTIC`, not accepted research
   evidence.
+- Added the opt-in `stage1_fragment_transition_cut_mode="explicit_root"`
+  representation for the next controlled strengthening diagnostic. It
+  materializes the same invalid end/start pair rows that the default lazy
+  callback adds only at integer incumbents, so it changes neither the Stage-1
+  objective nor the integer feasible set. The BFF request and solver metadata
+  record the mode and the materialized row count. A Gurobi two-fragment
+  infeasibility regression confirms equivalence with the lazy contract;
+  focused verification is `98 passed`. No full-case performance, bound, or
+  research claim is made before a clean-SHA artifact is accepted.
 
 ## 2026-08-23: Electricity-price Phase-3 tranche completed as a diagnostic
 

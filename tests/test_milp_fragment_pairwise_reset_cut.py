@@ -202,6 +202,59 @@ def test_fragment_transition_lazy_separator_fails_closed_on_callback_error(
 
 
 @pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
+def test_explicit_root_fragment_cuts_preserve_the_two_fragment_infeasibility() -> None:
+    """The explicit-root representation must match the lazy integer contract."""
+    context = DispatchContext(
+        service_date="2026-04-10",
+        trips=[
+            Trip("t1", "r1", "A", "B", "08:00", "08:10", 1.0, ("ICE",)),
+            Trip("t2", "r1", "C", "D", "08:30", "08:40", 1.0, ("ICE",)),
+        ],
+        turnaround_rules={},
+        deadhead_rules={
+            ("DEPOT", "A"): DeadheadRule("DEPOT", "A", 5),
+            ("DEPOT", "C"): DeadheadRule("DEPOT", "C", 5),
+        },
+        vehicle_profiles={"ICE": VehicleProfile(vehicle_type="ICE")},
+    )
+    problem = ProblemBuilder().build_from_dispatch(
+        context,
+        scenario_id="explicit-root-reset-cut",
+        vehicle_counts={"ICE": 1},
+        canonical_depot_id="DEPOT",
+        allow_same_day_depot_cycles=True,
+        max_depot_cycles_per_vehicle_per_day=2,
+        max_fragments_per_vehicle_per_day=2,
+        max_start_fragments_per_vehicle=2,
+        max_end_fragments_per_vehicle=2,
+        service_coverage_mode="strict",
+    )
+
+    result = MILPOptimizer().solve(
+        problem,
+        OptimizationConfig(
+            mode=OptimizationMode.MILP,
+            time_limit_sec=10,
+            mip_gap=0.0,
+            phase="phase3_two_stage",
+            stage1_fragment_transition_cut_mode="explicit_root",
+        ),
+    )
+
+    assert result.feasible is False
+    assert result.plan.unserved_trip_ids == ("t1", "t2")
+    assert result.plan.metadata["fragment_pairwise_depot_reset_constraint_count"] == 1
+    assert (
+        result.plan.metadata["fragment_pairwise_depot_reset_constraint_mode"]
+        == "explicit_root_relaxation_strengthening"
+    )
+    separator = result.plan.metadata["fragment_transition_lazy_separator"]
+    assert separator["enabled"] is False
+    assert separator["explicit_pairwise_rows_materialized"] == 1
+    assert separator["integer_feasible_set_preserved"] is True
+
+
+@pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
 def test_phase4_uses_lazy_fragment_separator_for_valid_depot_cycle() -> None:
     context = DispatchContext(
         service_date="2026-04-10",

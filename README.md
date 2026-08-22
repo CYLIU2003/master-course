@@ -18,6 +18,12 @@ rules out the tested search-profile adjustment as a sufficient fix and is
 diagnostic only, not a claimed model improvement or accepted sensitivity
 result.
 
+The next frozen diagnostic can materialize the same exact fragment-transition
+rows that the default formulation separates lazily, before the root LP is
+solved. This changes neither the integer feasible set nor the objective; it is
+not a performance or gap-improvement claim until its own clean-SHA full-case
+artifact and gate audit are complete.
+
 ## 2026-08-23 electricity-price sensitivity status
 
 The fresh three-point Phase-3 frontend/BFF bundle at

@@ -33,6 +33,13 @@ are both falsified as sufficient fixes; the release blocker remains a weak
 Stage-1 relaxation and requires a separately verified mathematical tightening,
 not more of the same search.
 
+The next candidate is an opt-in `explicit_root` representation of the exact
+fragment-transition rows that the default formulation enforces lazily at
+integer incumbents. Its small Gurobi regression preserves the same infeasible
+two-fragment case, but no full 264-trip artifact exists yet. It is therefore a
+pending controlled formulation diagnostic, **NOT** a relaxation-improvement,
+runtime, or research-acceptance claim.
+
 ## 2026-08-23: Three-point electricity-price tranche is physically valid but not research-accepted
 
 The clean-SHA frontend/BFF Phase-3 tranche at

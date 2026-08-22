@@ -12986,32 +12986,66 @@ class GurobiMILPAdapter:
                 trip_by_id=trip_by_id,
             )
         )
+        stage1_fragment_transition_cut_mode = str(
+            getattr(config, "stage1_fragment_transition_cut_mode", "lazy")
+            or ""
+        ).strip().lower()
+        if stage1_fragment_transition_cut_mode not in {"lazy", "explicit_root"}:
+            raise ValueError(
+                "stage1_fragment_transition_cut_mode must be 'lazy' or "
+                "'explicit_root'"
+            )
         if stage1_single_path_redundancy_elimination_applied:
             fragment_pairwise_depot_reset_constraint_count = 0
             fragment_temporal_occupancy_constraint_count = 0
             stage1_fragment_lazy_separator = None
         else:
-            fragment_pairwise_depot_reset_constraint_count = 0
-            stage1_fragment_lazy_separator = (
-                self._build_fragment_transition_lazy_separator(
-                    grb=GRB,
-                    problem=problem,
-                    trip_by_id=trip_by_id,
-                    vehicles=problem.vehicles,
-                    start_arc=start_arc,
-                    end_arc=end_arc,
-                    trip_day_index_by_trip_id=(
-                        trip_day_index_by_trip_id
-                    ),
-                    allow_same_day_depot_cycles=(
-                        allow_same_day_depot_cycles
-                    ),
-                    fixed_route_band_mode=bool(
-                        problem.metadata.get("fixed_route_band_mode", False)
-                    ),
+            if stage1_fragment_transition_cut_mode == "explicit_root":
+                fragment_pairwise_depot_reset_constraint_count = (
+                    self._add_fragment_pairwise_depot_reset_cuts(
+                        stage1,
+                        trip_by_id=trip_by_id,
+                        vehicles=problem.vehicles,
+                        assignment_trip_ids_by_vehicle=(
+                            assignment_trip_ids_by_vehicle
+                        ),
+                        start_arc=start_arc,
+                        end_arc=end_arc,
+                        trip_day_index_by_trip_id=(
+                            trip_day_index_by_trip_id
+                        ),
+                        problem=problem,
+                        allow_same_day_depot_cycles=(
+                            allow_same_day_depot_cycles
+                        ),
+                        fixed_route_band_mode=bool(
+                            problem.metadata.get("fixed_route_band_mode", False)
+                        ),
+                    )
                 )
-            )
-            stage1.Params.LazyConstraints = 1
+                stage1_fragment_lazy_separator = None
+            else:
+                fragment_pairwise_depot_reset_constraint_count = 0
+                stage1_fragment_lazy_separator = (
+                    self._build_fragment_transition_lazy_separator(
+                        grb=GRB,
+                        problem=problem,
+                        trip_by_id=trip_by_id,
+                        vehicles=problem.vehicles,
+                        start_arc=start_arc,
+                        end_arc=end_arc,
+                        trip_day_index_by_trip_id=(
+                            trip_day_index_by_trip_id
+                        ),
+                        allow_same_day_depot_cycles=(
+                            allow_same_day_depot_cycles
+                        ),
+                        fixed_route_band_mode=bool(
+                            problem.metadata.get("fixed_route_band_mode", False)
+                        ),
+                    )
+                )
+                stage1.Params.LazyConstraints = 1
             fragment_temporal_occupancy_constraint_count = (
                 self._add_fragment_temporal_occupancy_constraints(
                     stage1,
@@ -13963,7 +13997,11 @@ class GurobiMILPAdapter:
                     "fragment_pairwise_depot_reset_constraint_mode": (
                         "not_required_single_path_flow"
                         if stage1_single_path_redundancy_elimination_applied
-                        else "lazy_integer_incumbent_separation"
+                        else (
+                            "explicit_root_relaxation_strengthening"
+                            if stage1_fragment_transition_cut_mode == "explicit_root"
+                            else "lazy_integer_incumbent_separation"
+                        )
                     ),
                     "fragment_transition_lazy_separator": (
                         stage1_fragment_lazy_separator.to_metadata()
@@ -13974,7 +14012,14 @@ class GurobiMILPAdapter:
                             ),
                             "enabled": False,
                             "integer_feasible_set_preserved": True,
-                            "reason": "single_path_flow_is_sufficient",
+                            "reason": (
+                                "single_path_flow_is_sufficient"
+                                if stage1_single_path_redundancy_elimination_applied
+                                else "explicit_pairwise_rows_materialized"
+                            ),
+                            "explicit_pairwise_rows_materialized": (
+                                fragment_pairwise_depot_reset_constraint_count
+                            ),
                         }
                     ),
                     "overlap_clique_constraint_count": (
@@ -14298,7 +14343,11 @@ class GurobiMILPAdapter:
                 "fragment_pairwise_depot_reset_constraint_mode": (
                     "not_required_single_path_flow"
                     if stage1_single_path_redundancy_elimination_applied
-                    else "lazy_integer_incumbent_separation"
+                    else (
+                        "explicit_root_relaxation_strengthening"
+                        if stage1_fragment_transition_cut_mode == "explicit_root"
+                        else "lazy_integer_incumbent_separation"
+                    )
                 ),
                 "fragment_transition_lazy_separator": (
                     stage1_fragment_lazy_separator.to_metadata()
@@ -14309,7 +14358,14 @@ class GurobiMILPAdapter:
                         ),
                         "enabled": False,
                         "integer_feasible_set_preserved": True,
-                        "reason": "single_path_flow_is_sufficient",
+                        "reason": (
+                            "single_path_flow_is_sufficient"
+                            if stage1_single_path_redundancy_elimination_applied
+                            else "explicit_pairwise_rows_materialized"
+                        ),
+                        "explicit_pairwise_rows_materialized": (
+                            fragment_pairwise_depot_reset_constraint_count
+                        ),
                     }
                 ),
                 "overlap_clique_constraint_count": (
