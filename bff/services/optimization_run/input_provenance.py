@@ -259,6 +259,54 @@ def collect_git_state(*, repo_root: Path | None = None) -> dict[str, Any]:
     }
 
 
+def _memory_total_bytes() -> tuple[int | None, str | None, str | None]:
+    """Return host RAM and its source without making psutil a requirement."""
+
+    try:
+        import psutil
+
+        return int(psutil.virtual_memory().total), "psutil", None
+    except (ImportError, AttributeError, OSError) as psutil_error:
+        fallback_error = f"psutil: {type(psutil_error).__name__}: {psutil_error}"
+
+    try:
+        if os.name == "nt":
+            import ctypes
+
+            class _MemoryStatusEx(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+
+            status = _MemoryStatusEx()
+            status.dwLength = ctypes.sizeof(_MemoryStatusEx)
+            if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+                raise ctypes.WinError()
+            return int(status.ullTotalPhys), "windows_GlobalMemoryStatusEx", None
+
+        page_count = int(os.sysconf("SC_PHYS_PAGES"))
+        page_size = int(os.sysconf("SC_PAGE_SIZE"))
+        if page_count <= 0 or page_size <= 0:
+            raise OSError("physical-memory sysconf values must be positive")
+        return page_count * page_size, "os_sysconf", None
+    except (AttributeError, OSError, ValueError) as fallback_probe_error:
+        return (
+            None,
+            None,
+            fallback_error
+            + "; fallback: "
+            + f"{type(fallback_probe_error).__name__}: {fallback_probe_error}",
+        )
+
+
 def _runtime_environment() -> dict[str, Any]:
     """Capture the executable and host properties needed to reproduce a run.
 
@@ -279,16 +327,11 @@ def _runtime_environment() -> dict[str, Any]:
         gurobipy_version = str(getattr(gp, "__version__", "") or "") or None
     except (ImportError, AttributeError, RuntimeError):
         pass
-    memory_total_bytes: int | None = None
-    memory_probe_error: str | None = None
-    try:
-        import psutil
-
-        memory_total_bytes = int(psutil.virtual_memory().total)
-    except (ImportError, AttributeError, OSError) as exc:
-        memory_probe_error = f"{type(exc).__name__}: {exc}"
+    memory_total_bytes, memory_probe_source, memory_probe_error = (
+        _memory_total_bytes()
+    )
     return {
-        "schema_version": "runtime_environment_v2",
+        "schema_version": "runtime_environment_v3",
         "python_version": platform.python_version(),
         "python_implementation": platform.python_implementation(),
         "python_executable": sys.executable,
@@ -298,6 +341,7 @@ def _runtime_environment() -> dict[str, Any]:
         "cpu_logical_count": os.cpu_count(),
         "cpu_processor": platform.processor() or None,
         "memory_total_bytes": memory_total_bytes,
+        "memory_probe_source": memory_probe_source,
         "memory_probe_error": memory_probe_error,
         "gurobi_available": gurobi_available,
         "gurobi_version": gurobi_version,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -182,10 +183,17 @@ def test_frontend_run_input_bundle_is_self_verifying(tmp_path: Path) -> None:
     assert parameters["effective_problem_scenario"]["timestep_min"] == 15
     assert parameters["runtime_environment"]["python_version"]
     assert parameters["runtime_environment"]["schema_version"] == (
-        "runtime_environment_v2"
+        "runtime_environment_v3"
     )
     assert parameters["runtime_environment"]["cpu_logical_count"]
     assert "memory_total_bytes" in parameters["runtime_environment"]
+    assert "memory_probe_source" in parameters["runtime_environment"]
+    if os.name == "nt":
+        assert parameters["runtime_environment"]["memory_total_bytes"] > 0
+        assert parameters["runtime_environment"]["memory_probe_source"] in {
+            "psutil",
+            "windows_GlobalMemoryStatusEx",
+        }
     assert "gurobipy_version" in parameters["runtime_environment"]
     assert parameters["canonical_input_dimensions"]["trip_input_sha256"]
     assert parameters["canonical_input_dimensions"][

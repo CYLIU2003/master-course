@@ -22,6 +22,16 @@ solver explicitly enabled that search. A fresh clean-commit Phase-3 execution
 for 6/8/10 remains required and must include the expanded pre-solve runtime
 snapshot in `optimization_parameters.json`.
 
+The clean 6-port replacement at SHA
+`359cd3617206ac1d3e2ae9ff849c72e0697dffdc` is now complete, with an
+accepted 240-artifact bundle, 264/264 coverage, physical validation, and
+Rolling/accounting. It remains `DIAGNOSTIC`, `NOT USED FOR RESEARCH
+CONCLUSIONS`: Stage 1 terminated at its 900-second time limit with a certified
+19.227307% gap, above the predeclared 1% threshold. No 8/10-port case has
+been run. A revised runtime-environment v3 snapshot now records physical RAM
+without requiring `psutil`; a new clean 6/8/10 execution is required before
+any formal charger-response conclusion.
+
 ## 2026-08-22 Phase-3 A/B gate remains open
 
 The archived ten-run pure-ICE aggregation bundle used `phase4_integrated`, not

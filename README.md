@@ -14,7 +14,7 @@
   silently accepted as evidence about the deployed two-stage method.
 - Each new frontend run's `optimization_parameters.json` now carries a
   machine-readable runtime-environment snapshot (Python, Gurobi/gurobipy, OS,
-  logical CPU count, and RAM where probeable), together with its existing
+  logical CPU count, and RAM with its probe source), together with its existing
   frozen Git and canonical-input provenance.
 
 ## 2026-08-22 charger-capacity sensitivity contract
@@ -34,6 +34,12 @@
   charger-capacity result. The artifact gate now requires that certificate
   only when the solver records the search as enabled. A fresh frozen-commit
   run is still required for all three counts.
+- The replacement 6-port run at clean SHA
+  `359cd3617206ac1d3e2ae9ff849c72e0697dffdc` completed its artifact contract,
+  264/264 coverage, independent physical validation, and accepted 24-hour
+  Rolling/accounting. Stage 1 ended at its limit with a 19.227307% certified
+  gap, so it is a feasible-candidate diagnostic only—not an accepted
+  charger-capacity sensitivity result. The 8/10-port cases remain unrun.
 
 ## 2026-08-22 Phase-3 aggregation A/B status correction
 

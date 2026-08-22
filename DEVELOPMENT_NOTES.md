@@ -1,5 +1,35 @@
 # Development Notes
 
+## 2026-08-22: reproducibility snapshot records physical RAM without psutil
+
+- The first clean Phase-3 charger execution exposed that the optional `psutil`
+  probe left `memory_total_bytes` null. Replaced that dependency-only behavior
+  with a fallback to Windows `GlobalMemoryStatusEx` (and POSIX `sysconf` when
+  applicable), while persisting `memory_probe_source` and any probe error.
+  `runtime_environment` is now schema `v3`; the local probe records
+  `34,033,328,128` bytes from `windows_GlobalMemoryStatusEx`.
+- Updated `bff/services/optimization_run/input_provenance.py` and
+  `tests/test_run_input_provenance.py`. Focused verification:
+  `.venv\\Scripts\\python.exe -m pytest -q
+  tests\\test_run_input_provenance.py
+  tests\\test_thesis_sensitivity_matrix.py
+  tests\\test_frontend_artifact_completeness.py` (`58 passed`), plus direct
+  runtime-snapshot inspection and `git diff --check`.
+
+## 2026-08-22: 6-port Phase-3 charger run completed as a gap-missed diagnostic
+
+- At frozen clean SHA `359cd3617206ac1d3e2ae9ff849c72e0697dffdc`,
+  `CHARGER_COUNT_6` completed its 264-trip Phase-3 run at
+  `output/thesis_sensitivity_charger_capacity_20260822_359cd36/`. The case
+  has a complete 240-artifact bundle, exact requested/resolved/executed Phase
+  3 evidence, 264/264 service, independent physical validation, and accepted
+  Rolling/accounting. Its final canonical accounting cost is 64,422.491318
+  JPY.
+- Stage 1 stopped at the 900-second limit with a certified 19.227307% gap;
+  the 1% acceptance gate is false. Consequently the matrix case is
+  `DIAGNOSTIC`, `NOT USED FOR RESEARCH CONCLUSIONS`, and no charger-response
+  claim is made. The runner stopped before 8/10-port results were created.
+
 ## 2026-08-22: disabled Phase-3 composition search no longer breaks finalization
 
 - The first corrected 264-trip `CHARGER_COUNT_6` run at clean SHA
