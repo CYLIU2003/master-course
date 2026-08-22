@@ -26,10 +26,18 @@ relative gaps are not identifiable because the reference cost is numerically
 zero. This is not a proof of the 264-trip global optimum, a 1% full-scale
 gap, or a full M0--M3 comparison.
 
-The release is still **BLOCKED** by the genuine Phase-3 pure-ICE aggregation
-implementation and its AB/BA x5 evidence, accepted multi-point economic and
-charger sensitivities, and the formal M0/M1/M2/M3 comparison. No historical
-Phase-4 representation measurement is used to fill any of those gaps.
+The release is still **BLOCKED** by the fresh Phase-3 pure-ICE AB/BA x5
+evidence, accepted multi-point economic and charger sensitivities, and the
+formal M0/M1/M2/M3 comparison. No historical Phase-4 representation
+measurement is used to fill any of those gaps.
+
+The Phase-3 single-fragment aggregate network and deterministic canonical-ID
+recovery are now implemented behind the A/B-only diagnostic override. It is
+fail-closed when driver/switch costs, candidate enumeration, no-good cuts, or
+the exact-clone certificate would alter the labelled model. A focused
+aggregate/discrete Phase-3 regression passes, but this does not clear the
+release gate: the fresh full 264-trip AB/BA x5 execution and its independent
+physical/accounting acceptance remain mandatory.
 
 ## 2026-08-22 Phase-3 sensitivity correction; charger matrix remains blocked
 

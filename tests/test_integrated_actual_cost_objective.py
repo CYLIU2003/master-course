@@ -1709,6 +1709,67 @@ def test_phase3_records_trip_count_symmetry_audit() -> None:
     ] == 1
 
 
+def test_phase3_exact_ice_clone_aggregation_preserves_recovered_dispatch() -> None:
+    """Phase 3 may aggregate only the certified single-fragment ICE flow."""
+
+    base = _exact_ice_clone_problem()
+    problem = replace(
+        base,
+        metadata={
+            **dict(base.metadata or {}),
+            "cost_component_flags": {"driver_cost": False},
+            "vehicle_usage_cost_jpy_per_used_bus": 20_000.0,
+        },
+    )
+    config = OptimizationConfig(
+        mode=OptimizationMode.MILP,
+        phase="phase3_two_stage",
+        time_limit_sec=30,
+        stage1_time_limit_sec=30,
+        stage2_time_limit_sec=30,
+        mip_gap=0.0,
+        random_seed=42,
+        warm_start=False,
+        allow_postsolve_repair=False,
+        research_run=True,
+        stage1_stage2_candidate_limit=1,
+    )
+
+    with _diagnostic_exact_ice_clone_representation("pure_aggregate"):
+        aggregated_outcome, aggregated_plan = GurobiMILPAdapter().solve(
+            problem,
+            config,
+        )
+    with _diagnostic_exact_ice_clone_representation("discrete"):
+        discrete_outcome, discrete_plan = GurobiMILPAdapter().solve(
+            problem,
+            config,
+        )
+
+    assert aggregated_outcome.has_feasible_incumbent
+    assert discrete_outcome.has_feasible_incumbent
+    assert aggregated_plan.served_trip_ids == discrete_plan.served_trip_ids
+    assert aggregated_plan.metadata["stage1_objective"] == pytest.approx(
+        discrete_plan.metadata["stage1_objective"]
+    )
+    aggregated_audit = aggregated_plan.metadata[
+        "stage1_exact_combustion_clone_flow_aggregation_audit"
+    ]
+    assert aggregated_audit["representation"] == "pure_aggregate"
+    assert aggregated_audit["applied"] is True
+    assert aggregated_audit["vehicle_label_flow_variable_count_created"] == 0
+    assert aggregated_audit["aggregate_network_variable_count_created"] > 0
+    assert aggregated_audit["net_binary_variable_reduction"] > 0
+    assert aggregated_audit["recovered_vehicle_ids"] == ("ICE_001",)
+    discrete_audit = discrete_plan.metadata[
+        "stage1_exact_combustion_clone_flow_aggregation_audit"
+    ]
+    assert discrete_audit["representation"] == "discrete"
+    assert discrete_audit["applied"] is False
+    assert discrete_audit["vehicle_label_flow_variable_count_created"] > 0
+    assert discrete_audit["aggregate_network_variable_count_created"] == 0
+
+
 def test_phase4_seed_composition_search_scales_with_selected_fleet() -> None:
     candidate_limit, radius = _phase4_seed_composition_search_limits(
         available_vehicle_count=60,

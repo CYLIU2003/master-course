@@ -12079,33 +12079,134 @@ class GurobiMILPAdapter:
         if not allow_same_day_depot_cycles:
             daily_fragment_limit = 1
 
+        # Phase 3 is discrete by default.  The pure aggregate formulation is
+        # intentionally reachable only through the diagnostic representation
+        # override used by the isolated A/B harness.  This prevents a normal
+        # frontend run from silently changing its mathematical model.
+        component_flags = normalize_cost_component_flags(
+            problem.metadata.get("cost_component_flags")
+        )
+        stage1_exact_clone_audit = (
+            self._exact_combustion_clone_flow_aggregation_audit(
+                problem=problem,
+                identical_vehicle_groups=(
+                    _ordered_identical_vehicle_groups(problem)
+                ),
+                assignment_pairs=assignment_pairs,
+                arc_pairs=arc_pairs,
+                startup_energy_precheck_by_assignment=(
+                    startup_energy_precheck_by_assignment
+                ),
+                planning_days=planning_days,
+                daily_fragment_limit=daily_fragment_limit,
+                max_start_fragments_per_vehicle=(
+                    self._safe_positive_int(
+                        problem.metadata.get("max_start_fragments_per_vehicle"),
+                        default=1,
+                    )
+                ),
+                max_end_fragments_per_vehicle=(
+                    self._safe_positive_int(
+                        problem.metadata.get("max_end_fragments_per_vehicle"),
+                        default=1,
+                    )
+                ),
+            )
+        )
+        stage1_representation_override = (
+            _EXACT_ICE_CLONE_REPRESENTATION_OVERRIDE.get()
+        )
+        stage1_requested_representation = (
+            str(stage1_representation_override)
+            if stage1_representation_override is not None
+            else "discrete"
+        )
+        stage1_aggregation_blockers: List[str] = []
+        if stage1_requested_representation != "pure_aggregate":
+            stage1_aggregation_blockers.append("disabled_by_scenario")
+        if component_flags.get("driver_cost", True):
+            stage1_aggregation_blockers.append(
+                "driver_cost_requires_path_specific_integer_labels"
+            )
+        if component_flags.get("switch_cost", True) and problem.baseline_plan:
+            stage1_aggregation_blockers.append(
+                "switch_cost_requires_vehicle_labelled_assignment"
+            )
+        if stage1_stage2_candidate_limit > 1:
+            stage1_aggregation_blockers.append(
+                "stage1_candidate_pool_requires_vehicle_labelled_starts"
+            )
+        if tuple(problem.metadata.get("stage1_feasibility_no_good_cuts") or ()):
+            stage1_aggregation_blockers.append(
+                "stage1_no_good_cuts_require_vehicle_labelled_assignment"
+            )
+        stage1_clone_candidates = tuple(
+            record
+            for record in stage1_exact_clone_audit.get("groups", ())
+            if bool(record.get("certified_candidate"))
+            and int(record.get("fragment_layer_count", 0) or 0) == 1
+            and int(record.get("potential_binary_variable_reduction", 0) or 0)
+            > 0
+        )
+        if not stage1_clone_candidates:
+            stage1_aggregation_blockers.append(
+                "no_single_fragment_certified_combustion_clone_group"
+            )
+        stage1_selected_clone_group: Optional[Mapping[str, Any]] = None
+        if not stage1_aggregation_blockers:
+            stage1_selected_clone_group = max(
+                stage1_clone_candidates,
+                key=lambda record: (
+                    int(record.get("potential_binary_variable_reduction", 0) or 0),
+                    -int(record.get("group_index", 0) or 0),
+                ),
+            )
+        stage1_exact_clone_vehicle_ids = {
+            str(vehicle_id)
+            for vehicle_id in (
+                stage1_selected_clone_group.get("vehicle_ids", ())
+                if stage1_selected_clone_group is not None
+                else ()
+            )
+        }
+        stage1_assignment_variable_keys = tuple(
+            key
+            for key in assignment_pairs
+            if str(key[0]) not in stage1_exact_clone_vehicle_ids
+        )
+        stage1_connection_variable_keys = tuple(
+            key
+            for key in arc_pairs
+            if str(key[0]) not in stage1_exact_clone_vehicle_ids
+        )
+
         y: Dict[Tuple[str, str], Any] = {
             (vehicle_id, trip_id): stage1.addVar(
                 vtype=GRB.BINARY,
                 name=f"y_{vehicle_id}_{trip_id}",
             )
-            for vehicle_id, trip_id in assignment_pairs
+            for vehicle_id, trip_id in stage1_assignment_variable_keys
         }
         x: Dict[Tuple[str, str, str], Any] = {
             (vehicle_id, from_trip_id, to_trip_id): stage1.addVar(
                 vtype=GRB.BINARY,
                 name=f"x_{vehicle_id}_{from_trip_id}_{to_trip_id}",
             )
-            for vehicle_id, from_trip_id, to_trip_id in arc_pairs
+            for vehicle_id, from_trip_id, to_trip_id in stage1_connection_variable_keys
         }
         start_arc: Dict[Tuple[str, str], Any] = {
             (vehicle_id, trip_id): stage1.addVar(
                 vtype=GRB.BINARY,
                 name=f"start_{vehicle_id}_{trip_id}",
             )
-            for vehicle_id, trip_id in assignment_pairs
+            for vehicle_id, trip_id in stage1_assignment_variable_keys
         }
         end_arc: Dict[Tuple[str, str], Any] = {
             (vehicle_id, trip_id): stage1.addVar(
                 vtype=GRB.BINARY,
                 name=f"end_{vehicle_id}_{trip_id}",
             )
-            for vehicle_id, trip_id in assignment_pairs
+            for vehicle_id, trip_id in stage1_assignment_variable_keys
         }
         used_vehicle: Dict[str, Any] = {
             vehicle.vehicle_id: stage1.addVar(
@@ -12122,6 +12223,157 @@ class GurobiMILPAdapter:
             for vehicle in problem.vehicles
             for day_idx in day_indices
         }
+        stage1_exact_clone_assignment: Dict[str, Any] = {}
+        stage1_exact_clone_connection: Dict[Tuple[str, str], Any] = {}
+        stage1_exact_clone_start: Dict[str, Any] = {}
+        stage1_exact_clone_end: Dict[str, Any] = {}
+        stage1_exact_clone_used_count = None
+        if stage1_selected_clone_group is not None:
+            selected_group_index = int(
+                stage1_selected_clone_group.get("group_index", 0) or 0
+            )
+            selected_member_ids = tuple(
+                str(vehicle_id)
+                for vehicle_id in stage1_selected_clone_group.get(
+                    "vehicle_ids", ()
+                )
+            )
+            representative_vehicle_id = str(
+                stage1_selected_clone_group.get(
+                    "representative_vehicle_id", selected_member_ids[0]
+                )
+            )
+            selected_trip_ids = tuple(
+                assignment_trip_ids_by_vehicle.get(
+                    representative_vehicle_id, ()
+                )
+            )
+            selected_transition_pairs = tuple(
+                (str(from_trip_id), str(to_trip_id))
+                for vehicle_id, from_trip_id, to_trip_id in arc_pairs
+                if str(vehicle_id) == representative_vehicle_id
+            )
+            for trip_id in selected_trip_ids:
+                stage1_exact_clone_assignment[trip_id] = stage1.addVar(
+                    vtype=GRB.BINARY,
+                    name=(
+                        "stage1_exact_clone_group_assignment__"
+                        f"g{selected_group_index}__{trip_id}"
+                    ),
+                )
+                stage1_exact_clone_start[trip_id] = stage1.addVar(
+                    vtype=GRB.BINARY,
+                    name=(
+                        "stage1_exact_clone_group_start__"
+                        f"g{selected_group_index}__{trip_id}"
+                    ),
+                )
+                stage1_exact_clone_end[trip_id] = stage1.addVar(
+                    vtype=GRB.BINARY,
+                    name=(
+                        "stage1_exact_clone_group_end__"
+                        f"g{selected_group_index}__{trip_id}"
+                    ),
+                )
+                if not startup_feasible_by_assignment.get(
+                    (representative_vehicle_id, trip_id), True
+                ) or not startup_energy_feasible_by_assignment.get(
+                    (representative_vehicle_id, trip_id), True
+                ):
+                    stage1.addConstr(
+                        stage1_exact_clone_start[trip_id] == 0,
+                        name=(
+                            "stage1_exact_clone_group_startup_feasible__"
+                            f"g{selected_group_index}__{trip_id}"
+                        ),
+                    )
+            for from_trip_id, to_trip_id in selected_transition_pairs:
+                stage1_exact_clone_connection[(from_trip_id, to_trip_id)] = (
+                    stage1.addVar(
+                        vtype=GRB.BINARY,
+                        name=(
+                            "stage1_exact_clone_group_connection__"
+                            f"g{selected_group_index}__{from_trip_id}__"
+                            f"{to_trip_id}"
+                        ),
+                    )
+                )
+            aggregate_incoming: Dict[str, List[Any]] = {}
+            aggregate_outgoing: Dict[str, List[Any]] = {}
+            for (
+                from_trip_id,
+                to_trip_id,
+            ), variable in stage1_exact_clone_connection.items():
+                aggregate_outgoing.setdefault(from_trip_id, []).append(variable)
+                aggregate_incoming.setdefault(to_trip_id, []).append(variable)
+            for trip_id in selected_trip_ids:
+                stage1.addConstr(
+                    gp.quicksum(aggregate_incoming.get(trip_id, ()))
+                    + stage1_exact_clone_start[trip_id]
+                    == stage1_exact_clone_assignment[trip_id],
+                    name=(
+                        "stage1_exact_clone_group_inflow__"
+                        f"g{selected_group_index}__{trip_id}"
+                    ),
+                )
+                stage1.addConstr(
+                    gp.quicksum(aggregate_outgoing.get(trip_id, ()))
+                    + stage1_exact_clone_end[trip_id]
+                    == stage1_exact_clone_assignment[trip_id],
+                    name=(
+                        "stage1_exact_clone_group_outflow__"
+                        f"g{selected_group_index}__{trip_id}"
+                    ),
+                )
+            stage1_exact_clone_used_count = stage1.addVar(
+                lb=0.0,
+                ub=float(len(selected_member_ids)),
+                vtype=GRB.INTEGER,
+                name=(
+                    "stage1_exact_clone_group_used_count__"
+                    f"g{selected_group_index}"
+                ),
+            )
+            stage1.addConstr(
+                stage1_exact_clone_used_count
+                == gp.quicksum(stage1_exact_clone_start.values()),
+                name=(
+                    "stage1_exact_clone_group_used_count_from_starts__"
+                    f"g{selected_group_index}"
+                ),
+            )
+            stage1.addConstr(
+                stage1_exact_clone_used_count
+                == gp.quicksum(used_vehicle[vehicle_id] for vehicle_id in selected_member_ids),
+                name=(
+                    "stage1_exact_clone_group_used_count_vehicle_link__"
+                    f"g{selected_group_index}"
+                ),
+            )
+            # The aggregation certificate is single-day.  Matching the group
+            # count to the canonical prefix of used vehicle-days preserves all
+            # fixed vehicle-day costs without retaining labelled trip flow.
+            only_day_index = day_indices[0]
+            stage1.addConstr(
+                stage1_exact_clone_used_count
+                == gp.quicksum(
+                    used_vehicle_day[(vehicle_id, only_day_index)]
+                    for vehicle_id in selected_member_ids
+                ),
+                name=(
+                    "stage1_exact_clone_group_used_count_day_link__"
+                    f"g{selected_group_index}"
+                ),
+            )
+            for vehicle_id in selected_member_ids:
+                stage1.addConstr(
+                    used_vehicle_day[(vehicle_id, only_day_index)]
+                    == used_vehicle[vehicle_id],
+                    name=(
+                        "stage1_exact_clone_group_single_day_vehicle_link__"
+                        f"g{selected_group_index}__{vehicle_id}"
+                    ),
+                )
         stage1_identical_vehicle_groups = _ordered_identical_vehicle_groups(
             problem
         )
@@ -12196,6 +12448,11 @@ class GurobiMILPAdapter:
                 for vehicle_id in assignment_vehicle_ids_by_trip.get(trip.trip_id, [])
                 if (vehicle_id, trip.trip_id) in y
             ]
+            aggregate_assignment = stage1_exact_clone_assignment.get(
+                trip.trip_id
+            )
+            if aggregate_assignment is not None:
+                assign_terms.append(aggregate_assignment)
             # thesis_mode intentionally has no unserved decision variable.
             stage1.addConstr(gp.quicksum(assign_terms) == 1, name=f"cover_{trip.trip_id}")
 
@@ -12293,6 +12550,8 @@ class GurobiMILPAdapter:
 
         for vehicle in problem.vehicles:
             vehicle_id = vehicle.vehicle_id
+            if str(vehicle_id) in stage1_exact_clone_vehicle_ids:
+                continue
             for day_idx in day_indices:
                 day_var = used_vehicle_day[(vehicle_id, day_idx)]
                 day_trip_vars = [
@@ -12342,6 +12601,8 @@ class GurobiMILPAdapter:
             default=1,
         )
         for vehicle in problem.vehicles:
+            if str(vehicle.vehicle_id) in stage1_exact_clone_vehicle_ids:
+                continue
             vehicle_terms_start: List[Any] = []
             vehicle_terms_end: List[Any] = []
             for trip_id in assignment_trip_ids_by_vehicle.get(vehicle.vehicle_id, []):
@@ -12654,6 +12915,82 @@ class GurobiMILPAdapter:
                     objective1 += (
                         _ice_fuel_unit_cost(vehicle) * return_fuel_l * var
                     )
+            if stage1_selected_clone_group is not None:
+                representative_vehicle_id = str(
+                    stage1_selected_clone_group.get(
+                        "representative_vehicle_id"
+                    )
+                )
+                representative_vehicle = vehicle_by_id.get(
+                    representative_vehicle_id
+                )
+                if representative_vehicle is None:
+                    raise RuntimeError(
+                        "Selected Stage-1 exact-clone representative is missing"
+                    )
+                unit_cost = _ice_fuel_unit_cost(representative_vehicle)
+                for trip_id, var in stage1_exact_clone_assignment.items():
+                    objective1 += unit_cost * self._trip_fuel_l(
+                        problem, representative_vehicle, trip_id
+                    ) * var
+                for (from_trip_id, to_trip_id), var in (
+                    stage1_exact_clone_connection.items()
+                ):
+                    objective1 += unit_cost * self._deadhead_fuel_l(
+                        problem,
+                        representative_vehicle,
+                        from_trip_id,
+                        to_trip_id,
+                    ) * var
+                for trip_id, var in stage1_exact_clone_start.items():
+                    startup_precheck = startup_energy_precheck_by_assignment.get(
+                        (representative_vehicle_id, trip_id)
+                    )
+                    startup_fuel_l = self._deadhead_distance_km(
+                        problem,
+                        int(
+                            getattr(
+                                startup_precheck,
+                                "startup_deadhead_min",
+                                0,
+                            )
+                            or 0
+                        ),
+                    ) * max(
+                        float(
+                            getattr(
+                                representative_vehicle,
+                                "fuel_consumption_l_per_km",
+                                0.0,
+                            )
+                            or 0.0
+                        ),
+                        0.0,
+                    )
+                    objective1 += unit_cost * startup_fuel_l * var
+                for trip_id, var in stage1_exact_clone_end.items():
+                    trip = trip_by_id.get(trip_id)
+                    if trip is None:
+                        continue
+                    return_exists, return_deadhead_min = return_deadhead_min_to_home(
+                        problem, representative_vehicle, trip
+                    )
+                    if not return_exists:
+                        continue
+                    return_fuel_l = self._deadhead_distance_km(
+                        problem, int(return_deadhead_min or 0)
+                    ) * max(
+                        float(
+                            getattr(
+                                representative_vehicle,
+                                "fuel_consumption_l_per_km",
+                                0.0,
+                            )
+                            or 0.0
+                        ),
+                        0.0,
+                    )
+                    objective1 += unit_cost * return_fuel_l * var
         if component_flags.get("vehicle_fixed_cost", True):
             for vehicle in problem.vehicles:
                 objective1 += (
@@ -13450,6 +13787,12 @@ class GurobiMILPAdapter:
             y=y,
             x=x,
             start_arc=start_arc,
+            exact_clone_member_vehicle_ids=tuple(
+                sorted(stage1_exact_clone_vehicle_ids)
+            ),
+            exact_clone_aggregate_assignment=stage1_exact_clone_assignment,
+            exact_clone_aggregate_connection=stage1_exact_clone_connection,
+            exact_clone_aggregate_start=stage1_exact_clone_start,
         )
         served_set = set(served_trip_ids)
         stage1_plan = AssignmentPlan(
@@ -13738,6 +14081,124 @@ class GurobiMILPAdapter:
                 ),
             },
         )
+        stage1_audit_candidate = (
+            max(
+                stage1_clone_candidates,
+                key=lambda record: (
+                    int(record.get("potential_binary_variable_reduction", 0) or 0),
+                    -int(record.get("group_index", 0) or 0),
+                ),
+            )
+            if stage1_clone_candidates
+            else None
+        )
+        stage1_label_variable_count = 0
+        if stage1_audit_candidate is not None:
+            stage1_label_variable_count = int(
+                stage1_audit_candidate.get("vehicle_count", 0) or 0
+            ) * (
+                3
+                * int(
+                    stage1_audit_candidate.get(
+                        "assignment_trip_count_per_vehicle", 0
+                    )
+                    or 0
+                )
+                + int(
+                    stage1_audit_candidate.get(
+                        "transition_arc_count_per_vehicle", 0
+                    )
+                    or 0
+                )
+            )
+        stage1_aggregate_variable_count = (
+            len(stage1_exact_clone_assignment)
+            + len(stage1_exact_clone_connection)
+            + len(stage1_exact_clone_start)
+            + len(stage1_exact_clone_end)
+            + (1 if stage1_exact_clone_used_count is not None else 0)
+        )
+        stage1_representation_audit = {
+            **dict(stage1_exact_clone_audit),
+            "schema_version": "stage1_exact_combustion_clone_flow_aggregation_v1",
+            "requested_representation": stage1_requested_representation,
+            "representation": (
+                "pure_aggregate"
+                if stage1_selected_clone_group is not None
+                else "discrete"
+            ),
+            "diagnostic_override_active": (
+                stage1_representation_override is not None
+            ),
+            "applied": stage1_selected_clone_group is not None,
+            "application_blockers": tuple(
+                dict.fromkeys(stage1_aggregation_blockers)
+            ),
+            "selected_group_index": (
+                int(stage1_selected_clone_group.get("group_index", 0) or 0)
+                if stage1_selected_clone_group is not None
+                else None
+            ),
+            "vehicle_label_flow_variable_count_created": (
+                0
+                if stage1_selected_clone_group is not None
+                else stage1_label_variable_count
+            ),
+            "vehicle_label_flow_variable_count_removed": (
+                stage1_label_variable_count
+                if stage1_selected_clone_group is not None
+                else 0
+            ),
+            "aggregate_network_variable_count_created": (
+                stage1_aggregate_variable_count
+            ),
+            "aggregate_integer_variable_count_added": (
+                stage1_aggregate_variable_count
+            ),
+            "net_binary_variable_reduction": max(
+                stage1_label_variable_count - stage1_aggregate_variable_count,
+                0,
+            )
+            if stage1_selected_clone_group is not None
+            else 0,
+            "labeled_extended_feasible_region_relaxed": False,
+            "recoverable_physical_dispatch_set_changed": False,
+            "formulation_semantics": (
+                "pure_binary_group_assignment_connection_boundary_flow_"
+                "with_deterministic_exact_clone_id_recovery"
+                if stage1_selected_clone_group is not None
+                else "vehicle_labelled_stage1_flow"
+            ),
+            "recovered_path_count": sum(
+                1
+                for duty in duties
+                if str(stage1_plan.duty_vehicle_map().get(duty.duty_id, ""))
+                in stage1_exact_clone_vehicle_ids
+            ),
+            "recovered_vehicle_ids": tuple(
+                sorted(
+                    {
+                        str(stage1_plan.duty_vehicle_map().get(duty.duty_id, ""))
+                        for duty in duties
+                        if str(
+                            stage1_plan.duty_vehicle_map().get(
+                                duty.duty_id, ""
+                            )
+                        )
+                        in stage1_exact_clone_vehicle_ids
+                    }
+                )
+            ),
+        }
+        stage1_plan = replace(
+            stage1_plan,
+            metadata={
+                **dict(stage1_plan.metadata or {}),
+                "stage1_exact_combustion_clone_flow_aggregation_audit": (
+                    stage1_representation_audit
+                ),
+            },
+        )
 
         if not stage2_enabled:
             stage1_runtime_sec_value = float(getattr(stage1, "Runtime", 0.0) or 0.0)
@@ -13942,6 +14403,12 @@ class GurobiMILPAdapter:
                 y=y,
                 x=x,
                 start_arc=start_arc,
+                exact_clone_member_vehicle_ids=tuple(
+                    sorted(stage1_exact_clone_vehicle_ids)
+                ),
+                exact_clone_aggregate_assignment=stage1_exact_clone_assignment,
+                exact_clone_aggregate_connection=stage1_exact_clone_connection,
+                exact_clone_aggregate_start=stage1_exact_clone_start,
             )
             candidate_served = set(candidate_served_trip_ids)
             return AssignmentPlan(
@@ -15399,6 +15866,12 @@ class GurobiMILPAdapter:
                     x=x,
                     start_arc=start_arc,
                     use_pool_solution=True,
+                    exact_clone_member_vehicle_ids=tuple(
+                        sorted(stage1_exact_clone_vehicle_ids)
+                    ),
+                    exact_clone_aggregate_assignment=stage1_exact_clone_assignment,
+                    exact_clone_aggregate_connection=stage1_exact_clone_connection,
+                    exact_clone_aggregate_start=stage1_exact_clone_start,
                 )
                 candidate_served = set(candidate_served_trip_ids)
                 candidate_plan = AssignmentPlan(
@@ -16875,6 +17348,12 @@ class GurobiMILPAdapter:
                 y=y,
                 x=x,
                 start_arc=start_arc,
+                exact_clone_member_vehicle_ids=tuple(
+                    sorted(stage1_exact_clone_vehicle_ids)
+                ),
+                exact_clone_aggregate_assignment=stage1_exact_clone_assignment,
+                exact_clone_aggregate_connection=stage1_exact_clone_connection,
+                exact_clone_aggregate_start=stage1_exact_clone_start,
             )
             enumerated_served = set(enumerated_served_trip_ids)
             enumerated_objective = float(

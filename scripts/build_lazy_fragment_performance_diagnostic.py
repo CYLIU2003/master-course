@@ -581,6 +581,12 @@ def collect_pure_ice_case_metrics(
     stage1_final = dict(stage1_telemetry.get("final") or {})
     aggregation = dict(
         plan_metadata.get(
+            "stage1_exact_combustion_clone_flow_aggregation_audit"
+        )
+        or solver_metadata.get(
+            "stage1_exact_combustion_clone_flow_aggregation_audit"
+        )
+        or plan_metadata.get(
             "integrated_exact_combustion_clone_flow_aggregation_audit"
         )
         or solver_metadata.get(

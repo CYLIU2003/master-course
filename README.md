@@ -71,6 +71,11 @@
   rejects a child unless requested, resolved, and executed phases are all
   Phase 3. It records Stage-1 model size, solve/bound/gap/node telemetry and
   Phase-3 controls. No replacement ten-run result exists yet.
+- A fail-closed single-fragment exact-clone aggregate network is now wired to
+  Stage 1 only for the isolated A/B diagnostic override, with deterministic
+  canonical-ID recovery before Stage 2. A small Phase-3 parity test passes;
+  the required clean-SHA 264-trip AB/BA x5 measurement remains unrun and is
+  the only evidence that can clear this comparison gate.
 
 ## 2026-08-22 repeated same-SHA pure-ICE aggregation A/B result
 

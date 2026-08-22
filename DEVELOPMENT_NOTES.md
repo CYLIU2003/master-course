@@ -1,5 +1,35 @@
 # Development Notes
 
+## 2026-08-22: Phase-3 single-fragment pure-ICE aggregation is now wired and tested
+
+- `src/optimization/milp/solver_adapter.py` now connects the pre-existing
+  exact-clone certificate to Phase-3 Stage 1 only when the isolated A/B
+  diagnostic explicitly requests `pure_aggregate`. The normal frontend
+  Phase-3 path remains discrete. The aggregate replaces the selected
+  certified ICE group's labelled assignment/connection/start/end flow with
+  a binary group path-cover network and deterministically restores canonical
+  vehicle IDs before Stage 2.
+- The application is fail-closed: it requires a one-day, single-fragment
+  certified group and rejects aggregation when driver cost, vehicle-labelled
+  switch cost, a candidate pool, or a Stage-1 no-good cut would make the
+  representation non-equivalent. Fixed vehicle and vehicle-day costs remain
+  linked to the aggregate path count; fuel, CO2, startup, and terminal-return
+  fuel terms use the certified representative's identical coefficients.
+- The A/B collector now reads
+  `stage1_exact_combustion_clone_flow_aggregation_audit` before its legacy
+  Phase-4 field. Added a Phase-3 regression covering aggregate/discrete
+  Stage-1 objective equality, complete recovered dispatch, and representation
+  telemetry. Verification:
+  `C:\master-course\.venv\Scripts\python.exe -m pytest -q
+  tests\test_integrated_actual_cost_objective.py
+  tests\test_lazy_fragment_performance_diagnostic.py
+  tests\test_milp_strict_coverage_metadata.py` (`90 passed`), plus
+  `python -m py_compile src/optimization/milp/solver_adapter.py
+  scripts/build_lazy_fragment_performance_diagnostic.py` and
+  `git diff --check`.
+- A fresh clean-SHA 264-trip AB/BA x5 run is still required. No small-instance
+  test is presented as a full-scale representation or runtime result.
+
 ## 2026-08-22: same-SHA Phase-3 baseline, fixed-decision stress, and 40-trip oracle completed
 
 - A clean `a49716638a1d15567c190798f37b60e3b7920743` Phase-3 run completed at
