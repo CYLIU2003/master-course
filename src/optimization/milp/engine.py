@@ -314,6 +314,18 @@ class MILPOptimizer:
                 "stage1_model_constraint_count": (plan.metadata or {}).get(
                     "stage1_model_constraint_count"
                 ),
+                "stage1_model_binary_variable_count": (
+                    plan.metadata or {}
+                ).get("stage1_model_binary_variable_count"),
+                "stage1_model_integer_variable_count": (
+                    plan.metadata or {}
+                ).get("stage1_model_integer_variable_count"),
+                "stage1_model_continuous_variable_count": (
+                    plan.metadata or {}
+                ).get("stage1_model_continuous_variable_count"),
+                "stage1_model_nonzero_coefficient_count": (
+                    plan.metadata or {}
+                ).get("stage1_model_nonzero_coefficient_count"),
                 "stage1_search_telemetry": dict(
                     (plan.metadata or {}).get("stage1_search_telemetry") or {}
                 ),

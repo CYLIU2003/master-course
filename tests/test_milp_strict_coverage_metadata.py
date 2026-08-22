@@ -409,6 +409,10 @@ def test_stage1_omits_arc_links_implied_by_node_flow_equalities() -> None:
     ] == 2
     assert result.solver_metadata["stage1_model_variable_count"] > 0
     assert result.solver_metadata["stage1_model_constraint_count"] > 0
+    assert result.solver_metadata["stage1_model_binary_variable_count"] >= 0
+    assert result.solver_metadata["stage1_model_integer_variable_count"] >= 0
+    assert result.solver_metadata["stage1_model_continuous_variable_count"] >= 0
+    assert result.solver_metadata["stage1_model_nonzero_coefficient_count"] > 0
     assert result.solver_metadata["stage1_pre_optimize_seconds"] >= 0.0
     assert result.solver_metadata[
         "stage1_single_path_redundancy_elimination_applied"

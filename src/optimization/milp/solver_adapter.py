@@ -13054,6 +13054,19 @@ class GurobiMILPAdapter:
         stage1_numeric_diagnostics = _gurobi_numeric_diagnostics(stage1)
         stage1_model_variable_count = int(getattr(stage1, "NumVars", 0) or 0)
         stage1_model_constraint_count = int(getattr(stage1, "NumConstrs", 0) or 0)
+        stage1_model_binary_variable_count = int(
+            getattr(stage1, "NumBinVars", 0) or 0
+        )
+        stage1_model_integer_variable_count = int(
+            getattr(stage1, "NumIntVars", 0) or 0
+        )
+        stage1_model_continuous_variable_count = max(
+            stage1_model_variable_count - stage1_model_integer_variable_count,
+            0,
+        )
+        stage1_model_nonzero_coefficient_count = int(
+            getattr(stage1, "NumNZs", 0) or 0
+        )
         stage1_solver_gap = self._model_gap(stage1)
         stage1_solver_bound = self._model_bound(stage1)
         certified_bound_candidates = [
@@ -13215,6 +13228,18 @@ class GurobiMILPAdapter:
                     "stage1_pre_optimize_seconds": stage1_pre_optimize_seconds,
                     "stage1_model_variable_count": stage1_model_variable_count,
                     "stage1_model_constraint_count": stage1_model_constraint_count,
+                    "stage1_model_binary_variable_count": (
+                        stage1_model_binary_variable_count
+                    ),
+                    "stage1_model_integer_variable_count": (
+                        stage1_model_integer_variable_count
+                    ),
+                    "stage1_model_continuous_variable_count": (
+                        stage1_model_continuous_variable_count
+                    ),
+                    "stage1_model_nonzero_coefficient_count": (
+                        stage1_model_nonzero_coefficient_count
+                    ),
                     "stage1_search_telemetry": stage1_search_telemetry_result,
                     "stage2_has_feasible_incumbent": False,
                     "stage2_objective": None,
@@ -13518,6 +13543,18 @@ class GurobiMILPAdapter:
                 "stage1_pre_optimize_seconds": stage1_pre_optimize_seconds,
                 "stage1_model_variable_count": stage1_model_variable_count,
                 "stage1_model_constraint_count": stage1_model_constraint_count,
+                "stage1_model_binary_variable_count": (
+                    stage1_model_binary_variable_count
+                ),
+                "stage1_model_integer_variable_count": (
+                    stage1_model_integer_variable_count
+                ),
+                "stage1_model_continuous_variable_count": (
+                    stage1_model_continuous_variable_count
+                ),
+                "stage1_model_nonzero_coefficient_count": (
+                    stage1_model_nonzero_coefficient_count
+                ),
                 "stage1_search_telemetry": stage1_search_telemetry_result,
                 "stage1_time_limit_sec_effective": stage_time_limit,
                 "unserved_variable_created": False,

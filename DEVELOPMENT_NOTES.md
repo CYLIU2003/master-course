@@ -1,5 +1,27 @@
 # Development Notes
 
+## 2026-08-22: pure-ICE A/B harness is now Phase-3-only
+
+- The previous repeated A/B artifact was discovered to have executed
+  `phase4_integrated`; it cannot support the requested deployed-method claim.
+  `scripts/build_lazy_fragment_performance_diagnostic.py` now compiles a
+  documented Phase-3 request from the frozen source request, changes only the
+  mode, removes only Phase-4-specific fields, and stores both requests plus
+  the transformation. Each child rejects any run whose requested/resolved/
+  executed phase is not `phase3_two_stage`.
+- Added Stage-1 Gurobi model telemetry (binary, integer, continuous, and
+  nonzero counts) to the existing solver metadata and exports it through the
+  MILP engine for the A/B artifact. The run-level collector now reads Phase-3
+  Stage-1 build/solve/bound/gap/node fields rather than integrated-search
+  fields; it continues to mark Gurobi presolve time unavailable when not
+  exposed.
+- Updated `tests/test_lazy_fragment_performance_diagnostic.py` and
+  `tests/test_milp_strict_coverage_metadata.py`. Focused verification command:
+  `.venv\\Scripts\\python.exe -m pytest -q
+  tests\\test_lazy_fragment_performance_diagnostic.py
+  tests\\test_milp_strict_coverage_metadata.py`. A fresh clean-SHA ten-run
+  AB/BA experiment remains required; no historical Phase-4 value is relabelled.
+
 ## 2026-08-22: reproducibility snapshot records physical RAM without psutil
 
 - The first clean Phase-3 charger execution exposed that the optional `psutil`

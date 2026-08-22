@@ -38,7 +38,10 @@ The archived ten-run pure-ICE aggregation bundle used `phase4_integrated`, not
 the deployed `phase3_two_stage` method. It is retained only as a historical
 structural diagnostic and cannot satisfy the requested Phase-3 A/B evidence
 gate. A fresh same-SHA Phase-3-only AB/BA execution is required before making
-any representation claim about the thesis method.
+any representation claim about the thesis method. The reused harness now
+persists the Phase-3 request transformation, refuses a child whose
+requested/resolved/executed mode differs from Phase 3, and records Stage-1
+model/solve/bound/gap/node telemetry. No new 10-run artifact exists yet.
 
 ## 2026-08-22 charger sensitivity executable; SOC and stress paths remain blocked
 

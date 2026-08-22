@@ -48,6 +48,11 @@
   Phase-4 diagnostics only; they do not meet the Phase-3 A/B gate and must not
   be cited as a result for the deployed two-stage method. A new same-SHA,
   Phase-3-only AB/BA experiment remains required.
+- The reused A/B harness now compiles an auditable `phase3_two_stage` execution
+  request from the frozen source request, removes only Phase-4-only flags, and
+  rejects a child unless requested, resolved, and executed phases are all
+  Phase 3. It records Stage-1 model size, solve/bound/gap/node telemetry and
+  Phase-3 controls. No replacement ten-run result exists yet.
 
 ## 2026-08-22 repeated same-SHA pure-ICE aggregation A/B result
 

@@ -8,6 +8,7 @@ from scripts.build_lazy_fragment_performance_diagnostic import (
     build_comparison,
     build_pure_ice_ab_comparison,
     build_repeated_pure_ice_ab_comparison,
+    compile_phase3_pure_ice_ab_request,
     write_comparison_outputs,
     write_pure_ice_ab_outputs,
     write_repeated_pure_ice_ab_outputs,
@@ -227,6 +228,9 @@ def _pure_ice_metrics(
         "provenance": {
             "git_sha": "same-sha",
             "git_dirty": False,
+            "research_run": True,
+            "research_run_accepted": True,
+            "successor_pruning_enabled": False,
             "representation": representation,
             "audit_representation": representation,
             "prepared_input_id": "prepared-same",
@@ -236,9 +240,14 @@ def _pure_ice_metrics(
             "time_limit_sec": 900,
             "requested_gap_ratio": 0.01,
             "gurobi_version": "13.0.1",
-            "phase3_seed_time_limit_sec": 150,
+            "requested_phase": "phase3_two_stage",
+            "resolved_phase": "phase3_two_stage",
+            "executed_phase": "phase3_two_stage",
+            "phase4_seed_enabled": False,
+            "stage1_time_limit_sec": 900,
+            "stage2_time_limit_sec": 900,
             "rolling_step_time_limit_sec": 30,
-            "gurobi_parameters": {"integrated_mip_focus": 3},
+            "gurobi_parameters": {"gurobi_threads": 4},
         },
         "model_size": {
             "total_variables": total_variables,
@@ -284,6 +293,36 @@ def _pure_ice_metrics(
             ),
         },
     }
+
+
+def test_compile_phase3_pure_ice_ab_request_removes_only_phase4_controls() -> None:
+    source = {
+        "mode": "phase4_integrated",
+        "prepared_input_id": "prepared-same",
+        "random_seed": 42,
+        "gurobi_threads": 4,
+        "integrated_actual_cost_objective": True,
+        "integrated_ev_utilization_mode": "required",
+        "integrated_actual_cost_upper_bound_jpy": 1.0,
+        "integrated_actual_cost_upper_bound_delta_ratio": 0.01,
+    }
+
+    compiled, transformation = compile_phase3_pure_ice_ab_request(source)
+
+    assert compiled == {
+        "mode": "phase3_two_stage",
+        "prepared_input_id": "prepared-same",
+        "random_seed": 42,
+        "gurobi_threads": 4,
+    }
+    assert transformation["source_mode"] == "phase4_integrated"
+    assert transformation["target_mode"] == "phase3_two_stage"
+    assert transformation["removed_phase4_only_fields"] == [
+        "integrated_actual_cost_objective",
+        "integrated_ev_utilization_mode",
+        "integrated_actual_cost_upper_bound_jpy",
+        "integrated_actual_cost_upper_bound_delta_ratio",
+    ]
 
 
 def test_pure_ice_ab_reports_structural_only_when_gap_does_not_improve(
@@ -408,7 +447,8 @@ def test_repeated_pure_ice_ab_uses_alternating_pairs_and_median_statistics(
     assert comparison["aggregate_statistics"]["pure_aggregate"]["metrics"][
         "total_solver_time_sec"
     ]["median"] == 850.0
-    assert comparison["verdict"] == "PASS_STRUCTURAL_ONLY"
+    assert comparison["verdict"] == "PASS_PERFORMANCE"
+    assert comparison["correctness"]["median_solver_time_improved"] is True
     assert (tmp_path / "repeated_comparison.json").is_file()
     assert (tmp_path / "repeated_comparison.csv").is_file()
     assert "alternating AB/BA" in (tmp_path / "repeated_comparison.md").read_text(

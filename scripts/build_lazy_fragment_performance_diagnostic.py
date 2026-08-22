@@ -21,7 +21,14 @@ if str(REPO_ROOT) not in sys.path:
 
 
 SCHEMA_VERSION = "lazy_fragment_performance_diagnostic_v1"
-PURE_ICE_AB_SCHEMA_VERSION = "pure_ice_aggregation_ab_v2_repeated_processes"
+PURE_ICE_AB_SCHEMA_VERSION = "pure_ice_aggregation_ab_v3_phase3_repeated_processes"
+PURE_ICE_AB_TARGET_PHASE = "phase3_two_stage"
+_PHASE4_ONLY_REQUEST_FIELDS = (
+    "integrated_actual_cost_objective",
+    "integrated_ev_utilization_mode",
+    "integrated_actual_cost_upper_bound_jpy",
+    "integrated_actual_cost_upper_bound_delta_ratio",
+)
 INPUT_FINGERPRINT_KEYS = (
     "trip_ids_sha256",
     "vehicle_ids_sha256",
@@ -47,6 +54,37 @@ def _read_json(path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError(f"expected a JSON object: {path}")
     return payload
+
+
+def compile_phase3_pure_ice_ab_request(
+    source_request: Mapping[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Compile the explicit Phase-3 request used by every isolated A/B child.
+
+    Earlier evidence accidentally inherited an integrated Phase-4 request. The
+    A/B study evaluates the deployed two-stage method, so this narrowly changes
+    the mode and removes only Phase-4-only controls; all other supplied
+    controls remain byte-for-byte equivalent in the frozen request artifact.
+    """
+
+    request = dict(source_request)
+    source_mode = str(request.get("mode") or "").strip()
+    removed_fields = [
+        field for field in _PHASE4_ONLY_REQUEST_FIELDS if field in request
+    ]
+    for field in removed_fields:
+        request.pop(field)
+    request["mode"] = PURE_ICE_AB_TARGET_PHASE
+    transformation = {
+        "source_mode": source_mode or None,
+        "target_mode": PURE_ICE_AB_TARGET_PHASE,
+        "removed_phase4_only_fields": removed_fields,
+        "only_intended_request_changes": [
+            "mode",
+            *removed_fields,
+        ],
+    }
+    return request, transformation
 
 
 def _recursive_values(payload: Any, key: str) -> list[Any]:
@@ -537,9 +575,10 @@ def collect_pure_ice_case_metrics(
 
     plan_metadata = dict(canonical.get("metadata") or {})
     solver_metadata = dict(canonical.get("solver_metadata") or {})
-    profile = dict(solver_metadata.get("integrated_search_profile") or {})
-    callback = dict(profile.get("mip_callback_telemetry") or {})
-    presolve = dict(solver_metadata.get("presolve_reduction_summary") or {})
+    stage1_telemetry = dict(
+        solver_metadata.get("stage1_search_telemetry") or {}
+    )
+    stage1_final = dict(stage1_telemetry.get("final") or {})
     aggregation = dict(
         plan_metadata.get(
             "integrated_exact_combustion_clone_flow_aggregation_audit"
@@ -555,8 +594,6 @@ def collect_pure_ice_case_metrics(
     solver_validation = dict(physical.get("solver_validation_metrics") or {})
     accounting_cost = dict(accounting.get("cost_breakdown") or {})
 
-    initial_integer = int(presolve.get("initial_num_int_vars") or 0)
-    initial_binary = int(presolve.get("initial_num_bin_vars") or 0)
     duties = [
         dict(item)
         for item in list(canonical.get("duties") or ())
@@ -566,7 +603,7 @@ def collect_pure_ice_case_metrics(
     unserved = int(canonical.get("trip_count_unserved") or 0)
     first_events = [
         dict(item)
-        for item in list(callback.get("incumbent_events") or ())
+        for item in list(stage1_telemetry.get("incumbent_events") or ())
         if isinstance(item, Mapping)
     ]
     input_hashes = {
@@ -597,6 +634,13 @@ def collect_pure_ice_case_metrics(
                 manifest.get("git_sha") or settings.get("git_sha") or ""
             ),
             "git_dirty": bool(settings.get("git_dirty", True)),
+            "research_run": bool(settings.get("research_run", False)),
+            "research_run_accepted": bool(
+                settings.get("research_run_accepted", False)
+            ),
+            "successor_pruning_enabled": bool(
+                settings.get("successor_pruning_enabled", True)
+            ),
             "representation": representation,
             "audit_representation": aggregation.get("representation"),
             "prepared_input_id": str(manifest.get("prepared_input_id") or ""),
@@ -609,33 +653,43 @@ def collect_pure_ice_case_metrics(
             "time_limit_sec": settings.get("time_limit_seconds_effective"),
             "requested_gap_ratio": settings.get("mip_gap_requested_ratio"),
             "gurobi_version": rolling.get("solver_version"),
-            "phase3_seed_time_limit_sec": effective.get(
-                "phase4_phase3_seed_time_limit_sec"
+            "requested_phase": settings.get("requested_phase"),
+            "resolved_phase": settings.get("resolved_phase"),
+            "executed_phase": settings.get("executed_phase"),
+            "phase4_seed_enabled": bool(
+                solver_metadata.get("phase4_phase3_seed_enabled", False)
+            ),
+            "stage1_time_limit_sec": settings.get(
+                "stage1_time_limit_seconds_effective"
+            ),
+            "stage2_time_limit_sec": settings.get(
+                "stage2_time_limit_seconds_effective"
             ),
             "rolling_step_time_limit_sec": rolling.get("time_limit_sec"),
             "gurobi_parameters": {
                 key: solver_metadata.get(key)
                 for key in (
-                    "integrated_mip_focus",
-                    "integrated_heuristics",
-                    "integrated_symmetry",
-                    "integrated_root_method",
-                    "integrated_node_method",
-                    "integrated_soft_mem_limit_gb",
-                    "integrated_nodefile_start_gb",
+                    "gurobi_threads",
+                    "stage1_gurobi_feasibility_tol",
+                    "stage2_gurobi_feasibility_tol",
+                    "stage2_gurobi_integrality_tol",
                 )
             },
         },
         "model_size": {
-            "total_variables": presolve.get("initial_num_vars"),
-            "binary_variables": initial_binary,
-            "integer_variables": max(initial_integer - initial_binary, 0),
-            "continuous_variables": presolve.get(
-                "initial_num_continuous_vars"
+            "total_variables": solver_metadata.get("stage1_model_variable_count"),
+            "binary_variables": solver_metadata.get(
+                "stage1_model_binary_variable_count"
             ),
-            "constraints": presolve.get("initial_num_constrs"),
-            "nonzero_coefficients": presolve.get(
-                "initial_num_nonzero_coefficients"
+            "integer_variables": solver_metadata.get(
+                "stage1_model_integer_variable_count"
+            ),
+            "continuous_variables": solver_metadata.get(
+                "stage1_model_continuous_variable_count"
+            ),
+            "constraints": solver_metadata.get("stage1_model_constraint_count"),
+            "nonzero_coefficients": solver_metadata.get(
+                "stage1_model_nonzero_coefficient_count"
             ),
             "ice_label_variables": aggregation.get(
                 "vehicle_label_flow_variable_count_created"
@@ -655,24 +709,24 @@ def collect_pure_ice_case_metrics(
         },
         "timing": {
             "input_preparation_time_sec": None,
-            "variable_construction_time_sec": dict(
-                profile.get("vehicle_indexed_variable_build") or {}
-            ).get("wall_time_sec"),
+            "variable_construction_time_sec": None,
             "constraint_construction_time_sec": None,
-            "complete_model_build_time_sec": profile.get(
-                "pre_optimize_wall_time_sec"
+            "complete_model_build_time_sec": solver_metadata.get(
+                "stage1_pre_optimize_seconds"
             ),
             "presolve_time_sec": None,
-            "root_relaxation_time_sec": callback.get(
+            "root_relaxation_time_sec": stage1_telemetry.get(
                 "root_relaxation_runtime_sec"
             ),
-            "first_incumbent_time_sec": callback.get(
+            "first_incumbent_time_sec": stage1_telemetry.get(
                 "first_incumbent_runtime_sec"
             ),
-            "cost_stage_solve_time_sec": _phase_metric(
-                profile, "wall_time_sec"
+            "cost_stage_solve_time_sec": solver_metadata.get(
+                "stage2_runtime_seconds"
             ),
-            "total_solver_time_sec": settings.get("solve_time_sec"),
+            "total_solver_time_sec": solver_metadata.get(
+                "stage1_runtime_seconds"
+            ),
             "runner_wall_time_sec": runner_wall_time_sec,
             "availability": {
                 "input_preparation_time_sec": "not_separately_instrumented",
@@ -683,34 +737,45 @@ def collect_pure_ice_case_metrics(
             },
         },
         "solve_outcome": {
-            "solver_status": canonical.get("solver_status"),
-            "incumbent_objective_jpy": canonical.get("objective_value"),
-            "raw_gurobi_bound_jpy": settings.get("gurobi_raw_best_bound"),
-            "raw_gurobi_gap_ratio": settings.get("gurobi_raw_mip_gap_ratio"),
-            "root_relaxation_bound_jpy": callback.get(
+            "solver_status": solver_metadata.get("stage1_solver_status"),
+            "incumbent_objective_jpy": solver_metadata.get(
+                "stage1_objective_value"
+            ),
+            "raw_gurobi_bound_jpy": settings.get(
+                "stage1_gurobi_raw_best_bound"
+            ),
+            "raw_gurobi_gap_ratio": settings.get(
+                "stage1_gurobi_raw_mip_gap_ratio"
+            ),
+            "root_relaxation_bound_jpy": stage1_telemetry.get(
                 "root_relaxation_bound"
             ),
-            "independent_certified_lower_bound_jpy": plan_metadata.get(
-                "integrated_analytical_objective_lower_bound"
+            "independent_certified_lower_bound_jpy": solver_metadata.get(
+                "stage1_analytical_objective_lower_bound"
             ),
-            "certified_best_bound_jpy": settings.get("certified_best_bound"),
-            "certified_gap_ratio": settings.get("certified_mip_gap_ratio"),
-            "explored_nodes": settings.get("nodes_explored"),
-            "root_lp_iterations": callback.get(
+            "certified_best_bound_jpy": settings.get(
+                "stage1_certified_best_bound"
+            ),
+            "certified_gap_ratio": settings.get(
+                "stage1_certified_mip_gap_ratio"
+            ),
+            "explored_nodes": stage1_final.get("explored_node_count"),
+            "root_lp_iterations": stage1_telemetry.get(
                 "final_simplex_iteration_count"
             ),
             "first_incumbent_objective_jpy": (
-                callback.get("first_incumbent_objective")
-                if callback.get("first_incumbent_objective") is not None
+                stage1_telemetry.get("first_incumbent_objective")
+                if stage1_telemetry.get("first_incumbent_objective") is not None
                 else (
                     first_events[0].get("incumbent_objective")
                     if first_events
                     else None
                 )
             ),
-            "requested_gap_reached_time_sec": callback.get(
+            "requested_gap_reached_time_sec": stage1_telemetry.get(
                 "requested_gap_reached_runtime_sec"
             ),
+            "canonical_final_cost_jpy": accounting_cost.get("total_cost"),
             # The parent A/B coordinator populates this from the isolated child
             # process. Gurobi runs in that child process, so this is not the
             # coordinator's own memory footprint.
@@ -788,8 +853,19 @@ def _pure_ice_case_valid(metrics: Mapping[str, Any]) -> bool:
     """Apply the non-negotiable run-level correctness contract."""
 
     validity = dict(metrics.get("validity") or {})
+    provenance = dict(metrics.get("provenance") or {})
     return bool(
-        validity.get("served_trips") == validity.get("total_trips")
+        bool(provenance.get("git_sha"))
+        and not provenance.get("git_dirty")
+        and provenance.get("research_run")
+        and provenance.get("research_run_accepted")
+        and not provenance.get("successor_pruning_enabled")
+        and provenance.get("requested_phase") == PURE_ICE_AB_TARGET_PHASE
+        and provenance.get("resolved_phase") == PURE_ICE_AB_TARGET_PHASE
+        and provenance.get("executed_phase") == PURE_ICE_AB_TARGET_PHASE
+        and not provenance.get("phase4_seed_enabled")
+        and validity.get("total_trips") == 264
+        and validity.get("served_trips") == validity.get("total_trips")
         and validity.get("duplicate_coverage_count") == 0
         and validity.get("vehicle_overlap_count") == 0
         and validity.get("invalid_transition_count") == 0
@@ -1250,15 +1326,30 @@ def build_repeated_pure_ice_ab_comparison(
         right = _summary_median(aggregate_summary, metric)
         return left in (None, 0.0) or right is None or right <= 1.1 * left
 
+    discrete_solver_time = _summary_median(
+        discrete_summary, "total_solver_time_sec"
+    )
+    aggregate_solver_time = _summary_median(
+        aggregate_summary, "total_solver_time_sec"
+    )
+    median_solver_time_improved = bool(
+        discrete_solver_time not in (None, 0.0)
+        and aggregate_solver_time is not None
+        and aggregate_solver_time < discrete_solver_time
+    )
+    gap_not_materially_worse = bool(
+        gap_change is None or gap_change <= 0.01
+    )
+    root_not_worse = bool(root_change is None or root_change >= -1.0e-6)
+
     if not correctness:
         verdict = "FAIL_CORRECTNESS"
     elif (
         total_reduction > 0
         and binary_reduction > 0
-        and (root_change is None or root_change >= -1.0e-6)
-        and gap_change is not None
-        and gap_change <= -0.01
-        and _not_worse_by_ten_percent("total_solver_time_sec")
+        and root_not_worse
+        and gap_not_materially_worse
+        and median_solver_time_improved
         and _not_worse_by_ten_percent("runner_wall_time_sec")
     ):
         verdict = "PASS_PERFORMANCE"
@@ -1277,6 +1368,8 @@ def build_repeated_pure_ice_ab_comparison(
                 "pure_aggregate": len(aggregate_cases),
             },
             "child_processes_required": True,
+            "target_phase": PURE_ICE_AB_TARGET_PHASE,
+            "phase4_execution_forbidden": True,
             "case_plan": [
                 {
                     key: run.get(key)
@@ -1298,6 +1391,9 @@ def build_repeated_pure_ice_ab_comparison(
                 bool(check["passed"]) for check in individual_checks
             ),
             "individual_run_checks": individual_checks,
+            "median_solver_time_improved": median_solver_time_improved,
+            "gap_not_materially_worse": gap_not_materially_worse,
+            "bound_not_worse": root_not_worse,
         },
         "changes_from_medians": {
             "total_variable_reduction": total_reduction,
@@ -1309,7 +1405,8 @@ def build_repeated_pure_ice_ab_comparison(
         },
         "verdict": verdict,
         "claim_scope": (
-            "Same-SHA, same-input isolated-process repeated A/B diagnostic. "
+            "Same-SHA, same-input Phase-3-only isolated-process repeated A/B "
+            "diagnostic. "
             "Performance claims require PASS_PERFORMANCE and use medians only."
         ),
     }
@@ -1362,6 +1459,7 @@ def write_repeated_pure_ice_ab_outputs(
         "",
         f"- correctness: `{dict(comparison['correctness'])['passed']}`",
         f"- verdict: `{comparison['verdict']}`",
+        f"- target phase: `{dict(comparison['execution'])['target_phase']}`",
         "- order: alternating AB/BA isolated child processes",
         "- claim scope: median-based only; null presolve time means the solver did not expose a separate value.",
         "",
@@ -1408,12 +1506,26 @@ def _run_pure_ice_case(
                 )
             )
             with _diagnostic_exact_ice_clone_representation(representation):
+                if str(request.get("mode") or "") != PURE_ICE_AB_TARGET_PHASE:
+                    raise ValueError(
+                        "pure-ICE A/B requires an explicit phase3_two_stage request"
+                    )
+                phase4_fields = [
+                    field
+                    for field in _PHASE4_ONLY_REQUEST_FIELDS
+                    if field in request
+                ]
+                if phase4_fields:
+                    raise ValueError(
+                        "pure-ICE A/B request retains Phase-4-only fields: "
+                        + ", ".join(phase4_fields)
+                    )
                 _run_optimization(
                     scenario_id,
                     job.job_id,
                     prepared_input_id,
                     prepared_input_id,
-                    str(request.get("mode") or "phase4_integrated"),
+                    PURE_ICE_AB_TARGET_PHASE,
                     int(request.get("time_limit_seconds") or 900),
                     float(request.get("mip_gap") or 0.01),
                     int(request.get("random_seed") or 42),
@@ -1450,15 +1562,10 @@ def _run_pure_ice_case(
                         )
                         or 120
                     ),
-                    bool(request.get("integrated_actual_cost_objective", True)),
-                    str(
-                        request.get("integrated_ev_utilization_mode")
-                        or "disabled"
-                    ),
-                    request.get("integrated_actual_cost_upper_bound_jpy"),
-                    request.get(
-                        "integrated_actual_cost_upper_bound_delta_ratio"
-                    ),
+                    False,
+                    "disabled",
+                    None,
+                    None,
                     request.get("co2_emissions_cap_kg"),
                 )
             print(
@@ -1767,6 +1874,16 @@ def run_pure_ice_aggregation_child(
         representation=representation,
         runner_wall_time_sec=wall_time,
     )
+    phase_provenance = dict(metrics.get("provenance") or {})
+    observed_phases = {
+        key: phase_provenance.get(key)
+        for key in ("requested_phase", "resolved_phase", "executed_phase")
+    }
+    if any(value != PURE_ICE_AB_TARGET_PHASE for value in observed_phases.values()):
+        raise RuntimeError(
+            "A/B child did not execute the required Phase-3 method: "
+            + json.dumps(observed_phases, sort_keys=True)
+        )
     result_path.write_text(
         json.dumps(
             {
@@ -1797,8 +1914,8 @@ def run_pure_ice_aggregation_ab(
     if _git_output("status", "--porcelain"):
         raise RuntimeError("A/B diagnostic requires a clean Git worktree")
     git_sha = _git_output("rev-parse", "HEAD")
-    request = _read_json(optimization_request_path)
-    if str(request.get("prepared_input_id") or "") != prepared_input_id:
+    source_request = _read_json(optimization_request_path)
+    if str(source_request.get("prepared_input_id") or "") != prepared_input_id:
         raise ValueError(
             "optimization request prepared_input_id does not match the "
             "requested canonical prepared input"
@@ -1814,11 +1931,22 @@ def run_pure_ice_aggregation_ab(
         raise FileNotFoundError(
             f"canonical prepared input is missing: {prepared_path}"
         )
+    request, request_transformation = compile_phase3_pure_ice_ab_request(
+        source_request
+    )
+    if str(request.get("prepared_input_id") or "") != prepared_input_id:
+        raise ValueError(
+            "compiled Phase-3 request prepared_input_id does not match the "
+            "requested canonical prepared input"
+        )
     plan = build_pure_ice_alternating_case_plan(repetitions)
     output_dir.mkdir(parents=True, exist_ok=False)
     prepared_input_sha256 = _sha256_file(prepared_path)
     frozen_request_path = output_dir / "frozen_optimization_request.json"
-    frozen_request_path.write_bytes(optimization_request_path.read_bytes())
+    frozen_request_path.write_text(
+        json.dumps(request, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
     manifest = {
         "schema_version": PURE_ICE_AB_SCHEMA_VERSION,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -1829,11 +1957,13 @@ def run_pure_ice_aggregation_ab(
         "prepared_input_path": str(prepared_path.resolve()),
         "prepared_input_sha256": prepared_input_sha256,
         "optimization_request_path": str(optimization_request_path.resolve()),
-        "optimization_request_sha256": _sha256_file(
+        "source_optimization_request_sha256": _sha256_file(
             optimization_request_path
         ),
         "frozen_optimization_request_path": str(frozen_request_path.resolve()),
         "frozen_optimization_request_sha256": _sha256_file(frozen_request_path),
+        "source_optimization_request": source_request,
+        "phase3_request_transformation": request_transformation,
         "optimization_request": request,
         "small_exact_parity_passed": small_exact_parity_passed,
         "execution_contract": {
@@ -1843,6 +1973,8 @@ def run_pure_ice_aggregation_ab(
             "separate_child_process_per_run": True,
             "parent_rss_sampling_interval_sec": 0.2,
             "normal_bff_worker_used": True,
+            "target_phase": PURE_ICE_AB_TARGET_PHASE,
+            "phase4_execution_forbidden": True,
             "hourly_rolling_required": True,
             "public_api_or_schema_changed": False,
         },
