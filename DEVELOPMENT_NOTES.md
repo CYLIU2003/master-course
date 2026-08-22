@@ -46,8 +46,19 @@
   objective nor the integer feasible set. The BFF request and solver metadata
   record the mode and the materialized row count. A Gurobi two-fragment
   infeasibility regression confirms equivalence with the lazy contract;
-  focused verification is `98 passed`. No full-case performance, bound, or
-  research claim is made before a clean-SHA artifact is accepted.
+  focused verification is `98 passed`.
+- The frozen full-case `explicit_root` diagnostic at
+  `output/thesis_phase3_explicit_root_dc759be_20260823_r1/` used commit
+  `dc759bebf169b88bbe563ae9d715cae431fcf3ad`, the same prepared scenario,
+  full successor network, seed, four threads, candidate policy, and objective,
+  with a 240-second total budget (Stage 1=210, Stage 2=30). Materializing
+  1,243,440 exact rows expanded Stage 1 from 108,062 to 1,351,502 constraints.
+  The 165-second primary search ended with Gurobi bound 0.0 and no root-LP
+  certificate; Stage 2 then time-limited, so the runner correctly failed
+  `source_artifact_validation_failed` because no physical schedule artifact
+  exists. This is `DIAGNOSTIC`, not a feasible, performance, or bound-improving
+  result. Full explicit root materialization is rejected as the next release
+  path.
 
 ## 2026-08-23: Electricity-price Phase-3 tranche completed as a diagnostic
 

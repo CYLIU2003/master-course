@@ -33,12 +33,17 @@ are both falsified as sufficient fixes; the release blocker remains a weak
 Stage-1 relaxation and requires a separately verified mathematical tightening,
 not more of the same search.
 
-The next candidate is an opt-in `explicit_root` representation of the exact
-fragment-transition rows that the default formulation enforces lazily at
-integer incumbents. Its small Gurobi regression preserves the same infeasible
-two-fragment case, but no full 264-trip artifact exists yet. It is therefore a
-pending controlled formulation diagnostic, **NOT** a relaxation-improvement,
-runtime, or research-acceptance claim.
+The opt-in `explicit_root` representation of the exact fragment-transition
+rows was tested at clean commit `dc759bebf169b88bbe563ae9d715cae431fcf3ad`.
+Its small Gurobi regression preserves the same infeasible two-fragment case,
+but the 264-trip artifact at
+`output/thesis_phase3_explicit_root_dc759be_20260823_r1/` rejects it as a
+full-case route: 1,243,440 rows increased Stage 1 to 1,351,502 constraints,
+the 165-second primary search retained a 0.0 Gurobi bound, and Stage 2
+time-limited without creating a physical-schedule artifact. The runner
+correctly reports `source_artifact_validation_failed`. This is **DIAGNOSTIC,
+NOT USED FOR RESEARCH CONCLUSIONS**, not a feasible candidate or lower-bound
+improvement. Do not use full explicit row materialization for the release run.
 
 ## 2026-08-23: Three-point electricity-price tranche is physically valid but not research-accepted
 

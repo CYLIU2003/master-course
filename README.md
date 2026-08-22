@@ -18,11 +18,14 @@ rules out the tested search-profile adjustment as a sufficient fix and is
 diagnostic only, not a claimed model improvement or accepted sensitivity
 result.
 
-The next frozen diagnostic can materialize the same exact fragment-transition
-rows that the default formulation separates lazily, before the root LP is
-solved. This changes neither the integer feasible set nor the objective; it is
-not a performance or gap-improvement claim until its own clean-SHA full-case
-artifact and gate audit are complete.
+The frozen `explicit_root` diagnostic at
+`output/thesis_phase3_explicit_root_dc759be_20260823_r1/` materialized the
+same exact fragment-transition rows before the root LP. It added 1,243,440
+rows (1,351,502 Stage-1 constraints total), but its 165-second primary search
+never obtained a Gurobi root bound beyond 0.0; Stage 2 then time-limited and
+no physical-schedule artifact was produced. It is **DIAGNOSTIC, NOT USED FOR
+RESEARCH CONCLUSIONS** and rejects full explicit materialization as the next
+certificate path.
 
 ## 2026-08-23 electricity-price sensitivity status
 
