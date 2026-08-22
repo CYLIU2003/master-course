@@ -1,5 +1,36 @@
 # Development Notes
 
+## 2026-08-22: corrected electricity-price diagnostic tranche completed
+
+- After the fail-closed TOU-precedence repair, executed only
+  `ELECTRICITY_PRICE_24`, `ELECTRICITY_PRICE_30`, and
+  `ELECTRICITY_PRICE_36` through the frontend/BFF path from clean frozen
+  commit `c4c2ef4aca3f6bb156da10dda68be78867ee23ce`. The immutable result
+  bundle is `output/thesis_sensitivity_electricity_low_pv_20260822_c4c2ef4/`;
+  the run manifest confirms unchanged Git SHA and matched non-varied controls.
+- The audit proved that the effective grid marginal prices were 24, 30, and
+  36 JPY/kWh respectively (diesel remained 145 JPY/L). Every case served
+  264/264 trips, had zero unserved trips, passed physical validation,
+  24-step Rolling/accounting, artifact/provenance, and effective-parameter
+  gates. The BFF started only for this frozen tranche was stopped after the
+  runner completed.
+- All three cases remain `DIAGNOSTIC`, `NOT USED FOR RESEARCH CONCLUSIONS`:
+  each reached `time_limit` without the declared 1% MIP certificate
+  (5.099181%, 5.227442%, and 5.330183%). The 24/30 JPY incumbents were
+  identical on BEV/ICE trips (78/186) and grid import (12.528570 kWh); at 36
+  JPY they were 76/188 and 0 kWh. This is an observed incumbent change, not
+  evidence of an optimal economic-response direction.
+- Execution command: `.venv\\Scripts\\python.exe
+  scripts\\run_thesis_sensitivity_matrix.py --scenario-id
+  b23fd26c-1233-4c73-bb9e-bdb8b1584760 --base-url http://127.0.0.1:8000
+  --base-prepare-request
+  output\\thesis_sensitivity_powertrain_low_pv_20260815_94ce217_bev12_900s\\cases\\BEV_ENERGY_1.2\\frontend_prepare_request.json
+  --base-optimization-request
+  output\\thesis_sensitivity_powertrain_low_pv_20260815_94ce217_bev12_900s\\cases\\BEV_ENERGY_1.2\\frontend_optimization_request.json
+  --output-dir output\\thesis_sensitivity_electricity_low_pv_20260822_c4c2ef4
+  --case-id ELECTRICITY_PRICE_24 --case-id ELECTRICITY_PRICE_30 --case-id
+  ELECTRICITY_PRICE_36 --timeout-seconds 7200 --poll-interval-seconds 10`.
+
 ## 2026-08-22: fail-closed integrated-oracle scale certificate
 
 - Audited `scripts/audit_small_integrated_weather_milp.py` before extending

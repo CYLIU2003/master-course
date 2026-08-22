@@ -249,13 +249,25 @@
   artifact and writes it to the results CSV. Non-varied-control fingerprints
   are compared within each declared family, so intentionally varied price,
   PV, demand, or vehicle-day controls cannot cause a false cross-family pass.
-  No current-SHA price sensitivity solve has been run yet.
+  The corrected three-point electricity tranche completed at clean
+  `c4c2ef4aca3f6bb156da10dda68be78867ee23ce` in
+  `output/thesis_sensitivity_electricity_low_pv_20260822_c4c2ef4/`. Its
+  effective grid prices were exactly 24/30/36 JPY/kWh. All three cases are
+  retained as physically valid diagnostics, not accepted economic-response
+  evidence, because each ended at its time limit above the requested 1% MIP
+  gap (5.099181%, 5.227442%, and 5.330183%).
 - A first 24 JPY/kWh attempt correctly failed closed because its saved request
   still carried a 30 JPY/kWh explicit TOU band, which takes precedence over
   the flat-price field. Price-family requests now rewrite a *uniform* TOU band
   to the declared price and reject a non-uniform tariff rather than silently
   flattening it. The failed attempt is diagnostic only and is not used as a
   price-response result.
+- In the corrected run, all cases served 264/264 trips and passed physical,
+  Rolling, accounting, provenance, and effective-parameter checks. The
+  24/30 JPY cases kept the same 78/186 BEV/ICE trip split and 12.528570 kWh
+  grid import; the 36 JPY case had 76/188 trips and zero grid import. These
+  incumbent observations are descriptive only: the MIP-gap gate prevents a
+  conclusion about optimal economic dispatch response.
 - This change adds execution support only. No independent 0.8--1.2 solve
   tranche has yet been completed at the current SHA, so thesis Phase 2 and
   research release remain `BLOCKED`.

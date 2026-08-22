@@ -1,5 +1,24 @@
 # Current research release blockers
 
+## 2026-08-22 corrected electricity-price tranche is diagnostic, not accepted
+
+The corrected three-point electricity-price execution completed from clean
+SHA `c4c2ef4aca3f6bb156da10dda68be78867ee23ce` at
+`output/thesis_sensitivity_electricity_low_pv_20260822_c4c2ef4/`. The
+effective grid prices are exactly 24, 30, and 36 JPY/kWh, while diesel remains
+145 JPY/L; submitted price controls and all non-varied controls match their
+audited contracts. Each run served 264/264 trips, passed physical validation,
+accepted Rolling accounting, and preserved Git provenance.
+
+However, every case terminated at the time limit above the predeclared 1% MIP
+gap: 5.099181%, 5.227442%, and 5.330183%, respectively. The matrix manifest is
+therefore `BLOCKED`, and all three points are `DIAGNOSTIC`, `NOT USED FOR
+RESEARCH CONCLUSIONS`. The 24/30 JPY incumbents have the same 78/186 BEV/ICE
+trip split and 12.528570 kWh grid import; the 36 JPY incumbent has 76/188 and
+zero import. This may describe the recorded incumbents only; it does not
+establish an optimal price-response effect or clear the economic-sensitivity
+release gate.
+
 ## 2026-08-22 bounded small integrated-oracle evidence verified; release remains blocked
 
 The existing July 10-trip weather audits cannot support an integrated
