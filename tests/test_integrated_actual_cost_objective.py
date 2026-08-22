@@ -1806,12 +1806,111 @@ def test_phase3_discrete_audit_counts_multi_fragment_clone_labels() -> None:
     audit = plan.metadata["stage1_exact_combustion_clone_flow_aggregation_audit"]
     assert audit["representation"] == "discrete"
     assert audit["applied"] is False
-    assert "no_single_fragment_certified_combustion_clone_group" in audit[
+    assert "no_certified_combustion_clone_group_with_reduction" in audit[
         "application_blockers"
     ]
     assert audit["groups"][0]["fragment_layer_count"] == 2
     assert audit["vehicle_label_flow_variable_count_created"] > 0
     assert audit["aggregate_network_variable_count_created"] == 0
+
+
+def test_phase3_layered_ice_clone_aggregation_preserves_two_fragment_dispatch() -> None:
+    """Phase 3 preserves a two-fragment clone flow before Stage-2 recovery."""
+
+    base = _exact_ice_clone_problem()
+    vehicles = tuple(
+        replace(base.vehicles[0], vehicle_id=f"ICE_{index:03d}")
+        for index in range(1, 5)
+    )
+    first_dispatch_trip = replace(
+        base.dispatch_context.trips[0],
+        trip_id="fragment-1",
+        departure_time="08:00",
+        arrival_time="09:00",
+    )
+    second_dispatch_trip = replace(
+        base.dispatch_context.trips[0],
+        trip_id="fragment-2",
+        departure_time="11:00",
+        arrival_time="12:00",
+    )
+    first_problem_trip = replace(
+        base.trips[0],
+        trip_id="fragment-1",
+        departure_min=8 * 60,
+        arrival_min=9 * 60,
+    )
+    second_problem_trip = replace(
+        base.trips[0],
+        trip_id="fragment-2",
+        departure_min=11 * 60,
+        arrival_min=12 * 60,
+    )
+    common_metadata = {
+        **dict(base.metadata or {}),
+        "cost_component_flags": {"driver_cost": False},
+        "vehicle_usage_cost_jpy_per_used_bus": 20_000.0,
+        "daily_fragment_limit": 2,
+        "max_start_fragments_per_vehicle": 2,
+        "max_end_fragments_per_vehicle": 2,
+        "allow_same_day_depot_cycles": True,
+        "fixed_route_band_mode": False,
+    }
+    problem = replace(
+        base,
+        scenario=replace(base.scenario, allow_same_day_depot_cycles=True),
+        dispatch_context=replace(
+            base.dispatch_context,
+            trips=(first_dispatch_trip, second_dispatch_trip),
+        ),
+        trips=(first_problem_trip, second_problem_trip),
+        vehicles=vehicles,
+        feasible_connections={"fragment-1": (), "fragment-2": ()},
+        metadata=common_metadata,
+    )
+    config = OptimizationConfig(
+        mode=OptimizationMode.MILP,
+        phase="phase3_two_stage",
+        time_limit_sec=30,
+        stage1_time_limit_sec=30,
+        stage2_time_limit_sec=30,
+        mip_gap=0.0,
+        random_seed=42,
+        warm_start=False,
+        allow_postsolve_repair=False,
+        research_run=True,
+        stage1_stage2_candidate_limit=2,
+    )
+
+    with _diagnostic_exact_ice_clone_representation("pure_aggregate"):
+        aggregated_outcome, aggregated_plan = GurobiMILPAdapter().solve(
+            problem,
+            config,
+        )
+    with _diagnostic_exact_ice_clone_representation("discrete"):
+        discrete_outcome, discrete_plan = GurobiMILPAdapter().solve(
+            problem,
+            config,
+        )
+
+    assert aggregated_outcome.has_feasible_incumbent
+    assert discrete_outcome.has_feasible_incumbent
+    assert aggregated_plan.served_trip_ids == discrete_plan.served_trip_ids == (
+        "fragment-1",
+        "fragment-2",
+    )
+    assert aggregated_plan.metadata["stage1_objective"] == pytest.approx(
+        discrete_plan.metadata["stage1_objective"]
+    )
+    audit = aggregated_plan.metadata[
+        "stage1_exact_combustion_clone_flow_aggregation_audit"
+    ]
+    assert audit["representation"] == "pure_aggregate"
+    assert audit["applied"] is True
+    assert audit["fragment_layer_count"] == 2
+    assert audit["fragment_reset_variable_count"] > 0
+    assert audit["aggregate_network_variable_count_created"] > 0
+    assert audit["recovered_vehicle_ids"] == ("ICE_001",)
 
 
 def test_phase4_seed_composition_search_scales_with_selected_fleet() -> None:

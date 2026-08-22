@@ -12,7 +12,10 @@ three-fragment group and therefore yielded a false zero. The partial bundle
 `output/diagnostics/pure_ice_aggregation_phase3_ab_64c4a5a_20260822/` is
 **DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS**: it has no aggregate child or
 comparison report. The counter and a two-fragment Phase-3 regression are
-corrected, but the clean-SHA AB/BA x5 gate remains open and must be rerun.
+corrected. The A/B-only Phase-3 aggregate now supports the same integral
+layered-fragment reset network and canonical recovery used by the bounded
+Phase-4 reference; its one- and two-fragment Gurobi regressions pass. The
+clean-SHA AB/BA x5 gate remains open and must be rerun.
 
 At clean SHA `a49716638a1d15567c190798f37b60e3b7920743`, the 264-trip Phase-3
 baseline at `output/2026-08-22/run_20260822_2125/` passed 264/264 service,
@@ -43,13 +46,15 @@ evidence, accepted multi-point economic and charger sensitivities, and the
 formal M0/M1/M2/M3 comparison. No historical Phase-4 representation
 measurement is used to fill any of those gaps.
 
-The Phase-3 single-fragment aggregate network and deterministic canonical-ID
-recovery are now implemented behind the A/B-only diagnostic override. It is
-fail-closed when driver/switch costs, candidate enumeration, no-good cuts, or
-the exact-clone certificate would alter the labelled model. A focused
-aggregate/discrete Phase-3 regression passes, but this does not clear the
-release gate: the fresh full 264-trip AB/BA x5 execution and its independent
-physical/accounting acceptance remain mandatory.
+The Phase-3 exact-clone aggregate network, including its integral layered
+fragment-reset flow and deterministic canonical-ID recovery, is implemented
+behind the A/B-only diagnostic override. It is fail-closed when a nonzero
+driver/switch cost, an existing no-good cut, or the exact-clone certificate
+would alter the labelled model. Candidate-pool extraction is allowed because
+each solution is recovered from the integral aggregate flow. Focused one- and
+two-fragment aggregate/discrete Phase-3 regressions pass, but this does not
+clear the release gate: the fresh full 264-trip AB/BA x5 execution and its
+independent physical/accounting acceptance remain mandatory.
 
 ## 2026-08-22 Phase-3 sensitivity correction; charger matrix remains blocked
 

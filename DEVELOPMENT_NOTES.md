@@ -12,13 +12,16 @@
   so that value was zero even though the discrete Stage-1 model was used.
 - The representation telemetry now derives the discrete variable count from
   every certified clone group, independently of aggregate eligibility. The
-  aggregate remains restricted to a certified single-fragment group; this
-  correction neither enables a relaxation nor changes normal frontend Phase 3.
-  Added a Gurobi Phase-3 regression for a two-fragment group that must remain
-  discrete while reporting positive labelled-flow evidence. Verification:
+  A/B-only aggregate now also uses the existing integral layered-fragment reset
+  flow and canonical recovery path for certified multi-fragment groups. The
+  normal frontend Phase 3 remains discrete. Candidate-pool extraction is
+  permitted because it reuses that exact recovery; an already-present
+  vehicle-labelled no-good cut remains fail-closed. A zero-weight switch term
+  no longer blocks aggregation. Added Gurobi Phase-3 regressions for a
+  two-fragment group, including pool extraction. Verification:
   `C:\master-course\.venv\Scripts\python.exe -m pytest -q
   tests\test_integrated_actual_cost_objective.py
-  tests\test_lazy_fragment_performance_diagnostic.py` (`79 passed`), plus
+  tests\test_lazy_fragment_performance_diagnostic.py` (`80 passed`), plus
   `python -m py_compile src/optimization/milp/solver_adapter.py
   scripts/build_lazy_fragment_performance_diagnostic.py` and `git diff --check`.
 - The interrupted bundle is `DIAGNOSTIC`, `NOT USED FOR RESEARCH
