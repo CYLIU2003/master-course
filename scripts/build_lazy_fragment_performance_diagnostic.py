@@ -4,6 +4,8 @@ import argparse
 import csv
 import hashlib
 import json
+import os
+import statistics
 import subprocess
 import sys
 import time
@@ -19,7 +21,7 @@ if str(REPO_ROOT) not in sys.path:
 
 
 SCHEMA_VERSION = "lazy_fragment_performance_diagnostic_v1"
-PURE_ICE_AB_SCHEMA_VERSION = "pure_ice_aggregation_ab_v1"
+PURE_ICE_AB_SCHEMA_VERSION = "pure_ice_aggregation_ab_v2_repeated_processes"
 INPUT_FINGERPRINT_KEYS = (
     "trip_ids_sha256",
     "vehicle_ids_sha256",
@@ -709,6 +711,9 @@ def collect_pure_ice_case_metrics(
             "requested_gap_reached_time_sec": callback.get(
                 "requested_gap_reached_runtime_sec"
             ),
+            # The parent A/B coordinator populates this from the isolated child
+            # process. Gurobi runs in that child process, so this is not the
+            # coordinator's own memory footprint.
             "peak_memory_bytes": None,
         },
         "validity": {
@@ -779,6 +784,30 @@ def _ab_control_contract(metrics: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _pure_ice_case_valid(metrics: Mapping[str, Any]) -> bool:
+    """Apply the non-negotiable run-level correctness contract."""
+
+    validity = dict(metrics.get("validity") or {})
+    return bool(
+        validity.get("served_trips") == validity.get("total_trips")
+        and validity.get("duplicate_coverage_count") == 0
+        and validity.get("vehicle_overlap_count") == 0
+        and validity.get("invalid_transition_count") == 0
+        and validity.get("bev_soc_violation_count") == 0
+        and validity.get("ice_fuel_violation_count") == 0
+        and validity.get("charger_violation_count") == 0
+        and abs(float(validity.get("bess_terminal_error_kwh") or 0.0))
+        <= 1.0e-6
+        and validity.get("physical_validation_accepted")
+        and validity.get("rolling_step_count") == 24
+        and validity.get("rolling_chain_accepted")
+        and validity.get("accounting_eligible")
+        and validity.get("accounting_reconciliation_status") == "OK"
+        and not validity.get("fallback_used")
+        and not validity.get("post_solve_repair_used")
+    )
+
+
 def build_pure_ice_ab_comparison(
     case_a: Mapping[str, Any],
     case_b: Mapping[str, Any],
@@ -788,27 +817,6 @@ def build_pure_ice_ab_comparison(
     controls_match = _ab_control_contract(case_a) == _ab_control_contract(case_b)
     validity_a = dict(case_a.get("validity") or {})
     validity_b = dict(case_b.get("validity") or {})
-
-    def _case_correct(metrics: Mapping[str, Any]) -> bool:
-        validity = dict(metrics.get("validity") or {})
-        return bool(
-            validity.get("served_trips") == validity.get("total_trips")
-            and validity.get("duplicate_coverage_count") == 0
-            and validity.get("vehicle_overlap_count") == 0
-            and validity.get("invalid_transition_count") == 0
-            and validity.get("bev_soc_violation_count") == 0
-            and validity.get("ice_fuel_violation_count") == 0
-            and validity.get("charger_violation_count") == 0
-            and abs(float(validity.get("bess_terminal_error_kwh") or 0.0))
-            <= 1.0e-6
-            and validity.get("physical_validation_accepted")
-            and validity.get("rolling_step_count") == 24
-            and validity.get("rolling_chain_accepted")
-            and validity.get("accounting_eligible")
-            and validity.get("accounting_reconciliation_status") == "OK"
-            and not validity.get("fallback_used")
-            and not validity.get("post_solve_repair_used")
-        )
 
     audit_a = dict(case_a.get("representation_audit") or {})
     audit_b = dict(case_b.get("representation_audit") or {})
@@ -828,8 +836,8 @@ def build_pure_ice_ab_comparison(
         small_exact_parity_passed
         and controls_match
         and representation_correct
-        and _case_correct(case_a)
-        and _case_correct(case_b)
+        and _pure_ice_case_valid(case_a)
+        and _pure_ice_case_valid(case_b)
     )
 
     size_a = dict(case_a.get("model_size") or {})
@@ -924,8 +932,8 @@ def build_pure_ice_ab_comparison(
             "small_exact_parity_passed": small_exact_parity_passed,
             "control_contract_match": controls_match,
             "representation_audit_match": representation_correct,
-            "case_A_valid": _case_correct(case_a),
-            "case_B_valid": _case_correct(case_b),
+            "case_A_valid": _pure_ice_case_valid(case_a),
+            "case_B_valid": _pure_ice_case_valid(case_b),
             "case_A_reported_total_cost_jpy": validity_a.get(
                 "reported_total_cost_jpy"
             ),
@@ -1049,6 +1057,327 @@ def write_pure_ice_ab_outputs(
     )
 
 
+REPEATED_PURE_ICE_METRICS = (
+    ("total_variables", "model_size"),
+    ("binary_variables", "model_size"),
+    ("constraints", "model_size"),
+    ("nonzero_coefficients", "model_size"),
+    ("complete_model_build_time_sec", "timing"),
+    ("presolve_time_sec", "timing"),
+    ("total_solver_time_sec", "timing"),
+    ("runner_wall_time_sec", "timing"),
+    ("incumbent_objective_jpy", "solve_outcome"),
+    ("certified_best_bound_jpy", "solve_outcome"),
+    ("certified_gap_ratio", "solve_outcome"),
+    ("explored_nodes", "solve_outcome"),
+    ("peak_memory_bytes", "solve_outcome"),
+)
+
+
+def build_pure_ice_alternating_case_plan(
+    repetitions: int,
+) -> list[dict[str, Any]]:
+    """Build AB/BA pairs so each representation has the same run count."""
+
+    if repetitions < 5:
+        raise ValueError("A/B diagnostic requires at least five repetitions")
+    plan: list[dict[str, Any]] = []
+    for pair_index in range(repetitions):
+        pair = (
+            ("discrete", "pure_aggregate")
+            if pair_index % 2 == 0
+            else ("pure_aggregate", "discrete")
+        )
+        for order_in_pair, representation in enumerate(pair, start=1):
+            run_index = len(plan) + 1
+            label = "A_discrete" if representation == "discrete" else "B_pure_aggregate"
+            plan.append(
+                {
+                    "run_index": run_index,
+                    "pair_index": pair_index + 1,
+                    "pair_order": "AB" if pair_index % 2 == 0 else "BA",
+                    "order_in_pair": order_in_pair,
+                    "representation": representation,
+                    "label": label,
+                }
+            )
+    return plan
+
+
+def _quantile(sorted_values: list[float], probability: float) -> float:
+    """Return a deterministic linear-interpolated sample quantile."""
+
+    if not sorted_values:
+        raise ValueError("cannot compute a quantile of an empty value set")
+    position = (len(sorted_values) - 1) * probability
+    lower = int(position)
+    upper = min(lower + 1, len(sorted_values) - 1)
+    fraction = position - lower
+    return sorted_values[lower] + (sorted_values[upper] - sorted_values[lower]) * fraction
+
+
+def _numeric_summary(values: Iterable[Any]) -> dict[str, Any]:
+    numeric_values = sorted(
+        float(value)
+        for value in values
+        if isinstance(value, (int, float)) and not isinstance(value, bool)
+    )
+    if not numeric_values:
+        return {
+            "count": 0,
+            "median": None,
+            "q1": None,
+            "q3": None,
+            "iqr": None,
+            "minimum": None,
+            "maximum": None,
+        }
+    q1 = _quantile(numeric_values, 0.25)
+    q3 = _quantile(numeric_values, 0.75)
+    return {
+        "count": len(numeric_values),
+        "median": float(statistics.median(numeric_values)),
+        "q1": q1,
+        "q3": q3,
+        "iqr": q3 - q1,
+        "minimum": numeric_values[0],
+        "maximum": numeric_values[-1],
+    }
+
+
+def _repeated_case_statistics(
+    cases: Iterable[Mapping[str, Any]],
+) -> dict[str, Any]:
+    collected = [dict(case) for case in cases]
+    statistics_by_metric: dict[str, Any] = {}
+    for metric, section in REPEATED_PURE_ICE_METRICS:
+        values = [dict(case.get(section) or {}).get(metric) for case in collected]
+        statistics_by_metric[metric] = _numeric_summary(values)
+    return {
+        "run_count": len(collected),
+        "metrics": statistics_by_metric,
+        "presolve_time_availability": sorted(
+            {
+                str(dict(case.get("timing") or {}).get("availability", {}).get(
+                    "presolve_time_sec"
+                ))
+                for case in collected
+            }
+        ),
+    }
+
+
+def _summary_median(summary: Mapping[str, Any], metric: str) -> float | None:
+    metrics = dict(summary.get("metrics") or {})
+    value = dict(metrics.get(metric) or {}).get("median")
+    return None if value is None else float(value)
+
+
+def build_repeated_pure_ice_ab_comparison(
+    case_runs: Iterable[Mapping[str, Any]],
+    *,
+    small_exact_parity_passed: bool,
+) -> dict[str, Any]:
+    """Evaluate all isolated A/B runs and derive claims from medians only."""
+
+    runs = [dict(run) for run in case_runs]
+    discrete_cases = [
+        dict(run["metrics"])
+        for run in runs
+        if str(run.get("representation")) == "discrete"
+    ]
+    aggregate_cases = [
+        dict(run["metrics"])
+        for run in runs
+        if str(run.get("representation")) == "pure_aggregate"
+    ]
+    if len(discrete_cases) < 5 or len(aggregate_cases) < 5:
+        raise ValueError("A/B comparison requires at least five runs per representation")
+
+    controls = [
+        _ab_control_contract(case)
+        for case in (*discrete_cases, *aggregate_cases)
+    ]
+    controls_match = bool(controls) and all(
+        control == controls[0] for control in controls
+    )
+
+    def _case_correct(metrics: Mapping[str, Any], representation: str) -> bool:
+        audit = dict(metrics.get("representation_audit") or {})
+        expected_audit = (
+            audit.get("representation") == representation
+            and (
+                int(audit.get("vehicle_label_flow_variable_count_created") or 0) > 0
+                if representation == "discrete"
+                else int(audit.get("vehicle_label_flow_variable_count_created") or 0) == 0
+                and int(audit.get("aggregate_network_variable_count_created") or 0) > 0
+            )
+        )
+        return bool(expected_audit and _pure_ice_case_valid(metrics))
+
+    individual_checks = [
+        {
+            "run_index": run.get("run_index"),
+            "representation": run.get("representation"),
+            "passed": _case_correct(
+                dict(run["metrics"]), str(run.get("representation"))
+            ),
+        }
+        for run in runs
+    ]
+    correctness = bool(
+        small_exact_parity_passed
+        and controls_match
+        and all(bool(check["passed"]) for check in individual_checks)
+    )
+    discrete_summary = _repeated_case_statistics(discrete_cases)
+    aggregate_summary = _repeated_case_statistics(aggregate_cases)
+
+    def _median_change(metric: str) -> float | None:
+        left = _summary_median(discrete_summary, metric)
+        right = _summary_median(aggregate_summary, metric)
+        return None if left is None or right is None else right - left
+
+    total_reduction = -float(_median_change("total_variables") or 0.0)
+    binary_reduction = -float(_median_change("binary_variables") or 0.0)
+    gap_change = _median_change("certified_gap_ratio")
+    root_change = _median_change("certified_best_bound_jpy")
+    solver_time_change = _median_change("total_solver_time_sec")
+    wall_time_change = _median_change("runner_wall_time_sec")
+
+    def _not_worse_by_ten_percent(metric: str) -> bool:
+        left = _summary_median(discrete_summary, metric)
+        right = _summary_median(aggregate_summary, metric)
+        return left in (None, 0.0) or right is None or right <= 1.1 * left
+
+    if not correctness:
+        verdict = "FAIL_CORRECTNESS"
+    elif (
+        total_reduction > 0
+        and binary_reduction > 0
+        and (root_change is None or root_change >= -1.0e-6)
+        and gap_change is not None
+        and gap_change <= -0.01
+        and _not_worse_by_ten_percent("total_solver_time_sec")
+        and _not_worse_by_ten_percent("runner_wall_time_sec")
+    ):
+        verdict = "PASS_PERFORMANCE"
+    elif total_reduction > 0 or binary_reduction > 0:
+        verdict = "PASS_STRUCTURAL_ONLY"
+    else:
+        verdict = "NO_BENEFIT"
+
+    return {
+        "schema_version": PURE_ICE_AB_SCHEMA_VERSION,
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "execution": {
+            "run_count": len(runs),
+            "run_count_per_representation": {
+                "discrete": len(discrete_cases),
+                "pure_aggregate": len(aggregate_cases),
+            },
+            "child_processes_required": True,
+            "case_plan": [
+                {
+                    key: run.get(key)
+                    for key in ("run_index", "pair_index", "pair_order", "order_in_pair", "representation", "label")
+                }
+                for run in runs
+            ],
+        },
+        "case_runs": runs,
+        "aggregate_statistics": {
+            "discrete": discrete_summary,
+            "pure_aggregate": aggregate_summary,
+        },
+        "correctness": {
+            "passed": correctness,
+            "small_exact_parity_passed": small_exact_parity_passed,
+            "control_contract_match": controls_match,
+            "all_individual_runs_valid": all(
+                bool(check["passed"]) for check in individual_checks
+            ),
+            "individual_run_checks": individual_checks,
+        },
+        "changes_from_medians": {
+            "total_variable_reduction": total_reduction,
+            "binary_variable_reduction": binary_reduction,
+            "certified_gap_change_ratio": gap_change,
+            "certified_bound_change_jpy": root_change,
+            "total_solver_time_change_sec": solver_time_change,
+            "runner_wall_time_change_sec": wall_time_change,
+        },
+        "verdict": verdict,
+        "claim_scope": (
+            "Same-SHA, same-input isolated-process repeated A/B diagnostic. "
+            "Performance claims require PASS_PERFORMANCE and use medians only."
+        ),
+    }
+
+
+def write_repeated_pure_ice_ab_outputs(
+    comparison: Mapping[str, Any], output_dir: Path
+) -> None:
+    """Persist run-level metrics plus median/IQR evidence for the A/B study."""
+
+    (output_dir / "repeated_comparison.json").write_text(
+        json.dumps(comparison, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    summaries = dict(comparison["aggregate_statistics"])
+    rows: list[dict[str, Any]] = []
+    for metric, _section in REPEATED_PURE_ICE_METRICS:
+        discrete = dict(dict(summaries["discrete"])["metrics"][metric])
+        aggregate = dict(dict(summaries["pure_aggregate"])["metrics"][metric])
+        median_change = (
+            None
+            if discrete["median"] is None or aggregate["median"] is None
+            else float(aggregate["median"]) - float(discrete["median"])
+        )
+        rows.append(
+            {
+                "metric": metric,
+                "discrete_median": discrete["median"],
+                "discrete_q1": discrete["q1"],
+                "discrete_q3": discrete["q3"],
+                "discrete_minimum": discrete["minimum"],
+                "discrete_maximum": discrete["maximum"],
+                "aggregate_median": aggregate["median"],
+                "aggregate_q1": aggregate["q1"],
+                "aggregate_q3": aggregate["q3"],
+                "aggregate_minimum": aggregate["minimum"],
+                "aggregate_maximum": aggregate["maximum"],
+                "median_change": median_change,
+            }
+        )
+    csv_fields = tuple(rows[0])
+    with (output_dir / "repeated_comparison.csv").open(
+        "w", encoding="utf-8-sig", newline=""
+    ) as handle:
+        writer = csv.DictWriter(handle, fieldnames=csv_fields)
+        writer.writeheader()
+        writer.writerows(rows)
+    lines = [
+        "# Repeated pure ICE aggregation A/B diagnostic",
+        "",
+        f"- correctness: `{dict(comparison['correctness'])['passed']}`",
+        f"- verdict: `{comparison['verdict']}`",
+        "- order: alternating AB/BA isolated child processes",
+        "- claim scope: median-based only; null presolve time means the solver did not expose a separate value.",
+        "",
+        "| Metric | Discrete median [Q1, Q3] | Aggregate median [Q1, Q3] | B - A |",
+        "|---|---:|---:|---:|",
+    ]
+    for row in rows:
+        lines.append(
+            f"| {row['metric']} | {row['discrete_median']} [{row['discrete_q1']}, {row['discrete_q3']}] | "
+            f"{row['aggregate_median']} [{row['aggregate_q1']}, {row['aggregate_q3']}] | {row['median_change']} |"
+        )
+    (output_dir / "repeated_comparison.md").write_text(
+        "\n".join(lines) + "\n", encoding="utf-8"
+    )
+
+
 def _run_pure_ice_case(
     *,
     scenario_id: str,
@@ -1158,6 +1487,302 @@ def _run_pure_ice_case(
     return Path(run_dir_text), wall_time, job.job_id
 
 
+def _read_process_rss_bytes(process_id: int) -> int | None:
+    """Read a process's current resident memory without another dependency."""
+
+    if os.name == "nt":
+        import ctypes
+        from ctypes import wintypes
+
+        class ProcessMemoryCountersEx(ctypes.Structure):
+            _fields_ = [
+                ("cb", wintypes.DWORD),
+                ("PageFaultCount", wintypes.DWORD),
+                ("PeakWorkingSetSize", ctypes.c_size_t),
+                ("WorkingSetSize", ctypes.c_size_t),
+                ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                ("PagefileUsage", ctypes.c_size_t),
+                ("PeakPagefileUsage", ctypes.c_size_t),
+                ("PrivateUsage", ctypes.c_size_t),
+            ]
+
+        process_query_information = 0x0400
+        process_vm_read = 0x0010
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        psapi = ctypes.WinDLL("psapi", use_last_error=True)
+        kernel32.OpenProcess.argtypes = (
+            wintypes.DWORD,
+            wintypes.BOOL,
+            wintypes.DWORD,
+        )
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+        kernel32.CloseHandle.restype = wintypes.BOOL
+        psapi.GetProcessMemoryInfo.argtypes = (
+            wintypes.HANDLE,
+            ctypes.POINTER(ProcessMemoryCountersEx),
+            wintypes.DWORD,
+        )
+        psapi.GetProcessMemoryInfo.restype = wintypes.BOOL
+        handle = kernel32.OpenProcess(
+            process_query_information | process_vm_read, False, process_id
+        )
+        if not handle:
+            return None
+        try:
+            counters = ProcessMemoryCountersEx()
+            counters.cb = ctypes.sizeof(counters)
+            if not psapi.GetProcessMemoryInfo(
+                handle, ctypes.byref(counters), counters.cb
+            ):
+                return None
+            return int(counters.WorkingSetSize)
+        finally:
+            kernel32.CloseHandle(handle)
+    status_path = Path(f"/proc/{process_id}/status")
+    if status_path.is_file():
+        for line in status_path.read_text(encoding="utf-8").splitlines():
+            if line.startswith("VmRSS:"):
+                return int(line.split()[1]) * 1024
+    return None
+
+
+def _child_process_tree_ids(root_process_id: int) -> set[int]:
+    """Return the root plus live descendants, including venv launcher children."""
+
+    if os.name != "nt":
+        return {root_process_id}
+
+    import ctypes
+    from ctypes import wintypes
+
+    class ProcessEntry32(ctypes.Structure):
+        _fields_ = [
+            ("dwSize", wintypes.DWORD),
+            ("cntUsage", wintypes.DWORD),
+            ("th32ProcessID", wintypes.DWORD),
+            ("th32DefaultHeapID", ctypes.c_void_p),
+            ("th32ModuleID", wintypes.DWORD),
+            ("cntThreads", wintypes.DWORD),
+            ("th32ParentProcessID", wintypes.DWORD),
+            ("pcPriClassBase", ctypes.c_long),
+            ("dwFlags", wintypes.DWORD),
+            ("szExeFile", ctypes.c_wchar * 260),
+        ]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateToolhelp32Snapshot.argtypes = (wintypes.DWORD, wintypes.DWORD)
+    kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    kernel32.Process32FirstW.argtypes = (
+        wintypes.HANDLE,
+        ctypes.POINTER(ProcessEntry32),
+    )
+    kernel32.Process32FirstW.restype = wintypes.BOOL
+    kernel32.Process32NextW.argtypes = (
+        wintypes.HANDLE,
+        ctypes.POINTER(ProcessEntry32),
+    )
+    kernel32.Process32NextW.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    invalid_handle_value = ctypes.c_void_p(-1).value
+    handle = kernel32.CreateToolhelp32Snapshot(0x00000002, 0)
+    if handle == invalid_handle_value:
+        return {root_process_id}
+    children_by_parent: dict[int, set[int]] = {}
+    try:
+        entry = ProcessEntry32()
+        entry.dwSize = ctypes.sizeof(entry)
+        has_entry = kernel32.Process32FirstW(handle, ctypes.byref(entry))
+        while has_entry:
+            children_by_parent.setdefault(int(entry.th32ParentProcessID), set()).add(
+                int(entry.th32ProcessID)
+            )
+            entry.dwSize = ctypes.sizeof(entry)
+            has_entry = kernel32.Process32NextW(handle, ctypes.byref(entry))
+    finally:
+        kernel32.CloseHandle(handle)
+    process_ids = {root_process_id}
+    pending = [root_process_id]
+    while pending:
+        parent_id = pending.pop()
+        for child_id in children_by_parent.get(parent_id, set()):
+            if child_id not in process_ids:
+                process_ids.add(child_id)
+                pending.append(child_id)
+    return process_ids
+
+
+def _run_pure_ice_case_in_child_process(
+    *,
+    scenario_id: str,
+    prepared_input_id: str,
+    optimization_request_path: Path,
+    representation: str,
+    run_directory: Path,
+    expected_git_sha: str,
+) -> dict[str, Any]:
+    """Run exactly one normal BFF worker in an isolated Python process."""
+
+    child_result_path = run_directory / "child_result.json"
+    process_log_path = run_directory / "child_process.log"
+    command = [
+        sys.executable,
+        str(Path(__file__).resolve()),
+        "--run-pure-ice-aggregation-child",
+        "--scenario-id",
+        scenario_id,
+        "--prepared-input-id",
+        prepared_input_id,
+        "--optimization-request",
+        str(optimization_request_path.resolve()),
+        "--child-representation",
+        representation,
+        "--child-result-path",
+        str(child_result_path.resolve()),
+        "--expected-git-sha",
+        expected_git_sha,
+    ]
+    peak_rss_bytes = 0
+    rss_sample_count = 0
+    observed_process_ids: set[int] = set()
+    started = time.perf_counter()
+    with process_log_path.open("w", encoding="utf-8") as log_handle:
+        process = subprocess.Popen(
+            command,
+            cwd=REPO_ROOT,
+            stdout=log_handle,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        while process.poll() is None:
+            process_ids = _child_process_tree_ids(process.pid)
+            rss_values = [
+                _read_process_rss_bytes(process_id)
+                for process_id in process_ids
+            ]
+            sampled_rss_bytes = sum(
+                value for value in rss_values if value is not None
+            )
+            if sampled_rss_bytes > 0:
+                peak_rss_bytes = max(peak_rss_bytes, sampled_rss_bytes)
+                rss_sample_count += 1
+                observed_process_ids.update(
+                    process_id
+                    for process_id, value in zip(process_ids, rss_values)
+                    if value is not None
+                )
+            time.sleep(0.2)
+        process_ids = _child_process_tree_ids(process.pid)
+        rss_values = [
+            _read_process_rss_bytes(process_id)
+            for process_id in process_ids
+        ]
+        sampled_rss_bytes = sum(value for value in rss_values if value is not None)
+        if sampled_rss_bytes > 0:
+            peak_rss_bytes = max(peak_rss_bytes, sampled_rss_bytes)
+            rss_sample_count += 1
+            observed_process_ids.update(
+                process_id
+                for process_id, value in zip(process_ids, rss_values)
+                if value is not None
+            )
+    wall_time = time.perf_counter() - started
+    if process.returncode != 0:
+        raise RuntimeError(
+            f"{representation} child process failed with exit code "
+            f"{process.returncode}; inspect {process_log_path}"
+        )
+    if rss_sample_count == 0 or peak_rss_bytes <= 0:
+        raise RuntimeError(
+            "peak RSS was unavailable for isolated child process; refusing "
+            "to produce an incomplete performance artifact"
+        )
+    child_result = _read_json(child_result_path)
+    metrics = dict(child_result.get("metrics") or {})
+    if not metrics:
+        raise RuntimeError(f"child result contains no metrics: {child_result_path}")
+    if str(metrics.get("provenance", {}).get("representation")) != representation:
+        raise RuntimeError("child result representation does not match its request")
+    metrics.setdefault("solve_outcome", {})["peak_memory_bytes"] = peak_rss_bytes
+    metrics.setdefault("execution", {}).update(
+        {
+            "process_isolated": True,
+            "child_process_id": process.pid,
+            "child_process_command": command,
+            "parent_measured_peak_rss_bytes": peak_rss_bytes,
+            "rss_scope": "maximum sampled concurrent RSS across child process tree",
+            "rss_sample_count": rss_sample_count,
+            "observed_process_ids": sorted(observed_process_ids),
+            "parent_observed_wall_time_sec": wall_time,
+            "child_result_path": str(child_result_path.resolve()),
+            "child_process_log_path": str(process_log_path.resolve()),
+        }
+    )
+    return {
+        "metrics": metrics,
+        "job_id": child_result.get("job_id"),
+        "run_dir": child_result.get("run_dir"),
+        "runner_wall_time_sec": child_result.get("runner_wall_time_sec"),
+        "parent_observed_wall_time_sec": wall_time,
+        "peak_rss_bytes": peak_rss_bytes,
+        "rss_sample_count": rss_sample_count,
+    }
+
+
+def run_pure_ice_aggregation_child(
+    *,
+    scenario_id: str,
+    prepared_input_id: str,
+    optimization_request_path: Path,
+    representation: str,
+    result_path: Path,
+    expected_git_sha: str,
+) -> None:
+    """Child entrypoint with its own clean-SHA pre/post gate."""
+
+    if _git_output("status", "--porcelain"):
+        raise RuntimeError("A/B child requires a clean Git worktree at start")
+    if _git_output("rev-parse", "HEAD") != expected_git_sha:
+        raise RuntimeError("A/B child SHA differs from the parent frozen SHA")
+    request = _read_json(optimization_request_path)
+    run_dir, wall_time, job_id = _run_pure_ice_case(
+        scenario_id=scenario_id,
+        prepared_input_id=prepared_input_id,
+        request=request,
+        representation=representation,
+        log_path=result_path.parent / "bff_worker.log",
+    )
+    if _git_output("status", "--porcelain"):
+        raise RuntimeError("A/B child Git worktree changed during the run")
+    if _git_output("rev-parse", "HEAD") != expected_git_sha:
+        raise RuntimeError("A/B child SHA drifted during the run")
+    metrics = collect_pure_ice_case_metrics(
+        run_dir,
+        representation=representation,
+        runner_wall_time_sec=wall_time,
+    )
+    result_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "pure_ice_aggregation_child_result_v1",
+                "job_id": job_id,
+                "run_dir": str(run_dir.resolve()),
+                "runner_wall_time_sec": wall_time,
+                "git_sha_before_after": expected_git_sha,
+                "metrics": metrics,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
 def run_pure_ice_aggregation_ab(
     *,
     scenario_id: str,
@@ -1165,6 +1790,7 @@ def run_pure_ice_aggregation_ab(
     optimization_request_path: Path,
     output_dir: Path,
     small_exact_parity_passed: bool,
+    repetitions: int = 5,
 ) -> dict[str, Any]:
     if _git_output("status", "--porcelain"):
         raise RuntimeError("A/B diagnostic requires a clean Git worktree")
@@ -1186,7 +1812,11 @@ def run_pure_ice_aggregation_ab(
         raise FileNotFoundError(
             f"canonical prepared input is missing: {prepared_path}"
         )
+    plan = build_pure_ice_alternating_case_plan(repetitions)
     output_dir.mkdir(parents=True, exist_ok=False)
+    prepared_input_sha256 = _sha256_file(prepared_path)
+    frozen_request_path = output_dir / "frozen_optimization_request.json"
+    frozen_request_path.write_bytes(optimization_request_path.read_bytes())
     manifest = {
         "schema_version": PURE_ICE_AB_SCHEMA_VERSION,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -1195,16 +1825,21 @@ def run_pure_ice_aggregation_ab(
         "scenario_id": scenario_id,
         "prepared_input_id": prepared_input_id,
         "prepared_input_path": str(prepared_path.resolve()),
-        "prepared_input_sha256": _sha256_file(prepared_path),
+        "prepared_input_sha256": prepared_input_sha256,
         "optimization_request_path": str(optimization_request_path.resolve()),
         "optimization_request_sha256": _sha256_file(
             optimization_request_path
         ),
+        "frozen_optimization_request_path": str(frozen_request_path.resolve()),
+        "frozen_optimization_request_sha256": _sha256_file(frozen_request_path),
         "optimization_request": request,
         "small_exact_parity_passed": small_exact_parity_passed,
         "execution_contract": {
-            "case_order": ["A_discrete", "B_pure_aggregate"],
-            "run_count_per_representation": 1,
+            "case_order": [item["pair_order"] for item in plan[::2]],
+            "case_plan": plan,
+            "run_count_per_representation": repetitions,
+            "separate_child_process_per_run": True,
+            "parent_rss_sampling_interval_sec": 0.2,
             "normal_bff_worker_used": True,
             "hourly_rolling_required": True,
             "public_api_or_schema_changed": False,
@@ -1216,48 +1851,66 @@ def run_pure_ice_aggregation_ab(
         encoding="utf-8",
     )
 
-    case_a_dir, case_a_wall, case_a_job = _run_pure_ice_case(
-        scenario_id=scenario_id,
-        prepared_input_id=prepared_input_id,
-        request=request,
-        representation="discrete",
-        log_path=output_dir / "case_A.log",
-    )
-    case_b_dir, case_b_wall, case_b_job = _run_pure_ice_case(
-        scenario_id=scenario_id,
-        prepared_input_id=prepared_input_id,
-        request=request,
-        representation="pure_aggregate",
-        log_path=output_dir / "case_B.log",
-    )
-    case_a = collect_pure_ice_case_metrics(
-        case_a_dir,
-        representation="discrete",
-        runner_wall_time_sec=case_a_wall,
-    )
-    case_b = collect_pure_ice_case_metrics(
-        case_b_dir,
-        representation="pure_aggregate",
-        runner_wall_time_sec=case_b_wall,
-    )
-    comparison = build_pure_ice_ab_comparison(
-        case_a,
-        case_b,
+    case_runs: list[dict[str, Any]] = []
+    for planned_run in plan:
+        if _git_output("status", "--porcelain"):
+            raise RuntimeError("A/B diagnostic Git worktree changed during execution")
+        if _git_output("rev-parse", "HEAD") != git_sha:
+            raise RuntimeError("A/B diagnostic Git SHA drifted during execution")
+        if _sha256_file(prepared_path) != prepared_input_sha256:
+            raise RuntimeError("A/B diagnostic prepared input changed during execution")
+        run_directory = output_dir / "runs" / (
+            f"{int(planned_run['run_index']):02d}_{planned_run['label']}"
+        )
+        run_directory.mkdir(parents=True, exist_ok=False)
+        child = _run_pure_ice_case_in_child_process(
+            scenario_id=scenario_id,
+            prepared_input_id=prepared_input_id,
+            optimization_request_path=frozen_request_path,
+            representation=str(planned_run["representation"]),
+            run_directory=run_directory,
+            expected_git_sha=git_sha,
+        )
+        metrics = dict(child["metrics"])
+        observed_prepared_hash = dict(
+            dict(metrics.get("provenance") or {}).get("input_hashes") or {}
+        ).get("prepared_source_sha256")
+        if observed_prepared_hash != prepared_input_sha256:
+            raise RuntimeError(
+                "child run prepared-input hash does not match the frozen input"
+            )
+        if _sha256_file(prepared_path) != prepared_input_sha256:
+            raise RuntimeError("A/B diagnostic prepared input changed during child run")
+        (run_directory / "case_metrics.json").write_text(
+            json.dumps(metrics, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        case_runs.append({**planned_run, **child, "metrics": metrics})
+    if (
+        _git_output("status", "--porcelain")
+        or _git_output("rev-parse", "HEAD") != git_sha
+        or _sha256_file(prepared_path) != prepared_input_sha256
+    ):
+        raise RuntimeError("A/B diagnostic Git state drifted before finalization")
+    comparison = build_repeated_pure_ice_ab_comparison(
+        case_runs,
         small_exact_parity_passed=small_exact_parity_passed,
     )
-    write_pure_ice_ab_outputs(comparison, output_dir)
+    write_repeated_pure_ice_ab_outputs(comparison, output_dir)
     manifest.update(
         {
-            "case_A": {
-                "job_id": case_a_job,
-                "run_dir": str(case_a_dir.resolve()),
-                "runner_wall_time_sec": case_a_wall,
-            },
-            "case_B": {
-                "job_id": case_b_job,
-                "run_dir": str(case_b_dir.resolve()),
-                "runner_wall_time_sec": case_b_wall,
-            },
+            "completed_runs": [
+                {
+                    key: run.get(key)
+                    for key in (
+                        "run_index", "pair_index", "pair_order", "representation",
+                        "job_id", "run_dir", "runner_wall_time_sec",
+                        "parent_observed_wall_time_sec", "peak_rss_bytes",
+                        "rss_sample_count",
+                    )
+                }
+                for run in case_runs
+            ],
             "verdict": comparison["verdict"],
         }
     )
@@ -1267,12 +1920,9 @@ def run_pure_ice_aggregation_ab(
     )
     required = (
         "request_manifest.json",
-        "case_A_discrete_metrics.json",
-        "case_B_pure_aggregate_metrics.json",
-        "comparison.csv",
-        "comparison.md",
-        "case_A.log",
-        "case_B.log",
+        "repeated_comparison.json",
+        "repeated_comparison.csv",
+        "repeated_comparison.md",
     )
     hashes = {
         name: _sha256_file(output_dir / name)
@@ -1303,7 +1953,12 @@ def main() -> int:
     parser.add_argument(
         "--run-pure-ice-aggregation-ab",
         action="store_true",
-        help="Execute one discrete and one pure-aggregate full BFF run.",
+        help="Execute alternating isolated-process discrete/pure-aggregate BFF runs.",
+    )
+    parser.add_argument(
+        "--run-pure-ice-aggregation-child",
+        action="store_true",
+        help=argparse.SUPPRESS,
     )
     parser.add_argument("--baseline-run", type=Path)
     parser.add_argument("--candidate-run", type=Path)
@@ -1311,12 +1966,41 @@ def main() -> int:
     parser.add_argument("--scenario-id")
     parser.add_argument("--prepared-input-id")
     parser.add_argument("--optimization-request", type=Path)
+    parser.add_argument("--ab-repetitions", type=int, default=5)
+    parser.add_argument("--child-representation", choices=("discrete", "pure_aggregate"))
+    parser.add_argument("--child-result-path", type=Path)
+    parser.add_argument("--expected-git-sha")
     parser.add_argument(
         "--small-exact-parity-passed",
         action="store_true",
         help="Record the required focused exact-parity test precondition.",
     )
     args = parser.parse_args()
+
+    if args.run_pure_ice_aggregation_child:
+        missing = [
+            name
+            for name, value in (
+                ("--scenario-id", args.scenario_id),
+                ("--prepared-input-id", args.prepared_input_id),
+                ("--optimization-request", args.optimization_request),
+                ("--child-representation", args.child_representation),
+                ("--child-result-path", args.child_result_path),
+                ("--expected-git-sha", args.expected_git_sha),
+            )
+            if not value
+        ]
+        if missing:
+            parser.error("missing child A/B arguments: " + ", ".join(missing))
+        run_pure_ice_aggregation_child(
+            scenario_id=str(args.scenario_id),
+            prepared_input_id=str(args.prepared_input_id),
+            optimization_request_path=Path(args.optimization_request),
+            representation=str(args.child_representation),
+            result_path=Path(args.child_result_path),
+            expected_git_sha=str(args.expected_git_sha),
+        )
+        return 0
 
     if args.run_pure_ice_aggregation_ab:
         missing = [
@@ -1340,6 +2024,7 @@ def main() -> int:
             optimization_request_path=Path(args.optimization_request),
             output_dir=args.output_dir,
             small_exact_parity_passed=True,
+            repetitions=int(args.ab_repetitions),
         )
         print(
             json.dumps(

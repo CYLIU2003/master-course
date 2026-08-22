@@ -1,5 +1,31 @@
 # Development Notes
 
+## 2026-08-22: repeated isolated-process pure-ICE A/B harness
+
+- Extended the existing `scripts/build_lazy_fragment_performance_diagnostic.py`
+  rather than adding a parallel benchmark. The default full A/B mode now
+  requires five pairs and orders them AB/BA/AB/BA/AB, giving five executions
+  each for `discrete` and `pure_aggregate`.
+- Each planned run starts a fresh Python child which invokes the normal BFF
+  worker once under its own clean-SHA pre/post gate. The parent rejects any
+  source SHA/worktree drift, freezes the request bytes before the first child,
+  verifies the prepared-input SHA before/after every child and in its emitted
+  run artifact, records child command/run/job provenance, and measures maximum
+  sampled concurrent RSS over the full child-process tree; this includes the
+  virtual-environment launcher child on Windows.
+- The output contract is now
+  `pure_ice_aggregation_ab_v2_repeated_processes`: run-level metrics include
+  solver/model/correctness data and RSS, while `repeated_comparison.*` reports
+  median, Q1/Q3, minimum, maximum and IQR. Separate Gurobi presolve time is
+  retained as explicit `null` with availability metadata because the current
+  solver artifact does not expose it; it is never fabricated.
+- A review found that sampling only the launcher PID under-reports RSS on
+  Windows. The implementation now enumerates descendants and samples their
+  concurrent working sets; a live 80 MB child allocation test observed
+  96,841,728 bytes. Focused tests and integrated actual-cost regressions:
+  `75 passed`. No 264-trip repeated formal run has started yet; the old
+  one-pair `a145cf3` artifact remains historical `PASS_STRUCTURAL_ONLY` only.
+
 ## 2026-08-22: corrected electricity-price diagnostic tranche completed
 
 - After the fail-closed TOU-precedence repair, executed only

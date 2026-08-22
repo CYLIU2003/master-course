@@ -4,10 +4,13 @@ import json
 from pathlib import Path
 
 from scripts.build_lazy_fragment_performance_diagnostic import (
+    build_pure_ice_alternating_case_plan,
     build_comparison,
     build_pure_ice_ab_comparison,
+    build_repeated_pure_ice_ab_comparison,
     write_comparison_outputs,
     write_pure_ice_ab_outputs,
+    write_repeated_pure_ice_ab_outputs,
 )
 
 
@@ -346,6 +349,103 @@ def test_pure_ice_ab_fails_when_controls_differ() -> None:
     comparison = build_pure_ice_ab_comparison(
         case_a,
         case_b,
+        small_exact_parity_passed=True,
+    )
+
+    assert comparison["correctness"]["control_contract_match"] is False
+    assert comparison["verdict"] == "FAIL_CORRECTNESS"
+
+
+def test_repeated_pure_ice_ab_uses_alternating_pairs_and_median_statistics(
+    tmp_path: Path,
+) -> None:
+    plan = build_pure_ice_alternating_case_plan(5)
+
+    assert [item["pair_order"] for item in plan[::2]] == [
+        "AB",
+        "BA",
+        "AB",
+        "BA",
+        "AB",
+    ]
+    assert sum(item["representation"] == "discrete" for item in plan) == 5
+    assert sum(item["representation"] == "pure_aggregate" for item in plan) == 5
+
+    runs = []
+    for item in plan:
+        is_aggregate = item["representation"] == "pure_aggregate"
+        metrics = _pure_ice_metrics(
+            representation=item["representation"],
+            total_variables=536_000 if is_aggregate else 780_000,
+            binary_variables=507_000 if is_aggregate else 739_000,
+            certified_gap=0.06,
+            root_bound=58_000.0,
+            wall_time=880.0 if is_aggregate else 900.0,
+        )
+        metrics["timing"]["total_solver_time_sec"] = (
+            850.0 if is_aggregate else 870.0
+        )
+        metrics["timing"]["presolve_time_sec"] = None
+        metrics["solve_outcome"]["peak_memory_bytes"] = (
+            3_000_000 if is_aggregate else 4_000_000
+        )
+        runs.append({**item, "metrics": metrics})
+
+    comparison = build_repeated_pure_ice_ab_comparison(
+        runs,
+        small_exact_parity_passed=True,
+    )
+    write_repeated_pure_ice_ab_outputs(comparison, tmp_path)
+
+    assert comparison["correctness"]["passed"] is True
+    assert comparison["execution"]["run_count_per_representation"] == {
+        "discrete": 5,
+        "pure_aggregate": 5,
+    }
+    assert comparison["aggregate_statistics"]["discrete"]["metrics"][
+        "peak_memory_bytes"
+    ]["median"] == 4_000_000.0
+    assert comparison["aggregate_statistics"]["pure_aggregate"]["metrics"][
+        "total_solver_time_sec"
+    ]["median"] == 850.0
+    assert comparison["verdict"] == "PASS_STRUCTURAL_ONLY"
+    assert (tmp_path / "repeated_comparison.json").is_file()
+    assert (tmp_path / "repeated_comparison.csv").is_file()
+    assert "alternating AB/BA" in (tmp_path / "repeated_comparison.md").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_repeated_pure_ice_ab_rejects_fewer_than_five_repetitions() -> None:
+    try:
+        build_pure_ice_alternating_case_plan(4)
+    except ValueError as error:
+        assert "at least five" in str(error)
+    else:
+        raise AssertionError("expected the five-repetition gate to fail")
+
+
+def test_repeated_pure_ice_ab_fails_when_any_child_control_drifts() -> None:
+    plan = build_pure_ice_alternating_case_plan(5)
+    runs = []
+    for item in plan:
+        metrics = _pure_ice_metrics(
+            representation=item["representation"],
+            total_variables=536_000
+            if item["representation"] == "pure_aggregate"
+            else 780_000,
+            binary_variables=507_000
+            if item["representation"] == "pure_aggregate"
+            else 739_000,
+            certified_gap=0.06,
+            root_bound=58_000.0,
+            wall_time=900.0,
+        )
+        runs.append({**item, "metrics": metrics})
+    runs[-1]["metrics"]["provenance"]["gurobi_threads"] = 8
+
+    comparison = build_repeated_pure_ice_ab_comparison(
+        runs,
         small_exact_parity_passed=True,
     )
 

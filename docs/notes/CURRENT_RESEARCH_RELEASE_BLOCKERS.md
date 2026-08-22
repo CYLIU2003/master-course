@@ -1,5 +1,21 @@
 # Current research release blockers
 
+## 2026-08-22 repeated pure-ICE A/B implementation is ready; measurement pending
+
+The old `a145cf3` bundle is a valid one-pair structural diagnostic, but it
+does not meet the thesis requirement of independent processes and at least five
+AB/BA-alternating repetitions. The existing diagnostic CLI now implements that
+contract as ten isolated children, five per representation, with clean-SHA
+pre/post gates, run-level solver/correctness metrics, and measured maximum
+concurrent RSS across each child-process tree. It produces median, Q1/Q3,
+minimum and maximum statistics and can issue a speed conclusion only from
+those medians after every correctness gate passes.
+
+This is implementation-and-test evidence, not a new measurement. A fresh
+clean-commit 264-trip command is required before the A/B release gate can be
+cleared; any `FAIL_CORRECTNESS` must stop the remaining research evaluations
+and be repaired before continuation.
+
 ## 2026-08-22 corrected electricity-price tranche is diagnostic, not accepted
 
 The corrected three-point electricity-price execution completed from clean

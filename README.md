@@ -40,6 +40,14 @@
 
 ## 2026-08-21 same-SHA pure ICE aggregation A/B diagnostic
 
+- The historical one-pair bundle remains `PASS_STRUCTURAL_ONLY` for its own
+  SHA only. The current CLI now schedules five AB/BA-alternating pairs (ten
+  isolated child processes), records per-run input/solver controls, and has
+  the parent measure maximum concurrent RSS across each child-process tree.
+  It publishes run-level metrics plus median, Q1/Q3, minimum, and maximum
+  summaries. A fresh clean-commit ten-run execution is still pending; no
+  new performance conclusion has been made from this implementation change.
+
 - Prompt A is complete at clean commit
   `a145cf3a8b9cba0e4d97c48f800fba9ff07a1e69`. The normal BFF path ran the
   same canonical 264-trip Phase-4 integrated request once with the labelled
