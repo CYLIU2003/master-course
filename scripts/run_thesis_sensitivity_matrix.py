@@ -125,6 +125,10 @@ def build_case_requests(
     )
     optimization.pop("prepared_input_id", None)
     optimization.pop("preparedInputId", None)
+    # Exported historical requests can carry the Phase-4-only actual-cost
+    # switch.  Full-scale sensitivities evaluate Phase 3, so retaining the
+    # no-op flag would make the submitted contract internally contradictory.
+    optimization.pop("integrated_actual_cost_objective", None)
     return prepare, optimization
 
 

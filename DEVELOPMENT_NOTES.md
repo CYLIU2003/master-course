@@ -13,7 +13,9 @@
   `scripts/run_thesis_sensitivity_matrix.py` to fail closed unless the solver
   records Phase 3 as requested, resolved, and executed. The vehicle-day
   sensitivity audit now checks the same model identity instead of the
-  Phase-4-only actual-cost contract.
+  Phase-4-only actual-cost contract. The compiler additionally removes the
+  Phase-4-only `integrated_actual_cost_objective` field inherited from an old
+  exported base request.
 - Updated `tests/test_thesis_experiment_matrix.py` and
   `tests/test_thesis_sensitivity_matrix.py`. Pending verification command:
   `.venv\\Scripts\\python.exe -m pytest -q

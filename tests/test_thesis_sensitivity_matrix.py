@@ -116,6 +116,7 @@ def test_case_request_compiler_uses_fresh_prepare_and_declared_overrides() -> No
     assert optimization["mode"] == "phase3_two_stage"
     assert optimization["research_run"] is True
     assert optimization["custom_control"] == "preserved"
+    assert "integrated_actual_cost_objective" not in optimization
 
 
 def test_time_case_compiles_matching_prepare_optimization_and_rolling_steps() -> None:
