@@ -194,7 +194,7 @@ Presolve timing is unavailable from Gurobi. The A/B blocker is closed only for
 the limited formulation-size conclusion; all release, sensitivity, and formal
 comparison blockers remain.
 
-## 2026-08-22 current evidence checkpoint: baseline and bounded checks pass; release remains blocked
+## Historical 2026-08-22 evidence checkpoint: baseline and bounded checks pass; release remains blocked
 
 The first fresh Phase-3 A/B discrete child on
 `64c4a5a3ff1358e2f4b9397c51c5dfa078702a38` completed the underlying 264-trip
@@ -209,7 +209,8 @@ comparison report. The counter and a two-fragment Phase-3 regression are
 corrected. The A/B-only Phase-3 aggregate now supports the same integral
 layered-fragment reset network and canonical recovery used by the bounded
 Phase-4 reference; its one- and two-fragment Gurobi regressions pass. The
-clean-SHA AB/BA x5 gate remains open and must be rerun.
+clean-SHA AB/BA x5 gate was open at that point and was subsequently completed
+by the authoritative 2026-08-23 bundle above.
 
 At clean SHA `a49716638a1d15567c190798f37b60e3b7920743`, the 264-trip Phase-3
 baseline at `output/2026-08-22/run_20260822_2125/` passed 264/264 service,
@@ -235,10 +236,12 @@ relative gaps are not identifiable because the reference cost is numerically
 zero. This is not a proof of the 264-trip global optimum, a 1% full-scale
 gap, or a full M0--M3 comparison.
 
-The release is still **BLOCKED** by the fresh Phase-3 pure-ICE AB/BA x5
-evidence, accepted multi-point economic and charger sensitivities, and the
-formal M0/M1/M2/M3 comparison. No historical Phase-4 representation
-measurement is used to fill any of those gaps.
+The release is still **BLOCKED** by the 1% certified Stage-1 gap, accepted
+multi-point economic and charger sensitivities, and the formal M0/M1/M2/M3
+comparison. The completed Phase-3 pure-ICE AB/BA x5 bundle closes only its
+formulation-size claim; it supplies neither a speed claim nor a release gate.
+No historical Phase-4 representation measurement is used to fill any remaining
+gap.
 
 The Phase-3 exact-clone aggregate network, including its integral layered
 fragment-reset flow and deterministic canonical-ID recovery, is implemented
@@ -246,9 +249,9 @@ behind the A/B-only diagnostic override. It is fail-closed when a nonzero
 driver/switch cost, an existing no-good cut, or the exact-clone certificate
 would alter the labelled model. Candidate-pool extraction is allowed because
 each solution is recovered from the integral aggregate flow. Focused one- and
-two-fragment aggregate/discrete Phase-3 regressions pass, but this does not
-clear the release gate: the fresh full 264-trip AB/BA x5 execution and its
-independent physical/accounting acceptance remain mandatory.
+two-fragment aggregate/discrete Phase-3 regressions pass. The later full
+264-trip AB/BA x5 execution passed its controlled structural gate, but did not
+establish an improved solver-time median or clear the release gates.
 
 ## 2026-08-22 Phase-3 sensitivity correction; charger matrix remains blocked
 
@@ -282,7 +285,7 @@ been run. A revised runtime-environment v3 snapshot now records physical RAM
 without requiring `psutil`; a new clean 6/8/10 execution is required before
 any formal charger-response conclusion.
 
-## 2026-08-22 Phase-3 A/B gate remains open
+## Historical 2026-08-22 Phase-3 A/B gate remains open
 
 The archived ten-run pure-ICE aggregation bundle used `phase4_integrated`, not
 the deployed `phase3_two_stage` method. It is retained only as a historical

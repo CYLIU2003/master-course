@@ -144,7 +144,8 @@ comparison fails before execution.
   FOR RESEARCH CONCLUSIONS`; it is neither an A/B result nor evidence of
   aggregation performance. The audit counter and the exact layered
   multi-fragment aggregate/recovery regression are corrected on the subsequent
-  commit; a new clean-SHA AB/BA x5 run remains required.
+  commit; a new clean-SHA AB/BA x5 run was required at that point. It was
+  subsequently completed by the authoritative 2026-08-23 bundle above.
 
 - A clean-SHA 264-trip Phase-3 baseline at
   `output/2026-08-22/run_20260822_2125/` passed coverage, independent
@@ -159,8 +160,7 @@ comparison fails before execution.
 - The bounded 8/12/24/40-trip integrated-oracle certificate at
   `output/verification/small_integrated_oracle_scale/a497166/` is small-scale
   evidence only. It does not establish a 264-trip global optimum, a full-scale
-  1% gap, an economic response conclusion, or the still-blocked Phase-3
-  pure-ICE A/B comparison.
+  1% gap, an economic response conclusion, or a full M0--M3 comparison.
 
 ## 2026-08-22 Phase-3 sensitivity-mode correction
 
@@ -203,30 +203,31 @@ comparison fails before execution.
   gap, so it is a feasible-candidate diagnostic only—not an accepted
   charger-capacity sensitivity result. The 8/10-port cases remain unrun.
 
-## 2026-08-22 Phase-3 aggregation A/B status correction
+## Historical 2026-08-22 Phase-3 aggregation A/B status correction
 
 - The archived repeated pure-ICE aggregation A/B bundle was submitted in
   `phase4_integrated` mode. Its structural measurements remain historical
   Phase-4 diagnostics only; they do not meet the Phase-3 A/B gate and must not
   be cited as a result for the deployed two-stage method. A new same-SHA,
-  Phase-3-only AB/BA experiment remains required.
+  Phase-3-only AB/BA experiment was required at the time.
 - The reused A/B harness now compiles an auditable `phase3_two_stage` execution
   request from the frozen source request, removes only Phase-4-only flags, and
   rejects a child unless requested, resolved, and executed phases are all
   Phase 3. It records Stage-1 model size, solve/bound/gap/node telemetry and
-  Phase-3 controls. No replacement ten-run result exists yet.
+  Phase-3 controls. The later replacement ten-run result is recorded in the
+  current A/B verification status above.
 - A fail-closed exact-clone aggregate network, including its layered
   multi-fragment reset flow, is now wired to Stage 1 only for the isolated A/B
   diagnostic override, with deterministic canonical-ID recovery before Stage
-  2. Small one- and two-fragment Phase-3 parity tests pass;
-  the required clean-SHA 264-trip AB/BA x5 measurement remains unrun and is
-  the only evidence that can clear this comparison gate.
+  2. Small one- and two-fragment Phase-3 parity tests pass. The required
+  clean-SHA 264-trip AB/BA x5 measurement was subsequently completed; it
+  cleared only the formulation-size claim, not a speed or release claim.
 
-## 2026-08-22 repeated same-SHA pure-ICE aggregation A/B result
+## Historical 2026-08-22 repeated same-SHA pure-ICE aggregation A/B result
 
-The current Phase-3 A/B gate is blocked: the aggregate ICE-clone formulation
-is presently available only in the integrated Phase-4 builder, not in the
-deployed Phase-3 Stage-1 model. A stopped partial Phase-3 attempt at
+At this point the Phase-3 A/B gate was blocked: the aggregate ICE-clone
+formulation was then available only in the integrated Phase-4 builder, not in
+the deployed Phase-3 Stage-1 model. A stopped partial Phase-3 attempt at
 `output/diagnostics/pure_ice_aggregation_phase3_ab_c80fc26_20260822/` lacks
 the required representation audit and is diagnostic only. It cannot support
 a Phase-3 structural or runtime claim.

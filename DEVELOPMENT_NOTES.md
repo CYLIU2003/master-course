@@ -218,6 +218,11 @@
   median for `PASS_PERFORMANCE`. Gurobi did not expose separate presolve time
   in any child. The 264-trip results remain time-limited feasible candidates,
   not an integrated global-optimality or 1%-gap result.
+- Documentation consistency correction: older 2026-08-22 checkpoint entries
+  now state that the required rerun was pending *at that time*. The completed
+  `817d938` bundle closes only the controlled formulation-size claim; the
+  current release blockers remain the 1% certified-gap gate, accepted
+  multi-point economic/charger sensitivities, and formal M0/M1/M2/M3 evidence.
 
 ## 2026-08-23: Phase-3 A/B time-allocation control failure and fail-fast repair
 
