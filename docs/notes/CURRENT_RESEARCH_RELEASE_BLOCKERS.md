@@ -16,9 +16,22 @@ The Stage-1 incumbent (65,305.688576 JPY), certified bound
 (52,749.163582 JPY), and final explored-node count (1) were unchanged from
 the prior short run. Thus merely granting more wall time has not strengthened
 the root relaxation; it is not evidence that a still longer identical run will
-meet the 1% gate. The next controlled diagnostic changes only an explicit,
-recorded Gurobi bound-focus search profile. It does not change the mathematical
-model, objective, physical constraints, input, or research threshold.
+meet the 1% gate.
+
+The follow-up frozen `bound_focus` diagnostic at commit
+`8c37638364c6cd99a9637e23dbbe7c3b72be49ee` is stored at
+`output/thesis_phase3_bound_focus_8c37638_20260823_r1/`. It changed only the
+explicitly recorded Stage-1 search controls (`MIPFocus=3`, `Presolve=2`;
+`Heuristics=0.05`) while preserving the 264-trip prepared scenario,
+mathematical model, candidate policy, seed, four threads, total budget, and
+1% threshold. It again passed physical, Rolling, accounting, provenance, and
+complete-successor checks, but its sole failed check is `mip_gap_target_met`:
+19.227307% after 1,680.193 solver seconds. It retained the same incumbent,
+bound, and one explored node. This bundle is **DIAGNOSTIC, NOT USED FOR
+RESEARCH CONCLUSIONS**. The time-allocation and tested search-profile levers
+are both falsified as sufficient fixes; the release blocker remains a weak
+Stage-1 relaxation and requires a separately verified mathematical tightening,
+not more of the same search.
 
 ## 2026-08-23: Three-point electricity-price tranche is physically valid but not research-accepted
 

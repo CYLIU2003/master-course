@@ -1,6 +1,6 @@
 # Development Notes
 
-## 2026-08-23: Phase-3 gap-control telemetry and duration falsification
+## 2026-08-23: Phase-3 gap-control telemetry and search-control falsification
 
 - The frozen `phase3-gap-escalation-f9b83ad` frontend/BFF run is retained at
   `output/thesis_phase3_gap_escalation_f9b83ad_20260823_r1/`. Command used
@@ -25,6 +25,20 @@
   pytest -q tests/test_milp_strict_coverage_metadata.py
   tests/test_canonical_graph_export_parity.py tests/test_thesis_sensitivity_matrix.py
   tests/test_frontend_artifact_completeness.py` (`87 passed`).
+- The frozen `bound_focus` frontend/BFF diagnostic at commit
+  `8c37638364c6cd99a9637e23dbbe7c3b72be49ee` is retained at
+  `output/thesis_phase3_bound_focus_8c37638_20260823_r1/`. It held the
+  prepared scenario, mathematical model, 1800-second total budget, Stage-1
+  primary-search limit (1605 seconds), candidate policy, seed 42, four
+  threads, and 1% threshold fixed; only the recorded profile changed to
+  `MIPFocus=3`, `Presolve=2`, and unchanged `Heuristics=0.05`. It served
+  264/264 trips and passed physical, Rolling/accounting, provenance, and
+  complete-successor checks. Its sole failed check is still
+  `mip_gap_target_met`: 19.227307% after 1680.193 solver seconds, with the
+  same 65,305.688576-JPY incumbent, 52,749.163582-JPY bound, and one explored
+  node. Therefore the tested bound-focused profile is not a sufficient
+  certificate fix; this bundle is `DIAGNOSTIC`, not accepted research
+  evidence.
 
 ## 2026-08-23: Electricity-price Phase-3 tranche completed as a diagnostic
 

@@ -8,9 +8,15 @@ seconds (rather than the prior approximately 405-second primary search) while
 holding the model and formal controls fixed. It still ended at the same
 19.227307% certified Stage-1 gap, with the same incumbent, bound, and one
 explored node. It is a valid physical/accounting candidate but not an accepted
-optimality or sensitivity result. Stage-1 Gurobi profiles are now explicit and
-saved in `solver_settings.json`; `bound_focus` is a pending controlled search
-diagnostic, not a claimed model improvement.
+optimality or sensitivity result. Stage-1 Gurobi profiles are explicit and
+saved in `solver_settings.json`. The frozen `bound_focus` diagnostic at
+`output/thesis_phase3_bound_focus_8c37638_20260823_r1/` changed only
+`MIPFocus=3` and aggressive presolve. It again completed the physical,
+Rolling, accounting, provenance, and complete-successor gates, but ended at
+the identical 19.227307% certified gap after 1,680.193 solver seconds. This
+rules out the tested search-profile adjustment as a sufficient fix and is
+diagnostic only, not a claimed model improvement or accepted sensitivity
+result.
 
 ## 2026-08-23 electricity-price sensitivity status
 
