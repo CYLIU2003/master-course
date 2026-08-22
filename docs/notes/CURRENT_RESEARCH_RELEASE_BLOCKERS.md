@@ -22,6 +22,21 @@ candidate or Rolling plan, so it cannot be a fixed-plan source. A new stress
 bundle is required only after a fresh same-SHA complete Phase-3 candidate is
 available; no SHA check or stress rule may be relaxed to fill this gap.
 
+## 2026-08-23: Aggregate path-start certificate tightening awaits 264-trip measurement
+
+The analytical path/source LP and selector MIP now add the necessary aggregate
+of the original Stage-1 per-vehicle path-start limits. For each powertrain,
+selected starts are at most the available vehicle count times
+`min(max_start_fragments_per_vehicle, covered_day_count * daily_fragment_limit)`.
+The two rows, capacities, and per-vehicle limit are hashed in the certificate
+input; they retain the lower-bound relaxation because every full Stage-1
+solution obeys the underlying per-vehicle constraints. A focused Gurobi test
+uses two sequential but intentionally disconnected trips with one BEV and one
+ICE, proving a 10-JPY LP/MIP floor when the free BEV otherwise could begin both
+paths. This correct, unmeasured strengthening is not evidence of a 264-trip
+bound improvement, a feasible candidate, or release readiness. A fresh normal
+BFF run from a clean commit remains required.
+
 ## 2026-08-23: Analytical concurrent-service certificate corrected for overnight trips
 
 The powertrain path/source LP and selector-MIP certificate now derives service

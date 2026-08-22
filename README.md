@@ -30,6 +30,19 @@ bound; the incumbent and certified gap remained 65,305.688576 JPY and
 FOR RESEARCH CONCLUSIONS** and rejects this aggregate capacity condition as the
 current gap-closing path.
 
+Before any new 264-trip measurement, the same certificate was further
+tightened with the exact aggregate consequence of the original Stage-1
+fragment constraints: selected path starts for each powertrain cannot exceed
+the available vehicle count multiplied by
+`min(max_start_fragments_per_vehicle, covered_day_count * daily_fragment_limit)`.
+This preserves the lower-bound contract because every full Stage-1 solution
+satisfies both underlying per-vehicle limits. The capacity, per-vehicle limit,
+and two new deterministic rows are in the certificate input hash and audits.
+A focused sequential two-trip, one-BEV/one-ICE test with all connections
+withheld proves that the free BEV cannot start both paths; LP/MIP both retain a
+10-JPY lower bound. This is an unmeasured mathematical tightening, **not a
+264-trip gap or release claim**, until a fresh clean-SHA BFF artifact exists.
+
 The clean-SHA 264-trip diagnostic at
 `output/2026-08-23/run_20260823_0507/` (commit `93608f4`) proves that this
 certificate is correct but insufficient for the current case: it solved in

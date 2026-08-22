@@ -944,6 +944,92 @@ def test_weather_energy_fuel_certificate_counts_overnight_overlap_capacity() -> 
     assert float(path_mip["lower_bound_jpy"]) >= float(path_lp["lower_bound_jpy"])
 
 
+def test_weather_energy_fuel_certificate_limits_powertrain_path_starts() -> None:
+    """Path starts cannot exceed the aggregate per-vehicle fragment capacity."""
+    adapter = GurobiMILPAdapter()
+    base = _full_phase3_counterexample(sunny_midday_pv_kwh=25.0)
+    trip_specs = (
+        ("midday-return", "06:00", "07:00", 360, 420),
+        ("away-through-midday", "08:00", "09:00", 480, 540),
+    )
+    problem_trips = tuple(
+        replace(
+            trip,
+            departure_min=departure_min,
+            arrival_min=arrival_min,
+        )
+        for trip, (
+            _trip_id,
+            _departure_time,
+            _arrival_time,
+            departure_min,
+            arrival_min,
+        ) in zip(base.trips, trip_specs, strict=True)
+    )
+    dispatch_trips = [
+        replace(
+            trip,
+            departure_time=departure_time,
+            arrival_time=arrival_time,
+        )
+        for trip, (
+            _trip_id,
+            departure_time,
+            arrival_time,
+            _departure_min,
+            _arrival_min,
+        ) in zip(base.dispatch_context.trips, trip_specs, strict=True)
+    ]
+    problem = replace(
+        base,
+        trips=problem_trips,
+        dispatch_context=replace(base.dispatch_context, trips=dispatch_trips),
+        metadata={
+            **base.metadata,
+            "daily_fragment_limit": 1,
+            "max_start_fragments_per_vehicle": 1,
+        },
+    )
+    vehicle_by_id = {
+        str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles
+    }
+    compatible_by_trip = {
+        str(trip.trip_id): [
+            str(vehicle.vehicle_id) for vehicle in problem.vehicles
+        ]
+        for trip in problem.trips
+    }
+
+    certificate = adapter._stage1_analytical_weather_energy_fuel_lower_bound(
+        problem=problem,
+        assignment_vehicle_ids_by_trip=compatible_by_trip,
+        vehicle_by_id=vehicle_by_id,
+        component_flags=normalize_cost_component_flags(
+            problem.metadata["cost_component_flags"]
+        ),
+        # Supply a non-empty but invalid arc list: each trip must therefore
+        # begin a path, isolating the path-start capacity condition.
+        arc_pairs=(("missing-vehicle", "midday-return", "away-through-midday"),),
+    )
+
+    path_lp = dict(certificate["path_powertrain_source_flow_lp"])
+    path_mip = dict(certificate["path_powertrain_source_flow_mip"])
+    expected_capacity = {"ELECTRIC": 1, "COMBUSTION": 1}
+    assert path_lp["status"] == "optimal"
+    assert path_lp[
+        "powertrain_concurrent_service_capacity_constraint_count"
+    ] == 0
+    assert path_lp["powertrain_path_start_capacity_constraint_count"] == 2
+    assert path_lp["path_start_capacity_by_powertrain"] == expected_capacity
+    assert float(path_lp["lower_bound_jpy"]) == pytest.approx(10.0)
+    assert path_mip["status"] == "optimal"
+    assert path_mip["powertrain_path_start_capacity_constraint_count"] == 2
+    assert path_mip["path_start_capacity_by_powertrain"] == expected_capacity
+    assert float(path_mip["lower_bound_jpy"]) >= float(
+        path_lp["lower_bound_jpy"]
+    )
+
+
 def test_total_analytical_bound_fails_closed_for_negative_fixed_cost() -> None:
     problem = _full_phase3_counterexample(
         sunny_midday_pv_kwh=25.0

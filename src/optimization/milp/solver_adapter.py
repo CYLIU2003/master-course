@@ -24677,6 +24677,9 @@ class GurobiMILPAdapter:
             "constraint_count": 0,
             "powertrain_arc_count": 0,
             "powertrain_concurrent_service_capacity_constraint_count": 0,
+            "powertrain_path_start_capacity_constraint_count": 0,
+            "path_start_limit_per_vehicle": None,
+            "path_start_capacity_by_powertrain": {},
             "available_vehicle_count_by_powertrain": {},
             "free_source_used_kwh": None,
             "grid_source_used_kwh": None,
@@ -24693,11 +24696,14 @@ class GurobiMILPAdapter:
             "solution_count": 0,
             "selector_variable_count": 0,
             "powertrain_concurrent_service_capacity_constraint_count": 0,
+            "powertrain_path_start_capacity_constraint_count": 0,
+            "path_start_limit_per_vehicle": None,
+            "path_start_capacity_by_powertrain": {},
             "available_vehicle_count_by_powertrain": {},
             "semantics": (
                 "integral_powertrain_path_selection_with_powertrain_level_"
-                "concurrent_service_capacity_and_vehicle_identity_soc_charger_"
-                "and_time_source_coupling_relaxed"
+                "concurrent_service_and_path_start_capacity_and_vehicle_"
+                "identity_soc_charger_and_time_source_coupling_relaxed"
             ),
         }
         path_source_lp_lower_bound_jpy: Optional[float] = None
@@ -24960,6 +24966,60 @@ class GurobiMILPAdapter:
                     )
                     for powertrain in ("ELECTRIC", "COMBUSTION")
                 }
+                allow_same_day_depot_cycles = bool(
+                    getattr(
+                        problem.scenario,
+                        "allow_same_day_depot_cycles",
+                        True,
+                    )
+                )
+                daily_fragment_limit = self._safe_positive_int(
+                    problem.metadata.get("daily_fragment_limit")
+                    or problem.metadata.get(
+                        "max_depot_cycles_per_vehicle_per_day"
+                    )
+                    or getattr(
+                        problem.scenario,
+                        "max_depot_cycles_per_vehicle_per_day",
+                        1,
+                    ),
+                    default=1,
+                )
+                if not allow_same_day_depot_cycles:
+                    daily_fragment_limit = 1
+                planning_days = max(
+                    int(
+                        problem.metadata.get("planning_days")
+                        or getattr(problem.scenario, "planning_days", 1)
+                        or 1
+                    ),
+                    1,
+                )
+                fragment_day_count = len(
+                    set(range(planning_days))
+                    | {
+                        self._trip_day_index(
+                            problem,
+                            trip.departure_min,
+                        )
+                        for trip in problem.trips
+                    }
+                )
+                max_start_fragments_per_vehicle = self._safe_positive_int(
+                    problem.metadata.get("max_start_fragments_per_vehicle"),
+                    default=1,
+                )
+                path_start_limit_per_vehicle = min(
+                    max_start_fragments_per_vehicle,
+                    fragment_day_count * daily_fragment_limit,
+                )
+                path_start_capacity_by_powertrain = {
+                    powertrain: (
+                        available_vehicle_count_by_powertrain[powertrain]
+                        * path_start_limit_per_vehicle
+                    )
+                    for powertrain in ("ELECTRIC", "COMBUSTION")
+                }
                 concurrent_service_capacity_rows: List[Dict[str, Any]] = []
                 seen_concurrent_service_capacity_rows: Set[
                     Tuple[str, Tuple[str, ...], int]
@@ -25060,6 +25120,13 @@ class GurobiMILPAdapter:
                     "available_vehicle_count_by_powertrain": (
                         available_vehicle_count_by_powertrain
                     ),
+                    "path_start_limit_per_vehicle": (
+                        path_start_limit_per_vehicle
+                    ),
+                    "fragment_day_count": fragment_day_count,
+                    "path_start_capacity_by_powertrain": (
+                        path_start_capacity_by_powertrain
+                    ),
                     "concurrent_service_capacity_rows": (
                         concurrent_service_capacity_rows
                     ),
@@ -25149,6 +25216,15 @@ class GurobiMILPAdapter:
                             if (trip_id, powertrain) in assignment_var
                         )
                         == 1.0
+                    )
+                for powertrain in ("ELECTRIC", "COMBUSTION"):
+                    path_source_model.addConstr(
+                        gp.quicksum(
+                            start_var[key]
+                            for key in allowed_trip_powertrains
+                            if key[1] == powertrain
+                        )
+                        <= path_start_capacity_by_powertrain[powertrain]
                     )
                 for row in concurrent_service_capacity_rows:
                     powertrain = str(row["powertrain"])
@@ -25249,6 +25325,13 @@ class GurobiMILPAdapter:
                         "powertrain_concurrent_service_capacity_constraint_count": (
                             len(concurrent_service_capacity_rows)
                         ),
+                        "powertrain_path_start_capacity_constraint_count": 2,
+                        "path_start_limit_per_vehicle": (
+                            path_start_limit_per_vehicle
+                        ),
+                        "path_start_capacity_by_powertrain": (
+                            path_start_capacity_by_powertrain
+                        ),
                         "available_vehicle_count_by_powertrain": (
                             available_vehicle_count_by_powertrain
                         ),
@@ -25311,6 +25394,13 @@ class GurobiMILPAdapter:
                         "selector_variable_count": len(selector_variables),
                         "powertrain_concurrent_service_capacity_constraint_count": (
                             len(concurrent_service_capacity_rows)
+                        ),
+                        "powertrain_path_start_capacity_constraint_count": 2,
+                        "path_start_limit_per_vehicle": (
+                            path_start_limit_per_vehicle
+                        ),
+                        "path_start_capacity_by_powertrain": (
+                            path_start_capacity_by_powertrain
                         ),
                         "available_vehicle_count_by_powertrain": (
                             available_vehicle_count_by_powertrain

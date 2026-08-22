@@ -3,6 +3,23 @@
 ## 2026-08-23: Phase-3 gap-control telemetry and search-control falsification
 
 - Tightened the analytical `path_powertrain_source_flow_lp` and its integral
+  selector-MIP companion with a necessary aggregate path-start capacity for
+  each powertrain. The row is the direct sum of the original per-vehicle
+  constraints: selected starts are bounded by available vehicles times
+  `min(max_start_fragments_per_vehicle, covered_day_count * daily_fragment_limit)`.
+  It cannot exclude a full Stage-1 solution, while vehicle identity, SOC,
+  chargers, depot allocation, and time-indexed source coupling remain relaxed.
+  The per-vehicle limit and powertrain capacities are included in the
+  certificate input hash; LP/MIP audits expose the two rows and capacities.
+  `test_weather_energy_fuel_certificate_limits_powertrain_path_starts` uses
+  two sequential, deliberately disconnected trips with one BEV and one ICE to
+  prove that free electricity cannot fund two BEV path starts; both certificates
+  retain a 10-JPY floor. Focused verification is `81 passed` across the
+  Stage-1 certificate, coverage, graph parity, artifact, and README tests.
+  No 264-trip run has yet used this code, so it is a mathematical tightening
+  only, **not a gap, performance, or research-release claim**.
+
+- Tightened the analytical `path_powertrain_source_flow_lp` and its integral
   selector-MIP companion with a necessary powertrain-level concurrent-service
   capacity row. At every trip departure instant, the selected active BEV/PHEV/
   FCEV or combustion trips cannot exceed the count of available vehicles in
