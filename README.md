@@ -417,9 +417,20 @@ and labels every non-default request diagnostic-only; it does not multiply a
 user constraint, change the SOC scientific tolerance, or change Stage-2
 controls. `ScaleFlag=2` is the predeclared wide-coefficient-matrix candidate.
 Its actual-Gurobi small SOC fixture still passes independent physical
-validation, but this is only implementation parity. A frozen 264-trip BFF
-diagnostic with all non-scaling controls fixed is still required before any
-performance or numerical-robustness statement.
+validation, but this is only implementation parity. The frozen same-SHA
+264-trip pair at `diagnostic-stage1-scaleflag2-4ae58fc` is complete:
+`output/2026-08-24/run_20260824_0027/` is the normal `-1` control and
+`output/2026-08-24/run_20260824_0015/` is diagnostic-only `2`. They share the
+prepared-input SHA-256, seed, four threads, 900-second/435-second/30-second
+budget, selected Stage-1 candidate hash, Rolling assignment hash, and
+executed-energy-flow hash. Both finish at the same displayed 52,749.163582-JPY
+bound, 65,305.688576-JPY incumbent, 19.227307% gap, and 64,422.491318-JPY
+executed-day cost; the raw bound difference is below `1e-9` JPY and Stage-1
+runtime differs by 0.005 seconds. Both pass independent physical validation,
+24/24 Rolling, executed-day accounting, and 240/240 artifact verification.
+`ScaleFlag=2` therefore supplies no observed gap, candidate, or runtime
+benefit in this one controlled condition. It remains diagnostic-only and does
+not close the 1% gap or research-release gate.
 
 ## 2026-08-23 electricity-price sensitivity status
 

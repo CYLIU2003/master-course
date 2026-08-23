@@ -32,18 +32,29 @@ separately traced, documented, diagnostic solver-scaling experiment or an
 exactly proven alternative formulation may proceed; the release remains
 blocked by the 1% MIP-gap gate.
 
-The predeclared next observation is Gurobi-internal `ScaleFlag=2`, whose
-documentation specifically identifies geometric-mean scaling as a candidate
-for wide coefficient ranges. The implementation accepts only `-1/0/1/2/3`,
-keeps default `-1`, records the effective value in Stage-1 solver controls,
-and makes every non-default BFF request diagnostic-only. It neither
-multiplies a user row nor changes feasibility/SOC tolerances or Stage-2
-controls. An actual-Gurobi small fixture passes independent validation with
-`2`; that does not establish the 264-trip behavior. A clean frozen BFF run
-must hold the prepared input, SHA, time budget, threads, seed, model, and all
-other solver controls fixed before this setting is evaluated. Regardless of
-its outcome, it will not close the release unless the predeclared 1% gap and
-all other acceptance gates pass.
+The predeclared next observation, Gurobi-internal `ScaleFlag=2`, is complete
+at frozen `diagnostic-stage1-scaleflag2-4ae58fc`. The implementation accepts
+only `-1/0/1/2/3`, keeps default `-1`, records the effective value in Stage-1
+solver controls, and makes every non-default BFF request diagnostic-only. It
+neither multiplies a user row nor changes feasibility/SOC tolerances or
+Stage-2 controls. The normal `-1` control is
+`output/2026-08-24/run_20260824_0027/`; diagnostic-only `2` is
+`output/2026-08-24/run_20260824_0015/`. They have the same clean SHA,
+prepared-input SHA-256, seed, four threads, 900-second total / 435-second
+Stage-1 / 30-second Stage-2 budget, selected candidate hash, Rolling
+assignment hash, and executed-energy-flow hash.
+
+Both conditions pass independent physical validation, 24/24 accepted Rolling,
+executed-day accounting, and 240/240 artifact verification. The displayed
+Stage-1 bound (52,749.163582 JPY), incumbent (65,305.688576 JPY), certified
+gap (19.227307%), and final executed-day cost (64,422.491318 JPY) are the
+same. Raw bound movement is below `1e-9` JPY, candidate and flow hashes are
+identical, and Stage-1 runtime changes by only 0.005 seconds. The original
+input-matrix coefficient range remains `1.4507364e9` with the same warning, as
+expected from internal rather than user-side scaling. This single controlled
+pair therefore rejects `ScaleFlag=2` as a demonstrated certificate, candidate,
+or runtime improvement. It remains a diagnostic result and does not close the
+predeclared 1% gap or research-release gate.
 
 The first diagnostic artifact from `9af1129` is not usable even as the
 coefficient-source record: the canonical solver payload contained the scan,

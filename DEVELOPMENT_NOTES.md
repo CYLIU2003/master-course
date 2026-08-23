@@ -32,9 +32,17 @@
   diagnostic mode and the effective value is persisted with the other
   Stage-1 controls. The actual-Gurobi startup-deadhead fixture uses
   `ScaleFlag=2` and still passes the independent physical validator, but this
-  is deliberately small-scope implementation parity. The only predeclared
-  full-scale candidate is a clean 264-trip BFF diagnostic that changes this
-  setting alone; no user-side row scaling or tolerance change is authorized.
+  is deliberately small-scope implementation parity. The completed frozen
+  `4ae58fc` 264-trip pair uses the same prepared-input SHA-256, seed, threads,
+  900/435/30-second limits, selected candidate hash, Rolling assignment hash,
+  and executed-energy-flow hash. The normal `-1` control is
+  `output/2026-08-24/run_20260824_0027/`; diagnostic-only `2` is
+  `output/2026-08-24/run_20260824_0015/`. Both have the same displayed bound,
+  incumbent, 19.227307% certified gap, final cost, physical acceptance, 24/24
+  Rolling, accounting eligibility, and 240/240 artifact verification. Raw
+  bound difference is below `1e-9` JPY and Stage-1 runtime differs by 0.005
+  seconds, so this one pair supplies no gap/candidate/runtime benefit. No
+  user-side row scaling or tolerance change is authorized.
 
 ## 2026-08-23: Charger-capacity candidate set is comparable but gap-blocked
 
