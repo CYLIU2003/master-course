@@ -1,5 +1,21 @@
 # Development Notes
 
+## 2026-08-23: Common vehicle-day cost reaches the ledger but is gap-blocked
+
+- The normal BFF executed `VEHICLE_DAY_0` and `VEHICLE_DAY_20000` at frozen tag
+  `economic-vehicle-day-d97d524` in
+  `output/thesis_economic_vehicle_day_d97d524_20260823/`. Both cases retain
+  the clean frozen SHA, matching non-varied controls, 264/264 trip coverage,
+  physical validation, 24/24 Rolling, final accounting, and artifact hashes.
+- The matrix is `BLOCKED` only by `mip_gap_target_met` (19.2273% and 1.7803%).
+  The fixed-vehicle-day-cost semantics are research-eligible and the formula
+  residual is zero: the 20,000-JPY case records 640,000 JPY for 32 used
+  vehicles, increasing candidate total cost from 64,422.491 to 704,422.491
+  JPY. Both candidates retain 32 used vehicles and 48 BEV / 216 ICE trips.
+- This verifies the common per-used-vehicle-day cost coefficient and ledger,
+  not BEV-specific or ICE-specific cost elasticity, behavioral response, or an
+  optimal economic comparison. The local BFF was stopped after finalization.
+
 ## 2026-08-23: PV-supply response is a gap-blocked flow diagnostic
 
 - The normal BFF executed `PV_0.00` and `PV_1.00` at frozen tag

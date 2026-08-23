@@ -126,6 +126,15 @@ zero PV/BESS flow at 0.00x to 996.2-kWh PV generation, 47.918-kWh direct PV,
 only PV-parameter and candidate-flow provenance; it does not close PV-cost,
 economic-response, optimality, or release gates.
 
+The BFF common vehicle-day-cost 0/20,000-JPY-per-used-vehicle pair at
+`output/thesis_economic_vehicle_day_d97d524_20260823/` is `BLOCKED` only by
+the 19.2273% and 1.7803% Stage-1 gaps. Its fixed-vehicle-day-cost semantics
+are research-eligible and the 20,000-JPY case's 640,000-JPY ledger term equals
+32 used vehicles times 20,000 JPY with zero residual. Both time-limit
+candidates retain 32 vehicles and 48 BEV / 216 ICE trips. This verifies only
+the common cost coefficient and accounting; it cannot establish BEV-specific
+or ICE-specific economic response, optimality, or release readiness.
+
 ## 2026-08-23: Latest normal 264-trip Phase-3 rerun remains gap-blocked
 
 The frozen tag `phase3-current-formal-6e61b80` reran the ordinary BFF path

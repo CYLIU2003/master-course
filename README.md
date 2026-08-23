@@ -109,6 +109,15 @@ candidate has 996.2-kWh PV generation, 47.918-kWh direct PV use,
 provenance, but the different time-limit incumbents do not establish an
 accepted PV-cost or dispatch response.
 
+The BFF common vehicle-day-cost 0/20,000-JPY-per-used-vehicle pair at
+`output/thesis_economic_vehicle_day_d97d524_20260823/` is `BLOCKED` only by
+the 1% Stage-1 gap. The declared fixed-cost semantics pass with zero formula
+residual: 20,000 JPY times 32 used vehicles is the recorded 640,000-JPY cost.
+The 0- and 20,000-JPY candidates otherwise retain the same 32 vehicles and
+48 BEV / 216 ICE trips, at 64,422.491 JPY (19.2273% gap) and 704,422.491 JPY
+(1.7803% gap). It validates the common vehicle-day cost term and accounting,
+not separate BEV/ICE cost responses or an accepted economic optimum.
+
 ## 2026-08-23 current-SHA normal Phase-3 candidate: feasible, not optimal
 
 Frozen tag `phase3-current-formal-6e61b80` ran the ordinary frontend/BFF path
