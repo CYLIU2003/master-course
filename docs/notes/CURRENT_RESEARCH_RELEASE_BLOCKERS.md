@@ -115,6 +115,17 @@ BEV / 216 ICE trips at 64,422.491 JPY. Those different time-limit incumbents
 are feasible diagnostics only: they cannot close the energy-consumption,
 economic-response, optimality, or research-release gates.
 
+The BFF PV-supply 0.00x/1.00x pair at
+`output/thesis_economic_pv_3985f80_20260823/` is also `BLOCKED` only by
+`mip_gap_target_met` (3.4915% and 19.2273%, respectively). The parameter is
+effective and all other input, physical, Rolling, accounting, and artifact
+checks pass. Its time-limit candidates move from 477.578-kWh grid import and
+zero PV/BESS flow at 0.00x to 996.2-kWh PV generation, 47.918-kWh direct PV,
+559.783-kWh PV-to-BESS, 505.204-kWh BESS-to-bus, and zero grid import at
+1.00x. Because the candidate dispatches and gaps differ, this can establish
+only PV-parameter and candidate-flow provenance; it does not close PV-cost,
+economic-response, optimality, or release gates.
+
 ## 2026-08-23: Latest normal 264-trip Phase-3 rerun remains gap-blocked
 
 The frozen tag `phase3-current-formal-6e61b80` reran the ordinary BFF path

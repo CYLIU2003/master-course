@@ -98,6 +98,17 @@ use 32 vehicles for 48 BEV / 216 ICE trips at 64,422.491 JPY (19.2273% and
 energy-consumption response, an optimal dispatch comparison, or a release
 conclusion.
 
+The BFF PV-supply 0.00x/1.00x pair at
+`output/thesis_economic_pv_3985f80_20260823/` is `BLOCKED` only by the same
+gap gate. Both controls are effective and each case passes physical validation,
+24/24 Rolling, and final accounting. The 0.00x candidate has 477.578-kWh grid
+import, no PV/BESS flow, and 80,810.195 JPY at a 3.4915% gap; the 1.00x
+candidate has 996.2-kWh PV generation, 47.918-kWh direct PV use,
+559.783-kWh PV-to-BESS, 505.204-kWh BESS-to-bus, zero grid import, and
+64,422.491 JPY at a 19.2273% gap. This confirms parameter and candidate-flow
+provenance, but the different time-limit incumbents do not establish an
+accepted PV-cost or dispatch response.
+
 ## 2026-08-23 current-SHA normal Phase-3 candidate: feasible, not optimal
 
 Frozen tag `phase3-current-formal-6e61b80` ran the ordinary frontend/BFF path

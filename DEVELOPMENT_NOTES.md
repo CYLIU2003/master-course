@@ -1,5 +1,22 @@
 # Development Notes
 
+## 2026-08-23: PV-supply response is a gap-blocked flow diagnostic
+
+- The normal BFF executed `PV_0.00` and `PV_1.00` at frozen tag
+  `economic-pv-response-3985f80` in
+  `output/thesis_economic_pv_3985f80_20260823/`. Both cases retain the clean
+  frozen SHA, have matching non-varied controls, and pass input provenance,
+  264/264 trip coverage, physical validation, 24/24 Rolling, final accounting,
+  and artifact-hash checks.
+- The matrix is `BLOCKED` only by `mip_gap_target_met`: 0.00x has a 3.4915%
+  certified Stage-1 gap and 1.00x a 19.2273% gap. The effective PV change is
+  visible in candidate flows: 0.00x has 477.578-kWh grid import and no PV/BESS
+  flow, whereas 1.00x has 996.2-kWh PV generation, 47.918-kWh direct PV use,
+  559.783-kWh PV-to-BESS, 505.204-kWh BESS-to-bus, and zero grid import.
+- Their 80,810.195- and 64,422.491-JPY time-limit candidate costs are not an
+  optimal PV-cost comparison. This establishes the PV parameter and flow
+  provenance only; the local BFF was stopped after finalization.
+
 ## 2026-08-23: BEV-trip-energy response is feasible-candidate evidence only
 
 - The normal BFF executed `BEV_ENERGY_0.8`, `BEV_ENERGY_1.0`, and
