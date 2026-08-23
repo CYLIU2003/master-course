@@ -83,6 +83,13 @@ algorithmic pair, and its accounting-cost difference is within numerical
 tolerance. M0/M1 change fleet or PV/BESS treatment and remain descriptive
 ablations. This does not close any 264-trip or release gate.
 
+The SHA-matched fixed-decision stress replay at
+`output/diagnostics/fixed_solution_stress_ac8982d_20260823/` records no
+reoptimization. Only initial SOC -5 points is physically accepted; the other
+six energy, delay, PV, charger-outage, and combined stresses fail independent
+physical validation and have null added costs. This blocks any claim of
+fixed-plan robustness, recourse cost, or uncertainty resilience.
+
 ## 2026-08-23: Latest normal 264-trip Phase-3 rerun remains gap-blocked
 
 The frozen tag `phase3-current-formal-6e61b80` reran the ordinary BFF path

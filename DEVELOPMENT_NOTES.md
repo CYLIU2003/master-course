@@ -1,5 +1,23 @@
 # Development Notes
 
+## 2026-08-23: Current 264-trip fixed-decision stress evaluation
+
+- `output/diagnostics/fixed_solution_stress_ac8982d_20260823/` replays the
+  clean-`ac8982d` discrete A/B source candidate in an SHA-matched detached
+  worktree. The evaluator records `reoptimization_performed=false` and seven
+  predeclared stresses, preserving the source run and frozen optimization
+  request hashes.
+- Only `initial_soc_minus_5pp` is physically accepted, with full completion
+  and a 0-JPY fixed-decision accounting delta. `bev_energy_plus_10pct`,
+  `bev_energy_plus_20pct`, `travel_time_plus_10pct`, `pv_minus_20pct`,
+  `one_charger_outage`, and the combined case are physically rejected. The
+  event validator reports terminal-SOC, timing/overlap, PV, and/or charger
+  failures as applicable; their additional costs remain null rather than being
+  repaired or invented.
+- This is an honest post-solve stress screen, not a robust optimization or
+  recourse result. It demonstrates that this fixed candidate cannot support a
+  general uncertainty-robustness or additional-cost claim.
+
 ## 2026-08-23: Bounded 40-trip M0--M3 comparison completed
 
 - Frozen tag `small-m0m3-3e52305` executed

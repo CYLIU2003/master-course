@@ -62,6 +62,14 @@ numerical tolerance. M0 and M1 intentionally change the fleet or PV/BESS
 treatment, so their cost deltas are descriptive ablations rather than an
 algorithmic comparison.
 
+The fixed-decision 264-trip stress artifact is
+`output/diagnostics/fixed_solution_stress_ac8982d_20260823/`. It replays the
+clean-`ac8982d` discrete candidate with no reoptimization. Only initial SOC
+-5 percentage points remains physically accepted (0 JPY fixed-decision delta);
+the other six predeclared stresses fail independent physical validation, so
+their extra-cost values are correctly withheld. This is evidence of limited
+fixed-plan robustness, not a robustness claim for the method.
+
 ## 2026-08-23 current-SHA normal Phase-3 candidate: feasible, not optimal
 
 Frozen tag `phase3-current-formal-6e61b80` ran the ordinary frontend/BFF path
