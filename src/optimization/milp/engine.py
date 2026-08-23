@@ -309,6 +309,12 @@ class MILPOptimizer:
                 "stage1_root_lp_diagnostic": dict(
                     (plan.metadata or {}).get("stage1_root_lp_diagnostic") or {}
                 ),
+                "stage1_numeric_coefficient_diagnostic": dict(
+                    (plan.metadata or {}).get(
+                        "stage1_numeric_coefficient_diagnostic"
+                    )
+                    or {}
+                ),
                 "stage2_numeric_diagnostics": dict(
                     (plan.metadata or {}).get("stage2_numeric_diagnostics") or {}
                 ),

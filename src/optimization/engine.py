@@ -2279,6 +2279,7 @@ class OptimizationEngine:
             "stage1_switch_cost_term_count",
             "stage1_weather_aware_lower_bound",
             "stage1_weather_aware_lower_bound_semantics",
+            "stage1_numeric_coefficient_diagnostic",
             "stage1_stage2_candidate_limit_requested",
             "stage1_pool_solution_count",
             "stage1_distinct_candidate_count",

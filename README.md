@@ -393,6 +393,11 @@ can be traced to a specific formulation term. The BFF labels a request using
 this flag as diagnostic-only and its output is ineligible for research
 acceptance. A fresh clean-SHA 264-trip BFF artifact is required before any
 mathematically equivalent rescaling or tightening is considered.
+The initial clean-SHA diagnostic implementation run exposed an artifact
+serialization defect: the scan existed in the canonical solver payload but
+was absent from final `solver_settings.json`. That artifact is excluded; the
+MILP engine now forwards the scan explicitly, with an actual-Gurobi regression
+test, and requires a fresh frozen BFF rerun.
 
 ## 2026-08-23 electricity-price sensitivity status
 

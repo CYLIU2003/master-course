@@ -18,6 +18,13 @@ clean-SHA 264-trip artifact is required to identify a mathematically justified
 next formulation change; until then the release remains blocked by the 1% MIP
 gap rather than by an asserted scaling remedy.
 
+The first diagnostic artifact from `9af1129` is not usable even as the
+coefficient-source record: the canonical solver payload contained the scan,
+but final `solver_settings.json` omitted it. The serialization defect is fixed
+and covered by an actual-Gurobi engine regression; a new frozen BFF artifact
+must carry the same payload in both locations before it informs a rescaling
+decision.
+
 An opt-in, default-OFF redundant trip-level electric selector has been added
 for a controlled representation test. The two-trip physical fixture preserves
 the integer assignment and Stage-1 objective with the flag ON/OFF, but that is

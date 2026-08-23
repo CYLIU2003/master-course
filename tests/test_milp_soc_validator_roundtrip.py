@@ -135,6 +135,7 @@ def test_gurobi_plan_with_startup_deadhead_roundtrips_through_validator() -> Non
             warm_start=False,
             stage1_best_obj_stop_enabled=False,
             stage1_gurobi_search_profile="bound_focus",
+            stage1_numeric_coefficient_diagnostic_enabled=True,
             gurobi_threads=1,
         ),
     )
@@ -167,6 +168,9 @@ def test_gurobi_plan_with_startup_deadhead_roundtrips_through_validator() -> Non
     assert "maximum_constraint_violation" in result.solver_metadata[
         "stage1_numeric_diagnostics"
     ]
+    assert result.solver_metadata[
+        "stage1_numeric_coefficient_diagnostic"
+    ]["status"] == "ok"
     assert "maximum_constraint_violation" in result.solver_metadata[
         "stage2_numeric_diagnostics"
     ]

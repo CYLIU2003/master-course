@@ -13,6 +13,11 @@
   the research acceptance gate or be used for performance, cost, feasibility,
   or optimality conclusions. A clean frozen 264-trip BFF execution is pending;
   until then this is implementation and unit-test evidence only.
+- The first clean diagnostic at `9af1129` is excluded: it correctly scanned
+  108,062 rows and found the return-to-initial SOC relaxation coefficient, but
+  a MILP-engine serialization omission left final `solver_settings.json`
+  empty. The engine now explicitly forwards this field and an actual-Gurobi
+  round-trip test verifies the handoff. A fresh frozen BFF run is required.
 
 ## 2026-08-23: Charger-capacity candidate set is comparable but gap-blocked
 
