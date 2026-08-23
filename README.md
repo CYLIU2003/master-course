@@ -44,6 +44,16 @@ different feasible candidate rather than an optimality comparison. The
 manifest-attested resume mode remains available for future interrupted bundles,
 but was not needed to finalize this one.
 
+The current small integrated-oracle scale certificate is
+`output/verification/small_integrated_oracle_scale/e672918_20260823/`, frozen
+at `small-integrated-oracle-e672918`. It verifies the deterministic 8-, 12-,
+24-, and 40-trip subsets against exact Phase-4 canonical-actual-cost optima.
+Phase-3 and Phase-4 costs agree within numerical tolerance at every size; the
+relative difference is identifiable and 0.0 at 24 and 40 trips, while the
+zero-cost 8- and 12-trip references deliberately report it as undefined. This
+is bounded formulation evidence only, not a 264-trip global-optimality or
+runtime result.
+
 ## 2026-08-23 current-SHA normal Phase-3 candidate: feasible, not optimal
 
 Frozen tag `phase3-current-formal-6e61b80` ran the ordinary frontend/BFF path

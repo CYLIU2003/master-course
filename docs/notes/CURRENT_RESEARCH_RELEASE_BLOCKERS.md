@@ -68,6 +68,14 @@ seconds), and all runs are time-limited. It closes only the current-code
 structural-evidence gap; it does not close the 1% optimality, runtime-benefit,
 cost-dominance, sensitivity, or research-release gates.
 
+The current 8/12/24/40-trip integrated-oracle scale certificate at
+`output/verification/small_integrated_oracle_scale/e672918_20260823/` is
+`VERIFIED_BOUNDED_SMALL_INSTANCES`: all four Phase-4 references are exact and
+the corresponding Phase-3 canonical costs agree within numerical tolerance.
+The zero-cost 8/12 references have no relative gap; 24/40 report 0.0. This
+closes no full-network gate: it is explicitly not a 264-trip optimum, runtime,
+economic-sensitivity, or research-release conclusion.
+
 ## 2026-08-23: Latest normal 264-trip Phase-3 rerun remains gap-blocked
 
 The frozen tag `phase3-current-formal-6e61b80` reran the ordinary BFF path

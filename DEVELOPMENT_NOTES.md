@@ -1,5 +1,22 @@
 # Development Notes
 
+## 2026-08-23: 8/12/24/40-trip integrated-oracle scale certificate
+
+- Frozen tag `small-integrated-oracle-e672918` executed
+  `output/verification/small_integrated_oracle_scale/e672918_20260823/` from
+  clean `e672918d082d4a0d2c90df9a663b9e60ba0ab2ba`. It used the same prepared
+  input, seed 42, four Gurobi threads, and 300 seconds per phase for fresh
+  8-, 12-, 24-, and 40-trip day-spanning subsets.
+- The certificate is `VERIFIED_BOUNDED_SMALL_INSTANCES`: each Phase-4 run is
+  `optimal` at gap 0 and each Phase-3 canonical accounting cost equals the
+  exact Phase-4 canonical-actual-cost value within numerical tolerance. The
+  relative two-stage difference is identifiable and 0.0 at 24 and 40 trips;
+  it is deliberately undefined at 8 and 12 trips because the exact reference
+  cost is zero.
+- The certificate explicitly remains ineligible for a research-release or
+  full-network-optimality conclusion. It is exact bounded formulation evidence
+  only; it neither proves a 264-trip optimum nor validates a runtime claim.
+
 ## 2026-08-23: Current recovery-gated pure-ICE A/B completed
 
 - Clean commit `ac8982d33826f681c6441eeb3f7f320fc12f3a3b` completed the
