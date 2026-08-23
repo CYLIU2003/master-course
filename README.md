@@ -1,5 +1,27 @@
 # master-course
 
+## 2026-08-24 current-SHA 8/12/24-trip integrated-oracle refresh
+
+The frozen tag `small-integrated-oracle-f0240cc` reran the isolated-process
+Phase-3 versus integrated Phase-4 oracle at clean commit
+`f0240cc90fd44d92b9a39df2fbf0240c539ec825`. The certificate at
+`output/verification/small_integrated_oracle_scale/f0240cc_20260824/` has
+status `VERIFIED_BOUNDED_SMALL_INSTANCES`, matching clean pre/post SHA and the
+prepared-input SHA-256
+`639b6754cccd1aef7758454b56640f968b6b1c277ec32c1c142f53f670ade558`. It holds
+the seed (42), four Gurobi threads, and a 300-second per-phase limit fixed.
+
+For the deterministic 8-, 12-, and 24-trip subsets, each integrated Phase-4
+reference is `optimal` at zero solver gap. At 24 trips the canonical-cost
+difference is `1.4551915228366852e-11` JPY (Phase 3:
+`482.57095695945475`; Phase 4: `482.5709569594402`), within the declared
+`1e-5`-JPY comparison tolerance, so the identifiable ApproxGap is `0.0`. The
+8- and 12-trip exact reference costs are numerically zero, so their relative
+ApproxGap is correctly recorded as not identifiable rather than invented.
+This is bounded formulation evidence only: it does not establish a 264-trip
+global-cost optimum, a Phase-3 optimality guarantee, runtime performance, or
+an economic-sensitivity conclusion.
+
 ## 2026-08-23 pending Stage-1 powertrain-selector representation A/B
 
 The optional metadata flag `stage1_powertrain_selector_strengthening` adds one

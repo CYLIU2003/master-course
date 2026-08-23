@@ -1,5 +1,27 @@
 # Current research release blockers
 
+## 2026-08-24: Current-SHA small integrated oracle is verified but bounded
+
+The frozen tag `small-integrated-oracle-f0240cc` produced
+`output/verification/small_integrated_oracle_scale/f0240cc_20260824/` at
+clean commit `f0240cc90fd44d92b9a39df2fbf0240c539ec825`. Its 8/12/24-trip
+isolated-process certificate has matching clean pre/post SHA, the frozen
+prepared-input SHA-256
+`639b6754cccd1aef7758454b56640f968b6b1c277ec32c1c142f53f670ade558`, seed 42,
+four threads, and a 300-second per-phase limit. All Phase-4 references are
+`optimal` with zero solver gap; every paired Phase-3 schedule is feasible and
+complete. The 24-trip canonical-cost delta is
+`1.4551915228366852e-11` JPY against the `1e-5`-JPY tolerance, so its
+identifiable ApproxGap is `0.0`. The 8/12-trip exact reference costs are
+numerically zero and their relative gaps remain correctly not identifiable.
+
+This clears only the bounded small-instance formulation check. The certificate
+itself records `research_conclusion_eligible=false` and
+`formal_full_network_optimality_substitute=false`: it is not evidence of a
+264-trip integrated global optimum, a Phase-3 cost-optimality guarantee, a
+runtime benefit, a formal economic response, or release readiness. The
+full-scale certified-gap and acceptance blockers below remain in force.
+
 ## 2026-08-23: Current-code pure-ICE aggregation A/B is structural-only
 
 The normal candidate's solver telemetry is root-bound dominated: the

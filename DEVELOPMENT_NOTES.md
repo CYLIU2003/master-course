@@ -1,5 +1,26 @@
 # Development Notes
 
+## 2026-08-24: Current-SHA bounded integrated-oracle refresh
+
+- Tagged the clean code as `small-integrated-oracle-f0240cc` and ran the
+  existing isolated-process scale certificate for 8/12/24 trips at
+  `output/verification/small_integrated_oracle_scale/f0240cc_20260824/`.
+  The parent and every child attest the same clean pre/post SHA
+  `f0240cc90fd44d92b9a39df2fbf0240c539ec825`, frozen prepared-input SHA-256
+  `639b6754cccd1aef7758454b56640f968b6b1c277ec32c1c142f53f670ade558`, seed
+  42, four threads, and a 300-second per-phase limit.
+- The certificate is `VERIFIED_BOUNDED_SMALL_INSTANCES` with no blockers:
+  each Phase-4 canonical-actual-cost reference is `optimal` at zero gap and
+  each paired Phase-3 case is feasible and complete. The 24-trip cost delta
+  is `1.4551915228366852e-11` JPY, below the declared `1e-5`-JPY tolerance,
+  yielding identifiable ApproxGap `0.0`. The exact 8/12-trip reference costs
+  are numerically zero, so their relative gaps are explicitly
+  `not_identifiable_zero_reference_cost`.
+- This refresh is deliberately limited to bounded approximation/formulation
+  evidence. The certificate retains `research_conclusion_eligible=false` and
+  `formal_full_network_optimality_substitute=false`; it cannot close the
+  264-trip certified-gap, economic-response, stress, or runtime gates.
+
 ## 2026-08-23: Stage-1 coefficient-source diagnostic is read-only and fail-closed
 
 - Fixed a P1 acceptance-boundary omission before the next root-LP observation:
