@@ -58,6 +58,11 @@
   disabled warm start/repair, and disabled Phase-4 seed handoff. This closes a
   reproducibility omission in the prior bounded M0--M3 artifact and requires
   a fresh clean-commit rerun before using the strengthened contract.
+- `build_small_integrated_oracle_scale_certificate.py` now forwards that
+  explicit thread control to every isolated 8/12/24/40-trip child and writes
+  the same runtime snapshot into its parent provenance. The scale certificate
+  therefore needs its own fresh clean-commit run; older scale artifacts remain
+  historical bounded checks only.
 
 ## 2026-08-23: Current-SHA diesel-price response tranche
 

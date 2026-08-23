@@ -32,6 +32,8 @@ The subsequent reproducibility hardening requires a clean Git-attested
 worktree, records pre/post code provenance and the prepared-input hash, and
 fixes Gurobi at four threads. The older bundle remains a valid historical
 bounded result but is not the artifact for that stricter contract.
+The isolated 8/12/24/40 scale-certificate wrapper forwards the same fixed
+thread count and records its own runtime snapshot before issuing a new series.
 
 ## 2026-08-23 current-SHA diesel-price diagnostic: active cost term, unchanged candidate dispatch
 

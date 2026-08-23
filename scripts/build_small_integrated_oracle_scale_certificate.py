@@ -18,6 +18,8 @@ import subprocess
 import sys
 from typing import Any, Mapping, Sequence
 
+from bff.services.optimization_run.input_provenance import _runtime_environment
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_VERSION = "small_integrated_oracle_scale_certificate_v1"
@@ -373,6 +375,8 @@ def run(args: argparse.Namespace) -> int:
             str(args.time_limit_sec),
             "--random-seed",
             str(args.random_seed),
+            "--gurobi-threads",
+            str(args.gurobi_threads),
             "--skip-five-minute",
         ]
         print(f"[{index}/{len(trip_counts)}] running {trip_count}-trip oracle", flush=True)
@@ -418,8 +422,10 @@ def run(args: argparse.Namespace) -> int:
         "vehicles_per_type": args.vehicles_per_type,
         "time_limit_sec_per_phase": args.time_limit_sec,
         "random_seed": args.random_seed,
+        "gurobi_threads": args.gurobi_threads,
         "python_version": sys.version,
         "python_executable": sys.executable,
+        "runtime_environment": _runtime_environment(),
     }
     if git_sha_before != git_sha_after or dirty_after:
         for result in results:
@@ -468,6 +474,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--vehicles-per-type", type=int, default=5)
     parser.add_argument("--time-limit-sec", type=int, default=300)
     parser.add_argument("--random-seed", type=int, default=42)
+    parser.add_argument("--gurobi-threads", type=int, default=4)
     return parser
 
 

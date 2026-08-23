@@ -32,6 +32,9 @@ The small-oracle CLI has since been hardened to require clean Git provenance,
 persist pre/post SHA, the prepared-input hash, runtime environment, and fixed
 four-thread solver controls. A fresh artifact from that strengthened contract
 is required before treating its bounded result as current-code evidence.
+The 8/12/24/40 scale wrapper now forwards those fixed threads to each isolated
+child and records its parent runtime environment; it likewise needs a fresh
+clean-commit series before replacing the historical certificate.
 
 ## 2026-08-23: Diesel-price term is active; economic-response release gate remains blocked
 
