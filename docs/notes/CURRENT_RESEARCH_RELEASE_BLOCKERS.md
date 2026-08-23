@@ -1,5 +1,29 @@
 # Current research release blockers
 
+## 2026-08-23: Latest normal 264-trip Phase-3 rerun remains gap-blocked
+
+The frozen tag `phase3-current-formal-6e61b80` reran the ordinary BFF path
+from Fresh Prepare through `phase3_two_stage` and 60-minute Rolling for the
+central 145-JPY/L request. The one-case bundle
+`output/thesis_current_phase3_6e61b80_20260823/` has manifest SHA-256
+`f74c9ea76c24fae8f26ad3b043d54cf50fbd9d40a6c5ca1df52d3be04cd5796b`, matching
+clean pre/post SHA `6e61b80`, fixed seed 42, four threads, a 900-second
+request, and the same persisted prepared input. It passes valid/research-ready
+input provenance, full successor coverage, 264/264 trip service, independent
+physical validation, 24/24 accepted Rolling, executed-day accounting, and
+240/240 finalized artifact hashes.
+
+Its 64,422.491318-JPY candidate uses 32 vehicles for 48 BEV / 216 ICE trips,
+but Stage 1 terminated at 19.227306637% certified gap after 464.581506 seconds
+against the declared 1% target. The bundle is therefore `BLOCKED` solely by
+`mip_gap_target_met`; it is a feasible/accounting candidate and cannot be
+presented as an optimum, an accepted one-point economic sensitivity, or a
+release result. Independent phase-gate audit
+`output/diagnostics/thesis_phase_gate_6e61b80_20260823/current_phase_gate_audit.json`
+(SHA-256 `47a267623dea68cc9e5c032f6b9e2fc6c2531204dbc62154b972241d6f551a2d`)
+also remains `BLOCKED`: this Phase-3 source has no full Phase-4 execution and
+does not meet its Stage-1 gap.
+
 ## 2026-08-23: First bounded M0--M3 attempt is diagnostic; repaired rerun remains small-scope
 
 The opt-in `--run-small-m0-m3` path in

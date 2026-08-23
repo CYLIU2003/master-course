@@ -1,5 +1,39 @@
 # Development Notes
 
+## 2026-08-23: Current-SHA normal frontend/BFF Phase-3 rerun remains a feasible candidate
+
+- Before execution, recorded baseline `a145cf3a8b9cba0e4d97c48f800fba9ff07a1e69`
+  and current `6e61b808025385cfbf6b67efa37025d82ac44e31`: the baseline is an
+  ancestor and the current history contains 69 commits. The active environment
+  was Python 3.14.6, Gurobi/gurobipy 13.0.1, and Windows 11; the runtime
+  artifact additionally records the machine, thread, seed, input and solver
+  controls.
+- Created annotated tag `phase3-current-formal-6e61b80`, restarted the
+  port-8000 BFF from that clean SHA, and verified
+  `/api/research/git-preflight` reports matching clean runtime/current SHA.
+  The existing HTTP-only runner then executed exactly `DIESEL_PRICE_145` from
+  Fresh Prepare with four threads, seed 42, 900 seconds, 1% requested gap and
+  60-minute Rolling. Command:
+  `python scripts/run_thesis_sensitivity_matrix.py --scenario-id b23fd26c-1233-4c73-bb9e-bdb8b1584760 --base-url http://127.0.0.1:8000 --base-prepare-request output/thesis_sensitivity_diesel_b505c7a_20260823_r1/cases/DIESEL_PRICE_145/frontend_prepare_request.json --base-optimization-request output/thesis_sensitivity_diesel_b505c7a_20260823_r1/cases/DIESEL_PRICE_145/frontend_optimization_request.json --output-dir output/thesis_current_phase3_6e61b80_20260823 --case-id DIESEL_PRICE_145 --timeout-seconds 2400 --poll-interval-seconds 10`.
+- The completed bundle is `output/thesis_current_phase3_6e61b80_20260823/`.
+  Its manifest SHA-256 is
+  `f74c9ea76c24fae8f26ad3b043d54cf50fbd9d40a6c5ca1df52d3be04cd5796b`.
+  It has valid/research-ready input provenance, complete successors, 264/264
+  coverage, physical validity, 24/24 accepted Rolling, executed-day
+  accounting, and 240/240 finalized artifact hashes. Final candidate cost is
+  64,422.491318 JPY, using 32 vehicles for 48 BEV / 216 ICE trips.
+- The only one-case matrix failure is the declared gap: Stage 1 is a
+  time-limit result at 19.227306637% after 464.581506 solver seconds, above
+  1%. The runner consequently labels the manifest `BLOCKED`; this single
+  central-price rerun is not a completed price sensitivity. Independent
+  `audit_thesis_model_phase_gates.py` produced
+  `output/diagnostics/thesis_phase_gate_6e61b80_20260823/current_phase_gate_audit.json`
+  (SHA-256
+  `47a267623dea68cc9e5c032f6b9e2fc6c2531204dbc62154b972241d6f551a2d`) and
+  also returns `BLOCKED`, specifically including the absent full Phase-4 run
+  and the unmet Stage-1 gap. No optimality, accepted sensitivity, or release
+  claim is added.
+
 ## 2026-08-23: Bounded M0--M3 actual-cost-oracle protocol
 
 - Extended `scripts/audit_small_integrated_weather_milp.py` with the opt-in

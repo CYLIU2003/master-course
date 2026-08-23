@@ -1,5 +1,26 @@
 # master-course
 
+## 2026-08-23 current-SHA normal Phase-3 candidate: feasible, not optimal
+
+Frozen tag `phase3-current-formal-6e61b80` ran the ordinary frontend/BFF path
+from Fresh Prepare through `phase3_two_stage` and 60-minute Rolling for all
+264 trips.  The immutable one-case bundle is
+`output/thesis_current_phase3_6e61b80_20260823/` (manifest SHA-256
+`f74c9ea76c24fae8f26ad3b043d54cf50fbd9d40a6c5ca1df52d3be04cd5796b`). It
+records clean pre/post SHA `6e61b80`, the persisted prepared-input ID, seed
+42, four threads, a 900-second request, and 1% target. Input provenance,
+complete successors, 264/264 coverage, physical validation, accepted 24/24
+Rolling, executed-day accounting, and all 240 final artifact hashes pass.
+
+The candidate cost is 64,422.491318 JPY (48 BEV and 216 ICE trips; 32 used
+vehicles), but Stage 1 ended at a certified 19.227307% gap after 464.582
+solver seconds. It is therefore a reproducible feasible/accounting candidate
+only—not an optimality result, integrated-global-cost result, accepted
+sensitivity point, or research-release clearance. The independent phase-gate
+audit is `BLOCKED` at
+`output/diagnostics/thesis_phase_gate_6e61b80_20260823/current_phase_gate_audit.json`
+(SHA-256 `47a267623dea68cc9e5c032f6b9e2fc6c2531204dbc62154b972241d6f551a2d).
+
 ## 2026-08-23 bounded M0--M3 attempt: M0 is blocked by frozen compatibility
 
 `scripts/audit_small_integrated_weather_milp.py --run-small-m0-m3` now creates
