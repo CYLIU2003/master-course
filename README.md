@@ -24,6 +24,43 @@ was lower. Both representations remained time-limited and missed the 1% gap
 target (19.2273% discrete; 3.0775% aggregate); their different feasible
 incumbents are not an optimality or cost comparison.
 
+## 2026-08-24 current-SHA oracle, stress, and economic refresh
+
+At clean SHA `93e31b079d9c92028181a72bfd1062bac1dcbedc`, the bounded oracle
+certificate at `output/verification/small_integrated_oracle_scale/93e31b0_20260824/`
+is `VERIFIED_BOUNDED_SMALL_INSTANCES` for 8/12/24/40 trips. Its isolated
+Phase-4 references are optimal at zero gap; 24- and 40-trip Phase-3-minus-
+Phase-4 canonical-cost differences are `1.4551915228366852e-11` and
+`2.546585164964199e-11` JPY, respectively (identifiable ApproxGap `0.0`).
+The zero-cost 8/12 references correctly have no relative ApproxGap. This is
+bounded formulation evidence, never a 264-trip optimality or runtime claim.
+
+The matching 40-trip M0--M3 artifact at
+`output/verification/small_m0_m3/93e31b0_20260824/audit.json` is
+`PASS_SMALL_SCOPE_ONLY`: M0/M3 are exact references and the same-input M2--M3
+cost difference is `2.546585164964199e-11` JPY. M0/M1 change fleet and/or
+PV/BESS treatment, so their cost deltas are descriptive ablations, not a
+full-network algorithm comparison.
+
+The current fixed-decision replay at
+`output/diagnostics/fixed_solution_stress_0ddcd22_20260824/` uses the exact
+clean-`0ddcd22` discrete A/B candidate, with no reoptimization. Only initial
+SOC -5pp remains physically accepted, with a 0-JPY fixed-decision delta; BEV
+energy +10/+20%, travel +10%, PV -20%, one charger outage, and the combined
+stress have recorded physical failures and therefore no invented cost. It is
+limited fixed-plan robustness evidence.
+
+Fresh BFF price matrices at clean `93e31b0` are both `BLOCKED` only by the
+predeclared 1% Stage-1 gap. The diesel matrix at
+`output/thesis_economic_diesel_93e31b0_20260824/` confirms effective
+116/145/174-JPY/L inputs and candidate costs of 51,763.746062 / 64,422.491318
+/ 77,081.236574 JPY, but all cases retain a 19.2273% certified gap. The
+24/30/36-JPY/kWh electricity matrix at
+`output/thesis_economic_electricity_93e31b0_20260824/` has matching
+non-varied controls, zero grid import, and equal candidate costs, but also
+misses the same gap. These are input-provenance/candidate diagnostics, not
+economic-response conclusions.
+
 ## 2026-08-24 current-SHA 8/12/24-trip integrated-oracle refresh
 
 The frozen tag `small-integrated-oracle-f0240cc` reran the isolated-process

@@ -46,6 +46,34 @@ itself records `research_conclusion_eligible=false` and
 runtime benefit, a formal economic response, or release readiness. The
 full-scale certified-gap and acceptance blockers below remain in force.
 
+## 2026-08-24: Fresh small, fixed-plan, and price artifacts do not close the gap
+
+Clean `93e31b0` reran the 8/12/24/40 integrated oracle certificate at
+`output/verification/small_integrated_oracle_scale/93e31b0_20260824/`. It is
+`VERIFIED_BOUNDED_SMALL_INSTANCES`: Phase-4 is zero-gap at each size and the
+identifiable 24/40-trip Phase-3 ApproxGaps are 0.0. The matching 40-trip
+M0--M3 artifact at `output/verification/small_m0_m3/93e31b0_20260824/audit.json`
+is `PASS_SMALL_SCOPE_ONLY`, with a same-input M2--M3 canonical-cost delta of
+`2.546585164964199e-11` JPY. Both outputs remain bounded and are not 264-trip
+optimality or release evidence.
+
+The exact-source-SHA, no-reoptimization stress replay at
+`output/diagnostics/fixed_solution_stress_0ddcd22_20260824/` accepts only the
+fixed candidate under initial SOC -5pp (0 JPY delta); the six other
+predeclared stresses physically fail and have no manufactured cost. This does
+not establish recourse robustness.
+
+Current BFF diesel and electricity matrices are also correctly `BLOCKED`:
+`output/thesis_economic_diesel_93e31b0_20260824/` verifies the effective
+116/145/174-JPY/L inputs and
+`output/thesis_economic_electricity_93e31b0_20260824/` verifies the effective
+24/30/36-JPY/kWh inputs. Each price case serves 264/264 trips, passes physical
+and Rolling/accounting gates, and keeps non-varied controls stable, but every
+case misses the 1% Stage-1 target at about 19.2273%. The observed candidate
+cost response (and zero-grid-import electricity candidates) is therefore not
+an economic-response conclusion. The full-network certified-gap blocker
+remains unchanged.
+
 ## 2026-08-23: Current-code pure-ICE aggregation A/B is structural-only
 
 The normal candidate's solver telemetry is root-bound dominated: the

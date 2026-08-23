@@ -49,6 +49,43 @@
   `formal_full_network_optimality_substitute=false`; it cannot close the
   264-trip certified-gap, economic-response, stress, or runtime gates.
 
+## 2026-08-24: Current-SHA oracle, M0--M3, stress, and price refresh
+
+- At clean frozen SHA `93e31b079d9c92028181a72bfd1062bac1dcbedc`, the
+  isolated-process certificate at
+  `output/verification/small_integrated_oracle_scale/93e31b0_20260824/`
+  completes 8/12/24/40 trips as `VERIFIED_BOUNDED_SMALL_INSTANCES`. The
+  prepared-input SHA-256, seed 42, four threads, and 300-second per-phase cap
+  are fixed. Every Phase-4 reference is optimal at zero gap; the identifiable
+  24/40-trip ApproxGaps are 0.0, with canonical-cost differences
+  `1.4551915228366852e-11` and `2.546585164964199e-11` JPY. The zero-cost
+  8/12 references intentionally report relative gap as not identifiable.
+- The same clean SHA 40-trip M0--M3 audit at
+  `output/verification/small_m0_m3/93e31b0_20260824/audit.json` is
+  `PASS_SMALL_SCOPE_ONLY`. M0 and M3 are zero-gap integrated references;
+  M2/M3 have the same declared problem-input hash and differ by
+  `2.546585164964199e-11` JPY. M0/M1 vary fleet and/or PV/BESS assets, so the
+  M1-M0 and M2-M1 deltas are descriptive ablations only. Neither artifact is
+  a formal 264-trip global-optimality, runtime, or release result.
+- The exact-SHA fixed-decision evaluation ran in a clean detached `0ddcd22`
+  worktree against the discrete A/B source run and wrote
+  `output/diagnostics/fixed_solution_stress_0ddcd22_20260824/`. It records
+  `reoptimization_performed=false`. Initial SOC -5pp is physically accepted
+  with a 0-JPY fixed-decision delta; BEV energy +10/+20%, travel +10%, PV
+  -20%, one charger outage, and the combined stress are physical failures and
+  correctly have no cost value. This is not recourse robustness evidence.
+- Fresh normal-BFF price matrices used current clean `93e31b0`, fresh Prepare,
+  all 264 trips, no successor pruning, physical validation, Rolling 24/24,
+  accounting, and artifact hashes. The diesel 116/145/174-JPY/L matrix at
+  `output/thesis_economic_diesel_93e31b0_20260824/` has matching non-varied
+  controls and effective price inputs; candidate costs are 51,763.746062,
+  64,422.491318, and 77,081.236574 JPY. The electricity 24/30/36-JPY/kWh
+  matrix at `output/thesis_economic_electricity_93e31b0_20260824/` has
+  matching non-varied controls, 0.0-kWh grid import, and equal candidate cost.
+  Every price case is `BLOCKED` solely by its roughly 19.2273% Stage-1 gap;
+  price propagation is verified, but neither matrix supports an economically
+  optimal dispatch-response claim.
+
 ## 2026-08-23: Stage-1 coefficient-source diagnostic is read-only and fail-closed
 
 - Fixed a P1 acceptance-boundary omission before the next root-LP observation:
