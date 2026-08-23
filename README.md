@@ -133,16 +133,19 @@ zero BESS flow, 203.310-kWh grid import, and costs 71,979.208 JPY at a
 candidate-flow provenance, not an accepted BESS-cost response or global
 dispatch comparison.
 
-The initial 6/8/10-port charger-capacity execution at
-`output/thesis_economic_charger_capacity_ff77ecd_20260823/` is excluded from
-comparison. Although each case independently proved its declared count,
-physical validity, rolling, and accounting, their family control fingerprints
-also included `charger_input_sha256`, the intentionally varied charger
-inventory. The manifest therefore correctly reported `BLOCKED` for a
-provenance-definition defect, not for evidence of a non-charger control
-change. The runner now excludes only that declared hash for this family and
-retains all other controls in the fingerprint; a fresh clean-SHA 6/8/10-port
-run is required before reporting charger-capacity results.
+The first 6/8/10-port charger-capacity execution at
+`output/thesis_economic_charger_capacity_ff77ecd_20260823/` and the
+follow-up at `output/thesis_economic_charger_capacity_c775562_20260823/` are
+both excluded from comparison. The first fingerprint retained
+`charger_input_sha256`; the follow-up correctly excluded that hash but still
+retained charger-derived BEV compatibility IDs, depot charger-count fields,
+and their fleet-contract hash. Each manifest therefore correctly reported
+`BLOCKED` for a provenance-definition defect, not for evidence of a
+non-charger control change. The runner now normalizes only those derived
+count/ID fields from immutable snapshots while retaining vehicle state and
+parameters, non-charger depot data, and charger-port specifications. A fresh
+clean-SHA 6/8/10-port run is required before reporting charger-capacity
+results.
 
 ## 2026-08-23 current-SHA normal Phase-3 candidate: feasible, not optimal
 

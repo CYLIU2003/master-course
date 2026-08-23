@@ -512,6 +512,13 @@ def _audit_case(
         accounting=accounting,
         summary=summary,
     )
+    charger_nonvaried_snapshot_hash = (
+        _charger_capacity_nonvaried_snapshot_hash(
+            required["scenario_input_snapshot.json"]
+        )
+        if str(case.get("family") or "") == "charger_capacity_sensitivity"
+        else None
+    )
     checks = {
         "frontend_job_completed": terminal.get("status") == "completed",
         "run_input_valid": input_validation.get("valid") is True,
@@ -548,6 +555,10 @@ def _audit_case(
         ),
         "declared_case_parameter_effective": parameter_match,
         "declared_common_controls_effective": declared_controls_match,
+        "charger_capacity_nonvaried_snapshot_verified": bool(
+            str(case.get("family") or "") != "charger_capacity_sensitivity"
+            or charger_nonvaried_snapshot_hash
+        ),
         "submitted_request_provenance_matches": request_provenance_match,
         "prepared_trip_structure_verified": bool(
             str(case.get("family") or "")
@@ -585,6 +596,10 @@ def _audit_case(
             parameters=required["optimization_parameters.json"],
             economic_audit=required["assignment_economic_audit.json"],
             prepared_trip_input_sha256=prepared_trip_input_sha256,
+            scenario_snapshot=required["scenario_input_snapshot.json"],
+        ),
+        "charger_capacity_nonvaried_snapshot_sha256": (
+            charger_nonvaried_snapshot_hash
         ),
         "prepared_trip_input_sha256": prepared_trip_input_sha256,
         "prepared_trip_input_hash_source": prepared_trip_input_hash_source,
@@ -1502,6 +1517,7 @@ def _stable_control_fingerprint(
     parameters: Mapping[str, Any],
     economic_audit: Mapping[str, Any],
     prepared_trip_input_sha256: str | None = None,
+    scenario_snapshot: Mapping[str, Any] | None = None,
 ) -> str:
     dimensions = dict(parameters.get("canonical_input_dimensions") or {})
     scenario = dict(parameters.get("effective_problem_scenario") or {})
@@ -1516,6 +1532,8 @@ def _stable_control_fingerprint(
     price_value_set_sha256 = dimensions.get("price_value_set_sha256")
     vehicle_input_sha256 = dimensions.get("vehicle_input_sha256")
     charger_input_sha256 = dimensions.get("charger_input_sha256")
+    depot_input_sha256 = dimensions.get("depot_input_sha256")
+    scenario_fleet_contract_hash = metadata.get("scenario_fleet_contract_hash")
     energy_asset_control_input_sha256 = dimensions.get(
         "energy_asset_control_input_sha256"
     )
@@ -1529,7 +1547,15 @@ def _stable_control_fingerprint(
         diesel_price = None
         vehicle_input_sha256 = None
     if family == "charger_capacity_sensitivity":
+        # Generated charger inventory is deliberately varied. It propagates
+        # into vehicle compatibility IDs, depot charger counts, and the full
+        # fleet-contract hash, so use a snapshot-derived hash that removes
+        # only those count/ID fields while retaining all other vehicle, depot,
+        # and port-specification controls.
+        vehicle_input_sha256 = None
         charger_input_sha256 = None
+        depot_input_sha256 = None
+        scenario_fleet_contract_hash = None
     if family == "pv_supply_transition":
         energy_asset_control_input_sha256 = None
     if family == "bess_asset_ablation":
@@ -1548,12 +1574,15 @@ def _stable_control_fingerprint(
         "vehicle_type_input_sha256": dimensions.get(
             "vehicle_type_input_sha256"
         ),
-        "depot_input_sha256": dimensions.get("depot_input_sha256"),
+        "depot_input_sha256": depot_input_sha256,
         "price_value_set_sha256": price_value_set_sha256,
         "energy_asset_control_input_sha256": energy_asset_control_input_sha256,
         "objective_weights_sha256": objective_weights_sha256,
-        "scenario_fleet_contract_hash": metadata.get(
-            "scenario_fleet_contract_hash"
+        "scenario_fleet_contract_hash": scenario_fleet_contract_hash,
+        "charger_capacity_nonvaried_snapshot_sha256": (
+            _charger_capacity_nonvaried_snapshot_hash(scenario_snapshot)
+            if family == "charger_capacity_sensitivity"
+            else None
         ),
         "grid_price_jpy_per_kwh": grid_price,
         "diesel_price_jpy_per_l": diesel_price,
@@ -1565,6 +1594,92 @@ def _stable_control_fingerprint(
         ),
     }
     return _canonical_hash(payload)
+
+
+def _charger_capacity_nonvaried_snapshot_hash(
+    scenario_snapshot: Mapping[str, Any] | None,
+) -> str | None:
+    """Hash all charger-capacity controls except the declared port count.
+
+    Generated charger counts intentionally propagate into BEV compatibility ID
+    lists, depot charger-count fields, and the derived fleet-contract hash.
+    This normalizes only those representations and retains vehicle state and
+    parameters, non-charger depot data, and the distinct port specifications.
+    """
+
+    if not isinstance(scenario_snapshot, Mapping):
+        return None
+    inventory = scenario_snapshot.get("prepared_inventory")
+    if not isinstance(inventory, Mapping):
+        return None
+    raw_vehicles = inventory.get("vehicles")
+    raw_depots = inventory.get("depots")
+    raw_chargers = inventory.get("chargers")
+    if not all(
+        isinstance(values, list)
+        for values in (raw_vehicles, raw_depots, raw_chargers)
+    ):
+        return None
+
+    vehicles: list[dict[str, Any]] = []
+    for raw_vehicle in raw_vehicles:
+        if not isinstance(raw_vehicle, Mapping):
+            return None
+        vehicle = dict(raw_vehicle)
+        vehicle_id = str(vehicle.get("id") or "").strip()
+        if not vehicle_id:
+            return None
+        vehicle.pop("compatibleChargerIds", None)
+        vehicle.pop("chargerCompatibilitySource", None)
+        vehicles.append(vehicle)
+    vehicles.sort(key=lambda vehicle: str(vehicle.get("id") or ""))
+
+    depots: list[dict[str, Any]] = []
+    for raw_depot in raw_depots:
+        if not isinstance(raw_depot, Mapping):
+            return None
+        depot = dict(raw_depot)
+        depot_id = str(depot.get("id") or depot.get("depotId") or "").strip()
+        if not depot_id:
+            return None
+        depot.pop("normalChargerCount", None)
+        depot.pop("fastChargerCount", None)
+        depots.append(depot)
+    depots.sort(
+        key=lambda depot: str(depot.get("id") or depot.get("depotId") or "")
+    )
+
+    charger_attribute_variants: set[tuple[str, float, bool, int]] = set()
+    for raw_charger in raw_chargers:
+        if not isinstance(raw_charger, Mapping):
+            return None
+        site_id = str(raw_charger.get("siteId") or "").strip()
+        try:
+            power_kw = float(raw_charger.get("powerKw"))
+            simultaneous_ports = int(raw_charger.get("simultaneous_ports"))
+        except (TypeError, ValueError):
+            return None
+        if not site_id or power_kw <= 0.0 or simultaneous_ports <= 0:
+            return None
+        charger_attribute_variants.add(
+            (
+                site_id,
+                power_kw,
+                bool(raw_charger.get("bidirectional")),
+                simultaneous_ports,
+            )
+        )
+    if not charger_attribute_variants:
+        return None
+
+    return _canonical_hash(
+        {
+            "schema_version": "charger_capacity_nonvaried_controls_v1",
+            "vehicles": vehicles,
+            "depots": depots,
+            "charger_attribute_variants": sorted(charger_attribute_variants),
+        }
+    )
 
 
 def _bess_asset_states(

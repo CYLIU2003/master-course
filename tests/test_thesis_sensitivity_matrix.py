@@ -648,23 +648,71 @@ def test_charger_stable_fingerprint_excludes_intentional_charger_hash() -> None:
     low = json.loads(json.dumps(common))
     high = json.loads(json.dumps(common))
     high["canonical_input_dimensions"]["charger_input_sha256"] = "chargers-high"
+    snapshot = {
+        "prepared_inventory": {
+            "vehicles": [
+                {
+                    "id": "vehicle-a",
+                    "energyConsumption": 1.2,
+                    "compatibleChargerIds": ["charger-1"],
+                    "chargerCompatibilitySource": "generated",
+                }
+            ],
+            "depots": [
+                {
+                    "id": "depot-a",
+                    "fastChargerCount": 6,
+                    "fastChargerPowerKw": 90.0,
+                    "address": "stable",
+                }
+            ],
+            "chargers": [
+                {
+                    "id": "charger-1",
+                    "siteId": "depot-a",
+                    "powerKw": 90.0,
+                    "bidirectional": False,
+                    "simultaneous_ports": 1,
+                }
+            ],
+        }
+    }
+    high_snapshot = json.loads(json.dumps(snapshot))
+    high_snapshot["prepared_inventory"]["vehicles"][0][
+        "compatibleChargerIds"
+    ].append("charger-2")
+    high_snapshot["prepared_inventory"]["depots"][0]["fastChargerCount"] = 8
+    high_snapshot["prepared_inventory"]["chargers"].append(
+        {
+            "id": "charger-2",
+            "siteId": "depot-a",
+            "powerKw": 90.0,
+            "bidirectional": False,
+            "simultaneous_ports": 1,
+        }
+    )
 
     low_hash = _stable_control_fingerprint(
         case=case,
         parameters=low,
         economic_audit={},
+        scenario_snapshot=snapshot,
     )
     assert low_hash == _stable_control_fingerprint(
         case=case,
         parameters=high,
         economic_audit={},
+        scenario_snapshot=high_snapshot,
     )
 
-    high["canonical_input_dimensions"]["vehicle_input_sha256"] = "drift"
+    high_snapshot["prepared_inventory"]["vehicles"][0][
+        "energyConsumption"
+    ] = 1.3
     assert low_hash != _stable_control_fingerprint(
         case=case,
         parameters=high,
         economic_audit={},
+        scenario_snapshot=high_snapshot,
     )
 
 

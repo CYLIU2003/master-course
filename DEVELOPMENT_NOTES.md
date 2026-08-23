@@ -1,5 +1,24 @@
 # Development Notes
 
+## 2026-08-23: Second charger-control audit isolates derived compatibility data
+
+- The clean follow-up at `economic-charger-capacity-c775562` completed the
+  6/8/10-port BFF trial in
+  `output/thesis_economic_charger_capacity_c775562_20260823/`. Like the first
+  attempt, all cases pass the individual provenance, coverage, physical,
+  Rolling, accounting, and effective-count checks but miss the 1% Stage-1 gap
+  target. It is excluded from comparison because the family manifest still
+  finds different stable-control hashes.
+- Artifact-level comparison showed that generated port count propagates beyond
+  `charger_input_sha256`: it changes BEV `compatibleChargerIds`, depot
+  `fastChargerCount`, and the fleet contract composed from those fields. The
+  former patch was therefore necessary but insufficient.
+- The new immutable-snapshot hash removes only charger IDs and count fields,
+  while retaining vehicle parameters and initial state, non-charger depot
+  fields, and the set of charger port specifications. A focused test proves
+  that count/compatibility changes compare equal but a vehicle energy-rate
+  change does not. Fresh execution from the next clean commit is required.
+
 ## 2026-08-23: Charger-capacity fingerprint defect found before comparison
 
 - The normal BFF completed the 6/8/10-port trial at frozen tag
