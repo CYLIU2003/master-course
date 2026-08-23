@@ -70,6 +70,15 @@ the other six predeclared stresses fail independent physical validation, so
 their extra-cost values are correctly withheld. This is evidence of limited
 fixed-plan robustness, not a robustness claim for the method.
 
+The current BFF diesel-price response at
+`output/thesis_economic_diesel_4678e7d_20260823/` is `BLOCKED`, not an
+accepted economic sensitivity. The 116/145/174-JPY/L requests changed only the
+declared diesel price and retained matching non-varied controls, but every
+264-trip candidate stopped at the same 19.2273% Stage-1 gap. Their diagnostic
+costs and fuel costs scale with diesel price while the 48 BEV / 216 ICE trip
+split and 32 used vehicles do not change. It therefore confirms price-input
+provenance, not an economically optimal dispatch response.
+
 ## 2026-08-23 current-SHA normal Phase-3 candidate: feasible, not optimal
 
 Frozen tag `phase3-current-formal-6e61b80` ran the ordinary frontend/BFF path

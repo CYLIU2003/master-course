@@ -90,6 +90,13 @@ six energy, delay, PV, charger-outage, and combined stresses fail independent
 physical validation and have null added costs. This blocks any claim of
 fixed-plan robustness, recourse cost, or uncertainty resilience.
 
+The 116/145/174-JPY/L diesel-price matrix at
+`output/thesis_economic_diesel_4678e7d_20260823/` is `BLOCKED` only by the
+unchanged 19.2273% Stage-1 gap. Its fixed controls and effective diesel prices
+are audited, but all three time-limited candidates retain 48 BEV / 216 ICE
+trips and 32 used vehicles. The cost movement is therefore diagnostic input
+provenance, not accepted economic-dispatch or sensitivity evidence.
+
 ## 2026-08-23: Latest normal 264-trip Phase-3 rerun remains gap-blocked
 
 The frozen tag `phase3-current-formal-6e61b80` reran the ordinary BFF path

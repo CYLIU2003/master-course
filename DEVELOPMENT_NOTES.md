@@ -1,5 +1,23 @@
 # Development Notes
 
+## 2026-08-23: Diesel-price response is diagnostic and gap-blocked
+
+- The normal current BFF path executed `DIESEL_PRICE_116`, `DIESEL_PRICE_145`,
+  and `DIESEL_PRICE_174` at frozen tag `economic-diesel-response-4678e7d` in
+  `output/thesis_economic_diesel_4678e7d_20260823/`. Each case freshly
+  prepared the scenario, kept the non-varied control fingerprint identical,
+  used seed 42, four threads, and explicit Stage 1=435 / Stage 2=30 seconds.
+- The matrix status is `BLOCKED`: all three physical/accounting candidates are
+  rejected only by `mip_gap_target_met` (19.2273% certified Stage-1 gap,
+  time-limit), so none is an accepted sensitivity or an optimal economic
+  response. The diagnostic 116/145/174-JPY/L total costs are 51,763.746 /
+  64,422.491 / 77,081.237 JPY, with a constant 48 BEV / 216 ICE trip split,
+  32 used vehicles, and 0.0-kWh grid import.
+- This demonstrates that the diesel coefficient reached the reachable BFF
+  model and ledger, but not a behavioral dispatch response: fuel cost changes
+  mechanically with the price while the time-limited incumbent does not change
+  assignment. The local BFF used for this run was stopped after finalization.
+
 ## 2026-08-23: Current 264-trip fixed-decision stress evaluation
 
 - `output/diagnostics/fixed_solution_stress_ac8982d_20260823/` replays the
