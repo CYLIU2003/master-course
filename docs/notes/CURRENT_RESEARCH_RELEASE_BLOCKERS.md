@@ -76,6 +76,13 @@ The zero-cost 8/12 references have no relative gap; 24/40 report 0.0. This
 closes no full-network gate: it is explicitly not a 264-trip optimum, runtime,
 economic-sensitivity, or research-release conclusion.
 
+The corresponding 40-trip M0--M3 artifact at
+`output/verification/small_m0_m3/3e52305_20260823/audit.json` is
+`PASS_SMALL_SCOPE_ONLY`. All methods are complete; only M2/M3 is a same-input
+algorithmic pair, and its accounting-cost difference is within numerical
+tolerance. M0/M1 change fleet or PV/BESS treatment and remain descriptive
+ablations. This does not close any 264-trip or release gate.
+
 ## 2026-08-23: Latest normal 264-trip Phase-3 rerun remains gap-blocked
 
 The frozen tag `phase3-current-formal-6e61b80` reran the ordinary BFF path

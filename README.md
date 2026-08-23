@@ -54,6 +54,14 @@ zero-cost 8- and 12-trip references deliberately report it as undefined. This
 is bounded formulation evidence only, not a 264-trip global-optimality or
 runtime result.
 
+The matching 40-trip M0--M3 study at
+`output/verification/small_m0_m3/3e52305_20260823/audit.json` is
+`PASS_SMALL_SCOPE_ONLY`: all four methods are complete, M0/M3 exact references
+have gap 0, and the same-input M2 Phase-3/M3 integrated pair agrees within
+numerical tolerance. M0 and M1 intentionally change the fleet or PV/BESS
+treatment, so their cost deltas are descriptive ablations rather than an
+algorithmic comparison.
+
 ## 2026-08-23 current-SHA normal Phase-3 candidate: feasible, not optimal
 
 Frozen tag `phase3-current-formal-6e61b80` ran the ordinary frontend/BFF path

@@ -1,5 +1,23 @@
 # Development Notes
 
+## 2026-08-23: Bounded 40-trip M0--M3 comparison completed
+
+- Frozen tag `small-m0m3-3e52305` executed
+  `output/verification/small_m0_m3/3e52305_20260823/audit.json` from clean
+  `3e523056972b847871e12976c6db0a513611c025`, using the 40-trip deterministic
+  subset, five vehicles per type, seed 42, four threads, and 300 seconds.
+- The M0 all-ICE exact baseline, M1 mixed Phase-3 without PV/BESS, M2 deployed
+  mixed Phase-3, and M3 mixed integrated scalar-actual-cost oracle are all
+  feasible and complete. M0/M3 have `optimal` status and gap 0. The same-input
+  M2/M3 pair is `PASS_SMALL_SCOPE_ONLY`: 2,439.5361535728903 versus
+  2,439.536153572865 JPY, a numerical-tolerance difference of
+  `2.55e-11 JPY` with lower-bound consistency.
+- M0/M1 versus M2/M3 intentionally change the energy-asset or fleet contract;
+  their 13,057.776 / 13,728.193 / 2,439.536 / 2,439.536-JPY values are
+  descriptive small-scope ablations, not a full-service algorithmic or
+  economic result. This run cannot establish 264-trip optimality, runtime, or
+  release readiness.
+
 ## 2026-08-23: 8/12/24/40-trip integrated-oracle scale certificate
 
 - Frozen tag `small-integrated-oracle-e672918` executed
