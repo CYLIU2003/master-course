@@ -1952,6 +1952,7 @@ def _stage1_root_lp_diagnostic(
     assignment_vars: Mapping[Tuple[str, str], Any],
     used_vehicle_vars: Mapping[str, Any],
     vehicle_type_by_id: Mapping[str, str],
+    mutually_exclusive_trip_sets: Sequence[Sequence[str]] = (),
     time_limit_sec: float = 300.0,
     threads: Optional[int] = None,
 ) -> Dict[str, Any]:
@@ -2065,6 +2066,7 @@ def _stage1_root_lp_diagnostic(
         }
         epsilon = 1.0e-6
         assignment_by_trip: Dict[str, List[Tuple[str, float]]] = {}
+        assignment_value_by_key: Dict[Tuple[str, str], float] = {}
         powertrain_trip_equivalents: Dict[str, float] = {}
         fractional_assignments: List[Dict[str, Any]] = []
         for (vehicle_id, trip_id), original_var in assignment_vars.items():
@@ -2075,6 +2077,7 @@ def _stage1_root_lp_diagnostic(
                     f"{original_var.VarName}"
                 )
             value = float(relaxed_var.X)
+            assignment_value_by_key[(str(vehicle_id), str(trip_id))] = value
             assignment_by_trip.setdefault(str(trip_id), []).append(
                 (str(vehicle_id), value)
             )
@@ -2107,6 +2110,69 @@ def _stage1_root_lp_diagnostic(
             for values in assignment_by_trip.values()
             if sum(value > epsilon for _, value in values) > 1
         )
+        maximal_trip_sets = tuple(
+            tuple(dict.fromkeys(str(trip_id) for trip_id in trip_set))
+            for trip_set in mutually_exclusive_trip_sets
+            if len(set(str(trip_id) for trip_id in trip_set)) > 1
+        )
+        exclusive_set_summary: Dict[str, Any] = {
+            "enabled": bool(maximal_trip_sets),
+            "maximal_trip_set_count": len(maximal_trip_sets),
+            "checked_vehicle_trip_set_pairs": 0,
+            "violated_vehicle_trip_set_count": 0,
+            "maximum_assignment_mass": None,
+            "maximum_assignment_mass_excess": None,
+            "violation_sample": [],
+            "semantics": (
+                "read_only_evaluation_of_sum_assignment_less_than_or_equal_to_"
+                "one_for_supplied_mutually_exclusive_trip_sets"
+            ),
+        }
+        if maximal_trip_sets:
+            assignment_vehicle_ids = tuple(
+                sorted({vehicle_id for vehicle_id, _ in assignment_value_by_key})
+            )
+            violations: List[Dict[str, Any]] = []
+            maximum_assignment_mass = 0.0
+            for trip_set in maximal_trip_sets:
+                for vehicle_id in assignment_vehicle_ids:
+                    assignment_mass = sum(
+                        assignment_value_by_key.get((vehicle_id, trip_id), 0.0)
+                        for trip_id in trip_set
+                    )
+                    exclusive_set_summary["checked_vehicle_trip_set_pairs"] += 1
+                    maximum_assignment_mass = max(
+                        maximum_assignment_mass,
+                        assignment_mass,
+                    )
+                    if assignment_mass <= 1.0 + epsilon:
+                        continue
+                    violations.append(
+                        {
+                            "vehicle_id": vehicle_id,
+                            "trip_ids": list(trip_set),
+                            "assignment_mass": assignment_mass,
+                            "excess": assignment_mass - 1.0,
+                        }
+                    )
+            exclusive_set_summary.update(
+                {
+                    "violated_vehicle_trip_set_count": len(violations),
+                    "maximum_assignment_mass": maximum_assignment_mass,
+                    "maximum_assignment_mass_excess": max(
+                        maximum_assignment_mass - 1.0,
+                        0.0,
+                    ),
+                    "violation_sample": sorted(
+                        violations,
+                        key=lambda item: (
+                            -float(item["excess"]),
+                            str(item["vehicle_id"]),
+                            tuple(item["trip_ids"]),
+                        ),
+                    )[:20],
+                }
+            )
         diagnostic.update(
             {
                 "assignment_summary": {
@@ -2134,6 +2200,7 @@ def _stage1_root_lp_diagnostic(
                         for value in used_vehicle_values
                     ),
                 },
+                "mutually_exclusive_trip_set_summary": exclusive_set_summary,
             }
         )
     except Exception as exc:
@@ -14267,6 +14334,9 @@ class GurobiMILPAdapter:
                     vehicle_id: str(vehicle.vehicle_type)
                     for vehicle_id, vehicle in vehicle_by_id.items()
                 },
+                mutually_exclusive_trip_sets=self._build_trip_overlap_cliques(
+                    problem
+                ),
                 time_limit_sec=min(
                     requested_root_lp_diagnostic_sec,
                     remaining_before_root_lp_diagnostic_sec,

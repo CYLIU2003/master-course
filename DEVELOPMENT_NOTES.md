@@ -20,6 +20,12 @@
   contract. A returned Gurobi `SUBOPTIMAL` point is explicitly persisted as
   `suboptimal`, never as an opaque numeric status or an LP-optimality claim.
 
+- The root-LP artifact now also reads, but never adds, per-vehicle inequalities
+  over maximal sets of mutually overlapping trips. It records the largest
+  assignment mass and any `sum(assignments) > 1` violation. This prevents a
+  physically valid but LP-redundant overlap inequality from being promoted to
+  a formulation change without evidence from the exact relaxation.
+
 - Every returned root-LP diagnostic solution now also persists Gurobi's
   unscaled maximum bound/constraint violations and residuals, plus dual and
   complementarity quality metrics. These are descriptive quality evidence for

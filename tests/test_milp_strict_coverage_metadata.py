@@ -209,6 +209,53 @@ def test_root_lp_diagnostic_reports_fractional_assignment_without_mutating_mip()
     assert model.NumBinVars == 2
 
 
+@pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
+def test_root_lp_diagnostic_reports_exclusive_trip_set_violations_read_only() -> None:
+    from src.gurobi_runtime import ensure_gurobi
+
+    gp, grb = ensure_gurobi()
+    model = gp.Model("root_lp_exclusive_trip_set_diagnostic")
+    model.Params.OutputFlag = 0
+    first_assignment = model.addVar(vtype=grb.BINARY, name="assign__bus__first")
+    second_assignment = model.addVar(vtype=grb.BINARY, name="assign__bus__second")
+    used = model.addVar(vtype=grb.BINARY, name="used__bus")
+    model.addConstr(first_assignment == 0.75)
+    model.addConstr(second_assignment == 0.75)
+    model.addConstr(used == 1)
+    model.setObjective(first_assignment + second_assignment, grb.MINIMIZE)
+
+    diagnostic = _stage1_root_lp_diagnostic(
+        model=model,
+        grb=grb,
+        assignment_vars={
+            ("bus", "first"): first_assignment,
+            ("bus", "second"): second_assignment,
+        },
+        used_vehicle_vars={"bus": used},
+        vehicle_type_by_id={"bus": "ICE"},
+        mutually_exclusive_trip_sets=(("first", "second"),),
+        time_limit_sec=5,
+        threads=2,
+    )
+
+    summary = diagnostic["mutually_exclusive_trip_set_summary"]
+    assert summary["enabled"] is True
+    assert summary["maximal_trip_set_count"] == 1
+    assert summary["checked_vehicle_trip_set_pairs"] == 1
+    assert summary["violated_vehicle_trip_set_count"] == 1
+    assert summary["maximum_assignment_mass"] == pytest.approx(1.5)
+    assert summary["maximum_assignment_mass_excess"] == pytest.approx(0.5)
+    assert summary["violation_sample"] == [
+        {
+            "vehicle_id": "bus",
+            "trip_ids": ["first", "second"],
+            "assignment_mass": pytest.approx(1.5),
+            "excess": pytest.approx(0.5),
+        }
+    ]
+    assert model.NumBinVars == 3
+
+
 def test_numeric_coefficient_diagnostic_locates_smallest_matrix_row_read_only() -> None:
     class _Variable:
         def __init__(self, name: str) -> None:

@@ -388,6 +388,12 @@ use of the point. Its request default is 30 seconds and it is capped by the
 same Phase-3 wall-clock deadline, so the diagnostic cannot overrun the
 declared Stage-1/Stage-2 budget.
 
+The same read-only diagnostic evaluates the actual LP values against supplied
+maximal sets of mutually overlapping trips for each vehicle. It records any
+violation of `sum(assignments) <= 1`, but never adds those rows to Stage 1.
+This separates a proven, violated candidate inequality from a redundant one
+before a controlled formulation change is considered.
+
 The frozen 264-trip artifact at `output/2026-08-24/run_20260824_0119/`
 exercised that diagnostic at clean SHA `3a063f6` with the same prepared-input
 SHA-256, 4 threads, `Method=2`, `Crossover=0`, and a 300-second cap. It
