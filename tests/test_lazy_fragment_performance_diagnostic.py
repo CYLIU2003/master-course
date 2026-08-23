@@ -13,6 +13,7 @@ from scripts.build_lazy_fragment_performance_diagnostic import (
     build_comparison,
     build_pure_ice_ab_comparison,
     build_repeated_pure_ice_ab_comparison,
+    collect_pure_ice_case_metrics,
     compile_phase3_pure_ice_ab_request,
     write_comparison_outputs,
     write_pure_ice_ab_outputs,
@@ -320,6 +321,62 @@ def test_runtime_environment_snapshot_has_required_reproducibility_fields() -> N
     assert snapshot["operating_system"]["platform"]
     assert "logical_cpu_count" in snapshot["hardware"]
     assert "total_physical_memory_bytes" in snapshot["hardware"]
+
+
+def test_pure_ice_metrics_preserves_presolve_callback_timestamp(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import scripts.build_lazy_fragment_performance_diagnostic as diagnostic
+
+    payloads = {
+        "canonical_solver_result.json": {
+            "trip_count_served": 264,
+            "trip_count_unserved": 0,
+            "duties": [],
+            "metadata": {},
+            "solver_metadata": {
+                "stage1_search_telemetry": {
+                    "last_presolve_callback_runtime_sec": 0.75,
+                },
+                "stage1_gurobi_search_controls": {"presolve": 2},
+            },
+        },
+        "solver_settings.json": {
+            "time_limit_seconds_effective": 900,
+            "mip_gap_requested_ratio": 0.01,
+        },
+        "optimization_parameters.json": {
+            "canonical_input_dimensions": {},
+            "effective_optimization_config": {"random_seed": 42},
+        },
+        "run_input_manifest.json": {
+            "git_sha": "frozen-sha",
+            "prepared_input_id": "prepared-input",
+            "prepared_source_sha256": "prepared-hash",
+        },
+        "summary.json": {},
+    }
+    monkeypatch.setattr(
+        diagnostic,
+        "_read_json",
+        lambda path: payloads[path.name],
+    )
+    monkeypatch.setattr(diagnostic, "_optional_json", lambda _path: {})
+
+    metrics = collect_pure_ice_case_metrics(
+        tmp_path,
+        representation="discrete",
+    )
+
+    assert metrics["timing"]["presolve_time_sec"] == 0.75
+    assert (
+        metrics["timing"]["availability"]["presolve_time_sec"]
+        == "last_presolve_callback_elapsed_from_stage1_optimize_start;"
+        "not_a_dedicated_gurobi_presolve_duration_attribute"
+    )
+    assert metrics["provenance"]["stage1_gurobi_search_controls"] == {
+        "presolve": 2
+    }
 
 
 def test_pure_ice_case_forwards_selector_by_keyword(

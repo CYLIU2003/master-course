@@ -1,5 +1,28 @@
 # Development Notes
 
+## 2026-08-24: Preserve observed Stage-1 presolve telemetry in A/B evidence
+
+- Updated `src/optimization/milp/solver_adapter.py` so the existing read-only
+  Stage-1 search callback records the first/final Gurobi `PRESOLVE` callback
+  timestamps and first `MIP` callback timestamp. The collector explicitly
+  labels the final timestamp as elapsed time from `optimize` start, not a
+  Gurobi-provided exact presolve-duration attribute. It does not change the
+  model, objective, input, solver parameters, callback cuts, or stopping rule.
+- Updated `scripts/build_lazy_fragment_performance_diagnostic.py` to save the
+  final observed timestamp as `presolve_time_sec`, preserve a machine-readable
+  semantics/reason string when no callback is observed, and export effective
+  Stage-1 Gurobi search controls with the A/B provenance. Historical bundles
+  with `null` remain unchanged and are not backfilled.
+- Added callback semantics and A/B extraction regressions in
+  `tests/test_stage1_search_telemetry.py`,
+  `tests/test_milp_fragment_pairwise_reset_cut.py`, and
+  `tests/test_lazy_fragment_performance_diagnostic.py`. Ran
+  `\.venv\Scripts\python.exe -m pytest -q tests\test_milp_fragment_pairwise_reset_cut.py tests\test_stage1_search_telemetry.py tests\test_lazy_fragment_performance_diagnostic.py`:
+  `27 passed in 1.51s`. No new 264-trip run was started; this instrumentation
+  neither changes nor closes the current 1% certificate blocker.
+- After the documentation updates, ran the full suite:
+  `\.venv\Scripts\python.exe -m pytest -q` -> `1560 passed in 79.43s`.
+
 ## 2026-08-24: Thesis submission evidence audit
 
 - Added `docs/notes/THESIS_SUBMISSION_EVIDENCE_AUDIT.md` and linked it from

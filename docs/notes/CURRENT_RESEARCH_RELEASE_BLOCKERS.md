@@ -1,5 +1,16 @@
 # Current research release blockers
 
+## 2026-08-24: A/B presolve observation is explicit, not a release remedy
+
+Future pure-ICE A/B artifacts now save `presolve_time_sec` from the final
+Stage-1 Gurobi `PRESOLVE` callback. The persisted semantics explicitly state
+that it is elapsed time from `optimize` start, not a Gurobi dedicated internal
+presolve-duration attribute; no observed callback stays null with a recorded
+reason. This is read-only observability and also records the effective Stage-1
+search controls. It changes neither model nor solver behavior and has no
+264-trip execution artifact yet. It neither reinterprets the historical null
+values nor closes any gap, sensitivity, or release gate.
+
 ## 2026-08-24: Thesis evidence audit confirms release remains blocked
 
 `docs/notes/THESIS_SUBMISSION_EVIDENCE_AUDIT.md` now maps the required

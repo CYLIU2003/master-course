@@ -518,6 +518,9 @@ def test_milp_blocks_nested_fragments_inside_selected_connection_span() -> None:
     telemetry = result.plan.metadata["stage1_search_telemetry"]
     assert telemetry["schema_version"] == "stage1_search_telemetry_v1"
     assert telemetry["callback_error"] is None
+    assert telemetry["presolve_callback_count"] > 0
+    assert telemetry["last_presolve_callback_runtime_sec"] is not None
+    assert "presolve_timing_semantics" in telemetry
     assert telemetry["final"]["solution_count"] == 0
     assert result.solver_metadata["stage1_search_telemetry"] == telemetry
 

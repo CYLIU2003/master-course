@@ -73,3 +73,26 @@ def test_stage1_search_telemetry_records_first_incumbent_and_final_counts() -> N
     assert result["final"]["solution_count"] == 3
     assert result["final_simplex_iteration_count"] == 123.0
     assert result["final_barrier_iteration_count"] == 4.0
+
+
+def test_stage1_search_telemetry_records_presolve_callback_timestamp() -> None:
+    telemetry = _Stage1SearchTelemetry(requested_gap_ratio=0.01)
+
+    telemetry.record_presolve_callback(runtime_sec=0.25)
+    telemetry.record_presolve_callback(runtime_sec=0.75)
+    telemetry.record_mip_callback(runtime_sec=1.0)
+    result = telemetry.to_dict(
+        final_runtime_sec=2.0,
+        final_incumbent_objective=None,
+        final_best_bound=10.0,
+        final_node_count=0,
+        final_solution_count=0,
+        final_simplex_iteration_count=0,
+        final_barrier_iteration_count=0,
+    )
+
+    assert result["presolve_callback_count"] == 2
+    assert result["first_presolve_callback_runtime_sec"] == 0.25
+    assert result["last_presolve_callback_runtime_sec"] == 0.75
+    assert result["first_mip_callback_runtime_sec"] == 1.0
+    assert "not_a_dedicated_gurobi" in result["presolve_timing_semantics"]

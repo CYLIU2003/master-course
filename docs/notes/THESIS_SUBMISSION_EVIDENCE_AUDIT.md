@@ -28,6 +28,14 @@ input hash, scenario/prepared-input IDs, runtime environment, solver controls,
 threads, seed, time limits, and requested MIP gap. Current machine information
 is a verification observation; it is not substituted for frozen evidence.
 
+The historical five-pair A/B bundle predates a separate presolve observation,
+so its `presolve_time_sec` is correctly null with an availability reason.
+Current code records the final Stage-1 Gurobi `PRESOLVE` callback timestamp for
+future bundles and labels it as elapsed time from `optimize` start rather than
+as a dedicated internal presolve-duration attribute. This code-only telemetry
+change has focused regression coverage but no new 264-trip artifact; it does
+not alter the frozen A/B conclusion or any release gate.
+
 ## Requirement-by-requirement evidence
 
 | Requirement | Evidence | Status and allowed conclusion |

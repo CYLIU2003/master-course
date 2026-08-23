@@ -3305,6 +3305,10 @@ class _Stage1SearchTelemetry:
     first_incumbent_objective: Optional[float] = None
     root_relaxation_bound: Optional[float] = None
     root_relaxation_runtime_sec: Optional[float] = None
+    presolve_callback_count: int = 0
+    first_presolve_callback_runtime_sec: Optional[float] = None
+    last_presolve_callback_runtime_sec: Optional[float] = None
+    first_mip_callback_runtime_sec: Optional[float] = None
     requested_gap_reached_runtime_sec: Optional[float] = None
     incumbent_notification_count: int = 0
     dropped_incumbent_event_count: int = 0
@@ -3407,6 +3411,33 @@ class _Stage1SearchTelemetry:
             self.root_relaxation_runtime_sec = float(runtime)
         self._record_requested_gap_time(event)
 
+    def record_presolve_callback(self, *, runtime_sec: Any) -> None:
+        """Record the elapsed time at a Gurobi ``PRESOLVE`` callback.
+
+        Gurobi exposes no dedicated post-solve presolve-duration attribute.
+        This is therefore an observed callback timestamp measured from the
+        start of ``optimize``, rather than a claim of an exact internal phase
+        duration. It is read-only and must not influence solver control.
+        """
+
+        runtime = self._finite_or_none(runtime_sec)
+        if runtime is None:
+            return
+        self.presolve_callback_count += 1
+        if self.first_presolve_callback_runtime_sec is None:
+            self.first_presolve_callback_runtime_sec = runtime
+        self.last_presolve_callback_runtime_sec = runtime
+
+    def record_mip_callback(self, *, runtime_sec: Any) -> None:
+        """Record the first MIP callback timestamp after presolve."""
+
+        runtime = self._finite_or_none(runtime_sec)
+        if (
+            self.first_mip_callback_runtime_sec is None
+            and runtime is not None
+        ):
+            self.first_mip_callback_runtime_sec = runtime
+
     def record_incumbent(
         self,
         *,
@@ -3465,6 +3496,20 @@ class _Stage1SearchTelemetry:
             "root_relaxation_bound": self.root_relaxation_bound,
             "root_relaxation_runtime_sec": (
                 self.root_relaxation_runtime_sec
+            ),
+            "presolve_timing_semantics": (
+                "last_presolve_callback_elapsed_from_optimize_start;"
+                "not_a_dedicated_gurobi_presolve_duration_attribute"
+            ),
+            "presolve_callback_count": int(self.presolve_callback_count),
+            "first_presolve_callback_runtime_sec": (
+                self.first_presolve_callback_runtime_sec
+            ),
+            "last_presolve_callback_runtime_sec": (
+                self.last_presolve_callback_runtime_sec
+            ),
+            "first_mip_callback_runtime_sec": (
+                self.first_mip_callback_runtime_sec
             ),
             "requested_gap_reached_runtime_sec": (
                 self.requested_gap_reached_runtime_sec
@@ -10089,7 +10134,11 @@ class GurobiMILPAdapter:
         def _capture_first_feasible(_model: Any, where: Any) -> None:
             nonlocal first_feasible_sec
             try:
-                if where == GRB.Callback.MIPSOL:
+                if where == GRB.Callback.PRESOLVE:
+                    integrated_mip_telemetry.record_presolve_callback(
+                        runtime_sec=_model.cbGet(GRB.Callback.RUNTIME)
+                    )
+                elif where == GRB.Callback.MIPSOL:
                     lazy_cut_count = (
                         integrated_fragment_lazy_separator.callback(
                             _model, where
@@ -10117,6 +10166,9 @@ class GurobiMILPAdapter:
                             time.perf_counter() - optimize_started_at
                         )
                 elif where == GRB.Callback.MIP:
+                    integrated_mip_telemetry.record_mip_callback(
+                        runtime_sec=_model.cbGet(GRB.Callback.RUNTIME)
+                    )
                     integrated_mip_telemetry.record_progress(
                         runtime_sec=_model.cbGet(GRB.Callback.RUNTIME),
                         incumbent_objective=_model.cbGet(
@@ -14573,7 +14625,11 @@ class GurobiMILPAdapter:
 
         def _stage1_search_callback(model: Any, where: int) -> None:
             try:
-                if (
+                if where == GRB.Callback.PRESOLVE:
+                    stage1_search_telemetry.record_presolve_callback(
+                        runtime_sec=model.cbGet(GRB.Callback.RUNTIME)
+                    )
+                elif (
                     where == GRB.Callback.MIPNODE
                     and stage1_fragment_lazy_separator is not None
                 ):
@@ -14596,6 +14652,9 @@ class GurobiMILPAdapter:
                         solution_count=model.cbGet(GRB.Callback.MIPSOL_SOLCNT),
                     )
                 elif where == GRB.Callback.MIP:
+                    stage1_search_telemetry.record_mip_callback(
+                        runtime_sec=model.cbGet(GRB.Callback.RUNTIME)
+                    )
                     stage1_search_telemetry.record_progress(
                         runtime_sec=model.cbGet(GRB.Callback.RUNTIME),
                         incumbent_objective=model.cbGet(GRB.Callback.MIP_OBJBST),

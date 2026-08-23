@@ -665,6 +665,9 @@ def collect_pure_ice_case_metrics(
         solver_metadata.get("stage1_search_telemetry") or {}
     )
     stage1_final = dict(stage1_telemetry.get("final") or {})
+    presolve_callback_elapsed_sec = stage1_telemetry.get(
+        "last_presolve_callback_runtime_sec"
+    )
     aggregation = dict(
         plan_metadata.get(
             "stage1_exact_combustion_clone_flow_aggregation_audit"
@@ -767,6 +770,9 @@ def collect_pure_ice_case_metrics(
                     "stage2_gurobi_integrality_tol",
                 )
             },
+            "stage1_gurobi_search_controls": dict(
+                solver_metadata.get("stage1_gurobi_search_controls") or {}
+            ),
         },
         "model_size": {
             "total_variables": solver_metadata.get("stage1_model_variable_count"),
@@ -806,7 +812,7 @@ def collect_pure_ice_case_metrics(
             "complete_model_build_time_sec": solver_metadata.get(
                 "stage1_pre_optimize_seconds"
             ),
-            "presolve_time_sec": None,
+            "presolve_time_sec": presolve_callback_elapsed_sec,
             "root_relaxation_time_sec": stage1_telemetry.get(
                 "root_relaxation_runtime_sec"
             ),
@@ -825,7 +831,12 @@ def collect_pure_ice_case_metrics(
                 "constraint_construction_time_sec": (
                     "included_in_complete_model_build_time_sec"
                 ),
-                "presolve_time_sec": "not_separately_exposed_by_gurobi",
+                "presolve_time_sec": (
+                    "last_presolve_callback_elapsed_from_stage1_optimize_start;"
+                    "not_a_dedicated_gurobi_presolve_duration_attribute"
+                    if presolve_callback_elapsed_sec is not None
+                    else "no_stage1_presolve_callback_observed"
+                ),
             },
         },
         "solve_outcome": {

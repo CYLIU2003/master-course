@@ -58,6 +58,14 @@ was lower. Both representations remained time-limited and missed the 1% gap
 target (19.2273% discrete; 3.0775% aggregate); their different feasible
 incumbents are not an optimality or cost comparison.
 
+The frozen bundle predates separate presolve telemetry and therefore correctly
+records `presolve_time_sec=null` rather than inventing a value. Current
+`build_lazy_fragment_performance_diagnostic.py` collects the elapsed time of
+the final Stage-1 Gurobi `PRESOLVE` callback for future A/B runs. Its artifact
+semantics explicitly say this is a callback timestamp from the start of
+`optimize`, not a dedicated Gurobi internal presolve-duration attribute; an
+absent callback remains `null` with its reason recorded.
+
 ## 2026-08-24 current-SHA oracle, stress, and economic refresh
 
 At clean SHA `93e31b079d9c92028181a72bfd1062bac1dcbedc`, the bounded oracle
