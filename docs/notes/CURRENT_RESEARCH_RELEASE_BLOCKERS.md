@@ -74,6 +74,15 @@ cost response (and zero-grid-import electricity candidates) is therefore not
 an economic-response conclusion. The full-network certified-gap blocker
 remains unchanged.
 
+The fresh `9650ed9` 0/20,000-JPY vehicle-day-cost matrix at
+`output/thesis_economic_vehicle_day_9650ed9_20260824/` confirms that the
+declared fixed cost reaches the model and canonical accounting: 32 vehicle
+days produce exactly 640,000 JPY at 20,000 JPY/day. The paid case's certified
+gap improves to 1.7803% but still misses 1%; both cases are therefore
+`BLOCKED`. It establishes input/accounting propagation only. Executing more
+full-scale economic rows before the common certified-gap blocker is repaired
+would not supply release-eligible sensitivity evidence.
+
 ## 2026-08-23: Current-code pure-ICE aggregation A/B is structural-only
 
 The normal candidate's solver telemetry is root-bound dominated: the

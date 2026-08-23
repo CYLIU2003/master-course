@@ -85,6 +85,16 @@
   Every price case is `BLOCKED` solely by its roughly 19.2273% Stage-1 gap;
   price propagation is verified, but neither matrix supports an economically
   optimal dispatch-response claim.
+- Clean `9650ed9` then reran the 0/20,000-JPY fixed vehicle-day-cost pair at
+  `output/thesis_economic_vehicle_day_9650ed9_20260824/`. Both cases retain
+  the same stable non-varied controls and all physical/Rolling/accounting
+  checks; the vehicle-day audit confirms 32 vehicle-days and exactly
+  640,000 JPY = 32 × 20,000 JPY at the paid condition. Its cost is
+  704,422.491318 JPY and its certified gap is 1.7803%, so it too fails only
+  `mip_gap_target_met`. This is a correctly propagated fixed-cost diagnostic,
+  not an accepted economic response. Further current full-network economic
+  rows remain deliberately unrun as formal evidence until the common 1% gap
+  blocker is closed.
 
 ## 2026-08-23: Stage-1 coefficient-source diagnostic is read-only and fail-closed
 

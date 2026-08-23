@@ -61,6 +61,15 @@ non-varied controls, zero grid import, and equal candidate costs, but also
 misses the same gap. These are input-provenance/candidate diagnostics, not
 economic-response conclusions.
 
+The clean-`9650ed9` vehicle-day-cost matrix at
+`output/thesis_economic_vehicle_day_9650ed9_20260824/` likewise remains
+`BLOCKED` only by the MIP gap. Its 0 and 20,000-JPY/vehicle-day cases both use
+32 vehicle-days; the latter records exactly 640,000 JPY of fixed vehicle-day
+cost and a 704,422.491318-JPY candidate total. Its smaller 1.7803% gap still
+misses the declared 1% gate. Repeating remaining economic matrix rows before
+closing this common full-network gap would not create research-ready
+comparisons, so they remain diagnostic work rather than formal conclusions.
+
 ## 2026-08-24 current-SHA 8/12/24-trip integrated-oracle refresh
 
 The frozen tag `small-integrated-oracle-f0240cc` reran the isolated-process
