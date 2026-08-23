@@ -63,6 +63,11 @@
   the same runtime snapshot into its parent provenance. The scale certificate
   therefore needs its own fresh clean-commit run; older scale artifacts remain
   historical bounded checks only.
+- A direct invocation initially exposed that the wrapper imported the BFF
+  helper before adding the repository root to `sys.path`. The import ordering
+  is corrected, and a subprocess `--help` regression now executes it from the
+  `scripts/` directory. This prevents a test-only import path from masking an
+  unusable experiment command.
 
 ## 2026-08-23: Current-SHA diesel-price response tranche
 

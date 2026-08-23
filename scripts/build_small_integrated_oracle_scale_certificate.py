@@ -18,10 +18,14 @@ import subprocess
 import sys
 from typing import Any, Mapping, Sequence
 
-from bff.services.optimization_run.input_provenance import _runtime_environment
-
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from bff.services.optimization_run.input_provenance import _runtime_environment  # noqa: E402
+
+
 SCHEMA_VERSION = "small_integrated_oracle_scale_certificate_v1"
 DEFAULT_TRIP_COUNTS = (8, 12, 24)
 

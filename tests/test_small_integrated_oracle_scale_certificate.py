@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from pathlib import Path
+import subprocess
+import sys
+
 from copy import deepcopy
 
 import pytest
@@ -8,6 +12,23 @@ from scripts.build_small_integrated_oracle_scale_certificate import (
     build_scale_certificate,
     normalize_trip_counts,
 )
+
+
+def test_scale_certificate_cli_help_runs_from_scripts_directory() -> None:
+    script = Path(__file__).resolve().parents[1] / "scripts" / (
+        "build_small_integrated_oracle_scale_certificate.py"
+    )
+
+    completed = subprocess.run(
+        [sys.executable, str(script), "--help"],
+        cwd=script.parent,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert "--gurobi-threads" in completed.stdout
 
 
 def _exact_case(phase: str, *, cost: float) -> dict:
