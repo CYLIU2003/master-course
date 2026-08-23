@@ -2266,6 +2266,101 @@ def _gurobi_numeric_diagnostics(model: Any) -> Dict[str, Any]:
     return diagnostics
 
 
+def _stage1_numeric_coefficient_diagnostic(
+    model: Any,
+    *,
+    max_examples: int = 20,
+) -> Dict[str, Any]:
+    """Locate the smallest Stage-1 matrix coefficients without mutation.
+
+    Gurobi's ``MinCoeff`` attribute establishes that a scaling issue exists,
+    but it does not identify the originating rows. This opt-in diagnostic
+    scans the already-built linear matrix only. It never changes a variable,
+    constraint, objective, bound, parameter, or solution, so it is evidence
+    for formulation diagnosis rather than a modified research solve.
+    """
+
+    diagnostic: Dict[str, Any] = {
+        "enabled": True,
+        "status": "not_run",
+        "semantics": (
+            "read_only_scan_of_completed_stage1_linear_constraint_matrix; "
+            "never_changes_variables_constraints_objective_bounds_or_solver_parameters; "
+            "diagnostic_only_not_research_result_evidence"
+        ),
+        "maximum_examples": max(int(max_examples), 1),
+    }
+    started = time.perf_counter()
+    try:
+        model.update()
+        constraints = tuple(model.getConstrs())
+        minimum_absolute_coefficient: Optional[float] = None
+        maximum_absolute_coefficient: Optional[float] = None
+        minimum_examples: List[Dict[str, Any]] = []
+        scanned_nonzero_coefficient_count = 0
+
+        for constraint in constraints:
+            row = model.getRow(constraint)
+            for index in range(int(row.size())):
+                coefficient = float(row.getCoeff(index))
+                absolute_coefficient = abs(coefficient)
+                if not math.isfinite(absolute_coefficient):
+                    raise RuntimeError(
+                        "completed Stage-1 matrix contains a non-finite coefficient"
+                    )
+                if absolute_coefficient == 0.0:
+                    continue
+                scanned_nonzero_coefficient_count += 1
+                maximum_absolute_coefficient = max(
+                    maximum_absolute_coefficient or 0.0,
+                    absolute_coefficient,
+                )
+                example = {
+                    "constraint_name": str(getattr(constraint, "ConstrName", "")),
+                    "constraint_sense": str(getattr(constraint, "Sense", "")),
+                    "constraint_rhs": float(getattr(constraint, "RHS", 0.0)),
+                    "variable_name": str(
+                        getattr(row.getVar(index), "VarName", "")
+                    ),
+                    "coefficient": coefficient,
+                    "absolute_coefficient": absolute_coefficient,
+                }
+                if (
+                    minimum_absolute_coefficient is None
+                    or absolute_coefficient < minimum_absolute_coefficient
+                ):
+                    minimum_absolute_coefficient = absolute_coefficient
+                    minimum_examples = [example]
+                elif math.isclose(
+                    absolute_coefficient,
+                    minimum_absolute_coefficient,
+                    rel_tol=1.0e-12,
+                    abs_tol=0.0,
+                ) and len(minimum_examples) < diagnostic["maximum_examples"]:
+                    minimum_examples.append(example)
+
+        diagnostic.update(
+            {
+                "status": "ok",
+                "scanned_constraint_count": len(constraints),
+                "scanned_nonzero_coefficient_count": scanned_nonzero_coefficient_count,
+                "minimum_absolute_coefficient": minimum_absolute_coefficient,
+                "maximum_absolute_coefficient": maximum_absolute_coefficient,
+                "minimum_coefficient_examples": minimum_examples,
+            }
+        )
+    except Exception as exc:
+        diagnostic.update(
+            {
+                "status": "failed",
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+        )
+    finally:
+        diagnostic["scan_runtime_seconds"] = float(time.perf_counter() - started)
+    return diagnostic
+
+
 def _has_exact_mip_optimality_certificate(
     solver_status: str,
     mip_gap: Optional[float],
@@ -14051,6 +14146,20 @@ class GurobiMILPAdapter:
                 "separate_continuous_relaxation_is_not_part_of_the_stage1_mip"
             ),
         }
+        stage1_numeric_coefficient_diagnostic = {
+            "enabled": False,
+            "status": "disabled_by_config",
+            "semantics": (
+                "read_only_scan_of_completed_stage1_linear_constraint_matrix; "
+                "diagnostic_only_not_research_result_evidence"
+            ),
+        }
+        if bool(
+            getattr(config, "stage1_numeric_coefficient_diagnostic_enabled", False)
+        ):
+            stage1_numeric_coefficient_diagnostic = (
+                _stage1_numeric_coefficient_diagnostic(stage1)
+            )
         if bool(getattr(config, "stage1_root_lp_diagnostic_enabled", False)):
             remaining_before_root_lp_diagnostic_sec = max(
                 float(feedback_global_deadline) - time.monotonic(),
@@ -14351,6 +14460,9 @@ class GurobiMILPAdapter:
                         _configured_gurobi_integrality_tol(config, stage=2)
                     ),
                     "stage1_numeric_diagnostics": stage1_numeric_diagnostics,
+                    "stage1_numeric_coefficient_diagnostic": (
+                        stage1_numeric_coefficient_diagnostic
+                    ),
                     "stage1_root_lp_diagnostic": stage1_root_lp_diagnostic,
                     "stage1_mip_gap_ratio": stage1_gap,
                     "stage1_runtime_seconds": float(time.perf_counter() - total_started),
@@ -14727,6 +14839,9 @@ class GurobiMILPAdapter:
                     _configured_gurobi_integrality_tol(config, stage=2)
                 ),
                 "stage1_numeric_diagnostics": stage1_numeric_diagnostics,
+                "stage1_numeric_coefficient_diagnostic": (
+                    stage1_numeric_coefficient_diagnostic
+                ),
                 "stage1_root_lp_diagnostic": stage1_root_lp_diagnostic,
                 "stage1_mip_gap_ratio": stage1_gap,
                 "stage1_runtime_seconds": float(
@@ -19603,6 +19718,9 @@ class GurobiMILPAdapter:
                 "symmetry": int(stage1.Params.Symmetry),
             },
             "stage1_root_lp_diagnostic": stage1_root_lp_diagnostic,
+            "stage1_numeric_coefficient_diagnostic": (
+                stage1_numeric_coefficient_diagnostic
+            ),
             "stage1_runtime_seconds": stage1_total_solver_runtime_sec,
             "stage1_primary_runtime_seconds": stage1_primary_runtime_sec,
             "stage1_primary_search_time_limit_seconds": (

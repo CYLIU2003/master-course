@@ -27,6 +27,7 @@ from src.optimization.milp.solver_adapter import (
     _configured_stage1_gurobi_search_controls,
     _has_exact_mip_optimality_certificate,
     _single_path_flow_implies_temporal_exclusivity,
+    _stage1_numeric_coefficient_diagnostic,
     _stage1_termination_reason,
     _stage1_root_lp_diagnostic,
 )
@@ -178,6 +179,109 @@ def test_root_lp_diagnostic_reports_fractional_assignment_without_mutating_mip()
     assert diagnostic["assignment_summary"]["trips_split_across_multiple_vehicle_labels"] == 0
     assert diagnostic["vehicle_activation_summary"]["fractional_activation_count"] == 1
     assert model.NumBinVars == 2
+
+
+def test_numeric_coefficient_diagnostic_locates_smallest_matrix_row_read_only() -> None:
+    class _Variable:
+        def __init__(self, name: str) -> None:
+            self.VarName = name
+
+    class _Row:
+        def __init__(self, entries: list[tuple[_Variable, float]]) -> None:
+            self._entries = entries
+
+        def size(self) -> int:
+            return len(self._entries)
+
+        def getCoeff(self, index: int) -> float:
+            return self._entries[index][1]
+
+        def getVar(self, index: int) -> _Variable:
+            return self._entries[index][0]
+
+    class _Constraint:
+        def __init__(self, name: str, rhs: float) -> None:
+            self.ConstrName = name
+            self.Sense = "="
+            self.RHS = rhs
+
+    class _Model:
+        def __init__(self) -> None:
+            self.updated = False
+            self._first = _Constraint("energy_balance", 0.0)
+            self._second = _Constraint("soc_link", 1.0)
+            self._rows = {
+                self._first: _Row(
+                    [(_Variable("charge_kw"), 1450.0), (_Variable("loss"), 1.0e-6)]
+                ),
+                self._second: _Row(
+                    [(_Variable("soc"), -1.0e-7), (_Variable("reserve"), 1.0e-7)]
+                ),
+            }
+
+        def update(self) -> None:
+            self.updated = True
+
+        def getConstrs(self) -> list[_Constraint]:
+            return [self._first, self._second]
+
+        def getRow(self, constraint: _Constraint) -> _Row:
+            return self._rows[constraint]
+
+    model = _Model()
+
+    diagnostic = _stage1_numeric_coefficient_diagnostic(
+        model,
+        max_examples=1,
+    )
+
+    assert model.updated is True
+    assert diagnostic["status"] == "ok"
+    assert diagnostic["scanned_constraint_count"] == 2
+    assert diagnostic["scanned_nonzero_coefficient_count"] == 4
+    assert diagnostic["minimum_absolute_coefficient"] == pytest.approx(1.0e-7)
+    assert diagnostic["maximum_absolute_coefficient"] == pytest.approx(1450.0)
+    assert diagnostic["minimum_coefficient_examples"] == [
+        {
+            "constraint_name": "soc_link",
+            "constraint_sense": "=",
+            "constraint_rhs": 1.0,
+            "variable_name": "soc",
+            "coefficient": -1.0e-7,
+            "absolute_coefficient": 1.0e-7,
+        }
+    ]
+
+
+@pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
+def test_numeric_coefficient_diagnostic_reads_actual_gurobi_constraint_rows() -> None:
+    from src.gurobi_runtime import ensure_gurobi
+
+    gp, _ = ensure_gurobi()
+    model = gp.Model("numeric_coefficient_diagnostic")
+    model.Params.OutputFlag = 0
+    variable = model.addVar(name="charge_kw")
+    model.addConstr(1.0e-6 * variable <= 1.0, name="small_coefficient")
+    model.addConstr(4.0 * variable <= 4.0, name="ordinary_coefficient")
+    model.update()
+
+    diagnostic = _stage1_numeric_coefficient_diagnostic(model)
+
+    assert diagnostic["status"] == "ok"
+    assert diagnostic["minimum_absolute_coefficient"] == pytest.approx(1.0e-6)
+    assert diagnostic["maximum_absolute_coefficient"] == pytest.approx(4.0)
+    assert diagnostic["minimum_coefficient_examples"] == [
+        {
+            "constraint_name": "small_coefficient",
+            "constraint_sense": "<",
+            "constraint_rhs": 1.0,
+            "variable_name": "charge_kw",
+            "coefficient": 1.0e-6,
+            "absolute_coefficient": 1.0e-6,
+        }
+    ]
+    assert model.NumVars == 1
+    assert model.NumConstrs == 2
 
 
 def test_gurobi_feasibility_tolerances_are_stage_specific_and_validated() -> None:

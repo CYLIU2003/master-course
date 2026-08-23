@@ -383,6 +383,12 @@ class OptimizationConfig:
     # This small default prevents an opt-in observation from consuming the
     # declared Stage-1/Stage-2 research budget.
     stage1_root_lp_diagnostic_time_limit_sec: int = 30
+    # Opt-in, read-only scan of the completed Stage-1 constraint matrix.  It
+    # identifies the rows and variables that attain the smallest nonzero
+    # coefficient reported by Gurobi's aggregate numeric diagnostics.  The
+    # scan never adds or changes model content or solver controls and is
+    # diagnostic-only, not research-result evidence.
+    stage1_numeric_coefficient_diagnostic_enabled: bool = False
     # The default lazy separator keeps exact fragment-transition rows out of
     # the root LP. ``lifted_root`` adds compact, integer-equivalent lifted
     # aggregates; ``lazy_root_cuts`` submits violated rows at fractional nodes;

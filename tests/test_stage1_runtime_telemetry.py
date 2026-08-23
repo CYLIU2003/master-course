@@ -208,6 +208,33 @@ def test_single_manual_run_cannot_claim_runtime_comparison_after_disabling_stop_
     assert claim_scope["evidence"]["stage1_stop_rule_runtime_control_eligible"] is True
 
 
+def test_explicit_diagnostic_result_cannot_claim_physical_or_research_evidence() -> None:
+    claim_scope = _research_claim_scope_payload(
+        optimization_result={
+            "run_profile": "day_ahead_and_hourly_rolling",
+            "solver_metadata": {
+                "research_run": True,
+                "research_run_accepted": False,
+                "research_submission_git_provenance_eligible": True,
+                "diagnostic_mode": True,
+                "result_class": "debug_result",
+            },
+            "solution_validity": {"validated_feasible": True},
+        },
+        solver_settings={},
+        weather_policy={"enabled": False},
+        rolling_execution={"status": "executed_and_accepted"},
+    )
+
+    assert claim_scope["diagnostic_only"] is True
+    assert claim_scope["blocking_reason"] == "explicit_diagnostic_run"
+    assert claim_scope["result_label"] == (
+        "diagnostic_run_not_used_for_research_conclusions"
+    )
+    assert claim_scope["allowed_claims"] == []
+    assert claim_scope["research_submission_ready"] is False
+
+
 def test_teacher_release_preserves_vehicle_inventory_blocker() -> None:
     claim_scope = _research_claim_scope_payload(
         optimization_result={

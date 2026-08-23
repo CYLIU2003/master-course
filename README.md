@@ -383,6 +383,17 @@ The pure-ICE A/B harness also now forwards the complete Stage-1 diagnostic,
 search-profile, and fragment-cut controls to its synchronous worker, so future
 AB/BA runs cannot silently shift their positional arguments.
 
+The separate opt-in
+`stage1_numeric_coefficient_diagnostic_enabled` request flag is default-OFF
+and scans the completed Stage-1 linear matrix without changing variables,
+constraints, bounds, objective, starts, or Gurobi parameters. It records up to
+20 row/variable locations attaining the smallest nonzero coefficient, along
+with the scan count and elapsed time, so the existing coefficient-range warning
+can be traced to a specific formulation term. The BFF labels a request using
+this flag as diagnostic-only and its output is ineligible for research
+acceptance. A fresh clean-SHA 264-trip BFF artifact is required before any
+mathematically equivalent rescaling or tightening is considered.
+
 ## 2026-08-23 electricity-price sensitivity status
 
 The fresh three-point Phase-3 frontend/BFF bundle at

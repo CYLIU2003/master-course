@@ -9,6 +9,15 @@ certified 52,724.471363-JPY analytical lower bound, while the incumbent is
 already includes the required BEV return-to-initial and BESS terminal
 contracts; no unsafe constraint weakening is proposed.
 
+The current code now has a default-OFF read-only coefficient-source diagnostic
+for this warning. It scans the completed Stage-1 matrix and records the rows
+and variables attaining the smallest nonzero coefficients, but never changes
+the model, starts, bounds, objective, or Gurobi controls. Enabling it forces a
+diagnostic-only BFF result and cannot satisfy research acceptance. A fresh
+clean-SHA 264-trip artifact is required to identify a mathematically justified
+next formulation change; until then the release remains blocked by the 1% MIP
+gap rather than by an asserted scaling remedy.
+
 An opt-in, default-OFF redundant trip-level electric selector has been added
 for a controlled representation test. The two-trip physical fixture preserves
 the integer assignment and Stage-1 objective with the flag ON/OFF, but that is

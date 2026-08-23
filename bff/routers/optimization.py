@@ -866,6 +866,7 @@ class RunOptimizationBody(BaseModel):
         ge=1,
         le=300,
     )
+    stage1_numeric_coefficient_diagnostic_enabled: bool = False
     stage1_fragment_transition_cut_mode: Literal[
         "lazy", "lifted_root", "lazy_root_cuts", "explicit_root"
     ] = "lazy"
@@ -6705,6 +6706,11 @@ def _research_claim_scope_payload(
 
     metadata = dict(optimization_result.get("solver_metadata") or {})
     solution_validity = dict(optimization_result.get("solution_validity") or {})
+    is_diagnostic_result = bool(
+        metadata.get("diagnostic_mode", False)
+        or metadata.get("debug_mode", False)
+        or str(metadata.get("result_class") or "") == "debug_result"
+    )
     decision_policy = dict(
         (weather_policy.get("audit") or {}).get("decision_policy")
         or weather_policy.get("decision_policy")
@@ -6840,7 +6846,9 @@ def _research_claim_scope_payload(
     )
     teacher_release_failed_checks = sorted(set(teacher_release_failed_checks))
     research_submission_ready = not teacher_release_failed_checks
-    if weather_enabled and policy_scope == "pv_curve_only":
+    if is_diagnostic_result:
+        result_label = "diagnostic_run_not_used_for_research_conclusions"
+    elif weather_enabled and policy_scope == "pv_curve_only":
         result_label = "exploratory_pv_supply_sensitivity_not_weather_adaptive_dispatch"
     elif weather_enabled:
         result_label = "manual_weather_policy_day_ahead_result_not_formal_comparison"
@@ -6856,6 +6864,8 @@ def _research_claim_scope_payload(
         allowed_claims.append(
             "all_available_bev_minimum_use_policy_feasibility"
         )
+    if is_diagnostic_result:
+        allowed_claims = []
     disallowed_claims = [
         "integrated_global_total_cost_optimum",
         "actual_monthly_demand_charge_savings",
@@ -6875,14 +6885,18 @@ def _research_claim_scope_payload(
     # the way, but it cannot itself establish a runtime comparison.  That also
     # needs matched cross-case controls and repeated measurements.
     disallowed_claims.append("wall_clock_runtime_comparison")
-    nonformal_markers = (
-        {
+    if is_diagnostic_result:
+        nonformal_markers = {
+            "diagnostic_only": True,
+            "blocking_reason": "explicit_diagnostic_run",
+        }
+    elif not bool(metadata.get("research_run", False)):
+        nonformal_markers = {
             "diagnostic_only": True,
             "blocking_reason": "dirty_or_nonformal_run",
         }
-        if not bool(metadata.get("research_run", False))
-        else {}
-    )
+    else:
+        nonformal_markers = {}
 
     return {
         "schema_version": "research_claim_scope_v1",
@@ -11178,6 +11192,9 @@ def _solver_settings_payload(
         "stage1_root_lp_diagnostic": dict(
             metadata.get("stage1_root_lp_diagnostic") or {}
         ),
+        "stage1_numeric_coefficient_diagnostic": dict(
+            metadata.get("stage1_numeric_coefficient_diagnostic") or {}
+        ),
         "stage2_numeric_diagnostics": dict(
             metadata.get("stage2_numeric_diagnostics") or {}
         ),
@@ -11277,6 +11294,7 @@ def _run_optimization(
     integrated_actual_cost_upper_bound_jpy: Optional[float] = None,
     integrated_actual_cost_upper_bound_delta_ratio: Optional[float] = None,
     co2_emissions_cap_kg: Optional[float] = None,
+    stage1_numeric_coefficient_diagnostic_enabled: bool = False,
 ) -> None:
     output_dir: Optional[str] = None
     raw_frontend_request_payload = dict(frontend_request_payload or {})
@@ -11468,7 +11486,11 @@ def _run_optimization(
             )
             phase_token = _phase_from_solver_mode(solver_mode)
             requested_phase = phase_token or solver_mode
-            is_diagnostic_mode = solver_mode == "diagnostic" or solver_mode == "debug_mode"
+            is_diagnostic_mode = (
+                solver_mode == "diagnostic"
+                or solver_mode == "debug_mode"
+                or bool(stage1_numeric_coefficient_diagnostic_enabled)
+            )
             prepared_cost_cfg = dict(
                 ((scenario.get("scenario_overlay") or {}).get("cost_coefficients") or {})
             )
@@ -11497,6 +11519,9 @@ def _run_optimization(
                 ),
                 stage1_root_lp_diagnostic_time_limit_sec=max(
                     int(stage1_root_lp_diagnostic_time_limit_seconds), 1
+                ),
+                stage1_numeric_coefficient_diagnostic_enabled=bool(
+                    stage1_numeric_coefficient_diagnostic_enabled
                 ),
                 stage1_fragment_transition_cut_mode=str(
                     stage1_fragment_transition_cut_mode or "lazy"
@@ -11701,6 +11726,9 @@ def _run_optimization(
                     "stage2_time_limit_seconds": stage2_time_limit_seconds,
                     "stage1_best_obj_stop_enabled": bool(
                         stage1_best_obj_stop_enabled
+                    ),
+                    "stage1_numeric_coefficient_diagnostic_enabled": bool(
+                        stage1_numeric_coefficient_diagnostic_enabled
                     ),
                     "stage1_stage2_candidate_limit": (
                         opt_config.stage1_stage2_candidate_limit
@@ -13951,6 +13979,7 @@ def run_optimization(
             request.integrated_actual_cost_upper_bound_jpy,
             request.integrated_actual_cost_upper_bound_delta_ratio,
             request.co2_emissions_cap_kg,
+            request.stage1_numeric_coefficient_diagnostic_enabled,
         ),
         job_id=job.job_id,
         scenario_id=scenario_id,

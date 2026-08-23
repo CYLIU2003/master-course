@@ -1,5 +1,19 @@
 # Development Notes
 
+## 2026-08-23: Stage-1 coefficient-source diagnostic is read-only and fail-closed
+
+- The 264-trip Stage-1 telemetry reports a coefficient range of about
+  `1.45e9`, above the explicit scaling-warning threshold, while its root bound
+  remains unchanged. The new default-OFF
+  `stage1_numeric_coefficient_diagnostic_enabled` flag scans the completed
+  Gurobi linear matrix and exports the row/variable locations of the smallest
+  nonzero coefficients (capped at 20 examples).
+- The diagnostic performs no formulation or solver-control modification. The
+  BFF marks an enabled request as `diagnostic_mode`, so its result cannot pass
+  the research acceptance gate or be used for performance, cost, feasibility,
+  or optimality conclusions. A clean frozen 264-trip BFF execution is pending;
+  until then this is implementation and unit-test evidence only.
+
 ## 2026-08-23: Charger-capacity candidate set is comparable but gap-blocked
 
 - Frozen tag `economic-charger-capacity-dde40a1` completed the normal BFF
