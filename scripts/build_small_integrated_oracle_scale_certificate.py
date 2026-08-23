@@ -26,7 +26,7 @@ if str(REPO_ROOT) not in sys.path:
 from bff.services.optimization_run.input_provenance import _runtime_environment  # noqa: E402
 
 
-SCHEMA_VERSION = "small_integrated_oracle_scale_certificate_v1"
+SCHEMA_VERSION = "small_integrated_oracle_scale_certificate_v2"
 DEFAULT_TRIP_COUNTS = (8, 12, 24)
 
 
@@ -217,7 +217,8 @@ def build_scale_certificate(
         "schema_version": SCHEMA_VERSION,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "status": "VERIFIED_BOUNDED_SMALL_INSTANCES" if verified else "BLOCKED",
-        "research_conclusion_eligible": verified,
+        "bounded_formulation_conclusion_eligible": verified,
+        "research_conclusion_eligible": False,
         "formal_full_network_optimality_substitute": False,
         "scope_warning": (
             "Deterministic day-spanning small instances only; this certificate "

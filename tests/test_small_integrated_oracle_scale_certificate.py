@@ -107,6 +107,8 @@ def test_scale_certificate_accepts_complete_exact_series() -> None:
     assert certificate["mean_two_stage_approx_gap_ratio"] == pytest.approx(0.01)
     assert certificate["approx_gap_not_identifiable_trip_counts"] == []
     assert certificate["formal_full_network_optimality_substitute"] is False
+    assert certificate["bounded_formulation_conclusion_eligible"] is True
+    assert certificate["research_conclusion_eligible"] is False
     assert len(certificate["payload_sha256"]) == 64
     assert certificate["sizes"][0]["command"][-1] == "8"
 

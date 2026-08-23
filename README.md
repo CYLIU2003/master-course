@@ -34,6 +34,9 @@ fixes Gurobi at four threads. The older bundle remains a valid historical
 bounded result but is not the artifact for that stricter contract.
 The isolated 8/12/24/40 scale-certificate wrapper forwards the same fixed
 thread count and records its own runtime snapshot before issuing a new series.
+Its certificate distinguishes `bounded_formulation_conclusion_eligible` from
+`research_conclusion_eligible=false`; a verified small series can never label
+itself as a full research-release conclusion.
 
 ## 2026-08-23 current-SHA diesel-price diagnostic: active cost term, unchanged candidate dispatch
 

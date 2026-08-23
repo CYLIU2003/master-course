@@ -68,6 +68,10 @@
   is corrected, and a subprocess `--help` regression now executes it from the
   `scripts/` directory. This prevents a test-only import path from masking an
   unusable experiment command.
+- Corrected the scale-certificate claim field: a verified bounded series now
+  sets `bounded_formulation_conclusion_eligible=true` but always sets
+  `research_conclusion_eligible=false`. The schema is v2; the former v1
+  `true` value is an overclaiming artifact and is not current evidence.
 
 ## 2026-08-23: Current-SHA diesel-price response tranche
 

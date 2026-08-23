@@ -35,6 +35,10 @@ is required before treating its bounded result as current-code evidence.
 The 8/12/24/40 scale wrapper now forwards those fixed threads to each isolated
 child and records its parent runtime environment; it likewise needs a fresh
 clean-commit series before replacing the historical certificate.
+The prior attested v1 series is also `DIAGNOSTIC` because its
+`research_conclusion_eligible=true` field conflicts with its bounded-only
+scope. Certificate schema v2 fixes the field to `false` permanently and
+records bounded formulation eligibility separately.
 
 ## 2026-08-23: Diesel-price term is active; economic-response release gate remains blocked
 
