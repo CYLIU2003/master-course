@@ -32,6 +32,20 @@
   field, forwarded to `_run_optimization`, and written into the canonical
   problem metadata after the prepared input is materialized. Focused BFF,
   metadata-forwarding, Phase-3, and README tests passed (48 tests).
+- The corrected two-condition frontend/BFF bundle is
+  `output/thesis_powertrain_selector_ab_b890c41_20260823/`, frozen at
+  `b890c410f6c7b7125c1d7d0d721147bac44c4a75`. Its manifest is `BLOCKED` only
+  because each feasible candidate misses the declared 1% gap. Both cases use
+  prepared input `prepared-ee27696fc37f0c7a-f1e18f252e336f1f-8acc7b3a`, the
+  same 264 trips, seed 42, four threads, 900-second request, full successor
+  network, and 60-minute Rolling. OFF has zero selector variables/rows; ON
+  has 264/264. Both have the same Stage-1 incumbent 65,305.688576 JPY,
+  candidate cost 64,422.491318 JPY, 32 vehicles, 48/216 BEV/ICE trips, 264/264
+  service, accepted Rolling and physical validation. Their certified gaps are
+  19.227306637367274% (OFF) and 19.227306637127555% (ON), while Stage-1 solver
+  times are 463.816 and 463.918 seconds respectively. The one-run controlled
+  result shows no benefit; the flag remains default-OFF and does not close any
+  release gate.
 
 ## 2026-08-23: Current-SHA normal frontend/BFF Phase-3 rerun remains a feasible candidate
 

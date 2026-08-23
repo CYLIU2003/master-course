@@ -23,6 +23,16 @@ without a canonical selector record. The queued ON job was stopped. The flag
 now belongs to the optimization request and is persisted into canonical model
 metadata; a fresh two-condition run from the new clean commit is still pending.
 
+That corrected run is now complete at frozen SHA `b890c41` in
+`output/thesis_powertrain_selector_ab_b890c41_20260823/`. The conditions share
+the exact prepared input and all non-representation controls; canonical output
+records 0 selectors for OFF and 264 for ON. Both are physically valid 264-trip
+candidates with accepted 24/24 Rolling, but both remain at a 19.2273066%
+certified Stage-1 gap. Solver time is effectively unchanged (463.816 s OFF;
+463.918 s ON). Therefore this representation has no demonstrated benefit in
+the fixed 264-trip condition, remains default-OFF, and does not alter the
+gap-blocked release verdict.
+
 ## 2026-08-23: Latest normal 264-trip Phase-3 rerun remains gap-blocked
 
 The frozen tag `phase3-current-formal-6e61b80` reran the ordinary BFF path
