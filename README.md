@@ -19,9 +19,15 @@ The first frozen run at `phase3-small-m0-m3-ab55933` is
 incorrectly used only five ICE vehicles while the mixed conditions had ten
 vehicles in total. The frozen trips in fact permit both BEV and ICE; this was
 an implementation error, not an input-compatibility result. The corrected M0
-uses ten ICE vehicles to match the mixed-condition fleet budget and requires a
-new clean-commit execution. The first run's M1/M2/M3 values, including the
-1.1e-11-JPY M2--M3 difference, are not cited as a method-comparison result.
+uses ten ICE vehicles to match the mixed-condition fleet budget. The corrected
+clean-tag run `phase3-small-m0-m3-4445ea3` is
+`output/verification/small_m0_m3/4445ea3_20260823/audit_24.json` (SHA-256
+`d8dce27a1a197705d6da3175bcf12f908089c699eb1c0fd8aba5e3b3ba5d6126`) with
+`PASS_SMALL_SCOPE_ONLY`: M0 and M3 are exact zero-gap scalar-cost optima;
+M1/M2 each serve 24/24 trips; and the matching M2/M3 input hash gives a
+1.0914e-11-JPY difference. The direct small-oracle CLI does not carry the
+frontend phase-token acceptance contract, so this remains bounded
+formulation/approximation evidence—not a formal 264-trip M0--M3 result.
 
 ## 2026-08-23 current-SHA diesel-price diagnostic: active cost term, unchanged candidate dispatch
 

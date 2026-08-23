@@ -31,8 +31,20 @@
   input audit confirms every selected trip allows both BEV and ICE, so the
   earlier explanation of an ICE-compatibility blocker was wrong. The repair
   constructs M0 afresh with ten ICE vehicles—the same total fleet budget as
-  the mixed conditions—and requires a new clean-commit run. No values from
-  the invalid four-method attempt are used for a method-effect claim.
+  the mixed conditions. No values from the invalid four-method attempt are
+  used for a method-effect claim.
+- The repaired clean-tag run `phase3-small-m0-m3-4445ea3` produced
+  `output/verification/small_m0_m3/4445ea3_20260823/audit_24.json` (SHA-256
+  `d8dce27a1a197705d6da3175bcf12f908089c699eb1c0fd8aba5e3b3ba5d6126`) with
+  `PASS_SMALL_SCOPE_ONLY`. M0 is a 10-ICE-vehicle, no-PV/BESS exact scalar-cost
+  optimum at 12,131.306002 JPY; M1 is mixed Phase 3 without PV/BESS at
+  12,163.196412 JPY; M2 is deployed mixed Phase 3 at 577.394095 JPY; and M3
+  is its scalar actual-cost exact oracle at 577.394095 JPY. M2/M3 share
+  declared-input hash
+  `1cc0362caf019d6b08ad50125595be99a754317e877822b1edebe140c87e561b` and
+  differ by 1.0914e-11 JPY. The CLI is a direct bounded-model audit and does
+  not satisfy the frontend phase-token research-acceptance contract; these are
+  not full 264-trip method effects, economics, or release evidence.
 
 ## 2026-08-23: Current-SHA diesel-price response tranche
 

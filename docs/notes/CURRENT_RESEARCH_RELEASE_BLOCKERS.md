@@ -1,6 +1,6 @@
 # Current research release blockers
 
-## 2026-08-23: First bounded M0--M3 attempt is diagnostic; fleet-budget repair pending
+## 2026-08-23: First bounded M0--M3 attempt is diagnostic; repaired rerun remains small-scope
 
 The opt-in `--run-small-m0-m3` path in
 `scripts/audit_small_integrated_weather_milp.py` now defines a small-subset
@@ -15,9 +15,18 @@ five ICE vehicles, while the mixed M1/M2/M3 conditions had ten total vehicles.
 The selected frozen trips actually allow both BEV and ICE; this is an
 implementation defect, not a compatibility result. The artifact is therefore
 `DIAGNOSTIC`, `NOT USED FOR RESEARCH CONCLUSIONS`. The repair gives M0 ten ICE
-vehicles to match the mixed-condition total fleet count and must be rerun from
-a new clean commit. It cannot discharge the 264-trip Phase-3 gap, full-scale
-M0--M3, economic-sensitivity, or global-optimality release gates.
+vehicles to match the mixed-condition total fleet count and was rerun from a
+new clean commit.
+
+That corrected clean-tag execution is now
+`output/verification/small_m0_m3/4445ea3_20260823/audit_24.json` (SHA-256
+`d8dce27a1a197705d6da3175bcf12f908089c699eb1c0fd8aba5e3b3ba5d6126`) and
+returns `PASS_SMALL_SCOPE_ONLY`: M0/M3 are exact scalar-cost optima, M1/M2
+are 24/24 feasible, and M2/M3 have identical declared input hashes with a
+1.0914e-11-JPY difference. This still cannot discharge the 264-trip Phase-3
+gap, full-scale frontend M0--M3, economic-sensitivity, or global-optimality
+release gates, because the direct small-oracle CLI lacks frontend phase-token
+research acceptance and is expressly small-subset only.
 
 ## 2026-08-23: Diesel-price term is active; economic-response release gate remains blocked
 
