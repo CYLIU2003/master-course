@@ -146,6 +146,19 @@ candidates have different dispatches and gaps, so this establishes BESS-state
 and candidate-flow provenance only—not accepted BESS-cost or economic-response
 evidence. The economic-response and research-release gates remain open.
 
+The completed 6/8/10-port charger trial at
+`output/thesis_economic_charger_capacity_ff77ecd_20260823/` is explicitly
+excluded before comparison. Every individual run verifies the requested count,
+264/264 coverage, physical validity, 24/24 Rolling, and accounting, but the
+family manifest correctly found different non-varied-control fingerprints.
+Review traced that discrepancy to `charger_input_sha256`, which described the
+intentionally varied generated inventory and was mistakenly retained in the
+stable-control hash. This is a provenance-definition defect, not evidence of
+an infrastructure effect or another control change. The fixed runner excludes
+only that declared field and has a regression test that still detects vehicle
+input drift. A fresh clean-SHA 6/8/10-port BFF execution is required; the
+excluded trial must not be used for cost, dispatch, or charger-capacity claims.
+
 ## 2026-08-23: Latest normal 264-trip Phase-3 rerun remains gap-blocked
 
 The frozen tag `phase3-current-formal-6e61b80` reran the ordinary BFF path

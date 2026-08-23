@@ -1,5 +1,23 @@
 # Development Notes
 
+## 2026-08-23: Charger-capacity fingerprint defect found before comparison
+
+- The normal BFF completed the 6/8/10-port trial at frozen tag
+  `economic-charger-capacity-ff77ecd` in
+  `output/thesis_economic_charger_capacity_ff77ecd_20260823/`. Every case
+  passed request provenance, 264/264 coverage, physical validation, 24/24
+  Rolling, final accounting, and the effective-count audit, but all missed the
+  1% Stage-1 gap target.
+- Finalization also found a separate provenance defect: the family-aware
+  stable-control fingerprint retained `charger_input_sha256`, even though the
+  generated charger inventory is deliberately varied by this family. The
+  matrix correctly remained `BLOCKED`; this trial is excluded rather than
+  interpreted as a charger-capacity comparison.
+- The fingerprint now excludes only that declared hash for
+  `charger_capacity_sensitivity`; a regression test proves it still detects a
+  vehicle-input change. A new clean frozen commit and fresh BFF 6/8/10-port
+  run are required before any charger result can be recorded.
+
 ## 2026-08-23: BESS on/off candidate-flow response is gap-blocked
 
 - The normal BFF executed `BESS_ON` and `BESS_OFF` at frozen tag

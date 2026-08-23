@@ -1515,6 +1515,7 @@ def _stable_control_fingerprint(
     )
     price_value_set_sha256 = dimensions.get("price_value_set_sha256")
     vehicle_input_sha256 = dimensions.get("vehicle_input_sha256")
+    charger_input_sha256 = dimensions.get("charger_input_sha256")
     energy_asset_control_input_sha256 = dimensions.get(
         "energy_asset_control_input_sha256"
     )
@@ -1527,6 +1528,8 @@ def _stable_control_fingerprint(
     if family == "diesel_price_sensitivity":
         diesel_price = None
         vehicle_input_sha256 = None
+    if family == "charger_capacity_sensitivity":
+        charger_input_sha256 = None
     if family == "pv_supply_transition":
         energy_asset_control_input_sha256 = None
     if family == "bess_asset_ablation":
@@ -1541,7 +1544,7 @@ def _stable_control_fingerprint(
         "trip_structure_control_sha256": trip_structure_control_sha256,
         "vehicle_ids_sha256": dimensions.get("vehicle_ids_sha256"),
         "vehicle_input_sha256": vehicle_input_sha256,
-        "charger_input_sha256": dimensions.get("charger_input_sha256"),
+        "charger_input_sha256": charger_input_sha256,
         "vehicle_type_input_sha256": dimensions.get(
             "vehicle_type_input_sha256"
         ),

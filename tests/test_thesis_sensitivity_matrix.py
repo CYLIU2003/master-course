@@ -623,6 +623,51 @@ def test_energy_stable_fingerprint_excludes_intentional_demand_hash() -> None:
     )
 
 
+def test_charger_stable_fingerprint_excludes_intentional_charger_hash() -> None:
+    case = _case("CHARGER_COUNT_6")
+    common = {
+        "scenario_id": "scenario-a",
+        "canonical_input_dimensions": {
+            "trip_ids_sha256": "trips",
+            "trip_structure_input_sha256": "trip-structure",
+            "vehicle_ids_sha256": "vehicles",
+            "vehicle_input_sha256": "vehicle-input",
+            "charger_input_sha256": "chargers-low",
+            "vehicle_type_input_sha256": "vehicle-types",
+            "depot_input_sha256": "depots",
+            "price_value_set_sha256": "prices",
+            "energy_asset_control_input_sha256": "assets",
+            "objective_weights_sha256": "objective",
+        },
+        "effective_model_metadata": {
+            "service_date": "2025-08-05",
+            "scenario_fleet_contract_hash": "fleet",
+        },
+        "effective_problem_scenario": {},
+    }
+    low = json.loads(json.dumps(common))
+    high = json.loads(json.dumps(common))
+    high["canonical_input_dimensions"]["charger_input_sha256"] = "chargers-high"
+
+    low_hash = _stable_control_fingerprint(
+        case=case,
+        parameters=low,
+        economic_audit={},
+    )
+    assert low_hash == _stable_control_fingerprint(
+        case=case,
+        parameters=high,
+        economic_audit={},
+    )
+
+    high["canonical_input_dimensions"]["vehicle_input_sha256"] = "drift"
+    assert low_hash != _stable_control_fingerprint(
+        case=case,
+        parameters=high,
+        economic_audit={},
+    )
+
+
 def test_legacy_prepared_trip_hash_requires_verified_source(tmp_path: Path) -> None:
     source = tmp_path / "prepared-test.json"
     source.write_text(
