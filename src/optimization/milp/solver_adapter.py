@@ -10,7 +10,7 @@ import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Dict, Iterable, Iterator, List, Literal, Mapping, Optional, Protocol, Sequence, Set, Tuple
+from typing import Any, Collection, Dict, Iterable, Iterator, List, Literal, Mapping, Optional, Protocol, Sequence, Set, Tuple
 
 from src.dispatch.feasibility import FeasibilityEngine, evaluate_startup_feasibility
 from src.dispatch.models import DutyLeg, VehicleDuty
@@ -2654,6 +2654,93 @@ def _acyclic_flow_requires_path_start(
         if int(to_trip.departure_min) <= int(from_trip.departure_min):
             return False
     return True
+
+
+def _add_stage1_activation_start_strengthening(
+    *,
+    model: Any,
+    gp: Any,
+    requested: bool,
+    used_vehicle_vars: Mapping[str, Any],
+    path_start_vars: Mapping[Tuple[str, str], Any],
+    exact_clone_vehicle_ids: Collection[str] = (),
+    acyclic_flow_requires_path_start_certificate: bool,
+) -> Dict[str, Any]:
+    """Optionally add the proven activation-to-path-start Stage-1 rows.
+
+    For a non-aggregated vehicle label, the existing vehicle-day linkage
+    implies that an integral ``used_vehicle=1`` has an assigned trip.  The
+    completed time-ordered path-flow equations then imply that its nonempty
+    integral flow has a path start.  Thus ``used_vehicle <= sum(path_start)``
+    is valid only when the supplied acyclic-flow certificate holds.  Exact
+    clone aggregation has a different aggregate start domain, so it is
+    deliberately excluded rather than approximated with this labelled row.
+    """
+
+    exact_clone_ids = {str(vehicle_id) for vehicle_id in exact_clone_vehicle_ids}
+    used_vehicle_by_id = {
+        str(vehicle_id): variable
+        for vehicle_id, variable in used_vehicle_vars.items()
+    }
+    start_terms_by_vehicle: Dict[str, List[Any]] = {}
+    for (vehicle_id, _trip_id), variable in path_start_vars.items():
+        start_terms_by_vehicle.setdefault(str(vehicle_id), []).append(variable)
+
+    audit: Dict[str, Any] = {
+        "schema_version": "stage1_activation_start_strengthening_v1",
+        "requested": bool(requested),
+        "applied": False,
+        "acyclic_flow_requires_path_start_certificate": bool(
+            acyclic_flow_requires_path_start_certificate
+        ),
+        "exact_clone_vehicle_ids_excluded": sorted(exact_clone_ids),
+        "excluded_exact_clone_vehicle_count": len(
+            set(used_vehicle_by_id).intersection(exact_clone_ids)
+        ),
+        "eligible_vehicle_count": 0,
+        "excluded_missing_path_start_domain_vehicle_count": 0,
+        "constraint_count": 0,
+        "integer_feasible_set_preserved": bool(
+            acyclic_flow_requires_path_start_certificate
+        ),
+        "semantics": (
+            "opt_in_valid_inequality_used_vehicle_less_than_or_equal_to_"
+            "sum_path_start_for_nonaggregated_vehicle_labels_only; "
+            "requires_acyclic_integral_path_flow_and_existing_vehicle_day_"
+            "activation_linkage; exact_clone_aggregate_domain_excluded"
+        ),
+        "reason": "disabled_by_config",
+    }
+    if not requested:
+        return audit
+    if not acyclic_flow_requires_path_start_certificate:
+        raise ValueError(
+            "stage1_activation_start_strengthening requires strictly "
+            "chronological Stage-1 flow arcs"
+        )
+
+    for vehicle_id in sorted(used_vehicle_by_id):
+        if vehicle_id in exact_clone_ids:
+            continue
+        start_terms = start_terms_by_vehicle.get(vehicle_id, ())
+        if not start_terms:
+            audit["excluded_missing_path_start_domain_vehicle_count"] += 1
+            continue
+        model.addConstr(
+            used_vehicle_by_id[vehicle_id] <= gp.quicksum(start_terms),
+            name=f"stage1_activation_requires_path_start__{vehicle_id}",
+        )
+        audit["eligible_vehicle_count"] += 1
+        audit["constraint_count"] += 1
+
+    if int(audit["constraint_count"]) <= 0:
+        raise ValueError(
+            "stage1_activation_start_strengthening has no eligible "
+            "non-aggregated path-start domain"
+        )
+    audit["applied"] = True
+    audit["reason"] = "applied_to_eligible_nonaggregated_vehicle_labels"
+    return audit
 
 
 class _FragmentTransitionLazySeparator:
@@ -13655,6 +13742,31 @@ class GurobiMILPAdapter:
                     <= daily_fragment_limit
                 )
 
+        stage1_activation_start_certificate = (
+            _acyclic_flow_requires_path_start(
+                arc_pairs=arc_pairs,
+                trip_by_id=trip_by_id,
+            )
+        )
+        stage1_activation_start_strengthening = (
+            _add_stage1_activation_start_strengthening(
+                model=stage1,
+                gp=gp,
+                requested=bool(
+                    problem.metadata.get(
+                        "stage1_activation_start_strengthening",
+                        False,
+                    )
+                ),
+                used_vehicle_vars=used_vehicle,
+                path_start_vars=start_arc,
+                exact_clone_vehicle_ids=stage1_exact_clone_vehicle_ids,
+                acyclic_flow_requires_path_start_certificate=(
+                    stage1_activation_start_certificate
+                ),
+            )
+        )
+
         stage1_single_path_redundancy_elimination_applied = (
             _single_path_flow_implies_temporal_exclusivity(
                 max_start_fragments_per_vehicle=max_start_fragments_per_vehicle,
@@ -14446,10 +14558,7 @@ class GurobiMILPAdapter:
                 path_start_vars=start_arc,
                 path_start_count_limit=max_start_fragments_per_vehicle,
                 acyclic_flow_requires_path_start_certificate=(
-                    _acyclic_flow_requires_path_start(
-                        arc_pairs=arc_pairs,
-                        trip_by_id=trip_by_id,
-                    )
+                    stage1_activation_start_certificate
                 ),
                 time_limit_sec=min(
                     requested_root_lp_diagnostic_sec,
@@ -14844,6 +14953,9 @@ class GurobiMILPAdapter:
                         "integral_assignment_redundant_trip_level_electric_"
                         "selector_with_branch_priority"
                     ),
+                    "stage1_activation_start_strengthening": dict(
+                        stage1_activation_start_strengthening
+                    ),
                     "stage1_vehicle_count_lower_bound": (
                         stage1_vehicle_count_lower_bound
                     ),
@@ -15219,6 +15331,9 @@ class GurobiMILPAdapter:
                 "stage1_powertrain_selector_semantics": (
                     "integral_assignment_redundant_trip_level_electric_"
                     "selector_with_branch_priority"
+                ),
+                "stage1_activation_start_strengthening": dict(
+                    stage1_activation_start_strengthening
                 ),
                 "stage1_vehicle_count_lower_bound": (
                     stage1_vehicle_count_lower_bound

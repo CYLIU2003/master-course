@@ -185,6 +185,7 @@ def test_run_optimization_uses_canonical_engine_for_ga_mode() -> None:
             stage1_numeric_coefficient_diagnostic_enabled=False,
             stage1_gurobi_scale_flag=-1,
             stage1_powertrain_selector_strengthening=True,
+            stage1_activation_start_strengthening=True,
             gurobi_threads=4,
             frontend_request_payload={
                 "stage1_best_obj_stop_enabled": True,
@@ -206,6 +207,9 @@ def test_run_optimization_uses_canonical_engine_for_ga_mode() -> None:
     assert config.gurobi_threads == 4
     assert canonical_problem.metadata[
         "stage1_powertrain_selector_strengthening"
+    ] is True
+    assert canonical_problem.metadata[
+        "stage1_activation_start_strengthening"
     ] is True
     assert effective_scenario["simulation_config"]["bev_terminal_soc_policy"] == "return_to_initial"
     assert effective_scenario["simulation_config"]["final_soc_target_percent"] is None
@@ -511,6 +515,7 @@ def test_run_optimization_endpoint_submits_current_prepared_input_job() -> None:
                 stage1_root_lp_diagnostic_enabled=True,
                 stage1_numeric_coefficient_diagnostic_enabled=False,
                 stage1_gurobi_scale_flag=-1,
+                stage1_activation_start_strengthening=True,
             ),
             {"built_ready": True, "built_dir": "data/built/tokyu_full", "routes_df": None},
         )
@@ -523,13 +528,14 @@ def test_run_optimization_endpoint_submits_current_prepared_input_job() -> None:
     assert submitted_args[23] is True
     assert submitted_args[24] == 30
     assert submitted_args[26] is False
+    assert submitted_args[27] is True
     assert submitted_args[-2] is False
     assert submitted_args[-1] == -1
-    assert submitted_args[28] == "day_ahead_and_hourly_rolling"
-    assert submitted_args[29] is True
-    assert submitted_args[30] == 60
-    assert submitted_args[31]["run_hourly_rolling"] is True
-    assert submitted_args[31]["rolling_execution_minutes"] == 60
+    assert submitted_args[29] == "day_ahead_and_hourly_rolling"
+    assert submitted_args[30] is True
+    assert submitted_args[31] == 60
+    assert submitted_args[32]["run_hourly_rolling"] is True
+    assert submitted_args[32]["rolling_execution_minutes"] == 60
 
 
 def test_run_optimization_endpoint_only_allows_day_ahead_with_explicit_profile() -> None:
@@ -607,11 +613,12 @@ def test_run_optimization_endpoint_only_allows_day_ahead_with_explicit_profile()
     assert submitted_args[18] is False
     assert submitted_args[24] == 30
     assert submitted_args[26] is False
-    assert submitted_args[28] == "day_ahead_exploratory"
-    assert submitted_args[29] is False
-    assert submitted_args[30] == 60
-    assert submitted_args[31]["rolling_execution_minutes"] == 15
-    assert "rolling_controls_server_enforced" not in submitted_args[31]
+    assert submitted_args[27] is False
+    assert submitted_args[29] == "day_ahead_exploratory"
+    assert submitted_args[30] is False
+    assert submitted_args[31] == 60
+    assert submitted_args[32]["rolling_execution_minutes"] == 15
+    assert "rolling_controls_server_enforced" not in submitted_args[32]
 
 
 def test_formal_dirty_request_is_rejected_before_job_creation() -> None:

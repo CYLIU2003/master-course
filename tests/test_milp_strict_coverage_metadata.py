@@ -22,6 +22,7 @@ from src.optimization.common.problem import (
 from src.optimization.milp.engine import MILPOptimizer
 from src.optimization.milp.solver_adapter import (
     _acyclic_flow_requires_path_start,
+    _add_stage1_activation_start_strengthening,
     _best_objective_stop_from_certified_lower_bound,
     _configured_gurobi_feasibility_tol,
     _configured_gurobi_integrality_tol,
@@ -59,6 +60,51 @@ def test_acyclic_flow_requires_path_start_rejects_nonchronological_arc() -> None
         arc_pairs=(("bus", "late", "early"),),
         trip_by_id=trips,
     ) is False
+
+
+@pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
+def test_activation_start_strengthening_adds_only_certified_labelled_rows() -> None:
+    from src.gurobi_runtime import ensure_gurobi
+
+    gp, grb = ensure_gurobi()
+    model = gp.Model("activation_start_strengthening")
+    model.Params.OutputFlag = 0
+    assigned = model.addVar(vtype=grb.BINARY, name="assign__bus__trip")
+    start = model.addVar(vtype=grb.BINARY, name="start__bus__trip")
+    used = model.addVar(vtype=grb.BINARY, name="used__bus")
+    clone_used = model.addVar(vtype=grb.BINARY, name="used__clone")
+    model.addConstr(assigned == start)
+    model.addConstr(used == assigned)
+    model.addConstr(clone_used == 0)
+    model.setObjective(used, grb.MINIMIZE)
+
+    audit = _add_stage1_activation_start_strengthening(
+        model=model,
+        gp=gp,
+        requested=True,
+        used_vehicle_vars={"bus": used, "clone": clone_used},
+        path_start_vars={("bus", "trip"): start},
+        exact_clone_vehicle_ids={"clone"},
+        acyclic_flow_requires_path_start_certificate=True,
+    )
+
+    assert audit["applied"] is True
+    assert audit["constraint_count"] == 1
+    assert audit["eligible_vehicle_count"] == 1
+    assert audit["excluded_exact_clone_vehicle_count"] == 1
+    assert audit["integer_feasible_set_preserved"] is True
+    model.optimize()
+    assert model.Status == grb.OPTIMAL
+
+    with pytest.raises(ValueError, match="strictly chronological"):
+        _add_stage1_activation_start_strengthening(
+            model=model,
+            gp=gp,
+            requested=True,
+            used_vehicle_vars={"bus": used},
+            path_start_vars={("bus", "trip"): start},
+            acyclic_flow_requires_path_start_certificate=False,
+        )
 
 
 @pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")

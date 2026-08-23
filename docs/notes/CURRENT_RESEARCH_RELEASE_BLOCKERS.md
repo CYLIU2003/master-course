@@ -115,6 +115,26 @@ the observed root point. They must not be materialized as a purported root
 tightening. The remaining candidate space is assignment/flow structure beyond
 same-time overlap, and it still requires a separate validity proof.
 
+The next clean, quality-qualified diagnostic at `653f697` is
+`output/2026-08-24/run_20260824_0144/`. The separate root LP is optimal at
+52,749.163582 JPY with automatic crossover, four threads, a 300-second cap,
+and maximum unscaled primal violation `5.820766e-11`. It records 50 positive
+`used_vehicle - sum(path_start)` deficits across 60 labelled vehicles; the
+maximum is `0.8169431546`. Because up to 100 same-day fragments are permitted,
+the equality `used_vehicle = sum(path_start)` is not valid and is prohibited.
+
+The weaker inequality `used_vehicle <= sum(path_start)` is proved valid only
+for non-aggregate labels: existing vehicle-day linkage makes an integral
+active vehicle serve a trip, and strictly chronological arc flow gives every
+integral nonempty labelled flow a path start. Exact-clone aggregate vehicles
+are excluded because they have a different aggregate start domain. Current
+code exposes this row only as the default-OFF
+`stage1_activation_start_strengthening` diagnostic; it fails closed without
+the certificate and marks the BFF request diagnostic-only. An actual-Gurobi
+row test and a two-trip physical ON/OFF parity test pass. There is no 264-trip
+MIP ON/OFF artifact yet, so the row has no claimed bound, gap, runtime, cost,
+physical, or release benefit. The 1% MIP-gap blocker remains open.
+
 The first diagnostic artifact from `9af1129` is not usable even as the
 coefficient-source record: the canonical solver payload contained the scan,
 but final `solver_settings.json` omitted it. The serialization defect is fixed

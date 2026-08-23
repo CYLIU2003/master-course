@@ -374,6 +374,7 @@ def _solve_full_phase3_assignment(
     sunny_midday_pv_kwh: float,
     candidate_limit: int = 1,
     powertrain_selector_strengthening: bool = False,
+    activation_start_strengthening: bool = False,
 ) -> tuple[dict[str, str], dict[str, object]]:
     problem = _full_phase3_counterexample(
         sunny_midday_pv_kwh=sunny_midday_pv_kwh
@@ -384,6 +385,9 @@ def _solve_full_phase3_assignment(
             **problem.metadata,
             "stage1_powertrain_selector_strengthening": (
                 powertrain_selector_strengthening
+            ),
+            "stage1_activation_start_strengthening": (
+                activation_start_strengthening
             ),
         },
     )
@@ -510,6 +514,38 @@ def test_powertrain_selector_strengthening_preserves_small_phase3_solution() -> 
     assert strengthened_metadata["stage1_powertrain_selector_strengthening_enabled"] is True
     assert strengthened_metadata["stage1_powertrain_selector_count"] == 2
     assert strengthened_metadata["stage1_powertrain_selector_constraint_count"] == 2
+
+
+def test_activation_start_strengthening_preserves_small_phase3_solution() -> None:
+    baseline_assignment, baseline_metadata = _solve_full_phase3_assignment(
+        sunny_midday_pv_kwh=25.0,
+        activation_start_strengthening=False,
+    )
+    strengthened_assignment, strengthened_metadata = (
+        _solve_full_phase3_assignment(
+            sunny_midday_pv_kwh=25.0,
+            activation_start_strengthening=True,
+        )
+    )
+
+    assert strengthened_assignment == baseline_assignment
+    assert float(strengthened_metadata["stage1_objective"]) == pytest.approx(
+        float(baseline_metadata["stage1_objective"])
+    )
+    baseline_audit = dict(
+        baseline_metadata["stage1_activation_start_strengthening"]
+    )
+    strengthened_audit = dict(
+        strengthened_metadata["stage1_activation_start_strengthening"]
+    )
+    assert baseline_audit["requested"] is False
+    assert baseline_audit["applied"] is False
+    assert strengthened_audit["requested"] is True
+    assert strengthened_audit["applied"] is True
+    assert strengthened_audit[
+        "acyclic_flow_requires_path_start_certificate"
+    ] is True
+    assert strengthened_audit["constraint_count"] == 2
 
 
 def test_phase3_selects_lowest_canonical_cost_from_exact_stage2_candidates() -> None:

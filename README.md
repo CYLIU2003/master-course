@@ -428,6 +428,30 @@ that quality-qualified root LP solution. It found zero violations of
 `sum(assignments) <= 1`; the maximum assignment mass was `0.9142023`.
 Therefore, overlap-clique rows are rejected as a strengthening candidate for
 this relaxation and were not added to the model.
+
+The next quality-qualified observation at clean SHA `653f697` is
+`output/2026-08-24/run_20260824_0144/`. With the same prepared input, four
+threads, barrier plus automatic crossover, and a 300-second cap, its optimal
+root LP has 50 positive `used_vehicle - sum(path_start)` deficits across the
+60 labelled vehicles; the largest is `0.8169431546`. The model permits up to
+100 fragments, so `used_vehicle = sum(path_start)` is invalid and is not used.
+The separately checked strict chronological arc certificate is true, however:
+existing vehicle-day linkage makes an integral active non-aggregate vehicle
+serve a trip, and an integral nonempty acyclic path flow has at least one
+start. This proves only `used_vehicle <= sum(path_start)` for those labelled
+vehicles. Exact-clone aggregate vehicles are deliberately excluded because
+they use a different aggregate start domain.
+
+Current code exposes that row only through the default-OFF
+`stage1_activation_start_strengthening` diagnostic request. It fails closed
+without the acyclic-flow certificate, persists the eligible/excluded vehicle
+counts and row count, and makes the BFF result diagnostic-only. A direct
+Gurobi regression and a two-trip physical Phase-3 ON/OFF fixture preserve the
+integer assignment and Stage-1 objective. This is not a 264-trip MIP or
+runtime result: the next required evidence is a clean-SHA, same-input,
+fixed-control root-LP ON/OFF comparison followed by any warranted bounded MIP
+comparison. The 1% release gate remains blocked.
+
 The pure-ICE A/B harness also now forwards the complete Stage-1 diagnostic,
 search-profile, and fragment-cut controls to its synchronous worker, so future
 AB/BA runs cannot silently shift their positional arguments.

@@ -66,6 +66,26 @@
   `<= 1` (maximum `0.9142023`), so the overlap rows are already implied at the
   quality-qualified LP point. No redundant clique constraint was added.
 
+- The next clean-`653f697` root-LP diagnostic at
+  `output/2026-08-24/run_20260824_0144/` is quality-qualified (`optimal`,
+  automatic crossover, maximum unscaled primal violation `5.820766e-11`). It
+  finds 50 positive labelled activation-to-start deficits, with maximum
+  `0.8169431546`, while `max_start_fragments_per_vehicle=100`. Therefore the
+  proposed equality is explicitly rejected. The exact valid row is only
+  `used_vehicle <= sum(path_start)`: existing vehicle-day linkage forces an
+  active integral non-aggregate vehicle to serve a trip, and strictly
+  chronological arcs make every nonempty integral flow have a path start.
+
+- Added the default-OFF BFF diagnostic
+  `stage1_activation_start_strengthening`. It adds that inequality only for
+  eligible non-aggregate vehicle labels, fails closed if the acyclic-flow
+  certificate is absent, and records its proof boundary, excluded exact-clone
+  vehicle IDs, and constraint count. The BFF marks every enabled request as
+  diagnostic-only. An actual-Gurobi unit regression checks the applied row and
+  fail-closed branch; a two-trip Phase-3 ON/OFF regression preserves the
+  discrete plan and Stage-1 objective. No 264-trip MIP/runtimes have been
+  measured with this row, so it is not a performance or release claim.
+
 - The 264-trip Stage-1 telemetry reports a coefficient range of about
   `1.45e9`, above the explicit scaling-warning threshold, while its root bound
   remains unchanged. The new default-OFF

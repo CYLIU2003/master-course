@@ -354,6 +354,7 @@ def test_pure_ice_case_forwards_selector_by_keyword(
         request={
             "mode": "phase3_two_stage",
             "stage1_powertrain_selector_strengthening": True,
+            "stage1_activation_start_strengthening": True,
             "gurobi_threads": 4,
         },
         representation="discrete",
@@ -361,6 +362,7 @@ def test_pure_ice_case_forwards_selector_by_keyword(
     )
 
     assert observed["stage1_powertrain_selector_strengthening"] is True
+    assert observed["stage1_activation_start_strengthening"] is True
     assert observed["gurobi_threads"] == 4
     assert observed["mode"] == "phase3_two_stage"
 

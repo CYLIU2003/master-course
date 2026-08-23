@@ -875,6 +875,9 @@ class RunOptimizationBody(BaseModel):
         "lazy", "lifted_root", "lazy_root_cuts", "explicit_root"
     ] = "lazy"
     stage1_powertrain_selector_strengthening: bool = False
+    # A separately certified Stage-1 root-strengthening experiment.  It is
+    # default-off and always diagnostic because it changes the MIP rows.
+    stage1_activation_start_strengthening: bool = False
     stage1_stage2_candidate_limit: int = Field(default=1, ge=1, le=100)
     stage1_composition_search_radius: int = Field(default=0, ge=0, le=100)
     stage1_bev_frontier_enabled: bool = False
@@ -11282,6 +11285,7 @@ def _run_optimization(
     stage1_root_lp_diagnostic_time_limit_seconds: int = 30,
     stage1_fragment_transition_cut_mode: str = "lazy",
     stage1_powertrain_selector_strengthening: bool = False,
+    stage1_activation_start_strengthening: bool = False,
     gurobi_threads: Optional[int] = INTERACTIVE_GUROBI_THREADS,
     run_profile: str = DEFAULT_FRONTEND_RUN_PROFILE,
     run_hourly_rolling: bool = True,
@@ -11496,6 +11500,7 @@ def _run_optimization(
                 or solver_mode == "debug_mode"
                 or bool(stage1_numeric_coefficient_diagnostic_enabled)
                 or bool(stage1_root_lp_diagnostic_enabled)
+                or bool(stage1_activation_start_strengthening)
                 or int(stage1_gurobi_scale_flag) != -1
             )
             prepared_cost_cfg = dict(
@@ -11692,6 +11697,9 @@ def _run_optimization(
             problem.metadata[
                 "stage1_powertrain_selector_strengthening"
             ] = bool(stage1_powertrain_selector_strengthening)
+            problem.metadata[
+                "stage1_activation_start_strengthening"
+            ] = bool(stage1_activation_start_strengthening)
             interactive_bev_utilization_policy = (
                 _apply_interactive_bev_utilization_policy(
                     problem,
@@ -11737,6 +11745,9 @@ def _run_optimization(
                     ),
                     "stage1_numeric_coefficient_diagnostic_enabled": bool(
                         stage1_numeric_coefficient_diagnostic_enabled
+                    ),
+                    "stage1_activation_start_strengthening": bool(
+                        stage1_activation_start_strengthening
                     ),
                     "stage1_gurobi_scale_flag": int(
                         stage1_gurobi_scale_flag
@@ -13974,6 +13985,7 @@ def run_optimization(
             request.stage1_root_lp_diagnostic_time_limit_seconds,
             request.stage1_fragment_transition_cut_mode,
             request.stage1_powertrain_selector_strengthening,
+            request.stage1_activation_start_strengthening,
             request.gurobi_threads,
             run_profile,
             effective_run_hourly_rolling,
