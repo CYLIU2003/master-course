@@ -27,6 +27,15 @@
   unscaled primal violation exceeds the cloned model's configured feasibility
   tolerance.
 
+- The clean-`3a063f6` 264-trip BFF diagnostic at
+  `output/2026-08-24/run_20260824_0119/` confirms the gate end to end: the
+  barrier clone with `Method=2`, `Crossover=0`, 4 threads, and a 300-second
+  cap returned a `suboptimal` interior point after 24.032 seconds. It exposes
+  9,790 fractional assignment variables and 264 split trips, but its maximum
+  unscaled primal violation is `1.374481e-6` versus `1e-6`; the persisted
+  quality flag is therefore false. The point is deliberately excluded from
+  structural-tightening selection, acceptance, and optimality claims.
+
 - The 264-trip Stage-1 telemetry reports a coefficient range of about
   `1.45e9`, above the explicit scaling-warning threshold, while its root bound
   remains unchanged. The new default-OFF

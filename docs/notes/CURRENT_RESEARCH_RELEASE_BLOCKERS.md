@@ -68,13 +68,25 @@ The first two root-LP attempts at `429c8db` are also non-evidence: the
 `output/2026-08-24/run_20260824_0051/` diagnostics both reached their limits
 with no continuous solution (`SolCount=0`), so they contain no fractional
 structure from which to derive a valid inequality. Inspection found that the
-diagnostic clone hard-coded one thread. The next clean-SHA diagnostic is
-therefore bounded but improved only in its isolated LP solve: it uses barrier
-(`Method=2`) with crossover disabled and the same explicit thread count as the
-request; the artifact persists those three controls and labels any returned
-values as an interior diagnostic solution. It does not modify the production
-MIP, and no structural change is authorized until that run yields inspectable
-fractional evidence and any proposed inequality is proved valid.
+diagnostic clone hard-coded one thread. The corrected clean-`3a063f6` run at
+`output/2026-08-24/run_20260824_0119/` uses the same prepared-input SHA-256,
+four threads, barrier (`Method=2`), `Crossover=0`, and a 300-second cap. It
+returned one `suboptimal` interior point in 24.032 seconds: 9,790 assignment
+variables are fractional, all 264 trips are split across vehicle labels, and
+all 60 vehicle activations are fractional. This is useful only to show where
+the relaxation is weak; its `52,749.183898`-JPY interior objective is not a
+certified LP lower bound.
+
+The same artifact records a maximum unscaled primal violation of
+`1.374481e-6` against the configured `1e-6` feasibility tolerance (and a
+maximum complementarity violation of `0.0105805`). Its persisted
+`primal_quality_within_configured_tolerance` flag is therefore `false`.
+The implementation now fails closed on this condition: it stores the
+primal/dual/complementarity quality metrics and prohibits using the point as
+an optimality or valid-inequality certificate. The result is **DIAGNOSTIC, NOT
+USED FOR RESEARCH CONCLUSIONS**; no structural change is authorized until a
+quality-qualified observation exists and any proposed inequality is separately
+proved valid.
 
 The first diagnostic artifact from `9af1129` is not usable even as the
 coefficient-source record: the canonical solver payload contained the scan,

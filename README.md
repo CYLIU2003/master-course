@@ -387,6 +387,16 @@ whether the unscaled primal violation is within the configured feasibility
 tolerance; a false flag blocks structural use of the point. Its request default
 is 30 seconds and it is capped by the same Phase-3 wall-clock deadline, so the
 diagnostic cannot overrun the declared Stage-1/Stage-2 budget.
+
+The frozen 264-trip artifact at `output/2026-08-24/run_20260824_0119/`
+exercised that diagnostic at clean SHA `3a063f6` with the same prepared-input
+SHA-256, 4 threads, `Method=2`, `Crossover=0`, and a 300-second cap. It
+returned one `suboptimal` interior point in 24.032 seconds, with 9,790
+fractional assignment variables and all 264 trips split across vehicle labels.
+However, its maximum unscaled primal violation was `1.374481e-6`, above the
+configured `1e-6` feasibility tolerance, so the persisted quality gate is
+false. This is **DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS** and cannot
+select a structural tightening or close the 1% MIP-gap blocker.
 The pure-ICE A/B harness also now forwards the complete Stage-1 diagnostic,
 search-profile, and fragment-cut controls to its synchronous worker, so future
 AB/BA runs cannot silently shift their positional arguments.
