@@ -1955,7 +1955,7 @@ def _stage1_root_lp_diagnostic(
     mutually_exclusive_trip_sets: Sequence[Sequence[str]] = (),
     path_start_vars: Optional[Mapping[Tuple[str, str], Any]] = None,
     path_start_count_limit: Optional[int] = None,
-    single_path_integrality_certificate: bool = False,
+    acyclic_flow_requires_path_start_certificate: bool = False,
     time_limit_sec: float = 300.0,
     threads: Optional[int] = None,
 ) -> Dict[str, Any]:
@@ -2113,8 +2113,8 @@ def _stage1_root_lp_diagnostic(
 
         activation_start_summary: Dict[str, Any] = {
             "enabled": path_start_vars is not None,
-            "single_path_integrality_certificate": bool(
-                single_path_integrality_certificate
+            "acyclic_flow_requires_path_start_certificate": bool(
+                acyclic_flow_requires_path_start_certificate
             ),
             "path_start_count_limit": path_start_count_limit,
             "checked_vehicle_count": 0,
@@ -2123,9 +2123,9 @@ def _stage1_root_lp_diagnostic(
             "maximum_activation_start_deficit": None,
             "deficit_sample": [],
             "semantics": (
-                "read_only_evaluation_of_used_vehicle_equal_sum_path_start; "
-                "candidate_is_valid_only_when_single_path_integrality_"
-                "certificate_is_true"
+                "read_only_evaluation_of_used_vehicle_less_than_or_equal_to_"
+                "sum_path_start; candidate_is_valid_only_when_acyclic_flow_"
+                "requires_path_start_certificate_is_true"
             ),
         }
         if path_start_vars is not None:
@@ -2623,6 +2623,29 @@ def _single_path_flow_implies_temporal_exclusivity(
         or int(max_end_fragments_per_vehicle) > 1
     ):
         return False
+    for _vehicle_id, from_trip_id, to_trip_id in arc_pairs:
+        from_trip = trip_by_id.get(str(from_trip_id))
+        to_trip = trip_by_id.get(str(to_trip_id))
+        if from_trip is None or to_trip is None:
+            return False
+        if int(to_trip.departure_min) <= int(from_trip.departure_min):
+            return False
+    return True
+
+
+def _acyclic_flow_requires_path_start(
+    *,
+    arc_pairs: Sequence[Tuple[str, str, str]],
+    trip_by_id: Mapping[str, ProblemTrip],
+) -> bool:
+    """Return whether every integral nonempty path flow has a start arc.
+
+    Multiple depot-reset fragments may be valid, so this is deliberately weaker
+    than the single-path certificate. Strictly increasing departure times rule
+    out a selected cycle; an integral nonempty flow then has at least one source
+    node whose balance forces a path-start indicator to one.
+    """
+
     for _vehicle_id, from_trip_id, to_trip_id in arc_pairs:
         from_trip = trip_by_id.get(str(from_trip_id))
         to_trip = trip_by_id.get(str(to_trip_id))
@@ -14422,8 +14445,11 @@ class GurobiMILPAdapter:
                 ),
                 path_start_vars=start_arc,
                 path_start_count_limit=max_start_fragments_per_vehicle,
-                single_path_integrality_certificate=(
-                    stage1_single_path_redundancy_elimination_applied
+                acyclic_flow_requires_path_start_certificate=(
+                    _acyclic_flow_requires_path_start(
+                        arc_pairs=arc_pairs,
+                        trip_by_id=trip_by_id,
+                    )
                 ),
                 time_limit_sec=min(
                     requested_root_lp_diagnostic_sec,

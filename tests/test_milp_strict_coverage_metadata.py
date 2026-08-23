@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from types import SimpleNamespace
 
 import pytest
 
@@ -20,6 +21,7 @@ from src.optimization.common.problem import (
 )
 from src.optimization.milp.engine import MILPOptimizer
 from src.optimization.milp.solver_adapter import (
+    _acyclic_flow_requires_path_start,
     _best_objective_stop_from_certified_lower_bound,
     _configured_gurobi_feasibility_tol,
     _configured_gurobi_integrality_tol,
@@ -41,6 +43,22 @@ def test_exact_mip_optimality_requires_zero_certified_gap() -> None:
     assert _has_exact_mip_optimality_certificate("optimal", 0.0475) is False
     assert _has_exact_mip_optimality_certificate("objective_limit", 0.0) is False
     assert _has_exact_mip_optimality_certificate("optimal", None) is False
+
+
+def test_acyclic_flow_requires_path_start_rejects_nonchronological_arc() -> None:
+    trips = {
+        "early": SimpleNamespace(departure_min=100),
+        "late": SimpleNamespace(departure_min=200),
+    }
+
+    assert _acyclic_flow_requires_path_start(
+        arc_pairs=(("bus", "early", "late"),),
+        trip_by_id=trips,
+    ) is True
+    assert _acyclic_flow_requires_path_start(
+        arc_pairs=(("bus", "late", "early"),),
+        trip_by_id=trips,
+    ) is False
 
 
 @pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
@@ -279,14 +297,14 @@ def test_root_lp_diagnostic_reports_activation_start_deficit_read_only() -> None
         vehicle_type_by_id={"bus": "ICE"},
         path_start_vars={("bus", "trip"): start},
         path_start_count_limit=1,
-        single_path_integrality_certificate=True,
+        acyclic_flow_requires_path_start_certificate=True,
         time_limit_sec=5,
         threads=2,
     )
 
     summary = diagnostic["activation_start_summary"]
     assert summary["enabled"] is True
-    assert summary["single_path_integrality_certificate"] is True
+    assert summary["acyclic_flow_requires_path_start_certificate"] is True
     assert summary["path_start_count_limit"] == 1
     assert summary["checked_vehicle_count"] == 1
     assert summary["excluded_vehicle_count"] == 0
