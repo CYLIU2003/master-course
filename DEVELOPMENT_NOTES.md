@@ -15,7 +15,9 @@
   is available; it is still diagnostic-only, is never used as a MIP start, and
   cannot alter Stage-1 rows, bounds, objective, or acceptance. The focused
   actual-Gurobi regression verifies both the fractional fixture and this
-  persisted diagnostic-control contract.
+  persisted diagnostic-control contract. A returned Gurobi `SUBOPTIMAL`
+  interior point is explicitly persisted as `suboptimal`, never as an opaque
+  numeric status or an LP-optimality claim.
 
 - The 264-trip Stage-1 telemetry reports a coefficient range of about
   `1.45e9`, above the explicit scaling-warning threshold, while its root bound

@@ -2004,6 +2004,7 @@ def _stage1_root_lp_diagnostic(
             int(grb.INFEASIBLE): "infeasible",
             int(grb.INF_OR_UNBD): "inf_or_unbd",
             int(grb.UNBOUNDED): "unbounded",
+            int(grb.SUBOPTIMAL): "suboptimal",
         }
         diagnostic.update(
             {
