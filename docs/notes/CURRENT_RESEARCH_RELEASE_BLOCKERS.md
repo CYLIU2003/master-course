@@ -14,16 +14,31 @@ for this warning. It scans the completed Stage-1 matrix and records the rows
 and variables attaining the smallest nonzero coefficients, but never changes
 the model, starts, bounds, objective, or Gurobi controls. Enabling it forces a
 diagnostic-only BFF result and cannot satisfy research acceptance. A fresh
-clean-SHA 264-trip artifact is required to identify a mathematically justified
-next formulation change; until then the release remains blocked by the 1% MIP
-gap rather than by an asserted scaling remedy.
+clean-SHA 264-trip artifact at `output/2026-08-23/run_20260823_2354/` from
+`5969f6a` completed this trace: it scanned 108,062 rows and 6,295,964
+nonzeros in 26.031 seconds, with an identical payload in the canonical solver
+result and `solver_settings.json`. Every recorded minimum is approximately
+`1e-6` in `stage1_soc_relax_return_to_initial_upper__*` on a `used_*` binary.
+For the current input this is the intentional return-to-initial upper band
+(`0 <= net charge <= 1e-6 * used`), not an unexplained physical or objective
+coefficient. The run remains diagnostic-only, with a 19.227307% certified
+Stage-1 gap; it supplies no research conclusion.
+
+An algebraic row multiplier is rejected as a remedy. Gurobi applies primal
+feasibility tolerance in absolute row units, so multiplying this row would
+change the effective terminal-SOC numerical acceptance band. The scientific
+SOC tolerance and independent validator are therefore held fixed. Only a
+separately traced, documented, diagnostic solver-scaling experiment or an
+exactly proven alternative formulation may proceed; the release remains
+blocked by the 1% MIP-gap gate.
 
 The first diagnostic artifact from `9af1129` is not usable even as the
 coefficient-source record: the canonical solver payload contained the scan,
 but final `solver_settings.json` omitted it. The serialization defect is fixed
-and covered by an actual-Gurobi engine regression; a new frozen BFF artifact
-must carry the same payload in both locations before it informs a rescaling
-decision.
+and covered by an actual-Gurobi engine regression. The replacement `5969f6a`
+artifact above carries the exact same payload in both locations, so this
+serialization blocker is closed. It does not close the numerical-performance
+or 1% gap blocker.
 
 An opt-in, default-OFF redundant trip-level electric selector has been added
 for a controlled representation test. The two-trip physical fixture preserves

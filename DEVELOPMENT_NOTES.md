@@ -11,13 +11,21 @@
 - The diagnostic performs no formulation or solver-control modification. The
   BFF marks an enabled request as `diagnostic_mode`, so its result cannot pass
   the research acceptance gate or be used for performance, cost, feasibility,
-  or optimality conclusions. A clean frozen 264-trip BFF execution is pending;
-  until then this is implementation and unit-test evidence only.
+  or optimality conclusions. The replacement clean-`5969f6a` BFF execution at
+  `output/2026-08-23/run_20260823_2354/` retained the SHA throughout the solve
+  and persisted an identical scan in the canonical solver result and final
+  `solver_settings.json`. It scanned 108,062 rows / 6,295,964 nonzeros in
+  26.031 seconds and found all 20 minimum examples at approximately `1e-6` in
+  `stage1_soc_relax_return_to_initial_upper__*` on `used_*`. This is the
+  deliberate upper side of the return-to-initial scientific terminal-SOC
+  band, not a free scaling constant. The artifact is diagnostic-only and
+  remains excluded with a 19.227307% certified Stage-1 gap.
 - The first clean diagnostic at `9af1129` is excluded: it correctly scanned
   108,062 rows and found the return-to-initial SOC relaxation coefficient, but
   a MILP-engine serialization omission left final `solver_settings.json`
   empty. The engine now explicitly forwards this field and an actual-Gurobi
-  round-trip test verifies the handoff. A fresh frozen BFF run is required.
+  round-trip test verifies the handoff; the `5969f6a` rerun above closes that
+  artifact-persistence defect only.
 
 ## 2026-08-23: Charger-capacity candidate set is comparable but gap-blocked
 

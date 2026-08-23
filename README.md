@@ -397,7 +397,18 @@ The initial clean-SHA diagnostic implementation run exposed an artifact
 serialization defect: the scan existed in the canonical solver payload but
 was absent from final `solver_settings.json`. That artifact is excluded; the
 MILP engine now forwards the scan explicitly, with an actual-Gurobi regression
-test, and requires a fresh frozen BFF rerun.
+test. The replacement clean-`5969f6a` BFF run is
+`output/2026-08-23/run_20260823_2354/`: both persisted locations agree
+exactly after scanning 108,062 rows and 6,295,964 nonzeros in 26.031 seconds.
+All 20 minimum-coefficient examples are
+`stage1_soc_relax_return_to_initial_upper__*` rows on their `used_*` binary,
+at about `1e-6`. In this input, that is the intentional upper side of the
+return-to-initial terminal-SOC scientific band, not an arbitrary cost or
+physical coefficient. The run is explicitly diagnostic-only and remains
+excluded from research conclusions; it retained a 19.227307% certified
+Stage-1 gap. Because Gurobi feasibility tolerance is absolute, multiplying
+these rows would alter the effective original-unit tolerance, so no such
+rescaling is treated as formulation-equivalent.
 
 ## 2026-08-23 electricity-price sensitivity status
 
