@@ -2024,6 +2024,27 @@ def _stage1_root_lp_diagnostic(
         if int(getattr(relaxed_model, "SolCount", 0) or 0) <= 0:
             return diagnostic
 
+        diagnostic["solution_quality"] = {
+            "max_unscaled_violation": float(relaxed_model.getAttr("MaxVio")),
+            "max_unscaled_bound_violation": float(
+                relaxed_model.getAttr("BoundVio")
+            ),
+            "max_unscaled_constraint_violation": float(
+                relaxed_model.getAttr("ConstrVio")
+            ),
+            "max_unscaled_constraint_residual": float(
+                relaxed_model.getAttr("ConstrResidual")
+            ),
+            "max_unscaled_dual_violation": float(
+                relaxed_model.getAttr("DualVio")
+            ),
+            "max_unscaled_dual_residual": float(
+                relaxed_model.getAttr("DualResidual")
+            ),
+            "max_complementarity_violation": float(
+                relaxed_model.getAttr("ComplVio")
+            ),
+        }
         epsilon = 1.0e-6
         assignment_by_trip: Dict[str, List[Tuple[str, float]]] = {}
         powertrain_trip_equivalents: Dict[str, float] = {}

@@ -19,6 +19,12 @@
   interior point is explicitly persisted as `suboptimal`, never as an opaque
   numeric status or an LP-optimality claim.
 
+- Every returned root-LP diagnostic solution now also persists Gurobi's
+  unscaled maximum bound/constraint violations and residuals, plus dual and
+  complementarity quality metrics. These are descriptive quality evidence for
+  the interior point, not acceptance thresholds and not an optimality
+  certificate.
+
 - The 264-trip Stage-1 telemetry reports a coefficient range of about
   `1.45e9`, above the explicit scaling-warning threshold, while its root bound
   remains unchanged. The new default-OFF

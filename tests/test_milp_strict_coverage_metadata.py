@@ -193,6 +193,11 @@ def test_root_lp_diagnostic_reports_fractional_assignment_without_mutating_mip()
         "crossover": 0,
         "threads": 2,
     }
+    assert diagnostic["solution_quality"]["max_unscaled_violation"] <= 1.0e-6
+    assert (
+        diagnostic["solution_quality"]["max_unscaled_constraint_violation"]
+        <= 1.0e-6
+    )
     assert diagnostic["objective_jpy"] == pytest.approx(0.5)
     assert diagnostic["assignment_summary"]["fractional_assignment_variable_count"] == 1
     assert diagnostic["assignment_summary"]["trips_split_across_multiple_vehicle_labels"] == 0
