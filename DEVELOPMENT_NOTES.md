@@ -33,6 +33,20 @@
   also returns `BLOCKED`, specifically including the absent full Phase-4 run
   and the unmet Stage-1 gap. No optimality, accepted sensitivity, or release
   claim is added.
+- Used a clean detached worktree at the exact source SHA (rather than bypassing
+  the evaluator/source-SHA guard) to run
+  `run_fixed_solution_stress.py` against that copied source run. The result is
+  `output/diagnostics/fixed_solution_stress_6e61b80_20260823/`, with manifest
+  SHA-256
+  `d9a7160ead2227fdaa13d89b5a643f0afcee049ac3a1e3d62160fee3b86f90bd`.
+  It records matching source/evaluator SHA, a clean worktree, the fixed
+  prepared input and solver controls, and `reoptimization_performed=false`.
+  All seven fixed-plan stresses retain 264/264 assigned trips. Only
+  `initial_soc_minus_5pp` is physically valid (minimum 53.207928 kWh and
+  0-JPY delta); BEV energy +10/+20%, travel time +10%, PV -20%, charger
+  outage, and the combined condition fail physical validation and deliberately
+  have null cost deltas. This is a failure-revealing fixed-decision stress
+  result, not a reoptimized recourse or optimum claim.
 
 ## 2026-08-23: Bounded M0--M3 actual-cost-oracle protocol
 

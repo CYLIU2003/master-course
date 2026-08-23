@@ -24,6 +24,17 @@ release result. Independent phase-gate audit
 also remains `BLOCKED`: this Phase-3 source has no full Phase-4 execution and
 does not meet its Stage-1 gap.
 
+The exact-SHA fixed-decision stress rerun is
+`output/diagnostics/fixed_solution_stress_6e61b80_20260823/` (manifest SHA-256
+`d9a7160ead2227fdaa13d89b5a643f0afcee049ac3a1e3d62160fee3b86f90bd`). A clean
+detached `6e61b80` worktree was required so the evaluator did not weaken its
+source-SHA gate. It records `reoptimization_performed=false`. Only the
+initial-SOC minus-five-point case is physically valid (0-JPY fixed-decision
+delta); the other six specified stresses retain their violations and null
+costs. This satisfies the fixed-plan stress-input record for this candidate,
+but cannot close the gap, accepted sensitivity, recourse, Phase-4, or M0--M3
+release gates.
+
 ## 2026-08-23: First bounded M0--M3 attempt is diagnostic; repaired rerun remains small-scope
 
 The opt-in `--run-small-m0-m3` path in

@@ -21,6 +21,17 @@ audit is `BLOCKED` at
 `output/diagnostics/thesis_phase_gate_6e61b80_20260823/current_phase_gate_audit.json`
 (SHA-256 `47a267623dea68cc9e5c032f6b9e2fc6c2531204dbc62154b972241d6f551a2d).
 
+The matching fixed-decision stress evaluation is
+`output/diagnostics/fixed_solution_stress_6e61b80_20260823/` (manifest
+SHA-256 `d9a7160ead2227fdaa13d89b5a643f0afcee049ac3a1e3d62160fee3b86f90bd`).
+It was evaluated in a clean detached checkout of the exact source SHA and did
+not reoptimize. All seven cases retain 264/264 assigned trips; only initial
+SOC minus five percentage points remains physically valid, with a 0-JPY fixed
+decision delta. BEV energy +10/+20%, travel time +10%, PV -20%, one charger
+outage, and the combined stress have recorded physical violations and no
+invented cost. This is fixed-plan robustness evidence, not recourse or
+economic-optimality evidence.
+
 ## 2026-08-23 bounded M0--M3 attempt: M0 is blocked by frozen compatibility
 
 `scripts/audit_small_integrated_weather_milp.py --run-small-m0-m3` now creates
