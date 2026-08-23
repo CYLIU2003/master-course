@@ -382,7 +382,9 @@ tightening. The clone explicitly uses Gurobi barrier (`Method=2`) with
 `Crossover=0`, so any returned values are an interior diagnostic solution, and
 uses the request's explicit Gurobi thread count when one is supplied. Those
 controls and the returned solution's unscaled primal/dual/complementarity
-quality metrics are persisted with the diagnostic result. Its request default
+quality metrics are persisted with the diagnostic result. It also reports
+whether the unscaled primal violation is within the configured feasibility
+tolerance; a false flag blocks structural use of the point. Its request default
 is 30 seconds and it is capped by the same Phase-3 wall-clock deadline, so the
 diagnostic cannot overrun the declared Stage-1/Stage-2 budget.
 The pure-ICE A/B harness also now forwards the complete Stage-1 diagnostic,

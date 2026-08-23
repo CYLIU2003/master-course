@@ -2045,6 +2045,23 @@ def _stage1_root_lp_diagnostic(
                 relaxed_model.getAttr("ComplVio")
             ),
         }
+        configured_feasibility_tolerance = float(relaxed_model.Params.FeasibilityTol)
+        max_unscaled_primal_violation = max(
+            diagnostic["solution_quality"]["max_unscaled_bound_violation"],
+            diagnostic["solution_quality"]["max_unscaled_constraint_violation"],
+            diagnostic["solution_quality"]["max_unscaled_constraint_residual"],
+        )
+        diagnostic["quality_assessment"] = {
+            "configured_feasibility_tolerance": configured_feasibility_tolerance,
+            "max_unscaled_primal_violation": max_unscaled_primal_violation,
+            "primal_quality_within_configured_tolerance": (
+                max_unscaled_primal_violation <= configured_feasibility_tolerance
+            ),
+            "semantics": (
+                "quality_flag_only; never_an_optimality_or_valid_inequality_"
+                "certificate"
+            ),
+        }
         epsilon = 1.0e-6
         assignment_by_trip: Dict[str, List[Tuple[str, float]]] = {}
         powertrain_trip_equivalents: Dict[str, float] = {}

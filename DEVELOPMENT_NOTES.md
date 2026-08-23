@@ -23,7 +23,9 @@
   unscaled maximum bound/constraint violations and residuals, plus dual and
   complementarity quality metrics. These are descriptive quality evidence for
   the interior point, not acceptance thresholds and not an optimality
-  certificate.
+  certificate. The artifact also fail-closes structural use when its maximum
+  unscaled primal violation exceeds the cloned model's configured feasibility
+  tolerance.
 
 - The 264-trip Stage-1 telemetry reports a coefficient range of about
   `1.45e9`, above the explicit scaling-warning threshold, while its root bound
