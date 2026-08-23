@@ -1,5 +1,27 @@
 # Development Notes
 
+## 2026-08-23: Aggregation A/B recovery gate made fail-closed
+
+- The completed initial v4 A/B bundle exposed different time-limited feasible
+  incumbents: B used more BEV trips and had a lower evaluated candidate cost.
+  Its Stage-1 audit records an integral aggregate ICE flow, deterministic
+  recovery to 19 canonical ICE IDs, and no changed recoverable dispatch set;
+  its 24-step Rolling, independent physical validation, and accounting also
+  pass. This difference is therefore not itself evidence of a relaxation, but
+  neither result is a performance or optimality claim.
+- Review found a P1 gap in the harness: it checked only representation and
+  model-size counters, rather than the exactness/recovery fields. The A/B gate
+  now rejects aggregate evidence unless `applied=true`, the integer feasible
+  set and recoverable physical dispatch set are unchanged, the labelled
+  extended region is not relaxed, and every recovered path has a canonical
+  clone ID. The discrete control must likewise state that no set changed.
+- Added a negative regression that flips the recovery-set flag and requires
+  `FAIL_CORRECTNESS`. Focused A/B plus exact-clone regression tests pass
+  (`21 passed`). Because the harness contract changed, the initial v4 bundle
+  `output/diagnostics/pure_ice_aggregation_phase3_ab_01da730_20260823/` is
+  diagnostic-only. A fresh five-pair run from the post-fix clean commit is
+  required before recording a verdict.
+
 ## 2026-08-23: Hardened the 264-trip pure-ICE aggregation A/B contract
 
 - Found a P1 regression in

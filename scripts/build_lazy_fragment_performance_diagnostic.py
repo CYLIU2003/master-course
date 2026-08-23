@@ -1010,9 +1010,26 @@ def _pure_ice_representation_audit_valid(
         audit.get("aggregate_network_variable_count_created") or 0
     )
     if representation == "discrete":
-        return vehicle_label_count > 0 and aggregate_network_count == 0
+        return bool(
+            audit.get("applied") is False
+            and audit.get("integer_feasible_set_changed") is False
+            and audit.get("recoverable_physical_dispatch_set_changed") is False
+            and vehicle_label_count > 0
+            and aggregate_network_count == 0
+        )
     if representation == "pure_aggregate":
-        return vehicle_label_count == 0 and aggregate_network_count > 0
+        recovered_path_count = int(audit.get("recovered_path_count") or 0)
+        recovered_vehicle_ids = tuple(audit.get("recovered_vehicle_ids") or ())
+        return bool(
+            audit.get("applied") is True
+            and audit.get("integer_feasible_set_changed") is False
+            and audit.get("labeled_extended_feasible_region_relaxed") is False
+            and audit.get("recoverable_physical_dispatch_set_changed") is False
+            and vehicle_label_count == 0
+            and aggregate_network_count > 0
+            and recovered_path_count > 0
+            and recovered_path_count == len(recovered_vehicle_ids)
+        )
     raise ValueError(f"unsupported pure-ICE representation: {representation!r}")
 
 

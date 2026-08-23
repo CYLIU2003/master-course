@@ -292,11 +292,19 @@ def _pure_ice_metrics(
         },
         "representation_audit": {
             "representation": representation,
+            "applied": is_aggregate,
+            "integer_feasible_set_changed": False,
+            "labeled_extended_feasible_region_relaxed": False,
+            "recoverable_physical_dispatch_set_changed": False,
             "vehicle_label_flow_variable_count_created": (
                 0 if is_aggregate else 100
             ),
             "aggregate_network_variable_count_created": (
                 40 if is_aggregate else 0
+            ),
+            "recovered_path_count": 2 if is_aggregate else 0,
+            "recovered_vehicle_ids": (
+                ["ICE_001", "ICE_002"] if is_aggregate else []
             ),
         },
     }
@@ -468,6 +476,37 @@ def test_pure_ice_ab_fails_when_controls_differ() -> None:
     )
 
     assert comparison["correctness"]["control_contract_match"] is False
+    assert comparison["verdict"] == "FAIL_CORRECTNESS"
+
+
+def test_pure_ice_ab_fails_when_aggregate_recovery_changes_dispatch_set() -> None:
+    case_a = _pure_ice_metrics(
+        representation="discrete",
+        total_variables=100,
+        binary_variables=90,
+        certified_gap=0.05,
+        root_bound=10.0,
+        wall_time=10.0,
+    )
+    case_b = _pure_ice_metrics(
+        representation="pure_aggregate",
+        total_variables=80,
+        binary_variables=60,
+        certified_gap=0.04,
+        root_bound=10.0,
+        wall_time=9.0,
+    )
+    case_b["representation_audit"][
+        "recoverable_physical_dispatch_set_changed"
+    ] = True
+
+    comparison = build_pure_ice_ab_comparison(
+        case_a,
+        case_b,
+        small_exact_parity_passed=True,
+    )
+
+    assert comparison["correctness"]["representation_audit_match"] is False
     assert comparison["verdict"] == "FAIL_CORRECTNESS"
 
 

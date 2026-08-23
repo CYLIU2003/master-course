@@ -39,8 +39,14 @@ current-code evidence. Although it contains five isolated AB/BA pairs and
 reports `PASS_STRUCTURAL_ONLY`, its v3 runner used positional BFF worker
 arguments before the selector parameter was added and did not persist the
 full OS/CPU/RAM/gurobipy snapshot or explicit optimization-proxy checks. The
-v4 runner fixes both issues. A fresh clean-SHA five-pair run is required; no
-runtime or formulation claim will be carried forward from the v3 bundle.
+v4 runner fixes both issues. Its first clean-SHA bundle at
+`output/diagnostics/pure_ice_aggregation_phase3_ab_01da730_20260823/` was
+then retained only diagnostically after a further P1 review: the collector had
+not yet failed closed on the exact aggregate-flow recovery fields. The current
+gate requires unchanged integer and recoverable physical dispatch sets,
+non-relaxed labelled region, and a one-to-one count of recovered canonical
+ICE paths and IDs. A fresh clean-SHA five-pair run is required; no runtime or
+formulation claim will be carried forward from any earlier bundle.
 
 ## 2026-08-23: Latest normal 264-trip Phase-3 rerun remains gap-blocked
 
