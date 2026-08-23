@@ -373,11 +373,22 @@ def _solve_full_phase3_assignment(
     *,
     sunny_midday_pv_kwh: float,
     candidate_limit: int = 1,
+    powertrain_selector_strengthening: bool = False,
 ) -> tuple[dict[str, str], dict[str, object]]:
+    problem = _full_phase3_counterexample(
+        sunny_midday_pv_kwh=sunny_midday_pv_kwh
+    )
+    problem = replace(
+        problem,
+        metadata={
+            **problem.metadata,
+            "stage1_powertrain_selector_strengthening": (
+                powertrain_selector_strengthening
+            ),
+        },
+    )
     result = MILPOptimizer().solve(
-        _full_phase3_counterexample(
-            sunny_midday_pv_kwh=sunny_midday_pv_kwh
-        ),
+        problem,
         OptimizationConfig(
             mode=OptimizationMode.MILP,
             thesis_mode=True,
@@ -476,6 +487,29 @@ def test_full_phase3_same_input_and_pv_reproduces_assignment() -> None:
             "stage1_time_indexed_energy_recourse_configuration"
         ]["objective_coefficient_and_rhs_hash"]
     )
+
+
+def test_powertrain_selector_strengthening_preserves_small_phase3_solution() -> None:
+    baseline_assignment, baseline_metadata = _solve_full_phase3_assignment(
+        sunny_midday_pv_kwh=25.0,
+        powertrain_selector_strengthening=False,
+    )
+    strengthened_assignment, strengthened_metadata = (
+        _solve_full_phase3_assignment(
+            sunny_midday_pv_kwh=25.0,
+            powertrain_selector_strengthening=True,
+        )
+    )
+
+    assert strengthened_assignment == baseline_assignment
+    assert float(strengthened_metadata["stage1_objective"]) == pytest.approx(
+        float(baseline_metadata["stage1_objective"])
+    )
+    assert baseline_metadata["stage1_powertrain_selector_strengthening_enabled"] is False
+    assert baseline_metadata["stage1_powertrain_selector_count"] == 0
+    assert strengthened_metadata["stage1_powertrain_selector_strengthening_enabled"] is True
+    assert strengthened_metadata["stage1_powertrain_selector_count"] == 2
+    assert strengthened_metadata["stage1_powertrain_selector_constraint_count"] == 2
 
 
 def test_phase3_selects_lowest_canonical_cost_from_exact_stage2_candidates() -> None:

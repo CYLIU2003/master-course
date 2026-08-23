@@ -1,5 +1,30 @@
 # Development Notes
 
+## 2026-08-23: Pending controlled Stage-1 BEV/ICE selector representation test
+
+- The normal 264-trip candidate's search telemetry reached the substantive
+  52,749.163582-JPY root bound at node 0 and remained there through the
+  433.932-second Stage-1 primary search; its independent analytical bound is
+  52,724.471363 JPY. The 65,305.688576-JPY Stage-1 incumbent therefore shows
+  a structural integer-relaxation gap, not a claim that merely extending the
+  time limit will meet the 1% target. Inspection confirmed that Stage 1 already
+  includes the BEV return-to-initial terminal SOC constraint and BESS terminal
+  policy, so neither was weakened or changed.
+- Added the opt-in metadata flag
+  `stage1_powertrain_selector_strengthening`. When enabled, it introduces a
+  trip-level binary equal to the existing electric-assignment sum only when a
+  trip has both electric and combustion alternatives, and assigns it branch
+  priority 100. This is an integral-assignment-redundant extended formulation;
+  the ordinary default remains false pending controlled measurement. Metadata
+  records its enabled state, selector count, constraint count, and semantics.
+- `tests/test_weather_coupled_assignment.py` compares OFF/ON on the existing
+  two-trip Phase-3 physical-PV fixture and confirms identical assignment and
+  Stage-1 objective. The focused run plus the full test module passed (18
+  tests). That validates only equivalence on the bounded fixture. The next
+  permissible evidence is a clean-commit 264-trip A/B with unchanged SHA,
+  prepared input, objective/constraints, seed, threads, time limit, MIP gap,
+  and solver settings; only the representation flag may differ.
+
 ## 2026-08-23: Current-SHA normal frontend/BFF Phase-3 rerun remains a feasible candidate
 
 - Before execution, recorded baseline `a145cf3a8b9cba0e4d97c48f800fba9ff07a1e69`

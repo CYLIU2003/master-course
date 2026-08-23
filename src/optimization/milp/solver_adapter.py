@@ -13047,6 +13047,82 @@ class GurobiMILPAdapter:
             # thesis_mode intentionally has no unserved decision variable.
             stage1.addConstr(gp.quicksum(assign_terms) == 1, name=f"cover_{trip.trip_id}")
 
+        # This is an optional extended formulation for controlled A/B runs.
+        # It does not restrict any integral Stage-1 assignment: every covered
+        # trip already selects exactly one compatible vehicle, so the selector
+        # is the sum of its electric-vehicle assignment variables. Giving the
+        # resulting binary a branch priority can nevertheless expose the
+        # economically important BEV/ICE choice before Gurobi branches on a
+        # vehicle label. Keep it opt-in until the 264-trip representation
+        # comparison establishes whether it helps the certified gap.
+        stage1_powertrain_selector_strengthening_enabled = bool(
+            problem.metadata.get(
+                "stage1_powertrain_selector_strengthening",
+                False,
+            )
+        )
+        stage1_powertrain_selector_by_trip: Dict[str, Any] = {}
+        stage1_powertrain_selector_constraint_count = 0
+        if stage1_powertrain_selector_strengthening_enabled:
+            electric_vehicle_types = {"BEV", "PHEV", "FCEV"}
+            for trip in problem.trips:
+                trip_id = str(trip.trip_id)
+                electric_terms: List[Any] = []
+                combustion_terms: List[Any] = []
+                for vehicle_id in assignment_vehicle_ids_by_trip.get(
+                    trip_id,
+                    (),
+                ):
+                    assignment_var = y.get((vehicle_id, trip_id))
+                    if assignment_var is None:
+                        continue
+                    vehicle_type = str(
+                        getattr(
+                            vehicle_by_id.get(str(vehicle_id)),
+                            "vehicle_type",
+                            "",
+                        )
+                        or ""
+                    ).upper()
+                    if vehicle_type in electric_vehicle_types:
+                        electric_terms.append(assignment_var)
+                    else:
+                        combustion_terms.append(assignment_var)
+                aggregate_assignment = stage1_exact_clone_assignment.get(
+                    trip_id
+                )
+                if aggregate_assignment is not None:
+                    representative_vehicle = vehicle_by_id.get(
+                        str(
+                            stage1_selected_clone_group.get(
+                                "representative_vehicle_id",
+                                "",
+                            )
+                            if stage1_selected_clone_group is not None
+                            else ""
+                        )
+                    )
+                    if str(
+                        getattr(representative_vehicle, "vehicle_type", "")
+                        or ""
+                    ).upper() in electric_vehicle_types:
+                        electric_terms.append(aggregate_assignment)
+                    else:
+                        combustion_terms.append(aggregate_assignment)
+                if not electric_terms or not combustion_terms:
+                    continue
+                selector = stage1.addVar(
+                    vtype=GRB.BINARY,
+                    name=f"stage1_trip_is_electric__{trip_id}",
+                )
+                selector.BranchPriority = 100
+                stage1.addConstr(
+                    selector == gp.quicksum(electric_terms),
+                    name=f"stage1_trip_powertrain_selector__{trip_id}",
+                )
+                stage1_powertrain_selector_by_trip[trip_id] = selector
+                stage1_powertrain_selector_constraint_count += 1
+
         for (vehicle_id, _trip_id), var in y.items():
             stage1.addConstr(var <= used_vehicle[vehicle_id])
         for vehicle in problem.vehicles:
@@ -14375,6 +14451,19 @@ class GurobiMILPAdapter:
                     "stage1_energy_envelope_constraint_count": (
                         stage1_energy_envelope_constraint_count
                     ),
+                    "stage1_powertrain_selector_strengthening_enabled": (
+                        stage1_powertrain_selector_strengthening_enabled
+                    ),
+                    "stage1_powertrain_selector_count": len(
+                        stage1_powertrain_selector_by_trip
+                    ),
+                    "stage1_powertrain_selector_constraint_count": (
+                        stage1_powertrain_selector_constraint_count
+                    ),
+                    "stage1_powertrain_selector_semantics": (
+                        "integral_assignment_redundant_trip_level_electric_"
+                        "selector_with_branch_priority"
+                    ),
                     "stage1_vehicle_count_lower_bound": (
                         stage1_vehicle_count_lower_bound
                     ),
@@ -14733,6 +14822,19 @@ class GurobiMILPAdapter:
                 ),
                 "stage1_energy_envelope_constraint_count": (
                     stage1_energy_envelope_constraint_count
+                ),
+                "stage1_powertrain_selector_strengthening_enabled": (
+                    stage1_powertrain_selector_strengthening_enabled
+                ),
+                "stage1_powertrain_selector_count": len(
+                    stage1_powertrain_selector_by_trip
+                ),
+                "stage1_powertrain_selector_constraint_count": (
+                    stage1_powertrain_selector_constraint_count
+                ),
+                "stage1_powertrain_selector_semantics": (
+                    "integral_assignment_redundant_trip_level_electric_"
+                    "selector_with_branch_priority"
                 ),
                 "stage1_vehicle_count_lower_bound": (
                     stage1_vehicle_count_lower_bound

@@ -1,5 +1,16 @@
 # master-course
 
+## 2026-08-23 pending Stage-1 powertrain-selector representation A/B
+
+The optional metadata flag `stage1_powertrain_selector_strengthening` adds one
+binary selector for each BEV/ICE-compatible trip, equal to the sum of the
+existing BEV assignment binaries, with a branch priority. It is redundant for
+every integral assignment and is **OFF by default**. The two-trip Phase-3
+fixture verifies OFF/ON assignment and Stage-1 objective equality; it does not
+establish a 264-trip performance improvement. A clean-commit, same-SHA,
+same-input, fixed-control 264-trip A/B run is required before enabling it in
+the ordinary model or making any runtime/gap claim.
+
 ## 2026-08-23 current-SHA normal Phase-3 candidate: feasible, not optimal
 
 Frozen tag `phase3-current-formal-6e61b80` ran the ordinary frontend/BFF path

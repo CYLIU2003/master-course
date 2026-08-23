@@ -1,5 +1,22 @@
 # Current research release blockers
 
+## 2026-08-23: 264-trip Stage-1 representation A/B is pending
+
+The normal candidate's solver telemetry is root-bound dominated: the
+52,749.163582-JPY Stage-1 root bound closely matches the independently
+certified 52,724.471363-JPY analytical lower bound, while the incumbent is
+65,305.688576 JPY. Code review confirmed that the Stage-1 SOC/BESS relaxation
+already includes the required BEV return-to-initial and BESS terminal
+contracts; no unsafe constraint weakening is proposed.
+
+An opt-in, default-OFF redundant trip-level electric selector has been added
+for a controlled representation test. The two-trip physical fixture preserves
+the integer assignment and Stage-1 objective with the flag ON/OFF, but that is
+not 264-trip performance or gap evidence. Until a clean-commit same-SHA,
+same-input, fixed-control A/B run reports its artifacts, the candidate remains
+gap-blocked and this selector must not be presented as an improvement or
+enabled as the ordinary representation.
+
 ## 2026-08-23: Latest normal 264-trip Phase-3 rerun remains gap-blocked
 
 The frozen tag `phase3-current-formal-6e61b80` reran the ordinary BFF path
