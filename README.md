@@ -410,6 +410,17 @@ Stage-1 gap. Because Gurobi feasibility tolerance is absolute, multiplying
 these rows would alter the effective original-unit tolerance, so no such
 rescaling is treated as formulation-equivalent.
 
+For a controlled solver-only numerical diagnostic, the default-preserving
+`stage1_gurobi_scale_flag=-1` is now persisted with the complete Stage-1
+solver controls. The BFF permits only Gurobi's documented `-1/0/1/2/3` values
+and labels every non-default request diagnostic-only; it does not multiply a
+user constraint, change the SOC scientific tolerance, or change Stage-2
+controls. `ScaleFlag=2` is the predeclared wide-coefficient-matrix candidate.
+Its actual-Gurobi small SOC fixture still passes independent physical
+validation, but this is only implementation parity. A frozen 264-trip BFF
+diagnostic with all non-scaling controls fixed is still required before any
+performance or numerical-robustness statement.
+
 ## 2026-08-23 electricity-price sensitivity status
 
 The fresh three-point Phase-3 frontend/BFF bundle at

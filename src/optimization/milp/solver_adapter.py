@@ -1922,6 +1922,29 @@ def _configured_stage1_gurobi_search_controls(
     )
 
 
+def _configured_stage1_gurobi_scale_flag(config: OptimizationConfig) -> int:
+    """Return a supported Stage-1 Gurobi scaling mode.
+
+    The parameter controls Gurobi's internal row/column scaling only; it must
+    never be confused with a user-side row multiplier, which would alter the
+    effective absolute feasibility tolerance in original physical units.
+    """
+
+    try:
+        scale_flag = int(
+            getattr(config, "stage1_gurobi_scale_flag", -1)
+        )
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "stage1_gurobi_scale_flag must be one of -1, 0, 1, 2, or 3"
+        ) from exc
+    if scale_flag not in {-1, 0, 1, 2, 3}:
+        raise ValueError(
+            "stage1_gurobi_scale_flag must be one of -1, 0, 1, 2, or 3"
+        )
+    return scale_flag
+
+
 def _stage1_root_lp_diagnostic(
     *,
     model: Any,
@@ -12261,6 +12284,8 @@ class GurobiMILPAdapter:
         stage1.Params.Method = int(stage1_search_controls["root_method"])
         stage1.Params.NodeMethod = int(stage1_search_controls["node_method"])
         stage1.Params.Symmetry = int(stage1_search_controls["symmetry"])
+        stage1_scale_flag = _configured_stage1_gurobi_scale_flag(config)
+        stage1.Params.ScaleFlag = stage1_scale_flag
         stage1_feasibility_tol = _configured_gurobi_feasibility_tol(
             config, stage=1
         )
@@ -14451,6 +14476,7 @@ class GurobiMILPAdapter:
                         "root_method": int(stage1.Params.Method),
                         "node_method": int(stage1.Params.NodeMethod),
                         "symmetry": int(stage1.Params.Symmetry),
+                        "scale_flag": int(stage1.Params.ScaleFlag),
                     },
                     "stage1_gurobi_feasibility_tol": stage1_feasibility_tol,
                     "stage2_gurobi_feasibility_tol": (
@@ -14830,6 +14856,7 @@ class GurobiMILPAdapter:
                     "root_method": int(stage1.Params.Method),
                     "node_method": int(stage1.Params.NodeMethod),
                     "symmetry": int(stage1.Params.Symmetry),
+                    "scale_flag": int(stage1.Params.ScaleFlag),
                 },
                 "stage1_gurobi_feasibility_tol": stage1_feasibility_tol,
                 "stage2_gurobi_feasibility_tol": (
@@ -19716,6 +19743,7 @@ class GurobiMILPAdapter:
                 "root_method": int(stage1.Params.Method),
                 "node_method": int(stage1.Params.NodeMethod),
                 "symmetry": int(stage1.Params.Symmetry),
+                "scale_flag": int(stage1.Params.ScaleFlag),
             },
             "stage1_root_lp_diagnostic": stage1_root_lp_diagnostic,
             "stage1_numeric_coefficient_diagnostic": (

@@ -374,6 +374,11 @@ class OptimizationConfig:
     # generic cut setting.  Neither changes a model variable, constraint, or
     # objective; every effective control is persisted in run metadata.
     stage1_gurobi_search_profile: str = "default"
+    # Gurobi internal model scaling for a controlled numerical diagnostic.
+    # ``-1`` preserves the solver default.  Any non-default value changes no
+    # model semantics but must be persisted and kept out of research-result
+    # acceptance until separately validated on the frozen comparison input.
+    stage1_gurobi_scale_flag: int = -1
     # An opt-in research diagnostic solves a separate continuous relaxation
     # after Stage 1 is fully built.  It records aggregate fractional-assignment
     # evidence and never feeds rows, starts, bounds, or decisions back into

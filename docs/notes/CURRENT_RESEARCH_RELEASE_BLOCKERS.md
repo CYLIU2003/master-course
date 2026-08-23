@@ -32,6 +32,19 @@ separately traced, documented, diagnostic solver-scaling experiment or an
 exactly proven alternative formulation may proceed; the release remains
 blocked by the 1% MIP-gap gate.
 
+The predeclared next observation is Gurobi-internal `ScaleFlag=2`, whose
+documentation specifically identifies geometric-mean scaling as a candidate
+for wide coefficient ranges. The implementation accepts only `-1/0/1/2/3`,
+keeps default `-1`, records the effective value in Stage-1 solver controls,
+and makes every non-default BFF request diagnostic-only. It neither
+multiplies a user row nor changes feasibility/SOC tolerances or Stage-2
+controls. An actual-Gurobi small fixture passes independent validation with
+`2`; that does not establish the 264-trip behavior. A clean frozen BFF run
+must hold the prepared input, SHA, time budget, threads, seed, model, and all
+other solver controls fixed before this setting is evaluated. Regardless of
+its outcome, it will not close the release unless the predeclared 1% gap and
+all other acceptance gates pass.
+
 The first diagnostic artifact from `9af1129` is not usable even as the
 coefficient-source record: the canonical solver payload contained the scan,
 but final `solver_settings.json` omitted it. The serialization defect is fixed

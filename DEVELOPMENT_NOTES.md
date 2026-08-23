@@ -26,6 +26,15 @@
   empty. The engine now explicitly forwards this field and an actual-Gurobi
   round-trip test verifies the handoff; the `5969f6a` rerun above closes that
   artifact-persistence defect only.
+- The new `stage1_gurobi_scale_flag` records only Gurobi's internal
+  row/column-scaling setting (`-1`, `0`, `1`, `2`, or `3`); default `-1`
+  preserves existing behavior. A non-default BFF request is forced to
+  diagnostic mode and the effective value is persisted with the other
+  Stage-1 controls. The actual-Gurobi startup-deadhead fixture uses
+  `ScaleFlag=2` and still passes the independent physical validator, but this
+  is deliberately small-scope implementation parity. The only predeclared
+  full-scale candidate is a clean 264-trip BFF diagnostic that changes this
+  setting alone; no user-side row scaling or tolerance change is authorized.
 
 ## 2026-08-23: Charger-capacity candidate set is comparable but gap-blocked
 

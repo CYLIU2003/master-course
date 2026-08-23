@@ -860,6 +860,10 @@ class RunOptimizationBody(BaseModel):
     stage1_gurobi_search_profile: Literal[
         "default", "bound_focus", "root_cut_focus"
     ] = "default"
+    # Non-default scaling is a controlled numerical diagnostic.  The BFF
+    # records it and prevents a one-off solver setting from becoming research
+    # evidence without a separately accepted frozen comparison.
+    stage1_gurobi_scale_flag: Literal[-1, 0, 1, 2, 3] = -1
     stage1_root_lp_diagnostic_enabled: bool = False
     stage1_root_lp_diagnostic_time_limit_seconds: int = Field(
         default=30,
@@ -11295,6 +11299,7 @@ def _run_optimization(
     integrated_actual_cost_upper_bound_delta_ratio: Optional[float] = None,
     co2_emissions_cap_kg: Optional[float] = None,
     stage1_numeric_coefficient_diagnostic_enabled: bool = False,
+    stage1_gurobi_scale_flag: int = -1,
 ) -> None:
     output_dir: Optional[str] = None
     raw_frontend_request_payload = dict(frontend_request_payload or {})
@@ -11490,6 +11495,7 @@ def _run_optimization(
                 solver_mode == "diagnostic"
                 or solver_mode == "debug_mode"
                 or bool(stage1_numeric_coefficient_diagnostic_enabled)
+                or int(stage1_gurobi_scale_flag) != -1
             )
             prepared_cost_cfg = dict(
                 ((scenario.get("scenario_overlay") or {}).get("cost_coefficients") or {})
@@ -11514,6 +11520,7 @@ def _run_optimization(
                 stage1_gurobi_search_profile=str(
                     stage1_gurobi_search_profile or "default"
                 ),
+                stage1_gurobi_scale_flag=int(stage1_gurobi_scale_flag),
                 stage1_root_lp_diagnostic_enabled=bool(
                     stage1_root_lp_diagnostic_enabled
                 ),
@@ -11729,6 +11736,9 @@ def _run_optimization(
                     ),
                     "stage1_numeric_coefficient_diagnostic_enabled": bool(
                         stage1_numeric_coefficient_diagnostic_enabled
+                    ),
+                    "stage1_gurobi_scale_flag": int(
+                        stage1_gurobi_scale_flag
                     ),
                     "stage1_stage2_candidate_limit": (
                         opt_config.stage1_stage2_candidate_limit
@@ -13980,6 +13990,7 @@ def run_optimization(
             request.integrated_actual_cost_upper_bound_delta_ratio,
             request.co2_emissions_cap_kg,
             request.stage1_numeric_coefficient_diagnostic_enabled,
+            request.stage1_gurobi_scale_flag,
         ),
         job_id=job.job_id,
         scenario_id=scenario_id,

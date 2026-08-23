@@ -24,6 +24,7 @@ from src.optimization.milp.solver_adapter import (
     _configured_gurobi_feasibility_tol,
     _configured_gurobi_integrality_tol,
     _configured_gurobi_threads,
+    _configured_stage1_gurobi_scale_flag,
     _configured_stage1_gurobi_search_controls,
     _has_exact_mip_optimality_certificate,
     _single_path_flow_implies_temporal_exclusivity,
@@ -148,6 +149,17 @@ def test_stage1_gurobi_search_profiles_are_explicit_and_validated() -> None:
     with pytest.raises(ValueError, match="stage1_gurobi_search_profile"):
         _configured_stage1_gurobi_search_controls(
             OptimizationConfig(stage1_gurobi_search_profile="unsupported")
+        )
+
+
+def test_stage1_gurobi_scale_flag_is_explicit_and_validated() -> None:
+    assert _configured_stage1_gurobi_scale_flag(OptimizationConfig()) == -1
+    assert _configured_stage1_gurobi_scale_flag(
+        OptimizationConfig(stage1_gurobi_scale_flag=2)
+    ) == 2
+    with pytest.raises(ValueError, match="stage1_gurobi_scale_flag"):
+        _configured_stage1_gurobi_scale_flag(
+            OptimizationConfig(stage1_gurobi_scale_flag=4)
         )
 
 
