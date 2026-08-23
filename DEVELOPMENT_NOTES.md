@@ -26,6 +26,12 @@
   physically valid but LP-redundant overlap inequality from being promoted to
   a formulation change without evidence from the exact relaxation.
 
+- When the existing single-path certificate applies, the root-LP artifact now
+  also records the read-only activation-to-start deficit
+  (`used_vehicle - sum(path_start)`) per vehicle. The artifact makes the
+  certificate precondition explicit and never changes constraints; a positive
+  deficit is only a candidate for a separately proved valid inequality.
+
 - Every returned root-LP diagnostic solution now also persists Gurobi's
   unscaled maximum bound/constraint violations and residuals, plus dual and
   complementarity quality metrics. These are descriptive quality evidence for

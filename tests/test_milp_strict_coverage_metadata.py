@@ -256,6 +256,53 @@ def test_root_lp_diagnostic_reports_exclusive_trip_set_violations_read_only() ->
     assert model.NumBinVars == 3
 
 
+@pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
+def test_root_lp_diagnostic_reports_activation_start_deficit_read_only() -> None:
+    from src.gurobi_runtime import ensure_gurobi
+
+    gp, grb = ensure_gurobi()
+    model = gp.Model("root_lp_activation_start_diagnostic")
+    model.Params.OutputFlag = 0
+    assignment = model.addVar(vtype=grb.BINARY, name="assign__bus__trip")
+    start = model.addVar(vtype=grb.BINARY, name="start__bus__trip")
+    used = model.addVar(vtype=grb.BINARY, name="used__bus")
+    model.addConstr(assignment == 0.5)
+    model.addConstr(start == 0.25)
+    model.addConstr(used == 1)
+    model.setObjective(assignment, grb.MINIMIZE)
+
+    diagnostic = _stage1_root_lp_diagnostic(
+        model=model,
+        grb=grb,
+        assignment_vars={("bus", "trip"): assignment},
+        used_vehicle_vars={"bus": used},
+        vehicle_type_by_id={"bus": "ICE"},
+        path_start_vars={("bus", "trip"): start},
+        path_start_count_limit=1,
+        single_path_integrality_certificate=True,
+        time_limit_sec=5,
+        threads=2,
+    )
+
+    summary = diagnostic["activation_start_summary"]
+    assert summary["enabled"] is True
+    assert summary["single_path_integrality_certificate"] is True
+    assert summary["path_start_count_limit"] == 1
+    assert summary["checked_vehicle_count"] == 1
+    assert summary["excluded_vehicle_count"] == 0
+    assert summary["activation_start_deficit_count"] == 1
+    assert summary["maximum_activation_start_deficit"] == pytest.approx(0.75)
+    assert summary["deficit_sample"] == [
+        {
+            "vehicle_id": "bus",
+            "used_vehicle_value": pytest.approx(1.0),
+            "path_start_mass": pytest.approx(0.25),
+            "deficit": pytest.approx(0.75),
+        }
+    ]
+    assert model.NumBinVars == 3
+
+
 def test_numeric_coefficient_diagnostic_locates_smallest_matrix_row_read_only() -> None:
     class _Variable:
         def __init__(self, name: str) -> None:

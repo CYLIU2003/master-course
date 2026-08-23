@@ -394,6 +394,12 @@ violation of `sum(assignments) <= 1`, but never adds those rows to Stage 1.
 This separates a proven, violated candidate inequality from a redundant one
 before a controlled formulation change is considered.
 
+Where the single-path certificate holds, the diagnostic also measures the
+read-only difference between each `used_vehicle` value and its total path-start
+mass. This identifies whether the integer-valid activation-to-start equality
+is violated by the LP relaxation; it is never added merely because the
+diagnostic reports a deficit.
+
 The frozen 264-trip artifact at `output/2026-08-24/run_20260824_0119/`
 exercised that diagnostic at clean SHA `3a063f6` with the same prepared-input
 SHA-256, 4 threads, `Method=2`, `Crossover=0`, and a 300-second cap. It

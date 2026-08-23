@@ -1953,6 +1953,9 @@ def _stage1_root_lp_diagnostic(
     used_vehicle_vars: Mapping[str, Any],
     vehicle_type_by_id: Mapping[str, str],
     mutually_exclusive_trip_sets: Sequence[Sequence[str]] = (),
+    path_start_vars: Optional[Mapping[Tuple[str, str], Any]] = None,
+    path_start_count_limit: Optional[int] = None,
+    single_path_integrality_certificate: bool = False,
     time_limit_sec: float = 300.0,
     threads: Optional[int] = None,
 ) -> Dict[str, Any]:
@@ -2096,6 +2099,7 @@ def _stage1_root_lp_diagnostic(
                 )
 
         used_vehicle_values: List[float] = []
+        used_vehicle_value_by_id: Dict[str, float] = {}
         for vehicle_id, original_var in used_vehicle_vars.items():
             relaxed_var = relaxed_model.getVarByName(str(original_var.VarName))
             if relaxed_var is None:
@@ -2103,7 +2107,85 @@ def _stage1_root_lp_diagnostic(
                     "Stage-1 relaxation did not preserve used-vehicle variable "
                     f"{original_var.VarName}"
                 )
-            used_vehicle_values.append(float(relaxed_var.X))
+            value = float(relaxed_var.X)
+            used_vehicle_values.append(value)
+            used_vehicle_value_by_id[str(vehicle_id)] = value
+
+        activation_start_summary: Dict[str, Any] = {
+            "enabled": path_start_vars is not None,
+            "single_path_integrality_certificate": bool(
+                single_path_integrality_certificate
+            ),
+            "path_start_count_limit": path_start_count_limit,
+            "checked_vehicle_count": 0,
+            "excluded_vehicle_count": 0,
+            "activation_start_deficit_count": 0,
+            "maximum_activation_start_deficit": None,
+            "deficit_sample": [],
+            "semantics": (
+                "read_only_evaluation_of_used_vehicle_equal_sum_path_start; "
+                "candidate_is_valid_only_when_single_path_integrality_"
+                "certificate_is_true"
+            ),
+        }
+        if path_start_vars is not None:
+            start_value_by_vehicle: Dict[str, float] = {}
+            start_domain_by_vehicle: Dict[str, int] = {}
+            for (vehicle_id, _), original_var in path_start_vars.items():
+                relaxed_var = relaxed_model.getVarByName(str(original_var.VarName))
+                if relaxed_var is None:
+                    raise RuntimeError(
+                        "Stage-1 relaxation did not preserve path-start variable "
+                        f"{original_var.VarName}"
+                    )
+                normalized_vehicle_id = str(vehicle_id)
+                start_value_by_vehicle[normalized_vehicle_id] = (
+                    start_value_by_vehicle.get(normalized_vehicle_id, 0.0)
+                    + float(relaxed_var.X)
+                )
+                start_domain_by_vehicle[normalized_vehicle_id] = (
+                    start_domain_by_vehicle.get(normalized_vehicle_id, 0) + 1
+                )
+            activation_start_deficits: List[Dict[str, Any]] = []
+            maximum_activation_start_deficit = 0.0
+            for vehicle_id, used_value in used_vehicle_value_by_id.items():
+                if start_domain_by_vehicle.get(vehicle_id, 0) <= 0:
+                    activation_start_summary["excluded_vehicle_count"] += 1
+                    continue
+                start_mass = start_value_by_vehicle.get(vehicle_id, 0.0)
+                activation_start_deficit = used_value - start_mass
+                activation_start_summary["checked_vehicle_count"] += 1
+                maximum_activation_start_deficit = max(
+                    maximum_activation_start_deficit,
+                    activation_start_deficit,
+                )
+                if activation_start_deficit <= epsilon:
+                    continue
+                activation_start_deficits.append(
+                    {
+                        "vehicle_id": vehicle_id,
+                        "used_vehicle_value": used_value,
+                        "path_start_mass": start_mass,
+                        "deficit": activation_start_deficit,
+                    }
+                )
+            activation_start_summary.update(
+                {
+                    "activation_start_deficit_count": len(
+                        activation_start_deficits
+                    ),
+                    "maximum_activation_start_deficit": (
+                        maximum_activation_start_deficit
+                    ),
+                    "deficit_sample": sorted(
+                        activation_start_deficits,
+                        key=lambda item: (
+                            -float(item["deficit"]),
+                            str(item["vehicle_id"]),
+                        ),
+                    )[:20],
+                }
+            )
 
         split_trip_count = sum(
             1
@@ -2200,6 +2282,7 @@ def _stage1_root_lp_diagnostic(
                         for value in used_vehicle_values
                     ),
                 },
+                "activation_start_summary": activation_start_summary,
                 "mutually_exclusive_trip_set_summary": exclusive_set_summary,
             }
         )
@@ -14336,6 +14419,11 @@ class GurobiMILPAdapter:
                 },
                 mutually_exclusive_trip_sets=self._build_trip_overlap_cliques(
                     problem
+                ),
+                path_start_vars=start_arc,
+                path_start_count_limit=max_start_fragments_per_vehicle,
+                single_path_integrality_certificate=(
+                    stage1_single_path_redundancy_elimination_applied
                 ),
                 time_limit_sec=min(
                     requested_root_lp_diagnostic_sec,
