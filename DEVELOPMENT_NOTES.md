@@ -37,6 +37,16 @@
   quality flag is therefore false. The point is deliberately excluded from
   structural-tightening selection, acceptance, and optimality claims.
 
+- The follow-up clean-`c11bb46` diagnostic at
+  `output/2026-08-24/run_20260824_0124/` restores automatic crossover with the
+  same prepared input, 4 threads, and 300-second cap. It is `optimal` in
+  29.100 seconds and has a maximum unscaled primal violation of
+  `5.820766e-11`, so the quality gate is true. The 264-trip relaxation has
+  2,274 fractional assignment variables and every trip is split across
+  vehicle labels, while all 60 vehicle activations are integral. It is a
+  bounded structural observation only; it does not itself justify, implement,
+  or validate a new inequality.
+
 - The 264-trip Stage-1 telemetry reports a coefficient range of about
   `1.45e9`, above the explicit scaling-warning threshold, while its root bound
   remains unchanged. The new default-OFF

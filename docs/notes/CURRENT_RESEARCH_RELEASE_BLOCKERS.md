@@ -88,6 +88,23 @@ USED FOR RESEARCH CONCLUSIONS**; no structural change is authorized until a
 quality-qualified observation exists and any proposed inequality is separately
 proved valid.
 
+That quality-qualified observation is now available, but it is not a release
+result. The clean-`c11bb46` automatic-crossover diagnostic at
+`output/2026-08-24/run_20260824_0124/` holds the prepared-input SHA-256,
+four threads, and 300-second cap fixed while changing only the isolated LP
+clone to `Crossover=-1`. It returns `optimal` in 29.100 seconds at
+52,749.163582 JPY, with maximum unscaled primal violation `5.820766e-11`
+under the same `1e-6` tolerance; its persisted quality flag is `true`.
+
+The exact continuous relaxation contains 2,274 fractional assignment
+variables and splits every one of the 264 trips across vehicle labels, but all
+60 `used_vehicle` activations are integral. This localizes the weakness to the
+trip-to-vehicle assignment relaxation rather than vehicle-count activation.
+It authorizes only the next research step: derive a specific valid inequality
+for that assignment structure and prove it before any controlled MIP test.
+It is still **DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS** and does not
+close the 1% MIP-gap or release gate.
+
 The first diagnostic artifact from `9af1129` is not usable even as the
 coefficient-source record: the canonical solver payload contained the scan,
 but final `solver_settings.json` omitted it. The serialization defect is fixed

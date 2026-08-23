@@ -397,6 +397,16 @@ However, its maximum unscaled primal violation was `1.374481e-6`, above the
 configured `1e-6` feasibility tolerance, so the persisted quality gate is
 false. This is **DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS** and cannot
 select a structural tightening or close the 1% MIP-gap blocker.
+
+The corrected automatic-crossover artifact at
+`output/2026-08-24/run_20260824_0124/` from clean SHA `c11bb46` uses the same
+prepared input, 4 threads, and 300-second cap. It reaches the continuous
+relaxation optimum in 29.100 seconds with a maximum unscaled primal violation
+of `5.820766e-11`; the quality gate is true. It identifies 2,274 fractional
+assignment variables and split labels for all 264 trips, while all 60
+vehicle-activation values are integral. This is quality-qualified structural
+diagnostic evidence only: no valid inequality has yet been proved or added,
+and the research release remains blocked.
 The pure-ICE A/B harness also now forwards the complete Stage-1 diagnostic,
 search-profile, and fragment-cut controls to its synchronous worker, so future
 AB/BA runs cannot silently shift their positional arguments.
