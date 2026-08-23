@@ -40,6 +40,15 @@ The prior attested v1 series is also `DIAGNOSTIC` because its
 scope. Certificate schema v2 fixes the field to `false` permanently and
 records bounded formulation eligibility separately.
 
+The corrected v2 series is now
+`output/verification/small_integrated_oracle_scale/f75ee78_20260823/`
+(certificate SHA-256
+`545ad7fe16c40847e0ee87a6ccdff268845991aa6fc4cf8dedbb8a4260a9a358`). All
+8/12/24/40 sizes are verified from clean SHA `f75ee78`, fixed seed 42, four
+threads, and 300 seconds per phase. It is `VERIFIED_BOUNDED_SMALL_INSTANCES`
+with `bounded_formulation_conclusion_eligible=true` and
+`research_conclusion_eligible=false`; it clears no full-network release gate.
+
 ## 2026-08-23: Diesel-price term is active; economic-response release gate remains blocked
 
 At frozen tag `phase3-diesel-sensitivity-b505c7a`, the frontend/BFF-only

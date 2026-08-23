@@ -37,6 +37,12 @@ thread count and records its own runtime snapshot before issuing a new series.
 Its certificate distinguishes `bounded_formulation_conclusion_eligible` from
 `research_conclusion_eligible=false`; a verified small series can never label
 itself as a full research-release conclusion.
+The current v2 bundle is
+`output/verification/small_integrated_oracle_scale/f75ee78_20260823/`
+(certificate SHA-256
+`545ad7fe16c40847e0ee87a6ccdff268845991aa6fc4cf8dedbb8a4260a9a358`): it
+verifies 8/12/24/40 trips at clean SHA `f75ee78`, seed 42, four threads and
+300 seconds per phase. It supports bounded approximation evidence only.
 
 ## 2026-08-23 current-SHA diesel-price diagnostic: active cost term, unchanged candidate dispatch
 

@@ -72,6 +72,18 @@
   sets `bounded_formulation_conclusion_eligible=true` but always sets
   `research_conclusion_eligible=false`. The schema is v2; the former v1
   `true` value is an overclaiming artifact and is not current evidence.
+- The clean tag `phase3-small-oracle-scale-scoped-f75ee78` produced
+  `output/verification/small_integrated_oracle_scale/f75ee78_20260823/`.
+  The v2 certificate SHA-256 is
+  `545ad7fe16c40847e0ee87a6ccdff268845991aa6fc4cf8dedbb8a4260a9a358` and
+  verifies all 8/12/24/40-trip child artifacts with matching clean pre/post
+  SHA `f75ee78`, prepared-input hash
+  `639b6754cccd1aef7758454b56640f968b6b1c277ec32c1c142f53f670ade558`, seed
+  42, four threads, and 300 seconds per phase. Phase 4 is exact at every
+  size; ApproxGap is zero where identifiable (24/40) and deliberately
+  unidentifiable at zero-cost 8/12. The certificate has
+  `bounded_formulation_conclusion_eligible=true` and
+  `research_conclusion_eligible=false`.
 
 ## 2026-08-23: Current-SHA diesel-price response tranche
 
