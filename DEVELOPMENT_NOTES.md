@@ -1,5 +1,27 @@
 # Development Notes
 
+## 2026-08-24: Thesis submission evidence audit
+
+- Added `docs/notes/THESIS_SUBMISSION_EVIDENCE_AUDIT.md` and linked it from
+  `README.md`. This is a documentation-only requirement audit at clean
+  `2f388d4`; it records the requested baseline `a145cf3` as an ancestor 115
+  commits behind current `main`, the current Python/Gurobi/OS/CPU/RAM
+  observation, artifact locations, supported thesis claims, and prohibited
+  claims. It does not alter a model, solver parameter, input, artifact, or
+  acceptance rule.
+- Re-audited the five AB/BA isolated-process pairs, 8/12/24/40 integrated
+  oracle, small M0--M3 comparison, 13-case BFF sensitivity matrix, and fixed
+  stress bundle from their stored JSON artifacts. Their prior scope/status is
+  unchanged: aggregation is `PASS_STRUCTURAL_ONLY`; the oracle/M0--M3 evidence
+  is small-scope only; all selected full-scale sensitivity cases remain
+  `BLOCKED` solely by `mip_gap_target_met`; and fixed-plan stress is not
+  recourse robustness.
+- Ran `\.venv\Scripts\python.exe -m pytest -q` at this clean documentation
+  checkout: `1558 passed in 83.85s`. No external independent reviewer approval
+  exists in repository evidence, so the audit explicitly leaves that completion
+  gate open. The full-network 1% certificate remains the mathematical release
+  blocker; no new 264-trip solve was started.
+
 ## 2026-08-24: Remaining full-network one-factor sensitivity tranche
 
 - Tagged clean SHA `27ec8cee6e9293000ba6f9d31b734e30a424f3fb` as

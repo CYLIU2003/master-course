@@ -1,5 +1,23 @@
 # Current research release blockers
 
+## 2026-08-24: Thesis evidence audit confirms release remains blocked
+
+`docs/notes/THESIS_SUBMISSION_EVIDENCE_AUDIT.md` now maps the required
+reproducibility, A/B, integrated-oracle, sensitivity, stress, and M0--M3
+evidence to its exact claim boundary. It records the current clean
+documentation checkout `2f388d4` and confirms that the requested baseline
+`a145cf3` is its ancestor; no old artifact is relabelled as a current-HEAD
+formal run. The documentation audit and `1558` passing regression tests do
+not satisfy an optimality, economic-response, or independent-review gate.
+
+The remaining mathematical blocker is unchanged: the quality-qualified
+264-trip Stage-1 root LP splits every trip across vehicle labels despite the
+existing time-indexed charger/PV/BESS/grid relaxation. No tested safe root
+strengthening closes the declared 1% gap. A new formal run is prohibited until
+a specific original-feasible-set-valid assignment/path strengthening has a
+validity proof and focused exact/small-MILP regression; the release remains
+`BLOCKED`.
+
 ## 2026-08-24: Remaining one-factor matrix completes diagnostics, not acceptance
 
 The frozen tag `thesis-remaining-sensitivities-27ec8ce` ran the selected

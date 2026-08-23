@@ -1,5 +1,10 @@
 # master-course
 
+The current, requirement-by-requirement thesis-evidence audit is
+[THESIS_SUBMISSION_EVIDENCE_AUDIT.md](docs/notes/THESIS_SUBMISSION_EVIDENCE_AUDIT.md).
+It distinguishes verified bounded evidence from the active full-network
+release blocker; it does not upgrade the release status.
+
 ## 2026-08-24 remaining 264-trip one-factor sensitivity tranche: complete, diagnostic only
 
 Frozen tag `thesis-remaining-sensitivities-27ec8ce` executed the selected
