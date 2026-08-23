@@ -1953,23 +1953,36 @@ def _stage1_root_lp_diagnostic(
     used_vehicle_vars: Mapping[str, Any],
     vehicle_type_by_id: Mapping[str, str],
     time_limit_sec: float = 300.0,
+    threads: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Solve and summarize an isolated Stage-1 continuous relaxation.
 
-    The cloned model is read-only with respect to the production MIP.  The
-    summary intentionally reports aggregate fractional assignment evidence
+    The cloned model is read-only with respect to the production MIP. It uses
+    barrier without crossover so an available interior LP solution can be
+    reported without spending diagnostic time constructing a basic solution.
+    The summary intentionally reports aggregate fractional assignment evidence
     instead of a million-variable solution dump, making it useful for a
     formulation diagnosis without changing any research result.
     """
 
+    diagnostic_threads = 1 if threads is None else int(threads)
+    if diagnostic_threads < 1:
+        raise ValueError("root LP diagnostic threads must be a positive integer")
     diagnostic: Dict[str, Any] = {
         "enabled": True,
         "semantics": (
             "separate_continuous_relaxation_of_the_completed_stage1_model; "
-            "diagnostic_only_and_never_used_for_mip_rows_bounds_or_starts"
+            "diagnostic_only_and_never_used_for_mip_rows_bounds_or_starts; "
+            "interior_barrier_solution_without_crossover_is_not_a_mip_start"
         ),
         "status": "not_run",
         "time_limit_sec": max(float(time_limit_sec), 0.001),
+        "solver_controls": {
+            "method": 2,
+            "method_name": "barrier",
+            "crossover": 0,
+            "threads": diagnostic_threads,
+        },
     }
     relaxed_model: Any = None
     started = time.perf_counter()
@@ -1977,7 +1990,11 @@ def _stage1_root_lp_diagnostic(
         model.update()
         relaxed_model = model.relax()
         relaxed_model.Params.OutputFlag = 0
-        relaxed_model.Params.Threads = 1
+        relaxed_model.Params.Method = int(diagnostic["solver_controls"]["method"])
+        relaxed_model.Params.Crossover = int(
+            diagnostic["solver_controls"]["crossover"]
+        )
+        relaxed_model.Params.Threads = int(diagnostic["solver_controls"]["threads"])
         relaxed_model.Params.TimeLimit = diagnostic["time_limit_sec"]
         relaxed_model.optimize()
         status = int(getattr(relaxed_model, "Status", 0) or 0)
@@ -14214,6 +14231,7 @@ class GurobiMILPAdapter:
                     requested_root_lp_diagnostic_sec,
                     remaining_before_root_lp_diagnostic_sec,
                 ),
+                threads=configured_threads,
             )
         stage1_pre_optimize_seconds = float(time.perf_counter() - total_started)
         stage1_search_telemetry = _Stage1SearchTelemetry(

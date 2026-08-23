@@ -8,6 +8,15 @@
   BFF-worker regression that proves this flag alone sets `diagnostic_mode`.
   The auxiliary result therefore cannot be upgraded to research evidence.
 
+- The separate root-LP clone no longer overrides the requested Gurobi thread
+  count with one thread. It explicitly uses barrier (`Method=2`) with
+  `Crossover=0` and persists method, crossover, and effective threads in the
+  diagnostic artifact. This returns only a barrier interior solution when one
+  is available; it is still diagnostic-only, is never used as a MIP start, and
+  cannot alter Stage-1 rows, bounds, objective, or acceptance. The focused
+  actual-Gurobi regression verifies both the fractional fixture and this
+  persisted diagnostic-control contract.
+
 - The 264-trip Stage-1 telemetry reports a coefficient range of about
   `1.45e9`, above the explicit scaling-warning threshold, while its root bound
   remains unchanged. The new default-OFF

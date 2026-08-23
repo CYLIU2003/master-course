@@ -183,9 +183,16 @@ def test_root_lp_diagnostic_reports_fractional_assignment_without_mutating_mip()
         used_vehicle_vars={"bev": used},
         vehicle_type_by_id={"bev": "BEV"},
         time_limit_sec=5,
+        threads=2,
     )
 
     assert diagnostic["status"] == "optimal"
+    assert diagnostic["solver_controls"] == {
+        "method": 2,
+        "method_name": "barrier",
+        "crossover": 0,
+        "threads": 2,
+    }
     assert diagnostic["objective_jpy"] == pytest.approx(0.5)
     assert diagnostic["assignment_summary"]["fractional_assignment_variable_count"] == 1
     assert diagnostic["assignment_summary"]["trips_split_across_multiple_vehicle_labels"] == 0

@@ -378,8 +378,11 @@ vehicle-activation evidence. It never adds rows, changes bounds, supplies a
 MIP start, or affects the production solve. The BFF treats an enabled request
 as diagnostic-only, so it cannot satisfy research acceptance. A clean-SHA
 264-trip diagnostic is required before using it to select a structural
-tightening. Its request default
-is 30 seconds and it is capped by the same Phase-3 wall-clock deadline, so the
+tightening. The clone explicitly uses Gurobi barrier (`Method=2`) with
+`Crossover=0`, so any returned values are an interior diagnostic solution, and
+uses the request's explicit Gurobi thread count when one is supplied. Those
+controls are persisted with the diagnostic result. Its request default is 30
+seconds and it is capped by the same Phase-3 wall-clock deadline, so the
 diagnostic cannot overrun the declared Stage-1/Stage-2 budget.
 The pure-ICE A/B harness also now forwards the complete Stage-1 diagnostic,
 search-profile, and fragment-cut controls to its synchronous worker, so future

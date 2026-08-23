@@ -63,6 +63,19 @@ pair therefore rejects `ScaleFlag=2` as a demonstrated certificate, candidate,
 or runtime improvement. It remains a diagnostic result and does not close the
 predeclared 1% gap or research-release gate.
 
+The first two root-LP attempts at `429c8db` are also non-evidence: the
+30-second `output/2026-08-24/run_20260824_0047/` and 300-second
+`output/2026-08-24/run_20260824_0051/` diagnostics both reached their limits
+with no continuous solution (`SolCount=0`), so they contain no fractional
+structure from which to derive a valid inequality. Inspection found that the
+diagnostic clone hard-coded one thread. The next clean-SHA diagnostic is
+therefore bounded but improved only in its isolated LP solve: it uses barrier
+(`Method=2`) with crossover disabled and the same explicit thread count as the
+request; the artifact persists those three controls and labels any returned
+values as an interior diagnostic solution. It does not modify the production
+MIP, and no structural change is authorized until that run yields inspectable
+fractional evidence and any proposed inequality is proved valid.
+
 The first diagnostic artifact from `9af1129` is not usable even as the
 coefficient-source record: the canonical solver payload contained the scan,
 but final `solver_settings.json` omitted it. The serialization defect is fixed
