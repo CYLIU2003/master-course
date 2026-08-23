@@ -118,13 +118,20 @@ The 0- and 20,000-JPY candidates otherwise retain the same 32 vehicles and
 (1.7803% gap). It validates the common vehicle-day cost term and accounting,
 not separate BEV/ICE cost responses or an accepted economic optimum.
 
-The sensitivity matrix now declares `BESS_ON` and `BESS_OFF` through the same
-frontend/BFF path. `BESS_ON` reuses only an already enabled asset with positive
-energy capacity and power; it fails closed rather than creating a BESS.
-`BESS_OFF` clears BESS capacity, state, and transfer controls while preserving
-PV, timetable, fleet, tariff, and solver settings. The runner verifies the
-effective immutable scenario snapshot before a result can be accepted. No
-264-trip BESS pair has yet been executed from this new contract.
+This pair uses the new fail-closed BESS contract: `BESS_ON` reuses only an
+already enabled asset with positive energy capacity and power, while
+`BESS_OFF` clears only BESS capacity, state, and transfer controls. The runner
+verifies the resulting immutable scenario snapshot before evaluating a case.
+
+The BFF BESS_ON/OFF pair at
+`output/thesis_economic_bess_75c228f_20260823/` is `BLOCKED` only by its 1%
+Stage-1 gap. Immutable snapshots prove BESS is on/off as declared. The ON
+candidate uses 559.783-kWh PV-to-BESS and 505.204-kWh BESS-to-bus, has zero
+grid import, and costs 64,422.491 JPY at a 19.2273% gap. The OFF candidate has
+zero BESS flow, 203.310-kWh grid import, and costs 71,979.208 JPY at a
+26.8205% gap. These time-limit candidates establish BESS-setting and
+candidate-flow provenance, not an accepted BESS-cost response or global
+dispatch comparison.
 
 ## 2026-08-23 current-SHA normal Phase-3 candidate: feasible, not optimal
 

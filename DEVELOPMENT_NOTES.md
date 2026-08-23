@@ -1,5 +1,24 @@
 # Development Notes
 
+## 2026-08-23: BESS on/off candidate-flow response is gap-blocked
+
+- The normal BFF executed `BESS_ON` and `BESS_OFF` at frozen tag
+  `economic-bess-response-75c228f` in
+  `output/thesis_economic_bess_75c228f_20260823/`. The matrix has matching
+  non-varied controls and clean source SHA; both 264-trip cases pass input
+  provenance, artifact hashes, physical validation, 24/24 Rolling, final
+  accounting, and the immutable-snapshot BESS state audit.
+- It is `BLOCKED` only by `mip_gap_target_met`: BESS_ON has a 19.2273%
+  certified Stage-1 gap and BESS_OFF has 26.8205%. The ON snapshot records
+  `{"tsurumaki": true}` with 559.783-kWh PV-to-BESS, 505.204-kWh BESS-to-bus,
+  zero grid import, 48 BEV / 216 ICE trips, and 64,422.491 JPY. OFF records
+  `{"tsurumaki": false}`, zero BESS flow, 203.310-kWh grid import, 42 BEV /
+  222 ICE trips, and 71,979.208 JPY.
+- These differing time-limit incumbents demonstrate effective BESS state and
+  candidate-flow provenance only. They are not an accepted BESS-cost,
+  economic-dispatch, or optimality result; the local BFF was stopped after
+  finalization.
+
 ## 2026-08-23: BESS on/off sensitivity is now fail-closed and auditable
 
 - `scripts/build_thesis_experiment_matrix.py` now declares `BESS_ON` and
@@ -15,8 +34,8 @@
 - Focused verification:
   `python -m pytest -q tests/test_thesis_experiment_matrix.py
   tests/test_thesis_sensitivity_matrix.py` -> `32 passed`; `git diff --check`
-  passed. This is implementation evidence only. No BESS sensitivity solve has
-  been run yet, so its economic-response gate remains open.
+  passed. This implementation evidence preceded the subsequently recorded BFF
+  pair above; its economic-response gate remains gap-blocked.
 
 ## 2026-08-23: Common vehicle-day cost reaches the ledger but is gap-blocked
 

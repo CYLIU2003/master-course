@@ -135,14 +135,16 @@ candidates retain 32 vehicles and 48 BEV / 216 ICE trips. This verifies only
 the common cost coefficient and accounting; it cannot establish BEV-specific
 or ICE-specific economic response, optimality, or release readiness.
 
-The declared BESS on/off sensitivity was previously missing. The current
-matrix now has `BESS_ON` and `BESS_OFF` cases that reuse the frontend/BFF
-execution path. `BESS_ON` fails closed unless the base Prepare request already
-contains enabled BESS assets with positive capacity and power; `BESS_OFF`
-clears only BESS capacity, state, and transfer controls. The runner audits the
-immutable effective scenario snapshot, but no 264-trip BESS pair has yet been
-executed from this contract. Thus PV/BESS component-ablation evidence remains
-incomplete and the economic-response gate is still open.
+The BFF `BESS_ON`/`BESS_OFF` pair at
+`output/thesis_economic_bess_75c228f_20260823/` now supplies the missing
+component-ablation execution. The immutable snapshots prove the respective
+enabled states and all physical/accounting controls pass, but both cases are
+`BLOCKED` only by `mip_gap_target_met` (19.2273% ON; 26.8205% OFF). The ON
+candidate records 559.783-kWh PV-to-BESS, 505.204-kWh BESS-to-bus and zero grid
+import; OFF records zero BESS flow and 203.310-kWh grid import. Its time-limit
+candidates have different dispatches and gaps, so this establishes BESS-state
+and candidate-flow provenance only—not accepted BESS-cost or economic-response
+evidence. The economic-response and research-release gates remain open.
 
 ## 2026-08-23: Latest normal 264-trip Phase-3 rerun remains gap-blocked
 
