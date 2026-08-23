@@ -104,6 +104,17 @@ zero grid import/cost and unchanged assignments. This is a zero-import
 candidate diagnostic only, not evidence that electricity price is irrelevant
 or that the economic response gate is closed.
 
+The current BFF BEV-trip-energy 0.8x/1.0x/1.2x matrix at
+`output/thesis_economic_bev_energy_c6dec42_20260823/` is `BLOCKED` only by the
+predeclared 1% Stage-1 gap (26.8493%, 19.2273%, and 14.0845%, respectively).
+All cases have the same prepared-trip hash and non-varied controls, retain the
+clean frozen SHA, and pass coverage, physical validation, 24/24 Rolling, and
+final accounting. The 0.8x candidate uses 34 vehicles for 53 BEV / 211 ICE
+trips at 63,983.495 JPY; the 1.0x and 1.2x candidates use 32 vehicles for 48
+BEV / 216 ICE trips at 64,422.491 JPY. Those different time-limit incumbents
+are feasible diagnostics only: they cannot close the energy-consumption,
+economic-response, optimality, or research-release gates.
+
 ## 2026-08-23: Latest normal 264-trip Phase-3 rerun remains gap-blocked
 
 The frozen tag `phase3-current-formal-6e61b80` reran the ordinary BFF path

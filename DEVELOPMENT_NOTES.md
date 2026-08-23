@@ -1,5 +1,22 @@
 # Development Notes
 
+## 2026-08-23: BEV-trip-energy response is feasible-candidate evidence only
+
+- The normal BFF executed `BEV_ENERGY_0.8`, `BEV_ENERGY_1.0`, and
+  `BEV_ENERGY_1.2` at frozen tag `economic-bev-energy-c6dec42` in
+  `output/thesis_economic_bev_energy_c6dec42_20260823/`. The three cases share
+  the prepared-trip hash and non-varied control fingerprint; each source run
+  retained the clean frozen SHA, served 264/264 trips, passed physical
+  validation, accepted 24/24 Rolling steps, and reconciled final accounting.
+- The matrix is `BLOCKED` only by `mip_gap_target_met`: its certified Stage-1
+  gaps are 26.8493%, 19.2273%, and 14.0845% for 0.8x, 1.0x, and 1.2x. The 0.8x
+  time-limit candidate uses 34 vehicles for 53 BEV / 211 ICE trips and costs
+  63,983.495 JPY; the latter two use 32 vehicles for 48 BEV / 216 ICE trips and
+  cost 64,422.491 JPY within numerical precision.
+- The parameter reached the normal frontend/BFF path, but differing
+  time-limited incumbents cannot establish a cost, behavioral, or optimal
+  energy-consumption response. The local BFF was stopped after finalization.
+
 ## 2026-08-23: Electricity-price response is zero-import diagnostic only
 
 - The current BFF 24/30/36-JPY/kWh matrix at frozen tag
