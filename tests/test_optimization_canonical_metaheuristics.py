@@ -181,6 +181,7 @@ def test_run_optimization_uses_canonical_engine_for_ga_mode() -> None:
             100,
             0.25,
             stage1_best_obj_stop_enabled=True,
+            stage1_powertrain_selector_strengthening=True,
             gurobi_threads=4,
             frontend_request_payload={
                 "stage1_best_obj_stop_enabled": True,
@@ -196,6 +197,9 @@ def test_run_optimization_uses_canonical_engine_for_ga_mode() -> None:
     assert config.warm_start is True
     assert config.stage1_best_obj_stop_enabled is False
     assert config.gurobi_threads == 4
+    assert canonical_problem.metadata[
+        "stage1_powertrain_selector_strengthening"
+    ] is True
     assert effective_scenario["simulation_config"]["bev_terminal_soc_policy"] == "return_to_initial"
     assert effective_scenario["simulation_config"]["final_soc_target_percent"] is None
     assert effective_scenario["simulation_config"]["operation_time_window_enabled"] is False
@@ -507,11 +511,12 @@ def test_run_optimization_endpoint_submits_current_prepared_input_job() -> None:
     assert submitted_args[4] == "mode_milp_only"
     assert submitted_args[18] is True
     assert submitted_args[24] == 30
-    assert submitted_args[27] == "day_ahead_and_hourly_rolling"
-    assert submitted_args[28] is True
-    assert submitted_args[29] == 60
-    assert submitted_args[30]["run_hourly_rolling"] is True
-    assert submitted_args[30]["rolling_execution_minutes"] == 60
+    assert submitted_args[26] is False
+    assert submitted_args[28] == "day_ahead_and_hourly_rolling"
+    assert submitted_args[29] is True
+    assert submitted_args[30] == 60
+    assert submitted_args[31]["run_hourly_rolling"] is True
+    assert submitted_args[31]["rolling_execution_minutes"] == 60
 
 
 def test_run_optimization_endpoint_only_allows_day_ahead_with_explicit_profile() -> None:
@@ -588,11 +593,12 @@ def test_run_optimization_endpoint_only_allows_day_ahead_with_explicit_profile()
     collect_git_state.assert_not_called()
     assert submitted_args[18] is False
     assert submitted_args[24] == 30
-    assert submitted_args[27] == "day_ahead_exploratory"
-    assert submitted_args[28] is False
-    assert submitted_args[29] == 60
-    assert submitted_args[30]["rolling_execution_minutes"] == 15
-    assert "rolling_controls_server_enforced" not in submitted_args[30]
+    assert submitted_args[26] is False
+    assert submitted_args[28] == "day_ahead_exploratory"
+    assert submitted_args[29] is False
+    assert submitted_args[30] == 60
+    assert submitted_args[31]["rolling_execution_minutes"] == 15
+    assert "rolling_controls_server_enforced" not in submitted_args[31]
 
 
 def test_formal_dirty_request_is_rejected_before_job_creation() -> None:

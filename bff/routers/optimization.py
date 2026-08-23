@@ -869,6 +869,7 @@ class RunOptimizationBody(BaseModel):
     stage1_fragment_transition_cut_mode: Literal[
         "lazy", "lifted_root", "lazy_root_cuts", "explicit_root"
     ] = "lazy"
+    stage1_powertrain_selector_strengthening: bool = False
     stage1_stage2_candidate_limit: int = Field(default=1, ge=1, le=100)
     stage1_composition_search_radius: int = Field(default=0, ge=0, le=100)
     stage1_bev_frontier_enabled: bool = False
@@ -11259,6 +11260,7 @@ def _run_optimization(
     stage1_root_lp_diagnostic_enabled: bool = False,
     stage1_root_lp_diagnostic_time_limit_seconds: int = 30,
     stage1_fragment_transition_cut_mode: str = "lazy",
+    stage1_powertrain_selector_strengthening: bool = False,
     gurobi_threads: Optional[int] = INTERACTIVE_GUROBI_THREADS,
     run_profile: str = DEFAULT_FRONTEND_RUN_PROFILE,
     run_hourly_rolling: bool = True,
@@ -11650,6 +11652,13 @@ def _run_optimization(
                     weather_profile,
                     random_seed=random_seed,
                 )
+            # This is a representation-only Stage-1 experiment control. It
+            # must be part of the submitted optimization request (rather than
+            # silently discarded by Prepare) and must be recorded in the
+            # canonical problem metadata consumed by the solver.
+            problem.metadata[
+                "stage1_powertrain_selector_strengthening"
+            ] = bool(stage1_powertrain_selector_strengthening)
             interactive_bev_utilization_policy = (
                 _apply_interactive_bev_utilization_policy(
                     problem,
@@ -13925,6 +13934,7 @@ def run_optimization(
             request.stage1_root_lp_diagnostic_enabled,
             request.stage1_root_lp_diagnostic_time_limit_seconds,
             request.stage1_fragment_transition_cut_mode,
+            request.stage1_powertrain_selector_strengthening,
             request.gurobi_threads,
             run_profile,
             effective_run_hourly_rolling,

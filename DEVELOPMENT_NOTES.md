@@ -24,6 +24,14 @@
   permissible evidence is a clean-commit 264-trip A/B with unchanged SHA,
   prepared input, objective/constraints, seed, threads, time limit, MIP gap,
   and solver settings; only the representation flag may differ.
+- An initial 264-trip attempt put the flag in `simulation_settings`; both
+  Prepare calls consequently resolved to the same prepared-input ID and the
+  selector was absent from canonical metadata. The OFF result is retained only
+  as an incomplete execution diagnostic and the queued ON job was stopped;
+  neither is A/B evidence. The flag is now an explicit `RunOptimizationBody`
+  field, forwarded to `_run_optimization`, and written into the canonical
+  problem metadata after the prepared input is materialized. Focused BFF,
+  metadata-forwarding, Phase-3, and README tests passed (48 tests).
 
 ## 2026-08-23: Current-SHA normal frontend/BFF Phase-3 rerun remains a feasible candidate
 

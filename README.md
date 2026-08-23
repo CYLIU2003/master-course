@@ -11,6 +11,12 @@ establish a 264-trip performance improvement. A clean-commit, same-SHA,
 same-input, fixed-control 264-trip A/B run is required before enabling it in
 the ordinary model or making any runtime/gap claim.
 
+The selector is an explicit `run-optimization` request field and is recorded
+in canonical solver metadata; it is deliberately not a loose Prepare setting.
+An initial attempted 264-trip pair was discarded when both requests resolved
+to the same prepared input and the selector had not entered the canonical
+metadata.
+
 ## 2026-08-23 current-SHA normal Phase-3 candidate: feasible, not optimal
 
 Frozen tag `phase3-current-formal-6e61b80` ran the ordinary frontend/BFF path

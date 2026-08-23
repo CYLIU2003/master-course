@@ -17,6 +17,12 @@ same-input, fixed-control A/B run reports its artifacts, the candidate remains
 gap-blocked and this selector must not be presented as an improvement or
 enabled as the ordinary representation.
 
+The first attempted pair is explicitly excluded: its flag was supplied to
+Prepare, which discarded it, so OFF and ON resolved to the same prepared input
+without a canonical selector record. The queued ON job was stopped. The flag
+now belongs to the optimization request and is persisted into canonical model
+metadata; a fresh two-condition run from the new clean commit is still pending.
+
 ## 2026-08-23: Latest normal 264-trip Phase-3 rerun remains gap-blocked
 
 The frozen tag `phase3-current-formal-6e61b80` reran the ordinary BFF path
