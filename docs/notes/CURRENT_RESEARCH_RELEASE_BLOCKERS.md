@@ -1,5 +1,29 @@
 # Current research release blockers
 
+## 2026-08-24: Repeated pure-ICE aggregation A/B passes structure, not release
+
+The clean frozen tag `thesis-phase3-pure-ice-ab-0ddcd22` completed the
+five-pair isolated-process bundle at
+`output/diagnostics/pure_ice_aggregation_phase3_ab_0ddcd22_20260824/`. All
+ten current-SHA children attest the same pre/post clean commit
+`0ddcd2213c9d524f55e448ec046e2683eb2d03c8`, prepared-input SHA-256
+`639b6754cccd1aef7758454b56640f968b6b1c277ec32c1c142f53f670ade558`, seed 42,
+four threads, 435/30-second Stage-1/Stage-2 limits, and complete successor
+network. They each serve 264/264 trips, pass physical validation and Rolling
+24/24, reconcile accounting, and use neither fallback nor post-solve repair.
+The parent verdict is `PASS_STRUCTURAL_ONLY`; its manifest and comparison
+artifact hashes independently verify.
+
+This clears only a representation-structure gate. Median variables,
+binaries, constraints, and peak process-tree RSS fall 31.82%, 32.01%, 24.09%,
+and 17.22%, respectively, but median solver time rises from 465.655 to
+480.182 seconds. The discrete and aggregate cases remain time-limited at
+19.2273% and 3.0775% certified gaps, respectively, both above the declared
+1% target. Consequently neither the lower aggregate incumbent nor the lower
+parent wall time establishes a cost, optimality, runtime-performance, or
+economic-response claim. The full-network certified-gap/release blocker
+remains active.
+
 ## 2026-08-24: Current-SHA small integrated oracle is verified but bounded
 
 The frozen tag `small-integrated-oracle-f0240cc` produced

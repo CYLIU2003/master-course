@@ -1,5 +1,33 @@
 # Development Notes
 
+## 2026-08-24: Current-SHA repeated 264-trip pure-ICE aggregation A/B
+
+- Tagged clean SHA `0ddcd2213c9d524f55e448ec046e2683eb2d03c8` as
+  `thesis-phase3-pure-ice-ab-0ddcd22` and completed five predeclared AB/BA
+  pairs with `build_lazy_fragment_performance_diagnostic.py`. The normal BFF
+  Phase-3-only isolated-process bundle is
+  `output/diagnostics/pure_ice_aggregation_phase3_ab_0ddcd22_20260824/`.
+  Its parent and all ten children retain the same clean pre/post SHA,
+  prepared-input SHA-256
+  `639b6754cccd1aef7758454b56640f968b6b1c277ec32c1c142f53f670ade558`, seed 42,
+  four threads, 435/30-second Stage-1/Stage-2 limits, and fixed source request.
+- The parent cross-checks every child and reports `correctness.passed=true`:
+  all cases use the complete successor network, serve 264/264 trips with no
+  duplicate/overlap/invalid transition, pass independent physical validation,
+  accept 24 Rolling steps, reconcile accounting, and record no fallback,
+  synthetic-PV fallback, proxy objective, or post-solve repair. The manifest,
+  JSON, CSV, and Markdown SHA-256 entries were independently recomputed and
+  match `artifact_hashes.json`.
+- The verdict is deliberately `PASS_STRUCTURAL_ONLY`. Median model size falls
+  from 762,906 to 520,173 variables (-31.82%), 726,240 to 493,756 binaries
+  (-32.01%), and 108,062 to 82,035 constraints (-24.09%); median peak
+  process-tree RSS falls 3,655,520,256 to 3,026,018,304 bytes (-17.22%).
+  Median total solver time rises 465.655 to 480.182 seconds (+14.527 s), so a
+  lower median parent wall time is not promoted to a solver-performance claim.
+  Both 264-trip formulations remain time-limited and miss the predeclared 1%
+  gap (19.2273% discrete; 3.0775% aggregate). Different incumbents therefore
+  remain candidates, not an economic or optimum comparison.
+
 ## 2026-08-24: Current-SHA bounded integrated-oracle refresh
 
 - Tagged the clean code as `small-integrated-oracle-f0240cc` and ran the

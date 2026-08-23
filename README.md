@@ -1,5 +1,29 @@
 # master-course
 
+## 2026-08-24 current-SHA repeated 264-trip pure-ICE aggregation A/B
+
+The frozen tag `thesis-phase3-pure-ice-ab-0ddcd22` completed the prescribed
+five AB/BA pairs through the normal BFF/Phase-3 path. The bundle at
+`output/diagnostics/pure_ice_aggregation_phase3_ab_0ddcd22_20260824/` attests
+clean pre/post SHA `0ddcd2213c9d524f55e448ec046e2683eb2d03c8`, the frozen
+prepared-input SHA-256
+`639b6754cccd1aef7758454b56640f968b6b1c277ec32c1c142f53f670ade558`, seed 42,
+four Gurobi threads, 435/30-second Stage-1/Stage-2 limits, and 0.2-second
+process-tree RSS sampling. All ten isolated children served 264/264 trips,
+passed independent physical validation, accepted Rolling 24/24, reconciled
+accounting, and recorded no fallback or post-solve repair. The artifact hashes
+for its manifest and JSON/CSV/Markdown comparison all verify.
+
+The recorded verdict is `PASS_STRUCTURAL_ONLY`, not a performance or cost
+claim. Median variables fell from 762,906 to 520,173 (-31.82%), binaries from
+726,240 to 493,756 (-32.01%), constraints from 108,062 to 82,035 (-24.09%),
+and process-tree peak RSS from 3.656 GB to 3.026 GB (-17.22%). Median solver
+time increased from 465.655 to 480.182 seconds (+14.527 s), so the harness
+does not certify a solver-speed benefit even though median parent wall time
+was lower. Both representations remained time-limited and missed the 1% gap
+target (19.2273% discrete; 3.0775% aggregate); their different feasible
+incumbents are not an optimality or cost comparison.
+
 ## 2026-08-24 current-SHA 8/12/24-trip integrated-oracle refresh
 
 The frozen tag `small-integrated-oracle-f0240cc` reran the isolated-process
