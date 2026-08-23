@@ -1,5 +1,23 @@
 # Development Notes
 
+## 2026-08-23: Charger-capacity candidate set is comparable but gap-blocked
+
+- Frozen tag `economic-charger-capacity-dde40a1` completed the normal BFF
+  6/8/10-port matrix at
+  `output/thesis_economic_charger_capacity_dde40a1_20260823/`. All three
+  cases retain the clean source SHA, prove their effective requested count,
+  serve 264/264 trips, and pass input provenance, artifact hashes, physical
+  validation, 24/24 Rolling, final accounting, and the snapshot-control gate.
+- The normalized non-varied control hash is identical across the family. It
+  removes only charger-derived compatibility IDs and depot count fields while
+  retaining vehicle state/parameters, non-charger depot data, and the set of
+  port specifications. This closes the prior provenance-definition defect.
+- The manifest remains `BLOCKED` solely by `mip_gap_target_met`: each case has
+  a 19.2273% certified Stage-1 gap. Their 64,422.491-JPY, 48-BEV/216-ICE,
+  32-vehicle time-limit candidates are numerically the same, so they cannot
+  establish a no-capacity-effect finding, an accepted cost response, or a
+  capacity recommendation. The local BFF was stopped after finalization.
+
 ## 2026-08-23: Second charger-control audit isolates derived compatibility data
 
 - The clean follow-up at `economic-charger-capacity-c775562` completed the

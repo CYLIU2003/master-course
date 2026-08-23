@@ -133,19 +133,20 @@ zero BESS flow, 203.310-kWh grid import, and costs 71,979.208 JPY at a
 candidate-flow provenance, not an accepted BESS-cost response or global
 dispatch comparison.
 
-The first 6/8/10-port charger-capacity execution at
-`output/thesis_economic_charger_capacity_ff77ecd_20260823/` and the
-follow-up at `output/thesis_economic_charger_capacity_c775562_20260823/` are
-both excluded from comparison. The first fingerprint retained
-`charger_input_sha256`; the follow-up correctly excluded that hash but still
-retained charger-derived BEV compatibility IDs, depot charger-count fields,
-and their fleet-contract hash. Each manifest therefore correctly reported
-`BLOCKED` for a provenance-definition defect, not for evidence of a
-non-charger control change. The runner now normalizes only those derived
-count/ID fields from immutable snapshots while retaining vehicle state and
-parameters, non-charger depot data, and charger-port specifications. A fresh
-clean-SHA 6/8/10-port run is required before reporting charger-capacity
-results.
+The first two 6/8/10-port charger trials at
+`output/thesis_economic_charger_capacity_ff77ecd_20260823/` and
+`output/thesis_economic_charger_capacity_c775562_20260823/` are excluded for
+provenance-definition defects. The clean third trial at
+`output/thesis_economic_charger_capacity_dde40a1_20260823/` corrects them:
+immutable-snapshot normalization preserves vehicle state and parameters,
+non-charger depot data, and charger-port specifications while removing only
+the derived compatibility IDs and count fields. Its three effective counts
+(6/8/10), source SHAs, and normalized non-varied control hash match; each
+serves 264/264 trips and passes physical validation, 24/24 Rolling, and final
+accounting. The matrix remains `BLOCKED` solely by the 19.2273% Stage-1 gap in
+each case. The identical time-limit candidate cost and assignment do not show
+that charger capacity has no effect, and this is not an accepted equipment or
+economic response result.
 
 ## 2026-08-23 current-SHA normal Phase-3 candidate: feasible, not optimal
 

@@ -146,21 +146,20 @@ candidates have different dispatches and gaps, so this establishes BESS-state
 and candidate-flow provenance only—not accepted BESS-cost or economic-response
 evidence. The economic-response and research-release gates remain open.
 
-The completed 6/8/10-port charger trials at
+The first two 6/8/10-port charger trials at
 `output/thesis_economic_charger_capacity_ff77ecd_20260823/` and
-`output/thesis_economic_charger_capacity_c775562_20260823/` are explicitly
-excluded before comparison. Every individual run verifies the requested count,
-264/264 coverage, physical validity, 24/24 Rolling, and accounting, but both
-family manifests correctly find different non-varied-control fingerprints. The
-first includes the intentionally varied `charger_input_sha256`; the second
-excludes it but still includes charger-derived BEV compatibility IDs, depot
-count fields, and their fleet-contract hash. This is a provenance-definition
-defect, not evidence of an infrastructure effect or another control change.
-The current runner normalizes only those derived IDs/counts from immutable
-snapshots while retaining vehicle state and parameters, non-charger depot data,
-and port specifications; its regression test still detects a changed vehicle
-energy rate. A fresh clean-SHA 6/8/10-port BFF execution is required; both
-excluded trials must not be used for cost, dispatch, or charger-capacity claims.
+`output/thesis_economic_charger_capacity_c775562_20260823/` remain excluded:
+their control fingerprints included deliberate charger-inventory changes. The
+clean final trial at
+`output/thesis_economic_charger_capacity_dde40a1_20260823/` corrects this
+with an immutable-snapshot hash that normalizes only charger-derived
+compatibility IDs and depot count fields, while retaining vehicle state and
+parameters, non-charger depot data, and port specifications. Its 6/8/10-port
+cases have one matching non-varied control fingerprint, the declared effective
+counts, clean unchanged SHA, 264/264 coverage, physical validity, 24/24
+Rolling, and accounting. They are nevertheless all `BLOCKED` by the same
+19.2273% Stage-1 gap. Their identical time-limit candidates cannot support a
+no-capacity-effect, cost, dispatch, equipment-capacity, or release claim.
 
 ## 2026-08-23: Latest normal 264-trip Phase-3 rerun remains gap-blocked
 
