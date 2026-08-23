@@ -1,6 +1,6 @@
 # master-course
 
-## 2026-08-23 bounded M0--M3 protocol: small-scale only, execution pending
+## 2026-08-23 bounded M0--M3 attempt: M0 is blocked by frozen compatibility
 
 `scripts/audit_small_integrated_weather_milp.py --run-small-m0-m3` now creates
 one explicitly bounded four-method comparison from the same deterministic
@@ -12,8 +12,16 @@ fleet and energy assets and is therefore an algorithmic oracle comparison.
 The emitted artifact is hard-labelled
 `small_subset_only_not_full_264_trip_evidence`; M0/M1/M2/M3 deltas are not
 full-network method effects, global-optimality evidence, or release readiness.
-The protocol itself is committed and tested before any execution artifact is
-cited below.
+The first frozen run at `phase3-small-m0-m3-ab55933` is
+`output/verification/small_m0_m3/ab55933_20260823/audit_24.json` (SHA-256
+`f05cd64ae34925eeada14cb03ca6ebf3ab7d6075340fb66062a2b08134b412f8`) and is
+`BLOCKED_SMALL_SCOPE` and is retained as `DIAGNOSTIC`, not evidence: its M0
+incorrectly used only five ICE vehicles while the mixed conditions had ten
+vehicles in total. The frozen trips in fact permit both BEV and ICE; this was
+an implementation error, not an input-compatibility result. The corrected M0
+uses ten ICE vehicles to match the mixed-condition fleet budget and requires a
+new clean-commit execution. The first run's M1/M2/M3 values, including the
+1.1e-11-JPY M2--M3 difference, are not cited as a method-comparison result.
 
 ## 2026-08-23 current-SHA diesel-price diagnostic: active cost term, unchanged candidate dispatch
 

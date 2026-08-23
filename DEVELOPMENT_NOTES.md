@@ -19,8 +19,20 @@
 - The path is intentionally separate from the full frontend M0--M3 assembly:
   full `phase4_integrated` uses the production lexicographic policy, whereas
   this M3 explicitly requires the scalar actual-cost oracle. The implementation
-  and 14 focused tests are present; no run result is claimed until it is
-  executed from a new clean frozen commit.
+  and 14 focused tests were committed as `ab559338a8eafcd45309afd4b56a2e9e6a93a6f4`
+  and frozen with tag `phase3-small-m0-m3-ab55933` before execution.
+- The resulting 24-trip artifact is
+  `output/verification/small_m0_m3/ab55933_20260823/audit_24.json` (SHA-256
+  `f05cd64ae34925eeada14cb03ca6ebf3ab7d6075340fb66062a2b08134b412f8`). It is
+  `BLOCKED_SMALL_SCOPE` and is retained as `DIAGNOSTIC`, not a partial success
+  relabelled as a comparison. The first implementation selected only five ICE
+  vehicles for M0 while M1/M2/M3 had five BEVs plus five ICE vehicles. Strict
+  precheck therefore correctly rejected M0's insufficient fleet. A direct
+  input audit confirms every selected trip allows both BEV and ICE, so the
+  earlier explanation of an ICE-compatibility blocker was wrong. The repair
+  constructs M0 afresh with ten ICE vehicles—the same total fleet budget as
+  the mixed conditions—and requires a new clean-commit run. No values from
+  the invalid four-method attempt are used for a method-effect claim.
 
 ## 2026-08-23: Current-SHA diesel-price response tranche
 

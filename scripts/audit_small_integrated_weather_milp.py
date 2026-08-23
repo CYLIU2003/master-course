@@ -231,33 +231,18 @@ def _without_pv_bess_problem(
     )
 
 
-def _all_ice_baseline_problem(
-    problem: CanonicalOptimizationProblem,
-) -> CanonicalOptimizationProblem:
-    """Restrict a small comparison input to its available ICE fleet only."""
+def _all_ice_case_args(args: argparse.Namespace) -> argparse.Namespace:
+    """Use an ICE fleet with the mixed conditions' total vehicle count.
 
-    vehicles = tuple(
-        vehicle
-        for vehicle in problem.vehicles
-        if bool(vehicle.available)
-        and str(vehicle.vehicle_type).upper() == "ICE"
-    )
-    if not vehicles:
-        raise ValueError("small M0 baseline requires at least one available ICE vehicle")
-    vehicle_types = tuple(
-        vehicle_type
-        for vehicle_type in problem.vehicle_types
-        if str(vehicle_type.powertrain_type).upper() == "ICE"
-    )
-    return replace(
-        problem,
-        vehicles=vehicles,
-        vehicle_types=vehicle_types,
-        metadata={
-            **dict(problem.metadata or {}),
-            "small_m0_m3_fleet_contract": "available_ice_only",
-        },
-    )
+    ``vehicles_per_type`` selects that many BEVs and ICE vehicles for the
+    mixed conditions.  M0 therefore needs twice that count of ICE vehicles,
+    rather than silently cutting the fleet budget in half.
+    """
+
+    values = dict(vars(args))
+    values["allowed_vehicle_type"] = "ICE"
+    values["vehicles_per_type"] = int(args.vehicles_per_type) * 2
+    return argparse.Namespace(**values)
 
 
 def _with_small_m0_m3_method_contract(
@@ -1146,9 +1131,14 @@ def run(args: argparse.Namespace) -> int:
     case_specs: list[tuple[CanonicalOptimizationProblem, str, int, int]] = []
     if args.run_small_m0_m3:
         m0_problem = _with_small_m0_m3_method_contract(
-            _all_ice_baseline_problem(_without_pv_bess_problem(problem_15)),
+            _without_pv_bess_problem(
+                _build_problem(_all_ice_case_args(args), 15)
+            ),
             method_id="M0",
-            method_definition="all_ICE_small_exact_cost_baseline_no_PV_or_BESS",
+            method_definition=(
+                "all_ICE_small_exact_cost_baseline_no_PV_or_BESS_"
+                "with_mixed_condition_total_fleet_count"
+            ),
         )
         m1_problem = _with_small_m0_m3_method_contract(
             _without_pv_bess_problem(problem_15),

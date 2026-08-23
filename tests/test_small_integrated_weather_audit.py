@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from scripts.audit_small_integrated_weather_milp import (
+    _all_ice_case_args,
     _available_vehicle_subset,
     _align_objective_with_accounting,
     _day_spanning_trip_subset,
@@ -45,6 +46,20 @@ def test_vehicle_subset_can_isolate_ice_accounting_path() -> None:
     )
 
     assert [vehicle.vehicle_id for vehicle in selected] == ["ice-1", "ice-2"]
+
+
+def test_all_ice_case_preserves_the_mixed_total_fleet_budget() -> None:
+    args = SimpleNamespace(
+        allowed_vehicle_type="ALL",
+        vehicles_per_type=5,
+        trip_count=24,
+    )
+
+    m0_args = _all_ice_case_args(args)
+
+    assert m0_args.allowed_vehicle_type == "ICE"
+    assert m0_args.vehicles_per_type == 10
+    assert m0_args.trip_count == 24
 
 
 def test_small_oracle_restores_explicit_prepared_counterfactual_contract() -> None:

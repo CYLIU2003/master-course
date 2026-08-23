@@ -1,16 +1,23 @@
 # Current research release blockers
 
-## 2026-08-23: Bounded M0--M3 protocol exists; no result is released yet
+## 2026-08-23: First bounded M0--M3 attempt is diagnostic; fleet-budget repair pending
 
 The opt-in `--run-small-m0-m3` path in
 `scripts/audit_small_integrated_weather_milp.py` now defines a small-subset
 M0--M3 matrix with an all-ICE M0, no-PV/BESS mixed M1, deployed Phase-3 M2,
 and scalar actual-cost-oracle M3. The protocol is designed to fail closed and
-marks its output `small_subset_only_not_full_264_trip_evidence`. It has not
-yet been executed from its own clean frozen commit, so it clears no blocker.
-Even after a successful bounded execution it cannot discharge the 264-trip
-Phase-3 gap, full-scale M0--M3, economic-sensitivity, or global-optimality
-release gates.
+marks its output `small_subset_only_not_full_264_trip_evidence`. The clean
+tag `phase3-small-m0-m3-ab55933` executed a 24-trip bundle at
+`output/verification/small_m0_m3/ab55933_20260823/audit_24.json` (SHA-256
+`f05cd64ae34925eeada14cb03ca6ebf3ab7d6075340fb66062a2b08134b412f8`). Its
+M0 is infeasible in strict precheck because the first implementation gave it
+five ICE vehicles, while the mixed M1/M2/M3 conditions had ten total vehicles.
+The selected frozen trips actually allow both BEV and ICE; this is an
+implementation defect, not a compatibility result. The artifact is therefore
+`DIAGNOSTIC`, `NOT USED FOR RESEARCH CONCLUSIONS`. The repair gives M0 ten ICE
+vehicles to match the mixed-condition total fleet count and must be rerun from
+a new clean commit. It cannot discharge the 264-trip Phase-3 gap, full-scale
+M0--M3, economic-sensitivity, or global-optimality release gates.
 
 ## 2026-08-23: Diesel-price term is active; economic-response release gate remains blocked
 
