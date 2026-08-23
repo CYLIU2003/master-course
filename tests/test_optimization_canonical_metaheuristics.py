@@ -181,8 +181,9 @@ def test_run_optimization_uses_canonical_engine_for_ga_mode() -> None:
             100,
             0.25,
             stage1_best_obj_stop_enabled=True,
-            stage1_numeric_coefficient_diagnostic_enabled=True,
-            stage1_gurobi_scale_flag=2,
+            stage1_root_lp_diagnostic_enabled=True,
+            stage1_numeric_coefficient_diagnostic_enabled=False,
+            stage1_gurobi_scale_flag=-1,
             stage1_powertrain_selector_strengthening=True,
             gurobi_threads=4,
             frontend_request_payload={
@@ -198,8 +199,9 @@ def test_run_optimization_uses_canonical_engine_for_ga_mode() -> None:
     effective_scenario = problem_builder_cls.return_value.build_from_scenario.call_args.args[0]
     assert config.warm_start is True
     assert config.stage1_best_obj_stop_enabled is False
-    assert config.stage1_numeric_coefficient_diagnostic_enabled is True
-    assert config.stage1_gurobi_scale_flag == 2
+    assert config.stage1_root_lp_diagnostic_enabled is True
+    assert config.stage1_numeric_coefficient_diagnostic_enabled is False
+    assert config.stage1_gurobi_scale_flag == -1
     assert config.diagnostic_mode is True
     assert config.gurobi_threads == 4
     assert canonical_problem.metadata[
@@ -506,8 +508,9 @@ def test_run_optimization_endpoint_submits_current_prepared_input_job() -> None:
             optimization.RunOptimizationBody(
                 mode="mode_milp_only",
                 research_run=True,
-                stage1_numeric_coefficient_diagnostic_enabled=True,
-                stage1_gurobi_scale_flag=2,
+                stage1_root_lp_diagnostic_enabled=True,
+                stage1_numeric_coefficient_diagnostic_enabled=False,
+                stage1_gurobi_scale_flag=-1,
             ),
             {"built_ready": True, "built_dir": "data/built/tokyu_full", "routes_df": None},
         )
@@ -517,10 +520,11 @@ def test_run_optimization_endpoint_submits_current_prepared_input_job() -> None:
     assert submitted_args[2] == "prepared-current"
     assert submitted_args[4] == "mode_milp_only"
     assert submitted_args[18] is True
+    assert submitted_args[23] is True
     assert submitted_args[24] == 30
     assert submitted_args[26] is False
-    assert submitted_args[-2] is True
-    assert submitted_args[-1] == 2
+    assert submitted_args[-2] is False
+    assert submitted_args[-1] == -1
     assert submitted_args[28] == "day_ahead_and_hourly_rolling"
     assert submitted_args[29] is True
     assert submitted_args[30] == 60

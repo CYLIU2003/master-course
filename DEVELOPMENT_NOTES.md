@@ -2,6 +2,12 @@
 
 ## 2026-08-23: Stage-1 coefficient-source diagnostic is read-only and fail-closed
 
+- Fixed a P1 acceptance-boundary omission before the next root-LP observation:
+  `stage1_root_lp_diagnostic_enabled` already created an auxiliary relaxation,
+  but did not itself mark the BFF request diagnostic-only. It now does, with a
+  BFF-worker regression that proves this flag alone sets `diagnostic_mode`.
+  The auxiliary result therefore cannot be upgraded to research evidence.
+
 - The 264-trip Stage-1 telemetry reports a coefficient range of about
   `1.45e9`, above the explicit scaling-warning threshold, while its root bound
   remains unchanged. The new default-OFF

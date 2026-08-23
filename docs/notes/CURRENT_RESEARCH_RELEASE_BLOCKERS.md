@@ -32,6 +32,13 @@ separately traced, documented, diagnostic solver-scaling experiment or an
 exactly proven alternative formulation may proceed; the release remains
 blocked by the 1% MIP-gap gate.
 
+Before the next root-LP observation, a P1 acceptance-boundary defect was
+closed: `stage1_root_lp_diagnostic_enabled` created a separate relaxation but
+did not itself force BFF diagnostic mode. The BFF now fails closed, marking
+that flag diagnostic-only with a focused worker regression. No root-LP
+artifact can therefore become research evidence merely because the main solve
+also completes physical and Rolling gates.
+
 The predeclared next observation, Gurobi-internal `ScaleFlag=2`, is complete
 at frozen `diagnostic-stage1-scaleflag2-4ae58fc`. The implementation accepts
 only `-1/0/1/2/3`, keeps default `-1`, records the effective value in Stage-1

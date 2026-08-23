@@ -11495,6 +11495,7 @@ def _run_optimization(
                 solver_mode == "diagnostic"
                 or solver_mode == "debug_mode"
                 or bool(stage1_numeric_coefficient_diagnostic_enabled)
+                or bool(stage1_root_lp_diagnostic_enabled)
                 or int(stage1_gurobi_scale_flag) != -1
             )
             prepared_cost_cfg = dict(
