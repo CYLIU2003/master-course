@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import json
+from contextlib import nullcontext
 from pathlib import Path
+from types import SimpleNamespace
 
 from scripts.build_lazy_fragment_performance_diagnostic import (
+    _run_pure_ice_case,
+    _runtime_environment_snapshot,
     build_pure_ice_alternating_case_plan,
     build_comparison,
     build_pure_ice_ab_comparison,
@@ -281,6 +285,9 @@ def _pure_ice_metrics(
             "accounting_reconciliation_status": "OK",
             "fallback_used": False,
             "post_solve_repair_used": False,
+            "synthetic_pv_fallback_used": False,
+            "stage1_objective_proxy_used": False,
+            "weather_proxy_forecast_used": False,
             "reported_total_cost_jpy": 61_000.0,
         },
         "representation_audit": {
@@ -293,6 +300,60 @@ def _pure_ice_metrics(
             ),
         },
     }
+
+
+def test_runtime_environment_snapshot_has_required_reproducibility_fields() -> None:
+    snapshot = _runtime_environment_snapshot()
+
+    assert snapshot["python"]["version"]
+    assert snapshot["python"]["executable"]
+    assert "runtime_version" in snapshot["gurobi"]
+    assert snapshot["operating_system"]["platform"]
+    assert "logical_cpu_count" in snapshot["hardware"]
+    assert "total_physical_memory_bytes" in snapshot["hardware"]
+
+
+def test_pure_ice_case_forwards_selector_by_keyword(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import bff.routers.optimization as optimization
+    from bff.store import job_store
+    import src.optimization.milp.solver_adapter as solver_adapter
+
+    job = SimpleNamespace(job_id="test-job")
+    completed_job = SimpleNamespace(
+        status="completed", error=None, metadata={"run_dir": str(tmp_path)}
+    )
+    observed: dict = {}
+
+    monkeypatch.setattr(job_store, "create_job", lambda **_kwargs: job)
+    monkeypatch.setattr(job_store, "get_job", lambda _job_id: completed_job)
+    monkeypatch.setattr(
+        solver_adapter,
+        "_diagnostic_exact_ice_clone_representation",
+        lambda _representation: nullcontext(),
+    )
+    monkeypatch.setattr(
+        optimization,
+        "_run_optimization",
+        lambda **kwargs: observed.update(kwargs),
+    )
+
+    _run_pure_ice_case(
+        scenario_id="scenario-1",
+        prepared_input_id="prepared-1",
+        request={
+            "mode": "phase3_two_stage",
+            "stage1_powertrain_selector_strengthening": True,
+            "gurobi_threads": 4,
+        },
+        representation="discrete",
+        log_path=tmp_path / "bff_worker.log",
+    )
+
+    assert observed["stage1_powertrain_selector_strengthening"] is True
+    assert observed["gurobi_threads"] == 4
+    assert observed["mode"] == "phase3_two_stage"
 
 
 def test_compile_phase3_pure_ice_ab_request_removes_only_phase4_controls() -> None:

@@ -1,5 +1,32 @@
 # Development Notes
 
+## 2026-08-23: Hardened the 264-trip pure-ICE aggregation A/B contract
+
+- Found a P1 regression in
+  `scripts/build_lazy_fragment_performance_diagnostic.py`: the BFF private
+  worker signature acquired `stage1_powertrain_selector_strengthening`, while
+  the aggregation runner still supplied positional arguments. On current code,
+  that could shift the thread and later controls. The runner now calls the
+  reachable BFF worker with named arguments and has a focused regression test
+  that proves selector and thread forwarding.
+- Raised the repeated aggregation artifact schema to v4. Its request manifest
+  now records Python, Gurobi/gurobipy, OS, CPU, RAM, frozen-request SHA-256,
+  and explicit solver controls. Per-run validity now rejects synthetic-PV
+  fallback, Stage-1 objective proxy use, weather-proxy input, fallback, and
+  post-solve repair. The frozen trip-energy model remains disclosed as a common
+  input rather than mislabelled as an optimization-time substitution.
+- Commands: `.venv\\Scripts\\python.exe -m pytest -q
+  tests\\test_lazy_fragment_performance_diagnostic.py
+  tests\\test_stage1_runtime_telemetry.py
+  tests\\test_optimization_canonical_metaheuristics.py` and
+  `.venv\\Scripts\\python.exe -m compileall -q
+  scripts\\build_lazy_fragment_performance_diagnostic.py`. Result: 39 passed;
+  compile succeeded. `ruff` is not installed in this virtual environment.
+- The old five-pair v3 artifact at
+  `output/diagnostics/pure_ice_aggregation_phase3_ab_817d938_20260823/` stays
+  diagnostic-only. A clean v4 commit and fresh five-pair AB/BA rerun are now
+  required; old results will not be relabelled as current-code evidence.
+
 ## 2026-08-23: Pending controlled Stage-1 BEV/ICE selector representation test
 
 - The normal 264-trip candidate's search telemetry reached the substantive

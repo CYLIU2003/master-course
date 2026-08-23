@@ -5,6 +5,7 @@ import csv
 import hashlib
 import json
 import os
+import platform
 import statistics
 import subprocess
 import sys
@@ -21,7 +22,7 @@ if str(REPO_ROOT) not in sys.path:
 
 
 SCHEMA_VERSION = "lazy_fragment_performance_diagnostic_v1"
-PURE_ICE_AB_SCHEMA_VERSION = "pure_ice_aggregation_ab_v3_phase3_repeated_processes"
+PURE_ICE_AB_SCHEMA_VERSION = "pure_ice_aggregation_ab_v4_phase3_repeated_processes"
 PURE_ICE_AB_TARGET_PHASE = "phase3_two_stage"
 _PHASE4_ONLY_REQUEST_FIELDS = (
     "integrated_actual_cost_objective",
@@ -537,6 +538,72 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _total_physical_memory_bytes() -> int | None:
+    """Return installed RAM without adding a third-party runtime dependency."""
+
+    if os.name == "nt":
+        import ctypes
+
+        class MemoryStatusEx(ctypes.Structure):
+            _fields_ = [
+                ("dwLength", ctypes.c_ulong),
+                ("dwMemoryLoad", ctypes.c_ulong),
+                ("ullTotalPhys", ctypes.c_ulonglong),
+                ("ullAvailPhys", ctypes.c_ulonglong),
+                ("ullTotalPageFile", ctypes.c_ulonglong),
+                ("ullAvailPageFile", ctypes.c_ulonglong),
+                ("ullTotalVirtual", ctypes.c_ulonglong),
+                ("ullAvailVirtual", ctypes.c_ulonglong),
+                ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+            ]
+
+        memory_status = MemoryStatusEx()
+        memory_status.dwLength = ctypes.sizeof(memory_status)
+        if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(memory_status)):
+            return int(memory_status.ullTotalPhys)
+        return None
+    try:
+        return int(os.sysconf("SC_PAGE_SIZE")) * int(os.sysconf("SC_PHYS_PAGES"))
+    except (AttributeError, OSError, ValueError):
+        return None
+
+
+def _runtime_environment_snapshot() -> dict[str, Any]:
+    """Capture the runtime fields required to reproduce a performance result."""
+
+    try:
+        import gurobipy as gp
+
+        gurobi_runtime_version: list[int] | None = list(gp.gurobi.version())
+        gurobipy_version: str | None = str(getattr(gp, "__version__", "")) or None
+    except ImportError:
+        gurobi_runtime_version = None
+        gurobipy_version = None
+
+    return {
+        "python": {
+            "implementation": platform.python_implementation(),
+            "version": platform.python_version(),
+            "executable": str(Path(sys.executable).resolve()),
+        },
+        "gurobi": {
+            "runtime_version": gurobi_runtime_version,
+            "gurobipy_version": gurobipy_version,
+        },
+        "operating_system": {
+            "platform": platform.platform(),
+            "system": platform.system(),
+            "release": platform.release(),
+            "machine": platform.machine(),
+        },
+        "hardware": {
+            "processor": platform.processor() or None,
+            "logical_cpu_count": os.cpu_count(),
+            "total_physical_memory_bytes": _total_physical_memory_bytes(),
+        },
+    }
+
+
 def _git_output(*args: str) -> str:
     completed = subprocess.run(
         ("git", *args),
@@ -859,6 +926,22 @@ def collect_pure_ice_case_metrics(
                     "no_postsolve_modification", False
                 )
             ),
+            # These are the relevant optimization-time proxies. The trip-energy
+            # input model is recorded separately below; it is a frozen common
+            # input, not a representation-specific post-solve substitution.
+            "synthetic_pv_fallback_used": bool(
+                settings.get("synthetic_pv_fallback_applied", False)
+            ),
+            "stage1_objective_proxy_used": bool(
+                solver_metadata.get(
+                    "stage1_energy_cost_proxy_used_in_objective", False
+                )
+            ),
+            "weather_proxy_forecast_used": bool(
+                effective.get("weather_proxy_forecast_path")
+                or effective.get("weatherProxyForecastPath")
+            ),
+            "trip_energy_model": effective.get("trip_energy_model"),
         },
         "representation_audit": aggregation,
         "summary_vehicle_count_used": summary.get("vehicle_count_used"),
@@ -906,6 +989,9 @@ def _pure_ice_case_valid(metrics: Mapping[str, Any]) -> bool:
         and validity.get("accounting_reconciliation_status") == "OK"
         and not validity.get("fallback_used")
         and not validity.get("post_solve_repair_used")
+        and not validity.get("synthetic_pv_fallback_used")
+        and not validity.get("stage1_objective_proxy_used")
+        and not validity.get("weather_proxy_forecast_used")
     )
 
 
@@ -1549,74 +1635,52 @@ def _run_pure_ice_case(
                         "pure-ICE A/B request retains Phase-4-only fields: "
                         + ", ".join(phase4_fields)
                     )
+                # Keywords deliberately prevent a BFF-worker signature change
+                # from silently shifting threads, profile, or cost controls.
                 _run_optimization(
-                    scenario_id,
-                    job.job_id,
-                    prepared_input_id,
-                    prepared_input_id,
-                    PURE_ICE_AB_TARGET_PHASE,
-                    int(request.get("time_limit_seconds") or 900),
-                    float(request.get("mip_gap") or 0.01),
-                    int(request.get("random_seed") or 42),
-                    str(request.get("service_id") or "WEEKDAY"),
-                    str(request.get("depot_id") or "tsurumaki"),
-                    bool(request.get("rebuild_dispatch", False)),
-                    bool(request.get("use_existing_duties", False)),
-                    int(request.get("alns_iterations") or 500),
-                    int(request.get("no_improvement_limit") or 100),
-                    float(request.get("destroy_fraction") or 0.25),
-                    request.get("timestep_min") or request.get("time_step_min"),
-                    request.get("enableWeatherOperationPolicy"),
-                    request.get("weatherProxyForecastPath"),
-                    bool(request.get("research_run", True)),
-                    request.get("stage1_time_limit_seconds"),
-                    request.get("stage2_time_limit_seconds"),
-                    bool(request.get("stage1_best_obj_stop_enabled", False)),
-                    str(
-                        request.get("stage1_gurobi_search_profile")
-                        or "default"
-                    ),
-                    bool(
-                        request.get(
-                            "stage1_root_lp_diagnostic_enabled",
-                            False,
-                        )
-                    ),
-                    int(
-                        request.get(
-                            "stage1_root_lp_diagnostic_time_limit_seconds",
-                            30,
-                        )
-                        or 30
-                    ),
-                    str(
-                        request.get("stage1_fragment_transition_cut_mode")
-                        or "lazy"
-                    ),
-                    int(request.get("gurobi_threads") or 4),
-                    str(
-                        request.get("run_profile")
-                        or "day_ahead_and_hourly_rolling"
-                    ),
-                    bool(request.get("run_hourly_rolling", True)),
-                    int(request.get("rolling_execution_minutes") or 60),
-                    dict(request),
-                    int(request.get("stage1_stage2_candidate_limit") or 1),
-                    int(request.get("stage1_composition_search_radius") or 0),
-                    bool(request.get("stage1_bev_frontier_enabled", False)),
-                    int(request.get("stage1_bev_frontier_min_count") or 15),
-                    int(request.get("stage1_bev_frontier_max_count") or 35),
-                    int(
-                        request.get(
-                            "stage1_bev_frontier_target_time_limit_seconds"
-                        )
-                        or 120
-                    ),
-                    False,
-                    "disabled",
-                    None,
-                    None,
-                    request.get("co2_emissions_cap_kg"),
+                    scenario_id=scenario_id,
+                    job_id=job.job_id,
+                    prepared_input_id=prepared_input_id,
+                    requested_prepared_input_id=prepared_input_id,
+                    mode=PURE_ICE_AB_TARGET_PHASE,
+                    time_limit_seconds=int(request.get("time_limit_seconds") or 900),
+                    mip_gap=float(request.get("mip_gap") or 0.01),
+                    random_seed=int(request.get("random_seed") or 42),
+                    service_id=str(request.get("service_id") or "WEEKDAY"),
+                    depot_id=str(request.get("depot_id") or "tsurumaki"),
+                    rebuild_dispatch=bool(request.get("rebuild_dispatch", False)),
+                    use_existing_duties=bool(request.get("use_existing_duties", False)),
+                    alns_iterations=int(request.get("alns_iterations") or 500),
+                    no_improvement_limit=int(request.get("no_improvement_limit") or 100),
+                    destroy_fraction=float(request.get("destroy_fraction") or 0.25),
+                    timestep_min=request.get("timestep_min") or request.get("time_step_min"),
+                    enable_weather_operation_policy=request.get("enableWeatherOperationPolicy"),
+                    weather_proxy_forecast_path=request.get("weatherProxyForecastPath"),
+                    research_run=bool(request.get("research_run", True)),
+                    stage1_time_limit_seconds=request.get("stage1_time_limit_seconds"),
+                    stage2_time_limit_seconds=request.get("stage2_time_limit_seconds"),
+                    stage1_best_obj_stop_enabled=bool(request.get("stage1_best_obj_stop_enabled", False)),
+                    stage1_gurobi_search_profile=str(request.get("stage1_gurobi_search_profile") or "default"),
+                    stage1_root_lp_diagnostic_enabled=bool(request.get("stage1_root_lp_diagnostic_enabled", False)),
+                    stage1_root_lp_diagnostic_time_limit_seconds=int(request.get("stage1_root_lp_diagnostic_time_limit_seconds", 30) or 30),
+                    stage1_fragment_transition_cut_mode=str(request.get("stage1_fragment_transition_cut_mode") or "lazy"),
+                    stage1_powertrain_selector_strengthening=bool(request.get("stage1_powertrain_selector_strengthening", False)),
+                    gurobi_threads=int(request.get("gurobi_threads") or 4),
+                    run_profile=str(request.get("run_profile") or "day_ahead_and_hourly_rolling"),
+                    run_hourly_rolling=bool(request.get("run_hourly_rolling", True)),
+                    rolling_execution_minutes=int(request.get("rolling_execution_minutes") or 60),
+                    frontend_request_payload=dict(request),
+                    stage1_stage2_candidate_limit=int(request.get("stage1_stage2_candidate_limit") or 1),
+                    stage1_composition_search_radius=int(request.get("stage1_composition_search_radius") or 0),
+                    stage1_bev_frontier_enabled=bool(request.get("stage1_bev_frontier_enabled", False)),
+                    stage1_bev_frontier_min_count=int(request.get("stage1_bev_frontier_min_count") or 15),
+                    stage1_bev_frontier_max_count=int(request.get("stage1_bev_frontier_max_count") or 35),
+                    stage1_bev_frontier_target_time_limit_seconds=int(request.get("stage1_bev_frontier_target_time_limit_seconds") or 120),
+                    integrated_actual_cost_objective=False,
+                    integrated_ev_utilization_mode="disabled",
+                    integrated_actual_cost_upper_bound_jpy=None,
+                    integrated_actual_cost_upper_bound_delta_ratio=None,
+                    co2_emissions_cap_kg=request.get("co2_emissions_cap_kg"),
                 )
             print(
                 json.dumps(
@@ -2028,6 +2092,19 @@ def run_pure_ice_aggregation_ab(
         ),
         "frozen_optimization_request_path": str(frozen_request_path.resolve()),
         "frozen_optimization_request_sha256": _sha256_file(frozen_request_path),
+        "runtime_environment": _runtime_environment_snapshot(),
+        "solver_controls": {
+            "random_seed": request.get("random_seed"),
+            "gurobi_threads": request.get("gurobi_threads"),
+            "time_limit_seconds": request.get("time_limit_seconds"),
+            "mip_gap": request.get("mip_gap"),
+            "stage1_time_limit_seconds": request.get("stage1_time_limit_seconds"),
+            "stage2_time_limit_seconds": request.get("stage2_time_limit_seconds"),
+            "stage1_gurobi_search_profile": request.get("stage1_gurobi_search_profile"),
+            "stage1_fragment_transition_cut_mode": request.get("stage1_fragment_transition_cut_mode"),
+            "run_profile": request.get("run_profile"),
+            "rolling_execution_minutes": request.get("rolling_execution_minutes"),
+        },
         "source_optimization_request": source_request,
         "phase3_request_transformation": request_transformation,
         "optimization_request": request,

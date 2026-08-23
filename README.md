@@ -26,6 +26,13 @@ Stage-1 solver time is 463.816 s OFF versus 463.918 s ON. This one controlled
 run finds no gap or solver-time benefit, so the representation remains OFF and
 the normal research-release blocker remains unchanged.
 
+The separate pure-ICE aggregation benchmark has a historical five-pair v3
+bundle, but it predates a BFF worker signature change and does not contain the
+required machine-readable OS/CPU/RAM/gurobipy snapshot or explicit
+optimization-proxy gate. The current v4 runner forwards every BFF control by
+keyword and requires those fields; a clean-SHA v4 rerun is required before any
+current-code aggregation claim.
+
 ## 2026-08-23 current-SHA normal Phase-3 candidate: feasible, not optimal
 
 Frozen tag `phase3-current-formal-6e61b80` ran the ordinary frontend/BFF path

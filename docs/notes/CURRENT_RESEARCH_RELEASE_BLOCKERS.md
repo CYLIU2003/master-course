@@ -1,6 +1,6 @@
 # Current research release blockers
 
-## 2026-08-23: 264-trip Stage-1 representation A/B is pending
+## 2026-08-23: Current-code pure-ICE aggregation A/B is pending
 
 The normal candidate's solver telemetry is root-bound dominated: the
 52,749.163582-JPY Stage-1 root bound closely matches the independently
@@ -32,6 +32,15 @@ certified Stage-1 gap. Solver time is effectively unchanged (463.816 s OFF;
 463.918 s ON). Therefore this representation has no demonstrated benefit in
 the fixed 264-trip condition, remains default-OFF, and does not alter the
 gap-blocked release verdict.
+
+The historical pure-ICE aggregation bundle
+`output/diagnostics/pure_ice_aggregation_phase3_ab_817d938_20260823/` is not
+current-code evidence. Although it contains five isolated AB/BA pairs and
+reports `PASS_STRUCTURAL_ONLY`, its v3 runner used positional BFF worker
+arguments before the selector parameter was added and did not persist the
+full OS/CPU/RAM/gurobipy snapshot or explicit optimization-proxy checks. The
+v4 runner fixes both issues. A fresh clean-SHA five-pair run is required; no
+runtime or formulation claim will be carried forward from the v3 bundle.
 
 ## 2026-08-23: Latest normal 264-trip Phase-3 rerun remains gap-blocked
 
