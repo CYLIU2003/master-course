@@ -1,6 +1,6 @@
 # Current research release blockers
 
-## 2026-08-23: Current-code pure-ICE aggregation A/B is pending
+## 2026-08-23: Current-code pure-ICE aggregation A/B is structural-only
 
 The normal candidate's solver telemetry is root-bound dominated: the
 52,749.163582-JPY Stage-1 root bound closely matches the independently
@@ -45,16 +45,28 @@ then retained only diagnostically after a further P1 review: the collector had
 not yet failed closed on the exact aggregate-flow recovery fields. The current
 gate requires unchanged integer and recoverable physical dispatch sets,
 non-relaxed labelled region, and a one-to-one count of recovered canonical
-ICE paths and IDs. A fresh clean-SHA five-pair run is required; no runtime or
-formulation claim will be carried forward from any earlier bundle.
+ICE paths and IDs. No runtime or formulation claim is carried forward from
+those earlier bundles.
 
 The first recovery-gated v4 attempt at
 `output/diagnostics/pure_ice_aggregation_phase3_ab_4e715da_20260823_r3/`
 ended externally after four completed child artifacts and before finalization.
 It has no repeated comparison and is `DIAGNOSTIC`, `NOT USED FOR RESEARCH
 CONCLUSIONS`. The runner now supports a fail-closed manifest-attested resume
-mode, but that is a source change: a new clean-SHA five-pair A/B bundle must
-start from scratch and may resume only its own matching children.
+mode, but that is a source change and that partial bundle remains excluded.
+
+The fresh recovery-gated bundle at
+`output/diagnostics/pure_ice_aggregation_phase3_ab_ac8982d_20260823/` is now
+complete at clean SHA `ac8982d33826f681c6441eeb3f7f320fc12f3a3b`. All five
+AB/BA pairs hold the SHA, input hash, seed, threads, and Stage 1=435 / Stage
+2=30-second controls fixed. All ten children passed physical validation,
+24/24 Rolling, accounting, and fallback/repair exclusion. Aggregate recovery
+is applied and preserves both integer and recoverable physical dispatch sets.
+The result is `PASS_STRUCTURAL_ONLY`: median variables decreased 31.82% and
+constraints 24.09%, but median solver time increased 3.16% (465.570 to 480.265
+seconds), and all runs are time-limited. It closes only the current-code
+structural-evidence gap; it does not close the 1% optimality, runtime-benefit,
+cost-dominance, sensitivity, or research-release gates.
 
 ## 2026-08-23: Latest normal 264-trip Phase-3 rerun remains gap-blocked
 

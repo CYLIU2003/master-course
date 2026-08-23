@@ -1,5 +1,34 @@
 # Development Notes
 
+## 2026-08-23: Current recovery-gated pure-ICE A/B completed
+
+- Clean commit `ac8982d33826f681c6441eeb3f7f320fc12f3a3b` completed the
+  recovery-gated v4, isolated-process Phase-3 bundle at
+  `output/diagnostics/pure_ice_aggregation_phase3_ab_ac8982d_20260823/`.
+  It contains five alternating AB/BA pairs, 10 children total, the fixed
+  prepared input `prepared-ee27696fc37f0c7a-f1e18f252e336f1f-8acc7b3a`, seed
+  42, four Gurobi threads, Stage 1=435 seconds, Stage 2=30 seconds, and the
+  frozen request hash recorded with each child.
+- All 10 children share the clean SHA and prepared-input hash; each served
+  264/264 trips, passed independent physical validation, accepted 24/24
+  Rolling steps, reconciled final accounting, and used neither fallback nor
+  post-solve repair. Every aggregate child records `applied=true`, unchanged
+  integer and recoverable physical dispatch sets, a non-relaxed labelled
+  region, and 19 recovered canonical ICE paths/IDs.
+- `repeated_comparison.json` reports `PASS_STRUCTURAL_ONLY`. Median total
+  variables fell 762,906 to 520,173 (-31.82%), binaries 726,240 to 493,756
+  (-32.01%), constraints 108,062 to 82,035 (-24.09%), and process-tree RSS
+  3,654,950,912 to 3,026,780,160 bytes (-17.19%). Median total solver time
+  increased 465.570 to 480.265 seconds (+3.16%); although median wall time
+  fell 648.756 to 619.371 seconds, the collector correctly rejects a solver
+  performance claim. Both representations remain time-limited, so the lower
+  aggregate candidate incumbent and 3.08% gap do not establish cost dominance
+  or a 264-trip optimum.
+- Verification before this run: the focused suite reported `116 passed`; the
+  completed bundle is the current structural diagnostic, not a release or
+  sensitivity-acceptance result. Historical v3, initial-v4, and interrupted-r3
+  bundles remain diagnostic only and are not combined with this SHA.
+
 ## 2026-08-23: Pure-ICE A/B runner can now resume interrupted batches
 
 - The recovery-gated r3 attempt at

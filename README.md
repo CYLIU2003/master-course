@@ -26,22 +26,23 @@ Stage-1 solver time is 463.816 s OFF versus 463.918 s ON. This one controlled
 run finds no gap or solver-time benefit, so the representation remains OFF and
 the normal research-release blocker remains unchanged.
 
-The separate pure-ICE aggregation benchmark has historical v3 and initial-v4
-five-pair bundles. V3 predates the BFF worker signature change and lacks the
-required runtime/proxy metadata. The initial v4 bundle was generated before
-the collector required proof that aggregate paths were recovered to canonical
-ICE IDs without changing the recoverable physical dispatch set. The runner
-now forwards every BFF control by keyword and fails closed on that recovery
-audit; a fresh clean-SHA v4 run is required before any current-code aggregation
-claim.
+The authoritative recovery-gated v4 pure-ICE aggregation bundle is
+`output/diagnostics/pure_ice_aggregation_phase3_ab_ac8982d_20260823/`, from
+clean commit `ac8982d33826f681c6441eeb3f7f320fc12f3a3b`. Its five AB/BA pairs
+hold the SHA, prepared-input hash, seed, threads, time limits, and other solver
+controls fixed. All ten children passed coverage, independent physical
+validation, 24-step Rolling, final accounting, and fallback/repair exclusion;
+each aggregate child also passed the exact recovery audit with an unchanged
+integer and recoverable physical dispatch set.
 
-The first recovery-gated v4 attempt was externally interrupted after four
-valid child runs and has no comparison artifact, so it is diagnostic only. The
-runner now has an explicit manifest-attested resume mode: it reloads only
-completed children whose SHA, prepared-input hash, representation, and all
-validity gates match the frozen contract, then records a new retry directory
-for every remaining child. A fresh clean-SHA bundle is required before this
-mechanism is used as A/B evidence.
+Its verdict is `PASS_STRUCTURAL_ONLY`. Median variables fell from 762,906 to
+520,173 (-31.82%), binaries from 726,240 to 493,756 (-32.01%), and constraints
+from 108,062 to 82,035 (-24.09%). This does not establish a speed or cost
+benefit: median solver time increased from 465.570 to 480.265 seconds, every
+264-trip case remained time-limited, and the lower aggregate incumbent is a
+different feasible candidate rather than an optimality comparison. The
+manifest-attested resume mode remains available for future interrupted bundles,
+but was not needed to finalize this one.
 
 ## 2026-08-23 current-SHA normal Phase-3 candidate: feasible, not optimal
 
@@ -292,22 +293,21 @@ claim that electricity price is irrelevant.
 
 ## 2026-08-23 A/B verification status
 
-The first bundle at
-`output/diagnostics/pure_ice_aggregation_phase3_ab_81561d5_20260822/` remains
-diagnostic because its effective Stage-1/Stage-2 limits differed. The corrected
-clean-SHA bundle is
-`output/diagnostics/pure_ice_aggregation_phase3_ab_817d938_20260823/`: AB/BA
-isolated processes, five repetitions each, equal SHA/input/seed/threads and
-explicit Stage 1=435 / Stage 2=30 seconds. All ten cases passed coverage,
-physical validation, 24-step Rolling and final accounting with no fallback or
-repair.
+The initial bundles at
+`output/diagnostics/pure_ice_aggregation_phase3_ab_81561d5_20260822/` and
+`output/diagnostics/pure_ice_aggregation_phase3_ab_817d938_20260823/` remain
+historical diagnostics: their runner contracts predate the current BFF-control
+and recovery fail-closed checks. The current clean-SHA v4 bundle is
+`output/diagnostics/pure_ice_aggregation_phase3_ab_ac8982d_20260823/`:
+AB/BA isolated processes, five repetitions per representation, explicit Stage
+1=435 / Stage 2=30 seconds, and matching input/control contracts.
 
-Its result is `PASS_STRUCTURAL_ONLY`: median variables fell from 762,906 to
-520,173 and constraints from 108,062 to 82,035. It is not a speed or optimality
-claim—median solver time increased from 465.531 to 480.192 seconds, and all
-264-trip cases remain time-limited. The A/B CLI now requires explicit
-`--stage1-time-limit-seconds` and `--stage2-time-limit-seconds` so an unfrozen
-comparison fails before execution.
+The current verdict is `PASS_STRUCTURAL_ONLY`. It supports the exact checked
+formulation-size reductions listed above, but not a speed, optimality, or
+candidate-cost claim: aggregate median solver time is 480.265 seconds versus
+465.570 seconds for discrete, even though process wall time is lower. The A/B
+CLI requires explicit Stage-1 and Stage-2 limits and fails closed on unfrozen
+or recovery-incomplete comparisons.
 
 ## 2026-08-23 current-SHA Phase-3 feasibility and fixed-plan stress checkpoint
 
