@@ -135,6 +135,15 @@ candidates retain 32 vehicles and 48 BEV / 216 ICE trips. This verifies only
 the common cost coefficient and accounting; it cannot establish BEV-specific
 or ICE-specific economic response, optimality, or release readiness.
 
+The declared BESS on/off sensitivity was previously missing. The current
+matrix now has `BESS_ON` and `BESS_OFF` cases that reuse the frontend/BFF
+execution path. `BESS_ON` fails closed unless the base Prepare request already
+contains enabled BESS assets with positive capacity and power; `BESS_OFF`
+clears only BESS capacity, state, and transfer controls. The runner audits the
+immutable effective scenario snapshot, but no 264-trip BESS pair has yet been
+executed from this contract. Thus PV/BESS component-ablation evidence remains
+incomplete and the economic-response gate is still open.
+
 ## 2026-08-23: Latest normal 264-trip Phase-3 rerun remains gap-blocked
 
 The frozen tag `phase3-current-formal-6e61b80` reran the ordinary BFF path

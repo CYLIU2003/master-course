@@ -1,5 +1,23 @@
 # Development Notes
 
+## 2026-08-23: BESS on/off sensitivity is now fail-closed and auditable
+
+- `scripts/build_thesis_experiment_matrix.py` now declares `BESS_ON` and
+  `BESS_OFF`; `scripts/run_thesis_sensitivity_matrix.py` applies only the
+  narrowly declared BESS enablement transformation to existing
+  `depot_energy_assets`. `BESS_ON` requires an already enabled asset with
+  positive energy and power, while `BESS_OFF` clears BESS capacity, state, and
+  transfer controls without changing PV or any non-energy input.
+- The result audit reads `scenario_input_snapshot.json` and records effective
+  BESS enablement by depot. It rejects a case when the immutable snapshot does
+  not prove the declared on/off state; the family-aware control fingerprint
+  excludes only the deliberately varied energy-asset hash.
+- Focused verification:
+  `python -m pytest -q tests/test_thesis_experiment_matrix.py
+  tests/test_thesis_sensitivity_matrix.py` -> `32 passed`; `git diff --check`
+  passed. This is implementation evidence only. No BESS sensitivity solve has
+  been run yet, so its economic-response gate remains open.
+
 ## 2026-08-23: Common vehicle-day cost reaches the ledger but is gap-blocked
 
 - The normal BFF executed `VEHICLE_DAY_0` and `VEHICLE_DAY_20000` at frozen tag

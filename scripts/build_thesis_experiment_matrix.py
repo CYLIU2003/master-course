@@ -52,6 +52,7 @@ def build_experiment_matrix() -> dict[str, Any]:
         changes: dict[str, Any],
         *,
         request_overrides: dict[str, Any] | None = None,
+        depot_energy_asset_overrides: dict[str, Any] | None = None,
     ) -> None:
         prepare_settings = {**common, **changes}
         timestep_min = int(prepare_settings.get("timestep_min") or 60)
@@ -79,6 +80,9 @@ def build_experiment_matrix() -> dict[str, Any]:
                 "family": family,
                 "prepare_settings": prepare_settings,
                 "prepare_request_overrides": dict(request_overrides or {}),
+                "depot_energy_asset_overrides": dict(
+                    depot_energy_asset_overrides or {}
+                ),
                 "optimization_request_overrides": optimization_overrides,
                 "execution_path": (
                     "POST /api/scenarios/{scenario_id}/simulation/prepare then "
@@ -115,6 +119,13 @@ def build_experiment_matrix() -> dict[str, Any]:
             f"PV_{pv_scale:.2f}",
             "pv_supply_transition",
             {"pv_scale": pv_scale},
+        )
+    for bess_enabled in (True, False):
+        add(
+            f"BESS_{'ON' if bess_enabled else 'OFF'}",
+            "bess_asset_ablation",
+            {},
+            depot_energy_asset_overrides={"bess_enabled": bess_enabled},
         )
     for grid_price in (24.0, 30.0, 36.0):
         add(
@@ -181,7 +192,7 @@ def build_experiment_matrix() -> dict[str, Any]:
 
     return {
         "schema_version": (
-            "thesis_experiment_matrix_v8_phase3_two_stage_sensitivities"
+            "thesis_experiment_matrix_v9_phase3_two_stage_sensitivities"
         ),
         "execution_semantics": "frontend_bff_only_no_direct_solver",
         "common_control_contract": common,
@@ -195,6 +206,14 @@ def build_experiment_matrix() -> dict[str, Any]:
                 "Multiplicative alpha applied to the available PV energy "
                 "series after rated-capacity generation is constructed; it "
                 "does not change pv_capacity_kw."
+            ),
+            "bess_asset_ablation": (
+                "Uses the BESS assets already present in the submitted "
+                "Prepare request. BESS_ON fails closed unless those assets "
+                "are already enabled with positive capacity and power; "
+                "BESS_OFF disables BESS and clears only its capacity, state, "
+                "and transfer controls without changing PV, fleet, timetable, "
+                "tariff, or solver controls."
             ),
             "electricity_price_sensitivity": (
                 "Sets a flat grid purchase price of 24, 30, or 36 JPY/kWh "

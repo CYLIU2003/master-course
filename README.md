@@ -118,6 +118,14 @@ The 0- and 20,000-JPY candidates otherwise retain the same 32 vehicles and
 (1.7803% gap). It validates the common vehicle-day cost term and accounting,
 not separate BEV/ICE cost responses or an accepted economic optimum.
 
+The sensitivity matrix now declares `BESS_ON` and `BESS_OFF` through the same
+frontend/BFF path. `BESS_ON` reuses only an already enabled asset with positive
+energy capacity and power; it fails closed rather than creating a BESS.
+`BESS_OFF` clears BESS capacity, state, and transfer controls while preserving
+PV, timetable, fleet, tariff, and solver settings. The runner verifies the
+effective immutable scenario snapshot before a result can be accepted. No
+264-trip BESS pair has yet been executed from this new contract.
+
 ## 2026-08-23 current-SHA normal Phase-3 candidate: feasible, not optimal
 
 Frozen tag `phase3-current-formal-6e61b80` ran the ordinary frontend/BFF path

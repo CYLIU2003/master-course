@@ -112,6 +112,10 @@ def build_case_requests(
     if not isinstance(settings, dict):
         raise ValueError("base Prepare request must contain simulation_settings")
     settings.update(dict(case.get("prepare_settings") or {}))
+    _apply_depot_energy_asset_overrides(
+        settings,
+        overrides=case.get("depot_energy_asset_overrides"),
+    )
     if str(case.get("family") or "") == "electricity_price_sensitivity":
         _apply_flat_tariff_price_to_time_of_use_bands(
             settings,
@@ -130,6 +134,84 @@ def build_case_requests(
     # no-op flag would make the submitted contract internally contradictory.
     optimization.pop("integrated_actual_cost_objective", None)
     return prepare, optimization
+
+
+def _apply_depot_energy_asset_overrides(
+    settings: dict[str, Any],
+    *,
+    overrides: Any,
+) -> None:
+    """Apply the narrowly declared BESS asset ablation without inventing assets."""
+
+    if overrides in (None, {}):
+        return
+    if not isinstance(overrides, Mapping) or set(overrides) != {"bess_enabled"}:
+        raise ValueError(
+            "depot energy asset overrides may declare only bess_enabled"
+        )
+    bess_enabled = overrides["bess_enabled"]
+    if not isinstance(bess_enabled, bool):
+        raise ValueError("bess_enabled override must be a boolean")
+
+    raw_assets = settings.get("depot_energy_assets")
+    if not isinstance(raw_assets, list) or not raw_assets:
+        raise ValueError(
+            "BESS sensitivity requires non-empty depot_energy_assets in "
+            "the base Prepare request"
+        )
+    if not all(isinstance(asset, Mapping) for asset in raw_assets):
+        raise ValueError("depot_energy_assets must contain mapping records")
+
+    updated_assets: list[dict[str, Any]] = []
+    for raw_asset in raw_assets:
+        asset = dict(raw_asset)
+        if bess_enabled:
+            if not bool(asset.get("bess_enabled")):
+                raise ValueError(
+                    "BESS_ON cannot invent a disabled or absent BESS asset"
+                )
+            if not (
+                _positive_number(asset.get("bess_energy_kwh"))
+                and _positive_number(asset.get("bess_power_kw"))
+            ):
+                raise ValueError(
+                    "BESS_ON requires positive existing BESS energy and power"
+                )
+        else:
+            asset.update(
+                {
+                    "bess_enabled": False,
+                    "bess_energy_kwh": 0.0,
+                    "bess_power_kw": 0.0,
+                    "bess_initial_soc_kwh": 0.0,
+                    "bess_soc_min_kwh": 0.0,
+                    "bess_soc_max_kwh": 0.0,
+                    "bess_terminal_soc_min_kwh": 0.0,
+                    "bess_terminal_soc_target_kwh": 0.0,
+                    "bess_initial_soc_percent": 0.0,
+                    "bess_soc_min_percent": 0.0,
+                    "bess_soc_max_percent": 0.0,
+                    "bess_terminal_soc_min_percent": 0.0,
+                    "bess_terminal_soc_target_percent": 0.0,
+                    "bess_initial_soc_ratio": 0.0,
+                    "bess_soc_min_ratio": 0.0,
+                    "bess_soc_max_ratio": 0.0,
+                    "bess_terminal_soc_min_ratio": 0.0,
+                    "bess_terminal_soc_target_ratio": 0.0,
+                    "allow_grid_to_bess": False,
+                    "allow_pv_to_bess": False,
+                    "allow_bess_to_bus": False,
+                }
+            )
+        updated_assets.append(asset)
+    settings["depot_energy_assets"] = updated_assets
+
+
+def _positive_number(value: Any) -> bool:
+    try:
+        return not isinstance(value, bool) and float(value) > 0.0
+    except (TypeError, ValueError):
+        return False
 
 
 def _apply_flat_tariff_price_to_time_of_use_bands(
@@ -408,6 +490,7 @@ def _audit_case(
         case=case,
         parameters=required["optimization_parameters.json"],
         economic_audit=required["assignment_economic_audit.json"],
+        scenario_snapshot=required["scenario_input_snapshot.json"],
     )
     declared_controls_match = _declared_controls_match(
         case=case,
@@ -578,6 +661,9 @@ def _audit_case(
         "pv_to_bus_kwh": costs.get("pv_to_bus_kwh"),
         "pv_to_bess_kwh": costs.get("pv_to_bess_kwh"),
         "bess_to_bus_kwh": costs.get("bess_to_bus_kwh"),
+        "bess_enabled_by_depot": _bess_enabled_by_depot(
+            required["scenario_input_snapshot.json"]
+        ),
         "rolling_min_bev_soc_kwh": rolling_soc.get("minimum_soc_kwh"),
         "rolling_min_bev_soc_percent": rolling_soc.get(
             "minimum_soc_percent"
@@ -892,6 +978,7 @@ def _case_parameter_matches(
     case: Mapping[str, Any],
     parameters: Mapping[str, Any],
     economic_audit: Mapping[str, Any],
+    scenario_snapshot: Mapping[str, Any] | None = None,
 ) -> bool:
     expected = dict(case.get("prepare_settings") or {})
     scenario = dict(parameters.get("effective_problem_scenario") or {})
@@ -919,6 +1006,28 @@ def _case_parameter_matches(
         return bool(scales) and all(
             _numbers_equal(value, expected.get("pv_scale"))
             for value in scales.values()
+        )
+    if family == "bess_asset_ablation":
+        overrides = dict(case.get("depot_energy_asset_overrides") or {})
+        expected_enabled = overrides.get("bess_enabled")
+        states = _bess_asset_states(scenario_snapshot)
+        if not states or not isinstance(expected_enabled, bool):
+            return False
+        return all(
+            state["enabled"] is expected_enabled
+            and (
+                not expected_enabled
+                or (state["energy_positive"] and state["power_positive"])
+            )
+            and (
+                expected_enabled
+                or (
+                    not state["energy_positive"]
+                    and not state["power_positive"]
+                    and not state["allows_bess_transfer"]
+                )
+            )
+            for state in states
         )
     if family == "electricity_price_sensitivity":
         marginal = dict(economic_audit.get("marginal_cost_assumptions") or {})
@@ -1420,6 +1529,8 @@ def _stable_control_fingerprint(
         vehicle_input_sha256 = None
     if family == "pv_supply_transition":
         energy_asset_control_input_sha256 = None
+    if family == "bess_asset_ablation":
+        energy_asset_control_input_sha256 = None
     if family == "vehicle_day_cost_sensitivity":
         objective_weights_sha256 = None
     payload = {
@@ -1451,6 +1562,61 @@ def _stable_control_fingerprint(
         ),
     }
     return _canonical_hash(payload)
+
+
+def _bess_asset_states(
+    scenario_snapshot: Mapping[str, Any] | None,
+) -> list[dict[str, Any]]:
+    """Return effective BESS controls recorded in an immutable run snapshot."""
+
+    if not isinstance(scenario_snapshot, Mapping):
+        return []
+    configuration = scenario_snapshot.get("effective_configuration")
+    if not isinstance(configuration, Mapping):
+        return []
+    simulation_config = configuration.get("simulation_config")
+    if not isinstance(simulation_config, Mapping):
+        return []
+    raw_assets = simulation_config.get("depot_energy_assets")
+    if isinstance(raw_assets, Mapping):
+        assets = [raw_assets]
+    elif isinstance(raw_assets, list):
+        assets = raw_assets
+    else:
+        return []
+
+    states: list[dict[str, Any]] = []
+    for asset in assets:
+        if not isinstance(asset, Mapping):
+            return []
+        states.append(
+            {
+                "depot_id": str(asset.get("depot_id") or "").strip(),
+                "enabled": bool(asset.get("bess_enabled")),
+                "energy_positive": _positive_number(asset.get("bess_energy_kwh")),
+                "power_positive": _positive_number(asset.get("bess_power_kw")),
+                "allows_bess_transfer": any(
+                    bool(asset.get(key))
+                    for key in (
+                        "allow_grid_to_bess",
+                        "allow_pv_to_bess",
+                        "allow_bess_to_bus",
+                    )
+                ),
+            }
+        )
+    return states
+
+
+def _bess_enabled_by_depot(
+    scenario_snapshot: Mapping[str, Any],
+) -> dict[str, bool]:
+    """Expose only the auditable effective BESS enablement by depot."""
+
+    states = _bess_asset_states(scenario_snapshot)
+    if not states or any(not state["depot_id"] for state in states):
+        return {}
+    return {str(state["depot_id"]): bool(state["enabled"]) for state in states}
 
 
 def _verified_prepared_trip_input_hash(

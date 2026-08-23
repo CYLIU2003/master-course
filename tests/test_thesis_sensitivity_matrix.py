@@ -215,6 +215,129 @@ def test_charger_capacity_effect_audit_requires_effective_count() -> None:
     )
 
 
+def test_bess_asset_cases_reuse_or_disable_only_existing_assets() -> None:
+    base_request = {
+        "simulation_settings": {
+            "depot_energy_assets": [
+                {
+                    "depot_id": "dep-1",
+                    "pv_enabled": True,
+                    "pv_capacity_kw": 100.0,
+                    "bess_enabled": True,
+                    "bess_energy_kwh": 600.0,
+                    "bess_power_kw": 90.0,
+                    "bess_initial_soc_kwh": 300.0,
+                    "bess_soc_min_kwh": 120.0,
+                    "bess_soc_max_kwh": 480.0,
+                    "bess_terminal_soc_min_kwh": 300.0,
+                    "allow_pv_to_bess": True,
+                    "allow_bess_to_bus": True,
+                    "allow_grid_to_bess": False,
+                }
+            ]
+        }
+    }
+    on_prepare, _ = build_case_requests(
+        case=_case("BESS_ON"),
+        base_prepare_request=base_request,
+        base_optimization_request={},
+    )
+    off_prepare, _ = build_case_requests(
+        case=_case("BESS_OFF"),
+        base_prepare_request=base_request,
+        base_optimization_request={},
+    )
+
+    on_asset = on_prepare["simulation_settings"]["depot_energy_assets"][0]
+    off_asset = off_prepare["simulation_settings"]["depot_energy_assets"][0]
+    assert on_asset["bess_enabled"] is True
+    assert on_asset["bess_energy_kwh"] == 600.0
+    assert off_asset["bess_enabled"] is False
+    assert off_asset["bess_energy_kwh"] == 0.0
+    assert off_asset["bess_power_kw"] == 0.0
+    assert off_asset["allow_pv_to_bess"] is False
+    assert off_asset["allow_bess_to_bus"] is False
+    assert off_asset["pv_enabled"] is True
+    assert base_request["simulation_settings"]["depot_energy_assets"][0][
+        "bess_enabled"
+    ] is True
+
+
+def test_bess_on_fails_closed_without_an_existing_enabled_asset() -> None:
+    with pytest.raises(ValueError, match="cannot invent"):
+        build_case_requests(
+            case=_case("BESS_ON"),
+            base_prepare_request={
+                "simulation_settings": {
+                    "depot_energy_assets": [
+                        {
+                            "depot_id": "dep-1",
+                            "bess_enabled": False,
+                            "bess_energy_kwh": 0.0,
+                            "bess_power_kw": 0.0,
+                        }
+                    ]
+                }
+            },
+            base_optimization_request={},
+        )
+
+
+def test_bess_asset_effect_audit_uses_immutable_effective_snapshot() -> None:
+    enabled_snapshot = {
+        "effective_configuration": {
+            "simulation_config": {
+                "depot_energy_assets": [
+                    {
+                        "depot_id": "dep-1",
+                        "bess_enabled": True,
+                        "bess_energy_kwh": 600.0,
+                        "bess_power_kw": 90.0,
+                        "allow_pv_to_bess": True,
+                        "allow_bess_to_bus": True,
+                    }
+                ]
+            }
+        }
+    }
+    disabled_snapshot = {
+        "effective_configuration": {
+            "simulation_config": {
+                "depot_energy_assets": [
+                    {
+                        "depot_id": "dep-1",
+                        "bess_enabled": False,
+                        "bess_energy_kwh": 0.0,
+                        "bess_power_kw": 0.0,
+                        "allow_pv_to_bess": False,
+                        "allow_bess_to_bus": False,
+                        "allow_grid_to_bess": False,
+                    }
+                ]
+            }
+        }
+    }
+
+    assert sensitivity_runner._case_parameter_matches(
+        case=_case("BESS_ON"),
+        parameters={},
+        economic_audit={},
+        scenario_snapshot=enabled_snapshot,
+    )
+    assert sensitivity_runner._case_parameter_matches(
+        case=_case("BESS_OFF"),
+        parameters={},
+        economic_audit={},
+        scenario_snapshot=disabled_snapshot,
+    )
+    assert not sensitivity_runner._case_parameter_matches(
+        case=_case("BESS_OFF"),
+        parameters={},
+        economic_audit={},
+        scenario_snapshot=enabled_snapshot,
+    )
+
+
 def test_vehicle_day_cases_compile_only_declared_cost_change() -> None:
     zero_prepare, zero_optimization = build_case_requests(
         case=_case("VEHICLE_DAY_0"),

@@ -23,6 +23,7 @@ def test_experiment_matrix_contains_required_sensitivities() -> None:
         "bev_trip_energy_sensitivity",
         "ice_trip_fuel_sensitivity",
         "pv_supply_transition",
+        "bess_asset_ablation",
         "charger_capacity_sensitivity",
         "route_band_ablation",
         "turnaround_buffer_sensitivity",
@@ -77,6 +78,16 @@ def test_experiment_matrix_contains_required_sensitivities() -> None:
     assert payload["parameter_semantics"]["pv_scale"].startswith(
         "Multiplicative alpha"
     )
+    bess_cases = [
+        case
+        for case in payload["cases"]
+        if case["family"] == "bess_asset_ablation"
+    ]
+    assert [case["case_id"] for case in bess_cases] == ["BESS_ON", "BESS_OFF"]
+    assert [case["depot_energy_asset_overrides"] for case in bess_cases] == [
+        {"bess_enabled": True},
+        {"bess_enabled": False},
+    ]
     charger_cases = [
         case
         for case in payload["cases"]
