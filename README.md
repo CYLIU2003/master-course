@@ -28,6 +28,10 @@ M1/M2 each serve 24/24 trips; and the matching M2/M3 input hash gives a
 1.0914e-11-JPY difference. The direct small-oracle CLI does not carry the
 frontend phase-token acceptance contract, so this remains bounded
 formulation/approximation evidence—not a formal 264-trip M0--M3 result.
+The subsequent reproducibility hardening requires a clean Git-attested
+worktree, records pre/post code provenance and the prepared-input hash, and
+fixes Gurobi at four threads. The older bundle remains a valid historical
+bounded result but is not the artifact for that stricter contract.
 
 ## 2026-08-23 current-SHA diesel-price diagnostic: active cost term, unchanged candidate dispatch
 

@@ -16,6 +16,7 @@ from scripts.audit_small_integrated_weather_milp import (
     _restore_prepared_weather_comparison_contract,
     _primary_oracle_comparison,
     _small_m0_m3_comparison,
+    _small_oracle_solver_controls,
     _sensitivity_summary,
 )
 from src.optimization.common.cost_components import normalize_cost_component_flags
@@ -60,6 +61,21 @@ def test_all_ice_case_preserves_the_mixed_total_fleet_budget() -> None:
     assert m0_args.allowed_vehicle_type == "ICE"
     assert m0_args.vehicles_per_type == 10
     assert m0_args.trip_count == 24
+
+
+def test_small_oracle_solver_controls_fix_threads_and_exact_gap() -> None:
+    args = SimpleNamespace(
+        random_seed=73,
+        gurobi_threads=4,
+        time_limit_sec=300,
+    )
+
+    controls = _small_oracle_solver_controls(args)
+
+    assert controls["random_seed"] == 73
+    assert controls["gurobi_threads"] == 4
+    assert controls["mip_gap_ratio"] == 0.0
+    assert controls["allow_postsolve_repair"] is False
 
 
 def test_small_oracle_restores_explicit_prepared_counterfactual_contract() -> None:

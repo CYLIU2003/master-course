@@ -28,6 +28,11 @@ gap, full-scale frontend M0--M3, economic-sensitivity, or global-optimality
 release gates, because the direct small-oracle CLI lacks frontend phase-token
 research acceptance and is expressly small-subset only.
 
+The small-oracle CLI has since been hardened to require clean Git provenance,
+persist pre/post SHA, the prepared-input hash, runtime environment, and fixed
+four-thread solver controls. A fresh artifact from that strengthened contract
+is required before treating its bounded result as current-code evidence.
+
 ## 2026-08-23: Diesel-price term is active; economic-response release gate remains blocked
 
 At frozen tag `phase3-diesel-sensitivity-b505c7a`, the frontend/BFF-only

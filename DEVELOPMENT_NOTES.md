@@ -46,6 +46,19 @@
   not satisfy the frontend phase-token research-acceptance contract; these are
   not full 264-trip method effects, economics, or release evidence.
 
+## 2026-08-23: Small-oracle reproducibility hardening
+
+- The small integrated-oracle CLI now refuses a dirty or Git-unattested
+  worktree before it creates its output directory. It records the full
+  `runtime_environment_v3` snapshot, Git provenance before and after the
+  solve, a canonical prepared-input SHA-256, and a SHA-256 of declared solver
+  controls in `reproducibility`.
+- Added explicit `--gurobi-threads` (default `4`); all cases use the fixed
+  thread count, exact `mip_gap=0`, fixed seed, fixed per-phase time limit,
+  disabled warm start/repair, and disabled Phase-4 seed handoff. This closes a
+  reproducibility omission in the prior bounded M0--M3 artifact and requires
+  a fresh clean-commit rerun before using the strengthened contract.
+
 ## 2026-08-23: Current-SHA diesel-price response tranche
 
 - Restarted the port-8000 BFF before the run because its runtime Git
