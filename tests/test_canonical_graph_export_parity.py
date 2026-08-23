@@ -1441,6 +1441,11 @@ def test_solver_settings_payload_reports_gap_ratio_and_percent() -> None:
                 "time_limit_sec": 30.0,
                 "solution_count": 0,
             },
+            "stage1_activation_start_strengthening": {
+                "requested": True,
+                "applied": True,
+                "constraint_count": 60,
+            },
             "fragment_pairwise_depot_reset_constraint_count": 0,
             "fragment_temporal_occupancy_constraint_count": 13,
             "fragment_pairwise_depot_reset_constraint_mode": (
@@ -1488,6 +1493,11 @@ def test_solver_settings_payload_reports_gap_ratio_and_percent() -> None:
         "status": "time_limit",
         "time_limit_sec": 30.0,
         "solution_count": 0,
+    }
+    assert payload["stage1_activation_start_strengthening"] == {
+        "requested": True,
+        "applied": True,
+        "constraint_count": 60,
     }
     assert payload["fragment_pairwise_depot_reset_constraint_count"] == 0
     assert payload["fragment_temporal_occupancy_constraint_count"] == 13

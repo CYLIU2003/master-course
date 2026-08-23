@@ -132,8 +132,14 @@ code exposes this row only as the default-OFF
 `stage1_activation_start_strengthening` diagnostic; it fails closed without
 the certificate and marks the BFF request diagnostic-only. An actual-Gurobi
 row test and a two-trip physical ON/OFF parity test pass. There is no 264-trip
-MIP ON/OFF artifact yet, so the row has no claimed bound, gap, runtime, cost,
-physical, or release benefit. The 1% MIP-gap blocker remains open.
+MIP ON/OFF conclusion: the clean-`3de101b` ON artifact at
+`output/2026-08-24/run_20260824_0155/` applies all 60 eligible rows with no
+selected clone group, the same prepared-input hash, and unchanged clean Git
+state. Its barrier/crossover root LP reaches the 300-second cap with
+`SolCount=0`, so it contains no LP objective or quality-qualified point for a
+controlled bound comparison. It is **DIAGNOSTIC, NOT USED FOR RESEARCH
+CONCLUSIONS** and has no claimed gap, runtime, cost, physical, or release
+benefit. The row remains default-OFF and the 1% MIP-gap blocker remains open.
 
 The first diagnostic artifact from `9af1129` is not usable even as the
 coefficient-source record: the canonical solver payload contained the scan,

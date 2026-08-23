@@ -11199,6 +11199,9 @@ def _solver_settings_payload(
         "stage1_root_lp_diagnostic": dict(
             metadata.get("stage1_root_lp_diagnostic") or {}
         ),
+        "stage1_activation_start_strengthening": dict(
+            metadata.get("stage1_activation_start_strengthening") or {}
+        ),
         "stage1_numeric_coefficient_diagnostic": dict(
             metadata.get("stage1_numeric_coefficient_diagnostic") or {}
         ),

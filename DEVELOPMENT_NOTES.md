@@ -83,8 +83,14 @@
   vehicle IDs, and constraint count. The BFF marks every enabled request as
   diagnostic-only. An actual-Gurobi unit regression checks the applied row and
   fail-closed branch; a two-trip Phase-3 ON/OFF regression preserves the
-  discrete plan and Stage-1 objective. No 264-trip MIP/runtimes have been
-  measured with this row, so it is not a performance or release claim.
+  discrete plan and Stage-1 objective. The first clean-`3de101b` 264-trip ON
+  artifact at `output/2026-08-24/run_20260824_0155/` adds 60 rows (no selected
+  clone group), preserves the prepared-input hash and Git state, but reaches
+  the 300-second root-LP cap with `SolCount=0`. It has no LP objective or
+  quality-qualified point, so it provides no bound, gap, runtime, or release
+  claim and the row stays default-OFF. The engine now also forwards this
+  audit to final `solver_settings.json`; a payload regression covers that
+  evidence path.
 
 - The 264-trip Stage-1 telemetry reports a coefficient range of about
   `1.45e9`, above the explicit scaling-warning threshold, while its root bound

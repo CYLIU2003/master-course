@@ -447,10 +447,15 @@ Current code exposes that row only through the default-OFF
 without the acyclic-flow certificate, persists the eligible/excluded vehicle
 counts and row count, and makes the BFF result diagnostic-only. A direct
 Gurobi regression and a two-trip physical Phase-3 ON/OFF fixture preserve the
-integer assignment and Stage-1 objective. This is not a 264-trip MIP or
-runtime result: the next required evidence is a clean-SHA, same-input,
-fixed-control root-LP ON/OFF comparison followed by any warranted bounded MIP
-comparison. The 1% release gate remains blocked.
+integer assignment and Stage-1 objective. Its first clean-SHA 264-trip ON
+artifact, `output/2026-08-24/run_20260824_0155/` at `3de101b`, applies 60
+rows with no excluded clone vehicle and preserves the prepared-input hash and
+Git state before/after solve. However, the barrier/crossover root-LP clone
+reaches the 300-second cap with `SolCount=0`; it has no LP objective or
+quality-qualified point. Therefore this is **DIAGNOSTIC, NOT USED FOR
+RESEARCH CONCLUSIONS** and supplies no comparable bound, MIP-gap, runtime, or
+cost benefit. The candidate remains default-OFF; the 1% release gate remains
+blocked.
 
 The pure-ICE A/B harness also now forwards the complete Stage-1 diagnostic,
 search-profile, and fragment-cut controls to its synchronous worker, so future
