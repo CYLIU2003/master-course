@@ -9,15 +9,16 @@
   The auxiliary result therefore cannot be upgraded to research evidence.
 
 - The separate root-LP clone no longer overrides the requested Gurobi thread
-  count with one thread. It explicitly uses barrier (`Method=2`) with
-  `Crossover=0` and persists method, crossover, and effective threads in the
-  diagnostic artifact. This returns only a barrier interior solution when one
-  is available; it is still diagnostic-only, is never used as a MIP start, and
-  cannot alter Stage-1 rows, bounds, objective, or acceptance. The focused
-  actual-Gurobi regression verifies both the fractional fixture and this
-  persisted diagnostic-control contract. A returned Gurobi `SUBOPTIMAL`
-  interior point is explicitly persisted as `suboptimal`, never as an opaque
-  numeric status or an LP-optimality claim.
+  count with one thread. It explicitly uses barrier (`Method=2`) with Gurobi's
+  automatic crossover (`Crossover=-1`) and persists method, crossover, and
+  effective threads in the diagnostic artifact. The earlier no-crossover
+  interior point exceeded the configured primal feasibility tolerance, so the
+  diagnostic now allows normal crossover refinement. It remains
+  diagnostic-only, is never used as a MIP start, and cannot alter Stage-1
+  rows, bounds, objective, or acceptance. The focused actual-Gurobi regression
+  verifies both the fractional fixture and this persisted diagnostic-control
+  contract. A returned Gurobi `SUBOPTIMAL` point is explicitly persisted as
+  `suboptimal`, never as an opaque numeric status or an LP-optimality claim.
 
 - Every returned root-LP diagnostic solution now also persists Gurobi's
   unscaled maximum bound/constraint violations and residuals, plus dual and

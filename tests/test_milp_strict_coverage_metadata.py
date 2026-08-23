@@ -190,7 +190,8 @@ def test_root_lp_diagnostic_reports_fractional_assignment_without_mutating_mip()
     assert diagnostic["solver_controls"] == {
         "method": 2,
         "method_name": "barrier",
-        "crossover": 0,
+        "crossover": -1,
+        "crossover_name": "automatic",
         "threads": 2,
     }
     assert diagnostic["solution_quality"]["max_unscaled_violation"] <= 1.0e-6

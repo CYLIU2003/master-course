@@ -1958,8 +1958,8 @@ def _stage1_root_lp_diagnostic(
     """Solve and summarize an isolated Stage-1 continuous relaxation.
 
     The cloned model is read-only with respect to the production MIP. It uses
-    barrier without crossover so an available interior LP solution can be
-    reported without spending diagnostic time constructing a basic solution.
+    barrier with Gurobi's automatic crossover strategy so a returned solution
+    can receive the solver's normal crossover refinement.
     The summary intentionally reports aggregate fractional assignment evidence
     instead of a million-variable solution dump, making it useful for a
     formulation diagnosis without changing any research result.
@@ -1973,14 +1973,15 @@ def _stage1_root_lp_diagnostic(
         "semantics": (
             "separate_continuous_relaxation_of_the_completed_stage1_model; "
             "diagnostic_only_and_never_used_for_mip_rows_bounds_or_starts; "
-            "interior_barrier_solution_without_crossover_is_not_a_mip_start"
+            "barrier_diagnostic_solution_is_not_a_mip_start"
         ),
         "status": "not_run",
         "time_limit_sec": max(float(time_limit_sec), 0.001),
         "solver_controls": {
             "method": 2,
             "method_name": "barrier",
-            "crossover": 0,
+            "crossover": -1,
+            "crossover_name": "automatic",
             "threads": diagnostic_threads,
         },
     }

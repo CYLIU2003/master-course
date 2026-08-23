@@ -379,14 +379,14 @@ MIP start, or affects the production solve. The BFF treats an enabled request
 as diagnostic-only, so it cannot satisfy research acceptance. A clean-SHA
 264-trip diagnostic is required before using it to select a structural
 tightening. The clone explicitly uses Gurobi barrier (`Method=2`) with
-`Crossover=0`, so any returned values are an interior diagnostic solution, and
-uses the request's explicit Gurobi thread count when one is supplied. Those
-controls and the returned solution's unscaled primal/dual/complementarity
-quality metrics are persisted with the diagnostic result. It also reports
-whether the unscaled primal violation is within the configured feasibility
-tolerance; a false flag blocks structural use of the point. Its request default
-is 30 seconds and it is capped by the same Phase-3 wall-clock deadline, so the
-diagnostic cannot overrun the declared Stage-1/Stage-2 budget.
+automatic crossover (`Crossover=-1`), and uses the request's explicit Gurobi
+thread count when one is supplied. Those controls and the returned solution's
+unscaled primal/dual/complementarity quality metrics are persisted with the
+diagnostic result. It also reports whether the unscaled primal violation is
+within the configured feasibility tolerance; a false flag blocks structural
+use of the point. Its request default is 30 seconds and it is capped by the
+same Phase-3 wall-clock deadline, so the diagnostic cannot overrun the
+declared Stage-1/Stage-2 budget.
 
 The frozen 264-trip artifact at `output/2026-08-24/run_20260824_0119/`
 exercised that diagnostic at clean SHA `3a063f6` with the same prepared-input
