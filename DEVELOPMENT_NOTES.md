@@ -1,5 +1,40 @@
 # Development Notes
 
+## 2026-08-24: Remaining full-network one-factor sensitivity tranche
+
+- Tagged clean SHA `27ec8cee6e9293000ba6f9d31b734e30a424f3fb` as
+  `thesis-remaining-sensitivities-27ec8ce` before executing the selected
+  normal-BFF matrix at
+  `output/thesis_remaining_sensitivities_27ec8ce_20260824/`. The 13 fresh
+  Prepare -> `/run-optimization` -> hourly-Rolling cases are BEV energy
+  0.8/1.0/1.2, PV 0.00/0.25/0.50/0.75/1.00, BESS ON/OFF, and generated
+  90-kW single-port charger counts 6/8/10. The harness made no direct solver
+  call: it used BFF only; no fallback, post-solve repair, or source
+  modification occurred during the frozen execution.
+- All selected cases completed 264/264 service with complete successor
+  networks. Their BFF artifacts verify input validity/readiness, final
+  artifact hashes, explicit Phase-3 two-stage semantics, physical schedule,
+  24/24 Rolling accounting, SOC evidence, effective declared parameter,
+  submitted-request provenance, and unchanged Git SHA. The family-specific
+  stable-control fingerprints match: BEV `a0574204...`, PV/BESS
+  `55196eb6...`, and charger capacity `5f813641...`.
+- Every case is intentionally retained as `BLOCKED` only by
+  `mip_gap_target_met`; certified Stage-1 gaps range from 2.404055% (PV 0.50)
+  to 26.849287% (BEV energy 0.8). Thus candidate cost/flow changes are not
+  promoted to economic, dispatch, capacity, PV, BESS, or coefficient-response
+  conclusions. For example, PV 0.00/0.25/0.50/0.75/1.00 candidates record
+  grid import 477.578/232.941/1.799/0/0 kWh and costs
+  80,810.195/73,348.769/66,298.929/64,422.491/64,422.491 JPY; BESS OFF/ON
+  records 203.310/0 kWh grid import and 71,979.208/64,422.491 JPY candidates.
+  These are candidate provenance, not optimal-response evidence.
+- Ran `run_thesis_sensitivity_matrix.py --rebuild-existing-dir` without HTTP
+  or solver calls to `output/verification/thesis_remaining_sensitivities_reaudit_27ec8ce_20260824/`.
+  It fixes the source execution manifest SHA-256
+  `17221d1d92da27043668d6549468cb6eb6b44ccc2d1ded38dfa62c1bfe5d7dbc`,
+  reconfirms frozen/audit-builder SHA `27ec8ce`, all selected cases completed,
+  and finds no failed check other than the predeclared gap gate. The expected
+  CLI exit code is 2 because the re-audited matrix remains `BLOCKED`.
+
 ## 2026-08-24: Current-SHA repeated 264-trip pure-ICE aggregation A/B
 
 - Tagged clean SHA `0ddcd2213c9d524f55e448ec046e2683eb2d03c8` as
@@ -92,9 +127,9 @@
   640,000 JPY = 32 × 20,000 JPY at the paid condition. Its cost is
   704,422.491318 JPY and its certified gap is 1.7803%, so it too fails only
   `mip_gap_target_met`. This is a correctly propagated fixed-cost diagnostic,
-  not an accepted economic response. Further current full-network economic
-  rows remain deliberately unrun as formal evidence until the common 1% gap
-  blocker is closed.
+  not an accepted economic response. At that time, the remaining rows had not
+  been run; the later `27ec8ce` entry above records the completed diagnostic
+  tranche without weakening the common 1% gap blocker.
 
 ## 2026-08-23: Stage-1 coefficient-source diagnostic is read-only and fail-closed
 

@@ -1,5 +1,35 @@
 # Current research release blockers
 
+## 2026-08-24: Remaining one-factor matrix completes diagnostics, not acceptance
+
+The frozen tag `thesis-remaining-sensitivities-27ec8ce` ran the selected
+13-case normal-BFF matrix at clean SHA
+`27ec8cee6e9293000ba6f9d31b734e30a424f3fb`, stored at
+`output/thesis_remaining_sensitivities_27ec8ce_20260824/`: BEV energy
+0.8/1.0/1.2, PV 0.00/0.25/0.50/0.75/1.00, BESS ON/OFF, and 6/8/10 generated
+90-kW single-port chargers. Each case has fresh Prepare input, all 264 trips
+served, complete successors, physical validation, 24/24 Rolling, accounting,
+artifact-hash verification, and unchanged source SHA. Each family has one
+stable non-varied-control fingerprint; the charger normalizer varies only
+declared port count/derived compatibility identifiers.
+
+All 13 cases still fail exactly one required gate: `mip_gap_target_met`. Their
+certified gaps range from 2.404055% to 26.849287%, above the declared 1%
+threshold, so the matrix status and every case remain `BLOCKED`. The candidate
+PV, BESS, charger, and BEV-energy values are **DIAGNOSTIC, NOT USED FOR
+RESEARCH CONCLUSIONS**. In particular, zero grid import or equal candidate
+cost at PV 0.75/1.00 or charger 6/8/10 does not show no real effect; the
+time-limited Phase-3 candidates need not be the same optimum.
+
+The no-HTTP/no-solver re-audit at
+`output/verification/thesis_remaining_sensitivities_reaudit_27ec8ce_20260824/`
+rechecks all copied source bundles against source-manifest SHA-256
+`17221d1d92da27043668d6549468cb6eb6b44ccc2d1ded38dfa62c1bfe5d7dbc`. It
+confirms matching frozen/audit-builder SHA, every selected case completed, all
+non-gap checks true, and stable controls by family. Its expected exit code 2
+is the correct `BLOCKED` result, not a runner error. This closes neither the
+full-network 1% certificate blocker nor any economic/optimality release gate.
+
 ## 2026-08-24: Repeated pure-ICE aggregation A/B passes structure, not release
 
 The clean frozen tag `thesis-phase3-pure-ice-ab-0ddcd22` completed the
@@ -79,9 +109,10 @@ The fresh `9650ed9` 0/20,000-JPY vehicle-day-cost matrix at
 declared fixed cost reaches the model and canonical accounting: 32 vehicle
 days produce exactly 640,000 JPY at 20,000 JPY/day. The paid case's certified
 gap improves to 1.7803% but still misses 1%; both cases are therefore
-`BLOCKED`. It establishes input/accounting propagation only. Executing more
-full-scale economic rows before the common certified-gap blocker is repaired
-would not supply release-eligible sensitivity evidence.
+`BLOCKED`. It establishes input/accounting propagation only. The later
+`27ec8ce` diagnostic tranche ran the remaining selected rows and confirms that
+they also cannot supply release-eligible sensitivity evidence before the
+common certified-gap blocker is repaired.
 
 ## 2026-08-23: Current-code pure-ICE aggregation A/B is structural-only
 

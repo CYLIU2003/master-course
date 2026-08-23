@@ -1,5 +1,34 @@
 # master-course
 
+## 2026-08-24 remaining 264-trip one-factor sensitivity tranche: complete, diagnostic only
+
+Frozen tag `thesis-remaining-sensitivities-27ec8ce` executed the selected
+13-case normal-BFF tranche at clean SHA
+`27ec8cee6e9293000ba6f9d31b734e30a424f3fb` and saved it under
+`output/thesis_remaining_sensitivities_27ec8ce_20260824/`. It covers BEV-trip
+energy (0.8/1.0/1.2), PV supply (0.00/0.25/0.50/0.75/1.00), BESS ON/OFF, and
+6/8/10 generated 90-kW single-port chargers. Fresh Prepare, Phase-3,
+physical validation, 24/24 Rolling, final accounting, and finalized artifact
+hash verification completed for every case. The independent no-HTTP re-audit
+at `output/verification/thesis_remaining_sensitivities_reaudit_27ec8ce_20260824/`
+fixes the source-manifest SHA-256
+`17221d1d92da27043668d6549468cb6eb6b44ccc2d1ded38dfa62c1bfe5d7dbc` and
+reconfirms matching frozen/audit-builder SHAs and all non-varied-control
+fingerprints.
+
+Every case is nevertheless `BLOCKED` solely by the predeclared 1% Stage-1
+gap (range 2.4041%--26.8493%); no case is a research-accepted sensitivity or
+optimality result. The candidate values are retained only as provenance:
+PV 0.00/0.25/0.50/0.75/1.00 candidates have grid imports of
+477.578/232.941/1.799/0/0 kWh and candidate costs of
+80,810.195/73,348.769/66,298.929/64,422.491/64,422.491 JPY. BESS OFF records
+203.310-kWh grid import and a 71,979.208-JPY candidate, versus BESS ON's
+zero-grid-import 64,422.491-JPY candidate. The same 64,422.491-JPY candidate
+for 6/8/10 chargers, and different time-limit BEV-energy candidates, do not
+prove that charger capacity or BEV energy has no economic or dispatch effect.
+These are feasible Phase-3 two-stage candidates with different incumbents,
+not comparable optimal responses.
+
 ## 2026-08-24 current-SHA repeated 264-trip pure-ICE aggregation A/B
 
 The frozen tag `thesis-phase3-pure-ice-ab-0ddcd22` completed the prescribed
@@ -66,9 +95,9 @@ The clean-`9650ed9` vehicle-day-cost matrix at
 `BLOCKED` only by the MIP gap. Its 0 and 20,000-JPY/vehicle-day cases both use
 32 vehicle-days; the latter records exactly 640,000 JPY of fixed vehicle-day
 cost and a 704,422.491318-JPY candidate total. Its smaller 1.7803% gap still
-misses the declared 1% gate. Repeating remaining economic matrix rows before
-closing this common full-network gap would not create research-ready
-comparisons, so they remain diagnostic work rather than formal conclusions.
+misses the declared 1% gate. At that point, further economic matrix rows were
+not yet run; the later `27ec8ce` tranche above records them as diagnostic work,
+not formal conclusions.
 
 ## 2026-08-24 current-SHA 8/12/24-trip integrated-oracle refresh
 
