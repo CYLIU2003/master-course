@@ -35,6 +35,14 @@ now forwards every BFF control by keyword and fails closed on that recovery
 audit; a fresh clean-SHA v4 run is required before any current-code aggregation
 claim.
 
+The first recovery-gated v4 attempt was externally interrupted after four
+valid child runs and has no comparison artifact, so it is diagnostic only. The
+runner now has an explicit manifest-attested resume mode: it reloads only
+completed children whose SHA, prepared-input hash, representation, and all
+validity gates match the frozen contract, then records a new retry directory
+for every remaining child. A fresh clean-SHA bundle is required before this
+mechanism is used as A/B evidence.
+
 ## 2026-08-23 current-SHA normal Phase-3 candidate: feasible, not optimal
 
 Frozen tag `phase3-current-formal-6e61b80` ran the ordinary frontend/BFF path

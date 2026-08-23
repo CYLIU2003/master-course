@@ -2040,6 +2040,79 @@ def run_pure_ice_aggregation_child(
     )
 
 
+def _load_resumable_pure_ice_case_runs(
+    *,
+    output_dir: Path,
+    plan: Iterable[Mapping[str, Any]],
+    expected_git_sha: str,
+    expected_prepared_input_sha256: str,
+) -> dict[int, dict[str, Any]]:
+    """Load completed A/B children without accepting partial or drifted runs."""
+
+    completed: dict[int, dict[str, Any]] = {}
+    for planned_run in plan:
+        run_index = int(planned_run["run_index"])
+        expected_name = f"{run_index:02d}_{planned_run['label']}"
+        metric_paths = sorted(
+            path
+            for path in output_dir.rglob("case_metrics.json")
+            if path.parent.name == expected_name
+        )
+        if len(metric_paths) > 1:
+            raise RuntimeError(
+                "A/B resume found multiple completed artifacts for "
+                f"run {run_index}: {metric_paths}"
+            )
+        if not metric_paths:
+            continue
+
+        metrics_path = metric_paths[0]
+        child_result_path = metrics_path.parent / "child_result.json"
+        metrics = _read_json(metrics_path)
+        child_result = _read_json(child_result_path)
+        provenance = dict(metrics.get("provenance") or {})
+        observed_input_hashes = dict(provenance.get("input_hashes") or {})
+        representation = str(planned_run["representation"])
+        if str(provenance.get("representation") or "") != representation:
+            raise RuntimeError(
+                f"A/B resume representation drift in {metrics_path}"
+            )
+        if str(provenance.get("git_sha") or "") != expected_git_sha:
+            raise RuntimeError(f"A/B resume Git SHA drift in {metrics_path}")
+        if bool(provenance.get("git_dirty", True)):
+            raise RuntimeError(f"A/B resume dirty child in {metrics_path}")
+        if (
+            observed_input_hashes.get("prepared_source_sha256")
+            != expected_prepared_input_sha256
+        ):
+            raise RuntimeError(
+                f"A/B resume prepared-input hash drift in {metrics_path}"
+            )
+        if not _pure_ice_case_valid(metrics) or not _pure_ice_representation_audit_valid(
+            metrics, representation
+        ):
+            raise RuntimeError(
+                f"A/B resume refuses invalid completed child: {metrics_path}"
+            )
+        completed[run_index] = {
+            **dict(planned_run),
+            "metrics": metrics,
+            "job_id": child_result.get("job_id"),
+            "run_dir": child_result.get("run_dir"),
+            "runner_wall_time_sec": child_result.get("runner_wall_time_sec"),
+            "parent_observed_wall_time_sec": dict(metrics.get("timing") or {}).get(
+                "parent_observed_wall_time_sec"
+            ),
+            "peak_rss_bytes": dict(metrics.get("solve_outcome") or {}).get(
+                "peak_memory_bytes"
+            ),
+            "rss_sample_count": dict(metrics.get("timing") or {}).get(
+                "rss_sample_count"
+            ),
+        }
+    return completed
+
+
 def run_pure_ice_aggregation_ab(
     *,
     scenario_id: str,
@@ -2050,6 +2123,7 @@ def run_pure_ice_aggregation_ab(
     repetitions: int = 5,
     stage1_time_limit_seconds: int | None = None,
     stage2_time_limit_seconds: int | None = None,
+    resume: bool = False,
 ) -> dict[str, Any]:
     if _git_output("status", "--porcelain"):
         raise RuntimeError("A/B diagnostic requires a clean Git worktree")
@@ -2087,13 +2161,8 @@ def run_pure_ice_aggregation_ab(
             "requested canonical prepared input"
         )
     plan = build_pure_ice_alternating_case_plan(repetitions)
-    output_dir.mkdir(parents=True, exist_ok=False)
     prepared_input_sha256 = _sha256_file(prepared_path)
     frozen_request_path = output_dir / "frozen_optimization_request.json"
-    frozen_request_path.write_text(
-        json.dumps(request, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
     manifest = {
         "schema_version": PURE_ICE_AB_SCHEMA_VERSION,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -2108,7 +2177,7 @@ def run_pure_ice_aggregation_ab(
             optimization_request_path
         ),
         "frozen_optimization_request_path": str(frozen_request_path.resolve()),
-        "frozen_optimization_request_sha256": _sha256_file(frozen_request_path),
+        "frozen_optimization_request_sha256": None,
         "runtime_environment": _runtime_environment_snapshot(),
         "solver_controls": {
             "random_seed": request.get("random_seed"),
@@ -2142,10 +2211,81 @@ def run_pure_ice_aggregation_ab(
         },
     }
     manifest_path = output_dir / "request_manifest.json"
-    manifest_path.write_text(
-        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    completed_case_runs: dict[int, dict[str, Any]] = {}
+    resume_attempt_directory: Path | None = None
+    if resume:
+        if not output_dir.is_dir():
+            raise FileNotFoundError(
+                f"A/B resume output directory is missing: {output_dir}"
+            )
+        if (output_dir / "repeated_comparison.json").exists():
+            raise RuntimeError("A/B resume refuses an already-finalized bundle")
+        existing_manifest = _read_json(manifest_path)
+        expected_manifest = {
+            **manifest,
+            "frozen_optimization_request_sha256": _sha256_file(
+                frozen_request_path
+            ),
+        }
+        required_match = (
+            "schema_version",
+            "git_sha",
+            "scenario_id",
+            "prepared_input_id",
+            "prepared_input_sha256",
+            "frozen_optimization_request_sha256",
+            "solver_controls",
+            "optimization_request",
+            "small_exact_parity_passed",
+        )
+        if any(
+            existing_manifest.get(key) != expected_manifest.get(key)
+            for key in required_match
+        ):
+            raise RuntimeError("A/B resume manifest does not match frozen controls")
+        existing_plan = dict(existing_manifest.get("execution_contract") or {}).get(
+            "case_plan"
+        )
+        if existing_plan != plan:
+            raise RuntimeError("A/B resume case plan does not match frozen manifest")
+        completed_case_runs = _load_resumable_pure_ice_case_runs(
+            output_dir=output_dir,
+            plan=plan,
+            expected_git_sha=git_sha,
+            expected_prepared_input_sha256=prepared_input_sha256,
+        )
+        attempt_index = 1
+        while (output_dir / "resume_attempts" / f"attempt_{attempt_index:02d}").exists():
+            attempt_index += 1
+        resume_attempt_directory = (
+            output_dir / "resume_attempts" / f"attempt_{attempt_index:02d}"
+        )
+        manifest = existing_manifest
+        manifest.setdefault("resume_history", []).append(
+            {
+                "resumed_at_utc": datetime.now(timezone.utc).isoformat(),
+                "git_sha": git_sha,
+                "completed_run_indices_before_resume": sorted(completed_case_runs),
+                "resume_attempt_directory": str(resume_attempt_directory.resolve()),
+            }
+        )
+        manifest_path.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    else:
+        output_dir.mkdir(parents=True, exist_ok=False)
+        frozen_request_path.write_text(
+            json.dumps(request, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        manifest["frozen_optimization_request_sha256"] = _sha256_file(
+            frozen_request_path
+        )
+        manifest_path.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
 
     case_runs: list[dict[str, Any]] = []
     for planned_run in plan:
@@ -2155,9 +2295,16 @@ def run_pure_ice_aggregation_ab(
             raise RuntimeError("A/B diagnostic Git SHA drifted during execution")
         if _sha256_file(prepared_path) != prepared_input_sha256:
             raise RuntimeError("A/B diagnostic prepared input changed during execution")
-        run_directory = output_dir / "runs" / (
-            f"{int(planned_run['run_index']):02d}_{planned_run['label']}"
+        run_index = int(planned_run["run_index"])
+        if run_index in completed_case_runs:
+            case_runs.append(completed_case_runs[run_index])
+            continue
+        run_root = (
+            resume_attempt_directory / "runs"
+            if resume_attempt_directory is not None
+            else output_dir / "runs"
         )
+        run_directory = run_root / f"{run_index:02d}_{planned_run['label']}"
         run_directory.mkdir(parents=True, exist_ok=False)
         child = _run_pure_ice_case_in_child_process(
             scenario_id=scenario_id,
@@ -2256,6 +2403,14 @@ def main() -> int:
         action="store_true",
         help=argparse.SUPPRESS,
     )
+    parser.add_argument(
+        "--resume-pure-ice-aggregation-ab",
+        action="store_true",
+        help=(
+            "Resume an interrupted pure-ICE A/B bundle after revalidating its "
+            "frozen manifest and completed child artifacts."
+        ),
+    )
     parser.add_argument("--baseline-run", type=Path)
     parser.add_argument("--candidate-run", type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
@@ -2274,6 +2429,15 @@ def main() -> int:
         help="Record the required focused exact-parity test precondition.",
     )
     args = parser.parse_args()
+
+    if (
+        args.resume_pure_ice_aggregation_ab
+        and not args.run_pure_ice_aggregation_ab
+    ):
+        parser.error(
+            "--resume-pure-ice-aggregation-ab requires "
+            "--run-pure-ice-aggregation-ab"
+        )
 
     if args.run_pure_ice_aggregation_child:
         missing = [
@@ -2325,6 +2489,7 @@ def main() -> int:
             repetitions=int(args.ab_repetitions),
             stage1_time_limit_seconds=args.stage1_time_limit_seconds,
             stage2_time_limit_seconds=args.stage2_time_limit_seconds,
+            resume=bool(args.resume_pure_ice_aggregation_ab),
         )
         print(
             json.dumps(

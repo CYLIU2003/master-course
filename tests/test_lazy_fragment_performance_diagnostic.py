@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from scripts.build_lazy_fragment_performance_diagnostic import (
+    _load_resumable_pure_ice_case_runs,
     _run_pure_ice_case,
     _runtime_environment_snapshot,
     build_pure_ice_alternating_case_plan,
@@ -578,6 +579,155 @@ def test_repeated_pure_ice_ab_rejects_fewer_than_five_repetitions() -> None:
         assert "at least five" in str(error)
     else:
         raise AssertionError("expected the five-repetition gate to fail")
+
+
+def test_resume_loader_uses_only_matching_completed_case_artifact(
+    tmp_path: Path,
+) -> None:
+    plan = build_pure_ice_alternating_case_plan(5)
+    completed = plan[0]
+    case_dir = tmp_path / "runs" / f"01_{completed['label']}"
+    case_dir.mkdir(parents=True)
+    metrics = _pure_ice_metrics(
+        representation="discrete",
+        total_variables=780_000,
+        binary_variables=739_000,
+        certified_gap=0.06,
+        root_bound=58_000.0,
+        wall_time=900.0,
+    )
+    metrics["provenance"]["git_sha"] = "frozen-sha"
+    metrics["provenance"]["input_hashes"]["prepared_source_sha256"] = (
+        "prepared-hash"
+    )
+    _write_json(case_dir / "case_metrics.json", metrics)
+    _write_json(
+        case_dir / "child_result.json",
+        {
+            "job_id": "job-1",
+            "run_dir": str(case_dir),
+            "runner_wall_time_sec": 900.0,
+        },
+    )
+
+    loaded = _load_resumable_pure_ice_case_runs(
+        output_dir=tmp_path,
+        plan=plan,
+        expected_git_sha="frozen-sha",
+        expected_prepared_input_sha256="prepared-hash",
+    )
+
+    assert list(loaded) == [1]
+    assert loaded[1]["representation"] == "discrete"
+    assert loaded[1]["metrics"]["provenance"]["representation"] == "discrete"
+
+
+def test_pure_ice_ab_resume_skips_valid_completed_children(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import scripts.build_lazy_fragment_performance_diagnostic as diagnostic
+
+    scenario_id = "scenario"
+    prepared_input_id = "prepared"
+    prepared_path = (
+        tmp_path
+        / "output"
+        / "prepared_inputs"
+        / scenario_id
+        / f"{prepared_input_id}.json"
+    )
+    prepared_path.parent.mkdir(parents=True)
+    prepared_path.write_text("{}", encoding="utf-8")
+    request_path = tmp_path / "request.json"
+    _write_json(request_path, {"prepared_input_id": prepared_input_id})
+    output_dir = tmp_path / "ab"
+    interruption = {"enabled": True, "calls": 0}
+
+    monkeypatch.setattr(diagnostic, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(
+        diagnostic,
+        "_git_output",
+        lambda *_args: "frozen-sha" if _args[:2] == ("rev-parse", "HEAD") else "",
+    )
+    monkeypatch.setattr(
+        diagnostic,
+        "_runtime_environment_snapshot",
+        lambda: {"runtime": "test"},
+    )
+    monkeypatch.setattr(
+        diagnostic,
+        "compile_phase3_pure_ice_ab_request",
+        lambda request, **_kwargs: (dict(request), {"fixed": True}),
+    )
+
+    def fake_child(*, representation: str, run_directory: Path, **_kwargs: object) -> dict:
+        interruption["calls"] += 1
+        if interruption["enabled"] and interruption["calls"] == 2:
+            raise RuntimeError("simulated parent interruption")
+        metrics = _pure_ice_metrics(
+            representation=representation,
+            total_variables=536_000 if representation == "pure_aggregate" else 780_000,
+            binary_variables=507_000 if representation == "pure_aggregate" else 739_000,
+            certified_gap=0.06,
+            root_bound=58_000.0,
+            wall_time=900.0,
+        )
+        metrics["provenance"]["git_sha"] = "frozen-sha"
+        metrics["provenance"]["input_hashes"]["prepared_source_sha256"] = (
+            diagnostic._sha256_file(prepared_path)
+        )
+        child = {
+            "metrics": metrics,
+            "job_id": f"job-{interruption['calls']}",
+            "run_dir": str(run_directory),
+            "runner_wall_time_sec": 900.0,
+            "parent_observed_wall_time_sec": 900.0,
+            "peak_rss_bytes": 4_000_000,
+            "rss_sample_count": 1,
+        }
+        _write_json(
+            run_directory / "child_result.json",
+            {
+                "job_id": child["job_id"],
+                "run_dir": child["run_dir"],
+                "runner_wall_time_sec": child["runner_wall_time_sec"],
+            },
+        )
+        return child
+
+    monkeypatch.setattr(diagnostic, "_run_pure_ice_case_in_child_process", fake_child)
+
+    try:
+        diagnostic.run_pure_ice_aggregation_ab(
+            scenario_id=scenario_id,
+            prepared_input_id=prepared_input_id,
+            optimization_request_path=request_path,
+            output_dir=output_dir,
+            small_exact_parity_passed=True,
+            stage1_time_limit_seconds=435,
+            stage2_time_limit_seconds=30,
+        )
+    except RuntimeError as error:
+        assert "simulated parent interruption" in str(error)
+    else:
+        raise AssertionError("expected simulated parent interruption")
+
+    interruption["enabled"] = False
+    comparison = diagnostic.run_pure_ice_aggregation_ab(
+        scenario_id=scenario_id,
+        prepared_input_id=prepared_input_id,
+        optimization_request_path=request_path,
+        output_dir=output_dir,
+        small_exact_parity_passed=True,
+        stage1_time_limit_seconds=435,
+        stage2_time_limit_seconds=30,
+        resume=True,
+    )
+
+    assert comparison["execution"]["run_count"] == 10
+    assert interruption["calls"] == 11
+    manifest = json.loads((output_dir / "request_manifest.json").read_text())
+    assert manifest["resume_history"][0]["completed_run_indices_before_resume"] == [1]
 
 
 def test_repeated_pure_ice_ab_fails_when_any_child_control_drifts() -> None:

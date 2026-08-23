@@ -1,5 +1,23 @@
 # Development Notes
 
+## 2026-08-23: Pure-ICE A/B runner can now resume interrupted batches
+
+- The recovery-gated r3 attempt at
+  `output/diagnostics/pure_ice_aggregation_phase3_ab_4e715da_20260823_r3/`
+  was externally interrupted after four individually valid children and before
+  final comparison. It has no `repeated_comparison.json`; it is diagnostic
+  only and must not be combined with a later SHA.
+- Added `--resume-pure-ice-aggregation-ab` to the existing runner. It verifies
+  the frozen manifest (SHA, input hash, request hash, solver controls, case
+  plan), reloads only individually valid completed children, and writes every
+  retried child under a distinct `resume_attempts/attempt_NN/` path. Duplicate,
+  partial, dirty, hash-drifted, or invalid children fail closed.
+- The regression simulates an interruption after the first child, then resumes
+  to all ten cases without rerunning that child (`15 passed` in
+  `tests/test_lazy_fragment_performance_diagnostic.py`). A fresh clean commit
+  and new five-pair bundle are required; the r3 partial cannot be reused after
+  this source change.
+
 ## 2026-08-23: Aggregation A/B recovery gate made fail-closed
 
 - The completed initial v4 A/B bundle exposed different time-limited feasible

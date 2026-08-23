@@ -48,6 +48,14 @@ non-relaxed labelled region, and a one-to-one count of recovered canonical
 ICE paths and IDs. A fresh clean-SHA five-pair run is required; no runtime or
 formulation claim will be carried forward from any earlier bundle.
 
+The first recovery-gated v4 attempt at
+`output/diagnostics/pure_ice_aggregation_phase3_ab_4e715da_20260823_r3/`
+ended externally after four completed child artifacts and before finalization.
+It has no repeated comparison and is `DIAGNOSTIC`, `NOT USED FOR RESEARCH
+CONCLUSIONS`. The runner now supports a fail-closed manifest-attested resume
+mode, but that is a source change: a new clean-SHA five-pair A/B bundle must
+start from scratch and may resume only its own matching children.
+
 ## 2026-08-23: Latest normal 264-trip Phase-3 rerun remains gap-blocked
 
 The frozen tag `phase3-current-formal-6e61b80` reran the ordinary BFF path
