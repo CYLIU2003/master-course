@@ -413,6 +413,14 @@ assignment variables and split labels for all 264 trips, while all 60
 vehicle-activation values are integral. This is quality-qualified structural
 diagnostic evidence only: no valid inequality has yet been proved or added,
 and the research release remains blocked.
+
+The next read-only overlap audit at
+`output/2026-08-24/run_20260824_0131/` checked all 9,420
+vehicle-by-maximal-overlap-clique pairs (157 cliques × 60 vehicles) against
+that quality-qualified root LP solution. It found zero violations of
+`sum(assignments) <= 1`; the maximum assignment mass was `0.9142023`.
+Therefore, overlap-clique rows are rejected as a strengthening candidate for
+this relaxation and were not added to the model.
 The pure-ICE A/B harness also now forwards the complete Stage-1 diagnostic,
 search-profile, and fragment-cut controls to its synchronous worker, so future
 AB/BA runs cannot silently shift their positional arguments.

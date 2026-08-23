@@ -105,6 +105,16 @@ for that assignment structure and prove it before any controlled MIP test.
 It is still **DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS** and does not
 close the 1% MIP-gap or release gate.
 
+The first specific candidate is rejected by a clean, read-only test. At
+`ea9a279`, `output/2026-08-24/run_20260824_0131/` evaluates the exact root-LP
+solution against all 157 maximal temporal-overlap cliques for all 60 vehicles
+(9,420 inequalities of the form `sum(y[v, trip]) <= 1`). It finds zero
+violations; the largest left-hand side is `0.9142023`. These rows are therefore
+already implied strongly enough by the present single-path flow relaxation at
+the observed root point. They must not be materialized as a purported root
+tightening. The remaining candidate space is assignment/flow structure beyond
+same-time overlap, and it still requires a separate validity proof.
+
 The first diagnostic artifact from `9af1129` is not usable even as the
 coefficient-source record: the canonical solver payload contained the scan,
 but final `solver_settings.json` omitted it. The serialization defect is fixed

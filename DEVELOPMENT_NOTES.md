@@ -53,6 +53,12 @@
   bounded structural observation only; it does not itself justify, implement,
   or validate a new inequality.
 
+- The clean-`ea9a279` root-LP audit at
+  `output/2026-08-24/run_20260824_0131/` evaluated all 157 maximal temporal
+  overlap cliques for all 60 vehicles. All 9,420 assignment masses satisfy
+  `<= 1` (maximum `0.9142023`), so the overlap rows are already implied at the
+  quality-qualified LP point. No redundant clique constraint was added.
+
 - The 264-trip Stage-1 telemetry reports a coefficient range of about
   `1.45e9`, above the explicit scaling-warning threshold, while its root bound
   remains unchanged. The new default-OFF
