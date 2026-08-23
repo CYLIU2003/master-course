@@ -1,5 +1,22 @@
 # Development Notes
 
+## 2026-08-23: Electricity-price response is zero-import diagnostic only
+
+- The current BFF 24/30/36-JPY/kWh matrix at frozen tag
+  `economic-electricity-response-b7d4cd4` completed in
+  `output/thesis_economic_electricity_b7d4cd4_20260823/`. The TOU tariff
+  values are effective, all non-varied controls match, and every source run
+  retains the clean frozen SHA.
+- The manifest is `BLOCKED` only by `mip_gap_target_met`: each candidate is
+  time-limited at a 19.2273% certified Stage-1 gap. All three candidate
+  ledgers report 0.0-kWh grid import and 0-JPY grid cost, the same
+  64,422.491318-JPY total (within numerical precision), 48 BEV / 216 ICE
+  trips, and 32 used vehicles.
+- This is not a no-price-effect result. It only shows that this fixed
+  zero-grid-import candidate has no exposed grid-price term; the BFF was
+  stopped after finalization and the matrix remains ineligible for a formal
+  economic sensitivity conclusion.
+
 ## 2026-08-23: Diesel-price response is diagnostic and gap-blocked
 
 - The normal current BFF path executed `DIESEL_PRICE_116`, `DIESEL_PRICE_145`,

@@ -79,6 +79,14 @@ costs and fuel costs scale with diesel price while the 48 BEV / 216 ICE trip
 split and 32 used vehicles do not change. It therefore confirms price-input
 provenance, not an economically optimal dispatch response.
 
+The matching 24/30/36-JPY/kWh electricity-price matrix at
+`output/thesis_economic_electricity_b7d4cd4_20260823/` is likewise `BLOCKED`
+only by the 19.2273% gap. The tariff changes are effective and other controls
+match, but all three candidates have 0.0-kWh grid import and 0-JPY grid cost,
+with the same 48 BEV / 216 ICE split and total cost. This is a
+candidate-specific zero-import diagnostic, not a claim that electricity price
+is generally irrelevant.
+
 ## 2026-08-23 current-SHA normal Phase-3 candidate: feasible, not optimal
 
 Frozen tag `phase3-current-formal-6e61b80` ran the ordinary frontend/BFF path

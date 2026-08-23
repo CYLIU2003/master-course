@@ -97,6 +97,13 @@ are audited, but all three time-limited candidates retain 48 BEV / 216 ICE
 trips and 32 used vehicles. The cost movement is therefore diagnostic input
 provenance, not accepted economic-dispatch or sensitivity evidence.
 
+The current 24/30/36-JPY/kWh electricity-price matrix at
+`output/thesis_economic_electricity_b7d4cd4_20260823/` is equally gap-blocked.
+Tariffs are effective and controls match, but its time-limited candidates have
+zero grid import/cost and unchanged assignments. This is a zero-import
+candidate diagnostic only, not evidence that electricity price is irrelevant
+or that the economic response gate is closed.
+
 ## 2026-08-23: Latest normal 264-trip Phase-3 rerun remains gap-blocked
 
 The frozen tag `phase3-current-formal-6e61b80` reran the ordinary BFF path
