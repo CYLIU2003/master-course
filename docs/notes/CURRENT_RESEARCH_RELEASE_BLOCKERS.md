@@ -1,5 +1,25 @@
 # Current research release blockers
 
+## 2026-08-24: Exact-clone rank symmetry needs a fresh root diagnostic
+
+The Stage-1 call was missing the canonical chronological trip order already
+used by the existing identical-vehicle duty-order helper in Phase 4. This
+suppressed the helper's exact equal-count assignment-rank tie-breaker even
+when a clone group had the same assignment and complete successor domains.
+The current source restores that argument. On the frozen 264-trip inventory,
+the 25 homogeneous ICE labels are expected to receive 24 additional rank rows
+after their 24 existing non-increasing trip-count rows. The construction is
+an exact identifier-permutation symmetry breaker: any integer clone-duty set
+can be sorted by trip count and then chronological rank sum. Domain-mismatched
+groups remain skipped.
+
+This is not yet a result. The source regression suite passes `1570` tests, but
+no clean-SHA 264-trip root-LP comparison has measured the changed bound or
+model size. Do not infer a speedup, a better gap, a cost change, or release
+readiness. The next permitted experiment is a frozen, matched root diagnostic;
+only a quality-qualified bound improvement and separate full MIP evidence can
+authorize later research execution.
+
 ## 2026-08-24: Fresh A/B telemetry is explicit, not a release remedy
 
 Frozen tag `thesis-freeze-25ec2f1` now has a fresh five-pair AB/BA,

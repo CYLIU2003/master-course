@@ -14312,6 +14312,9 @@ class GurobiMILPAdapter:
             _add_identical_vehicle_trip_count_symmetry(
                 model=stage1,
                 assignment_arc=y,
+                ordered_trip_ids=_canonical_trip_ids_for_vehicle_symmetry(
+                    problem
+                ),
                 transition_arc=x if stage1_successor_pruning_enabled else None,
                 transition_domains_proven_equal=(
                     not stage1_successor_pruning_enabled

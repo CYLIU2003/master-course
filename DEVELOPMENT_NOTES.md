@@ -1,5 +1,37 @@
 # Development Notes
 
+## 2026-08-24: Stage-1 exact-clone equal-count rank symmetry restored
+
+- Found a Stage-1/Phase-4 call-path inconsistency while auditing the 264-trip
+  fractional root: `_add_identical_vehicle_trip_count_symmetry` already
+  implements an exact chronological assignment-rank tie-breaker for
+  equal-trip-count clone duties, and the Phase-4 builder passes the canonical
+  trip order, but the Phase-3 Stage-1 builder did not. Consequently the
+  clean-`f71bc51` root artifact records 24 count-order rows but zero
+  equal-count rank rows for its 25-vehicle homogeneous ICE group.
+- Restored the existing `ordered_trip_ids=_canonical_trip_ids_for_vehicle_symmetry(problem)`
+  argument at the Stage-1 call. The helper still fails closed unless the exact
+  clone group has equal assignment and transition domains. At integral values,
+  an identifier permutation sorts clone duties by non-increasing trip count
+  and then non-decreasing chronological rank sum, so this removes only
+  duplicate labels, not an unlabelled dispatch, physical constraint, or cost
+  option. The expected 264-trip addition is 24 rank rows; no new variable,
+  objective, input, solver parameter, fallback, or repair path was added.
+- Extended the Phase-3 model-generation regression to require the persisted
+  equal-count rank-row count. The Stage-2 feedback regression now expects one
+  IIS/no-good-cut retry rather than two: the former second all-BEV attempt was
+  merely the excluded exact-clone label permutation. It still proves Stage-2
+  IIS generation, the full-assignment cut, and a physically feasible BEV/ICE
+  final schedule.
+- Validation: `\.venv\Scripts\python.exe -m pytest -q
+  tests\test_stage2_infeasibility_feedback.py
+  tests\test_integrated_actual_cost_objective.py
+  tests\test_milp_strict_coverage_metadata.py
+  tests\test_canonical_graph_export_parity.py` -> `138 passed in 3.58s`;
+  `\.venv\Scripts\python.exe -m pytest -q` -> `1570 passed in 79.19s`.
+  A fresh root comparison from a clean frozen commit is required before any
+  claim about bound, gap, runtime, cost, or release status.
+
 ## 2026-08-24: Task-to-evidence audit is complete; release remains blocked
 
 - At documentation-only HEAD `5dafe071129201756fadd1812cedc6736e8b7ffb`,

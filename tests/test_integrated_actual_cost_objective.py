@@ -1709,6 +1709,12 @@ def test_phase3_records_trip_count_symmetry_audit() -> None:
     assert plan.metadata[
         "stage1_identical_vehicle_trip_count_ordering_constraint_count"
     ] == 1
+    assert audit[
+        "equal_count_assignment_rank_ordering_constraint_count"
+    ] == 1
+    assert plan.metadata[
+        "stage1_identical_vehicle_equal_count_assignment_rank_ordering_constraint_count"
+    ] == 1
     root_lp_diagnostic = plan.metadata["stage1_root_lp_diagnostic"]
     assert root_lp_diagnostic["enabled"] is True
     assert root_lp_diagnostic["status"] == "optimal"

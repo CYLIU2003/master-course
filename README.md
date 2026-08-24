@@ -8,6 +8,22 @@ The reviewer-facing scope, checks, and open decisions are in
 [THESIS_EXTERNAL_REVIEW_BRIEF.md](docs/notes/THESIS_EXTERNAL_REVIEW_BRIEF.md);
 that brief is a request for independent review, not an approval record.
 
+## Pending Stage-1 exact-clone equal-count symmetry diagnostic
+
+Stage 1 now passes the existing canonical chronological trip order to its
+identical-vehicle duty-order helper, matching the already-used Phase-4 call.
+For an exact clone group with equal assignment and successor domains, this
+adds the existing rank-sum tie-breaker after non-increasing trip count. Any
+integer solution can be relabelled into that order, so it preserves the
+unlabelled feasible duty set and objective; groups with unequal domains remain
+skipped. The 264-trip discrete model is expected to add 24 such rows for the
+25-vehicle homogeneous ICE group.
+
+This is a pending, controlled root-diagnostic candidate only. The source
+regression suite passes `1570 passed in 79.19s`, but no clean-SHA 264-trip
+root or MIP result exists yet. It therefore supports no bound, gap, runtime,
+cost, or release claim.
+
 ## Long-cap single-representation diagnostics are not A/B evidence
 
 `scripts/build_lazy_fragment_performance_diagnostic.py` has a separate
