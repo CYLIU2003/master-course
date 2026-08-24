@@ -1,5 +1,25 @@
 # Development Notes
 
+## 2026-08-24: Task-to-evidence audit is complete; release remains blocked
+
+- At documentation-only HEAD `5dafe071129201756fadd1812cedc6736e8b7ffb`,
+  re-audited the requested baseline `a145cf3` and the frozen A/B, small-oracle,
+  sensitivity, stress, M0--M3, and root-diagnostic artifacts. The baseline is
+  an ancestor of this HEAD. The evidence mapping is recorded in
+  `docs/notes/THESIS_SUBMISSION_EVIDENCE_AUDIT.md`; no frozen artifact is
+  relabelled as a result of this later documentation commit.
+- The requested artifact-producing protocols are complete at their stated
+  scope: A/B remains `PASS_STRUCTURAL_ONLY`, the integrated oracle and M0--M3
+  results remain small-scope only, the sensitivity matrix remains gap-blocked,
+  and the stress study remains fixed-decision rather than recourse evidence.
+  The active release state remains **BLOCKED** because no valid full-network
+  strengthening has closed the Stage-1 1% gap.
+- The full suite at this documentation checkout passes
+  `1570 passed in 80.60s`. `claude` is not installed in this environment; the
+  available local `codex` executable is not an independent external reviewer.
+  No external review, approval, `LGTM`, `READY`, or “model complete” status is
+  claimed.
+
 ## 2026-08-24: Exact no-path clique separation is diagnostic and fail-closed
 
 - Added the default-off

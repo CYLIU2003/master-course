@@ -18,6 +18,22 @@ The research release is **BLOCKED**. This document records which thesis-facing
 claims are supported and which remain forbidden. The authoritative live
 release status is [CURRENT_RESEARCH_RELEASE_BLOCKERS.md](CURRENT_RESEARCH_RELEASE_BLOCKERS.md).
 
+## Requested work status
+
+This matrix maps the stated thesis-preparation work to immutable artifacts.
+Here, **complete** means that the named protocol and its evidence record exist;
+it never promotes a bounded, diagnostic, or gap-missing result to a research
+release conclusion.
+
+| Requested item | Evidence status | Allowed conclusion |
+| --- | --- | --- |
+| Reproducibility records | **Complete for cited artifacts.** The A/B, oracle, stress, sensitivity, and root-diagnostic artifacts persist their clean source identity, inputs or prepared-input hashes, controls, and acceptance checks. | These records make the cited runs auditable; a later documentation-only commit does not relabel them as current-HEAD formal evidence. |
+| 264-trip pure-ICE aggregation A/B | **Protocol complete.** Ten isolated executions form five AB/BA pairs. | `PASS_STRUCTURAL_ONLY`: verified model-size/RSS reductions, but no speed, cost, or optimality benefit. |
+| 8/12/24/40 integrated oracle | **Protocol complete, bounded scope.** Each listed subset has its stored exact Phase-4 reference. | A formulation/approximation check for the listed small instances only; not a 264-trip integrated-optimality certificate. |
+| One-factor response and fixed-plan stress | **Diagnostic execution complete.** The 13-case matrix and seven fixed-decision stresses have immutable outcomes. | The matrix remains gap-blocked; only the initial-SOC-minus-5pp fixed plan is physically accepted. Neither result supports an economic-response or recourse-robustness claim. |
+| M0--M3 common output | **Protocol complete, bounded scope.** The 40-trip audit contains all four methods. | `PASS_SMALL_SCOPE_ONLY`; only the matching-input M2--M3 numerical agreement is an algorithmic oracle check. |
+| Submission release | **Not complete.** | The full 264-trip Stage-1 1% gap and independent-review gates remain open. The release is `BLOCKED`. |
+
 ## Reproducibility snapshot
 
 The current environment observed during this audit is Windows 11

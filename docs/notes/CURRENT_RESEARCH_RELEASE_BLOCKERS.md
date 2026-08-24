@@ -49,7 +49,8 @@ reproducibility, A/B, integrated-oracle, sensitivity, stress, and M0--M3
 evidence to its exact claim boundary. It records the new frozen `25ec2f1`
 A/B evidence and confirms that the requested baseline `a145cf3` is its
 ancestor; no old artifact is relabelled as a current-HEAD formal run. The
-documentation audit and `1569` passing regression tests do not satisfy an
+documentation audit and the current documentation checkout's `1570` passing
+regression tests do not satisfy an
 optimality, economic-response, or independent-review gate.
 
 The remaining mathematical blocker is unchanged: the quality-qualified
