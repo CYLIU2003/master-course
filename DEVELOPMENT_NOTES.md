@@ -15,10 +15,17 @@
   aggregate representation from turning a diagnostic-only observation into an
   error.  A unit test covers direct/reset reachability and a feasible Phase-3
   integration test proves the root-LP metadata path.
-- No 264-trip result exists for this new audit at this point.  It is not a
-  formulation strengthening, has no claimed bound/runtime benefit, and cannot
-  alter the 1% release gate until a clean-SHA BFF diagnostic yields a
-  quality-qualified result and a separate validity proof supports any row.
+- The clean-`0bd81bc` normal-BFF diagnostic at
+  `output/2026-08-24/run_20260824_1050/` keeps the same prepared-input
+  SHA-256 `639b6754...`, seed 42, four threads, complete successor network,
+  435/30-second Phase-3 limits, and 1% target.  Its separate 762,906-variable
+  root LP is optimal at 52,749.163582 JPY with maximum unscaled primal
+  violation `5.820766e-11`.  It checks 1,404,360 no-path pairs in 9.652
+  seconds, finds zero violations, and records a maximum assignment mass of
+  `0.8457521`; this candidate is rejected without adding a row.  The BFF
+  artifact is explicitly diagnostic-only and retains clean, identical pre/post
+  SHA.  It has no claimed bound/runtime benefit and does not alter the 1%
+  release gate.
 
 ## 2026-08-24: Fresh frozen 264-trip A/B telemetry evidence
 

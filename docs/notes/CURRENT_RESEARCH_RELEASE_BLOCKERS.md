@@ -42,8 +42,13 @@ forms a permissive support graph from direct Stage-1 arcs and canonically
 feasible depot-reset edges. A pair with no path is logged as a possible
 `y[v,i] + y[v,j] <= 1` row, with no row added to the production model. The
 audit records its separate evaluation time and excludes unavailable assignment
-variables. It has no 264-trip observation yet, is **DIAGNOSTIC, NOT USED FOR
-RESEARCH CONCLUSIONS**, and cannot weaken or close the 1% gate.
+variables. The clean-`0bd81bc` normal-BFF run at
+`output/2026-08-24/run_20260824_1050/` is quality-qualified (root LP optimum
+52,749.163582 JPY; maximum unscaled primal violation `5.820766e-11`) and
+checks all 1,404,360 candidate pairs in 9.652 seconds. It finds zero
+violations and maximum assignment mass `0.8457521`, so this candidate is
+rejected; no row is added. The artifact is **DIAGNOSTIC, NOT USED FOR RESEARCH
+CONCLUSIONS**, and cannot weaken or close the 1% gate.
 
 ## 2026-08-24: Remaining one-factor matrix completes diagnostics, not acceptance
 

@@ -62,11 +62,13 @@ energy balance.
 Observed candidates do not justify a new row: the full vehicle-by-overlap
 audit found no violated overlap-clique inequality; explicit/lifted fragment
 rows and generic cut/scaling diagnostics did not improve the certified bound;
-and the activation-to-start row remains default-off because its 264-trip
-diagnostic did not yield a comparable root-LP result. Adding a duplicate
-charger or energy row, reducing the declared gap, or restricting fragments
-without a proof would change or weaken the research contract and is not
-authorized.
+the activation-to-start row remains default-off because its 264-trip diagnostic
+did not yield a comparable root-LP result; and the clean-`0bd81bc` BFF root-LP
+audit at `output/2026-08-24/run_20260824_1050/` checks 1,404,360 same-day
+no-path assignment pairs, finds zero violations (maximum mass `0.8457521`),
+and adds no row. Adding a duplicate charger or energy row, reducing the
+declared gap, or restricting fragments without a proof would change or weaken
+the research contract and is not authorized.
 
 ## Thesis claim boundary
 

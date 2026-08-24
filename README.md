@@ -538,8 +538,11 @@ diagnostic records their count, violations, sample, and separate evaluation
 wall time. It never changes bounds, supplies a MIP start, or affects the
 production solve. The BFF treats an enabled request
 as diagnostic-only, so it cannot satisfy research acceptance. A clean-SHA
-264-trip diagnostic is required before using it to select a structural
-tightening. The clone explicitly uses Gurobi barrier (`Method=2`) with
+264-trip diagnostic at `output/2026-08-24/run_20260824_1050/` now rejects the
+no-path candidate: its quality-qualified root LP checks 1,404,360 pairs,
+finds zero violations, and has maximum assignment mass `0.8457521`. This is
+**DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS** and no row was added. The
+clone explicitly uses Gurobi barrier (`Method=2`) with
 automatic crossover (`Crossover=-1`), and uses the request's explicit Gurobi
 thread count when one is supplied. Those controls and the returned solution's
 unscaled primal/dual/complementarity quality metrics are persisted with the
