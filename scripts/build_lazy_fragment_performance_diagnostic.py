@@ -2416,14 +2416,17 @@ def run_pure_ice_aggregation_single_diagnostic(
     representation: str,
     stage1_time_limit_seconds: int | None = None,
     stage2_time_limit_seconds: int | None = None,
+    wall_clock_overhead_seconds: int | None = None,
 ) -> dict[str, Any]:
     """Run one frozen Phase-3 representation diagnostic without A/B claims.
 
     This path is deliberately separate from ``run_pure_ice_aggregation_ab``:
     one observation can assess whether a longer fixed Stage-1 cap improves a
     representation's certified gap, but cannot support a runtime, cost, or
-    representation-comparison claim.  The same clean-SHA and prepared-input
-    gates as an A/B child remain mandatory.
+    representation-comparison claim.  Its shared wall-clock budget explicitly
+    includes a separate construction/finalization allowance, so a requested
+    Stage-2 solve is not silently consumed before that model is built.  The
+    same clean-SHA and prepared-input gates as an A/B child remain mandatory.
     """
 
     if representation not in {"discrete", "pure_aggregate"}:
@@ -2448,11 +2451,18 @@ def run_pure_ice_aggregation_single_diagnostic(
         raise FileNotFoundError(
             f"canonical prepared input is missing: {prepared_path}"
         )
-    if stage1_time_limit_seconds is None or stage2_time_limit_seconds is None:
+    if (
+        stage1_time_limit_seconds is None
+        or stage2_time_limit_seconds is None
+        or wall_clock_overhead_seconds is None
+    ):
         raise ValueError(
             "single diagnostic requires explicit fixed "
-            "stage1_time_limit_seconds and stage2_time_limit_seconds"
+            "stage1_time_limit_seconds, stage2_time_limit_seconds, and "
+            "wall_clock_overhead_seconds"
         )
+    if int(wall_clock_overhead_seconds) < 0:
+        raise ValueError("wall_clock_overhead_seconds must be non-negative")
     request, request_transformation = compile_phase3_pure_ice_ab_request(
         source_request,
         stage1_time_limit_seconds=stage1_time_limit_seconds,
@@ -2463,6 +2473,25 @@ def run_pure_ice_aggregation_single_diagnostic(
             "compiled Phase-3 request prepared_input_id does not match the "
             "requested canonical prepared input"
         )
+    wall_clock_budget_seconds = (
+        int(stage1_time_limit_seconds)
+        + int(stage2_time_limit_seconds)
+        + int(wall_clock_overhead_seconds)
+    )
+    request["time_limit_seconds"] = wall_clock_budget_seconds
+    request_transformation = {
+        **request_transformation,
+        "single_diagnostic_wall_clock_contract": {
+            "stage1_time_limit_seconds": int(stage1_time_limit_seconds),
+            "stage2_time_limit_seconds": int(stage2_time_limit_seconds),
+            "wall_clock_overhead_seconds": int(wall_clock_overhead_seconds),
+            "time_limit_seconds": wall_clock_budget_seconds,
+            "semantics": (
+                "shared_wall_clock_budget_equals_explicit_stage_solver_caps_"
+                "plus_model_construction_and_finalization_allowance"
+            ),
+        },
+    }
 
     output_dir.mkdir(parents=True, exist_ok=False)
     frozen_request_path = output_dir / "frozen_optimization_request.json"
@@ -2507,6 +2536,9 @@ def run_pure_ice_aggregation_single_diagnostic(
         "source_optimization_request": source_request,
         "phase3_request_transformation": request_transformation,
         "optimization_request": request,
+        "single_diagnostic_wall_clock_contract": request_transformation[
+            "single_diagnostic_wall_clock_contract"
+        ],
         "claim_scope": {
             "diagnostic_only": True,
             "ab_comparison": False,
@@ -2645,6 +2677,14 @@ def main() -> int:
     parser.add_argument("--stage1-time-limit-seconds", type=int)
     parser.add_argument("--stage2-time-limit-seconds", type=int)
     parser.add_argument(
+        "--single-diagnostic-wall-clock-overhead-seconds",
+        type=int,
+        help=(
+            "Explicit model-construction/finalization allowance added to the "
+            "single diagnostic's shared wall-clock limit."
+        ),
+    )
+    parser.add_argument(
         "--single-diagnostic-representation",
         choices=("discrete", "pure_aggregate"),
         help=(
@@ -2755,8 +2795,12 @@ def main() -> int:
                 ),
                 ("--stage1-time-limit-seconds", args.stage1_time_limit_seconds),
                 ("--stage2-time-limit-seconds", args.stage2_time_limit_seconds),
+                (
+                    "--single-diagnostic-wall-clock-overhead-seconds",
+                    args.single_diagnostic_wall_clock_overhead_seconds,
+                ),
             )
-            if not value
+            if value is None or value == ""
         ]
         if missing:
             parser.error(
@@ -2770,6 +2814,9 @@ def main() -> int:
             representation=str(args.single_diagnostic_representation),
             stage1_time_limit_seconds=args.stage1_time_limit_seconds,
             stage2_time_limit_seconds=args.stage2_time_limit_seconds,
+            wall_clock_overhead_seconds=(
+                args.single_diagnostic_wall_clock_overhead_seconds
+            ),
         )
         print(
             json.dumps(

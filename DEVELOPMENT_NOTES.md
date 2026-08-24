@@ -13,8 +13,19 @@
   performance, cost, optimality, and formal-research-acceptance claims.  A
   single representation observation therefore cannot weaken the A/B minimum
   repetition guard or close the full-network 1% release gate.
+- The shared `time_limit_seconds` is now explicitly the sum of fixed Stage-1
+  and Stage-2 solver caps plus the required
+  `--single-diagnostic-wall-clock-overhead-seconds` allowance.  The first
+  clean-`6f080ba` 870/30 attempt incorrectly retained a 900-second global
+  deadline: after Stage 1 and candidate enumeration, Stage 2 received only
+  0.214 seconds and returned no feasible candidate.  Its frontend run
+  `output/2026-08-24/run_20260824_1218/` is therefore an invalid protocol
+  observation, not a representation feasibility, gap, or performance result.
+  The new explicit allowance prevents that Stage-2 starvation while preserving
+  the requested solver caps and recording the only changed time control.
 - Added a focused regression that uses an isolated fake child to verify frozen
-  controls, recorded hashes, output artifacts, and every claim prohibition.
+  controls, the full wall-clock contract, recorded hashes, output artifacts,
+  and every claim prohibition.
 
 ## 2026-08-24: Activation-start subset diagnostics are explicit and fail closed
 

@@ -13,11 +13,14 @@ that brief is a request for independent review, not an approval record.
 `scripts/build_lazy_fragment_performance_diagnostic.py` has a separate
 `--run-pure-ice-aggregation-single-diagnostic` path for a frozen, clean-SHA
 Phase-3 observation of one representation under an explicitly longer Stage-1
-cap.  It preserves the prepared-input hash and solver controls, but writes
-machine-readable prohibitions on A/B, runtime, cost, optimality, and formal
-research-acceptance claims.  The prescribed comparison remains five isolated
-AB/BA pairs; a single observation can only diagnose reachability of the
-declared gap target.
+cap.  Its global wall-clock limit is explicitly the requested Stage-1 cap,
+requested Stage-2 cap, and a separately recorded model-construction/finalization
+allowance; this prevents Stage 2 from being silently starved by the shared
+deadline.  It preserves the prepared-input hash and all non-time controls, but
+writes machine-readable prohibitions on A/B, runtime, cost, optimality, and
+formal research-acceptance claims.  The prescribed comparison remains five
+isolated AB/BA pairs; a single observation can only diagnose reachability of
+the declared gap target.
 
 ## 2026-08-24 remaining 264-trip one-factor sensitivity tranche: complete, diagnostic only
 

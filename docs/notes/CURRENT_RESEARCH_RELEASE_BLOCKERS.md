@@ -19,11 +19,16 @@ and both representations miss the declared 1% gap (19.2273% discrete;
 historical null values nor closes any optimality, sensitivity, or release gate.
 
 An explicitly separate single-representation, long-Stage-1-cap diagnostic is
-available for reachability investigation.  It freezes the normal Phase-3
-request and rechecks clean-SHA/prepared-input provenance, but its manifest
-prohibits A/B, runtime, cost, optimality, and formal research-acceptance
-claims.  It cannot replace the five-pair AB/BA evidence or close the 1% gate,
-even if its individual diagnostic gap improves.
+available for reachability investigation.  Its frozen global wall-clock limit
+must equal the explicit Stage-1 cap, Stage-2 cap, and separately recorded
+model-construction/finalization allowance; a first clean-`6f080ba` 870/30
+attempt incorrectly kept the old 900-second global limit and gave Stage 2 only
+0.214 seconds after Stage 1/candidate enumeration.  That frontend result is
+invalid and is not used as a representation feasibility, gap, cost, or
+performance observation.  The corrected runner rechecks clean-SHA/prepared
+input provenance and prohibits A/B, runtime, cost, optimality, and formal
+research-acceptance claims.  It cannot replace the five-pair AB/BA evidence or
+close the 1% gate, even if its individual diagnostic gap improves.
 
 ## 2026-08-24: Thesis evidence audit confirms release remains blocked
 

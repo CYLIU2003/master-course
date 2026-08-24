@@ -870,6 +870,7 @@ def test_single_pure_ice_diagnostic_is_frozen_and_never_claims_comparison(
         representation="pure_aggregate",
         stage1_time_limit_seconds=870,
         stage2_time_limit_seconds=30,
+        wall_clock_overhead_seconds=120,
     )
 
     assert result["verdict"] == "DIAGNOSTIC_COMPLETE_NOT_A_COMPARISON"
@@ -879,6 +880,17 @@ def test_single_pure_ice_diagnostic_is_frozen_and_never_claims_comparison(
     manifest = json.loads((output_dir / "request_manifest.json").read_text())
     assert manifest["representation"] == "pure_aggregate"
     assert manifest["solver_controls"]["stage1_time_limit_seconds"] == 870
+    assert manifest["solver_controls"]["time_limit_seconds"] == 1020
+    assert manifest["single_diagnostic_wall_clock_contract"] == {
+        "stage1_time_limit_seconds": 870,
+        "stage2_time_limit_seconds": 30,
+        "wall_clock_overhead_seconds": 120,
+        "time_limit_seconds": 1020,
+        "semantics": (
+            "shared_wall_clock_budget_equals_explicit_stage_solver_caps_"
+            "plus_model_construction_and_finalization_allowance"
+        ),
+    }
     assert (output_dir / "run" / "case_metrics.json").is_file()
     assert (output_dir / "diagnostic_result.json").is_file()
     assert (output_dir / "artifact_hashes.json").is_file()
