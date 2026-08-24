@@ -86,6 +86,12 @@ valid rows/model size, but selects dual simplex. It too ends at the cap with
 to compare with the barrier result. Its verdict is
 `NO_COMPARABLE_ROOT_LP_SOLUTION`, not evidence that the inequality improves the
 root bound or should be enabled.
+The next clean `08af482` one-row subset observation restores a
+quality-qualified barrier root-LP point, but not a stronger bound: the selected
+row increases the model from 108,062 to 108,063 constraints and changes the
+objective by `-4.37e-11` JPY, within the declared `1e-5`-JPY comparison
+tolerance. Its `NO_ROOT_BOUND_IMPROVEMENT` verdict rejects MIP ON/OFF and
+formal experimentation for this candidate.
 
 ## Thesis claim boundary
 

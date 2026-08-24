@@ -574,6 +574,14 @@ path-start-ineligible ID rather than silently changing the selected model. Its
 artifact records all eligible labels, requested IDs, selected IDs, and added
 row count. This is a controlled feasibility/bound diagnostic only; a subset is
 never a default formulation change or an accepted research result by itself.
+The clean `08af482` one-row follow-up at
+`output/diagnostics/stage1_activation_start_subset_root_08af482_20260824/`
+selects the largest-deficit label, adds one row (108,063 constraints total),
+and returns a quality-qualified optimal root LP. Its objective,
+`52,749.16358183801` JPY, is equal to the unstrengthened
+`52,749.16358183805` JPY within the predeclared `1e-5`-JPY tolerance. The
+verdict is `NO_ROOT_BOUND_IMPROVEMENT`, **DIAGNOSTIC, NOT USED FOR RESEARCH
+CONCLUSIONS**. It neither authorizes a MIP ON/OFF run nor a formal run.
 
 The same read-only diagnostic evaluates the actual LP values against supplied
 maximal sets of mutually overlapping trips for each vehicle. It records any

@@ -20,6 +20,16 @@
   observation (`4f5a4c1d-cac3-4fd2-87a8-cf0049c71ebe`, deficit
   `0.8169431546`); its validity does not depend on that ranking, but the
   ranking makes the selection reproducible and avoids an arbitrary label.
+- The clean `08af482` normal-BFF artifact at
+  `output/diagnostics/stage1_activation_start_subset_root_08af482_20260824/`
+  holds the prepared source, seed, threads, root method, and 300-second cap
+  fixed, adds exactly that one row, and passes
+  `verify_run_input_provenance.py`. Its root LP is optimal and
+  quality-qualified (`5.820766091346741e-11` maximum unscaled primal
+  violation), but its 52,749.16358183801-JPY root objective differs from the
+  unstrengthened 52,749.16358183805 JPY by only `-4.37e-11` JPY, inside the
+  `1e-5`-JPY comparison tolerance. The verdict is
+  `NO_ROOT_BOUND_IMPROVEMENT`; no MIP ON/OFF or formal run is authorized.
 
 ## 2026-08-24: Root-LP clone method is explicit and remains diagnostic-only
 

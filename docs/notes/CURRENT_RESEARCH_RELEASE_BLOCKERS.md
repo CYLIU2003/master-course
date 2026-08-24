@@ -78,13 +78,16 @@ unchanged, supplies no comparative root bound, and is not a license to run a
 formal experiment.
 
 Because the all-row model has no comparable root solution under either
-permitted algorithm, a bounded one-row diagnostic may test the same certified
-inequality for the explicitly recorded largest-deficit non-aggregate label.
-The request must retain the same prepared input and controls, record the
-selection audit, and remain diagnostic-only. A root objective from that test is
-only candidate evidence: it still requires a valid-inequality regression and a
-controlled MIP ON/OFF comparison before any row can be considered for a formal
-run.
+permitted algorithm, the bounded clean-`08af482` one-row diagnostic at
+`output/diagnostics/stage1_activation_start_subset_root_08af482_20260824/`
+tests the same certified inequality for the explicitly recorded largest-deficit
+non-aggregate label. It retains the prepared source, root controls, and cap;
+adds exactly one row; and returns a quality-qualified optimal root LP. Its
+52,749.16358183801-JPY objective equals the unstrengthened
+52,749.16358183805-JPY objective within the `1e-5`-JPY comparison tolerance.
+The `NO_ROOT_BOUND_IMPROVEMENT` result is **DIAGNOSTIC, NOT USED FOR RESEARCH
+CONCLUSIONS**. It rejects this one-row candidate as a root-bound path, so no
+MIP ON/OFF or formal run is authorized.
 
 ## 2026-08-24: Remaining one-factor matrix completes diagnostics, not acceptance
 
