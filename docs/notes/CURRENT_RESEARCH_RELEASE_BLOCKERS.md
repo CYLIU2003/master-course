@@ -130,6 +130,21 @@ The `NO_ROOT_BOUND_IMPROVEMENT` result is **DIAGNOSTIC, NOT USED FOR RESEARCH
 CONCLUSIONS**. It rejects this one-row candidate as a root-bound path, so no
 MIP ON/OFF or formal run is authorized.
 
+The frozen clean-`f10525f` top-five follow-up at
+`output/diagnostics/stage1_activation_start_top5_root_f10525f_20260824/`
+precommits the five largest baseline deficits and adds exactly five certified
+activation-start rows (108,067 constraints). It keeps the prepared-source
+hash, seed 42, four threads, barrier/automatic crossover, 300-second root cap,
+and default Stage-1 controls fixed; its normal-BFF run
+`output/2026-08-24/run_20260824_1343/` passes run-input provenance. The root
+LP is optimal and quality-qualified, but its 52,749.16358183858-JPY objective
+is only `+5.3e-10` JPY from the unstrengthened point, within the same
+`1e-5`-JPY tolerance. This is a second `NO_ROOT_BOUND_IMPROVEMENT`,
+**DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS**. It rejects the tested
+one-row and five-row high-deficit subsets as a root-bound path, but makes no
+claim about all other subsets and authorizes neither a MIP ON/OFF nor a formal
+run.
+
 ## 2026-08-24: Remaining one-factor matrix completes diagnostics, not acceptance
 
 The frozen tag `thesis-remaining-sensitivities-27ec8ce` ran the selected

@@ -102,6 +102,19 @@ objective by `-4.37e-11` JPY, within the declared `1e-5`-JPY comparison
 tolerance. Its `NO_ROOT_BOUND_IMPROVEMENT` verdict rejects MIP ON/OFF and
 formal experimentation for this candidate.
 
+The subsequent frozen clean-`f10525f` top-five subset diagnostic at
+`output/diagnostics/stage1_activation_start_top5_root_f10525f_20260824/`
+precommits the five largest baseline deficits, keeps the prepared-source hash,
+seed 42, four threads, barrier/automatic crossover, 300-second root cap, and
+default Stage-1 controls fixed, and adds exactly five rows (108,067
+constraints). Its normal-BFF run `output/2026-08-24/run_20260824_1343/` passes
+run-input provenance. The root LP is optimal and quality-qualified, but its
+52,749.16358183858-JPY objective is only `+5.3e-10` JPY from the unstrengthened
+point, within the same `1e-5`-JPY comparison tolerance. This second
+`NO_ROOT_BOUND_IMPROVEMENT` rejects the tested high-deficit subsets of one and
+five rows as root-bound paths. It does not establish redundancy of every other
+subset, authorize a MIP ON/OFF comparison, or change the formal-release block.
+
 ## Thesis claim boundary
 
 The evidence supports these statements:

@@ -619,6 +619,21 @@ and returns a quality-qualified optimal root LP. Its objective,
 verdict is `NO_ROOT_BOUND_IMPROVEMENT`, **DIAGNOSTIC, NOT USED FOR RESEARCH
 CONCLUSIONS**. It neither authorizes a MIP ON/OFF run nor a formal run.
 
+The frozen clean-`f10525f` top-five follow-up at
+`output/diagnostics/stage1_activation_start_top5_root_f10525f_20260824/`
+fixes the five largest observed deficits before the run, retains the canonical
+prepared-source hash, seed 42, four threads, `Method=2`, the 300-second root
+cap, and the same default Stage-1 model controls, and adds exactly five rows
+(108,067 constraints). Its root LP is again optimal and quality-qualified; its
+objective is `52,749.16358183858` JPY, only `+5.3e-10` JPY from the
+unstrengthened comparison point and therefore inside the same `1e-5`-JPY
+tolerance. Run-input provenance verifies. The assessment remains
+`NO_ROOT_BOUND_IMPROVEMENT`, **DIAGNOSTIC, NOT USED FOR RESEARCH
+CONCLUSIONS**. Together with the one-row null result, this rejects the tested
+high-deficit subset sizes as a root-bound path; it does not infer that every
+other subset is redundant and it authorizes neither a MIP ON/OFF nor a formal
+run.
+
 The same read-only diagnostic evaluates the actual LP values against supplied
 maximal sets of mutually overlapping trips for each vehicle. It records any
 violation of `sum(assignments) <= 1`, but never adds those rows to Stage 1.

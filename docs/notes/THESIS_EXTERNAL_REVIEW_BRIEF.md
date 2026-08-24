@@ -16,8 +16,9 @@ not a reviewer approval.
 Review the frozen evidence and the claim boundary only:
 
 - Baseline review SHA: `a145cf3a8b9cba0e4d97c48f800fba9ff07a1e69`.
-- Latest root-LP subset diagnostic source: `08af4829b3491269698f0faf67162af9d8d52861`
-  (`thesis-activation-start-subset-08af482`).
+- Latest root-LP subset diagnostic source: `f10525f4255be72bde81d19778b5af5ceeac8949`
+  (`thesis-activation-start-top5-diagnostic-f10525f`); its one-row predecessor
+  is `08af4829b3491269698f0faf67162af9d8d52861`.
 - Latest exhaustive no-path-clique diagnostic source:
   `f71bc51a48c743e86c4150bb53bbb5e281caa4cb`
   (`thesis-exact-no-path-clique-f71bc51`).
@@ -40,7 +41,7 @@ generation, UI work, or large refactor; those are outside this review.
 | Small M0--M3 | `output/verification/small_m0_m3/93e31b0_20260824/audit.json` | Is the M2--M3 same-input comparison clearly separated from fleet/PV/BESS-changing M0/M1 ablations? |
 | Economic response | `output/thesis_remaining_sensitivities_27ec8ce_20260824/sensitivity_execution_manifest.json` | Do the documented gap failures prevent economic-response conclusions? |
 | Fixed-plan stress | `output/diagnostics/fixed_solution_stress_0ddcd22_20260824/fixed_solution_stress.json` | Is fixed-decision fragility correctly kept distinct from reoptimized robustness? |
-| Root-LP strengthening | `output/diagnostics/stage1_activation_start_dual_root_a51b1f3_20260824/diagnostic_assessment.json` and `output/diagnostics/stage1_activation_start_subset_root_08af482_20260824/diagnostic_assessment.json` | Do the all-row no-solution and one-row no-bound-improvement results justify rejecting this candidate without a MIP ON/OFF run? |
+| Root-LP strengthening | `output/diagnostics/stage1_activation_start_dual_root_a51b1f3_20260824/diagnostic_assessment.json`, `output/diagnostics/stage1_activation_start_subset_root_08af482_20260824/diagnostic_assessment.json`, and `output/diagnostics/stage1_activation_start_top5_root_f10525f_20260824/diagnostic_result.json` | Do the all-row no-solution plus quality-qualified one-row and five-row no-bound-improvement results justify rejecting the tested high-deficit subsets without a MIP ON/OFF run, while avoiding an unsupported claim about every other subset? |
 | Exact no-path cliques | `output/diagnostics/stage1_assignment_path_exact_clique_root_f71bc51_20260824/diagnostic_result.json` | Does the optimal, quality-qualified root LP plus 59/59 optimal auxiliary clique MIPs justify rejecting this complete no-path clique family at that root point, without implying a general integrality or gap result? |
 
 The implementation adds only diagnostic controls:

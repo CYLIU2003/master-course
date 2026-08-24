@@ -108,6 +108,20 @@
   unstrengthened 52,749.16358183805 JPY by only `-4.37e-11` JPY, inside the
   `1e-5`-JPY comparison tolerance. The verdict is
   `NO_ROOT_BOUND_IMPROVEMENT`; no MIP ON/OFF or formal run is authorized.
+- The frozen `thesis-activation-start-top5-diagnostic-f10525f` follow-up at
+  `output/diagnostics/stage1_activation_start_top5_root_f10525f_20260824/`
+  precommits the five largest observed baseline deficits, retains the same
+  prepared-source SHA, seed 42, four threads, barrier/automatic crossover,
+  300-second root cap, and default Stage-1 controls, and adds exactly five
+  certified rows (108,067 constraints). Its normal-BFF run
+  `output/2026-08-24/run_20260824_1343/` passes run-input provenance. The root
+  LP is optimal and quality-qualified (`5.820766091346741e-11` maximum
+  unscaled primal violation), but its 52,749.16358183858-JPY objective is only
+  `+5.3e-10` JPY from the unstrengthened comparison point, inside the same
+  `1e-5`-JPY tolerance. This second `NO_ROOT_BOUND_IMPROVEMENT` diagnostic
+  rejects the tested high-deficit subsets of one and five rows as a root-bound
+  path. It does not generalize to all possible subsets, change the production
+  default, authorize a MIP ON/OFF run, or weaken the release gate.
 
 ## 2026-08-24: Root-LP clone method is explicit and remains diagnostic-only
 
