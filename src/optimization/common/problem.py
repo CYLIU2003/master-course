@@ -388,6 +388,10 @@ class OptimizationConfig:
     # This small default prevents an opt-in observation from consuming the
     # declared Stage-1/Stage-2 research budget.
     stage1_root_lp_diagnostic_time_limit_sec: int = 30
+    # The separate root-LP clone normally uses barrier (``2``). Dual simplex
+    # (``1``) is available only to diagnose whether a valid strengthening is
+    # obscured by barrier/crossover behavior. It never changes the Stage-1 MIP.
+    stage1_root_lp_diagnostic_method: int = 2
     # Opt-in, read-only scan of the completed Stage-1 constraint matrix.  It
     # identifies the rows and variables that attain the smallest nonzero
     # coefficient reported by Gurobi's aggregate numeric diagnostics.  The

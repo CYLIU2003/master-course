@@ -1945,6 +1945,44 @@ def _configured_stage1_gurobi_scale_flag(config: OptimizationConfig) -> int:
     return scale_flag
 
 
+_ROOT_LP_DIAGNOSTIC_METHOD_NAMES = {
+    1: "dual_simplex",
+    2: "barrier",
+}
+
+
+def _root_lp_diagnostic_method_name(method: int) -> str:
+    """Return the supported read-only root-LP clone method name."""
+
+    try:
+        normalized_method = int(method)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "stage1_root_lp_diagnostic_method must be 1 (dual simplex) or 2 (barrier)"
+        ) from exc
+    method_name = _ROOT_LP_DIAGNOSTIC_METHOD_NAMES.get(normalized_method)
+    if method_name is None:
+        raise ValueError(
+            "stage1_root_lp_diagnostic_method must be 1 (dual simplex) or 2 (barrier)"
+        )
+    return method_name
+
+
+def _configured_stage1_root_lp_diagnostic_method(
+    config: OptimizationConfig,
+) -> int:
+    """Return the validated algorithm for the isolated Stage-1 LP clone."""
+
+    try:
+        method = int(getattr(config, "stage1_root_lp_diagnostic_method", 2))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "stage1_root_lp_diagnostic_method must be 1 (dual simplex) or 2 (barrier)"
+        ) from exc
+    _root_lp_diagnostic_method_name(method)
+    return method
+
+
 def _assignment_path_reachability_by_vehicle(
     *,
     assignment_trip_ids_by_vehicle: Mapping[str, Sequence[str]],
@@ -2151,12 +2189,14 @@ def _stage1_root_lp_diagnostic(
     acyclic_flow_requires_path_start_certificate: bool = False,
     time_limit_sec: float = 300.0,
     threads: Optional[int] = None,
+    method: int = 2,
 ) -> Dict[str, Any]:
     """Solve and summarize an isolated Stage-1 continuous relaxation.
 
-    The cloned model is read-only with respect to the production MIP. It uses
-    barrier with Gurobi's automatic crossover strategy so a returned solution
-    can receive the solver's normal crossover refinement.
+    The cloned model is read-only with respect to the production MIP. The
+    requested algorithm is recorded so a dual-simplex diagnostic can be
+    compared with the default barrier-plus-automatic-crossover observation
+    without changing the production MIP.
     The summary intentionally reports aggregate fractional assignment evidence
     instead of a million-variable solution dump, making it useful for a
     formulation diagnosis without changing any research result.
@@ -2165,20 +2205,23 @@ def _stage1_root_lp_diagnostic(
     diagnostic_threads = 1 if threads is None else int(threads)
     if diagnostic_threads < 1:
         raise ValueError("root LP diagnostic threads must be a positive integer")
+    diagnostic_method = int(method)
+    diagnostic_method_name = _root_lp_diagnostic_method_name(diagnostic_method)
     diagnostic: Dict[str, Any] = {
         "enabled": True,
         "semantics": (
             "separate_continuous_relaxation_of_the_completed_stage1_model; "
             "diagnostic_only_and_never_used_for_mip_rows_bounds_or_starts; "
-            "barrier_diagnostic_solution_is_not_a_mip_start"
+            "root_lp_diagnostic_solution_is_not_a_mip_start"
         ),
         "status": "not_run",
         "time_limit_sec": max(float(time_limit_sec), 0.001),
         "solver_controls": {
-            "method": 2,
-            "method_name": "barrier",
+            "method": diagnostic_method,
+            "method_name": diagnostic_method_name,
             "crossover": -1,
             "crossover_name": "automatic",
+            "crossover_applicable": diagnostic_method == 2,
             "threads": diagnostic_threads,
         },
     }
@@ -15036,6 +15079,7 @@ class GurobiMILPAdapter:
                     remaining_before_root_lp_diagnostic_sec,
                 ),
                 threads=configured_threads,
+                method=_configured_stage1_root_lp_diagnostic_method(config),
             )
         stage1_pre_optimize_seconds = float(time.perf_counter() - total_started)
         stage1_search_telemetry = _Stage1SearchTelemetry(

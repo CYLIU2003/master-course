@@ -870,6 +870,9 @@ class RunOptimizationBody(BaseModel):
         ge=1,
         le=300,
     )
+    # This controls only the separate read-only root-LP clone, never the
+    # production Stage-1 MIP solver method.
+    stage1_root_lp_diagnostic_method: Literal[1, 2] = 2
     stage1_numeric_coefficient_diagnostic_enabled: bool = False
     stage1_fragment_transition_cut_mode: Literal[
         "lazy", "lifted_root", "lazy_root_cuts", "explicit_root"
@@ -11307,6 +11310,7 @@ def _run_optimization(
     co2_emissions_cap_kg: Optional[float] = None,
     stage1_numeric_coefficient_diagnostic_enabled: bool = False,
     stage1_gurobi_scale_flag: int = -1,
+    stage1_root_lp_diagnostic_method: int = 2,
 ) -> None:
     output_dir: Optional[str] = None
     raw_frontend_request_payload = dict(frontend_request_payload or {})
@@ -11535,6 +11539,9 @@ def _run_optimization(
                 ),
                 stage1_root_lp_diagnostic_time_limit_sec=max(
                     int(stage1_root_lp_diagnostic_time_limit_seconds), 1
+                ),
+                stage1_root_lp_diagnostic_method=int(
+                    stage1_root_lp_diagnostic_method
                 ),
                 stage1_numeric_coefficient_diagnostic_enabled=bool(
                     stage1_numeric_coefficient_diagnostic_enabled
@@ -14007,6 +14014,7 @@ def run_optimization(
             request.co2_emissions_cap_kg,
             request.stage1_numeric_coefficient_diagnostic_enabled,
             request.stage1_gurobi_scale_flag,
+            request.stage1_root_lp_diagnostic_method,
         ),
         job_id=job.job_id,
         scenario_id=scenario_id,

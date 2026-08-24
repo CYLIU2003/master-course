@@ -1691,6 +1691,11 @@ def _run_pure_ice_case(
                     stage1_gurobi_search_profile=str(request.get("stage1_gurobi_search_profile") or "default"),
                     stage1_root_lp_diagnostic_enabled=bool(request.get("stage1_root_lp_diagnostic_enabled", False)),
                     stage1_root_lp_diagnostic_time_limit_seconds=int(request.get("stage1_root_lp_diagnostic_time_limit_seconds", 30) or 30),
+                    stage1_root_lp_diagnostic_method=(
+                        int(request["stage1_root_lp_diagnostic_method"])
+                        if request.get("stage1_root_lp_diagnostic_method") is not None
+                        else 2
+                    ),
                     stage1_fragment_transition_cut_mode=str(request.get("stage1_fragment_transition_cut_mode") or "lazy"),
                     stage1_powertrain_selector_strengthening=bool(request.get("stage1_powertrain_selector_strengthening", False)),
                     stage1_activation_start_strengthening=bool(request.get("stage1_activation_start_strengthening", False)),

@@ -1,5 +1,23 @@
 # Development Notes
 
+## 2026-08-24: Root-LP clone method is explicit and remains diagnostic-only
+
+- Added the constrained `stage1_root_lp_diagnostic_method` control to the
+  isolated continuous clone only: the default remains barrier (`Method=2`) with
+  automatic crossover, while dual simplex (`Method=1`) can be selected to
+  diagnose a valid strengthening whose barrier clone has no comparable LP
+  point. The production Stage-1 MIP's method, rows, bounds, starts, objective,
+  and acceptance logic are unchanged.
+- Both the BFF and the pure-ICE diagnostic harness record and forward only
+  these two methods. Invalid direct-harness input fails rather than silently
+  reverting to barrier. The persisted controls explicitly mark crossover as
+  inapplicable for dual simplex, preventing a misleading crossover claim.
+- Focused regressions cover method validation, BFF-to-config propagation,
+  harness forwarding, and an isolated Gurobi dual-simplex LP. This change is
+  not an experiment result: a future clean-SHA run remains **DIAGNOSTIC, NOT
+  USED FOR RESEARCH CONCLUSIONS** unless it separately meets the existing
+  validity, quality, and controlled-comparison gates.
+
 ## 2026-08-24: Stage-1 no-path assignment-pair audit remains read-only
 
 - Extended the opt-in isolated Stage-1 root-LP diagnostic with a per-vehicle,

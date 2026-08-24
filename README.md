@@ -542,15 +542,18 @@ as diagnostic-only, so it cannot satisfy research acceptance. A clean-SHA
 no-path candidate: its quality-qualified root LP checks 1,404,360 pairs,
 finds zero violations, and has maximum assignment mass `0.8457521`. This is
 **DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS** and no row was added. The
-clone explicitly uses Gurobi barrier (`Method=2`) with
-automatic crossover (`Crossover=-1`), and uses the request's explicit Gurobi
-thread count when one is supplied. Those controls and the returned solution's
-unscaled primal/dual/complementarity quality metrics are persisted with the
-diagnostic result. It also reports whether the unscaled primal violation is
-within the configured feasibility tolerance; a false flag blocks structural
-use of the point. Its request default is 30 seconds and it is capped by the
-same Phase-3 wall-clock deadline, so the diagnostic cannot overrun the
-declared Stage-1/Stage-2 budget.
+clone uses Gurobi barrier (`Method=2`) with automatic crossover
+(`Crossover=-1`) by default, and uses the request's explicit Gurobi thread
+count when one is supplied. A separately recorded `Method=1` (dual simplex)
+is permitted only for the read-only clone when a valid row's barrier result has
+no comparable LP solution; it never changes the production Stage-1 MIP method.
+The artifact states whether crossover is applicable, as well as the returned
+solution's unscaled primal/dual/complementarity quality metrics. It also
+reports whether the unscaled primal violation is within the configured
+feasibility tolerance; a false flag blocks structural use of the point. Its
+request default is 30 seconds and it is capped by the same Phase-3 wall-clock
+deadline, so the diagnostic cannot overrun the declared Stage-1/Stage-2
+budget.
 
 The same read-only diagnostic evaluates the actual LP values against supplied
 maximal sets of mutually overlapping trips for each vehicle. It records any

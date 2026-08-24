@@ -29,6 +29,7 @@ from src.optimization.milp.solver_adapter import (
     _configured_gurobi_threads,
     _configured_stage1_gurobi_scale_flag,
     _configured_stage1_gurobi_search_controls,
+    _configured_stage1_root_lp_diagnostic_method,
     _has_exact_mip_optimality_certificate,
     _iter_assignment_path_incompatibility_pairs,
     _iter_weighted_assignment_path_incompatibility_cliques,
@@ -297,6 +298,20 @@ def test_stage1_gurobi_scale_flag_is_explicit_and_validated() -> None:
         )
 
 
+def test_root_lp_diagnostic_method_is_explicit_and_limited_to_safe_variants() -> None:
+    assert _configured_stage1_root_lp_diagnostic_method(OptimizationConfig()) == 2
+    assert (
+        _configured_stage1_root_lp_diagnostic_method(
+            OptimizationConfig(stage1_root_lp_diagnostic_method=1)
+        )
+        == 1
+    )
+    with pytest.raises(ValueError, match="stage1_root_lp_diagnostic_method"):
+        _configured_stage1_root_lp_diagnostic_method(
+            OptimizationConfig(stage1_root_lp_diagnostic_method=0)
+        )
+
+
 @pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
 def test_root_lp_diagnostic_reports_fractional_assignment_without_mutating_mip() -> None:
     from src.gurobi_runtime import ensure_gurobi
@@ -326,6 +341,7 @@ def test_root_lp_diagnostic_reports_fractional_assignment_without_mutating_mip()
         "method_name": "barrier",
         "crossover": -1,
         "crossover_name": "automatic",
+        "crossover_applicable": True,
         "threads": 2,
     }
     assert diagnostic["solution_quality"]["max_unscaled_violation"] <= 1.0e-6
@@ -340,6 +356,38 @@ def test_root_lp_diagnostic_reports_fractional_assignment_without_mutating_mip()
     assert diagnostic["assignment_summary"]["fractional_assignment_variable_count"] == 1
     assert diagnostic["assignment_summary"]["trips_split_across_multiple_vehicle_labels"] == 0
     assert diagnostic["vehicle_activation_summary"]["fractional_activation_count"] == 1
+    assert model.NumBinVars == 2
+
+
+@pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
+def test_root_lp_diagnostic_can_use_dual_simplex_without_mutating_mip() -> None:
+    from src.gurobi_runtime import ensure_gurobi
+
+    gp, grb = ensure_gurobi()
+    model = gp.Model("root_lp_dual_simplex_diagnostic")
+    model.Params.OutputFlag = 0
+    assignment = model.addVar(vtype=grb.BINARY, name="assign__bev__trip")
+    used = model.addVar(vtype=grb.BINARY, name="used__bev")
+    model.addConstr(assignment == 0.5)
+    model.addConstr(used == assignment)
+    model.setObjective(assignment, grb.MINIMIZE)
+
+    diagnostic = _stage1_root_lp_diagnostic(
+        model=model,
+        grb=grb,
+        assignment_vars={("bev", "trip"): assignment},
+        used_vehicle_vars={"bev": used},
+        vehicle_type_by_id={"bev": "BEV"},
+        time_limit_sec=5,
+        threads=2,
+        method=1,
+    )
+
+    assert diagnostic["status"] == "optimal"
+    assert diagnostic["solver_controls"]["method"] == 1
+    assert diagnostic["solver_controls"]["method_name"] == "dual_simplex"
+    assert diagnostic["solver_controls"]["crossover_applicable"] is False
+    assert diagnostic["objective_jpy"] == pytest.approx(0.5)
     assert model.NumBinVars == 2
 
 

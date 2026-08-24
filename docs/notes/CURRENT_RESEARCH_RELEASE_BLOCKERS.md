@@ -63,6 +63,16 @@ adds no MIP row. A future clean-SHA result must first identify a violation and
 receive a separate exactness proof and regression before any formulation
 change is considered.
 
+The certified `used_vehicle <= sum(path_start)` candidate remains valid only
+under its strict acyclic-flow certificate and stays default-off. Its prior
+clean-`3de101b` 264-trip ON diagnostic reached the 300-second barrier/crossover
+clone limit with `SolCount=0`, so it has no comparable root point. The next
+observation may select dual simplex for that separate read-only clone only;
+the request records `Method=1`, marks crossover inapplicable, and leaves the
+production Stage-1 MIP method and every acceptance gate unchanged. This is a
+solver-algorithm diagnostic, not a formulation improvement or a license to run
+a formal experiment.
+
 ## 2026-08-24: Remaining one-factor matrix completes diagnostics, not acceptance
 
 The frozen tag `thesis-remaining-sensitivities-27ec8ce` ran the selected

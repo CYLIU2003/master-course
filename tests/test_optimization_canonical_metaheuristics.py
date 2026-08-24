@@ -182,6 +182,7 @@ def test_run_optimization_uses_canonical_engine_for_ga_mode() -> None:
             0.25,
             stage1_best_obj_stop_enabled=True,
             stage1_root_lp_diagnostic_enabled=True,
+            stage1_root_lp_diagnostic_method=1,
             stage1_numeric_coefficient_diagnostic_enabled=False,
             stage1_gurobi_scale_flag=-1,
             stage1_powertrain_selector_strengthening=True,
@@ -201,6 +202,7 @@ def test_run_optimization_uses_canonical_engine_for_ga_mode() -> None:
     assert config.warm_start is True
     assert config.stage1_best_obj_stop_enabled is False
     assert config.stage1_root_lp_diagnostic_enabled is True
+    assert config.stage1_root_lp_diagnostic_method == 1
     assert config.stage1_numeric_coefficient_diagnostic_enabled is False
     assert config.stage1_gurobi_scale_flag == -1
     assert config.diagnostic_mode is True
@@ -513,6 +515,7 @@ def test_run_optimization_endpoint_submits_current_prepared_input_job() -> None:
                 mode="mode_milp_only",
                 research_run=True,
                 stage1_root_lp_diagnostic_enabled=True,
+                stage1_root_lp_diagnostic_method=1,
                 stage1_numeric_coefficient_diagnostic_enabled=False,
                 stage1_gurobi_scale_flag=-1,
                 stage1_activation_start_strengthening=True,
@@ -529,8 +532,9 @@ def test_run_optimization_endpoint_submits_current_prepared_input_job() -> None:
     assert submitted_args[24] == 30
     assert submitted_args[26] is False
     assert submitted_args[27] is True
-    assert submitted_args[-2] is False
-    assert submitted_args[-1] == -1
+    assert submitted_args[-3] is False
+    assert submitted_args[-2] == -1
+    assert submitted_args[-1] == 1
     assert submitted_args[29] == "day_ahead_and_hourly_rolling"
     assert submitted_args[30] is True
     assert submitted_args[31] == 60

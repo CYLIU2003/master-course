@@ -73,6 +73,11 @@ no-path cliques and also finds zero violations (largest mass
 heuristic, it rejects only the checked cliques. Adding a duplicate charger or
 energy row, reducing the declared gap, or restricting fragments without a
 proof would change or weaken the research contract and is not authorized.
+For the activation-to-start diagnostic only, the next clean-SHA clone may use
+dual simplex instead of the default barrier/crossover algorithm to determine
+whether the absent LP point is algorithmic. That method selection is recorded,
+does not alter the Stage-1 MIP, and supplies no evidence until the same quality
+and controlled-comparison gates are met.
 
 ## Thesis claim boundary
 
