@@ -66,12 +66,16 @@ change is considered.
 The certified `used_vehicle <= sum(path_start)` candidate remains valid only
 under its strict acyclic-flow certificate and stays default-off. Its prior
 clean-`3de101b` 264-trip ON diagnostic reached the 300-second barrier/crossover
-clone limit with `SolCount=0`, so it has no comparable root point. The next
-observation may select dual simplex for that separate read-only clone only;
-the request records `Method=1`, marks crossover inapplicable, and leaves the
-production Stage-1 MIP method and every acceptance gate unchanged. This is a
-solver-algorithm diagnostic, not a formulation improvement or a license to run
-a formal experiment.
+clone limit with `SolCount=0`, so it had no comparable root point. The clean
+`a51b1f3` follow-up at
+`output/diagnostics/stage1_activation_start_dual_root_a51b1f3_20260824/`
+uses dual simplex (`Method=1`) for that separate clone only, with the same
+prepared-source hash, four threads, cap, 60 rows, and 762,906-variable/
+108,122-constraint model. It also reaches 300 seconds with `SolCount=0`.
+The `NO_COMPARABLE_ROOT_LP_SOLUTION` assessment is **DIAGNOSTIC, NOT USED FOR
+RESEARCH CONCLUSIONS**; it leaves the production MIP and every acceptance gate
+unchanged, supplies no comparative root bound, and is not a license to run a
+formal experiment.
 
 ## 2026-08-24: Remaining one-factor matrix completes diagnostics, not acceptance
 

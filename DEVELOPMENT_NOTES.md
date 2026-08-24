@@ -17,6 +17,17 @@
   not an experiment result: a future clean-SHA run remains **DIAGNOSTIC, NOT
   USED FOR RESEARCH CONCLUSIONS** unless it separately meets the existing
   validity, quality, and controlled-comparison gates.
+- The clean `a51b1f3` normal-BFF follow-up is frozen at
+  `output/diagnostics/stage1_activation_start_dual_root_a51b1f3_20260824/`.
+  After Phase-3 normalization, its only request difference from the prior
+  activation-start observation is `stage1_root_lp_diagnostic_method=1`. The
+  scenario, prepared input and source hash, four threads, 300-second cap, 60
+  eligible rows, and 762,906-variable/108,122-constraint clone are unchanged.
+  Dual simplex also reaches the cap with `SolCount=0` (300.222 seconds), just
+  as barrier did (300.278 seconds). `verify_run_input_provenance.py` passes,
+  but no LP objective or quality-qualified point exists. The assessment verdict
+  is `NO_COMPARABLE_ROOT_LP_SOLUTION`; the row remains default-OFF and no bound,
+  gap, runtime, cost, physical, or release claim is made.
 
 ## 2026-08-24: Stage-1 no-path assignment-pair audit remains read-only
 

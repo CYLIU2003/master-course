@@ -555,6 +555,18 @@ request default is 30 seconds and it is capped by the same Phase-3 wall-clock
 deadline, so the diagnostic cannot overrun the declared Stage-1/Stage-2
 budget.
 
+The clean `a51b1f3` dual-simplex follow-up freezes the Phase-3-normalized
+request at
+`output/diagnostics/stage1_activation_start_dual_root_a51b1f3_20260824/` and
+changes only that clone algorithm from `Method=2` to `Method=1`. With the same
+prepared-source hash, four threads, 300-second cap, and 60 valid
+activation-start rows (762,906 variables; 108,122 constraints), it too reaches
+the cap with `SolCount=0`. Thus neither permitted clone algorithm produced a
+root objective or quality-qualified LP point. The assessment is
+`NO_COMPARABLE_ROOT_LP_SOLUTION`, **DIAGNOSTIC, NOT USED FOR RESEARCH
+CONCLUSIONS**; it does not justify enabling the rows by default or making a
+bound, gap, runtime, cost, physical, or release claim.
+
 The same read-only diagnostic evaluates the actual LP values against supplied
 maximal sets of mutually overlapping trips for each vehicle. It records any
 violation of `sum(assignments) <= 1`, but never adds those rows to Stage 1.

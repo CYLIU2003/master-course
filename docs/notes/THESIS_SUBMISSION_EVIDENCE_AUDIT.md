@@ -78,6 +78,14 @@ dual simplex instead of the default barrier/crossover algorithm to determine
 whether the absent LP point is algorithmic. That method selection is recorded,
 does not alter the Stage-1 MIP, and supplies no evidence until the same quality
 and controlled-comparison gates are met.
+That follow-up is now complete at clean `a51b1f3`: the frozen normal-BFF
+artifact `output/diagnostics/stage1_activation_start_dual_root_a51b1f3_20260824/`
+keeps the prepared-source hash, four threads, 300-second cap, and the same 60
+valid rows/model size, but selects dual simplex. It too ends at the cap with
+`SolCount=0`; therefore there is no root objective or quality-qualified point
+to compare with the barrier result. Its verdict is
+`NO_COMPARABLE_ROOT_LP_SOLUTION`, not evidence that the inequality improves the
+root bound or should be enabled.
 
 ## Thesis claim boundary
 
