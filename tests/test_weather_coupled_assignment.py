@@ -375,6 +375,7 @@ def _solve_full_phase3_assignment(
     candidate_limit: int = 1,
     powertrain_selector_strengthening: bool = False,
     activation_start_strengthening: bool = False,
+    activation_start_vehicle_ids: tuple[str, ...] | None = None,
 ) -> tuple[dict[str, str], dict[str, object]]:
     problem = _full_phase3_counterexample(
         sunny_midday_pv_kwh=sunny_midday_pv_kwh
@@ -388,6 +389,11 @@ def _solve_full_phase3_assignment(
             ),
             "stage1_activation_start_strengthening": (
                 activation_start_strengthening
+            ),
+            "stage1_activation_start_strengthening_vehicle_ids": (
+                None
+                if activation_start_vehicle_ids is None
+                else list(activation_start_vehicle_ids)
             ),
         },
     )
@@ -546,6 +552,28 @@ def test_activation_start_strengthening_preserves_small_phase3_solution() -> Non
         "acyclic_flow_requires_path_start_certificate"
     ] is True
     assert strengthened_audit["constraint_count"] == 2
+
+
+def test_activation_start_subset_preserves_small_phase3_solution() -> None:
+    baseline_assignment, baseline_metadata = _solve_full_phase3_assignment(
+        sunny_midday_pv_kwh=25.0,
+        activation_start_strengthening=False,
+    )
+    subset_assignment, subset_metadata = _solve_full_phase3_assignment(
+        sunny_midday_pv_kwh=25.0,
+        activation_start_strengthening=True,
+        activation_start_vehicle_ids=("bev-weather",),
+    )
+
+    assert subset_assignment == baseline_assignment
+    assert float(subset_metadata["stage1_objective"]) == pytest.approx(
+        float(baseline_metadata["stage1_objective"])
+    )
+    subset_audit = dict(subset_metadata["stage1_activation_start_strengthening"])
+    assert subset_audit["selection_mode"] == "explicit_vehicle_id_subset"
+    assert subset_audit["available_eligible_vehicle_count"] == 2
+    assert subset_audit["selected_vehicle_ids"] == ["bev-weather"]
+    assert subset_audit["constraint_count"] == 1
 
 
 def test_phase3_selects_lowest_canonical_cost_from_exact_stage2_candidates() -> None:

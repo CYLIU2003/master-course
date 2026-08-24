@@ -15,8 +15,10 @@
   the isolated-process harness preserve this field. The Stage-1 MIP remains
   diagnostic-only whenever activation-start strengthening is requested.
 - Added focused Gurobi, BFF propagation, harness forwarding, and default-body
-  regressions. The first planned one-row diagnostic selects the vehicle with
-  the largest read-only activation-start deficit in the clean baseline root-LP
+  regressions, plus a small Phase-3 ON/OFF subset regression that preserves the
+  assignment and Stage-1 objective. The first planned one-row diagnostic
+  selects the vehicle with the largest read-only activation-start deficit in
+  the clean baseline root-LP
   observation (`4f5a4c1d-cac3-4fd2-87a8-cf0049c71ebe`, deficit
   `0.8169431546`); its validity does not depend on that ranking, but the
   ranking makes the selection reproducible and avoids an arbitrary label.
