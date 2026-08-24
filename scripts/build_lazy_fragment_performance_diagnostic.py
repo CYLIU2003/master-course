@@ -23,6 +23,9 @@ if str(REPO_ROOT) not in sys.path:
 
 SCHEMA_VERSION = "lazy_fragment_performance_diagnostic_v1"
 PURE_ICE_AB_SCHEMA_VERSION = "pure_ice_aggregation_ab_v4_phase3_repeated_processes"
+PURE_ICE_SINGLE_DIAGNOSTIC_SCHEMA_VERSION = (
+    "pure_ice_aggregation_single_diagnostic_v1"
+)
 PURE_ICE_AB_TARGET_PHASE = "phase3_two_stage"
 _PHASE4_ONLY_REQUEST_FIELDS = (
     "integrated_actual_cost_objective",
@@ -2404,6 +2407,200 @@ def run_pure_ice_aggregation_ab(
     return comparison
 
 
+def run_pure_ice_aggregation_single_diagnostic(
+    *,
+    scenario_id: str,
+    prepared_input_id: str,
+    optimization_request_path: Path,
+    output_dir: Path,
+    representation: str,
+    stage1_time_limit_seconds: int | None = None,
+    stage2_time_limit_seconds: int | None = None,
+) -> dict[str, Any]:
+    """Run one frozen Phase-3 representation diagnostic without A/B claims.
+
+    This path is deliberately separate from ``run_pure_ice_aggregation_ab``:
+    one observation can assess whether a longer fixed Stage-1 cap improves a
+    representation's certified gap, but cannot support a runtime, cost, or
+    representation-comparison claim.  The same clean-SHA and prepared-input
+    gates as an A/B child remain mandatory.
+    """
+
+    if representation not in {"discrete", "pure_aggregate"}:
+        raise ValueError(f"unsupported diagnostic representation: {representation!r}")
+    if _git_output("status", "--porcelain"):
+        raise RuntimeError("single diagnostic requires a clean Git worktree")
+    git_sha = _git_output("rev-parse", "HEAD")
+    source_request = _read_json(optimization_request_path)
+    if str(source_request.get("prepared_input_id") or "") != prepared_input_id:
+        raise ValueError(
+            "optimization request prepared_input_id does not match the "
+            "requested canonical prepared input"
+        )
+    prepared_path = (
+        REPO_ROOT
+        / "output"
+        / "prepared_inputs"
+        / scenario_id
+        / f"{prepared_input_id}.json"
+    )
+    if not prepared_path.is_file():
+        raise FileNotFoundError(
+            f"canonical prepared input is missing: {prepared_path}"
+        )
+    if stage1_time_limit_seconds is None or stage2_time_limit_seconds is None:
+        raise ValueError(
+            "single diagnostic requires explicit fixed "
+            "stage1_time_limit_seconds and stage2_time_limit_seconds"
+        )
+    request, request_transformation = compile_phase3_pure_ice_ab_request(
+        source_request,
+        stage1_time_limit_seconds=stage1_time_limit_seconds,
+        stage2_time_limit_seconds=stage2_time_limit_seconds,
+    )
+    if str(request.get("prepared_input_id") or "") != prepared_input_id:
+        raise ValueError(
+            "compiled Phase-3 request prepared_input_id does not match the "
+            "requested canonical prepared input"
+        )
+
+    output_dir.mkdir(parents=True, exist_ok=False)
+    frozen_request_path = output_dir / "frozen_optimization_request.json"
+    frozen_request_path.write_text(
+        json.dumps(request, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    prepared_input_sha256 = _sha256_file(prepared_path)
+    manifest = {
+        "schema_version": PURE_ICE_SINGLE_DIAGNOSTIC_SCHEMA_VERSION,
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "git_sha": git_sha,
+        "git_dirty": False,
+        "scenario_id": scenario_id,
+        "prepared_input_id": prepared_input_id,
+        "prepared_input_path": str(prepared_path.resolve()),
+        "prepared_input_sha256": prepared_input_sha256,
+        "optimization_request_path": str(optimization_request_path.resolve()),
+        "source_optimization_request_sha256": _sha256_file(
+            optimization_request_path
+        ),
+        "frozen_optimization_request_path": str(frozen_request_path.resolve()),
+        "frozen_optimization_request_sha256": _sha256_file(frozen_request_path),
+        "runtime_environment": _runtime_environment_snapshot(),
+        "representation": representation,
+        "solver_controls": {
+            "random_seed": request.get("random_seed"),
+            "gurobi_threads": request.get("gurobi_threads"),
+            "time_limit_seconds": request.get("time_limit_seconds"),
+            "mip_gap": request.get("mip_gap"),
+            "stage1_time_limit_seconds": request.get("stage1_time_limit_seconds"),
+            "stage2_time_limit_seconds": request.get("stage2_time_limit_seconds"),
+            "stage1_gurobi_search_profile": request.get(
+                "stage1_gurobi_search_profile"
+            ),
+            "stage1_fragment_transition_cut_mode": request.get(
+                "stage1_fragment_transition_cut_mode"
+            ),
+            "run_profile": request.get("run_profile"),
+            "rolling_execution_minutes": request.get("rolling_execution_minutes"),
+        },
+        "source_optimization_request": source_request,
+        "phase3_request_transformation": request_transformation,
+        "optimization_request": request,
+        "claim_scope": {
+            "diagnostic_only": True,
+            "ab_comparison": False,
+            "performance_claim_forbidden": True,
+            "cost_comparison_forbidden": True,
+            "optimality_claim_forbidden": True,
+            "formal_research_acceptance_forbidden": True,
+        },
+    }
+    manifest_path = output_dir / "request_manifest.json"
+    manifest_path.write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    if (
+        _git_output("status", "--porcelain")
+        or _git_output("rev-parse", "HEAD") != git_sha
+        or _sha256_file(prepared_path) != prepared_input_sha256
+    ):
+        raise RuntimeError("single diagnostic inputs drifted before child run")
+    run_directory = output_dir / "run"
+    run_directory.mkdir()
+    child = _run_pure_ice_case_in_child_process(
+        scenario_id=scenario_id,
+        prepared_input_id=prepared_input_id,
+        optimization_request_path=frozen_request_path,
+        representation=representation,
+        run_directory=run_directory,
+        expected_git_sha=git_sha,
+    )
+    metrics = dict(child["metrics"])
+    observed_prepared_hash = dict(
+        dict(metrics.get("provenance") or {}).get("input_hashes") or {}
+    ).get("prepared_source_sha256")
+    if observed_prepared_hash != prepared_input_sha256:
+        raise RuntimeError(
+            "child run prepared-input hash does not match the frozen input"
+        )
+    if (
+        _git_output("status", "--porcelain")
+        or _git_output("rev-parse", "HEAD") != git_sha
+        or _sha256_file(prepared_path) != prepared_input_sha256
+    ):
+        raise RuntimeError("single diagnostic inputs drifted after child run")
+    (run_directory / "case_metrics.json").write_text(
+        json.dumps(metrics, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    result = {
+        "schema_version": PURE_ICE_SINGLE_DIAGNOSTIC_SCHEMA_VERSION,
+        "verdict": "DIAGNOSTIC_COMPLETE_NOT_A_COMPARISON",
+        "claim_scope": manifest["claim_scope"],
+        "representation": representation,
+        "git_sha_before_after": git_sha,
+        "prepared_input_sha256": prepared_input_sha256,
+        "child": {
+            key: child.get(key)
+            for key in (
+                "job_id",
+                "run_dir",
+                "runner_wall_time_sec",
+                "parent_observed_wall_time_sec",
+                "peak_rss_bytes",
+                "rss_sample_count",
+            )
+        },
+        "metrics": metrics,
+    }
+    result_path = output_dir / "diagnostic_result.json"
+    result_path.write_text(
+        json.dumps(result, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    required = (
+        "request_manifest.json",
+        "diagnostic_result.json",
+        "frozen_optimization_request.json",
+    )
+    (output_dir / "artifact_hashes.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "artifact_hashes_v1",
+                "sha256": {name: _sha256_file(output_dir / name) for name in required},
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return result
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
@@ -2415,6 +2612,15 @@ def main() -> int:
         "--run-pure-ice-aggregation-ab",
         action="store_true",
         help="Execute alternating isolated-process discrete/pure-aggregate BFF runs.",
+    )
+    parser.add_argument(
+        "--run-pure-ice-aggregation-single-diagnostic",
+        action="store_true",
+        help=(
+            "Execute one frozen Phase-3 representation diagnostic without "
+            "creating an A/B, performance, cost, optimality, or formal "
+            "research-acceptance claim."
+        ),
     )
     parser.add_argument(
         "--run-pure-ice-aggregation-child",
@@ -2438,6 +2644,13 @@ def main() -> int:
     parser.add_argument("--ab-repetitions", type=int, default=5)
     parser.add_argument("--stage1-time-limit-seconds", type=int)
     parser.add_argument("--stage2-time-limit-seconds", type=int)
+    parser.add_argument(
+        "--single-diagnostic-representation",
+        choices=("discrete", "pure_aggregate"),
+        help=(
+            "Representation for --run-pure-ice-aggregation-single-diagnostic."
+        ),
+    )
     parser.add_argument("--child-representation", choices=("discrete", "pure_aggregate"))
     parser.add_argument("--child-result-path", type=Path)
     parser.add_argument("--expected-git-sha")
@@ -2455,6 +2668,15 @@ def main() -> int:
         parser.error(
             "--resume-pure-ice-aggregation-ab requires "
             "--run-pure-ice-aggregation-ab"
+        )
+
+    if (
+        args.run_pure_ice_aggregation_ab
+        and args.run_pure_ice_aggregation_single_diagnostic
+    ):
+        parser.error(
+            "choose either --run-pure-ice-aggregation-ab or "
+            "--run-pure-ice-aggregation-single-diagnostic"
         )
 
     if args.run_pure_ice_aggregation_child:
@@ -2513,6 +2735,46 @@ def main() -> int:
             json.dumps(
                 {
                     "verdict": comparison["verdict"],
+                    "output_dir": str(args.output_dir.resolve()),
+                },
+                ensure_ascii=False,
+            )
+        )
+        return 0
+
+    if args.run_pure_ice_aggregation_single_diagnostic:
+        missing = [
+            name
+            for name, value in (
+                ("--scenario-id", args.scenario_id),
+                ("--prepared-input-id", args.prepared_input_id),
+                ("--optimization-request", args.optimization_request),
+                (
+                    "--single-diagnostic-representation",
+                    args.single_diagnostic_representation,
+                ),
+                ("--stage1-time-limit-seconds", args.stage1_time_limit_seconds),
+                ("--stage2-time-limit-seconds", args.stage2_time_limit_seconds),
+            )
+            if not value
+        ]
+        if missing:
+            parser.error(
+                "missing single-diagnostic arguments: " + ", ".join(missing)
+            )
+        result = run_pure_ice_aggregation_single_diagnostic(
+            scenario_id=str(args.scenario_id),
+            prepared_input_id=str(args.prepared_input_id),
+            optimization_request_path=Path(args.optimization_request),
+            output_dir=args.output_dir,
+            representation=str(args.single_diagnostic_representation),
+            stage1_time_limit_seconds=args.stage1_time_limit_seconds,
+            stage2_time_limit_seconds=args.stage2_time_limit_seconds,
+        )
+        print(
+            json.dumps(
+                {
+                    "verdict": result["verdict"],
                     "output_dir": str(args.output_dir.resolve()),
                 },
                 ensure_ascii=False,

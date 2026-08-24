@@ -1,5 +1,21 @@
 # Development Notes
 
+## 2026-08-24: Long-cap single-representation diagnostics fail closed
+
+- Added the explicit
+  `--run-pure-ice-aggregation-single-diagnostic` path to
+  `build_lazy_fragment_performance_diagnostic.py`.  It is intentionally
+  distinct from the five-pair AB/BA runner: it compiles and freezes a Phase-3
+  request with explicit Stage-1/Stage-2 limits, runs exactly one isolated BFF
+  child, and checks the clean Git SHA and canonical prepared-input SHA-256
+  before and after that child.
+- Its manifest and result hard-code `diagnostic_only=true` and prohibit A/B,
+  performance, cost, optimality, and formal-research-acceptance claims.  A
+  single representation observation therefore cannot weaken the A/B minimum
+  repetition guard or close the full-network 1% release gate.
+- Added a focused regression that uses an isolated fake child to verify frozen
+  controls, recorded hashes, output artifacts, and every claim prohibition.
+
 ## 2026-08-24: Activation-start subset diagnostics are explicit and fail closed
 
 - Added the optional

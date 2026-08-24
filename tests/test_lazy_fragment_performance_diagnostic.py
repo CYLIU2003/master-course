@@ -793,6 +793,97 @@ def test_pure_ice_ab_resume_skips_valid_completed_children(
     assert manifest["resume_history"][0]["completed_run_indices_before_resume"] == [1]
 
 
+def test_single_pure_ice_diagnostic_is_frozen_and_never_claims_comparison(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import scripts.build_lazy_fragment_performance_diagnostic as diagnostic
+
+    scenario_id = "scenario"
+    prepared_input_id = "prepared"
+    prepared_path = (
+        tmp_path
+        / "output"
+        / "prepared_inputs"
+        / scenario_id
+        / f"{prepared_input_id}.json"
+    )
+    prepared_path.parent.mkdir(parents=True)
+    prepared_path.write_text("{}", encoding="utf-8")
+    request_path = tmp_path / "request.json"
+    _write_json(
+        request_path,
+        {
+            "prepared_input_id": prepared_input_id,
+            "random_seed": 42,
+            "gurobi_threads": 4,
+        },
+    )
+    output_dir = tmp_path / "single"
+
+    monkeypatch.setattr(diagnostic, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(
+        diagnostic,
+        "_git_output",
+        lambda *_args: "frozen-sha" if _args[:2] == ("rev-parse", "HEAD") else "",
+    )
+    monkeypatch.setattr(
+        diagnostic,
+        "_runtime_environment_snapshot",
+        lambda: {"runtime": "test"},
+    )
+    monkeypatch.setattr(
+        diagnostic,
+        "compile_phase3_pure_ice_ab_request",
+        lambda request, **kwargs: ({**request, **kwargs}, {"fixed": True}),
+    )
+
+    def fake_child(*, representation: str, run_directory: Path, **_kwargs: object) -> dict:
+        metrics = _pure_ice_metrics(
+            representation=representation,
+            total_variables=536_000,
+            binary_variables=507_000,
+            certified_gap=0.028,
+            root_bound=58_000.0,
+            wall_time=900.0,
+        )
+        metrics["provenance"]["git_sha"] = "frozen-sha"
+        metrics["provenance"]["input_hashes"]["prepared_source_sha256"] = (
+            diagnostic._sha256_file(prepared_path)
+        )
+        return {
+            "metrics": metrics,
+            "job_id": "job-1",
+            "run_dir": str(run_directory),
+            "runner_wall_time_sec": 900.0,
+            "parent_observed_wall_time_sec": 901.0,
+            "peak_rss_bytes": 4_000_000,
+            "rss_sample_count": 1,
+        }
+
+    monkeypatch.setattr(diagnostic, "_run_pure_ice_case_in_child_process", fake_child)
+
+    result = diagnostic.run_pure_ice_aggregation_single_diagnostic(
+        scenario_id=scenario_id,
+        prepared_input_id=prepared_input_id,
+        optimization_request_path=request_path,
+        output_dir=output_dir,
+        representation="pure_aggregate",
+        stage1_time_limit_seconds=870,
+        stage2_time_limit_seconds=30,
+    )
+
+    assert result["verdict"] == "DIAGNOSTIC_COMPLETE_NOT_A_COMPARISON"
+    assert result["claim_scope"]["ab_comparison"] is False
+    assert result["claim_scope"]["performance_claim_forbidden"] is True
+    assert result["claim_scope"]["formal_research_acceptance_forbidden"] is True
+    manifest = json.loads((output_dir / "request_manifest.json").read_text())
+    assert manifest["representation"] == "pure_aggregate"
+    assert manifest["solver_controls"]["stage1_time_limit_seconds"] == 870
+    assert (output_dir / "run" / "case_metrics.json").is_file()
+    assert (output_dir / "diagnostic_result.json").is_file()
+    assert (output_dir / "artifact_hashes.json").is_file()
+
+
 def test_repeated_pure_ice_ab_fails_when_any_child_control_drifts() -> None:
     plan = build_pure_ice_alternating_case_plan(5)
     runs = []

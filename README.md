@@ -8,6 +8,17 @@ The reviewer-facing scope, checks, and open decisions are in
 [THESIS_EXTERNAL_REVIEW_BRIEF.md](docs/notes/THESIS_EXTERNAL_REVIEW_BRIEF.md);
 that brief is a request for independent review, not an approval record.
 
+## Long-cap single-representation diagnostics are not A/B evidence
+
+`scripts/build_lazy_fragment_performance_diagnostic.py` has a separate
+`--run-pure-ice-aggregation-single-diagnostic` path for a frozen, clean-SHA
+Phase-3 observation of one representation under an explicitly longer Stage-1
+cap.  It preserves the prepared-input hash and solver controls, but writes
+machine-readable prohibitions on A/B, runtime, cost, optimality, and formal
+research-acceptance claims.  The prescribed comparison remains five isolated
+AB/BA pairs; a single observation can only diagnose reachability of the
+declared gap target.
+
 ## 2026-08-24 remaining 264-trip one-factor sensitivity tranche: complete, diagnostic only
 
 Frozen tag `thesis-remaining-sensitivities-27ec8ce` executed the selected

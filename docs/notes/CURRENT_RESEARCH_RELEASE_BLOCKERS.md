@@ -18,6 +18,13 @@ and both representations miss the declared 1% gap (19.2273% discrete;
 3.0775% aggregate). This read-only telemetry evidence neither reinterprets the
 historical null values nor closes any optimality, sensitivity, or release gate.
 
+An explicitly separate single-representation, long-Stage-1-cap diagnostic is
+available for reachability investigation.  It freezes the normal Phase-3
+request and rechecks clean-SHA/prepared-input provenance, but its manifest
+prohibits A/B, runtime, cost, optimality, and formal research-acceptance
+claims.  It cannot replace the five-pair AB/BA evidence or close the 1% gate,
+even if its individual diagnostic gap improves.
+
 ## 2026-08-24: Thesis evidence audit confirms release remains blocked
 
 `docs/notes/THESIS_SUBMISSION_EVIDENCE_AUDIT.md` maps the required
