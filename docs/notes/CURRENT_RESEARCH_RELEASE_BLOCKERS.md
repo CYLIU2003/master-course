@@ -1,24 +1,30 @@
 # Current research release blockers
 
-## 2026-08-24: Exact-clone rank symmetry needs a fresh root diagnostic
+## 2026-08-24: Exact-clone rank symmetry rejected after controlled diagnostic
 
-The Stage-1 call was missing the canonical chronological trip order already
-used by the existing identical-vehicle duty-order helper in Phase 4. This
-suppressed the helper's exact equal-count assignment-rank tie-breaker even
-when a clone group had the same assignment and complete successor domains.
-The current source restores that argument. On the frozen 264-trip inventory,
-the 25 homogeneous ICE labels are expected to receive 24 additional rank rows
-after their 24 existing non-increasing trip-count rows. The construction is
-an exact identifier-permutation symmetry breaker: any integer clone-duty set
-can be sorted by trip count and then chronological rank sum. Domain-mismatched
-groups remain skipped.
+The clean `1aaaa27` candidate supplied the canonical chronological trip order
+to the Phase-3 Stage-1 identical-vehicle duty-order helper. It added 24
+equal-count assignment-rank rows after the existing 24 trip-count rows for the
+exact 25-vehicle homogeneous ICE group; clone-signature, assignment-domain,
+and complete-successor-domain checks remained unchanged. Any integer clone-duty
+set can be relabelled into the trip-count then rank-sum order, so the candidate
+was an exact identifier-permutation symmetry breaker.
 
-This is not yet a result. The source regression suite passes `1570` tests, but
-no clean-SHA 264-trip root-LP comparison has measured the changed bound or
-model size. Do not infer a speedup, a better gap, a cost change, or release
-readiness. The next permitted experiment is a frozen, matched root diagnostic;
-only a quality-qualified bound improvement and separate full MIP evidence can
-authorize later research execution.
+The frozen 264-trip diagnostic at
+`output/diagnostics/stage1_clone_rank_root_1aaaa27_20260824/` verifies its
+artifact hashes and BFF input provenance. Its quality-qualified root LP value,
+`52,749.16358183724` JPY, differs from the unstrengthened
+`52,749.16358183805` JPY by approximately `-8.1e-10` JPY, inside the
+predeclared `1e-5`-JPY tolerance. The 435-second primary MIP obtained no raw
+Gurobi bound beyond `0`; its analytical-floor certified gap was `19.2651169%`,
+worse than the prior `19.2273066%`.
+
+The physical, Rolling, and accounting outputs are retained only as diagnostic
+execution checks. This is **DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS**.
+The current source deliberately restores the prior Stage-1 count-only symmetry
+call. This rejects the rank tie-breaker as a 264-trip certificate path and
+does not authorize a MIP comparison, formal run, speed claim, cost claim, or
+release-status change.
 
 ## 2026-08-24: Fresh A/B telemetry is explicit, not a release remedy
 

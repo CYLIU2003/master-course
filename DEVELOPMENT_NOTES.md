@@ -30,6 +30,10 @@
   Stage-2 feedback test again expects two distinct all-BEV IIS/no-good-cut
   retries. The reversal protects both the mathematical model and the claim
   boundary; it authorizes neither a MIP A/B nor a formal run.
+- Documentation reconciliation: the release-blocker document had a stale
+  leading section stating that this already-completed diagnostic was pending.
+  It now records the rejection, frozen artifact, and source reversion. This is
+  a documentation-only correction; it changes no code, artifact, or result.
 
 ## 2026-08-24: Task-to-evidence audit is complete; release remains blocked
 
