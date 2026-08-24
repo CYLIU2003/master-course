@@ -4,6 +4,9 @@ The current, requirement-by-requirement thesis-evidence audit is
 [THESIS_SUBMISSION_EVIDENCE_AUDIT.md](docs/notes/THESIS_SUBMISSION_EVIDENCE_AUDIT.md).
 It distinguishes verified bounded evidence from the active full-network
 release blocker; it does not upgrade the release status.
+The reviewer-facing scope, checks, and open decisions are in
+[THESIS_EXTERNAL_REVIEW_BRIEF.md](docs/notes/THESIS_EXTERNAL_REVIEW_BRIEF.md);
+that brief is a request for independent review, not an approval record.
 
 ## 2026-08-24 remaining 264-trip one-factor sensitivity tranche: complete, diagnostic only
 
