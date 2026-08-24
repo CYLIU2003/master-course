@@ -18,6 +18,14 @@ The research release is **BLOCKED**. This document records which thesis-facing
 claims are supported and which remain forbidden. The authoritative live
 release status is [CURRENT_RESEARCH_RELEASE_BLOCKERS.md](CURRENT_RESEARCH_RELEASE_BLOCKERS.md).
 
+The later clean-`f41e2b3` pure-aggregate `incumbent_focus` diagnostic is
+recorded at
+`output/diagnostics/pure_ice_aggregation_incumbent_focus_f41e2b3_20260824/`.
+It verifies provenance, 264/264 physical execution, 24/24 Rolling, accounting,
+and no fallback/repair, but its 4.010147% certified Stage-1 gap misses the
+predeclared 1% target. It is a rejected single diagnostic, not a substitute
+for the A/B evidence or a release-acceptance result.
+
 ## Requested work status
 
 This matrix maps the stated thesis-preparation work to immutable artifacts.

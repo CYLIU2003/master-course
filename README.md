@@ -30,20 +30,24 @@ The source therefore deliberately restores the prior Stage-1 count-only
 symmetry call. This negative diagnostic supports no bound, gap, runtime, cost,
 optimality, or release claim and does not authorize a MIP A/B or formal run.
 
-## 2026-08-24 pending aggregate incumbent-focus diagnostic
+## 2026-08-24 aggregate incumbent-focus diagnostic: rejected
 
-The explicit Stage-1 `incumbent_focus` profile is available only for a
-claim-scoped single diagnostic. It fixes Gurobi `MIPFocus=1`,
-`Heuristics=0.5`, and `Presolve=2`, while preserving the model, objective,
-prepared input, seed, threads, time limits, and acceptance threshold. The
-existing single-diagnostic CLI records a requested profile override in both
-the frozen request and its manifest; it does not create an A/B, performance,
-cost, optimality, or research-acceptance claim.
+Clean tag `thesis-aggregate-incumbent-focus-f41e2b3` ran the pure-aggregate
+264-trip Phase-3 diagnostic at
+`output/diagnostics/pure_ice_aggregation_incumbent_focus_f41e2b3_20260824/`.
+It fixed only Gurobi `MIPFocus=1`, `Heuristics=0.5`, and `Presolve=2`; the
+model, objective, prepared input, seed 42, four threads, 870/30-second
+Stage-1/Stage-2 caps, and 1% target were held fixed. Frozen-request hashes,
+BFF input provenance, and the three diagnostic-artifact hashes verify.
 
-This candidate is motivated by the exact pure-aggregate model's 3.0775%
-median gap, but it has no 264-trip measurement at this source revision yet.
-It is not enabled for ordinary frontend runs and does not change the active
-`BLOCKED` release status.
+The time-limited Stage 1 ended at a 54,952.853971-JPY incumbent and a
+52,749.163582-JPY certified bound, a **4.010147%** certified gap. It served
+264/264 trips, passed physical validation, 24/24 Rolling, and accounting
+reconciliation, with no fallback or post-solve repair; those execution gates
+do not waive the missed 1% optimality gate. The profile is therefore rejected
+as the current gap-closing path. This one diagnostic is not A/B, performance,
+cost, optimality, or research-acceptance evidence, and release remains
+`BLOCKED`.
 
 ## Long-cap single-representation diagnostics are not A/B evidence
 

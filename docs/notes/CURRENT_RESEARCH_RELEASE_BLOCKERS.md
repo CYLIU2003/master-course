@@ -1,6 +1,6 @@
 # Current research release blockers
 
-## 2026-08-24: Aggregate incumbent-focus diagnostic is pending, not release evidence
+## 2026-08-24: Aggregate incumbent-focus diagnostic rejected, not release evidence
 
 The exact pure-ICE aggregate representation leaves a 3.0775% median
 264-trip Stage-1 gap under the default profile, while the discrete model is
@@ -10,14 +10,22 @@ rows, variables, objectives, prepared inputs, seed, threads, time limits,
 acceptance gates, recovery rules, and automatic cuts/method/node
 method/symmetry remain unchanged.
 
-The existing single-representation diagnostic records this control in its
-frozen request and manifest and marks the resulting artifact as diagnostic
-only. Before any result is used, it requires a clean frozen commit, the
-focused exact/profile/CLI regressions, BFF provenance, 264/264 coverage,
-physical validation, 24/24 Rolling, accounting reconciliation, and no
-fallback or repair. It cannot establish an A/B performance result, a cost
-comparison, a global optimum, or research acceptance. No measurement exists
-yet, so the 1% gate and release remain **BLOCKED**.
+Clean tag `thesis-aggregate-incumbent-focus-f41e2b3` at
+`f41e2b3634d86e9f209f50d811f35f0e0123fb66` executed the frozen
+single-representation diagnostic at
+`output/diagnostics/pure_ice_aggregation_incumbent_focus_f41e2b3_20260824/`.
+The controls were recorded in its request and manifest; its BFF provenance
+and three artifact hashes verify. It served 264/264 trips, passed physical
+validation, 24/24 Rolling, and accounting reconciliation, with no fallback
+or repair.
+
+The Stage-1 run was time-limited at a 54,952.853971-JPY incumbent and a
+52,749.163582-JPY certified bound, or **4.010147%**, above the predeclared
+1% target and worse than the 3.077512% aggregate A/B median. It therefore
+rejects `incumbent_focus` as the current gap-closing path. The artifact is
+**DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS**: it cannot establish an A/B
+performance result, cost comparison, global optimum, or research acceptance.
+The 1% and independent-review gates remain **BLOCKED**.
 
 ## 2026-08-24: Exact-clone rank symmetry rejected after controlled diagnostic
 

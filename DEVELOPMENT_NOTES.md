@@ -1,6 +1,6 @@
 # Development Notes
 
-## 2026-08-24: Claim-scoped Stage-1 incumbent-focus diagnostic added
+## 2026-08-24: Claim-scoped Stage-1 incumbent-focus diagnostic rejected
 
 - The exact pure-ICE aggregate A/B reaches a substantially better feasible
   candidate than the discrete representation but still misses the 1% gap. The
@@ -25,8 +25,32 @@
   tests\\test_weather_coupled_assignment.py` → `83 passed in 1.95s`;
   `.venv\\Scripts\\python.exe -m compileall -q
   scripts\\build_lazy_fragment_performance_diagnostic.py` succeeded; and
-  `git diff --check` passed. No 264-trip candidate has been executed yet, so
-  this is implementation evidence only and the release remains **BLOCKED**.
+  `git diff --check` passed. The final focused suite, including documentation
+  navigation, was `86 passed in 2.11s`; the clean tagged source also passed
+  the complete suite: `1570 passed in 80.08s`.
+- Clean tag `thesis-aggregate-incumbent-focus-f41e2b3` at
+  `f41e2b3634d86e9f209f50d811f35f0e0123fb66` then ran exactly:
+  `.venv\\Scripts\\python.exe scripts\\build_lazy_fragment_performance_diagnostic.py
+  --run-pure-ice-aggregation-single-diagnostic --scenario-id
+  b23fd26c-1233-4c73-bb9e-bdb8b1584760 --prepared-input-id
+  prepared-ee27696fc37f0c7a-f1e18f252e336f1f-8acc7b3a
+  --optimization-request
+  output\\diagnostics\\pure_ice_aggregation_phase3_ab_25ec2f1_20260824\\frozen_optimization_request.json
+  --output-dir
+  output\\diagnostics\\pure_ice_aggregation_incumbent_focus_f41e2b3_20260824
+  --single-diagnostic-representation pure_aggregate
+  --stage1-time-limit-seconds 870 --stage2-time-limit-seconds 30
+  --single-diagnostic-wall-clock-overhead-seconds 120
+  --single-diagnostic-stage1-gurobi-search-profile incumbent_focus`.
+- The frozen-request and BFF-input provenance checks passed; the diagnostic
+  artifact hashes for its manifest, result, and frozen request also passed.
+  The run served 264/264 trips, passed physical validation, 24/24 Rolling,
+  and accounting reconciliation, with no fallback or repair. Stage 1 was
+  time-limited after 915.184 seconds of solver time and produced a
+  54,952.853971-JPY incumbent versus a 52,749.163582-JPY certified bound:
+  **4.010147%**, not the predeclared 1%. This is worse than the 3.077512%
+  aggregate A/B median, rejects `incumbent_focus` as the current gap-closing
+  path, and remains diagnostic-only. The release remains **BLOCKED**.
 
 ## 2026-08-24: Stage-1 exact-clone equal-count rank symmetry rejected and reverted
 
