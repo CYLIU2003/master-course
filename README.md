@@ -562,8 +562,11 @@ The follow-up diagnostic also searches deterministic high-mass cliques of
 same-day assignments that are pairwise unreachable in the direct/depot-reset
 support graph. A discovered clique is an exact-valid candidate for
 `sum(y[v, trip] for trip in clique) <= 1`; the greedy search is not an
-exhaustive proof that no other clique can help. It remains read-only and has
-no 264-trip result yet.
+exhaustive proof that no other clique can help. The clean-`91cfbb5` 264-trip
+diagnostic at `output/2026-08-24/run_20260824_1114/` checks 815 cliques with a
+quality-qualified root LP and finds zero violations (largest mass
+`1 + 2.20e-14`, inside the `1e-6` tolerance). It remains read-only and
+**DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS**.
 
 Where strict chronological arcs certify that a nonempty integral flow must
 have a start, the diagnostic also measures the read-only difference between

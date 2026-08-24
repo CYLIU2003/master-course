@@ -54,9 +54,14 @@ The next read-only diagnostic searches deterministic high-mass cliques of
 same-day assignments that are pairwise unreachable in the same permissive
 direct/depot-reset graph. Every emitted clique is a valid
 `sum(y[v, trip] for trip in clique) <= 1` candidate, but the greedy discovery
-is not exhaustive and presently has no 264-trip observation. No MIP row is
-added unless a future clean-SHA result first identifies a violation and a
-separate exactness proof and regression support it.
+is not exhaustive. The clean-`91cfbb5` normal-BFF root-LP artifact at
+`output/2026-08-24/run_20260824_1114/` is quality-qualified and checks 815
+cliques in 8.919 seconds; it finds zero violations and largest mass
+`1 + 2.20e-14`, within the `1e-6` tolerance. This rejects the searched greedy
+candidates only, is **DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS**, and
+adds no MIP row. A future clean-SHA result must first identify a violation and
+receive a separate exactness proof and regression before any formulation
+change is considered.
 
 ## 2026-08-24: Remaining one-factor matrix completes diagnostics, not acceptance
 

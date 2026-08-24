@@ -30,9 +30,15 @@
   same-day assignments that are pairwise unreachable even in that permissive
   graph.  Each discovered clique is a valid candidate for
   `sum(y[v, trip] for trip in clique) <= 1`; greedy discovery is deliberately
-  not an exhaustive redundancy certificate.  It still adds no MIP row and has
-  no 264-trip result at this point.  A violation would require its own
-  validity proof, small-MILP exactness regression, and controlled ON/OFF run.
+  not an exhaustive redundancy certificate.  The clean-`91cfbb5` normal-BFF
+  diagnostic at `output/2026-08-24/run_20260824_1114/` is
+  quality-qualified at the same 52,749.163582-JPY root objective and examines
+  815 such cliques in 8.919 seconds. It finds zero violations; the largest
+  mass is `1 + 2.20e-14`, within the root diagnostic's `1e-6` tolerance. This
+  rejects the searched deterministic candidates only, adds no MIP row, and
+  does not alter the 1% release gate. Any future violation would still require
+  its own validity proof, small-MILP exactness regression, and controlled
+  ON/OFF run.
 
 ## 2026-08-24: Fresh frozen 264-trip A/B telemetry evidence
 

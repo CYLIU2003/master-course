@@ -66,9 +66,13 @@ the activation-to-start row remains default-off because its 264-trip diagnostic
 did not yield a comparable root-LP result; and the clean-`0bd81bc` BFF root-LP
 audit at `output/2026-08-24/run_20260824_1050/` checks 1,404,360 same-day
 no-path assignment pairs, finds zero violations (maximum mass `0.8457521`),
-and adds no row. Adding a duplicate charger or energy row, reducing the
-declared gap, or restricting fragments without a proof would change or weaken
-the research contract and is not authorized.
+and adds no row. Its clean-`91cfbb5` successor at
+`output/2026-08-24/run_20260824_1114/` checks 815 deterministic high-mass
+no-path cliques and also finds zero violations (largest mass
+`1 + 2.20e-14` within the `1e-6` tolerance); because that discovery is
+heuristic, it rejects only the checked cliques. Adding a duplicate charger or
+energy row, reducing the declared gap, or restricting fragments without a
+proof would change or weaken the research contract and is not authorized.
 
 ## Thesis claim boundary
 
