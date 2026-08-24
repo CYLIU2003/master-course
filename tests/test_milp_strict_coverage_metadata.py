@@ -31,6 +31,7 @@ from src.optimization.milp.solver_adapter import (
     _configured_stage1_gurobi_search_controls,
     _has_exact_mip_optimality_certificate,
     _iter_assignment_path_incompatibility_pairs,
+    _iter_weighted_assignment_path_incompatibility_cliques,
     _single_path_flow_implies_temporal_exclusivity,
     _stage1_numeric_coefficient_diagnostic,
     _stage1_termination_reason,
@@ -92,6 +93,42 @@ def test_assignment_path_incompatibility_pairs_require_no_direct_or_reset_path()
         ("bus", "early", "orphan"),
         ("bus", "orphan", "middle"),
         ("bus", "orphan", "late"),
+    ]
+
+
+def test_weighted_path_incompatibility_cliques_are_pairwise_no_path_sets() -> None:
+    cliques = list(
+        _iter_weighted_assignment_path_incompatibility_cliques(
+            assignment_value_by_key={
+                ("bus", "early"): 0.3,
+                ("bus", "orphan"): 0.5,
+                ("bus", "middle"): 0.4,
+                ("bus", "late"): 0.2,
+            },
+            assignment_trip_ids_by_vehicle={
+                "bus": ("early", "orphan", "middle", "late")
+            },
+            direct_arc_pairs=(("bus", "early", "middle"),),
+            reset_arc_pairs_by_vehicle={"bus": (("middle", "late"),)},
+            trip_order_key_by_id={
+                "early": (0, 100, 120, "early"),
+                "orphan": (0, 150, 170, "orphan"),
+                "middle": (0, 200, 220, "middle"),
+                "late": (0, 300, 320, "late"),
+            },
+            trip_day_index_by_trip_id={
+                "early": 0,
+                "orphan": 0,
+                "middle": 0,
+                "late": 0,
+            },
+        )
+    )
+
+    assert cliques == [
+        ("bus", ("orphan", "middle")),
+        ("bus", ("early", "orphan")),
+        ("bus", ("orphan", "late")),
     ]
 
 
@@ -399,6 +436,58 @@ def test_root_lp_diagnostic_reports_path_incompatibility_violations_read_only() 
         }
     ]
     assert model.NumBinVars == 3
+
+
+@pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
+def test_root_lp_diagnostic_reports_path_incompatibility_clique_violations_read_only() -> None:
+    from src.gurobi_runtime import ensure_gurobi
+
+    gp, grb = ensure_gurobi()
+    model = gp.Model("root_lp_path_incompatibility_clique_diagnostic")
+    model.Params.OutputFlag = 0
+    assignments = {
+        trip_id: model.addVar(vtype=grb.BINARY, name=f"assign__bus__{trip_id}")
+        for trip_id in ("first", "second", "third")
+    }
+    used = model.addVar(vtype=grb.BINARY, name="used__bus")
+    for assignment in assignments.values():
+        model.addConstr(assignment == 0.4)
+    model.addConstr(used == 1)
+    model.setObjective(sum(assignments.values()), grb.MINIMIZE)
+
+    diagnostic = _stage1_root_lp_diagnostic(
+        model=model,
+        grb=grb,
+        assignment_vars={
+            ("bus", trip_id): assignment
+            for trip_id, assignment in assignments.items()
+        },
+        used_vehicle_vars={"bus": used},
+        vehicle_type_by_id={"bus": "ICE"},
+        assignment_path_incompatibility_cliques=lambda _values: (
+            ("bus", ("first", "second", "third")),
+        ),
+        time_limit_sec=5,
+        threads=2,
+    )
+
+    summary = diagnostic["assignment_path_incompatibility_clique_summary"]
+    assert summary["enabled"] is True
+    assert summary["candidate_clique_count"] == 1
+    assert summary["checked_assignment_clique_count"] == 1
+    assert summary["violated_assignment_clique_count"] == 1
+    assert summary["evaluation_wall_seconds"] >= 0.0
+    assert summary["maximum_assignment_mass"] == pytest.approx(1.2)
+    assert summary["maximum_assignment_mass_excess"] == pytest.approx(0.2)
+    assert summary["violation_sample"] == [
+        {
+            "vehicle_id": "bus",
+            "trip_ids": ["first", "second", "third"],
+            "assignment_mass": pytest.approx(1.2),
+            "excess": pytest.approx(0.2),
+        }
+    ]
+    assert model.NumBinVars == 4
 
 
 @pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")

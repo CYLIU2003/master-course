@@ -558,6 +558,13 @@ violation of `sum(assignments) <= 1`, but never adds those rows to Stage 1.
 This separates a proven, violated candidate inequality from a redundant one
 before a controlled formulation change is considered.
 
+The follow-up diagnostic also searches deterministic high-mass cliques of
+same-day assignments that are pairwise unreachable in the direct/depot-reset
+support graph. A discovered clique is an exact-valid candidate for
+`sum(y[v, trip] for trip in clique) <= 1`; the greedy search is not an
+exhaustive proof that no other clique can help. It remains read-only and has
+no 264-trip result yet.
+
 Where strict chronological arcs certify that a nonempty integral flow must
 have a start, the diagnostic also measures the read-only difference between
 each `used_vehicle` value and its total path-start mass. This identifies

@@ -10,7 +10,7 @@ import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Collection, Dict, Iterable, Iterator, List, Literal, Mapping, Optional, Protocol, Sequence, Set, Tuple
+from typing import Any, Callable, Collection, Dict, Iterable, Iterator, List, Literal, Mapping, Optional, Protocol, Sequence, Set, Tuple
 
 from src.dispatch.feasibility import FeasibilityEngine, evaluate_startup_feasibility
 from src.dispatch.models import DutyLeg, VehicleDuty
@@ -1945,25 +1945,14 @@ def _configured_stage1_gurobi_scale_flag(config: OptimizationConfig) -> int:
     return scale_flag
 
 
-def _iter_assignment_path_incompatibility_pairs(
+def _assignment_path_reachability_by_vehicle(
     *,
     assignment_trip_ids_by_vehicle: Mapping[str, Sequence[str]],
     direct_arc_pairs: Iterable[Tuple[str, str, str]],
     reset_arc_pairs_by_vehicle: Mapping[str, Iterable[Tuple[str, str]]],
     trip_order_key_by_id: Mapping[str, Tuple[int, int, int, str]],
-    trip_day_index_by_trip_id: Mapping[str, int],
-) -> Iterator[Tuple[str, str, str]]:
-    """Yield same-day assignment pairs with no route through the support graph.
-
-    The support graph contains every Stage-1 direct connection arc and every
-    canonically feasible depot-reset edge supplied by the caller.  An integer
-    vehicle path (possibly containing several depot-reset fragments) can only
-    assign two same-day trips when the earlier trip reaches the later one in
-    this superset graph.  Therefore an absent path is a safe *candidate* for
-    ``y[v,i] + y[v,j] <= 1``.  This helper only identifies candidates; it does
-    not alter the production MIP or assert that adding all candidate rows is
-    computationally useful.
-    """
+) -> Tuple[Dict[str, Tuple[str, ...]], Dict[str, Dict[str, Set[str]]]]:
+    """Build the permissive per-vehicle support-graph transitive closure."""
 
     trip_ids_by_vehicle = {
         str(vehicle_id): tuple(
@@ -2005,7 +1994,8 @@ def _iter_assignment_path_incompatibility_pairs(
         for from_trip_id, to_trip_id in reset_pairs:
             _add_edge(str(vehicle_id), str(from_trip_id), str(to_trip_id))
 
-    for vehicle_id, trip_ids in sorted(trip_ids_by_vehicle.items()):
+    reachable_by_vehicle: Dict[str, Dict[str, Set[str]]] = {}
+    for vehicle_id, trip_ids in trip_ids_by_vehicle.items():
         successors = successors_by_vehicle[vehicle_id]
         reachable_by_trip: Dict[str, Set[str]] = {}
         for source_trip_id in trip_ids:
@@ -2018,6 +2008,41 @@ def _iter_assignment_path_incompatibility_pairs(
                 reachable.add(candidate_trip_id)
                 pending.extend(successors.get(candidate_trip_id, ()))
             reachable_by_trip[source_trip_id] = reachable
+        reachable_by_vehicle[vehicle_id] = reachable_by_trip
+
+    return trip_ids_by_vehicle, reachable_by_vehicle
+
+
+def _iter_assignment_path_incompatibility_pairs(
+    *,
+    assignment_trip_ids_by_vehicle: Mapping[str, Sequence[str]],
+    direct_arc_pairs: Iterable[Tuple[str, str, str]],
+    reset_arc_pairs_by_vehicle: Mapping[str, Iterable[Tuple[str, str]]],
+    trip_order_key_by_id: Mapping[str, Tuple[int, int, int, str]],
+    trip_day_index_by_trip_id: Mapping[str, int],
+) -> Iterator[Tuple[str, str, str]]:
+    """Yield same-day assignment pairs with no route through the support graph.
+
+    The support graph contains every Stage-1 direct connection arc and every
+    canonically feasible depot-reset edge supplied by the caller.  An integer
+    vehicle path (possibly containing several depot-reset fragments) can only
+    assign two same-day trips when the earlier trip reaches the later one in
+    this superset graph.  Therefore an absent path is a safe *candidate* for
+    ``y[v,i] + y[v,j] <= 1``.  This helper only identifies candidates; it does
+    not alter the production MIP or assert that adding all candidate rows is
+    computationally useful.
+    """
+
+    trip_ids_by_vehicle, reachable_by_vehicle = (
+        _assignment_path_reachability_by_vehicle(
+            assignment_trip_ids_by_vehicle=assignment_trip_ids_by_vehicle,
+            direct_arc_pairs=direct_arc_pairs,
+            reset_arc_pairs_by_vehicle=reset_arc_pairs_by_vehicle,
+            trip_order_key_by_id=trip_order_key_by_id,
+        )
+    )
+    for vehicle_id, trip_ids in sorted(trip_ids_by_vehicle.items()):
+        reachable_by_trip = reachable_by_vehicle[vehicle_id]
 
         for left_index, left_trip_id in enumerate(trip_ids):
             for right_trip_id in trip_ids[left_index + 1 :]:
@@ -2033,6 +2058,77 @@ def _iter_assignment_path_incompatibility_pairs(
                 yield (vehicle_id, left_trip_id, right_trip_id)
 
 
+def _iter_weighted_assignment_path_incompatibility_cliques(
+    *,
+    assignment_value_by_key: Mapping[Tuple[str, str], float],
+    assignment_trip_ids_by_vehicle: Mapping[str, Sequence[str]],
+    direct_arc_pairs: Iterable[Tuple[str, str, str]],
+    reset_arc_pairs_by_vehicle: Mapping[str, Iterable[Tuple[str, str]]],
+    trip_order_key_by_id: Mapping[str, Tuple[int, int, int, str]],
+    trip_day_index_by_trip_id: Mapping[str, int],
+    seed_limit_per_vehicle_day: int = 16,
+) -> Iterator[Tuple[str, Tuple[str, ...]]]:
+    """Yield deterministic high-mass cliques of pairwise no-path assignments.
+
+    Every yielded clique is valid: no pair has a path even in the supplied
+    direct-or-depot-reset support graph, so an integer vehicle can select at
+    most one member.  Discovery is deliberately heuristic (top-weighted
+    greedy seeds); a missing violation cannot prove this entire clique family
+    redundant.  The caller must keep this diagnostic-only until a discovered
+    row receives a separate validity proof and MIP regression.
+    """
+
+    if seed_limit_per_vehicle_day < 1:
+        raise ValueError("clique seed limit must be a positive integer")
+    trip_ids_by_vehicle, reachable_by_vehicle = (
+        _assignment_path_reachability_by_vehicle(
+            assignment_trip_ids_by_vehicle=assignment_trip_ids_by_vehicle,
+            direct_arc_pairs=direct_arc_pairs,
+            reset_arc_pairs_by_vehicle=reset_arc_pairs_by_vehicle,
+            trip_order_key_by_id=trip_order_key_by_id,
+        )
+    )
+    seen: Set[Tuple[str, Tuple[str, ...]]] = set()
+    for vehicle_id, trip_ids in sorted(trip_ids_by_vehicle.items()):
+        reachable_by_trip = reachable_by_vehicle[vehicle_id]
+        trip_ids_by_day: Dict[int, List[str]] = {}
+        for trip_id in trip_ids:
+            trip_ids_by_day.setdefault(
+                int(trip_day_index_by_trip_id.get(trip_id, 0)),
+                [],
+            ).append(trip_id)
+        for day_trip_ids in trip_ids_by_day.values():
+            weighted_trip_ids = sorted(
+                day_trip_ids,
+                key=lambda trip_id: (
+                    -float(assignment_value_by_key.get((vehicle_id, trip_id), 0.0)),
+                    trip_order_key_by_id[trip_id],
+                ),
+            )
+            for seed_trip_id in weighted_trip_ids[:seed_limit_per_vehicle_day]:
+                clique = [seed_trip_id]
+                for candidate_trip_id in weighted_trip_ids:
+                    if candidate_trip_id == seed_trip_id:
+                        continue
+                    if all(
+                        candidate_trip_id not in reachable_by_trip[selected_trip_id]
+                        and selected_trip_id
+                        not in reachable_by_trip[candidate_trip_id]
+                        for selected_trip_id in clique
+                    ):
+                        clique.append(candidate_trip_id)
+                if len(clique) < 2:
+                    continue
+                ordered_clique = tuple(
+                    sorted(clique, key=lambda trip_id: trip_order_key_by_id[trip_id])
+                )
+                clique_key = (vehicle_id, ordered_clique)
+                if clique_key in seen:
+                    continue
+                seen.add(clique_key)
+                yield clique_key
+
+
 def _stage1_root_lp_diagnostic(
     *,
     model: Any,
@@ -2043,6 +2139,12 @@ def _stage1_root_lp_diagnostic(
     mutually_exclusive_trip_sets: Sequence[Sequence[str]] = (),
     assignment_path_incompatible_pairs: Optional[
         Iterable[Tuple[str, str, str]]
+    ] = None,
+    assignment_path_incompatibility_cliques: Optional[
+        Callable[
+            [Mapping[Tuple[str, str], float]],
+            Iterable[Tuple[str, Sequence[str]]],
+        ]
     ] = None,
     path_start_vars: Optional[Mapping[Tuple[str, str], Any]] = None,
     path_start_count_limit: Optional[int] = None,
@@ -2424,6 +2526,95 @@ def _stage1_root_lp_diagnostic(
                     )[:20],
                 }
             )
+        path_incompatibility_clique_summary: Dict[str, Any] = {
+            "enabled": assignment_path_incompatibility_cliques is not None,
+            "candidate_clique_count": 0,
+            "checked_assignment_clique_count": 0,
+            "violated_assignment_clique_count": 0,
+            "evaluation_wall_seconds": None,
+            "maximum_assignment_mass": None,
+            "maximum_assignment_mass_excess": None,
+            "violation_sample": [],
+            "semantics": (
+                "read_only_evaluation_of_sum_y_vehicle_trip_less_than_or_"
+                "equal_to_one_for_supplied_same_day_cliques_whose_members_"
+                "are_pairwise_unreachable_in_the_direct_or_valid_depot_"
+                "reset_support_graph; greedy_candidate_discovery_is_not_an_"
+                "exhaustive_redundancy_certificate_and_rows_are_not_added_"
+                "to_the_mip"
+            ),
+        }
+        if assignment_path_incompatibility_cliques is not None:
+            path_incompatibility_clique_started = time.perf_counter()
+            clique_violations: List[Dict[str, Any]] = []
+            maximum_assignment_mass = 0.0
+            seen_cliques: Set[Tuple[str, Tuple[str, ...]]] = set()
+            for vehicle_id, raw_trip_ids in assignment_path_incompatibility_cliques(
+                assignment_value_by_key
+            ):
+                normalized_vehicle_id = str(vehicle_id)
+                trip_ids = tuple(dict.fromkeys(str(trip_id) for trip_id in raw_trip_ids))
+                if len(trip_ids) < 2 or any(
+                    (normalized_vehicle_id, trip_id)
+                    not in assignment_value_by_key
+                    for trip_id in trip_ids
+                ):
+                    raise ValueError(
+                        "assignment path incompatibility clique diagnostic "
+                        "received an invalid assignment clique"
+                    )
+                clique_key = (normalized_vehicle_id, tuple(sorted(trip_ids)))
+                if clique_key in seen_cliques:
+                    continue
+                seen_cliques.add(clique_key)
+                assignment_mass = sum(
+                    assignment_value_by_key[(normalized_vehicle_id, trip_id)]
+                    for trip_id in trip_ids
+                )
+                path_incompatibility_clique_summary[
+                    "candidate_clique_count"
+                ] += 1
+                path_incompatibility_clique_summary[
+                    "checked_assignment_clique_count"
+                ] += 1
+                maximum_assignment_mass = max(
+                    maximum_assignment_mass,
+                    assignment_mass,
+                )
+                if assignment_mass <= 1.0 + epsilon:
+                    continue
+                clique_violations.append(
+                    {
+                        "vehicle_id": normalized_vehicle_id,
+                        "trip_ids": list(trip_ids),
+                        "assignment_mass": assignment_mass,
+                        "excess": assignment_mass - 1.0,
+                    }
+                )
+            path_incompatibility_clique_summary.update(
+                {
+                    "violated_assignment_clique_count": len(
+                        clique_violations
+                    ),
+                    "evaluation_wall_seconds": float(
+                        time.perf_counter()
+                        - path_incompatibility_clique_started
+                    ),
+                    "maximum_assignment_mass": maximum_assignment_mass,
+                    "maximum_assignment_mass_excess": max(
+                        maximum_assignment_mass - 1.0,
+                        0.0,
+                    ),
+                    "violation_sample": sorted(
+                        clique_violations,
+                        key=lambda item: (
+                            -float(item["excess"]),
+                            str(item["vehicle_id"]),
+                            tuple(item["trip_ids"]),
+                        ),
+                    )[:20],
+                }
+            )
         diagnostic.update(
             {
                 "assignment_summary": {
@@ -2455,6 +2646,9 @@ def _stage1_root_lp_diagnostic(
                 "mutually_exclusive_trip_set_summary": exclusive_set_summary,
                 "assignment_path_incompatibility_summary": (
                     path_incompatibility_summary
+                ),
+                "assignment_path_incompatibility_clique_summary": (
+                    path_incompatibility_clique_summary
                 ),
             }
         )
@@ -14752,6 +14946,7 @@ class GurobiMILPAdapter:
                 _stage1_numeric_coefficient_diagnostic(stage1)
             )
         if bool(getattr(config, "stage1_root_lp_diagnostic_enabled", False)):
+            root_lp_direct_arc_pairs = tuple(arc_pairs)
             remaining_before_root_lp_diagnostic_sec = max(
                 float(feedback_global_deadline) - time.monotonic(),
                 0.0,
@@ -14767,6 +14962,29 @@ class GurobiMILPAdapter:
                 ),
                 0.001,
             )
+
+            def _assignment_path_incompatibility_cliques(
+                assignment_value_by_key: Mapping[Tuple[str, str], float],
+            ) -> Iterator[Tuple[str, Tuple[str, ...]]]:
+                return self._iter_stage1_assignment_path_incompatibility_cliques(
+                    assignment_value_by_key=assignment_value_by_key,
+                    problem=problem,
+                    trip_by_id=trip_by_id,
+                    vehicles=problem.vehicles,
+                    assignment_trip_ids_by_vehicle=(
+                        assignment_trip_ids_by_vehicle
+                    ),
+                    assignment_var_keys=tuple(y),
+                    direct_arc_pairs=root_lp_direct_arc_pairs,
+                    start_arc=start_arc,
+                    end_arc=end_arc,
+                    trip_day_index_by_trip_id=trip_day_index_by_trip_id,
+                    allow_same_day_depot_cycles=allow_same_day_depot_cycles,
+                    fixed_route_band_mode=bool(
+                        problem.metadata.get("fixed_route_band_mode", False)
+                    ),
+                )
+
             stage1_root_lp_diagnostic = _stage1_root_lp_diagnostic(
                 model=stage1,
                 grb=GRB,
@@ -14788,7 +15006,7 @@ class GurobiMILPAdapter:
                             assignment_trip_ids_by_vehicle
                         ),
                         assignment_var_keys=tuple(y),
-                        direct_arc_pairs=arc_pairs,
+                        direct_arc_pairs=root_lp_direct_arc_pairs,
                         start_arc=start_arc,
                         end_arc=end_arc,
                         trip_day_index_by_trip_id=(
@@ -14804,6 +15022,9 @@ class GurobiMILPAdapter:
                             )
                         ),
                     )
+                ),
+                assignment_path_incompatibility_cliques=(
+                    _assignment_path_incompatibility_cliques
                 ),
                 path_start_vars=start_arc,
                 path_start_count_limit=max_start_fragments_per_vehicle,
@@ -28981,7 +29202,7 @@ class GurobiMILPAdapter:
             for clique in maximal_cliques
         )
 
-    def _iter_stage1_assignment_path_incompatibilities(
+    def _stage1_assignment_path_support_inputs(
         self,
         *,
         problem: CanonicalOptimizationProblem,
@@ -28995,8 +29216,13 @@ class GurobiMILPAdapter:
         trip_day_index_by_trip_id: Mapping[str, int],
         allow_same_day_depot_cycles: bool,
         fixed_route_band_mode: bool,
-    ) -> Iterator[Tuple[str, str, str]]:
-        """Yield read-only no-path assignment-pair candidates for root LP.
+    ) -> Tuple[
+        Dict[str, Tuple[str, ...]],
+        Tuple[Tuple[str, str, str], ...],
+        Dict[str, List[Tuple[str, str]]],
+        Dict[str, Tuple[int, int, int, str]],
+    ]:
+        """Build the canonical, permissive support inputs for root diagnostics.
 
         A valid reset edge is intentionally a *superset* of a concrete
         selected fragment boundary: it ignores whether a particular integer
@@ -29119,11 +29345,103 @@ class GurobiMILPAdapter:
                             [],
                         ).append((end_trip_id, start_trip_id))
 
+        return (
+            assignment_trip_ids_with_variables_by_vehicle,
+            tuple(
+                (str(vehicle_id), str(from_trip_id), str(to_trip_id))
+                for vehicle_id, from_trip_id, to_trip_id in direct_arc_pairs
+            ),
+            reset_arc_pairs_by_vehicle,
+            trip_order_key_by_id,
+        )
+
+    def _iter_stage1_assignment_path_incompatibilities(
+        self,
+        *,
+        problem: CanonicalOptimizationProblem,
+        trip_by_id: Mapping[str, ProblemTrip],
+        vehicles: Sequence[Any],
+        assignment_trip_ids_by_vehicle: Mapping[str, Sequence[str]],
+        assignment_var_keys: Collection[Tuple[str, str]],
+        direct_arc_pairs: Iterable[Tuple[str, str, str]],
+        start_arc: Mapping[Tuple[str, str], Any],
+        end_arc: Mapping[Tuple[str, str], Any],
+        trip_day_index_by_trip_id: Mapping[str, int],
+        allow_same_day_depot_cycles: bool,
+        fixed_route_band_mode: bool,
+    ) -> Iterator[Tuple[str, str, str]]:
+        """Yield read-only no-path assignment-pair candidates for root LP."""
+
+        (
+            assignment_trip_ids_with_variables_by_vehicle,
+            support_direct_arc_pairs,
+            reset_arc_pairs_by_vehicle,
+            trip_order_key_by_id,
+        ) = self._stage1_assignment_path_support_inputs(
+            problem=problem,
+            trip_by_id=trip_by_id,
+            vehicles=vehicles,
+            assignment_trip_ids_by_vehicle=assignment_trip_ids_by_vehicle,
+            assignment_var_keys=assignment_var_keys,
+            direct_arc_pairs=direct_arc_pairs,
+            start_arc=start_arc,
+            end_arc=end_arc,
+            trip_day_index_by_trip_id=trip_day_index_by_trip_id,
+            allow_same_day_depot_cycles=allow_same_day_depot_cycles,
+            fixed_route_band_mode=fixed_route_band_mode,
+        )
         yield from _iter_assignment_path_incompatibility_pairs(
             assignment_trip_ids_by_vehicle=(
                 assignment_trip_ids_with_variables_by_vehicle
             ),
+            direct_arc_pairs=support_direct_arc_pairs,
+            reset_arc_pairs_by_vehicle=reset_arc_pairs_by_vehicle,
+            trip_order_key_by_id=trip_order_key_by_id,
+            trip_day_index_by_trip_id=trip_day_index_by_trip_id,
+        )
+
+    def _iter_stage1_assignment_path_incompatibility_cliques(
+        self,
+        *,
+        assignment_value_by_key: Mapping[Tuple[str, str], float],
+        problem: CanonicalOptimizationProblem,
+        trip_by_id: Mapping[str, ProblemTrip],
+        vehicles: Sequence[Any],
+        assignment_trip_ids_by_vehicle: Mapping[str, Sequence[str]],
+        assignment_var_keys: Collection[Tuple[str, str]],
+        direct_arc_pairs: Iterable[Tuple[str, str, str]],
+        start_arc: Mapping[Tuple[str, str], Any],
+        end_arc: Mapping[Tuple[str, str], Any],
+        trip_day_index_by_trip_id: Mapping[str, int],
+        allow_same_day_depot_cycles: bool,
+        fixed_route_band_mode: bool,
+    ) -> Iterator[Tuple[str, Tuple[str, ...]]]:
+        """Yield heuristic, exact-valid no-path clique candidates for root LP."""
+
+        (
+            assignment_trip_ids_with_variables_by_vehicle,
+            support_direct_arc_pairs,
+            reset_arc_pairs_by_vehicle,
+            trip_order_key_by_id,
+        ) = self._stage1_assignment_path_support_inputs(
+            problem=problem,
+            trip_by_id=trip_by_id,
+            vehicles=vehicles,
+            assignment_trip_ids_by_vehicle=assignment_trip_ids_by_vehicle,
+            assignment_var_keys=assignment_var_keys,
             direct_arc_pairs=direct_arc_pairs,
+            start_arc=start_arc,
+            end_arc=end_arc,
+            trip_day_index_by_trip_id=trip_day_index_by_trip_id,
+            allow_same_day_depot_cycles=allow_same_day_depot_cycles,
+            fixed_route_band_mode=fixed_route_band_mode,
+        )
+        yield from _iter_weighted_assignment_path_incompatibility_cliques(
+            assignment_value_by_key=assignment_value_by_key,
+            assignment_trip_ids_by_vehicle=(
+                assignment_trip_ids_with_variables_by_vehicle
+            ),
+            direct_arc_pairs=support_direct_arc_pairs,
             reset_arc_pairs_by_vehicle=reset_arc_pairs_by_vehicle,
             trip_order_key_by_id=trip_order_key_by_id,
             trip_day_index_by_trip_id=trip_day_index_by_trip_id,

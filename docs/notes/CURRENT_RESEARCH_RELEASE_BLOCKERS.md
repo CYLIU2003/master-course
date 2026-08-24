@@ -50,6 +50,14 @@ violations and maximum assignment mass `0.8457521`, so this candidate is
 rejected; no row is added. The artifact is **DIAGNOSTIC, NOT USED FOR RESEARCH
 CONCLUSIONS**, and cannot weaken or close the 1% gate.
 
+The next read-only diagnostic searches deterministic high-mass cliques of
+same-day assignments that are pairwise unreachable in the same permissive
+direct/depot-reset graph. Every emitted clique is a valid
+`sum(y[v, trip] for trip in clique) <= 1` candidate, but the greedy discovery
+is not exhaustive and presently has no 264-trip observation. No MIP row is
+added unless a future clean-SHA result first identifies a violation and a
+separate exactness proof and regression support it.
+
 ## 2026-08-24: Remaining one-factor matrix completes diagnostics, not acceptance
 
 The frozen tag `thesis-remaining-sensitivities-27ec8ce` ran the selected

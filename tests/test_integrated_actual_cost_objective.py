@@ -1715,6 +1715,9 @@ def test_phase3_records_trip_count_symmetry_audit() -> None:
     assert root_lp_diagnostic["assignment_path_incompatibility_summary"][
         "enabled"
     ] is True
+    assert root_lp_diagnostic[
+        "assignment_path_incompatibility_clique_summary"
+    ]["enabled"] is True
 
 
 def test_phase3_exact_ice_clone_aggregation_preserves_recovered_dispatch() -> None:

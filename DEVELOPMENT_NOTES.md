@@ -26,6 +26,13 @@
   artifact is explicitly diagnostic-only and retains clean, identical pre/post
   SHA.  It has no claimed bound/runtime benefit and does not alter the 1%
   release gate.
+- The next opt-in root-LP audit forms deterministic high-mass cliques of
+  same-day assignments that are pairwise unreachable even in that permissive
+  graph.  Each discovered clique is a valid candidate for
+  `sum(y[v, trip] for trip in clique) <= 1`; greedy discovery is deliberately
+  not an exhaustive redundancy certificate.  It still adds no MIP row and has
+  no 264-trip result at this point.  A violation would require its own
+  validity proof, small-MILP exactness regression, and controlled ON/OFF run.
 
 ## 2026-08-24: Fresh frozen 264-trip A/B telemetry evidence
 
