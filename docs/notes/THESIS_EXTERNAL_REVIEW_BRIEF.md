@@ -22,6 +22,9 @@ Review the frozen evidence and the claim boundary only:
 - Latest exhaustive no-path-clique diagnostic source:
   `f71bc51a48c743e86c4150bb53bbb5e281caa4cb`
   (`thesis-exact-no-path-clique-f71bc51`).
+- Rejected exact-clone rank-tie-breaker source: `1aaaa272c48aa4d4673833719d13af5be191ddd1`
+  (`thesis-stage1-clone-rank-symmetry-1aaaa27`); the current source reverts
+  this candidate after its controlled negative diagnostic.
 - Latest long-cap diagnostic source: `96982abe376422a630543bc35426d201c0a998ac`
   (`thesis-long-stage1-single-96982ab`).
 - Full 264-trip discrete/pure-aggregate A/B evidence, small 8/12/24/40-trip
@@ -43,6 +46,7 @@ generation, UI work, or large refactor; those are outside this review.
 | Fixed-plan stress | `output/diagnostics/fixed_solution_stress_0ddcd22_20260824/fixed_solution_stress.json` | Is fixed-decision fragility correctly kept distinct from reoptimized robustness? |
 | Root-LP strengthening | `output/diagnostics/stage1_activation_start_dual_root_a51b1f3_20260824/diagnostic_assessment.json`, `output/diagnostics/stage1_activation_start_subset_root_08af482_20260824/diagnostic_assessment.json`, and `output/diagnostics/stage1_activation_start_top5_root_f10525f_20260824/diagnostic_result.json` | Do the all-row no-solution plus quality-qualified one-row and five-row no-bound-improvement results justify rejecting the tested high-deficit subsets without a MIP ON/OFF run, while avoiding an unsupported claim about every other subset? |
 | Exact no-path cliques | `output/diagnostics/stage1_assignment_path_exact_clique_root_f71bc51_20260824/diagnostic_result.json` | Does the optimal, quality-qualified root LP plus 59/59 optimal auxiliary clique MIPs justify rejecting this complete no-path clique family at that root point, without implying a general integrality or gap result? |
+| Stage-1 clone rank tie-breaker | `output/diagnostics/stage1_clone_rank_root_1aaaa27_20260824/diagnostic_result.json` | Does the no-improvement root LP and worse primary-MIP certified gap justify rejecting and reverting this exact label-symmetry candidate without calling it a comparative performance result? |
 
 The implementation adds only diagnostic controls:
 
@@ -113,6 +117,14 @@ The exact no-path-clique source `f71bc51` passes `1570` regressions in
 `verify_run_input_provenance.py`; the root LP is optimal and quality-qualified,
 and all 59 eligible auxiliary MIPs prove optimal with no violation. This is a
 negative strengthening result only, not reviewer approval or release evidence.
+
+The clean `1aaaa27` rank-tie-breaker candidate passed `1570` regressions in
+79.19 seconds before its frozen diagnostic. The artifact verifies hashes and
+BFF provenance; its root LP differs from the unstrengthened objective by about
+`-8.1e-10` JPY within the `1e-5` tolerance, while its primary-MIP
+analytical-floor gap is `19.2651169%` versus `19.2273066%` previously. It is
+therefore rejected and the source reverts it; this is a negative diagnostic,
+not a MIP comparison, approval, or release evidence.
 
 ## 6. Remaining limitations and requested decision
 

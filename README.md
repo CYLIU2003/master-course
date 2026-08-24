@@ -8,21 +8,27 @@ The reviewer-facing scope, checks, and open decisions are in
 [THESIS_EXTERNAL_REVIEW_BRIEF.md](docs/notes/THESIS_EXTERNAL_REVIEW_BRIEF.md);
 that brief is a request for independent review, not an approval record.
 
-## Pending Stage-1 exact-clone equal-count symmetry diagnostic
+## 2026-08-24 Stage-1 exact-clone rank symmetry: rejected and reverted
 
-Stage 1 now passes the existing canonical chronological trip order to its
-identical-vehicle duty-order helper, matching the already-used Phase-4 call.
-For an exact clone group with equal assignment and successor domains, this
-adds the existing rank-sum tie-breaker after non-increasing trip count. Any
-integer solution can be relabelled into that order, so it preserves the
-unlabelled feasible duty set and objective; groups with unequal domains remain
-skipped. The 264-trip discrete model is expected to add 24 such rows for the
-25-vehicle homogeneous ICE group.
+The clean tag `thesis-stage1-clone-rank-symmetry-1aaaa27` tested the existing
+chronological rank-sum tie-breaker after the established exact-clone trip-count
+order. The frozen 264-trip discrete diagnostic at
+`output/diagnostics/stage1_clone_rank_root_1aaaa27_20260824/` added the
+expected 24 rows for the 25-vehicle homogeneous ICE group, with the prepared
+input, seed, threads, time controls, solver settings, and all other model
+controls held fixed. Artifact hashes and BFF input provenance verify.
 
-This is a pending, controlled root-diagnostic candidate only. The source
-regression suite passes `1570 passed in 79.19s`, but no clean-SHA 264-trip
-root or MIP result exists yet. It therefore supports no bound, gap, runtime,
-cost, or release claim.
+The quality-qualified root LP was `52,749.16358183724` JPY, differing from the
+unstrengthened root value `52,749.16358183805` JPY by about `-8.1e-10` JPY,
+inside the predeclared `1e-5`-JPY tolerance. During the 435-second Stage-1
+primary MIP, Gurobi obtained no raw bound beyond `0`; only the analytical
+floor `52,724.471326575986` JPY certified a `19.2651169%` gap, worse than the
+prior `19.2273066%`. The physical, Rolling, and accounting checks are retained
+only as diagnostic execution checks, not as acceptance evidence.
+
+The source therefore deliberately restores the prior Stage-1 count-only
+symmetry call. This negative diagnostic supports no bound, gap, runtime, cost,
+optimality, or release claim and does not authorize a MIP A/B or formal run.
 
 ## Long-cap single-representation diagnostics are not A/B evidence
 

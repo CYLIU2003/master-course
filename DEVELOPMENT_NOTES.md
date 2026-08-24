@@ -1,36 +1,35 @@
 # Development Notes
 
-## 2026-08-24: Stage-1 exact-clone equal-count rank symmetry restored
+## 2026-08-24: Stage-1 exact-clone equal-count rank symmetry rejected and reverted
 
-- Found a Stage-1/Phase-4 call-path inconsistency while auditing the 264-trip
-  fractional root: `_add_identical_vehicle_trip_count_symmetry` already
-  implements an exact chronological assignment-rank tie-breaker for
-  equal-trip-count clone duties, and the Phase-4 builder passes the canonical
-  trip order, but the Phase-3 Stage-1 builder did not. Consequently the
-  clean-`f71bc51` root artifact records 24 count-order rows but zero
-  equal-count rank rows for its 25-vehicle homogeneous ICE group.
-- Restored the existing `ordered_trip_ids=_canonical_trip_ids_for_vehicle_symmetry(problem)`
-  argument at the Stage-1 call. The helper still fails closed unless the exact
-  clone group has equal assignment and transition domains. At integral values,
-  an identifier permutation sorts clone duties by non-increasing trip count
-  and then non-decreasing chronological rank sum, so this removes only
-  duplicate labels, not an unlabelled dispatch, physical constraint, or cost
-  option. The expected 264-trip addition is 24 rank rows; no new variable,
-  objective, input, solver parameter, fallback, or repair path was added.
-- Extended the Phase-3 model-generation regression to require the persisted
-  equal-count rank-row count. The Stage-2 feedback regression now expects one
-  IIS/no-good-cut retry rather than two: the former second all-BEV attempt was
-  merely the excluded exact-clone label permutation. It still proves Stage-2
-  IIS generation, the full-assignment cut, and a physically feasible BEV/ICE
-  final schedule.
-- Validation: `\.venv\Scripts\python.exe -m pytest -q
-  tests\test_stage2_infeasibility_feedback.py
-  tests\test_integrated_actual_cost_objective.py
-  tests\test_milp_strict_coverage_metadata.py
-  tests\test_canonical_graph_export_parity.py` -> `138 passed in 3.58s`;
-  `\.venv\Scripts\python.exe -m pytest -q` -> `1570 passed in 79.19s`.
-  A fresh root comparison from a clean frozen commit is required before any
-  claim about bound, gap, runtime, cost, or release status.
+- A call-path audit found that `_add_identical_vehicle_trip_count_symmetry`
+  already has an exact chronological assignment-rank tie-breaker when supplied
+  canonical trip order. Phase 4 supplies that order, while Phase-3 Stage 1
+  originally did not. The frozen `f71bc51` root artifact consequently had 24
+  count-order rows and zero equal-count rank rows for its 25 homogeneous ICE
+  clones.
+- The smallest candidate supplied
+  `ordered_trip_ids=_canonical_trip_ids_for_vehicle_symmetry(problem)` at the
+  Stage-1 call. The helper continues to fail closed unless clone signatures,
+  assignment domains, and transition domains match. At integer values an
+  identifier permutation can order clone duties by non-increasing trip count
+  and then chronological rank sum, so the candidate changed only labels. It
+  added 24 rows, no variables, inputs, objectives, solver controls, fallback,
+  or repair path.
+- Clean tag `thesis-stage1-clone-rank-symmetry-1aaaa27` ran the frozen
+  264-trip discrete diagnostic at
+  `output/diagnostics/stage1_clone_rank_root_1aaaa27_20260824/`. Its
+  quality-qualified root LP was unchanged within the predeclared `1e-5` JPY
+  tolerance (difference about `-8.1e-10` JPY). The 435-second production
+  Stage-1 MIP obtained raw bound `0`; its analytical-floor gap was
+  `19.2651169%`, worse than the prior `19.2273066%`. Hash and BFF provenance
+  verification passed, and the physical/Rolling/accounting outputs remain
+  diagnostic-only.
+- The candidate is therefore rejected: the source restores the original
+  Stage-1 count-only call, the new rank-row assertions are removed, and the
+  Stage-2 feedback test again expects two distinct all-BEV IIS/no-good-cut
+  retries. The reversal protects both the mathematical model and the claim
+  boundary; it authorizes neither a MIP A/B nor a formal run.
 
 ## 2026-08-24: Task-to-evidence audit is complete; release remains blocked
 

@@ -113,9 +113,8 @@ def _feedback_problem(diagnostics_dir: str) -> CanonicalOptimizationProblem:
 
     Two BEVs can fractionally share a 90 kW and a 50 kW charger in Stage 1,
     but the exact Stage 2 requires each active vehicle to select one physical
-    charger. The first all-BEV assignment is therefore infeasible. Its
-    vehicle-label permutation is excluded by exact-clone symmetry, and a more
-    expensive ICE assignment remains feasible after the one no-good cut.
+    charger.  The first two all-BEV assignments are therefore infeasible.  A
+    more expensive ICE assignment remains feasible after the no-good cuts.
     """
     dispatch_trips = []
     problem_trips = []
@@ -296,12 +295,18 @@ def test_proven_stage2_infeasibility_returns_a_no_good_cut_to_stage1(
     assert independent_report.feasible, independent_report.errors
     assert metadata["stage2_solver_status"] == "optimal"
     assert metadata["stage2_feasible"] is True
-    assert metadata["stage2_feedback_iteration"] == 1
-    assert metadata["stage1_feasibility_no_good_cut_count"] == 1
-    assert len(feedback_history) == 1
+    assert metadata["stage2_feedback_iteration"] == 2
+    assert metadata["stage1_feasibility_no_good_cut_count"] == 2
+    assert len(feedback_history) == 2
     assert all(entry["stage2_status"] == "infeasible" for entry in feedback_history)
     assert all(entry["iis_generated"] is True for entry in feedback_history)
     assert all(entry["cut_scope"] == "full_assignment" for entry in feedback_history)
     assert "BEV" in assigned_vehicle_types
     assert "ICE" in assigned_vehicle_types
     assert (tmp_path / "diagnostics" / "stage2_infeasible.ilp").is_file()
+    assert (
+        tmp_path
+        / "diagnostics"
+        / "stage2_feedback_attempt_1"
+        / "stage2_infeasible.ilp"
+    ).is_file()

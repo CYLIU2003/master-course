@@ -1754,6 +1754,26 @@ incumbent, bound, nodes, gap, physical validation, Rolling, and accounting.
 Until that run meets the declared 1% gap and all downstream gates, research
 release remains **BLOCKED**.
 
+### Stage-1 exact-clone equal-count rank symmetry: rejected after controlled diagnostic
+
+The clean `1aaaa27` candidate supplied the existing canonical chronological
+trip order to the Phase-3 Stage-1 clone-duty helper, adding 24 equal-count
+rank-sum rows for the exact 25-ICE-clone group while preserving all frozen
+inputs and controls. Its artifact at
+`output/diagnostics/stage1_clone_rank_root_1aaaa27_20260824/` verifies hashes
+and BFF input provenance. The quality-qualified root LP value,
+`52,749.16358183724` JPY, differs from the unstrengthened
+`52,749.16358183805` JPY by about `-8.1e-10` JPY, inside the predeclared
+`1e-5`-JPY tolerance. It therefore provides no relaxation improvement.
+
+The 435-second primary MIP obtained no raw Gurobi bound beyond `0`; only the
+analytical floor `52,724.471326575986` JPY certified a `19.2651169%` gap,
+worse than the prior `19.2273066%`. Although downstream physical, Rolling, and
+accounting checks completed, this is **DIAGNOSTIC, NOT USED FOR RESEARCH
+CONCLUSIONS**. The source deliberately restores Stage 1 to the prior count-only
+symmetry call. This rejects this exact rank tie-breaker as a 264-trip
+certificate path and does not authorize a MIP comparison or formal run.
+
 ### Exact identical-vehicle trip-count ordering: implemented; timing pending
 
 Phase 3 Stage 1 and integrated Phase 4 now add an exact label-symmetry cut for

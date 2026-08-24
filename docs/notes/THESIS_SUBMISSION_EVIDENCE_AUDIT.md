@@ -98,6 +98,17 @@ tolerance. This rejects the complete no-path clique family at that root point,
 adds no row, remains diagnostic-only, and does not change this blocker. Adding a duplicate charger or
 energy row, reducing the declared gap, or restricting fragments without a
 proof would change or weaken the research contract and is not authorized.
+
+The clean `1aaaa27` Stage-1 exact-clone equal-count rank tie-breaker attempt
+at `output/diagnostics/stage1_clone_rank_root_1aaaa27_20260824/` held the
+prepared input and solver controls fixed and added only 24 expected rows. Its
+quality-qualified root LP differs from the unstrengthened value by about
+`-8.1e-10` JPY, inside the predeclared `1e-5`-JPY tolerance. Its 435-second
+primary MIP obtained raw bound `0`, leaving an analytical-floor gap of
+`19.2651169%` versus the prior `19.2273066%`. Hash and BFF provenance checks
+pass, but this is a negative diagnostic only; the source has been reverted to
+the prior count-only Stage-1 symmetry call and it supplies no performance,
+optimality, or release evidence.
 For the activation-to-start diagnostic only, the next clean-SHA clone may use
 dual simplex instead of the default barrier/crossover algorithm to determine
 whether the absent LP point is algorithmic. That method selection is recorded,
