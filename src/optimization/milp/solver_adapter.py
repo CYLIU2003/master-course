@@ -3074,6 +3074,7 @@ def _add_stage1_activation_start_strengthening(
     path_start_vars: Mapping[Tuple[str, str], Any],
     exact_clone_vehicle_ids: Collection[str] = (),
     acyclic_flow_requires_path_start_certificate: bool,
+    requested_vehicle_ids: Optional[Collection[str]] = None,
 ) -> Dict[str, Any]:
     """Optionally add the proven activation-to-path-start Stage-1 rows.
 
@@ -3087,6 +3088,22 @@ def _add_stage1_activation_start_strengthening(
     """
 
     exact_clone_ids = {str(vehicle_id) for vehicle_id in exact_clone_vehicle_ids}
+    selected_vehicle_ids: Optional[Tuple[str, ...]] = None
+    if requested_vehicle_ids is not None:
+        selected_vehicle_ids = tuple(
+            sorted(str(vehicle_id).strip() for vehicle_id in requested_vehicle_ids)
+        )
+        if not selected_vehicle_ids or any(
+            not vehicle_id for vehicle_id in selected_vehicle_ids
+        ):
+            raise ValueError(
+                "stage1_activation_start_strengthening_vehicle_ids must contain "
+                "at least one non-empty vehicle id"
+            )
+        if len(set(selected_vehicle_ids)) != len(selected_vehicle_ids):
+            raise ValueError(
+                "stage1_activation_start_strengthening_vehicle_ids must not contain duplicates"
+            )
     used_vehicle_by_id = {
         str(vehicle_id): variable
         for vehicle_id, variable in used_vehicle_vars.items()
@@ -3108,6 +3125,17 @@ def _add_stage1_activation_start_strengthening(
         ),
         "eligible_vehicle_count": 0,
         "excluded_missing_path_start_domain_vehicle_count": 0,
+        "selection_mode": (
+            "all_eligible_vehicle_labels"
+            if selected_vehicle_ids is None
+            else "explicit_vehicle_id_subset"
+        ),
+        "requested_vehicle_ids": (
+            None if selected_vehicle_ids is None else list(selected_vehicle_ids)
+        ),
+        "available_eligible_vehicle_count": 0,
+        "selected_vehicle_ids": [],
+        "selected_vehicle_count": 0,
         "constraint_count": 0,
         "integer_feasible_set_preserved": bool(
             acyclic_flow_requires_path_start_certificate
@@ -3128,6 +3156,7 @@ def _add_stage1_activation_start_strengthening(
             "chronological Stage-1 flow arcs"
         )
 
+    eligible_vehicle_ids: List[str] = []
     for vehicle_id in sorted(used_vehicle_by_id):
         if vehicle_id in exact_clone_ids:
             continue
@@ -3135,12 +3164,31 @@ def _add_stage1_activation_start_strengthening(
         if not start_terms:
             audit["excluded_missing_path_start_domain_vehicle_count"] += 1
             continue
+        eligible_vehicle_ids.append(vehicle_id)
+    audit["available_eligible_vehicle_count"] = len(eligible_vehicle_ids)
+    if selected_vehicle_ids is None:
+        selected_vehicle_ids = tuple(eligible_vehicle_ids)
+    else:
+        unavailable_selected_ids = sorted(
+            set(selected_vehicle_ids).difference(eligible_vehicle_ids)
+        )
+        if unavailable_selected_ids:
+            raise ValueError(
+                "stage1_activation_start_strengthening_vehicle_ids contains "
+                "non-eligible vehicle ids: "
+                + ", ".join(unavailable_selected_ids)
+            )
+
+    for vehicle_id in selected_vehicle_ids:
+        start_terms = start_terms_by_vehicle[vehicle_id]
         model.addConstr(
             used_vehicle_by_id[vehicle_id] <= gp.quicksum(start_terms),
             name=f"stage1_activation_requires_path_start__{vehicle_id}",
         )
         audit["eligible_vehicle_count"] += 1
         audit["constraint_count"] += 1
+        audit["selected_vehicle_ids"].append(vehicle_id)
+    audit["selected_vehicle_count"] = len(audit["selected_vehicle_ids"])
 
     if int(audit["constraint_count"]) <= 0:
         raise ValueError(
@@ -14224,6 +14272,9 @@ class GurobiMILPAdapter:
                 exact_clone_vehicle_ids=stage1_exact_clone_vehicle_ids,
                 acyclic_flow_requires_path_start_certificate=(
                     stage1_activation_start_certificate
+                ),
+                requested_vehicle_ids=problem.metadata.get(
+                    "stage1_activation_start_strengthening_vehicle_ids"
                 ),
             )
         )

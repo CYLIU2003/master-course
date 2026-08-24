@@ -567,6 +567,14 @@ root objective or quality-qualified LP point. The assessment is
 CONCLUSIONS**; it does not justify enabling the rows by default or making a
 bound, gap, runtime, cost, physical, or release claim.
 
+For a subsequent diagnostic, `stage1_activation_start_strengthening_vehicle_ids`
+may select an explicit non-aggregate subset of the independently certified
+rows. The solver rejects an empty, duplicate, unknown, clone-domain, or
+path-start-ineligible ID rather than silently changing the selected model. Its
+artifact records all eligible labels, requested IDs, selected IDs, and added
+row count. This is a controlled feasibility/bound diagnostic only; a subset is
+never a default formulation change or an accepted research result by itself.
+
 The same read-only diagnostic evaluates the actual LP values against supplied
 maximal sets of mutually overlapping trips for each vehicle. It records any
 violation of `sum(assignments) <= 1`, but never adds those rows to Stage 1.

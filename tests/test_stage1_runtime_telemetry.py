@@ -486,6 +486,7 @@ def test_interactive_run_defaults_and_provenance_record_server_enforcement() -> 
     assert request.require_all_available_bevs is False
     assert request.stage1_powertrain_selector_strengthening is False
     assert request.stage1_activation_start_strengthening is False
+    assert request.stage1_activation_start_strengthening_vehicle_ids is None
 
     strengthened_request = RunOptimizationBody(
         stage1_powertrain_selector_strengthening=True
@@ -496,6 +497,7 @@ def test_interactive_run_defaults_and_provenance_record_server_enforcement() -> 
         stage1_activation_start_strengthening=True
     )
     assert activation_strengthened_request.stage1_activation_start_strengthening is True
+    assert activation_strengthened_request.stage1_activation_start_strengthening_vehicle_ids is None
 
     controls = _interactive_runtime_controls_payload(
         requested_stage1_best_obj_stop_enabled=True,

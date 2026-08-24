@@ -881,6 +881,9 @@ class RunOptimizationBody(BaseModel):
     # A separately certified Stage-1 root-strengthening experiment.  It is
     # default-off and always diagnostic because it changes the MIP rows.
     stage1_activation_start_strengthening: bool = False
+    # ``None`` applies every eligible certified row. An explicit subset is
+    # diagnostic-only and must name eligible non-aggregate vehicle labels.
+    stage1_activation_start_strengthening_vehicle_ids: Optional[List[str]] = None
     stage1_stage2_candidate_limit: int = Field(default=1, ge=1, le=100)
     stage1_composition_search_radius: int = Field(default=0, ge=0, le=100)
     stage1_bev_frontier_enabled: bool = False
@@ -11311,6 +11314,7 @@ def _run_optimization(
     stage1_numeric_coefficient_diagnostic_enabled: bool = False,
     stage1_gurobi_scale_flag: int = -1,
     stage1_root_lp_diagnostic_method: int = 2,
+    stage1_activation_start_strengthening_vehicle_ids: Optional[List[str]] = None,
 ) -> None:
     output_dir: Optional[str] = None
     raw_frontend_request_payload = dict(frontend_request_payload or {})
@@ -11710,6 +11714,21 @@ def _run_optimization(
             problem.metadata[
                 "stage1_activation_start_strengthening"
             ] = bool(stage1_activation_start_strengthening)
+            if (
+                stage1_activation_start_strengthening_vehicle_ids is not None
+                and not bool(stage1_activation_start_strengthening)
+            ):
+                raise ValueError(
+                    "stage1_activation_start_strengthening_vehicle_ids requires "
+                    "stage1_activation_start_strengthening=true"
+                )
+            problem.metadata[
+                "stage1_activation_start_strengthening_vehicle_ids"
+            ] = (
+                None
+                if stage1_activation_start_strengthening_vehicle_ids is None
+                else list(stage1_activation_start_strengthening_vehicle_ids)
+            )
             interactive_bev_utilization_policy = (
                 _apply_interactive_bev_utilization_policy(
                     problem,
@@ -11758,6 +11777,11 @@ def _run_optimization(
                     ),
                     "stage1_activation_start_strengthening": bool(
                         stage1_activation_start_strengthening
+                    ),
+                    "stage1_activation_start_strengthening_vehicle_ids": (
+                        None
+                        if stage1_activation_start_strengthening_vehicle_ids is None
+                        else list(stage1_activation_start_strengthening_vehicle_ids)
                     ),
                     "stage1_gurobi_scale_flag": int(
                         stage1_gurobi_scale_flag
@@ -14015,6 +14039,7 @@ def run_optimization(
             request.stage1_numeric_coefficient_diagnostic_enabled,
             request.stage1_gurobi_scale_flag,
             request.stage1_root_lp_diagnostic_method,
+            request.stage1_activation_start_strengthening_vehicle_ids,
         ),
         job_id=job.job_id,
         scenario_id=scenario_id,

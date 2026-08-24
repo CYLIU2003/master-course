@@ -1699,6 +1699,7 @@ def _run_pure_ice_case(
                     stage1_fragment_transition_cut_mode=str(request.get("stage1_fragment_transition_cut_mode") or "lazy"),
                     stage1_powertrain_selector_strengthening=bool(request.get("stage1_powertrain_selector_strengthening", False)),
                     stage1_activation_start_strengthening=bool(request.get("stage1_activation_start_strengthening", False)),
+                    stage1_activation_start_strengthening_vehicle_ids=request.get("stage1_activation_start_strengthening_vehicle_ids"),
                     gurobi_threads=int(request.get("gurobi_threads") or 4),
                     run_profile=str(request.get("run_profile") or "day_ahead_and_hourly_rolling"),
                     run_hourly_rolling=bool(request.get("run_hourly_rolling", True)),

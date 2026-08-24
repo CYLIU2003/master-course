@@ -1,5 +1,26 @@
 # Development Notes
 
+## 2026-08-24: Activation-start subset diagnostics are explicit and fail closed
+
+- Added the optional
+  `stage1_activation_start_strengthening_vehicle_ids` control for a bounded
+  diagnostic of a strict subset of the already certified
+  `used_vehicle <= sum(path_start)` rows. `None` preserves the old all-eligible
+  behavior; an explicit list is normalized deterministically and is accepted
+  only when every ID is a non-aggregate vehicle label with an existing
+  path-start domain. Empty, duplicate, unknown, clone-domain, and unavailable
+  selections fail rather than silently adding a different set of rows.
+- The audit now distinguishes `available_eligible_vehicle_count` from the
+  explicit selected IDs and the actual `constraint_count`. BFF provenance and
+  the isolated-process harness preserve this field. The Stage-1 MIP remains
+  diagnostic-only whenever activation-start strengthening is requested.
+- Added focused Gurobi, BFF propagation, harness forwarding, and default-body
+  regressions. The first planned one-row diagnostic selects the vehicle with
+  the largest read-only activation-start deficit in the clean baseline root-LP
+  observation (`4f5a4c1d-cac3-4fd2-87a8-cf0049c71ebe`, deficit
+  `0.8169431546`); its validity does not depend on that ranking, but the
+  ranking makes the selection reproducible and avoids an arbitrary label.
+
 ## 2026-08-24: Root-LP clone method is explicit and remains diagnostic-only
 
 - Added the constrained `stage1_root_lp_diagnostic_method` control to the

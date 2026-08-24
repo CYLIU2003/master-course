@@ -77,6 +77,15 @@ RESEARCH CONCLUSIONS**; it leaves the production MIP and every acceptance gate
 unchanged, supplies no comparative root bound, and is not a license to run a
 formal experiment.
 
+Because the all-row model has no comparable root solution under either
+permitted algorithm, a bounded one-row diagnostic may test the same certified
+inequality for the explicitly recorded largest-deficit non-aggregate label.
+The request must retain the same prepared input and controls, record the
+selection audit, and remain diagnostic-only. A root objective from that test is
+only candidate evidence: it still requires a valid-inequality regression and a
+controlled MIP ON/OFF comparison before any row can be considered for a formal
+run.
+
 ## 2026-08-24: Remaining one-factor matrix completes diagnostics, not acceptance
 
 The frozen tag `thesis-remaining-sensitivities-27ec8ce` ran the selected

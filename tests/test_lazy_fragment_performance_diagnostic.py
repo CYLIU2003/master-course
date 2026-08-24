@@ -412,6 +412,7 @@ def test_pure_ice_case_forwards_selector_by_keyword(
             "mode": "phase3_two_stage",
             "stage1_powertrain_selector_strengthening": True,
             "stage1_activation_start_strengthening": True,
+            "stage1_activation_start_strengthening_vehicle_ids": ["vehicle-1"],
             "stage1_root_lp_diagnostic_method": 1,
             "gurobi_threads": 4,
         },
@@ -421,6 +422,7 @@ def test_pure_ice_case_forwards_selector_by_keyword(
 
     assert observed["stage1_powertrain_selector_strengthening"] is True
     assert observed["stage1_activation_start_strengthening"] is True
+    assert observed["stage1_activation_start_strengthening_vehicle_ids"] == ["vehicle-1"]
     assert observed["stage1_root_lp_diagnostic_method"] == 1
     assert observed["gurobi_threads"] == 4
     assert observed["mode"] == "phase3_two_stage"

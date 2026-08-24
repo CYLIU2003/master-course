@@ -179,6 +179,52 @@ def test_activation_start_strengthening_adds_only_certified_labelled_rows() -> N
 
 
 @pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
+def test_activation_start_strengthening_accepts_only_an_explicit_eligible_subset() -> None:
+    from src.gurobi_runtime import ensure_gurobi
+
+    gp, grb = ensure_gurobi()
+    model = gp.Model("activation_start_subset_strengthening")
+    model.Params.OutputFlag = 0
+    first_start = model.addVar(vtype=grb.BINARY, name="start__first__trip")
+    second_start = model.addVar(vtype=grb.BINARY, name="start__second__trip")
+    first_used = model.addVar(vtype=grb.BINARY, name="used__first")
+    second_used = model.addVar(vtype=grb.BINARY, name="used__second")
+    model.addConstr(first_used == first_start)
+    model.addConstr(second_used == second_start)
+
+    audit = _add_stage1_activation_start_strengthening(
+        model=model,
+        gp=gp,
+        requested=True,
+        requested_vehicle_ids=["second"],
+        used_vehicle_vars={"first": first_used, "second": second_used},
+        path_start_vars={
+            ("first", "trip"): first_start,
+            ("second", "trip"): second_start,
+        },
+        acyclic_flow_requires_path_start_certificate=True,
+    )
+
+    assert audit["selection_mode"] == "explicit_vehicle_id_subset"
+    assert audit["available_eligible_vehicle_count"] == 2
+    assert audit["selected_vehicle_ids"] == ["second"]
+    assert audit["constraint_count"] == 1
+    with pytest.raises(ValueError, match="non-eligible vehicle ids"):
+        _add_stage1_activation_start_strengthening(
+            model=model,
+            gp=gp,
+            requested=True,
+            requested_vehicle_ids=["unknown"],
+            used_vehicle_vars={"first": first_used, "second": second_used},
+            path_start_vars={
+                ("first", "trip"): first_start,
+                ("second", "trip"): second_start,
+            },
+            acyclic_flow_requires_path_start_certificate=True,
+        )
+
+
+@pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
 def test_milp_strict_coverage_metadata_is_exported() -> None:
     context = DispatchContext(
         service_date="2026-04-10",
