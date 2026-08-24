@@ -23,6 +23,18 @@
   observation, not a representation feasibility, gap, or performance result.
   The new explicit allowance prevents that Stage-2 starvation while preserving
   the requested solver caps and recording the only changed time control.
+- The corrected clean `96982ab` diagnostic at
+  `output/diagnostics/pure_ice_aggregation_single_long_stage1_96982ab_20260824/`
+  uses the explicit 870/30/120-second contract (1020 seconds total). Its child
+  attests clean pre/post SHA, the canonical prepared-source hash, seed 42,
+  four threads, physical validation, accepted 24/24 Rolling, accounting, and
+  no fallback/repair; the three top-level artifact hashes and BFF run-input
+  provenance check verify. Stage 2 is optimal in 0.296435 seconds under its
+  effective 30-second limit. The Stage-1 certified gap is 3.041301684%, a
+  0.036210-percentage-point change from the 435-second aggregate median,
+  still well above 1%. This is a valid **DIAGNOSTIC, NOT USED FOR RESEARCH
+  CONCLUSIONS** and supplies no A/B, performance, cost, optimality, or
+  formal-acceptance claim.
 - Added a focused regression that uses an isolated fake child to verify frozen
   controls, the full wall-clock contract, recorded hashes, output artifacts,
   and every claim prohibition.

@@ -30,6 +30,18 @@ input provenance and prohibits A/B, runtime, cost, optimality, and formal
 research-acceptance claims.  It cannot replace the five-pair AB/BA evidence or
 close the 1% gate, even if its individual diagnostic gap improves.
 
+The corrected clean-`96982ab` diagnostic at
+`output/diagnostics/pure_ice_aggregation_single_long_stage1_96982ab_20260824/`
+uses an explicit 870/30/120-second Stage-1/Stage-2/overhead envelope (1020
+seconds total). Its artifact hashes and BFF run-input provenance verify; it
+serves 264/264 trips, passes physical validation, accepts 24/24 Rolling,
+reconciles accounting, and has no fallback or repair. Its one pure-aggregate
+candidate has a 3.041301684% certified Stage-1 gap, only 0.036210 percentage
+points below the prior 435-second aggregate median of 3.077511540%, and still
+misses the 1% target. It is **DIAGNOSTIC, NOT USED FOR RESEARCH
+CONCLUSIONS**: it makes no A/B, speed, cost, optimality, or release claim and
+does not authorize a formal run.
+
 ## 2026-08-24: Thesis evidence audit confirms release remains blocked
 
 `docs/notes/THESIS_SUBMISSION_EVIDENCE_AUDIT.md` maps the required

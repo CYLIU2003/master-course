@@ -18,7 +18,8 @@ Review the frozen evidence and the claim boundary only:
 - Baseline review SHA: `a145cf3a8b9cba0e4d97c48f800fba9ff07a1e69`.
 - Latest root-LP subset diagnostic source: `08af4829b3491269698f0faf67162af9d8d52861`
   (`thesis-activation-start-subset-08af482`).
-- Current documentation head when this brief was written: `e56d08f`.
+- Latest long-cap diagnostic source: `96982abe376422a630543bc35426d201c0a998ac`
+  (`thesis-long-stage1-single-96982ab`).
 - Full 264-trip discrete/pure-aggregate A/B evidence, small 8/12/24/40-trip
   Phase-4 oracle, small M0--M3 study, one-factor sensitivity matrix,
   fixed-decision stress evaluation, and the root-LP candidate diagnostics.
@@ -31,6 +32,7 @@ generation, UI work, or large refactor; those are outside this review.
 | Area | Evidence | Review question |
 | --- | --- | --- |
 | Reproducible 264-trip A/B | `output/diagnostics/pure_ice_aggregation_phase3_ab_25ec2f1_20260824/repeated_comparison.json` | Are the five AB/BA isolated-process pairs sufficient to support `PASS_STRUCTURAL_ONLY`, but not a speedup claim? |
+| Long-cap aggregate reachability | `output/diagnostics/pure_ice_aggregation_single_long_stage1_96982ab_20260824/diagnostic_result.json` | Does the explicit 870/30/120-second wall-clock contract and the 3.041301684% result remain correctly labelled as one diagnostic, not a performance, cost, or acceptance comparison? |
 | Small integrated oracle | `output/verification/small_integrated_oracle_scale/93e31b0_20260824/scale_certificate.json` | Are 8/12/24/40-trip zero-gap Phase-4 references appropriately limited to bounded formulation evidence? |
 | Small M0--M3 | `output/verification/small_m0_m3/93e31b0_20260824/audit.json` | Is the M2--M3 same-input comparison clearly separated from fleet/PV/BESS-changing M0/M1 ablations? |
 | Economic response | `output/thesis_remaining_sensitivities_27ec8ce_20260824/sensitivity_execution_manifest.json` | Do the documented gap failures prevent economic-response conclusions? |
@@ -58,6 +60,8 @@ The evidence currently supports these statements:
   audited candidates.
 - Exact homogeneous-ICE aggregation reduced model structure/RSS in the frozen
   A/B study, but did not improve median solver time.
+- The one long-cap aggregate diagnostic remains physically valid but misses the
+  1% gap; it is a reachability observation, not comparative evidence.
 - The bounded small oracle agrees with Phase 3 within numerical tolerance for
   the listed subsets; it does not prove a 264-trip integrated optimum.
 - The stress results describe a fixed solution's limited robustness, not
@@ -77,7 +81,10 @@ The code changes for the latest root diagnostics passed:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q
-# 1567 passed in 79.69s at source SHA 08af482
+# 1569 passed in 78.97s at source SHA 96982ab
+
+.\.venv\Scripts\python.exe scripts\verify_run_input_provenance.py `
+  --run-dir output\2026-08-24\run_20260824_1239
 
 .\.venv\Scripts\python.exe scripts\verify_run_input_provenance.py `
   --run-dir output\2026-08-24\run_20260824_1139

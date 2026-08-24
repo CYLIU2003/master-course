@@ -22,6 +22,25 @@ formal research-acceptance claims.  The prescribed comparison remains five
 isolated AB/BA pairs; a single observation can only diagnose reachability of
 the declared gap target.
 
+## 2026-08-24 long-cap aggregate reachability diagnostic: complete, not accepted
+
+The clean tag `thesis-long-stage1-single-96982ab` ran one pure-aggregate,
+normal-BFF Phase-3 diagnostic at
+`output/diagnostics/pure_ice_aggregation_single_long_stage1_96982ab_20260824/`.
+It holds the 264-trip prepared-input SHA-256, seed 42, four threads, and every
+non-time solver/model control fixed. Its explicit 1020-second shared envelope
+is 870 seconds Stage 1, 30 seconds Stage 2, and 120 seconds for model
+construction/finalization; all three top-level artifact hashes verify and the
+run-input provenance check is valid. The run serves 264/264 trips, is
+physically valid, accepts 24/24 Rolling, reconciles accounting, and uses no
+fallback or repair.
+
+Its certified Stage-1 gap is 3.041301684%, only 0.036210 percentage points
+below the 435-second aggregate median of 3.077511540% and still above the 1%
+target. This is one diagnostic observation, not A/B evidence and not a speed,
+cost, optimality, or research-acceptance claim. It does not authorise a formal
+run or change the release status.
+
 ## 2026-08-24 remaining 264-trip one-factor sensitivity tranche: complete, diagnostic only
 
 Frozen tag `thesis-remaining-sensitivities-27ec8ce` executed the selected
