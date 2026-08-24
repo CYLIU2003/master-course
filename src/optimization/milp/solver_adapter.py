@@ -1945,6 +1945,94 @@ def _configured_stage1_gurobi_scale_flag(config: OptimizationConfig) -> int:
     return scale_flag
 
 
+def _iter_assignment_path_incompatibility_pairs(
+    *,
+    assignment_trip_ids_by_vehicle: Mapping[str, Sequence[str]],
+    direct_arc_pairs: Iterable[Tuple[str, str, str]],
+    reset_arc_pairs_by_vehicle: Mapping[str, Iterable[Tuple[str, str]]],
+    trip_order_key_by_id: Mapping[str, Tuple[int, int, int, str]],
+    trip_day_index_by_trip_id: Mapping[str, int],
+) -> Iterator[Tuple[str, str, str]]:
+    """Yield same-day assignment pairs with no route through the support graph.
+
+    The support graph contains every Stage-1 direct connection arc and every
+    canonically feasible depot-reset edge supplied by the caller.  An integer
+    vehicle path (possibly containing several depot-reset fragments) can only
+    assign two same-day trips when the earlier trip reaches the later one in
+    this superset graph.  Therefore an absent path is a safe *candidate* for
+    ``y[v,i] + y[v,j] <= 1``.  This helper only identifies candidates; it does
+    not alter the production MIP or assert that adding all candidate rows is
+    computationally useful.
+    """
+
+    trip_ids_by_vehicle = {
+        str(vehicle_id): tuple(
+            sorted(
+                {
+                    str(trip_id)
+                    for trip_id in trip_ids
+                    if str(trip_id) in trip_order_key_by_id
+                },
+                key=lambda trip_id: trip_order_key_by_id[trip_id],
+            )
+        )
+        for vehicle_id, trip_ids in assignment_trip_ids_by_vehicle.items()
+    }
+    trip_id_sets_by_vehicle = {
+        vehicle_id: set(trip_ids)
+        for vehicle_id, trip_ids in trip_ids_by_vehicle.items()
+    }
+    successors_by_vehicle: Dict[str, Dict[str, Set[str]]] = {
+        vehicle_id: {trip_id: set() for trip_id in trip_ids}
+        for vehicle_id, trip_ids in trip_ids_by_vehicle.items()
+    }
+
+    def _add_edge(vehicle_id: str, from_trip_id: str, to_trip_id: str) -> None:
+        vehicle_successors = successors_by_vehicle.get(vehicle_id)
+        vehicle_trip_ids = trip_id_sets_by_vehicle.get(vehicle_id, set())
+        if (
+            vehicle_successors is None
+            or from_trip_id not in vehicle_trip_ids
+            or to_trip_id not in vehicle_trip_ids
+            or from_trip_id == to_trip_id
+        ):
+            return
+        vehicle_successors[from_trip_id].add(to_trip_id)
+
+    for vehicle_id, from_trip_id, to_trip_id in direct_arc_pairs:
+        _add_edge(str(vehicle_id), str(from_trip_id), str(to_trip_id))
+    for vehicle_id, reset_pairs in reset_arc_pairs_by_vehicle.items():
+        for from_trip_id, to_trip_id in reset_pairs:
+            _add_edge(str(vehicle_id), str(from_trip_id), str(to_trip_id))
+
+    for vehicle_id, trip_ids in sorted(trip_ids_by_vehicle.items()):
+        successors = successors_by_vehicle[vehicle_id]
+        reachable_by_trip: Dict[str, Set[str]] = {}
+        for source_trip_id in trip_ids:
+            reachable: Set[str] = set()
+            pending = list(successors[source_trip_id])
+            while pending:
+                candidate_trip_id = pending.pop()
+                if candidate_trip_id in reachable:
+                    continue
+                reachable.add(candidate_trip_id)
+                pending.extend(successors.get(candidate_trip_id, ()))
+            reachable_by_trip[source_trip_id] = reachable
+
+        for left_index, left_trip_id in enumerate(trip_ids):
+            for right_trip_id in trip_ids[left_index + 1 :]:
+                if int(
+                    trip_day_index_by_trip_id.get(left_trip_id, 0)
+                ) != int(trip_day_index_by_trip_id.get(right_trip_id, 0)):
+                    continue
+                if (
+                    right_trip_id in reachable_by_trip[left_trip_id]
+                    or left_trip_id in reachable_by_trip[right_trip_id]
+                ):
+                    continue
+                yield (vehicle_id, left_trip_id, right_trip_id)
+
+
 def _stage1_root_lp_diagnostic(
     *,
     model: Any,
@@ -1953,6 +2041,9 @@ def _stage1_root_lp_diagnostic(
     used_vehicle_vars: Mapping[str, Any],
     vehicle_type_by_id: Mapping[str, str],
     mutually_exclusive_trip_sets: Sequence[Sequence[str]] = (),
+    assignment_path_incompatible_pairs: Optional[
+        Iterable[Tuple[str, str, str]]
+    ] = None,
     path_start_vars: Optional[Mapping[Tuple[str, str], Any]] = None,
     path_start_count_limit: Optional[int] = None,
     acyclic_flow_requires_path_start_certificate: bool = False,
@@ -2255,6 +2346,84 @@ def _stage1_root_lp_diagnostic(
                     )[:20],
                 }
             )
+        path_incompatibility_summary: Dict[str, Any] = {
+            "enabled": assignment_path_incompatible_pairs is not None,
+            "candidate_pair_count": 0,
+            "checked_assignment_pair_count": 0,
+            "violated_assignment_pair_count": 0,
+            "evaluation_wall_seconds": None,
+            "maximum_assignment_mass": None,
+            "maximum_assignment_mass_excess": None,
+            "violation_sample": [],
+            "semantics": (
+                "read_only_evaluation_of_y_vehicle_trip_i_plus_y_vehicle_"
+                "trip_j_less_than_or_equal_to_one_for_same_day_pairs_without_"
+                "a_path_in_the_supplied_direct_or_valid_depot_reset_support_"
+                "graph; candidate_rows_are_not_added_to_the_mip"
+            ),
+        }
+        if assignment_path_incompatible_pairs is not None:
+            path_incompatibility_started = time.perf_counter()
+            incompatibility_violations: List[Dict[str, Any]] = []
+            maximum_assignment_mass = 0.0
+            for vehicle_id, first_trip_id, second_trip_id in (
+                assignment_path_incompatible_pairs
+            ):
+                first_key = (str(vehicle_id), str(first_trip_id))
+                second_key = (str(vehicle_id), str(second_trip_id))
+                if first_key == second_key or (
+                    first_key not in assignment_value_by_key
+                    or second_key not in assignment_value_by_key
+                ):
+                    raise ValueError(
+                        "assignment path incompatibility diagnostic received "
+                        "an invalid assignment pair"
+                    )
+                assignment_mass = (
+                    assignment_value_by_key[first_key]
+                    + assignment_value_by_key[second_key]
+                )
+                path_incompatibility_summary["candidate_pair_count"] += 1
+                path_incompatibility_summary[
+                    "checked_assignment_pair_count"
+                ] += 1
+                maximum_assignment_mass = max(
+                    maximum_assignment_mass,
+                    assignment_mass,
+                )
+                if assignment_mass <= 1.0 + epsilon:
+                    continue
+                incompatibility_violations.append(
+                    {
+                        "vehicle_id": str(vehicle_id),
+                        "trip_ids": [str(first_trip_id), str(second_trip_id)],
+                        "assignment_mass": assignment_mass,
+                        "excess": assignment_mass - 1.0,
+                    }
+                )
+            path_incompatibility_summary.update(
+                {
+                    "violated_assignment_pair_count": len(
+                        incompatibility_violations
+                    ),
+                    "evaluation_wall_seconds": float(
+                        time.perf_counter() - path_incompatibility_started
+                    ),
+                    "maximum_assignment_mass": maximum_assignment_mass,
+                    "maximum_assignment_mass_excess": max(
+                        maximum_assignment_mass - 1.0,
+                        0.0,
+                    ),
+                    "violation_sample": sorted(
+                        incompatibility_violations,
+                        key=lambda item: (
+                            -float(item["excess"]),
+                            str(item["vehicle_id"]),
+                            tuple(item["trip_ids"]),
+                        ),
+                    )[:20],
+                }
+            )
         diagnostic.update(
             {
                 "assignment_summary": {
@@ -2284,6 +2453,9 @@ def _stage1_root_lp_diagnostic(
                 },
                 "activation_start_summary": activation_start_summary,
                 "mutually_exclusive_trip_set_summary": exclusive_set_summary,
+                "assignment_path_incompatibility_summary": (
+                    path_incompatibility_summary
+                ),
             }
         )
     except Exception as exc:
@@ -14606,6 +14778,32 @@ class GurobiMILPAdapter:
                 },
                 mutually_exclusive_trip_sets=self._build_trip_overlap_cliques(
                     problem
+                ),
+                assignment_path_incompatible_pairs=(
+                    self._iter_stage1_assignment_path_incompatibilities(
+                        problem=problem,
+                        trip_by_id=trip_by_id,
+                        vehicles=problem.vehicles,
+                        assignment_trip_ids_by_vehicle=(
+                            assignment_trip_ids_by_vehicle
+                        ),
+                        assignment_var_keys=tuple(y),
+                        direct_arc_pairs=arc_pairs,
+                        start_arc=start_arc,
+                        end_arc=end_arc,
+                        trip_day_index_by_trip_id=(
+                            trip_day_index_by_trip_id
+                        ),
+                        allow_same_day_depot_cycles=(
+                            allow_same_day_depot_cycles
+                        ),
+                        fixed_route_band_mode=bool(
+                            problem.metadata.get(
+                                "fixed_route_band_mode",
+                                False,
+                            )
+                        ),
+                    )
                 ),
                 path_start_vars=start_arc,
                 path_start_count_limit=max_start_fragments_per_vehicle,
@@ -28781,6 +28979,154 @@ class GurobiMILPAdapter:
                 )
             )
             for clique in maximal_cliques
+        )
+
+    def _iter_stage1_assignment_path_incompatibilities(
+        self,
+        *,
+        problem: CanonicalOptimizationProblem,
+        trip_by_id: Mapping[str, ProblemTrip],
+        vehicles: Sequence[Any],
+        assignment_trip_ids_by_vehicle: Mapping[str, Sequence[str]],
+        assignment_var_keys: Collection[Tuple[str, str]],
+        direct_arc_pairs: Iterable[Tuple[str, str, str]],
+        start_arc: Mapping[Tuple[str, str], Any],
+        end_arc: Mapping[Tuple[str, str], Any],
+        trip_day_index_by_trip_id: Mapping[str, int],
+        allow_same_day_depot_cycles: bool,
+        fixed_route_band_mode: bool,
+    ) -> Iterator[Tuple[str, str, str]]:
+        """Yield read-only no-path assignment-pair candidates for root LP.
+
+        A valid reset edge is intentionally a *superset* of a concrete
+        selected fragment boundary: it ignores whether a particular integer
+        solution would select that endpoint.  Consequently, a pair reported
+        as unreachable has no direct-or-reset path even in this permissive
+        support graph and is safe to inspect as a potential assignment cut.
+        """
+
+        vehicle_by_id = {
+            str(getattr(vehicle, "vehicle_id", "") or ""): vehicle
+            for vehicle in vehicles
+            if str(getattr(vehicle, "vehicle_id", "") or "")
+        }
+        available_assignment_keys = {
+            (str(vehicle_id), str(trip_id))
+            for vehicle_id, trip_id in assignment_var_keys
+        }
+        trip_order_key_by_id = {
+            str(trip_id): (
+                int(trip_day_index_by_trip_id.get(str(trip_id), 0)),
+                self._service_minute(problem, trip.departure_min),
+                self._trip_service_arrival_min(problem, trip),
+                str(trip_id),
+            )
+            for trip_id, trip in trip_by_id.items()
+        }
+        reset_arc_pairs_by_vehicle: Dict[str, List[Tuple[str, str]]] = {}
+        assignment_trip_ids_with_variables_by_vehicle: Dict[
+            str, Tuple[str, ...]
+        ] = {}
+        reset_feasible_cache: Dict[
+            Tuple[str, str, str, str, bool, bool], bool
+        ] = {}
+
+        for vehicle_id, raw_trip_ids in assignment_trip_ids_by_vehicle.items():
+            normalized_vehicle_id = str(vehicle_id)
+            vehicle = vehicle_by_id.get(normalized_vehicle_id)
+            if vehicle is None:
+                continue
+            vehicle_type = str(getattr(vehicle, "vehicle_type", "") or "")
+            home_depot_id = str(
+                getattr(vehicle, "home_depot_id", "") or ""
+            )
+            trip_ids = tuple(
+                sorted(
+                    {
+                        str(trip_id)
+                        for trip_id in raw_trip_ids
+                        if (
+                            str(trip_id) in trip_by_id
+                            and (normalized_vehicle_id, str(trip_id))
+                            in available_assignment_keys
+                        )
+                    },
+                    key=lambda trip_id: trip_order_key_by_id[trip_id],
+                )
+            )
+            assignment_trip_ids_with_variables_by_vehicle[
+                normalized_vehicle_id
+            ] = trip_ids
+            for end_trip_id in trip_ids:
+                end_key = (normalized_vehicle_id, end_trip_id)
+                end_trip = trip_by_id[end_trip_id]
+                if end_key not in end_arc:
+                    continue
+                for start_trip_id in trip_ids:
+                    start_key = (normalized_vehicle_id, start_trip_id)
+                    if (
+                        start_trip_id == end_trip_id
+                        or start_key not in start_arc
+                        or int(
+                            trip_day_index_by_trip_id.get(end_trip_id, 0)
+                        )
+                        != int(
+                            trip_day_index_by_trip_id.get(start_trip_id, 0)
+                        )
+                    ):
+                        continue
+                    start_trip = trip_by_id[start_trip_id]
+                    if self._trip_service_arrival_min(
+                        problem, end_trip
+                    ) > self._service_minute(problem, start_trip.departure_min):
+                        continue
+                    cache_key = (
+                        vehicle_type,
+                        home_depot_id,
+                        end_trip_id,
+                        start_trip_id,
+                        bool(fixed_route_band_mode),
+                        bool(allow_same_day_depot_cycles),
+                    )
+                    reset_feasible = reset_feasible_cache.get(cache_key)
+                    if reset_feasible is None:
+                        reset_feasible = fragment_transition_diagnostic(
+                            VehicleDuty(
+                                duty_id=(
+                                    f"{normalized_vehicle_id}__end_probe"
+                                ),
+                                vehicle_type=vehicle_type,
+                                legs=(DutyLeg(trip=end_trip),),
+                            ),
+                            VehicleDuty(
+                                duty_id=(
+                                    f"{normalized_vehicle_id}__start_probe"
+                                ),
+                                vehicle_type=vehicle_type,
+                                legs=(DutyLeg(trip=start_trip),),
+                            ),
+                            home_depot_id=home_depot_id,
+                            dispatch_context=problem.dispatch_context,
+                            fixed_route_band_mode=bool(fixed_route_band_mode),
+                            allow_same_day_depot_cycles=bool(
+                                allow_same_day_depot_cycles
+                            ),
+                        ).feasible
+                        reset_feasible_cache[cache_key] = bool(reset_feasible)
+                    if reset_feasible:
+                        reset_arc_pairs_by_vehicle.setdefault(
+                            normalized_vehicle_id,
+                            [],
+                        ).append((end_trip_id, start_trip_id))
+
+        yield from _iter_assignment_path_incompatibility_pairs(
+            assignment_trip_ids_by_vehicle=(
+                assignment_trip_ids_with_variables_by_vehicle
+            ),
+            direct_arc_pairs=direct_arc_pairs,
+            reset_arc_pairs_by_vehicle=reset_arc_pairs_by_vehicle,
+            trip_order_key_by_id=trip_order_key_by_id,
+            trip_day_index_by_trip_id=trip_day_index_by_trip_id,
         )
 
     def _trip_interval_bounds(

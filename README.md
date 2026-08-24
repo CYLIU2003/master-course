@@ -531,8 +531,12 @@ certificate path.
 
 An opt-in Stage-1 root-LP diagnostic now solves a separate continuous copy of
 the completed model and records only aggregate fractional assignment and
-vehicle-activation evidence. It never adds rows, changes bounds, supplies a
-MIP start, or affects the production solve. The BFF treats an enabled request
+vehicle-activation evidence. It also read-only evaluates same-day vehicle-trip
+pairs having no path in a permissive graph of direct arcs plus canonically
+feasible depot resets; those candidate rows are never added to the MIP. The
+diagnostic records their count, violations, sample, and separate evaluation
+wall time. It never changes bounds, supplies a MIP start, or affects the
+production solve. The BFF treats an enabled request
 as diagnostic-only, so it cannot satisfy research acceptance. A clean-SHA
 264-trip diagnostic is required before using it to select a structural
 tightening. The clone explicitly uses Gurobi barrier (`Method=2`) with

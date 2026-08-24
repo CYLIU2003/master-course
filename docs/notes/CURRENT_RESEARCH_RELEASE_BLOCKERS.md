@@ -36,6 +36,15 @@ a specific original-feasible-set-valid assignment/path strengthening has a
 validity proof and focused exact/small-MILP regression; the release remains
 `BLOCKED`.
 
+Before the next clean-SHA root-LP observation, the diagnostic gained one
+strictly read-only candidate audit: for each vehicle and same-day trip pair it
+forms a permissive support graph from direct Stage-1 arcs and canonically
+feasible depot-reset edges. A pair with no path is logged as a possible
+`y[v,i] + y[v,j] <= 1` row, with no row added to the production model. The
+audit records its separate evaluation time and excludes unavailable assignment
+variables. It has no 264-trip observation yet, is **DIAGNOSTIC, NOT USED FOR
+RESEARCH CONCLUSIONS**, and cannot weaken or close the 1% gate.
+
 ## 2026-08-24: Remaining one-factor matrix completes diagnostics, not acceptance
 
 The frozen tag `thesis-remaining-sensitivities-27ec8ce` ran the selected

@@ -1,5 +1,25 @@
 # Development Notes
 
+## 2026-08-24: Stage-1 no-path assignment-pair audit remains read-only
+
+- Extended the opt-in isolated Stage-1 root-LP diagnostic with a per-vehicle,
+  same-day assignment-pair audit.  Its support graph contains every direct
+  Stage-1 connection arc and every canonically feasible depot-reset edge.  A
+  missing path in this deliberately permissive graph is only a necessary
+  condition for an integer vehicle path, so the diagnostic may inspect
+  `y[v,i] + y[v,j] <= 1` without adding a production row or changing the
+  objective, bounds, starts, solver controls, or accepted solution.
+- The audit records candidate/violation counts, largest assignment mass,
+  samples, and its separate evaluation wall time.  It excludes trip labels
+  without an actual assignment variable before enumeration, preventing an
+  aggregate representation from turning a diagnostic-only observation into an
+  error.  A unit test covers direct/reset reachability and a feasible Phase-3
+  integration test proves the root-LP metadata path.
+- No 264-trip result exists for this new audit at this point.  It is not a
+  formulation strengthening, has no claimed bound/runtime benefit, and cannot
+  alter the 1% release gate until a clean-SHA BFF diagnostic yields a
+  quality-qualified result and a separate validity proof supports any row.
+
 ## 2026-08-24: Fresh frozen 264-trip A/B telemetry evidence
 
 - Tagged clean code SHA `25ec2f170949b7108c5dd98ac1dc5b5b03845525` as

@@ -30,6 +30,7 @@ from src.optimization.milp.solver_adapter import (
     _configured_stage1_gurobi_scale_flag,
     _configured_stage1_gurobi_search_controls,
     _has_exact_mip_optimality_certificate,
+    _iter_assignment_path_incompatibility_pairs,
     _single_path_flow_implies_temporal_exclusivity,
     _stage1_numeric_coefficient_diagnostic,
     _stage1_termination_reason,
@@ -60,6 +61,38 @@ def test_acyclic_flow_requires_path_start_rejects_nonchronological_arc() -> None
         arc_pairs=(("bus", "late", "early"),),
         trip_by_id=trips,
     ) is False
+
+
+def test_assignment_path_incompatibility_pairs_require_no_direct_or_reset_path() -> None:
+    pairs = list(
+        _iter_assignment_path_incompatibility_pairs(
+            assignment_trip_ids_by_vehicle={
+                "bus": ("early", "orphan", "middle", "late", "tomorrow")
+            },
+            direct_arc_pairs=(("bus", "early", "middle"),),
+            reset_arc_pairs_by_vehicle={"bus": (("middle", "late"),)},
+            trip_order_key_by_id={
+                "early": (0, 100, 120, "early"),
+                "orphan": (0, 150, 170, "orphan"),
+                "middle": (0, 200, 220, "middle"),
+                "late": (0, 300, 320, "late"),
+                "tomorrow": (1, 100, 120, "tomorrow"),
+            },
+            trip_day_index_by_trip_id={
+                "early": 0,
+                "orphan": 0,
+                "middle": 0,
+                "late": 0,
+                "tomorrow": 1,
+            },
+        )
+    )
+
+    assert pairs == [
+        ("bus", "early", "orphan"),
+        ("bus", "orphan", "middle"),
+        ("bus", "orphan", "late"),
+    ]
 
 
 @pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
@@ -307,6 +340,54 @@ def test_root_lp_diagnostic_reports_exclusive_trip_set_violations_read_only() ->
     assert summary["maximal_trip_set_count"] == 1
     assert summary["checked_vehicle_trip_set_pairs"] == 1
     assert summary["violated_vehicle_trip_set_count"] == 1
+    assert summary["maximum_assignment_mass"] == pytest.approx(1.5)
+    assert summary["maximum_assignment_mass_excess"] == pytest.approx(0.5)
+    assert summary["violation_sample"] == [
+        {
+            "vehicle_id": "bus",
+            "trip_ids": ["first", "second"],
+            "assignment_mass": pytest.approx(1.5),
+            "excess": pytest.approx(0.5),
+        }
+    ]
+    assert model.NumBinVars == 3
+
+
+@pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
+def test_root_lp_diagnostic_reports_path_incompatibility_violations_read_only() -> None:
+    from src.gurobi_runtime import ensure_gurobi
+
+    gp, grb = ensure_gurobi()
+    model = gp.Model("root_lp_path_incompatibility_diagnostic")
+    model.Params.OutputFlag = 0
+    first_assignment = model.addVar(vtype=grb.BINARY, name="assign__bus__first")
+    second_assignment = model.addVar(vtype=grb.BINARY, name="assign__bus__second")
+    used = model.addVar(vtype=grb.BINARY, name="used__bus")
+    model.addConstr(first_assignment == 0.75)
+    model.addConstr(second_assignment == 0.75)
+    model.addConstr(used == 1)
+    model.setObjective(first_assignment + second_assignment, grb.MINIMIZE)
+
+    diagnostic = _stage1_root_lp_diagnostic(
+        model=model,
+        grb=grb,
+        assignment_vars={
+            ("bus", "first"): first_assignment,
+            ("bus", "second"): second_assignment,
+        },
+        used_vehicle_vars={"bus": used},
+        vehicle_type_by_id={"bus": "ICE"},
+        assignment_path_incompatible_pairs=(("bus", "first", "second"),),
+        time_limit_sec=5,
+        threads=2,
+    )
+
+    summary = diagnostic["assignment_path_incompatibility_summary"]
+    assert summary["enabled"] is True
+    assert summary["candidate_pair_count"] == 1
+    assert summary["checked_assignment_pair_count"] == 1
+    assert summary["violated_assignment_pair_count"] == 1
+    assert summary["evaluation_wall_seconds"] >= 0.0
     assert summary["maximum_assignment_mass"] == pytest.approx(1.5)
     assert summary["maximum_assignment_mass_excess"] == pytest.approx(0.5)
     assert summary["violation_sample"] == [
