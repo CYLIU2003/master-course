@@ -286,6 +286,17 @@ gap improves to 1.7803% but still misses 1%; both cases are therefore
 they also cannot supply release-eligible sensitivity evidence before the
 common certified-gap blocker is repaired.
 
+The current no-HTTP/no-solver re-audits at
+`output/verification/thesis_economic_diesel_reaudit_365a6b5_20260824/`,
+`output/verification/thesis_economic_electricity_reaudit_365a6b5_20260824/`,
+and `output/verification/thesis_economic_vehicle_day_reaudit_365a6b5_20260824/`
+re-verify every copied price and vehicle-day source bundle. Across these eight
+cases and the separate 13-case BEV-energy/PV/BESS/charger tranche, all 21
+full-scale sensitivity cases fail only `mip_gap_target_met` (1.780295%--
+26.849287%), with no accepted case. This strengthens the audit trail only; it
+does not turn candidate differences into an economic-response conclusion or
+permit cross-family comparisons as one common experiment.
+
 ## 2026-08-23: Current-code pure-ICE aggregation A/B is structural-only
 
 The normal candidate's solver telemetry is root-bound dominated: the
