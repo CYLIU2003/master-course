@@ -34,7 +34,7 @@ prove that charger capacity or BEV energy has no economic or dispatch effect.
 These are feasible Phase-3 two-stage candidates with different incumbents,
 not comparable optimal responses.
 
-## 2026-08-24 current-SHA repeated 264-trip pure-ICE aggregation A/B
+## 2026-08-24 historical 264-trip pure-ICE aggregation A/B
 
 The frozen tag `thesis-phase3-pure-ice-ab-0ddcd22` completed the prescribed
 five AB/BA pairs through the normal BFF/Phase-3 path. The bundle at
@@ -65,6 +65,29 @@ the final Stage-1 Gurobi `PRESOLVE` callback for future A/B runs. Its artifact
 semantics explicitly say this is a callback timestamp from the start of
 `optimize`, not a dedicated Gurobi internal presolve-duration attribute; an
 absent callback remains `null` with its reason recorded.
+
+## 2026-08-24 frozen-25ec2f1 repeated 264-trip pure-ICE aggregation A/B
+
+Frozen tag `thesis-freeze-25ec2f1` executed a fresh five-pair AB/BA,
+isolated-process bundle at clean SHA
+`25ec2f170949b7108c5dd98ac1dc5b5b03845525`, stored in
+`output/diagnostics/pure_ice_aggregation_phase3_ab_25ec2f1_20260824/`.
+All ten children share the prepared-input SHA-256
+`639b6754cccd1aef7758454b56640f968b6b1c277ec32c1c142f53f670ade558`, seed 42,
+four threads, 435/30-second stage limits, full successors, and clean pre/post
+SHA. Every run served 264/264 trips, accepted physical validation and 24/24
+Rolling, reconciled accounting, and used neither fallback nor post-solve
+repair; the four published comparison artifacts have verified SHA-256 hashes.
+
+The final verdict is again `PASS_STRUCTURAL_ONLY`. Median variables, binaries,
+constraints, and process-tree RSS decreased by 31.82%, 32.01%, 24.09%, and
+17.27%, respectively. The final `PRESOLVE` callback elapsed timestamp fell
+from 9.342 to 8.152 seconds (-12.74%), but it is explicitly not a Gurobi
+internal presolve-duration attribute. Median solver time increased from
+465.761 to 480.487 seconds (+3.16%), even though parent wall time fell from
+647.385 to 618.898 seconds (-4.40%). Both representations remain time-limited
+and miss the 1% Stage-1 gap (19.2273% discrete; 3.0775% aggregate), so this is
+not a solver-speed, cost, or optimality claim.
 
 ## 2026-08-24 current-SHA oracle, stress, and economic refresh
 

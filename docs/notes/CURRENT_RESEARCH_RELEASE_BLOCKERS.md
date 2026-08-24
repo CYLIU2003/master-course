@@ -1,25 +1,32 @@
 # Current research release blockers
 
-## 2026-08-24: A/B presolve observation is explicit, not a release remedy
+## 2026-08-24: Fresh A/B telemetry is explicit, not a release remedy
 
-Future pure-ICE A/B artifacts now save `presolve_time_sec` from the final
-Stage-1 Gurobi `PRESOLVE` callback. The persisted semantics explicitly state
-that it is elapsed time from `optimize` start, not a Gurobi dedicated internal
-presolve-duration attribute; no observed callback stays null with a recorded
-reason. This is read-only observability and also records the effective Stage-1
-search controls. It changes neither model nor solver behavior and has no
-264-trip execution artifact yet. It neither reinterprets the historical null
-values nor closes any gap, sensitivity, or release gate.
+Frozen tag `thesis-freeze-25ec2f1` now has a fresh five-pair AB/BA,
+isolated-process 264-trip bundle at
+`output/diagnostics/pure_ice_aggregation_phase3_ab_25ec2f1_20260824/`. All
+ten clean-SHA runs accept coverage, physical validation, 24/24 Rolling,
+accounting, and no-fallback/no-repair gates; its four public comparison files
+have verified SHA-256 hashes. Each artifact saves `presolve_time_sec` from the
+final Stage-1 Gurobi `PRESOLVE` callback and the effective Stage-1 search
+controls. Its machine-readable semantics state that the value is elapsed from
+`optimize` start, not a dedicated Gurobi internal presolve-duration attribute.
+
+The verdict is `PASS_STRUCTURAL_ONLY`: aggregation reduces model size and RSS,
+and its callback timestamp is lower, but median solver time is 3.16% slower
+and both representations miss the declared 1% gap (19.2273% discrete;
+3.0775% aggregate). This read-only telemetry evidence neither reinterprets the
+historical null values nor closes any optimality, sensitivity, or release gate.
 
 ## 2026-08-24: Thesis evidence audit confirms release remains blocked
 
-`docs/notes/THESIS_SUBMISSION_EVIDENCE_AUDIT.md` now maps the required
+`docs/notes/THESIS_SUBMISSION_EVIDENCE_AUDIT.md` maps the required
 reproducibility, A/B, integrated-oracle, sensitivity, stress, and M0--M3
-evidence to its exact claim boundary. It records the current clean
-documentation checkout `2f388d4` and confirms that the requested baseline
-`a145cf3` is its ancestor; no old artifact is relabelled as a current-HEAD
-formal run. The documentation audit and `1558` passing regression tests do
-not satisfy an optimality, economic-response, or independent-review gate.
+evidence to its exact claim boundary. It records the new frozen `25ec2f1`
+A/B evidence and confirms that the requested baseline `a145cf3` is its
+ancestor; no old artifact is relabelled as a current-HEAD formal run. The
+documentation audit and `1560` passing regression tests do not satisfy an
+optimality, economic-response, or independent-review gate.
 
 The remaining mathematical blocker is unchanged: the quality-qualified
 264-trip Stage-1 root LP splits every trip across vehicle labels despite the

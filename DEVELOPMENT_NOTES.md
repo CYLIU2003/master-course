@@ -1,5 +1,24 @@
 # Development Notes
 
+## 2026-08-24: Fresh frozen 264-trip A/B telemetry evidence
+
+- Tagged clean code SHA `25ec2f170949b7108c5dd98ac1dc5b5b03845525` as
+  `thesis-freeze-25ec2f1`, then executed the normal-BFF Phase-3 five-pair
+  AB/BA isolated-process benchmark at
+  `output/diagnostics/pure_ice_aggregation_phase3_ab_25ec2f1_20260824/`.
+  It fixes prepared-input SHA-256 `639b6754...`, seed 42, four threads,
+  435/30-second Stage-1/Stage-2 limits, complete successors, and the frozen
+  request. All ten children retain the same clean pre/post SHA and pass
+  coverage, physical, Rolling, accounting, and no-fallback/no-repair checks.
+- The four published comparison files pass the harness SHA-256 verification.
+  `repeated_comparison.json` records `PASS_STRUCTURAL_ONLY`: the aggregate
+  representation reduces median variables/binaries/constraints/RSS but has a
+  3.16% slower median solver time. The newly observed final `PRESOLVE`
+  callback elapsed timestamps are 9.342 seconds (discrete) and 8.152 seconds
+  (aggregate); they remain explicitly labelled as callback timestamps, not
+  dedicated Gurobi presolve-duration measurements. Both cases miss the 1% gap.
+  No performance, cost, or optimality claim is added.
+
 ## 2026-08-24: Preserve observed Stage-1 presolve telemetry in A/B evidence
 
 - Updated `src/optimization/milp/solver_adapter.py` so the existing read-only
@@ -18,8 +37,9 @@
   `tests/test_milp_fragment_pairwise_reset_cut.py`, and
   `tests/test_lazy_fragment_performance_diagnostic.py`. Ran
   `\.venv\Scripts\python.exe -m pytest -q tests\test_milp_fragment_pairwise_reset_cut.py tests\test_stage1_search_telemetry.py tests\test_lazy_fragment_performance_diagnostic.py`:
-  `27 passed in 1.51s`. No new 264-trip run was started; this instrumentation
-  neither changes nor closes the current 1% certificate blocker.
+  `27 passed in 1.51s`. The subsequent frozen A/B run above confirms that this
+  instrumentation is persisted in real 264-trip artifacts; it does not close
+  the current 1% certificate blocker.
 - After the documentation updates, ran the full suite:
   `\.venv\Scripts\python.exe -m pytest -q` -> `1560 passed in 79.43s`.
 
