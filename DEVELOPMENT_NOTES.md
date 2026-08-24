@@ -34,6 +34,18 @@
   leading section stating that this already-completed diagnostic was pending.
   It now records the rejection, frozen artifact, and source reversion. This is
   a documentation-only correction; it changes no code, artifact, or result.
+- Submission-audit reconciliation: the evidence table now enumerates the
+  separate electricity-price, diesel-price, and vehicle-day-cost matrices in
+  addition to the 13-case BEV-energy/PV/BESS/charger tranche. The existing
+  runner re-audited each immutable source without HTTP or solving:
+  `\.venv\Scripts\python.exe scripts\run_thesis_sensitivity_matrix.py
+  --rebuild-existing-dir output\thesis_economic_diesel_93e31b0_20260824
+  --output-dir output\verification\thesis_economic_diesel_reaudit_365a6b5_20260824`;
+  the electricity and vehicle-day commands used the analogous full source and
+  output paths. Each returned the expected `BLOCKED` exit because every case
+  fails only the declared 1% MIP-gap check. The new re-audit bundles are
+  `output/verification/thesis_economic_*_reaudit_365a6b5_20260824/`. This
+  clarification adds no cross-SHA comparison or economic-response claim.
 
 ## 2026-08-24: Task-to-evidence audit is complete; release remains blocked
 
