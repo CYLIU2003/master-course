@@ -873,6 +873,14 @@ class RunOptimizationBody(BaseModel):
     # This controls only the separate read-only root-LP clone, never the
     # production Stage-1 MIP solver method.
     stage1_root_lp_diagnostic_method: Literal[1, 2] = 2
+    # This follow-up solves separate auxiliary clique-separation MIPs at the
+    # root-LP point.  It never adds rows to Stage 1 and remains diagnostic.
+    stage1_root_lp_diagnostic_exact_clique_separation_enabled: bool = False
+    stage1_root_lp_diagnostic_exact_clique_time_limit_seconds: int = Field(
+        default=30,
+        ge=1,
+        le=300,
+    )
     stage1_numeric_coefficient_diagnostic_enabled: bool = False
     stage1_fragment_transition_cut_mode: Literal[
         "lazy", "lifted_root", "lazy_root_cuts", "explicit_root"
@@ -11292,6 +11300,8 @@ def _run_optimization(
     stage1_gurobi_search_profile: str = "default",
     stage1_root_lp_diagnostic_enabled: bool = False,
     stage1_root_lp_diagnostic_time_limit_seconds: int = 30,
+    stage1_root_lp_diagnostic_exact_clique_separation_enabled: bool = False,
+    stage1_root_lp_diagnostic_exact_clique_time_limit_seconds: int = 30,
     stage1_fragment_transition_cut_mode: str = "lazy",
     stage1_powertrain_selector_strengthening: bool = False,
     stage1_activation_start_strengthening: bool = False,
@@ -11356,6 +11366,14 @@ def _run_optimization(
     stage1_best_obj_stop_enabled = INTERACTIVE_STAGE1_BEST_OBJ_STOP_ENABLED
     gurobi_threads = INTERACTIVE_GUROBI_THREADS
     try:
+        if (
+            stage1_root_lp_diagnostic_exact_clique_separation_enabled
+            and not stage1_root_lp_diagnostic_enabled
+        ):
+            raise ValueError(
+                "stage1_root_lp_diagnostic_exact_clique_separation_enabled "
+                "requires stage1_root_lp_diagnostic_enabled"
+            )
         solver_mode = _normalize_solver_mode(mode)
         job_store.update_job(
             job_id,
@@ -11546,6 +11564,17 @@ def _run_optimization(
                 ),
                 stage1_root_lp_diagnostic_method=int(
                     stage1_root_lp_diagnostic_method
+                ),
+                stage1_root_lp_diagnostic_exact_clique_separation_enabled=(
+                    bool(
+                        stage1_root_lp_diagnostic_exact_clique_separation_enabled
+                    )
+                ),
+                stage1_root_lp_diagnostic_exact_clique_time_limit_sec=max(
+                    int(
+                        stage1_root_lp_diagnostic_exact_clique_time_limit_seconds
+                    ),
+                    1,
                 ),
                 stage1_numeric_coefficient_diagnostic_enabled=bool(
                     stage1_numeric_coefficient_diagnostic_enabled
@@ -14017,6 +14046,8 @@ def run_optimization(
             request.stage1_gurobi_search_profile,
             request.stage1_root_lp_diagnostic_enabled,
             request.stage1_root_lp_diagnostic_time_limit_seconds,
+            request.stage1_root_lp_diagnostic_exact_clique_separation_enabled,
+            request.stage1_root_lp_diagnostic_exact_clique_time_limit_seconds,
             request.stage1_fragment_transition_cut_mode,
             request.stage1_powertrain_selector_strengthening,
             request.stage1_activation_start_strengthening,

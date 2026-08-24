@@ -47,6 +47,11 @@ The implementation adds only diagnostic controls:
   subset of independently certified activation-to-path-start inequalities. It
   rejects empty, duplicate, unknown, clone-domain, and start-domain-ineligible
   IDs.
+- `stage1_root_lp_diagnostic_exact_clique_separation_enabled` is default-off
+  and solves independent maximum-weight clique MIPs at an optimal,
+  quality-qualified root-LP point. It is exhaustive only when every eligible
+  vehicle/day auxiliary MIP proves optimal; timeout is inconclusive and no
+  discovered row is added to Stage 1.
 - The exact inequality is
   `used_vehicle <= sum(path_start)` for a non-aggregate label only when the
   chronological acyclic-flow certificate holds. It does not alter the integer

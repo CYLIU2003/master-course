@@ -1,5 +1,30 @@
 # Development Notes
 
+## 2026-08-24: Exact no-path clique separation is diagnostic and fail-closed
+
+- Added the default-off
+  `stage1_root_lp_diagnostic_exact_clique_separation_enabled` follow-up to the
+  isolated root-LP diagnostic. For every vehicle/day with enough observed
+  assignment mass to possibly violate a row, it solves a separate
+  maximum-weight binary clique MIP. The clique model excludes exactly pairs
+  with a support-graph path in either direction; every returned set is checked
+  again to be pairwise mutually unreachable in the permissive direct plus
+  canonically feasible depot-reset graph.
+- This closes the previous high-mass greedy search's *coverage* gap without
+  changing the production formulation: all auxiliary models are separate,
+  rows are never inserted, and a root LP that is non-optimal or outside the
+  configured primal tolerance is not evaluated. The common root-diagnostic
+  deadline is enforced across LP, existing read-only audits, and this
+  follow-up; any skipped or time-limited group is `inconclusive`, never a
+  no-violation conclusion. A complete non-violation certificate requires all
+  eligible groups to be solved to MIP optimality with zero requested relative
+  and absolute MIP gaps.
+- Added Gurobi regression coverage for a maximum-weight violation, BFF/config
+  propagation, and isolated-process harness forwarding. Focused tests pass
+  (`57 passed`). This is implementation evidence only: no new frozen 264-trip
+  artifact exists yet, no candidate row has been added, and the 1% release
+  gate remains unchanged.
+
 ## 2026-08-24: Long-cap single-representation diagnostics fail closed
 
 - Added the explicit

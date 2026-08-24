@@ -87,6 +87,16 @@ adds no MIP row. A future clean-SHA result must first identify a violation and
 receive a separate exactness proof and regression before any formulation
 change is considered.
 
+The current source also adds a default-off exhaustive, read-only
+maximum-weight clique separator over the same support graph. It runs only
+after an optimal, quality-qualified root LP; an auxiliary time limit or
+skipped group is `inconclusive`; and a no-violation conclusion requires every
+eligible vehicle/day auxiliary MIP to prove optimal. No frozen 264-trip
+artifact has executed this separator yet. Its implementation does not
+authorize a formal run or weaken the 1% gate; even a found violation would
+still need an independent validity proof, focused regression, and controlled
+MIP ON/OFF evidence before any model change.
+
 The certified `used_vehicle <= sum(path_start)` candidate remains valid only
 under its strict acyclic-flow certificate and stays default-off. Its prior
 clean-`3de101b` 264-trip ON diagnostic reached the 300-second barrier/crossover

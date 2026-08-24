@@ -71,7 +71,10 @@ and adds no row. Its clean-`91cfbb5` successor at
 `output/2026-08-24/run_20260824_1114/` checks 815 deterministic high-mass
 no-path cliques and also finds zero violations (largest mass
 `1 + 2.20e-14` within the `1e-6` tolerance); because that discovery is
-heuristic, it rejects only the checked cliques. Adding a duplicate charger or
+heuristic, it rejects only the checked cliques. The current source adds a
+default-off exhaustive read-only maximum-weight clique separator, but no
+frozen 264-trip artifact has executed it, so it is not evidence and does not
+change this blocker. Adding a duplicate charger or
 energy row, reducing the declared gap, or restricting fragments without a
 proof would change or weaken the research contract and is not authorized.
 For the activation-to-start diagnostic only, the next clean-SHA clone may use

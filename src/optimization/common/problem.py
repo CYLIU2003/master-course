@@ -392,6 +392,13 @@ class OptimizationConfig:
     # (``1``) is available only to diagnose whether a valid strengthening is
     # obscured by barrier/crossover behavior. It never changes the Stage-1 MIP.
     stage1_root_lp_diagnostic_method: int = 2
+    # An opt-in follow-up to the root-LP observation.  It solves independent
+    # maximum-weight clique separation MIPs over same-day no-path assignment
+    # sets at the observed root-LP point.  It is read-only: discovered rows
+    # are reported only and are never inserted into the production Stage-1
+    # MIP.  A timeout is inconclusive rather than evidence that no row exists.
+    stage1_root_lp_diagnostic_exact_clique_separation_enabled: bool = False
+    stage1_root_lp_diagnostic_exact_clique_time_limit_sec: int = 30
     # Opt-in, read-only scan of the completed Stage-1 constraint matrix.  It
     # identifies the rows and variables that attain the smallest nonzero
     # coefficient reported by Gurobi's aggregate numeric diagnostics.  The

@@ -2167,6 +2167,342 @@ def _iter_weighted_assignment_path_incompatibility_cliques(
                 yield clique_key
 
 
+def _separate_exact_weighted_assignment_path_incompatibility_cliques(
+    *,
+    gp: Any,
+    grb: Any,
+    assignment_value_by_key: Mapping[Tuple[str, str], float],
+    assignment_trip_ids_by_vehicle: Mapping[str, Sequence[str]],
+    direct_arc_pairs: Iterable[Tuple[str, str, str]],
+    reset_arc_pairs_by_vehicle: Mapping[str, Iterable[Tuple[str, str]]],
+    trip_order_key_by_id: Mapping[str, Tuple[int, int, int, str]],
+    trip_day_index_by_trip_id: Mapping[str, int],
+    time_limit_sec: float,
+    threads: int,
+    epsilon: float = 1.0e-6,
+) -> Dict[str, Any]:
+    """Separate maximum-weight valid no-path cliques at one root-LP point.
+
+    The support graph is deliberately permissive: it contains every direct
+    Stage-1 arc plus every independently feasible depot-reset arc.  Hence, a
+    same-day clique whose members are pairwise mutually unreachable cannot be
+    jointly selected by one integral vehicle path.  This helper solves a
+    separate binary maximum-weight clique problem for each vehicle/day; it
+    never changes the source LP or production Stage-1 MIP.  An unfinished
+    auxiliary MIP is reported as inconclusive, never as a no-violation proof.
+    """
+
+    requested_time_limit_sec = max(float(time_limit_sec), 0.0)
+    requested_threads = int(threads)
+    summary: Dict[str, Any] = {
+        "enabled": True,
+        "status": "not_run",
+        "requested_time_limit_sec": requested_time_limit_sec,
+        "epsilon": float(epsilon),
+        "solver_controls": {
+            "threads": requested_threads,
+            "mip_gap": 0.0,
+            "mip_gap_abs": 0.0,
+            "seed": 0,
+        },
+        "candidate_group_count": 0,
+        "eligible_group_count": 0,
+        "trivially_nonviolating_group_count": 0,
+        "analytically_solved_group_count": 0,
+        "auxiliary_mip_group_count": 0,
+        "auxiliary_mip_optimal_group_count": 0,
+        "auxiliary_mip_time_limited_group_count": 0,
+        "skipped_group_count": 0,
+        "checked_assignment_variable_count": 0,
+        "maximum_assignment_mass": None,
+        "maximum_assignment_mass_excess": None,
+        "all_eligible_groups_certified": False,
+        "no_violated_clique_certified": False,
+        "violated_assignment_clique_count": 0,
+        "violation_sample": [],
+        "semantics": (
+            "read_only_exact_maximum_weight_clique_separation_at_the_observed_"
+            "root_lp_solution; same_day_clique_members_are_pairwise_"
+            "unreachable_in_the_supplied_direct_or_valid_depot_reset_support_"
+            "graph; discovered_rows_are_not_added_to_the_mip"
+        ),
+    }
+    started = time.perf_counter()
+    if requested_time_limit_sec <= 0.0:
+        summary.update(
+            {
+                "status": "not_run_time_budget_exhausted",
+                "wall_runtime_sec": 0.0,
+            }
+        )
+        return summary
+    if requested_threads < 1:
+        summary.update(
+            {
+                "status": "error",
+                "error": "ValueError: threads must be a positive integer",
+                "wall_runtime_sec": 0.0,
+            }
+        )
+        return summary
+    if epsilon < 0.0:
+        summary.update(
+            {
+                "status": "error",
+                "error": "ValueError: epsilon must be non-negative",
+                "wall_runtime_sec": 0.0,
+            }
+        )
+        return summary
+
+    deadline = time.monotonic() + requested_time_limit_sec
+    auxiliary_models: List[Any] = []
+    violations: List[Dict[str, Any]] = []
+    maximum_assignment_mass = 0.0
+    completed_eligible_groups = 0
+    try:
+        trip_ids_by_vehicle, reachable_by_vehicle = (
+            _assignment_path_reachability_by_vehicle(
+                assignment_trip_ids_by_vehicle=assignment_trip_ids_by_vehicle,
+                direct_arc_pairs=direct_arc_pairs,
+                reset_arc_pairs_by_vehicle=reset_arc_pairs_by_vehicle,
+                trip_order_key_by_id=trip_order_key_by_id,
+            )
+        )
+        grouped_trip_ids: List[Tuple[str, int, Tuple[str, ...]]] = []
+        for vehicle_id, trip_ids in sorted(trip_ids_by_vehicle.items()):
+            trip_ids_by_day: Dict[int, List[str]] = {}
+            for trip_id in trip_ids:
+                if (vehicle_id, trip_id) not in assignment_value_by_key:
+                    continue
+                day_index = int(trip_day_index_by_trip_id.get(trip_id, 0))
+                trip_ids_by_day.setdefault(day_index, []).append(trip_id)
+            grouped_trip_ids.extend(
+                (
+                    vehicle_id,
+                    day_index,
+                    tuple(
+                        sorted(
+                            day_trip_ids,
+                            key=lambda trip_id: trip_order_key_by_id[trip_id],
+                        )
+                    ),
+                )
+                for day_index, day_trip_ids in sorted(trip_ids_by_day.items())
+            )
+
+        for vehicle_id, day_index, trip_ids in grouped_trip_ids:
+            summary["candidate_group_count"] += 1
+            assignment_value_by_trip_id: Dict[str, float] = {}
+            for trip_id in trip_ids:
+                raw_value = float(assignment_value_by_key[(vehicle_id, trip_id)])
+                if not math.isfinite(raw_value):
+                    raise ValueError(
+                        "exact clique separation received a non-finite "
+                        "root-LP assignment value"
+                    )
+                if raw_value < -epsilon or raw_value > 1.0 + epsilon:
+                    raise ValueError(
+                        "exact clique separation received a root-LP assignment "
+                        "outside the binary variable bounds"
+                    )
+                assignment_value_by_trip_id[trip_id] = max(raw_value, 0.0)
+            summary["checked_assignment_variable_count"] += len(trip_ids)
+            total_assignment_mass = sum(assignment_value_by_trip_id.values())
+            if total_assignment_mass <= 1.0 + epsilon:
+                summary["trivially_nonviolating_group_count"] += 1
+                continue
+            summary["eligible_group_count"] += 1
+            if time.monotonic() >= deadline:
+                summary["skipped_group_count"] += 1
+                continue
+
+            reachable_by_trip = reachable_by_vehicle[vehicle_id]
+            compatible_pairs: List[Tuple[str, str]] = []
+            incompatible_pair_count = 0
+            for left_index, left_trip_id in enumerate(trip_ids):
+                for right_trip_id in trip_ids[left_index + 1 :]:
+                    if (
+                        right_trip_id in reachable_by_trip[left_trip_id]
+                        or left_trip_id in reachable_by_trip[right_trip_id]
+                    ):
+                        compatible_pairs.append((left_trip_id, right_trip_id))
+                    else:
+                        incompatible_pair_count += 1
+
+            def _record_candidate(
+                selected_trip_ids: Sequence[str],
+                assignment_mass: float,
+                *,
+                source: str,
+                proven_optimal: bool,
+            ) -> None:
+                nonlocal maximum_assignment_mass
+                selected = tuple(
+                    sorted(selected_trip_ids, key=lambda trip_id: trip_order_key_by_id[trip_id])
+                )
+                if not selected:
+                    raise RuntimeError(
+                        "exact clique separation returned an empty selected clique"
+                    )
+                for left_index, left_trip_id in enumerate(selected):
+                    for right_trip_id in selected[left_index + 1 :]:
+                        if (
+                            right_trip_id in reachable_by_trip[left_trip_id]
+                            or left_trip_id in reachable_by_trip[right_trip_id]
+                        ):
+                            raise RuntimeError(
+                                "exact clique separation selected a pair with a "
+                                "support-graph path"
+                            )
+                maximum_assignment_mass = max(
+                    maximum_assignment_mass,
+                    assignment_mass,
+                )
+                if assignment_mass <= 1.0 + epsilon:
+                    return
+                violations.append(
+                    {
+                        "vehicle_id": vehicle_id,
+                        "day_index": day_index,
+                        "trip_ids": list(selected),
+                        "assignment_mass": assignment_mass,
+                        "excess": assignment_mass - 1.0,
+                        "source": source,
+                        "maximum_weight_proven": proven_optimal,
+                    }
+                )
+
+            if not compatible_pairs:
+                summary["analytically_solved_group_count"] += 1
+                completed_eligible_groups += 1
+                _record_candidate(
+                    trip_ids,
+                    total_assignment_mass,
+                    source="all_members_pairwise_unreachable",
+                    proven_optimal=True,
+                )
+                continue
+            if incompatible_pair_count == 0:
+                summary["analytically_solved_group_count"] += 1
+                completed_eligible_groups += 1
+                selected_trip_id = max(
+                    trip_ids,
+                    key=lambda trip_id: (
+                        assignment_value_by_trip_id[trip_id],
+                        trip_order_key_by_id[trip_id],
+                    ),
+                )
+                _record_candidate(
+                    (selected_trip_id,),
+                    assignment_value_by_trip_id[selected_trip_id],
+                    source="all_members_pairwise_compatible",
+                    proven_optimal=True,
+                )
+                continue
+
+            remaining_time_sec = max(deadline - time.monotonic(), 0.0)
+            if remaining_time_sec <= 0.0:
+                summary["skipped_group_count"] += 1
+                continue
+            clique_model = gp.Model("root_lp_exact_no_path_clique")
+            auxiliary_models.append(clique_model)
+            clique_model.Params.OutputFlag = 0
+            clique_model.Params.Threads = requested_threads
+            clique_model.Params.TimeLimit = remaining_time_sec
+            clique_model.Params.MIPGap = 0.0
+            clique_model.Params.MIPGapAbs = 0.0
+            clique_model.Params.Seed = 0
+            select = clique_model.addVars(
+                trip_ids,
+                vtype=grb.BINARY,
+                name="select_root_lp_clique",
+            )
+            for first_trip_id, second_trip_id in compatible_pairs:
+                clique_model.addConstr(
+                    select[first_trip_id] + select[second_trip_id] <= 1.0
+                )
+            clique_model.setObjective(
+                gp.quicksum(
+                    assignment_value_by_trip_id[trip_id] * select[trip_id]
+                    for trip_id in trip_ids
+                ),
+                grb.MAXIMIZE,
+            )
+            clique_model.optimize()
+            summary["auxiliary_mip_group_count"] += 1
+            auxiliary_status = int(getattr(clique_model, "Status", 0) or 0)
+            has_solution = int(getattr(clique_model, "SolCount", 0) or 0) > 0
+            if auxiliary_status == int(grb.OPTIMAL):
+                summary["auxiliary_mip_optimal_group_count"] += 1
+                completed_eligible_groups += 1
+            elif auxiliary_status == int(grb.TIME_LIMIT):
+                summary["auxiliary_mip_time_limited_group_count"] += 1
+            if not has_solution:
+                continue
+            selected_trip_ids = tuple(
+                trip_id
+                for trip_id in trip_ids
+                if float(select[trip_id].X) >= 0.5
+            )
+            _record_candidate(
+                selected_trip_ids,
+                float(clique_model.ObjVal),
+                source="auxiliary_mip",
+                proven_optimal=auxiliary_status == int(grb.OPTIMAL),
+            )
+
+        all_eligible_groups_certified = (
+            completed_eligible_groups == int(summary["eligible_group_count"])
+            and int(summary["skipped_group_count"]) == 0
+            and int(summary["auxiliary_mip_time_limited_group_count"]) == 0
+        )
+        summary["all_eligible_groups_certified"] = all_eligible_groups_certified
+        summary["violated_assignment_clique_count"] = len(violations)
+        summary["violation_sample"] = sorted(
+            violations,
+            key=lambda item: (
+                -float(item["excess"]),
+                str(item["vehicle_id"]),
+                int(item["day_index"]),
+                tuple(item["trip_ids"]),
+            ),
+        )[:20]
+        summary["maximum_assignment_mass"] = maximum_assignment_mass
+        summary["maximum_assignment_mass_excess"] = max(
+            maximum_assignment_mass - 1.0,
+            0.0,
+        )
+        summary["no_violated_clique_certified"] = bool(
+            all_eligible_groups_certified and not violations
+        )
+        if all_eligible_groups_certified:
+            summary["status"] = (
+                "completed_violated_clique_found"
+                if violations
+                else "completed_no_violated_clique_certified"
+            )
+        elif violations:
+            summary["status"] = "incomplete_violated_clique_found"
+        else:
+            summary["status"] = "inconclusive"
+    except Exception as exc:
+        summary.update(
+            {
+                "status": "error",
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+        )
+    finally:
+        summary["wall_runtime_sec"] = float(time.perf_counter() - started)
+        for auxiliary_model in auxiliary_models:
+            try:
+                auxiliary_model.dispose()
+            except Exception:
+                pass
+    return summary
+
+
 def _stage1_root_lp_diagnostic(
     *,
     model: Any,
@@ -2183,6 +2519,9 @@ def _stage1_root_lp_diagnostic(
             [Mapping[Tuple[str, str], float]],
             Iterable[Tuple[str, Sequence[str]]],
         ]
+    ] = None,
+    assignment_path_exact_clique_separation: Optional[
+        Callable[[Mapping[Tuple[str, str], float], float], Mapping[str, Any]]
     ] = None,
     path_start_vars: Optional[Mapping[Tuple[str, str], Any]] = None,
     path_start_count_limit: Optional[int] = None,
@@ -2658,6 +2997,55 @@ def _stage1_root_lp_diagnostic(
                     )[:20],
                 }
             )
+        exact_path_incompatibility_clique_summary: Dict[str, Any] = {
+            "enabled": assignment_path_exact_clique_separation is not None,
+            "status": "disabled_by_config",
+            "semantics": (
+                "separate_exact_maximum_weight_clique_separation_is_read_only_"
+                "and_never_adds_rows_to_the_production_mip"
+            ),
+        }
+        if assignment_path_exact_clique_separation is not None:
+            if status != int(grb.OPTIMAL):
+                exact_path_incompatibility_clique_summary.update(
+                    {
+                        "status": "not_run_root_lp_not_optimal",
+                        "root_lp_status": diagnostic["status"],
+                    }
+                )
+            elif not bool(
+                diagnostic["quality_assessment"][
+                    "primal_quality_within_configured_tolerance"
+                ]
+            ):
+                exact_path_incompatibility_clique_summary.update(
+                    {
+                        "status": "not_run_root_lp_quality_not_accepted",
+                    }
+                )
+            else:
+                remaining_diagnostic_time_sec = max(
+                    float(diagnostic["time_limit_sec"])
+                    - float(time.perf_counter() - started),
+                    0.0,
+                )
+                if remaining_diagnostic_time_sec <= 0.0:
+                    exact_path_incompatibility_clique_summary.update(
+                        {
+                            "status": "not_run_time_budget_exhausted",
+                            "remaining_root_lp_diagnostic_time_sec": 0.0,
+                        }
+                    )
+                else:
+                    exact_path_incompatibility_clique_summary = dict(
+                        assignment_path_exact_clique_separation(
+                            assignment_value_by_key,
+                            remaining_diagnostic_time_sec,
+                        )
+                    )
+                    exact_path_incompatibility_clique_summary[
+                        "remaining_root_lp_diagnostic_time_sec_at_start"
+                    ] = remaining_diagnostic_time_sec
         diagnostic.update(
             {
                 "assignment_summary": {
@@ -2692,6 +3080,9 @@ def _stage1_root_lp_diagnostic(
                 ),
                 "assignment_path_incompatibility_clique_summary": (
                     path_incompatibility_clique_summary
+                ),
+                "assignment_path_exact_clique_separation_summary": (
+                    exact_path_incompatibility_clique_summary
                 ),
             }
         )
@@ -15056,6 +15447,17 @@ class GurobiMILPAdapter:
                 ),
                 0.001,
             )
+            requested_exact_clique_separation_sec = max(
+                float(
+                    getattr(
+                        config,
+                        "stage1_root_lp_diagnostic_exact_clique_time_limit_sec",
+                        30,
+                    )
+                    or 30
+                ),
+                0.001,
+            )
 
             def _assignment_path_incompatibility_cliques(
                 assignment_value_by_key: Mapping[Tuple[str, str], float],
@@ -15077,6 +15479,36 @@ class GurobiMILPAdapter:
                     fixed_route_band_mode=bool(
                         problem.metadata.get("fixed_route_band_mode", False)
                     ),
+                )
+
+            def _assignment_path_exact_clique_separation(
+                assignment_value_by_key: Mapping[Tuple[str, str], float],
+                remaining_root_lp_diagnostic_time_sec: float,
+            ) -> Dict[str, Any]:
+                return self._separate_stage1_assignment_path_incompatibility_cliques(
+                    gp=gp,
+                    grb=GRB,
+                    assignment_value_by_key=assignment_value_by_key,
+                    problem=problem,
+                    trip_by_id=trip_by_id,
+                    vehicles=problem.vehicles,
+                    assignment_trip_ids_by_vehicle=(
+                        assignment_trip_ids_by_vehicle
+                    ),
+                    assignment_var_keys=tuple(y),
+                    direct_arc_pairs=root_lp_direct_arc_pairs,
+                    start_arc=start_arc,
+                    end_arc=end_arc,
+                    trip_day_index_by_trip_id=trip_day_index_by_trip_id,
+                    allow_same_day_depot_cycles=allow_same_day_depot_cycles,
+                    fixed_route_band_mode=bool(
+                        problem.metadata.get("fixed_route_band_mode", False)
+                    ),
+                    time_limit_sec=min(
+                        requested_exact_clique_separation_sec,
+                        remaining_root_lp_diagnostic_time_sec,
+                    ),
+                    threads=configured_threads,
                 )
 
             stage1_root_lp_diagnostic = _stage1_root_lp_diagnostic(
@@ -15119,6 +15551,17 @@ class GurobiMILPAdapter:
                 ),
                 assignment_path_incompatibility_cliques=(
                     _assignment_path_incompatibility_cliques
+                ),
+                assignment_path_exact_clique_separation=(
+                    _assignment_path_exact_clique_separation
+                    if bool(
+                        getattr(
+                            config,
+                            "stage1_root_lp_diagnostic_exact_clique_separation_enabled",
+                            False,
+                        )
+                    )
+                    else None
                 ),
                 path_start_vars=start_arc,
                 path_start_count_limit=max_start_fragments_per_vehicle,
@@ -29540,6 +29983,61 @@ class GurobiMILPAdapter:
             reset_arc_pairs_by_vehicle=reset_arc_pairs_by_vehicle,
             trip_order_key_by_id=trip_order_key_by_id,
             trip_day_index_by_trip_id=trip_day_index_by_trip_id,
+        )
+
+    def _separate_stage1_assignment_path_incompatibility_cliques(
+        self,
+        *,
+        gp: Any,
+        grb: Any,
+        assignment_value_by_key: Mapping[Tuple[str, str], float],
+        problem: CanonicalOptimizationProblem,
+        trip_by_id: Mapping[str, ProblemTrip],
+        vehicles: Sequence[Any],
+        assignment_trip_ids_by_vehicle: Mapping[str, Sequence[str]],
+        assignment_var_keys: Collection[Tuple[str, str]],
+        direct_arc_pairs: Iterable[Tuple[str, str, str]],
+        start_arc: Mapping[Tuple[str, str], Any],
+        end_arc: Mapping[Tuple[str, str], Any],
+        trip_day_index_by_trip_id: Mapping[str, int],
+        allow_same_day_depot_cycles: bool,
+        fixed_route_band_mode: bool,
+        time_limit_sec: float,
+        threads: int,
+    ) -> Dict[str, Any]:
+        """Run exact read-only no-path clique separation for a root-LP point."""
+
+        (
+            assignment_trip_ids_with_variables_by_vehicle,
+            support_direct_arc_pairs,
+            reset_arc_pairs_by_vehicle,
+            trip_order_key_by_id,
+        ) = self._stage1_assignment_path_support_inputs(
+            problem=problem,
+            trip_by_id=trip_by_id,
+            vehicles=vehicles,
+            assignment_trip_ids_by_vehicle=assignment_trip_ids_by_vehicle,
+            assignment_var_keys=assignment_var_keys,
+            direct_arc_pairs=direct_arc_pairs,
+            start_arc=start_arc,
+            end_arc=end_arc,
+            trip_day_index_by_trip_id=trip_day_index_by_trip_id,
+            allow_same_day_depot_cycles=allow_same_day_depot_cycles,
+            fixed_route_band_mode=fixed_route_band_mode,
+        )
+        return _separate_exact_weighted_assignment_path_incompatibility_cliques(
+            gp=gp,
+            grb=grb,
+            assignment_value_by_key=assignment_value_by_key,
+            assignment_trip_ids_by_vehicle=(
+                assignment_trip_ids_with_variables_by_vehicle
+            ),
+            direct_arc_pairs=support_direct_arc_pairs,
+            reset_arc_pairs_by_vehicle=reset_arc_pairs_by_vehicle,
+            trip_order_key_by_id=trip_order_key_by_id,
+            trip_day_index_by_trip_id=trip_day_index_by_trip_id,
+            time_limit_sec=time_limit_sec,
+            threads=threads,
         )
 
     def _trip_interval_bounds(

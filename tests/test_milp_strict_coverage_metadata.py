@@ -30,6 +30,7 @@ from src.optimization.milp.solver_adapter import (
     _configured_stage1_gurobi_scale_flag,
     _configured_stage1_gurobi_search_controls,
     _configured_stage1_root_lp_diagnostic_method,
+    _separate_exact_weighted_assignment_path_incompatibility_cliques,
     _has_exact_mip_optimality_certificate,
     _iter_assignment_path_incompatibility_pairs,
     _iter_weighted_assignment_path_incompatibility_cliques,
@@ -131,6 +132,60 @@ def test_weighted_path_incompatibility_cliques_are_pairwise_no_path_sets() -> No
         ("bus", ("early", "orphan")),
         ("bus", ("orphan", "late")),
     ]
+
+
+@pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")
+def test_exact_no_path_clique_separation_finds_the_maximum_root_lp_violation() -> None:
+    from src.gurobi_runtime import ensure_gurobi
+
+    gp, grb = ensure_gurobi()
+    summary = _separate_exact_weighted_assignment_path_incompatibility_cliques(
+        gp=gp,
+        grb=grb,
+        assignment_value_by_key={
+            ("bus", "early"): 0.6,
+            ("bus", "orphan"): 0.45,
+            ("bus", "middle"): 0.6,
+            ("bus", "late"): 0.6,
+        },
+        assignment_trip_ids_by_vehicle={
+            "bus": ("early", "orphan", "middle", "late")
+        },
+        direct_arc_pairs=(("bus", "early", "middle"),),
+        reset_arc_pairs_by_vehicle={"bus": (("middle", "late"),)},
+        trip_order_key_by_id={
+            "early": (0, 100, 120, "early"),
+            "orphan": (0, 150, 170, "orphan"),
+            "middle": (0, 200, 220, "middle"),
+            "late": (0, 300, 320, "late"),
+        },
+        trip_day_index_by_trip_id={
+            "early": 0,
+            "orphan": 0,
+            "middle": 0,
+            "late": 0,
+        },
+        time_limit_sec=5,
+        threads=1,
+    )
+
+    assert summary["status"] == "completed_violated_clique_found"
+    assert summary["candidate_group_count"] == 1
+    assert summary["eligible_group_count"] == 1
+    assert summary["auxiliary_mip_group_count"] == 1
+    assert summary["auxiliary_mip_optimal_group_count"] == 1
+    assert summary["all_eligible_groups_certified"] is True
+    assert summary["no_violated_clique_certified"] is False
+    assert summary["maximum_assignment_mass"] == pytest.approx(1.05)
+    assert summary["maximum_assignment_mass_excess"] == pytest.approx(0.05)
+    assert summary["violated_assignment_clique_count"] == 1
+    violation = summary["violation_sample"][0]
+    assert violation["vehicle_id"] == "bus"
+    assert violation["day_index"] == 0
+    assert violation["assignment_mass"] == pytest.approx(1.05)
+    assert violation["maximum_weight_proven"] is True
+    assert "orphan" in violation["trip_ids"]
+    assert len(violation["trip_ids"]) == 2
 
 
 @pytest.mark.skipif(not is_gurobi_available(), reason="Gurobi required")

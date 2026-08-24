@@ -635,6 +635,20 @@ quality-qualified root LP and finds zero violations (largest mass
 `1 + 2.20e-14`, inside the `1e-6` tolerance). It remains read-only and
 **DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS**.
 
+To close the greedy search's coverage gap, the default-off
+`stage1_root_lp_diagnostic_exact_clique_separation_enabled` follow-up now
+solves a separate maximum-weight binary clique problem for every vehicle/day
+whose observed root-LP assignment mass could exceed one. It uses the same
+permissive direct/depot-reset support graph, forbids only pairs that have a
+path in either direction, and therefore reports a row only after verifying
+that every selected pair is mutually unreachable. The auxiliary MIPs have a
+separate recorded cap but may use only the remaining root-diagnostic budget;
+the result is `inconclusive` on a timeout, `not_run` unless the root LP is
+optimal and quality-qualified, and can certify no violation only after every
+eligible group is solved. It never alters Stage 1, bounds, starts, or a
+production solution. No frozen 264-trip result for this new exhaustive
+diagnostic exists yet, so it supplies no claim or release-gate change.
+
 Where strict chronological arcs certify that a nonempty integral flow must
 have a start, the diagnostic also measures the read-only difference between
 each `used_vehicle` value and its total path-start mass. This identifies
