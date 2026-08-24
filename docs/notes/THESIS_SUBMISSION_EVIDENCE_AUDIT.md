@@ -34,6 +34,13 @@ and no-fallback/no-repair checks pass; its 4.968996% certified Stage-1 gap
 does not. It rejects the internal-cut profile as a gap-closing path and cannot
 be used as A/B, performance, cost, optimality, or release-acceptance evidence.
 
+The clean-`21e2649` `bound_focus` single diagnostic is stored at
+`output/diagnostics/pure_ice_aggregation_bound_focus_21e2649_20260824/`.
+It passes provenance, hashes, physical execution, 24/24 Rolling, accounting,
+and no-fallback/no-repair checks, but its 4.968996% Stage-1 certificate does
+not meet 1%. This completes the existing aggregate solver-profile diagnostics;
+it neither establishes an A/B result nor replaces a release-acceptance run.
+
 ## Requested work status
 
 This matrix maps the stated thesis-preparation work to immutable artifacts.

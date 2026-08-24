@@ -1,5 +1,35 @@
 # Development Notes
 
+## 2026-08-24: Aggregate bound-focus diagnostic rejected
+
+- The sole remaining existing aggregate Stage-1 search profile was
+  `bound_focus` (`MIPFocus=3`, `Presolve=2`, automatic cuts). It changes no
+  model row, variable, objective, input, recovery path, or acceptance gate and
+  was executed only as a frozen single-representation diagnostic.
+- Clean tag `thesis-aggregate-bound-focus-21e2649` at
+  `21e2649055771563a12f2739b3a6c69427304b62` ran exactly:
+  `.venv\\Scripts\\python.exe scripts\\build_lazy_fragment_performance_diagnostic.py
+  --run-pure-ice-aggregation-single-diagnostic --scenario-id
+  b23fd26c-1233-4c73-bb9e-bdb8b1584760 --prepared-input-id
+  prepared-ee27696fc37f0c7a-f1e18f252e336f1f-8acc7b3a
+  --optimization-request
+  output\\diagnostics\\pure_ice_aggregation_phase3_ab_25ec2f1_20260824\\frozen_optimization_request.json
+  --output-dir
+  output\\diagnostics\\pure_ice_aggregation_bound_focus_21e2649_20260824
+  --single-diagnostic-representation pure_aggregate
+  --stage1-time-limit-seconds 870 --stage2-time-limit-seconds 30
+  --single-diagnostic-wall-clock-overhead-seconds 120
+  --single-diagnostic-stage1-gurobi-search-profile bound_focus`.
+- Its BFF input-provenance and all three diagnostic artifact-hash checks pass.
+  It serves 264/264 trips, passes physical validation, 24/24 Rolling, and
+  accounting reconciliation without fallback or repair. Stage 1 used 915.139
+  solver seconds and time-limited at 55,507.320152 JPY against a
+  52,749.163582-JPY bound: **4.968996%**, above 1% and identical to the
+  rejected `root_cut_focus` candidate. All existing aggregate profiles
+  (default, incumbent-focus, root-cut-focus, bound-focus) are therefore
+  measured; no unsupported new profile will be introduced. This is
+  diagnostic-only and release remains **BLOCKED**.
+
 ## 2026-08-24: Aggregate root-cut-focus diagnostic rejected
 
 - The aggregate model had not been measured with the existing

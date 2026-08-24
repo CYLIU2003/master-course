@@ -1,5 +1,27 @@
 # Current research release blockers
 
+## 2026-08-24: Aggregate bound-focus diagnostic rejected; profile search exhausted
+
+Clean tag `thesis-aggregate-bound-focus-21e2649` / SHA
+`21e2649055771563a12f2739b3a6c69427304b62` ran the pure-aggregate
+`bound_focus` single diagnostic at
+`output/diagnostics/pure_ice_aggregation_bound_focus_21e2649_20260824/`.
+Only Gurobi `MIPFocus=3` and `Presolve=2` were non-default, with automatic
+cuts; the model, objective, prepared input, seed, threads, caps, recovery,
+and gates were unchanged. Frozen-request/BFF provenance and all three
+diagnostic artifact hashes pass.
+
+The run served 264/264 trips, passed physical validation, 24/24 Rolling,
+accounting reconciliation, and no-fallback/no-repair checks. Stage 1
+time-limited at a 55,507.320152-JPY incumbent and 52,749.163582-JPY bound,
+or **4.968996%**, above 1% and identical to the rejected `root_cut_focus`
+candidate. The default, `incumbent_focus`, `root_cut_focus`, and `bound_focus`
+profiles now have frozen aggregate measurements; none closes the gap. This is
+**DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS**. Further solver-profile
+proliferation is not justified; a new run requires a separately proved,
+feasible-set-preserving mathematical strengthening and focused exact/small-MILP
+regression. The 1% and independent-review gates remain **BLOCKED**.
+
 ## 2026-08-24: Aggregate root-cut-focus diagnostic rejected, not release evidence
 
 The pure-aggregate representation was measured once with the existing

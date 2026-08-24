@@ -8,6 +8,25 @@ The reviewer-facing scope, checks, and open decisions are in
 [THESIS_EXTERNAL_REVIEW_BRIEF.md](docs/notes/THESIS_EXTERNAL_REVIEW_BRIEF.md);
 that brief is a request for independent review, not an approval record.
 
+## 2026-08-24 aggregate bound-focus diagnostic: rejected
+
+Clean tag `thesis-aggregate-bound-focus-21e2649` ran one pure-aggregate
+264-trip Phase-3 diagnostic at
+`output/diagnostics/pure_ice_aggregation_bound_focus_21e2649_20260824/`.
+Only Gurobi's internal `MIPFocus=3` and `Presolve=2` were changed; model,
+objective, prepared input, seed 42, four threads, 870/30-second caps, and the
+1% target stayed fixed. The frozen request, BFF input provenance, and all
+diagnostic artifact hashes verify.
+
+Stage 1 time-limited at a 55,507.320152-JPY incumbent and a
+52,749.163582-JPY certified bound: **4.968996%**. It served 264/264 trips,
+passed physical validation, 24/24 Rolling, and accounting reconciliation,
+without fallback or post-solve repair. This matches the failed root-cut-focus
+candidate and exceeds the 1% target, so `bound_focus` is rejected. The
+default, incumbent-focus, root-cut-focus, and bound-focus aggregate
+measurements are all diagnostics, not A/B, performance, cost, optimality, or
+research-acceptance evidence; release remains `BLOCKED`.
+
 ## 2026-08-24 aggregate root-cut-focus diagnostic: rejected
 
 Clean tag `thesis-aggregate-root-cut-focus-fabd665` ran one pure-aggregate
