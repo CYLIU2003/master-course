@@ -382,6 +382,18 @@ def test_stage1_gurobi_search_profiles_are_explicit_and_validated() -> None:
         "node_method": -1,
         "symmetry": -1,
     }
+    assert _configured_stage1_gurobi_search_controls(
+        OptimizationConfig(stage1_gurobi_search_profile="incumbent_focus")
+    ) == {
+        "profile": "incumbent_focus",
+        "mip_focus": 1,
+        "heuristics": 0.5,
+        "presolve": 2,
+        "cuts": -1,
+        "root_method": -1,
+        "node_method": -1,
+        "symmetry": -1,
+    }
     with pytest.raises(ValueError, match="stage1_gurobi_search_profile"):
         _configured_stage1_gurobi_search_controls(
             OptimizationConfig(stage1_gurobi_search_profile="unsupported")

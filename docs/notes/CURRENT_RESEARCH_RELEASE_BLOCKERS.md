@@ -1,5 +1,24 @@
 # Current research release blockers
 
+## 2026-08-24: Aggregate incumbent-focus diagnostic is pending, not release evidence
+
+The exact pure-ICE aggregate representation leaves a 3.0775% median
+264-trip Stage-1 gap under the default profile, while the discrete model is
+root-bound dominated at 19.2273%. The new explicit `incumbent_focus` control
+sets only Gurobi `MIPFocus=1`, `Heuristics=0.5`, and `Presolve=2`; all model
+rows, variables, objectives, prepared inputs, seed, threads, time limits,
+acceptance gates, recovery rules, and automatic cuts/method/node
+method/symmetry remain unchanged.
+
+The existing single-representation diagnostic records this control in its
+frozen request and manifest and marks the resulting artifact as diagnostic
+only. Before any result is used, it requires a clean frozen commit, the
+focused exact/profile/CLI regressions, BFF provenance, 264/264 coverage,
+physical validation, 24/24 Rolling, accounting reconciliation, and no
+fallback or repair. It cannot establish an A/B performance result, a cost
+comparison, a global optimum, or research acceptance. No measurement exists
+yet, so the 1% gate and release remain **BLOCKED**.
+
 ## 2026-08-24: Exact-clone rank symmetry rejected after controlled diagnostic
 
 The clean `1aaaa27` candidate supplied the canonical chronological trip order

@@ -1,5 +1,33 @@
 # Development Notes
 
+## 2026-08-24: Claim-scoped Stage-1 incumbent-focus diagnostic added
+
+- The exact pure-ICE aggregate A/B reaches a substantially better feasible
+  candidate than the discrete representation but still misses the 1% gap. The
+  existing Stage-1 profiles only exposed the default and bound-oriented
+  controls, so added the explicit `incumbent_focus` profile:
+  `MIPFocus=1`, `Heuristics=0.5`, `Presolve=2`, automatic cuts/method/node
+  method/symmetry. It changes no model variable, constraint, objective,
+  prepared input, acceptance threshold, or recovery rule.
+- `RunOptimizationBody` accepts the profile, `OptimizationConfig` documents
+  it, and `_configured_stage1_gurobi_search_controls` produces the complete
+  persisted control mapping. The existing
+  `build_lazy_fragment_performance_diagnostic.py` single-diagnostic CLI now
+  accepts `--single-diagnostic-stage1-gurobi-search-profile` and records any
+  supplied override in the frozen request and manifest. It remains a
+  diagnostic-only path and cannot make performance, cost, optimality, or
+  formal research-acceptance claims.
+- Focused verification before the clean commit:
+  `.venv\\Scripts\\python.exe -m pytest -q
+  tests\\test_lazy_fragment_performance_diagnostic.py
+  tests\\test_milp_strict_coverage_metadata.py
+  tests\\test_stage1_runtime_telemetry.py
+  tests\\test_weather_coupled_assignment.py` → `83 passed in 1.95s`;
+  `.venv\\Scripts\\python.exe -m compileall -q
+  scripts\\build_lazy_fragment_performance_diagnostic.py` succeeded; and
+  `git diff --check` passed. No 264-trip candidate has been executed yet, so
+  this is implementation evidence only and the release remains **BLOCKED**.
+
 ## 2026-08-24: Stage-1 exact-clone equal-count rank symmetry rejected and reverted
 
 - A call-path audit found that `_add_identical_vehicle_trip_count_symmetry`

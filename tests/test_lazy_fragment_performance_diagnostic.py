@@ -875,6 +875,7 @@ def test_single_pure_ice_diagnostic_is_frozen_and_never_claims_comparison(
         stage1_time_limit_seconds=870,
         stage2_time_limit_seconds=30,
         wall_clock_overhead_seconds=120,
+        stage1_gurobi_search_profile="incumbent_focus",
     )
 
     assert result["verdict"] == "DIAGNOSTIC_COMPLETE_NOT_A_COMPARISON"
@@ -885,6 +886,12 @@ def test_single_pure_ice_diagnostic_is_frozen_and_never_claims_comparison(
     assert manifest["representation"] == "pure_aggregate"
     assert manifest["solver_controls"]["stage1_time_limit_seconds"] == 870
     assert manifest["solver_controls"]["time_limit_seconds"] == 1020
+    assert manifest["solver_controls"]["stage1_gurobi_search_profile"] == (
+        "incumbent_focus"
+    )
+    assert manifest["phase3_request_transformation"][
+        "stage1_gurobi_search_profile_override"
+    ] == "incumbent_focus"
     assert manifest["single_diagnostic_wall_clock_contract"] == {
         "stage1_time_limit_seconds": 870,
         "stage2_time_limit_seconds": 30,

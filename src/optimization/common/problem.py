@@ -370,9 +370,10 @@ class OptimizationConfig:
     # Stage-1 search controls are an explicit, auditable solver profile rather
     # than an implicit performance tweak. ``default`` reproduces Gurobi's
     # documented defaults; ``bound_focus`` directs search effort toward the
-    # dual bound, while ``root_cut_focus`` also requests Gurobi's aggressive
-    # generic cut setting.  Neither changes a model variable, constraint, or
-    # objective; every effective control is persisted in run metadata.
+    # dual bound, ``root_cut_focus`` also requests Gurobi's aggressive generic
+    # cut setting, and ``incumbent_focus`` directs effort toward feasible
+    # incumbents. None changes a model variable, constraint, or objective;
+    # every effective control is persisted in run metadata.
     stage1_gurobi_search_profile: str = "default"
     # Gurobi internal model scaling for a controlled numerical diagnostic.
     # ``-1`` preserves the solver default.  Any non-default value changes no

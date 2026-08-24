@@ -2419,6 +2419,7 @@ def run_pure_ice_aggregation_single_diagnostic(
     stage1_time_limit_seconds: int | None = None,
     stage2_time_limit_seconds: int | None = None,
     wall_clock_overhead_seconds: int | None = None,
+    stage1_gurobi_search_profile: str | None = None,
 ) -> dict[str, Any]:
     """Run one frozen Phase-3 representation diagnostic without A/B claims.
 
@@ -2470,6 +2471,16 @@ def run_pure_ice_aggregation_single_diagnostic(
         stage1_time_limit_seconds=stage1_time_limit_seconds,
         stage2_time_limit_seconds=stage2_time_limit_seconds,
     )
+    if stage1_gurobi_search_profile is not None:
+        request["stage1_gurobi_search_profile"] = str(
+            stage1_gurobi_search_profile
+        )
+        request_transformation = {
+            **request_transformation,
+            "stage1_gurobi_search_profile_override": str(
+                stage1_gurobi_search_profile
+            ),
+        }
     if str(request.get("prepared_input_id") or "") != prepared_input_id:
         raise ValueError(
             "compiled Phase-3 request prepared_input_id does not match the "
@@ -2693,6 +2704,14 @@ def main() -> int:
             "Representation for --run-pure-ice-aggregation-single-diagnostic."
         ),
     )
+    parser.add_argument(
+        "--single-diagnostic-stage1-gurobi-search-profile",
+        choices=("default", "bound_focus", "root_cut_focus", "incumbent_focus"),
+        help=(
+            "Optional Stage-1 Gurobi search profile for one claim-scoped "
+            "single diagnostic. The frozen request records the override."
+        ),
+    )
     parser.add_argument("--child-representation", choices=("discrete", "pure_aggregate"))
     parser.add_argument("--child-result-path", type=Path)
     parser.add_argument("--expected-git-sha")
@@ -2818,6 +2837,9 @@ def main() -> int:
             stage2_time_limit_seconds=args.stage2_time_limit_seconds,
             wall_clock_overhead_seconds=(
                 args.single_diagnostic_wall_clock_overhead_seconds
+            ),
+            stage1_gurobi_search_profile=(
+                args.single_diagnostic_stage1_gurobi_search_profile
             ),
         )
         print(

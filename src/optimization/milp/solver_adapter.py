@@ -1916,9 +1916,17 @@ def _configured_stage1_gurobi_search_controls(
             "presolve": 2,
             "cuts": 3,
         }
+    if profile == "incumbent_focus":
+        return {
+            **default_controls,
+            "profile": "incumbent_focus",
+            "mip_focus": 1,
+            "heuristics": 0.5,
+            "presolve": 2,
+        }
     raise ValueError(
         "stage1_gurobi_search_profile must be 'default', 'bound_focus', "
-        "or 'root_cut_focus'"
+        "'root_cut_focus', or 'incumbent_focus'"
     )
 
 

@@ -30,6 +30,21 @@ The source therefore deliberately restores the prior Stage-1 count-only
 symmetry call. This negative diagnostic supports no bound, gap, runtime, cost,
 optimality, or release claim and does not authorize a MIP A/B or formal run.
 
+## 2026-08-24 pending aggregate incumbent-focus diagnostic
+
+The explicit Stage-1 `incumbent_focus` profile is available only for a
+claim-scoped single diagnostic. It fixes Gurobi `MIPFocus=1`,
+`Heuristics=0.5`, and `Presolve=2`, while preserving the model, objective,
+prepared input, seed, threads, time limits, and acceptance threshold. The
+existing single-diagnostic CLI records a requested profile override in both
+the frozen request and its manifest; it does not create an A/B, performance,
+cost, optimality, or research-acceptance claim.
+
+This candidate is motivated by the exact pure-aggregate model's 3.0775%
+median gap, but it has no 264-trip measurement at this source revision yet.
+It is not enabled for ordinary frontend runs and does not change the active
+`BLOCKED` release status.
+
 ## Long-cap single-representation diagnostics are not A/B evidence
 
 `scripts/build_lazy_fragment_performance_diagnostic.py` has a separate

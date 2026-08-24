@@ -493,6 +493,11 @@ def test_interactive_run_defaults_and_provenance_record_server_enforcement() -> 
     )
     assert strengthened_request.stage1_powertrain_selector_strengthening is True
 
+    incumbent_focus_request = RunOptimizationBody(
+        stage1_gurobi_search_profile="incumbent_focus"
+    )
+    assert incumbent_focus_request.stage1_gurobi_search_profile == "incumbent_focus"
+
     activation_strengthened_request = RunOptimizationBody(
         stage1_activation_start_strengthening=True
     )
