@@ -1,5 +1,25 @@
 # Current research release blockers
 
+## 2026-08-24: Aggregate root-cut-focus diagnostic rejected, not release evidence
+
+The pure-aggregate representation was measured once with the existing
+`root_cut_focus` controls (`MIPFocus=3`, `Presolve=2`, `Cuts=3`) at clean tag
+`thesis-aggregate-root-cut-focus-fabd665` / SHA
+`fabd6650efabd152f0cd2e25f9ba6d976b28f28d`. It is an internal-solver-control
+diagnostic only: it changes no model row, variable, objective, prepared input,
+seed, threads, time limits, recovery rule, or acceptance gate.
+
+The artifact at
+`output/diagnostics/pure_ice_aggregation_root_cut_focus_fabd665_20260824/`
+passes frozen-request/BFF provenance and all three diagnostic artifact hashes.
+It served 264/264 trips, passed physical validation, 24/24 Rolling, accounting
+reconciliation, and no-fallback/no-repair checks. Stage 1 was time-limited at
+a 55,507.320152-JPY incumbent and 52,749.163582-JPY certified bound, a
+**4.968996%** gap. This is above 1% and worse than the default aggregate A/B
+median, so it rejects `root_cut_focus` as a gap-closing path. The artifact is
+**DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS**; the 1% and independent-review
+gates remain **BLOCKED**.
+
 ## 2026-08-24: Aggregate incumbent-focus diagnostic rejected, not release evidence
 
 The exact pure-ICE aggregate representation leaves a 3.0775% median

@@ -1,5 +1,35 @@
 # Development Notes
 
+## 2026-08-24: Aggregate root-cut-focus diagnostic rejected
+
+- The aggregate model had not been measured with the existing
+  `root_cut_focus` profile. The profile changes only Gurobi internal controls
+  (`MIPFocus=3`, `Presolve=2`, `Cuts=3`), so it preserves the integer feasible
+  set, objective, inputs, recovery logic, and every acceptance gate. It was
+  run solely through the claim-scoped single-diagnostic CLI, not as an A/B or
+  formal research-acceptance run.
+- Clean tag `thesis-aggregate-root-cut-focus-fabd665` at
+  `fabd6650efabd152f0cd2e25f9ba6d976b28f28d` executed exactly:
+  `.venv\\Scripts\\python.exe scripts\\build_lazy_fragment_performance_diagnostic.py
+  --run-pure-ice-aggregation-single-diagnostic --scenario-id
+  b23fd26c-1233-4c73-bb9e-bdb8b1584760 --prepared-input-id
+  prepared-ee27696fc37f0c7a-f1e18f252e336f1f-8acc7b3a
+  --optimization-request
+  output\\diagnostics\\pure_ice_aggregation_phase3_ab_25ec2f1_20260824\\frozen_optimization_request.json
+  --output-dir
+  output\\diagnostics\\pure_ice_aggregation_root_cut_focus_fabd665_20260824
+  --single-diagnostic-representation pure_aggregate
+  --stage1-time-limit-seconds 870 --stage2-time-limit-seconds 30
+  --single-diagnostic-wall-clock-overhead-seconds 120
+  --single-diagnostic-stage1-gurobi-search-profile root_cut_focus`.
+- BFF run-input provenance and all three diagnostic artifact hashes pass. The
+  264/264-trip output passes physical validation, 24/24 Rolling, and accounting
+  reconciliation, without fallback or repair. Stage 1 used 915.174 solver
+  seconds and ended time-limited with a 55,507.320152-JPY incumbent and
+  52,749.163582-JPY certified bound: **4.968996%**, not 1%. This is worse than
+  the default aggregate A/B median and rejects `root_cut_focus` as a
+  gap-closing path. It is diagnostic-only and the release remains **BLOCKED**.
+
 ## 2026-08-24: Claim-scoped Stage-1 incumbent-focus diagnostic rejected
 
 - The exact pure-ICE aggregate A/B reaches a substantially better feasible

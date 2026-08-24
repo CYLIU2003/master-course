@@ -26,6 +26,14 @@ and no fallback/repair, but its 4.010147% certified Stage-1 gap misses the
 predeclared 1% target. It is a rejected single diagnostic, not a substitute
 for the A/B evidence or a release-acceptance result.
 
+The subsequent clean-`fabd665` `root_cut_focus` single diagnostic is stored
+at
+`output/diagnostics/pure_ice_aggregation_root_cut_focus_fabd665_20260824/`.
+Its BFF provenance, hashes, physical execution, 24/24 Rolling, accounting,
+and no-fallback/no-repair checks pass; its 4.968996% certified Stage-1 gap
+does not. It rejects the internal-cut profile as a gap-closing path and cannot
+be used as A/B, performance, cost, optimality, or release-acceptance evidence.
+
 ## Requested work status
 
 This matrix maps the stated thesis-preparation work to immutable artifacts.

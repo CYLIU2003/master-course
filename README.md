@@ -8,6 +8,24 @@ The reviewer-facing scope, checks, and open decisions are in
 [THESIS_EXTERNAL_REVIEW_BRIEF.md](docs/notes/THESIS_EXTERNAL_REVIEW_BRIEF.md);
 that brief is a request for independent review, not an approval record.
 
+## 2026-08-24 aggregate root-cut-focus diagnostic: rejected
+
+Clean tag `thesis-aggregate-root-cut-focus-fabd665` ran one pure-aggregate
+264-trip Phase-3 diagnostic at
+`output/diagnostics/pure_ice_aggregation_root_cut_focus_fabd665_20260824/`.
+It changed only Gurobi's internal `MIPFocus=3`, `Presolve=2`, and `Cuts=3`
+controls; model, objective, prepared input, seed 42, four threads, 870/30
+Stage-1/Stage-2 caps, and the 1% target were fixed. The frozen request, BFF
+input provenance, and diagnostic artifact hashes verify.
+
+Stage 1 time-limited at a 55,507.320152-JPY incumbent and a
+52,749.163582-JPY certified bound: **4.968996%**. It served 264/264 trips,
+passed physical validation, 24/24 Rolling, and accounting reconciliation,
+without fallback or post-solve repair. Those execution gates do not waive the
+missed 1% certificate; `root_cut_focus` is rejected as a gap-closing path.
+This is one diagnostic, not A/B, performance, cost, optimality, or
+research-acceptance evidence. The release remains `BLOCKED`.
+
 ## 2026-08-24 Stage-1 exact-clone rank symmetry: rejected and reverted
 
 The clean tag `thesis-stage1-clone-rank-symmetry-1aaaa27` tested the existing
