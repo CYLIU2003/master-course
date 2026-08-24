@@ -27,6 +27,15 @@ Review the frozen evidence and the claim boundary only:
   this candidate after its controlled negative diagnostic.
 - Latest long-cap diagnostic source: `96982abe376422a630543bc35426d201c0a998ac`
   (`thesis-long-stage1-single-96982ab`).
+- Rejected aggregate incumbent-focus source:
+  `f41e2b3634d86e9f209f50d811f35f0e0123fb66`
+  (`thesis-aggregate-incumbent-focus-f41e2b3`).
+- Rejected aggregate root-cut-focus source:
+  `fabd6650efabd152f0cd2e25f9ba6d976b28f28d`
+  (`thesis-aggregate-root-cut-focus-fabd665`).
+- Rejected aggregate bound-focus source:
+  `21e2649055771563a12f2739b3a6c69427304b62`
+  (`thesis-aggregate-bound-focus-21e2649`).
 - Full 264-trip discrete/pure-aggregate A/B evidence, small 8/12/24/40-trip
   Phase-4 oracle, small M0--M3 study, one-factor sensitivity matrix,
   fixed-decision stress evaluation, and the root-LP candidate diagnostics.
@@ -40,6 +49,7 @@ generation, UI work, or large refactor; those are outside this review.
 | --- | --- | --- |
 | Reproducible 264-trip A/B | `output/diagnostics/pure_ice_aggregation_phase3_ab_25ec2f1_20260824/repeated_comparison.json` | Are the five AB/BA isolated-process pairs sufficient to support `PASS_STRUCTURAL_ONLY`, but not a speedup claim? |
 | Long-cap aggregate reachability | `output/diagnostics/pure_ice_aggregation_single_long_stage1_96982ab_20260824/diagnostic_result.json` | Does the explicit 870/30/120-second wall-clock contract and the 3.041301684% result remain correctly labelled as one diagnostic, not a performance, cost, or acceptance comparison? |
+| Aggregate Stage-1 search profiles | `output/diagnostics/pure_ice_aggregation_incumbent_focus_f41e2b3_20260824/diagnostic_result.json`, `output/diagnostics/pure_ice_aggregation_root_cut_focus_fabd665_20260824/diagnostic_result.json`, and `output/diagnostics/pure_ice_aggregation_bound_focus_21e2649_20260824/diagnostic_result.json` | Do the frozen one-profile measurements, all above the 1% gate (4.010147%, 4.968996%, and 4.968996%), correctly reject the existing aggregate solver profiles without creating A/B, cost, speed, or acceptance claims? |
 | Small integrated oracle | `output/verification/small_integrated_oracle_scale/93e31b0_20260824/scale_certificate.json` | Are 8/12/24/40-trip zero-gap Phase-4 references appropriately limited to bounded formulation evidence? |
 | Small M0--M3 | `output/verification/small_m0_m3/93e31b0_20260824/audit.json` | Is the M2--M3 same-input comparison clearly separated from fleet/PV/BESS-changing M0/M1 ablations? |
 | Economic response | `output/thesis_remaining_sensitivities_27ec8ce_20260824/sensitivity_execution_manifest.json`, `output/thesis_economic_electricity_93e31b0_20260824/sensitivity_execution_manifest.json`, `output/thesis_economic_diesel_93e31b0_20260824/sensitivity_execution_manifest.json`, and `output/thesis_economic_vehicle_day_9650ed9_20260824/sensitivity_execution_manifest.json` | Do the 21 documented gap failures, despite effective varied inputs and valid physical/accounting artifacts within each frozen family, correctly prevent economic-response conclusions and cross-family comparison claims? |
@@ -76,6 +86,8 @@ The evidence currently supports these statements:
   A/B study, but did not improve median solver time.
 - The one long-cap aggregate diagnostic remains physically valid but misses the
   1% gap; it is a reachability observation, not comparative evidence.
+- The three subsequent aggregate solver-profile diagnostics also miss the 1%
+  gate and are rejected one-profile observations, not comparative evidence.
 - The bounded small oracle agrees with Phase 3 within numerical tolerance for
   the listed subsets; it does not prove a 264-trip integrated optimum.
 - The stress results describe a fixed solution's limited robustness, not
@@ -125,6 +137,14 @@ BFF provenance; its root LP differs from the unstrengthened objective by about
 analytical-floor gap is `19.2651169%` versus `19.2273066%` previously. It is
 therefore rejected and the source reverts it; this is a negative diagnostic,
 not a MIP comparison, approval, or release evidence.
+
+The later `f41e2b3`, `fabd665`, and `21e2649` profile diagnostics use the
+same frozen prepared input, seed, four threads, and 870/30/120-second envelope.
+Each verifies BFF provenance and diagnostic artifact hashes, serves 264/264
+trips, passes physical validation, 24/24 Rolling, accounting, and no-fallback/
+no-repair gates. Their certified Stage-1 gaps are 4.010147%, 4.968996%, and
+4.968996%, respectively. They are negative one-profile diagnostics only and
+do not add a reviewer identity, review decision, or release acceptance.
 
 ## 6. Remaining limitations and requested decision
 
