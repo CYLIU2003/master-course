@@ -18,6 +18,9 @@ Review the frozen evidence and the claim boundary only:
 - Baseline review SHA: `a145cf3a8b9cba0e4d97c48f800fba9ff07a1e69`.
 - Latest root-LP subset diagnostic source: `08af4829b3491269698f0faf67162af9d8d52861`
   (`thesis-activation-start-subset-08af482`).
+- Latest exhaustive no-path-clique diagnostic source:
+  `f71bc51a48c743e86c4150bb53bbb5e281caa4cb`
+  (`thesis-exact-no-path-clique-f71bc51`).
 - Latest long-cap diagnostic source: `96982abe376422a630543bc35426d201c0a998ac`
   (`thesis-long-stage1-single-96982ab`).
 - Full 264-trip discrete/pure-aggregate A/B evidence, small 8/12/24/40-trip
@@ -38,6 +41,7 @@ generation, UI work, or large refactor; those are outside this review.
 | Economic response | `output/thesis_remaining_sensitivities_27ec8ce_20260824/sensitivity_execution_manifest.json` | Do the documented gap failures prevent economic-response conclusions? |
 | Fixed-plan stress | `output/diagnostics/fixed_solution_stress_0ddcd22_20260824/fixed_solution_stress.json` | Is fixed-decision fragility correctly kept distinct from reoptimized robustness? |
 | Root-LP strengthening | `output/diagnostics/stage1_activation_start_dual_root_a51b1f3_20260824/diagnostic_assessment.json` and `output/diagnostics/stage1_activation_start_subset_root_08af482_20260824/diagnostic_assessment.json` | Do the all-row no-solution and one-row no-bound-improvement results justify rejecting this candidate without a MIP ON/OFF run? |
+| Exact no-path cliques | `output/diagnostics/stage1_assignment_path_exact_clique_root_f71bc51_20260824/diagnostic_result.json` | Does the optimal, quality-qualified root LP plus 59/59 optimal auxiliary clique MIPs justify rejecting this complete no-path clique family at that root point, without implying a general integrality or gap result? |
 
 The implementation adds only diagnostic controls:
 
@@ -102,6 +106,12 @@ Both provenance checks are valid. The selected-one-row root LP is optimal with
 maximum unscaled primal violation `5.820766091346741e-11`, but its objective
 differs from the unstrengthened root LP by `-4.3655745685100555e-11` JPY, well
 inside the predeclared `1e-5`-JPY comparison tolerance.
+
+The exact no-path-clique source `f71bc51` passes `1570` regressions in
+79.56 seconds. Its frozen 264-trip diagnostic verifies top-level hashes and
+`verify_run_input_provenance.py`; the root LP is optimal and quality-qualified,
+and all 59 eligible auxiliary MIPs prove optimal with no violation. This is a
+negative strengthening result only, not reviewer approval or release evidence.
 
 ## 6. Remaining limitations and requested decision
 

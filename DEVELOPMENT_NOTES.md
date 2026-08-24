@@ -21,9 +21,21 @@
   and absolute MIP gaps.
 - Added Gurobi regression coverage for a maximum-weight violation, BFF/config
   propagation, and isolated-process harness forwarding. Focused tests pass
-  (`57 passed`). This is implementation evidence only: no new frozen 264-trip
-  artifact exists yet, no candidate row has been added, and the 1% release
-  gate remains unchanged.
+  (`57 passed`); the post-commit full regression suite passes (`1570 passed
+  in 79.56s`).
+- The frozen `thesis-exact-no-path-clique-f71bc51` normal-BFF diagnostic at
+  `output/diagnostics/stage1_assignment_path_exact_clique_root_f71bc51_20260824/`
+  holds the prepared-source SHA `639b6754...`, seed 42, four threads, complete
+  successor network, and explicit 435/30/420-second Stage-1/Stage-2/overhead
+  contract fixed. Its artifact hashes and BFF run-input provenance validate.
+  The root LP is optimal and quality-qualified at 52,749.16358183805 JPY;
+  exact separation completes all 59 eligible vehicle/day auxiliary MIPs in
+  5.688 seconds (one group is trivially nonviolating), with no timeout,
+  skipped group, or violation. The largest mass is `1 + 2.22e-14`, within the
+  `1e-6` tolerance. This rejects the complete examined no-path clique family
+  at this root point; it adds no row and remains **DIAGNOSTIC, NOT USED FOR
+  RESEARCH CONCLUSIONS**. The Stage-1 19.2273066% certified gap still misses
+  the 1% gate, so no formulation or release conclusion changes.
 
 ## 2026-08-24: Long-cap single-representation diagnostics fail closed
 

@@ -646,8 +646,17 @@ separate recorded cap but may use only the remaining root-diagnostic budget;
 the result is `inconclusive` on a timeout, `not_run` unless the root LP is
 optimal and quality-qualified, and can certify no violation only after every
 eligible group is solved. It never alters Stage 1, bounds, starts, or a
-production solution. No frozen 264-trip result for this new exhaustive
-diagnostic exists yet, so it supplies no claim or release-gate change.
+production solution. The frozen clean-`f71bc51` 264-trip diagnostic at
+`output/diagnostics/stage1_assignment_path_exact_clique_root_f71bc51_20260824/`
+uses the same prepared-source SHA, seed 42, four threads, complete successor
+network, and a recorded 435/30/420-second Stage-1/Stage-2/overhead contract.
+Its optimal, quality-qualified root LP completes all 59 eligible auxiliary
+MIPs (one other vehicle/day is trivially nonviolating), with zero skipped or
+time-limited groups and zero violations. Its largest returned mass is
+`1 + 2.22e-14`, inside the `1e-6` tolerance. Thus the complete same-day
+no-path clique family is rejected at this root-LP point; no row was added. It
+remains **DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS** and does not change
+the 1% release gate.
 
 Where strict chronological arcs certify that a nonempty integral flow must
 have a start, the diagnostic also measures the read-only difference between

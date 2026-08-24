@@ -72,9 +72,14 @@ and adds no row. Its clean-`91cfbb5` successor at
 no-path cliques and also finds zero violations (largest mass
 `1 + 2.20e-14` within the `1e-6` tolerance); because that discovery is
 heuristic, it rejects only the checked cliques. The current source adds a
-default-off exhaustive read-only maximum-weight clique separator, but no
-frozen 264-trip artifact has executed it, so it is not evidence and does not
-change this blocker. Adding a duplicate charger or
+default-off exhaustive read-only maximum-weight clique separator. Its frozen
+clean-`f71bc51` 264-trip artifact at
+`output/diagnostics/stage1_assignment_path_exact_clique_root_f71bc51_20260824/`
+has an optimal, quality-qualified root LP and completes all 59 eligible
+vehicle/day auxiliary MIPs (one is trivially nonviolating) with no timeout,
+skip, or violation; its largest mass is `1 + 2.22e-14` within the `1e-6`
+tolerance. This rejects the complete no-path clique family at that root point,
+adds no row, remains diagnostic-only, and does not change this blocker. Adding a duplicate charger or
 energy row, reducing the declared gap, or restricting fragments without a
 proof would change or weaken the research contract and is not authorized.
 For the activation-to-start diagnostic only, the next clean-SHA clone may use

@@ -91,11 +91,18 @@ The current source also adds a default-off exhaustive, read-only
 maximum-weight clique separator over the same support graph. It runs only
 after an optimal, quality-qualified root LP; an auxiliary time limit or
 skipped group is `inconclusive`; and a no-violation conclusion requires every
-eligible vehicle/day auxiliary MIP to prove optimal. No frozen 264-trip
-artifact has executed this separator yet. Its implementation does not
-authorize a formal run or weaken the 1% gate; even a found violation would
-still need an independent validity proof, focused regression, and controlled
-MIP ON/OFF evidence before any model change.
+eligible vehicle/day auxiliary MIP to prove optimal. The frozen clean
+`f71bc51` artifact at
+`output/diagnostics/stage1_assignment_path_exact_clique_root_f71bc51_20260824/`
+now executes it under the same prepared input, seed 42, four threads, complete
+successor network, and explicit 435/30/420-second contract. Its root LP is
+optimal and quality-qualified; all 59 eligible auxiliary MIPs prove optimal
+(one group is trivially nonviolating), no group times out or is skipped, and
+zero valid clique rows are violated. The maximum mass is `1 + 2.22e-14`,
+within the `1e-6` tolerance. This exact diagnostic rejects the full no-path
+clique family at that root point, adds no MIP row, and is **DIAGNOSTIC, NOT
+USED FOR RESEARCH CONCLUSIONS**. Its Stage-1 certified gap remains
+19.2273066%, so it does not authorize a formal run or weaken the 1% gate.
 
 The certified `used_vehicle <= sum(path_start)` candidate remains valid only
 under its strict acyclic-flow certificate and stays default-off. Its prior
