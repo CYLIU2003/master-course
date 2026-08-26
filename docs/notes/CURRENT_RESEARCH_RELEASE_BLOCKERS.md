@@ -39,6 +39,14 @@ vehicle-day-cost semantics/value and diesel price.  The next fresh Prepare
 explicitly pins those to the SUNNY control values; only named PV-curve/date
 leaves are exempted, and any PV price/asset-cost divergence remains a blocker.
 
+The immediate `1524a50` reattempt again Fresh Prepared both 264-trip inputs
+but stopped before a solver child when an explicit zero
+`stage1_composition_search_radius` was erroneously treated as absent.  This is
+another preserved `FAIL_CORRECTNESS` preflight artifact at
+`output/diagnostics/pure_ice_weather_ab_1524a50_20260826/`, not A/B evidence.
+The next frozen attempt uses the direct `None`-versus-zero correction with a
+focused regression test.
+
 Five interleaved AB/BA pairs per scenario are required before any runtime
 conclusion.  Any coverage, physical, Rolling, accounting, no-fallback/no-repair
 or aggregate recovery failure is `FAIL_CORRECTNESS`; fewer than five completed

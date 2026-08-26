@@ -47,6 +47,12 @@ It also pins the shared scalar objective, vehicle-day cost/meaning, and diesel
 price; the input contract permits named PV curve/date leaves only, never a PV
 price or asset-cost change.
 
+The subsequent `1524a50` Fresh Prepare again produced both 264-trip inputs,
+then correctly stopped before any child when the coordinator treated the
+explicit zero composition-search radius as missing.  That second preserved
+`FAIL_CORRECTNESS` artifact is likewise not A/B evidence; the zero-value
+control now has a regression test before the next frozen attempt.
+
 ## 2026-08-24 aggregate bound-focus diagnostic: rejected
 
 Clean tag `thesis-aggregate-bound-focus-21e2649` ran one pure-aggregate

@@ -434,9 +434,11 @@ def _validate_request_controls(request: Mapping[str, Any], code_name: str) -> No
             f"{code_name} optimization request violates frozen A/B controls: "
             + json.dumps(mismatches, ensure_ascii=False, sort_keys=True)
         )
-    if int(request.get("stage1_stage2_candidate_limit") or 0) != 1:
+    candidate_limit = request.get("stage1_stage2_candidate_limit")
+    if (int(candidate_limit) if candidate_limit is not None else 0) != 1:
         raise ValueError(f"{code_name} requires stage1_stage2_candidate_limit=1")
-    if int(request.get("stage1_composition_search_radius") or -1) != 0:
+    composition_radius = request.get("stage1_composition_search_radius")
+    if (int(composition_radius) if composition_radius is not None else -1) != 0:
         raise ValueError(f"{code_name} requires stage1_composition_search_radius=0")
 
 

@@ -7,6 +7,7 @@ from scripts.run_pure_ice_aggregation_weather_ab import (
     REQUIRED_FIXED_HASHES,
     _validate_prepare_request,
     _validate_child_fleet_contract,
+    _validate_request_controls,
     _remove_weather_linked_fields,
     build_prepared_input_contract,
     build_cross_scenario_comparison,
@@ -241,3 +242,27 @@ def test_prepared_contract_does_not_hide_a_pv_cost_control_change() -> None:
 
     assert "pv_generation_kwh_by_slot" not in stripped
     assert stripped["pv_marginal_charge_cost_yen_per_kwh"] == 99.0
+
+
+def test_zero_composition_radius_is_an_explicit_frozen_control() -> None:
+    request = {
+        "mode": "phase3_two_stage",
+        "service_id": "WEEKDAY",
+        "depot_id": "tsurumaki",
+        "time_step_min": 15,
+        "timestep_min": 15,
+        "run_profile": "day_ahead_and_hourly_rolling",
+        "run_hourly_rolling": True,
+        "rolling_execution_minutes": 60,
+        "gurobi_threads": 1,
+        "stage1_best_obj_stop_enabled": False,
+        "stage1_powertrain_selector_strengthening": False,
+        "research_run": True,
+        "rebuild_dispatch": False,
+        "force_reprepare": False,
+        "use_existing_duties": False,
+        "stage1_stage2_candidate_limit": 1,
+        "stage1_composition_search_radius": 0,
+    }
+
+    _validate_request_controls(request, "SUNNY")

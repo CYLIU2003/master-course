@@ -53,6 +53,13 @@
   SUNNY values.  The preflight removes only named PV-curve/date leaves, not PV
   cost controls, so a non-weather PV-price change remains a correctness
   failure rather than being hidden as a weather effect.
+- A second Fresh Prepare at `1524a50` also yielded both 264-trip inputs, but
+  stopped before its first child because the coordinator used Python truthiness
+  when validating `stage1_composition_search_radius=0`.  The field is an
+  explicit valid control, not a missing value.  The narrow correction now
+  distinguishes `None` from zero and has a direct regression test.  The
+  preserved `output/diagnostics/pure_ice_weather_ab_1524a50_20260826/` remains
+  `FAIL_CORRECTNESS` protocol evidence only; no solver run began.
 
 - Frozen execution command (after clean commit/tag and BFF launch) is:
   `.venv\\Scripts\\python.exe scripts\\run_pure_ice_aggregation_weather_ab.py
