@@ -1,5 +1,54 @@
 # Development Notes
 
+## 2026-08-26: Bounded interleaved SUNNY/RAIN pure-ICE aggregation protocol
+
+- Added `scripts/run_pure_ice_aggregation_weather_ab.py` as a coordinator over
+  the existing isolated-process `build_lazy_fragment_performance_diagnostic.py`
+  child path and existing BFF Fresh Prepare endpoint.  It introduces no
+  solver/model code.  It fixes the user-supplied
+  existing scenario IDs: SUNNY `771d115b-75b0-49f7-a7f0-25f259a2cd21` and RAIN
+  `b23fd26c-1233-4c73-bb9e-bdb8b1584760`; both must Fresh Prepare a 264-trip
+  `tsurumaki`/`WEEKDAY` scope.  RAIN retains service date 2025-08-05 and the
+  existing 2025-08-10 weather/PV counterfactual contract, rather than changing
+  timetable day type.
+- The coordinator requires the exact small-parity gate, 15-minute internal
+  slots, 60-minute Rolling, `phase3_two_stage`, one Gurobi thread, disabled
+  BestObjStop and powertrain selector, equal seed/gap/stage caps, no fallback,
+  repair, synthetic PV, or Stage-1 proxy.  It runs full pairs in the explicit
+  order SUNNY AB, RAIN AB, SUNNY BA, RAIN BA, SUNNY AB, RAIN AB, SUNNY BA,
+  RAIN BA, SUNNY AB, RAIN AB, so neither scenario consumes the whole window.
+- Versioned exact Prepare/optimization templates are under
+  `config/research/pure_ice_weather_ab/`.  Before any child run the
+  coordinator records and attests BFF runtime SHA, persists exact Fresh
+  Prepare requests/responses and freshly returned IDs, then fail-closes if the
+  materialized inputs differ outside weather/PV fields.  A Prepare or pre-solve
+  contract failure is itself persisted with artifact hashes.
+- It records prepared-input SHA-256, fleet-contract presence, case-level
+  physical/Rolling/accounting/recovery gates, root/first-incumbent/node/RSS
+  metrics, duty mix, energy flows, fuel, SOC and cost evidence.  It emits a
+  cross-scenario table only after five completed pairs per scenario and checks
+  that every non-weather input hash matches while the PV hash differs.
+- It records a 20-hour new-work cutoff and 24-hour execution deadline.  A
+  partial outcome is explicitly `INTERRUPTED`/diagnostic, never a runtime
+  result.  `tests/test_pure_ice_aggregation_weather_ab.py` covers the
+  interleaved AB/BA order and the weather-only hash contract; the focused
+  aggregation suite passes `26 passed` before the frozen execution.  No
+  264-trip run has been started by this code change, so no performance or
+  optimality claim is made.
+
+- Frozen execution command (after clean commit/tag and BFF launch) is:
+  `.venv\\Scripts\\python.exe scripts\\run_pure_ice_aggregation_weather_ab.py
+  --output-dir output\\diagnostics\\pure_ice_weather_ab_<frozen-sha>_20260826
+  --sunny-prepare-request
+  config\\research\\pure_ice_weather_ab\\sunny_prepare_request.json
+  --rain-prepare-request
+  config\\research\\pure_ice_weather_ab\\rain_prepare_request.json
+  --optimization-request-template
+  config\\research\\pure_ice_weather_ab\\optimization_request_template.json
+  --stage1-time-limit-seconds 435 --stage2-time-limit-seconds 30
+  --small-exact-parity-passed`.  The 24-hour deadline begins before Fresh
+  Prepare; resumption must use the same directory, stage caps, and `--resume`.
+
 ## 2026-08-24: Aggregate bound-focus diagnostic rejected
 
 - The sole remaining existing aggregate Stage-1 search profile was

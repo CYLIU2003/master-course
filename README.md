@@ -8,6 +8,33 @@ The reviewer-facing scope, checks, and open decisions are in
 [THESIS_EXTERNAL_REVIEW_BRIEF.md](docs/notes/THESIS_EXTERNAL_REVIEW_BRIEF.md);
 that brief is a request for independent review, not an approval record.
 
+## Current 2026-08-26 SUNNY/RAIN pure-ICE aggregation protocol
+
+The historical 264-trip pure-ICE A/B bundles are not evidence for the current
+checkout.  The next bounded measurement is fixed to existing scenarios SUNNY
+`771d115b-75b0-49f7-a7f0-25f259a2cd21` and RAIN
+`b23fd26c-1233-4c73-bb9e-bdb8b1584760`.  Both use the 264-trip `tsurumaki` /
+`WEEKDAY` scope and 15-minute internal slots.  RAIN retains the established
+fixed-WEEKDAY-timetable PV counterfactual contract; it must not become a
+Sunday/holiday timetable merely because its weather date is 2025-08-10.
+
+`scripts/run_pure_ice_aggregation_weather_ab.py` reuses the normal isolated
+Phase-3 A/B child runner and normal BFF Fresh Prepare endpoint, requires a
+focused exact-parity test, fixes one Gurobi thread and all non-representation controls, and executes
+SUNNY AB, RAIN AB, SUNNY BA, RAIN BA, ... for five pairs per scenario.  It
+stops starting new cases after 20 hours, never starts a case after 24 hours,
+and writes `INTERRUPTED` rather than a runtime conclusion if fewer than five
+pairs complete.  It adds only a hash-gated SUNNY/RAIN comparison table; it
+does not enable aggregation in normal settings or change the optimization
+model.  This protocol has no result yet and does not change the `BLOCKED`
+research-release status.
+
+The versioned request templates are under
+`config/research/pure_ice_weather_ab/`.  The coordinator records the BFF
+runtime SHA attestation, exact Fresh Prepare request/response, resulting
+prepared-input IDs and SHA-256 hashes.  It refuses to solve if any non-weather
+prepared content differs across SUNNY and RAIN.
+
 ## 2026-08-24 aggregate bound-focus diagnostic: rejected
 
 Clean tag `thesis-aggregate-bound-focus-21e2649` ran one pure-aggregate

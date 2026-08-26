@@ -640,6 +640,32 @@ def _phase_metric(
     return cost_phase.get(key)
 
 
+def _rolling_state_soc_summary(run_dir: Path) -> dict[str, Any]:
+    """Summarize persisted hourly state transitions without inferring SOC."""
+
+    minimum_bev_soc_kwh: float | None = None
+    for state_path in sorted(
+        run_dir.glob("rolling_hourly_chain/step_*/state_for_next_hour.json")
+    ):
+        state = _optional_json(state_path)
+        vehicle_soc = dict(state.get("actual_vehicle_soc_kwh") or {})
+        values = [
+            float(value)
+            for value in vehicle_soc.values()
+            if isinstance(value, (int, float)) and not isinstance(value, bool)
+        ]
+        if values:
+            current_minimum = min(values)
+            minimum_bev_soc_kwh = (
+                current_minimum
+                if minimum_bev_soc_kwh is None
+                else min(minimum_bev_soc_kwh, current_minimum)
+            )
+    return {
+        "minimum_bev_soc_kwh": minimum_bev_soc_kwh,
+    }
+
+
 def collect_pure_ice_case_metrics(
     run_dir: Path,
     *,
@@ -697,6 +723,38 @@ def collect_pure_ice_case_metrics(
         for item in list(canonical.get("duties") or ())
         if isinstance(item, Mapping)
     ]
+    duty_counts = {
+        powertrain: {
+            "trip_count": sum(
+                len(list(duty.get("trip_ids") or ()))
+                for duty in duties
+                if str(duty.get("vehicle_type") or "").upper() == powertrain
+            ),
+            "used_vehicle_count": sum(
+                1
+                for duty in duties
+                if str(duty.get("vehicle_type") or "").upper() == powertrain
+            ),
+        }
+        for powertrain in ("BEV", "ICE")
+    }
+    rolling_soc_summary = _rolling_state_soc_summary(run_dir)
+    terminal_bev_soc = {
+        str(vehicle_id): float(value)
+        for vehicle_id, value in dict(
+            solver_metadata.get("vehicle_terminal_soc_kwh_by_vehicle") or {}
+        ).items()
+        if isinstance(value, (int, float)) and not isinstance(value, bool)
+    }
+    terminal_bess_soc = {
+        str(depot_id): float(values.get("terminal_soc_kwh"))
+        for depot_id, values in dict(
+            accounting.get("bess_terminal_soc_by_depot") or {}
+        ).items()
+        if isinstance(values, Mapping)
+        and isinstance(values.get("terminal_soc_kwh"), (int, float))
+        and not isinstance(values.get("terminal_soc_kwh"), bool)
+    }
     served = int(canonical.get("trip_count_served") or 0)
     unserved = int(canonical.get("trip_count_unserved") or 0)
     first_events = [
@@ -958,6 +1016,30 @@ def collect_pure_ice_case_metrics(
             "trip_energy_model": effective.get("trip_energy_model"),
         },
         "representation_audit": aggregation,
+        "operational_outcomes": {
+            "bev_trip_count": duty_counts["BEV"]["trip_count"],
+            "ice_trip_count": duty_counts["ICE"]["trip_count"],
+            "used_bev_vehicle_count": duty_counts["BEV"]["used_vehicle_count"],
+            "used_ice_vehicle_count": duty_counts["ICE"]["used_vehicle_count"],
+            "total_cost_jpy": accounting_cost.get("total_cost"),
+            "cost_breakdown_jpy": accounting_cost,
+            "fuel_liters": accounting_cost.get("ice_fuel_consumed_l"),
+            "grid_import_kwh": accounting_cost.get("grid_import_kwh"),
+            "pv_to_bus_kwh": accounting_cost.get("pv_to_bus_kwh"),
+            "pv_to_bess_kwh": accounting_cost.get("pv_to_bess_kwh"),
+            "bess_to_bus_kwh": accounting_cost.get("bess_to_bus_kwh"),
+            "pv_curtail_kwh": accounting_cost.get("pv_curtail_kwh"),
+            "peak_grid_kw": accounting_cost.get("peak_grid_kw"),
+            **rolling_soc_summary,
+            "terminal_bev_soc_kwh_by_vehicle": terminal_bev_soc,
+            "terminal_bev_soc_kwh_total": (
+                sum(terminal_bev_soc.values()) if terminal_bev_soc else None
+            ),
+            "terminal_bess_soc_kwh_by_depot": terminal_bess_soc,
+            "terminal_bess_soc_kwh_total": (
+                sum(terminal_bess_soc.values()) if terminal_bess_soc else None
+            ),
+        },
         "summary_vehicle_count_used": summary.get("vehicle_count_used"),
     }
 
@@ -1885,6 +1967,7 @@ def _run_pure_ice_case_in_child_process(
     representation: str,
     run_directory: Path,
     expected_git_sha: str,
+    execution_deadline_utc: datetime | None = None,
 ) -> dict[str, Any]:
     """Run exactly one normal BFF worker in an isolated Python process."""
 
@@ -1922,6 +2005,15 @@ def _run_pure_ice_case_in_child_process(
             text=True,
         )
         while process.poll() is None:
+            if (
+                execution_deadline_utc is not None
+                and datetime.now(timezone.utc) >= execution_deadline_utc
+            ):
+                _terminate_pure_ice_child_process_tree(process)
+                raise RuntimeError(
+                    "pure-ICE child safely interrupted at the declared "
+                    "execution deadline"
+                )
             process_ids = _child_process_tree_ids(process.pid)
             rss_values = [
                 _read_process_rss_bytes(process_id)
@@ -1994,6 +2086,37 @@ def _run_pure_ice_case_in_child_process(
         "peak_rss_bytes": peak_rss_bytes,
         "rss_sample_count": rss_sample_count,
     }
+
+
+def _terminate_pure_ice_child_process_tree(process: subprocess.Popen[str]) -> None:
+    """Stop only the known child process tree after a declared experiment cutoff."""
+
+    if process.poll() is not None:
+        return
+    if os.name == "nt":
+        subprocess.run(
+            ("taskkill", "/PID", str(process.pid), "/T"),
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    else:
+        process.terminate()
+    try:
+        process.wait(timeout=20)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+    if os.name == "nt":
+        subprocess.run(
+            ("taskkill", "/PID", str(process.pid), "/T", "/F"),
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    else:
+        process.kill()
+    process.wait(timeout=20)
 
 
 def run_pure_ice_aggregation_child(

@@ -1,5 +1,35 @@
 # Current research release blockers
 
+## 2026-08-26: Current-SHA SUNNY/RAIN aggregation evidence is pending
+
+The recovery-gated implementation has a new bounded coordinator,
+`scripts/run_pure_ice_aggregation_weather_ab.py`, but **no current-SHA
+SUNNY/RAIN artifact exists yet**.  The historical one-scenario A/B measurements
+remain diagnostic-only and cannot be relabelled as the requested two-scenario
+evidence.
+
+The pending protocol fixes SUNNY `771d115b-75b0-49f7-a7f0-25f259a2cd21` and
+RAIN `b23fd26c-1233-4c73-bb9e-bdb8b1584760`, a 264-trip `tsurumaki`/`WEEKDAY`
+scope, Fresh Prepare, the materialized `scenario_fleet_contract_v2`, 15-minute
+internal slots, 60-minute Rolling, one thread, disabled BestObjStop and
+powertrain selector, and the same seed/gap/stage caps.  RAIN keeps the
+established fixed-WEEKDAY timetable with 2025-08-10 weather/PV provenance.
+Only weather-linked/PV input hashes may differ between scenarios.
+
+The coordinator now performs Fresh Prepare through the normal BFF endpoint,
+records BFF runtime-Git attestation plus exact Prepare request/response, and
+stores a fail-closed preflight artifact if those inputs are invalid or differ
+outside weather/PV content.  The 24-hour clock starts before Fresh Prepare;
+there is still no current-SHA execution artifact and thus no new result.
+
+Five interleaved AB/BA pairs per scenario are required before any runtime
+conclusion.  Any coverage, physical, Rolling, accounting, no-fallback/no-repair
+or aggregate recovery failure is `FAIL_CORRECTNESS`; fewer than five completed
+pairs before the 24-hour cutoff is `INTERRUPTED` and **DIAGNOSTIC, NOT USED FOR
+RESEARCH CONCLUSIONS**.  In every outcome the release remains **BLOCKED**, and
+aggregation must remain off in normal settings until both scenario artifacts
+meet their stated gates.
+
 ## 2026-08-24: Aggregate bound-focus diagnostic rejected; profile search exhausted
 
 Clean tag `thesis-aggregate-bound-focus-21e2649` / SHA
