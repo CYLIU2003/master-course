@@ -15416,7 +15416,64 @@ class GurobiMILPAdapter:
             used_vehicle=used_vehicle,
             used_vehicle_day=used_vehicle_day,
             trip_day_index_by_trip_id=trip_day_index_by_trip_id,
+            aggregate_represented_vehicle_ids=tuple(
+                stage1_exact_clone_vehicle_ids
+            ),
         )
+        stage1_aggregate_mip_start_audit: Dict[str, Any] = {
+            "schema_version": "exact_clone_aggregate_mip_start_audit_v1",
+            "requested": bool(
+                stage1_selected_clone_group is not None
+                and getattr(config, "warm_start", True)
+            ),
+            "applied": False,
+            "reason": (
+                "not_applicable_discrete_representation"
+                if stage1_selected_clone_group is None
+                else stage1_warm_start_rejection_reason
+            ),
+        }
+        if stage1_selected_clone_group is not None and stage1_warm_start_applied:
+            stage1_warm_start_plan = (
+                getattr(config, "fixed_assignment", None)
+                or problem.baseline_plan
+            )
+            if stage1_warm_start_plan is None:
+                raise RuntimeError(
+                    "Stage-1 aggregate warm start was marked applied without "
+                    "a baseline assignment plan"
+                )
+            stage1_aggregate_mip_start_audit = (
+                self._apply_exact_clone_aggregate_path_warm_start(
+                    problem,
+                    baseline=stage1_warm_start_plan,
+                    selected_clone_group=stage1_selected_clone_group,
+                    aggregate_assignment=stage1_exact_clone_assignment,
+                    aggregate_connection=stage1_exact_clone_connection,
+                    aggregate_start=stage1_exact_clone_start,
+                    aggregate_end=stage1_exact_clone_end,
+                    fragment_layer_assignment=(
+                        stage1_exact_clone_fragment_layer_assignment
+                    ),
+                    fragment_layer_connection=(
+                        stage1_exact_clone_fragment_layer_connection
+                    ),
+                    fragment_layer_start=(
+                        stage1_exact_clone_fragment_layer_start
+                    ),
+                    fragment_layer_end=stage1_exact_clone_fragment_layer_end,
+                    fragment_reset=stage1_exact_clone_fragment_reset,
+                    aggregate_used_count=stage1_exact_clone_used_count,
+                    used_vehicle=used_vehicle,
+                    used_vehicle_day=used_vehicle_day,
+                    day_indices=day_indices,
+                )
+            )
+            if not stage1_aggregate_mip_start_audit["applied"]:
+                raise RuntimeError(
+                    "Stage-1 exact-clone aggregate warm start is incomplete: "
+                    + str(stage1_aggregate_mip_start_audit.get("reason") or "unknown")
+                )
         stage1_root_lp_diagnostic = {
             "enabled": False,
             "status": "disabled_by_config",
@@ -16613,6 +16670,12 @@ class GurobiMILPAdapter:
             ),
             "fragment_reset_variable_count": len(
                 stage1_exact_clone_fragment_reset
+            ),
+            "aggregate_mip_start_complete": bool(
+                stage1_aggregate_mip_start_audit.get("applied", False)
+            ),
+            "aggregate_mip_start_audit": dict(
+                stage1_aggregate_mip_start_audit
             ),
             "recovered_path_count": sum(
                 1
@@ -23797,6 +23860,229 @@ class GurobiMILPAdapter:
                 metadata=baseline_meta,
             ),
         )
+
+    def _apply_exact_clone_aggregate_path_warm_start(
+        self,
+        problem: CanonicalOptimizationProblem,
+        *,
+        baseline: AssignmentPlan,
+        selected_clone_group: Mapping[str, Any],
+        aggregate_assignment: Mapping[str, Any],
+        aggregate_connection: Mapping[Tuple[str, str], Any],
+        aggregate_start: Mapping[str, Any],
+        aggregate_end: Mapping[str, Any],
+        fragment_layer_assignment: Mapping[Tuple[int, str], Any],
+        fragment_layer_connection: Mapping[Tuple[int, str, str], Any],
+        fragment_layer_start: Mapping[Tuple[int, str], Any],
+        fragment_layer_end: Mapping[Tuple[int, str], Any],
+        fragment_reset: Mapping[Tuple[int, str, str], Any],
+        aggregate_used_count: Any,
+        used_vehicle: Mapping[str, Any],
+        used_vehicle_day: Mapping[Tuple[str, int], Any],
+        day_indices: Sequence[int],
+    ) -> Dict[str, Any]:
+        """Map a labelled physical baseline onto the full aggregate network."""
+
+        audit: Dict[str, Any] = {
+            "schema_version": "exact_clone_aggregate_mip_start_audit_v1",
+            "requested": True,
+            "applied": False,
+            "reason": "",
+            "selected_trip_count": 0,
+            "selected_vehicle_count": 0,
+        }
+        selected_member_ids = tuple(
+            str(vehicle_id)
+            for vehicle_id in selected_clone_group.get("vehicle_ids", ())
+        )
+        if not selected_member_ids:
+            audit["reason"] = "selected_clone_group_has_no_members"
+            return audit
+        if not day_indices:
+            audit["reason"] = "day_index_domain_is_empty"
+            return audit
+        if aggregate_used_count is None:
+            audit["reason"] = "aggregate_used_count_variable_missing"
+            return audit
+        if any(vehicle_id not in used_vehicle for vehicle_id in selected_member_ids):
+            audit["reason"] = "canonical_used_vehicle_domain_incomplete"
+            return audit
+        only_day_index = int(day_indices[0])
+        if any(
+            (vehicle_id, only_day_index) not in used_vehicle_day
+            for vehicle_id in selected_member_ids
+        ):
+            audit["reason"] = "canonical_used_vehicle_day_domain_incomplete"
+            return audit
+
+        selected_member_id_set = set(selected_member_ids)
+        selected_group_trip_ids: Set[str] = set()
+        selected_group_connections: Set[Tuple[str, str]] = set()
+        selected_group_start_trip_ids: Set[str] = set()
+        selected_group_end_trip_ids: Set[str] = set()
+        selected_group_vehicle_ids: Set[str] = set()
+        selected_group_fragments_by_vehicle: Dict[
+            str, List[Tuple[str, ...]]
+        ] = {}
+        baseline_duty_vehicle_map = baseline.duty_vehicle_map()
+        for duty in baseline.duties:
+            duty_vehicle_id = str(
+                baseline_duty_vehicle_map.get(str(duty.duty_id)) or ""
+            )
+            if duty_vehicle_id not in selected_member_id_set:
+                continue
+            duty_trip_ids = tuple(str(trip_id) for trip_id in duty.trip_ids)
+            if not duty_trip_ids:
+                continue
+            selected_group_vehicle_ids.add(duty_vehicle_id)
+            selected_group_fragments_by_vehicle.setdefault(
+                duty_vehicle_id, []
+            ).append(duty_trip_ids)
+            selected_group_trip_ids.update(duty_trip_ids)
+            selected_group_start_trip_ids.add(duty_trip_ids[0])
+            selected_group_end_trip_ids.add(duty_trip_ids[-1])
+            selected_group_connections.update(
+                zip(duty_trip_ids, duty_trip_ids[1:])
+            )
+
+        selected_layer_trip_keys: Set[Tuple[int, str]] = set()
+        selected_layer_connection_keys: Set[Tuple[int, str, str]] = set()
+        selected_layer_start_keys: Set[Tuple[int, str]] = set()
+        selected_layer_end_keys: Set[Tuple[int, str]] = set()
+        selected_fragment_reset_keys: Set[Tuple[int, str, str]] = set()
+        fragment_layer_count = max(
+            int(selected_clone_group.get("fragment_layer_count", 1) or 1),
+            1,
+        )
+        if fragment_layer_assignment:
+            trip_by_id = problem.trip_by_id()
+            for duty_vehicle_id in sorted(selected_group_fragments_by_vehicle):
+                ordered_fragments = sorted(
+                    selected_group_fragments_by_vehicle[duty_vehicle_id],
+                    key=lambda trip_ids: (
+                        self._service_minute(
+                            problem,
+                            trip_by_id[trip_ids[0]].departure_min,
+                        ),
+                        trip_ids[0],
+                    ),
+                )
+                if len(ordered_fragments) > fragment_layer_count:
+                    audit["reason"] = "baseline_fragment_layer_count_exceeded"
+                    return audit
+                for layer_index, duty_trip_ids in enumerate(ordered_fragments):
+                    selected_layer_trip_keys.update(
+                        (layer_index, trip_id) for trip_id in duty_trip_ids
+                    )
+                    selected_layer_start_keys.add(
+                        (layer_index, duty_trip_ids[0])
+                    )
+                    selected_layer_end_keys.add(
+                        (layer_index, duty_trip_ids[-1])
+                    )
+                    selected_layer_connection_keys.update(
+                        (
+                            layer_index,
+                            from_trip_id,
+                            to_trip_id,
+                        )
+                        for from_trip_id, to_trip_id in zip(
+                            duty_trip_ids, duty_trip_ids[1:]
+                        )
+                    )
+                    if layer_index > 0:
+                        previous_fragment = ordered_fragments[layer_index - 1]
+                        selected_fragment_reset_keys.add(
+                            (
+                                layer_index - 1,
+                                previous_fragment[-1],
+                                duty_trip_ids[0],
+                            )
+                        )
+
+        domain_checks = {
+            "assignment": selected_group_trip_ids.issubset(
+                aggregate_assignment
+            ),
+            "connection": selected_group_connections.issubset(
+                aggregate_connection
+            ),
+            "start": selected_group_start_trip_ids.issubset(aggregate_start),
+            "end": selected_group_end_trip_ids.issubset(aggregate_end),
+            "layer_assignment": selected_layer_trip_keys.issubset(
+                fragment_layer_assignment
+            ),
+            "layer_connection": selected_layer_connection_keys.issubset(
+                fragment_layer_connection
+            ),
+            "layer_start": selected_layer_start_keys.issubset(
+                fragment_layer_start
+            ),
+            "layer_end": selected_layer_end_keys.issubset(fragment_layer_end),
+            "fragment_reset": selected_fragment_reset_keys.issubset(
+                fragment_reset
+            ),
+        }
+        audit["domain_checks"] = domain_checks
+        if not all(domain_checks.values()):
+            audit["reason"] = "aggregate_variable_domain_incomplete"
+            return audit
+
+        for trip_id, aggregate_var in aggregate_assignment.items():
+            aggregate_var.Start = (
+                1.0 if trip_id in selected_group_trip_ids else 0.0
+            )
+        for key, aggregate_var in aggregate_connection.items():
+            aggregate_var.Start = (
+                1.0 if key in selected_group_connections else 0.0
+            )
+        for trip_id, aggregate_var in aggregate_start.items():
+            aggregate_var.Start = (
+                1.0 if trip_id in selected_group_start_trip_ids else 0.0
+            )
+        for trip_id, aggregate_var in aggregate_end.items():
+            aggregate_var.Start = (
+                1.0 if trip_id in selected_group_end_trip_ids else 0.0
+            )
+        for key, layer_var in fragment_layer_assignment.items():
+            layer_var.Start = 1.0 if key in selected_layer_trip_keys else 0.0
+        for key, layer_var in fragment_layer_connection.items():
+            layer_var.Start = (
+                1.0 if key in selected_layer_connection_keys else 0.0
+            )
+        for key, layer_var in fragment_layer_start.items():
+            layer_var.Start = 1.0 if key in selected_layer_start_keys else 0.0
+        for key, layer_var in fragment_layer_end.items():
+            layer_var.Start = 1.0 if key in selected_layer_end_keys else 0.0
+        for key, reset_var in fragment_reset.items():
+            reset_var.Start = (
+                1.0 if key in selected_fragment_reset_keys else 0.0
+            )
+
+        selected_group_vehicle_count = len(selected_group_vehicle_ids)
+        aggregate_used_count.Start = float(selected_group_vehicle_count)
+        for member_index, vehicle_id in enumerate(selected_member_ids):
+            canonical_active = (
+                1.0 if member_index < selected_group_vehicle_count else 0.0
+            )
+            used_vehicle[vehicle_id].Start = canonical_active
+            used_vehicle_day[(vehicle_id, only_day_index)].Start = (
+                canonical_active
+            )
+
+        audit.update(
+            {
+                "applied": True,
+                "reason": "",
+                "selected_trip_count": len(selected_group_trip_ids),
+                "selected_vehicle_count": selected_group_vehicle_count,
+                "selected_layer_trip_count": len(selected_layer_trip_keys),
+                "selected_fragment_reset_count": len(
+                    selected_fragment_reset_keys
+                ),
+            }
+        )
+        return audit
 
     def _apply_stage1_assignment_warm_start(
         self,

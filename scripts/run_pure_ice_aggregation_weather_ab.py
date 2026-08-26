@@ -663,6 +663,79 @@ def _validate_child_fleet_contract(
     return audit
 
 
+def _validate_child_runtime_controls(
+    *,
+    child: Mapping[str, Any],
+    metrics: Mapping[str, Any],
+    run_directory: Path,
+) -> dict[str, Any]:
+    """Require solver-native evidence for the frozen one-thread controls."""
+
+    source_run_dir_text = str(child.get("run_dir") or "").strip()
+    source_run_dir = Path(source_run_dir_text) if source_run_dir_text else None
+    settings_path = (
+        source_run_dir / "solver_settings.json"
+        if source_run_dir is not None
+        else None
+    )
+    checks: dict[str, bool] = {
+        "source_run_dir_present": source_run_dir is not None,
+        "solver_settings_artifact_exists": bool(
+            settings_path and settings_path.is_file()
+        ),
+    }
+    settings: dict[str, Any] = {}
+    controls: dict[str, Any] = {}
+    if settings_path is not None and settings_path.is_file():
+        settings = _read_json(settings_path)
+        controls = dict(settings.get("interactive_runtime_controls") or {})
+        expected = {
+            "stage1_best_obj_stop_enabled": False,
+            "gurobi_threads": 1,
+        }
+        metrics_provenance = dict(metrics.get("provenance") or {})
+        checks.update(
+            {
+                "batch_scope": controls.get("scope") == "research_batch_run",
+                "no_runtime_override": controls.get("override_applied") is False,
+                "requested_controls_match": controls.get("requested") == expected,
+                "effective_controls_match": controls.get("effective") == expected,
+                "solver_settings_threads_match": settings.get("gurobi_threads") == 1,
+                "metrics_threads_match": metrics_provenance.get("gurobi_threads") == 1,
+                "best_obj_stop_disabled": (
+                    settings.get("stage1_best_obj_stop_enabled") is False
+                ),
+            }
+        )
+    audit = {
+        "schema_version": SCHEMA_VERSION,
+        "source_run_dir": str(source_run_dir.resolve()) if source_run_dir else None,
+        "source_solver_settings_path": (
+            str(settings_path.resolve()) if settings_path else None
+        ),
+        "required": {
+            "scope": "research_batch_run",
+            "stage1_best_obj_stop_enabled": False,
+            "gurobi_threads": 1,
+            "override_applied": False,
+        },
+        "observed": {
+            "interactive_runtime_controls": controls,
+            "solver_settings_gurobi_threads": settings.get("gurobi_threads"),
+            "metrics_gurobi_threads": dict(metrics.get("provenance") or {}).get(
+                "gurobi_threads"
+            ),
+            "stage1_best_obj_stop_enabled": settings.get(
+                "stage1_best_obj_stop_enabled"
+            ),
+        },
+        "checks": checks,
+        "accepted": all(checks.values()),
+    }
+    _write_json(run_directory / "runtime_control_validation.json", audit)
+    return audit
+
+
 def build_interleaved_case_schedule(repetitions: int = 5) -> list[dict[str, Any]]:
     """Return SUN AB, RAIN AB, SUN BA, RAIN BA, ... without solver work."""
 
@@ -1170,6 +1243,12 @@ def run_weather_ab(
         observed_hash = dict(dict(metrics.get("provenance") or {}).get("input_hashes") or {}).get("prepared_source_sha256")
         if observed_hash != descriptors[code]["prepared_source_sha256"]:
             raise RuntimeError("child prepared-source hash does not match frozen descriptor")
+        runtime_control_audit = _validate_child_runtime_controls(
+            child=child,
+            metrics=metrics,
+            run_directory=run_directory,
+        )
+        metrics["runtime_control_validation"] = runtime_control_audit
         fleet_contract_audit = _validate_child_fleet_contract(
             child=child,
             expected_descriptor=descriptors[code],
@@ -1181,6 +1260,7 @@ def run_weather_ab(
         if not (
             _pure_ice_case_valid(metrics)
             and _pure_ice_representation_audit_valid(metrics, str(scheduled["representation"]))
+            and runtime_control_audit["accepted"]
             and fleet_contract_audit["accepted"]
         ):
             status = "FAIL_CORRECTNESS"

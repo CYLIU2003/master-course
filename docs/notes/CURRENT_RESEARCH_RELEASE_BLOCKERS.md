@@ -1,5 +1,31 @@
 # Current research release blockers
 
+## 2026-08-26: Direct execution faults fixed; fresh frozen evidence still pending
+
+The two direct code faults found in the failed `2fe6330` attempt are repaired
+in the current worktree. Research-batch execution now preserves the declared
+one Gurobi thread and disabled BestObjStop instead of inheriting the ordinary
+interactive four-thread override, and the coordinator fail-closes unless the
+solver artifact proves the exact requested/effective controls with no
+override. Ordinary interactive runs retain their prior server-authoritative
+policy.
+
+Phase-3 pure aggregation now seeds the full aggregate path formulation from
+the same complete physical baseline used by the labelled model. It covers
+aggregate assignment/connection/boundary variables, fragment layers and reset
+arcs, used count, and the canonical ICE-ID activation prefix. An incomplete
+mapping raises before the solve, and the representation artifact must record a
+complete aggregate MIP-start audit. A focused exact small-instance recovery
+test and all related suites pass (`118 passed`); the complete repository suite
+also passes (`1583 passed in 102.02s`).
+
+This repair is not 264-trip evidence. Until it is committed/tagged cleanly,
+Fresh Prepare is repeated for both fixed scenarios, and the bounded
+interleaved run passes its physical/Rolling/accounting/recovery/control gates,
+completed pairs remain SUNNY `0/5`, RAIN `0/5`. Structural, runtime, gap,
+cost, and weather-effect conclusions remain unavailable; aggregation stays
+default-OFF and research release remains **BLOCKED**.
+
 ## 2026-08-26: SUNNY/RAIN aggregation attempt stopped at `FAIL_CORRECTNESS`
 
 Frozen SHA `2fe63300270266fa6a87970330ac2f3a493b873b` Fresh Prepared both

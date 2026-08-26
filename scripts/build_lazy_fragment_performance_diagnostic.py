@@ -1116,6 +1116,17 @@ def _pure_ice_representation_audit_valid(
     if representation == "pure_aggregate":
         recovered_path_count = int(audit.get("recovered_path_count") or 0)
         recovered_vehicle_ids = tuple(audit.get("recovered_vehicle_ids") or ())
+        aggregate_mip_start_audit = dict(
+            audit.get("aggregate_mip_start_audit") or {}
+        )
+        aggregate_mip_start_valid = bool(
+            aggregate_mip_start_audit.get("requested") is False
+            or (
+                aggregate_mip_start_audit.get("requested") is True
+                and aggregate_mip_start_audit.get("applied") is True
+                and audit.get("aggregate_mip_start_complete") is True
+            )
+        )
         return bool(
             audit.get("applied") is True
             and audit.get("integer_feasible_set_changed") is False
@@ -1123,6 +1134,7 @@ def _pure_ice_representation_audit_valid(
             and audit.get("recoverable_physical_dispatch_set_changed") is False
             and vehicle_label_count == 0
             and aggregate_network_count > 0
+            and aggregate_mip_start_valid
             and recovered_path_count > 0
             and recovered_path_count == len(recovered_vehicle_ids)
         )
@@ -1787,7 +1799,7 @@ def _run_pure_ice_case(
                     stage1_powertrain_selector_strengthening=bool(request.get("stage1_powertrain_selector_strengthening", False)),
                     stage1_activation_start_strengthening=bool(request.get("stage1_activation_start_strengthening", False)),
                     stage1_activation_start_strengthening_vehicle_ids=request.get("stage1_activation_start_strengthening_vehicle_ids"),
-                    gurobi_threads=int(request.get("gurobi_threads") or 4),
+                    gurobi_threads=int(request.get("gurobi_threads") or 1),
                     run_profile=str(request.get("run_profile") or "day_ahead_and_hourly_rolling"),
                     run_hourly_rolling=bool(request.get("run_hourly_rolling", True)),
                     rolling_execution_minutes=int(request.get("rolling_execution_minutes") or 60),
@@ -1803,6 +1815,7 @@ def _run_pure_ice_case(
                     integrated_actual_cost_upper_bound_jpy=None,
                     integrated_actual_cost_upper_bound_delta_ratio=None,
                     co2_emissions_cap_kg=request.get("co2_emissions_cap_kg"),
+                    enforce_interactive_runtime_controls=False,
                 )
             print(
                 json.dumps(

@@ -1740,20 +1740,21 @@ def test_phase3_exact_ice_clone_aggregation_preserves_recovered_dispatch() -> No
         stage2_time_limit_sec=30,
         mip_gap=0.0,
         random_seed=42,
-        warm_start=False,
+        warm_start=True,
         allow_postsolve_repair=False,
         research_run=True,
         stage1_stage2_candidate_limit=1,
     )
 
-    with _diagnostic_exact_ice_clone_representation("pure_aggregate"):
-        aggregated_outcome, aggregated_plan = GurobiMILPAdapter().solve(
-            problem,
-            config,
-        )
     with _diagnostic_exact_ice_clone_representation("discrete"):
         discrete_outcome, discrete_plan = GurobiMILPAdapter().solve(
             problem,
+            replace(config, warm_start=False),
+        )
+    seeded_problem = replace(problem, baseline_plan=discrete_plan)
+    with _diagnostic_exact_ice_clone_representation("pure_aggregate"):
+        aggregated_outcome, aggregated_plan = GurobiMILPAdapter().solve(
+            seeded_problem,
             config,
         )
 
@@ -1771,7 +1772,11 @@ def test_phase3_exact_ice_clone_aggregation_preserves_recovered_dispatch() -> No
     assert aggregated_audit["vehicle_label_flow_variable_count_created"] == 0
     assert aggregated_audit["aggregate_network_variable_count_created"] > 0
     assert aggregated_audit["net_binary_variable_reduction"] > 0
+    assert aggregated_audit["aggregate_mip_start_complete"] is True
+    assert aggregated_audit["aggregate_mip_start_audit"]["reason"] == ""
     assert aggregated_audit["recovered_vehicle_ids"] == ("ICE_001",)
+    assert aggregated_plan.metadata["stage1_warm_start_applied"] is True
+    assert aggregated_plan.metadata["stage1_warm_start_rejection_reason"] == ""
     discrete_audit = discrete_plan.metadata[
         "stage1_exact_combustion_clone_flow_aggregation_audit"
     ]

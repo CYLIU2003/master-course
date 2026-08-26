@@ -10,6 +10,7 @@ from bff.routers.optimization import (
     _apply_interactive_research_contract,
     _apply_interactive_bev_terminal_soc_policy,
     _interactive_runtime_controls_payload,
+    _resolve_runtime_controls,
     _research_claim_scope_payload,
     _solver_objective_accounting_reconciliation_payload,
     _solver_settings_payload,
@@ -513,6 +514,24 @@ def test_interactive_run_defaults_and_provenance_record_server_enforcement() -> 
     assert controls["effective"] == {
         "stage1_best_obj_stop_enabled": False,
         "gurobi_threads": 4,
+    }
+
+
+def test_research_batch_runtime_controls_preserve_frozen_request() -> None:
+    controls, best_obj_stop_enabled, gurobi_threads = _resolve_runtime_controls(
+        requested_stage1_best_obj_stop_enabled=False,
+        requested_gurobi_threads=1,
+        enforce_interactive_runtime_controls=False,
+    )
+
+    assert best_obj_stop_enabled is False
+    assert gurobi_threads == 1
+    assert controls["scope"] == "research_batch_run"
+    assert controls["enforced"] is False
+    assert controls["override_applied"] is False
+    assert controls["requested"] == controls["effective"] == {
+        "stage1_best_obj_stop_enabled": False,
+        "gurobi_threads": 1,
     }
 
 

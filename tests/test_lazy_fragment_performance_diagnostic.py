@@ -304,6 +304,11 @@ def _pure_ice_metrics(
             "aggregate_network_variable_count_created": (
                 40 if is_aggregate else 0
             ),
+            "aggregate_mip_start_complete": is_aggregate,
+            "aggregate_mip_start_audit": {
+                "requested": is_aggregate,
+                "applied": is_aggregate,
+            },
             "recovered_path_count": 2 if is_aggregate else 0,
             "recovered_vehicle_ids": (
                 ["ICE_001", "ICE_002"] if is_aggregate else []
@@ -416,7 +421,7 @@ def test_pure_ice_case_forwards_selector_by_keyword(
             "stage1_root_lp_diagnostic_method": 1,
             "stage1_root_lp_diagnostic_exact_clique_separation_enabled": True,
             "stage1_root_lp_diagnostic_exact_clique_time_limit_seconds": 60,
-            "gurobi_threads": 4,
+            "gurobi_threads": 1,
         },
         representation="discrete",
         log_path=tmp_path / "bff_worker.log",
@@ -428,7 +433,8 @@ def test_pure_ice_case_forwards_selector_by_keyword(
     assert observed["stage1_root_lp_diagnostic_method"] == 1
     assert observed["stage1_root_lp_diagnostic_exact_clique_separation_enabled"] is True
     assert observed["stage1_root_lp_diagnostic_exact_clique_time_limit_seconds"] == 60
-    assert observed["gurobi_threads"] == 4
+    assert observed["gurobi_threads"] == 1
+    assert observed["enforce_interactive_runtime_controls"] is False
     assert observed["mode"] == "phase3_two_stage"
 
 

@@ -516,6 +516,63 @@ def _interactive_runtime_controls_payload(
     }
 
 
+def _resolve_runtime_controls(
+    *,
+    requested_stage1_best_obj_stop_enabled: Any,
+    requested_gurobi_threads: Any,
+    enforce_interactive_runtime_controls: bool,
+) -> Tuple[Dict[str, Any], bool, int]:
+    """Resolve interactive or frozen research-batch solver controls.
+
+    The public BFF endpoint remains server-authoritative.  Internal research
+    diagnostics must instead preserve their predeclared controls exactly so
+    an A/B run cannot claim one thread while solving with four.
+    """
+
+    if enforce_interactive_runtime_controls:
+        payload = _interactive_runtime_controls_payload(
+            requested_stage1_best_obj_stop_enabled=(
+                requested_stage1_best_obj_stop_enabled
+            ),
+            requested_gurobi_threads=requested_gurobi_threads,
+        )
+        effective = dict(payload["effective"])
+        return (
+            payload,
+            bool(effective["stage1_best_obj_stop_enabled"]),
+            int(effective["gurobi_threads"]),
+        )
+
+    if requested_gurobi_threads is None:
+        raise ValueError("research batch runs require an explicit gurobi_threads")
+    requested_threads = int(requested_gurobi_threads)
+    if requested_threads < 1:
+        raise ValueError("research batch gurobi_threads must be at least one")
+    requested = {
+        "stage1_best_obj_stop_enabled": bool(
+            requested_stage1_best_obj_stop_enabled
+        ),
+        "gurobi_threads": requested_threads,
+    }
+    payload = {
+        "policy_version": "research_batch_runtime_controls_v1",
+        "scope": "research_batch_run",
+        "enforced": False,
+        "requested": requested,
+        "effective": dict(requested),
+        "override_applied": False,
+        "reason": (
+            "Research batch runs preserve the frozen requested controls; "
+            "the caller and post-run artifact gate are authoritative."
+        ),
+    }
+    return (
+        payload,
+        bool(requested["stage1_best_obj_stop_enabled"]),
+        requested_threads,
+    )
+
+
 def _apply_interactive_bev_terminal_soc_policy(
     scenario: Dict[str, Any],
 ) -> Dict[str, Any]:
@@ -11325,6 +11382,7 @@ def _run_optimization(
     stage1_gurobi_scale_flag: int = -1,
     stage1_root_lp_diagnostic_method: int = 2,
     stage1_activation_start_strengthening_vehicle_ids: Optional[List[str]] = None,
+    enforce_interactive_runtime_controls: bool = True,
 ) -> None:
     output_dir: Optional[str] = None
     raw_frontend_request_payload = dict(frontend_request_payload or {})
@@ -11356,15 +11414,17 @@ def _run_optimization(
         "server_enforced": bool(rolling_required),
         "requested": requested_rolling_controls,
     }
-    interactive_runtime_controls = _interactive_runtime_controls_payload(
+    (
+        interactive_runtime_controls,
+        stage1_best_obj_stop_enabled,
+        gurobi_threads,
+    ) = _resolve_runtime_controls(
         requested_stage1_best_obj_stop_enabled=stage1_best_obj_stop_enabled,
         requested_gurobi_threads=gurobi_threads,
+        enforce_interactive_runtime_controls=(
+            enforce_interactive_runtime_controls
+        ),
     )
-    # This worker is only entered by the BFF interactive endpoint.  Enforce at
-    # the last boundary before OptimizationConfig construction rather than
-    # trusting a UI/default request field.
-    stage1_best_obj_stop_enabled = INTERACTIVE_STAGE1_BEST_OBJ_STOP_ENABLED
-    gurobi_threads = INTERACTIVE_GUROBI_THREADS
     try:
         if (
             stage1_root_lp_diagnostic_exact_clique_separation_enabled

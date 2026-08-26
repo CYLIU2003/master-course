@@ -11,6 +11,7 @@ from scripts.run_pure_ice_aggregation_weather_ab import (
     ScenarioInput,
     _validate_prepare_request,
     _validate_child_fleet_contract,
+    _validate_child_runtime_controls,
     _validate_request_controls,
     _write_child_failure,
     _remove_weather_linked_fields,
@@ -235,6 +236,49 @@ def test_child_fleet_contract_must_match_the_prepared_fleet(tmp_path: Path) -> N
 
     assert audit["accepted"] is True
     assert (tmp_path / "child" / "fleet_contract_validation.json").is_file()
+
+
+def test_child_runtime_controls_require_solver_native_one_thread_evidence(
+    tmp_path: Path,
+) -> None:
+    source_run = tmp_path / "source-run"
+    source_run.mkdir()
+    (source_run / "solver_settings.json").write_text(
+        json.dumps(
+            {
+                "gurobi_threads": 1,
+                "stage1_best_obj_stop_enabled": False,
+                "interactive_runtime_controls": {
+                    "scope": "research_batch_run",
+                    "requested": {
+                        "stage1_best_obj_stop_enabled": False,
+                        "gurobi_threads": 1,
+                    },
+                    "effective": {
+                        "stage1_best_obj_stop_enabled": False,
+                        "gurobi_threads": 1,
+                    },
+                    "override_applied": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    accepted = _validate_child_runtime_controls(
+        child={"run_dir": str(source_run)},
+        metrics={"provenance": {"gurobi_threads": 1}},
+        run_directory=tmp_path / "accepted",
+    )
+    rejected = _validate_child_runtime_controls(
+        child={"run_dir": str(source_run)},
+        metrics={"provenance": {"gurobi_threads": 4}},
+        run_directory=tmp_path / "rejected",
+    )
+
+    assert accepted["accepted"] is True
+    assert rejected["accepted"] is False
+    assert rejected["checks"]["metrics_threads_match"] is False
 
 
 def test_prepared_contract_does_not_hide_a_pv_cost_control_change() -> None:

@@ -1,5 +1,37 @@
 # Development Notes
 
+## 2026-08-26: Direct weather A/B execution faults repaired before a new freeze
+
+- The failed `2fe6330` attempt exposed two reachable implementation faults,
+  both now addressed without changing objectives, constraints, fleet,
+  timetable, weather inputs, acceptance tolerances, fallback, or repair
+  policy. `_run_optimization` retains the existing four-thread interactive
+  policy by default, while the internal pure-ICE research-batch caller opts
+  into exact preservation of its frozen `gurobi_threads=1` and
+  `stage1_best_obj_stop_enabled=false` values. The child coordinator reads
+  solver-native `solver_settings.json` plus collected provenance and rejects
+  any run unless request/effective controls are both exactly those values and
+  no runtime override occurred.
+- The aggregate `B` child had rejected its complete physical baseline because
+  Phase 3 tried to seed removed labelled ICE assignment variables. The Stage-1
+  seed now declares the certified clone IDs as aggregate-represented and maps
+  the same baseline onto the complete aggregate path network: assignment,
+  connection, start/end, fragment layers, inter-fragment resets, aggregate
+  used count, and deterministic canonical ICE activation prefix. Missing
+  domains or an incomplete mapping raise before optimization; the
+  representation audit records `aggregate_mip_start_complete` and its detailed
+  mapping audit.
+- Focused exact regression constructs a complete discrete physical baseline,
+  seeds the pure-aggregate Phase-3 model, and verifies feasible incumbents,
+  equal recovered trip coverage/objective, accepted warm start, and canonical
+  recovery. The related interactive/batch runtime-control, coordinator,
+  aggregation, and Phase-3/Phase-4 suites pass `118 passed`; the complete
+  repository regression passes `1583 passed in 102.02s`. `py_compile` and
+  `git diff --check` also pass. These are implementation checks only. A new
+  clean commit/tag, Fresh Prepare, and SUNNY/RAIN execution are still required;
+  the failed old directory must not be resumed and no performance/weather
+  conclusion changes yet.
+
 ## 2026-08-26: Bounded interleaved SUNNY/RAIN pure-ICE aggregation protocol
 
 - Frozen attempt `2fe63300270266fa6a87970330ac2f3a493b873b` Fresh Prepared

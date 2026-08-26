@@ -38,6 +38,19 @@ aggregate correctness failure on a new clean SHA, then Fresh Prepare and run
 the whole schedule. Aggregation stays disabled and research release remains
 `BLOCKED`.
 
+The direct implementation faults from that attempt are now repaired, but no
+new 264-trip result is claimed yet. The internal research-batch call preserves
+the frozen one-thread/BestObjStop controls while the ordinary interactive BFF
+path remains server-authoritative at four threads. Each weather A/B child must
+also prove those effective controls from `solver_settings.json`. For aggregate
+Stage 1, the labelled physical baseline is now mapped onto every aggregate
+assignment, connection, boundary, fragment-layer, reset, used-count, and
+canonical vehicle-activation MIP-start variable; an incomplete mapping fails
+before optimization. A focused exact small-instance A/B plus the related
+runtime/control regressions pass. Fresh Prepare and the bounded SUNNY/RAIN run
+must still be performed from the next clean frozen commit before any empirical
+claim changes.
+
 The versioned request templates are under
 `config/research/pure_ice_weather_ab/`.  The coordinator records the BFF
 runtime SHA attestation, exact Fresh Prepare request/response, resulting
