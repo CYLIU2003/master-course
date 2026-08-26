@@ -726,6 +726,26 @@ def _persist_case_metrics(
     _write_json(run_directory / "case_metrics.json", metrics)
 
 
+def _write_child_failure(
+    *,
+    run_directory: Path,
+    representation: str,
+    error: Exception,
+) -> dict[str, Any]:
+    """Persist a failed child before stopping every remaining comparison run."""
+
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "status": "FAIL_CORRECTNESS",
+        "representation": representation,
+        "error_type": type(error).__name__,
+        "error": str(error),
+        "failed_at_utc": _utc_now().isoformat(),
+    }
+    _write_json(run_directory / "child_failure.json", payload)
+    return payload
+
+
 def _current_progress(
     *,
     schedule: Iterable[Mapping[str, Any]],
@@ -1125,19 +1145,26 @@ def run_weather_ab(
                 execution_deadline_utc=deadline_at,
             )
         except RuntimeError as exc:
-            if "declared execution deadline" not in str(exc):
-                raise
-            status = "INTERRUPTED"
-            reason = "deadline_reached_during_child"
-            _write_json(
-                run_directory / "interrupted_child.json",
-                {
-                    "schema_version": SCHEMA_VERSION,
-                    "status": status,
-                    "reason": reason,
-                    "interrupted_at_utc": _utc_now().isoformat(),
-                },
-            )
+            if "declared execution deadline" in str(exc):
+                status = "INTERRUPTED"
+                reason = "deadline_reached_during_child"
+                _write_json(
+                    run_directory / "interrupted_child.json",
+                    {
+                        "schema_version": SCHEMA_VERSION,
+                        "status": status,
+                        "reason": reason,
+                        "interrupted_at_utc": _utc_now().isoformat(),
+                    },
+                )
+            else:
+                status = "FAIL_CORRECTNESS"
+                reason = f"child_failure_{code}_run_{run_index:02d}"
+                _write_child_failure(
+                    run_directory=run_directory,
+                    representation=str(scheduled["representation"]),
+                    error=exc,
+                )
             break
         metrics = dict(child["metrics"])
         observed_hash = dict(dict(metrics.get("provenance") or {}).get("input_hashes") or {}).get("prepared_source_sha256")

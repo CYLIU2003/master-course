@@ -26,8 +26,17 @@ stops starting new cases after 20 hours, never starts a case after 24 hours,
 and writes `INTERRUPTED` rather than a runtime conclusion if fewer than five
 pairs complete.  It adds only a hash-gated SUNNY/RAIN comparison table; it
 does not enable aggregation in normal settings or change the optimization
-model.  This protocol has no result yet and does not change the `BLOCKED`
-research-release status.
+model. The first frozen execution at `2fe6330` stopped with
+`FAIL_CORRECTNESS`, so it is not a result: the reachable BFF worker forced four
+threads despite the one-thread request, and the first aggregate child produced
+no valid day-ahead solution (264 uncovered trips; no Rolling or
+aggregate-recovery proof). No RAIN child was started. The preserved partial
+artifact is `output/diagnostics/pure_ice_weather_ab_2fe6330_20260826/`; it
+supports no structural, runtime, cost, gap, or weather-effect conclusion. Do
+not resume it. First repair and attest a one-thread batch path plus the
+aggregate correctness failure on a new clean SHA, then Fresh Prepare and run
+the whole schedule. Aggregation stays disabled and research release remains
+`BLOCKED`.
 
 The versioned request templates are under
 `config/research/pure_ice_weather_ab/`.  The coordinator records the BFF

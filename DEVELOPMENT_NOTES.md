@@ -2,6 +2,34 @@
 
 ## 2026-08-26: Bounded interleaved SUNNY/RAIN pure-ICE aggregation protocol
 
+- Frozen attempt `2fe63300270266fa6a87970330ac2f3a493b873b` Fresh Prepared
+  both expected 264-trip inputs and started only SUNNY `A` then `B`, preserving
+  all files in `output/diagnostics/pure_ice_weather_ab_2fe6330_20260826/`.
+  The attempt is `FAIL_CORRECTNESS`, not a partial A/B result. Although the
+  discrete `A` output passes coverage/physical/24-hour Rolling/accounting, its
+  BFF audit proves that the requested one thread was forcibly changed to four.
+  Its 71.061-second solver time and 9.5213476% certified gap are diagnostic
+  metadata only. The following pure-aggregate child returned
+  `TIME_LIMIT_WITHOUT_VALID_SOLUTION`, exported no duties (264 uncovered), and
+  never entered Rolling; it therefore has neither a valid physical dispatch nor
+  `applied=true` aggregate recovery proof. No RAIN child started, so SUNNY and
+  RAIN each have zero completed pairs and no structural/runtime/weather claim
+  is permitted.
+- Root cause is reachable code, not an inferred API contract:
+  `scripts/build_lazy_fragment_performance_diagnostic.py` invokes the BFF
+  interactive worker, and `bff/routers/optimization.py::_run_optimization`
+  overwrites `gurobi_threads` with `INTERACTIVE_GUROBI_THREADS=4`. A bounded
+  experiment requiring one thread cannot use that worker as-is. The next
+  attempt must first provide and attest a suitable batch path, then reproduce
+  the aggregate no-valid-solution failure or repair its direct cause; it must
+  Fresh Prepare on a new clean SHA rather than resume this failed directory.
+- Fixed the coordinator's own terminal-artifact bug: a child `RuntimeError`
+  now writes `child_failure.json`, records `FAIL_CORRECTNESS`, finalizes the
+  parent output, and stops every remaining scheduled case. It deliberately
+  does not turn the original failed source run into a new experiment. Focused
+  coordinator, aggregation-runner, and README navigation tests pass (`31
+  passed`), and `py_compile` succeeds.
+
 - Added `scripts/run_pure_ice_aggregation_weather_ab.py` as a coordinator over
   the existing isolated-process `build_lazy_fragment_performance_diagnostic.py`
   child path and existing BFF Fresh Prepare endpoint.  It introduces no

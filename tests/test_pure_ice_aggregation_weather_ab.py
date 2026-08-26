@@ -3,11 +3,16 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import scripts.run_pure_ice_aggregation_weather_ab as weather_ab
 from scripts.run_pure_ice_aggregation_weather_ab import (
     REQUIRED_FIXED_HASHES,
+    RAIN_SCENARIO_ID,
+    SUNNY_SCENARIO_ID,
+    ScenarioInput,
     _validate_prepare_request,
     _validate_child_fleet_contract,
     _validate_request_controls,
+    _write_child_failure,
     _remove_weather_linked_fields,
     build_prepared_input_contract,
     build_cross_scenario_comparison,
@@ -266,3 +271,69 @@ def test_zero_composition_radius_is_an_explicit_frozen_control() -> None:
     }
 
     _validate_request_controls(request, "SUNNY")
+
+
+def test_failed_child_is_persisted_as_a_correctness_failure(tmp_path: Path) -> None:
+    payload = _write_child_failure(
+        run_directory=tmp_path,
+        representation="pure_aggregate",
+        error=RuntimeError("day-ahead result is not feasible"),
+    )
+
+    assert payload["status"] == "FAIL_CORRECTNESS"
+    assert payload["representation"] == "pure_aggregate"
+    assert json.loads((tmp_path / "child_failure.json").read_text()) == payload
+
+
+def test_child_runtime_error_finalizes_the_parent_as_fail_correctness(
+    tmp_path: Path, monkeypatch
+) -> None:
+    common_descriptor = {
+        "prepared_source_sha256": "prepared-source",
+        "route_ids_sha256": "routes",
+        "trip_ids_sha256": "trips",
+        "trip_structure_without_weather_energy_sha256": "trip-structure",
+        "vehicles_sha256": "vehicles",
+        "fleet_contract_hash": "fleet-contract",
+        "fleet_active_vehicle_id_hash": "fleet-vehicles",
+        "fleet_initial_state_hash": "fleet-initial-state",
+        "fleet_vehicle_parameter_hash": "fleet-parameters",
+        "chargers_sha256": "chargers",
+        "depots_sha256": "depots",
+        "simulation_config_without_weather_sha256": "simulation",
+        "scenario_overlay_without_weather_sha256": "overlay",
+        "weather_and_counterfactual_fields": {},
+    }
+
+    monkeypatch.setattr(weather_ab, "_assert_clean_frozen_sha", lambda *_: "frozen-sha")
+    monkeypatch.setattr(
+        weather_ab, "_prepared_descriptor", lambda _: dict(common_descriptor)
+    )
+    monkeypatch.setattr(
+        weather_ab,
+        "_normalized_request",
+        lambda scenario, **_: ({"prepared_input_id": scenario.prepared_input_id}, {}),
+    )
+    monkeypatch.setattr(weather_ab, "_load_completed_case_runs", lambda **_: {})
+
+    def _raise_child_error(**_):
+        raise RuntimeError("day-ahead result is not feasible")
+
+    monkeypatch.setattr(weather_ab, "_run_pure_ice_case_in_child_process", _raise_child_error)
+    output_dir = tmp_path / "weather-ab"
+    result = weather_ab.run_weather_ab(
+        sunny=ScenarioInput("SUNNY", SUNNY_SCENARIO_ID, "sunny-prepared", tmp_path / "sunny.json"),
+        rain=ScenarioInput("RAIN", RAIN_SCENARIO_ID, "rain-prepared", tmp_path / "rain.json"),
+        output_dir=output_dir,
+        stage1_time_limit_seconds=435,
+        stage2_time_limit_seconds=30,
+        small_exact_parity_passed=True,
+    )
+
+    assert result["status"] == "FAIL_CORRECTNESS"
+    assert result["reason"] == "child_failure_SUNNY_run_01"
+    assert result["completed_case_counts"] == {"SUNNY": 0, "RAIN": 0}
+    assert json.loads((output_dir / "weather_ab_result.json").read_text())["status"] == "FAIL_CORRECTNESS"
+    assert json.loads(
+        (output_dir / "scenarios" / "SUNNY" / "runs" / "01_A_discrete" / "child_failure.json").read_text()
+    )["error_type"] == "RuntimeError"

@@ -1,5 +1,50 @@
 # Current research release blockers
 
+## 2026-08-26: SUNNY/RAIN aggregation attempt stopped at `FAIL_CORRECTNESS`
+
+Frozen SHA `2fe63300270266fa6a87970330ac2f3a493b873b` Fresh Prepared both
+scenarios successfully and began the required first SUNNY `A`/`B` pair at
+`output/diagnostics/pure_ice_weather_ab_2fe6330_20260826/`. This is **not** a
+completed SUNNY pair and it is **not** a SUNNY/RAIN A/B result:
+
+- The discrete SUNNY `A` child materially served 264/264 trips and recorded
+  physical validation, 24/24 Rolling, and accounting as accepted. It is still
+  diagnostic-only because the request's one Gurobi thread was server-overridden
+  to four by the reachable BFF interactive worker. Its `solver_settings.json`
+  records `requested.gurobi_threads=1`, `effective.gurobi_threads=4`, and
+  `override_applied=true`; its 71.061-second solver time and 9.5213476%
+  certified gap cannot be compared under the declared one-thread protocol.
+- The following pure-aggregate SUNNY `B` child ended
+  `TIME_LIMIT_WITHOUT_VALID_SOLUTION`: it exported no duties, left 264/264
+  trips uncovered, and did not start hourly Rolling. It has no solver-native
+  aggregate `applied=true`/one-to-one recovery evidence. This independently
+  fails coverage, Rolling, and aggregate-recovery gates.
+- No RAIN child was started. Completed pair counts are SUNNY `0/5` and RAIN
+  `0/5`; runtime, structural, cost, PV/BESS, weather-effect, and certified-gap
+  comparisons are all **not available**. Aggregation remains default-OFF and
+  the research release remains **BLOCKED**.
+
+The preserved inputs/results are respectively SHA-256
+`E32E7724F4FECEC2502252E7D8C1D7B0F7C8A1CD691B0AA1C284B6838219440D`
+(`preparation/fresh_prepare_manifest.json`),
+`07E0EB83E16765B25A385B9FFF69C279A093A626E73C4C6324D72348AD913AB5`
+(SUNNY `A` `case_metrics.json`),
+`16AA6E966B638A21BFEEFA0F973478D1C1FFE2B36B7FF7645D59816690D713AC`
+(aggregate source-run `solver_result.json`), and
+`907F55427E458CEF52B7C6E8232AF21D0B971AD5F4E96E0D925649E57EB16652`
+(`assignment_validation_diagnostics.json`). The original coordinator did not
+finalize its terminal status when a child process raised; the narrow follow-up
+now persists `child_failure.json`, finalizes `FAIL_CORRECTNESS`, and stops the
+remaining schedule. It does not replay or relabel this failed run.
+
+The direct blockers before a new clean-SHA attempt are: (1) use a reachable
+non-interactive/batch execution path that attests the requested one-thread
+control instead of the BFF's four-thread interactive override; and (2) make
+the pure-aggregate child obtain a valid 264-trip day-ahead result and emit the
+required exact recovery audit. Re-run Fresh Prepare and the entire sequence
+only after those narrow fixes, their focused tests, documentation, and a new
+clean frozen commit/tag; do not resume this directory.
+
 ## 2026-08-26: Current-SHA SUNNY/RAIN aggregation evidence is pending
 
 The recovery-gated implementation has a new bounded coordinator,
