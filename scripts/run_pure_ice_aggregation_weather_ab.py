@@ -690,7 +690,7 @@ def _validate_child_runtime_controls(
     metrics: Mapping[str, Any],
     run_directory: Path,
 ) -> dict[str, Any]:
-    """Require solver-native evidence for the frozen one-thread controls."""
+    """Require effective-config and solver-native evidence for frozen controls."""
 
     source_run_dir_text = str(child.get("run_dir") or "").strip()
     source_run_dir = Path(source_run_dir_text) if source_run_dir_text else None
@@ -699,15 +699,35 @@ def _validate_child_runtime_controls(
         if source_run_dir is not None
         else None
     )
+    parameters_path = (
+        source_run_dir / "optimization_parameters.json"
+        if source_run_dir is not None
+        else None
+    )
     checks: dict[str, bool] = {
         "source_run_dir_present": source_run_dir is not None,
         "solver_settings_artifact_exists": bool(
             settings_path and settings_path.is_file()
         ),
+        "optimization_parameters_artifact_exists": bool(
+            parameters_path and parameters_path.is_file()
+        ),
     }
     settings: dict[str, Any] = {}
+    parameters: dict[str, Any] = {}
+    effective_config: dict[str, Any] = {}
     controls: dict[str, Any] = {}
-    if settings_path is not None and settings_path.is_file():
+    if parameters_path is not None and parameters_path.is_file():
+        parameters = _read_json(parameters_path)
+        effective_config = dict(
+            parameters.get("effective_optimization_config") or {}
+        )
+    if (
+        settings_path is not None
+        and settings_path.is_file()
+        and parameters_path is not None
+        and parameters_path.is_file()
+    ):
         settings = _read_json(settings_path)
         controls = dict(settings.get("interactive_runtime_controls") or {})
         expected = {
@@ -727,20 +747,34 @@ def _validate_child_runtime_controls(
                     settings.get("stage1_best_obj_stop_enabled") is False
                 ),
                 "candidate_limit_match": (
-                    settings.get("stage1_stage2_candidate_limit_requested") == 1
+                    effective_config.get("stage1_stage2_candidate_limit") == 1
                 ),
                 "composition_radius_match": (
-                    settings.get("stage1_composition_search_radius_requested") == 0
+                    effective_config.get("stage1_composition_search_radius") == 0
+                ),
+                "solver_candidate_limit_consistent": (
+                    settings.get("stage1_stage2_candidate_limit_requested")
+                    in (None, 1)
+                ),
+                "solver_composition_radius_consistent": (
+                    settings.get("stage1_composition_search_radius_requested")
+                    in (None, 0)
                 ),
                 "stage1_limit_match": (
-                    settings.get("stage1_time_limit_seconds_requested") == 435
+                    effective_config.get("stage1_time_limit_sec") == 435
                 ),
                 "stage2_limit_match": (
-                    settings.get("stage2_time_limit_seconds_requested") == 30
+                    effective_config.get("stage2_time_limit_sec") == 30
                 ),
                 "total_limit_includes_overhead": (
-                    settings.get("time_limit_seconds_effective")
+                    effective_config.get("time_limit_sec")
                     == 435 + 30 + WEATHER_AB_WALL_CLOCK_OVERHEAD_SECONDS
+                ),
+                "effective_config_threads_match": (
+                    effective_config.get("gurobi_threads") == 1
+                ),
+                "effective_config_best_obj_stop_disabled": (
+                    effective_config.get("stage1_best_obj_stop_enabled") is False
                 ),
             }
         )
@@ -749,6 +783,9 @@ def _validate_child_runtime_controls(
         "source_run_dir": str(source_run_dir.resolve()) if source_run_dir else None,
         "source_solver_settings_path": (
             str(settings_path.resolve()) if settings_path else None
+        ),
+        "source_optimization_parameters_path": (
+            str(parameters_path.resolve()) if parameters_path else None
         ),
         "required": {
             "scope": "research_batch_run",
@@ -772,19 +809,20 @@ def _validate_child_runtime_controls(
             "stage1_best_obj_stop_enabled": settings.get(
                 "stage1_best_obj_stop_enabled"
             ),
-            "stage1_stage2_candidate_limit": settings.get(
+            "effective_optimization_config": effective_config,
+            "solver_stage1_stage2_candidate_limit_requested": settings.get(
                 "stage1_stage2_candidate_limit_requested"
             ),
-            "stage1_composition_search_radius": settings.get(
+            "solver_stage1_composition_search_radius_requested": settings.get(
                 "stage1_composition_search_radius_requested"
             ),
-            "stage1_time_limit_seconds": settings.get(
+            "solver_stage1_time_limit_seconds_requested": settings.get(
                 "stage1_time_limit_seconds_requested"
             ),
-            "stage2_time_limit_seconds": settings.get(
+            "solver_stage2_time_limit_seconds_requested": settings.get(
                 "stage2_time_limit_seconds_requested"
             ),
-            "time_limit_seconds_effective": settings.get(
+            "solver_time_limit_seconds_effective": settings.get(
                 "time_limit_seconds_effective"
             ),
         },

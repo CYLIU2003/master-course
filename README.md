@@ -10,6 +10,20 @@ that brief is a request for independent review, not an approval record.
 
 ## Current 2026-08-26 SUNNY/RAIN pure-ICE aggregation protocol
 
+Clean freeze `7cb191a` verified that the corrected batch path actually used
+candidate limit/radius `1/0`, the 435/30-second solver caps, a 585-second
+child budget, one Gurobi thread, and disabled BestObjStop. Its first SUNNY A
+also passed 264/264 coverage, physical validation, 24/24 Rolling, accounting,
+and fleet checks. The coordinator nevertheless rejected it because the
+single-candidate solver path legitimately leaves the optional candidate fields
+in `solver_settings.json` as `null`, while the effective values are persisted
+in `optimization_parameters.json`. No B or RAIN child ran and pair counts are
+still zero. The post-run audit now reads candidate/radius and time controls
+from `effective_optimization_config`, keeps `solver_settings.json` for native
+Gurobi/runtime evidence and contradiction detection, and requires both
+artifacts. The failed `7cb191a` directory is diagnostic-only and must not be
+resumed; the next attempt requires another clean SHA and Fresh Prepare.
+
 The first post-repair clean freeze `31748ee` is also preserved as
 `FAIL_CORRECTNESS`, not as an A/B result. Its SUNNY A passed 264/264,
 physical, 24/24 Rolling, accounting, fleet, and one-thread checks. SUNNY B
@@ -53,10 +67,11 @@ the whole schedule. Aggregation stays disabled and research release remains
 `BLOCKED`.
 
 The initially identified implementation faults from that attempt are repaired,
-but no new 264-trip result is claimed yet. The internal research-batch call preserves
+but no completed A/B pair is claimed yet. The internal research-batch call preserves
 the frozen one-thread/BestObjStop controls while the ordinary interactive BFF
 path remains server-authoritative at four threads. Each weather A/B child must
-also prove those effective controls from `solver_settings.json`. For aggregate
+also prove Gurobi-native controls from `solver_settings.json` and the complete
+effective configuration from `optimization_parameters.json`. For aggregate
 Stage 1, the labelled physical baseline is now mapped onto every aggregate
 assignment, connection, boundary, fragment-layer, reset, used-count, and
 canonical vehicle-activation MIP-start variable; an incomplete mapping fails

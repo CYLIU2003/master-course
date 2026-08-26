@@ -1,5 +1,33 @@
 # Current research release blockers
 
+## 2026-08-26: `7cb191a` executed frozen controls but hit an audit-source blocker
+
+Clean SHA `7cb191a7d1981cb2e6743edbf70ae7203bdbd4a0` Fresh Prepared SUNNY and
+RAIN at `output/diagnostics/pure_ice_weather_ab_7cb191a_20260826/`, then the
+coordinator stopped after the first SUNNY A. The underlying child served
+264/264 trips and passed physical, 24/24 Rolling, accounting, fleet,
+clean-SHA, fallback, repair, and synthetic-PV gates. Its authoritative
+`optimization_parameters.json` confirms the intended effective candidate
+limit/radius `1/0`, Stage-1/Stage-2 caps `435/30`, total child limit `585`, one
+Gurobi thread, and disabled BestObjStop.
+
+The parent remains **FAIL_CORRECTNESS**, not a completed pair. On the
+single-candidate path, the solver adapter does not populate the optional
+candidate fields in `solver_settings.json`; they are `null`. The coordinator
+looked only at those optional fields and reported a false runtime-control
+mismatch despite the correct effective configuration. It therefore did not
+start SUNNY B or any RAIN child. Completed pairs remain SUNNY `0/5`, RAIN
+`0/5`, and no structural, runtime, gap, cost, or weather-effect conclusion is
+available.
+
+The narrow repair now requires both artifacts: executed search/time controls
+come from `optimization_parameters.json/effective_optimization_config`, while
+Gurobi-native settings and batch-override evidence remain checked in
+`solver_settings.json`. A missing effective-config artifact or a non-null
+contradiction still fails closed. Another clean commit/tag, Fresh Prepare, and
+full restart are mandatory. Aggregation remains default-OFF and release
+remains **BLOCKED**.
+
 ## 2026-08-26: `31748ee` proves aggregate seed but fails frozen search controls
 
 Clean SHA `31748ee247dfad4165172dba3468667b3ab9575f` Fresh Prepared SUNNY and

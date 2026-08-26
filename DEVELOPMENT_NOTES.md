@@ -1,5 +1,40 @@
 # Development Notes
 
+## 2026-08-26: Effective-config runtime audit corrected after `7cb191a`
+
+- Clean tag `thesis-pure-ice-weather-ab-7cb191a` / SHA
+  `7cb191a7d1981cb2e6743edbf70ae7203bdbd4a0` Fresh Prepared both scenarios
+  at `output/diagnostics/pure_ice_weather_ab_7cb191a_20260826/`. The first
+  SUNNY discrete child served 264/264 trips and passed physical validation,
+  24/24 Rolling, accounting, fleet, clean-SHA, no-fallback/no-repair, and the
+  materially executed one-thread controls. Its source
+  `optimization_parameters.json` records effective candidate limit/radius
+  `1/0`, Stage caps `435/30`, total `585`, one thread, and disabled
+  BestObjStop.
+- The coordinator still fail-closed at `invalid_SUNNY_run_01`, so this is not
+  a completed pair. The single-candidate solver adapter returns before its
+  optional `solver_settings.json` candidate-search metadata fields are filled,
+  leaving them `null`; the old audit incorrectly interpreted those nulls as
+  executed-control mismatch even though the authoritative effective config was
+  correct. No B or RAIN child ran; completed pairs remain SUNNY `0/5`, RAIN
+  `0/5`. The parent result, Fresh Prepare manifest, A case metrics, and original
+  runtime audit SHA-256 values are respectively
+  `660B80271D3404A793169ADFAA38F6A5ACF2CBF2C93498AB566699A4CF2761CB`,
+  `CA3A61F1E0D4DE41C6BAD09DCF03654449A789A556052975B6E9497B93282B52`,
+  `2C9EBC1FB8B9921B9A2A8DAB4D47E2E8126F97BA67EEB91F2D8D026C71A0D3B3`,
+  and `31D5262237A5B4D69827E986CD86DC5A2875FC966102893FECD3575519E81FE2`.
+- The narrow repair requires `optimization_parameters.json` and validates
+  candidate limit/radius, stage caps, total budget, thread count, and
+  BestObjStop from `effective_optimization_config`. It retains
+  `solver_settings.json` for Gurobi-native thread/BestObjStop evidence and
+  rejects any non-null candidate metadata that contradicts the effective
+  config. A regression reproduces the real null-metadata path, and a missing
+  effective-config artifact fails closed. The focused coordinator file passes
+  `14 passed`; the complete repository suite passes `1585 passed in 89.03s`.
+  `py_compile` and `git diff --check` also pass. The preserved `7cb191a`
+  directory is diagnostic-only and will not be resumed; a new clean commit
+  and Fresh Prepare are required.
+
 ## 2026-08-26: Batch candidate-search override and Stage-2 starvation repaired
 
 - Clean tag `thesis-pure-ice-weather-ab-31748ee` / SHA

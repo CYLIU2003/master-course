@@ -286,8 +286,10 @@ def test_child_runtime_controls_require_solver_native_one_thread_evidence(
             {
                 "gurobi_threads": 1,
                 "stage1_best_obj_stop_enabled": False,
-                "stage1_stage2_candidate_limit_requested": 1,
-                "stage1_composition_search_radius_requested": 0,
+                # The single-candidate solver path returns before these optional
+                # corroborating fields are populated in solver_settings.json.
+                "stage1_stage2_candidate_limit_requested": None,
+                "stage1_composition_search_radius_requested": None,
                 "stage1_time_limit_seconds_requested": 435,
                 "stage2_time_limit_seconds_requested": 30,
                 "time_limit_seconds_effective": 585,
@@ -307,6 +309,22 @@ def test_child_runtime_controls_require_solver_native_one_thread_evidence(
         ),
         encoding="utf-8",
     )
+    (source_run / "optimization_parameters.json").write_text(
+        json.dumps(
+            {
+                "effective_optimization_config": {
+                    "time_limit_sec": 585,
+                    "stage1_time_limit_sec": 435,
+                    "stage2_time_limit_sec": 30,
+                    "stage1_best_obj_stop_enabled": False,
+                    "gurobi_threads": 1,
+                    "stage1_stage2_candidate_limit": 1,
+                    "stage1_composition_search_radius": 0,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
 
     accepted = _validate_child_runtime_controls(
         child={"run_dir": str(source_run)},
@@ -319,17 +337,43 @@ def test_child_runtime_controls_require_solver_native_one_thread_evidence(
         run_directory=tmp_path / "rejected",
     )
     wrong_search_settings = json.loads(
-        (source_run / "solver_settings.json").read_text(encoding="utf-8")
+        (source_run / "optimization_parameters.json").read_text(encoding="utf-8")
     )
-    wrong_search_settings["stage1_stage2_candidate_limit_requested"] = 10
-    wrong_search_settings["stage1_composition_search_radius_requested"] = 2
-    (source_run / "solver_settings.json").write_text(
+    wrong_search_settings["effective_optimization_config"][
+        "stage1_stage2_candidate_limit"
+    ] = 10
+    wrong_search_settings["effective_optimization_config"][
+        "stage1_composition_search_radius"
+    ] = 2
+    (source_run / "optimization_parameters.json").write_text(
         json.dumps(wrong_search_settings), encoding="utf-8"
     )
     rejected_search = _validate_child_runtime_controls(
         child={"run_dir": str(source_run)},
         metrics={"provenance": {"gurobi_threads": 1}},
         run_directory=tmp_path / "rejected-search",
+    )
+    wrong_search_settings["effective_optimization_config"][
+        "stage1_stage2_candidate_limit"
+    ] = 1
+    wrong_search_settings["effective_optimization_config"][
+        "stage1_composition_search_radius"
+    ] = 0
+    (source_run / "optimization_parameters.json").write_text(
+        json.dumps(wrong_search_settings), encoding="utf-8"
+    )
+    contradictory_solver_settings = json.loads(
+        (source_run / "solver_settings.json").read_text(encoding="utf-8")
+    )
+    contradictory_solver_settings["stage1_stage2_candidate_limit_requested"] = 10
+    contradictory_solver_settings["stage1_composition_search_radius_requested"] = 2
+    (source_run / "solver_settings.json").write_text(
+        json.dumps(contradictory_solver_settings), encoding="utf-8"
+    )
+    rejected_contradiction = _validate_child_runtime_controls(
+        child={"run_dir": str(source_run)},
+        metrics={"provenance": {"gurobi_threads": 1}},
+        run_directory=tmp_path / "rejected-contradiction",
     )
 
     assert accepted["accepted"] is True
@@ -338,6 +382,52 @@ def test_child_runtime_controls_require_solver_native_one_thread_evidence(
     assert rejected_search["accepted"] is False
     assert rejected_search["checks"]["candidate_limit_match"] is False
     assert rejected_search["checks"]["composition_radius_match"] is False
+    assert rejected_contradiction["accepted"] is False
+    assert (
+        rejected_contradiction["checks"]["solver_candidate_limit_consistent"]
+        is False
+    )
+    assert (
+        rejected_contradiction["checks"]["solver_composition_radius_consistent"]
+        is False
+    )
+
+
+def test_child_runtime_controls_require_effective_optimization_parameters(
+    tmp_path: Path,
+) -> None:
+    source_run = tmp_path / "source-run"
+    source_run.mkdir()
+    (source_run / "solver_settings.json").write_text(
+        json.dumps(
+            {
+                "gurobi_threads": 1,
+                "stage1_best_obj_stop_enabled": False,
+                "interactive_runtime_controls": {
+                    "scope": "research_batch_run",
+                    "requested": {
+                        "stage1_best_obj_stop_enabled": False,
+                        "gurobi_threads": 1,
+                    },
+                    "effective": {
+                        "stage1_best_obj_stop_enabled": False,
+                        "gurobi_threads": 1,
+                    },
+                    "override_applied": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    audit = _validate_child_runtime_controls(
+        child={"run_dir": str(source_run)},
+        metrics={"provenance": {"gurobi_threads": 1}},
+        run_directory=tmp_path / "missing-parameters",
+    )
+
+    assert audit["accepted"] is False
+    assert audit["checks"]["optimization_parameters_artifact_exists"] is False
 
 
 def test_prepared_contract_does_not_hide_a_pv_cost_control_change() -> None:
