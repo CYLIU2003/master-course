@@ -3,7 +3,7 @@
   "research_run": true,
   "time_step_min": 15,
   "timestep_min": 15,
-  "time_limit_seconds": 465,
+  "time_limit_seconds": 585,
   "stage1_time_limit_seconds": 435,
   "stage2_time_limit_seconds": 30,
   "stage1_best_obj_stop_enabled": false,

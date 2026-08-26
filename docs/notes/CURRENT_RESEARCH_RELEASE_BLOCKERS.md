@@ -1,5 +1,37 @@
 # Current research release blockers
 
+## 2026-08-26: `31748ee` proves aggregate seed but fails frozen search controls
+
+Clean SHA `31748ee247dfad4165172dba3468667b3ab9575f` Fresh Prepared SUNNY and
+RAIN, then stopped during the first SUNNY A/B pair at
+`output/diagnostics/pure_ice_weather_ab_31748ee_20260826/`. This remains
+**FAIL_CORRECTNESS**, not a completed pair:
+
+- SUNNY A passed 264/264 coverage, physical validation, 24/24 Rolling,
+  accounting, fleet, clean SHA, one effective Gurobi thread, and disabled
+  BestObjStop.
+- SUNNY B proved the repaired mapping reached the solver:
+  `stage1_warm_start_applied=true`, no rejection reason, and
+  `aggregate_mip_start_complete=true`. Gurobi produced the first aggregate
+  incumbent after 1.162 seconds at 707,349.173370 JPY.
+- A separate BFF research policy silently changed the frozen candidate-search
+  controls from limit/radius `1/0` to `10/2`. It reserved and consumed 45
+  seconds for enumeration and left Stage 2 an effective 0-second budget. B
+  therefore ended `TIME_LIMIT_WITHOUT_VALID_SOLUTION` with no valid exported
+  duties. This makes A's otherwise passing execution protocol-invalid too.
+- No RAIN child started. Completed pairs remain SUNNY `0/5`, RAIN `0/5`; no
+  structural, runtime, gap, cost, or weather conclusion is allowed.
+
+The narrow follow-up preserves `1/0` for internal research-batch execution,
+keeps ordinary interactive research at its prior minimum `10/2`, and extends
+the child-wide deadline only by a fixed 120-second model-build/artifact
+allowance. Stage-1 and Stage-2 solver caps stay exactly 435 and 30 seconds.
+Post-run validation now checks these solver-native effective values. Focused
+verification passes `122 passed`, and the complete suite passes `1584 passed
+in 87.84s`; a new clean SHA, Fresh Prepare, and full
+restart are still mandatory. Aggregation remains default-OFF and release
+remains **BLOCKED**.
+
 ## 2026-08-26: Direct execution faults fixed; fresh frozen evidence still pending
 
 The two direct code faults found in the failed `2fe6330` attempt are repaired

@@ -573,6 +573,22 @@ def _resolve_runtime_controls(
     )
 
 
+def _resolve_stage1_candidate_search_controls(
+    *,
+    requested_candidate_limit: Any,
+    requested_composition_radius: Any,
+    research_run: bool,
+    enforce_interactive_runtime_controls: bool,
+) -> Tuple[int, int]:
+    """Keep interactive research breadth separate from frozen batch controls."""
+
+    candidate_limit = max(int(requested_candidate_limit), 1)
+    composition_radius = max(int(requested_composition_radius), 0)
+    if research_run and enforce_interactive_runtime_controls:
+        return max(candidate_limit, 10), max(composition_radius, 2)
+    return candidate_limit, composition_radius
+
+
 def _apply_interactive_bev_terminal_soc_policy(
     scenario: Dict[str, Any],
 ) -> Dict[str, Any]:
@@ -11425,6 +11441,17 @@ def _run_optimization(
             enforce_interactive_runtime_controls
         ),
     )
+    (
+        stage1_stage2_candidate_limit,
+        stage1_composition_search_radius,
+    ) = _resolve_stage1_candidate_search_controls(
+        requested_candidate_limit=stage1_stage2_candidate_limit,
+        requested_composition_radius=stage1_composition_search_radius,
+        research_run=bool(research_run),
+        enforce_interactive_runtime_controls=(
+            enforce_interactive_runtime_controls
+        ),
+    )
     try:
         if (
             stage1_root_lp_diagnostic_exact_clique_separation_enabled
@@ -11642,16 +11669,8 @@ def _run_optimization(
                 stage1_fragment_transition_cut_mode=str(
                     stage1_fragment_transition_cut_mode or "lazy"
                 ),
-                stage1_stage2_candidate_limit=(
-                    max(int(stage1_stage2_candidate_limit), 10)
-                    if bool(research_run)
-                    else max(int(stage1_stage2_candidate_limit), 1)
-                ),
-                stage1_composition_search_radius=(
-                    max(int(stage1_composition_search_radius), 2)
-                    if bool(research_run)
-                    else max(int(stage1_composition_search_radius), 0)
-                ),
+                stage1_stage2_candidate_limit=stage1_stage2_candidate_limit,
+                stage1_composition_search_radius=stage1_composition_search_radius,
                 stage1_bev_frontier_enabled=bool(
                     stage1_bev_frontier_enabled
                 ),

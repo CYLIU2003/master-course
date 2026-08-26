@@ -11,6 +11,7 @@ from bff.routers.optimization import (
     _apply_interactive_bev_terminal_soc_policy,
     _interactive_runtime_controls_payload,
     _resolve_runtime_controls,
+    _resolve_stage1_candidate_search_controls,
     _research_claim_scope_payload,
     _solver_objective_accounting_reconciliation_payload,
     _solver_settings_payload,
@@ -533,6 +534,19 @@ def test_research_batch_runtime_controls_preserve_frozen_request() -> None:
         "stage1_best_obj_stop_enabled": False,
         "gurobi_threads": 1,
     }
+
+    assert _resolve_stage1_candidate_search_controls(
+        requested_candidate_limit=1,
+        requested_composition_radius=0,
+        research_run=True,
+        enforce_interactive_runtime_controls=False,
+    ) == (1, 0)
+    assert _resolve_stage1_candidate_search_controls(
+        requested_candidate_limit=1,
+        requested_composition_radius=0,
+        research_run=True,
+        enforce_interactive_runtime_controls=True,
+    ) == (10, 2)
 
 
 def test_all_available_bev_policy_reuses_minimum_use_constraint() -> None:

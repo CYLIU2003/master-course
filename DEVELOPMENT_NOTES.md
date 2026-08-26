@@ -1,5 +1,39 @@
 # Development Notes
 
+## 2026-08-26: Batch candidate-search override and Stage-2 starvation repaired
+
+- Clean tag `thesis-pure-ice-weather-ab-31748ee` / SHA
+  `31748ee247dfad4165172dba3468667b3ab9575f` Fresh Prepared both 264-trip
+  scenarios and started the first SUNNY A/B pair at
+  `output/diagnostics/pure_ice_weather_ab_31748ee_20260826/`. SUNNY A passed
+  coverage, physical validation, 24/24 Rolling, accounting, fleet, clean-SHA,
+  and the new one-thread audit. SUNNY B submitted the complete aggregate MIP
+  start (`stage1_warm_start_applied=true`,
+  `aggregate_mip_start_complete=true`) and obtained its first Stage-1
+  incumbent after 1.162 seconds at 707,349.173370 JPY.
+- The run nevertheless correctly ended `FAIL_CORRECTNESS`. A second reachable
+  BFF research policy had silently changed the frozen
+  `stage1_stage2_candidate_limit=1` and
+  `stage1_composition_search_radius=0` to effective `10/2` in both A and B.
+  For B this reserved 45 seconds, ran candidate enumeration, and reached Stage
+  2 with an effective 0-second budget. Its source result is
+  `TIME_LIMIT_WITHOUT_VALID_SOLUTION`; no RAIN child started and completed
+  pair counts remain SUNNY `0/5`, RAIN `0/5`. The SHA-256 values of the parent
+  result, Fresh Prepare manifest, B source solver result, and candidate audit
+  are respectively `11D0B750...AAF3D`, `FB2CCE91...6041`,
+  `762F13A2...3957`, and `E2439DBC...5839`.
+- The batch execution boundary now also preserves candidate limit/radius
+  exactly, while ordinary interactive research runs retain their minimum
+  `10/2` exploration policy. Post-run control validation now requires
+  solver-native `1/0`, 435/30-second Stage-1/Stage-2 caps, and the total child
+  deadline. The weather protocol adds a fixed 120-second artifact/model-build
+  allowance, so the total is 585 seconds without changing either solver cap.
+  This follows the existing long-diagnostic rule that global wall time must
+  not consume Stage 2. Focused related verification passes `122 passed`; the
+  complete repository suite passes `1584 passed in 87.84s`. `py_compile` and
+  `git diff --check` also pass. A new clean commit/tag and Fresh Prepare
+  are required; the `31748ee` directory must not be resumed.
+
 ## 2026-08-26: Direct weather A/B execution faults repaired before a new freeze
 
 - The failed `2fe6330` attempt exposed two reachable implementation faults,

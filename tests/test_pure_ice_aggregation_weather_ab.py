@@ -9,6 +9,8 @@ from scripts.run_pure_ice_aggregation_weather_ab import (
     RAIN_SCENARIO_ID,
     SUNNY_SCENARIO_ID,
     ScenarioInput,
+    WEATHER_AB_WALL_CLOCK_OVERHEAD_SECONDS,
+    _normalized_request,
     _validate_prepare_request,
     _validate_child_fleet_contract,
     _validate_child_runtime_controls,
@@ -208,6 +210,42 @@ def test_versioned_prepare_templates_satisfy_the_protocol() -> None:
     )
 
 
+def test_weather_request_preserves_stage_caps_and_adds_fixed_overhead(
+    tmp_path: Path,
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    source = json.loads(
+        (
+            root
+            / "config"
+            / "research"
+            / "pure_ice_weather_ab"
+            / "optimization_request_template.json"
+        ).read_text(encoding="utf-8")
+    )
+    source["prepared_input_id"] = "prepared-fixed"
+    request_path = tmp_path / "request.json"
+    request_path.write_text(json.dumps(source), encoding="utf-8")
+
+    request, transformation = _normalized_request(
+        ScenarioInput(
+            "SUNNY",
+            SUNNY_SCENARIO_ID,
+            "prepared-fixed",
+            request_path,
+        ),
+        stage1_time_limit_seconds=435,
+        stage2_time_limit_seconds=30,
+    )
+
+    assert request["stage1_time_limit_seconds"] == 435
+    assert request["stage2_time_limit_seconds"] == 30
+    assert request["time_limit_seconds"] == 585
+    assert transformation["wall_clock_overhead_seconds"] == (
+        WEATHER_AB_WALL_CLOCK_OVERHEAD_SECONDS
+    )
+
+
 def test_child_fleet_contract_must_match_the_prepared_fleet(tmp_path: Path) -> None:
     source_run = tmp_path / "source-run"
     source_run.mkdir()
@@ -248,6 +286,11 @@ def test_child_runtime_controls_require_solver_native_one_thread_evidence(
             {
                 "gurobi_threads": 1,
                 "stage1_best_obj_stop_enabled": False,
+                "stage1_stage2_candidate_limit_requested": 1,
+                "stage1_composition_search_radius_requested": 0,
+                "stage1_time_limit_seconds_requested": 435,
+                "stage2_time_limit_seconds_requested": 30,
+                "time_limit_seconds_effective": 585,
                 "interactive_runtime_controls": {
                     "scope": "research_batch_run",
                     "requested": {
@@ -275,10 +318,26 @@ def test_child_runtime_controls_require_solver_native_one_thread_evidence(
         metrics={"provenance": {"gurobi_threads": 4}},
         run_directory=tmp_path / "rejected",
     )
+    wrong_search_settings = json.loads(
+        (source_run / "solver_settings.json").read_text(encoding="utf-8")
+    )
+    wrong_search_settings["stage1_stage2_candidate_limit_requested"] = 10
+    wrong_search_settings["stage1_composition_search_radius_requested"] = 2
+    (source_run / "solver_settings.json").write_text(
+        json.dumps(wrong_search_settings), encoding="utf-8"
+    )
+    rejected_search = _validate_child_runtime_controls(
+        child={"run_dir": str(source_run)},
+        metrics={"provenance": {"gurobi_threads": 1}},
+        run_directory=tmp_path / "rejected-search",
+    )
 
     assert accepted["accepted"] is True
     assert rejected["accepted"] is False
     assert rejected["checks"]["metrics_threads_match"] is False
+    assert rejected_search["accepted"] is False
+    assert rejected_search["checks"]["candidate_limit_match"] is False
+    assert rejected_search["checks"]["composition_radius_match"] is False
 
 
 def test_prepared_contract_does_not_hide_a_pv_cost_control_change() -> None:
@@ -312,6 +371,9 @@ def test_zero_composition_radius_is_an_explicit_frozen_control() -> None:
         "use_existing_duties": False,
         "stage1_stage2_candidate_limit": 1,
         "stage1_composition_search_radius": 0,
+        "stage1_time_limit_seconds": 435,
+        "stage2_time_limit_seconds": 30,
+        "time_limit_seconds": 585,
     }
 
     _validate_request_controls(request, "SUNNY")

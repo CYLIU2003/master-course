@@ -10,6 +10,20 @@ that brief is a request for independent review, not an approval record.
 
 ## Current 2026-08-26 SUNNY/RAIN pure-ICE aggregation protocol
 
+The first post-repair clean freeze `31748ee` is also preserved as
+`FAIL_CORRECTNESS`, not as an A/B result. Its SUNNY A passed 264/264,
+physical, 24/24 Rolling, accounting, fleet, and one-thread checks. SUNNY B
+proved that the complete aggregate MIP start was submitted and produced a
+Stage-1 incumbent after 1.162 seconds, but the BFF still changed the frozen
+candidate limit/radius from `1/0` to `10/2`. That reserved and consumed 45
+seconds for candidate enumeration and left Stage 2 with an effective 0-second
+budget, so B exported no valid dispatch. No RAIN child ran; completed pair
+counts remain SUNNY 0/5 and RAIN 0/5. The current follow-up preserves `1/0`
+for the internal batch path, adds solver-artifact checks for those controls,
+and gives the fixed 435/30-second solver caps a separate 120-second artifact
+overhead inside the overall child deadline. A new clean SHA and Fresh Prepare
+are still required.
+
 The historical 264-trip pure-ICE A/B bundles are not evidence for the current
 checkout.  The next bounded measurement is fixed to existing scenarios SUNNY
 `771d115b-75b0-49f7-a7f0-25f259a2cd21` and RAIN
@@ -38,8 +52,8 @@ aggregate correctness failure on a new clean SHA, then Fresh Prepare and run
 the whole schedule. Aggregation stays disabled and research release remains
 `BLOCKED`.
 
-The direct implementation faults from that attempt are now repaired, but no
-new 264-trip result is claimed yet. The internal research-batch call preserves
+The initially identified implementation faults from that attempt are repaired,
+but no new 264-trip result is claimed yet. The internal research-batch call preserves
 the frozen one-thread/BestObjStop controls while the ordinary interactive BFF
 path remains server-authoritative at four threads. Each weather A/B child must
 also prove those effective controls from `solver_settings.json`. For aggregate

@@ -50,6 +50,7 @@ from src.optimization.common.fleet_contract import (  # noqa: E402
 
 
 SCHEMA_VERSION = "pure_ice_aggregation_weather_ab_v1"
+WEATHER_AB_WALL_CLOCK_OVERHEAD_SECONDS = 120
 SUNNY_SCENARIO_ID = "771d115b-75b0-49f7-a7f0-25f259a2cd21"
 RAIN_SCENARIO_ID = "b23fd26c-1233-4c73-bb9e-bdb8b1584760"
 SERVICE_DATE = "2025-08-05"
@@ -199,6 +200,16 @@ def _normalized_request(
         stage1_time_limit_seconds=stage1_time_limit_seconds,
         stage2_time_limit_seconds=stage2_time_limit_seconds,
     )
+    request["time_limit_seconds"] = (
+        int(stage1_time_limit_seconds)
+        + int(stage2_time_limit_seconds)
+        + WEATHER_AB_WALL_CLOCK_OVERHEAD_SECONDS
+    )
+    transformation = {
+        **dict(transformation),
+        "wall_clock_overhead_seconds": WEATHER_AB_WALL_CLOCK_OVERHEAD_SECONDS,
+        "total_time_limit_seconds": request["time_limit_seconds"],
+    }
     _validate_request_controls(request, scenario.code_name)
     return request, transformation
 
@@ -440,6 +451,16 @@ def _validate_request_controls(request: Mapping[str, Any], code_name: str) -> No
     composition_radius = request.get("stage1_composition_search_radius")
     if (int(composition_radius) if composition_radius is not None else -1) != 0:
         raise ValueError(f"{code_name} requires stage1_composition_search_radius=0")
+    stage1_limit = int(request.get("stage1_time_limit_seconds") or 0)
+    stage2_limit = int(request.get("stage2_time_limit_seconds") or 0)
+    expected_total_limit = (
+        stage1_limit + stage2_limit + WEATHER_AB_WALL_CLOCK_OVERHEAD_SECONDS
+    )
+    if int(request.get("time_limit_seconds") or 0) != expected_total_limit:
+        raise ValueError(
+            f"{code_name} requires time_limit_seconds={expected_total_limit} "
+            "to preserve both stage caps plus the fixed artifact overhead"
+        )
 
 
 def _prepared_descriptor(scenario: ScenarioInput) -> dict[str, Any]:
@@ -705,6 +726,22 @@ def _validate_child_runtime_controls(
                 "best_obj_stop_disabled": (
                     settings.get("stage1_best_obj_stop_enabled") is False
                 ),
+                "candidate_limit_match": (
+                    settings.get("stage1_stage2_candidate_limit_requested") == 1
+                ),
+                "composition_radius_match": (
+                    settings.get("stage1_composition_search_radius_requested") == 0
+                ),
+                "stage1_limit_match": (
+                    settings.get("stage1_time_limit_seconds_requested") == 435
+                ),
+                "stage2_limit_match": (
+                    settings.get("stage2_time_limit_seconds_requested") == 30
+                ),
+                "total_limit_includes_overhead": (
+                    settings.get("time_limit_seconds_effective")
+                    == 435 + 30 + WEATHER_AB_WALL_CLOCK_OVERHEAD_SECONDS
+                ),
             }
         )
     audit = {
@@ -718,6 +755,13 @@ def _validate_child_runtime_controls(
             "stage1_best_obj_stop_enabled": False,
             "gurobi_threads": 1,
             "override_applied": False,
+            "stage1_stage2_candidate_limit": 1,
+            "stage1_composition_search_radius": 0,
+            "stage1_time_limit_seconds": 435,
+            "stage2_time_limit_seconds": 30,
+            "wall_clock_overhead_seconds": (
+                WEATHER_AB_WALL_CLOCK_OVERHEAD_SECONDS
+            ),
         },
         "observed": {
             "interactive_runtime_controls": controls,
@@ -727,6 +771,21 @@ def _validate_child_runtime_controls(
             ),
             "stage1_best_obj_stop_enabled": settings.get(
                 "stage1_best_obj_stop_enabled"
+            ),
+            "stage1_stage2_candidate_limit": settings.get(
+                "stage1_stage2_candidate_limit_requested"
+            ),
+            "stage1_composition_search_radius": settings.get(
+                "stage1_composition_search_radius_requested"
+            ),
+            "stage1_time_limit_seconds": settings.get(
+                "stage1_time_limit_seconds_requested"
+            ),
+            "stage2_time_limit_seconds": settings.get(
+                "stage2_time_limit_seconds_requested"
+            ),
+            "time_limit_seconds_effective": settings.get(
+                "time_limit_seconds_effective"
             ),
         },
         "checks": checks,
@@ -1147,6 +1206,9 @@ def run_weather_ab(
                 "mip_gap": requests["SUNNY"].get("mip_gap"),
                 "stage1_time_limit_seconds": stage1_time_limit_seconds,
                 "stage2_time_limit_seconds": stage2_time_limit_seconds,
+                "wall_clock_overhead_seconds": (
+                    WEATHER_AB_WALL_CLOCK_OVERHEAD_SECONDS
+                ),
                 "stage1_best_obj_stop_enabled": False,
                 "stage1_powertrain_selector_strengthening": False,
                 "time_step_min": 15,
