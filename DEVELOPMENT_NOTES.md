@@ -1,5 +1,88 @@
 # Development Notes
 
+## 2026-08-27: Final SUNNY/RAIN 20-child A/B completed at `453b1d3`
+
+- Clean tag `thesis-pure-ice-weather-ab-453b1d3` / SHA
+  `453b1d340311de109645d006b9ec5a0de2788c2e` Fresh Prepared SUNNY
+  `771d115b-75b0-49f7-a7f0-25f259a2cd21` and RAIN
+  `b23fd26c-1233-4c73-bb9e-bdb8b1584760`, then completed the interleaved
+  AB/BA schedule at
+  `output/diagnostics/pure_ice_weather_ab_453b1d3_20260827/`. Counts are
+  SUNNY A=5/B=5 and RAIN A=5/B=5, hence five complete pairs per scenario and
+  20 isolated child processes. The clock ran from 2026-08-27 01:34:04.291 to
+  03:49:36.223 JST (2 h 15 min 31.933 s); nothing was interrupted and the
+  20-hour/24-hour cutoffs were not approached.
+- Independent iteration over all 20 `case_metrics.json` files found zero gate
+  failures. Every run has 264/264 coverage, physical PASS, 24/24 accepted
+  Rolling, accounting `OK`, accepted fleet/runtime-control audits, and no
+  fallback, repair, synthetic PV, optimization proxy, weather proxy, overlap,
+  duplicate coverage, invalid transition, charger, BEV-SOC, or ICE-fuel
+  violation. Each of ten B runs also has `applied=true`, complete MIP-start
+  domain checks, unchanged integer and recoverable physical dispatch sets,
+  no labelled-region relaxation, and 18 unique recovered paths mapped
+  one-to-one to 18 canonical ICE IDs.
+- Both scenario verdicts are `PASS_STRUCTURAL_ONLY`. A/B model medians are
+  825,858/583,125 total variables (-29.392%), 726,240/493,756 binaries
+  (-32.012%), 151,574/125,547 constraints (-17.171%), and
+  16,316,201/15,753,121 nonzeros (-3.451%). Median peak RSS falls by about
+  359.4 MB (SUNNY) and 355.9 MB (RAIN), and model build/presolve improves by
+  about one second, but this does not translate to solver performance.
+- Median solver time worsens from 30.754 to 435.106 seconds for SUNNY
+  (14.148x; +1,314.8%) and 31.887 to 435.103 seconds for RAIN (13.645x;
+  +1,264.5%). The incumbent, certified bound/gap, and explored node count are
+  unchanged within each weather case. Aggregate B's native median raw bound
+  is -3,796.937 JPY with raw gap 100.537%, versus A's raw 640,000-JPY bound
+  and 9.521% raw gap; the final certified bound is rescued only by the
+  independent valid lower-bound calculation. This is structural reduction
+  with weaker native relaxation, not a runtime or optimality improvement.
+- The fixed-input contract passes. SUNNY and RAIN share the timetable, trip,
+  vehicle, charger, tariff, objective, solver controls, and energy-asset
+  control hash
+  `037c2bf93cf94f702b6b6612e437efe8ce6c80c94f71af4fdb916458b064dba0`.
+  Their PV hashes intentionally differ (`65213bba...ab652` versus
+  `0d07117e...b6c40`). Dispatch/cost medians are identical: 46 BEV and 218 ICE
+  trips, 14/18 used vehicles, 441.385315 L fuel, zero grid purchase, and
+  707,349.173370 JPY (640,000 vehicle-use + 66,207.797 fuel + 1,141.376 CO2,
+  with negligible floating-point electricity cost). Weather still changes
+  energy flows: RAIN has +98.761426 kWh PV-to-bus, -109.430953 kWh
+  PV-to-BESS, -98.761435 kWh BESS-to-bus, and -5,049.380474 kWh curtailment.
+  The certified gap differs through the valid lower bound: SUNNY 9.5213476%
+  and RAIN 1.6563581%.
+- Claim boundary: correctness parity and structural reduction are supported
+  for these two fixed scenarios. A general speedup, improved optimality,
+  integrated-global optimum, or weather-general benefit is not supported.
+  Aggregation remains default-OFF. The goal itself has no incomplete pair,
+  but the thesis release remains blocked by the Stage-1 certification gap and
+  by the absence of a runtime benefit.
+- Key SHA-256 values: `weather_ab_result.json`
+  `F041658DA3B24F9815CB558CBA00CB2AEC2AAB7F2682AE56244BBEFE019BAEF7`;
+  `request_manifest.json`
+  `D0F65C2232D73EDFB057FC0C417FA969F726C44B8A09FCD31E4165368BD5659B`;
+  `artifact_hashes.json`
+  `F6B7232164EE2ED9DF5F9CF7B005F25A5F25C1C6F3699240ACAE05B41BCBE672`;
+  Fresh Prepare manifest
+  `613A51BC9701D93AB7114C4305C6758523A345F4B2A87754B8969352F3A3EC32`;
+  cross-scenario JSON
+  `1489A9507C31BF36F9337BF9D2ED2D671DA4A34E1850637858A9D7B59CA76D5C`.
+  The bundle's artifact index is the authoritative full inventory.
+- Resume command: none. The parent is terminal `COMPLETED`; adding `--resume`
+  after later documentation commits correctly fails the frozen-SHA contract
+  and must not be used. A deliberate fresh reproduction must first use a
+  clean checkout of `thesis-pure-ice-weather-ab-453b1d3`, start that checkout's
+  BFF, choose a new empty output directory, and run:
+  `.venv\Scripts\python.exe scripts\run_pure_ice_aggregation_weather_ab.py
+  --base-url http://127.0.0.1:8010 --output-dir
+  output\diagnostics\pure_ice_weather_ab_453b1d3_<new-date>
+  --sunny-prepare-request
+  config\research\pure_ice_weather_ab\sunny_prepare_request.json
+  --rain-prepare-request
+  config\research\pure_ice_weather_ab\rain_prepare_request.json
+  --optimization-request-template
+  config\research\pure_ice_weather_ab\optimization_request_template.json
+  --stage1-time-limit-seconds 435 --stage2-time-limit-seconds 30
+  --small-exact-parity-passed`. This is a reproduction command, not a pending
+  action or authorization to spend more compute.
+
 ## 2026-08-27: Completed `18faf07` run rejected by weather-leaf asset hash
 
 - Clean tag `thesis-pure-ice-weather-ab-18faf07` / SHA

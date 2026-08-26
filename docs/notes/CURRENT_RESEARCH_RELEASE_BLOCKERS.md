@@ -1,5 +1,58 @@
 # Current research release blockers
 
+## 2026-08-27: Two-weather aggregation A/B complete; structural-only result
+
+The clean frozen release candidate
+`thesis-pure-ice-weather-ab-453b1d3` / SHA
+`453b1d340311de109645d006b9ec5a0de2788c2e` completed SUNNY `5/5` and
+RAIN `5/5` pairs (20/20 isolated children) at
+`output/diagnostics/pure_ice_weather_ab_453b1d3_20260827/`. The parent status
+is `COMPLETED`, the final cross-scenario input contract passes, and an
+independent audit of all child metrics found zero correctness-gate failures.
+Every child served 264/264 trips, passed physical validation, 24/24 Rolling,
+accounting, fleet, runtime controls, and prohibited fallback/repair/proxy
+checks. All ten B children also satisfy the exact aggregate application,
+feasible-set invariance, non-relaxation, complete MIP-start, and one-to-one
+canonical recovery gates.
+
+The verdict is **`PASS_STRUCTURAL_ONLY` for both scenarios**. B reduces total
+variables 29.392%, binaries 32.012%, constraints 17.171%, and nonzeros 3.451%,
+but has no incumbent, certified-bound, certified-gap, or node-count benefit.
+Median solver time worsens from 30.754 to 435.106 seconds in SUNNY and from
+31.887 to 435.103 seconds in RAIN. Its native raw relaxation/bound is also
+materially weaker; the valid reported certified bound comes from the separate
+independent lower-bound calculation. Therefore pure-ICE aggregation remains
+default-OFF and no runtime or optimality improvement may be claimed.
+
+The weather cases share all fixed timetable, fleet, charger, BESS/PV-asset,
+tariff, objective, and solver controls; their PV hashes differ as declared.
+They select the same 46 BEV / 218 ICE trips, 14/18 vehicles, 441.385315 L fuel,
+zero grid purchase, and 707,349.173370-JPY incumbent. This is not evidence that
+weather was ignored: RAIN uses 98.761426 kWh more direct PV-to-bus, 98.761435
+kWh less BESS-to-bus, and curtails 5,049.380474 kWh less PV. The valid lower
+bound also changes, producing a 9.5213476% SUNNY certified gap and a 1.6563581%
+RAIN gap. These are scenario-specific energy-flow/certification effects, not
+a general aggregation benefit.
+
+The experiment finished in 2 h 15 min 31.933 s; no child was interrupted and
+there are no missing pairs under the 24-hour goal. The central result,
+artifact index, Fresh Prepare manifest, and cross-weather JSON SHA-256 values
+are respectively
+`F041658DA3B24F9815CB558CBA00CB2AEC2AAB7F2682AE56244BBEFE019BAEF7`,
+`F6B7232164EE2ED9DF5F9CF7B005F25A5F25C1C6F3699240ACAE05B41BCBE672`,
+`613A51BC9701D93AB7114C4305C6758523A345F4B2A87754B8969352F3A3EC32`,
+and `1489A9507C31BF36F9337BF9D2ED2D671DA4A34E1850637858A9D7B59CA76D5C`.
+There is no valid resume command because the bundle is terminal
+`COMPLETED`; a future deliberate reproduction must be a Fresh Prepare/full
+run from its own clean frozen SHA and new directory.
+
+The research release remains **BLOCKED**, but no longer because this A/B is
+pending. The active reasons are the unresolved Phase-3 Stage-1 certification
+gap (especially SUNNY's 9.52%) and the absence of a solver-performance benefit
+from the tested aggregation. Correct physical feasibility and complete
+Rolling/accounting evidence do not establish an integrated global optimum or
+release readiness.
+
 ## 2026-08-27: `18faf07` completed 20/20 but failed the final input contract
 
 Clean SHA `18faf07cbcbc1443906d9da4143b5b88319e8d67` completed SUNNY `5/5`

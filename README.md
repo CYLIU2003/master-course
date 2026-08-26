@@ -8,7 +8,49 @@ The reviewer-facing scope, checks, and open decisions are in
 [THESIS_EXTERNAL_REVIEW_BRIEF.md](docs/notes/THESIS_EXTERNAL_REVIEW_BRIEF.md);
 that brief is a request for independent review, not an approval record.
 
-## Current 2026-08-27 SUNNY/RAIN pure-ICE aggregation protocol
+## Current 2026-08-27 SUNNY/RAIN pure-ICE aggregation result
+
+Clean frozen tag `thesis-pure-ice-weather-ab-453b1d3` / SHA
+`453b1d340311de109645d006b9ec5a0de2788c2e` completed the requested
+SUNNY `5/5` and RAIN `5/5` pairs (20 isolated children) at
+`output/diagnostics/pure_ice_weather_ab_453b1d3_20260827/`. An independent
+post-run audit found zero failed gates: all children served 264/264 trips and
+passed physical validation, 24/24 Rolling, accounting, fleet, frozen runtime
+controls, and the prohibited fallback/repair/proxy checks. All ten aggregate
+children additionally proved `applied=true`, unchanged integer and
+recoverable physical-dispatch sets, no labelled-region relaxation, complete
+aggregate MIP starts, and one-to-one recovery of 18 paths to canonical ICE
+IDs. The final cross-scenario input contract passed; fixed controls match and
+only the separately hashed weather/PV profile differs.
+
+Both scenarios are **`PASS_STRUCTURAL_ONLY`**. Relative to discrete A,
+aggregate B reduced total variables 29.392%, binaries 32.012%, constraints
+17.171%, and nonzeros 3.451%. It did not improve the incumbent, certified
+bound, certified gap, or node count. Median solver time instead increased
+from 30.754 to 435.106 seconds for SUNNY and from 31.887 to 435.103 seconds
+for RAIN. B's median raw root/best bound was also weaker (-3,796.937 JPY
+versus A's 0/640,000 JPY); the reported certified bound remains the separate
+valid lower bound. Aggregation therefore stays default-OFF, no solver-speed or
+optimality benefit is claimed, and the Stage-1 certification blocker remains.
+
+SUNNY and RAIN produced the same 46 BEV / 218 ICE trip split, 14/18 used
+BEV/ICE vehicles, 441.385 L fuel, 707,349.173 JPY total cost, and zero grid
+purchase. Their energy flows were not identical: RAIN shifted 98.761 kWh from
+BESS-to-bus to direct PV-to-bus and curtailed 5,049.380 kWh less PV. The
+incumbent stayed the same while the valid lower bound changed, giving SUNNY a
+9.5213476% certified gap and RAIN a 1.6563581% gap. This is a scenario-specific
+weather effect on energy flows and certification, not evidence that aggregation
+helps one weather case.
+
+The run reached `COMPLETED` in 2 h 15 min 31.933 s, before either cutoff; no
+child was interrupted and there is no valid `--resume` action for this bundle.
+The central result and artifact-index SHA-256 values are respectively
+`F041658DA3B24F9815CB558CBA00CB2AEC2AAB7F2682AE56244BBEFE019BAEF7`
+and `F6B7232164EE2ED9DF5F9CF7B005F25A5F25C1C6F3699240ACAE05B41BCBE672`.
+The full file-by-file hash inventory is in that bundle's
+`artifact_hashes.json`.
+
+### Historical failed attempts
 
 Clean freeze `18faf07` completed all 20 requested children and every child
 passed coverage, physical, 24/24 Rolling, accounting, fleet, runtime-control,
