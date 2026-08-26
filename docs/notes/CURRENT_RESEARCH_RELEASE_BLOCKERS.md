@@ -20,7 +20,24 @@ The coordinator now performs Fresh Prepare through the normal BFF endpoint,
 records BFF runtime-Git attestation plus exact Prepare request/response, and
 stores a fail-closed preflight artifact if those inputs are invalid or differ
 outside weather/PV content.  The 24-hour clock starts before Fresh Prepare;
-there is still no current-SHA execution artifact and thus no new result.
+there is still no current-SHA solver-execution artifact and thus no new A/B
+result.
+
+At frozen SHA `d8cfcd2`, both Fresh Prepare responses were ready at 264 trips
+but the coordinator stopped before any solver child because its initial
+preflight checked for a serialized `scenario_fleet_contract_v2` in the
+prepared JSON.  That assumption was incorrect: the canonical contract is
+resolved from the materialized Prepared fleet by the problem builder and
+persisted per solver run.  The preserved artifact
+`output/diagnostics/pure_ice_weather_ab_d8cfcd2_20260826/` is therefore a
+`FAIL_CORRECTNESS` protocol-preflight result, not research evidence.  The
+narrow repair records the resolved pre-solve contract hashes and requires each
+child's solver-native fleet contract to match before it can count toward A/B.
+
+The same fail-closed audit found inherited RAIN differences in objective preset,
+vehicle-day-cost semantics/value and diesel price.  The next fresh Prepare
+explicitly pins those to the SUNNY control values; only named PV-curve/date
+leaves are exempted, and any PV price/asset-cost divergence remains a blocker.
 
 Five interleaved AB/BA pairs per scenario are required before any runtime
 conclusion.  Any coverage, physical, Rolling, accounting, no-fallback/no-repair

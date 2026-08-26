@@ -6,6 +6,8 @@ from pathlib import Path
 from scripts.run_pure_ice_aggregation_weather_ab import (
     REQUIRED_FIXED_HASHES,
     _validate_prepare_request,
+    _validate_child_fleet_contract,
+    _remove_weather_linked_fields,
     build_prepared_input_contract,
     build_cross_scenario_comparison,
     build_cross_scenario_input_contract,
@@ -38,6 +40,10 @@ def _prepare_request(*, role: str, weather_date: str, fixed_weekday: bool) -> di
             "mip_gap": 0.1,
             "planning_days": 1,
             "planning_horizon_hours": 24.0,
+            "objective_preset": "scalar_total_cost_v1",
+            "vehicle_usage_cost_jpy_per_used_bus": 20000.0,
+            "vehicle_usage_cost_semantics": "fixed_vehicle_day_cost",
+            "diesel_price_per_l": 150.0,
             "counterfactual_pv_source_date": weather_date,
             "comparison_role": role,
             "allow_fixed_weekday_timetable_pv_counterfactual": fixed_weekday,
@@ -193,3 +199,45 @@ def test_versioned_prepare_templates_satisfy_the_protocol() -> None:
         json.loads((templates / "rain_prepare_request.json").read_text()),
         code_name="RAIN",
     )
+
+
+def test_child_fleet_contract_must_match_the_prepared_fleet(tmp_path: Path) -> None:
+    source_run = tmp_path / "source-run"
+    source_run.mkdir()
+    contract = {
+        "schema_version": "scenario_fleet_contract_v2",
+        "validation_status": "OK",
+        "fleet_contract_hash": "fleet",
+        "active_vehicle_id_hash": "vehicle-ids",
+        "initial_state_hash": "initial-state",
+        "vehicle_parameter_hash": "parameters",
+    }
+    (source_run / "scenario_fleet_contract.json").write_text(
+        json.dumps(contract), encoding="utf-8"
+    )
+
+    audit = _validate_child_fleet_contract(
+        child={"run_dir": str(source_run)},
+        expected_descriptor={
+            "fleet_contract_hash": "fleet",
+            "fleet_active_vehicle_id_hash": "vehicle-ids",
+            "fleet_initial_state_hash": "initial-state",
+            "fleet_vehicle_parameter_hash": "parameters",
+        },
+        run_directory=tmp_path / "child",
+    )
+
+    assert audit["accepted"] is True
+    assert (tmp_path / "child" / "fleet_contract_validation.json").is_file()
+
+
+def test_prepared_contract_does_not_hide_a_pv_cost_control_change() -> None:
+    stripped = _remove_weather_linked_fields(
+        {
+            "pv_generation_kwh_by_slot": [1.0, 2.0],
+            "pv_marginal_charge_cost_yen_per_kwh": 99.0,
+        }
+    )
+
+    assert "pv_generation_kwh_by_slot" not in stripped
+    assert stripped["pv_marginal_charge_cost_yen_per_kwh"] == 99.0

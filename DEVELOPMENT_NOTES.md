@@ -32,9 +32,27 @@
   partial outcome is explicitly `INTERRUPTED`/diagnostic, never a runtime
   result.  `tests/test_pure_ice_aggregation_weather_ab.py` covers the
   interleaved AB/BA order and the weather-only hash contract; the focused
-  aggregation suite passes `26 passed` before the frozen execution.  No
+  aggregation suite passes `28 passed` before the frozen execution.  No
   264-trip run has been started by this code change, so no performance or
   optimality claim is made.
+
+- The first frozen Fresh Prepare at `d8cfcd2` correctly materialized both
+  264-trip requests but stopped before a solver child in
+  `output/diagnostics/pure_ice_weather_ab_d8cfcd2_20260826/`.  The original
+  preflight incorrectly searched the prepared JSON for a serialized
+  `scenario_fleet_contract_v2`; that contract is instead resolved by the
+  canonical problem builder and persisted at each actual solver run.  The
+  narrow correction now resolves the contract from the materialized prepared
+  fleet at preflight, records its hashes, and rejects each child unless its
+  solver-native `scenario_fleet_contract.json` matches.  The failed first
+  attempt is preserved as `FAIL_CORRECTNESS`; it ran no solver and is not A/B
+  performance, cost, feasibility, or optimality evidence.
+- The resulting input audit also exposed inherited RAIN differences in scalar
+  objective preset, used-vehicle-day cost/semantics, and diesel price.  The
+  versioned Prepare templates now set those common controls explicitly to the
+  SUNNY values.  The preflight removes only named PV-curve/date leaves, not PV
+  cost controls, so a non-weather PV-price change remains a correctness
+  failure rather than being hidden as a weather effect.
 
 - Frozen execution command (after clean commit/tag and BFF launch) is:
   `.venv\\Scripts\\python.exe scripts\\run_pure_ice_aggregation_weather_ab.py

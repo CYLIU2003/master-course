@@ -43,6 +43,10 @@ from scripts.run_frontend_controlled_pv_pair import (  # noqa: E402
     HttpJsonClient,
     _validate_bff_runtime_preflight,
 )
+from src.optimization.common.fleet_contract import (  # noqa: E402
+    SCENARIO_FLEET_CONTRACT_SCHEMA_VERSION,
+    resolve_scenario_fleet_contract,
+)
 
 
 SCHEMA_VERSION = "pure_ice_aggregation_weather_ab_v1"
@@ -75,6 +79,28 @@ WEATHER_LINKED_HASHES = (
     "trip_input_sha256",
     "trip_energy_input_sha256",
     "trip_energy_hash",
+)
+WEATHER_LINKED_PREPARED_FIELDS = frozenset(
+    {
+        "allow_fixed_weekday_timetable_pv_counterfactual",
+        "calendar_policy",
+        "comparison_role",
+        "comparison_type",
+        "counterfactual_pv_source_date",
+        "capacity_factor_by_slot",
+        "pv_capacity_factor_by_date",
+        "pv_case_id",
+        "pv_generation_kwh_by_date",
+        "pv_generation_kwh_by_slot",
+        "pv_profile_dates",
+        "pv_profile_id",
+        "pv_source_date",
+        "scenario_id",
+        "trip_energy_model",
+        "weather_mode",
+        "weather_observation_date",
+        "weather_profile_source",
+    }
 )
 CROSS_SCENARIO_METRICS = (
     "bev_trip_count",
@@ -220,6 +246,10 @@ def _validate_prepare_request(
         "mip_gap": 0.1,
         "planning_days": 1,
         "planning_horizon_hours": 24.0,
+        "objective_preset": "scalar_total_cost_v1",
+        "vehicle_usage_cost_jpy_per_used_bus": 20000.0,
+        "vehicle_usage_cost_semantics": "fixed_vehicle_day_cost",
+        "diesel_price_per_l": 150.0,
     }
     for key, value in fixed_settings.items():
         if settings.get(key) != value:
@@ -418,6 +448,13 @@ def _prepared_descriptor(scenario: ScenarioInput) -> dict[str, Any]:
         raise FileNotFoundError(f"prepared input is missing: {path}")
     payload = _read_json(path)
     simulation_config = dict(payload.get("simulation_config") or {})
+    fleet_scenario = dict(payload.get("scenario_overlay") or {})
+    fleet_scenario["vehicles"] = list(payload.get("vehicles") or [])
+    fleet_contract = resolve_scenario_fleet_contract(
+        fleet_scenario,
+        selected_depot_ids=list(payload.get("depot_ids") or []),
+        research_run=True,
+    ).to_dict(include_source_records=True)
     expected_weather_date = WEATHER_DATES[scenario.code_name]
     checks = {
         "scenario_id": payload.get("scenario_id") == scenario.scenario_id,
@@ -426,9 +463,13 @@ def _prepared_descriptor(scenario: ScenarioInput) -> dict[str, Any]:
         "weekday_service": list(payload.get("service_ids") or []) == ["WEEKDAY"],
         "tsurumaki_primary_depot": payload.get("primary_depot_id") == "tsurumaki",
         "trip_count_264": int(payload.get("trip_count") or 0) == 264,
-        "scenario_fleet_contract_v2_present": (
-            "scenario_fleet_contract_v2"
-            in json.dumps(payload, ensure_ascii=False, sort_keys=True)
+        "scenario_fleet_contract_v2": (
+            fleet_contract.get("schema_version")
+            == SCENARIO_FLEET_CONTRACT_SCHEMA_VERSION
+        ),
+        "scenario_fleet_contract_validation_ok": (
+            fleet_contract.get("validation_status") == "OK"
+            and bool(fleet_contract.get("active_vehicle_ids"))
         ),
         "time_step_min_15": simulation_config.get("time_step_min") == 15,
         "timestep_min_15": simulation_config.get("timestep_min") == 15,
@@ -482,6 +523,13 @@ def _prepared_descriptor(scenario: ScenarioInput) -> dict[str, Any]:
             _remove_weather_linked_fields(payload.get("trips") or [])
         ),
         "vehicles_sha256": _canonical_hash(payload.get("vehicles") or []),
+        "fleet_contract_hash": fleet_contract.get("fleet_contract_hash"),
+        "fleet_active_vehicle_id_hash": fleet_contract.get("active_vehicle_id_hash"),
+        "fleet_initial_state_hash": fleet_contract.get("initial_state_hash"),
+        "fleet_vehicle_parameter_hash": fleet_contract.get("vehicle_parameter_hash"),
+        "fleet_active_vehicle_count": len(fleet_contract.get("active_vehicle_ids") or []),
+        "fleet_contract_validation_status": fleet_contract.get("validation_status"),
+        "fleet_contract_errors": list(fleet_contract.get("errors") or []),
         "chargers_sha256": _canonical_hash(payload.get("chargers") or []),
         "depots_sha256": _canonical_hash(payload.get("depots") or []),
         "simulation_config_without_weather_sha256": _canonical_hash(
@@ -498,12 +546,11 @@ def _prepared_descriptor(scenario: ScenarioInput) -> dict[str, Any]:
 def _remove_weather_linked_fields(value: Any) -> Any:
     """Remove only declared weather/PV and weather-energy leaves for preflight."""
 
-    tokens = ("weather", "pv", "counterfactual", "comparison", "calendar", "trip_energy")
     if isinstance(value, Mapping):
         return {
             str(key): _remove_weather_linked_fields(child)
             for key, child in value.items()
-            if not any(token in str(key).lower() for token in tokens)
+            if str(key).lower() not in WEATHER_LINKED_PREPARED_FIELDS
         }
     if isinstance(value, list):
         return [_remove_weather_linked_fields(item) for item in value]
@@ -520,6 +567,10 @@ def build_prepared_input_contract(
         "trip_ids_sha256",
         "trip_structure_without_weather_energy_sha256",
         "vehicles_sha256",
+        "fleet_contract_hash",
+        "fleet_active_vehicle_id_hash",
+        "fleet_initial_state_hash",
+        "fleet_vehicle_parameter_hash",
         "chargers_sha256",
         "depots_sha256",
         "simulation_config_without_weather_sha256",
@@ -535,6 +586,79 @@ def build_prepared_input_contract(
         "sunny_weather_fields": descriptors["SUNNY"].get("weather_and_counterfactual_fields"),
         "rain_weather_fields": descriptors["RAIN"].get("weather_and_counterfactual_fields"),
     }
+
+
+def _validate_child_fleet_contract(
+    *,
+    child: Mapping[str, Any],
+    expected_descriptor: Mapping[str, Any],
+    run_directory: Path,
+) -> dict[str, Any]:
+    """Compare the solver-native fleet contract to the Prepare materialization."""
+
+    source_run_dir_text = str(child.get("run_dir") or "").strip()
+    source_run_dir = Path(source_run_dir_text) if source_run_dir_text else None
+    contract_path = (
+        source_run_dir / "scenario_fleet_contract.json"
+        if source_run_dir is not None
+        else None
+    )
+    checks: dict[str, bool] = {
+        "source_run_dir_present": source_run_dir is not None,
+        "contract_artifact_exists": bool(contract_path and contract_path.is_file()),
+    }
+    contract: dict[str, Any] = {}
+    if contract_path is not None and contract_path.is_file():
+        contract = _read_json(contract_path)
+        checks.update(
+            {
+                "schema_version": (
+                    contract.get("schema_version")
+                    == SCENARIO_FLEET_CONTRACT_SCHEMA_VERSION
+                ),
+                "validation_status": contract.get("validation_status") == "OK",
+                "fleet_contract_hash": (
+                    contract.get("fleet_contract_hash")
+                    == expected_descriptor.get("fleet_contract_hash")
+                ),
+                "active_vehicle_id_hash": (
+                    contract.get("active_vehicle_id_hash")
+                    == expected_descriptor.get("fleet_active_vehicle_id_hash")
+                ),
+                "initial_state_hash": (
+                    contract.get("initial_state_hash")
+                    == expected_descriptor.get("fleet_initial_state_hash")
+                ),
+                "vehicle_parameter_hash": (
+                    contract.get("vehicle_parameter_hash")
+                    == expected_descriptor.get("fleet_vehicle_parameter_hash")
+                ),
+            }
+        )
+    audit = {
+        "schema_version": SCHEMA_VERSION,
+        "source_run_dir": str(source_run_dir.resolve()) if source_run_dir else None,
+        "source_contract_path": str(contract_path.resolve()) if contract_path else None,
+        "expected": {
+            key: expected_descriptor.get(key)
+            for key in (
+                "fleet_contract_hash",
+                "fleet_active_vehicle_id_hash",
+                "fleet_initial_state_hash",
+                "fleet_vehicle_parameter_hash",
+            )
+        },
+        "observed": {
+            "fleet_contract_hash": contract.get("fleet_contract_hash"),
+            "active_vehicle_id_hash": contract.get("active_vehicle_id_hash"),
+            "initial_state_hash": contract.get("initial_state_hash"),
+            "vehicle_parameter_hash": contract.get("vehicle_parameter_hash"),
+        },
+        "checks": checks,
+        "accepted": all(checks.values()),
+    }
+    _write_json(run_directory / "fleet_contract_validation.json", audit)
+    return audit
 
 
 def build_interleaved_case_schedule(repetitions: int = 5) -> list[dict[str, Any]]:
@@ -1017,11 +1141,18 @@ def run_weather_ab(
         observed_hash = dict(dict(metrics.get("provenance") or {}).get("input_hashes") or {}).get("prepared_source_sha256")
         if observed_hash != descriptors[code]["prepared_source_sha256"]:
             raise RuntimeError("child prepared-source hash does not match frozen descriptor")
+        fleet_contract_audit = _validate_child_fleet_contract(
+            child=child,
+            expected_descriptor=descriptors[code],
+            run_directory=run_directory,
+        )
+        metrics["fleet_contract_validation"] = fleet_contract_audit
         _persist_case_metrics(run_directory, metrics)
         completed[code][run_index] = {**scheduled, **child, "metrics": metrics}
         if not (
             _pure_ice_case_valid(metrics)
             and _pure_ice_representation_audit_valid(metrics, str(scheduled["representation"]))
+            and fleet_contract_audit["accepted"]
         ):
             status = "FAIL_CORRECTNESS"
             reason = f"invalid_{code}_run_{run_index:02d}"

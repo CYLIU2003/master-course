@@ -35,6 +35,18 @@ runtime SHA attestation, exact Fresh Prepare request/response, resulting
 prepared-input IDs and SHA-256 hashes.  It refuses to solve if any non-weather
 prepared content differs across SUNNY and RAIN.
 
+The first Fresh Prepare attempt at frozen commit `d8cfcd2` produced both
+264-trip inputs, then stopped before a solver child was started.  Its initial
+preflight erroneously required the downstream solver-native fleet contract to
+be serialized inside the prepared-input JSON.  The preserved artifact is
+`output/diagnostics/pure_ice_weather_ab_d8cfcd2_20260826/` and is a
+`FAIL_CORRECTNESS` protocol check, not A/B evidence.  The corrected preflight
+resolves `scenario_fleet_contract_v2` directly from the materialized Prepared
+fleet and later compares it to each solver-native contract artifact.
+It also pins the shared scalar objective, vehicle-day cost/meaning, and diesel
+price; the input contract permits named PV curve/date leaves only, never a PV
+price or asset-cost change.
+
 ## 2026-08-24 aggregate bound-focus diagnostic: rejected
 
 Clean tag `thesis-aggregate-bound-focus-21e2649` ran one pure-aggregate
