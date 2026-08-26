@@ -8,7 +8,23 @@ The reviewer-facing scope, checks, and open decisions are in
 [THESIS_EXTERNAL_REVIEW_BRIEF.md](docs/notes/THESIS_EXTERNAL_REVIEW_BRIEF.md);
 that brief is a request for independent review, not an approval record.
 
-## Current 2026-08-26 SUNNY/RAIN pure-ICE aggregation protocol
+## Current 2026-08-27 SUNNY/RAIN pure-ICE aggregation protocol
+
+Clean freeze `18faf07` completed all 20 requested children and every child
+passed coverage, physical, 24/24 Rolling, accounting, fleet, runtime-control,
+and no-fallback/no-repair gates. Every aggregate child also passed the exact
+recovery contract. The parent still correctly remains `FAIL_CORRECTNESS` and
+its per-scenario `PASS_STRUCTURAL_ONLY` diagnostics must not be adopted: the
+final cross-scenario audit reported a different
+`energy_asset_control_input_sha256`. Artifact inspection proved that this hash
+included date-specific PV leaves (`pv_source_date`, `pv_case_id`, dated PV and
+capacity-factor arrays, and profile dates/source) even though the independent
+Fresh Prepare comparison showed every non-weather PV/BESS asset control was
+identical. The hash builder now excludes those declared weather-linked leaves
+while still detecting changes to PV capacity, BESS power/energy/efficiency,
+permissions, prices, and other fixed controls. The failed `18faf07` bundle is
+diagnostic-only and will not be resumed or relabelled; a new clean SHA, Fresh
+Prepare, and complete 20-child restart remain required.
 
 Clean freeze `7cb191a` verified that the corrected batch path actually used
 candidate limit/radius `1/0`, the 435/30-second solver caps, a 585-second
@@ -38,7 +54,7 @@ and gives the fixed 435/30-second solver caps a separate 120-second artifact
 overhead inside the overall child deadline. A new clean SHA and Fresh Prepare
 are still required.
 
-The historical 264-trip pure-ICE A/B bundles are not evidence for the current
+Historical or failed 264-trip pure-ICE A/B bundles are not evidence for the current
 checkout.  The next bounded measurement is fixed to existing scenarios SUNNY
 `771d115b-75b0-49f7-a7f0-25f259a2cd21` and RAIN
 `b23fd26c-1233-4c73-bb9e-bdb8b1584760`.  Both use the 264-trip `tsurumaki` /

@@ -1,5 +1,46 @@
 # Development Notes
 
+## 2026-08-27: Completed `18faf07` run rejected by weather-leaf asset hash
+
+- Clean tag `thesis-pure-ice-weather-ab-18faf07` / SHA
+  `18faf07cbcbc1443906d9da4143b5b88319e8d67` Fresh Prepared both fixed
+  scenarios and completed the full AB/BA schedule at
+  `output/diagnostics/pure_ice_weather_ab_18faf07_20260826/`: SUNNY `5/5`
+  pairs, RAIN `5/5` pairs, 20/20 independent child processes. Every child
+  served 264/264 trips and passed physical validation, 24/24 Rolling,
+  accounting, fleet, clean-SHA, one-thread, BestObjStop, candidate `1/0`,
+  fallback, repair, and synthetic-PV gates. All ten aggregate children also
+  recorded `applied=true`, complete MIP starts, unchanged integer and
+  recoverable physical feasible sets, no labelled-region relaxation, and
+  one-to-one recovery of 18 ICE paths.
+- The parent nevertheless ended `FAIL_CORRECTNESS` with
+  `cross_scenario_input_contract_failed`. The final fixed-control comparison
+  found only `energy_asset_control_input_sha256` unequal, so the generated
+  per-scenario `PASS_STRUCTURAL_ONLY` values are retained as diagnostics and
+  are not research conclusions. The parent result, Fresh Prepare manifest,
+  root artifact index, and weather comparison JSON SHA-256 values are
+  respectively
+  `683F986B7AA4A323DA65A51880BB09B379EFEEBF648ECC5DADFE1DCCBEAEE99B`,
+  `94F51433E226A58D8C6EFBC5EEA11B688FA3CFAA16DEDAEBD7AF1181FEB651A7`,
+  `0DDF704494C138FFDA694BC94ED08842898AC90330E688BA499A670BE75EF027`,
+  and `5DEF5BCF9BBFABFB01E00EB5F829930CE4AD6D45D03C756482411AC1BECD7EAC`.
+- Field-level comparison of both effective scenarios found no asset-control
+  drift. Every difference was a declared weather/PV leaf: slot capacity
+  factors and PV output, their dated payloads, `pv_case_id`,
+  `pv_profile_dates`, and `pv_source_date`. Fresh Prepare's independent deep
+  comparison already passed every non-weather simulation, overlay, fleet,
+  charger, depot, tariff, objective, and BESS/PV-control field. The provenance
+  hash had removed only four direct PV arrays and still included the dated
+  copies and date/profile identifiers.
+- The narrow repair defines one explicit weather-linked energy-asset field
+  set for this provenance hash. A direct regression proves SUNNY/RAIN PV/date
+  payload changes preserve the fixed-control hash and change the PV-profile
+  hash, while a BESS-power change still changes the fixed-control hash. The
+  focused provenance/coordinator tests pass `22 passed`; the complete suite
+  passes `1586 passed in 88.92s`. `py_compile` and `git diff --check` pass.
+  Because code changed, none of the old 20 children will be reused: a new
+  clean commit/tag, Fresh Prepare, and full restart are mandatory.
+
 ## 2026-08-26: Effective-config runtime audit corrected after `7cb191a`
 
 - Clean tag `thesis-pure-ice-weather-ab-7cb191a` / SHA

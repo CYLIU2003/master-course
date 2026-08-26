@@ -27,6 +27,27 @@ MANIFEST_FILE = "run_input_manifest.json"
 VALIDATION_FILE = "run_input_validation.json"
 TRIP_STRUCTURE_SCHEMA = "canonical_trip_structure_v2_energy_demand_excluded"
 PREPARED_TRIP_INPUT_SCHEMA = "prepared_trip_rows_v1"
+ENERGY_ASSET_CONTROL_INPUT_SCHEMA = (
+    "depot_energy_asset_controls_v2_weather_profile_excluded"
+)
+_WEATHER_LINKED_ENERGY_ASSET_FIELDS = frozenset(
+    {
+        "available_pv_surplus_kwh_by_slot",
+        "capacity_factor_by_slot",
+        "counterfactual_pv_source_date",
+        "pv_capacity_factor_by_date",
+        "pv_case_id",
+        "pv_generation_kwh_by_date",
+        "pv_generation_kwh_by_slot",
+        "pv_profile_dates",
+        "pv_profile_id",
+        "pv_profile_source",
+        "pv_source_date",
+        "pv_supply_scale",
+        "weather_observation_date",
+        "weather_profile_source",
+    }
+)
 CORE_ARTIFACTS = (
     SCENARIO_SNAPSHOT_FILE,
     PREPARE_AUDIT_FILE,
@@ -611,13 +632,7 @@ def _optimization_parameters(
             str(depot_id): {
                 key: value
                 for key, value in dict(asset).items()
-                if key
-                not in {
-                    "pv_generation_kwh_by_slot",
-                    "available_pv_surplus_kwh_by_slot",
-                    "capacity_factor_by_slot",
-                    "pv_supply_scale",
-                }
+                if key not in _WEATHER_LINKED_ENERGY_ASSET_FIELDS
             }
             if isinstance(asset, Mapping)
             else asset
@@ -710,6 +725,9 @@ def _optimization_parameters(
             "price_value_set_sha256": hashlib.sha256(
                 _canonical_json_bytes(price_value_set_input)
             ).hexdigest(),
+            "energy_asset_control_input_schema": (
+                ENERGY_ASSET_CONTROL_INPUT_SCHEMA
+            ),
             "energy_asset_control_input_sha256": hashlib.sha256(
                 _canonical_json_bytes(energy_asset_control_input)
             ).hexdigest(),

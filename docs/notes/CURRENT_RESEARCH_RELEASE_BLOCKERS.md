@@ -1,5 +1,33 @@
 # Current research release blockers
 
+## 2026-08-27: `18faf07` completed 20/20 but failed the final input contract
+
+Clean SHA `18faf07cbcbc1443906d9da4143b5b88319e8d67` completed SUNNY `5/5`
+and RAIN `5/5` pairs (20/20 children) at
+`output/diagnostics/pure_ice_weather_ab_18faf07_20260826/`. All individual
+correctness gates passed, including 264/264 coverage, physical validation,
+24/24 Rolling, accounting, fleet, frozen runtime controls, prohibited-fallback
+checks, and aggregate exact-recovery evidence.
+
+The overall result remains **FAIL_CORRECTNESS**, not a performance result.
+The final cross-scenario fixed-input check rejected the unequal
+`energy_asset_control_input_sha256`, so both generated per-scenario
+`PASS_STRUCTURAL_ONLY` diagnostics are not adopted as research conclusions.
+Inspection proved the hash included the formally allowed weather-linked
+`pv_source_date`, `pv_case_id`, profile-date metadata, and dated PV/capacity
+factor arrays. No fixed PV capacity, BESS, tariff, charger, fleet, timetable,
+objective, permission, efficiency, or other control differed; the independent
+prepared-content contract passed all such fields.
+
+The narrow repair excludes only those declared weather-linked PV payload and
+provenance leaves from the fixed energy-asset-control hash. It continues to
+hash every actual PV/BESS control, and regression proves a BESS-power change
+  still fails. Focused tests pass `22 passed`; the full suite passes `1586
+passed in 88.92s`. Because the artifact schema output changed, a new clean
+SHA, Fresh Prepare, and all 20 new children are required. The `18faf07`
+directory must not be resumed or relabelled. Aggregation remains default-OFF
+and release remains **BLOCKED**.
+
 ## 2026-08-26: `7cb191a` executed frozen controls but hit an audit-source blocker
 
 Clean SHA `7cb191a7d1981cb2e6743edbf70ae7203bdbd4a0` Fresh Prepared SUNNY and

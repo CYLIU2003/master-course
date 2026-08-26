@@ -12,12 +12,14 @@ from bff.routers import optimization as optimization_router
 
 from bff.services.optimization_run.input_provenance import (
     CODE_PROVENANCE_FILE,
+    ENERGY_ASSET_CONTROL_INPUT_SCHEMA,
     MANIFEST_FILE,
     PARAMETERS_FILE,
     PREPARE_AUDIT_FILE,
     SCENARIO_SNAPSHOT_FILE,
     SUMMARY_FILE,
     VALIDATION_FILE,
+    _optimization_parameters,
     _trip_structure_input,
     persist_run_input_provenance,
     validate_run_input_provenance,
@@ -209,6 +211,9 @@ def test_frontend_run_input_bundle_is_self_verifying(tmp_path: Path) -> None:
     assert parameters["canonical_input_dimensions"][
         "energy_asset_control_input_sha256"
     ]
+    assert parameters["canonical_input_dimensions"][
+        "energy_asset_control_input_schema"
+    ] == ENERGY_ASSET_CONTROL_INPUT_SCHEMA
     assert parameters["canonical_input_dimensions"]["objective_weights_sha256"]
     assert parameters["canonical_input_dimensions"]["pv_profile_sha256"]
     assert parameters["canonical_input_dimensions"][
@@ -243,6 +248,92 @@ def test_frontend_run_input_bundle_is_self_verifying(tmp_path: Path) -> None:
     )
     assert changed_source["valid"] is False
     assert "prepared_source_sha256" in changed_source["failed_checks"]
+
+
+def test_energy_asset_control_hash_excludes_only_weather_linked_pv_payloads() -> None:
+    def parameters_for(asset: dict) -> dict:
+        problem = _problem()
+        problem.depot_energy_assets = {"depot-a": asset}
+        return _optimization_parameters(
+            scenario_id="scenario-test",
+            prepared_input_id="prepared-test",
+            frontend_request={},
+            optimization_config=OptimizationConfig(),
+            canonical_problem=problem,
+            code_provenance={},
+        )
+
+    fixed_controls = {
+        "pv_enabled": True,
+        "pv_capacity_kw": 1000.0,
+        "pv_slot_minutes": 60,
+        "bess_enabled": True,
+        "bess_power_kw": 250.0,
+        "bess_energy_kwh": 500.0,
+        "bess_charge_efficiency": 0.95,
+    }
+    sunny = parameters_for(
+        {
+            **fixed_controls,
+            "capacity_factor_by_slot": [0.0, 0.8],
+            "pv_generation_kwh_by_slot": [0.0, 800.0],
+            "pv_capacity_factor_by_date": [
+                {"date": "2025-08-05", "capacity_factor_by_slot": [0.0, 0.8]}
+            ],
+            "pv_generation_kwh_by_date": [
+                {"date": "2025-08-05", "pv_generation_kwh_by_slot": [0.0, 800.0]}
+            ],
+            "pv_case_id": "sunny",
+            "pv_profile_dates": ["2025-08-05"],
+            "pv_profile_source": "tsurumaki_2025-08-05_60min",
+            "pv_source_date": "2025-08-05",
+        }
+    )
+    rain = parameters_for(
+        {
+            **fixed_controls,
+            "capacity_factor_by_slot": [0.0, 0.1],
+            "pv_generation_kwh_by_slot": [0.0, 100.0],
+            "pv_capacity_factor_by_date": [
+                {"date": "2025-08-10", "capacity_factor_by_slot": [0.0, 0.1]}
+            ],
+            "pv_generation_kwh_by_date": [
+                {"date": "2025-08-10", "pv_generation_kwh_by_slot": [0.0, 100.0]}
+            ],
+            "pv_case_id": "rain",
+            "pv_profile_dates": ["2025-08-10"],
+            "pv_profile_source": "tsurumaki_2025-08-10_60min",
+            "pv_source_date": "2025-08-10",
+        }
+    )
+    changed_bess = parameters_for(
+        {
+            **fixed_controls,
+            "bess_power_kw": 300.0,
+            "capacity_factor_by_slot": [0.0, 0.8],
+            "pv_generation_kwh_by_slot": [0.0, 800.0],
+        }
+    )
+
+    sunny_dimensions = sunny["canonical_input_dimensions"]
+    rain_dimensions = rain["canonical_input_dimensions"]
+    changed_bess_dimensions = changed_bess["canonical_input_dimensions"]
+    assert (
+        sunny_dimensions["energy_asset_control_input_schema"]
+        == ENERGY_ASSET_CONTROL_INPUT_SCHEMA
+    )
+    assert (
+        sunny_dimensions["energy_asset_control_input_sha256"]
+        == rain_dimensions["energy_asset_control_input_sha256"]
+    )
+    assert (
+        sunny_dimensions["pv_profile_sha256"]
+        != rain_dimensions["pv_profile_sha256"]
+    )
+    assert (
+        sunny_dimensions["energy_asset_control_input_sha256"]
+        != changed_bess_dimensions["energy_asset_control_input_sha256"]
+    )
 
 
 def test_trip_structure_hash_input_excludes_energy_derived_soc_requirement() -> None:
