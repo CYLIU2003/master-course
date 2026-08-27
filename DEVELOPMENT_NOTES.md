@@ -12,8 +12,9 @@
   vehicle floor under the deliberately relaxed pooled-energy bound.
 - Fresh Prepare and discrete-A-only candidate discovery at clean SHA
   `4c92867b674bd24d06ea83d136d4d3d01bf77bd0` produced 22 distinct feasible
-  candidates per scenario.  Fixed-assignment Stage-2 recourse at clean SHA
-  `9c2d7dc36abd324e72c2bceffe15055606380afb` evaluated the 22-candidate union
+  candidates per scenario.  The final fixed-assignment Stage-2 recourse audit
+  at clean SHA `3ec87149d5d5fac3c3fae3c043bd1d69e89df7c6` evaluated the
+  22-candidate union
   under both weather cases: all 44 evaluations passed independent physical,
   accounting, no-fallback/no-repair, and unchanged-assignment gates.
 - This is **Case A**.  SUNNY selects physical assignment
@@ -25,17 +26,18 @@
   then used-vehicle count, then physical assignment hash.  The requested
   payload remains separately recorded, non-research runs are unchanged, and
   pure-ICE aggregation remains default-OFF.
-- Clean execution SHA `e3cc7e86a7caf6755c2001e8d09582a4d17acf11` then
-  Fresh Prepared both scenarios and ran the public BFF path with 15-minute
-  internal steps and 60-minute Rolling.  Although each recorded client request
-  asked for one candidate, radius zero, and frontier OFF, the formal policy is
-  auditable as 22 candidates, radius four, and frontier ON.  Both runs
-  evaluated 22/22 feasible candidates, served 264/264 trips, passed independent
-  physical validation, 24/24 Rolling, accounting, SHA, and no-fallback/repair
-  gates, and recovered the exact winners from the fixed-dispatch matrix.
-- SUNNY (`output/2026-08-28/run_20260828_0034`) selects 28 BEV / 4 ICE
+- Clean execution SHA `ba5ac4abac490caccca006260670dfbc2c411fa9` Fresh
+  Prepared both scenarios and ran the public BFF path with 15-minute internal
+  steps, 60-minute Rolling, Gurobi one thread, total/Stage-1/Stage-2 limits of
+  585/435/30 seconds, 10% requested gap, seed 42, selector OFF, and
+  BestObjStop OFF.  The formal candidate-coverage policy is recorded as 22
+  candidates, radius four, and frontier ON.  Both runs evaluated 22/22
+  candidates, served 264/264 trips, passed independent physical validation,
+  24/24 Rolling, accounting, SHA, and no-fallback/repair gates, and recovered
+  the exact winners from the fixed-dispatch matrix.
+- SUNNY (`output/2026-08-28/run_20260828_0107`) selects 28 BEV / 4 ICE
   vehicles and 199 / 65 trips at 660,983.783805 JPY.  RAIN
-  (`output/2026-08-28/run_20260828_0022`) selects 21 BEV / 11 ICE vehicles and
+  (`output/2026-08-28/run_20260828_0119`) selects 21 BEV / 11 ICE vehicles and
   91 / 173 trips at 698,296.465284 JPY.  Thus weather changes the chosen
   dispatch in these two fixed scenarios.  This is bounded Phase-3 evidence,
   not an integrated global optimum or a general weather claim.
@@ -50,29 +52,36 @@
   Candidate coverage fixes dispatch selection but does not establish an
   integrated optimum or improve the pure-ICE aggregation verdict.  Aggregation
   B remains default-OFF and was not rerun.
-- Final validation passed `193` focused frontend/research/candidate tests and
-  the complete suite passed `1600 tests in 97.88 s`.  `git diff --check` and
-  Python compilation also pass.
-- Completion audit found that the clean `e3cc7e86` public confirmation recorded
+- The earlier clean `e3cc7e86` public confirmation recorded
   `gurobi_threads=1` in the request but enforced the ordinary interactive value
   `4`.  Those two runs remain useful candidate-selection diagnostics but are
   not fixed-control research evidence.  The public endpoint now exempts formal
-  `research_run=true` requests from interactive runtime overrides, while
-  ordinary UI runs retain the four-thread policy.  A new clean-SHA Fresh pair
-  is required before closing this item.
+  `research_run=true` requests from interactive runtime overrides; ordinary UI
+  runs retain the four-thread policy.  The `ba5ac4a` pair above is the clean
+  fixed-control replacement.
 - The same audit also found that the candidate-union artifact omitted explicit
   provenance for the five frozen discrete-A runs per scenario.  The diagnosis
   harness now recovers the sole candidate from each candidate-limit-one run,
   records all ten with selection/rejection semantics, and merges their
   provenance before deduplication with expanded candidates.
+- `case_a_candidate_selection_audit.json` verifies all six requested Case-A
+  checks.  Each scenario has 22 candidates and zero Stage-1 proxy/Stage-2
+  canonical rank reversals; SUNNY's first/second delta is 5,180.298562 JPY and
+  RAIN's is 566.622470 JPY.  `normal_confirmation_input_contract.json` verifies
+  every comparable Fresh-run hash against the frozen A baseline; cross-weather
+  differences are limited to scenario snapshots, PV, and the derived canonical
+  hash containing PV.
+- Validation passed `247` related Phase-3/weather/frontend integration tests
+  and the full suite passed `1602 tests in 88.55 s`.  Python compilation and
+  `git diff --check` also pass.  The pre-fix full-suite attempt exposed one
+  stale positional-argument assertion; the updated regression now explicitly
+  verifies that a formal run disables the ordinary interactive override.
 - Diagnostic artifacts are under
-  `output/diagnostics/weather_dispatch_diagnosis_20260827/`; SHA-256 values for
-  `weather_candidate_union.json`, `cross_weather_fixed_dispatch_matrix.json`,
-  `aggregation_runtime_decomposition.json`, and
-  `sunny_rain_gap_decomposition.json` are respectively `4A35CCA3...923E6`,
-  `D8FDC116...5A3BB`, `EF1FEA7F...42048`, and `0B59CB51...E557`.
-  `normal_path_confirmation/confirmation_manifest.json` is the consolidated
-  production-path gate and identifies the excluded 60-minute diagnostic run.
+  `output/diagnostics/weather_dispatch_diagnosis_20260827/`.
+  `normal_path_confirmation_fixed_controls_ba5ac4a/confirmation_manifest.json`
+  is the consolidated production-path gate and explicitly excludes the
+  60-minute diagnostic and both four-thread diagnostic runs.  File-level
+  SHA-256 values are regenerated in `artifact_hashes.json` after final tests.
 
 ## 2026-08-27: Final SUNNY/RAIN 20-child A/B completed at `453b1d3`
 

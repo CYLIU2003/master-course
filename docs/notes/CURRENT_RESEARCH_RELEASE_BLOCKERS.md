@@ -18,19 +18,30 @@ composition neighborhood, and multi-candidate Stage-2 evaluation, with a
 deterministic canonical-cost/used-fleet/assignment-hash ordering.  Aggregate B
 stays default-OFF and was not part of this repair.
 
-The first updated public-path pair at clean SHA `e3cc7e86` evaluated 22/22
-feasible candidates and passed service, physical, Rolling, accounting, SHA,
-and winner-hash gates.  A completion audit nevertheless found that its
-effective runtime controls used four Gurobi threads even though the frozen
-request and baseline bundle specify one.  It is therefore diagnostic evidence
-for the Case-A mechanism, not the final fixed-control research pair.  Formal
-public `research_run=true` requests now preserve their predeclared controls;
-Fresh SUNNY/RAIN reruns from the repair's clean SHA remain required.
+The first updated public-path pair at clean SHA `e3cc7e86` used four effective
+Gurobi threads despite requesting one and remains diagnostic-only.  Its clean
+fixed-control replacement executed at `ba5ac4a`: SUNNY
+`run_20260828_0107` and RAIN `run_20260828_0119` both retained one thread,
+585/435/30-second limits, seed 42, 10% requested gap, selector OFF, and
+BestObjStop OFF.  Each evaluated 22 candidates, served 264/264 trips, and
+passed physical validation, 24/24 Rolling, accounting, SHA, and winner-hash
+gates.  The selected physical assignments differ and exactly match the
+cross-weather canonical minima.  Final cross-evaluation/audit was regenerated
+from clean SHA `3ec8714`.
 
 The first confirmation attempt used an incorrect 60-minute internal step and
 is explicitly excluded; it is not research evidence.  The corrected normal
 runs and exclusion record are consolidated in
-`output/diagnostics/weather_dispatch_diagnosis_20260827/normal_path_confirmation/confirmation_manifest.json`.
+`output/diagnostics/weather_dispatch_diagnosis_20260827/normal_path_confirmation_fixed_controls_ba5ac4a/confirmation_manifest.json`.
+
+All six Case-A audit checks pass.  Weather-specific PV/BESS/tariff inputs enter
+the Stage-1 recourse objective; `used_in_stage1_objective=true`; the 22-candidate
+Stage-1 and Stage-2 ranks were explicitly compared (zero reversals in both
+scenarios); selection is not first-feasible/Stage-1-only; 54 source candidates
+deduplicate to 22 physical assignments; and the confirmed normal path selects
+the minimum feasible, physically valid, accounting-reconciled Stage-2
+canonical cost.  The full Fresh-run input contract matches every comparable
+hash in the frozen A baseline.
 
 The release remains **BLOCKED**.  SUNNY still has a 9.5213476% certified gap
 and RAIN 1.6563581%; neither Phase 3 run proves an integrated global optimum.

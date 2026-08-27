@@ -17,13 +17,14 @@ physical/accounting gates and selected different SUNNY and RAIN assignments
 (Case A).  The formal public Phase-3 path now reuses the existing neutral BEV
 frontier and evaluates multiple Stage-2 candidates, selecting by canonical
 actual cost with deterministic used-fleet/hash tie-breaks.  Fresh normal-path
-The first public-path confirmation at clean `e3cc7e86` passed service,
-physical, Rolling, accounting, and winner-hash gates, but a completion audit
-found that the BFF replaced the requested one Gurobi thread with the ordinary
-interactive four-thread policy.  Its selected winners remain diagnostic, not
-the final fixed-control evidence.  Formal public runs now preserve their
-predeclared runtime controls; a clean-SHA Fresh SUNNY/RAIN confirmation is
-required.  Research release remains **BLOCKED**.  Pure-ICE aggregation remains
+runs from execution SHA `ba5ac4a` preserved the frozen one-thread,
+585/435/30-second controls, evaluated 22 candidates each, served 264/264
+trips, and passed independent physical validation, 24/24 Rolling, accounting,
+and winner-hash gates.  SUNNY selected `76fb6a9b...a516c` at
+660,983.783805 JPY; RAIN selected `213b2ccd...5316` at 698,296.465284 JPY.
+The final cross-evaluation/audit SHA is `3ec8714`.  Research release remains
+**BLOCKED** because Phase 3 is not an integrated global optimum and the Stage-1
+certified gaps remain 9.5213%/1.6564%.  Pure-ICE aggregation remains
 default-OFF and was not rerun.
 
 ## Current 2026-08-27 SUNNY/RAIN pure-ICE aggregation result

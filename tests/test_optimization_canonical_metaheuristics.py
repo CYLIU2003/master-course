@@ -545,10 +545,11 @@ def test_run_optimization_endpoint_submits_current_prepared_input_job() -> None:
     assert submitted_args[26] == 60
     assert submitted_args[28] is False
     assert submitted_args[29] is True
-    assert submitted_args[-4] is False
-    assert submitted_args[-3] == -1
-    assert submitted_args[-2] == 1
-    assert submitted_args[-1] == ["vehicle-1"]
+    assert submitted_args[-5] is False
+    assert submitted_args[-4] == -1
+    assert submitted_args[-3] == 1
+    assert submitted_args[-2] == ["vehicle-1"]
+    assert submitted_args[-1] is False
     assert submitted_args[31] == "day_ahead_and_hourly_rolling"
     assert submitted_args[32] is True
     assert submitted_args[33] == 60
