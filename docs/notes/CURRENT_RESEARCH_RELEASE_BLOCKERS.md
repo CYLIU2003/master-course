@@ -1,6 +1,6 @@
 # Current research release blockers
 
-## 2026-08-27: Same-dispatch diagnosis is Case A; fixed-path confirmation pending
+## 2026-08-28: Case A repair confirmed; certification blocker remains
 
 The 103-file frozen A/B bundle was hash-reverified without rerunning aggregate
 B.  Runtime evidence shows discrete A reached the requested 10% gap after
@@ -18,11 +18,26 @@ composition neighborhood, and multi-candidate Stage-2 evaluation, with a
 deterministic canonical-cost/used-fleet/assignment-hash ordering.  Aggregate B
 stays default-OFF and was not part of this repair.
 
-This is not yet release evidence: the updated normal public path must complete
-Fresh Prepare, 264/264 service, independent physical validation, 24/24 Rolling,
-and accounting for one SUNNY and one RAIN run from the same clean frozen SHA.
-The release remains **BLOCKED**, and Phase 3 remains a bounded two-stage method,
-not an integrated global-optimality claim.
+The updated public path was confirmed at clean SHA `e3cc7e86` with Fresh
+Prepare and the fixed 15-minute internal / 60-minute Rolling contract.  Both
+SUNNY and RAIN evaluated 22/22 feasible candidates, served 264/264 trips, and
+passed independent physical validation, 24/24 Rolling, accounting, SHA, and
+no-fallback/no-repair gates.  Their selected physical assignment hashes match
+the prior fixed-dispatch matrix.  SUNNY uses 28 BEV / 4 ICE vehicles for
+199 / 65 trips at 660,983.783805 JPY; RAIN uses 21 BEV / 11 ICE vehicles for
+91 / 173 trips at 698,296.465284 JPY.  The former identical dispatch was
+therefore a candidate-coverage artifact for these two scenarios.
+
+The first confirmation attempt used an incorrect 60-minute internal step and
+is explicitly excluded; it is not research evidence.  The corrected normal
+runs and exclusion record are consolidated in
+`output/diagnostics/weather_dispatch_diagnosis_20260827/normal_path_confirmation/confirmation_manifest.json`.
+
+The release remains **BLOCKED**.  SUNNY still has a 9.5213476% certified gap
+and RAIN 1.6563581%; neither Phase 3 run proves an integrated global optimum.
+The result supports weather-specific dispatch in these two scenarios only,
+not a general weather benefit.  Pure-ICE aggregation remains default-OFF and
+its earlier structural-only/no-runtime-benefit verdict is unchanged.
 
 ## 2026-08-27: Two-weather aggregation A/B complete; structural-only result
 

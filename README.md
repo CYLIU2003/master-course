@@ -8,7 +8,7 @@ The reviewer-facing scope, checks, and open decisions are in
 [THESIS_EXTERNAL_REVIEW_BRIEF.md](docs/notes/THESIS_EXTERNAL_REVIEW_BRIEF.md);
 that brief is a request for independent review, not an approval record.
 
-## Current 2026-08-27 weather-dispatch diagnosis
+## Current 2026-08-28 weather-dispatch diagnosis
 
 The previously identical SUNNY/RAIN incumbent was caused by insufficient
 Phase-3 candidate coverage, not by proof that weather cannot change dispatch.
@@ -17,8 +17,13 @@ physical/accounting gates and selected different SUNNY and RAIN assignments
 (Case A).  The formal public Phase-3 path now reuses the existing neutral BEV
 frontier and evaluates multiple Stage-2 candidates, selecting by canonical
 actual cost with deterministic used-fleet/hash tie-breaks.  Fresh normal-path
-SUNNY/RAIN confirmation is still pending, so research release remains
-**BLOCKED**.  Pure-ICE aggregation remains default-OFF and was not rerun.
+SUNNY/RAIN confirmation at clean `e3cc7e86` passed 264/264 service, independent
+physical validation, 24/24 Rolling, accounting, and winner-hash gates.  SUNNY
+uses 28 BEV / 4 ICE vehicles for 199 / 65 trips at 660,983.784 JPY; RAIN uses
+21 / 11 for 91 / 173 trips at 698,296.465 JPY.  This proves scenario-specific
+dispatch selection for these two cases, not integrated global optimality or a
+general weather claim.  Research release remains **BLOCKED** by the certified
+Stage-1 gaps.  Pure-ICE aggregation remains default-OFF and was not rerun.
 
 ## Current 2026-08-27 SUNNY/RAIN pure-ICE aggregation result
 
