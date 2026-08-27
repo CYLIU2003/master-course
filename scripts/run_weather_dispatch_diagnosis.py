@@ -45,7 +45,10 @@ from scripts.run_pure_ice_aggregation_weather_ab import (  # noqa: E402
     ScenarioInput,
     prepare_fresh_weather_inputs,
 )
-from src.dispatch.feasibility import FeasibilityEngine  # noqa: E402
+from src.dispatch.feasibility import (  # noqa: E402
+    FeasibilityEngine,
+    evaluate_startup_feasibility,
+)
 from src.optimization.common.builder import ProblemBuilder  # noqa: E402
 from src.optimization.common.evaluator import CostEvaluator  # noqa: E402
 from src.optimization.common.feasibility import FeasibilityChecker  # noqa: E402
@@ -650,6 +653,10 @@ def _serialized_assignment(problem: Any, candidate: Mapping[str, Any]) -> dict[s
         str(vehicle.vehicle_id): str(vehicle.vehicle_type).upper()
         for vehicle in problem.vehicles
     }
+    vehicle_by_id = {
+        str(vehicle.vehicle_id): vehicle
+        for vehicle in problem.vehicles
+    }
     grouped: dict[str, list[dict[str, Any]]] = {}
     duty_vehicle_map: dict[str, str] = {}
     for row in rows:
@@ -667,10 +674,25 @@ def _serialized_assignment(problem: Any, candidate: Mapping[str, Any]) -> dict[s
         previous_trip = None
         mapped_vehicle = duty_vehicle_map[duty_id]
         mapped_type = vehicle_type.get(mapped_vehicle, "")
+        vehicle = vehicle_by_id.get(mapped_vehicle)
+        if vehicle is None:
+            raise ValueError(f"candidate duty {duty_id} maps to an unknown vehicle")
         for row in duty_rows:
             trip = trip_lookup[str(row["trip_id"])]
             deadhead = 0
-            if previous_trip is not None:
+            if previous_trip is None:
+                startup = evaluate_startup_feasibility(
+                    trip,
+                    problem.dispatch_context,
+                    str(vehicle.home_depot_id),
+                )
+                if not startup.feasible:
+                    raise ValueError(
+                        f"candidate duty {duty_id} has infeasible startup: "
+                        f"{startup.reason_code}"
+                    )
+                deadhead = int(startup.deadhead_time_min or 0)
+            else:
                 connection = feasibility.can_connect(
                     previous_trip,
                     trip,
@@ -803,6 +825,7 @@ def _fixed_dispatch_evaluation(
 
 
 def cross_evaluate(output_dir: Path) -> dict[str, Any]:
+    evaluation_git_sha = _assert_clean_sha()
     unique = list(_read_json(output_dir / "weather_candidate_union.json").get("candidates") or ())
     discovery = _read_json(output_dir / "candidate_discovery_manifest.json")
     contexts = {}
@@ -845,6 +868,9 @@ def cross_evaluate(output_dir: Path) -> dict[str, Any]:
     )
     payload = {
         "schema_version": SCHEMA_VERSION,
+        "evaluation_git_sha": evaluation_git_sha,
+        "candidate_discovery_git_sha": discovery.get("git_sha"),
+        "git_dirty_before_after": False,
         "candidate_count": len(unique),
         "dispatch_reoptimization_performed": False,
         "energy_recourse_optimization_performed": True,
@@ -853,6 +879,7 @@ def cross_evaluate(output_dir: Path) -> dict[str, Any]:
         "selected": {"SUNNY": sunny_selected, "RAIN": rain_selected},
         "rows": matrix_rows,
     }
+    _assert_clean_sha(evaluation_git_sha)
     _write_json(output_dir / "cross_weather_fixed_dispatch_matrix.json", payload)
     _write_csv(output_dir / "cross_weather_fixed_dispatch_matrix.csv", matrix_rows)
     md = [
