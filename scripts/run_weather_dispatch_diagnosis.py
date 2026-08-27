@@ -45,6 +45,10 @@ from scripts.run_pure_ice_aggregation_weather_ab import (  # noqa: E402
     ScenarioInput,
     prepare_fresh_weather_inputs,
 )
+from scripts.run_frontend_controlled_pv_pair import (  # noqa: E402
+    HttpJsonClient,
+    _poll_job,
+)
 from src.dispatch.feasibility import (  # noqa: E402
     FeasibilityEngine,
     evaluate_startup_feasibility,
@@ -902,6 +906,210 @@ def cross_evaluate(output_dir: Path) -> dict[str, Any]:
     return payload
 
 
+def _normal_confirmation_request(scenario: ScenarioInput) -> dict[str, Any]:
+    """Build the public-path request whose narrow controls the policy broadens."""
+
+    request = _read_json(scenario.optimization_request_path)
+    request.update(
+        {
+            "mode": "phase3_two_stage",
+            "research_run": True,
+            "prepared_input_id": scenario.prepared_input_id,
+            "service_id": "WEEKDAY",
+            "depot_id": "tsurumaki",
+            "time_step_min": 60,
+            "timestep_min": 60,
+            "time_limit_seconds": 1950,
+            "stage1_time_limit_seconds": 1800,
+            "stage2_time_limit_seconds": 30,
+            "stage1_stage2_candidate_limit": 1,
+            "stage1_composition_search_radius": 0,
+            "stage1_bev_frontier_enabled": False,
+            "stage1_powertrain_selector_strengthening": False,
+            "stage1_best_obj_stop_enabled": False,
+            "gurobi_threads": 1,
+            "mip_gap": 0.1,
+            "random_seed": 42,
+            "run_profile": "day_ahead_and_hourly_rolling",
+            "run_hourly_rolling": True,
+            "rolling_execution_minutes": 60,
+        }
+    )
+    return request
+
+
+def _confirmation_gate(run_dir: Path, expected_sha: str) -> dict[str, Any]:
+    summary = _read_json(run_dir / "summary.json")
+    physical = _read_json(run_dir / "physical_schedule_validation.json")
+    accounting = _read_json(run_dir / "final_cost_reconciliation.json")
+    rolling = _read_json(
+        run_dir / "rolling_hourly_chain" / "rolling_chain_summary.json"
+    )
+    candidates = _read_json(run_dir / "stage1_stage2_candidate_evaluation.json")
+    selected_index = int(candidates.get("selected_candidate_index") or 0)
+    candidate_rows = list(candidates.get("candidates") or ())
+    if selected_index <= 0 or selected_index > len(candidate_rows):
+        raise RuntimeError("normal confirmation lacks a valid selected candidate index")
+    selected = dict(candidate_rows[selected_index - 1])
+    selected_physical_hash = assignment_hash_from_rows(
+        selected.get("vehicle_trip_assignments") or ()
+    )
+    acceptance_checks = dict(
+        dict(summary.get("solution_validity") or {}).get(
+            "research_acceptance_checks"
+        )
+        or {}
+    )
+    checks = {
+        "served_264": int(summary.get("trip_count_served") or 0) == 264,
+        "unserved_zero": int(summary.get("trip_count_unserved") or -1) == 0,
+        "physical_validation_passed": physical.get("accepted") is True,
+        "rolling_24_of_24": (
+            int(rolling.get("expected_step_count") or 0) == 24
+            and int(rolling.get("step_count") or 0) == 24
+            and rolling.get("all_steps_feasible") is True
+        ),
+        "accounting_reconciliation_passed": accounting.get("status") == "OK",
+        "git_sha_matches": (
+            str(rolling.get("day_ahead_git_sha") or "") == expected_sha
+            and str(rolling.get("rolling_runner_git_sha") or "") == expected_sha
+            and rolling.get("rolling_runner_git_dirty") is False
+        ),
+        "fallback_and_repair_absent": (
+            acceptance_checks.get("no_fallback") is True
+            and acceptance_checks.get("no_postsolve_modification") is True
+            and not bool(selected.get("fallback_used", False))
+            and not bool(selected.get("repair_used", False))
+        ),
+        "candidate_coverage_applied": (
+            int(candidates.get("requested_candidate_limit") or 0) >= 22
+            and int(candidates.get("composition_search_radius_requested") or 0)
+            >= 4
+            and int(candidates.get("candidate_count_evaluated") or 0) >= 12
+        ),
+    }
+    if not all(checks.values()):
+        raise RuntimeError(f"normal confirmation gate failed: {checks}")
+    return {
+        "run_dir": str(run_dir.resolve()),
+        "checks": checks,
+        "selected_candidate_index": selected_index,
+        "selected_internal_assignment_hash": selected.get("assignment_hash"),
+        "selected_physical_assignment_hash": selected_physical_hash,
+        "selected_canonical_actual_cost_jpy": candidates.get(
+            "selected_canonical_actual_cost_jpy"
+        ),
+        "candidate_count_evaluated": candidates.get("candidate_count_evaluated"),
+        "prepared_input_id": rolling.get("prepared_input_id"),
+        "prepared_input_sha256": rolling.get("prepared_input_sha256"),
+        "trip_input_hash": rolling.get("trip_input_hash"),
+        "vehicle_input_hash": rolling.get("vehicle_input_hash"),
+        "fleet_contract_hash": rolling.get("scenario_fleet_contract_hash"),
+        "day_ahead_assignment_hash": rolling.get("day_ahead_assignment_hash"),
+    }
+
+
+def confirm_normal_runs(
+    *,
+    output_dir: Path,
+    base_url: str,
+    existing_bundle: Path,
+) -> dict[str, Any]:
+    """Fresh Prepare and validate one public normal-path run per weather case."""
+
+    frozen_sha = _assert_clean_sha()
+    started = datetime.now(timezone.utc)
+    confirmation_dir = output_dir / "normal_path_confirmation"
+    confirmation_dir.mkdir(parents=True, exist_ok=False)
+    scenarios, prepare_evidence = prepare_fresh_weather_inputs(
+        base_url=base_url,
+        output_dir=confirmation_dir / "fresh_prepare",
+        sunny_prepare_request_path=(
+            existing_bundle / "preparation" / "SUNNY" / "frontend_prepare_request.json"
+        ),
+        rain_prepare_request_path=(
+            existing_bundle / "preparation" / "RAIN" / "frontend_prepare_request.json"
+        ),
+        optimization_template_path=(
+            existing_bundle
+            / "preparation"
+            / "SUNNY"
+            / "frontend_optimization_request.json"
+        ),
+        frozen_sha=frozen_sha,
+        study_started_at_utc=started,
+    )
+    client = HttpJsonClient(base_url)
+    results: dict[str, Any] = {}
+    progress_log: list[dict[str, Any]] = []
+    for code in SCENARIOS:
+        scenario = scenarios[code]
+        case_dir = confirmation_dir / code
+        case_dir.mkdir(parents=True, exist_ok=False)
+        request = _normal_confirmation_request(scenario)
+        _write_json(case_dir / "frontend_optimization_request.json", request)
+        submit, _ = client.request_json(
+            "POST",
+            f"/api/scenarios/{scenario.scenario_id}/run-optimization",
+            request,
+            timeout_seconds=180.0,
+        )
+        job_id = str(submit.get("job_id") or submit.get("jobId") or "").strip()
+        if not job_id:
+            raise RuntimeError(f"{code} public optimization returned no job ID")
+        terminal, _ = _poll_job(
+            client=client,
+            job_id=job_id,
+            timeout_seconds=7200.0,
+            poll_interval_seconds=5.0,
+            log=progress_log,
+        )
+        _write_json(case_dir / "frontend_job_terminal_response.json", terminal)
+        if terminal.get("status") != "completed":
+            raise RuntimeError(f"{code} public optimization failed: {terminal}")
+        run_dir = Path(str(dict(terminal.get("metadata") or {}).get("run_dir") or ""))
+        if not run_dir.is_dir():
+            raise RuntimeError(f"{code} run directory is missing: {run_dir}")
+        results[code] = {
+            "scenario_id": scenario.scenario_id,
+            "job_id": job_id,
+            **_confirmation_gate(run_dir, frozen_sha),
+        }
+        _write_json(case_dir / "confirmation_gate.json", results[code])
+    expected = dict(
+        _read_json(output_dir / "cross_weather_fixed_dispatch_matrix.json").get(
+            "selected"
+        )
+        or {}
+    )
+    winner_checks = {
+        code: results[code]["selected_physical_assignment_hash"]
+        == str(dict(expected.get(code) or {}).get("assignment_hash") or "")
+        for code in SCENARIOS
+    }
+    if not all(winner_checks.values()):
+        raise RuntimeError(f"normal path did not recover diagnosed winners: {winner_checks}")
+    manifest = {
+        "schema_version": SCHEMA_VERSION,
+        "git_sha": frozen_sha,
+        "git_dirty_before_after": False,
+        "started_at_utc": started.isoformat(),
+        "finished_at_utc": datetime.now(timezone.utc).isoformat(),
+        "fresh_prepare": prepare_evidence,
+        "public_endpoint": "/api/scenarios/{scenario_id}/run-optimization",
+        "requested_candidate_limit": 1,
+        "requested_composition_radius": 0,
+        "requested_bev_frontier_enabled": False,
+        "pure_ice_aggregate_B_executed": False,
+        "winner_matches_fixed_dispatch_diagnosis": winner_checks,
+        "scenarios": results,
+        "progress_log": progress_log,
+    }
+    _assert_clean_sha(frozen_sha)
+    _write_json(confirmation_dir / "confirmation_manifest.json", manifest)
+    return manifest
+
+
 def _artifact_hashes(output_dir: Path) -> dict[str, str]:
     return {
         path.relative_to(output_dir).as_posix(): _sha256_file(path)
@@ -915,7 +1123,11 @@ def main() -> None:
     parser.add_argument("--existing-bundle", type=Path, default=DEFAULT_EXISTING_BUNDLE)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
-    parser.add_argument("--stage", choices=("existing", "discover", "union", "cross", "all"), default="all")
+    parser.add_argument(
+        "--stage",
+        choices=("existing", "discover", "union", "cross", "confirm", "all"),
+        default="all",
+    )
     parser.add_argument("--stage1-time-limit-seconds", type=int, default=1800)
     parser.add_argument("--stage2-time-limit-seconds", type=int, default=30)
     parser.add_argument("--candidate-limit", type=int, default=21)
@@ -937,6 +1149,12 @@ def main() -> None:
         build_candidate_union(output_dir)
     if args.stage in {"cross", "all"}:
         cross_evaluate(output_dir)
+    if args.stage in {"confirm", "all"}:
+        confirm_normal_runs(
+            output_dir=output_dir,
+            base_url=args.base_url,
+            existing_bundle=args.existing_bundle.resolve(),
+        )
     _write_json(
         output_dir / "artifact_hashes.json",
         {"schema_version": "artifact_hashes_v1", "sha256": _artifact_hashes(output_dir)},
