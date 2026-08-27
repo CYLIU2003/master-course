@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from scripts.run_weather_dispatch_diagnosis import (
+    _normal_confirmation_request,
     assignment_hash_from_rows,
     candidate_is_selectable,
     classify_weather_winners,
@@ -8,6 +9,7 @@ from scripts.run_weather_dispatch_diagnosis import (
     select_canonical_candidate,
     validate_fixed_dispatch_evidence,
 )
+from scripts.run_pure_ice_aggregation_weather_ab import ScenarioInput
 from bff.routers.optimization import (
     RunOptimizationBody,
     _apply_research_phase3_candidate_coverage_policy,
@@ -182,3 +184,18 @@ def test_nonresearch_phase3_keeps_requested_candidate_controls() -> None:
         stage1_bev_frontier_enabled=False,
     )
     assert _apply_research_phase3_candidate_coverage_policy(requested) is requested
+
+
+def test_normal_confirmation_keeps_15_minute_internal_timestep(tmp_path) -> None:
+    request_path = tmp_path / "request.json"
+    request_path.write_text("{}", encoding="utf-8")
+    scenario = ScenarioInput(
+        code_name="SUNNY",
+        scenario_id="scenario",
+        prepared_input_id="prepared",
+        optimization_request_path=request_path,
+    )
+    request = _normal_confirmation_request(scenario)
+    assert request["time_step_min"] == 15
+    assert request["timestep_min"] == 15
+    assert request["rolling_execution_minutes"] == 60

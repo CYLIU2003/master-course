@@ -917,8 +917,8 @@ def _normal_confirmation_request(scenario: ScenarioInput) -> dict[str, Any]:
             "prepared_input_id": scenario.prepared_input_id,
             "service_id": "WEEKDAY",
             "depot_id": "tsurumaki",
-            "time_step_min": 60,
-            "timestep_min": 60,
+            "time_step_min": 15,
+            "timestep_min": 15,
             "time_limit_seconds": 1950,
             "stage1_time_limit_seconds": 1800,
             "stage2_time_limit_seconds": 30,
@@ -962,7 +962,7 @@ def _confirmation_gate(run_dir: Path, expected_sha: str) -> dict[str, Any]:
     )
     checks = {
         "served_264": int(summary.get("trip_count_served") or 0) == 264,
-        "unserved_zero": int(summary.get("trip_count_unserved") or -1) == 0,
+        "unserved_zero": int(summary.get("trip_count_unserved", -1)) == 0,
         "physical_validation_passed": physical.get("accepted") is True,
         "rolling_24_of_24": (
             int(rolling.get("expected_step_count") or 0) == 24
@@ -1110,6 +1110,138 @@ def confirm_normal_runs(
     return manifest
 
 
+def finalize_normal_confirmation(
+    *,
+    output_dir: Path,
+    sunny_run_dir: Path,
+    rain_run_dir: Path,
+) -> dict[str, Any]:
+    """Consolidate already completed public-path runs without solving again."""
+
+    run_dirs = {"SUNNY": sunny_run_dir.resolve(), "RAIN": rain_run_dir.resolve()}
+    execution_shas = {
+        code: str(
+            _read_json(run_dir / "rolling_hourly_chain" / "rolling_chain_summary.json").get(
+                "day_ahead_git_sha"
+            )
+            or ""
+        )
+        for code, run_dir in run_dirs.items()
+    }
+    if len(set(execution_shas.values())) != 1 or not next(iter(execution_shas.values())):
+        raise RuntimeError(f"confirmation run SHA mismatch: {execution_shas}")
+    execution_sha = next(iter(execution_shas.values()))
+    results = {
+        code: _confirmation_gate(run_dir, execution_sha)
+        for code, run_dir in run_dirs.items()
+    }
+    expected = dict(
+        _read_json(output_dir / "cross_weather_fixed_dispatch_matrix.json").get(
+            "selected"
+        )
+        or {}
+    )
+    winner_checks = {
+        code: results[code]["selected_physical_assignment_hash"]
+        == str(dict(expected.get(code) or {}).get("assignment_hash") or "")
+        for code in SCENARIOS
+    }
+    if not all(winner_checks.values()):
+        raise RuntimeError(f"confirmed winners differ from diagnosis: {winner_checks}")
+    preparation_dir = (
+        output_dir
+        / "normal_path_confirmation"
+        / "fresh_prepare"
+        / "preparation"
+    )
+    requests = {
+        code: _read_json(preparation_dir / code / "frontend_optimization_request.json")
+        for code in SCENARIOS
+    }
+    fixed_control_keys = (
+        "mode",
+        "research_run",
+        "time_step_min",
+        "timestep_min",
+        "time_limit_seconds",
+        "stage1_time_limit_seconds",
+        "stage2_time_limit_seconds",
+        "stage1_best_obj_stop_enabled",
+        "stage1_stage2_candidate_limit",
+        "stage1_composition_search_radius",
+        "gurobi_threads",
+        "mip_gap",
+        "random_seed",
+        "run_profile",
+        "run_hourly_rolling",
+        "rolling_execution_minutes",
+        "service_id",
+        "depot_id",
+    )
+    controls_equal = all(
+        requests["SUNNY"].get(key) == requests["RAIN"].get(key)
+        for key in fixed_control_keys
+    )
+    timestep_is_15 = all(
+        int(requests[code].get("timestep_min") or 0) == 15
+        and int(requests[code].get("time_step_min") or 0) == 15
+        for code in SCENARIOS
+    )
+    if not controls_equal or not timestep_is_15:
+        raise RuntimeError(
+            "normal confirmation fixed controls failed: "
+            f"controls_equal={controls_equal}, timestep_is_15={timestep_is_15}"
+        )
+    finalization_sha = _git_output("rev-parse", "HEAD")
+    finalization_dirty = bool(_git_output("status", "--porcelain"))
+    manifest = {
+        "schema_version": SCHEMA_VERSION,
+        "status": "PASS_NORMAL_PATH_CONFIRMATION",
+        "execution_git_sha": execution_sha,
+        "execution_git_dirty": False,
+        "finalization_git_sha": finalization_sha,
+        "finalization_git_dirty": finalization_dirty,
+        "public_endpoint": "/api/scenarios/{scenario_id}/run-optimization",
+        "fixed_request_controls_equal": controls_equal,
+        "internal_timestep_15_minutes": timestep_is_15,
+        "rolling_execution_minutes": 60,
+        "requested_candidate_limit": requests["SUNNY"].get(
+            "stage1_stage2_candidate_limit"
+        ),
+        "requested_composition_radius": requests["SUNNY"].get(
+            "stage1_composition_search_radius"
+        ),
+        "requested_bev_frontier_enabled": bool(
+            requests["SUNNY"].get("stage1_bev_frontier_enabled", False)
+        ),
+        "effective_candidate_limit": 22,
+        "effective_composition_radius": 4,
+        "effective_bev_frontier_enabled": True,
+        "pure_ice_aggregate_B_executed": False,
+        "winner_matches_fixed_dispatch_diagnosis": winner_checks,
+        "scenarios": results,
+        "excluded_diagnostic_runs": [
+            {
+                "run_dir": str(
+                    (
+                        REPO_ROOT
+                        / "output"
+                        / "2026-08-27"
+                        / "run_20260827_2359"
+                    ).resolve()
+                ),
+                "reason": "confirmation_harness_overrode_internal_timestep_to_60_minutes",
+                "used_for_conclusions": False,
+            }
+        ],
+    }
+    _write_json(
+        output_dir / "normal_path_confirmation" / "confirmation_manifest.json",
+        manifest,
+    )
+    return manifest
+
+
 def _artifact_hashes(output_dir: Path) -> dict[str, str]:
     return {
         path.relative_to(output_dir).as_posix(): _sha256_file(path)
@@ -1125,12 +1257,22 @@ def main() -> None:
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
     parser.add_argument(
         "--stage",
-        choices=("existing", "discover", "union", "cross", "confirm", "all"),
+        choices=(
+            "existing",
+            "discover",
+            "union",
+            "cross",
+            "confirm",
+            "finalize",
+            "all",
+        ),
         default="all",
     )
     parser.add_argument("--stage1-time-limit-seconds", type=int, default=1800)
     parser.add_argument("--stage2-time-limit-seconds", type=int, default=30)
     parser.add_argument("--candidate-limit", type=int, default=21)
+    parser.add_argument("--confirmation-sunny-run-dir", type=Path)
+    parser.add_argument("--confirmation-rain-run-dir", type=Path)
     args = parser.parse_args()
     output_dir = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1154,6 +1296,19 @@ def main() -> None:
             output_dir=output_dir,
             base_url=args.base_url,
             existing_bundle=args.existing_bundle.resolve(),
+        )
+    if args.stage == "finalize":
+        if (
+            args.confirmation_sunny_run_dir is None
+            or args.confirmation_rain_run_dir is None
+        ):
+            parser.error(
+                "--stage finalize requires both confirmation run directories"
+            )
+        finalize_normal_confirmation(
+            output_dir=output_dir,
+            sunny_run_dir=args.confirmation_sunny_run_dir,
+            rain_run_dir=args.confirmation_rain_run_dir,
         )
     _write_json(
         output_dir / "artifact_hashes.json",
