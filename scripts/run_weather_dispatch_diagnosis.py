@@ -1131,6 +1131,21 @@ def _normal_confirmation_request(scenario: ScenarioInput) -> dict[str, Any]:
     return request
 
 
+def _powertrain_selector_is_disabled(
+    frontend_request: Mapping[str, Any],
+    solver_metadata: Mapping[str, Any],
+) -> bool:
+    """Verify selector OFF at its request and model-build evidence endpoints."""
+
+    return bool(
+        frontend_request.get("stage1_powertrain_selector_strengthening") is False
+        and solver_metadata.get(
+            "stage1_powertrain_selector_strengthening_enabled"
+        )
+        is False
+    )
+
+
 def _confirmation_gate(run_dir: Path, expected_sha: str) -> dict[str, Any]:
     summary = _read_json(run_dir / "summary.json")
     physical = _read_json(run_dir / "physical_schedule_validation.json")
@@ -1141,6 +1156,12 @@ def _confirmation_gate(run_dir: Path, expected_sha: str) -> dict[str, Any]:
     candidates = _read_json(run_dir / "stage1_stage2_candidate_evaluation.json")
     parameters = _read_json(run_dir / "optimization_parameters.json")
     solver_result = _read_json(run_dir / "solver_result.json")
+    canonical_solver_result = _read_json(run_dir / "canonical_solver_result.json")
+    frontend_request_envelope = dict(parameters.get("frontend_request") or {})
+    frontend_request = dict(
+        frontend_request_envelope.get("raw_frontend_body")
+        or frontend_request_envelope
+    )
     effective_config = dict(parameters.get("effective_optimization_config") or {})
     canonical_inputs = dict(parameters.get("canonical_input_dimensions") or {})
     runtime_controls = dict(summary.get("interactive_runtime_controls") or {})
@@ -1152,6 +1173,7 @@ def _confirmation_gate(run_dir: Path, expected_sha: str) -> dict[str, Any]:
         )
         or {}
     )
+    model_build_metadata = dict(canonical_solver_result.get("metadata") or {})
     selected_index = int(candidates.get("selected_candidate_index") or 0)
     candidate_rows = list(candidates.get("candidates") or ())
     if selected_index <= 0 or selected_index > len(candidate_rows):
@@ -1208,8 +1230,13 @@ def _confirmation_gate(run_dir: Path, expected_sha: str) -> dict[str, Any]:
             and float(effective_config.get("mip_gap") or -1.0) == 0.1
             and int(effective_config.get("random_seed") or -1) == 42
             and effective_config.get("stage1_best_obj_stop_enabled") is False
-            and effective_config.get("stage1_powertrain_selector_strengthening")
-            is False
+            # The selector flag is a request/model-build control.  Older
+            # effective-config schemas omit it, so verify both authoritative
+            # endpoints instead of treating an omitted derived key as ON.
+            and _powertrain_selector_is_disabled(
+                frontend_request,
+                model_build_metadata,
+            )
         ),
         "stage1_weather_recourse_used_in_objective": (
             stage1_recourse_configuration.get("used_in_stage1_objective") is True
@@ -1359,11 +1386,378 @@ def confirm_normal_runs(
     return manifest
 
 
+def build_case_a_candidate_selection_audit(
+    *,
+    output_dir: Path,
+    confirmation_manifest: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Persist the six fail-closed Case-A candidate/selection checks."""
+
+    discovery = _read_json(output_dir / "candidate_discovery_manifest.json")
+    union = _read_json(output_dir / "weather_candidate_union.json")
+    matrix = _read_json(output_dir / "cross_weather_fixed_dispatch_matrix.json")
+    matrix_rows = list(matrix.get("rows") or ())
+    selected = dict(matrix.get("selected") or {})
+    confirmation = dict(confirmation_manifest.get("scenarios") or {})
+    audit_rows: list[dict[str, Any]] = []
+    scenario_audits: dict[str, Any] = {}
+
+    for code in SCENARIOS:
+        source_run_dir = Path(
+            str(dict(discovery["scenarios"][code]).get("run_dir") or "")
+        )
+        source_candidates_payload = _read_json(
+            source_run_dir / "stage1_stage2_candidate_evaluation.json"
+        )
+        source_candidates = list(source_candidates_payload.get("candidates") or ())
+        solver_result = _read_json(source_run_dir / "solver_result.json")
+        source_parameters = _read_json(
+            source_run_dir / "optimization_parameters.json"
+        )
+        recourse_configuration = dict(
+            dict(solver_result.get("solver_metadata") or {}).get(
+                "stage1_time_indexed_energy_recourse_configuration"
+            )
+            or {}
+        )
+        input_hashes = dict(
+            source_parameters.get("canonical_input_dimensions") or {}
+        )
+        canonical_by_hash = {
+            str(row["assignment_hash"]): dict(row)
+            for row in matrix_rows
+            if row.get("scenario") == code
+        }
+        ranked_source = []
+        for raw in source_candidates:
+            candidate = dict(raw)
+            physical_hash = assignment_hash_from_rows(
+                candidate.get("vehicle_trip_assignments") or ()
+            )
+            matrix_row = canonical_by_hash.get(physical_hash)
+            if matrix_row is None:
+                raise RuntimeError(
+                    f"{code} source candidate missing from cross matrix: {physical_hash}"
+                )
+            ranked_source.append((candidate, physical_hash, matrix_row))
+        proxy_order = sorted(
+            ranked_source,
+            key=lambda item: (
+                float(item[0]["stage1_candidate_priority_cost_jpy"]),
+                item[1],
+            ),
+        )
+        canonical_order = sorted(
+            ranked_source,
+            key=lambda item: (
+                float(item[2]["canonical_actual_cost_jpy"]),
+                int(item[2]["used_vehicle_count"]),
+                item[1],
+            ),
+        )
+        proxy_rank = {item[1]: index for index, item in enumerate(proxy_order, 1)}
+        canonical_rank = {
+            item[1]: index for index, item in enumerate(canonical_order, 1)
+        }
+        selected_index = int(source_candidates_payload.get("selected_candidate_index") or 0)
+        for candidate, physical_hash, matrix_row in ranked_source:
+            source_index = int(candidate.get("candidate_index") or 0)
+            audit_rows.append(
+                {
+                    "scenario": code,
+                    "assignment_hash": physical_hash,
+                    "candidate_hash": candidate.get("candidate_hash"),
+                    "source_candidate_index": source_index,
+                    "source_selected": source_index == selected_index,
+                    "source_rejection_reason": (
+                        None
+                        if source_index == selected_index
+                        else "not_selected_by_source_run"
+                    ),
+                    "stage1_candidate_priority_cost_jpy": candidate.get(
+                        "stage1_candidate_priority_cost_jpy"
+                    ),
+                    "stage1_energy_recourse_objective_jpy": candidate.get(
+                        "stage1_recourse_objective_jpy"
+                    ),
+                    "stage1_proxy_rank": proxy_rank[physical_hash],
+                    "stage2_canonical_actual_cost_jpy": matrix_row.get(
+                        "canonical_actual_cost_jpy"
+                    ),
+                    "stage2_canonical_rank": canonical_rank[physical_hash],
+                    "rank_reversed": (
+                        proxy_rank[physical_hash] != canonical_rank[physical_hash]
+                    ),
+                    "stage2_feasible": matrix_row.get("stage2_feasible"),
+                    "physical_validation_feasible": matrix_row.get(
+                        "physical_validation_feasible"
+                    ),
+                    "accounting_reconciliation_passed": matrix_row.get(
+                        "accounting_reconciliation_passed"
+                    ),
+                    "selectable": matrix_row.get("selectable"),
+                }
+            )
+        canonical_winner = canonical_order[0][1]
+        confirmed = dict(confirmation.get(code) or {})
+        recourse_input_hash = recourse_configuration.get("recourse_input_hash")
+        selection_semantics = str(
+            source_candidates_payload.get("selection_semantics") or ""
+        )
+        checks = {
+            "weather_pv_bess_tariff_inputs_enter_stage1": bool(
+                input_hashes.get("pv_profile_sha256")
+                and input_hashes.get("price_input_sha256")
+                and input_hashes.get("energy_asset_control_input_sha256")
+                and recourse_input_hash
+                and recourse_configuration.get("arbitrary_weather_assignment_bias_used")
+                is False
+            ),
+            "stage1_recourse_used_in_objective": (
+                recourse_configuration.get("used_in_stage1_objective") is True
+            ),
+            "proxy_vs_canonical_rank_compared": len(ranked_source) >= 12,
+            "selection_not_first_feasible_or_stage1_only": (
+                "minimum_canonical_actual_cost" in selection_semantics
+                and int(source_candidates_payload.get("candidate_count_evaluated") or 0)
+                >= 12
+            ),
+            "physical_assignment_hash_deduplication_applied": (
+                int(union.get("candidate_count_before_deduplication") or 0)
+                > int(union.get("unique_physical_assignment_count") or 0)
+                >= 12
+            ),
+            "stage2_canonical_minimum_selected": (
+                canonical_winner
+                == str(dict(selected.get(code) or {}).get("assignment_hash") or "")
+                == str(confirmed.get("selected_physical_assignment_hash") or "")
+            ),
+        }
+        if not all(checks.values()):
+            raise RuntimeError(f"Case A selection audit failed for {code}: {checks}")
+        scenario_rows = [row for row in audit_rows if row["scenario"] == code]
+        second = canonical_order[1][2]
+        scenario_audits[code] = {
+            "source_run_dir": str(source_run_dir.resolve()),
+            "candidate_count": len(ranked_source),
+            "stage1_time_indexed_energy_recourse_configuration": (
+                recourse_configuration
+            ),
+            "canonical_input_hashes": input_hashes,
+            "selection_semantics": selection_semantics,
+            "proxy_canonical_rank_reversal_count": sum(
+                bool(row["rank_reversed"]) for row in scenario_rows
+            ),
+            "canonical_winner_assignment_hash": canonical_winner,
+            "canonical_winner_cost_jpy": canonical_order[0][2].get(
+                "canonical_actual_cost_jpy"
+            ),
+            "canonical_second_assignment_hash": canonical_order[1][1],
+            "canonical_second_cost_jpy": second.get("canonical_actual_cost_jpy"),
+            "canonical_first_second_delta_jpy": (
+                float(second["canonical_actual_cost_jpy"])
+                - float(canonical_order[0][2]["canonical_actual_cost_jpy"])
+            ),
+            "confirmed_normal_run_dir": confirmed.get("run_dir"),
+            "checks": checks,
+        }
+
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "verdict": "FIXED",
+        "case": "A",
+        "cause": (
+            "normal_path_candidate_coverage_was_one_candidate; canonical_selection_"
+            "itself_was_correct_for_the_candidates_it_received"
+        ),
+        "fix": {
+            "candidate_limit_minimum": 22,
+            "composition_search_radius_minimum": 4,
+            "bev_frontier_enabled": True,
+            "final_order": (
+                "stage2_canonical_actual_cost_then_used_vehicle_count_then_"
+                "assignment_hash"
+            ),
+            "arbitrary_weather_bias_added": False,
+        },
+        "candidate_union": {
+            key: union.get(key)
+            for key in (
+                "existing_A_run_count",
+                "expanded_candidate_count",
+                "candidate_count_before_deduplication",
+                "unique_physical_assignment_count",
+                "target_reached",
+            )
+        },
+        "scenarios": scenario_audits,
+        "rows": audit_rows,
+    }
+    _write_json(output_dir / "case_a_candidate_selection_audit.json", payload)
+    _write_csv(output_dir / "case_a_candidate_selection_audit.csv", audit_rows)
+    md = [
+        "# Case A candidate-generation and selection audit",
+        "",
+        "Verdict: **FIXED**. The previous normal path evaluated one candidate; the fixed policy evaluates the neutral 22-candidate composition/frontier coverage. No weather bias was added.",
+        "",
+        "| scenario | candidates | proxy/canonical reversals | winner | second-place delta JPY | six checks |",
+        "|---|---:|---:|---|---:|---|",
+    ]
+    for code in SCENARIOS:
+        audit = scenario_audits[code]
+        md.append(
+            f"| {code} | {audit['candidate_count']} | "
+            f"{audit['proxy_canonical_rank_reversal_count']} | "
+            f"{str(audit['canonical_winner_assignment_hash'])[:12]} | "
+            f"{float(audit['canonical_first_second_delta_jpy']):.6f} | PASS |"
+        )
+    (output_dir / "case_a_candidate_selection_audit.md").write_text(
+        "\n".join(md) + "\n", encoding="utf-8"
+    )
+    return payload
+
+
+def build_confirmation_input_contract(
+    *,
+    output_dir: Path,
+    existing_bundle: Path,
+    confirmation_manifest: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Compare every canonical final-run input hash with the frozen A baseline."""
+
+    rows: list[dict[str, Any]] = []
+    scenarios: dict[str, Any] = {}
+    final_hashes_by_scenario: dict[str, dict[str, Any]] = {}
+    for code in SCENARIOS:
+        baseline_path = next(
+            iter(
+                sorted(
+                    existing_bundle.glob(
+                        f"scenarios/{code}/runs/*_A_discrete/case_metrics.json"
+                    )
+                )
+            ),
+            None,
+        )
+        if baseline_path is None:
+            raise RuntimeError(f"missing frozen A baseline for {code}")
+        baseline = _read_json(baseline_path)
+        baseline_provenance = dict(baseline.get("provenance") or {})
+        baseline_hashes = dict(baseline_provenance.get("input_hashes") or {})
+        confirmed = dict(
+            dict(confirmation_manifest.get("scenarios") or {}).get(code) or {}
+        )
+        final_hashes = dict(confirmed.get("canonical_input_hashes") or {})
+        final_hashes.update(
+            {
+                "prepared_source_sha256": confirmed.get("prepared_input_sha256"),
+                "prepared_input_sha256": confirmed.get("prepared_input_sha256"),
+            }
+        )
+        final_hashes_by_scenario[code] = final_hashes
+        comparable_keys = sorted(set(baseline_hashes) & set(final_hashes))
+        for key in comparable_keys:
+            rows.append(
+                {
+                    "scenario": code,
+                    "input_key": key,
+                    "frozen_A_sha256": baseline_hashes.get(key),
+                    "fresh_confirmation_sha256": final_hashes.get(key),
+                    "matches_frozen_A": (
+                        baseline_hashes.get(key) == final_hashes.get(key)
+                    ),
+                }
+            )
+        mismatches = [
+            row["input_key"]
+            for row in rows
+            if row["scenario"] == code and not row["matches_frozen_A"]
+        ]
+        scenarios[code] = {
+            "scenario_id": WEATHER_SCENARIO_IDS[code],
+            "run_dir": confirmed.get("run_dir"),
+            "prepared_input_id": confirmed.get("prepared_input_id"),
+            "prepared_source_sha256": confirmed.get("prepared_input_sha256"),
+            "fleet_contract_hash": confirmed.get("fleet_contract_hash"),
+            "canonical_input_hashes": final_hashes,
+            "effective_solver_controls": confirmed.get(
+                "effective_solver_controls"
+            ),
+            "runtime_controls": confirmed.get("runtime_controls"),
+            "frozen_A_baseline": str(baseline_path.resolve()),
+            "mismatches_from_frozen_A": mismatches,
+        }
+        if mismatches:
+            raise RuntimeError(
+                f"{code} Fresh confirmation input drifted from frozen A: {mismatches}"
+            )
+    cross_scenario_differences = sorted(
+        key
+        for key in set(final_hashes_by_scenario["SUNNY"])
+        | set(final_hashes_by_scenario["RAIN"])
+        if final_hashes_by_scenario["SUNNY"].get(key)
+        != final_hashes_by_scenario["RAIN"].get(key)
+    )
+    expected_weather_differences = {
+        "canonical_ablation_input_sha256",
+        "prepared_input_sha256",
+        "prepared_source_sha256",
+        "pv_profile_sha256",
+    }
+    unexpected = sorted(
+        set(cross_scenario_differences) - expected_weather_differences
+    )
+    if unexpected:
+        raise RuntimeError(
+            f"unexpected SUNNY/RAIN confirmation input differences: {unexpected}"
+        )
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "status": "PASS_FULL_INPUT_CONTRACT",
+        "fresh_prepare_used": True,
+        "fixed_nonweather_inputs_equal": not unexpected,
+        "cross_scenario_different_hashes": cross_scenario_differences,
+        "difference_interpretation": {
+            "pv_profile_sha256": "authoritative_weather_linked_PV_input",
+            "canonical_ablation_input_sha256": (
+                "derived_contract_hash_that_includes_weather_linked_PV"
+            ),
+            "prepared_input_sha256": "scenario_specific_prepared_snapshot",
+            "prepared_source_sha256": "scenario_specific_prepared_snapshot",
+        },
+        "scenarios": scenarios,
+        "rows": rows,
+    }
+    _write_json(output_dir / "normal_confirmation_input_contract.json", payload)
+    _write_csv(output_dir / "normal_confirmation_input_contract.csv", rows)
+    md = [
+        "# Fresh normal-path input contract",
+        "",
+        "Status: **PASS_FULL_INPUT_CONTRACT**. Every comparable hash matches the frozen A baseline within each scenario.",
+        "",
+        "SUNNY/RAIN differ only in scenario-specific prepared snapshots, the authoritative PV profile, and the canonical contract hash derived from that PV input.",
+        "",
+        "| scenario | prepared input | prepared SHA-256 | frozen-A drift |",
+        "|---|---|---|---:|",
+    ]
+    for code in SCENARIOS:
+        scenario = scenarios[code]
+        md.append(
+            f"| {code} | {scenario['prepared_input_id']} | "
+            f"{scenario['prepared_source_sha256']} | 0 |"
+        )
+    (output_dir / "normal_confirmation_input_contract.md").write_text(
+        "\n".join(md) + "\n", encoding="utf-8"
+    )
+    return payload
+
+
 def finalize_normal_confirmation(
     *,
     output_dir: Path,
     sunny_run_dir: Path,
     rain_run_dir: Path,
+    existing_bundle: Path = DEFAULT_EXISTING_BUNDLE,
     confirmation_dir_name: str = "normal_path_confirmation",
 ) -> dict[str, Any]:
     """Consolidate already completed public-path runs without solving again."""
@@ -1482,8 +1876,53 @@ def finalize_normal_confirmation(
                 ),
                 "reason": "confirmation_harness_overrode_internal_timestep_to_60_minutes",
                 "used_for_conclusions": False,
-            }
+            },
+            {
+                "run_dir": str(
+                    (
+                        REPO_ROOT
+                        / "output"
+                        / "2026-08-28"
+                        / "run_20260828_0022"
+                    ).resolve()
+                ),
+                "reason": "public_BFF_interactive_policy_overrode_requested_one_thread_to_four_threads",
+                "used_for_conclusions": False,
+            },
+            {
+                "run_dir": str(
+                    (
+                        REPO_ROOT
+                        / "output"
+                        / "2026-08-28"
+                        / "run_20260828_0034"
+                    ).resolve()
+                ),
+                "reason": "public_BFF_interactive_policy_overrode_requested_one_thread_to_four_threads",
+                "used_for_conclusions": False,
+            },
         ],
+    }
+    case_a_audit = build_case_a_candidate_selection_audit(
+        output_dir=output_dir,
+        confirmation_manifest=manifest,
+    )
+    input_contract = build_confirmation_input_contract(
+        output_dir=output_dir,
+        existing_bundle=existing_bundle,
+        confirmation_manifest=manifest,
+    )
+    manifest["case_a_candidate_selection_audit"] = {
+        "status": case_a_audit["verdict"],
+        "path": str(
+            (output_dir / "case_a_candidate_selection_audit.json").resolve()
+        ),
+    }
+    manifest["full_input_contract"] = {
+        "status": input_contract["status"],
+        "path": str(
+            (output_dir / "normal_confirmation_input_contract.json").resolve()
+        ),
     }
     _write_json(
         output_dir / confirmation_dir_name / "confirmation_manifest.json",
@@ -1567,6 +2006,7 @@ def main() -> None:
             output_dir=output_dir,
             sunny_run_dir=args.confirmation_sunny_run_dir,
             rain_run_dir=args.confirmation_rain_run_dir,
+            existing_bundle=args.existing_bundle.resolve(),
             confirmation_dir_name=args.confirmation_dir_name,
         )
     _write_json(

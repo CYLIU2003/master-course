@@ -4,6 +4,7 @@ import json
 
 from scripts.run_weather_dispatch_diagnosis import (
     _normal_confirmation_request,
+    _powertrain_selector_is_disabled,
     assignment_hash_from_rows,
     candidate_is_selectable,
     classify_weather_winners,
@@ -218,6 +219,14 @@ def test_public_formal_run_preserves_predeclared_runtime_controls() -> None:
     ordinary = RunOptimizationBody(research_run=False, gurobi_threads=1)
     assert _public_run_enforces_interactive_runtime_controls(formal) is False
     assert _public_run_enforces_interactive_runtime_controls(ordinary) is True
+
+
+def test_selector_off_gate_uses_request_and_model_build_evidence() -> None:
+    request = {"stage1_powertrain_selector_strengthening": False}
+    metadata = {"stage1_powertrain_selector_strengthening_enabled": False}
+    assert _powertrain_selector_is_disabled(request, metadata)
+    assert not _powertrain_selector_is_disabled({}, metadata)
+    assert not _powertrain_selector_is_disabled(request, {})
 
 
 def test_normal_confirmation_keeps_15_minute_internal_timestep(tmp_path) -> None:
