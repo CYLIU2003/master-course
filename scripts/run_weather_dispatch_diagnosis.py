@@ -1099,24 +1099,35 @@ def _normal_confirmation_request(scenario: ScenarioInput) -> dict[str, Any]:
             "prepared_input_id": scenario.prepared_input_id,
             "service_id": "WEEKDAY",
             "depot_id": "tsurumaki",
-            "time_step_min": 15,
-            "timestep_min": 15,
-            "time_limit_seconds": 1950,
-            "stage1_time_limit_seconds": 1800,
-            "stage2_time_limit_seconds": 30,
             "stage1_stage2_candidate_limit": 1,
             "stage1_composition_search_radius": 0,
             "stage1_bev_frontier_enabled": False,
-            "stage1_powertrain_selector_strengthening": False,
-            "stage1_best_obj_stop_enabled": False,
-            "gurobi_threads": 1,
-            "mip_gap": 0.1,
-            "random_seed": 42,
-            "run_profile": "day_ahead_and_hourly_rolling",
-            "run_hourly_rolling": True,
-            "rolling_execution_minutes": 60,
         }
     )
+    expected_controls = {
+        "time_step_min": 15,
+        "timestep_min": 15,
+        "time_limit_seconds": 585,
+        "stage1_time_limit_seconds": 435,
+        "stage2_time_limit_seconds": 30,
+        "stage1_powertrain_selector_strengthening": False,
+        "stage1_best_obj_stop_enabled": False,
+        "gurobi_threads": 1,
+        "mip_gap": 0.1,
+        "random_seed": 42,
+        "run_profile": "day_ahead_and_hourly_rolling",
+        "run_hourly_rolling": True,
+        "rolling_execution_minutes": 60,
+    }
+    mismatches = {
+        key: {"expected": expected, "observed": request.get(key)}
+        for key, expected in expected_controls.items()
+        if request.get(key) != expected
+    }
+    if mismatches:
+        raise RuntimeError(
+            f"normal confirmation request drifted from frozen controls: {mismatches}"
+        )
     return request
 
 
@@ -1128,6 +1139,19 @@ def _confirmation_gate(run_dir: Path, expected_sha: str) -> dict[str, Any]:
         run_dir / "rolling_hourly_chain" / "rolling_chain_summary.json"
     )
     candidates = _read_json(run_dir / "stage1_stage2_candidate_evaluation.json")
+    parameters = _read_json(run_dir / "optimization_parameters.json")
+    solver_result = _read_json(run_dir / "solver_result.json")
+    effective_config = dict(parameters.get("effective_optimization_config") or {})
+    canonical_inputs = dict(parameters.get("canonical_input_dimensions") or {})
+    runtime_controls = dict(summary.get("interactive_runtime_controls") or {})
+    requested_runtime_controls = dict(runtime_controls.get("requested") or {})
+    effective_runtime_controls = dict(runtime_controls.get("effective") or {})
+    stage1_recourse_configuration = dict(
+        dict(solver_result.get("solver_metadata") or {}).get(
+            "stage1_time_indexed_energy_recourse_configuration"
+        )
+        or {}
+    )
     selected_index = int(candidates.get("selected_candidate_index") or 0)
     candidate_rows = list(candidates.get("candidates") or ())
     if selected_index <= 0 or selected_index > len(candidate_rows):
@@ -1169,6 +1193,27 @@ def _confirmation_gate(run_dir: Path, expected_sha: str) -> dict[str, Any]:
             >= 4
             and int(candidates.get("candidate_count_evaluated") or 0) >= 12
         ),
+        "frozen_runtime_controls_preserved": (
+            runtime_controls.get("scope") == "research_batch_run"
+            and runtime_controls.get("override_applied") is False
+            and requested_runtime_controls.get("gurobi_threads") == 1
+            and effective_runtime_controls.get("gurobi_threads") == 1
+            and effective_config.get("gurobi_threads") == 1
+            and int(rolling.get("gurobi_threads") or 0) == 1
+        ),
+        "frozen_solver_limits_preserved": (
+            int(effective_config.get("time_limit_sec") or 0) == 585
+            and int(effective_config.get("stage1_time_limit_sec") or 0) == 435
+            and int(effective_config.get("stage2_time_limit_sec") or 0) == 30
+            and float(effective_config.get("mip_gap") or -1.0) == 0.1
+            and int(effective_config.get("random_seed") or -1) == 42
+            and effective_config.get("stage1_best_obj_stop_enabled") is False
+            and effective_config.get("stage1_powertrain_selector_strengthening")
+            is False
+        ),
+        "stage1_weather_recourse_used_in_objective": (
+            stage1_recourse_configuration.get("used_in_stage1_objective") is True
+        ),
     }
     if not all(checks.values()):
         raise RuntimeError(f"normal confirmation gate failed: {checks}")
@@ -1188,6 +1233,27 @@ def _confirmation_gate(run_dir: Path, expected_sha: str) -> dict[str, Any]:
         "vehicle_input_hash": rolling.get("vehicle_input_hash"),
         "fleet_contract_hash": rolling.get("scenario_fleet_contract_hash"),
         "day_ahead_assignment_hash": rolling.get("day_ahead_assignment_hash"),
+        "runtime_controls": runtime_controls,
+        "effective_solver_controls": {
+            key: effective_config.get(key)
+            for key in (
+                "time_limit_sec",
+                "stage1_time_limit_sec",
+                "stage2_time_limit_sec",
+                "stage1_best_obj_stop_enabled",
+                "gurobi_threads",
+                "stage1_stage2_candidate_limit",
+                "stage1_composition_search_radius",
+                "stage1_bev_frontier_enabled",
+                "stage1_powertrain_selector_strengthening",
+                "mip_gap",
+                "random_seed",
+            )
+        },
+        "canonical_input_hashes": canonical_inputs,
+        "stage1_time_indexed_energy_recourse_configuration": (
+            stage1_recourse_configuration
+        ),
     }
 
 
@@ -1196,12 +1262,13 @@ def confirm_normal_runs(
     output_dir: Path,
     base_url: str,
     existing_bundle: Path,
+    confirmation_dir_name: str = "normal_path_confirmation",
 ) -> dict[str, Any]:
     """Fresh Prepare and validate one public normal-path run per weather case."""
 
     frozen_sha = _assert_clean_sha()
     started = datetime.now(timezone.utc)
-    confirmation_dir = output_dir / "normal_path_confirmation"
+    confirmation_dir = output_dir / confirmation_dir_name
     confirmation_dir.mkdir(parents=True, exist_ok=False)
     scenarios, prepare_evidence = prepare_fresh_weather_inputs(
         base_url=base_url,
@@ -1297,6 +1364,7 @@ def finalize_normal_confirmation(
     output_dir: Path,
     sunny_run_dir: Path,
     rain_run_dir: Path,
+    confirmation_dir_name: str = "normal_path_confirmation",
 ) -> dict[str, Any]:
     """Consolidate already completed public-path runs without solving again."""
 
@@ -1332,7 +1400,7 @@ def finalize_normal_confirmation(
         raise RuntimeError(f"confirmed winners differ from diagnosis: {winner_checks}")
     preparation_dir = (
         output_dir
-        / "normal_path_confirmation"
+        / confirmation_dir_name
         / "fresh_prepare"
         / "preparation"
     )
@@ -1418,7 +1486,7 @@ def finalize_normal_confirmation(
         ],
     }
     _write_json(
-        output_dir / "normal_path_confirmation" / "confirmation_manifest.json",
+        output_dir / confirmation_dir_name / "confirmation_manifest.json",
         manifest,
     )
     return manifest
@@ -1455,6 +1523,10 @@ def main() -> None:
     parser.add_argument("--candidate-limit", type=int, default=21)
     parser.add_argument("--confirmation-sunny-run-dir", type=Path)
     parser.add_argument("--confirmation-rain-run-dir", type=Path)
+    parser.add_argument(
+        "--confirmation-dir-name",
+        default="normal_path_confirmation",
+    )
     args = parser.parse_args()
     output_dir = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1465,6 +1537,7 @@ def main() -> None:
             output_dir=output_dir,
             base_url=args.base_url,
             existing_bundle=args.existing_bundle.resolve(),
+            confirmation_dir_name=args.confirmation_dir_name,
             stage1_seconds=args.stage1_time_limit_seconds,
             stage2_seconds=args.stage2_time_limit_seconds,
             candidate_limit=args.candidate_limit,
@@ -1494,6 +1567,7 @@ def main() -> None:
             output_dir=output_dir,
             sunny_run_dir=args.confirmation_sunny_run_dir,
             rain_run_dir=args.confirmation_rain_run_dir,
+            confirmation_dir_name=args.confirmation_dir_name,
         )
     _write_json(
         output_dir / "artifact_hashes.json",

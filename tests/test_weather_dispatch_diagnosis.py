@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from scripts.run_weather_dispatch_diagnosis import (
     _normal_confirmation_request,
     assignment_hash_from_rows,
@@ -220,7 +222,26 @@ def test_public_formal_run_preserves_predeclared_runtime_controls() -> None:
 
 def test_normal_confirmation_keeps_15_minute_internal_timestep(tmp_path) -> None:
     request_path = tmp_path / "request.json"
-    request_path.write_text("{}", encoding="utf-8")
+    request_path.write_text(
+        json.dumps(
+            {
+                "time_step_min": 15,
+                "timestep_min": 15,
+                "time_limit_seconds": 585,
+                "stage1_time_limit_seconds": 435,
+                "stage2_time_limit_seconds": 30,
+                "stage1_powertrain_selector_strengthening": False,
+                "stage1_best_obj_stop_enabled": False,
+                "gurobi_threads": 1,
+                "mip_gap": 0.1,
+                "random_seed": 42,
+                "run_profile": "day_ahead_and_hourly_rolling",
+                "run_hourly_rolling": True,
+                "rolling_execution_minutes": 60,
+            }
+        ),
+        encoding="utf-8",
+    )
     scenario = ScenarioInput(
         code_name="SUNNY",
         scenario_id="scenario",
@@ -231,3 +252,7 @@ def test_normal_confirmation_keeps_15_minute_internal_timestep(tmp_path) -> None
     assert request["time_step_min"] == 15
     assert request["timestep_min"] == 15
     assert request["rolling_execution_minutes"] == 60
+    assert request["time_limit_seconds"] == 585
+    assert request["stage1_time_limit_seconds"] == 435
+    assert request["stage2_time_limit_seconds"] == 30
+    assert request["gurobi_threads"] == 1
