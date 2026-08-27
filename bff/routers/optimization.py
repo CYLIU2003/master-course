@@ -13911,6 +13911,37 @@ def get_research_git_preflight() -> Dict[str, Any]:
     return _research_git_preflight_payload()
 
 
+def _apply_research_phase3_candidate_coverage_policy(
+    request: RunOptimizationBody,
+) -> RunOptimizationBody:
+    """Broaden formal Phase-3 evidence without adding an economic bias.
+
+    The request remains the provenance record.  The effective formal research
+    run evaluates the existing neutral BEV frontier and enough Stage-2
+    candidates to expose weather-dependent canonical-cost reversals.  Internal
+    frozen batch diagnostics bypass this public endpoint and therefore retain
+    their explicitly frozen controls.
+    """
+
+    if not request.research_run or _normalize_solver_mode(request.mode) != (
+        "phase3_two_stage"
+    ):
+        return request
+    return request.model_copy(
+        update={
+            "stage1_stage2_candidate_limit": max(
+                int(request.stage1_stage2_candidate_limit),
+                22,
+            ),
+            "stage1_composition_search_radius": max(
+                int(request.stage1_composition_search_radius),
+                4,
+            ),
+            "stage1_bev_frontier_enabled": True,
+        }
+    )
+
+
 @router.post("/scenarios/{scenario_id}/run-optimization")
 def run_optimization(
     scenario_id: str,
@@ -14026,6 +14057,7 @@ def run_optimization(
     # controls.  Provenance must distinguish what the client requested from
     # what the BFF actually executed.
     requested_frontend_payload = request.model_dump()
+    request = _apply_research_phase3_candidate_coverage_policy(request)
     effective_run_hourly_rolling = bool(rolling_required)
     effective_rolling_execution_minutes = 60
     timestep_min = _request_timestep_min(request.timestep_min, request.time_step_min)

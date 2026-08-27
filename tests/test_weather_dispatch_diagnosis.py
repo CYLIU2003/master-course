@@ -8,8 +8,13 @@ from scripts.run_weather_dispatch_diagnosis import (
     select_canonical_candidate,
     validate_fixed_dispatch_evidence,
 )
+from bff.routers.optimization import (
+    RunOptimizationBody,
+    _apply_research_phase3_candidate_coverage_policy,
+)
 from src.optimization.milp.solver_adapter import (
     _EXACT_ICE_CLONE_REPRESENTATION_OVERRIDE,
+    _phase3_candidate_selection_key,
 )
 
 
@@ -144,5 +149,36 @@ def test_tie_break_is_used_fleet_then_assignment_hash() -> None:
     assert selected["assignment_hash"] == "a"
 
 
+def test_production_phase3_tie_break_key_is_cost_then_fleet_then_hash() -> None:
+    candidate = (123.5, 7, "abc", 99, object(), object())
+    assert _phase3_candidate_selection_key(candidate) == (123.5, 7, "abc")
+
+
 def test_pure_ice_aggregate_diagnostic_override_remains_off_by_default() -> None:
     assert _EXACT_ICE_CLONE_REPRESENTATION_OVERRIDE.get() is None
+
+
+def test_formal_phase3_enables_neutral_candidate_coverage_policy() -> None:
+    requested = RunOptimizationBody(
+        mode="phase3_two_stage",
+        research_run=True,
+        stage1_stage2_candidate_limit=1,
+        stage1_composition_search_radius=0,
+        stage1_bev_frontier_enabled=False,
+    )
+    effective = _apply_research_phase3_candidate_coverage_policy(requested)
+    assert effective.stage1_stage2_candidate_limit == 22
+    assert effective.stage1_composition_search_radius == 4
+    assert effective.stage1_bev_frontier_enabled is True
+    assert requested.stage1_stage2_candidate_limit == 1
+
+
+def test_nonresearch_phase3_keeps_requested_candidate_controls() -> None:
+    requested = RunOptimizationBody(
+        mode="phase3_two_stage",
+        research_run=False,
+        stage1_stage2_candidate_limit=1,
+        stage1_composition_search_radius=0,
+        stage1_bev_frontier_enabled=False,
+    )
+    assert _apply_research_phase3_candidate_coverage_policy(requested) is requested

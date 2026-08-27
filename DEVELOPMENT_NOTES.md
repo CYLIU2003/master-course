@@ -1,5 +1,41 @@
 # Development Notes
 
+## 2026-08-27: Weather-dispatch diagnosis identifies Case A candidate insufficiency
+
+- Reverified all 103 files in the frozen `453b1d3` A/B bundle and did not
+  rerun aggregate representation B.  Discrete A stopped after reaching the
+  requested 10% gap in about 31 seconds; aggregate B exhausted its roughly
+  435-second Stage-1 limit.  The common 707,349.173-JPY incumbent therefore
+  does not establish an exact optimum.  SUNNY's 9.521% versus RAIN's 1.656%
+  certified gap is bound-side: their incumbent is identical, while SUNNY's
+  valid analytical weather-energy lower bound collapses to the 640,000-JPY
+  vehicle floor under the deliberately relaxed pooled-energy bound.
+- Fresh Prepare and discrete-A-only candidate discovery at clean SHA
+  `4c92867b674bd24d06ea83d136d4d3d01bf77bd0` produced 22 distinct feasible
+  candidates per scenario.  Fixed-assignment Stage-2 recourse at clean SHA
+  `9c2d7dc36abd324e72c2bceffe15055606380afb` evaluated the 22-candidate union
+  under both weather cases: all 44 evaluations passed independent physical,
+  accounting, no-fallback/no-repair, and unchanged-assignment gates.
+- This is **Case A**.  SUNNY selects physical assignment
+  `76fb6a9b...a516c` at 660,983.78 JPY, while RAIN selects
+  `213b2ccd...5316` at 698,296.47 JPY.  The old one-candidate normal setting
+  hid this weather-dependent ordering.  The public formal Phase-3 endpoint now
+  applies the existing neutral BEV frontier, composition radius 4, and at
+  least 22 Stage-2 candidates; final selection is canonical actual cost,
+  then used-vehicle count, then physical assignment hash.  The requested
+  payload remains separately recorded, non-research runs are unchanged, and
+  pure-ICE aggregation remains default-OFF.
+- Focused regression is `192 passed` (`37` candidate/selection tests plus
+  `155` frontend/research/runtime tests).  A clean-SHA Fresh Prepare and one
+  normal SUNNY/RAIN run per scenario are still required before adopting the
+  production-path result.  Until then the release remains **BLOCKED**.
+- Diagnostic artifacts are under
+  `output/diagnostics/weather_dispatch_diagnosis_20260827/`; SHA-256 values for
+  `weather_candidate_union.json`, `cross_weather_fixed_dispatch_matrix.json`,
+  `aggregation_runtime_decomposition.json`, and
+  `sunny_rain_gap_decomposition.json` are respectively `4A35CCA3...923E6`,
+  `D8FDC116...5A3BB`, `EF1FEA7F...42048`, and `0B59CB51...E557`.
+
 ## 2026-08-27: Final SUNNY/RAIN 20-child A/B completed at `453b1d3`
 
 - Clean tag `thesis-pure-ice-weather-ab-453b1d3` / SHA

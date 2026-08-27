@@ -1,5 +1,29 @@
 # Current research release blockers
 
+## 2026-08-27: Same-dispatch diagnosis is Case A; fixed-path confirmation pending
+
+The 103-file frozen A/B bundle was hash-reverified without rerunning aggregate
+B.  Runtime evidence shows discrete A reached the requested 10% gap after
+about 31 seconds, whereas B hit its approximately 435-second Stage-1 limit;
+neither observation is an exact-optimum comparison.  The SUNNY/RAIN gap
+difference is caused by different certified lower bounds, not incumbents.
+
+Fresh discrete-A candidate discovery found 22 distinct feasible candidates in
+each scenario.  Cross-evaluating the 22-candidate physical union with fixed
+dispatch and weather-specific energy recourse passed all 44 physical and
+accounting gates.  SUNNY and RAIN have different canonical winners, proving
+**Case A: insufficient candidate coverage**.  The normal formal Phase-3 path
+has therefore been narrowed to reuse the existing neutral BEV frontier,
+composition neighborhood, and multi-candidate Stage-2 evaluation, with a
+deterministic canonical-cost/used-fleet/assignment-hash ordering.  Aggregate B
+stays default-OFF and was not part of this repair.
+
+This is not yet release evidence: the updated normal public path must complete
+Fresh Prepare, 264/264 service, independent physical validation, 24/24 Rolling,
+and accounting for one SUNNY and one RAIN run from the same clean frozen SHA.
+The release remains **BLOCKED**, and Phase 3 remains a bounded two-stage method,
+not an integrated global-optimality claim.
+
 ## 2026-08-27: Two-weather aggregation A/B complete; structural-only result
 
 The clean frozen release candidate

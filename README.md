@@ -8,6 +8,18 @@ The reviewer-facing scope, checks, and open decisions are in
 [THESIS_EXTERNAL_REVIEW_BRIEF.md](docs/notes/THESIS_EXTERNAL_REVIEW_BRIEF.md);
 that brief is a request for independent review, not an approval record.
 
+## Current 2026-08-27 weather-dispatch diagnosis
+
+The previously identical SUNNY/RAIN incumbent was caused by insufficient
+Phase-3 candidate coverage, not by proof that weather cannot change dispatch.
+A discrete-only 22-candidate fixed-dispatch cross-evaluation passed all 44
+physical/accounting gates and selected different SUNNY and RAIN assignments
+(Case A).  The formal public Phase-3 path now reuses the existing neutral BEV
+frontier and evaluates multiple Stage-2 candidates, selecting by canonical
+actual cost with deterministic used-fleet/hash tie-breaks.  Fresh normal-path
+SUNNY/RAIN confirmation is still pending, so research release remains
+**BLOCKED**.  Pure-ICE aggregation remains default-OFF and was not rerun.
+
 ## Current 2026-08-27 SUNNY/RAIN pure-ICE aggregation result
 
 Clean frozen tag `thesis-pure-ice-weather-ab-453b1d3` / SHA

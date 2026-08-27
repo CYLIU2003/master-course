@@ -83,6 +83,14 @@ _EXACT_ICE_CLONE_REPRESENTATION_OVERRIDE: contextvars.ContextVar[
 )
 
 
+def _phase3_candidate_selection_key(
+    candidate: Sequence[Any],
+) -> Tuple[float, int, str]:
+    """Return the deterministic canonical Phase-3 candidate ordering key."""
+
+    return float(candidate[0]), int(candidate[1]), str(candidate[2])
+
+
 @contextmanager
 def _diagnostic_exact_ice_clone_representation(
     representation: Literal["discrete", "pure_aggregate"],
@@ -20000,6 +20008,8 @@ class GurobiMILPAdapter:
             Tuple[
                 float,
                 int,
+                str,
+                int,
                 MILPSolverOutcome,
                 AssignmentPlan,
             ]
@@ -20601,6 +20611,8 @@ class GurobiMILPAdapter:
                 feasible_candidate_results.append(
                     (
                         canonical_cost,
+                        len(assigned_vehicle_ids),
+                        str(assignment_hash),
                         evaluation_index,
                         candidate_outcome,
                         candidate_final_plan,
@@ -21155,7 +21167,8 @@ class GurobiMILPAdapter:
                 "independently_physically_valid_"
                 "time_bounded_primary_pool_used_powertrain_composition_"
                 "neighborhood_complete_constructive_dispatch_and_"
-                "powertrain_pattern_no_good_enumeration_candidates"
+                "powertrain_pattern_no_good_enumeration_candidates_then_"
+                "used_vehicle_count_then_assignment_hash"
             ),
             "stage1_stage2_candidate_global_optimality_claimed": False,
             "stage1_stage2_candidate_evaluation": candidate_evaluations,
@@ -21257,12 +21270,14 @@ class GurobiMILPAdapter:
         if feasible_candidate_results:
             (
                 _selected_cost,
+                _selected_used_vehicle_count,
+                _selected_assignment_hash,
                 selected_candidate_index,
                 selected_outcome,
                 selected_plan,
             ) = min(
                 feasible_candidate_results,
-                key=lambda item: (item[0], item[1]),
+                key=_phase3_candidate_selection_key,
             )
             selected_metadata = {
                 **dict(selected_plan.metadata or {}),
@@ -21288,6 +21303,12 @@ class GurobiMILPAdapter:
                 ),
                 "stage1_stage2_selected_canonical_actual_cost_jpy": (
                     _selected_cost
+                ),
+                "stage1_stage2_selected_used_vehicle_count": (
+                    _selected_used_vehicle_count
+                ),
+                "stage1_stage2_selected_assignment_hash": (
+                    _selected_assignment_hash
                 ),
             }
             return (
