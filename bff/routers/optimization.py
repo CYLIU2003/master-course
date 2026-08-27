@@ -524,9 +524,10 @@ def _resolve_runtime_controls(
 ) -> Tuple[Dict[str, Any], bool, int]:
     """Resolve interactive or frozen research-batch solver controls.
 
-    The public BFF endpoint remains server-authoritative.  Internal research
-    diagnostics must instead preserve their predeclared controls exactly so
-    an A/B run cannot claim one thread while solving with four.
+    Ordinary public BFF runs remain server-authoritative.  Formal research
+    runs, whether submitted publicly or by an internal diagnostic, preserve
+    their predeclared controls exactly so an experiment cannot claim one
+    thread while solving with four.
     """
 
     if enforce_interactive_runtime_controls:
@@ -13942,6 +13943,14 @@ def _apply_research_phase3_candidate_coverage_policy(
     )
 
 
+def _public_run_enforces_interactive_runtime_controls(
+    request: RunOptimizationBody,
+) -> bool:
+    """Keep ordinary UI policy while preserving formal research controls."""
+
+    return not bool(request.research_run)
+
+
 @router.post("/scenarios/{scenario_id}/run-optimization")
 def run_optimization(
     scenario_id: str,
@@ -14182,6 +14191,7 @@ def run_optimization(
             request.stage1_gurobi_scale_flag,
             request.stage1_root_lp_diagnostic_method,
             request.stage1_activation_start_strengthening_vehicle_ids,
+            _public_run_enforces_interactive_runtime_controls(request),
         ),
         job_id=job.job_id,
         scenario_id=scenario_id,

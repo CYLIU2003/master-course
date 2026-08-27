@@ -13,6 +13,7 @@ from scripts.run_pure_ice_aggregation_weather_ab import ScenarioInput
 from bff.routers.optimization import (
     RunOptimizationBody,
     _apply_research_phase3_candidate_coverage_policy,
+    _public_run_enforces_interactive_runtime_controls,
 )
 from src.optimization.milp.solver_adapter import (
     _EXACT_ICE_CLONE_REPRESENTATION_OVERRIDE,
@@ -120,13 +121,37 @@ def test_assignment_hash_deduplication_uses_physical_assignment() -> None:
     computed = assignment_hash_from_rows(rows)
     unique = deduplicate_candidates(
         [
-            {"assignment_hash": "source-a", "candidate_hash": "a", "vehicle_trip_assignments": rows},
-            {"assignment_hash": "source-b", "candidate_hash": "b", "vehicle_trip_assignments": list(reversed(rows))},
+            {
+                "assignment_hash": "source-a",
+                "candidate_hash": "a",
+                "vehicle_trip_assignments": rows,
+                "source_kind": "expanded_discrete_A_search",
+            },
+            {
+                "assignment_hash": "source-b",
+                "candidate_hash": "b",
+                "vehicle_trip_assignments": list(reversed(rows)),
+                "source_kind": "frozen_existing_A_run",
+                "source_run_label": "01_A_discrete",
+                "candidate_selection_rank": 1,
+                "selected": True,
+            },
         ]
     )
     assert len(unique) == 1
     assert unique[0]["assignment_hash"] == computed
     assert len(unique[0]["provenance"]) == 2
+    assert unique[0]["provenance"][1] == {
+        "source_kind": "frozen_existing_A_run",
+        "scenario": None,
+        "run_dir": None,
+        "run_label": "01_A_discrete",
+        "candidate_index": None,
+        "candidate_hash": "b",
+        "selected": True,
+        "selection_rank": 1,
+        "rejection_reason": None,
+    }
 
 
 def test_fallback_repair_and_accounting_mismatch_are_not_selectable() -> None:
@@ -184,6 +209,13 @@ def test_nonresearch_phase3_keeps_requested_candidate_controls() -> None:
         stage1_bev_frontier_enabled=False,
     )
     assert _apply_research_phase3_candidate_coverage_policy(requested) is requested
+
+
+def test_public_formal_run_preserves_predeclared_runtime_controls() -> None:
+    formal = RunOptimizationBody(research_run=True, gurobi_threads=1)
+    ordinary = RunOptimizationBody(research_run=False, gurobi_threads=1)
+    assert _public_run_enforces_interactive_runtime_controls(formal) is False
+    assert _public_run_enforces_interactive_runtime_controls(ordinary) is True
 
 
 def test_normal_confirmation_keeps_15_minute_internal_timestep(tmp_path) -> None:

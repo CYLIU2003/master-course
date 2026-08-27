@@ -53,6 +53,18 @@
 - Final validation passed `193` focused frontend/research/candidate tests and
   the complete suite passed `1600 tests in 97.88 s`.  `git diff --check` and
   Python compilation also pass.
+- Completion audit found that the clean `e3cc7e86` public confirmation recorded
+  `gurobi_threads=1` in the request but enforced the ordinary interactive value
+  `4`.  Those two runs remain useful candidate-selection diagnostics but are
+  not fixed-control research evidence.  The public endpoint now exempts formal
+  `research_run=true` requests from interactive runtime overrides, while
+  ordinary UI runs retain the four-thread policy.  A new clean-SHA Fresh pair
+  is required before closing this item.
+- The same audit also found that the candidate-union artifact omitted explicit
+  provenance for the five frozen discrete-A runs per scenario.  The diagnosis
+  harness now recovers the sole candidate from each candidate-limit-one run,
+  records all ten with selection/rejection semantics, and merges their
+  provenance before deduplication with expanded candidates.
 - Diagnostic artifacts are under
   `output/diagnostics/weather_dispatch_diagnosis_20260827/`; SHA-256 values for
   `weather_candidate_union.json`, `cross_weather_fixed_dispatch_matrix.json`,

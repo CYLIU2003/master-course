@@ -18,15 +18,14 @@ composition neighborhood, and multi-candidate Stage-2 evaluation, with a
 deterministic canonical-cost/used-fleet/assignment-hash ordering.  Aggregate B
 stays default-OFF and was not part of this repair.
 
-The updated public path was confirmed at clean SHA `e3cc7e86` with Fresh
-Prepare and the fixed 15-minute internal / 60-minute Rolling contract.  Both
-SUNNY and RAIN evaluated 22/22 feasible candidates, served 264/264 trips, and
-passed independent physical validation, 24/24 Rolling, accounting, SHA, and
-no-fallback/no-repair gates.  Their selected physical assignment hashes match
-the prior fixed-dispatch matrix.  SUNNY uses 28 BEV / 4 ICE vehicles for
-199 / 65 trips at 660,983.783805 JPY; RAIN uses 21 BEV / 11 ICE vehicles for
-91 / 173 trips at 698,296.465284 JPY.  The former identical dispatch was
-therefore a candidate-coverage artifact for these two scenarios.
+The first updated public-path pair at clean SHA `e3cc7e86` evaluated 22/22
+feasible candidates and passed service, physical, Rolling, accounting, SHA,
+and winner-hash gates.  A completion audit nevertheless found that its
+effective runtime controls used four Gurobi threads even though the frozen
+request and baseline bundle specify one.  It is therefore diagnostic evidence
+for the Case-A mechanism, not the final fixed-control research pair.  Formal
+public `research_run=true` requests now preserve their predeclared controls;
+Fresh SUNNY/RAIN reruns from the repair's clean SHA remain required.
 
 The first confirmation attempt used an incorrect 60-minute internal step and
 is explicitly excluded; it is not research evidence.  The corrected normal

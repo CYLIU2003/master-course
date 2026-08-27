@@ -17,13 +17,14 @@ physical/accounting gates and selected different SUNNY and RAIN assignments
 (Case A).  The formal public Phase-3 path now reuses the existing neutral BEV
 frontier and evaluates multiple Stage-2 candidates, selecting by canonical
 actual cost with deterministic used-fleet/hash tie-breaks.  Fresh normal-path
-SUNNY/RAIN confirmation at clean `e3cc7e86` passed 264/264 service, independent
-physical validation, 24/24 Rolling, accounting, and winner-hash gates.  SUNNY
-uses 28 BEV / 4 ICE vehicles for 199 / 65 trips at 660,983.784 JPY; RAIN uses
-21 / 11 for 91 / 173 trips at 698,296.465 JPY.  This proves scenario-specific
-dispatch selection for these two cases, not integrated global optimality or a
-general weather claim.  Research release remains **BLOCKED** by the certified
-Stage-1 gaps.  Pure-ICE aggregation remains default-OFF and was not rerun.
+The first public-path confirmation at clean `e3cc7e86` passed service,
+physical, Rolling, accounting, and winner-hash gates, but a completion audit
+found that the BFF replaced the requested one Gurobi thread with the ordinary
+interactive four-thread policy.  Its selected winners remain diagnostic, not
+the final fixed-control evidence.  Formal public runs now preserve their
+predeclared runtime controls; a clean-SHA Fresh SUNNY/RAIN confirmation is
+required.  Research release remains **BLOCKED**.  Pure-ICE aggregation remains
+default-OFF and was not rerun.
 
 ## Current 2026-08-27 SUNNY/RAIN pure-ICE aggregation result
 
