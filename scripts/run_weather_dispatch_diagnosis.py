@@ -1537,7 +1537,6 @@ def main() -> None:
             output_dir=output_dir,
             base_url=args.base_url,
             existing_bundle=args.existing_bundle.resolve(),
-            confirmation_dir_name=args.confirmation_dir_name,
             stage1_seconds=args.stage1_time_limit_seconds,
             stage2_seconds=args.stage2_time_limit_seconds,
             candidate_limit=args.candidate_limit,
@@ -1554,6 +1553,7 @@ def main() -> None:
             output_dir=output_dir,
             base_url=args.base_url,
             existing_bundle=args.existing_bundle.resolve(),
+            confirmation_dir_name=args.confirmation_dir_name,
         )
     if args.stage == "finalize":
         if (
