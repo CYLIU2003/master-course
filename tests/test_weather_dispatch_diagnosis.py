@@ -6,7 +6,9 @@ from pathlib import Path
 import pytest
 
 from scripts.run_weather_dispatch_diagnosis import (
+    REQUIRED_CONFIRMATION_INPUT_HASHES,
     _day_ahead_research_is_accepted,
+    _executed_day_total_cost_jpy,
     _normal_confirmation_request,
     _powertrain_selector_is_disabled,
     _rolling_chain_is_accepted,
@@ -204,12 +206,30 @@ def test_confirmation_requires_complete_rolling_and_research_acceptance() -> Non
     )
 
 
+def test_executed_day_cost_is_authoritative_and_reconciled() -> None:
+    accounting = {
+        "eligible": True,
+        "cost_breakdown": {
+            "total_cost": 698_598.628643161,
+            "total_cost_with_assets": 698_598.628643161,
+            "objective_value": 698_598.628643161,
+        },
+    }
+    assert _executed_day_total_cost_jpy(accounting) == pytest.approx(
+        698_598.628643161
+    )
+
+    accounting["cost_breakdown"]["objective_value"] += 0.01
+    with pytest.raises(RuntimeError, match="totals disagree"):
+        _executed_day_total_cost_jpy(accounting)
+
+
 def _write_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
-def test_confirmation_input_contract_fails_when_baseline_hash_is_missing(
+def test_confirmation_input_contract_fails_when_mandatory_baseline_hash_is_missing(
     tmp_path: Path,
 ) -> None:
     existing_bundle = tmp_path / "existing"
@@ -231,7 +251,43 @@ def test_confirmation_input_contract_fails_when_baseline_hash_is_missing(
             },
         )
         confirmation["scenarios"][code] = {
+            "prepared_input_id": f"prepared-{code}",
             "prepared_input_sha256": f"prepared-{code}",
+            "fleet_contract_hash": f"fleet-{code}",
+            "canonical_input_hashes": {},
+        }
+
+    with pytest.raises(RuntimeError, match="baseline lacks mandatory input hashes"):
+        build_confirmation_input_contract(
+            output_dir=tmp_path / "out",
+            existing_bundle=existing_bundle,
+            confirmation_manifest=confirmation,
+        )
+
+
+def test_confirmation_input_contract_fails_when_mandatory_final_hash_is_missing(
+    tmp_path: Path,
+) -> None:
+    existing_bundle = tmp_path / "existing"
+    confirmation = {"scenarios": {}}
+    for code in ("SUNNY", "RAIN"):
+        hashes = {
+            key: f"{code}-{key}"
+            for key in REQUIRED_CONFIRMATION_INPUT_HASHES
+        }
+        _write_json(
+            existing_bundle
+            / "scenarios"
+            / code
+            / "runs"
+            / "01_A_discrete"
+            / "case_metrics.json",
+            {"provenance": {"input_hashes": hashes}},
+        )
+        confirmation["scenarios"][code] = {
+            "prepared_input_id": f"prepared-{code}",
+            "prepared_input_sha256": hashes["prepared_input_sha256"],
+            "fleet_contract_hash": f"fleet-{code}",
             "canonical_input_hashes": {},
         }
 

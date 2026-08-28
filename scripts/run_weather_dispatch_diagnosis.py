@@ -41,6 +41,7 @@ from scripts.build_lazy_fragment_performance_diagnostic import (  # noqa: E402
 )
 from scripts.run_pure_ice_aggregation_weather_ab import (  # noqa: E402
     RAIN_SCENARIO_ID,
+    REQUIRED_FIXED_HASHES,
     SUNNY_SCENARIO_ID,
     ScenarioInput,
     prepare_fresh_weather_inputs,
@@ -81,6 +82,48 @@ DEFAULT_EXISTING_BUNDLE = (
     / "diagnostics"
     / "pure_ice_weather_ab_453b1d3_20260827"
 )
+
+REQUIRED_CONFIRMATION_INPUT_HASHES = (
+    *REQUIRED_FIXED_HASHES,
+    "canonical_ablation_input_sha256",
+    "prepared_input_sha256",
+    "prepared_source_sha256",
+    "pv_profile_sha256",
+    "pv_hash",
+    "trip_input_sha256",
+)
+
+FIXED_CONFIRMATION_REQUEST_CONTROL_KEYS = (
+    "mode",
+    "research_run",
+    "time_step_min",
+    "timestep_min",
+    "time_limit_seconds",
+    "stage1_time_limit_seconds",
+    "stage2_time_limit_seconds",
+    "stage1_best_obj_stop_enabled",
+    "stage1_powertrain_selector_strengthening",
+    "stage1_stage2_candidate_limit",
+    "stage1_composition_search_radius",
+    "gurobi_threads",
+    "mip_gap",
+    "random_seed",
+    "run_profile",
+    "run_hourly_rolling",
+    "rolling_execution_minutes",
+    "service_id",
+    "depot_id",
+)
+
+REQUIRED_EFFECTIVE_FRONTIER_CONTROLS = {
+    "stage1_stage2_candidate_limit": 22,
+    "stage1_composition_search_radius": 4,
+    "stage1_composition_target_time_limit_sec": 60.0,
+    "stage1_bev_frontier_enabled": True,
+    "stage1_bev_frontier_min_count": 15,
+    "stage1_bev_frontier_max_count": 35,
+    "stage1_bev_frontier_target_time_limit_sec": 120.0,
+}
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -1167,12 +1210,38 @@ def _day_ahead_research_is_accepted(summary: Mapping[str, Any]) -> bool:
     )
 
 
+def _executed_day_total_cost_jpy(accounting: Mapping[str, Any]) -> float:
+    """Return the unique accepted Rolling-day cost, failing on split totals."""
+
+    if accounting.get("eligible") is not True:
+        raise RuntimeError("executed-day accounting is not eligible")
+    breakdown = dict(accounting.get("cost_breakdown") or {})
+    totals: dict[str, float] = {}
+    for key in ("total_cost", "total_cost_with_assets", "objective_value"):
+        value = breakdown.get(key)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise RuntimeError(f"executed-day accounting lacks numeric {key}")
+        numeric = float(value)
+        if not math.isfinite(numeric):
+            raise RuntimeError(f"executed-day accounting has non-finite {key}")
+        totals[key] = numeric
+    if max(totals.values()) - min(totals.values()) > 1.0e-6:
+        raise RuntimeError(f"executed-day accounting totals disagree: {totals}")
+    return totals["total_cost"]
+
+
 def _confirmation_gate(run_dir: Path, expected_sha: str) -> dict[str, Any]:
     summary = _read_json(run_dir / "summary.json")
     physical = _read_json(run_dir / "physical_schedule_validation.json")
     accounting = _read_json(run_dir / "final_cost_reconciliation.json")
     rolling = _read_json(
         run_dir / "rolling_hourly_chain" / "rolling_chain_summary.json"
+    )
+    executed_day_accounting = _read_json(
+        run_dir / "rolling_hourly_chain" / "executed_day_accounting.json"
+    )
+    executed_day_total_cost_jpy = _executed_day_total_cost_jpy(
+        executed_day_accounting
     )
     candidates = _read_json(run_dir / "stage1_stage2_candidate_evaluation.json")
     parameters = _read_json(run_dir / "optimization_parameters.json")
@@ -1262,6 +1331,17 @@ def _confirmation_gate(run_dir: Path, expected_sha: str) -> dict[str, Any]:
                 model_build_metadata,
             )
         ),
+        "effective_frontier_controls_preserved": all(
+            effective_config.get(key) == expected
+            for key, expected in REQUIRED_EFFECTIVE_FRONTIER_CONTROLS.items()
+        ),
+        "executed_day_accounting_is_authoritative": (
+            executed_day_accounting.get("eligible") is True
+            and int(executed_day_accounting.get("expected_slot_count") or 0) == 96
+            and int(executed_day_accounting.get("executed_slot_count") or 0) == 96
+            and not list(executed_day_accounting.get("missing_slots") or ())
+            and not list(executed_day_accounting.get("duplicate_slots") or ())
+        ),
         "stage1_weather_recourse_used_in_objective": (
             stage1_recourse_configuration.get("used_in_stage1_objective") is True
         ),
@@ -1274,8 +1354,13 @@ def _confirmation_gate(run_dir: Path, expected_sha: str) -> dict[str, Any]:
         "selected_candidate_index": selected_index,
         "selected_internal_assignment_hash": selected.get("assignment_hash"),
         "selected_physical_assignment_hash": selected_physical_hash,
-        "selected_canonical_actual_cost_jpy": candidates.get(
+        "day_ahead_selected_canonical_actual_cost_jpy": candidates.get(
             "selected_canonical_actual_cost_jpy"
+        ),
+        "executed_day_accounting_total_cost_jpy": executed_day_total_cost_jpy,
+        "final_cost_source": (
+            "rolling_hourly_chain/executed_day_accounting.json:"
+            "cost_breakdown.total_cost"
         ),
         "candidate_count_evaluated": candidates.get("candidate_count_evaluated"),
         "prepared_input_id": rolling.get("prepared_input_id"),
@@ -1285,22 +1370,9 @@ def _confirmation_gate(run_dir: Path, expected_sha: str) -> dict[str, Any]:
         "fleet_contract_hash": rolling.get("scenario_fleet_contract_hash"),
         "day_ahead_assignment_hash": rolling.get("day_ahead_assignment_hash"),
         "runtime_controls": runtime_controls,
-        "effective_solver_controls": {
-            key: effective_config.get(key)
-            for key in (
-                "time_limit_sec",
-                "stage1_time_limit_sec",
-                "stage2_time_limit_sec",
-                "stage1_best_obj_stop_enabled",
-                "gurobi_threads",
-                "stage1_stage2_candidate_limit",
-                "stage1_composition_search_radius",
-                "stage1_bev_frontier_enabled",
-                "stage1_powertrain_selector_strengthening",
-                "mip_gap",
-                "random_seed",
-            )
-        },
+        # Persist the complete effective configuration. A hand-maintained
+        # whitelist previously omitted frontier bounds and target budgets.
+        "effective_solver_controls": effective_config,
         "canonical_input_hashes": canonical_inputs,
         "stage1_time_indexed_energy_recourse_configuration": (
             stage1_recourse_configuration
@@ -1671,6 +1743,16 @@ def build_confirmation_input_contract(
         confirmed = dict(
             dict(confirmation_manifest.get("scenarios") or {}).get(code) or {}
         )
+        missing_confirmation_metadata = sorted(
+            key
+            for key in ("prepared_input_id", "prepared_input_sha256", "fleet_contract_hash")
+            if confirmed.get(key) in (None, "")
+        )
+        if missing_confirmation_metadata:
+            raise RuntimeError(
+                f"{code} Fresh confirmation lacks required metadata: "
+                f"{missing_confirmation_metadata}"
+            )
         final_hashes = dict(confirmed.get("canonical_input_hashes") or {})
         final_hashes.update(
             {
@@ -1688,9 +1770,17 @@ def build_confirmation_input_contract(
             }
         )
         final_hashes_by_scenario[code] = final_hashes
-        required_baseline_keys = sorted(
-            key for key, value in baseline_hashes.items() if value not in (None, "")
+        missing_baseline_keys = sorted(
+            key
+            for key in REQUIRED_CONFIRMATION_INPUT_HASHES
+            if baseline_hashes.get(key) in (None, "")
         )
+        if missing_baseline_keys:
+            raise RuntimeError(
+                f"{code} frozen A baseline lacks mandatory input hashes: "
+                f"{missing_baseline_keys}"
+            )
+        required_baseline_keys = sorted(REQUIRED_CONFIRMATION_INPUT_HASHES)
         missing_final_keys = sorted(
             key for key in required_baseline_keys if final_hashes.get(key) in (None, "")
         )
@@ -1731,6 +1821,7 @@ def build_confirmation_input_contract(
             "frozen_A_baseline": str(baseline_path.resolve()),
             "mismatches_from_frozen_A": mismatches,
             "missing_hashes_from_frozen_A_contract": missing_final_keys,
+            "mandatory_hash_keys": list(REQUIRED_CONFIRMATION_INPUT_HASHES),
         }
         if mismatches:
             raise RuntimeError(
@@ -1848,39 +1939,33 @@ def finalize_normal_confirmation(
         code: _read_json(preparation_dir / code / "frontend_optimization_request.json")
         for code in SCENARIOS
     }
-    fixed_control_keys = (
-        "mode",
-        "research_run",
-        "time_step_min",
-        "timestep_min",
-        "time_limit_seconds",
-        "stage1_time_limit_seconds",
-        "stage2_time_limit_seconds",
-        "stage1_best_obj_stop_enabled",
-        "stage1_stage2_candidate_limit",
-        "stage1_composition_search_radius",
-        "gurobi_threads",
-        "mip_gap",
-        "random_seed",
-        "run_profile",
-        "run_hourly_rolling",
-        "rolling_execution_minutes",
-        "service_id",
-        "depot_id",
-    )
     controls_equal = all(
         requests["SUNNY"].get(key) == requests["RAIN"].get(key)
-        for key in fixed_control_keys
+        for key in FIXED_CONFIRMATION_REQUEST_CONTROL_KEYS
     )
+    effective_control_keys = sorted(
+        set(results["SUNNY"]["effective_solver_controls"])
+        | set(results["RAIN"]["effective_solver_controls"])
+    )
+    effective_control_differences = [
+        key
+        for key in effective_control_keys
+        if results["SUNNY"]["effective_solver_controls"].get(key)
+        != results["RAIN"]["effective_solver_controls"].get(key)
+    ]
+    effective_controls_equal = not effective_control_differences
     timestep_is_15 = all(
         int(requests[code].get("timestep_min") or 0) == 15
         and int(requests[code].get("time_step_min") or 0) == 15
         for code in SCENARIOS
     )
-    if not controls_equal or not timestep_is_15:
+    if not controls_equal or not effective_controls_equal or not timestep_is_15:
         raise RuntimeError(
             "normal confirmation fixed controls failed: "
-            f"controls_equal={controls_equal}, timestep_is_15={timestep_is_15}"
+            f"request_controls_equal={controls_equal}, "
+            f"effective_controls_equal={effective_controls_equal}, "
+            f"effective_differences={effective_control_differences}, "
+            f"timestep_is_15={timestep_is_15}"
         )
     finalization_sha = _git_output("rev-parse", "HEAD")
     finalization_dirty = bool(_git_output("status", "--porcelain"))
@@ -1893,6 +1978,12 @@ def finalize_normal_confirmation(
         "finalization_git_dirty": finalization_dirty,
         "public_endpoint": "/api/scenarios/{scenario_id}/run-optimization",
         "fixed_request_controls_equal": controls_equal,
+        "fixed_request_control_keys": list(
+            FIXED_CONFIRMATION_REQUEST_CONTROL_KEYS
+        ),
+        "effective_solver_controls_equal": effective_controls_equal,
+        "effective_solver_control_keys": effective_control_keys,
+        "effective_solver_control_differences": effective_control_differences,
         "internal_timestep_15_minutes": timestep_is_15,
         "rolling_execution_minutes": 60,
         "requested_candidate_limit": requests["SUNNY"].get(
