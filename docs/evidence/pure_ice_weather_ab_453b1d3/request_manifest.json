@@ -1,0 +1,531 @@
+{
+  "schema_version": "pure_ice_aggregation_weather_ab_v1",
+  "generated_at_utc": "2026-08-26T16:34:04.290863+00:00",
+  "started_at_utc": "2026-08-26T16:34:04.290863+00:00",
+  "new_work_cutoff_at_utc": "2026-08-27T12:34:04.290863+00:00",
+  "deadline_at_utc": "2026-08-27T16:34:04.290863+00:00",
+  "git_sha": "453b1d340311de109645d006b9ec5a0de2788c2e",
+  "git_dirty": false,
+  "runtime_environment": {
+    "python": {
+      "implementation": "CPython",
+      "version": "3.14.6",
+      "executable": "C:\\master-course\\.venv\\Scripts\\python.exe"
+    },
+    "gurobi": {
+      "runtime_version": [
+        13,
+        0,
+        1
+      ],
+      "gurobipy_version": "13.0.1"
+    },
+    "operating_system": {
+      "platform": "Windows-11-10.0.26200-SP0",
+      "system": "Windows",
+      "release": "11",
+      "machine": "AMD64"
+    },
+    "hardware": {
+      "processor": "Intel64 Family 6 Model 151 Stepping 2, GenuineIntel",
+      "logical_cpu_count": 20,
+      "total_physical_memory_bytes": 34033328128
+    }
+  },
+  "scenarios": {
+    "SUNNY": {
+      "scenario_id": "771d115b-75b0-49f7-a7f0-25f259a2cd21",
+      "weather_date": "2025-08-05",
+      "service_date": "2025-08-05",
+      "service_id": "WEEKDAY",
+      "depot_id": "tsurumaki"
+    },
+    "RAIN": {
+      "scenario_id": "b23fd26c-1233-4c73-bb9e-bdb8b1584760",
+      "weather_date": "2025-08-10",
+      "service_date": "2025-08-05",
+      "service_id": "WEEKDAY",
+      "depot_id": "tsurumaki"
+    }
+  },
+  "prepared_inputs": {
+    "SUNNY": {
+      "scenario_id": "771d115b-75b0-49f7-a7f0-25f259a2cd21",
+      "prepared_input_id": "prepared-1f1b85053b8c9ea1-453c50ff177c277b-8acc7b3a",
+      "prepared_input_path": "C:\\master-course\\output\\prepared_inputs\\771d115b-75b0-49f7-a7f0-25f259a2cd21\\prepared-1f1b85053b8c9ea1-453c50ff177c277b-8acc7b3a.json",
+      "prepared_source_sha256": "99e49dd72e73d6e2e8c546d71573d3b00a7f00d23ab748da7171e1dd4b6bf05d",
+      "prepared_at": 1787703641.3002675,
+      "service_date": "2025-08-05",
+      "service_ids": [
+        "WEEKDAY"
+      ],
+      "primary_depot_id": "tsurumaki",
+      "trip_count": 264,
+      "route_ids_sha256": "33134b4b827ff940e0a96887a7eecb0746528740db3bd59759c98730fec7490d",
+      "trips_sha256": "1c382c9c3dc6eec41173c1c451d790a66ae41ffef5c4bd10d2caabc7826511f9",
+      "trip_ids_sha256": "fe51fbcd526a4f2b8704e2325ad134b18dffd9233fb01adf2dfa508008850bab",
+      "trip_structure_without_weather_energy_sha256": "1c382c9c3dc6eec41173c1c451d790a66ae41ffef5c4bd10d2caabc7826511f9",
+      "vehicles_sha256": "ef639b60b7d2e5803f161499287d02ec72e7d4ccebd877b1a704166653f95781",
+      "fleet_contract_hash": "2179433a2b5b952e9beb756bd971d8056df690ed476728e695a25081599e9f3b",
+      "fleet_active_vehicle_id_hash": "745cd98a9433b3e556b81c689ae13ae2ab1cff1e4da7797363b17a824c2a20c0",
+      "fleet_initial_state_hash": "8440d86b76c955a456641baa6979178604ec5c9f81d6881e9277b56400d17358",
+      "fleet_vehicle_parameter_hash": "dd8cd744b22dc3b6546680c66c4598ff066efbf2408d3ef3ed80e5c4b0838520",
+      "fleet_active_vehicle_count": 60,
+      "fleet_contract_validation_status": "OK",
+      "fleet_contract_errors": [],
+      "chargers_sha256": "43b7370e5b354baf10253951557a3c6b6d28d63b03f6972208d0c49bc09869d4",
+      "depots_sha256": "37f8a4730ef9d74353f97ca0c1413b582dde32d6d07313b835523c40197d027d",
+      "simulation_config_without_weather_sha256": "8441dfc07a8374bf2c35fd88c4851135d8bb5b70804c2a1ede655f0a203b7394",
+      "scenario_overlay_without_weather_sha256": "88429609f235b1f254b809a4c9b95d321e8447e8ed12d6293a9476c319de0b58",
+      "weather_and_counterfactual_fields": {
+        "allow_fixed_weekday_timetable_pv_counterfactual": false,
+        "comparison_type": "same_service_date_pv_counterfactual",
+        "comparison_role": "baseline",
+        "counterfactual_pv_source_date": "2025-08-05",
+        "weather_observation_date": "2025-08-05",
+        "weather_profile_source": "tsurumaki_2025-08-05_60min",
+        "pv_marginal_charge_cost_yen_per_kwh": 0.0,
+        "pv_curtail_penalty_yen_per_kwh": 0.0,
+        "pv_scale": 1.0,
+        "pv_profile_id": "tsurumaki_2025-08-05_60min",
+        "pv_input_semantics": "available_surplus_after_depot_load",
+        "weather_mode": "actual_date_profile",
+        "weather_factor_scalar": 1.0,
+        "enable_weather_operation_policy": false,
+        "weather_proxy_forecast_path": null,
+        "weather_proxy_daily_csv_path": null,
+        "weather_proxy_station_id": null,
+        "weather_proxy_station_name": null,
+        "solcast_typical_weather_class": "auto"
+      },
+      "preflight_checks": {
+        "scenario_id": true,
+        "prepared_input_id": true,
+        "service_date": true,
+        "weekday_service": true,
+        "tsurumaki_primary_depot": true,
+        "trip_count_264": true,
+        "scenario_fleet_contract_v2": true,
+        "scenario_fleet_contract_validation_ok": true,
+        "time_step_min_15": true,
+        "timestep_min_15": true,
+        "weather_observation_date": true,
+        "counterfactual_pv_source_date": true,
+        "sunny_baseline_role": true
+      }
+    },
+    "RAIN": {
+      "scenario_id": "b23fd26c-1233-4c73-bb9e-bdb8b1584760",
+      "prepared_input_id": "prepared-a6c5e0a8cdd9b32b-f1e18f252e336f1f-8acc7b3a",
+      "prepared_input_path": "C:\\master-course\\output\\prepared_inputs\\b23fd26c-1233-4c73-bb9e-bdb8b1584760\\prepared-a6c5e0a8cdd9b32b-f1e18f252e336f1f-8acc7b3a.json",
+      "prepared_source_sha256": "8220f7208b7add87beeb3a30c5d8f727480423427fff5e2f5eca1ed4a8e0ed3f",
+      "prepared_at": 1787704192.9058816,
+      "service_date": "2025-08-05",
+      "service_ids": [
+        "WEEKDAY"
+      ],
+      "primary_depot_id": "tsurumaki",
+      "trip_count": 264,
+      "route_ids_sha256": "33134b4b827ff940e0a96887a7eecb0746528740db3bd59759c98730fec7490d",
+      "trips_sha256": "1c382c9c3dc6eec41173c1c451d790a66ae41ffef5c4bd10d2caabc7826511f9",
+      "trip_ids_sha256": "fe51fbcd526a4f2b8704e2325ad134b18dffd9233fb01adf2dfa508008850bab",
+      "trip_structure_without_weather_energy_sha256": "1c382c9c3dc6eec41173c1c451d790a66ae41ffef5c4bd10d2caabc7826511f9",
+      "vehicles_sha256": "ef639b60b7d2e5803f161499287d02ec72e7d4ccebd877b1a704166653f95781",
+      "fleet_contract_hash": "2179433a2b5b952e9beb756bd971d8056df690ed476728e695a25081599e9f3b",
+      "fleet_active_vehicle_id_hash": "745cd98a9433b3e556b81c689ae13ae2ab1cff1e4da7797363b17a824c2a20c0",
+      "fleet_initial_state_hash": "8440d86b76c955a456641baa6979178604ec5c9f81d6881e9277b56400d17358",
+      "fleet_vehicle_parameter_hash": "dd8cd744b22dc3b6546680c66c4598ff066efbf2408d3ef3ed80e5c4b0838520",
+      "fleet_active_vehicle_count": 60,
+      "fleet_contract_validation_status": "OK",
+      "fleet_contract_errors": [],
+      "chargers_sha256": "43b7370e5b354baf10253951557a3c6b6d28d63b03f6972208d0c49bc09869d4",
+      "depots_sha256": "37f8a4730ef9d74353f97ca0c1413b582dde32d6d07313b835523c40197d027d",
+      "simulation_config_without_weather_sha256": "8441dfc07a8374bf2c35fd88c4851135d8bb5b70804c2a1ede655f0a203b7394",
+      "scenario_overlay_without_weather_sha256": "88429609f235b1f254b809a4c9b95d321e8447e8ed12d6293a9476c319de0b58",
+      "weather_and_counterfactual_fields": {
+        "allow_fixed_weekday_timetable_pv_counterfactual": true,
+        "comparison_type": "same_service_date_pv_counterfactual",
+        "comparison_role": "pv_curve_counterfactual",
+        "counterfactual_pv_source_date": "2025-08-10",
+        "weather_observation_date": "2025-08-10",
+        "weather_profile_source": "tsurumaki_2025-08-10_60min",
+        "pv_marginal_charge_cost_yen_per_kwh": 0.0,
+        "pv_curtail_penalty_yen_per_kwh": 0.0,
+        "pv_scale": 1.0,
+        "pv_profile_id": "tsurumaki_2025-08-10_60min",
+        "pv_input_semantics": "available_surplus_after_depot_load",
+        "weather_mode": "actual_date_profile",
+        "weather_factor_scalar": 1.0,
+        "enable_weather_operation_policy": false,
+        "weather_proxy_forecast_path": null,
+        "weather_proxy_daily_csv_path": null,
+        "weather_proxy_station_id": null,
+        "weather_proxy_station_name": null,
+        "solcast_typical_weather_class": "auto",
+        "calendar_policy": "fixed_weekday_timetable_pv_counterfactual"
+      },
+      "preflight_checks": {
+        "scenario_id": true,
+        "prepared_input_id": true,
+        "service_date": true,
+        "weekday_service": true,
+        "tsurumaki_primary_depot": true,
+        "trip_count_264": true,
+        "scenario_fleet_contract_v2": true,
+        "scenario_fleet_contract_validation_ok": true,
+        "time_step_min_15": true,
+        "timestep_min_15": true,
+        "weather_observation_date": true,
+        "counterfactual_pv_source_date": true,
+        "rain_fixed_weekday_counterfactual": true
+      }
+    }
+  },
+  "prepared_content_contract": {
+    "fixed_prepared_content_checks": {
+      "route_ids_sha256": true,
+      "trip_ids_sha256": true,
+      "trip_structure_without_weather_energy_sha256": true,
+      "vehicles_sha256": true,
+      "fleet_contract_hash": true,
+      "fleet_active_vehicle_id_hash": true,
+      "fleet_initial_state_hash": true,
+      "fleet_vehicle_parameter_hash": true,
+      "chargers_sha256": true,
+      "depots_sha256": true,
+      "simulation_config_without_weather_sha256": true,
+      "scenario_overlay_without_weather_sha256": true
+    },
+    "all_fixed_prepared_content_matches": true,
+    "sunny_weather_fields": {
+      "allow_fixed_weekday_timetable_pv_counterfactual": false,
+      "comparison_type": "same_service_date_pv_counterfactual",
+      "comparison_role": "baseline",
+      "counterfactual_pv_source_date": "2025-08-05",
+      "weather_observation_date": "2025-08-05",
+      "weather_profile_source": "tsurumaki_2025-08-05_60min",
+      "pv_marginal_charge_cost_yen_per_kwh": 0.0,
+      "pv_curtail_penalty_yen_per_kwh": 0.0,
+      "pv_scale": 1.0,
+      "pv_profile_id": "tsurumaki_2025-08-05_60min",
+      "pv_input_semantics": "available_surplus_after_depot_load",
+      "weather_mode": "actual_date_profile",
+      "weather_factor_scalar": 1.0,
+      "enable_weather_operation_policy": false,
+      "weather_proxy_forecast_path": null,
+      "weather_proxy_daily_csv_path": null,
+      "weather_proxy_station_id": null,
+      "weather_proxy_station_name": null,
+      "solcast_typical_weather_class": "auto"
+    },
+    "rain_weather_fields": {
+      "allow_fixed_weekday_timetable_pv_counterfactual": true,
+      "comparison_type": "same_service_date_pv_counterfactual",
+      "comparison_role": "pv_curve_counterfactual",
+      "counterfactual_pv_source_date": "2025-08-10",
+      "weather_observation_date": "2025-08-10",
+      "weather_profile_source": "tsurumaki_2025-08-10_60min",
+      "pv_marginal_charge_cost_yen_per_kwh": 0.0,
+      "pv_curtail_penalty_yen_per_kwh": 0.0,
+      "pv_scale": 1.0,
+      "pv_profile_id": "tsurumaki_2025-08-10_60min",
+      "pv_input_semantics": "available_surplus_after_depot_load",
+      "weather_mode": "actual_date_profile",
+      "weather_factor_scalar": 1.0,
+      "enable_weather_operation_policy": false,
+      "weather_proxy_forecast_path": null,
+      "weather_proxy_daily_csv_path": null,
+      "weather_proxy_station_id": null,
+      "weather_proxy_station_name": null,
+      "solcast_typical_weather_class": "auto",
+      "calendar_policy": "fixed_weekday_timetable_pv_counterfactual"
+    }
+  },
+  "fresh_prepare_evidence": {
+    "schema_version": "pure_ice_aggregation_weather_ab_v1",
+    "study_started_at_utc": "2026-08-26T16:34:04.290863+00:00",
+    "prepared_at_utc": "2026-08-26T16:34:16.267841+00:00",
+    "git_sha": "453b1d340311de109645d006b9ec5a0de2788c2e",
+    "base_url": "http://127.0.0.1:8010",
+    "optimization_template_sha256": "18ab1a69a2df89e62b799ece7db89213e7d5b3bd8a8339a415a96550d17df16c",
+    "scenarios": {
+      "SUNNY": {
+        "scenario_id": "771d115b-75b0-49f7-a7f0-25f259a2cd21",
+        "prepared_input_id": "prepared-1f1b85053b8c9ea1-453c50ff177c277b-8acc7b3a",
+        "prepare_request_sha256": "1b68e5156df99eec8f5066a5fe2007876b6fa8af49b6b7928e5fe73027239242",
+        "prepare_response_sha256": "7fca4ebcb04facd2b8d904cb22ef17631a4eca622d9277fc340818b52575a8dc",
+        "response_checks": {
+          "ready": true,
+          "prepared_input_id_present": true,
+          "route_count_16": true,
+          "trip_count_264": true,
+          "weekday_service": true
+        }
+      },
+      "RAIN": {
+        "scenario_id": "b23fd26c-1233-4c73-bb9e-bdb8b1584760",
+        "prepared_input_id": "prepared-a6c5e0a8cdd9b32b-f1e18f252e336f1f-8acc7b3a",
+        "prepare_request_sha256": "8108e5d167bf40af4b2b0050d9b227c519603d9b6e5c8db45d3e48fffd86ce91",
+        "prepare_response_sha256": "6d2ba4b6fee8621579304a2293ced3558bf2df8dbc45efefd445e6242457dd81",
+        "response_checks": {
+          "ready": true,
+          "prepared_input_id_present": true,
+          "route_count_16": true,
+          "trip_count_264": true,
+          "weekday_service": true
+        }
+      }
+    }
+  },
+  "frozen_optimization_request_sha256": {
+    "SUNNY": "9c39d1e1d58f423e59aeb9bc152933c9e7d7d97b788601b0a9d9539dd579125b",
+    "RAIN": "826c2ba9573b8cc7809f7ffd5511b6963879a0f03385b6a629d9fe449609f3c9"
+  },
+  "solver_controls": {
+    "random_seed": 42,
+    "gurobi_threads": 1,
+    "mip_gap": 0.1,
+    "stage1_time_limit_seconds": 435,
+    "stage2_time_limit_seconds": 30,
+    "wall_clock_overhead_seconds": 120,
+    "stage1_best_obj_stop_enabled": false,
+    "stage1_powertrain_selector_strengthening": false,
+    "time_step_min": 15,
+    "rolling_execution_minutes": 60
+  },
+  "phase3_request_transformations": {
+    "SUNNY": {
+      "source_mode": "phase3_two_stage",
+      "target_mode": "phase3_two_stage",
+      "removed_phase4_only_fields": [],
+      "only_intended_request_changes": [
+        "mode",
+        "stage1_time_limit_seconds",
+        "stage2_time_limit_seconds"
+      ],
+      "fixed_stage_time_limits": {
+        "stage1_time_limit_seconds": 435,
+        "stage2_time_limit_seconds": 30
+      },
+      "wall_clock_overhead_seconds": 120,
+      "total_time_limit_seconds": 585
+    },
+    "RAIN": {
+      "source_mode": "phase3_two_stage",
+      "target_mode": "phase3_two_stage",
+      "removed_phase4_only_fields": [],
+      "only_intended_request_changes": [
+        "mode",
+        "stage1_time_limit_seconds",
+        "stage2_time_limit_seconds"
+      ],
+      "fixed_stage_time_limits": {
+        "stage1_time_limit_seconds": 435,
+        "stage2_time_limit_seconds": 30
+      },
+      "wall_clock_overhead_seconds": 120,
+      "total_time_limit_seconds": 585
+    }
+  },
+  "execution_contract": {
+    "scenario_order_within_pair": [
+      "SUNNY",
+      "RAIN"
+    ],
+    "per_scenario_pair_order": [
+      "AB",
+      "BA",
+      "AB",
+      "BA",
+      "AB"
+    ],
+    "interleaved_case_schedule": [
+      {
+        "scenario": "SUNNY",
+        "run_index": 1,
+        "pair_index": 1,
+        "pair_order": "AB",
+        "order_in_pair": 1,
+        "representation": "discrete",
+        "label": "A_discrete"
+      },
+      {
+        "scenario": "SUNNY",
+        "run_index": 2,
+        "pair_index": 1,
+        "pair_order": "AB",
+        "order_in_pair": 2,
+        "representation": "pure_aggregate",
+        "label": "B_pure_aggregate"
+      },
+      {
+        "scenario": "RAIN",
+        "run_index": 1,
+        "pair_index": 1,
+        "pair_order": "AB",
+        "order_in_pair": 1,
+        "representation": "discrete",
+        "label": "A_discrete"
+      },
+      {
+        "scenario": "RAIN",
+        "run_index": 2,
+        "pair_index": 1,
+        "pair_order": "AB",
+        "order_in_pair": 2,
+        "representation": "pure_aggregate",
+        "label": "B_pure_aggregate"
+      },
+      {
+        "scenario": "SUNNY",
+        "run_index": 3,
+        "pair_index": 2,
+        "pair_order": "BA",
+        "order_in_pair": 1,
+        "representation": "pure_aggregate",
+        "label": "B_pure_aggregate"
+      },
+      {
+        "scenario": "SUNNY",
+        "run_index": 4,
+        "pair_index": 2,
+        "pair_order": "BA",
+        "order_in_pair": 2,
+        "representation": "discrete",
+        "label": "A_discrete"
+      },
+      {
+        "scenario": "RAIN",
+        "run_index": 3,
+        "pair_index": 2,
+        "pair_order": "BA",
+        "order_in_pair": 1,
+        "representation": "pure_aggregate",
+        "label": "B_pure_aggregate"
+      },
+      {
+        "scenario": "RAIN",
+        "run_index": 4,
+        "pair_index": 2,
+        "pair_order": "BA",
+        "order_in_pair": 2,
+        "representation": "discrete",
+        "label": "A_discrete"
+      },
+      {
+        "scenario": "SUNNY",
+        "run_index": 5,
+        "pair_index": 3,
+        "pair_order": "AB",
+        "order_in_pair": 1,
+        "representation": "discrete",
+        "label": "A_discrete"
+      },
+      {
+        "scenario": "SUNNY",
+        "run_index": 6,
+        "pair_index": 3,
+        "pair_order": "AB",
+        "order_in_pair": 2,
+        "representation": "pure_aggregate",
+        "label": "B_pure_aggregate"
+      },
+      {
+        "scenario": "RAIN",
+        "run_index": 5,
+        "pair_index": 3,
+        "pair_order": "AB",
+        "order_in_pair": 1,
+        "representation": "discrete",
+        "label": "A_discrete"
+      },
+      {
+        "scenario": "RAIN",
+        "run_index": 6,
+        "pair_index": 3,
+        "pair_order": "AB",
+        "order_in_pair": 2,
+        "representation": "pure_aggregate",
+        "label": "B_pure_aggregate"
+      },
+      {
+        "scenario": "SUNNY",
+        "run_index": 7,
+        "pair_index": 4,
+        "pair_order": "BA",
+        "order_in_pair": 1,
+        "representation": "pure_aggregate",
+        "label": "B_pure_aggregate"
+      },
+      {
+        "scenario": "SUNNY",
+        "run_index": 8,
+        "pair_index": 4,
+        "pair_order": "BA",
+        "order_in_pair": 2,
+        "representation": "discrete",
+        "label": "A_discrete"
+      },
+      {
+        "scenario": "RAIN",
+        "run_index": 7,
+        "pair_index": 4,
+        "pair_order": "BA",
+        "order_in_pair": 1,
+        "representation": "pure_aggregate",
+        "label": "B_pure_aggregate"
+      },
+      {
+        "scenario": "RAIN",
+        "run_index": 8,
+        "pair_index": 4,
+        "pair_order": "BA",
+        "order_in_pair": 2,
+        "representation": "discrete",
+        "label": "A_discrete"
+      },
+      {
+        "scenario": "SUNNY",
+        "run_index": 9,
+        "pair_index": 5,
+        "pair_order": "AB",
+        "order_in_pair": 1,
+        "representation": "discrete",
+        "label": "A_discrete"
+      },
+      {
+        "scenario": "SUNNY",
+        "run_index": 10,
+        "pair_index": 5,
+        "pair_order": "AB",
+        "order_in_pair": 2,
+        "representation": "pure_aggregate",
+        "label": "B_pure_aggregate"
+      },
+      {
+        "scenario": "RAIN",
+        "run_index": 9,
+        "pair_index": 5,
+        "pair_order": "AB",
+        "order_in_pair": 1,
+        "representation": "discrete",
+        "label": "A_discrete"
+      },
+      {
+        "scenario": "RAIN",
+        "run_index": 10,
+        "pair_index": 5,
+        "pair_order": "AB",
+        "order_in_pair": 2,
+        "representation": "pure_aggregate",
+        "label": "B_pure_aggregate"
+      }
+    ],
+    "separate_child_process_per_run": true,
+    "fallback_forbidden": true,
+    "post_solve_repair_forbidden": true,
+    "synthetic_pv_fallback_forbidden": true,
+    "stage1_objective_proxy_forbidden": true,
+    "small_exact_parity_passed": true
+  }
+}

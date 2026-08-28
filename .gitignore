@@ -54,6 +54,10 @@ NUL
 .vscode/
 .idea/
 
+# Local AI-agent worktrees and machine-specific permissions
+.claude/worktrees/
+.claude/settings.local.json
+
 # Env files
 .env
 .env.*

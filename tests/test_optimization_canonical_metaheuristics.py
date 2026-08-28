@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
+from contextlib import ExitStack
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 import pytest
@@ -115,42 +116,108 @@ def test_run_optimization_uses_canonical_engine_for_ga_mode() -> None:
     def _record_set_field(_scenario_id: str, field: str, value, **_kwargs) -> None:
         stored_fields[field] = value
 
-    with (
-        mock.patch.object(optimization, "load_prepared_input", return_value=prepared_input),
-        mock.patch.object(optimization.store, "get_scenario_document_shallow", return_value=scenario_doc),
-        mock.patch.object(optimization, "_rebuild_dispatch_artifacts") as rebuild_dispatch,
-        mock.patch.object(optimization, "build_problem_data_from_scenario") as build_problem_data,
-        mock.patch.object(optimization, "ProblemBuilder") as problem_builder_cls,
-        mock.patch.object(optimization, "OptimizationEngine") as engine_cls,
-        mock.patch.object(optimization, "solve_problem_data") as solve_problem_data,
-        mock.patch.object(
-            optimization.ResultSerializer,
-            "serialize_result",
-            return_value={"solver_mode": "ga", "vehicle_paths": {"veh-1": ["trip-1"]}},
-        ),
-        mock.patch.object(optimization, "_scenario_feed_context", return_value={}),
-            mock.patch.object(optimization, "_scoped_output_dir", return_value="outputs/test"),
+    with ExitStack() as stack:
+        stack.enter_context(
+            mock.patch.object(
+                optimization,
+                "load_prepared_input",
+                return_value=prepared_input,
+            )
+        )
+        stack.enter_context(
+            mock.patch.object(
+                optimization.store,
+                "get_scenario_document_shallow",
+                return_value=scenario_doc,
+            )
+        )
+        rebuild_dispatch = stack.enter_context(
+            mock.patch.object(optimization, "_rebuild_dispatch_artifacts")
+        )
+        build_problem_data = stack.enter_context(
+            mock.patch.object(optimization, "build_problem_data_from_scenario")
+        )
+        problem_builder_cls = stack.enter_context(
+            mock.patch.object(optimization, "ProblemBuilder")
+        )
+        engine_cls = stack.enter_context(
+            mock.patch.object(optimization, "OptimizationEngine")
+        )
+        solve_problem_data = stack.enter_context(
+            mock.patch.object(optimization, "solve_problem_data")
+        )
+        stack.enter_context(
+            mock.patch.object(
+                optimization.ResultSerializer,
+                "serialize_result",
+                return_value={
+                    "solver_mode": "ga",
+                    "vehicle_paths": {"veh-1": ["trip-1"]},
+                },
+            )
+        )
+        stack.enter_context(
+            mock.patch.object(optimization, "_scenario_feed_context", return_value={})
+        )
+        stack.enter_context(
+            mock.patch.object(
+                optimization,
+                "_scoped_output_dir",
+                return_value="outputs/test",
+            )
+        )
+        persist_input_provenance = stack.enter_context(
             mock.patch.object(
                 optimization,
                 "persist_run_input_provenance",
                 return_value={"status": "OK"},
-            ) as persist_input_provenance,
-            mock.patch.object(optimization, "_persist_canonical_graph_exports", return_value={"enabled": False, "diagram_count": 0}),
-        mock.patch.object(optimization, "_persist_json_outputs"),
-        mock.patch.object(optimization, "_cost_breakdown", return_value={}),
-        mock.patch.object(optimization, "log_optimization_experiment", return_value={"experiment_id": "exp-1"}),
-        mock.patch.object(optimization.store, "set_field", side_effect=_record_set_field),
-        mock.patch.object(optimization, "_canonical_charging_output_payload", return_value=None),
-        mock.patch.object(optimization.store, "update_scenario"),
-        mock.patch.object(optimization.store, "get_field", return_value=None),
-        mock.patch.object(optimization.job_store, "update_job"),
-        mock.patch.multiple(
-            optimization,
-            _git_sha=mock.Mock(return_value="deadbeef"),
-            persist_frontend_day_ahead_rolling_contract=mock.DEFAULT,
-            execute_frontend_rolling_chain=mock.DEFAULT,
-        ) as rolling_mocks,
-    ):
+            )
+        )
+        stack.enter_context(
+            mock.patch.object(
+                optimization,
+                "_persist_canonical_graph_exports",
+                return_value={"enabled": False, "diagram_count": 0},
+            )
+        )
+        stack.enter_context(mock.patch.object(optimization, "_persist_json_outputs"))
+        stack.enter_context(
+            mock.patch.object(optimization, "_cost_breakdown", return_value={})
+        )
+        stack.enter_context(
+            mock.patch.object(
+                optimization,
+                "log_optimization_experiment",
+                return_value={"experiment_id": "exp-1"},
+            )
+        )
+        stack.enter_context(
+            mock.patch.object(
+                optimization.store,
+                "set_field",
+                side_effect=_record_set_field,
+            )
+        )
+        stack.enter_context(
+            mock.patch.object(
+                optimization,
+                "_canonical_charging_output_payload",
+                return_value=None,
+            )
+        )
+        stack.enter_context(mock.patch.object(optimization.store, "update_scenario"))
+        stack.enter_context(
+            mock.patch.object(optimization.store, "get_field", return_value=None)
+        )
+        stack.enter_context(mock.patch.object(optimization.job_store, "update_job"))
+        rolling_mocks = stack.enter_context(
+            mock.patch.multiple(
+                optimization,
+                _git_sha=mock.Mock(return_value="deadbeef"),
+                persist_frontend_day_ahead_rolling_contract=mock.DEFAULT,
+                execute_frontend_rolling_chain=mock.DEFAULT,
+            )
+        )
         rolling_mocks["execute_frontend_rolling_chain"].return_value = (
             SimpleNamespace(
                 status="executed_and_accepted",
@@ -342,46 +409,108 @@ def test_run_optimization_records_canonical_graph_artifacts_for_milp_mode() -> N
     def _record_set_field(_scenario_id: str, field: str, value, **_kwargs) -> None:
         stored_fields[field] = value
 
-    with (
-        mock.patch.object(optimization, "load_prepared_input", return_value=prepared_input),
-        mock.patch.object(optimization.store, "get_scenario_document_shallow", return_value=scenario_doc),
-        mock.patch.object(optimization, "_rebuild_dispatch_artifacts") as rebuild_dispatch,
-        mock.patch.object(optimization, "build_problem_data_from_scenario") as build_problem_data,
-        mock.patch.object(optimization, "ProblemBuilder") as problem_builder_cls,
-        mock.patch.object(optimization, "OptimizationEngine") as engine_cls,
-        mock.patch.object(optimization, "solve_problem_data") as solve_problem_data,
-        mock.patch.object(
-            optimization.ResultSerializer,
-            "serialize_result",
-            return_value={"solver_mode": "milp", "vehicle_paths": {"veh-1": ["trip-1"]}},
-        ),
-        mock.patch.object(
-            optimization,
-            "_persist_canonical_graph_exports",
-            return_value={
-                "enabled": True,
-                "diagram_count": 1,
-                "manifest_path": "graph/route_band_diagrams/manifest.json",
-                "vehicle_timeline_path": "graph/vehicle_timeline.csv",
-            },
-        ) as persist_graph_exports,
-            mock.patch.object(optimization, "_scenario_feed_context", return_value={}),
-            mock.patch.object(optimization, "_scoped_output_dir", return_value="outputs/test"),
+    with ExitStack() as stack:
+        stack.enter_context(
+            mock.patch.object(
+                optimization,
+                "load_prepared_input",
+                return_value=prepared_input,
+            )
+        )
+        stack.enter_context(
+            mock.patch.object(
+                optimization.store,
+                "get_scenario_document_shallow",
+                return_value=scenario_doc,
+            )
+        )
+        rebuild_dispatch = stack.enter_context(
+            mock.patch.object(optimization, "_rebuild_dispatch_artifacts")
+        )
+        build_problem_data = stack.enter_context(
+            mock.patch.object(optimization, "build_problem_data_from_scenario")
+        )
+        problem_builder_cls = stack.enter_context(
+            mock.patch.object(optimization, "ProblemBuilder")
+        )
+        engine_cls = stack.enter_context(
+            mock.patch.object(optimization, "OptimizationEngine")
+        )
+        solve_problem_data = stack.enter_context(
+            mock.patch.object(optimization, "solve_problem_data")
+        )
+        stack.enter_context(
+            mock.patch.object(
+                optimization.ResultSerializer,
+                "serialize_result",
+                return_value={
+                    "solver_mode": "milp",
+                    "vehicle_paths": {"veh-1": ["trip-1"]},
+                },
+            )
+        )
+        persist_graph_exports = stack.enter_context(
+            mock.patch.object(
+                optimization,
+                "_persist_canonical_graph_exports",
+                return_value={
+                    "enabled": True,
+                    "diagram_count": 1,
+                    "manifest_path": "graph/route_band_diagrams/manifest.json",
+                    "vehicle_timeline_path": "graph/vehicle_timeline.csv",
+                },
+            )
+        )
+        stack.enter_context(
+            mock.patch.object(optimization, "_scenario_feed_context", return_value={})
+        )
+        stack.enter_context(
+            mock.patch.object(
+                optimization,
+                "_scoped_output_dir",
+                return_value="outputs/test",
+            )
+        )
+        persist_input_provenance = stack.enter_context(
             mock.patch.object(
                 optimization,
                 "persist_run_input_provenance",
                 return_value={"status": "OK"},
-            ) as persist_input_provenance,
-            mock.patch.object(optimization, "_persist_json_outputs"),
-        mock.patch.object(optimization, "_cost_breakdown", return_value={}),
-        mock.patch.object(optimization, "log_optimization_experiment", return_value={"experiment_id": "exp-1"}),
-        mock.patch.object(optimization.store, "set_field", side_effect=_record_set_field),
-        mock.patch.object(optimization, "_canonical_charging_output_payload", return_value=None),
-        mock.patch.object(optimization.store, "update_scenario"),
-        mock.patch.object(optimization.store, "get_field", return_value=None),
-        mock.patch.object(optimization.job_store, "update_job"),
-        mock.patch.object(optimization, "_git_sha", return_value="deadbeef"),
-    ):
+            )
+        )
+        stack.enter_context(mock.patch.object(optimization, "_persist_json_outputs"))
+        stack.enter_context(
+            mock.patch.object(optimization, "_cost_breakdown", return_value={})
+        )
+        stack.enter_context(
+            mock.patch.object(
+                optimization,
+                "log_optimization_experiment",
+                return_value={"experiment_id": "exp-1"},
+            )
+        )
+        stack.enter_context(
+            mock.patch.object(
+                optimization.store,
+                "set_field",
+                side_effect=_record_set_field,
+            )
+        )
+        stack.enter_context(
+            mock.patch.object(
+                optimization,
+                "_canonical_charging_output_payload",
+                return_value=None,
+            )
+        )
+        stack.enter_context(mock.patch.object(optimization.store, "update_scenario"))
+        stack.enter_context(
+            mock.patch.object(optimization.store, "get_field", return_value=None)
+        )
+        stack.enter_context(mock.patch.object(optimization.job_store, "update_job"))
+        stack.enter_context(
+            mock.patch.object(optimization, "_git_sha", return_value="deadbeef")
+        )
         problem_builder_cls.return_value.build_from_scenario.return_value = canonical_problem
         engine_cls.return_value.solve.return_value = engine_result
         optimization._run_optimization(

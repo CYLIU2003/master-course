@@ -1,0 +1,723 @@
+{
+  "schema_version": "pure_ice_aggregation_weather_ab_v1",
+  "generated_at_utc": "2026-08-26T18:49:36.221309+00:00",
+  "claim_scope": "Cross-scenario descriptive comparison. Different weather/PV inputs are expected; it is not an optimality or causal claim.",
+  "input_contract": {
+    "fixed_control_hashes": {
+      "trip_ids_sha256": true,
+      "vehicle_ids_sha256": true,
+      "charger_ids_sha256": true,
+      "trip_structure_input_sha256": true,
+      "vehicle_input_sha256": true,
+      "charger_input_sha256": true,
+      "depot_input_sha256": true,
+      "vehicle_type_input_sha256": true,
+      "price_input_sha256": true,
+      "price_value_set_sha256": true,
+      "energy_asset_control_input_sha256": true,
+      "objective_weights_sha256": true,
+      "timetable_hash": true,
+      "vehicle_hash": true,
+      "tariff_hash": true,
+      "objective_hash": true
+    },
+    "all_fixed_controls_match": true,
+    "weather_linked_hash_differences": {
+      "pv_profile_sha256": {
+        "sunny": "65213bba051354c6dc2e5a2c27b47b8d0a7a32ba85cfcce857f9e359f98ab652",
+        "rain": "0d07117ea15c8f6010ea6fd30c96c1c1ed175a857bec59ef0f8ebee1a2cb6c40"
+      },
+      "pv_hash": {
+        "sunny": "65213bba051354c6dc2e5a2c27b47b8d0a7a32ba85cfcce857f9e359f98ab652",
+        "rain": "0d07117ea15c8f6010ea6fd30c96c1c1ed175a857bec59ef0f8ebee1a2cb6c40"
+      }
+    },
+    "pv_profile_hashes_differ": true,
+    "per_scenario_hashes": {
+      "SUNNY": {
+        "canonical_ablation_input_sha256": {
+          "values": [
+            "b796a945c281894ae8b03391427e9d6efb3933854641eac17a50427d83684318"
+          ],
+          "stable_within_scenario": true,
+          "value": "b796a945c281894ae8b03391427e9d6efb3933854641eac17a50427d83684318"
+        },
+        "charger_ids_sha256": {
+          "values": [
+            "175fa023ed7b37ab0e57e73b45986ba962492e01bdafda1dcfdb71adee13d777"
+          ],
+          "stable_within_scenario": true,
+          "value": "175fa023ed7b37ab0e57e73b45986ba962492e01bdafda1dcfdb71adee13d777"
+        },
+        "charger_input_sha256": {
+          "values": [
+            "5d19e5b5a327577f98758d0a0cf848301108c014e6abd9e4ba696afa5846e4b6"
+          ],
+          "stable_within_scenario": true,
+          "value": "5d19e5b5a327577f98758d0a0cf848301108c014e6abd9e4ba696afa5846e4b6"
+        },
+        "depot_input_sha256": {
+          "values": [
+            "741b5f5d08a80c78a03ce6fe15cf3a6a69318385cff95a45852fb31125b38421"
+          ],
+          "stable_within_scenario": true,
+          "value": "741b5f5d08a80c78a03ce6fe15cf3a6a69318385cff95a45852fb31125b38421"
+        },
+        "energy_asset_control_input_sha256": {
+          "values": [
+            "037c2bf93cf94f702b6b6612e437efe8ce6c80c94f71af4fdb916458b064dba0"
+          ],
+          "stable_within_scenario": true,
+          "value": "037c2bf93cf94f702b6b6612e437efe8ce6c80c94f71af4fdb916458b064dba0"
+        },
+        "objective_hash": {
+          "values": [
+            "1023574d08bc7f01b359645153092cb53cdb01de93cd66e6047c2e17bce3ae56"
+          ],
+          "stable_within_scenario": true,
+          "value": "1023574d08bc7f01b359645153092cb53cdb01de93cd66e6047c2e17bce3ae56"
+        },
+        "objective_weights_sha256": {
+          "values": [
+            "1023574d08bc7f01b359645153092cb53cdb01de93cd66e6047c2e17bce3ae56"
+          ],
+          "stable_within_scenario": true,
+          "value": "1023574d08bc7f01b359645153092cb53cdb01de93cd66e6047c2e17bce3ae56"
+        },
+        "prepared_input_sha256": {
+          "values": [
+            "99e49dd72e73d6e2e8c546d71573d3b00a7f00d23ab748da7171e1dd4b6bf05d"
+          ],
+          "stable_within_scenario": true,
+          "value": "99e49dd72e73d6e2e8c546d71573d3b00a7f00d23ab748da7171e1dd4b6bf05d"
+        },
+        "prepared_source_sha256": {
+          "values": [
+            "99e49dd72e73d6e2e8c546d71573d3b00a7f00d23ab748da7171e1dd4b6bf05d"
+          ],
+          "stable_within_scenario": true,
+          "value": "99e49dd72e73d6e2e8c546d71573d3b00a7f00d23ab748da7171e1dd4b6bf05d"
+        },
+        "price_input_sha256": {
+          "values": [
+            "6997be4769dd747c5b58df8d777d53adbad96ff36ff1a662420111ed4c4e6f40"
+          ],
+          "stable_within_scenario": true,
+          "value": "6997be4769dd747c5b58df8d777d53adbad96ff36ff1a662420111ed4c4e6f40"
+        },
+        "price_value_set_sha256": {
+          "values": [
+            "537cd9bdd87e4ad129efcec4caca5b182498e224818c567f20241871c41a7e96"
+          ],
+          "stable_within_scenario": true,
+          "value": "537cd9bdd87e4ad129efcec4caca5b182498e224818c567f20241871c41a7e96"
+        },
+        "pv_hash": {
+          "values": [
+            "65213bba051354c6dc2e5a2c27b47b8d0a7a32ba85cfcce857f9e359f98ab652"
+          ],
+          "stable_within_scenario": true,
+          "value": "65213bba051354c6dc2e5a2c27b47b8d0a7a32ba85cfcce857f9e359f98ab652"
+        },
+        "pv_profile_sha256": {
+          "values": [
+            "65213bba051354c6dc2e5a2c27b47b8d0a7a32ba85cfcce857f9e359f98ab652"
+          ],
+          "stable_within_scenario": true,
+          "value": "65213bba051354c6dc2e5a2c27b47b8d0a7a32ba85cfcce857f9e359f98ab652"
+        },
+        "tariff_hash": {
+          "values": [
+            "6997be4769dd747c5b58df8d777d53adbad96ff36ff1a662420111ed4c4e6f40"
+          ],
+          "stable_within_scenario": true,
+          "value": "6997be4769dd747c5b58df8d777d53adbad96ff36ff1a662420111ed4c4e6f40"
+        },
+        "timetable_hash": {
+          "values": [
+            "ddaee2c36b7484ec9cb98c3966fb8faa91cee157b452c2d9f0b4f7765ff60039"
+          ],
+          "stable_within_scenario": true,
+          "value": "ddaee2c36b7484ec9cb98c3966fb8faa91cee157b452c2d9f0b4f7765ff60039"
+        },
+        "trip_energy_hash": {
+          "values": [
+            "None"
+          ],
+          "stable_within_scenario": true,
+          "value": null
+        },
+        "trip_ids_sha256": {
+          "values": [
+            "fe51fbcd526a4f2b8704e2325ad134b18dffd9233fb01adf2dfa508008850bab"
+          ],
+          "stable_within_scenario": true,
+          "value": "fe51fbcd526a4f2b8704e2325ad134b18dffd9233fb01adf2dfa508008850bab"
+        },
+        "trip_input_sha256": {
+          "values": [
+            "e5cb47b5e554095a783595f1b8bf5c820fdbc8368f47458d7c881aecb8e5e779"
+          ],
+          "stable_within_scenario": true,
+          "value": "e5cb47b5e554095a783595f1b8bf5c820fdbc8368f47458d7c881aecb8e5e779"
+        },
+        "trip_structure_input_sha256": {
+          "values": [
+            "4a753692705a9ba982198a00c33940d489680a8c343df24bde19625418f02041"
+          ],
+          "stable_within_scenario": true,
+          "value": "4a753692705a9ba982198a00c33940d489680a8c343df24bde19625418f02041"
+        },
+        "vehicle_hash": {
+          "values": [
+            "42f03f2bbebb16508b8763d98a47523146c6192a669f5f6cedebcf06833ea34e"
+          ],
+          "stable_within_scenario": true,
+          "value": "42f03f2bbebb16508b8763d98a47523146c6192a669f5f6cedebcf06833ea34e"
+        },
+        "vehicle_ids_sha256": {
+          "values": [
+            "745cd98a9433b3e556b81c689ae13ae2ab1cff1e4da7797363b17a824c2a20c0"
+          ],
+          "stable_within_scenario": true,
+          "value": "745cd98a9433b3e556b81c689ae13ae2ab1cff1e4da7797363b17a824c2a20c0"
+        },
+        "vehicle_input_sha256": {
+          "values": [
+            "42f03f2bbebb16508b8763d98a47523146c6192a669f5f6cedebcf06833ea34e"
+          ],
+          "stable_within_scenario": true,
+          "value": "42f03f2bbebb16508b8763d98a47523146c6192a669f5f6cedebcf06833ea34e"
+        },
+        "vehicle_type_input_sha256": {
+          "values": [
+            "c9480714062c1f022a386769f62f8ebe5f0bfd3328cdc990c539c18a976866a6"
+          ],
+          "stable_within_scenario": true,
+          "value": "c9480714062c1f022a386769f62f8ebe5f0bfd3328cdc990c539c18a976866a6"
+        }
+      },
+      "RAIN": {
+        "canonical_ablation_input_sha256": {
+          "values": [
+            "23e62062332eac4347330f333fbc02c947d848c79e0ad6a39e14944cdad3276a"
+          ],
+          "stable_within_scenario": true,
+          "value": "23e62062332eac4347330f333fbc02c947d848c79e0ad6a39e14944cdad3276a"
+        },
+        "charger_ids_sha256": {
+          "values": [
+            "175fa023ed7b37ab0e57e73b45986ba962492e01bdafda1dcfdb71adee13d777"
+          ],
+          "stable_within_scenario": true,
+          "value": "175fa023ed7b37ab0e57e73b45986ba962492e01bdafda1dcfdb71adee13d777"
+        },
+        "charger_input_sha256": {
+          "values": [
+            "5d19e5b5a327577f98758d0a0cf848301108c014e6abd9e4ba696afa5846e4b6"
+          ],
+          "stable_within_scenario": true,
+          "value": "5d19e5b5a327577f98758d0a0cf848301108c014e6abd9e4ba696afa5846e4b6"
+        },
+        "depot_input_sha256": {
+          "values": [
+            "741b5f5d08a80c78a03ce6fe15cf3a6a69318385cff95a45852fb31125b38421"
+          ],
+          "stable_within_scenario": true,
+          "value": "741b5f5d08a80c78a03ce6fe15cf3a6a69318385cff95a45852fb31125b38421"
+        },
+        "energy_asset_control_input_sha256": {
+          "values": [
+            "037c2bf93cf94f702b6b6612e437efe8ce6c80c94f71af4fdb916458b064dba0"
+          ],
+          "stable_within_scenario": true,
+          "value": "037c2bf93cf94f702b6b6612e437efe8ce6c80c94f71af4fdb916458b064dba0"
+        },
+        "objective_hash": {
+          "values": [
+            "1023574d08bc7f01b359645153092cb53cdb01de93cd66e6047c2e17bce3ae56"
+          ],
+          "stable_within_scenario": true,
+          "value": "1023574d08bc7f01b359645153092cb53cdb01de93cd66e6047c2e17bce3ae56"
+        },
+        "objective_weights_sha256": {
+          "values": [
+            "1023574d08bc7f01b359645153092cb53cdb01de93cd66e6047c2e17bce3ae56"
+          ],
+          "stable_within_scenario": true,
+          "value": "1023574d08bc7f01b359645153092cb53cdb01de93cd66e6047c2e17bce3ae56"
+        },
+        "prepared_input_sha256": {
+          "values": [
+            "8220f7208b7add87beeb3a30c5d8f727480423427fff5e2f5eca1ed4a8e0ed3f"
+          ],
+          "stable_within_scenario": true,
+          "value": "8220f7208b7add87beeb3a30c5d8f727480423427fff5e2f5eca1ed4a8e0ed3f"
+        },
+        "prepared_source_sha256": {
+          "values": [
+            "8220f7208b7add87beeb3a30c5d8f727480423427fff5e2f5eca1ed4a8e0ed3f"
+          ],
+          "stable_within_scenario": true,
+          "value": "8220f7208b7add87beeb3a30c5d8f727480423427fff5e2f5eca1ed4a8e0ed3f"
+        },
+        "price_input_sha256": {
+          "values": [
+            "6997be4769dd747c5b58df8d777d53adbad96ff36ff1a662420111ed4c4e6f40"
+          ],
+          "stable_within_scenario": true,
+          "value": "6997be4769dd747c5b58df8d777d53adbad96ff36ff1a662420111ed4c4e6f40"
+        },
+        "price_value_set_sha256": {
+          "values": [
+            "537cd9bdd87e4ad129efcec4caca5b182498e224818c567f20241871c41a7e96"
+          ],
+          "stable_within_scenario": true,
+          "value": "537cd9bdd87e4ad129efcec4caca5b182498e224818c567f20241871c41a7e96"
+        },
+        "pv_hash": {
+          "values": [
+            "0d07117ea15c8f6010ea6fd30c96c1c1ed175a857bec59ef0f8ebee1a2cb6c40"
+          ],
+          "stable_within_scenario": true,
+          "value": "0d07117ea15c8f6010ea6fd30c96c1c1ed175a857bec59ef0f8ebee1a2cb6c40"
+        },
+        "pv_profile_sha256": {
+          "values": [
+            "0d07117ea15c8f6010ea6fd30c96c1c1ed175a857bec59ef0f8ebee1a2cb6c40"
+          ],
+          "stable_within_scenario": true,
+          "value": "0d07117ea15c8f6010ea6fd30c96c1c1ed175a857bec59ef0f8ebee1a2cb6c40"
+        },
+        "tariff_hash": {
+          "values": [
+            "6997be4769dd747c5b58df8d777d53adbad96ff36ff1a662420111ed4c4e6f40"
+          ],
+          "stable_within_scenario": true,
+          "value": "6997be4769dd747c5b58df8d777d53adbad96ff36ff1a662420111ed4c4e6f40"
+        },
+        "timetable_hash": {
+          "values": [
+            "ddaee2c36b7484ec9cb98c3966fb8faa91cee157b452c2d9f0b4f7765ff60039"
+          ],
+          "stable_within_scenario": true,
+          "value": "ddaee2c36b7484ec9cb98c3966fb8faa91cee157b452c2d9f0b4f7765ff60039"
+        },
+        "trip_energy_hash": {
+          "values": [
+            "None"
+          ],
+          "stable_within_scenario": true,
+          "value": null
+        },
+        "trip_ids_sha256": {
+          "values": [
+            "fe51fbcd526a4f2b8704e2325ad134b18dffd9233fb01adf2dfa508008850bab"
+          ],
+          "stable_within_scenario": true,
+          "value": "fe51fbcd526a4f2b8704e2325ad134b18dffd9233fb01adf2dfa508008850bab"
+        },
+        "trip_input_sha256": {
+          "values": [
+            "e5cb47b5e554095a783595f1b8bf5c820fdbc8368f47458d7c881aecb8e5e779"
+          ],
+          "stable_within_scenario": true,
+          "value": "e5cb47b5e554095a783595f1b8bf5c820fdbc8368f47458d7c881aecb8e5e779"
+        },
+        "trip_structure_input_sha256": {
+          "values": [
+            "4a753692705a9ba982198a00c33940d489680a8c343df24bde19625418f02041"
+          ],
+          "stable_within_scenario": true,
+          "value": "4a753692705a9ba982198a00c33940d489680a8c343df24bde19625418f02041"
+        },
+        "vehicle_hash": {
+          "values": [
+            "42f03f2bbebb16508b8763d98a47523146c6192a669f5f6cedebcf06833ea34e"
+          ],
+          "stable_within_scenario": true,
+          "value": "42f03f2bbebb16508b8763d98a47523146c6192a669f5f6cedebcf06833ea34e"
+        },
+        "vehicle_ids_sha256": {
+          "values": [
+            "745cd98a9433b3e556b81c689ae13ae2ab1cff1e4da7797363b17a824c2a20c0"
+          ],
+          "stable_within_scenario": true,
+          "value": "745cd98a9433b3e556b81c689ae13ae2ab1cff1e4da7797363b17a824c2a20c0"
+        },
+        "vehicle_input_sha256": {
+          "values": [
+            "42f03f2bbebb16508b8763d98a47523146c6192a669f5f6cedebcf06833ea34e"
+          ],
+          "stable_within_scenario": true,
+          "value": "42f03f2bbebb16508b8763d98a47523146c6192a669f5f6cedebcf06833ea34e"
+        },
+        "vehicle_type_input_sha256": {
+          "values": [
+            "c9480714062c1f022a386769f62f8ebe5f0bfd3328cdc990c539c18a976866a6"
+          ],
+          "stable_within_scenario": true,
+          "value": "c9480714062c1f022a386769f62f8ebe5f0bfd3328cdc990c539c18a976866a6"
+        }
+      }
+    }
+  },
+  "summaries": {
+    "SUNNY": {
+      "discrete": {
+        "bev_trip_count": 46.0,
+        "ice_trip_count": 218.0,
+        "used_bev_vehicle_count": 14.0,
+        "used_ice_vehicle_count": 18.0,
+        "total_cost_jpy": 707349.1733696415,
+        "fuel_liters": 441.3853152654867,
+        "grid_import_kwh": 0.0,
+        "pv_to_bus_kwh": 3.855033402289651,
+        "pv_to_bess_kwh": 582.4895923300704,
+        "bess_to_bus_kwh": 525.6968570777005,
+        "pv_curtail_kwh": 5469.905374267641,
+        "peak_grid_kw": 0.0,
+        "minimum_bev_soc_kwh": 101.772424,
+        "terminal_bev_soc_kwh_total": 2738.7111520000003,
+        "terminal_bess_soc_kwh_total": 3000.0,
+        "incumbent_objective_jpy": 707349.1733696415,
+        "certified_best_bound_jpy": 640000.0,
+        "certified_gap_ratio": 0.09521347575597812,
+        "total_solver_time_sec": 30.753999948501587
+      },
+      "pure_aggregate": {
+        "bev_trip_count": 46.0,
+        "ice_trip_count": 218.0,
+        "used_bev_vehicle_count": 14.0,
+        "used_ice_vehicle_count": 18.0,
+        "total_cost_jpy": 707349.1733696415,
+        "fuel_liters": 441.3853152654867,
+        "grid_import_kwh": 0.0,
+        "pv_to_bus_kwh": 3.855033402289651,
+        "pv_to_bess_kwh": 582.4895923300704,
+        "bess_to_bus_kwh": 525.6968570777005,
+        "pv_curtail_kwh": 5469.905374267641,
+        "peak_grid_kw": 0.0,
+        "minimum_bev_soc_kwh": 101.772424,
+        "terminal_bev_soc_kwh_total": 2738.7111520000003,
+        "terminal_bess_soc_kwh_total": 3000.0,
+        "incumbent_objective_jpy": 707349.1733696413,
+        "certified_best_bound_jpy": 640000.0,
+        "certified_gap_ratio": 0.09521347575597783,
+        "total_solver_time_sec": 435.10599994659424
+      }
+    },
+    "RAIN": {
+      "discrete": {
+        "bev_trip_count": 46.0,
+        "ice_trip_count": 218.0,
+        "used_bev_vehicle_count": 14.0,
+        "used_ice_vehicle_count": 18.0,
+        "total_cost_jpy": 707349.1733696415,
+        "fuel_liters": 441.3853152654867,
+        "grid_import_kwh": 0.0,
+        "pv_to_bus_kwh": 102.6164598316493,
+        "pv_to_bess_kwh": 473.0586395871641,
+        "bess_to_bus_kwh": 426.93542222729485,
+        "pv_curtail_kwh": 420.5249005811866,
+        "peak_grid_kw": 0.0,
+        "minimum_bev_soc_kwh": 101.772425,
+        "terminal_bev_soc_kwh_total": 2738.711148,
+        "terminal_bess_soc_kwh_total": 3000.0,
+        "incumbent_objective_jpy": 707349.1733696415,
+        "certified_best_bound_jpy": 695632.9381236411,
+        "certified_gap_ratio": 0.01656358088352197,
+        "total_solver_time_sec": 31.88700008392334
+      },
+      "pure_aggregate": {
+        "bev_trip_count": 46.0,
+        "ice_trip_count": 218.0,
+        "used_bev_vehicle_count": 14.0,
+        "used_ice_vehicle_count": 18.0,
+        "total_cost_jpy": 707349.1733696415,
+        "fuel_liters": 441.3853152654867,
+        "grid_import_kwh": 0.0,
+        "pv_to_bus_kwh": 102.6164598316493,
+        "pv_to_bess_kwh": 473.0586395871641,
+        "bess_to_bus_kwh": 426.93542222729485,
+        "pv_curtail_kwh": 420.5249005811866,
+        "peak_grid_kw": 0.0,
+        "minimum_bev_soc_kwh": 101.772425,
+        "terminal_bev_soc_kwh_total": 2738.711148,
+        "terminal_bess_soc_kwh_total": 3000.0,
+        "incumbent_objective_jpy": 707349.1733696413,
+        "certified_best_bound_jpy": 695632.9381236411,
+        "certified_gap_ratio": 0.016563580883521646,
+        "total_solver_time_sec": 435.103000164032
+      }
+    }
+  },
+  "rows": [
+    {
+      "representation": "discrete",
+      "metric": "bev_trip_count",
+      "sunny_median": 46.0,
+      "rain_median": 46.0,
+      "rain_minus_sunny": 0.0
+    },
+    {
+      "representation": "discrete",
+      "metric": "ice_trip_count",
+      "sunny_median": 218.0,
+      "rain_median": 218.0,
+      "rain_minus_sunny": 0.0
+    },
+    {
+      "representation": "discrete",
+      "metric": "used_bev_vehicle_count",
+      "sunny_median": 14.0,
+      "rain_median": 14.0,
+      "rain_minus_sunny": 0.0
+    },
+    {
+      "representation": "discrete",
+      "metric": "used_ice_vehicle_count",
+      "sunny_median": 18.0,
+      "rain_median": 18.0,
+      "rain_minus_sunny": 0.0
+    },
+    {
+      "representation": "discrete",
+      "metric": "total_cost_jpy",
+      "sunny_median": 707349.1733696415,
+      "rain_median": 707349.1733696415,
+      "rain_minus_sunny": 0.0
+    },
+    {
+      "representation": "discrete",
+      "metric": "fuel_liters",
+      "sunny_median": 441.3853152654867,
+      "rain_median": 441.3853152654867,
+      "rain_minus_sunny": 0.0
+    },
+    {
+      "representation": "discrete",
+      "metric": "grid_import_kwh",
+      "sunny_median": 0.0,
+      "rain_median": 0.0,
+      "rain_minus_sunny": 0.0
+    },
+    {
+      "representation": "discrete",
+      "metric": "pv_to_bus_kwh",
+      "sunny_median": 3.855033402289651,
+      "rain_median": 102.6164598316493,
+      "rain_minus_sunny": 98.76142642935964
+    },
+    {
+      "representation": "discrete",
+      "metric": "pv_to_bess_kwh",
+      "sunny_median": 582.4895923300704,
+      "rain_median": 473.0586395871641,
+      "rain_minus_sunny": -109.4309527429063
+    },
+    {
+      "representation": "discrete",
+      "metric": "bess_to_bus_kwh",
+      "sunny_median": 525.6968570777005,
+      "rain_median": 426.93542222729485,
+      "rain_minus_sunny": -98.76143485040569
+    },
+    {
+      "representation": "discrete",
+      "metric": "pv_curtail_kwh",
+      "sunny_median": 5469.905374267641,
+      "rain_median": 420.5249005811866,
+      "rain_minus_sunny": -5049.380473686454
+    },
+    {
+      "representation": "discrete",
+      "metric": "peak_grid_kw",
+      "sunny_median": 0.0,
+      "rain_median": 0.0,
+      "rain_minus_sunny": 0.0
+    },
+    {
+      "representation": "discrete",
+      "metric": "minimum_bev_soc_kwh",
+      "sunny_median": 101.772424,
+      "rain_median": 101.772425,
+      "rain_minus_sunny": 9.999999974752427e-07
+    },
+    {
+      "representation": "discrete",
+      "metric": "terminal_bev_soc_kwh_total",
+      "sunny_median": 2738.7111520000003,
+      "rain_median": 2738.711148,
+      "rain_minus_sunny": -4.000000444648322e-06
+    },
+    {
+      "representation": "discrete",
+      "metric": "terminal_bess_soc_kwh_total",
+      "sunny_median": 3000.0,
+      "rain_median": 3000.0,
+      "rain_minus_sunny": 0.0
+    },
+    {
+      "representation": "discrete",
+      "metric": "incumbent_objective_jpy",
+      "sunny_median": 707349.1733696415,
+      "rain_median": 707349.1733696415,
+      "rain_minus_sunny": 0.0
+    },
+    {
+      "representation": "discrete",
+      "metric": "certified_best_bound_jpy",
+      "sunny_median": 640000.0,
+      "rain_median": 695632.9381236411,
+      "rain_minus_sunny": 55632.93812364107
+    },
+    {
+      "representation": "discrete",
+      "metric": "certified_gap_ratio",
+      "sunny_median": 0.09521347575597812,
+      "rain_median": 0.01656358088352197,
+      "rain_minus_sunny": -0.07864989487245615
+    },
+    {
+      "representation": "discrete",
+      "metric": "total_solver_time_sec",
+      "sunny_median": 30.753999948501587,
+      "rain_median": 31.88700008392334,
+      "rain_minus_sunny": 1.133000135421753
+    },
+    {
+      "representation": "pure_aggregate",
+      "metric": "bev_trip_count",
+      "sunny_median": 46.0,
+      "rain_median": 46.0,
+      "rain_minus_sunny": 0.0
+    },
+    {
+      "representation": "pure_aggregate",
+      "metric": "ice_trip_count",
+      "sunny_median": 218.0,
+      "rain_median": 218.0,
+      "rain_minus_sunny": 0.0
+    },
+    {
+      "representation": "pure_aggregate",
+      "metric": "used_bev_vehicle_count",
+      "sunny_median": 14.0,
+      "rain_median": 14.0,
+      "rain_minus_sunny": 0.0
+    },
+    {
+      "representation": "pure_aggregate",
+      "metric": "used_ice_vehicle_count",
+      "sunny_median": 18.0,
+      "rain_median": 18.0,
+      "rain_minus_sunny": 0.0
+    },
+    {
+      "representation": "pure_aggregate",
+      "metric": "total_cost_jpy",
+      "sunny_median": 707349.1733696415,
+      "rain_median": 707349.1733696415,
+      "rain_minus_sunny": 0.0
+    },
+    {
+      "representation": "pure_aggregate",
+      "metric": "fuel_liters",
+      "sunny_median": 441.3853152654867,
+      "rain_median": 441.3853152654867,
+      "rain_minus_sunny": 0.0
+    },
+    {
+      "representation": "pure_aggregate",
+      "metric": "grid_import_kwh",
+      "sunny_median": 0.0,
+      "rain_median": 0.0,
+      "rain_minus_sunny": 0.0
+    },
+    {
+      "representation": "pure_aggregate",
+      "metric": "pv_to_bus_kwh",
+      "sunny_median": 3.855033402289651,
+      "rain_median": 102.6164598316493,
+      "rain_minus_sunny": 98.76142642935964
+    },
+    {
+      "representation": "pure_aggregate",
+      "metric": "pv_to_bess_kwh",
+      "sunny_median": 582.4895923300704,
+      "rain_median": 473.0586395871641,
+      "rain_minus_sunny": -109.4309527429063
+    },
+    {
+      "representation": "pure_aggregate",
+      "metric": "bess_to_bus_kwh",
+      "sunny_median": 525.6968570777005,
+      "rain_median": 426.93542222729485,
+      "rain_minus_sunny": -98.76143485040569
+    },
+    {
+      "representation": "pure_aggregate",
+      "metric": "pv_curtail_kwh",
+      "sunny_median": 5469.905374267641,
+      "rain_median": 420.5249005811866,
+      "rain_minus_sunny": -5049.380473686454
+    },
+    {
+      "representation": "pure_aggregate",
+      "metric": "peak_grid_kw",
+      "sunny_median": 0.0,
+      "rain_median": 0.0,
+      "rain_minus_sunny": 0.0
+    },
+    {
+      "representation": "pure_aggregate",
+      "metric": "minimum_bev_soc_kwh",
+      "sunny_median": 101.772424,
+      "rain_median": 101.772425,
+      "rain_minus_sunny": 9.999999974752427e-07
+    },
+    {
+      "representation": "pure_aggregate",
+      "metric": "terminal_bev_soc_kwh_total",
+      "sunny_median": 2738.7111520000003,
+      "rain_median": 2738.711148,
+      "rain_minus_sunny": -4.000000444648322e-06
+    },
+    {
+      "representation": "pure_aggregate",
+      "metric": "terminal_bess_soc_kwh_total",
+      "sunny_median": 3000.0,
+      "rain_median": 3000.0,
+      "rain_minus_sunny": 0.0
+    },
+    {
+      "representation": "pure_aggregate",
+      "metric": "incumbent_objective_jpy",
+      "sunny_median": 707349.1733696413,
+      "rain_median": 707349.1733696413,
+      "rain_minus_sunny": 0.0
+    },
+    {
+      "representation": "pure_aggregate",
+      "metric": "certified_best_bound_jpy",
+      "sunny_median": 640000.0,
+      "rain_median": 695632.9381236411,
+      "rain_minus_sunny": 55632.93812364107
+    },
+    {
+      "representation": "pure_aggregate",
+      "metric": "certified_gap_ratio",
+      "sunny_median": 0.09521347575597783,
+      "rain_median": 0.016563580883521646,
+      "rain_minus_sunny": -0.07864989487245619
+    },
+    {
+      "representation": "pure_aggregate",
+      "metric": "total_solver_time_sec",
+      "sunny_median": 435.10599994659424,
+      "rain_median": 435.103000164032,
+      "rain_minus_sunny": -0.0029997825622558594
+    }
+  ]
+}

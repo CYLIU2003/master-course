@@ -29,10 +29,13 @@ default-OFF and was not rerun.
 
 ## Current 2026-08-27 SUNNY/RAIN pure-ICE aggregation result
 
-Clean frozen tag `thesis-pure-ice-weather-ab-453b1d3` / SHA
+Clean frozen tag `thesis-pure-ice-weather-ab-453b1d3` / numerical execution SHA
 `453b1d340311de109645d006b9ec5a0de2788c2e` completed the requested
 SUNNY `5/5` and RAIN `5/5` pairs (20 isolated children) at
-`output/diagnostics/pure_ice_weather_ab_453b1d3_20260827/`. An independent
+[the Git-tracked review evidence](docs/evidence/pure_ice_weather_ab_453b1d3/README.md),
+copied from `output/diagnostics/pure_ice_weather_ab_453b1d3_20260827/`. The
+documentation HEAD immediately after the run was `abf149d3dbc3909e40361ada3c9a8542c1cf1dd5`;
+it must not be confused with the execution SHA. An independent
 post-run audit found zero failed gates: all children served 264/264 trips and
 passed physical validation, 24/24 Rolling, accounting, fleet, frozen runtime
 controls, and the prohibited fallback/repair/proxy checks. All ten aggregate
@@ -66,8 +69,8 @@ child was interrupted and there is no valid `--resume` action for this bundle.
 The central result and artifact-index SHA-256 values are respectively
 `F041658DA3B24F9815CB558CBA00CB2AEC2AAB7F2682AE56244BBEFE019BAEF7`
 and `F6B7232164EE2ED9DF5F9CF7B005F25A5F25C1C6F3699240ACAE05B41BCBE672`.
-The full file-by-file hash inventory is in that bundle's
-`artifact_hashes.json`.
+The full file-by-file hash inventory is published as
+[`artifact_hashes.json`](docs/evidence/pure_ice_weather_ab_453b1d3/artifact_hashes.json).
 
 ### Historical failed attempts
 

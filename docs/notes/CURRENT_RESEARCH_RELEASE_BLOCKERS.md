@@ -1,5 +1,33 @@
 # Current research release blockers
 
+## 2026-08-29: release gates narrowed to CI, evidence access, and claim/gap consistency
+
+The completed two-weather aggregation A/B has been copied, without a solver
+rerun, into the Git-tracked review subset at
+[`docs/evidence/pure_ice_weather_ab_453b1d3/`](../evidence/pure_ice_weather_ab_453b1d3/README.md).
+Its numerical execution SHA is `453b1d340311de109645d006b9ec5a0de2788c2e`;
+`abf149d3dbc3909e40361ada3c9a8542c1cf1dd5` is the documentation HEAD that
+recorded the completed result. The two identities must not be conflated.
+
+The release gates are now:
+
+1. Python 3.11 GitHub Actions must collect and pass the full test suite.
+2. Cited evidence must be available to reviewers. The main review subset and
+   full 103-file hash inventory are now in Git; durable publication of the
+   complete raw 20-run bundle remains open.
+3. Thesis claims must match the certificates: SUNNY remains at a 9.5213476%
+   certified gap and RAIN at 1.6563581%. Neither is a 1%-optimal integrated
+   global result. Whether 1% is an absolute submission requirement must be
+   decided explicitly with the advisor.
+
+Aggregation's lack of solver speedup is not a thesis-wide blocker. It is the
+reason the exact aggregation is rejected as a performance contribution and
+remains default-OFF. The evidence supports correctness/recovery and structural
+reduction only. RAIN is the 2025-08-05 WEEKDAY service with a PV profile sourced
+from 2025-08-10, not an observed Sunday operating case. Candidate limit/radius
+were `1/0`, the requested gap was 10%, and weather-operation policy was OFF;
+the A/B is not an endogenous fleet-composition or formal 1% experiment.
+
 ## 2026-08-28: Case A repair confirmed; certification blocker remains
 
 The 103-file frozen A/B bundle was hash-reverified without rerunning aggregate
@@ -96,11 +124,12 @@ There is no valid resume command because the bundle is terminal
 run from its own clean frozen SHA and new directory.
 
 The research release remains **BLOCKED**, but no longer because this A/B is
-pending. The active reasons are the unresolved Phase-3 Stage-1 certification
-gap (especially SUNNY's 9.52%) and the absence of a solver-performance benefit
-from the tested aggregation. Correct physical feasibility and complete
-Rolling/accounting evidence do not establish an integrated global optimum or
-release readiness.
+pending. The active numerical issue is the unresolved Phase-3 Stage-1
+certification gap, especially SUNNY's 9.52%, if a 1% claim or gate is retained.
+The absence of a solver-performance benefit is instead the documented reason
+not to adopt or promote the aggregation. Correct physical feasibility and
+complete Rolling/accounting evidence do not establish an integrated global
+optimum or release readiness.
 
 ## 2026-08-27: `18faf07` completed 20/20 but failed the final input contract
 

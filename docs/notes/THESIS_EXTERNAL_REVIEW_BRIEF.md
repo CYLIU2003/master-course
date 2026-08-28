@@ -7,15 +7,20 @@ actual strength. The project must not turn a feasible 264-trip candidate, a
 bounded small-instance oracle, or a diagnostic root-LP observation into an
 unjustified global-optimality, speedup, economic-response, or deployment claim.
 
-The release remains `BLOCKED` until this independent review and the separate
-264-trip Stage-1 1% gap gate are both resolved. This file is a review request,
-not a reviewer approval.
+The release remains `BLOCKED` until CI is green, cited evidence is accessible,
+and the thesis claim scope is consistent with the certified 264-trip gaps.
+Independent review remains required by the project process, but absence of an
+aggregation speedup is not itself a thesis-wide release blocker. This file is
+a review request, not a reviewer approval.
 
 ## 2. Scope
 
 Review the frozen evidence and the claim boundary only:
 
 - Baseline review SHA: `a145cf3a8b9cba0e4d97c48f800fba9ff07a1e69`.
+- Latest two-weather A/B numerical execution SHA:
+  `453b1d340311de109645d006b9ec5a0de2788c2e`; the immediately following
+  documentation HEAD is `abf149d3dbc3909e40361ada3c9a8542c1cf1dd5`.
 - Latest root-LP subset diagnostic source: `f10525f4255be72bde81d19778b5af5ceeac8949`
   (`thesis-activation-start-top5-diagnostic-f10525f`); its one-row predecessor
   is `08af4829b3491269698f0faf67162af9d8d52861`.
@@ -47,7 +52,7 @@ generation, UI work, or large refactor; those are outside this review.
 
 | Area | Evidence | Review question |
 | --- | --- | --- |
-| Reproducible 264-trip A/B | `output/diagnostics/pure_ice_aggregation_phase3_ab_25ec2f1_20260824/repeated_comparison.json` | Are the five AB/BA isolated-process pairs sufficient to support `PASS_STRUCTURAL_ONLY`, but not a speedup claim? |
+| Reproducible 264-trip two-weather A/B | [`docs/evidence/pure_ice_weather_ab_453b1d3/`](../evidence/pure_ice_weather_ab_453b1d3/README.md), including SUNNY/RAIN repeated comparisons and the cross-scenario contract | Do the five AB/BA pairs per scenario and exact recovery gates support `PASS_STRUCTURAL_ONLY`, while the 13.65--14.15x solver-time regression correctly rejects a speedup claim? |
 | Long-cap aggregate reachability | `output/diagnostics/pure_ice_aggregation_single_long_stage1_96982ab_20260824/diagnostic_result.json` | Does the explicit 870/30/120-second wall-clock contract and the 3.041301684% result remain correctly labelled as one diagnostic, not a performance, cost, or acceptance comparison? |
 | Aggregate Stage-1 search profiles | `output/diagnostics/pure_ice_aggregation_incumbent_focus_f41e2b3_20260824/diagnostic_result.json`, `output/diagnostics/pure_ice_aggregation_root_cut_focus_fabd665_20260824/diagnostic_result.json`, and `output/diagnostics/pure_ice_aggregation_bound_focus_21e2649_20260824/diagnostic_result.json` | Do the frozen one-profile measurements, all above the 1% gate (4.010147%, 4.968996%, and 4.968996%), correctly reject the existing aggregate solver profiles without creating A/B, cost, speed, or acceptance claims? |
 | Small integrated oracle | `output/verification/small_integrated_oracle_scale/93e31b0_20260824/scale_certificate.json` | Are 8/12/24/40-trip zero-gap Phase-4 references appropriately limited to bounded formulation evidence? |

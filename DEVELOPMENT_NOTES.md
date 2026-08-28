@@ -1,5 +1,63 @@
 # Development Notes
 
+## 2026-08-29: Python 3.11 CI compatibility and Git-tracked A/B evidence
+
+- Replaced the two oversized static `mock.patch` context-manager nests in
+  `tests/test_optimization_canonical_metaheuristics.py` with
+  `contextlib.ExitStack`. Every original patch target, configured mock, and
+  assertion remains in the tests; this removes Python 3.11's
+  `too many statically nested blocks` collection failure without changing
+  production or solver code. The CI compile step now includes `tests`.
+- Removed `.claude/worktrees/magical-elgamal` from the Git index instead of
+  inventing a `.gitmodules` entry. Removed the machine-local
+  `.claude/settings.local.json` from the index and ignored both
+  `.claude/worktrees/` and `.claude/settings.local.json`. The local paths were
+  left on disk; this is repository hygiene, not destructive workspace cleanup.
+- Reverified the frozen 103-file
+  `output/diagnostics/pure_ice_weather_ab_453b1d3_20260827/` hash index with
+  zero missing files and zero mismatches. Copied the review-sized result,
+  SUNNY/RAIN repeated comparisons, cross-scenario comparison, request and
+  Fresh-Prepare manifests, and full hash inventory byte-for-byte into
+  `docs/evidence/pure_ice_weather_ab_453b1d3/`. No solver was rerun. Added a
+  focused regression that verifies every published file against the frozen
+  index and fails if the execution SHA, controls, scenario semantics,
+  correctness verdict, or claim boundary drifts.
+- Synchronized the repository README, thesis evidence audit, external-review
+  brief, and live blocker document. Numerical execution SHA `453b1d3` is kept
+  separate from the following documentation HEAD `abf149d`; RAIN is described
+  as the 2025-08-05 WEEKDAY service with PV sourced from 2025-08-10. The
+  candidate limit/radius `1/0`, requested gap 10%, and weather policy OFF are
+  explicit. Aggregation remains default-OFF: correctness/recovery and
+  structural reduction are supported, while speedup, optimality improvement,
+  endogenous fleet-composition response, 1%-optimality, and integrated global
+  optimality remain prohibited claims.
+- Narrowed the thesis-wide release gates to green Python 3.11 CI, reviewer
+  access to cited evidence, and consistency between thesis claims and the
+  9.5213476% SUNNY / 1.6563581% RAIN certificates. Aggregation's measured
+  solver-time regression is its non-adoption rationale, not a thesis-wide
+  blocker. Durable publication of the complete raw 20-run bundle and an
+  explicit advisor decision on whether 1% is a mandatory submission threshold
+  remain open.
+- Validation commands and results:
+
+  ```powershell
+  .\.venv\Scripts\python.exe -m pytest -q `
+    tests/test_optimization_canonical_metaheuristics.py `
+    tests/test_published_pure_ice_weather_evidence.py
+  # 13 passed in 2.71s
+
+  .\.venv\Scripts\python.exe -m compileall -q src bff scripts tools tests
+
+  .\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider
+  # 1604 passed in 106.42s
+
+  git diff --check
+  ```
+
+  The local environment is CPython 3.14; Python 3.11 compatibility is verified
+  by the repository's unchanged 3.11 GitHub Actions runtime rather than by
+  raising CI to 3.14.
+
 ## 2026-08-28: Case A repair confirmed through the normal SUNNY/RAIN path
 
 - Reverified all 103 files in the frozen `453b1d3` A/B bundle and did not

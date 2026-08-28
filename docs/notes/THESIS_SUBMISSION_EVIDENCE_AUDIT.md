@@ -1,22 +1,32 @@
 # Thesis submission evidence audit
 
-**Audit date:** 2026-08-24  
-**Latest 264-trip A/B evidence:** clean frozen tag `thesis-freeze-25ec2f1` at `25ec2f170949b7108c5dd98ac1dc5b5b03845525`
-**Requested comparison baseline:** `a145cf3a8b9cba0e4d97c48f800fba9ff07a1e69`
+**Audit date:** 2026-08-29
+
+**Latest 264-trip two-weather A/B evidence:** clean frozen tag
+`thesis-pure-ice-weather-ab-453b1d3` at execution SHA
+`453b1d340311de109645d006b9ec5a0de2788c2e`
+
+**Documentation HEAD immediately after the experiment:** `abf149d3dbc3909e40361ada3c9a8542c1cf1dd5`
 
 ## Scope and disposition
 
 This is an evidence audit, not a change to the mathematical model, acceptance
-gates, or claimed results. The requested baseline is an ancestor of the
-frozen `25ec2f1` evidence checkout, with no divergent baseline-side commits.
-The changes add
-reproducibility capture, isolated-process A/B evidence, bounded integrated
-oracles, sensitivity/stress harnesses, and gap diagnostics. They do not make
-the 264-trip Phase-3 result an integrated global total-cost optimum.
+gates, or claimed results. The numerical results belong to frozen execution
+SHA `453b1d3`; the later `abf149d` commit records them and must not be presented
+as the execution source. The Git-tracked review subset is
+[docs/evidence/pure_ice_weather_ab_453b1d3](../evidence/pure_ice_weather_ab_453b1d3/README.md).
+It makes the central result, both repeated comparisons, the cross-scenario
+comparison, request/Fresh-Prepare manifests, and the full hash inventory
+reviewable without rerunning Gurobi. These records do not make the 264-trip
+Phase-3 result an integrated global total-cost optimum.
 
-The research release is **BLOCKED**. This document records which thesis-facing
-claims are supported and which remain forbidden. The authoritative live
-release status is [CURRENT_RESEARCH_RELEASE_BLOCKERS.md](CURRENT_RESEARCH_RELEASE_BLOCKERS.md).
+The research release is **BLOCKED** until the repository CI is green and the
+thesis claim scope is made consistent with the certified gaps. Evidence
+accessibility is a release gate and is addressed for the review-sized subset
+in this repository; durable publication of the complete 20-run raw bundle is
+still open. Failure of aggregation to accelerate the solver is an adoption
+result, not a thesis-wide release blocker. The authoritative live status is
+[CURRENT_RESEARCH_RELEASE_BLOCKERS.md](CURRENT_RESEARCH_RELEASE_BLOCKERS.md).
 
 The later clean-`f41e2b3` pure-aggregate `incumbent_focus` diagnostic is
 recorded at
@@ -51,11 +61,11 @@ release conclusion.
 | Requested item | Evidence status | Allowed conclusion |
 | --- | --- | --- |
 | Reproducibility records | **Complete for cited artifacts.** The A/B, oracle, stress, sensitivity, and root-diagnostic artifacts persist their clean source identity, inputs or prepared-input hashes, controls, and acceptance checks. | These records make the cited runs auditable; a later documentation-only commit does not relabel them as current-HEAD formal evidence. |
-| 264-trip pure-ICE aggregation A/B | **Protocol complete.** Ten isolated executions form five AB/BA pairs. | `PASS_STRUCTURAL_ONLY`: verified model-size/RSS reductions, but no speed, cost, or optimality benefit. |
+| 264-trip pure-ICE aggregation A/B | **Protocol complete for both PV counterfactual scenarios.** Twenty isolated executions form five AB/BA pairs for SUNNY and five for RAIN. | Both are `PASS_STRUCTURAL_ONLY`: verified correctness/recovery and model-size/RSS reductions, but materially worse solver time and no optimality benefit. Aggregation remains default-OFF. |
 | 8/12/24/40 integrated oracle | **Protocol complete, bounded scope.** Each listed subset has its stored exact Phase-4 reference. | A formulation/approximation check for the listed small instances only; not a 264-trip integrated-optimality certificate. |
 | One-factor response and fixed-plan stress | **Diagnostic execution complete.** The 13-case BEV-energy/PV/BESS/charger matrix, separate three-point electricity and diesel matrices, two-point vehicle-day-cost matrix, and seven fixed-decision stresses have immutable outcomes. | Every full-scale sensitivity is gap-blocked; only the initial-SOC-minus-5pp fixed plan is physically accepted. Neither result supports an economic-response or recourse-robustness claim. |
 | M0--M3 common output | **Protocol complete, bounded scope.** The 40-trip audit contains all four methods. | `PASS_SMALL_SCOPE_ONLY`; only the matching-input M2--M3 numerical agreement is an algorithmic oracle check. |
-| Submission release | **Not complete.** | The full 264-trip Stage-1 1% gap and independent-review gates remain open. The release is `BLOCKED`. |
+| Submission release | **Not complete.** | CI must be green; cited evidence must remain accessible; claims must report the 9.5213476% SUNNY and 1.6563581% RAIN certified gaps rather than imply a 1%-optimal or integrated-global result. Whether 1% is an absolute submission gate is an advisor decision. |
 
 ## Reproducibility snapshot
 
@@ -79,8 +89,8 @@ persisted. This read-only telemetry change does not alter the release gate.
 
 | Requirement | Evidence | Status and allowed conclusion |
 | --- | --- | --- |
-| Reproducible run identity | Each fresh 264-trip A/B child records clean pre/post `25ec2f1`, prepared-input SHA-256, seed 42, four threads, 435/30-second stage limits, runtime environment, and Gurobi controls. The 40-trip oracle audit records clean pre/post `93e31b0`, its prepared-input hash, runtime environment, and controls. | **Verified for the cited artifacts.** A later documentation-only HEAD does not relabel those runs as current-HEAD formal evidence. |
-| 264-trip pure-ICE aggregation A/B | [Repeated comparison](../../output/diagnostics/pure_ice_aggregation_phase3_ab_25ec2f1_20260824/repeated_comparison.json): ten isolated children, five AB/BA pairs, all 264/264 served, physical validation, Rolling 24/24, accounting, no fallback/repair, verified artifact hashes, and final `PRESOLVE` callback timestamps. | **PASS_STRUCTURAL_ONLY.** Median variables/binaries/constraints/RSS decrease 31.82%/32.01%/24.09%/17.27%; the callback timestamp falls 12.74%, but median solver time increases from 465.761 to 480.487 seconds. Do not claim speedup, equal full-scale objective, or optimality. |
+| Reproducible run identity | The [request manifest](../evidence/pure_ice_weather_ab_453b1d3/request_manifest.json) records clean execution SHA `453b1d3`, prepared-input and control hashes, seed 42, one thread, 435/30-second stage limits, candidate limit/radius `1/0`, 10% requested gap, selector OFF, BestObjStop OFF, and weather-operation policy OFF. | **Verified for the cited artifacts.** The later `abf149d` documentation HEAD does not relabel the runs as its own formal evidence. |
+| 264-trip pure-ICE aggregation A/B | [SUNNY repeated comparison](../evidence/pure_ice_weather_ab_453b1d3/SUNNY_repeated_comparison.json), [RAIN repeated comparison](../evidence/pure_ice_weather_ab_453b1d3/RAIN_repeated_comparison.json), and [cross-scenario comparison](../evidence/pure_ice_weather_ab_453b1d3/weather_cross_scenario_comparison.json): twenty isolated children, ten AB/BA pairs, all 264/264 served, physical validation, Rolling 24/24, accounting, no fallback/repair/proxy, and exact aggregate-path recovery. RAIN keeps the 2025-08-05 WEEKDAY service and uses PV sourced from 2025-08-10. | **PASS_STRUCTURAL_ONLY in both scenarios.** Median variables/binaries/constraints decrease 29.392%/32.012%/17.171%, but solver time worsens from 30.754 to 435.106 seconds in SUNNY and 31.887 to 435.103 seconds in RAIN. Do not claim speedup, optimality improvement, endogenous fleet-composition response, 1%-optimality, or integrated global optimality. |
 | Long-cap aggregate reachability | [Single diagnostic](../../output/diagnostics/pure_ice_aggregation_single_long_stage1_96982ab_20260824/diagnostic_result.json): one clean-`96982ab` pure-aggregate child with identical prepared input, seed, threads, model controls, and an explicit 870/30/120-second Stage-1/Stage-2/overhead contract. It serves 264/264, passes physical validation, accepts Rolling 24/24, reconciles accounting, has no fallback/repair, and has verified diagnostic artifact hashes and BFF input provenance. | **Valid diagnostic only.** The 3.041301684% certified Stage-1 gap is 0.036210 percentage points below the 435-second aggregate median but remains above 1%. One aggregate observation is not A/B, speed, cost, optimality, or research-acceptance evidence, and it cannot authorize a formal run. |
 | Small integrated oracle | [Scale certificate](../../output/verification/small_integrated_oracle_scale/93e31b0_20260824/scale_certificate.json): 8/12/24/40-trip Phase-4 references are optimal at zero gap; Phase-3 pairs complete. | **Verified, bounded only.** 24/40-trip identifiable ApproxGap is 0.0 within numerical tolerance; 8/12 relative gaps are correctly not identifiable because the reference cost is zero. This does not certify 264-trip global optimality or a full-scale Phase-3 cost bound. |
 | Economic one-factor response | [BEV-energy/PV/BESS/charger matrix](../../output/thesis_remaining_sensitivities_27ec8ce_20260824/sensitivity_execution_manifest.json), [electricity matrix](../../output/thesis_economic_electricity_93e31b0_20260824/sensitivity_execution_manifest.json), [diesel matrix](../../output/thesis_economic_diesel_93e31b0_20260824/sensitivity_execution_manifest.json), and [vehicle-day matrix](../../output/thesis_economic_vehicle_day_9650ed9_20260824/sensitivity_execution_manifest.json) each record fresh Prepare, complete successors, physical validation, Rolling, accounting, provenance, and stable non-varied controls within their own frozen family. The three current no-HTTP re-audits at `output/verification/thesis_economic_*_reaudit_365a6b5_20260824/` re-verify every copied source bundle. | **Executed but not accepted.** All 21 full-scale cases fail only `mip_gap_target_met` (1.780295%--26.849287% versus 1%). Candidate changes establish input propagation and feasible-candidate provenance only; they are not economic-response results and cannot be compared across differently frozen families as one common experiment. |
