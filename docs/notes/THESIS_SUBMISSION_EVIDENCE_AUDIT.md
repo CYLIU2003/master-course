@@ -1,6 +1,6 @@
 # Thesis submission evidence audit
 
-**Audit date:** 2026-08-29
+**Audit date (Asia/Tokyo):** 2026-08-29
 
 **Latest 264-trip two-weather A/B evidence:** clean frozen tag
 `thesis-pure-ice-weather-ab-453b1d3` at execution SHA
@@ -21,7 +21,10 @@ reviewable without rerunning Gurobi. These records do not make the 264-trip
 Phase-3 result an integrated global total-cost optimum.
 
 The research release is **BLOCKED** until the repository CI is green and the
-thesis claim scope is made consistent with the certified gaps. Evidence
+thesis claim scope is made consistent with the certified gaps. Independent
+review and a later fresh clean-commit formal run remain repository-level
+requirements before `LGTM` or `READY`; this evidence-only audit does not
+authorize that run. Evidence
 accessibility is a release gate and is addressed for the review-sized subset
 in this repository; durable publication of the complete 20-run raw bundle is
 still open. Failure of aggregation to accelerate the solver is an adoption

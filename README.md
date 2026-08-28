@@ -18,11 +18,14 @@ physical/accounting gates and selected different SUNNY and RAIN assignments
 frontier and evaluates multiple Stage-2 candidates, selecting by canonical
 actual cost with deterministic used-fleet/hash tie-breaks.  Fresh normal-path
 runs from execution SHA `ba5ac4a` preserved the frozen one-thread,
-585/435/30-second controls, evaluated 22 candidates each, served 264/264
-trips, and passed independent physical validation, 24/24 Rolling, accounting,
-and winner-hash gates.  SUNNY selected `76fb6a9b...a516c` at
-660,983.783805 JPY; RAIN selected `213b2ccd...5316` at 698,296.465284 JPY.
-The final cross-evaluation/audit SHA is `3ec8714`.  Research release remains
+  585/435/30-second controls, evaluated 22 candidates each, served 264/264
+  trips, and passed independent physical validation, 24/24 Rolling, accounting,
+  and winner-hash gates.  SUNNY selected `76fb6a9b...a516c` at
+  660,983.783805 JPY; RAIN selected `213b2ccd...5316` at 698,296.465284 JPY.
+  The final cross-evaluation/audit SHA is `3ec8714`; the
+  [Git-tracked Case A review evidence](docs/evidence/weather_dispatch_case_a_3ec8714/README.md)
+  contains the 44-row matrix, audit, public confirmation, and hash inventory.
+  Research release remains
 **BLOCKED** because Phase 3 is not an integrated global optimum and the Stage-1
 certified gaps remain 9.5213%/1.6564%.  Pure-ICE aggregation remains
 default-OFF and was not rerun.

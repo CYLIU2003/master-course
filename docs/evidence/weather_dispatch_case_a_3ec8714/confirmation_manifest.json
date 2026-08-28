@@ -1,0 +1,250 @@
+{
+  "schema_version": "weather_dispatch_diagnosis_v1",
+  "status": "PASS_NORMAL_PATH_CONFIRMATION",
+  "execution_git_sha": "ba5ac4abac490caccca006260670dfbc2c411fa9",
+  "execution_git_dirty": false,
+  "finalization_git_sha": "6fdc2dc6184c1cff51698099ecac52c889da1f36",
+  "finalization_git_dirty": false,
+  "public_endpoint": "/api/scenarios/{scenario_id}/run-optimization",
+  "fixed_request_controls_equal": true,
+  "internal_timestep_15_minutes": true,
+  "rolling_execution_minutes": 60,
+  "requested_candidate_limit": 1,
+  "requested_composition_radius": 0,
+  "requested_bev_frontier_enabled": false,
+  "effective_candidate_limit": 22,
+  "effective_composition_radius": 4,
+  "effective_bev_frontier_enabled": true,
+  "pure_ice_aggregate_B_executed": false,
+  "winner_matches_fixed_dispatch_diagnosis": {
+    "SUNNY": true,
+    "RAIN": true
+  },
+  "scenarios": {
+    "SUNNY": {
+      "run_dir": "C:\\master-course\\output\\2026-08-28\\run_20260828_0107",
+      "checks": {
+        "served_264": true,
+        "unserved_zero": true,
+        "physical_validation_passed": true,
+        "rolling_24_of_24": true,
+        "accounting_reconciliation_passed": true,
+        "git_sha_matches": true,
+        "fallback_and_repair_absent": true,
+        "candidate_coverage_applied": true,
+        "frozen_runtime_controls_preserved": true,
+        "frozen_solver_limits_preserved": true,
+        "stage1_weather_recourse_used_in_objective": true
+      },
+      "selected_candidate_index": 1,
+      "selected_internal_assignment_hash": "db0b67eda7aecd03f57a277a57d87c4dfa722cf1f73b5d2cead06efaa19c4aab",
+      "selected_physical_assignment_hash": "76fb6a9b635bce41ae73db10f08facc7862a1f55a4465004457e79838c9a516c",
+      "selected_canonical_actual_cost_jpy": 660983.7838045002,
+      "candidate_count_evaluated": 22,
+      "prepared_input_id": "prepared-1f1b85053b8c9ea1-453c50ff177c277b-8acc7b3a",
+      "prepared_input_sha256": "99e49dd72e73d6e2e8c546d71573d3b00a7f00d23ab748da7171e1dd4b6bf05d",
+      "trip_input_hash": "ddaee2c36b7484ec9cb98c3966fb8faa91cee157b452c2d9f0b4f7765ff60039",
+      "vehicle_input_hash": "42f03f2bbebb16508b8763d98a47523146c6192a669f5f6cedebcf06833ea34e",
+      "fleet_contract_hash": "2179433a2b5b952e9beb756bd971d8056df690ed476728e695a25081599e9f3b",
+      "day_ahead_assignment_hash": "d4a4b0f1cc17d2e8f9570850137916f7b1091b29ac65aba15df25b4d7a674a3e",
+      "runtime_controls": {
+        "policy_version": "research_batch_runtime_controls_v1",
+        "scope": "research_batch_run",
+        "enforced": false,
+        "requested": {
+          "stage1_best_obj_stop_enabled": false,
+          "gurobi_threads": 1
+        },
+        "effective": {
+          "stage1_best_obj_stop_enabled": false,
+          "gurobi_threads": 1
+        },
+        "override_applied": false,
+        "reason": "Research batch runs preserve the frozen requested controls; the caller and post-run artifact gate are authoritative."
+      },
+      "effective_solver_controls": {
+        "time_limit_sec": 585,
+        "stage1_time_limit_sec": 435,
+        "stage2_time_limit_sec": 30,
+        "stage1_best_obj_stop_enabled": false,
+        "gurobi_threads": 1,
+        "stage1_stage2_candidate_limit": 22,
+        "stage1_composition_search_radius": 4,
+        "stage1_bev_frontier_enabled": true,
+        "stage1_powertrain_selector_strengthening": null,
+        "mip_gap": 0.1,
+        "random_seed": 42
+      },
+      "canonical_input_hashes": {
+        "trip_count": 264,
+        "vehicle_count": 60,
+        "charger_count": 10,
+        "price_slot_count": 96,
+        "pv_slot_count": 96,
+        "trip_ids_sha256": "fe51fbcd526a4f2b8704e2325ad134b18dffd9233fb01adf2dfa508008850bab",
+        "vehicle_ids_sha256": "745cd98a9433b3e556b81c689ae13ae2ab1cff1e4da7797363b17a824c2a20c0",
+        "charger_ids_sha256": "175fa023ed7b37ab0e57e73b45986ba962492e01bdafda1dcfdb71adee13d777",
+        "trip_input_sha256": "e5cb47b5e554095a783595f1b8bf5c820fdbc8368f47458d7c881aecb8e5e779",
+        "trip_structure_input_schema": "canonical_trip_structure_v2_energy_demand_excluded",
+        "trip_structure_input_sha256": "4a753692705a9ba982198a00c33940d489680a8c343df24bde19625418f02041",
+        "vehicle_input_sha256": "42f03f2bbebb16508b8763d98a47523146c6192a669f5f6cedebcf06833ea34e",
+        "charger_input_sha256": "5d19e5b5a327577f98758d0a0cf848301108c014e6abd9e4ba696afa5846e4b6",
+        "depot_input_sha256": "741b5f5d08a80c78a03ce6fe15cf3a6a69318385cff95a45852fb31125b38421",
+        "vehicle_type_input_sha256": "c9480714062c1f022a386769f62f8ebe5f0bfd3328cdc990c539c18a976866a6",
+        "price_input_sha256": "6997be4769dd747c5b58df8d777d53adbad96ff36ff1a662420111ed4c4e6f40",
+        "price_value_set_sha256": "537cd9bdd87e4ad129efcec4caca5b182498e224818c567f20241871c41a7e96",
+        "energy_asset_control_input_schema": "depot_energy_asset_controls_v2_weather_profile_excluded",
+        "energy_asset_control_input_sha256": "037c2bf93cf94f702b6b6612e437efe8ce6c80c94f71af4fdb916458b064dba0",
+        "objective_weights_sha256": "1023574d08bc7f01b359645153092cb53cdb01de93cd66e6047c2e17bce3ae56",
+        "pv_profile_sha256": "65213bba051354c6dc2e5a2c27b47b8d0a7a32ba85cfcce857f9e359f98ab652",
+        "canonical_ablation_input_sha256": "b796a945c281894ae8b03391427e9d6efb3933854641eac17a50427d83684318"
+      },
+      "stage1_time_indexed_energy_recourse_configuration": {
+        "enabled": true,
+        "used_in_stage1_objective": true,
+        "semantics": "slot_level_assignment_coupled_continuous_energy_recourse",
+        "relaxation_scope": "continuous_physical_charger_assignment_and_continuous_bess_charge_discharge_modes",
+        "stage2_authority": "fixed_assignment_binary_charger_and_exact_energy_dispatch",
+        "units": {
+          "source_flows": "kWh_per_slot",
+          "charge_power": "kW",
+          "peak_import": "kW",
+          "cost": "JPY"
+        },
+        "constraint_count": 965,
+        "timestep_h": 0.25,
+        "contract_overage_allowed": true,
+        "contract_overage_cost_enabled": true,
+        "contract_overage_penalty_yen_per_kwh": 500.0,
+        "recourse_input_hash": "4eba8f5076a14aa46a299b107622da7b9c78c36373e4c66708428f90f4fded69",
+        "objective_coefficient_and_rhs_hash": "4eba8f5076a14aa46a299b107622da7b9c78c36373e4c66708428f90f4fded69",
+        "arbitrary_weather_assignment_bias_used": false
+      }
+    },
+    "RAIN": {
+      "run_dir": "C:\\master-course\\output\\2026-08-28\\run_20260828_0119",
+      "checks": {
+        "served_264": true,
+        "unserved_zero": true,
+        "physical_validation_passed": true,
+        "rolling_24_of_24": true,
+        "accounting_reconciliation_passed": true,
+        "git_sha_matches": true,
+        "fallback_and_repair_absent": true,
+        "candidate_coverage_applied": true,
+        "frozen_runtime_controls_preserved": true,
+        "frozen_solver_limits_preserved": true,
+        "stage1_weather_recourse_used_in_objective": true
+      },
+      "selected_candidate_index": 1,
+      "selected_internal_assignment_hash": "c6cb0cc9574f1964d3761001ec64bdd7287cb252e56a3509f2627e2623a03034",
+      "selected_physical_assignment_hash": "213b2ccd409559807467d9726bdf7eb4958f9c1d5d68c3363e95db5299d65316",
+      "selected_canonical_actual_cost_jpy": 698296.465283954,
+      "candidate_count_evaluated": 22,
+      "prepared_input_id": "prepared-a6c5e0a8cdd9b32b-f1e18f252e336f1f-8acc7b3a",
+      "prepared_input_sha256": "8220f7208b7add87beeb3a30c5d8f727480423427fff5e2f5eca1ed4a8e0ed3f",
+      "trip_input_hash": "ddaee2c36b7484ec9cb98c3966fb8faa91cee157b452c2d9f0b4f7765ff60039",
+      "vehicle_input_hash": "42f03f2bbebb16508b8763d98a47523146c6192a669f5f6cedebcf06833ea34e",
+      "fleet_contract_hash": "2179433a2b5b952e9beb756bd971d8056df690ed476728e695a25081599e9f3b",
+      "day_ahead_assignment_hash": "55319fc3d75cb034d2cb3508c27d8ef5178d58b2d77f10105de3f146e8adec77",
+      "runtime_controls": {
+        "policy_version": "research_batch_runtime_controls_v1",
+        "scope": "research_batch_run",
+        "enforced": false,
+        "requested": {
+          "stage1_best_obj_stop_enabled": false,
+          "gurobi_threads": 1
+        },
+        "effective": {
+          "stage1_best_obj_stop_enabled": false,
+          "gurobi_threads": 1
+        },
+        "override_applied": false,
+        "reason": "Research batch runs preserve the frozen requested controls; the caller and post-run artifact gate are authoritative."
+      },
+      "effective_solver_controls": {
+        "time_limit_sec": 585,
+        "stage1_time_limit_sec": 435,
+        "stage2_time_limit_sec": 30,
+        "stage1_best_obj_stop_enabled": false,
+        "gurobi_threads": 1,
+        "stage1_stage2_candidate_limit": 22,
+        "stage1_composition_search_radius": 4,
+        "stage1_bev_frontier_enabled": true,
+        "stage1_powertrain_selector_strengthening": null,
+        "mip_gap": 0.1,
+        "random_seed": 42
+      },
+      "canonical_input_hashes": {
+        "trip_count": 264,
+        "vehicle_count": 60,
+        "charger_count": 10,
+        "price_slot_count": 96,
+        "pv_slot_count": 96,
+        "trip_ids_sha256": "fe51fbcd526a4f2b8704e2325ad134b18dffd9233fb01adf2dfa508008850bab",
+        "vehicle_ids_sha256": "745cd98a9433b3e556b81c689ae13ae2ab1cff1e4da7797363b17a824c2a20c0",
+        "charger_ids_sha256": "175fa023ed7b37ab0e57e73b45986ba962492e01bdafda1dcfdb71adee13d777",
+        "trip_input_sha256": "e5cb47b5e554095a783595f1b8bf5c820fdbc8368f47458d7c881aecb8e5e779",
+        "trip_structure_input_schema": "canonical_trip_structure_v2_energy_demand_excluded",
+        "trip_structure_input_sha256": "4a753692705a9ba982198a00c33940d489680a8c343df24bde19625418f02041",
+        "vehicle_input_sha256": "42f03f2bbebb16508b8763d98a47523146c6192a669f5f6cedebcf06833ea34e",
+        "charger_input_sha256": "5d19e5b5a327577f98758d0a0cf848301108c014e6abd9e4ba696afa5846e4b6",
+        "depot_input_sha256": "741b5f5d08a80c78a03ce6fe15cf3a6a69318385cff95a45852fb31125b38421",
+        "vehicle_type_input_sha256": "c9480714062c1f022a386769f62f8ebe5f0bfd3328cdc990c539c18a976866a6",
+        "price_input_sha256": "6997be4769dd747c5b58df8d777d53adbad96ff36ff1a662420111ed4c4e6f40",
+        "price_value_set_sha256": "537cd9bdd87e4ad129efcec4caca5b182498e224818c567f20241871c41a7e96",
+        "energy_asset_control_input_schema": "depot_energy_asset_controls_v2_weather_profile_excluded",
+        "energy_asset_control_input_sha256": "037c2bf93cf94f702b6b6612e437efe8ce6c80c94f71af4fdb916458b064dba0",
+        "objective_weights_sha256": "1023574d08bc7f01b359645153092cb53cdb01de93cd66e6047c2e17bce3ae56",
+        "pv_profile_sha256": "0d07117ea15c8f6010ea6fd30c96c1c1ed175a857bec59ef0f8ebee1a2cb6c40",
+        "canonical_ablation_input_sha256": "23e62062332eac4347330f333fbc02c947d848c79e0ad6a39e14944cdad3276a"
+      },
+      "stage1_time_indexed_energy_recourse_configuration": {
+        "enabled": true,
+        "used_in_stage1_objective": true,
+        "semantics": "slot_level_assignment_coupled_continuous_energy_recourse",
+        "relaxation_scope": "continuous_physical_charger_assignment_and_continuous_bess_charge_discharge_modes",
+        "stage2_authority": "fixed_assignment_binary_charger_and_exact_energy_dispatch",
+        "units": {
+          "source_flows": "kWh_per_slot",
+          "charge_power": "kW",
+          "peak_import": "kW",
+          "cost": "JPY"
+        },
+        "constraint_count": 965,
+        "timestep_h": 0.25,
+        "contract_overage_allowed": true,
+        "contract_overage_cost_enabled": true,
+        "contract_overage_penalty_yen_per_kwh": 500.0,
+        "recourse_input_hash": "e1b11889094b8ff1ee95e649a63602be98f453c45c2357abd5042525df1d2643",
+        "objective_coefficient_and_rhs_hash": "e1b11889094b8ff1ee95e649a63602be98f453c45c2357abd5042525df1d2643",
+        "arbitrary_weather_assignment_bias_used": false
+      }
+    }
+  },
+  "excluded_diagnostic_runs": [
+    {
+      "run_dir": "C:\\master-course\\output\\2026-08-27\\run_20260827_2359",
+      "reason": "confirmation_harness_overrode_internal_timestep_to_60_minutes",
+      "used_for_conclusions": false
+    },
+    {
+      "run_dir": "C:\\master-course\\output\\2026-08-28\\run_20260828_0022",
+      "reason": "public_BFF_interactive_policy_overrode_requested_one_thread_to_four_threads",
+      "used_for_conclusions": false
+    },
+    {
+      "run_dir": "C:\\master-course\\output\\2026-08-28\\run_20260828_0034",
+      "reason": "public_BFF_interactive_policy_overrode_requested_one_thread_to_four_threads",
+      "used_for_conclusions": false
+    }
+  ],
+  "case_a_candidate_selection_audit": {
+    "status": "FIXED",
+    "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_diagnosis_20260827\\case_a_candidate_selection_audit.json"
+  },
+  "full_input_contract": {
+    "status": "PASS_FULL_INPUT_CONTRACT",
+    "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_diagnosis_20260827\\normal_confirmation_input_contract.json"
+  }
+}

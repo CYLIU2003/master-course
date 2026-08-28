@@ -11,7 +11,8 @@ The release remains `BLOCKED` until CI is green, cited evidence is accessible,
 and the thesis claim scope is consistent with the certified 264-trip gaps.
 Independent review remains required by the project process, but absence of an
 aggregation speedup is not itself a thesis-wide release blocker. This file is
-a review request, not a reviewer approval.
+a review request, not a reviewer approval. A fresh clean-commit formal run also
+remains required before `LGTM` or `READY`, but is outside this review-only task.
 
 ## 2. Scope
 

@@ -64,6 +64,9 @@ from src.optimization.engine import OptimizationEngine  # noqa: E402
 from src.optimization.rolling.reoptimizer import (  # noqa: E402
     assignment_plan_from_serialized_result,
 )
+from src.optimization.rolling.acceptance import (  # noqa: E402
+    rolling_chain_acceptance_audit,
+)
 
 
 SCHEMA_VERSION = "weather_dispatch_diagnosis_v1"
@@ -173,7 +176,8 @@ def candidate_is_selectable(candidate: Mapping[str, Any]) -> bool:
     except (TypeError, ValueError):
         return False
     return bool(
-        candidate.get("stage2_feasible", candidate.get("feasible", False))
+        candidate.get("selectable") is True
+        and candidate.get("stage2_feasible", candidate.get("feasible", False))
         and candidate.get("physical_validation_feasible", False)
         and candidate.get("accounting_reconciliation_passed", False)
         and not candidate.get("fallback_used", False)
@@ -1146,6 +1150,23 @@ def _powertrain_selector_is_disabled(
     )
 
 
+def _rolling_chain_is_accepted(rolling: Mapping[str, Any]) -> bool:
+    """Require every shared Rolling acceptance invariant, not only 24 steps."""
+
+    return bool(rolling_chain_acceptance_audit(rolling)["accepted"])
+
+
+def _day_ahead_research_is_accepted(summary: Mapping[str, Any]) -> bool:
+    """Keep physical feasibility separate from full research acceptance."""
+
+    return bool(
+        dict(summary.get("solution_validity") or {}).get(
+            "research_acceptance_status"
+        )
+        == "ACCEPTED"
+    )
+
+
 def _confirmation_gate(run_dir: Path, expected_sha: str) -> dict[str, Any]:
     summary = _read_json(run_dir / "summary.json")
     physical = _read_json(run_dir / "physical_schedule_validation.json")
@@ -1195,7 +1216,7 @@ def _confirmation_gate(run_dir: Path, expected_sha: str) -> dict[str, Any]:
         "rolling_24_of_24": (
             int(rolling.get("expected_step_count") or 0) == 24
             and int(rolling.get("step_count") or 0) == 24
-            and rolling.get("all_steps_feasible") is True
+            and _rolling_chain_is_accepted(rolling)
         ),
         "accounting_reconciliation_passed": accounting.get("status") == "OK",
         "git_sha_matches": (
@@ -1208,6 +1229,9 @@ def _confirmation_gate(run_dir: Path, expected_sha: str) -> dict[str, Any]:
             and acceptance_checks.get("no_postsolve_modification") is True
             and not bool(selected.get("fallback_used", False))
             and not bool(selected.get("repair_used", False))
+        ),
+        "day_ahead_research_acceptance_passed": (
+            _day_ahead_research_is_accepted(summary)
         ),
         "candidate_coverage_applied": (
             int(candidates.get("requested_candidate_limit") or 0) >= 22
@@ -1652,10 +1676,30 @@ def build_confirmation_input_contract(
             {
                 "prepared_source_sha256": confirmed.get("prepared_input_sha256"),
                 "prepared_input_sha256": confirmed.get("prepared_input_sha256"),
+                "timetable_hash": confirmed.get("trip_input_hash"),
+                "vehicle_hash": confirmed.get("vehicle_input_hash"),
+            }
+        )
+        final_hashes.update(
+            {
+                "tariff_hash": final_hashes.get("price_input_sha256"),
+                "objective_hash": final_hashes.get("objective_weights_sha256"),
+                "pv_hash": final_hashes.get("pv_profile_sha256"),
             }
         )
         final_hashes_by_scenario[code] = final_hashes
-        comparable_keys = sorted(set(baseline_hashes) & set(final_hashes))
+        required_baseline_keys = sorted(
+            key for key, value in baseline_hashes.items() if value not in (None, "")
+        )
+        missing_final_keys = sorted(
+            key for key in required_baseline_keys if final_hashes.get(key) in (None, "")
+        )
+        if missing_final_keys:
+            raise RuntimeError(
+                f"{code} Fresh confirmation lacks frozen-A input hashes: "
+                f"{missing_final_keys}"
+            )
+        comparable_keys = required_baseline_keys
         for key in comparable_keys:
             rows.append(
                 {
@@ -1686,6 +1730,7 @@ def build_confirmation_input_contract(
             "runtime_controls": confirmed.get("runtime_controls"),
             "frozen_A_baseline": str(baseline_path.resolve()),
             "mismatches_from_frozen_A": mismatches,
+            "missing_hashes_from_frozen_A_contract": missing_final_keys,
         }
         if mismatches:
             raise RuntimeError(
@@ -1703,6 +1748,7 @@ def build_confirmation_input_contract(
         "prepared_input_sha256",
         "prepared_source_sha256",
         "pv_profile_sha256",
+        "pv_hash",
     }
     unexpected = sorted(
         set(cross_scenario_differences) - expected_weather_differences

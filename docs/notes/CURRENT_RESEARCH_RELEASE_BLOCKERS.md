@@ -1,6 +1,6 @@
 # Current research release blockers
 
-## 2026-08-29: release gates narrowed to CI, evidence access, and claim/gap consistency
+## 2026-08-29 (Asia/Tokyo): release gates clarified after CI/evidence audit
 
 The completed two-weather aggregation A/B has been copied, without a solver
 rerun, into the Git-tracked review subset at
@@ -19,6 +19,11 @@ The release gates are now:
    certified gap and RAIN at 1.6563581%. Neither is a 1%-optimal integrated
    global result. Whether 1% is an absolute submission requirement must be
    decided explicitly with the advisor.
+4. The project-required independent review must resolve all P0/P1 findings.
+5. Before `LGTM`, `READY`, or a model-complete claim, the repository contract
+   still requires a fresh clean-commit formal run. This is separate from the
+   completed aggregation A/B and is not authorization to start a solver run in
+   this CI/evidence-only task.
 
 Aggregation's lack of solver speedup is not a thesis-wide blocker. It is the
 reason the exact aggregation is rejected as a performance contribution and

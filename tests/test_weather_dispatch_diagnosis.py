@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+
+import pytest
 
 from scripts.run_weather_dispatch_diagnosis import (
+    _day_ahead_research_is_accepted,
     _normal_confirmation_request,
     _powertrain_selector_is_disabled,
+    _rolling_chain_is_accepted,
     assignment_hash_from_rows,
+    build_confirmation_input_contract,
     candidate_is_selectable,
     classify_weather_winners,
     deduplicate_candidates,
@@ -53,6 +59,7 @@ def _candidate(
         "accounting_reconciliation_passed": True,
         "fallback_used": False,
         "repair_used": False,
+        "selectable": True,
     }
     candidate.update(overrides)
     return candidate
@@ -166,6 +173,74 @@ def test_fallback_repair_and_accounting_mismatch_are_not_selectable() -> None:
     assert not candidate_is_selectable(
         _candidate("missing-cost", 1.0, canonical_actual_cost_jpy=None)
     )
+    assert not candidate_is_selectable(_candidate("rejected", 1.0, selectable=False))
+
+
+def test_confirmation_requires_complete_rolling_and_research_acceptance() -> None:
+    rolling_checks = {
+        "full_energy_horizon_requested": True,
+        "all_steps_feasible": True,
+        "expected_step_count_observed": True,
+        "executed_day_accounting_eligible": True,
+        "day_ahead_git_clean": True,
+        "rolling_runner_git_clean": True,
+        "day_ahead_and_rolling_git_sha_match": True,
+        "day_ahead_assignment_hash_constant": True,
+        "gurobi_available": True,
+        "no_chain_runtime_error": True,
+    }
+    assert _rolling_chain_is_accepted(
+        {"chain_accepted": True, "acceptance_checks": rolling_checks}
+    )
+    rolling_checks["executed_day_accounting_eligible"] = False
+    assert not _rolling_chain_is_accepted(
+        {"chain_accepted": True, "acceptance_checks": rolling_checks}
+    )
+    assert _day_ahead_research_is_accepted(
+        {"solution_validity": {"research_acceptance_status": "ACCEPTED"}}
+    )
+    assert not _day_ahead_research_is_accepted(
+        {"solution_validity": {"research_acceptance_status": "REJECTED"}}
+    )
+
+
+def _write_json(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_confirmation_input_contract_fails_when_baseline_hash_is_missing(
+    tmp_path: Path,
+) -> None:
+    existing_bundle = tmp_path / "existing"
+    confirmation = {"scenarios": {}}
+    for code in ("SUNNY", "RAIN"):
+        _write_json(
+            existing_bundle
+            / "scenarios"
+            / code
+            / "runs"
+            / "01_A_discrete"
+            / "case_metrics.json",
+            {
+                "provenance": {
+                    "input_hashes": {
+                        "timetable_hash": "required-timetable-hash"
+                    }
+                }
+            },
+        )
+        confirmation["scenarios"][code] = {
+            "prepared_input_sha256": f"prepared-{code}",
+            "canonical_input_hashes": {},
+        }
+
+    with pytest.raises(RuntimeError, match="lacks frozen-A input hashes"):
+        build_confirmation_input_contract(
+            output_dir=tmp_path / "out",
+            existing_bundle=existing_bundle,
+            confirmation_manifest=confirmation,
+        )
 
 
 def test_tie_break_is_used_fleet_then_assignment_hash() -> None:

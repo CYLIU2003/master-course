@@ -1,6 +1,6 @@
 # Development Notes
 
-## 2026-08-29: Python 3.11 CI compatibility and Git-tracked A/B evidence
+## 2026-08-29 (Asia/Tokyo): Python 3.11 CI compatibility and Git-tracked A/B evidence
 
 - Replaced the two oversized static `mock.patch` context-manager nests in
   `tests/test_optimization_canonical_metaheuristics.py` with
@@ -20,6 +20,21 @@
   explicit prerequisite skip instead of testing fallback data. A Python
   3.11-only `1.16e-10` accounting residual is checked against the canonical
   `1e-6 JPY` tolerance rather than exact floating-point zero.
+- Automated independent review of PR #7 found fail-open conditions in the
+  pre-existing weather-diagnosis branch. Candidate selection now requires the
+  stored complete `selectable=true` gate, normal-path confirmation uses the
+  shared full Rolling acceptance audit, and day-ahead confirmation requires
+  `research_acceptance_status=ACCEPTED`. The Fresh-confirmation input contract
+  now requires every non-empty frozen-A hash and maps the persisted canonical
+  hashes to their legacy aliases; missing tariff, timetable, fleet, objective,
+  or PV evidence stops the audit. The formal Phase-3 candidate-coverage policy
+  is applied before effective frontier-bound validation.
+- Published a second review-sized, hash-verified subset at
+  `docs/evidence/weather_dispatch_case_a_3ec8714/`. It contains the 44-row
+  fixed-dispatch matrix, Case A audit, public-path confirmation, input
+  contract, reports, and the full 73-file hash inventory. No solver was rerun.
+  This closes the GitHub accessibility gap for the README's current Case A
+  diagnosis while retaining the bounded, non-global claim scope.
 - Removed `.claude/worktrees/magical-elgamal` from the Git index instead of
   inventing a `.gitmodules` entry. Removed the machine-local
   `.claude/settings.local.json` from the index and ignored both
@@ -61,7 +76,7 @@
   .\.venv\Scripts\python.exe -m compileall -q src bff scripts tools tests
 
   .\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider
-  # 1604 passed in 88.23s
+  # 1608 passed in 88.98s
 
   .\.venv\Scripts\python.exe -m pytest -q `
     tests/test_research_dataset_bootstrap_alignment.py `

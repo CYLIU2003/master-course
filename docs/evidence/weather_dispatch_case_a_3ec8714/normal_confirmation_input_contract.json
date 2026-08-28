@@ -1,0 +1,386 @@
+{
+  "schema_version": "weather_dispatch_diagnosis_v1",
+  "status": "PASS_FULL_INPUT_CONTRACT",
+  "fresh_prepare_used": true,
+  "fixed_nonweather_inputs_equal": true,
+  "cross_scenario_different_hashes": [
+    "canonical_ablation_input_sha256",
+    "prepared_input_sha256",
+    "prepared_source_sha256",
+    "pv_profile_sha256"
+  ],
+  "difference_interpretation": {
+    "pv_profile_sha256": "authoritative_weather_linked_PV_input",
+    "canonical_ablation_input_sha256": "derived_contract_hash_that_includes_weather_linked_PV",
+    "prepared_input_sha256": "scenario_specific_prepared_snapshot",
+    "prepared_source_sha256": "scenario_specific_prepared_snapshot"
+  },
+  "scenarios": {
+    "SUNNY": {
+      "scenario_id": "771d115b-75b0-49f7-a7f0-25f259a2cd21",
+      "run_dir": "C:\\master-course\\output\\2026-08-28\\run_20260828_0107",
+      "prepared_input_id": "prepared-1f1b85053b8c9ea1-453c50ff177c277b-8acc7b3a",
+      "prepared_source_sha256": "99e49dd72e73d6e2e8c546d71573d3b00a7f00d23ab748da7171e1dd4b6bf05d",
+      "fleet_contract_hash": "2179433a2b5b952e9beb756bd971d8056df690ed476728e695a25081599e9f3b",
+      "canonical_input_hashes": {
+        "trip_count": 264,
+        "vehicle_count": 60,
+        "charger_count": 10,
+        "price_slot_count": 96,
+        "pv_slot_count": 96,
+        "trip_ids_sha256": "fe51fbcd526a4f2b8704e2325ad134b18dffd9233fb01adf2dfa508008850bab",
+        "vehicle_ids_sha256": "745cd98a9433b3e556b81c689ae13ae2ab1cff1e4da7797363b17a824c2a20c0",
+        "charger_ids_sha256": "175fa023ed7b37ab0e57e73b45986ba962492e01bdafda1dcfdb71adee13d777",
+        "trip_input_sha256": "e5cb47b5e554095a783595f1b8bf5c820fdbc8368f47458d7c881aecb8e5e779",
+        "trip_structure_input_schema": "canonical_trip_structure_v2_energy_demand_excluded",
+        "trip_structure_input_sha256": "4a753692705a9ba982198a00c33940d489680a8c343df24bde19625418f02041",
+        "vehicle_input_sha256": "42f03f2bbebb16508b8763d98a47523146c6192a669f5f6cedebcf06833ea34e",
+        "charger_input_sha256": "5d19e5b5a327577f98758d0a0cf848301108c014e6abd9e4ba696afa5846e4b6",
+        "depot_input_sha256": "741b5f5d08a80c78a03ce6fe15cf3a6a69318385cff95a45852fb31125b38421",
+        "vehicle_type_input_sha256": "c9480714062c1f022a386769f62f8ebe5f0bfd3328cdc990c539c18a976866a6",
+        "price_input_sha256": "6997be4769dd747c5b58df8d777d53adbad96ff36ff1a662420111ed4c4e6f40",
+        "price_value_set_sha256": "537cd9bdd87e4ad129efcec4caca5b182498e224818c567f20241871c41a7e96",
+        "energy_asset_control_input_schema": "depot_energy_asset_controls_v2_weather_profile_excluded",
+        "energy_asset_control_input_sha256": "037c2bf93cf94f702b6b6612e437efe8ce6c80c94f71af4fdb916458b064dba0",
+        "objective_weights_sha256": "1023574d08bc7f01b359645153092cb53cdb01de93cd66e6047c2e17bce3ae56",
+        "pv_profile_sha256": "65213bba051354c6dc2e5a2c27b47b8d0a7a32ba85cfcce857f9e359f98ab652",
+        "canonical_ablation_input_sha256": "b796a945c281894ae8b03391427e9d6efb3933854641eac17a50427d83684318",
+        "prepared_source_sha256": "99e49dd72e73d6e2e8c546d71573d3b00a7f00d23ab748da7171e1dd4b6bf05d",
+        "prepared_input_sha256": "99e49dd72e73d6e2e8c546d71573d3b00a7f00d23ab748da7171e1dd4b6bf05d"
+      },
+      "effective_solver_controls": {
+        "time_limit_sec": 585,
+        "stage1_time_limit_sec": 435,
+        "stage2_time_limit_sec": 30,
+        "stage1_best_obj_stop_enabled": false,
+        "gurobi_threads": 1,
+        "stage1_stage2_candidate_limit": 22,
+        "stage1_composition_search_radius": 4,
+        "stage1_bev_frontier_enabled": true,
+        "stage1_powertrain_selector_strengthening": null,
+        "mip_gap": 0.1,
+        "random_seed": 42
+      },
+      "runtime_controls": {
+        "policy_version": "research_batch_runtime_controls_v1",
+        "scope": "research_batch_run",
+        "enforced": false,
+        "requested": {
+          "stage1_best_obj_stop_enabled": false,
+          "gurobi_threads": 1
+        },
+        "effective": {
+          "stage1_best_obj_stop_enabled": false,
+          "gurobi_threads": 1
+        },
+        "override_applied": false,
+        "reason": "Research batch runs preserve the frozen requested controls; the caller and post-run artifact gate are authoritative."
+      },
+      "frozen_A_baseline": "C:\\master-course\\output\\diagnostics\\pure_ice_weather_ab_453b1d3_20260827\\scenarios\\SUNNY\\runs\\01_A_discrete\\case_metrics.json",
+      "mismatches_from_frozen_A": []
+    },
+    "RAIN": {
+      "scenario_id": "b23fd26c-1233-4c73-bb9e-bdb8b1584760",
+      "run_dir": "C:\\master-course\\output\\2026-08-28\\run_20260828_0119",
+      "prepared_input_id": "prepared-a6c5e0a8cdd9b32b-f1e18f252e336f1f-8acc7b3a",
+      "prepared_source_sha256": "8220f7208b7add87beeb3a30c5d8f727480423427fff5e2f5eca1ed4a8e0ed3f",
+      "fleet_contract_hash": "2179433a2b5b952e9beb756bd971d8056df690ed476728e695a25081599e9f3b",
+      "canonical_input_hashes": {
+        "trip_count": 264,
+        "vehicle_count": 60,
+        "charger_count": 10,
+        "price_slot_count": 96,
+        "pv_slot_count": 96,
+        "trip_ids_sha256": "fe51fbcd526a4f2b8704e2325ad134b18dffd9233fb01adf2dfa508008850bab",
+        "vehicle_ids_sha256": "745cd98a9433b3e556b81c689ae13ae2ab1cff1e4da7797363b17a824c2a20c0",
+        "charger_ids_sha256": "175fa023ed7b37ab0e57e73b45986ba962492e01bdafda1dcfdb71adee13d777",
+        "trip_input_sha256": "e5cb47b5e554095a783595f1b8bf5c820fdbc8368f47458d7c881aecb8e5e779",
+        "trip_structure_input_schema": "canonical_trip_structure_v2_energy_demand_excluded",
+        "trip_structure_input_sha256": "4a753692705a9ba982198a00c33940d489680a8c343df24bde19625418f02041",
+        "vehicle_input_sha256": "42f03f2bbebb16508b8763d98a47523146c6192a669f5f6cedebcf06833ea34e",
+        "charger_input_sha256": "5d19e5b5a327577f98758d0a0cf848301108c014e6abd9e4ba696afa5846e4b6",
+        "depot_input_sha256": "741b5f5d08a80c78a03ce6fe15cf3a6a69318385cff95a45852fb31125b38421",
+        "vehicle_type_input_sha256": "c9480714062c1f022a386769f62f8ebe5f0bfd3328cdc990c539c18a976866a6",
+        "price_input_sha256": "6997be4769dd747c5b58df8d777d53adbad96ff36ff1a662420111ed4c4e6f40",
+        "price_value_set_sha256": "537cd9bdd87e4ad129efcec4caca5b182498e224818c567f20241871c41a7e96",
+        "energy_asset_control_input_schema": "depot_energy_asset_controls_v2_weather_profile_excluded",
+        "energy_asset_control_input_sha256": "037c2bf93cf94f702b6b6612e437efe8ce6c80c94f71af4fdb916458b064dba0",
+        "objective_weights_sha256": "1023574d08bc7f01b359645153092cb53cdb01de93cd66e6047c2e17bce3ae56",
+        "pv_profile_sha256": "0d07117ea15c8f6010ea6fd30c96c1c1ed175a857bec59ef0f8ebee1a2cb6c40",
+        "canonical_ablation_input_sha256": "23e62062332eac4347330f333fbc02c947d848c79e0ad6a39e14944cdad3276a",
+        "prepared_source_sha256": "8220f7208b7add87beeb3a30c5d8f727480423427fff5e2f5eca1ed4a8e0ed3f",
+        "prepared_input_sha256": "8220f7208b7add87beeb3a30c5d8f727480423427fff5e2f5eca1ed4a8e0ed3f"
+      },
+      "effective_solver_controls": {
+        "time_limit_sec": 585,
+        "stage1_time_limit_sec": 435,
+        "stage2_time_limit_sec": 30,
+        "stage1_best_obj_stop_enabled": false,
+        "gurobi_threads": 1,
+        "stage1_stage2_candidate_limit": 22,
+        "stage1_composition_search_radius": 4,
+        "stage1_bev_frontier_enabled": true,
+        "stage1_powertrain_selector_strengthening": null,
+        "mip_gap": 0.1,
+        "random_seed": 42
+      },
+      "runtime_controls": {
+        "policy_version": "research_batch_runtime_controls_v1",
+        "scope": "research_batch_run",
+        "enforced": false,
+        "requested": {
+          "stage1_best_obj_stop_enabled": false,
+          "gurobi_threads": 1
+        },
+        "effective": {
+          "stage1_best_obj_stop_enabled": false,
+          "gurobi_threads": 1
+        },
+        "override_applied": false,
+        "reason": "Research batch runs preserve the frozen requested controls; the caller and post-run artifact gate are authoritative."
+      },
+      "frozen_A_baseline": "C:\\master-course\\output\\diagnostics\\pure_ice_weather_ab_453b1d3_20260827\\scenarios\\RAIN\\runs\\01_A_discrete\\case_metrics.json",
+      "mismatches_from_frozen_A": []
+    }
+  },
+  "rows": [
+    {
+      "scenario": "SUNNY",
+      "input_key": "canonical_ablation_input_sha256",
+      "frozen_A_sha256": "b796a945c281894ae8b03391427e9d6efb3933854641eac17a50427d83684318",
+      "fresh_confirmation_sha256": "b796a945c281894ae8b03391427e9d6efb3933854641eac17a50427d83684318",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "SUNNY",
+      "input_key": "charger_ids_sha256",
+      "frozen_A_sha256": "175fa023ed7b37ab0e57e73b45986ba962492e01bdafda1dcfdb71adee13d777",
+      "fresh_confirmation_sha256": "175fa023ed7b37ab0e57e73b45986ba962492e01bdafda1dcfdb71adee13d777",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "SUNNY",
+      "input_key": "charger_input_sha256",
+      "frozen_A_sha256": "5d19e5b5a327577f98758d0a0cf848301108c014e6abd9e4ba696afa5846e4b6",
+      "fresh_confirmation_sha256": "5d19e5b5a327577f98758d0a0cf848301108c014e6abd9e4ba696afa5846e4b6",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "SUNNY",
+      "input_key": "depot_input_sha256",
+      "frozen_A_sha256": "741b5f5d08a80c78a03ce6fe15cf3a6a69318385cff95a45852fb31125b38421",
+      "fresh_confirmation_sha256": "741b5f5d08a80c78a03ce6fe15cf3a6a69318385cff95a45852fb31125b38421",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "SUNNY",
+      "input_key": "energy_asset_control_input_sha256",
+      "frozen_A_sha256": "037c2bf93cf94f702b6b6612e437efe8ce6c80c94f71af4fdb916458b064dba0",
+      "fresh_confirmation_sha256": "037c2bf93cf94f702b6b6612e437efe8ce6c80c94f71af4fdb916458b064dba0",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "SUNNY",
+      "input_key": "objective_weights_sha256",
+      "frozen_A_sha256": "1023574d08bc7f01b359645153092cb53cdb01de93cd66e6047c2e17bce3ae56",
+      "fresh_confirmation_sha256": "1023574d08bc7f01b359645153092cb53cdb01de93cd66e6047c2e17bce3ae56",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "SUNNY",
+      "input_key": "prepared_input_sha256",
+      "frozen_A_sha256": "99e49dd72e73d6e2e8c546d71573d3b00a7f00d23ab748da7171e1dd4b6bf05d",
+      "fresh_confirmation_sha256": "99e49dd72e73d6e2e8c546d71573d3b00a7f00d23ab748da7171e1dd4b6bf05d",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "SUNNY",
+      "input_key": "prepared_source_sha256",
+      "frozen_A_sha256": "99e49dd72e73d6e2e8c546d71573d3b00a7f00d23ab748da7171e1dd4b6bf05d",
+      "fresh_confirmation_sha256": "99e49dd72e73d6e2e8c546d71573d3b00a7f00d23ab748da7171e1dd4b6bf05d",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "SUNNY",
+      "input_key": "price_input_sha256",
+      "frozen_A_sha256": "6997be4769dd747c5b58df8d777d53adbad96ff36ff1a662420111ed4c4e6f40",
+      "fresh_confirmation_sha256": "6997be4769dd747c5b58df8d777d53adbad96ff36ff1a662420111ed4c4e6f40",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "SUNNY",
+      "input_key": "price_value_set_sha256",
+      "frozen_A_sha256": "537cd9bdd87e4ad129efcec4caca5b182498e224818c567f20241871c41a7e96",
+      "fresh_confirmation_sha256": "537cd9bdd87e4ad129efcec4caca5b182498e224818c567f20241871c41a7e96",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "SUNNY",
+      "input_key": "pv_profile_sha256",
+      "frozen_A_sha256": "65213bba051354c6dc2e5a2c27b47b8d0a7a32ba85cfcce857f9e359f98ab652",
+      "fresh_confirmation_sha256": "65213bba051354c6dc2e5a2c27b47b8d0a7a32ba85cfcce857f9e359f98ab652",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "SUNNY",
+      "input_key": "trip_ids_sha256",
+      "frozen_A_sha256": "fe51fbcd526a4f2b8704e2325ad134b18dffd9233fb01adf2dfa508008850bab",
+      "fresh_confirmation_sha256": "fe51fbcd526a4f2b8704e2325ad134b18dffd9233fb01adf2dfa508008850bab",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "SUNNY",
+      "input_key": "trip_input_sha256",
+      "frozen_A_sha256": "e5cb47b5e554095a783595f1b8bf5c820fdbc8368f47458d7c881aecb8e5e779",
+      "fresh_confirmation_sha256": "e5cb47b5e554095a783595f1b8bf5c820fdbc8368f47458d7c881aecb8e5e779",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "SUNNY",
+      "input_key": "trip_structure_input_sha256",
+      "frozen_A_sha256": "4a753692705a9ba982198a00c33940d489680a8c343df24bde19625418f02041",
+      "fresh_confirmation_sha256": "4a753692705a9ba982198a00c33940d489680a8c343df24bde19625418f02041",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "SUNNY",
+      "input_key": "vehicle_ids_sha256",
+      "frozen_A_sha256": "745cd98a9433b3e556b81c689ae13ae2ab1cff1e4da7797363b17a824c2a20c0",
+      "fresh_confirmation_sha256": "745cd98a9433b3e556b81c689ae13ae2ab1cff1e4da7797363b17a824c2a20c0",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "SUNNY",
+      "input_key": "vehicle_input_sha256",
+      "frozen_A_sha256": "42f03f2bbebb16508b8763d98a47523146c6192a669f5f6cedebcf06833ea34e",
+      "fresh_confirmation_sha256": "42f03f2bbebb16508b8763d98a47523146c6192a669f5f6cedebcf06833ea34e",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "SUNNY",
+      "input_key": "vehicle_type_input_sha256",
+      "frozen_A_sha256": "c9480714062c1f022a386769f62f8ebe5f0bfd3328cdc990c539c18a976866a6",
+      "fresh_confirmation_sha256": "c9480714062c1f022a386769f62f8ebe5f0bfd3328cdc990c539c18a976866a6",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "RAIN",
+      "input_key": "canonical_ablation_input_sha256",
+      "frozen_A_sha256": "23e62062332eac4347330f333fbc02c947d848c79e0ad6a39e14944cdad3276a",
+      "fresh_confirmation_sha256": "23e62062332eac4347330f333fbc02c947d848c79e0ad6a39e14944cdad3276a",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "RAIN",
+      "input_key": "charger_ids_sha256",
+      "frozen_A_sha256": "175fa023ed7b37ab0e57e73b45986ba962492e01bdafda1dcfdb71adee13d777",
+      "fresh_confirmation_sha256": "175fa023ed7b37ab0e57e73b45986ba962492e01bdafda1dcfdb71adee13d777",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "RAIN",
+      "input_key": "charger_input_sha256",
+      "frozen_A_sha256": "5d19e5b5a327577f98758d0a0cf848301108c014e6abd9e4ba696afa5846e4b6",
+      "fresh_confirmation_sha256": "5d19e5b5a327577f98758d0a0cf848301108c014e6abd9e4ba696afa5846e4b6",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "RAIN",
+      "input_key": "depot_input_sha256",
+      "frozen_A_sha256": "741b5f5d08a80c78a03ce6fe15cf3a6a69318385cff95a45852fb31125b38421",
+      "fresh_confirmation_sha256": "741b5f5d08a80c78a03ce6fe15cf3a6a69318385cff95a45852fb31125b38421",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "RAIN",
+      "input_key": "energy_asset_control_input_sha256",
+      "frozen_A_sha256": "037c2bf93cf94f702b6b6612e437efe8ce6c80c94f71af4fdb916458b064dba0",
+      "fresh_confirmation_sha256": "037c2bf93cf94f702b6b6612e437efe8ce6c80c94f71af4fdb916458b064dba0",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "RAIN",
+      "input_key": "objective_weights_sha256",
+      "frozen_A_sha256": "1023574d08bc7f01b359645153092cb53cdb01de93cd66e6047c2e17bce3ae56",
+      "fresh_confirmation_sha256": "1023574d08bc7f01b359645153092cb53cdb01de93cd66e6047c2e17bce3ae56",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "RAIN",
+      "input_key": "prepared_input_sha256",
+      "frozen_A_sha256": "8220f7208b7add87beeb3a30c5d8f727480423427fff5e2f5eca1ed4a8e0ed3f",
+      "fresh_confirmation_sha256": "8220f7208b7add87beeb3a30c5d8f727480423427fff5e2f5eca1ed4a8e0ed3f",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "RAIN",
+      "input_key": "prepared_source_sha256",
+      "frozen_A_sha256": "8220f7208b7add87beeb3a30c5d8f727480423427fff5e2f5eca1ed4a8e0ed3f",
+      "fresh_confirmation_sha256": "8220f7208b7add87beeb3a30c5d8f727480423427fff5e2f5eca1ed4a8e0ed3f",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "RAIN",
+      "input_key": "price_input_sha256",
+      "frozen_A_sha256": "6997be4769dd747c5b58df8d777d53adbad96ff36ff1a662420111ed4c4e6f40",
+      "fresh_confirmation_sha256": "6997be4769dd747c5b58df8d777d53adbad96ff36ff1a662420111ed4c4e6f40",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "RAIN",
+      "input_key": "price_value_set_sha256",
+      "frozen_A_sha256": "537cd9bdd87e4ad129efcec4caca5b182498e224818c567f20241871c41a7e96",
+      "fresh_confirmation_sha256": "537cd9bdd87e4ad129efcec4caca5b182498e224818c567f20241871c41a7e96",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "RAIN",
+      "input_key": "pv_profile_sha256",
+      "frozen_A_sha256": "0d07117ea15c8f6010ea6fd30c96c1c1ed175a857bec59ef0f8ebee1a2cb6c40",
+      "fresh_confirmation_sha256": "0d07117ea15c8f6010ea6fd30c96c1c1ed175a857bec59ef0f8ebee1a2cb6c40",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "RAIN",
+      "input_key": "trip_ids_sha256",
+      "frozen_A_sha256": "fe51fbcd526a4f2b8704e2325ad134b18dffd9233fb01adf2dfa508008850bab",
+      "fresh_confirmation_sha256": "fe51fbcd526a4f2b8704e2325ad134b18dffd9233fb01adf2dfa508008850bab",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "RAIN",
+      "input_key": "trip_input_sha256",
+      "frozen_A_sha256": "e5cb47b5e554095a783595f1b8bf5c820fdbc8368f47458d7c881aecb8e5e779",
+      "fresh_confirmation_sha256": "e5cb47b5e554095a783595f1b8bf5c820fdbc8368f47458d7c881aecb8e5e779",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "RAIN",
+      "input_key": "trip_structure_input_sha256",
+      "frozen_A_sha256": "4a753692705a9ba982198a00c33940d489680a8c343df24bde19625418f02041",
+      "fresh_confirmation_sha256": "4a753692705a9ba982198a00c33940d489680a8c343df24bde19625418f02041",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "RAIN",
+      "input_key": "vehicle_ids_sha256",
+      "frozen_A_sha256": "745cd98a9433b3e556b81c689ae13ae2ab1cff1e4da7797363b17a824c2a20c0",
+      "fresh_confirmation_sha256": "745cd98a9433b3e556b81c689ae13ae2ab1cff1e4da7797363b17a824c2a20c0",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "RAIN",
+      "input_key": "vehicle_input_sha256",
+      "frozen_A_sha256": "42f03f2bbebb16508b8763d98a47523146c6192a669f5f6cedebcf06833ea34e",
+      "fresh_confirmation_sha256": "42f03f2bbebb16508b8763d98a47523146c6192a669f5f6cedebcf06833ea34e",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "RAIN",
+      "input_key": "vehicle_type_input_sha256",
+      "frozen_A_sha256": "c9480714062c1f022a386769f62f8ebe5f0bfd3328cdc990c539c18a976866a6",
+      "fresh_confirmation_sha256": "c9480714062c1f022a386769f62f8ebe5f0bfd3328cdc990c539c18a976866a6",
+      "matches_frozen_A": true
+    }
+  ]
+}

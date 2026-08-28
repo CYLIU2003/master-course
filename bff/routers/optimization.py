@@ -13959,6 +13959,11 @@ def run_optimization(
 ) -> Dict[str, Any]:
     _require_scenario(scenario_id)
     request = body or RunOptimizationBody()
+    # Preserve the client request before applying the server-authoritative
+    # formal candidate-coverage policy. All validation below must inspect the
+    # effective request so enabling the frontier cannot revive invalid bounds.
+    requested_frontend_payload = request.model_dump()
+    request = _apply_research_phase3_candidate_coverage_policy(request)
     _require_research_git_preflight_before_job_creation(
         research_run=bool(request.research_run)
     )
@@ -14062,11 +14067,6 @@ def run_optimization(
             ),
         ) from exc
     rolling_required = frontend_rolling_is_required(run_profile)
-    # Preserve the parsed request before applying server-authoritative rolling
-    # controls.  Provenance must distinguish what the client requested from
-    # what the BFF actually executed.
-    requested_frontend_payload = request.model_dump()
-    request = _apply_research_phase3_candidate_coverage_policy(request)
     effective_run_hourly_rolling = bool(rolling_required)
     effective_rolling_execution_minutes = 60
     timestep_min = _request_timestep_min(request.timestep_min, request.time_step_min)
