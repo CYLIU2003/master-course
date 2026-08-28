@@ -20,9 +20,12 @@ comparison, request/Fresh-Prepare manifests, and the full hash inventory
 reviewable without rerunning Gurobi. These records do not make the 264-trip
 Phase-3 result an integrated global total-cost optimum.
 
-The research release is **BLOCKED** until the repository CI is green and the
-thesis claim scope is made consistent with the certified gaps. Independent
-review and a later fresh clean-commit formal run remain repository-level
+Python 3.11 CI is green at validated code/evidence SHA `b612081` (94 focused
+tests; full `1596 passed, 17 skipped`; compile and whitespace checks passed).
+The research
+release remains **BLOCKED** on the external items and claim/certificate scope
+listed below. Independent human/Claude review and a later fresh clean-commit
+formal run remain repository-level
 requirements before `LGTM` or `READY`; this evidence-only audit does not
 authorize that run. Evidence
 accessibility is a release gate and is addressed for the review-sized subset

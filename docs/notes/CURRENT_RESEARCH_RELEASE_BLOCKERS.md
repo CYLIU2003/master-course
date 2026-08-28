@@ -32,9 +32,12 @@ Its numerical execution SHA is `453b1d340311de109645d006b9ec5a0de2788c2e`;
 `abf149d3dbc3909e40361ada3c9a8542c1cf1dd5` is the documentation HEAD that
 recorded the completed result. The two identities must not be conflated.
 
-The release gates are now:
+Release-gate status is now:
 
-1. Python 3.11 GitHub Actions must collect and pass the full test suite.
+1. **Satisfied for this branch:** Python 3.11 GitHub Actions run
+   `33192993121` collected and passed 94 focused tests plus the full
+   `1596 passed, 17 skipped` suite at `b612081`; compile and whitespace checks
+   also passed.
 2. Cited evidence must be available to reviewers. The main review subset and
    full 103-file hash inventory are now in Git; durable publication of the
    complete raw 20-run bundle remains open.
@@ -42,7 +45,9 @@ The release gates are now:
    certified gap and RAIN at 1.6563581%. Neither is a 1%-optimal integrated
    global result. Whether 1% is an absolute submission requirement must be
    decided explicitly with the advisor.
-4. The project-required independent review must resolve all P0/P1 findings.
+4. **Automated P0/P1 pass; human review still open:** Codex re-review of
+   `b612081` reported no major issues. The project-required human/Claude review
+   remains external to this task.
 5. Before `LGTM`, `READY`, or a model-complete claim, the repository contract
    still requires a fresh clean-commit formal run. This is separate from the
    completed aggregation A/B and is not authorization to start a solver run in

@@ -32,6 +32,32 @@
   The updated manifests and hash inventory
   are published beside the frozen Case-A evidence under
   `docs/evidence/weather_dispatch_case_a_3ec8714/`.
+- Final validation at code/evidence HEAD `b612081`:
+
+  ```powershell
+  .\.venv\Scripts\python.exe -m compileall -q src bff scripts tools tests
+  .\.venv\Scripts\python.exe -m pytest -q `
+    tests/test_weather_dispatch_diagnosis.py `
+    tests/test_published_weather_dispatch_case_a_evidence.py `
+    tests/test_published_pure_ice_weather_evidence.py `
+    -p no:cacheprovider
+  # 27 passed
+
+  .\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider
+  # 1613 passed in 101.21s
+
+  git diff --check
+  ```
+
+  Python 3.11 GitHub Actions run `33192993121` passed the 94 focused
+  research-contract tests and the full `1596 passed, 17 skipped` suite;
+  compile and whitespace checks also passed. Automated Codex re-review of
+  `b612081` reported no major issues after all P1 findings were fixed.
+- No solver, Prepare, fixed-dispatch recourse, sensitivity, or Phase-4 job was
+  run in this CI/evidence stabilization task. Remaining external items are a
+  durable archive for the complete raw bundle, the advisor's explicit 1%
+  submission-threshold decision, human/Claude review, and the separate fresh
+  clean-commit formal run required before `LGTM`/`READY`.
 
 ## 2026-08-29 (Asia/Tokyo): Python 3.11 CI compatibility and Git-tracked A/B evidence
 

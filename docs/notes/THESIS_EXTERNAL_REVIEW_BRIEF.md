@@ -7,9 +7,12 @@ actual strength. The project must not turn a feasible 264-trip candidate, a
 bounded small-instance oracle, or a diagnostic root-LP observation into an
 unjustified global-optimality, speedup, economic-response, or deployment claim.
 
-The release remains `BLOCKED` until CI is green, cited evidence is accessible,
-and the thesis claim scope is consistent with the certified 264-trip gaps.
-Independent review remains required by the project process, but absence of an
+Python 3.11 CI is green at validated code/evidence SHA `b612081` (94 focused
+tests; full `1596 passed, 17 skipped`; compile and whitespace checks passed),
+and the
+review-sized cited evidence is Git-tracked. The release remains `BLOCKED` on
+the remaining claim/certificate and external gates. Independent human/Claude
+review remains required by the project process, but absence of an
 aggregation speedup is not itself a thesis-wide release blocker. This file is
 a review request, not a reviewer approval. A fresh clean-commit formal run also
 remains required before `LGTM` or `READY`, but is outside this review-only task.
