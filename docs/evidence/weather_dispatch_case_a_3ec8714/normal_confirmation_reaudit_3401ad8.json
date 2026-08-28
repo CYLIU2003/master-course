@@ -3,7 +3,7 @@
   "status": "PASS_NORMAL_PATH_CONFIRMATION",
   "execution_git_sha": "ba5ac4abac490caccca006260670dfbc2c411fa9",
   "execution_git_dirty": false,
-  "finalization_git_sha": "4be54bd657e1a0e556249fd1b016cbf8285b23df",
+  "finalization_git_sha": "3401ad8ece31b4459bd8ecf3e1d4e95212b0f630",
   "finalization_git_dirty": false,
   "public_endpoint": "/api/scenarios/{scenario_id}/run-optimization",
   "fixed_request_controls_equal": true,
@@ -17,6 +17,7 @@
     "stage2_time_limit_seconds",
     "stage1_best_obj_stop_enabled",
     "stage1_powertrain_selector_strengthening",
+    "require_all_available_bevs",
     "stage1_stage2_candidate_limit",
     "stage1_composition_search_radius",
     "gurobi_threads",
@@ -109,6 +110,7 @@
     "worst_trip_scoring"
   ],
   "effective_solver_control_differences": [],
+  "bev_utilization_policies_equal": true,
   "internal_timestep_15_minutes": true,
   "rolling_execution_minutes": 60,
   "requested_candidate_limit": 1,
@@ -138,6 +140,7 @@
         "frozen_runtime_controls_preserved": true,
         "frozen_solver_limits_preserved": true,
         "effective_frontier_controls_preserved": true,
+        "bev_utilization_policy_preserved": true,
         "executed_day_accounting_is_authoritative": true,
         "stage1_weather_recourse_used_in_objective": true
       },
@@ -149,6 +152,8 @@
       "final_cost_source": "rolling_hourly_chain/executed_day_accounting.json:cost_breakdown.total_cost",
       "candidate_count_evaluated": 22,
       "prepared_input_id": "prepared-1f1b85053b8c9ea1-453c50ff177c277b-8acc7b3a",
+      "service_date": "2025-08-05",
+      "calendar_policy": "service_date_matches_timetable",
       "prepared_input_sha256": "99e49dd72e73d6e2e8c546d71573d3b00a7f00d23ab748da7171e1dd4b6bf05d",
       "trip_input_hash": "ddaee2c36b7484ec9cb98c3966fb8faa91cee157b452c2d9f0b4f7765ff60039",
       "vehicle_input_hash": "42f03f2bbebb16508b8763d98a47523146c6192a669f5f6cedebcf06833ea34e",
@@ -168,6 +173,51 @@
         },
         "override_applied": false,
         "reason": "Research batch runs preserve the frozen requested controls; the caller and post-run artifact gate are authoritative."
+      },
+      "interactive_bev_utilization_policy": {
+        "policy": "require_all_available_bevs_at_least_one_trip",
+        "enabled": false,
+        "available_bev_count": 35,
+        "available_bev_ids": [
+          "0549a411-fd2a-4339-b4a3-45a3b7d37898",
+          "0c9b7317-11ce-4340-ad98-a702eaacaaa4",
+          "1804ab20-a2a0-475c-b4d0-71d8a72c192f",
+          "2e2015fd-c7c1-4c32-8498-ebb6be29cc4c",
+          "35f95479-c68e-40bc-b31a-1f0a5490227c",
+          "3acd650a-ca8c-4114-9922-f514a915f460",
+          "3e38e74f-191a-4b72-8061-59f0020151e3",
+          "4159394a-daba-42d9-aa73-3474613ab9f1",
+          "4f5a4c1d-cac3-4fd2-87a8-cf0049c71ebe",
+          "58bf7ff7-1083-4fbf-84b3-58d45c129f30",
+          "66629acd-98e0-4911-bc68-cd1c9b434a49",
+          "8270c9a2-ed1f-4508-81a0-0903ddc4924c",
+          "89d3f73a-7cd0-421c-8e62-45a073264f6c",
+          "a645e188-64a8-4244-9882-49f00eeb8a62",
+          "befc4670-e889-45d9-bd65-23118c02e196",
+          "bf789db6-3414-4525-9104-06a4b1161271",
+          "builder-bev-tsurumaki-001",
+          "builder-bev-tsurumaki-002",
+          "builder-bev-tsurumaki-003",
+          "builder-bev-tsurumaki-004",
+          "builder-bev-tsurumaki-005",
+          "builder-bev-tsurumaki-006",
+          "builder-bev-tsurumaki-007",
+          "builder-bev-tsurumaki-008",
+          "builder-bev-tsurumaki-009",
+          "builder-bev-tsurumaki-010",
+          "ca16a2ca-147b-4359-92db-913031d5faff",
+          "ce309a0b-8c0b-49dc-a839-171db28e76a4",
+          "cf7b771e-a6ac-4e0b-9738-ad3901a68307",
+          "d10aa797-db07-40a2-b52b-d4caf02ff33b",
+          "d225af48-8eec-47b7-abb1-34cfe83e31f0",
+          "dcf6407f-77ac-4c32-a840-49fcc7f9a525",
+          "e0772317-52e2-4e70-bfc8-1eb486f0f75c",
+          "e56620e3-804c-41a3-9441-b054b74c1392",
+          "ff03ad3a-409a-43ef-9c63-384bacb5f9d2"
+        ],
+        "minimum_used_bev_count": 0,
+        "mathematical_effect": "no additional minimum-BEV-use constraint",
+        "claim_scope": "baseline optimization policy"
       },
       "effective_solver_controls": {
         "mode": "milp",
@@ -314,6 +364,7 @@
         "frozen_runtime_controls_preserved": true,
         "frozen_solver_limits_preserved": true,
         "effective_frontier_controls_preserved": true,
+        "bev_utilization_policy_preserved": true,
         "executed_day_accounting_is_authoritative": true,
         "stage1_weather_recourse_used_in_objective": true
       },
@@ -325,6 +376,8 @@
       "final_cost_source": "rolling_hourly_chain/executed_day_accounting.json:cost_breakdown.total_cost",
       "candidate_count_evaluated": 22,
       "prepared_input_id": "prepared-a6c5e0a8cdd9b32b-f1e18f252e336f1f-8acc7b3a",
+      "service_date": "2025-08-05",
+      "calendar_policy": "service_date_matches_timetable",
       "prepared_input_sha256": "8220f7208b7add87beeb3a30c5d8f727480423427fff5e2f5eca1ed4a8e0ed3f",
       "trip_input_hash": "ddaee2c36b7484ec9cb98c3966fb8faa91cee157b452c2d9f0b4f7765ff60039",
       "vehicle_input_hash": "42f03f2bbebb16508b8763d98a47523146c6192a669f5f6cedebcf06833ea34e",
@@ -344,6 +397,51 @@
         },
         "override_applied": false,
         "reason": "Research batch runs preserve the frozen requested controls; the caller and post-run artifact gate are authoritative."
+      },
+      "interactive_bev_utilization_policy": {
+        "policy": "require_all_available_bevs_at_least_one_trip",
+        "enabled": false,
+        "available_bev_count": 35,
+        "available_bev_ids": [
+          "0549a411-fd2a-4339-b4a3-45a3b7d37898",
+          "0c9b7317-11ce-4340-ad98-a702eaacaaa4",
+          "1804ab20-a2a0-475c-b4d0-71d8a72c192f",
+          "2e2015fd-c7c1-4c32-8498-ebb6be29cc4c",
+          "35f95479-c68e-40bc-b31a-1f0a5490227c",
+          "3acd650a-ca8c-4114-9922-f514a915f460",
+          "3e38e74f-191a-4b72-8061-59f0020151e3",
+          "4159394a-daba-42d9-aa73-3474613ab9f1",
+          "4f5a4c1d-cac3-4fd2-87a8-cf0049c71ebe",
+          "58bf7ff7-1083-4fbf-84b3-58d45c129f30",
+          "66629acd-98e0-4911-bc68-cd1c9b434a49",
+          "8270c9a2-ed1f-4508-81a0-0903ddc4924c",
+          "89d3f73a-7cd0-421c-8e62-45a073264f6c",
+          "a645e188-64a8-4244-9882-49f00eeb8a62",
+          "befc4670-e889-45d9-bd65-23118c02e196",
+          "bf789db6-3414-4525-9104-06a4b1161271",
+          "builder-bev-tsurumaki-001",
+          "builder-bev-tsurumaki-002",
+          "builder-bev-tsurumaki-003",
+          "builder-bev-tsurumaki-004",
+          "builder-bev-tsurumaki-005",
+          "builder-bev-tsurumaki-006",
+          "builder-bev-tsurumaki-007",
+          "builder-bev-tsurumaki-008",
+          "builder-bev-tsurumaki-009",
+          "builder-bev-tsurumaki-010",
+          "ca16a2ca-147b-4359-92db-913031d5faff",
+          "ce309a0b-8c0b-49dc-a839-171db28e76a4",
+          "cf7b771e-a6ac-4e0b-9738-ad3901a68307",
+          "d10aa797-db07-40a2-b52b-d4caf02ff33b",
+          "d225af48-8eec-47b7-abb1-34cfe83e31f0",
+          "dcf6407f-77ac-4c32-a840-49fcc7f9a525",
+          "e0772317-52e2-4e70-bfc8-1eb486f0f75c",
+          "e56620e3-804c-41a3-9441-b054b74c1392",
+          "ff03ad3a-409a-43ef-9c63-384bacb5f9d2"
+        ],
+        "minimum_used_bev_count": 0,
+        "mathematical_effect": "no additional minimum-BEV-use constraint",
+        "claim_scope": "baseline optimization policy"
       },
       "effective_solver_controls": {
         "mode": "milp",
@@ -495,34 +593,34 @@
   ],
   "case_a_candidate_selection_audit": {
     "status": "FIXED",
-    "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_4be54bd_20260829\\case_a_candidate_selection_audit.json"
+    "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_3401ad8_20260829\\case_a_candidate_selection_audit.json"
   },
   "full_input_contract": {
     "status": "PASS_FULL_INPUT_CONTRACT",
-    "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_4be54bd_20260829\\normal_confirmation_input_contract.json"
+    "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_3401ad8_20260829\\normal_confirmation_input_contract.json"
   },
   "finalization_input_artifacts": {
     "artifact_count": 31,
-    "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_4be54bd_20260829\\normal_path_confirmation_fixed_controls_ba5ac4a\\finalization_input_artifacts.json",
-    "sha256": "d0bc0ff80891b74a5c22ea944868d09d81d8b3e7bb5ed8e06eb392cdb12b2097",
+    "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_3401ad8_20260829\\normal_path_confirmation_fixed_controls_ba5ac4a\\finalization_input_artifacts.json",
+    "sha256": "f0e9c6a68dff127fd483d72f156fa419c3129fca0afd74e0e01c7542a4fb64fb",
     "artifacts": {
       "diagnosis/candidate_discovery_manifest.json": {
-        "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_4be54bd_20260829\\candidate_discovery_manifest.json",
+        "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_3401ad8_20260829\\candidate_discovery_manifest.json",
         "size_bytes": 47839,
         "sha256": "0d8a6c7df045009dd32218e690203411901af42dd4627ab5e526e98a4f0c49f4"
       },
       "diagnosis/weather_candidate_union.json": {
-        "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_4be54bd_20260829\\weather_candidate_union.json",
+        "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_3401ad8_20260829\\weather_candidate_union.json",
         "size_bytes": 2105448,
         "sha256": "3dbf00732342f66140b95df4e9b93cfb15b462896ebc9589a1807e980e05bfdf"
       },
       "diagnosis/cross_weather_fixed_dispatch_matrix.json": {
-        "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_4be54bd_20260829\\cross_weather_fixed_dispatch_matrix.json",
+        "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_3401ad8_20260829\\cross_weather_fixed_dispatch_matrix.json",
         "size_bytes": 83540,
         "sha256": "4c0c73663b08429aa2f48ed93d4a57b8538588e82228a7b90456e27ce6b1e51c"
       },
       "confirmation_request/SUNNY": {
-        "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_4be54bd_20260829\\normal_path_confirmation_fixed_controls_ba5ac4a\\fresh_prepare\\preparation\\SUNNY\\frontend_optimization_request.json",
+        "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_3401ad8_20260829\\normal_path_confirmation_fixed_controls_ba5ac4a\\fresh_prepare\\preparation\\SUNNY\\frontend_optimization_request.json",
         "size_bytes": 916,
         "sha256": "9c39d1e1d58f423e59aeb9bc152933c9e7d7d97b788601b0a9d9539dd579125b"
       },
@@ -592,7 +690,7 @@
         "sha256": "a56456cc486073bce6517d5ba3a8823d525052a46127674436276cdec254a8ee"
       },
       "confirmation_request/RAIN": {
-        "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_4be54bd_20260829\\normal_path_confirmation_fixed_controls_ba5ac4a\\fresh_prepare\\preparation\\RAIN\\frontend_optimization_request.json",
+        "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_3401ad8_20260829\\normal_path_confirmation_fixed_controls_ba5ac4a\\fresh_prepare\\preparation\\RAIN\\frontend_optimization_request.json",
         "size_bytes": 916,
         "sha256": "826c2ba9573b8cc7809f7ffd5511b6963879a0f03385b6a629d9fe449609f3c9"
       },

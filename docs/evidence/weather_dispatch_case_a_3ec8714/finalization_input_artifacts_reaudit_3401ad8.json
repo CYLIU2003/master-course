@@ -3,22 +3,22 @@
   "artifact_count": 31,
   "artifacts": {
     "diagnosis/candidate_discovery_manifest.json": {
-      "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_4be54bd_20260829\\candidate_discovery_manifest.json",
+      "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_3401ad8_20260829\\candidate_discovery_manifest.json",
       "size_bytes": 47839,
       "sha256": "0d8a6c7df045009dd32218e690203411901af42dd4627ab5e526e98a4f0c49f4"
     },
     "diagnosis/weather_candidate_union.json": {
-      "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_4be54bd_20260829\\weather_candidate_union.json",
+      "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_3401ad8_20260829\\weather_candidate_union.json",
       "size_bytes": 2105448,
       "sha256": "3dbf00732342f66140b95df4e9b93cfb15b462896ebc9589a1807e980e05bfdf"
     },
     "diagnosis/cross_weather_fixed_dispatch_matrix.json": {
-      "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_4be54bd_20260829\\cross_weather_fixed_dispatch_matrix.json",
+      "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_3401ad8_20260829\\cross_weather_fixed_dispatch_matrix.json",
       "size_bytes": 83540,
       "sha256": "4c0c73663b08429aa2f48ed93d4a57b8538588e82228a7b90456e27ce6b1e51c"
     },
     "confirmation_request/SUNNY": {
-      "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_4be54bd_20260829\\normal_path_confirmation_fixed_controls_ba5ac4a\\fresh_prepare\\preparation\\SUNNY\\frontend_optimization_request.json",
+      "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_3401ad8_20260829\\normal_path_confirmation_fixed_controls_ba5ac4a\\fresh_prepare\\preparation\\SUNNY\\frontend_optimization_request.json",
       "size_bytes": 916,
       "sha256": "9c39d1e1d58f423e59aeb9bc152933c9e7d7d97b788601b0a9d9539dd579125b"
     },
@@ -88,7 +88,7 @@
       "sha256": "a56456cc486073bce6517d5ba3a8823d525052a46127674436276cdec254a8ee"
     },
     "confirmation_request/RAIN": {
-      "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_4be54bd_20260829\\normal_path_confirmation_fixed_controls_ba5ac4a\\fresh_prepare\\preparation\\RAIN\\frontend_optimization_request.json",
+      "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_3401ad8_20260829\\normal_path_confirmation_fixed_controls_ba5ac4a\\fresh_prepare\\preparation\\RAIN\\frontend_optimization_request.json",
       "size_bytes": 916,
       "sha256": "826c2ba9573b8cc7809f7ffd5511b6963879a0f03385b6a629d9fe449609f3c9"
     },

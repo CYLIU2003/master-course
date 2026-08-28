@@ -1,6 +1,6 @@
 # SUNNY/RAIN Phase-3 weather-dispatch diagnosis
 
-> Re-audited at clean SHA `4be54bd`. The original `3ec8714` report is retained
+> Re-audited at clean SHA `3401ad8`. The original `3ec8714` report is retained
 > byte-for-byte as `weather_dispatch_diagnosis_report_frozen_3ec8714.md`.
 > Costs below now separate the day-ahead candidate from the authoritative
 > accepted Rolling-day accounting total.
@@ -37,7 +37,7 @@ Both physical assignment hashes exactly match the winners declared by
 the internal timestep is 15 minutes, Rolling execution is 60 minutes, and both
 runs used the same trip, vehicle, charger, depot, BESS-control, tariff,
 objective, fleet-contract, and solver-control hashes.  The complete comparison
-is in `normal_confirmation_input_contract_reaudit_4be54bd.json`; only scenario-specific
+is in `normal_confirmation_input_contract_reaudit_3401ad8.json`; only scenario-specific
 prepared snapshots, PV, and the canonical hash derived from PV differ.
 
 ## Case-A six-check audit
@@ -45,7 +45,7 @@ prepared snapshots, PV, and the canonical hash derived from PV differ.
 The union contains all ten frozen A incumbents plus 44 expanded source
 candidates: 54 source rows deduplicate to 22 physical assignments.  Every
 candidate was evaluated under both scenarios.
-`case_a_candidate_selection_audit_reaudit_4be54bd.json`
+`case_a_candidate_selection_audit_reaudit_3401ad8.json`
 records the following for both SUNNY and RAIN:
 
 1. weather PV/BESS/tariff inputs enter Stage 1;

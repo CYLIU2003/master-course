@@ -12,7 +12,7 @@ publication.
 - Expanded discrete candidate discovery: SHA `4c92867b`
 - Public normal-path SUNNY/RAIN confirmation: SHA `ba5ac4a`
 - Final cross-weather audit/documentation: SHA `3ec8714`
-- Read-only confirmation re-audit: SHA `4be54bd`
+- Read-only confirmation re-audit: SHA `3401ad8`
 - Source `artifact_hashes.json` SHA-256:
   `68244b2c57f8f2055c1751f91e2d946a08b1a876830ccc6fd321eb3894c96981`
 
@@ -30,22 +30,22 @@ PV profile sourced from 2025-08-10; it is not an observed Sunday-service case.
 - `normal_confirmation_input_contract.*` compares the public-path input hashes
   with the frozen discrete-A baselines.
 - `artifact_hashes.json` is the full 73-file source-bundle index.
-- `normal_confirmation_reaudit_4be54bd.json` re-finalizes the two existing
+- `normal_confirmation_reaudit_3401ad8.json` re-finalizes the two existing
   public-path runs under the stricter confirmation gates without running a
   solver. It requires accepted day-ahead research status, every shared
   Rolling acceptance check, all seven effective candidate/frontier controls,
   and the authoritative executed-day accounting cost.
-- `normal_confirmation_input_contract_reaudit_4be54bd.*` fails closed on 23
+- `normal_confirmation_input_contract_reaudit_3401ad8.*` fails closed on 23
   explicitly required hashes on both the frozen-A and confirmation sides;
   it no longer derives the contract from whichever baseline keys happen to
   be present. The fleet-contract hash must match its frozen-A baseline and
   the other weather scenario.
-- `finalization_input_artifacts_reaudit_4be54bd.json` hashes all 31 raw
+- `finalization_input_artifacts_reaudit_3401ad8.json` hashes all 31 raw
   artifacts read from the two public runs, candidate-discovery runs,
   fixed-dispatch diagnosis, request inputs, and frozen-A baselines. The
   finalizer verifies those identities again before publishing.
-- `case_a_candidate_selection_audit_reaudit_4be54bd.*` and
-  `reaudit_source_artifact_hashes_4be54bd.json` preserve the updated Case-A
+- `case_a_candidate_selection_audit_reaudit_3401ad8.*` and
+  `reaudit_source_artifact_hashes_3401ad8.json` preserve the updated Case-A
   audit and the complete re-finalization bundle inventory.
 - `weather_dispatch_diagnosis_report.md` is the reconciled report with separate
   day-ahead and executed-day cost columns. Its original `3ec8714` bytes remain

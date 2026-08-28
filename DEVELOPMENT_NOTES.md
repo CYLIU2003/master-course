@@ -18,12 +18,17 @@
   is 698,296.465284 JPY, but the executed-day Rolling total is
   698,598.628643 JPY; documentation now keeps these evidence levels separate.
 - Re-finalized the existing `ba5ac4a` run directories read-only at clean SHA
-  `4be54bd657e1a0e556249fd1b016cbf8285b23df`. No Prepare, solver, recourse
+  `3401ad8ece31b4459bd8ecf3e1d4e95212b0f630`. No Prepare, solver, recourse
   optimization, or model change was executed. All 14 per-scenario confirmation
   checks pass, the complete effective configurations and fleet-contract hashes
   are equal across SUNNY and RAIN, and the new mandatory input contract has
   zero missing keys and zero within-scenario mismatches. The finalizer hashes
   all 31 raw artifacts it reads and verifies them again before publication.
+  The full `--stage all` workflow now invokes the same strict finalizer after
+  fresh confirmation; it cannot finish with only the weaker per-run gate.
+  The fixed request and persisted policy both require
+  `require_all_available_bevs=false`, and the effective service date must be
+  `2025-08-05` in both weather cases.
   The updated manifests and hash inventory
   are published beside the frozen Case-A evidence under
   `docs/evidence/weather_dispatch_case_a_3ec8714/`.

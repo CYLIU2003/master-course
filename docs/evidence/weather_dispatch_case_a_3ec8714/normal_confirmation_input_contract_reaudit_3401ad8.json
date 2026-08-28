@@ -10,6 +10,14 @@
     "pv_hash",
     "pv_profile_sha256"
   ],
+  "service_date_contract": {
+    "expected": "2025-08-05",
+    "observed": {
+      "SUNNY": "2025-08-05",
+      "RAIN": "2025-08-05"
+    },
+    "matches": true
+  },
   "difference_interpretation": {
     "pv_profile_sha256": "authoritative_weather_linked_PV_input",
     "canonical_ablation_input_sha256": "derived_contract_hash_that_includes_weather_linked_PV",
@@ -23,6 +31,8 @@
       "prepared_input_id": "prepared-1f1b85053b8c9ea1-453c50ff177c277b-8acc7b3a",
       "prepared_source_sha256": "99e49dd72e73d6e2e8c546d71573d3b00a7f00d23ab748da7171e1dd4b6bf05d",
       "fleet_contract_hash": "2179433a2b5b952e9beb756bd971d8056df690ed476728e695a25081599e9f3b",
+      "service_date": "2025-08-05",
+      "calendar_policy": "service_date_matches_timetable",
       "canonical_input_hashes": {
         "trip_count": 264,
         "vehicle_count": 60,
@@ -189,6 +199,8 @@
       "prepared_input_id": "prepared-a6c5e0a8cdd9b32b-f1e18f252e336f1f-8acc7b3a",
       "prepared_source_sha256": "8220f7208b7add87beeb3a30c5d8f727480423427fff5e2f5eca1ed4a8e0ed3f",
       "fleet_contract_hash": "2179433a2b5b952e9beb756bd971d8056df690ed476728e695a25081599e9f3b",
+      "service_date": "2025-08-05",
+      "calendar_policy": "service_date_matches_timetable",
       "canonical_input_hashes": {
         "trip_count": 264,
         "vehicle_count": 60,
