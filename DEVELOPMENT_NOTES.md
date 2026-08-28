@@ -8,6 +8,18 @@
   assertion remains in the tests; this removes Python 3.11's
   `too many statically nested blocks` collection failure without changing
   production or solver code. The CI compile step now includes `tests`.
+- The first Python 3.11 PR run confirmed that compilation and all focused
+  research-contract tests pass, then exposed 53 pre-existing full-suite
+  environment failures hidden behind the former collection error. The
+  workflow had described itself as Gurobi-free while collecting solver tests,
+  did not materialize PV profiles from the tracked Solcast inputs, and let
+  tests silently fall back when the generated, Git-ignored Tokyu route index
+  was absent. CI now installs Gurobi 13.0.1 for its small restricted-runtime
+  tests and deterministically builds the two required PV dates. Tests that
+  genuinely require the untracked materialized Tokyu dataset report an
+  explicit prerequisite skip instead of testing fallback data. A Python
+  3.11-only `1.16e-10` accounting residual is checked against the canonical
+  `1e-6 JPY` tolerance rather than exact floating-point zero.
 - Removed `.claude/worktrees/magical-elgamal` from the Git index instead of
   inventing a `.gitmodules` entry. Removed the machine-local
   `.claude/settings.local.json` from the index and ignored both
@@ -49,14 +61,24 @@
   .\.venv\Scripts\python.exe -m compileall -q src bff scripts tools tests
 
   .\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider
-  # 1604 passed in 106.42s
+  # 1604 passed in 88.23s
+
+  .\.venv\Scripts\python.exe -m pytest -q `
+    tests/test_research_dataset_bootstrap_alignment.py `
+    tests/test_runtime_route_family.py `
+    tests/test_negative_total_cost_semantics.py `
+    tests/test_frontend_weather_pair_execution.py `
+    tests/test_integrated_actual_cost_objective.py `
+    tests/test_trip_energy_proxy_and_location_aliases.py `
+    -p no:cacheprovider
+  # 148 passed in 22.06s
 
   git diff --check
   ```
 
   The local environment is CPython 3.14; Python 3.11 compatibility is verified
-  by the repository's unchanged 3.11 GitHub Actions runtime rather than by
-  raising CI to 3.14.
+  by the repository's 3.11 GitHub Actions runtime rather than by raising CI to
+  3.14.
 
 ## 2026-08-28: Case A repair confirmed through the normal SUNNY/RAIN path
 

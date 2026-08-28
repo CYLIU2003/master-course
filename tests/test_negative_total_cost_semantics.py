@@ -87,7 +87,7 @@ def test_canonical_cost_ledger_preserves_demand_and_grid_co2_cost() -> None:
     assert ledger["components"]["demand_charge_cost_jpy"] == 866.050866
     assert ledger["components"]["co2_cost_jpy"] == 1354.850153
     assert ledger["co2"]["grid_co2_kg"] == 205.687081
-    assert ledger["accounting_residual_jpy"] == 0.0
+    assert abs(ledger["accounting_residual_jpy"]) <= 1.0e-6
     assert ledger["accounting_residual_satisfied"] is True
 
 

@@ -2,12 +2,24 @@ from __future__ import annotations
 
 from unittest import mock
 
+import pytest
+
 from bff.services import master_defaults
 from src.research_dataset_loader import (
     build_dataset_bootstrap,
     _filter_depots_by_route_context,
     _filter_routes_by_route_ids,
     load_dataset_definition,
+)
+from src.tokyu_bus_data import tokyu_bus_data_ready
+
+
+requires_materialized_tokyu_data = pytest.mark.skipif(
+    not tokyu_bus_data_ready("tokyu_full"),
+    reason=(
+        "materialized data/catalog-fast/tokyu_bus_data is a generated, "
+        "Git-ignored integration prerequisite"
+    ),
 )
 
 
@@ -58,6 +70,7 @@ def test_build_dataset_bootstrap_keeps_dataset_depots_visible() -> None:
     assert selected_depot_ids
 
 
+@requires_materialized_tokyu_data
 def test_build_dataset_bootstrap_uses_catalog_fast_route_inventory() -> None:
     payload = build_dataset_bootstrap(
         master_defaults.DEFAULT_DATASET_ID,
@@ -81,6 +94,7 @@ def test_build_dataset_bootstrap_uses_catalog_fast_route_inventory() -> None:
     assert any(route_id not in set(selected_route_ids) for route_id in route_ids)
 
 
+@requires_materialized_tokyu_data
 def test_build_dataset_bootstrap_routes_include_day_type_trip_counts() -> None:
     payload = build_dataset_bootstrap(
         master_defaults.DEFAULT_DATASET_ID,

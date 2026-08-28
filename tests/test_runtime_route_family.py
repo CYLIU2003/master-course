@@ -3,9 +3,20 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from functools import lru_cache
 
+import pytest
+
 from bff.services.runtime_route_family import reclassify_routes_for_runtime
 from src.research_dataset_loader import build_dataset_bootstrap
-from src.tokyu_bus_data import route_trip_counts_by_day_type
+from src.tokyu_bus_data import route_trip_counts_by_day_type, tokyu_bus_data_ready
+
+
+requires_materialized_tokyu_data = pytest.mark.skipif(
+    not tokyu_bus_data_ready("tokyu_full"),
+    reason=(
+        "materialized data/catalog-fast/tokyu_bus_data is a generated, "
+        "Git-ignored integration prerequisite"
+    ),
+)
 
 
 @lru_cache(maxsize=1)
@@ -23,6 +34,7 @@ def _reclassified_routes() -> list[dict]:
     return reclassify_routes_for_runtime([dict(route) for route in payload["routes"]])
 
 
+@requires_materialized_tokyu_data
 def test_runtime_reclassification_fixes_east98_depot_variants() -> None:
     routes = {
         str(route.get("id") or ""): route
@@ -62,6 +74,7 @@ def test_runtime_reclassification_fixes_east98_depot_variants() -> None:
         assert int(route["tripCount"]) == expected_trip_counts[route_id]
 
 
+@requires_materialized_tokyu_data
 def test_runtime_reclassification_splits_generic_service_families_and_removes_unknowns() -> None:
     routes = _reclassified_routes()
     generic_codes = {"高速", "空港", "直行", "急行", "出入庫"}
@@ -91,6 +104,7 @@ def test_runtime_reclassification_splits_generic_service_families_and_removes_un
     assert depot_move_variants == Counter({"depot_in": 4, "depot_out": 3})
 
 
+@requires_materialized_tokyu_data
 def test_bootstrap_route_trip_counts_match_trip_rows_for_all_routes() -> None:
     payload = _bootstrap_payload()
     route_ids = [
@@ -127,6 +141,7 @@ def test_bootstrap_route_trip_counts_match_trip_rows_for_all_routes() -> None:
     assert mismatches == []
 
 
+@requires_materialized_tokyu_data
 def test_runtime_reclassification_applies_official_override_tags() -> None:
     routes = {
         str(route.get("id") or ""): route

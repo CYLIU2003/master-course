@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  validate-without-gurobi:
+  validate-python-311:
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
@@ -25,7 +25,14 @@ jobs:
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt pytest
+          python -m pip install -r requirements.txt pytest gurobipy==13.0.1
+
+      - name: Build deterministic PV test profiles
+        shell: pwsh
+        run: >-
+          python scripts/build_pv_profiles.py
+          --dates 2025-08-05 2025-08-10
+          --overwrite
 
       - name: Compile Python sources
         shell: pwsh
@@ -43,7 +50,7 @@ jobs:
             tests/test_research_phase3_weather_comparison.py `
             -p no:cacheprovider
 
-      - name: Run full suite without licensed Gurobi integration
+      - name: Run full suite with the restricted Gurobi test runtime
         shell: pwsh
         run: python -m pytest -q -p no:cacheprovider
 
