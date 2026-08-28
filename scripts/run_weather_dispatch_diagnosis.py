@@ -91,6 +91,19 @@ REQUIRED_CONFIRMATION_INPUT_HASHES = (
     "pv_profile_sha256",
     "pv_hash",
     "trip_input_sha256",
+    "fleet_contract_hash",
+)
+
+CONFIRMATION_RUN_INPUT_FILES = (
+    "summary.json",
+    "physical_schedule_validation.json",
+    "final_cost_reconciliation.json",
+    "rolling_hourly_chain/rolling_chain_summary.json",
+    "rolling_hourly_chain/executed_day_accounting.json",
+    "stage1_stage2_candidate_evaluation.json",
+    "optimization_parameters.json",
+    "solver_result.json",
+    "canonical_solver_result.json",
 )
 
 FIXED_CONFIRMATION_REQUEST_CONTROL_KEYS = (
@@ -131,6 +144,88 @@ def _read_json(path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError(f"expected JSON object: {path}")
     return payload
+
+
+def _artifact_identity(path: Path) -> dict[str, Any]:
+    """Identify an existing source artifact without rewriting it."""
+
+    resolved = path.resolve()
+    if not resolved.is_file():
+        raise RuntimeError(f"required finalization input is missing: {resolved}")
+    return {
+        "path": str(resolved),
+        "size_bytes": resolved.stat().st_size,
+        "sha256": _sha256_file(resolved),
+    }
+
+
+def _finalization_input_artifacts(
+    *,
+    output_dir: Path,
+    existing_bundle: Path,
+    run_dirs: Mapping[str, Path],
+    confirmation_dir_name: str,
+) -> dict[str, Any]:
+    """Hash every raw JSON artifact consumed by read-only finalization."""
+
+    artifacts: dict[str, dict[str, Any]] = {}
+
+    def add(label: str, path: Path) -> None:
+        if label in artifacts:
+            raise RuntimeError(f"duplicate finalization input label: {label}")
+        artifacts[label] = _artifact_identity(path)
+
+    for name in (
+        "candidate_discovery_manifest.json",
+        "weather_candidate_union.json",
+        "cross_weather_fixed_dispatch_matrix.json",
+    ):
+        add(f"diagnosis/{name}", output_dir / name)
+
+    discovery = _read_json(output_dir / "candidate_discovery_manifest.json")
+    preparation_dir = (
+        output_dir / confirmation_dir_name / "fresh_prepare" / "preparation"
+    )
+    for code in SCENARIOS:
+        add(
+            f"confirmation_request/{code}",
+            preparation_dir / code / "frontend_optimization_request.json",
+        )
+        for relative_path in CONFIRMATION_RUN_INPUT_FILES:
+            add(
+                f"confirmation_run/{code}/{relative_path}",
+                run_dirs[code] / relative_path,
+            )
+
+        discovery_run_dir = Path(
+            str(dict(discovery["scenarios"][code]).get("run_dir") or "")
+        )
+        for name in (
+            "stage1_stage2_candidate_evaluation.json",
+            "solver_result.json",
+            "optimization_parameters.json",
+        ):
+            add(f"candidate_discovery_run/{code}/{name}", discovery_run_dir / name)
+
+        baseline_path = next(
+            iter(
+                sorted(
+                    existing_bundle.glob(
+                        f"scenarios/{code}/runs/*_A_discrete/case_metrics.json"
+                    )
+                )
+            ),
+            None,
+        )
+        if baseline_path is None:
+            raise RuntimeError(f"missing frozen A baseline for {code}")
+        add(f"frozen_A_baseline/{code}/case_metrics.json", baseline_path)
+
+    return {
+        "schema_version": "weather_dispatch_finalization_inputs_v1",
+        "artifact_count": len(artifacts),
+        "artifacts": artifacts,
+    }
 
 
 def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
@@ -1740,6 +1835,27 @@ def build_confirmation_input_contract(
         baseline = _read_json(baseline_path)
         baseline_provenance = dict(baseline.get("provenance") or {})
         baseline_hashes = dict(baseline_provenance.get("input_hashes") or {})
+        baseline_fleet_validation = dict(
+            baseline.get("fleet_contract_validation") or {}
+        )
+        baseline_fleet_expected = dict(
+            baseline_fleet_validation.get("expected") or {}
+        ).get("fleet_contract_hash")
+        baseline_fleet_observed = dict(
+            baseline_fleet_validation.get("observed") or {}
+        ).get("fleet_contract_hash")
+        baseline_fleet_check = dict(
+            baseline_fleet_validation.get("checks") or {}
+        ).get("fleet_contract_hash")
+        if not (
+            baseline_fleet_check is True
+            and baseline_fleet_expected not in (None, "")
+            and baseline_fleet_expected == baseline_fleet_observed
+        ):
+            raise RuntimeError(
+                f"{code} frozen A baseline lacks a valid fleet-contract hash"
+            )
+        baseline_hashes["fleet_contract_hash"] = baseline_fleet_expected
         confirmed = dict(
             dict(confirmation_manifest.get("scenarios") or {}).get(code) or {}
         )
@@ -1767,6 +1883,7 @@ def build_confirmation_input_contract(
                 "tariff_hash": final_hashes.get("price_input_sha256"),
                 "objective_hash": final_hashes.get("objective_weights_sha256"),
                 "pv_hash": final_hashes.get("pv_profile_sha256"),
+                "fleet_contract_hash": confirmed.get("fleet_contract_hash"),
             }
         )
         final_hashes_by_scenario[code] = final_hashes
@@ -1912,6 +2029,12 @@ def finalize_normal_confirmation(
     if len(set(execution_shas.values())) != 1 or not next(iter(execution_shas.values())):
         raise RuntimeError(f"confirmation run SHA mismatch: {execution_shas}")
     execution_sha = next(iter(execution_shas.values()))
+    input_artifacts_before = _finalization_input_artifacts(
+        output_dir=output_dir,
+        existing_bundle=existing_bundle,
+        run_dirs=run_dirs,
+        confirmation_dir_name=confirmation_dir_name,
+    )
     results = {
         code: _confirmation_gate(run_dir, execution_sha)
         for code, run_dir in run_dirs.items()
@@ -2060,6 +2183,24 @@ def finalize_normal_confirmation(
         "path": str(
             (output_dir / "normal_confirmation_input_contract.json").resolve()
         ),
+    }
+    input_artifacts_after = _finalization_input_artifacts(
+        output_dir=output_dir,
+        existing_bundle=existing_bundle,
+        run_dirs=run_dirs,
+        confirmation_dir_name=confirmation_dir_name,
+    )
+    if input_artifacts_after != input_artifacts_before:
+        raise RuntimeError("raw finalization inputs changed during the re-audit")
+    input_artifact_manifest_path = (
+        output_dir / confirmation_dir_name / "finalization_input_artifacts.json"
+    )
+    _write_json(input_artifact_manifest_path, input_artifacts_before)
+    manifest["finalization_input_artifacts"] = {
+        "artifact_count": input_artifacts_before["artifact_count"],
+        "path": str(input_artifact_manifest_path.resolve()),
+        "sha256": _sha256_file(input_artifact_manifest_path),
+        "artifacts": input_artifacts_before["artifacts"],
     }
     _write_json(
         output_dir / confirmation_dir_name / "confirmation_manifest.json",

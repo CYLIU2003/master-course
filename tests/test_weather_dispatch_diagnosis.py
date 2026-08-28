@@ -229,6 +229,14 @@ def _write_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
+def _fleet_validation(fleet_hash: str) -> dict:
+    return {
+        "expected": {"fleet_contract_hash": fleet_hash},
+        "observed": {"fleet_contract_hash": fleet_hash},
+        "checks": {"fleet_contract_hash": True},
+    }
+
+
 def test_confirmation_input_contract_fails_when_mandatory_baseline_hash_is_missing(
     tmp_path: Path,
 ) -> None:
@@ -247,7 +255,8 @@ def test_confirmation_input_contract_fails_when_mandatory_baseline_hash_is_missi
                     "input_hashes": {
                         "timetable_hash": "required-timetable-hash"
                     }
-                }
+                },
+                "fleet_contract_validation": _fleet_validation(f"fleet-{code}"),
             },
         )
         confirmation["scenarios"][code] = {
@@ -282,16 +291,82 @@ def test_confirmation_input_contract_fails_when_mandatory_final_hash_is_missing(
             / "runs"
             / "01_A_discrete"
             / "case_metrics.json",
-            {"provenance": {"input_hashes": hashes}},
+            {
+                "provenance": {"input_hashes": hashes},
+                "fleet_contract_validation": _fleet_validation(
+                    hashes["fleet_contract_hash"]
+                ),
+            },
         )
         confirmation["scenarios"][code] = {
             "prepared_input_id": f"prepared-{code}",
             "prepared_input_sha256": hashes["prepared_input_sha256"],
-            "fleet_contract_hash": f"fleet-{code}",
+            "fleet_contract_hash": hashes["fleet_contract_hash"],
             "canonical_input_hashes": {},
         }
 
     with pytest.raises(RuntimeError, match="lacks frozen-A input hashes"):
+        build_confirmation_input_contract(
+            output_dir=tmp_path / "out",
+            existing_bundle=existing_bundle,
+            confirmation_manifest=confirmation,
+        )
+
+
+def test_confirmation_input_contract_rejects_changed_fleet_contract(
+    tmp_path: Path,
+) -> None:
+    existing_bundle = tmp_path / "existing"
+    confirmation = {"scenarios": {}}
+    for code in ("SUNNY", "RAIN"):
+        hashes = {key: f"shared-{key}" for key in REQUIRED_CONFIRMATION_INPUT_HASHES}
+        hashes["prepared_input_sha256"] = f"prepared-{code}"
+        hashes["prepared_source_sha256"] = f"prepared-{code}"
+        hashes["pv_profile_sha256"] = f"pv-{code}"
+        hashes["pv_hash"] = f"pv-{code}"
+        hashes["canonical_ablation_input_sha256"] = f"canonical-{code}"
+        hashes["timetable_hash"] = hashes["trip_input_sha256"]
+        hashes["vehicle_hash"] = hashes["vehicle_input_sha256"]
+        hashes["tariff_hash"] = hashes["price_input_sha256"]
+        hashes["objective_hash"] = hashes["objective_weights_sha256"]
+        _write_json(
+            existing_bundle
+            / "scenarios"
+            / code
+            / "runs"
+            / "01_A_discrete"
+            / "case_metrics.json",
+            {
+                "provenance": {"input_hashes": hashes},
+                "fleet_contract_validation": _fleet_validation(
+                    hashes["fleet_contract_hash"]
+                ),
+            },
+        )
+        confirmation["scenarios"][code] = {
+            "prepared_input_id": f"prepared-{code}",
+            "prepared_input_sha256": hashes["prepared_input_sha256"],
+            "fleet_contract_hash": f"changed-fleet-{code}",
+            "canonical_input_hashes": {
+                key: value
+                for key, value in hashes.items()
+                if key
+                not in {
+                    "prepared_input_sha256",
+                    "prepared_source_sha256",
+                    "fleet_contract_hash",
+                    "timetable_hash",
+                    "vehicle_hash",
+                    "tariff_hash",
+                    "objective_hash",
+                    "pv_hash",
+                }
+            },
+            "trip_input_hash": hashes["timetable_hash"],
+            "vehicle_input_hash": hashes["vehicle_hash"],
+        }
+
+    with pytest.raises(RuntimeError, match="fleet_contract_hash"):
         build_confirmation_input_contract(
             output_dir=tmp_path / "out",
             existing_bundle=existing_bundle,
