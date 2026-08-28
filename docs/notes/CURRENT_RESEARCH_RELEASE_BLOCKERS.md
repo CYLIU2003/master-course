@@ -1,5 +1,23 @@
 # Current research release blockers
 
+## 2026-08-29 (Asia/Tokyo): Case-A confirmation evidence re-audited
+
+Read-only finalization at clean SHA `b18cf48e1d74a576132501e544596a686dd48a37`
+rechecked the existing `ba5ac4a` SUNNY/RAIN run directories without Prepare or
+solver execution. The input contract now requires 22 explicit hashes on both
+sides, every effective optimization-config field is compared across weather
+runs, and all candidate/frontier bounds and target budgets are fail-closed.
+Both scenarios pass all 14 confirmation checks.
+
+The unique final cost source is the accepted Rolling chain's
+`executed_day_accounting.json`. SUNNY reconciles at 660,983.783805 JPY. RAIN's
+day-ahead selected-candidate cost is 698,296.465284 JPY, but its authoritative
+executed-day Rolling cost is 698,598.628643 JPY. The tracked re-audit evidence
+is in
+[`docs/evidence/weather_dispatch_case_a_3ec8714/`](../evidence/weather_dispatch_case_a_3ec8714/README.md).
+The Case-A assignment conclusion is unchanged; this correction only prevents
+the day-ahead cost from being presented as the final Rolling cost.
+
 ## 2026-08-29 (Asia/Tokyo): release gates clarified after CI/evidence audit
 
 The completed two-weather aggregation A/B has been copied, without a solver

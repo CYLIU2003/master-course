@@ -1,0 +1,24 @@
+{
+  "schema_version": "artifact_hashes_v1",
+  "sha256": {
+    "candidate_discovery_manifest.json": "0d8a6c7df045009dd32218e690203411901af42dd4627ab5e526e98a4f0c49f4",
+    "case_a_candidate_selection_audit.csv": "2dda4469fb10c6f07b39e4c6618589b2e647ba4ed0684adc54e9db181c0bc42e",
+    "case_a_candidate_selection_audit.json": "fa73d23ba8abf99c5b595f3169122782688034418fd8ef03ac43b163f6d239d4",
+    "case_a_candidate_selection_audit.md": "134f2aaa8caadcb864259e4644d1a10c610916ab7c5ccd4afedc32b184dd3053",
+    "cross_weather_fixed_dispatch_matrix.json": "4c0c73663b08429aa2f48ed93d4a57b8538588e82228a7b90456e27ce6b1e51c",
+    "normal_confirmation_input_contract.csv": "8edebd90c459eefa95a776405b09c557330b794f82f632361a607bad3db696f7",
+    "normal_confirmation_input_contract.json": "1efbfc6bd6a87d48a8c512e2042e6ef5ed5f373de20fb5a0ddc6e6ce95c2d2df",
+    "normal_confirmation_input_contract.md": "069084f0e9a72eb76f74a1358e28590136a72067e4fbae04cef8d6693cf393c7",
+    "normal_path_confirmation_fixed_controls_ba5ac4a/confirmation_manifest.json": "6eacea9f00890cf98d03da586e7c1141d43eec1a03485683fb4218dc79797d9c",
+    "normal_path_confirmation_fixed_controls_ba5ac4a/fresh_prepare/preparation/bff_health_response.json": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288",
+    "normal_path_confirmation_fixed_controls_ba5ac4a/fresh_prepare/preparation/bff_runtime_git_preflight_response.json": "600fa29c8a7dbe3c405b293e3d21bac8918661bd91da2a8b23915c928837e322",
+    "normal_path_confirmation_fixed_controls_ba5ac4a/fresh_prepare/preparation/fresh_prepare_manifest.json": "31d5c17a07bc89a030cecd5aee52464aec01b88b16ee06e07d590b0d677d4ac3",
+    "normal_path_confirmation_fixed_controls_ba5ac4a/fresh_prepare/preparation/RAIN/frontend_optimization_request.json": "826c2ba9573b8cc7809f7ffd5511b6963879a0f03385b6a629d9fe449609f3c9",
+    "normal_path_confirmation_fixed_controls_ba5ac4a/fresh_prepare/preparation/RAIN/frontend_prepare_request.json": "8108e5d167bf40af4b2b0050d9b227c519603d9b6e5c8db45d3e48fffd86ce91",
+    "normal_path_confirmation_fixed_controls_ba5ac4a/fresh_prepare/preparation/RAIN/frontend_prepare_response.json": "6d2ba4b6fee8621579304a2293ced3558bf2df8dbc45efefd445e6242457dd81",
+    "normal_path_confirmation_fixed_controls_ba5ac4a/fresh_prepare/preparation/SUNNY/frontend_optimization_request.json": "9c39d1e1d58f423e59aeb9bc152933c9e7d7d97b788601b0a9d9539dd579125b",
+    "normal_path_confirmation_fixed_controls_ba5ac4a/fresh_prepare/preparation/SUNNY/frontend_prepare_request.json": "1b68e5156df99eec8f5066a5fe2007876b6fa8af49b6b7928e5fe73027239242",
+    "normal_path_confirmation_fixed_controls_ba5ac4a/fresh_prepare/preparation/SUNNY/frontend_prepare_response.json": "7fca4ebcb04facd2b8d904cb22ef17631a4eca622d9277fc340818b52575a8dc",
+    "weather_candidate_union.json": "3dbf00732342f66140b95df4e9b93cfb15b462896ebc9589a1807e980e05bfdf"
+  }
+}

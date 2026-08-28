@@ -1,5 +1,31 @@
 # Development Notes
 
+## 2026-08-29 (Asia/Tokyo): Case-A confirmation re-audit
+
+- Automated PR re-review found four fail-open evidence conditions after the
+  first green CI run. The confirmation input contract now requires 22 named
+  hashes on both the frozen-A and final-run sides, instead of inferring its
+  required set from whatever keys happen to be present. A non-empty prepared
+  input ID/SHA and fleet-contract hash are also mandatory.
+- Each confirmation now persists and compares the complete effective
+  optimization configuration. The gate additionally requires the effective
+  22-candidate/radius-4 policy, 60-second composition target, and the complete
+  BEV-frontier tuple (enabled, min 15, max 35, 120-second target). This closes
+  the earlier request-only comparison that omitted effective frontier bounds.
+- The unique final cost source is now
+  `rolling_hourly_chain/executed_day_accounting.json`. The existing SUNNY run
+  reconciles at 660,983.783805 JPY. The existing RAIN run's day-ahead candidate
+  is 698,296.465284 JPY, but the executed-day Rolling total is
+  698,598.628643 JPY; documentation now keeps these evidence levels separate.
+- Re-finalized the existing `ba5ac4a` run directories read-only at clean SHA
+  `b18cf48e1d74a576132501e544596a686dd48a37`. No Prepare, solver, recourse
+  optimization, or model change was executed. All 14 per-scenario confirmation
+  checks pass, the complete effective configurations are equal across SUNNY
+  and RAIN, and the new mandatory input contract has zero missing keys and
+  zero within-scenario mismatches. The updated manifests and hash inventory
+  are published beside the frozen Case-A evidence under
+  `docs/evidence/weather_dispatch_case_a_3ec8714/`.
+
 ## 2026-08-29 (Asia/Tokyo): Python 3.11 CI compatibility and Git-tracked A/B evidence
 
 - Replaced the two oversized static `mock.patch` context-manager nests in
@@ -112,10 +138,11 @@
   22-candidate union
   under both weather cases: all 44 evaluations passed independent physical,
   accounting, no-fallback/no-repair, and unchanged-assignment gates.
-- This is **Case A**.  SUNNY selects physical assignment
-  `76fb6a9b...a516c` at 660,983.78 JPY, while RAIN selects
-  `213b2ccd...5316` at 698,296.47 JPY.  The old one-candidate normal setting
-  hid this weather-dependent ordering.  The public formal Phase-3 endpoint now
+- This is **Case A**.  In the fixed-dispatch day-ahead recourse matrix, SUNNY
+  selects physical assignment `76fb6a9b...a516c` at 660,983.78 JPY, while
+  RAIN selects `213b2ccd...5316` at 698,296.47 JPY. The old one-candidate
+  normal setting hid this weather-dependent ordering. The public formal
+  Phase-3 endpoint now
   applies the existing neutral BEV frontier, composition radius 4, and at
   least 22 Stage-2 candidates; final selection is canonical actual cost,
   then used-vehicle count, then physical assignment hash.  The requested
@@ -131,9 +158,11 @@
   24/24 Rolling, accounting, SHA, and no-fallback/repair gates, and recovered
   the exact winners from the fixed-dispatch matrix.
 - SUNNY (`output/2026-08-28/run_20260828_0107`) selects 28 BEV / 4 ICE
-  vehicles and 199 / 65 trips at 660,983.783805 JPY.  RAIN
-  (`output/2026-08-28/run_20260828_0119`) selects 21 BEV / 11 ICE vehicles and
-  91 / 173 trips at 698,296.465284 JPY.  Thus weather changes the chosen
+  vehicles and 199 / 65 trips; its executed-day Rolling cost is
+  660,983.783805 JPY. RAIN (`output/2026-08-28/run_20260828_0119`) selects
+  21 BEV / 11 ICE vehicles and 91 / 173 trips; its day-ahead candidate cost is
+  698,296.465284 JPY and its executed-day Rolling cost is 698,598.628643 JPY.
+  Thus weather changes the chosen
   dispatch in these two fixed scenarios.  This is bounded Phase-3 evidence,
   not an integrated global optimum or a general weather claim.
 - A first confirmation attempt at `output/2026-08-27/run_20260827_2359`
