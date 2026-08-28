@@ -42,6 +42,7 @@ from scripts.build_lazy_fragment_performance_diagnostic import (  # noqa: E402
 from scripts.run_pure_ice_aggregation_weather_ab import (  # noqa: E402
     RAIN_SCENARIO_ID,
     REQUIRED_FIXED_HASHES,
+    SERVICE_DATE,
     SUNNY_SCENARIO_ID,
     ScenarioInput,
     prepare_fresh_weather_inputs,
@@ -116,6 +117,7 @@ FIXED_CONFIRMATION_REQUEST_CONTROL_KEYS = (
     "stage2_time_limit_seconds",
     "stage1_best_obj_stop_enabled",
     "stage1_powertrain_selector_strengthening",
+    "require_all_available_bevs",
     "stage1_stage2_candidate_limit",
     "stage1_composition_search_radius",
     "gurobi_threads",
@@ -1253,6 +1255,7 @@ def _normal_confirmation_request(scenario: ScenarioInput) -> dict[str, Any]:
         "stage1_time_limit_seconds": 435,
         "stage2_time_limit_seconds": 30,
         "stage1_powertrain_selector_strengthening": False,
+        "require_all_available_bevs": False,
         "stage1_best_obj_stop_enabled": False,
         "gurobi_threads": 1,
         "mip_gap": 0.1,
@@ -1347,6 +1350,9 @@ def _confirmation_gate(run_dir: Path, expected_sha: str) -> dict[str, Any]:
         frontend_request_envelope.get("raw_frontend_body")
         or frontend_request_envelope
     )
+    bev_utilization_policy = dict(
+        frontend_request_envelope.get("interactive_bev_utilization_policy") or {}
+    )
     effective_config = dict(parameters.get("effective_optimization_config") or {})
     canonical_inputs = dict(parameters.get("canonical_input_dimensions") or {})
     runtime_controls = dict(summary.get("interactive_runtime_controls") or {})
@@ -1430,6 +1436,13 @@ def _confirmation_gate(run_dir: Path, expected_sha: str) -> dict[str, Any]:
             effective_config.get(key) == expected
             for key, expected in REQUIRED_EFFECTIVE_FRONTIER_CONTROLS.items()
         ),
+        "bev_utilization_policy_preserved": (
+            frontend_request.get("require_all_available_bevs") is False
+            and bev_utilization_policy.get("enabled") is False
+            and int(bev_utilization_policy.get("minimum_used_bev_count") or 0) == 0
+            and bev_utilization_policy.get("mathematical_effect")
+            == "no additional minimum-BEV-use constraint"
+        ),
         "executed_day_accounting_is_authoritative": (
             executed_day_accounting.get("eligible") is True
             and int(executed_day_accounting.get("expected_slot_count") or 0) == 96
@@ -1459,12 +1472,15 @@ def _confirmation_gate(run_dir: Path, expected_sha: str) -> dict[str, Any]:
         ),
         "candidate_count_evaluated": candidates.get("candidate_count_evaluated"),
         "prepared_input_id": rolling.get("prepared_input_id"),
+        "service_date": rolling.get("service_date"),
+        "calendar_policy": rolling.get("calendar_policy"),
         "prepared_input_sha256": rolling.get("prepared_input_sha256"),
         "trip_input_hash": rolling.get("trip_input_hash"),
         "vehicle_input_hash": rolling.get("vehicle_input_hash"),
         "fleet_contract_hash": rolling.get("scenario_fleet_contract_hash"),
         "day_ahead_assignment_hash": rolling.get("day_ahead_assignment_hash"),
         "runtime_controls": runtime_controls,
+        "interactive_bev_utilization_policy": bev_utilization_policy,
         # Persist the complete effective configuration. A hand-maintained
         # whitelist previously omitted frontier bounds and target budgets.
         "effective_solver_controls": effective_config,
@@ -1861,7 +1877,12 @@ def build_confirmation_input_contract(
         )
         missing_confirmation_metadata = sorted(
             key
-            for key in ("prepared_input_id", "prepared_input_sha256", "fleet_contract_hash")
+            for key in (
+                "prepared_input_id",
+                "prepared_input_sha256",
+                "fleet_contract_hash",
+                "service_date",
+            )
             if confirmed.get(key) in (None, "")
         )
         if missing_confirmation_metadata:
@@ -1930,6 +1951,8 @@ def build_confirmation_input_contract(
             "prepared_input_id": confirmed.get("prepared_input_id"),
             "prepared_source_sha256": confirmed.get("prepared_input_sha256"),
             "fleet_contract_hash": confirmed.get("fleet_contract_hash"),
+            "service_date": confirmed.get("service_date"),
+            "calendar_policy": confirmed.get("calendar_policy"),
             "canonical_input_hashes": final_hashes,
             "effective_solver_controls": confirmed.get(
                 "effective_solver_controls"
@@ -1965,12 +1988,26 @@ def build_confirmation_input_contract(
         raise RuntimeError(
             f"unexpected SUNNY/RAIN confirmation input differences: {unexpected}"
         )
+    service_dates = {
+        code: str(scenarios[code].get("service_date") or "") for code in SCENARIOS
+    }
+    if set(service_dates.values()) != {SERVICE_DATE}:
+        raise RuntimeError(
+            "SUNNY/RAIN confirmation service date drifted from the fixed "
+            f"counterfactual contract: expected={SERVICE_DATE}, "
+            f"observed={service_dates}"
+        )
     payload = {
         "schema_version": SCHEMA_VERSION,
         "status": "PASS_FULL_INPUT_CONTRACT",
         "fresh_prepare_used": True,
         "fixed_nonweather_inputs_equal": not unexpected,
         "cross_scenario_different_hashes": cross_scenario_differences,
+        "service_date_contract": {
+            "expected": SERVICE_DATE,
+            "observed": service_dates,
+            "matches": True,
+        },
         "difference_interpretation": {
             "pv_profile_sha256": "authoritative_weather_linked_PV_input",
             "canonical_ablation_input_sha256": (
@@ -2077,17 +2114,27 @@ def finalize_normal_confirmation(
         != results["RAIN"]["effective_solver_controls"].get(key)
     ]
     effective_controls_equal = not effective_control_differences
+    bev_utilization_policies_equal = (
+        results["SUNNY"]["interactive_bev_utilization_policy"]
+        == results["RAIN"]["interactive_bev_utilization_policy"]
+    )
     timestep_is_15 = all(
         int(requests[code].get("timestep_min") or 0) == 15
         and int(requests[code].get("time_step_min") or 0) == 15
         for code in SCENARIOS
     )
-    if not controls_equal or not effective_controls_equal or not timestep_is_15:
+    if (
+        not controls_equal
+        or not effective_controls_equal
+        or not bev_utilization_policies_equal
+        or not timestep_is_15
+    ):
         raise RuntimeError(
             "normal confirmation fixed controls failed: "
             f"request_controls_equal={controls_equal}, "
             f"effective_controls_equal={effective_controls_equal}, "
             f"effective_differences={effective_control_differences}, "
+            f"bev_utilization_policies_equal={bev_utilization_policies_equal}, "
             f"timestep_is_15={timestep_is_15}"
         )
     finalization_sha = _git_output("rev-parse", "HEAD")
@@ -2107,6 +2154,7 @@ def finalize_normal_confirmation(
         "effective_solver_controls_equal": effective_controls_equal,
         "effective_solver_control_keys": effective_control_keys,
         "effective_solver_control_differences": effective_control_differences,
+        "bev_utilization_policies_equal": bev_utilization_policies_equal,
         "internal_timestep_15_minutes": timestep_is_15,
         "rolling_execution_minutes": 60,
         "requested_candidate_limit": requests["SUNNY"].get(
@@ -2265,14 +2313,33 @@ def main() -> None:
         )
     if args.stage in {"cross", "all"}:
         cross_evaluate(output_dir)
+    confirmation_manifest: dict[str, Any] | None = None
     if args.stage in {"confirm", "all"}:
-        confirm_normal_runs(
+        confirmation_manifest = confirm_normal_runs(
             output_dir=output_dir,
             base_url=args.base_url,
             existing_bundle=args.existing_bundle.resolve(),
             confirmation_dir_name=args.confirmation_dir_name,
         )
-    if args.stage == "finalize":
+    if args.stage == "all":
+        assert confirmation_manifest is not None
+        confirmed_scenarios = dict(confirmation_manifest.get("scenarios") or {})
+        confirmed_run_paths = {
+            code: str(dict(confirmed_scenarios.get(code) or {}).get("run_dir") or "")
+            for code in SCENARIOS
+        }
+        if not all(confirmed_run_paths.values()):
+            raise RuntimeError(
+                f"all-stage confirmation omitted run directories: {confirmed_run_paths}"
+            )
+        finalize_normal_confirmation(
+            output_dir=output_dir,
+            sunny_run_dir=Path(confirmed_run_paths["SUNNY"]),
+            rain_run_dir=Path(confirmed_run_paths["RAIN"]),
+            existing_bundle=args.existing_bundle.resolve(),
+            confirmation_dir_name=args.confirmation_dir_name,
+        )
+    elif args.stage == "finalize":
         if (
             args.confirmation_sunny_run_dir is None
             or args.confirmation_rain_run_dir is None

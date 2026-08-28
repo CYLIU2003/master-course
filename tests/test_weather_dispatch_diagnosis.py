@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import sys
 
 import pytest
 
+import scripts.run_weather_dispatch_diagnosis as diagnosis
 from scripts.run_weather_dispatch_diagnosis import (
     REQUIRED_CONFIRMATION_INPUT_HASHES,
     _day_ahead_research_is_accepted,
@@ -261,6 +263,7 @@ def test_confirmation_input_contract_fails_when_mandatory_baseline_hash_is_missi
         )
         confirmation["scenarios"][code] = {
             "prepared_input_id": f"prepared-{code}",
+            "service_date": "2025-08-05",
             "prepared_input_sha256": f"prepared-{code}",
             "fleet_contract_hash": f"fleet-{code}",
             "canonical_input_hashes": {},
@@ -300,6 +303,7 @@ def test_confirmation_input_contract_fails_when_mandatory_final_hash_is_missing(
         )
         confirmation["scenarios"][code] = {
             "prepared_input_id": f"prepared-{code}",
+            "service_date": "2025-08-05",
             "prepared_input_sha256": hashes["prepared_input_sha256"],
             "fleet_contract_hash": hashes["fleet_contract_hash"],
             "canonical_input_hashes": {},
@@ -345,6 +349,7 @@ def test_confirmation_input_contract_rejects_changed_fleet_contract(
         )
         confirmation["scenarios"][code] = {
             "prepared_input_id": f"prepared-{code}",
+            "service_date": "2025-08-05",
             "prepared_input_sha256": hashes["prepared_input_sha256"],
             "fleet_contract_hash": f"changed-fleet-{code}",
             "canonical_input_hashes": {
@@ -372,6 +377,61 @@ def test_confirmation_input_contract_rejects_changed_fleet_contract(
             existing_bundle=existing_bundle,
             confirmation_manifest=confirmation,
         )
+
+    for scenario in confirmation["scenarios"].values():
+        scenario["fleet_contract_hash"] = "shared-fleet_contract_hash"
+    confirmation["scenarios"]["RAIN"]["service_date"] = "2025-08-06"
+    with pytest.raises(RuntimeError, match="service date drifted"):
+        build_confirmation_input_contract(
+            output_dir=tmp_path / "out-service-date",
+            existing_bundle=existing_bundle,
+            confirmation_manifest=confirmation,
+        )
+
+
+def test_all_stage_runs_strict_finalizer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for name in (
+        "analyze_existing_bundle",
+        "discover_candidates",
+        "build_candidate_union",
+        "cross_evaluate",
+    ):
+        monkeypatch.setattr(diagnosis, name, lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        diagnosis,
+        "confirm_normal_runs",
+        lambda **kwargs: {
+            "scenarios": {
+                "SUNNY": {"run_dir": str(tmp_path / "sunny-run")},
+                "RAIN": {"run_dir": str(tmp_path / "rain-run")},
+            }
+        },
+    )
+    finalized: dict = {}
+
+    def record_finalization(**kwargs) -> None:
+        finalized.update(kwargs)
+
+    monkeypatch.setattr(diagnosis, "finalize_normal_confirmation", record_finalization)
+    monkeypatch.setattr(diagnosis, "_artifact_hashes", lambda output_dir: {})
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "run_weather_dispatch_diagnosis.py",
+            "--stage",
+            "all",
+            "--output-dir",
+            str(tmp_path / "output"),
+        ],
+    )
+
+    diagnosis.main()
+
+    assert finalized["sunny_run_dir"] == tmp_path / "sunny-run"
+    assert finalized["rain_run_dir"] == tmp_path / "rain-run"
 
 
 def test_tie_break_is_used_fleet_then_assignment_hash() -> None:
@@ -446,6 +506,7 @@ def test_normal_confirmation_keeps_15_minute_internal_timestep(tmp_path) -> None
                 "stage1_time_limit_seconds": 435,
                 "stage2_time_limit_seconds": 30,
                 "stage1_powertrain_selector_strengthening": False,
+                "require_all_available_bevs": False,
                 "stage1_best_obj_stop_enabled": False,
                 "gurobi_threads": 1,
                 "mip_gap": 0.1,
