@@ -1,10 +1,5 @@
 # SUNNY/RAIN Phase-3 weather-dispatch diagnosis
 
-> Re-audited at clean SHA `4be54bd`. The original `3ec8714` report is retained
-> byte-for-byte as `weather_dispatch_diagnosis_report_frozen_3ec8714.md`.
-> Costs below now separate the day-ahead candidate from the authoritative
-> accepted Rolling-day accounting total.
-
 ## Verdict
 
 **PASS_NORMAL_PATH_CONFIRMATION / Case A (candidate-generation insufficiency).**
@@ -27,25 +22,24 @@ remained OFF and was not rerun.
 
 ## Normal-path confirmation
 
-| Scenario | Run | Candidates | Service | Physical | Rolling | Accounting | Used BEV/ICE | BEV/ICE trips | Day-ahead candidate (JPY) | Executed-day Rolling (JPY) | Physical assignment |
-|---|---|---:|---:|---|---:|---|---:|---:|---:|---:|---|
-| SUNNY | `output/2026-08-28/run_20260828_0107` | 22/22 feasible | 264/264 | PASS | 24/24 | OK | 28/4 | 199/65 | 660,983.783805 | 660,983.783805 | `76fb6a9b635b...a516c` |
-| RAIN | `output/2026-08-28/run_20260828_0119` | 22/22 feasible | 264/264 | PASS | 24/24 | OK | 21/11 | 91/173 | 698,296.465284 | 698,598.628643 | `213b2ccd4095...5316` |
+| Scenario | Run | Candidates | Service | Physical | Rolling | Accounting | Used BEV/ICE | BEV/ICE trips | Total cost (JPY) | Physical assignment |
+|---|---|---:|---:|---|---:|---|---:|---:|---:|---|
+| SUNNY | `output/2026-08-28/run_20260828_0107` | 22/22 feasible | 264/264 | PASS | 24/24 | OK | 28/4 | 199/65 | 660,983.783805 | `76fb6a9b635b...a516c` |
+| RAIN | `output/2026-08-28/run_20260828_0119` | 22/22 feasible | 264/264 | PASS | 24/24 | OK | 21/11 | 91/173 | 698,296.465284 | `213b2ccd4095...5316` |
 
 Both physical assignment hashes exactly match the winners declared by
 `cross_weather_fixed_dispatch_matrix.json`.  Fixed request controls match,
 the internal timestep is 15 minutes, Rolling execution is 60 minutes, and both
 runs used the same trip, vehicle, charger, depot, BESS-control, tariff,
 objective, fleet-contract, and solver-control hashes.  The complete comparison
-is in `normal_confirmation_input_contract_reaudit_4be54bd.json`; only scenario-specific
+is in `normal_confirmation_input_contract.json`; only scenario-specific
 prepared snapshots, PV, and the canonical hash derived from PV differ.
 
 ## Case-A six-check audit
 
 The union contains all ten frozen A incumbents plus 44 expanded source
 candidates: 54 source rows deduplicate to 22 physical assignments.  Every
-candidate was evaluated under both scenarios.
-`case_a_candidate_selection_audit_reaudit_4be54bd.json`
+candidate was evaluated under both scenarios.  `case_a_candidate_selection_audit.json`
 records the following for both SUNNY and RAIN:
 
 1. weather PV/BESS/tariff inputs enter Stage 1;

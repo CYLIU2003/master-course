@@ -24,7 +24,7 @@ runs from execution SHA `ba5ac4a` preserved the frozen one-thread,
   candidate and authoritative executed-day Rolling cost are both
   660,983.783805 JPY. RAIN selected `213b2ccd...5316`; its day-ahead candidate
   cost is 698,296.465284 JPY, while the authoritative executed-day Rolling
-  cost is 698,598.628643 JPY. Read-only re-finalization at `b18cf48` records
+  cost is 698,598.628643 JPY. Read-only re-finalization at `4be54bd` records
   this distinction and compares every effective solver control. The final
   cross-evaluation/audit SHA is `3ec8714`; the
   [Git-tracked Case A review evidence](docs/evidence/weather_dispatch_case_a_3ec8714/README.md)

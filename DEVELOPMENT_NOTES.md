@@ -3,7 +3,7 @@
 ## 2026-08-29 (Asia/Tokyo): Case-A confirmation re-audit
 
 - Automated PR re-review found four fail-open evidence conditions after the
-  first green CI run. The confirmation input contract now requires 22 named
+  first green CI run. The confirmation input contract now requires 23 named
   hashes on both the frozen-A and final-run sides, instead of inferring its
   required set from whatever keys happen to be present. A non-empty prepared
   input ID/SHA and fleet-contract hash are also mandatory.
@@ -18,11 +18,13 @@
   is 698,296.465284 JPY, but the executed-day Rolling total is
   698,598.628643 JPY; documentation now keeps these evidence levels separate.
 - Re-finalized the existing `ba5ac4a` run directories read-only at clean SHA
-  `b18cf48e1d74a576132501e544596a686dd48a37`. No Prepare, solver, recourse
+  `4be54bd657e1a0e556249fd1b016cbf8285b23df`. No Prepare, solver, recourse
   optimization, or model change was executed. All 14 per-scenario confirmation
-  checks pass, the complete effective configurations are equal across SUNNY
-  and RAIN, and the new mandatory input contract has zero missing keys and
-  zero within-scenario mismatches. The updated manifests and hash inventory
+  checks pass, the complete effective configurations and fleet-contract hashes
+  are equal across SUNNY and RAIN, and the new mandatory input contract has
+  zero missing keys and zero within-scenario mismatches. The finalizer hashes
+  all 31 raw artifacts it reads and verifies them again before publication.
+  The updated manifests and hash inventory
   are published beside the frozen Case-A evidence under
   `docs/evidence/weather_dispatch_case_a_3ec8714/`.
 

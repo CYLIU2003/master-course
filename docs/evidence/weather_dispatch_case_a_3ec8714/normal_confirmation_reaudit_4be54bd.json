@@ -3,7 +3,7 @@
   "status": "PASS_NORMAL_PATH_CONFIRMATION",
   "execution_git_sha": "ba5ac4abac490caccca006260670dfbc2c411fa9",
   "execution_git_dirty": false,
-  "finalization_git_sha": "b18cf48e1d74a576132501e544596a686dd48a37",
+  "finalization_git_sha": "4be54bd657e1a0e556249fd1b016cbf8285b23df",
   "finalization_git_dirty": false,
   "public_endpoint": "/api/scenarios/{scenario_id}/run-optimization",
   "fixed_request_controls_equal": true,
@@ -495,10 +495,172 @@
   ],
   "case_a_candidate_selection_audit": {
     "status": "FIXED",
-    "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_b18cf48_20260829\\case_a_candidate_selection_audit.json"
+    "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_4be54bd_20260829\\case_a_candidate_selection_audit.json"
   },
   "full_input_contract": {
     "status": "PASS_FULL_INPUT_CONTRACT",
-    "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_b18cf48_20260829\\normal_confirmation_input_contract.json"
+    "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_4be54bd_20260829\\normal_confirmation_input_contract.json"
+  },
+  "finalization_input_artifacts": {
+    "artifact_count": 31,
+    "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_4be54bd_20260829\\normal_path_confirmation_fixed_controls_ba5ac4a\\finalization_input_artifacts.json",
+    "sha256": "d0bc0ff80891b74a5c22ea944868d09d81d8b3e7bb5ed8e06eb392cdb12b2097",
+    "artifacts": {
+      "diagnosis/candidate_discovery_manifest.json": {
+        "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_4be54bd_20260829\\candidate_discovery_manifest.json",
+        "size_bytes": 47839,
+        "sha256": "0d8a6c7df045009dd32218e690203411901af42dd4627ab5e526e98a4f0c49f4"
+      },
+      "diagnosis/weather_candidate_union.json": {
+        "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_4be54bd_20260829\\weather_candidate_union.json",
+        "size_bytes": 2105448,
+        "sha256": "3dbf00732342f66140b95df4e9b93cfb15b462896ebc9589a1807e980e05bfdf"
+      },
+      "diagnosis/cross_weather_fixed_dispatch_matrix.json": {
+        "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_4be54bd_20260829\\cross_weather_fixed_dispatch_matrix.json",
+        "size_bytes": 83540,
+        "sha256": "4c0c73663b08429aa2f48ed93d4a57b8538588e82228a7b90456e27ce6b1e51c"
+      },
+      "confirmation_request/SUNNY": {
+        "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_4be54bd_20260829\\normal_path_confirmation_fixed_controls_ba5ac4a\\fresh_prepare\\preparation\\SUNNY\\frontend_optimization_request.json",
+        "size_bytes": 916,
+        "sha256": "9c39d1e1d58f423e59aeb9bc152933c9e7d7d97b788601b0a9d9539dd579125b"
+      },
+      "confirmation_run/SUNNY/summary.json": {
+        "path": "C:\\master-course\\output\\2026-08-28\\run_20260828_0107\\summary.json",
+        "size_bytes": 13081,
+        "sha256": "3852a2eb663148d8f99ae1e798962c3b152037b850963366ca77796af48d949e"
+      },
+      "confirmation_run/SUNNY/physical_schedule_validation.json": {
+        "path": "C:\\master-course\\output\\2026-08-28\\run_20260828_0107\\physical_schedule_validation.json",
+        "size_bytes": 5599,
+        "sha256": "b66a31d004426912f06bc2fb1eaf5b03e910ac993e32be56a57e6ccbe20b159f"
+      },
+      "confirmation_run/SUNNY/final_cost_reconciliation.json": {
+        "path": "C:\\master-course\\output\\2026-08-28\\run_20260828_0107\\final_cost_reconciliation.json",
+        "size_bytes": 11332,
+        "sha256": "d9fc7e4858082ec0591b22e9eddc6f1b8200b39caf4c0f8401141daaaf8ec1a7"
+      },
+      "confirmation_run/SUNNY/rolling_hourly_chain/rolling_chain_summary.json": {
+        "path": "C:\\master-course\\output\\2026-08-28\\run_20260828_0107\\rolling_hourly_chain\\rolling_chain_summary.json",
+        "size_bytes": 211411,
+        "sha256": "083376349b3deceba7f4ed63f9d56aa373b8b03825e83c74b3b961e509d23fda"
+      },
+      "confirmation_run/SUNNY/rolling_hourly_chain/executed_day_accounting.json": {
+        "path": "C:\\master-course\\output\\2026-08-28\\run_20260828_0107\\rolling_hourly_chain\\executed_day_accounting.json",
+        "size_bytes": 4499,
+        "sha256": "9487f2d9cc1084ea260da812ab50ccbcb8399b023d627d7ca5754d193c5b95ef"
+      },
+      "confirmation_run/SUNNY/stage1_stage2_candidate_evaluation.json": {
+        "path": "C:\\master-course\\output\\2026-08-28\\run_20260828_0107\\stage1_stage2_candidate_evaluation.json",
+        "size_bytes": 2071518,
+        "sha256": "cde5dc30b0536137a942870a9ba2831c178b7d123cabd8dad8f9aea56e2afd1c"
+      },
+      "confirmation_run/SUNNY/optimization_parameters.json": {
+        "path": "C:\\master-course\\output\\2026-08-28\\run_20260828_0107\\optimization_parameters.json",
+        "size_bytes": 183543,
+        "sha256": "103d80fef1ef594828d509294697c8dbf24ebcaecc06b42f0c6ace063e9a3ae7"
+      },
+      "confirmation_run/SUNNY/solver_result.json": {
+        "path": "C:\\master-course\\output\\2026-08-28\\run_20260828_0107\\solver_result.json",
+        "size_bytes": 3465812,
+        "sha256": "613dd119a62fabfc58f197ef0eaac8abfd3a1eac27ce10f6cae3b432d865d0f9"
+      },
+      "confirmation_run/SUNNY/canonical_solver_result.json": {
+        "path": "C:\\master-course\\output\\2026-08-28\\run_20260828_0107\\canonical_solver_result.json",
+        "size_bytes": 6503912,
+        "sha256": "40c8a4acab04379722d584caa644faaead674839a25e791a756b82626cfcce77"
+      },
+      "candidate_discovery_run/SUNNY/stage1_stage2_candidate_evaluation.json": {
+        "path": "C:\\master-course\\output\\2026-08-27\\run_20260827_2244\\stage1_stage2_candidate_evaluation.json",
+        "size_bytes": 2071489,
+        "sha256": "d8314d82f20947ceaba0dd4677dc62804e092ad3391722d4ad751c4ee2a902b0"
+      },
+      "candidate_discovery_run/SUNNY/solver_result.json": {
+        "path": "C:\\master-course\\output\\2026-08-27\\run_20260827_2244\\solver_result.json",
+        "size_bytes": 3465583,
+        "sha256": "952d4a670261457b2f1aada8feb228c342e34542d52a602a1f428257281c6e17"
+      },
+      "candidate_discovery_run/SUNNY/optimization_parameters.json": {
+        "path": "C:\\master-course\\output\\2026-08-27\\run_20260827_2244\\optimization_parameters.json",
+        "size_bytes": 182624,
+        "sha256": "5a633d3c7441815aa671fa6f4953f424c4abc58510c31d1fe6770bcbeb357a61"
+      },
+      "frozen_A_baseline/SUNNY/case_metrics.json": {
+        "path": "C:\\master-course\\output\\diagnostics\\pure_ice_weather_ab_453b1d3_20260827\\scenarios\\SUNNY\\runs\\01_A_discrete\\case_metrics.json",
+        "size_bytes": 27279,
+        "sha256": "a56456cc486073bce6517d5ba3a8823d525052a46127674436276cdec254a8ee"
+      },
+      "confirmation_request/RAIN": {
+        "path": "C:\\master-course\\output\\diagnostics\\weather_dispatch_case_a_reaudit_4be54bd_20260829\\normal_path_confirmation_fixed_controls_ba5ac4a\\fresh_prepare\\preparation\\RAIN\\frontend_optimization_request.json",
+        "size_bytes": 916,
+        "sha256": "826c2ba9573b8cc7809f7ffd5511b6963879a0f03385b6a629d9fe449609f3c9"
+      },
+      "confirmation_run/RAIN/summary.json": {
+        "path": "C:\\master-course\\output\\2026-08-28\\run_20260828_0119\\summary.json",
+        "size_bytes": 13052,
+        "sha256": "7cd4e4c9fd831b2341622f4127f8a6f7588406d77d14a27f3e0efaf0562abcd1"
+      },
+      "confirmation_run/RAIN/physical_schedule_validation.json": {
+        "path": "C:\\master-course\\output\\2026-08-28\\run_20260828_0119\\physical_schedule_validation.json",
+        "size_bytes": 5598,
+        "sha256": "03a197e6641912516cf8204ad05625cf09de6f04f274623e1f18dd661b46ee81"
+      },
+      "confirmation_run/RAIN/final_cost_reconciliation.json": {
+        "path": "C:\\master-course\\output\\2026-08-28\\run_20260828_0119\\final_cost_reconciliation.json",
+        "size_bytes": 11214,
+        "sha256": "c2732e01056ba6defc6d9e66a0471ac190a5fec27f7f8b0feb27f601e46a76b0"
+      },
+      "confirmation_run/RAIN/rolling_hourly_chain/rolling_chain_summary.json": {
+        "path": "C:\\master-course\\output\\2026-08-28\\run_20260828_0119\\rolling_hourly_chain\\rolling_chain_summary.json",
+        "size_bytes": 203691,
+        "sha256": "c3c3ac68ee48f9f64f32a7ed7d71ea921bde5bc5b7ff2a1bf87d5df22b1381a9"
+      },
+      "confirmation_run/RAIN/rolling_hourly_chain/executed_day_accounting.json": {
+        "path": "C:\\master-course\\output\\2026-08-28\\run_20260828_0119\\rolling_hourly_chain\\executed_day_accounting.json",
+        "size_bytes": 4627,
+        "sha256": "ff8648a51795b04f381a7b2404ebca6628e67ed684369c1f482cf3cce8dc84bd"
+      },
+      "confirmation_run/RAIN/stage1_stage2_candidate_evaluation.json": {
+        "path": "C:\\master-course\\output\\2026-08-28\\run_20260828_0119\\stage1_stage2_candidate_evaluation.json",
+        "size_bytes": 2072483,
+        "sha256": "4d033d19583f97394c0d59bbda57eaf452031c46a3b8fa69f967d6d692614f26"
+      },
+      "confirmation_run/RAIN/optimization_parameters.json": {
+        "path": "C:\\master-course\\output\\2026-08-28\\run_20260828_0119\\optimization_parameters.json",
+        "size_bytes": 183560,
+        "sha256": "183dc4f754a65e57575d561c9d56d9952ee6fb41b58da49b6daa2772f07f00d7"
+      },
+      "confirmation_run/RAIN/solver_result.json": {
+        "path": "C:\\master-course\\output\\2026-08-28\\run_20260828_0119\\solver_result.json",
+        "size_bytes": 3461487,
+        "sha256": "0fd1cf81b0e5c5b38d7ea8e79d0d45a58256e71851937153941cb18ae9c6005b"
+      },
+      "confirmation_run/RAIN/canonical_solver_result.json": {
+        "path": "C:\\master-course\\output\\2026-08-28\\run_20260828_0119\\canonical_solver_result.json",
+        "size_bytes": 6402626,
+        "sha256": "f22fa69a449d84abf2892bf37ebabaac842105856ef29b7f2a9eb1de7e64caa6"
+      },
+      "candidate_discovery_run/RAIN/stage1_stage2_candidate_evaluation.json": {
+        "path": "C:\\master-course\\output\\2026-08-27\\run_20260827_2311\\stage1_stage2_candidate_evaluation.json",
+        "size_bytes": 2072464,
+        "sha256": "a5ff222c622b59f1147f92162193710723fd849d4281dcb9ceb5c2462f656c7b"
+      },
+      "candidate_discovery_run/RAIN/solver_result.json": {
+        "path": "C:\\master-course\\output\\2026-08-27\\run_20260827_2311\\solver_result.json",
+        "size_bytes": 3461551,
+        "sha256": "b4631809d27050fc2d0dcd51e054dd826e40a51c4e5a036a47d8ff115dc9683d"
+      },
+      "candidate_discovery_run/RAIN/optimization_parameters.json": {
+        "path": "C:\\master-course\\output\\2026-08-27\\run_20260827_2311\\optimization_parameters.json",
+        "size_bytes": 182641,
+        "sha256": "f100bd913f0476742c8eb850a0b35dd62ac45c8d10f914c1ab5894bf62d3edca"
+      },
+      "frozen_A_baseline/RAIN/case_metrics.json": {
+        "path": "C:\\master-course\\output\\diagnostics\\pure_ice_weather_ab_453b1d3_20260827\\scenarios\\RAIN\\runs\\01_A_discrete\\case_metrics.json",
+        "size_bytes": 27311,
+        "sha256": "6fcbe1bd1755b3234f90fe447003fd47eefcacd5680a4852cf0089eab99481fe"
+      }
+    }
   }
 }

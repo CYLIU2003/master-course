@@ -2,11 +2,13 @@
 
 ## 2026-08-29 (Asia/Tokyo): Case-A confirmation evidence re-audited
 
-Read-only finalization at clean SHA `b18cf48e1d74a576132501e544596a686dd48a37`
+Read-only finalization at clean SHA `4be54bd657e1a0e556249fd1b016cbf8285b23df`
 rechecked the existing `ba5ac4a` SUNNY/RAIN run directories without Prepare or
-solver execution. The input contract now requires 22 explicit hashes on both
+solver execution. The input contract now requires 23 explicit hashes on both
 sides, every effective optimization-config field is compared across weather
-runs, and all candidate/frontier bounds and target budgets are fail-closed.
+runs, the frozen-A and cross-weather fleet-contract hashes must match, and all
+candidate/frontier bounds and target budgets are fail-closed. All 31 raw
+artifacts read by finalization are hashed and verified before publication.
 Both scenarios pass all 14 confirmation checks.
 
 The unique final cost source is the accepted Rolling chain's

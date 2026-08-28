@@ -14,7 +14,10 @@ FULL_INDEX_SHA256 = (
     "68244b2c57f8f2055c1751f91e2d946a08b1a876830ccc6fd321eb3894c96981"
 )
 REAUDIT_INDEX_SHA256 = (
-    "d57ed42ed9f76e3513347054aae50b7e5ad38ec2c0053901028cb22751341e6d"
+    "468e7ff0bf01ec601df261f8c0fa78273a1c483d5b3e7d620aad4bf56b5c5e8c"
+)
+FINALIZATION_INPUT_INDEX_SHA256 = (
+    "d0bc0ff80891b74a5c22ea944868d09d81d8b3e7bb5ed8e06eb392cdb12b2097"
 )
 PUBLISHED_SOURCE_PATHS = {
     "cross_weather_fixed_dispatch_matrix.json": (
@@ -31,29 +34,35 @@ PUBLISHED_SOURCE_PATHS = {
     "confirmation_manifest.json": (
         "normal_path_confirmation_fixed_controls_ba5ac4a/confirmation_manifest.json"
     ),
-    "weather_dispatch_diagnosis_report.md": "weather_dispatch_diagnosis_report.md",
+    "weather_dispatch_diagnosis_report_frozen_3ec8714.md": (
+        "weather_dispatch_diagnosis_report.md"
+    ),
     "goal_completion_audit.md": "goal_completion_audit.md",
 }
 REAUDIT_SOURCE_PATHS = {
-    "normal_confirmation_reaudit_b18cf48.json": (
+    "normal_confirmation_reaudit_4be54bd.json": (
         "normal_path_confirmation_fixed_controls_ba5ac4a/confirmation_manifest.json"
     ),
-    "normal_confirmation_input_contract_reaudit_b18cf48.json": (
+    "finalization_input_artifacts_reaudit_4be54bd.json": (
+        "normal_path_confirmation_fixed_controls_ba5ac4a/"
+        "finalization_input_artifacts.json"
+    ),
+    "normal_confirmation_input_contract_reaudit_4be54bd.json": (
         "normal_confirmation_input_contract.json"
     ),
-    "normal_confirmation_input_contract_reaudit_b18cf48.csv": (
+    "normal_confirmation_input_contract_reaudit_4be54bd.csv": (
         "normal_confirmation_input_contract.csv"
     ),
-    "normal_confirmation_input_contract_reaudit_b18cf48.md": (
+    "normal_confirmation_input_contract_reaudit_4be54bd.md": (
         "normal_confirmation_input_contract.md"
     ),
-    "case_a_candidate_selection_audit_reaudit_b18cf48.json": (
+    "case_a_candidate_selection_audit_reaudit_4be54bd.json": (
         "case_a_candidate_selection_audit.json"
     ),
-    "case_a_candidate_selection_audit_reaudit_b18cf48.csv": (
+    "case_a_candidate_selection_audit_reaudit_4be54bd.csv": (
         "case_a_candidate_selection_audit.csv"
     ),
-    "case_a_candidate_selection_audit_reaudit_b18cf48.md": (
+    "case_a_candidate_selection_audit_reaudit_4be54bd.md": (
         "case_a_candidate_selection_audit.md"
     ),
 }
@@ -119,7 +128,7 @@ def test_published_case_a_claim_stays_bounded_and_auditable() -> None:
 
 
 def test_published_confirmation_reaudit_is_fail_closed() -> None:
-    index_path = EVIDENCE_ROOT / "reaudit_source_artifact_hashes_b18cf48.json"
+    index_path = EVIDENCE_ROOT / "reaudit_source_artifact_hashes_4be54bd.json"
     assert _sha256(index_path) == REAUDIT_INDEX_SHA256
     reaudited_index = _read_json(index_path.name)["sha256"]
     for published_name, source_relative_path in REAUDIT_SOURCE_PATHS.items():
@@ -127,18 +136,37 @@ def test_published_confirmation_reaudit_is_fail_closed() -> None:
             source_relative_path
         ]
 
-    confirmation = _read_json("normal_confirmation_reaudit_b18cf48.json")
+    confirmation = _read_json("normal_confirmation_reaudit_4be54bd.json")
     assert confirmation["status"] == "PASS_NORMAL_PATH_CONFIRMATION"
     assert confirmation["execution_git_sha"] == (
         "ba5ac4abac490caccca006260670dfbc2c411fa9"
     )
     assert confirmation["finalization_git_sha"] == (
-        "b18cf48e1d74a576132501e544596a686dd48a37"
+        "4be54bd657e1a0e556249fd1b016cbf8285b23df"
     )
     assert confirmation["finalization_git_dirty"] is False
     assert confirmation["fixed_request_controls_equal"] is True
     assert confirmation["effective_solver_controls_equal"] is True
     assert confirmation["effective_solver_control_differences"] == []
+    raw_inputs = _read_json("finalization_input_artifacts_reaudit_4be54bd.json")
+    assert _sha256(
+        EVIDENCE_ROOT / "finalization_input_artifacts_reaudit_4be54bd.json"
+    ) == FINALIZATION_INPUT_INDEX_SHA256
+    assert raw_inputs["artifact_count"] == 31
+    assert len(raw_inputs["artifacts"]) == 31
+    for required_label in (
+        "confirmation_run/SUNNY/summary.json",
+        "confirmation_run/SUNNY/rolling_hourly_chain/rolling_chain_summary.json",
+        "confirmation_run/SUNNY/rolling_hourly_chain/executed_day_accounting.json",
+        "confirmation_run/SUNNY/solver_result.json",
+        "confirmation_run/RAIN/stage1_stage2_candidate_evaluation.json",
+        "confirmation_run/RAIN/canonical_solver_result.json",
+        "frozen_A_baseline/SUNNY/case_metrics.json",
+        "frozen_A_baseline/RAIN/case_metrics.json",
+    ):
+        identity = raw_inputs["artifacts"][required_label]
+        assert len(identity["sha256"]) == 64
+        assert identity["size_bytes"] > 0
 
     expected_frontier = {
         "stage1_stage2_candidate_limit": 22,
@@ -169,11 +197,23 @@ def test_published_confirmation_reaudit_is_fail_closed() -> None:
     ] == pytest.approx(698_296.465283954, abs=1.0e-6)
 
     contract = _read_json(
-        "normal_confirmation_input_contract_reaudit_b18cf48.json"
+        "normal_confirmation_input_contract_reaudit_4be54bd.json"
     )
     assert contract["status"] == "PASS_FULL_INPUT_CONTRACT"
     assert contract["fixed_nonweather_inputs_equal"] is True
     for scenario in contract["scenarios"].values():
-        assert len(scenario["mandatory_hash_keys"]) == 22
+        assert len(scenario["mandatory_hash_keys"]) == 23
+        assert scenario["fleet_contract_hash"] == (
+            "2179433a2b5b952e9beb756bd971d8056df690ed476728e695a25081599e9f3b"
+        )
         assert scenario["mismatches_from_frozen_A"] == []
         assert scenario["missing_hashes_from_frozen_A_contract"] == []
+
+    report = " ".join(
+        (EVIDENCE_ROOT / "weather_dispatch_diagnosis_report.md")
+        .read_text(encoding="utf-8")
+        .split()
+    )
+    assert "Day-ahead candidate (JPY)" in report
+    assert "Executed-day Rolling (JPY)" in report
+    assert "698,296.465284 | 698,598.628643" in report

@@ -52,7 +52,8 @@
         "vehicle_hash": "42f03f2bbebb16508b8763d98a47523146c6192a669f5f6cedebcf06833ea34e",
         "tariff_hash": "6997be4769dd747c5b58df8d777d53adbad96ff36ff1a662420111ed4c4e6f40",
         "objective_hash": "1023574d08bc7f01b359645153092cb53cdb01de93cd66e6047c2e17bce3ae56",
-        "pv_hash": "65213bba051354c6dc2e5a2c27b47b8d0a7a32ba85cfcce857f9e359f98ab652"
+        "pv_hash": "65213bba051354c6dc2e5a2c27b47b8d0a7a32ba85cfcce857f9e359f98ab652",
+        "fleet_contract_hash": "2179433a2b5b952e9beb756bd971d8056df690ed476728e695a25081599e9f3b"
       },
       "effective_solver_controls": {
         "mode": "milp",
@@ -178,7 +179,8 @@
         "prepared_source_sha256",
         "pv_profile_sha256",
         "pv_hash",
-        "trip_input_sha256"
+        "trip_input_sha256",
+        "fleet_contract_hash"
       ]
     },
     "RAIN": {
@@ -216,7 +218,8 @@
         "vehicle_hash": "42f03f2bbebb16508b8763d98a47523146c6192a669f5f6cedebcf06833ea34e",
         "tariff_hash": "6997be4769dd747c5b58df8d777d53adbad96ff36ff1a662420111ed4c4e6f40",
         "objective_hash": "1023574d08bc7f01b359645153092cb53cdb01de93cd66e6047c2e17bce3ae56",
-        "pv_hash": "0d07117ea15c8f6010ea6fd30c96c1c1ed175a857bec59ef0f8ebee1a2cb6c40"
+        "pv_hash": "0d07117ea15c8f6010ea6fd30c96c1c1ed175a857bec59ef0f8ebee1a2cb6c40",
+        "fleet_contract_hash": "2179433a2b5b952e9beb756bd971d8056df690ed476728e695a25081599e9f3b"
       },
       "effective_solver_controls": {
         "mode": "milp",
@@ -342,7 +345,8 @@
         "prepared_source_sha256",
         "pv_profile_sha256",
         "pv_hash",
-        "trip_input_sha256"
+        "trip_input_sha256",
+        "fleet_contract_hash"
       ]
     }
   },
@@ -380,6 +384,13 @@
       "input_key": "energy_asset_control_input_sha256",
       "frozen_A_sha256": "037c2bf93cf94f702b6b6612e437efe8ce6c80c94f71af4fdb916458b064dba0",
       "fresh_confirmation_sha256": "037c2bf93cf94f702b6b6612e437efe8ce6c80c94f71af4fdb916458b064dba0",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "SUNNY",
+      "input_key": "fleet_contract_hash",
+      "frozen_A_sha256": "2179433a2b5b952e9beb756bd971d8056df690ed476728e695a25081599e9f3b",
+      "fresh_confirmation_sha256": "2179433a2b5b952e9beb756bd971d8056df690ed476728e695a25081599e9f3b",
       "matches_frozen_A": true
     },
     {
@@ -534,6 +545,13 @@
       "input_key": "energy_asset_control_input_sha256",
       "frozen_A_sha256": "037c2bf93cf94f702b6b6612e437efe8ce6c80c94f71af4fdb916458b064dba0",
       "fresh_confirmation_sha256": "037c2bf93cf94f702b6b6612e437efe8ce6c80c94f71af4fdb916458b064dba0",
+      "matches_frozen_A": true
+    },
+    {
+      "scenario": "RAIN",
+      "input_key": "fleet_contract_hash",
+      "frozen_A_sha256": "2179433a2b5b952e9beb756bd971d8056df690ed476728e695a25081599e9f3b",
+      "fresh_confirmation_sha256": "2179433a2b5b952e9beb756bd971d8056df690ed476728e695a25081599e9f3b",
       "matches_frozen_A": true
     },
     {
