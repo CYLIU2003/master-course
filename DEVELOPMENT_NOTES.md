@@ -1,5 +1,24 @@
 # Development Notes
 
+## 2026-08-29 (Asia/Tokyo): formal Phase-3 provenance review hardening
+
+- Formal public-path Phase-3 candidate coverage now derives its BEV frontier
+  bounds from the exact vehicle array materialized by Fresh Prepare. A fleet
+  with fewer BEVs than the default 15--35 range is therefore bounded to its
+  actual active BEV count instead of evaluating impossible composition counts.
+- Read-only SUNNY/RAIN finalization now hashes and compares the actual
+  per-scenario `frontend_optimization_request.json` submitted to the public
+  endpoint. The earlier Fresh Prepare request template remains provenance, but
+  it no longer substitutes for the submitted request in the finalization gate.
+- The selected candidate's used-vehicle count and physical assignment hash now
+  propagate through both MILP and public optimization metadata. Focused
+  regression for the three review findings passed: `50 passed`; the complete
+  repository suite passed `1622 passed in 167.36s`, with Python compilation
+  and `git diff --check` also clean.
+- These changes do not alter or relabel the frozen `bb0c005` numerical
+  evidence. A future formal run must start from a new clean frozen commit and
+  produce new artifacts before the new code can support a research claim.
+
 ## 2026-08-29 (Asia/Tokyo): fresh public-path SUNNY/RAIN rerun at `bb0c005`
 
 - Tagged and froze `bb0c0050883a91dd86a9e8813ae88d4b6d8c361d` as

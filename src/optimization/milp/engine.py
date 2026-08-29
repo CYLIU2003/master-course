@@ -600,6 +600,12 @@ class MILPOptimizer:
                         False,
                     )
                 ),
+                "stage1_stage2_selected_used_vehicle_count": (
+                    plan.metadata or {}
+                ).get("stage1_stage2_selected_used_vehicle_count"),
+                "stage1_stage2_selected_assignment_hash": (
+                    plan.metadata or {}
+                ).get("stage1_stage2_selected_assignment_hash"),
                 "stage1_cost_ranked_composition_budget_semantics": (
                     plan.metadata or {}
                 ).get("stage1_cost_ranked_composition_budget_semantics"),

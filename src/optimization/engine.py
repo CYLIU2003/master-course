@@ -2288,6 +2288,8 @@ class OptimizationEngine:
             "stage1_stage2_selected_candidate_index",
             "stage1_stage2_selected_candidate_hash",
             "stage1_stage2_selected_canonical_actual_cost_jpy",
+            "stage1_stage2_selected_used_vehicle_count",
+            "stage1_stage2_selected_assignment_hash",
             "stage1_stage2_candidate_selection_semantics",
             "stage1_stage2_candidate_global_optimality_claimed",
             "stage1_stage2_candidate_evaluation",

@@ -26,6 +26,7 @@ from scripts.run_pure_ice_aggregation_weather_ab import ScenarioInput
 from bff.routers.optimization import (
     RunOptimizationBody,
     _apply_research_phase3_candidate_coverage_policy,
+    _prepared_active_bev_count,
     _public_run_enforces_interactive_runtime_controls,
 )
 from src.optimization.milp.solver_adapter import (
@@ -389,6 +390,88 @@ def test_confirmation_input_contract_rejects_changed_fleet_contract(
         )
 
 
+def test_finalization_inventory_hashes_submitted_confirmation_requests(
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "output"
+    existing_bundle = tmp_path / "existing"
+    confirmation_dir_name = "normal_confirmation"
+    discovery_scenarios: dict[str, dict[str, str]] = {}
+    run_dirs: dict[str, Path] = {}
+
+    for name in (
+        "candidate_discovery_manifest.json",
+        "weather_candidate_union.json",
+        "cross_weather_fixed_dispatch_matrix.json",
+    ):
+        _write_json(output_dir / name, {})
+    for code in ("SUNNY", "RAIN"):
+        discovery_run = tmp_path / f"discovery-{code}"
+        discovery_scenarios[code] = {"run_dir": str(discovery_run)}
+        for name in (
+            "stage1_stage2_candidate_evaluation.json",
+            "solver_result.json",
+            "optimization_parameters.json",
+        ):
+            _write_json(discovery_run / name, {"scenario": code})
+
+        run_dir = tmp_path / f"run-{code}"
+        run_dirs[code] = run_dir
+        for relative_path in diagnosis.CONFIRMATION_RUN_INPUT_FILES:
+            _write_json(run_dir / relative_path, {"scenario": code})
+        _write_json(
+            existing_bundle
+            / "scenarios"
+            / code
+            / "runs"
+            / "01_A_discrete"
+            / "case_metrics.json",
+            {"scenario": code},
+        )
+        _write_json(
+            output_dir
+            / confirmation_dir_name
+            / "fresh_prepare"
+            / "preparation"
+            / code
+            / "frontend_optimization_request.json",
+            {"source": "template", "scenario": code},
+        )
+        _write_json(
+            output_dir
+            / confirmation_dir_name
+            / code
+            / "frontend_optimization_request.json",
+            {"source": "submitted", "scenario": code},
+        )
+
+    _write_json(
+        output_dir / "candidate_discovery_manifest.json",
+        {"scenarios": discovery_scenarios},
+    )
+    inventory = diagnosis._finalization_input_artifacts(
+        output_dir=output_dir,
+        existing_bundle=existing_bundle,
+        run_dirs=run_dirs,
+        confirmation_dir_name=confirmation_dir_name,
+    )
+    sunny_request = inventory["artifacts"]["confirmation_request/SUNNY"]
+    assert sunny_request["path"] == str(
+        (
+            output_dir
+            / confirmation_dir_name
+            / "SUNNY"
+            / "frontend_optimization_request.json"
+        ).resolve()
+    )
+    assert sunny_request["sha256"] == diagnosis._sha256_file(
+        output_dir
+        / confirmation_dir_name
+        / "SUNNY"
+        / "frontend_optimization_request.json"
+    )
+
+
 def test_all_stage_runs_strict_finalizer(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -462,10 +545,15 @@ def test_formal_phase3_enables_neutral_candidate_coverage_policy() -> None:
         stage1_composition_search_radius=0,
         stage1_bev_frontier_enabled=False,
     )
-    effective = _apply_research_phase3_candidate_coverage_policy(requested)
+    effective = _apply_research_phase3_candidate_coverage_policy(
+        requested,
+        available_bev_count=35,
+    )
     assert effective.stage1_stage2_candidate_limit == 22
     assert effective.stage1_composition_search_radius == 4
     assert effective.stage1_bev_frontier_enabled is True
+    assert effective.stage1_bev_frontier_min_count == 15
+    assert effective.stage1_bev_frontier_max_count == 35
     assert requested.stage1_stage2_candidate_limit == 1
 
 
@@ -478,6 +566,124 @@ def test_nonresearch_phase3_keeps_requested_candidate_controls() -> None:
         stage1_bev_frontier_enabled=False,
     )
     assert _apply_research_phase3_candidate_coverage_policy(requested) is requested
+
+
+def test_formal_phase3_frontier_is_bounded_by_prepared_active_bev_count() -> None:
+    requested = RunOptimizationBody(
+        mode="phase3_two_stage",
+        research_run=True,
+        stage1_bev_frontier_min_count=15,
+        stage1_bev_frontier_max_count=35,
+    )
+    effective = _apply_research_phase3_candidate_coverage_policy(
+        requested,
+        available_bev_count=8,
+    )
+    assert effective.stage1_bev_frontier_min_count == 8
+    assert effective.stage1_bev_frontier_max_count == 8
+
+
+def test_prepared_active_bev_count_uses_exact_materialized_vehicle_set(
+    tmp_path: Path,
+) -> None:
+    solver_input = tmp_path / "solver_input.json"
+    _write_json(
+        solver_input,
+        {
+            "depot_ids": ["dep-1"],
+            "vehicles": [
+                {
+                    "id": "bev-1",
+                    "depotId": "dep-1",
+                    "type": "BEV",
+                    "powertrain": "BEV",
+                    "available": True,
+                    "batteryKwh": 314.0,
+                    "energyConsumption": 1.316,
+                    "initialSoc": 0.5,
+                    "chargePowerKw": 90.0,
+                    "compatibleChargerIds": ["charger-1"],
+                },
+                {
+                    "id": "bev-2",
+                    "depotId": "dep-1",
+                    "type": "BEV",
+                    "powertrainType": "bev",
+                    "enabled": True,
+                    "batteryKwh": 314.0,
+                    "energyConsumption": 1.316,
+                    "initialSoc": 0.5,
+                    "chargePowerKw": 90.0,
+                    "compatibleChargerIds": ["charger-1"],
+                },
+                {
+                    "id": "bev-disabled",
+                    "depotId": "dep-1",
+                    "powertrain": "BEV",
+                    "available": False,
+                },
+                {
+                    "id": "bev-other-depot",
+                    "depotId": "dep-2",
+                    "powertrain": "BEV",
+                    "available": True,
+                },
+                {
+                    "id": "ice-1",
+                    "depotId": "dep-1",
+                    "type": "ICE",
+                    "vehicleType": "ICE",
+                    "available": True,
+                    "fuelTankL": 160.0,
+                    "fuelConsumptionLPerKm": 0.22,
+                    "initialFuelL": 144.0,
+                },
+            ]
+        },
+    )
+    assert _prepared_active_bev_count(solver_input) == 2
+
+
+def test_prepared_active_bev_count_rejects_missing_powertrain(tmp_path: Path) -> None:
+    solver_input = tmp_path / "solver_input.json"
+    _write_json(
+        solver_input,
+        {
+            "depot_ids": ["dep-1"],
+            "vehicles": [
+                {"id": "unknown", "depotId": "dep-1", "available": True}
+            ],
+        },
+    )
+    with pytest.raises(ValueError, match="formal fleet contract"):
+        _prepared_active_bev_count(solver_input)
+
+
+def test_prepared_active_bev_count_rejects_implicit_availability(
+    tmp_path: Path,
+) -> None:
+    solver_input = tmp_path / "solver_input.json"
+    _write_json(
+        solver_input,
+        {
+            "depot_ids": ["dep-1"],
+            "vehicles": [
+                {
+                    "id": "bev-1",
+                    "depotId": "dep-1",
+                    "type": "BEV",
+                    "powertrain": "BEV",
+                    "batteryKwh": 314.0,
+                    "energyConsumption": 1.316,
+                    "initialSoc": 0.5,
+                    "chargePowerKw": 90.0,
+                    "compatibleChargerIds": ["charger-1"],
+                }
+            ],
+        },
+    )
+    with pytest.raises(ValueError, match="vehicle availability is required"):
+        _prepared_active_bev_count(solver_input)
 
 
 def test_public_formal_run_preserves_predeclared_runtime_controls() -> None:

@@ -133,6 +133,7 @@ from src.optimization.common.energy_flow_accounting import (
     normalize_pv_energy_breakdown,
 )
 from src.optimization.common.fleet_contract import (
+    FleetContractError,
     canonical_powertrain,
     resolve_scenario_fleet_contract,
 )
@@ -13914,6 +13915,8 @@ def get_research_git_preflight() -> Dict[str, Any]:
 
 def _apply_research_phase3_candidate_coverage_policy(
     request: RunOptimizationBody,
+    *,
+    available_bev_count: int | None = None,
 ) -> RunOptimizationBody:
     """Broaden formal Phase-3 evidence without adding an economic bias.
 
@@ -13928,6 +13931,18 @@ def _apply_research_phase3_candidate_coverage_policy(
         "phase3_two_stage"
     ):
         return request
+    if available_bev_count is None or available_bev_count < 0:
+        raise ValueError(
+            "formal Phase-3 candidate coverage requires the prepared active BEV count"
+        )
+    frontier_max = min(
+        int(request.stage1_bev_frontier_max_count),
+        int(available_bev_count),
+    )
+    frontier_min = min(
+        int(request.stage1_bev_frontier_min_count),
+        frontier_max,
+    )
     return request.model_copy(
         update={
             "stage1_stage2_candidate_limit": max(
@@ -13939,8 +13954,41 @@ def _apply_research_phase3_candidate_coverage_policy(
                 4,
             ),
             "stage1_bev_frontier_enabled": True,
+            "stage1_bev_frontier_min_count": frontier_min,
+            "stage1_bev_frontier_max_count": frontier_max,
         }
     )
+
+
+def _prepared_active_bev_count(solver_input_path: Path) -> int:
+    """Count BEVs in the exact vehicle set materialized by Prepare."""
+
+    payload = json.loads(solver_input_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("prepared solver input must be a JSON object")
+    if not isinstance(payload.get("vehicles"), list):
+        raise ValueError("prepared solver input must contain a vehicles array")
+    scope = payload.get("scope")
+    scope_depot_ids = (
+        list(scope.get("depot_ids") or []) if isinstance(scope, dict) else []
+    )
+    selected_depot_ids = list(payload.get("depot_ids") or scope_depot_ids)
+    try:
+        contract = resolve_scenario_fleet_contract(
+            payload,
+            selected_depot_ids=selected_depot_ids,
+            research_run=True,
+        )
+    except FleetContractError as exc:
+        raise ValueError(
+            f"prepared vehicle set violates the formal fleet contract: {exc}"
+        ) from exc
+    if contract.validation_status != "OK":
+        raise ValueError(
+            "prepared vehicle set violates the formal fleet contract: "
+            + "; ".join(contract.errors)
+        )
+    return int(contract.inventory_by_powertrain.get("BEV", 0))
 
 
 def _public_run_enforces_interactive_runtime_controls(
@@ -13963,7 +14011,6 @@ def run_optimization(
     # formal candidate-coverage policy. All validation below must inspect the
     # effective request so enabling the frontier cannot revive invalid bounds.
     requested_frontend_payload = request.model_dump()
-    request = _apply_research_phase3_candidate_coverage_policy(request)
     _require_research_git_preflight_before_job_creation(
         research_run=bool(request.research_run)
     )
@@ -14105,6 +14152,27 @@ def run_optimization(
             ),
         )
     _require_nonempty_prepared_scope(prep, action="Optimization preflight")
+    active_bev_count = None
+    if request.research_run and normalized_requested_mode == "phase3_two_stage":
+        active_bev_count = _prepared_active_bev_count(Path(prep.solver_input_path))
+    request = _apply_research_phase3_candidate_coverage_policy(
+        request,
+        available_bev_count=active_bev_count,
+    )
+    if (
+        request.stage1_bev_frontier_enabled
+        and request.stage1_bev_frontier_min_count
+        > request.stage1_bev_frontier_max_count
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=make_error(
+                AppErrorCode.SCHEMA_VALIDATION_ERROR,
+                "effective stage1_bev_frontier_min_count must be <= "
+                "stage1_bev_frontier_max_count",
+                field="stage1_bev_frontier_min_count",
+            ),
+        )
     _preflight_weather_proxy_request(
         scenario=scenario,
         enable_weather_operation_policy=request.enableWeatherOperationPolicy,
