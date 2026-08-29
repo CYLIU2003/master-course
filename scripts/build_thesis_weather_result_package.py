@@ -157,6 +157,7 @@ REQUIRED_SOURCE_FILES = (
     "SUNNY/physical_schedule_validation.json",
     "SUNNY/summary.json",
     "SUNNY/solver_metrics.json",
+    "SUNNY/vehicle_soc_event_timeline.csv",
     "RAIN/optimization_parameters.json",
     "RAIN/executed_day_accounting.json",
     "RAIN/selected_candidate.json",
@@ -165,6 +166,7 @@ REQUIRED_SOURCE_FILES = (
     "RAIN/physical_schedule_validation.json",
     "RAIN/summary.json",
     "RAIN/solver_metrics.json",
+    "RAIN/vehicle_soc_event_timeline.csv",
 )
 
 
@@ -186,6 +188,7 @@ class ScenarioEvidence:
     physical_validation: Mapping[str, Any]
     solver_summary: Mapping[str, Any]
     solver_metrics: Mapping[str, Any]
+    minimum_soc_timeline_kwh: float
 
     @property
     def costs(self) -> Mapping[str, Any]:
@@ -323,7 +326,55 @@ def _load_scenario(
         ),
         solver_summary=_read_json(scenario_root / "summary.json"),
         solver_metrics=_read_json(scenario_root / "solver_metrics.json"),
+        minimum_soc_timeline_kwh=_minimum_soc_from_timeline(
+            scenario_root / "vehicle_soc_event_timeline.csv",
+            scenario=code,
+        ),
     )
+
+
+def _minimum_soc_from_timeline(path: Path, *, scenario: str) -> float:
+    """Recompute the executed minimum BEV SOC from persisted event rows."""
+
+    with path.open(encoding="utf-8-sig", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    required = {
+        "vehicle_id",
+        "event_id",
+        "battery_capacity_kwh",
+        "reserve_soc_kwh",
+        "soc_before_kwh",
+        "soc_after_kwh",
+    }
+    _require(bool(rows), f"{scenario}: empty SOC event timeline")
+    _require(
+        required.issubset(rows[0]),
+        f"{scenario}: incomplete SOC event timeline columns",
+    )
+    observed: list[float] = []
+    for index, row in enumerate(rows):
+        context = f"{scenario} SOC event {index}"
+        _require(bool(row.get("vehicle_id")), f"{context}: missing vehicle ID")
+        _require(bool(row.get("event_id")), f"{context}: missing event ID")
+        try:
+            capacity = float(row["battery_capacity_kwh"])
+            reserve = float(row["reserve_soc_kwh"])
+            before = float(row["soc_before_kwh"])
+            after = float(row["soc_after_kwh"])
+        except (TypeError, ValueError, KeyError) as exc:
+            raise EvidenceValidationError(f"{context}: invalid SOC value") from exc
+        _require(
+            all(math.isfinite(value) for value in (capacity, reserve, before, after)),
+            f"{context}: non-finite SOC value",
+        )
+        _require(capacity > 0.0, f"{context}: invalid battery capacity")
+        _require(
+            reserve - TOLERANCE <= before <= capacity + TOLERANCE
+            and reserve - TOLERANCE <= after <= capacity + TOLERANCE,
+            f"{context}: SOC outside physical bounds",
+        )
+        observed.extend((before, after))
+    return min(observed)
 
 
 def _default_parameter_source_root(evidence_root: Path) -> Path:
@@ -371,6 +422,7 @@ def _load_parameter_sources(
     )
 
     observed_parameters: dict[str, Mapping[str, Any]] = {}
+    observed_tariffs: dict[str, Mapping[str, Any]] = {}
     for code in ("SUNNY", "RAIN"):
         scenario_root = root / code
         snapshot_path = scenario_root / "scenario_input_snapshot.json"
@@ -426,6 +478,9 @@ def _load_parameter_sources(
         observed_parameters[code] = _extract_parameter_values(
             snapshot, scenario=code, source_path=snapshot_path
         )
+        observed_tariffs[code] = _extract_tariff_values(
+            snapshot, scenario=code, source_path=snapshot_path
+        )
         _require(
             observed_parameters[code]
             == _required_field(captured, "parameters", str(manifest_path)),
@@ -441,7 +496,15 @@ def _load_parameter_sources(
         == _required_field(source_manifest, "shared_parameters", str(manifest_path)),
         "Shared parameter manifest differs from raw snapshots",
     )
-    return source_hashes, _tree_sha256(source_hashes), observed_parameters["SUNNY"]
+    _require(
+        observed_tariffs["SUNNY"] == observed_tariffs["RAIN"],
+        "SUNNY/RAIN fixed tariff sources differ",
+    )
+    return (
+        source_hashes,
+        _tree_sha256(source_hashes),
+        {**observed_parameters["SUNNY"], **observed_tariffs["SUNNY"]},
+    )
 
 
 def _extract_parameter_values(
@@ -549,6 +612,41 @@ def _extract_parameter_values(
     }
 
 
+def _extract_tariff_values(
+    snapshot: Mapping[str, Any],
+    *,
+    scenario: str,
+    source_path: Path,
+) -> dict[str, float]:
+    """Read fixed cost coefficients from the sealed raw scenario snapshot."""
+
+    context = f"{scenario}: {source_path}"
+    persisted = _required_field(snapshot, "persisted_scenario", context)
+    overlay = _required_field(persisted, "scenario_overlay", context)
+    costs = _required_field(overlay, "cost_coefficients", context)
+    source_keys = {
+        "grid_flat_price_per_kwh": "grid_flat_price_per_kwh",
+        "demand_charge_cost_per_kw": "demand_charge_cost_per_kw",
+        "vehicle_usage_cost_jpy_per_used_bus": (
+            "vehicle_usage_cost_jpy_per_used_bus"
+        ),
+        "diesel_price_per_l": "diesel_price_per_l",
+        "co2_price_per_kg": "co2_price_per_kg",
+    }
+    observed: dict[str, float] = {}
+    for output_key, source_key in source_keys.items():
+        value = _required_field(costs, source_key, context)
+        _require(
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and math.isfinite(float(value))
+            and float(value) >= 0.0,
+            f"{context}: invalid tariff coefficient {source_key}",
+        )
+        observed[output_key] = float(value)
+    return observed
+
+
 def load_and_validate_bundle(
     evidence_dir: Path,
     parameter_evidence_dir: Path | None = None,
@@ -607,12 +705,29 @@ def _validate_bundle(bundle: EvidenceBundle) -> None:
     _require(summary["execution_git_sha"] == EXECUTION_SHA, "Unexpected execution SHA")
     _require(summary["execution_git_dirty"] is False, "Execution worktree was dirty")
     _require(summary["status"] == "PASS_NORMAL_PATH_CONFIRMATION", "Summary gate failed")
+    _require(
+        manifest.get("status") == "PASS_NORMAL_PATH_CONFIRMATION",
+        "Confirmation manifest gate failed",
+    )
     _require(manifest["execution_git_sha"] == EXECUTION_SHA, "Manifest SHA mismatch")
+    _require(
+        manifest.get("execution_git_dirty") is False,
+        "Confirmation execution worktree was dirty",
+    )
+    _require(
+        manifest.get("finalization_git_sha") == EXECUTION_SHA,
+        "Confirmation finalization SHA mismatch",
+    )
+    _require(
+        manifest.get("finalization_git_dirty") is False,
+        "Confirmation finalization worktree was dirty",
+    )
     _require(manifest["effective_solver_controls_equal"] is True, "Solver controls differ")
     _require(contract["status"] == "PASS_FULL_INPUT_CONTRACT", "Input contract failed")
     _require(contract["fresh_prepare_used"] is True, "Fresh Prepare was not used")
     _require(contract["fixed_nonweather_inputs_equal"] is True, "Fixed inputs differ")
     _require(contract["service_date_contract"]["matches"] is True, "Service date mismatch")
+    _validate_tariff_parameters(bundle)
 
     for code, scenario in bundle.scenarios.items():
         expected = EXPECTED_RESULTS[code]
@@ -683,10 +798,14 @@ def _validate_bundle(bundle: EvidenceBundle) -> None:
         )
         _require(scenario.costs["objective_is_actual_cost"] is False, f"{code}: cost scope")
         _validate_cost_reconciliation(scenario)
+        _validate_fuel_reconciliation(scenario)
+        _validate_minimum_soc_reconciliation(scenario)
         _validate_energy_balance(scenario)
+        _validate_executed_day_attestations(scenario)
 
     sunny = bundle.scenarios["SUNNY"]
     rain = bundle.scenarios["RAIN"]
+    _validate_grid_tariff_reconciliation(bundle)
     difference = float(rain.costs["total_cost"]) - float(sunny.costs["total_cost"])
     _assert_close(difference, EXPECTED_COST_DIFFERENCE_JPY, "Executed-day cost difference")
     component_difference = sum(
@@ -937,6 +1056,46 @@ def _validate_confirmation_checks(
     )
 
 
+def _validate_executed_day_attestations(scenario: ScenarioEvidence) -> None:
+    """Bind the standalone final ledger to every persisted attestation."""
+
+    code = scenario.code
+    nested = _required_field(
+        scenario.rolling,
+        "executed_day_accounting",
+        f"{code} rolling summary",
+    )
+    _require(
+        scenario.accounting == nested,
+        f"{code}: standalone accounting differs from Rolling accounting",
+    )
+    total_cost = float(
+        _required_field(scenario.costs, "total_cost", f"{code} cost breakdown")
+    )
+    _assert_close(
+        float(
+            _required_field(
+                scenario.summary,
+                "executed_day_cost_jpy",
+                f"{code} result summary",
+            )
+        ),
+        total_cost,
+        f"{code}: result-summary accounting total",
+    )
+    _assert_close(
+        float(
+            _required_field(
+                scenario.confirmation_gate,
+                "executed_day_accounting_total_cost_jpy",
+                f"{code} confirmation gate",
+            )
+        ),
+        total_cost,
+        f"{code}: confirmation-gate accounting total",
+    )
+
+
 def _validate_cost_reconciliation(scenario: ScenarioEvidence) -> None:
     """Recompute the canonical evaluator totals from every cost component."""
 
@@ -973,6 +1132,55 @@ def _validate_cost_reconciliation(scenario: ScenarioEvidence) -> None:
         float(_required_field(costs, "objective_value", f"{scenario.code} cost breakdown")),
         total_cost,
         f"{scenario.code}: accounting objective total",
+    )
+
+
+def _validate_fuel_reconciliation(scenario: ScenarioEvidence) -> None:
+    """Reconcile executed fuel volume to the summary and monetary ledger."""
+
+    code = scenario.code
+    fuel_liters = float(
+        _required_field(scenario.costs, "ice_fuel_consumed_l", f"{code} cost breakdown")
+    )
+    _assert_close(
+        float(
+            _required_field(
+                scenario.summary,
+                "executed_day_fuel_liters",
+                f"{code} result summary",
+            )
+        ),
+        fuel_liters,
+        f"{code}: executed fuel liters",
+    )
+    diesel_price = float(
+        _required_field(
+            scenario.optimization["effective_problem_scenario"],
+            "diesel_price_yen_per_l",
+            f"{code} effective problem",
+        )
+    )
+    _assert_close(
+        fuel_liters * diesel_price,
+        float(_required_field(scenario.costs, "fuel_cost", f"{code} cost breakdown")),
+        f"{code}: fuel cost from liters and tariff",
+    )
+
+
+def _validate_minimum_soc_reconciliation(scenario: ScenarioEvidence) -> None:
+    """Bind the published rounded minimum SOC to executed event evidence."""
+
+    published = float(
+        _required_field(
+            scenario.summary,
+            "minimum_executed_bev_soc_kwh",
+            f"{scenario.code} result summary",
+        )
+    )
+    _assert_close(
+        published,
+        round(scenario.minimum_soc_timeline_kwh, 2),
+        f"{scenario.code}: minimum executed BEV SOC",
     )
 
 
@@ -1441,6 +1649,93 @@ def _validate_shared_inputs(
     )
 
 
+def _validate_tariff_parameters(bundle: EvidenceBundle) -> None:
+    """Bind both effective models to one sealed fixed-tariff snapshot."""
+
+    sunny = bundle.scenarios["SUNNY"]
+    rain = bundle.scenarios["RAIN"]
+    shared = bundle.shared_parameters
+    problem_keys = (
+        "diesel_price_yen_per_l",
+        "demand_charge_on_peak_yen_per_kw",
+        "demand_charge_off_peak_yen_per_kw",
+        "co2_price_per_kg",
+    )
+    sunny_problem = sunny.optimization["effective_problem_scenario"]
+    rain_problem = rain.optimization["effective_problem_scenario"]
+    for key in problem_keys:
+        _assert_close(
+            float(_required_field(sunny_problem, key, "SUNNY effective problem")),
+            float(_required_field(rain_problem, key, "RAIN effective problem")),
+            f"SUNNY/RAIN effective tariff differs: {key}",
+        )
+    raw_to_effective = {
+        "diesel_price_per_l": "diesel_price_yen_per_l",
+        "co2_price_per_kg": "co2_price_per_kg",
+    }
+    for raw_key, effective_key in raw_to_effective.items():
+        _assert_close(
+            float(_required_field(sunny_problem, effective_key, "SUNNY effective problem")),
+            float(_required_field(shared, raw_key, "sealed shared tariffs")),
+            f"Effective tariff differs from sealed raw source: {effective_key}",
+        )
+    raw_demand_charge = float(
+        _required_field(
+            shared,
+            "demand_charge_cost_per_kw",
+            "sealed shared tariffs",
+        )
+    )
+    for key in (
+        "demand_charge_on_peak_yen_per_kw",
+        "demand_charge_off_peak_yen_per_kw",
+    ):
+        _assert_close(
+            float(_required_field(sunny_problem, key, "SUNNY effective problem")),
+            raw_demand_charge,
+            f"Effective tariff differs from sealed raw source: {key}",
+        )
+    raw_vehicle_cost = float(
+        _required_field(
+            shared,
+            "vehicle_usage_cost_jpy_per_used_bus",
+            "sealed shared tariffs",
+        )
+    )
+    for scenario in (sunny, rain):
+        _assert_close(
+            float(
+                _required_field(
+                    scenario.model_metadata,
+                    "vehicle_usage_cost_jpy_per_used_bus",
+                    f"{scenario.code} model metadata",
+                )
+            ),
+            raw_vehicle_cost,
+            f"{scenario.code}: vehicle-use tariff differs from sealed raw source",
+        )
+
+
+def _validate_grid_tariff_reconciliation(bundle: EvidenceBundle) -> None:
+    """Reconcile the nonzero executed grid ledger to the sealed unit price."""
+
+    rain = bundle.scenarios["RAIN"]
+    rain_grid_import = float(rain.costs["grid_import_kwh"])
+    _require(rain_grid_import > 0.0, "RAIN: grid import required for tariff audit")
+    implied_grid_price = float(rain.costs["electricity_cost"]) / rain_grid_import
+    _assert_close(
+        implied_grid_price,
+        float(
+            _required_field(
+                bundle.shared_parameters,
+                "grid_flat_price_per_kwh",
+                "sealed shared tariffs",
+            )
+        ),
+        "Executed grid price differs from sealed raw source",
+    )
+
+
 def _single_value(values: Iterable[Any], label: str) -> Any:
     unique = {json.dumps(value, ensure_ascii=False, sort_keys=True) for value in values}
     _require(len(unique) == 1, f"Expected one value for {label}, got {len(unique)}")
@@ -1478,7 +1773,6 @@ def _parameter_rows(bundle: EvidenceBundle) -> list[dict[str, str]]:
     fleet = _fleet_parameters(sunny)
     _require(fleet == _fleet_parameters(rain), "Fleet parameter snapshots differ")
     protocol = bundle.summary["protocol"]
-    problem = sunny.optimization["effective_problem_scenario"]
     solver = sunny.solver
     frontend = sunny.optimization["frontend_request"]
     energy_assets = bundle.shared_parameters
@@ -1491,7 +1785,11 @@ def _parameter_rows(bundle: EvidenceBundle) -> list[dict[str, str]]:
     _require(sunny_terminal == rain_terminal, "SUNNY/RAIN BESS terminal summaries differ")
     _require(solver == rain.solver, "Effective solver configuration differs")
     rain_grid_price = float(rain.costs["electricity_cost"]) / float(rain.costs["grid_import_kwh"])
-    _assert_close(rain_grid_price, 30.0, "Grid energy unit price")
+    _assert_close(
+        rain_grid_price,
+        float(energy_assets["grid_flat_price_per_kwh"]),
+        "Grid energy unit price",
+    )
 
     rows: list[dict[str, str]] = []
 
@@ -1542,11 +1840,12 @@ def _parameter_rows(bundle: EvidenceBundle) -> list[dict[str, str]]:
     add("BESS", "充電／放電効率", f"{energy_assets['bess_charge_efficiency'] * 100:.0f}／{energy_assets['bess_discharge_efficiency'] * 100:.0f}", unit="%", source="parameter_sources/*/scenario_input_snapshot.json")
     add("BESS", "実行日初期／終端SOC", f"{sunny_terminal['initial_soc_kwh']:.0f}／{sunny_terminal['terminal_soc_kwh']:.0f}", unit="kWh", source="executed_day_accounting.json")
     add("BESS", "観測された充放電比", float(sunny.costs["bess_to_bus_kwh"]) / float(sunny.costs["pv_to_bess_kwh"]) * 100.0, unit="%", source="executed_day_accounting.jsonから算出")
-    add("料金", "系統購入単価", rain_grid_price, unit="円/kWh", source="executed_day_accounting.jsonから算出")
-    add("料金", "軽油単価", problem["diesel_price_yen_per_l"], unit="円/L", source="optimization_parameters.json")
-    add("料金", "車両使用費", sunny.model_metadata["vehicle_usage_cost_jpy_per_used_bus"], unit="円/台日", source="optimization_parameters.json")
-    add("料金", "CO₂価格", problem["co2_price_per_kg"], unit="円/kg", source="optimization_parameters.json")
-    add("料金", "需要料金（on/off peak）", f"{problem['demand_charge_on_peak_yen_per_kw']:.0f}／{problem['demand_charge_off_peak_yen_per_kw']:.0f}", unit="円/kW", source="optimization_parameters.json")
+    tariff_source = "parameter_sources/*/scenario_input_snapshot.json"
+    add("料金", "系統購入単価", energy_assets["grid_flat_price_per_kwh"], unit="円/kWh", source=tariff_source)
+    add("料金", "軽油単価", energy_assets["diesel_price_per_l"], unit="円/L", source=tariff_source)
+    add("料金", "車両使用費", energy_assets["vehicle_usage_cost_jpy_per_used_bus"], unit="円/台日", source=tariff_source)
+    add("料金", "CO₂価格", energy_assets["co2_price_per_kg"], unit="円/kg", source=tariff_source)
+    add("料金", "需要料金（on/off peak）", f"{energy_assets['demand_charge_cost_per_kw']:.0f}／{energy_assets['demand_charge_cost_per_kw']:.0f}", unit="円/kW", source=tariff_source)
     add("料金", "評価額の性格", f"モデル定義による評価額（objective_is_actual_cost={str(sunny.costs['objective_is_actual_cost']).lower()}）", unit="-", source="executed_day_accounting.json")
     add("料金", "ゼロ計上項目", "需要料金・運転士費・電池劣化費・PV設備費・BESS設備費", unit="-", source="executed_day_accounting.json")
     add("Solver", "方式", solver["phase"], unit="-", source="optimization_parameters.json")

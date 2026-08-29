@@ -120,6 +120,11 @@ def test_builder_loads_and_validates_both_canonical_scenarios() -> None:
         "bess_charge_efficiency": 0.95,
         "bess_discharge_efficiency": 0.95,
         "bess_terminal_soc_target_kwh": 3000.0,
+        "grid_flat_price_per_kwh": 30.0,
+        "demand_charge_cost_per_kw": 0.0,
+        "vehicle_usage_cost_jpy_per_used_bus": 20000.0,
+        "diesel_price_per_l": 150.0,
+        "co2_price_per_kg": 1.0,
     }
 
     sunny = bundle.scenarios["SUNNY"]
@@ -223,6 +228,118 @@ def test_each_accounting_total_reconciles_to_all_canonical_components(
     with pytest.raises(
         builder.EvidenceValidationError,
         match="SUNNY: total cost component reconciliation",
+    ):
+        builder.load_and_validate_bundle(evidence, PARAMETER_SOURCE_ROOT)
+
+
+def test_standalone_accounting_must_equal_nested_rolling_ledger(
+    tmp_path: Path,
+) -> None:
+    evidence = tmp_path / "evidence"
+    shutil.copytree(EVIDENCE_ROOT, evidence)
+    accounting_path = evidence / "SUNNY" / "executed_day_accounting.json"
+    accounting = json.loads(accounting_path.read_text(encoding="utf-8"))
+    costs = accounting["cost_breakdown"]
+    costs["vehicle_usage_cost"] += 100.0
+    for key in ("total_cost", "total_cost_with_assets", "objective_value"):
+        costs[key] += 100.0
+    _write_json(accounting_path, accounting)
+
+    summary_path = evidence / "result_summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["scenarios"]["SUNNY"]["executed_day_cost_jpy"] += 100.0
+    _write_json(summary_path, summary)
+    _refresh_evidence_hash_index(evidence)
+
+    with pytest.raises(
+        builder.EvidenceValidationError,
+        match="SUNNY: standalone accounting differs from Rolling accounting",
+    ):
+        builder.load_and_validate_bundle(evidence, PARAMETER_SOURCE_ROOT)
+
+
+def test_executed_fuel_liters_reconcile_to_summary_and_cost(
+    tmp_path: Path,
+) -> None:
+    evidence = tmp_path / "evidence"
+    shutil.copytree(EVIDENCE_ROOT, evidence)
+    accounting_path = evidence / "RAIN" / "executed_day_accounting.json"
+    accounting = json.loads(accounting_path.read_text(encoding="utf-8"))
+    accounting["cost_breakdown"]["ice_fuel_consumed_l"] += 1.0
+    _write_json(accounting_path, accounting)
+
+    rolling_path = evidence / "RAIN" / "rolling_chain_summary.json"
+    rolling = json.loads(rolling_path.read_text(encoding="utf-8"))
+    rolling["executed_day_accounting"] = accounting
+    _write_json(rolling_path, rolling)
+    _refresh_evidence_hash_index(evidence)
+
+    with pytest.raises(
+        builder.EvidenceValidationError,
+        match="RAIN: executed fuel liters",
+    ):
+        builder.load_and_validate_bundle(evidence, PARAMETER_SOURCE_ROOT)
+
+
+def test_minimum_soc_is_recomputed_from_executed_event_timeline(
+    tmp_path: Path,
+) -> None:
+    evidence = tmp_path / "evidence"
+    shutil.copytree(EVIDENCE_ROOT, evidence)
+    summary_path = evidence / "result_summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["scenarios"]["RAIN"]["minimum_executed_bev_soc_kwh"] = -999.0
+    _write_json(summary_path, summary)
+    _refresh_evidence_hash_index(evidence)
+
+    with pytest.raises(
+        builder.EvidenceValidationError,
+        match="RAIN: minimum executed BEV SOC",
+    ):
+        builder.load_and_validate_bundle(evidence, PARAMETER_SOURCE_ROOT)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    (
+        ("status", "FAILED", "Confirmation manifest gate failed"),
+        ("execution_git_dirty", True, "Confirmation execution worktree was dirty"),
+        ("finalization_git_sha", "different", "Confirmation finalization SHA mismatch"),
+        ("finalization_git_dirty", True, "Confirmation finalization worktree was dirty"),
+    ),
+)
+def test_confirmation_manifest_requires_clean_identical_execution(
+    tmp_path: Path,
+    field: str,
+    value: object,
+    message: str,
+) -> None:
+    evidence = tmp_path / "evidence"
+    shutil.copytree(EVIDENCE_ROOT, evidence)
+    manifest_path = evidence / "confirmation_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest[field] = value
+    _write_json(manifest_path, manifest)
+    _refresh_evidence_hash_index(evidence)
+
+    with pytest.raises(builder.EvidenceValidationError, match=message):
+        builder.load_and_validate_bundle(evidence, PARAMETER_SOURCE_ROOT)
+
+
+def test_effective_tariffs_match_both_scenarios_and_sealed_raw_source(
+    tmp_path: Path,
+) -> None:
+    evidence = tmp_path / "evidence"
+    shutil.copytree(EVIDENCE_ROOT, evidence)
+    optimization_path = evidence / "SUNNY" / "optimization_parameters.json"
+    optimization = json.loads(optimization_path.read_text(encoding="utf-8"))
+    optimization["effective_problem_scenario"]["diesel_price_yen_per_l"] = 999.0
+    _write_json(optimization_path, optimization)
+    _refresh_evidence_hash_index(evidence)
+
+    with pytest.raises(
+        builder.EvidenceValidationError,
+        match="SUNNY/RAIN effective tariff differs: diesel_price_yen_per_l",
     ):
         builder.load_and_validate_bundle(evidence, PARAMETER_SOURCE_ROOT)
 

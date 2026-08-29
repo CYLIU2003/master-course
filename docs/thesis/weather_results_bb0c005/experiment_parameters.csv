@@ -33,11 +33,11 @@ BESS,初期／終端目標SOC,3000／3000,,,kWh,parameter_sources/*/scenario_inp
 BESS,充電／放電効率,95／95,,,%,parameter_sources/*/scenario_input_snapshot.json
 BESS,実行日初期／終端SOC,3000／3000,,,kWh,executed_day_accounting.json
 BESS,観測された充放電比,90.25,,,%,executed_day_accounting.jsonから算出
-料金,系統購入単価,30,,,円/kWh,executed_day_accounting.jsonから算出
-料金,軽油単価,150,,,円/L,optimization_parameters.json
-料金,車両使用費,20000,,,円/台日,optimization_parameters.json
-料金,CO₂価格,1,,,円/kg,optimization_parameters.json
-料金,需要料金（on/off peak）,0／0,,,円/kW,optimization_parameters.json
+料金,系統購入単価,30,,,円/kWh,parameter_sources/*/scenario_input_snapshot.json
+料金,軽油単価,150,,,円/L,parameter_sources/*/scenario_input_snapshot.json
+料金,車両使用費,20000,,,円/台日,parameter_sources/*/scenario_input_snapshot.json
+料金,CO₂価格,1,,,円/kg,parameter_sources/*/scenario_input_snapshot.json
+料金,需要料金（on/off peak）,0／0,,,円/kW,parameter_sources/*/scenario_input_snapshot.json
 料金,評価額の性格,モデル定義による評価額（objective_is_actual_cost=false）,,,-,executed_day_accounting.json
 料金,ゼロ計上項目,需要料金・運転士費・電池劣化費・PV設備費・BESS設備費,,,-,executed_day_accounting.json
 Solver,方式,phase3_two_stage,,,-,optimization_parameters.json

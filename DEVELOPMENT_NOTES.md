@@ -1,5 +1,32 @@
 # Development Notes
 
+## 2026-08-29 (Asia/Tokyo): final thesis-package evidence cross-links hardened
+
+- On `research/thesis-weather-results-bb0c005`, the report loader now requires
+  `confirmation_manifest.json` to record
+  `PASS_NORMAL_PATH_CONFIRMATION`, clean execution/finalization states, and
+  the same frozen solver-run SHA `bb0c0050883a91dd86a9e8813ae88d4b6d8c361d`.
+  The standalone `executed_day_accounting.json` must equal the ledger embedded
+  in `rolling_chain_summary.json`, and its total must also reconcile to
+  `result_summary.json` and the per-scenario confirmation gate.
+- Executed ICE liters now reconcile both to the published scenario summary and
+  to `fuel_cost / diesel_price`. The published two-decimal minimum BEV SOC is
+  recomputed from every before/after value in the persisted vehicle SOC event
+  timeline, with finite capacity/reserve bounds enforced. No source evidence
+  byte or solver result was changed.
+- The common grid, diesel, vehicle-day, CO2, and demand-charge coefficients are
+  read directly from each sealed raw `scenario_input_snapshot.json`; SUNNY and
+  RAIN must agree, both effective optimization problems must agree with the raw
+  values, and the nonzero RAIN grid ledger must reproduce the raw 30 JPY/kWh
+  price. The experiment-parameter table now cites those raw snapshots as the
+  tariff source.
+- Local verification after these changes: `52 passed` for the two thesis
+  reporting suites and `222 passed` for the reporting plus research-contract
+  focused suite; compile, exact package regeneration, and `git diff --check`
+  passed; the full repository suite completed with `1711 passed in 106.25s`.
+  Per the account owner's current instruction, GitHub Actions and Copilot
+  review are not invoked; remote validation remains dormant.
+
 ## 2026-08-29 (Asia/Tokyo): thesis SUNNY/RAIN result package from canonical `bb0c005` evidence
 
 - On branch `research/thesis-weather-results-bb0c005` at base

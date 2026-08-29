@@ -10,12 +10,13 @@ that brief is a request for independent review, not an approval record.
 
 ## GitHub validation policy
 
-The expensive Python 3.11 research-validation workflow is manual-only. It no
-longer runs automatically on pushes or pull-request updates. When a remote
-validation run is needed, start **Research code validation** from the GitHub
-Actions page with **Run workflow**. Local focused and full-suite validation
-remain required before publishing research-code or evidence changes. The
-workflow downloads Noto Sans JP from the official pinned `Sans2.004` tag,
+The Python 3.11 research-validation workflow is retained as a manual-only
+reference and does not run on pushes or pull-request updates. Under the current
+account-owner policy it must not be triggered; validation is local-only unless
+the owner explicitly reverses that policy. Local focused and full-suite
+validation remain required before publishing research-code or evidence
+changes. The dormant workflow definition downloads Noto Sans JP from the
+official pinned `Sans2.004` tag,
 verifies its SHA-256, and passes that exact file to the thesis figure builder;
 missing or substituted Japanese fonts remain a fail-closed error. The complete
 Matplotlib/Pillow renderer dependency set is pinned in
@@ -26,8 +27,11 @@ download, SHA-256 check, and environment binding required before reproduction.
 Before rendering, the loader also re-audits every Rolling acceptance check,
 binds physical validation to the exact assignment/fleet/execution hashes,
 reconciles canonical input hashes and solver controls to the confirmation
-contract, checks grid-import flow balance, and verifies reported gap/runtime
-against direct solver artifacts.
+contract, requires the standalone executed-day ledger to equal the ledger
+embedded in the accepted Rolling chain, and verifies reported gap/runtime
+against direct solver artifacts. Fuel volume and cost, the event-timeline
+minimum BEV SOC, and every fixed tariff are independently reconciled to the
+sealed scenario inputs before any thesis table is rendered.
 
 ## Current 2026-08-29 fresh SUNNY/RAIN rerun
 

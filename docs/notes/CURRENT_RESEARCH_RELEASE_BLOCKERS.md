@@ -194,16 +194,25 @@ LF text bytes, path-only SVG labels, and every artifact SHA-256. This improves
 reporting completeness and reviewability but does not change the numerical
 certification or release blockers above.
 
+The report loader additionally cross-checks the final cost against the ledger
+embedded in the accepted Rolling chain and the confirmation gate, recomputes
+fuel cost from executed liters and the sealed diesel price, and validates the
+published minimum BEV SOC from the persisted event timeline. Grid, diesel,
+vehicle-day, CO2, and demand-charge coefficients must be identical between
+SUNNY and RAIN and equal the sealed raw scenario snapshots. These are
+reporting-integrity gates only: they do not improve the Stage-1 certificates or
+upgrade the bounded Phase-3 result to an integrated optimum.
+
 ## 2026-08-29 (Asia/Tokyo): remote validation scheduling policy
 
-The expensive Python 3.11 research-validation workflow is now manual-only via
-`workflow_dispatch`; pushes and pull-request updates no longer start it
-automatically. This is a cost/noise control and does not make a local test pass,
-solver completion, or research acceptance optional. Each published research
-change must still record its local compile/focused/full-suite evidence, and a
-manual GitHub run can be requested when an independent Python 3.11 check is
-needed. This scheduling policy does not change the active numerical or release
-blockers below.
+The Python 3.11 research-validation workflow remains manual-only via
+`workflow_dispatch`; pushes and pull-request updates do not start it. The
+account owner has additionally required that GitHub Actions and paid/AI review
+features not be invoked at all. Until that instruction is explicitly reversed,
+validation is local-only and a fresh remote-CI gate cannot be claimed. This
+cost-control policy does not make local compile/focused/full-suite evidence,
+solver completion, or research acceptance optional, and it does not change the
+active numerical or release blockers below.
 
 ## 2026-08-29 (Asia/Tokyo): Case-A confirmation evidence re-audited
 
