@@ -19,14 +19,18 @@ from scripts.run_weather_dispatch_diagnosis import (
     build_confirmation_input_contract,
     candidate_is_selectable,
     classify_weather_winners,
+    confirmation_request_matches_worker,
     deduplicate_candidates,
+    require_selectable_assignment_coverage,
     select_canonical_candidate,
+    selectable_assignment_hashes,
     validate_fixed_dispatch_evidence,
 )
 from scripts.run_pure_ice_aggregation_weather_ab import ScenarioInput
 from bff.routers.optimization import (
     RunOptimizationBody,
     _apply_research_phase3_candidate_coverage_policy,
+    _apply_research_phase3_candidate_coverage_policy_or_http_error,
     _prepared_active_bev_count,
     _prepared_active_bev_count_or_http_error,
     _public_run_enforces_interactive_runtime_controls,
@@ -682,10 +686,121 @@ def test_formal_phase3_rejects_inverted_requested_frontier() -> None:
         )
 
 
+def test_public_formal_phase3_returns_422_for_inverted_requested_frontier() -> None:
+    requested = RunOptimizationBody(
+        mode="phase3_two_stage",
+        research_run=True,
+        stage1_bev_frontier_enabled=False,
+        stage1_bev_frontier_min_count=50,
+        stage1_bev_frontier_max_count=20,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        _apply_research_phase3_candidate_coverage_policy_or_http_error(
+            requested,
+            available_bev_count=20,
+        )
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.detail["field"] == "stage1_bev_frontier_min_count"
+
+
 def test_confirmation_compares_dispatch_construction_controls() -> None:
     assert {"rebuild_dispatch", "use_existing_duties"}.issubset(
         diagnosis.FIXED_CONFIRMATION_REQUEST_CONTROL_KEYS
     )
+
+
+def test_confirmation_request_parity_uses_worker_raw_body() -> None:
+    copied = {"rebuild_dispatch": True, "use_existing_duties": False}
+    assert confirmation_request_matches_worker(copied, dict(copied))
+    assert not confirmation_request_matches_worker(
+        copied,
+        {"rebuild_dispatch": False, "use_existing_duties": False},
+    )
+
+
+def test_selectable_coverage_counts_only_distinct_fully_valid_assignments() -> None:
+    rows = [
+        {**_candidate(f"valid-{index}", 100.0 + index), "scenario": "SUNNY"}
+        for index in range(12)
+    ]
+    rows.extend(
+        [
+            {**_candidate("valid-0", 200.0), "scenario": "SUNNY"},
+            {
+                **_candidate("invalid-accounting", 50.0),
+                "scenario": "SUNNY",
+                "accounting_reconciliation_passed": False,
+            },
+            {**_candidate("rain-only", 40.0), "scenario": "RAIN"},
+        ]
+    )
+    assert selectable_assignment_hashes(rows, scenario="SUNNY") == sorted(
+        f"valid-{index}" for index in range(12)
+    )
+
+
+def test_selectable_coverage_fails_when_evaluated_rows_are_not_valid() -> None:
+    rows = [
+        {**_candidate(f"{code}-{index}", 100.0 + index), "scenario": code}
+        for code in ("SUNNY", "RAIN")
+        for index in range(12)
+    ]
+    rows[-1]["physical_validation_feasible"] = False
+
+    with pytest.raises(RuntimeError, match="12 distinct fully selectable"):
+        require_selectable_assignment_coverage(rows)
+
+
+def test_frozen_a_candidate_audit_never_follows_unindexed_run_dir(
+    tmp_path: Path,
+) -> None:
+    paths = []
+    for code in ("SUNNY", "RAIN"):
+        for index in range(5):
+            path = (
+                tmp_path
+                / "scenarios"
+                / code
+                / "runs"
+                / f"{index + 1:02d}_A_discrete"
+                / "case_metrics.json"
+            )
+            _write_json(
+                path,
+                {
+                    "run_dir": str(tmp_path / "unindexed-poison" / code / str(index)),
+                    "provenance": {
+                        "representation": "discrete",
+                        "audit_representation": "discrete",
+                    },
+                },
+            )
+            paths.append(path)
+    _write_json(
+        tmp_path / "artifact_hashes.json",
+        {
+            "sha256": {
+                path.relative_to(tmp_path).as_posix(): diagnosis._sha256_file(path)
+                for path in paths
+            }
+        },
+    )
+    assert diagnosis._load_existing_a_candidates(tmp_path) == []
+
+
+def test_candidate_union_rejects_unverified_frozen_bundle(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        diagnosis,
+        "_verify_existing_bundle",
+        lambda _bundle: {"accepted": False, "hash_mismatches": ["tampered"]},
+    )
+
+    with pytest.raises(RuntimeError, match="hash verification failed"):
+        diagnosis.build_candidate_union(tmp_path / "output", tmp_path / "bundle")
 
 
 def test_runtime_analysis_ignores_unindexed_case_metrics(tmp_path: Path) -> None:
