@@ -73,6 +73,16 @@ related suite passes 140 tests and the candidate-model suite passes 20 tests.
 The complete repository suite passes 1,655 tests.
 No frozen evidence or numerical result was changed.
 
+The subsequent exact-HEAD review closes three P1 and three P2 fail-open paths.
+Finalization is bound to the current clean checkout; the candidate union carries
+its producer SHA; and confirmation rejects a sealed matrix from another SHA
+before Fresh Prepare or solver submission. Independent Stage-2 accounting
+includes terminal unreplenished BEV energy valuation, runtime residuals exclude
+both solver stages, and rejected requests cannot persist dispatch-scope changes.
+The expanded related suite passes 164 tests and the complete repository suite
+passes 1,659 tests. These are next-run guards only. Frozen `bb0c005` evidence and all published
+numerical results remain unchanged, and no solver was rerun.
+
 The scenario audit retained the exact intended counterfactual: SUNNY
 `771d115b-75b0-49f7-a7f0-25f259a2cd21` uses 2025-08-05 service/weather/PV;
 RAIN `b23fd26c-1233-4c73-bb9e-bdb8b1584760` keeps the same 2025-08-05 WEEKDAY

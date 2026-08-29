@@ -54,7 +54,12 @@ discovery, cross-evaluation, confirmation, and finalization must share one
 clean Git SHA. Runtime decomposition preserves the indexed Stage-1 runtime
 directly, while candidate accounting also reconciles canonical cost against
 the independently solved Stage-2 variable-cost objective. Null formal thread
-controls fail as a structured 422 before queueing. Finalization normalizes both the
+controls fail as a structured 422 before queueing. The candidate-union artifact
+records its own producer SHA, confirmation rejects an incompatible matrix
+before Fresh Prepare or solver submission, and finalization binds evidence to
+the current clean checkout. Stage-2 accounting includes terminal unreplenished
+BEV energy valuation, runtime residuals exclude both solver stages, and a
+rejected request cannot persist a new dispatch scope. Finalization normalizes both the
 submitted copy and worker-persisted body through the public request model,
 compares every normalized SUNNY/RAIN control except the declared
 scenario-specific `prepared_input_id`, and requires each public worker run

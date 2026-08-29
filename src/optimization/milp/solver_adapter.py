@@ -145,6 +145,7 @@ def _stage2_result_accounting_reconciliation(
     independently_produced_total = float(stage2_objective_jpy) + sum(
         float(value)
         for value in (
+            breakdown.electricity_cost_provisional_leftover,
             breakdown.fuel_cost,
             breakdown.vehicle_cost,
             breakdown.vehicle_usage_cost,
