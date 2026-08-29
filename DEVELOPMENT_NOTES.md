@@ -89,6 +89,11 @@
   and exposes only that file through `THESIS_JAPANESE_FONT_PATH`. The builder
   verifies the file exists and identifies as Noto Sans JP; it does not fall
   back to a font that would corrupt Japanese glyphs.
+- Manual Python 3.11 run `33243590026` on
+  `be06de12c9233117d10a9cf98fdf9b2c2796afaf` then passed the pinned-font
+  check, compilation, `94` focused research-contract tests, the complete
+  `1608 passed, 17 skipped` suite (`1,625` collected), and the committed-patch
+  whitespace check.
 - The unchanged evidence tree SHA-256 is
   `c706da7e10bc4e99a06a441f91e1722baa971b41ab936d29db36e650accede5f`.
   The six-file parameter supplement tree SHA-256 is
