@@ -193,6 +193,15 @@
   byte was altered. The combined reporting/evidence/contract/navigation suite
   passed `161 passed in 13.62s`, exact package verification passed, and the
   complete repository suite passed `1670 passed in 178.17s`.
+- Final integration of PR #7 at `68b9133` added producer-time seals for the
+  derived union/matrix handoffs, independent candidate cost reconciliation,
+  requested-depot BEV scoping, and indexed-only runtime analysis. On the
+  integrated PR #8 tree, the combined reporting/evidence/contract/navigation
+  suite passed `168 passed in 14.77s`, exact package verification returned
+  `PASS_EXACT_THESIS_WEATHER_RESULT_PACKAGE`, and the complete repository suite
+  passed `1677 passed in 182.26s`. The package remains 24 files and 1,084,538
+  bytes; its source-tree, parameter-source-tree, and package-manifest hashes
+  remain unchanged.
 
 ## 2026-08-29 (Asia/Tokyo): formal Phase-3 provenance review hardening
 
