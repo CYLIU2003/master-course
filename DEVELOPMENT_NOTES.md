@@ -123,6 +123,13 @@
   for these paths pass; the expanded related suite passed `164` tests and the
   complete repository suite passed `1659 passed in 168.91s`. No formal
   experiment or frozen artifact was changed.
+- The next exact-HEAD review closed two remaining P1 paths. Cross-weather
+  fixed-dispatch evaluation now requires canonical cost to reconcile with the
+  independent Stage-2 objective plus non-Stage-2 components, matching the
+  worker candidate gate. After validation, dispatch-scope persistence writes
+  the already-resolved service/depot values instead of rereading mutable store
+  state, so concurrent requests cannot change the fleet between frontier
+  validation and queued execution. The direct related suite passes 84 tests.
 
 ## 2026-08-29 (Asia/Tokyo): fresh public-path SUNNY/RAIN rerun at `bb0c005`
 

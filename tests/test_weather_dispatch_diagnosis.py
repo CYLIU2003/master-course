@@ -1504,8 +1504,8 @@ def test_formal_endpoint_uses_resolved_depot_for_prepared_bev_count(
         ),
         mock.call(
             "scenario-1",
-            service_id=None,
-            depot_id=None,
+            service_id="WEEKDAY",
+            depot_id="dep-1",
             persist=True,
         ),
     ]

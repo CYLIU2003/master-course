@@ -59,7 +59,10 @@ records its own producer SHA, confirmation rejects an incompatible matrix
 before Fresh Prepare or solver submission, and finalization binds evidence to
 the current clean checkout. Stage-2 accounting includes terminal unreplenished
 BEV energy valuation, runtime residuals exclude both solver stages, and a
-rejected request cannot persist a new dispatch scope. Finalization normalizes both the
+rejected request cannot persist a new dispatch scope. The validated service and
+depot values are persisted without a second mutable-store lookup, and the
+cross-weather fixed-dispatch matrix reconciles cost against the independent
+Stage-2 objective. Finalization normalizes both the
 submitted copy and worker-persisted body through the public request model,
 compares every normalized SUNNY/RAIN control except the declared
 scenario-specific `prepared_input_id`, and requires each public worker run

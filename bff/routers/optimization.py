@@ -14286,8 +14286,8 @@ def run_optimization(
         )
     scope = _resolve_dispatch_scope(
         scenario_id,
-        service_id=request.service_id,
-        depot_id=request.depot_id,
+        service_id=scope.get("serviceId"),
+        depot_id=scope.get("depotId"),
         persist=True,
     )
     job = job_store.create_job(execution_model=_executor_mode())
