@@ -31,7 +31,10 @@ contract, requires the standalone executed-day ledger to equal the ledger
 embedded in the accepted Rolling chain, and verifies reported gap/runtime
 against direct solver artifacts. Fuel volume and cost, the event-timeline
 minimum BEV SOC, and every fixed tariff are independently reconciled to the
-sealed scenario inputs before any thesis table is rendered.
+sealed scenario inputs before any thesis table is rendered. Each of the 24
+Rolling steps must also preserve the frozen seed, thread count, gap, time
+limit, timestep, and execution interval, cover the ordered hourly timestamps,
+and report an acceptable Stage-2 status.
 
 ## Current 2026-08-29 fresh SUNNY/RAIN rerun
 

@@ -203,6 +203,14 @@ SUNNY and RAIN and equal the sealed raw scenario snapshots. These are
 reporting-integrity gates only: they do not improve the Stage-1 certificates or
 upgrade the bounded Phase-3 result to an integrated optimum.
 
+The same loader now proves that the 24 persisted Rolling records form the
+ordered 00:00--23:00 hourly chain, that their internal slot indices follow the
+15-minute grid, and that every step retains the frozen Stage-2 time limit,
+requested gap, seed, thread count, backend, and execution interval. An
+infeasible or unknown Stage-2 status fails closed even if an outer feasibility
+flag was left true. This closes a reporting acceptance gap; it is not a new
+solver run or a stronger optimality certificate.
+
 ## 2026-08-29 (Asia/Tokyo): remote validation scheduling policy
 
 The Python 3.11 research-validation workflow remains manual-only via

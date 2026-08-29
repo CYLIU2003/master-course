@@ -26,6 +26,15 @@
   passed; the full repository suite completed with `1711 passed in 106.25s`.
   Per the account owner's current instruction, GitHub Actions and Copilot
   review are not invoked; remote validation remains dormant.
+- A subsequent PR audit found three additional Rolling-attestation gaps. The
+  loader now rejects an infeasible/unknown per-step Stage-2 status, derives all
+  24 expected `HH:MM` timestamps and 15-minute slot indices from the frozen
+  60-minute execution interval, and checks chain-level plus per-step timestep,
+  time limit, gap, seed, thread, and backend fields against the frozen
+  protocol. Three tamper regressions cover the exact review reproductions;
+  the reporting suites now pass `55` tests and the wider focused suite passes
+  `225` tests. Compile, exact package verification, and `git diff --check`
+  passed; the complete repository suite passed `1714 tests in 105.09s`.
 
 ## 2026-08-29 (Asia/Tokyo): thesis SUNNY/RAIN result package from canonical `bb0c005` evidence
 

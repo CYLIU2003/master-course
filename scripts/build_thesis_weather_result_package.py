@@ -66,6 +66,15 @@ EXPECTED_SOLVER_CONTROLS = {
     "stage1_bev_frontier_max_count": 35,
     "stage1_bev_frontier_target_time_limit_sec": 120.0,
 }
+EXPECTED_ROLLING_CONTROLS = {
+    "timestep_min": 15,
+    "execution_minutes": 60,
+    "time_limit_sec": 30,
+    "mip_gap": 0.1,
+    "random_seed": 42,
+    "gurobi_threads": 1,
+    "solver_backend": "gurobi",
+}
 EXPECTED_CONFIRMATION_CHECKS = frozenset(
     {
         "served_264",
@@ -949,9 +958,17 @@ def _validate_rolling_chain(scenario: ScenarioEvidence) -> None:
         "day_ahead_assignment_hash",
         f"{code} rolling summary",
     )
+    _validate_rolling_controls(scenario, steps)
+    _validate_rolling_step_times(
+        scenario,
+        steps,
+        expected_step_count=expected_step_count,
+    )
     all_steps_feasible = all(
         step.get("feasible") is True
         and str(step.get("solver_status") or "").lower() in {"feasible", "optimal"}
+        and str(step.get("stage2_solver_status") or "").lower()
+        in {"feasible", "optimal", "time_limit"}
         and not list(step.get("infeasibility_reasons") or ())
         for step in steps
     )
@@ -1022,6 +1039,204 @@ def _validate_rolling_chain(scenario: ScenarioEvidence) -> None:
         f"missing={audit['missing_required_checks']}, "
         f"failing={audit['failing_checks']}",
     )
+
+
+def _validate_rolling_controls(
+    scenario: ScenarioEvidence,
+    steps: Sequence[Mapping[str, Any]],
+) -> None:
+    """Bind Rolling-level and per-step controls to the frozen experiment."""
+
+    code = scenario.code
+    rolling = scenario.rolling
+    frontend = _required_field(
+        scenario.optimization,
+        "frontend_request",
+        f"{code} optimization provenance",
+    )
+    top_level_keys = (
+        "timestep_min",
+        "time_limit_sec",
+        "mip_gap",
+        "random_seed",
+        "gurobi_threads",
+        "solver_backend",
+    )
+    for key in top_level_keys:
+        actual = _required_field(rolling, key, f"{code} rolling summary")
+        expected = EXPECTED_ROLLING_CONTROLS[key]
+        if isinstance(expected, float):
+            _assert_close(
+                float(actual),
+                expected,
+                f"{code}: Rolling top-level control {key}",
+            )
+        else:
+            _require(
+                actual == expected,
+                f"{code}: Rolling top-level control {key}",
+            )
+    frontend_keys = {
+        "timestep_min": "timestep_min",
+        "rolling_execution_minutes": "execution_minutes",
+        "stage2_time_limit_seconds": "time_limit_sec",
+        "mip_gap": "mip_gap",
+        "random_seed": "random_seed",
+        "gurobi_threads": "gurobi_threads",
+    }
+    for frontend_key, expected_key in frontend_keys.items():
+        actual = _required_field(frontend, frontend_key, f"{code} frontend request")
+        expected = EXPECTED_ROLLING_CONTROLS[expected_key]
+        if isinstance(expected, float):
+            _assert_close(
+                float(actual),
+                expected,
+                f"{code}: frozen Rolling request {frontend_key}",
+            )
+        else:
+            _require(
+                actual == expected,
+                f"{code}: frozen Rolling request {frontend_key}",
+            )
+    step_keys = (
+        "timestep_min",
+        "execution_minutes",
+        "time_limit_sec",
+        "mip_gap",
+        "random_seed",
+        "gurobi_threads",
+        "solver_backend",
+    )
+    for index, step in enumerate(steps):
+        for key in step_keys:
+            actual = _required_field(step, key, f"{code} Rolling step {index}")
+            expected = EXPECTED_ROLLING_CONTROLS[key]
+            if isinstance(expected, float):
+                _assert_close(
+                    float(actual),
+                    expected,
+                    f"{code}: Rolling step {index} control {key}",
+                )
+            else:
+                _require(
+                    actual == expected,
+                    f"{code}: Rolling step {index} control {key}",
+                )
+        stage2_status = str(
+            _required_field(
+                step,
+                "stage2_solver_status",
+                f"{code} Rolling step {index}",
+            )
+        ).lower()
+        _require(
+            stage2_status in {"feasible", "optimal", "time_limit"},
+            f"{code}: unacceptable Stage 2 status at Rolling step {index}: "
+            f"{stage2_status or '<empty>'}",
+        )
+        effective_limit = float(
+            _required_field(
+                step,
+                "stage2_time_limit_sec_effective",
+                f"{code} Rolling step {index}",
+            )
+        )
+        _require(
+            math.isfinite(effective_limit)
+            and 0.0 < effective_limit <= EXPECTED_ROLLING_CONTROLS["time_limit_sec"] + TOLERANCE,
+            f"{code}: invalid effective Stage 2 limit at Rolling step {index}",
+        )
+
+
+def _clock_minutes(value: Any, *, context: str) -> int:
+    """Parse one persisted 24-hour HH:MM timestamp fail-closed."""
+
+    _require(isinstance(value, str), f"{context}: clock value must be a string")
+    pieces = value.split(":")
+    _require(
+        len(pieces) == 2
+        and len(pieces[0]) == 2
+        and len(pieces[1]) == 2
+        and all(piece.isdigit() for piece in pieces),
+        f"{context}: expected HH:MM, got {value!r}",
+    )
+    hour, minute = (int(piece) for piece in pieces)
+    _require(
+        0 <= hour < 24 and 0 <= minute < 60,
+        f"{context}: invalid clock time {value!r}",
+    )
+    return hour * 60 + minute
+
+
+def _format_clock(total_minutes: int) -> str:
+    normalized = total_minutes % (24 * 60)
+    return f"{normalized // 60:02d}:{normalized % 60:02d}"
+
+
+def _validate_rolling_step_times(
+    scenario: ScenarioEvidence,
+    steps: Sequence[Mapping[str, Any]],
+    *,
+    expected_step_count: int,
+) -> None:
+    """Prove that persisted Rolling steps cover one ordered execution day."""
+
+    code = scenario.code
+    rolling = scenario.rolling
+    timestep = int(EXPECTED_ROLLING_CONTROLS["timestep_min"])
+    execution_minutes = int(EXPECTED_ROLLING_CONTROLS["execution_minutes"])
+    _require(
+        execution_minutes % timestep == 0,
+        f"{code}: Rolling interval is not aligned to the internal timestep",
+    )
+    _require(
+        expected_step_count * execution_minutes == 24 * 60,
+        f"{code}: Rolling steps do not cover exactly one day",
+    )
+    start_time = _required_field(
+        rolling,
+        "rolling_start_time",
+        f"{code} rolling summary",
+    )
+    start_minutes = _clock_minutes(
+        start_time,
+        context=f"{code} Rolling start time",
+    )
+    _require(
+        start_minutes % timestep == 0,
+        f"{code}: Rolling start time is not timestep-aligned",
+    )
+    expected_end = _format_clock(
+        start_minutes + expected_step_count * execution_minutes
+    )
+    _require(
+        _required_field(
+            rolling,
+            "rolling_end_time",
+            f"{code} rolling summary",
+        )
+        == expected_end,
+        f"{code}: Rolling end time does not match the covered intervals",
+    )
+    slots_per_day = (24 * 60) // timestep
+    slot_stride = execution_minutes // timestep
+    for index, step in enumerate(steps):
+        expected_time = _format_clock(start_minutes + index * execution_minutes)
+        _require(
+            _required_field(step, "current_time", f"{code} Rolling step {index}")
+            == expected_time,
+            f"{code}: Rolling step time sequence differs at step {index}",
+        )
+        expected_slot = (start_minutes // timestep + index * slot_stride) % slots_per_day
+        _require(
+            _required_field(
+                step,
+                "rolling_start_slot_index",
+                f"{code} Rolling step {index}",
+            )
+            == expected_slot,
+            f"{code}: Rolling slot sequence differs at step {index}",
+        )
 
 
 def _validate_confirmation_checks(

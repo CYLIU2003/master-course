@@ -512,6 +512,60 @@ def test_confirmation_gate_requires_exact_producer_check_set(
         builder.load_and_validate_bundle(evidence, PARAMETER_SOURCE_ROOT)
 
 
+def test_rolling_rejects_infeasible_stage2_status(tmp_path: Path) -> None:
+    evidence = tmp_path / "evidence"
+    shutil.copytree(EVIDENCE_ROOT, evidence)
+    path = evidence / "RAIN" / "rolling_chain_summary.json"
+    rolling = json.loads(path.read_text(encoding="utf-8"))
+    rolling["steps"][0]["stage2_solver_status"] = "infeasible"
+    _write_json(path, rolling)
+    _refresh_evidence_hash_index(evidence)
+
+    with pytest.raises(
+        builder.EvidenceValidationError,
+        match="RAIN: unacceptable Stage 2 status at Rolling step 0: infeasible",
+    ):
+        builder.load_and_validate_bundle(evidence, PARAMETER_SOURCE_ROOT)
+
+
+def test_rolling_rejects_duplicate_or_skipped_hourly_timestamps(
+    tmp_path: Path,
+) -> None:
+    evidence = tmp_path / "evidence"
+    shutil.copytree(EVIDENCE_ROOT, evidence)
+    path = evidence / "RAIN" / "rolling_chain_summary.json"
+    rolling = json.loads(path.read_text(encoding="utf-8"))
+    rolling["steps"][1]["current_time"] = "00:00"
+    _write_json(path, rolling)
+    _refresh_evidence_hash_index(evidence)
+
+    with pytest.raises(
+        builder.EvidenceValidationError,
+        match="RAIN: Rolling step time sequence differs at step 1",
+    ):
+        builder.load_and_validate_bundle(evidence, PARAMETER_SOURCE_ROOT)
+
+
+def test_rolling_controls_match_frozen_protocol_at_chain_and_step_levels(
+    tmp_path: Path,
+) -> None:
+    evidence = tmp_path / "evidence"
+    shutil.copytree(EVIDENCE_ROOT, evidence)
+    path = evidence / "RAIN" / "rolling_chain_summary.json"
+    rolling = json.loads(path.read_text(encoding="utf-8"))
+    rolling["random_seed"] = 999
+    for step in rolling["steps"]:
+        step["random_seed"] = 999
+    _write_json(path, rolling)
+    _refresh_evidence_hash_index(evidence)
+
+    with pytest.raises(
+        builder.EvidenceValidationError,
+        match="RAIN: Rolling top-level control random_seed",
+    ):
+        builder.load_and_validate_bundle(evidence, PARAMETER_SOURCE_ROOT)
+
+
 def test_canonical_input_hashes_match_audited_input_contract(
     tmp_path: Path,
 ) -> None:
