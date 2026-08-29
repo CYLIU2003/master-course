@@ -261,7 +261,7 @@ def assignment_hash_from_rows(rows: Iterable[Mapping[str, Any]]) -> str:
         vehicle_id = str(row.get("vehicle_id") or "")
         duty_id = str(row.get("duty_id") or "")
         powertrain = str(row.get("powertrain") or "").upper()
-        normalized.append((trip_id, vehicle_id))
+        normalized.append((vehicle_id, trip_id))
         if duty_id:
             existing_vehicle = duty_vehicles.setdefault(duty_id, vehicle_id)
             if existing_vehicle != vehicle_id:
@@ -279,11 +279,11 @@ def assignment_hash_from_rows(rows: Iterable[Mapping[str, Any]]) -> str:
                 )
     normalized.sort()
     if not normalized or any(
-        not trip_id or not vehicle_id
-        for trip_id, vehicle_id in normalized
+        not vehicle_id or not trip_id
+        for vehicle_id, trip_id in normalized
     ):
         raise ValueError("assignment rows require non-empty trip_id and vehicle_id")
-    if len({trip_id for trip_id, _ in normalized}) != len(normalized):
+    if len({trip_id for _, trip_id in normalized}) != len(normalized):
         raise ValueError("assignment rows contain duplicate trip IDs")
     return _canonical_hash(normalized)
 
@@ -2107,6 +2107,12 @@ def finalize_normal_confirmation(
 ) -> dict[str, Any]:
     """Consolidate already completed public-path runs without solving again."""
 
+    source_bundle_verification = _verify_existing_bundle(existing_bundle)
+    if not source_bundle_verification["accepted"]:
+        raise RuntimeError(
+            "existing bundle hash verification failed before finalization: "
+            f"{source_bundle_verification}"
+        )
     run_dirs = {"SUNNY": sunny_run_dir.resolve(), "RAIN": rain_run_dir.resolve()}
     execution_shas = {
         code: str(
@@ -2196,6 +2202,7 @@ def finalize_normal_confirmation(
         "finalization_git_sha": finalization_sha,
         "finalization_git_dirty": finalization_dirty,
         "public_endpoint": "/api/scenarios/{scenario_id}/run-optimization",
+        "source_bundle_verification": source_bundle_verification,
         "fixed_request_controls_equal": controls_equal,
         "fixed_request_control_keys": list(
             FIXED_CONFIRMATION_REQUEST_CONTROL_KEYS
