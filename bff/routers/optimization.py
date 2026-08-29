@@ -13978,6 +13978,29 @@ def _apply_research_phase3_candidate_coverage_policy(
     )
 
 
+def _apply_research_phase3_candidate_coverage_policy_or_http_error(
+    request: RunOptimizationBody,
+    *,
+    available_bev_count: int | None = None,
+) -> RunOptimizationBody:
+    """Translate formal frontier-contract failures to a public 422 response."""
+
+    try:
+        return _apply_research_phase3_candidate_coverage_policy(
+            request,
+            available_bev_count=available_bev_count,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=make_error(
+                AppErrorCode.SCHEMA_VALIDATION_ERROR,
+                str(exc),
+                field="stage1_bev_frontier_min_count",
+            ),
+        ) from exc
+
+
 def _prepared_active_bev_count(solver_input_path: Path) -> int:
     """Count BEVs in the exact vehicle set materialized by Prepare."""
 
@@ -14191,7 +14214,7 @@ def run_optimization(
         active_bev_count = _prepared_active_bev_count_or_http_error(
             Path(prep.solver_input_path)
         )
-    request = _apply_research_phase3_candidate_coverage_policy(
+    request = _apply_research_phase3_candidate_coverage_policy_or_http_error(
         request,
         available_bev_count=active_bev_count,
     )

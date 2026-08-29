@@ -39,6 +39,29 @@
   `(vehicle_id, trip_id)` tuple order. No solver or evidence artifact was
   rerun or rewritten. The expanded focused suite passed `88 passed in 3.26s`;
   the complete repository suite passed `1630 passed in 168.24s`.
+- A later review found four additional fail-open paths. Frozen A
+  `case_metrics.json` files contain aggregate results but no sealed physical
+  assignment rows, so candidate reconstruction no longer follows their
+  unindexed `run_dir` pointers; all ten indexed A metrics are audited as
+  discrete inventory and contribute zero candidates. The public confirmation
+  now compares each submitted request copy with
+  `optimization_parameters.json -> frontend_request.raw_frontend_body`, and
+  all fixed-control comparisons use that worker-persisted body. Candidate
+  coverage is accepted only with at least 12 distinct per-scenario assignment
+  hashes that pass Stage 2, physical validation, accounting, and no
+  fallback/repair. Inverted formal frontier bounds are translated to a
+  structured HTTP 422 before job creation. No scenario, solver, or frozen
+  evidence artifact was changed or rerun. Standalone candidate-union execution
+  also re-hashes all 103 indexed bundle artifacts before reading the discrete-A
+  inventory. The expanded related suite passed `124 passed in 1.75s`; the
+  complete repository suite passed `1636 passed in 168.10s`.
+- The two prepared contracts were reread while implementing the gates. SUNNY
+  is scenario `771d115b-75b0-49f7-a7f0-25f259a2cd21` with 2025-08-05 service
+  and PV/weather. RAIN is `b23fd26c-1233-4c73-bb9e-bdb8b1584760`, preserving
+  the same 2025-08-05 WEEKDAY service while sourcing PV/weather from
+  2025-08-10. Shared materialized controls include 264 trips, 60 active buses
+  (35 BEV / 25 ICE), 10 x 90-kW chargers, 200-kW grid capacity, 1-MW PV, and a
+  6-MWh / 900-kW BESS.
 
 ## 2026-08-29 (Asia/Tokyo): fresh public-path SUNNY/RAIN rerun at `bb0c005`
 

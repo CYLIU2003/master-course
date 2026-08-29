@@ -20,6 +20,25 @@ hashes use production `(vehicle_id, trip_id)` ordering. These are additional
 next-run code guards only. The refreshed focused suite passes 88 tests and the
 complete repository suite passes 1,630 tests.
 
+Four later review findings are also closed for the next run. The ten indexed
+historical discrete-A metrics are no longer treated as recoverable physical
+candidates because their assignment rows are not sealed; no unindexed
+`run_dir` is followed. The finalizer compares the copied submission with the
+worker-persisted raw request body and uses that body for cross-weather control
+parity. Candidate coverage now means at least 12 distinct fully selectable
+assignments per scenario, not merely 12 evaluated rows. An inverted disabled
+frontier request now fails as a structured 422 before job creation.
+Standalone candidate-union execution also verifies all 103 frozen index entries
+before reading the inventory. The related contract/evidence regression passes
+124 tests and the complete repository regression passes 1,636 tests.
+
+The scenario audit retained the exact intended counterfactual: SUNNY
+`771d115b-75b0-49f7-a7f0-25f259a2cd21` uses 2025-08-05 service/weather/PV;
+RAIN `b23fd26c-1233-4c73-bb9e-bdb8b1584760` keeps the same 2025-08-05 WEEKDAY
+service and uses 2025-08-10 weather/PV. Both prepared inputs materialize 264
+trips and the same 60-bus fleet (35 BEV / 25 ICE), 10 90-kW chargers, 200-kW
+grid capacity, 1-MW PV rating, and 6-MWh / 900-kW BESS.
+
 This is code-hardening evidence only. It does not mutate the frozen `bb0c005`
 SUNNY/RAIN artifacts, rerun a solver, reduce their certified gaps, or clear the
 advisor/release blockers below. Any numerical claim under this newer code still

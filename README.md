@@ -40,6 +40,23 @@ set, physical assignment identity excludes incidental duty labels, runtime
 analysis consumes only hash-indexed frozen artifacts, strict finalization
 verifies the frozen index, hashes the actually submitted request, and compares dispatch-construction
 switches, and final candidate tie-break metadata reaches the public result.
+The candidate union no longer follows the frozen aggregate metrics' unindexed
+`run_dir` pointers: because the sealed metrics contain no vehicle-trip rows,
+those ten historical A runs are inventory-only and contribute zero recovered
+candidates. Finalization also requires the submitted request copy to equal the
+worker-persisted raw body, and requires at least 12 distinct candidates per
+scenario that each pass Stage 2, physical validation, accounting, and the
+no-fallback/no-repair gate. Invalid formal frontier ranges now return a
+structured HTTP 422 before job creation.
+
+The two fixed scenario contracts were re-read from the frozen prepared inputs.
+SUNNY is `771d115b-75b0-49f7-a7f0-25f259a2cd21` with 2025-08-05 service and
+PV/weather; RAIN is `b23fd26c-1233-4c73-bb9e-bdb8b1584760` with the same
+2025-08-05 WEEKDAY service but 2025-08-10 PV/weather under the declared
+fixed-weekday counterfactual. Both use 264 trips, the exact 60-vehicle active
+fleet (35 BEV / 25 ICE), 10 90-kW chargers, a 200-kW grid limit, 1-MW PV, and
+a 6-MWh / 900-kW BESS. These parameters are provenance facts, not permission
+to replace or regenerate either scenario.
 New numerical claims require a fresh clean-commit run.
 
 ## Current 2026-08-28 weather-dispatch diagnosis

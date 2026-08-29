@@ -339,6 +339,43 @@ def candidate_is_selectable(candidate: Mapping[str, Any]) -> bool:
     )
 
 
+def selectable_assignment_hashes(
+    rows: Iterable[Mapping[str, Any]],
+    *,
+    scenario: str | None = None,
+) -> list[str]:
+    """Return distinct physical hashes that pass every final-candidate gate."""
+
+    hashes = {
+        str(row.get("assignment_hash") or "")
+        for row in rows
+        if (scenario is None or row.get("scenario") == scenario)
+        and candidate_is_selectable(row)
+        and str(row.get("assignment_hash") or "")
+    }
+    return sorted(hashes)
+
+
+def require_selectable_assignment_coverage(
+    rows: Iterable[Mapping[str, Any]],
+    *,
+    target: int = 12,
+) -> dict[str, int]:
+    """Fail unless each weather scenario has enough distinct valid candidates."""
+
+    materialized = list(rows)
+    counts = {
+        code: len(selectable_assignment_hashes(materialized, scenario=code))
+        for code in SCENARIOS
+    }
+    if any(count < target for count in counts.values()):
+        raise RuntimeError(
+            f"requires {target} distinct fully selectable candidates per "
+            f"scenario: {counts}"
+        )
+    return counts
+
+
 def select_canonical_candidate(
     candidates: Iterable[Mapping[str, Any]],
 ) -> dict[str, Any]:
@@ -828,9 +865,15 @@ def _load_candidate_rows_from_run(code: str, source_run_dir: Path) -> list[dict[
 
 
 def _load_existing_a_candidates(existing_bundle: Path) -> list[dict[str, Any]]:
-    """Recover the sole candidate from each frozen candidate-limit-one A run."""
+    """Audit frozen A runs without following their unsealed ``run_dir`` paths.
 
-    candidates: list[dict[str, Any]] = []
+    The frozen bundle seals aggregate ``case_metrics.json`` files, but it does
+    not seal the vehicle-trip assignment rows needed to reconstruct a physical
+    candidate.  Consequently these runs cannot safely contribute candidates
+    to a new union.  Their indexed metrics are still checked here so the
+    historical five-per-scenario discrete-A inventory remains explicit.
+    """
+
     counts = {code: 0 for code in SCENARIOS}
     for case_metrics_path in _indexed_a_case_metrics_paths(existing_bundle):
         metrics = _read_json(case_metrics_path)
@@ -839,105 +882,29 @@ def _load_existing_a_candidates(existing_bundle: Path) -> list[dict[str, Any]]:
             raise RuntimeError(
                 f"unexpected existing A scenario: {source_scenario}"
             )
-        run_dir = Path(str(metrics.get("run_dir") or ""))
-        solver = _read_json(run_dir / "solver_result.json")
-        scenario = _read_json(run_dir / "effective_scenario.json")
-        powertrain_by_vehicle = {
-            str(vehicle.get("id") or ""): str(vehicle.get("type") or "").upper()
-            for vehicle in list(scenario.get("vehicles") or ())
-        }
-        assignment = dict(solver.get("assignment") or {})
-        assignment_rows = [
-            {
-                "duty_id": f"milp_{vehicle_id}",
-                "trip_id": str(trip_id),
-                "vehicle_id": str(vehicle_id),
-                "powertrain": powertrain_by_vehicle.get(str(vehicle_id), ""),
-            }
-            for vehicle_id, trip_ids in assignment.items()
-            for trip_id in list(trip_ids or ())
-        ]
-        physical_hash = assignment_hash_from_rows(assignment_rows)
-        metadata = dict(solver.get("solver_metadata") or {})
-        used_vehicle_ids = set(assignment)
-        used_bev = sum(
-            powertrain_by_vehicle.get(str(vehicle_id)) == "BEV"
-            for vehicle_id in used_vehicle_ids
-        )
-        used_ice = sum(
-            powertrain_by_vehicle.get(str(vehicle_id)) == "ICE"
-            for vehicle_id in used_vehicle_ids
-        )
-        bev_trips = sum(
-            1
-            for row in assignment_rows
-            if str(row.get("powertrain") or "").upper() == "BEV"
-        )
-        ice_trips = len(assignment_rows) - bev_trips
-        recourse = dict(
-            metadata.get("stage1_time_indexed_energy_recourse_result") or {}
-        )
-        run_label = case_metrics_path.parent.name
-        candidates.append(
-            {
-                "source_kind": "frozen_existing_A_run",
-                "source_scenario": source_scenario,
-                "source_run_dir": str(run_dir.resolve()),
-                "source_run_label": run_label,
-                "candidate_index": 1,
-                "candidate_selection_rank": 1,
-                "selected": True,
-                "rejection_reason": None,
-                "candidate_hash": physical_hash,
-                "candidate_hash_semantics": (
-                    "derived_physical_assignment_hash_because_candidate_limit_one_"
-                    "run_has_no_native_candidate_pool_artifact"
-                ),
-                "assignment_hash": physical_hash,
-                "vehicle_trip_assignments": assignment_rows,
-                "used_bev": used_bev,
-                "used_ice": used_ice,
-                "bev_trips": bev_trips,
-                "ice_trips": ice_trips,
-                "stage1_relaxed_objective_jpy": metadata.get(
-                    "stage1_objective"
-                ),
-                "stage1_recourse_objective_jpy": recourse.get("objective_jpy"),
-                "stage2_actual_canonical_cost_jpy": solver.get(
-                    "objective_value"
-                ),
-                "stage2_feasible": (
-                    str(metadata.get("stage2_solver_status") or "").lower()
-                    == "optimal"
-                    and not list(solver.get("unserved_tasks") or ())
-                ),
-                "physical_validation_feasible": bool(
-                    dict(metrics.get("validity") or {}).get(
-                        "physical_validation_accepted"
-                    )
-                ),
-                "accounting_reconciliation_passed": (
-                    dict(metrics.get("validity") or {}).get(
-                        "accounting_reconciliation_status"
-                    )
-                    == "OK"
-                ),
-                "stage1_candidate_priority_cost_semantics": (
-                    "stage1_weather_aware_relaxed_objective"
-                ),
-                "stage1_candidate_priority_is_solver_native": True,
-            }
-        )
+        provenance = dict(metrics.get("provenance") or {})
+        if provenance.get("representation") != "discrete" or provenance.get(
+            "audit_representation"
+        ) != "discrete":
+            raise RuntimeError(
+                f"indexed frozen A run is not discrete: {case_metrics_path}"
+            )
         counts[source_scenario] += 1
     if counts != {"SUNNY": 5, "RAIN": 5}:
         raise RuntimeError(f"expected five frozen A runs per scenario: {counts}")
-    return candidates
+    return []
 
 
 def build_candidate_union(
     output_dir: Path,
     existing_bundle: Path = DEFAULT_EXISTING_BUNDLE,
 ) -> list[dict[str, Any]]:
+    source_bundle_verification = _verify_existing_bundle(existing_bundle)
+    if not source_bundle_verification["accepted"]:
+        raise RuntimeError(
+            "existing bundle hash verification failed before candidate-union "
+            f"audit: {source_bundle_verification}"
+        )
     manifest = _read_json(output_dir / "candidate_discovery_manifest.json")
     existing_candidates = _load_existing_a_candidates(existing_bundle)
     expanded_candidates: list[dict[str, Any]] = []
@@ -950,21 +917,18 @@ def build_candidate_union(
     existing_payload = {
         "schema_version": SCHEMA_VERSION,
         "source_bundle": str(existing_bundle.resolve()),
-        "source_bundle_sha256_verification": "103_of_103_passed",
+        "source_bundle_verification": source_bundle_verification,
         "representation": "discrete_A",
         "candidate_limit_per_run": 1,
         "native_candidate_pool_artifact_available": False,
+        "recovery_status": "NOT_RECOVERABLE_FROM_INDEXED_BUNDLE_ONLY",
         "recovery_semantics": (
-            "the_authoritative_final_assignment_is_the_sole_candidate_in_each_"
-            "candidate_limit_one_run"
+            "indexed_case_metrics_do_not_contain_physical_assignment_rows;_"
+            "unindexed_run_dir_paths_are_never_followed"
         ),
-        "run_count": len(existing_candidates),
-        "run_count_by_scenario": {
-            code: sum(
-                row.get("source_scenario") == code for row in existing_candidates
-            )
-            for code in SCENARIOS
-        },
+        "indexed_run_count": 10,
+        "indexed_run_count_by_scenario": {code: 5 for code in SCENARIOS},
+        "candidate_contribution_count": 0,
         "unique_physical_assignment_count": len(existing_unique),
         "candidates": existing_candidates,
     }
@@ -982,12 +946,15 @@ def build_candidate_union(
     )
     payload = {
         "schema_version": SCHEMA_VERSION,
-        "existing_A_candidates_collected_first": True,
-        "existing_A_run_count": len(existing_candidates),
+        "existing_A_candidates_collected_first": False,
+        "existing_A_indexed_metrics_audited": True,
+        "existing_A_run_count": 10,
+        "existing_A_candidate_contribution_count": len(existing_candidates),
         "existing_A_unique_physical_assignment_count": len(existing_unique),
         "expanded_candidate_count": len(expanded_candidates),
         "candidate_count_before_deduplication": len(candidates),
         "unique_physical_assignment_count": len(unique),
+        "physical_assignment_hash_deduplication_applied": True,
         "target_unique_assignment_count": 12,
         "target_reached": len(unique) >= 12,
         "candidates": unique,
@@ -1238,11 +1205,16 @@ def cross_evaluate(output_dir: Path) -> dict[str, Any]:
             )
             matrix_rows.append(row)
             by_scenario[code].append(row)
+    selectable_hashes_by_scenario = {
+        code: selectable_assignment_hashes(matrix_rows, scenario=code)
+        for code in SCENARIOS
+    }
+    selectable_counts = require_selectable_assignment_coverage(matrix_rows)
     verdict = classify_weather_winners(
         by_scenario["SUNNY"],
         by_scenario["RAIN"],
         candidate_target=12,
-        unique_candidate_count=len(unique),
+        unique_candidate_count=min(selectable_counts.values()),
     )
     sunny_selected = select_canonical_candidate(by_scenario["SUNNY"])
     rain_selected = select_canonical_candidate(by_scenario["RAIN"])
@@ -1262,6 +1234,8 @@ def cross_evaluate(output_dir: Path) -> dict[str, Any]:
         "candidate_discovery_git_sha": discovery.get("git_sha"),
         "git_dirty_before_after": False,
         "candidate_count": len(unique),
+        "selectable_assignment_count_by_scenario": selectable_counts,
+        "selectable_assignment_hashes_by_scenario": selectable_hashes_by_scenario,
         "dispatch_reoptimization_performed": False,
         "energy_recourse_optimization_performed": True,
         "verdict": verdict,
@@ -1334,6 +1308,15 @@ def _normal_confirmation_request(scenario: ScenarioInput) -> dict[str, Any]:
             f"normal confirmation request drifted from frozen controls: {mismatches}"
         )
     return request
+
+
+def confirmation_request_matches_worker(
+    copied_request: Mapping[str, Any],
+    worker_request: Mapping[str, Any],
+) -> bool:
+    """Compare the submitted copy with the worker-persisted raw request body."""
+
+    return _canonical_hash(dict(copied_request)) == _canonical_hash(dict(worker_request))
 
 
 def _powertrain_selector_is_disabled(
@@ -1463,11 +1446,10 @@ def _confirmation_gate(run_dir: Path, expected_sha: str) -> dict[str, Any]:
         "day_ahead_research_acceptance_passed": (
             _day_ahead_research_is_accepted(summary)
         ),
-        "candidate_coverage_applied": (
+        "candidate_coverage_policy_applied": (
             int(candidates.get("requested_candidate_limit") or 0) >= 22
             and int(candidates.get("composition_search_radius_requested") or 0)
             >= 4
-            and int(candidates.get("candidate_count_evaluated") or 0) >= 12
         ),
         "frozen_runtime_controls_preserved": (
             runtime_controls.get("scope") == "research_batch_run"
@@ -1531,6 +1513,8 @@ def _confirmation_gate(run_dir: Path, expected_sha: str) -> dict[str, Any]:
             "cost_breakdown.total_cost"
         ),
         "candidate_count_evaluated": candidates.get("candidate_count_evaluated"),
+        "worker_frontend_request": frontend_request,
+        "worker_frontend_request_sha256": _canonical_hash(frontend_request),
         "prepared_input_id": rolling.get("prepared_input_id"),
         "service_date": rolling.get("service_date"),
         "calendar_policy": rolling.get("calendar_policy"),
@@ -1619,12 +1603,28 @@ def confirm_normal_runs(
             **_confirmation_gate(run_dir, frozen_sha),
         }
         _write_json(case_dir / "confirmation_gate.json", results[code])
-    expected = dict(
-        _read_json(output_dir / "cross_weather_fixed_dispatch_matrix.json").get(
-            "selected"
-        )
-        or {}
+    matrix = _read_json(output_dir / "cross_weather_fixed_dispatch_matrix.json")
+    expected = dict(matrix.get("selected") or {})
+    selectable_counts = require_selectable_assignment_coverage(
+        matrix.get("rows") or ()
     )
+    copied_requests = {
+        code: _read_json(
+            confirmation_dir / code / "frontend_optimization_request.json"
+        )
+        for code in SCENARIOS
+    }
+    worker_request_checks = {
+        code: confirmation_request_matches_worker(
+            copied_requests[code], results[code]["worker_frontend_request"]
+        )
+        for code in SCENARIOS
+    }
+    if not all(worker_request_checks.values()):
+        raise RuntimeError(
+            "submitted confirmation request differs from worker raw body: "
+            f"{worker_request_checks}"
+        )
     winner_checks = {
         code: results[code]["selected_physical_assignment_hash"]
         == str(dict(expected.get(code) or {}).get("assignment_hash") or "")
@@ -1645,6 +1645,8 @@ def confirm_normal_runs(
         "requested_bev_frontier_enabled": False,
         "pure_ice_aggregate_B_executed": False,
         "winner_matches_fixed_dispatch_diagnosis": winner_checks,
+        "selectable_assignment_count_by_scenario": selectable_counts,
+        "submitted_request_matches_worker_raw_body": worker_request_checks,
         "scenarios": results,
         "progress_log": progress_log,
     }
@@ -1707,15 +1709,24 @@ def build_case_a_candidate_selection_audit(
                     f"{code} source candidate missing from cross matrix: {physical_hash}"
                 )
             ranked_source.append((candidate, physical_hash, matrix_row))
+        selectable_ranked = [
+            item for item in ranked_source if candidate_is_selectable(item[2])
+        ]
+        selectable_hashes = {item[1] for item in selectable_ranked}
+        if len(selectable_hashes) < 12:
+            raise RuntimeError(
+                f"{code} has fewer than twelve distinct fully selectable "
+                f"candidates: {len(selectable_hashes)}"
+            )
         proxy_order = sorted(
-            ranked_source,
+            selectable_ranked,
             key=lambda item: (
                 float(item[0]["stage1_candidate_priority_cost_jpy"]),
                 item[1],
             ),
         )
         canonical_order = sorted(
-            ranked_source,
+            selectable_ranked,
             key=lambda item: (
                 float(item[2]["canonical_actual_cost_jpy"]),
                 int(item[2]["used_vehicle_count"]),
@@ -1747,13 +1758,14 @@ def build_case_a_candidate_selection_audit(
                     "stage1_energy_recourse_objective_jpy": candidate.get(
                         "stage1_recourse_objective_jpy"
                     ),
-                    "stage1_proxy_rank": proxy_rank[physical_hash],
+                    "stage1_proxy_rank": proxy_rank.get(physical_hash),
                     "stage2_canonical_actual_cost_jpy": matrix_row.get(
                         "canonical_actual_cost_jpy"
                     ),
-                    "stage2_canonical_rank": canonical_rank[physical_hash],
+                    "stage2_canonical_rank": canonical_rank.get(physical_hash),
                     "rank_reversed": (
-                        proxy_rank[physical_hash] != canonical_rank[physical_hash]
+                        physical_hash in selectable_hashes
+                        and proxy_rank[physical_hash] != canonical_rank[physical_hash]
                     ),
                     "stage2_feasible": matrix_row.get("stage2_feasible"),
                     "physical_validation_feasible": matrix_row.get(
@@ -1783,16 +1795,15 @@ def build_case_a_candidate_selection_audit(
             "stage1_recourse_used_in_objective": (
                 recourse_configuration.get("used_in_stage1_objective") is True
             ),
-            "proxy_vs_canonical_rank_compared": len(ranked_source) >= 12,
+            "proxy_vs_canonical_rank_compared": len(selectable_hashes) >= 12,
             "selection_not_first_feasible_or_stage1_only": (
                 "minimum_canonical_actual_cost" in selection_semantics
-                and int(source_candidates_payload.get("candidate_count_evaluated") or 0)
-                >= 12
+                and len(selectable_hashes) >= 12
             ),
             "physical_assignment_hash_deduplication_applied": (
-                int(union.get("candidate_count_before_deduplication") or 0)
-                > int(union.get("unique_physical_assignment_count") or 0)
-                >= 12
+                union.get("physical_assignment_hash_deduplication_applied") is True
+                and int(union.get("unique_physical_assignment_count") or 0) >= 12
+                and len(selectable_hashes) >= 12
             ),
             "stage2_canonical_minimum_selected": (
                 canonical_winner
@@ -1806,7 +1817,9 @@ def build_case_a_candidate_selection_audit(
         second = canonical_order[1][2]
         scenario_audits[code] = {
             "source_run_dir": str(source_run_dir.resolve()),
-            "candidate_count": len(ranked_source),
+            "candidate_count": len(selectable_hashes),
+            "source_candidate_count": len(ranked_source),
+            "distinct_fully_selectable_assignment_count": len(selectable_hashes),
             "stage1_time_indexed_energy_recourse_configuration": (
                 recourse_configuration
             ),
@@ -2136,11 +2149,10 @@ def finalize_normal_confirmation(
         code: _confirmation_gate(run_dir, execution_sha)
         for code, run_dir in run_dirs.items()
     }
-    expected = dict(
-        _read_json(output_dir / "cross_weather_fixed_dispatch_matrix.json").get(
-            "selected"
-        )
-        or {}
+    matrix = _read_json(output_dir / "cross_weather_fixed_dispatch_matrix.json")
+    expected = dict(matrix.get("selected") or {})
+    selectable_counts = require_selectable_assignment_coverage(
+        matrix.get("rows") or ()
     )
     winner_checks = {
         code: results[code]["selected_physical_assignment_hash"]
@@ -2150,12 +2162,27 @@ def finalize_normal_confirmation(
     if not all(winner_checks.values()):
         raise RuntimeError(f"confirmed winners differ from diagnosis: {winner_checks}")
     confirmation_dir = output_dir / confirmation_dir_name
-    requests = {
+    copied_requests = {
         code: _read_json(confirmation_dir / code / "frontend_optimization_request.json")
         for code in SCENARIOS
     }
+    worker_requests = {
+        code: dict(results[code]["worker_frontend_request"])
+        for code in SCENARIOS
+    }
+    worker_request_checks = {
+        code: confirmation_request_matches_worker(
+            copied_requests[code], worker_requests[code]
+        )
+        for code in SCENARIOS
+    }
+    if not all(worker_request_checks.values()):
+        raise RuntimeError(
+            "submitted confirmation request differs from worker raw body: "
+            f"{worker_request_checks}"
+        )
     controls_equal = all(
-        requests["SUNNY"].get(key) == requests["RAIN"].get(key)
+        worker_requests["SUNNY"].get(key) == worker_requests["RAIN"].get(key)
         for key in FIXED_CONFIRMATION_REQUEST_CONTROL_KEYS
     )
     effective_control_keys = sorted(
@@ -2174,8 +2201,8 @@ def finalize_normal_confirmation(
         == results["RAIN"]["interactive_bev_utilization_policy"]
     )
     timestep_is_15 = all(
-        int(requests[code].get("timestep_min") or 0) == 15
-        and int(requests[code].get("time_step_min") or 0) == 15
+        int(worker_requests[code].get("timestep_min") or 0) == 15
+        and int(worker_requests[code].get("time_step_min") or 0) == 15
         for code in SCENARIOS
     )
     if (
@@ -2203,6 +2230,14 @@ def finalize_normal_confirmation(
         "finalization_git_dirty": finalization_dirty,
         "public_endpoint": "/api/scenarios/{scenario_id}/run-optimization",
         "source_bundle_verification": source_bundle_verification,
+        "selectable_assignment_count_by_scenario": selectable_counts,
+        "submitted_request_matches_worker_raw_body": worker_request_checks,
+        "submitted_request_sha256": {
+            code: _canonical_hash(copied_requests[code]) for code in SCENARIOS
+        },
+        "worker_raw_request_sha256": {
+            code: _canonical_hash(worker_requests[code]) for code in SCENARIOS
+        },
         "fixed_request_controls_equal": controls_equal,
         "fixed_request_control_keys": list(
             FIXED_CONFIRMATION_REQUEST_CONTROL_KEYS
@@ -2213,14 +2248,14 @@ def finalize_normal_confirmation(
         "bev_utilization_policies_equal": bev_utilization_policies_equal,
         "internal_timestep_15_minutes": timestep_is_15,
         "rolling_execution_minutes": 60,
-        "requested_candidate_limit": requests["SUNNY"].get(
+        "requested_candidate_limit": worker_requests["SUNNY"].get(
             "stage1_stage2_candidate_limit"
         ),
-        "requested_composition_radius": requests["SUNNY"].get(
+        "requested_composition_radius": worker_requests["SUNNY"].get(
             "stage1_composition_search_radius"
         ),
         "requested_bev_frontier_enabled": bool(
-            requests["SUNNY"].get("stage1_bev_frontier_enabled", False)
+            worker_requests["SUNNY"].get("stage1_bev_frontier_enabled", False)
         ),
         "effective_candidate_limit": 22,
         "effective_composition_radius": 4,
