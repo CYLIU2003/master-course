@@ -1,0 +1,60 @@
+{
+  "job_id": "f4b0118a-d41c-42ca-8420-631af4ace73e",
+  "status": "completed",
+  "progress": 100,
+  "message": "Feasible candidate complete; physical checks and the certified Stage 1 MIP gap target passed, but integrated global optimality is not established.",
+  "result_key": "optimization_result",
+  "error": null,
+  "metadata": {
+    "persistence": {
+      "store": "json_files",
+      "survives_restart": true,
+      "warning": "Background jobs are persisted to output/jobs; in-progress jobs are marked failed if the BFF restarts."
+    },
+    "pid": 8460,
+    "started_at": "2026-08-29T05:55:46.416591+00:00",
+    "execution_model": "thread",
+    "scenario_id": "b23fd26c-1233-4c73-bb9e-bdb8b1584760",
+    "service_id": "WEEKDAY",
+    "depot_id": "tsurumaki",
+    "stage": "completed",
+    "mode": "phase3_two_stage",
+    "updated_at": "2026-08-29T06:06:40.966855+00:00",
+    "rebuild_dispatch": false,
+    "use_existing_duties": false,
+    "prepared_input_id": "prepared-a6c5e0a8cdd9b32b-f1e18f252e336f1f-8acc7b3a",
+    "prepared_input_path": "C:\\master-course\\output\\prepared_inputs\\b23fd26c-1233-4c73-bb9e-bdb8b1584760\\prepared-a6c5e0a8cdd9b32b-f1e18f252e336f1f-8acc7b3a.json",
+    "problem_summary": {
+      "trips": 264,
+      "vehicles": 60,
+      "chargers": 10,
+      "feasible_arcs": 11310,
+      "price_slots": 96,
+      "pv_slots": 96,
+      "time_limit_seconds_requested": 585
+    },
+    "run_dir": "C:\\master-course\\output\\2026-08-29\\run_20260829_1455",
+    "run_profile": "day_ahead_and_hourly_rolling",
+    "rolling_execution_minutes": 60,
+    "objective_value": 698296.465283954,
+    "solver_status": "feasible",
+    "feed_context": {
+      "feedId": "tokyu",
+      "snapshotId": "2026-03-23",
+      "datasetId": "tokyu_full",
+      "datasetFingerprint": "tokyu_full:2026-03-23",
+      "manualRouteFamilyMapHash": null,
+      "source": "tokyu_bus_data"
+    },
+    "reporting_finalizer_status": "completed",
+    "artifact_completeness_status": "OK",
+    "artifact_completeness_artifact": "artifact_completeness.json",
+    "required_artifact_count": 240,
+    "verified_artifact_count": 240
+  },
+  "persistence": {
+    "store": "json_files",
+    "survives_restart": true,
+    "warning": "Background jobs are persisted to output/jobs; in-progress jobs are marked failed if the BFF restarts."
+  }
+}

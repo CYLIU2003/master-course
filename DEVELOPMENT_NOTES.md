@@ -1,5 +1,46 @@
 # Development Notes
 
+## 2026-08-29 (Asia/Tokyo): fresh public-path SUNNY/RAIN rerun at `bb0c005`
+
+- Tagged and froze `bb0c0050883a91dd86a9e8813ae88d4b6d8c361d` as
+  `thesis-weather-rerun-bb0c005`, started the BFF from that clean SHA, and used
+  the public `/api/scenarios/{scenario_id}/run-optimization` path. Both inputs
+  were Fresh Prepared; no direct solver call, fallback, repair, or synthetic PV
+  substitution was used.
+- Fixed controls were 264 trips, `tsurumaki` / `WEEKDAY`, 15-minute internal
+  slots, 60-minute Rolling, total/Stage-1/Stage-2 limits 585/435/30 seconds,
+  requested gap 10%, seed 42, one Gurobi thread, selector OFF, BestObjStop OFF,
+  and the effective 22-candidate/radius-4/frontier policy. The full input
+  contract passed; only the declared weather/PV hashes and derived prepared
+  snapshots differ across scenarios.
+- SUNNY job `a8fa5296-5c25-4aec-8ca1-d0677b56c552` produced
+  `output/2026-08-29/run_20260829_1445`: 28 BEV / 4 ICE buses, 199 / 65 trips,
+  264/264 served, 22/22 feasible candidates, physical PASS, 24/24 Rolling,
+  accounting OK, and 660,983.783805 JPY executed-day cost. Its Stage-1
+  surrogate-objective certified gap is 9.5213476%.
+- RAIN job `f4b0118a-d41c-42ca-8420-631af4ace73e` produced
+  `output/2026-08-29/run_20260829_1455`: 21 BEV / 11 ICE buses, 91 / 173 trips,
+  264/264 served, 22/22 feasible candidates, physical PASS, 24/24 Rolling,
+  accounting OK, 698,296.465284 JPY day-ahead candidate cost, and
+  698,598.628643 JPY executed-day cost. Its Stage-1 surrogate-objective
+  certified gap is 1.6563581%.
+- Strict finalization passed all 14 checks per scenario, matched both physical
+  winner hashes to the fixed-dispatch diagnosis, compared every effective
+  control, and hashed all 31 raw finalization inputs. The review-sized bundle
+  is `docs/evidence/weather_dispatch_rerun_bb0c005/`.
+- Claim boundary: this is a reproducible Phase-3 two-stage feasible
+  SUNNY/RAIN comparison. It is not an integrated global optimum, a 1%-optimal
+  result, or evidence of a general weather benefit. Both per-run teacher
+  release statuses remain `BLOCKED`.
+- Publication verification passed Python compilation, `29` focused evidence
+  and contract tests, the complete `1617 passed` suite, and
+  `git diff --check`. The 39-file review bundle is 1,543,889 bytes; its
+  `artifact_hashes.json`, `result_summary.json`, and strict
+  `confirmation_manifest.json` SHA-256 values are respectively
+  `7e0440e2325e98d3f2570d38f1982329f3f1d36758ceee5cde440482ab2832ef`,
+  `3c8772afba5e3dc6f259bc1c29087abde14e86dd6bf4592b3c454e20cd624f4a`,
+  and `4c79dc750ea8bfa2382202cfb5105b86c7719bbb1e0ac03c05d545359f81acd4`.
+
 ## 2026-08-29 (Asia/Tokyo): GitHub research validation made manual-only
 
 - Changed `.github/workflows/research-validation.yml` from automatic `push`

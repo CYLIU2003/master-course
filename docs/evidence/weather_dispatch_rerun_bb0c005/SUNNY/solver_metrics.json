@@ -1,0 +1,32 @@
+{
+  "schema_version": "phase3_solver_metrics_review_v1",
+  "source_artifact": "solver_result.json",
+  "source_sha256": "38be8f7434a26084a88ebe63491e22d26f49d27064b5d5dc7d5497af31c93e17",
+  "solver_status": "feasible",
+  "objective_value": 660983.7838045002,
+  "solve_time_seconds": 380.98232229676796,
+  "requested_mip_gap": 0.1,
+  "achieved_mip_gap": 0.09521347575597812,
+  "solver_metadata": {
+    "stage1_objective_value": 707349.1733696415,
+    "stage1_certified_best_bound": 640000.0,
+    "stage1_certified_mip_gap_ratio": 0.09521347575597812,
+    "stage1_gurobi_raw_best_bound": 640000.0,
+    "stage1_gurobi_raw_mip_gap_ratio": 0.09521347575597812,
+    "stage1_runtime_seconds": 378.96799969673157,
+    "stage1_primary_runtime_seconds": 30.858999967575073,
+    "stage1_model_variable_count": 825858,
+    "stage1_model_binary_variable_count": 726240,
+    "stage1_model_constraint_count": 151574,
+    "stage1_model_nonzero_coefficient_count": 16316201,
+    "stage1_stage2_candidate_count_evaluated": 22,
+    "stage1_stage2_feasible_candidate_count": 22,
+    "stage2_runtime_seconds": 2.014225799997803,
+    "gurobi_threads": 1,
+    "trip_count_served": 264,
+    "trip_count_unserved": 0,
+    "fallback_applied": false,
+    "postsolve_modified_solution": false,
+    "synthetic_pv_fallback_applied": false
+  }
+}

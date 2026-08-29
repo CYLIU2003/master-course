@@ -1,0 +1,308 @@
+{
+  "schema_version": "final_cost_reconciliation_v1",
+  "status": "OK",
+  "source": "rolling_hourly_chain/executed_day_accounting.json",
+  "tolerance_jpy": 1e-06,
+  "expected_by_metric_jpy": {
+    "total_cost_jpy": 698598.6286431606,
+    "electricity_cost_jpy": 3925.5582995974178,
+    "fuel_cost_jpy": 53682.200807522095,
+    "demand_charge_cost_jpy": 0.0,
+    "vehicle_usage_cost_jpy": 640000.0,
+    "co2_cost_jpy": 990.869536041073,
+    "contract_overage_cost_jpy": 0.0,
+    "vehicle_fixed_cost_jpy": 0.0,
+    "driver_cost_jpy": 0.0,
+    "unserved_penalty_jpy": 0.0,
+    "switch_cost_jpy": 0.0,
+    "battery_degradation_cost_jpy": 0.0,
+    "deviation_cost_jpy": 0.0
+  },
+  "observed_by_metric_jpy": {
+    "total_cost_jpy": {
+      "executed_day_accounting": 698598.6286431606,
+      "canonical_cost_ledger": 698598.6286431606,
+      "summary": 698598.6286431606,
+      "experiment_report_json": 698598.6286431606,
+      "cost_breakdown_detail": 698598.6286431606,
+      "results_xlsx": 698598.6286431606,
+      "optimization_result": 698598.6286431606
+    },
+    "electricity_cost_jpy": {
+      "canonical_cost_ledger": 3925.5582995974178,
+      "summary": 3925.5582995974178,
+      "experiment_report_json": 3925.5582995974178,
+      "cost_breakdown_detail": 3925.5582995974178,
+      "results_xlsx": 3925.558299597418,
+      "executed_day_accounting": 3925.5582995974178,
+      "canonical_cost_ledger_canonical_component": 3925.5582995974178,
+      "summary_canonical_component": 3925.5582995974178,
+      "experiment_report_json_canonical_component": 3925.5582995974178,
+      "cost_breakdown_detail_canonical_component": 3925.5582995974178,
+      "results_xlsx_canonical_component": 3925.558299597418,
+      "optimization_result": 3925.5582995974178
+    },
+    "fuel_cost_jpy": {
+      "canonical_cost_ledger": 53682.200807522095,
+      "summary": 53682.200807522095,
+      "experiment_report_json": 53682.200807522095,
+      "cost_breakdown_detail": 53682.200807522095,
+      "results_xlsx": 53682.20080752209,
+      "executed_day_accounting": 53682.200807522095,
+      "canonical_cost_ledger_canonical_component": 53682.200807522095,
+      "summary_canonical_component": 53682.200807522095,
+      "experiment_report_json_canonical_component": 53682.200807522095,
+      "cost_breakdown_detail_canonical_component": 53682.200807522095,
+      "results_xlsx_canonical_component": 53682.20080752209,
+      "optimization_result": 53682.200807522095
+    },
+    "demand_charge_cost_jpy": {
+      "canonical_cost_ledger": 0.0,
+      "summary": 0.0,
+      "experiment_report_json": 0.0,
+      "cost_breakdown_detail": 0.0,
+      "results_xlsx": 0.0,
+      "executed_day_accounting": 0.0,
+      "canonical_cost_ledger_canonical_component": 0.0,
+      "summary_canonical_component": 0.0,
+      "experiment_report_json_canonical_component": 0.0,
+      "cost_breakdown_detail_canonical_component": 0.0,
+      "results_xlsx_canonical_component": 0.0,
+      "optimization_result": 0.0
+    },
+    "vehicle_usage_cost_jpy": {
+      "canonical_cost_ledger": 640000.0,
+      "experiment_report_json": 640000.0,
+      "cost_breakdown_detail": 640000.0,
+      "results_xlsx": 640000.0,
+      "executed_day_accounting": 640000.0,
+      "canonical_cost_ledger_canonical_component": 640000.0,
+      "summary": 640000.0,
+      "experiment_report_json_canonical_component": 640000.0,
+      "cost_breakdown_detail_canonical_component": 640000.0,
+      "results_xlsx_canonical_component": 640000.0,
+      "optimization_result": 640000.0
+    },
+    "co2_cost_jpy": {
+      "canonical_cost_ledger": 990.869536041073,
+      "summary": 990.869536041073,
+      "experiment_report_json": 990.869536041073,
+      "cost_breakdown_detail": 990.869536041073,
+      "results_xlsx": 990.869536041073,
+      "executed_day_accounting": 990.869536041073,
+      "canonical_cost_ledger_canonical_component": 990.869536041073,
+      "summary_canonical_component": 990.869536041073,
+      "experiment_report_json_canonical_component": 990.869536041073,
+      "cost_breakdown_detail_canonical_component": 990.869536041073,
+      "results_xlsx_canonical_component": 990.869536041073,
+      "optimization_result": 990.869536041073
+    },
+    "contract_overage_cost_jpy": {
+      "executed_day_accounting": 0.0,
+      "canonical_cost_ledger": 0.0,
+      "summary": 0.0,
+      "experiment_report_json": 0.0,
+      "cost_breakdown_detail": 0.0,
+      "results_xlsx": 0.0,
+      "optimization_result": 0.0
+    },
+    "vehicle_fixed_cost_jpy": {
+      "executed_day_accounting": 0.0,
+      "canonical_cost_ledger": 0.0,
+      "summary": 0.0,
+      "experiment_report_json": 0.0,
+      "cost_breakdown_detail": 0.0,
+      "results_xlsx": 0.0,
+      "optimization_result": 0.0
+    },
+    "driver_cost_jpy": {
+      "executed_day_accounting": 0.0,
+      "canonical_cost_ledger": 0.0,
+      "summary": 0.0,
+      "experiment_report_json": 0.0,
+      "cost_breakdown_detail": 0.0,
+      "results_xlsx": 0.0,
+      "optimization_result": 0.0
+    },
+    "unserved_penalty_jpy": {
+      "executed_day_accounting": 0.0,
+      "canonical_cost_ledger": 0.0,
+      "summary": 0.0,
+      "experiment_report_json": 0.0,
+      "cost_breakdown_detail": 0.0,
+      "results_xlsx": 0.0,
+      "optimization_result": 0.0
+    },
+    "switch_cost_jpy": {
+      "executed_day_accounting": 0.0,
+      "canonical_cost_ledger": 0.0,
+      "summary": 0.0,
+      "experiment_report_json": 0.0,
+      "cost_breakdown_detail": 0.0,
+      "results_xlsx": 0.0,
+      "optimization_result": 0.0
+    },
+    "battery_degradation_cost_jpy": {
+      "executed_day_accounting": 0.0,
+      "canonical_cost_ledger": 0.0,
+      "summary": 0.0,
+      "experiment_report_json": 0.0,
+      "cost_breakdown_detail": 0.0,
+      "results_xlsx": 0.0,
+      "optimization_result": 0.0
+    },
+    "deviation_cost_jpy": {
+      "executed_day_accounting": 0.0,
+      "canonical_cost_ledger": 0.0,
+      "summary": 0.0,
+      "experiment_report_json": 0.0,
+      "cost_breakdown_detail": 0.0,
+      "results_xlsx": 0.0,
+      "optimization_result": 0.0
+    }
+  },
+  "residual_to_executed_day_by_metric_jpy": {
+    "total_cost_jpy": {
+      "executed_day_accounting": 0.0,
+      "canonical_cost_ledger": 0.0,
+      "summary": 0.0,
+      "experiment_report_json": 0.0,
+      "cost_breakdown_detail": 0.0,
+      "results_xlsx": 0.0,
+      "optimization_result": 0.0
+    },
+    "electricity_cost_jpy": {
+      "canonical_cost_ledger": 0.0,
+      "summary": 0.0,
+      "experiment_report_json": 0.0,
+      "cost_breakdown_detail": 0.0,
+      "results_xlsx": 4.547473508864641e-13,
+      "executed_day_accounting": 0.0,
+      "canonical_cost_ledger_canonical_component": 0.0,
+      "summary_canonical_component": 0.0,
+      "experiment_report_json_canonical_component": 0.0,
+      "cost_breakdown_detail_canonical_component": 0.0,
+      "results_xlsx_canonical_component": 4.547473508864641e-13,
+      "optimization_result": 0.0
+    },
+    "fuel_cost_jpy": {
+      "canonical_cost_ledger": 0.0,
+      "summary": 0.0,
+      "experiment_report_json": 0.0,
+      "cost_breakdown_detail": 0.0,
+      "results_xlsx": -7.275957614183426e-12,
+      "executed_day_accounting": 0.0,
+      "canonical_cost_ledger_canonical_component": 0.0,
+      "summary_canonical_component": 0.0,
+      "experiment_report_json_canonical_component": 0.0,
+      "cost_breakdown_detail_canonical_component": 0.0,
+      "results_xlsx_canonical_component": -7.275957614183426e-12,
+      "optimization_result": 0.0
+    },
+    "demand_charge_cost_jpy": {
+      "canonical_cost_ledger": 0.0,
+      "summary": 0.0,
+      "experiment_report_json": 0.0,
+      "cost_breakdown_detail": 0.0,
+      "results_xlsx": 0.0,
+      "executed_day_accounting": 0.0,
+      "canonical_cost_ledger_canonical_component": 0.0,
+      "summary_canonical_component": 0.0,
+      "experiment_report_json_canonical_component": 0.0,
+      "cost_breakdown_detail_canonical_component": 0.0,
+      "results_xlsx_canonical_component": 0.0,
+      "optimization_result": 0.0
+    },
+    "vehicle_usage_cost_jpy": {
+      "canonical_cost_ledger": 0.0,
+      "experiment_report_json": 0.0,
+      "cost_breakdown_detail": 0.0,
+      "results_xlsx": 0.0,
+      "executed_day_accounting": 0.0,
+      "canonical_cost_ledger_canonical_component": 0.0,
+      "summary": 0.0,
+      "experiment_report_json_canonical_component": 0.0,
+      "cost_breakdown_detail_canonical_component": 0.0,
+      "results_xlsx_canonical_component": 0.0,
+      "optimization_result": 0.0
+    },
+    "co2_cost_jpy": {
+      "canonical_cost_ledger": 0.0,
+      "summary": 0.0,
+      "experiment_report_json": 0.0,
+      "cost_breakdown_detail": 0.0,
+      "results_xlsx": 0.0,
+      "executed_day_accounting": 0.0,
+      "canonical_cost_ledger_canonical_component": 0.0,
+      "summary_canonical_component": 0.0,
+      "experiment_report_json_canonical_component": 0.0,
+      "cost_breakdown_detail_canonical_component": 0.0,
+      "results_xlsx_canonical_component": 0.0,
+      "optimization_result": 0.0
+    },
+    "contract_overage_cost_jpy": {
+      "executed_day_accounting": 0.0,
+      "canonical_cost_ledger": 0.0,
+      "summary": 0.0,
+      "experiment_report_json": 0.0,
+      "cost_breakdown_detail": 0.0,
+      "results_xlsx": 0.0,
+      "optimization_result": 0.0
+    },
+    "vehicle_fixed_cost_jpy": {
+      "executed_day_accounting": 0.0,
+      "canonical_cost_ledger": 0.0,
+      "summary": 0.0,
+      "experiment_report_json": 0.0,
+      "cost_breakdown_detail": 0.0,
+      "results_xlsx": 0.0,
+      "optimization_result": 0.0
+    },
+    "driver_cost_jpy": {
+      "executed_day_accounting": 0.0,
+      "canonical_cost_ledger": 0.0,
+      "summary": 0.0,
+      "experiment_report_json": 0.0,
+      "cost_breakdown_detail": 0.0,
+      "results_xlsx": 0.0,
+      "optimization_result": 0.0
+    },
+    "unserved_penalty_jpy": {
+      "executed_day_accounting": 0.0,
+      "canonical_cost_ledger": 0.0,
+      "summary": 0.0,
+      "experiment_report_json": 0.0,
+      "cost_breakdown_detail": 0.0,
+      "results_xlsx": 0.0,
+      "optimization_result": 0.0
+    },
+    "switch_cost_jpy": {
+      "executed_day_accounting": 0.0,
+      "canonical_cost_ledger": 0.0,
+      "summary": 0.0,
+      "experiment_report_json": 0.0,
+      "cost_breakdown_detail": 0.0,
+      "results_xlsx": 0.0,
+      "optimization_result": 0.0
+    },
+    "battery_degradation_cost_jpy": {
+      "executed_day_accounting": 0.0,
+      "canonical_cost_ledger": 0.0,
+      "summary": 0.0,
+      "experiment_report_json": 0.0,
+      "cost_breakdown_detail": 0.0,
+      "results_xlsx": 0.0,
+      "optimization_result": 0.0
+    },
+    "deviation_cost_jpy": {
+      "executed_day_accounting": 0.0,
+      "canonical_cost_ledger": 0.0,
+      "summary": 0.0,
+      "experiment_report_json": 0.0,
+      "cost_breakdown_detail": 0.0,
+      "results_xlsx": 0.0,
+      "optimization_result": 0.0
+    }
+  },
+  "failed_artifacts": {}
+}

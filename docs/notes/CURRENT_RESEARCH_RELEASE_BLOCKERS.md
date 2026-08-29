@@ -1,5 +1,29 @@
 # Current research release blockers
 
+## 2026-08-29 (Asia/Tokyo): clean-SHA formal rerun completed
+
+Frozen tag `thesis-weather-rerun-bb0c005` / SHA
+`bb0c0050883a91dd86a9e8813ae88d4b6d8c361d` completed Fresh Prepare and the
+normal public Phase-3 path for SUNNY and RAIN. Both runs served 264/264 trips
+and passed independent physical validation, 24/24 Rolling, executed-day
+accounting, clean-SHA, no-fallback/no-repair, input-hash, and fixed-control
+gates. Strict finalization reports `PASS_NORMAL_PATH_CONFIRMATION` and
+`PASS_FULL_INPUT_CONTRACT`; all 31 consumed raw artifacts are hashed.
+
+SUNNY selected 28 BEV / 4 ICE buses and 199 / 65 trips at an authoritative
+executed-day cost of 660,983.783805 JPY. RAIN selected 21 BEV / 11 ICE buses
+and 91 / 173 trips; its day-ahead candidate cost is 698,296.465284 JPY and its
+authoritative executed-day cost is 698,598.628643 JPY. The compact published
+bundle is
+[`docs/evidence/weather_dispatch_rerun_bb0c005/`](../evidence/weather_dispatch_rerun_bb0c005/README.md).
+
+The clean-run blocker is therefore satisfied for this SHA, but the release
+remains **BLOCKED**. The Stage-1 surrogate-objective certified gaps are still
+9.5213476% (SUNNY) and 1.6563581% (RAIN), not 1% in both cases; Phase 3 is not
+an integrated global optimum; and the advisor's 1% submission-threshold and
+human review decisions remain open. The rerun supports only a bounded
+two-scenario feasible comparison, not a general weather-benefit claim.
+
 ## 2026-08-29 (Asia/Tokyo): remote validation scheduling policy
 
 The expensive Python 3.11 research-validation workflow is now manual-only via

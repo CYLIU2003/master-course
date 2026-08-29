@@ -1,0 +1,1966 @@
+{
+  "schema_version": "selected_phase3_candidate_review_v1",
+  "source_artifact": "stage1_stage2_candidate_evaluation.json",
+  "source_sha256": "e88edd94c9607041b10f154a7ace9ffe6ad471da908cb060d435742024b8ee64",
+  "selected_candidate_index": 1,
+  "candidate_count_evaluated": 22,
+  "feasible_candidate_count": 22,
+  "selected_candidate": {
+    "candidate_index": 1,
+    "stage1_pool_solution_index": 7,
+    "stage1_candidate_source": "bev_minimum_frontier",
+    "stage1_composition_target_used_bev": 21,
+    "stage1_composition_target_used_ice": null,
+    "minimum_used_bev_count": 21,
+    "candidate_hash": "c6cb0cc9574f1964d3761001ec64bdd7287cb252e56a3509f2627e2623a03034",
+    "assignment_hash": "c6cb0cc9574f1964d3761001ec64bdd7287cb252e56a3509f2627e2623a03034",
+    "stage1_relaxed_objective_jpy": 698296.4652839542,
+    "stage1_candidate_priority_cost_jpy": 698296.4652839542,
+    "stage1_candidate_priority_cost_semantics": "stage1_weather_aware_relaxed_objective",
+    "stage1_candidate_priority_is_solver_native": true,
+    "constructive_dispatch_validation": {},
+    "stage2_solver_status": "optimal",
+    "stage2_exact_objective_jpy": 3688.8209120508577,
+    "stage2_actual_canonical_cost_jpy": 698296.465283954,
+    "feasible": true,
+    "stage2_feasible": true,
+    "canonical_evaluation_feasible": true,
+    "physical_validation_feasible": true,
+    "physical_validation_error_count": 0,
+    "physical_validation_error_hash": "",
+    "physical_validation_errors": [],
+    "iis_hash": "",
+    "stage2_iis_assignment_cut_type": "none",
+    "stage2_iis_assignment_cut_scope": "none",
+    "stage2_iis_assignment_cut_vehicle_ids": [],
+    "stage2_iis_assignment_cut_reason": "stage2_iis_not_available",
+    "used_bev": 21,
+    "used_ice": 11,
+    "bev_trips": 91,
+    "ice_trips": 173,
+    "grid_import_kwh": 120.9449479360937,
+    "pv_to_bus_kwh": 332.1779346905264,
+    "pv_to_bess_kwh": 664.0220653094736,
+    "bess_to_bus_kwh": 599.2799139418013,
+    "bev_service_distance_km": 635.213265,
+    "bev_deadhead_distance_km": 168.6,
+    "ice_service_distance_km": 1501.523651,
+    "ice_deadhead_distance_km": 171.6,
+    "ice_fuel_l": 370.160099779,
+    "bev_total_movement_distance_km": 803.813265,
+    "ice_total_movement_distance_km": 1673.123651,
+    "total_movement_distance_km": 2476.936916,
+    "bev_movement_distance_share": 0.32451907,
+    "runtime_sec": 1.4053563000052236,
+    "stage2_runtime_sec": 1.3807186000049114,
+    "stage2_time_limit_sec_effective": 3,
+    "vehicle_trip_assignments": [
+      {
+        "duty_id": "milp_35f95479-c68e-40bc-b31a-1f0a5490227c",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004600838.Kamimachieki.00240154.a.Weekday.0558",
+        "vehicle_id": "35f95479-c68e-40bc-b31a-1f0a5490227c",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_2e2015fd-c7c1-4c32-8498-ebb6be29cc4c",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004600838.Kamimachieki.00240154.a.Weekday.0603",
+        "vehicle_id": "2e2015fd-c7c1-4c32-8498-ebb6be29cc4c",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_e0772317-52e2-4e70-bfc8-1eb486f0f75c",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004600838.Kamimachieki.00240154.a.Weekday.0608",
+        "vehicle_id": "e0772317-52e2-4e70-bfc8-1eb486f0f75c",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_1804ab20-a2a0-475c-b4d0-71d8a72c192f",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004600838.Kamimachieki.00240154.a.Weekday.0613",
+        "vehicle_id": "1804ab20-a2a0-475c-b4d0-71d8a72c192f",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_dcf6407f-77ac-4c32-a840-49fcc7f9a525",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004600838.Kamimachieki.00240154.a.Weekday.0618",
+        "vehicle_id": "dcf6407f-77ac-4c32-a840-49fcc7f9a525",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_d225af48-8eec-47b7-abb1-34cfe83e31f0",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004600838.Kamimachieki.00240154.a.Weekday.0623",
+        "vehicle_id": "d225af48-8eec-47b7-abb1-34cfe83e31f0",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_0549a411-fd2a-4339-b4a3-45a3b7d37898",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004600838.Kamimachieki.00240154.a.Weekday.0628",
+        "vehicle_id": "0549a411-fd2a-4339-b4a3-45a3b7d37898",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_ca16a2ca-147b-4359-92db-913031d5faff",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004600838.Kamimachieki.00240154.a.Weekday.0636",
+        "vehicle_id": "ca16a2ca-147b-4359-92db-913031d5faff",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_builder-bev-tsurumaki-008",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004600838.Kamimachieki.00240154.a.Weekday.0651",
+        "vehicle_id": "builder-bev-tsurumaki-008",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_builder-bev-tsurumaki-007",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004600838.Kamimachieki.00240154.a.Weekday.0656",
+        "vehicle_id": "builder-bev-tsurumaki-007",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_2e2015fd-c7c1-4c32-8498-ebb6be29cc4c",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004600838.Kamimachieki.00240154.a.Weekday.0705",
+        "vehicle_id": "2e2015fd-c7c1-4c32-8498-ebb6be29cc4c",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_e56620e3-804c-41a3-9441-b054b74c1392",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004600838.Kamimachieki.00240154.a.Weekday.0721",
+        "vehicle_id": "e56620e3-804c-41a3-9441-b054b74c1392",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_builder-bev-tsurumaki-010",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004600838.Kamimachieki.00240154.a.Weekday.0751",
+        "vehicle_id": "builder-bev-tsurumaki-010",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_1804ab20-a2a0-475c-b4d0-71d8a72c192f",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004600838.Kamimachieki.00240154.a.Weekday.0833",
+        "vehicle_id": "1804ab20-a2a0-475c-b4d0-71d8a72c192f",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_e56620e3-804c-41a3-9441-b054b74c1392",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004602125.Sakurashougakkou.00240160.a.Weekday.0605",
+        "vehicle_id": "e56620e3-804c-41a3-9441-b054b74c1392",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_d10aa797-db07-40a2-b52b-d4caf02ff33b",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004602125.Sakurashougakkou.00240160.a.Weekday.0623",
+        "vehicle_id": "d10aa797-db07-40a2-b52b-d4caf02ff33b",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_ce309a0b-8c0b-49dc-a839-171db28e76a4",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004602125.Sakurashougakkou.00240160.a.Weekday.0631",
+        "vehicle_id": "ce309a0b-8c0b-49dc-a839-171db28e76a4",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_builder-bev-tsurumaki-010",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004602125.Sakurashougakkou.00240160.a.Weekday.0639",
+        "vehicle_id": "builder-bev-tsurumaki-010",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_0c9b7317-11ce-4340-ad98-a702eaacaaa4",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004602125.Sakurashougakkou.00240160.a.Weekday.0653",
+        "vehicle_id": "0c9b7317-11ce-4340-ad98-a702eaacaaa4",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_35f95479-c68e-40bc-b31a-1f0a5490227c",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004602125.Sakurashougakkou.00240160.a.Weekday.0706",
+        "vehicle_id": "35f95479-c68e-40bc-b31a-1f0a5490227c",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_2e2015fd-c7c1-4c32-8498-ebb6be29cc4c",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004602125.Sakurashougakkou.00240160.a.Weekday.1503",
+        "vehicle_id": "2e2015fd-c7c1-4c32-8498-ebb6be29cc4c",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_e56620e3-804c-41a3-9441-b054b74c1392",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004602125.Sakurashougakkou.00240160.a.Weekday.1524",
+        "vehicle_id": "e56620e3-804c-41a3-9441-b054b74c1392",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_35f95479-c68e-40bc-b31a-1f0a5490227c",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004602125.Sakurashougakkou.00240160.a.Weekday.1526",
+        "vehicle_id": "35f95479-c68e-40bc-b31a-1f0a5490227c",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_builder-bev-tsurumaki-007",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004602236.Shibuyaeki.00240050.5.Weekday.2206",
+        "vehicle_id": "builder-bev-tsurumaki-007",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_0c9b7317-11ce-4340-ad98-a702eaacaaa4",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004602236.Shibuyaeki.00240050.5.Weekday.2218",
+        "vehicle_id": "0c9b7317-11ce-4340-ad98-a702eaacaaa4",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_2e2015fd-c7c1-4c32-8498-ebb6be29cc4c",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004602236.Shibuyaeki.00240050.5.Weekday.2237",
+        "vehicle_id": "2e2015fd-c7c1-4c32-8498-ebb6be29cc4c",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_1804ab20-a2a0-475c-b4d0-71d8a72c192f",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004602236.Shibuyaeki.00240050.5.Weekday.2244",
+        "vehicle_id": "1804ab20-a2a0-475c-b4d0-71d8a72c192f",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_35f95479-c68e-40bc-b31a-1f0a5490227c",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004602236.Shibuyaeki.00240050.5.Weekday.2250",
+        "vehicle_id": "35f95479-c68e-40bc-b31a-1f0a5490227c",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_0549a411-fd2a-4339-b4a3-45a3b7d37898",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004602325.Shibuyaeki.00240050.5.Weekday.2230",
+        "vehicle_id": "0549a411-fd2a-4339-b4a3-45a3b7d37898",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_1804ab20-a2a0-475c-b4d0-71d8a72c192f",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004602970.Shibuyaeki.00240050.5.Weekday.0719",
+        "vehicle_id": "1804ab20-a2a0-475c-b4d0-71d8a72c192f",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_d225af48-8eec-47b7-abb1-34cfe83e31f0",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004602970.Shibuyaeki.00240050.5.Weekday.0800",
+        "vehicle_id": "d225af48-8eec-47b7-abb1-34cfe83e31f0",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_ce309a0b-8c0b-49dc-a839-171db28e76a4",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004602974.Shibuyaeki.00240050.5.Weekday.0846",
+        "vehicle_id": "ce309a0b-8c0b-49dc-a839-171db28e76a4",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_ca16a2ca-147b-4359-92db-913031d5faff",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004602974.Shibuyaeki.00240050.5.Weekday.0856",
+        "vehicle_id": "ca16a2ca-147b-4359-92db-913031d5faff",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_builder-bev-tsurumaki-010",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004602974.Shibuyaeki.00240050.5.Weekday.0903",
+        "vehicle_id": "builder-bev-tsurumaki-010",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_d10aa797-db07-40a2-b52b-d4caf02ff33b",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004602974.Shibuyaeki.00240050.5.Weekday.0910",
+        "vehicle_id": "d10aa797-db07-40a2-b52b-d4caf02ff33b",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_dcf6407f-77ac-4c32-a840-49fcc7f9a525",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004602974.Shibuyaeki.00240050.5.Weekday.0941",
+        "vehicle_id": "dcf6407f-77ac-4c32-a840-49fcc7f9a525",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_e0772317-52e2-4e70-bfc8-1eb486f0f75c",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004602974.Shibuyaeki.00240050.5.Weekday.1014",
+        "vehicle_id": "e0772317-52e2-4e70-bfc8-1eb486f0f75c",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_35f95479-c68e-40bc-b31a-1f0a5490227c",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004602974.Shibuyaeki.00240050.5.Weekday.1032",
+        "vehicle_id": "35f95479-c68e-40bc-b31a-1f0a5490227c",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_e56620e3-804c-41a3-9441-b054b74c1392",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004602974.Shibuyaeki.00240050.5.Weekday.1101",
+        "vehicle_id": "e56620e3-804c-41a3-9441-b054b74c1392",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_2e2015fd-c7c1-4c32-8498-ebb6be29cc4c",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004602974.Shibuyaeki.00240050.5.Weekday.1109",
+        "vehicle_id": "2e2015fd-c7c1-4c32-8498-ebb6be29cc4c",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_builder-bev-tsurumaki-008",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004602974.Shibuyaeki.00240050.5.Weekday.1930",
+        "vehicle_id": "builder-bev-tsurumaki-008",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_e56620e3-804c-41a3-9441-b054b74c1392",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu21.0004602974.Shibuyaeki.00240050.5.Weekday.2018",
+        "vehicle_id": "e56620e3-804c-41a3-9441-b054b74c1392",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_3e38e74f-191a-4b72-8061-59f0020151e3",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602324.Shibuyaeki.00240050.5.Weekday.2100",
+        "vehicle_id": "3e38e74f-191a-4b72-8061-59f0020151e3",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_6a566764-ea31-4d70-ae2d-df9928f8da84",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602324.Shibuyaeki.00240050.5.Weekday.2120",
+        "vehicle_id": "6a566764-ea31-4d70-ae2d-df9928f8da84",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_ad6f23ad-bb04-4c53-b94b-c0148f63ee8e",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602324.Shibuyaeki.00240050.5.Weekday.2140",
+        "vehicle_id": "ad6f23ad-bb04-4c53-b94b-c0148f63ee8e",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_9e728d1a-80c7-40d6-adc8-77ca37a7b394",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602324.Shibuyaeki.00240050.5.Weekday.2200",
+        "vehicle_id": "9e728d1a-80c7-40d6-adc8-77ca37a7b394",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_cf7b771e-a6ac-4e0b-9738-ad3901a68307",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602328.Kamimachi.00240159.b.Weekday.0610",
+        "vehicle_id": "cf7b771e-a6ac-4e0b-9738-ad3901a68307",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_ad6f23ad-bb04-4c53-b94b-c0148f63ee8e",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602328.Kamimachi.00240159.b.Weekday.0633",
+        "vehicle_id": "ad6f23ad-bb04-4c53-b94b-c0148f63ee8e",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_83b7c190-860f-449d-9fa5-cf6acc616e22",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602328.Kamimachi.00240159.b.Weekday.0647",
+        "vehicle_id": "83b7c190-860f-449d-9fa5-cf6acc616e22",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_c70c7cc7-42f0-4b48-acb5-312ad86ebb5b",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.0630",
+        "vehicle_id": "c70c7cc7-42f0-4b48-acb5-312ad86ebb5b",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_cf7b771e-a6ac-4e0b-9738-ad3901a68307",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.0656",
+        "vehicle_id": "cf7b771e-a6ac-4e0b-9738-ad3901a68307",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_ad6f23ad-bb04-4c53-b94b-c0148f63ee8e",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.0716",
+        "vehicle_id": "ad6f23ad-bb04-4c53-b94b-c0148f63ee8e",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_9e728d1a-80c7-40d6-adc8-77ca37a7b394",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.0729",
+        "vehicle_id": "9e728d1a-80c7-40d6-adc8-77ca37a7b394",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_builder-bev-tsurumaki-009",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.0739",
+        "vehicle_id": "builder-bev-tsurumaki-009",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_3e38e74f-191a-4b72-8061-59f0020151e3",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.0749",
+        "vehicle_id": "3e38e74f-191a-4b72-8061-59f0020151e3",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_builder-bev-tsurumaki-006",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.0757",
+        "vehicle_id": "builder-bev-tsurumaki-006",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_6a566764-ea31-4d70-ae2d-df9928f8da84",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.0811",
+        "vehicle_id": "6a566764-ea31-4d70-ae2d-df9928f8da84",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_c70c7cc7-42f0-4b48-acb5-312ad86ebb5b",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.0831",
+        "vehicle_id": "c70c7cc7-42f0-4b48-acb5-312ad86ebb5b",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_83b7c190-860f-449d-9fa5-cf6acc616e22",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.0850",
+        "vehicle_id": "83b7c190-860f-449d-9fa5-cf6acc616e22",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_cf7b771e-a6ac-4e0b-9738-ad3901a68307",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.0909",
+        "vehicle_id": "cf7b771e-a6ac-4e0b-9738-ad3901a68307",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_ad6f23ad-bb04-4c53-b94b-c0148f63ee8e",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.0925",
+        "vehicle_id": "ad6f23ad-bb04-4c53-b94b-c0148f63ee8e",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_9e728d1a-80c7-40d6-adc8-77ca37a7b394",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.0941",
+        "vehicle_id": "9e728d1a-80c7-40d6-adc8-77ca37a7b394",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_3e38e74f-191a-4b72-8061-59f0020151e3",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.1000",
+        "vehicle_id": "3e38e74f-191a-4b72-8061-59f0020151e3",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_6a566764-ea31-4d70-ae2d-df9928f8da84",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.1018",
+        "vehicle_id": "6a566764-ea31-4d70-ae2d-df9928f8da84",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_c70c7cc7-42f0-4b48-acb5-312ad86ebb5b",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.1038",
+        "vehicle_id": "c70c7cc7-42f0-4b48-acb5-312ad86ebb5b",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_83b7c190-860f-449d-9fa5-cf6acc616e22",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.1058",
+        "vehicle_id": "83b7c190-860f-449d-9fa5-cf6acc616e22",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_cf7b771e-a6ac-4e0b-9738-ad3901a68307",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.1118",
+        "vehicle_id": "cf7b771e-a6ac-4e0b-9738-ad3901a68307",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_ad6f23ad-bb04-4c53-b94b-c0148f63ee8e",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.1138",
+        "vehicle_id": "ad6f23ad-bb04-4c53-b94b-c0148f63ee8e",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_9e728d1a-80c7-40d6-adc8-77ca37a7b394",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.1158",
+        "vehicle_id": "9e728d1a-80c7-40d6-adc8-77ca37a7b394",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_6a566764-ea31-4d70-ae2d-df9928f8da84",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.1218",
+        "vehicle_id": "6a566764-ea31-4d70-ae2d-df9928f8da84",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_c70c7cc7-42f0-4b48-acb5-312ad86ebb5b",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.1238",
+        "vehicle_id": "c70c7cc7-42f0-4b48-acb5-312ad86ebb5b",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_83b7c190-860f-449d-9fa5-cf6acc616e22",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.1301",
+        "vehicle_id": "83b7c190-860f-449d-9fa5-cf6acc616e22",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_cf7b771e-a6ac-4e0b-9738-ad3901a68307",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.1321",
+        "vehicle_id": "cf7b771e-a6ac-4e0b-9738-ad3901a68307",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_ad6f23ad-bb04-4c53-b94b-c0148f63ee8e",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.1341",
+        "vehicle_id": "ad6f23ad-bb04-4c53-b94b-c0148f63ee8e",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_3e38e74f-191a-4b72-8061-59f0020151e3",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.1401",
+        "vehicle_id": "3e38e74f-191a-4b72-8061-59f0020151e3",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_6a566764-ea31-4d70-ae2d-df9928f8da84",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.1421",
+        "vehicle_id": "6a566764-ea31-4d70-ae2d-df9928f8da84",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_c70c7cc7-42f0-4b48-acb5-312ad86ebb5b",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.1441",
+        "vehicle_id": "c70c7cc7-42f0-4b48-acb5-312ad86ebb5b",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_83b7c190-860f-449d-9fa5-cf6acc616e22",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.1503",
+        "vehicle_id": "83b7c190-860f-449d-9fa5-cf6acc616e22",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_9e728d1a-80c7-40d6-adc8-77ca37a7b394",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.1526",
+        "vehicle_id": "9e728d1a-80c7-40d6-adc8-77ca37a7b394",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_cf7b771e-a6ac-4e0b-9738-ad3901a68307",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.1546",
+        "vehicle_id": "cf7b771e-a6ac-4e0b-9738-ad3901a68307",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_3e38e74f-191a-4b72-8061-59f0020151e3",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.1606",
+        "vehicle_id": "3e38e74f-191a-4b72-8061-59f0020151e3",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_6a566764-ea31-4d70-ae2d-df9928f8da84",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.1626",
+        "vehicle_id": "6a566764-ea31-4d70-ae2d-df9928f8da84",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_c70c7cc7-42f0-4b48-acb5-312ad86ebb5b",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.1646",
+        "vehicle_id": "c70c7cc7-42f0-4b48-acb5-312ad86ebb5b",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_ad6f23ad-bb04-4c53-b94b-c0148f63ee8e",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.1703",
+        "vehicle_id": "ad6f23ad-bb04-4c53-b94b-c0148f63ee8e",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_83b7c190-860f-449d-9fa5-cf6acc616e22",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.1719",
+        "vehicle_id": "83b7c190-860f-449d-9fa5-cf6acc616e22",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_9e728d1a-80c7-40d6-adc8-77ca37a7b394",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.1739",
+        "vehicle_id": "9e728d1a-80c7-40d6-adc8-77ca37a7b394",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_cf7b771e-a6ac-4e0b-9738-ad3901a68307",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.1757",
+        "vehicle_id": "cf7b771e-a6ac-4e0b-9738-ad3901a68307",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_3e38e74f-191a-4b72-8061-59f0020151e3",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.1818",
+        "vehicle_id": "3e38e74f-191a-4b72-8061-59f0020151e3",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_6a566764-ea31-4d70-ae2d-df9928f8da84",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.1836",
+        "vehicle_id": "6a566764-ea31-4d70-ae2d-df9928f8da84",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_c70c7cc7-42f0-4b48-acb5-312ad86ebb5b",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.1855",
+        "vehicle_id": "c70c7cc7-42f0-4b48-acb5-312ad86ebb5b",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_ad6f23ad-bb04-4c53-b94b-c0148f63ee8e",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.1914",
+        "vehicle_id": "ad6f23ad-bb04-4c53-b94b-c0148f63ee8e",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_9e728d1a-80c7-40d6-adc8-77ca37a7b394",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.1934",
+        "vehicle_id": "9e728d1a-80c7-40d6-adc8-77ca37a7b394",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_83b7c190-860f-449d-9fa5-cf6acc616e22",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.1955",
+        "vehicle_id": "83b7c190-860f-449d-9fa5-cf6acc616e22",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_3e38e74f-191a-4b72-8061-59f0020151e3",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.2015",
+        "vehicle_id": "3e38e74f-191a-4b72-8061-59f0020151e3",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_6a566764-ea31-4d70-ae2d-df9928f8da84",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.2035",
+        "vehicle_id": "6a566764-ea31-4d70-ae2d-df9928f8da84",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_ad6f23ad-bb04-4c53-b94b-c0148f63ee8e",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.2055",
+        "vehicle_id": "ad6f23ad-bb04-4c53-b94b-c0148f63ee8e",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_9e728d1a-80c7-40d6-adc8-77ca37a7b394",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.2115",
+        "vehicle_id": "9e728d1a-80c7-40d6-adc8-77ca37a7b394",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_c70c7cc7-42f0-4b48-acb5-312ad86ebb5b",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.2129",
+        "vehicle_id": "c70c7cc7-42f0-4b48-acb5-312ad86ebb5b",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_83b7c190-860f-449d-9fa5-cf6acc616e22",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602849.Yougaeki.00240311.2.Weekday.2152",
+        "vehicle_id": "83b7c190-860f-449d-9fa5-cf6acc616e22",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_83b7c190-860f-449d-9fa5-cf6acc616e22",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602850.Yougaeki.00240311.2.Weekday.1919",
+        "vehicle_id": "83b7c190-860f-449d-9fa5-cf6acc616e22",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_cf7b771e-a6ac-4e0b-9738-ad3901a68307",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602850.Yougaeki.00240311.2.Weekday.2023",
+        "vehicle_id": "cf7b771e-a6ac-4e0b-9738-ad3901a68307",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_3e38e74f-191a-4b72-8061-59f0020151e3",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602850.Yougaeki.00240311.2.Weekday.2205",
+        "vehicle_id": "3e38e74f-191a-4b72-8061-59f0020151e3",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_6a566764-ea31-4d70-ae2d-df9928f8da84",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602850.Yougaeki.00240311.2.Weekday.2224",
+        "vehicle_id": "6a566764-ea31-4d70-ae2d-df9928f8da84",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_ad6f23ad-bb04-4c53-b94b-c0148f63ee8e",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602850.Yougaeki.00240311.2.Weekday.2244",
+        "vehicle_id": "ad6f23ad-bb04-4c53-b94b-c0148f63ee8e",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_9e728d1a-80c7-40d6-adc8-77ca37a7b394",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.0635",
+        "vehicle_id": "9e728d1a-80c7-40d6-adc8-77ca37a7b394",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_builder-bev-tsurumaki-009",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.0646",
+        "vehicle_id": "builder-bev-tsurumaki-009",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_3e38e74f-191a-4b72-8061-59f0020151e3",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.0651",
+        "vehicle_id": "3e38e74f-191a-4b72-8061-59f0020151e3",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_builder-bev-tsurumaki-006",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.0703",
+        "vehicle_id": "builder-bev-tsurumaki-006",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_6a566764-ea31-4d70-ae2d-df9928f8da84",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.0708",
+        "vehicle_id": "6a566764-ea31-4d70-ae2d-df9928f8da84",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_c70c7cc7-42f0-4b48-acb5-312ad86ebb5b",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.0731",
+        "vehicle_id": "c70c7cc7-42f0-4b48-acb5-312ad86ebb5b",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_83b7c190-860f-449d-9fa5-cf6acc616e22",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.0745",
+        "vehicle_id": "83b7c190-860f-449d-9fa5-cf6acc616e22",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_cf7b771e-a6ac-4e0b-9738-ad3901a68307",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.0807",
+        "vehicle_id": "cf7b771e-a6ac-4e0b-9738-ad3901a68307",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_ad6f23ad-bb04-4c53-b94b-c0148f63ee8e",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.0821",
+        "vehicle_id": "ad6f23ad-bb04-4c53-b94b-c0148f63ee8e",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_9e728d1a-80c7-40d6-adc8-77ca37a7b394",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.0836",
+        "vehicle_id": "9e728d1a-80c7-40d6-adc8-77ca37a7b394",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_3e38e74f-191a-4b72-8061-59f0020151e3",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.0854",
+        "vehicle_id": "3e38e74f-191a-4b72-8061-59f0020151e3",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_6a566764-ea31-4d70-ae2d-df9928f8da84",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.0916",
+        "vehicle_id": "6a566764-ea31-4d70-ae2d-df9928f8da84",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_c70c7cc7-42f0-4b48-acb5-312ad86ebb5b",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.0937",
+        "vehicle_id": "c70c7cc7-42f0-4b48-acb5-312ad86ebb5b",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_83b7c190-860f-449d-9fa5-cf6acc616e22",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.0957",
+        "vehicle_id": "83b7c190-860f-449d-9fa5-cf6acc616e22",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_cf7b771e-a6ac-4e0b-9738-ad3901a68307",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.1020",
+        "vehicle_id": "cf7b771e-a6ac-4e0b-9738-ad3901a68307",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_ad6f23ad-bb04-4c53-b94b-c0148f63ee8e",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.1036",
+        "vehicle_id": "ad6f23ad-bb04-4c53-b94b-c0148f63ee8e",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_9e728d1a-80c7-40d6-adc8-77ca37a7b394",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.1055",
+        "vehicle_id": "9e728d1a-80c7-40d6-adc8-77ca37a7b394",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_6a566764-ea31-4d70-ae2d-df9928f8da84",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.1115",
+        "vehicle_id": "6a566764-ea31-4d70-ae2d-df9928f8da84",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_c70c7cc7-42f0-4b48-acb5-312ad86ebb5b",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.1135",
+        "vehicle_id": "c70c7cc7-42f0-4b48-acb5-312ad86ebb5b",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_83b7c190-860f-449d-9fa5-cf6acc616e22",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.1155",
+        "vehicle_id": "83b7c190-860f-449d-9fa5-cf6acc616e22",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_cf7b771e-a6ac-4e0b-9738-ad3901a68307",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.1215",
+        "vehicle_id": "cf7b771e-a6ac-4e0b-9738-ad3901a68307",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_ad6f23ad-bb04-4c53-b94b-c0148f63ee8e",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.1235",
+        "vehicle_id": "ad6f23ad-bb04-4c53-b94b-c0148f63ee8e",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_3e38e74f-191a-4b72-8061-59f0020151e3",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.1255",
+        "vehicle_id": "3e38e74f-191a-4b72-8061-59f0020151e3",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_6a566764-ea31-4d70-ae2d-df9928f8da84",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.1315",
+        "vehicle_id": "6a566764-ea31-4d70-ae2d-df9928f8da84",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_c70c7cc7-42f0-4b48-acb5-312ad86ebb5b",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.1335",
+        "vehicle_id": "c70c7cc7-42f0-4b48-acb5-312ad86ebb5b",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_83b7c190-860f-449d-9fa5-cf6acc616e22",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.1355",
+        "vehicle_id": "83b7c190-860f-449d-9fa5-cf6acc616e22",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_9e728d1a-80c7-40d6-adc8-77ca37a7b394",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.1415",
+        "vehicle_id": "9e728d1a-80c7-40d6-adc8-77ca37a7b394",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_cf7b771e-a6ac-4e0b-9738-ad3901a68307",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.1435",
+        "vehicle_id": "cf7b771e-a6ac-4e0b-9738-ad3901a68307",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_3e38e74f-191a-4b72-8061-59f0020151e3",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.1455",
+        "vehicle_id": "3e38e74f-191a-4b72-8061-59f0020151e3",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_6a566764-ea31-4d70-ae2d-df9928f8da84",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.1515",
+        "vehicle_id": "6a566764-ea31-4d70-ae2d-df9928f8da84",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_c70c7cc7-42f0-4b48-acb5-312ad86ebb5b",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.1535",
+        "vehicle_id": "c70c7cc7-42f0-4b48-acb5-312ad86ebb5b",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_ad6f23ad-bb04-4c53-b94b-c0148f63ee8e",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.1552",
+        "vehicle_id": "ad6f23ad-bb04-4c53-b94b-c0148f63ee8e",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_83b7c190-860f-449d-9fa5-cf6acc616e22",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.1609",
+        "vehicle_id": "83b7c190-860f-449d-9fa5-cf6acc616e22",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_9e728d1a-80c7-40d6-adc8-77ca37a7b394",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.1628",
+        "vehicle_id": "9e728d1a-80c7-40d6-adc8-77ca37a7b394",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_cf7b771e-a6ac-4e0b-9738-ad3901a68307",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.1647",
+        "vehicle_id": "cf7b771e-a6ac-4e0b-9738-ad3901a68307",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_3e38e74f-191a-4b72-8061-59f0020151e3",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.1706",
+        "vehicle_id": "3e38e74f-191a-4b72-8061-59f0020151e3",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_6a566764-ea31-4d70-ae2d-df9928f8da84",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.1725",
+        "vehicle_id": "6a566764-ea31-4d70-ae2d-df9928f8da84",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_c70c7cc7-42f0-4b48-acb5-312ad86ebb5b",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.1744",
+        "vehicle_id": "c70c7cc7-42f0-4b48-acb5-312ad86ebb5b",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_ad6f23ad-bb04-4c53-b94b-c0148f63ee8e",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.1802",
+        "vehicle_id": "ad6f23ad-bb04-4c53-b94b-c0148f63ee8e",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_83b7c190-860f-449d-9fa5-cf6acc616e22",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.1818",
+        "vehicle_id": "83b7c190-860f-449d-9fa5-cf6acc616e22",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_9e728d1a-80c7-40d6-adc8-77ca37a7b394",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.1836",
+        "vehicle_id": "9e728d1a-80c7-40d6-adc8-77ca37a7b394",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_cf7b771e-a6ac-4e0b-9738-ad3901a68307",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.1854",
+        "vehicle_id": "cf7b771e-a6ac-4e0b-9738-ad3901a68307",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_3e38e74f-191a-4b72-8061-59f0020151e3",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.1909",
+        "vehicle_id": "3e38e74f-191a-4b72-8061-59f0020151e3",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_6a566764-ea31-4d70-ae2d-df9928f8da84",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.1927",
+        "vehicle_id": "6a566764-ea31-4d70-ae2d-df9928f8da84",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_c70c7cc7-42f0-4b48-acb5-312ad86ebb5b",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.1945",
+        "vehicle_id": "c70c7cc7-42f0-4b48-acb5-312ad86ebb5b",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_ad6f23ad-bb04-4c53-b94b-c0148f63ee8e",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.2003",
+        "vehicle_id": "ad6f23ad-bb04-4c53-b94b-c0148f63ee8e",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_9e728d1a-80c7-40d6-adc8-77ca37a7b394",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.2022",
+        "vehicle_id": "9e728d1a-80c7-40d6-adc8-77ca37a7b394",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_83b7c190-860f-449d-9fa5-cf6acc616e22",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu22.0004602969.Shibuyaeki.00240050.5.Weekday.2040",
+        "vehicle_id": "83b7c190-860f-449d-9fa5-cf6acc616e22",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_8c2de7e0-c7ce-442a-9b85-28c43e1e5abe",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600088.Shibuyaeki.00240050.5.Weekday.2110",
+        "vehicle_id": "8c2de7e0-c7ce-442a-9b85-28c43e1e5abe",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_3acd650a-ca8c-4114-9922-f514a915f460",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600088.Shibuyaeki.00240050.5.Weekday.2130",
+        "vehicle_id": "3acd650a-ca8c-4114-9922-f514a915f460",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_992b60f3-a928-4505-ad03-258145614671",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600088.Shibuyaeki.00240050.5.Weekday.2150",
+        "vehicle_id": "992b60f3-a928-4505-ad03-258145614671",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_53c3619d-3614-4dce-ad65-5454d712ba1b",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600088.Shibuyaeki.00240050.5.Weekday.2212",
+        "vehicle_id": "53c3619d-3614-4dce-ad65-5454d712ba1b",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_e4463ae4-7450-4ea4-b9e5-46962d854a07",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600088.Shibuyaeki.00240050.5.Weekday.2224",
+        "vehicle_id": "e4463ae4-7450-4ea4-b9e5-46962d854a07",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_e4463ae4-7450-4ea4-b9e5-46962d854a07",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.0615",
+        "vehicle_id": "e4463ae4-7450-4ea4-b9e5-46962d854a07",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_ff03ad3a-409a-43ef-9c63-384bacb5f9d2",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.0644",
+        "vehicle_id": "ff03ad3a-409a-43ef-9c63-384bacb5f9d2",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_992b60f3-a928-4505-ad03-258145614671",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.0709",
+        "vehicle_id": "992b60f3-a928-4505-ad03-258145614671",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_b46f03c3-cfd6-4398-ad6a-a3bbfac7528f",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.0723",
+        "vehicle_id": "b46f03c3-cfd6-4398-ad6a-a3bbfac7528f",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_8c2de7e0-c7ce-442a-9b85-28c43e1e5abe",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.0743",
+        "vehicle_id": "8c2de7e0-c7ce-442a-9b85-28c43e1e5abe",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_75c562eb-9239-44bb-b4b4-d57e61d40881",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.0757",
+        "vehicle_id": "75c562eb-9239-44bb-b4b4-d57e61d40881",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_e4463ae4-7450-4ea4-b9e5-46962d854a07",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.0816",
+        "vehicle_id": "e4463ae4-7450-4ea4-b9e5-46962d854a07",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_53c3619d-3614-4dce-ad65-5454d712ba1b",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.0833",
+        "vehicle_id": "53c3619d-3614-4dce-ad65-5454d712ba1b",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_3acd650a-ca8c-4114-9922-f514a915f460",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.0853",
+        "vehicle_id": "3acd650a-ca8c-4114-9922-f514a915f460",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_992b60f3-a928-4505-ad03-258145614671",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.0912",
+        "vehicle_id": "992b60f3-a928-4505-ad03-258145614671",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_b46f03c3-cfd6-4398-ad6a-a3bbfac7528f",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.0929",
+        "vehicle_id": "b46f03c3-cfd6-4398-ad6a-a3bbfac7528f",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_8c2de7e0-c7ce-442a-9b85-28c43e1e5abe",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.0946",
+        "vehicle_id": "8c2de7e0-c7ce-442a-9b85-28c43e1e5abe",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_75c562eb-9239-44bb-b4b4-d57e61d40881",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.1006",
+        "vehicle_id": "75c562eb-9239-44bb-b4b4-d57e61d40881",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_e4463ae4-7450-4ea4-b9e5-46962d854a07",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.1025",
+        "vehicle_id": "e4463ae4-7450-4ea4-b9e5-46962d854a07",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_53c3619d-3614-4dce-ad65-5454d712ba1b",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.1045",
+        "vehicle_id": "53c3619d-3614-4dce-ad65-5454d712ba1b",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_3acd650a-ca8c-4114-9922-f514a915f460",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.1105",
+        "vehicle_id": "3acd650a-ca8c-4114-9922-f514a915f460",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_992b60f3-a928-4505-ad03-258145614671",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.1125",
+        "vehicle_id": "992b60f3-a928-4505-ad03-258145614671",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_b46f03c3-cfd6-4398-ad6a-a3bbfac7528f",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.1145",
+        "vehicle_id": "b46f03c3-cfd6-4398-ad6a-a3bbfac7528f",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_8c2de7e0-c7ce-442a-9b85-28c43e1e5abe",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.1205",
+        "vehicle_id": "8c2de7e0-c7ce-442a-9b85-28c43e1e5abe",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_75c562eb-9239-44bb-b4b4-d57e61d40881",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.1225",
+        "vehicle_id": "75c562eb-9239-44bb-b4b4-d57e61d40881",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_53c3619d-3614-4dce-ad65-5454d712ba1b",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.1248",
+        "vehicle_id": "53c3619d-3614-4dce-ad65-5454d712ba1b",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_e4463ae4-7450-4ea4-b9e5-46962d854a07",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.1308",
+        "vehicle_id": "e4463ae4-7450-4ea4-b9e5-46962d854a07",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_992b60f3-a928-4505-ad03-258145614671",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.1328",
+        "vehicle_id": "992b60f3-a928-4505-ad03-258145614671",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_b46f03c3-cfd6-4398-ad6a-a3bbfac7528f",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.1348",
+        "vehicle_id": "b46f03c3-cfd6-4398-ad6a-a3bbfac7528f",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_8c2de7e0-c7ce-442a-9b85-28c43e1e5abe",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.1408",
+        "vehicle_id": "8c2de7e0-c7ce-442a-9b85-28c43e1e5abe",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_75c562eb-9239-44bb-b4b4-d57e61d40881",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.1428",
+        "vehicle_id": "75c562eb-9239-44bb-b4b4-d57e61d40881",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_53c3619d-3614-4dce-ad65-5454d712ba1b",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.1452",
+        "vehicle_id": "53c3619d-3614-4dce-ad65-5454d712ba1b",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_e4463ae4-7450-4ea4-b9e5-46962d854a07",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.1514",
+        "vehicle_id": "e4463ae4-7450-4ea4-b9e5-46962d854a07",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_992b60f3-a928-4505-ad03-258145614671",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.1533",
+        "vehicle_id": "992b60f3-a928-4505-ad03-258145614671",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_b46f03c3-cfd6-4398-ad6a-a3bbfac7528f",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.1552",
+        "vehicle_id": "b46f03c3-cfd6-4398-ad6a-a3bbfac7528f",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_8c2de7e0-c7ce-442a-9b85-28c43e1e5abe",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.1613",
+        "vehicle_id": "8c2de7e0-c7ce-442a-9b85-28c43e1e5abe",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_3acd650a-ca8c-4114-9922-f514a915f460",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.1633",
+        "vehicle_id": "3acd650a-ca8c-4114-9922-f514a915f460",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_75c562eb-9239-44bb-b4b4-d57e61d40881",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.1653",
+        "vehicle_id": "75c562eb-9239-44bb-b4b4-d57e61d40881",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_53c3619d-3614-4dce-ad65-5454d712ba1b",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.1709",
+        "vehicle_id": "53c3619d-3614-4dce-ad65-5454d712ba1b",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_e4463ae4-7450-4ea4-b9e5-46962d854a07",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.1727",
+        "vehicle_id": "e4463ae4-7450-4ea4-b9e5-46962d854a07",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_992b60f3-a928-4505-ad03-258145614671",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.1745",
+        "vehicle_id": "992b60f3-a928-4505-ad03-258145614671",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_b46f03c3-cfd6-4398-ad6a-a3bbfac7528f",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.1807",
+        "vehicle_id": "b46f03c3-cfd6-4398-ad6a-a3bbfac7528f",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_8c2de7e0-c7ce-442a-9b85-28c43e1e5abe",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.1825",
+        "vehicle_id": "8c2de7e0-c7ce-442a-9b85-28c43e1e5abe",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_3acd650a-ca8c-4114-9922-f514a915f460",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.1844",
+        "vehicle_id": "3acd650a-ca8c-4114-9922-f514a915f460",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_75c562eb-9239-44bb-b4b4-d57e61d40881",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.1902",
+        "vehicle_id": "75c562eb-9239-44bb-b4b4-d57e61d40881",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_53c3619d-3614-4dce-ad65-5454d712ba1b",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.1921",
+        "vehicle_id": "53c3619d-3614-4dce-ad65-5454d712ba1b",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_e4463ae4-7450-4ea4-b9e5-46962d854a07",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.1942",
+        "vehicle_id": "e4463ae4-7450-4ea4-b9e5-46962d854a07",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_b46f03c3-cfd6-4398-ad6a-a3bbfac7528f",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.2002",
+        "vehicle_id": "b46f03c3-cfd6-4398-ad6a-a3bbfac7528f",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_8c2de7e0-c7ce-442a-9b85-28c43e1e5abe",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.2022",
+        "vehicle_id": "8c2de7e0-c7ce-442a-9b85-28c43e1e5abe",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_3acd650a-ca8c-4114-9922-f514a915f460",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.2042",
+        "vehicle_id": "3acd650a-ca8c-4114-9922-f514a915f460",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_992b60f3-a928-4505-ad03-258145614671",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.2102",
+        "vehicle_id": "992b60f3-a928-4505-ad03-258145614671",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_e4463ae4-7450-4ea4-b9e5-46962d854a07",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.2136",
+        "vehicle_id": "e4463ae4-7450-4ea4-b9e5-46962d854a07",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_b46f03c3-cfd6-4398-ad6a-a3bbfac7528f",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004600812.Soshigayaookuraeki.00240324.1.Weekday.2202",
+        "vehicle_id": "b46f03c3-cfd6-4398-ad6a-a3bbfac7528f",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_ff03ad3a-409a-43ef-9c63-384bacb5f9d2",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602174.Soshigayaookuraeki.00240324.1.Weekday.0835",
+        "vehicle_id": "ff03ad3a-409a-43ef-9c63-384bacb5f9d2",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_992b60f3-a928-4505-ad03-258145614671",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602174.Soshigayaookuraeki.00240324.1.Weekday.1948",
+        "vehicle_id": "992b60f3-a928-4505-ad03-258145614671",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_53c3619d-3614-4dce-ad65-5454d712ba1b",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602174.Soshigayaookuraeki.00240324.1.Weekday.2110",
+        "vehicle_id": "53c3619d-3614-4dce-ad65-5454d712ba1b",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_75c562eb-9239-44bb-b4b4-d57e61d40881",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602174.Soshigayaookuraeki.00240324.1.Weekday.2141",
+        "vehicle_id": "75c562eb-9239-44bb-b4b4-d57e61d40881",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_8c2de7e0-c7ce-442a-9b85-28c43e1e5abe",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602174.Soshigayaookuraeki.00240324.1.Weekday.2217",
+        "vehicle_id": "8c2de7e0-c7ce-442a-9b85-28c43e1e5abe",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_3acd650a-ca8c-4114-9922-f514a915f460",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602174.Soshigayaookuraeki.00240324.1.Weekday.2237",
+        "vehicle_id": "3acd650a-ca8c-4114-9922-f514a915f460",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_992b60f3-a928-4505-ad03-258145614671",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602174.Soshigayaookuraeki.00240324.1.Weekday.2259",
+        "vehicle_id": "992b60f3-a928-4505-ad03-258145614671",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_53c3619d-3614-4dce-ad65-5454d712ba1b",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602174.Soshigayaookuraeki.00240324.1.Weekday.2311",
+        "vehicle_id": "53c3619d-3614-4dce-ad65-5454d712ba1b",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_ff03ad3a-409a-43ef-9c63-384bacb5f9d2",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602189.Kamimachi.00240159.b.Weekday.0551",
+        "vehicle_id": "ff03ad3a-409a-43ef-9c63-384bacb5f9d2",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_3acd650a-ca8c-4114-9922-f514a915f460",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602189.Kamimachi.00240159.b.Weekday.0620",
+        "vehicle_id": "3acd650a-ca8c-4114-9922-f514a915f460",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_992b60f3-a928-4505-ad03-258145614671",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602189.Kamimachi.00240159.b.Weekday.0639",
+        "vehicle_id": "992b60f3-a928-4505-ad03-258145614671",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_b46f03c3-cfd6-4398-ad6a-a3bbfac7528f",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.0630",
+        "vehicle_id": "b46f03c3-cfd6-4398-ad6a-a3bbfac7528f",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_8c2de7e0-c7ce-442a-9b85-28c43e1e5abe",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.0640",
+        "vehicle_id": "8c2de7e0-c7ce-442a-9b85-28c43e1e5abe",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_75c562eb-9239-44bb-b4b4-d57e61d40881",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.0657",
+        "vehicle_id": "75c562eb-9239-44bb-b4b4-d57e61d40881",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_e4463ae4-7450-4ea4-b9e5-46962d854a07",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.0713",
+        "vehicle_id": "e4463ae4-7450-4ea4-b9e5-46962d854a07",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_53c3619d-3614-4dce-ad65-5454d712ba1b",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.0726",
+        "vehicle_id": "53c3619d-3614-4dce-ad65-5454d712ba1b",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_ff03ad3a-409a-43ef-9c63-384bacb5f9d2",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.0738",
+        "vehicle_id": "ff03ad3a-409a-43ef-9c63-384bacb5f9d2",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_3acd650a-ca8c-4114-9922-f514a915f460",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.0752",
+        "vehicle_id": "3acd650a-ca8c-4114-9922-f514a915f460",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_992b60f3-a928-4505-ad03-258145614671",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.0813",
+        "vehicle_id": "992b60f3-a928-4505-ad03-258145614671",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_b46f03c3-cfd6-4398-ad6a-a3bbfac7528f",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.0828",
+        "vehicle_id": "b46f03c3-cfd6-4398-ad6a-a3bbfac7528f",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_8c2de7e0-c7ce-442a-9b85-28c43e1e5abe",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.0844",
+        "vehicle_id": "8c2de7e0-c7ce-442a-9b85-28c43e1e5abe",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_75c562eb-9239-44bb-b4b4-d57e61d40881",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.0905",
+        "vehicle_id": "75c562eb-9239-44bb-b4b4-d57e61d40881",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_e4463ae4-7450-4ea4-b9e5-46962d854a07",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.0927",
+        "vehicle_id": "e4463ae4-7450-4ea4-b9e5-46962d854a07",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_53c3619d-3614-4dce-ad65-5454d712ba1b",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.0947",
+        "vehicle_id": "53c3619d-3614-4dce-ad65-5454d712ba1b",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_3acd650a-ca8c-4114-9922-f514a915f460",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.1007",
+        "vehicle_id": "3acd650a-ca8c-4114-9922-f514a915f460",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_992b60f3-a928-4505-ad03-258145614671",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.1027",
+        "vehicle_id": "992b60f3-a928-4505-ad03-258145614671",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_b46f03c3-cfd6-4398-ad6a-a3bbfac7528f",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.1046",
+        "vehicle_id": "b46f03c3-cfd6-4398-ad6a-a3bbfac7528f",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_8c2de7e0-c7ce-442a-9b85-28c43e1e5abe",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.1106",
+        "vehicle_id": "8c2de7e0-c7ce-442a-9b85-28c43e1e5abe",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_75c562eb-9239-44bb-b4b4-d57e61d40881",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.1125",
+        "vehicle_id": "75c562eb-9239-44bb-b4b4-d57e61d40881",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_53c3619d-3614-4dce-ad65-5454d712ba1b",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.1145",
+        "vehicle_id": "53c3619d-3614-4dce-ad65-5454d712ba1b",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_e4463ae4-7450-4ea4-b9e5-46962d854a07",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.1205",
+        "vehicle_id": "e4463ae4-7450-4ea4-b9e5-46962d854a07",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_992b60f3-a928-4505-ad03-258145614671",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.1225",
+        "vehicle_id": "992b60f3-a928-4505-ad03-258145614671",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_b46f03c3-cfd6-4398-ad6a-a3bbfac7528f",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.1245",
+        "vehicle_id": "b46f03c3-cfd6-4398-ad6a-a3bbfac7528f",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_8c2de7e0-c7ce-442a-9b85-28c43e1e5abe",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.1305",
+        "vehicle_id": "8c2de7e0-c7ce-442a-9b85-28c43e1e5abe",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_75c562eb-9239-44bb-b4b4-d57e61d40881",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.1325",
+        "vehicle_id": "75c562eb-9239-44bb-b4b4-d57e61d40881",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_53c3619d-3614-4dce-ad65-5454d712ba1b",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.1345",
+        "vehicle_id": "53c3619d-3614-4dce-ad65-5454d712ba1b",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_e4463ae4-7450-4ea4-b9e5-46962d854a07",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.1405",
+        "vehicle_id": "e4463ae4-7450-4ea4-b9e5-46962d854a07",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_992b60f3-a928-4505-ad03-258145614671",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.1425",
+        "vehicle_id": "992b60f3-a928-4505-ad03-258145614671",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_b46f03c3-cfd6-4398-ad6a-a3bbfac7528f",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.1445",
+        "vehicle_id": "b46f03c3-cfd6-4398-ad6a-a3bbfac7528f",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_8c2de7e0-c7ce-442a-9b85-28c43e1e5abe",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.1505",
+        "vehicle_id": "8c2de7e0-c7ce-442a-9b85-28c43e1e5abe",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_3acd650a-ca8c-4114-9922-f514a915f460",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.1525",
+        "vehicle_id": "3acd650a-ca8c-4114-9922-f514a915f460",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_75c562eb-9239-44bb-b4b4-d57e61d40881",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.1544",
+        "vehicle_id": "75c562eb-9239-44bb-b4b4-d57e61d40881",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_53c3619d-3614-4dce-ad65-5454d712ba1b",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.1600",
+        "vehicle_id": "53c3619d-3614-4dce-ad65-5454d712ba1b",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_e4463ae4-7450-4ea4-b9e5-46962d854a07",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.1618",
+        "vehicle_id": "e4463ae4-7450-4ea4-b9e5-46962d854a07",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_992b60f3-a928-4505-ad03-258145614671",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.1637",
+        "vehicle_id": "992b60f3-a928-4505-ad03-258145614671",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_b46f03c3-cfd6-4398-ad6a-a3bbfac7528f",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.1656",
+        "vehicle_id": "b46f03c3-cfd6-4398-ad6a-a3bbfac7528f",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_8c2de7e0-c7ce-442a-9b85-28c43e1e5abe",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.1715",
+        "vehicle_id": "8c2de7e0-c7ce-442a-9b85-28c43e1e5abe",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_3acd650a-ca8c-4114-9922-f514a915f460",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.1735",
+        "vehicle_id": "3acd650a-ca8c-4114-9922-f514a915f460",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_75c562eb-9239-44bb-b4b4-d57e61d40881",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.1753",
+        "vehicle_id": "75c562eb-9239-44bb-b4b4-d57e61d40881",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_53c3619d-3614-4dce-ad65-5454d712ba1b",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.1810",
+        "vehicle_id": "53c3619d-3614-4dce-ad65-5454d712ba1b",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_e4463ae4-7450-4ea4-b9e5-46962d854a07",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.1827",
+        "vehicle_id": "e4463ae4-7450-4ea4-b9e5-46962d854a07",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_992b60f3-a928-4505-ad03-258145614671",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.1845",
+        "vehicle_id": "992b60f3-a928-4505-ad03-258145614671",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_b46f03c3-cfd6-4398-ad6a-a3bbfac7528f",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.1900",
+        "vehicle_id": "b46f03c3-cfd6-4398-ad6a-a3bbfac7528f",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_8c2de7e0-c7ce-442a-9b85-28c43e1e5abe",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.1918",
+        "vehicle_id": "8c2de7e0-c7ce-442a-9b85-28c43e1e5abe",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_3acd650a-ca8c-4114-9922-f514a915f460",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.1936",
+        "vehicle_id": "3acd650a-ca8c-4114-9922-f514a915f460",
+        "powertrain": "BEV"
+      },
+      {
+        "duty_id": "milp_75c562eb-9239-44bb-b4b4-d57e61d40881",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.1954",
+        "vehicle_id": "75c562eb-9239-44bb-b4b4-d57e61d40881",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_53c3619d-3614-4dce-ad65-5454d712ba1b",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.2012",
+        "vehicle_id": "53c3619d-3614-4dce-ad65-5454d712ba1b",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_e4463ae4-7450-4ea4-b9e5-46962d854a07",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.2031",
+        "vehicle_id": "e4463ae4-7450-4ea4-b9e5-46962d854a07",
+        "powertrain": "ICE"
+      },
+      {
+        "duty_id": "milp_b46f03c3-cfd6-4398-ad6a-a3bbfac7528f",
+        "trip_id": "odpt.BusTimetable:TokyuBus.Shibu23.0004602972.Shibuyaeki.00240050.5.Weekday.2050",
+        "vehicle_id": "b46f03c3-cfd6-4398-ad6a-a3bbfac7528f",
+        "powertrain": "ICE"
+      }
+    ],
+    "relaxed_pv_overlap_by_bev_duty": [
+      {
+        "vehicle_id": "0549a411-fd2a-4339-b4a3-45a3b7d37898",
+        "duty_ids": [
+          "milp_0549a411-fd2a-4339-b4a3-45a3b7d37898"
+        ],
+        "home_depot_id": "tsurumaki",
+        "relaxed_positive_charge_slots": [
+          22,
+          94
+        ],
+        "relaxed_charge_input_kwh": 18.540952227368425,
+        "pv_available_in_relaxed_charge_slots_kwh": 2.55,
+        "semantics": "vehicle_local_pv_availability_during_positive_stage1_relaxed_charge_slots_not_solver_native_vehicle_source_allocation"
+      },
+      {
+        "vehicle_id": "0c9b7317-11ce-4340-ad98-a702eaacaaa4",
+        "duty_ids": [
+          "milp_0c9b7317-11ce-4340-ad98-a702eaacaaa4"
+        ],
+        "home_depot_id": "tsurumaki",
+        "relaxed_positive_charge_slots": [
+          0
+        ],
+        "relaxed_charge_input_kwh": 19.124944543157895,
+        "pv_available_in_relaxed_charge_slots_kwh": 0.0,
+        "semantics": "vehicle_local_pv_availability_during_positive_stage1_relaxed_charge_slots_not_solver_native_vehicle_source_allocation"
+      },
+      {
+        "vehicle_id": "1804ab20-a2a0-475c-b4d0-71d8a72c192f",
+        "duty_ids": [
+          "milp_1804ab20-a2a0-475c-b4d0-71d8a72c192f"
+        ],
+        "home_depot_id": "tsurumaki",
+        "relaxed_positive_charge_slots": [
+          6,
+          95
+        ],
+        "relaxed_charge_input_kwh": 34.274451178947366,
+        "pv_available_in_relaxed_charge_slots_kwh": 0.0,
+        "semantics": "vehicle_local_pv_availability_during_positive_stage1_relaxed_charge_slots_not_solver_native_vehicle_source_allocation"
+      },
+      {
+        "vehicle_id": "2e2015fd-c7c1-4c32-8498-ebb6be29cc4c",
+        "duty_ids": [
+          "milp_2e2015fd-c7c1-4c32-8498-ebb6be29cc4c"
+        ],
+        "home_depot_id": "tsurumaki",
+        "relaxed_positive_charge_slots": [
+          0,
+          20,
+          93,
+          94
+        ],
+        "relaxed_charge_input_kwh": 52.41839114105263,
+        "pv_available_in_relaxed_charge_slots_kwh": 2.55,
+        "semantics": "vehicle_local_pv_availability_during_positive_stage1_relaxed_charge_slots_not_solver_native_vehicle_source_allocation"
+      },
+      {
+        "vehicle_id": "35f95479-c68e-40bc-b31a-1f0a5490227c",
+        "duty_ids": [
+          "milp_35f95479-c68e-40bc-b31a-1f0a5490227c"
+        ],
+        "home_depot_id": "tsurumaki",
+        "relaxed_positive_charge_slots": [
+          7,
+          94,
+          95
+        ],
+        "relaxed_charge_input_kwh": 53.103783334736846,
+        "pv_available_in_relaxed_charge_slots_kwh": 0.0,
+        "semantics": "vehicle_local_pv_availability_during_positive_stage1_relaxed_charge_slots_not_solver_native_vehicle_source_allocation"
+      },
+      {
+        "vehicle_id": "3acd650a-ca8c-4114-9922-f514a915f460",
+        "duty_ids": [
+          "milp_3acd650a-ca8c-4114-9922-f514a915f460"
+        ],
+        "home_depot_id": "tsurumaki",
+        "relaxed_positive_charge_slots": [
+          0,
+          1,
+          2,
+          3,
+          24,
+          92,
+          94,
+          95
+        ],
+        "relaxed_charge_input_kwh": 170.76551755789473,
+        "pv_available_in_relaxed_charge_slots_kwh": 13.8125,
+        "semantics": "vehicle_local_pv_availability_during_positive_stage1_relaxed_charge_slots_not_solver_native_vehicle_source_allocation"
+      },
+      {
+        "vehicle_id": "3e38e74f-191a-4b72-8061-59f0020151e3",
+        "duty_ids": [
+          "milp_3e38e74f-191a-4b72-8061-59f0020151e3"
+        ],
+        "home_depot_id": "tsurumaki",
+        "relaxed_positive_charge_slots": [
+          0,
+          1,
+          90,
+          91,
+          92,
+          93,
+          94,
+          95
+        ],
+        "relaxed_charge_input_kwh": 174.62287978947364,
+        "pv_available_in_relaxed_charge_slots_kwh": 0.0,
+        "semantics": "vehicle_local_pv_availability_during_positive_stage1_relaxed_charge_slots_not_solver_native_vehicle_source_allocation"
+      },
+      {
+        "vehicle_id": "builder-bev-tsurumaki-006",
+        "duty_ids": [
+          "milp_builder-bev-tsurumaki-006"
+        ],
+        "home_depot_id": "tsurumaki",
+        "relaxed_positive_charge_slots": [
+          37,
+          59,
+          62
+        ],
+        "relaxed_charge_input_kwh": 45.21750095578948,
+        "pv_available_in_relaxed_charge_slots_kwh": 75.225,
+        "semantics": "vehicle_local_pv_availability_during_positive_stage1_relaxed_charge_slots_not_solver_native_vehicle_source_allocation"
+      },
+      {
+        "vehicle_id": "builder-bev-tsurumaki-007",
+        "duty_ids": [
+          "milp_builder-bev-tsurumaki-007"
+        ],
+        "home_depot_id": "tsurumaki",
+        "relaxed_positive_charge_slots": [
+          26,
+          95
+        ],
+        "relaxed_charge_input_kwh": 18.855131296842103,
+        "pv_available_in_relaxed_charge_slots_kwh": 13.8125,
+        "semantics": "vehicle_local_pv_availability_during_positive_stage1_relaxed_charge_slots_not_solver_native_vehicle_source_allocation"
+      },
+      {
+        "vehicle_id": "builder-bev-tsurumaki-008",
+        "duty_ids": [
+          "milp_builder-bev-tsurumaki-008"
+        ],
+        "home_depot_id": "tsurumaki",
+        "relaxed_positive_charge_slots": [
+          25,
+          26
+        ],
+        "relaxed_charge_input_kwh": 19.013824273684214,
+        "pv_available_in_relaxed_charge_slots_kwh": 27.625,
+        "semantics": "vehicle_local_pv_availability_during_positive_stage1_relaxed_charge_slots_not_solver_native_vehicle_source_allocation"
+      },
+      {
+        "vehicle_id": "builder-bev-tsurumaki-009",
+        "duty_ids": [
+          "milp_builder-bev-tsurumaki-009"
+        ],
+        "home_depot_id": "tsurumaki",
+        "relaxed_positive_charge_slots": [
+          50,
+          55,
+          56
+        ],
+        "relaxed_charge_input_kwh": 45.21750095578948,
+        "pv_available_in_relaxed_charge_slots_kwh": 82.875,
+        "semantics": "vehicle_local_pv_availability_during_positive_stage1_relaxed_charge_slots_not_solver_native_vehicle_source_allocation"
+      },
+      {
+        "vehicle_id": "builder-bev-tsurumaki-010",
+        "duty_ids": [
+          "milp_builder-bev-tsurumaki-010"
+        ],
+        "home_depot_id": "tsurumaki",
+        "relaxed_positive_charge_slots": [
+          44,
+          67,
+          69,
+          71
+        ],
+        "relaxed_charge_input_kwh": 36.887891423157896,
+        "pv_available_in_relaxed_charge_slots_kwh": 59.925,
+        "semantics": "vehicle_local_pv_availability_during_positive_stage1_relaxed_charge_slots_not_solver_native_vehicle_source_allocation"
+      },
+      {
+        "vehicle_id": "ca16a2ca-147b-4359-92db-913031d5faff",
+        "duty_ids": [
+          "milp_ca16a2ca-147b-4359-92db-913031d5faff"
+        ],
+        "home_depot_id": "tsurumaki",
+        "relaxed_positive_charge_slots": [
+          63
+        ],
+        "relaxed_charge_input_kwh": 19.013824273684214,
+        "pv_available_in_relaxed_charge_slots_kwh": 22.3125,
+        "semantics": "vehicle_local_pv_availability_during_positive_stage1_relaxed_charge_slots_not_solver_native_vehicle_source_allocation"
+      },
+      {
+        "vehicle_id": "ce309a0b-8c0b-49dc-a839-171db28e76a4",
+        "duty_ids": [
+          "milp_ce309a0b-8c0b-49dc-a839-171db28e76a4"
+        ],
+        "home_depot_id": "tsurumaki",
+        "relaxed_positive_charge_slots": [
+          38
+        ],
+        "relaxed_charge_input_kwh": 19.283637520000003,
+        "pv_available_in_relaxed_charge_slots_kwh": 21.0375,
+        "semantics": "vehicle_local_pv_availability_during_positive_stage1_relaxed_charge_slots_not_solver_native_vehicle_source_allocation"
+      },
+      {
+        "vehicle_id": "cf7b771e-a6ac-4e0b-9738-ad3901a68307",
+        "duty_ids": [
+          "milp_cf7b771e-a6ac-4e0b-9738-ad3901a68307"
+        ],
+        "home_depot_id": "tsurumaki",
+        "relaxed_positive_charge_slots": [
+          21,
+          83,
+          84,
+          85,
+          86,
+          87,
+          88,
+          95
+        ],
+        "relaxed_charge_input_kwh": 158.29558917052628,
+        "pv_available_in_relaxed_charge_slots_kwh": 2.55,
+        "semantics": "vehicle_local_pv_availability_during_positive_stage1_relaxed_charge_slots_not_solver_native_vehicle_source_allocation"
+      },
+      {
+        "vehicle_id": "d10aa797-db07-40a2-b52b-d4caf02ff33b",
+        "duty_ids": [
+          "milp_d10aa797-db07-40a2-b52b-d4caf02ff33b"
+        ],
+        "home_depot_id": "tsurumaki",
+        "relaxed_positive_charge_slots": [
+          44
+        ],
+        "relaxed_charge_input_kwh": 19.283637520000003,
+        "pv_available_in_relaxed_charge_slots_kwh": 31.6625,
+        "semantics": "vehicle_local_pv_availability_during_positive_stage1_relaxed_charge_slots_not_solver_native_vehicle_source_allocation"
+      },
+      {
+        "vehicle_id": "d225af48-8eec-47b7-abb1-34cfe83e31f0",
+        "duty_ids": [
+          "milp_d225af48-8eec-47b7-abb1-34cfe83e31f0"
+        ],
+        "home_depot_id": "tsurumaki",
+        "relaxed_positive_charge_slots": [
+          35,
+          56,
+          63
+        ],
+        "relaxed_charge_input_kwh": 18.74395146105263,
+        "pv_available_in_relaxed_charge_slots_kwh": 66.9375,
+        "semantics": "vehicle_local_pv_availability_during_positive_stage1_relaxed_charge_slots_not_solver_native_vehicle_source_allocation"
+      },
+      {
+        "vehicle_id": "dcf6407f-77ac-4c32-a840-49fcc7f9a525",
+        "duty_ids": [
+          "milp_dcf6407f-77ac-4c32-a840-49fcc7f9a525"
+        ],
+        "home_depot_id": "tsurumaki",
+        "relaxed_positive_charge_slots": [
+          42,
+          68
+        ],
+        "relaxed_charge_input_kwh": 19.01382427368421,
+        "pv_available_in_relaxed_charge_slots_kwh": 28.05,
+        "semantics": "vehicle_local_pv_availability_during_positive_stage1_relaxed_charge_slots_not_solver_native_vehicle_source_allocation"
+      },
+      {
+        "vehicle_id": "e0772317-52e2-4e70-bfc8-1eb486f0f75c",
+        "duty_ids": [
+          "milp_e0772317-52e2-4e70-bfc8-1eb486f0f75c"
+        ],
+        "home_depot_id": "tsurumaki",
+        "relaxed_positive_charge_slots": [
+          46
+        ],
+        "relaxed_charge_input_kwh": 19.013824273684214,
+        "pv_available_in_relaxed_charge_slots_kwh": 31.6625,
+        "semantics": "vehicle_local_pv_availability_during_positive_stage1_relaxed_charge_slots_not_solver_native_vehicle_source_allocation"
+      },
+      {
+        "vehicle_id": "e56620e3-804c-41a3-9441-b054b74c1392",
+        "duty_ids": [
+          "milp_e56620e3-804c-41a3-9441-b054b74c1392"
+        ],
+        "home_depot_id": "tsurumaki",
+        "relaxed_positive_charge_slots": [
+          1,
+          8,
+          23,
+          95
+        ],
+        "relaxed_charge_input_kwh": 52.846897364210534,
+        "pv_available_in_relaxed_charge_slots_kwh": 2.55,
+        "semantics": "vehicle_local_pv_availability_during_positive_stage1_relaxed_charge_slots_not_solver_native_vehicle_source_allocation"
+      },
+      {
+        "vehicle_id": "ff03ad3a-409a-43ef-9c63-384bacb5f9d2",
+        "duty_ids": [
+          "milp_ff03ad3a-409a-43ef-9c63-384bacb5f9d2"
+        ],
+        "home_depot_id": "tsurumaki",
+        "relaxed_positive_charge_slots": [
+          43,
+          64,
+          70
+        ],
+        "relaxed_charge_input_kwh": 38.86484203368421,
+        "pv_available_in_relaxed_charge_slots_kwh": 42.7125,
+        "semantics": "vehicle_local_pv_availability_during_positive_stage1_relaxed_charge_slots_not_solver_native_vehicle_source_allocation"
+      }
+    ],
+    "stage1_recourse_objective_jpy": 3688.8209120508864,
+    "stage1_recourse_result_hash": "4d993b07e157bf0a86414474a8ec4b986620da3d5a87a0e00964edd0bf9ce75e"
+  }
+}

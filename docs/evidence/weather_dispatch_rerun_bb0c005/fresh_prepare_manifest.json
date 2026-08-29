@@ -1,0 +1,36 @@
+{
+  "schema_version": "pure_ice_aggregation_weather_ab_v1",
+  "study_started_at_utc": "2026-08-29T05:45:02.035494+00:00",
+  "prepared_at_utc": "2026-08-29T05:45:14.328553+00:00",
+  "git_sha": "bb0c0050883a91dd86a9e8813ae88d4b6d8c361d",
+  "base_url": "http://127.0.0.1:8000",
+  "optimization_template_sha256": "9c39d1e1d58f423e59aeb9bc152933c9e7d7d97b788601b0a9d9539dd579125b",
+  "scenarios": {
+    "SUNNY": {
+      "scenario_id": "771d115b-75b0-49f7-a7f0-25f259a2cd21",
+      "prepared_input_id": "prepared-1f1b85053b8c9ea1-453c50ff177c277b-8acc7b3a",
+      "prepare_request_sha256": "1b68e5156df99eec8f5066a5fe2007876b6fa8af49b6b7928e5fe73027239242",
+      "prepare_response_sha256": "7fca4ebcb04facd2b8d904cb22ef17631a4eca622d9277fc340818b52575a8dc",
+      "response_checks": {
+        "ready": true,
+        "prepared_input_id_present": true,
+        "route_count_16": true,
+        "trip_count_264": true,
+        "weekday_service": true
+      }
+    },
+    "RAIN": {
+      "scenario_id": "b23fd26c-1233-4c73-bb9e-bdb8b1584760",
+      "prepared_input_id": "prepared-a6c5e0a8cdd9b32b-f1e18f252e336f1f-8acc7b3a",
+      "prepare_request_sha256": "8108e5d167bf40af4b2b0050d9b227c519603d9b6e5c8db45d3e48fffd86ce91",
+      "prepare_response_sha256": "6d2ba4b6fee8621579304a2293ced3558bf2df8dbc45efefd445e6242457dd81",
+      "response_checks": {
+        "ready": true,
+        "prepared_input_id_present": true,
+        "route_count_16": true,
+        "trip_count_264": true,
+        "weekday_service": true
+      }
+    }
+  }
+}

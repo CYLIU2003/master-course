@@ -16,6 +16,24 @@ validation run is needed, start **Research code validation** from the GitHub
 Actions page with **Run workflow**. Local focused and full-suite validation
 remain required before publishing research-code or evidence changes.
 
+## Current 2026-08-29 fresh SUNNY/RAIN rerun
+
+Fresh public-path runs at frozen tag `thesis-weather-rerun-bb0c005` / SHA
+`bb0c0050883a91dd86a9e8813ae88d4b6d8c361d` reproduced the Case-A winners.
+Both scenarios served 264/264 trips and passed independent physical validation,
+24/24 Rolling, executed-day accounting, frozen-control, and input-hash gates.
+SUNNY used 28 BEV / 4 ICE buses for 199 / 65 trips and reconciled to
+660,983.783805 JPY. RAIN used 21 BEV / 11 ICE buses for 91 / 173 trips; its
+day-ahead candidate cost was 698,296.465284 JPY and its authoritative Rolling
+cost was 698,598.628643 JPY. The compact, Git-tracked review bundle is
+[here](docs/evidence/weather_dispatch_rerun_bb0c005/README.md).
+
+The rerun passes the requested 10% Stage-1 certificate target, but the
+certified gaps remain 9.5213% for SUNNY and 1.6564% for RAIN. The result is a
+validated Phase-3 two-stage feasible comparison, not an integrated global
+optimum, a 1%-optimal result, or a general weather-benefit claim. Teacher/thesis
+release remains BLOCKED.
+
 ## Current 2026-08-28 weather-dispatch diagnosis
 
 The previously identical SUNNY/RAIN incumbent was caused by insufficient

@@ -1,0 +1,347 @@
+{
+  "scenario_id": "b23fd26c-1233-4c73-bb9e-bdb8b1584760",
+  "mode": "phase3_two_stage",
+  "solver_status": "feasible",
+  "objective_mode": "total_cost",
+  "objective_value": 698296.465283954,
+  "objective_value_unit": "solver_objective_score",
+  "objective_value_jpy": 698296.465283954,
+  "total_cost_jpy": 698598.6286431606,
+  "accounting_total_cost_jpy": 698598.6286431606,
+  "solver_objective_value": 698296.465283954,
+  "validated_operating_cost_jpy": 698598.6286431606,
+  "objective_is_actual_cost": false,
+  "solver_objective_matches_accounting_total": false,
+  "used_powertrain_composition_search_accepted": false,
+  "supports_exact_milp": true,
+  "stage1_solver_status": "optimal",
+  "stage1_termination_reason": "optimality_proven",
+  "stage1_best_obj_stop_enabled": false,
+  "stage1_best_obj_stop_applied": false,
+  "stage1_best_obj_stop_threshold": 772925.4868040456,
+  "stage1_gurobi_raw_mip_gap_ratio": 0.09521347575597812,
+  "stage1_certified_mip_gap_ratio": 0.01656358088352197,
+  "runtime_comparison_eligible": false,
+  "mip_gap_target_met": true,
+  "gurobi_threads": 1,
+  "interactive_runtime_controls": {
+    "policy_version": "research_batch_runtime_controls_v1",
+    "scope": "research_batch_run",
+    "enforced": false,
+    "requested": {
+      "stage1_best_obj_stop_enabled": false,
+      "gurobi_threads": 1
+    },
+    "effective": {
+      "stage1_best_obj_stop_enabled": false,
+      "gurobi_threads": 1
+    },
+    "override_applied": false,
+    "reason": "Research batch runs preserve the frozen requested controls; the caller and post-run artifact gate are authoritative."
+  },
+  "interactive_operation_time_window_controls": {
+    "schema_version": "interactive_operation_time_window_controls_v1",
+    "scope": "interactive_bff_run_optimization",
+    "requested": {
+      "operation_time_window_enabled": false,
+      "start_time": "00:00",
+      "end_time": "23:59"
+    },
+    "effective": {
+      "operation_time_window_enabled": false,
+      "start_time": "00:00",
+      "end_time": "23:59",
+      "planning_horizon_hours": 24.0
+    },
+    "full_day_horizon_forced": true,
+    "reason": "The start/end pair is inactive; canonical optimization uses the complete 00:00-23:59 calendar day."
+  },
+  "interactive_terminal_soc_controls": {
+    "policy_version": "interactive_terminal_soc_controls_v1",
+    "scope": "interactive_bff_run_optimization",
+    "enforced": true,
+    "requested": {
+      "simulation_config": {
+        "bev_terminal_soc_policy": null,
+        "terminal_soc_policy": null,
+        "final_soc_target_percent": 80.0,
+        "final_soc_target_tolerance_percent": 20.0
+      },
+      "charging_constraints": {
+        "bev_terminal_soc_policy": null,
+        "terminal_soc_policy": null,
+        "final_soc_target_percent": null,
+        "final_soc_target_tolerance_percent": null
+      }
+    },
+    "effective": {
+      "bev_terminal_soc_policy": "return_to_initial",
+      "terminal_soc_policy": "return_to_initial",
+      "final_soc_target_percent": null,
+      "final_soc_target_tolerance_percent": null
+    },
+    "override_applied": true,
+    "reason": "Interactive day-ahead runs enforce per-vehicle return_to_initial BEV terminal SOC so representative-day energy and cost comparisons do not consume or create BEV inventory."
+  },
+  "bev_terminal_soc_policy": "return_to_initial",
+  "bev_terminal_soc_balance_satisfied": true,
+  "bev_terminal_soc_total_drawdown_kwh": 0.0,
+  "solve_time_seconds": 380.0187980730552,
+  "solve_time_unit": "s",
+  "trip_count_served": 264,
+  "trip_count_unserved": 0,
+  "vehicle_count_used": 32,
+  "canonical_cost_components_jpy": {
+    "electricity_cost_jpy": 3925.5582995974178,
+    "fuel_cost_jpy": 53682.200807522095,
+    "demand_charge_cost_jpy": 0.0,
+    "contract_overage_cost_jpy": 0.0,
+    "vehicle_fixed_cost_jpy": 0.0,
+    "vehicle_usage_cost_jpy": 640000.0,
+    "driver_cost_jpy": 0.0,
+    "unserved_penalty_jpy": 0.0,
+    "switch_cost_jpy": 0.0,
+    "battery_degradation_cost_jpy": 0.0,
+    "deviation_cost_jpy": 0.0,
+    "co2_cost_jpy": 990.869536041073
+  },
+  "canonical_cost_component_status": {
+    "electricity_cost_jpy": {
+      "enabled": true,
+      "status": "ENABLED",
+      "source_key": "electricity_cost",
+      "source_present": true,
+      "value_jpy": 3925.5582995974178
+    },
+    "fuel_cost_jpy": {
+      "enabled": true,
+      "status": "ENABLED",
+      "source_key": "fuel_cost",
+      "source_present": true,
+      "value_jpy": 53682.200807522095
+    },
+    "demand_charge_cost_jpy": {
+      "enabled": true,
+      "status": "ENABLED",
+      "source_key": "demand_cost",
+      "source_present": true,
+      "value_jpy": 0.0
+    },
+    "contract_overage_cost_jpy": {
+      "enabled": true,
+      "status": "ENABLED",
+      "source_key": "contract_overage_cost",
+      "source_present": true,
+      "value_jpy": 0.0
+    },
+    "vehicle_fixed_cost_jpy": {
+      "enabled": false,
+      "status": "SKIPPED",
+      "source_key": "vehicle_cost",
+      "source_present": true,
+      "value_jpy": 0.0
+    },
+    "vehicle_usage_cost_jpy": {
+      "enabled": true,
+      "status": "ENABLED",
+      "source_key": "vehicle_usage_cost",
+      "source_present": true,
+      "value_jpy": 640000.0
+    },
+    "driver_cost_jpy": {
+      "enabled": false,
+      "status": "SKIPPED",
+      "source_key": "driver_cost",
+      "source_present": true,
+      "value_jpy": 0.0
+    },
+    "unserved_penalty_jpy": {
+      "enabled": true,
+      "status": "ENABLED",
+      "source_key": "unserved_penalty",
+      "source_present": true,
+      "value_jpy": 0.0
+    },
+    "switch_cost_jpy": {
+      "enabled": true,
+      "status": "ENABLED",
+      "source_key": "switch_cost",
+      "source_present": true,
+      "value_jpy": 0.0
+    },
+    "battery_degradation_cost_jpy": {
+      "enabled": true,
+      "status": "ENABLED",
+      "source_key": "degradation_cost",
+      "source_present": true,
+      "value_jpy": 0.0
+    },
+    "deviation_cost_jpy": {
+      "enabled": false,
+      "status": "SKIPPED",
+      "source_key": "deviation_cost",
+      "source_present": true,
+      "value_jpy": 0.0
+    },
+    "co2_cost_jpy": {
+      "enabled": true,
+      "status": "ENABLED",
+      "source_key": "co2_cost",
+      "source_present": true,
+      "value_jpy": 990.869536041073
+    }
+  },
+  "same_day_depot_cycles_enabled": true,
+  "max_depot_cycles_per_vehicle_per_day": 3,
+  "vehicle_fragment_counts": {
+    "0549a411-fd2a-4339-b4a3-45a3b7d37898": 1,
+    "0c9b7317-11ce-4340-ad98-a702eaacaaa4": 1,
+    "1804ab20-a2a0-475c-b4d0-71d8a72c192f": 1,
+    "2e2015fd-c7c1-4c32-8498-ebb6be29cc4c": 1,
+    "35f95479-c68e-40bc-b31a-1f0a5490227c": 1,
+    "3acd650a-ca8c-4114-9922-f514a915f460": 1,
+    "3e38e74f-191a-4b72-8061-59f0020151e3": 1,
+    "53c3619d-3614-4dce-ad65-5454d712ba1b": 1,
+    "6a566764-ea31-4d70-ae2d-df9928f8da84": 1,
+    "75c562eb-9239-44bb-b4b4-d57e61d40881": 1,
+    "83b7c190-860f-449d-9fa5-cf6acc616e22": 1,
+    "8c2de7e0-c7ce-442a-9b85-28c43e1e5abe": 1,
+    "992b60f3-a928-4505-ad03-258145614671": 1,
+    "9e728d1a-80c7-40d6-adc8-77ca37a7b394": 1,
+    "ad6f23ad-bb04-4c53-b94b-c0148f63ee8e": 1,
+    "b46f03c3-cfd6-4398-ad6a-a3bbfac7528f": 1,
+    "builder-bev-tsurumaki-006": 1,
+    "builder-bev-tsurumaki-007": 1,
+    "builder-bev-tsurumaki-008": 1,
+    "builder-bev-tsurumaki-009": 1,
+    "builder-bev-tsurumaki-010": 1,
+    "c70c7cc7-42f0-4b48-acb5-312ad86ebb5b": 1,
+    "ca16a2ca-147b-4359-92db-913031d5faff": 1,
+    "ce309a0b-8c0b-49dc-a839-171db28e76a4": 1,
+    "cf7b771e-a6ac-4e0b-9738-ad3901a68307": 1,
+    "d10aa797-db07-40a2-b52b-d4caf02ff33b": 1,
+    "d225af48-8eec-47b7-abb1-34cfe83e31f0": 1,
+    "dcf6407f-77ac-4c32-a840-49fcc7f9a525": 1,
+    "e0772317-52e2-4e70-bfc8-1eb486f0f75c": 1,
+    "e4463ae4-7450-4ea4-b9e5-46962d854a07": 1,
+    "e56620e3-804c-41a3-9441-b054b74c1392": 1,
+    "ff03ad3a-409a-43ef-9c63-384bacb5f9d2": 1
+  },
+  "vehicles_with_multiple_fragments": [],
+  "max_fragments_observed": 1,
+  "solution_validity": {
+    "validated_no_cancellation": true,
+    "validated_feasible": true,
+    "status_reason": "validated_feasible_no_cancellation",
+    "result_class": "exact_or_validated",
+    "blocking_reasons": [],
+    "physical_blocking_reasons": [],
+    "physical_validation_status": "VALID",
+    "research_acceptance_status": "ACCEPTED",
+    "research_blocking_reasons": [],
+    "research_acceptance_failed_checks": [],
+    "research_kpi_eligible": true,
+    "research_feasibility_eligible": true,
+    "research_assignment_eligible": false,
+    "research_cost_kpi_eligible": true,
+    "validation_metrics": {
+      "unassigned_trip_count": 0,
+      "duplicate_trip_count": 0,
+      "vehicle_time_overlap_count": 0,
+      "infeasible_transition_count": 0,
+      "ev_soc_lower_violation_count": 0,
+      "ev_soc_upper_violation_count": 0,
+      "ev_soc_violation_count": 0,
+      "bess_soc_lower_violation_count": 0,
+      "bess_soc_upper_violation_count": 0,
+      "bess_soc_violation_count": 0,
+      "bess_terminal_soc_deviation_kwh": 4.547473508864641e-13,
+      "bess_terminal_soc_tolerance_kwh": 1e-06,
+      "contract_power_violation_count": 0,
+      "charger_concurrency_violation_count": 0,
+      "all_required_validation_checks_passed": true
+    },
+    "research_acceptance_checks": {
+      "recognized_research_phase": true,
+      "no_fallback": true,
+      "no_postsolve_modification": true,
+      "all_trips_served": true,
+      "postsolve_feasible": true,
+      "not_diagnostic_or_debug": true,
+      "phase_routing_exact": true,
+      "operator_id_resolved": true,
+      "single_continuous_vehicle_duty": true,
+      "two_stage_milp_evaluated": true,
+      "exact_milp_backend": true,
+      "source_provenance_exact": true,
+      "service_calendar_contract": true,
+      "research_vehicle_inventory_contract": true
+    },
+    "terminal_soc_validation": {
+      "bev_terminal_soc_policy": "return_to_initial",
+      "bev_terminal_soc_balance_satisfied": true,
+      "bess_terminal_soc_deviation_kwh": 0.0,
+      "bess_terminal_soc_tolerance_kwh": 1e-06
+    },
+    "physical_schedule_validation_status": "VALID",
+    "physical_schedule_validation_artifact": "physical_schedule_validation.json"
+  },
+  "result_status": "FEASIBLE_CANDIDATE",
+  "failure_stage": null,
+  "research_kpi_eligible": true,
+  "reported_total_cost_jpy": 698598.6286431606,
+  "gross_operating_cost_jpy": 698598.6286431606,
+  "grid_purchase_cost_jpy": 3925.558299597403,
+  "energy_cost_jpy": 3925.5582995974178,
+  "demand_charge_cost_jpy": 0.0,
+  "fuel_cost_jpy": 53682.200807522095,
+  "co2_cost_jpy": 990.869536041073,
+  "accounting_residual_jpy": 0.0,
+  "canonical_cost_ledger_source": "graph\\canonical_cost_ledger.json",
+  "objective_accounting_equality_required": false,
+  "trip_count_by_type": {
+    "BEV": 91,
+    "ICE": 173
+  },
+  "cost_definition": {
+    "total_cost_jpy": "gross operating cost from graph/canonical_cost_ledger.json",
+    "reported_total_cost_jpy": "same as gross_operating_cost_jpy",
+    "gross_operating_cost_jpy": "sum of solver-evaluated canonical cost ledger terms",
+    "objective_value_jpy": "solver objective value; equals reported_total_cost_jpy only when objective_is_actual_cost=true",
+    "objective_is_actual_cost": false,
+    "objective_accounting_equality_required": false,
+    "solver_objective_matches_accounting_total": false
+  },
+  "electricity_cost_jpy": 3925.5582995974178,
+  "propulsion_energy_cost_jpy": 57607.75910711951,
+  "vehicle_usage_cost_jpy": 640000.0,
+  "run_profile": "day_ahead_and_hourly_rolling",
+  "rolling_execution": {
+    "status": "executed_and_accepted",
+    "rolling_horizon_policy": "remaining_day_charging_only_fixed_assignment",
+    "rolling_execution_minutes": 60,
+    "chain_summary_path": "C:\\master-course\\output\\2026-08-29\\run_20260829_1455\\rolling_hourly_chain\\rolling_chain_summary.json",
+    "chain_accepted": true,
+    "acceptance_checks": {
+      "full_energy_horizon_requested": true,
+      "all_steps_feasible": true,
+      "expected_step_count_observed": true,
+      "executed_day_accounting_eligible": true,
+      "day_ahead_git_clean": true,
+      "rolling_runner_git_clean": true,
+      "day_ahead_and_rolling_git_sha_match": true,
+      "day_ahead_assignment_hash_constant": true,
+      "gurobi_available": true,
+      "no_chain_runtime_error": true
+    },
+    "rejection_reasons": [],
+    "semantics": "Rolling evidence is accepted only when the persisted chain summary and every recorded acceptance check pass."
+  },
+  "research_submission_ready": false,
+  "teacher_release_status": "BLOCKED",
+  "teacher_release_failed_checks": [
+    "controlled_counterfactual_pair_not_verified",
+    "solver_objective_canonical_accounting_mismatch",
+    "used_powertrain_composition_search_not_certified"
+  ]
+}
