@@ -29,6 +29,16 @@ confirmation attestations and the frozen protocol; and certified gap/runtime
 must match direct solver artifacts. Six refreshed-index tamper regressions
 cover these paths. This hardening changes no canonical result or package byte.
 
+The following exact-HEAD review closes six more reporting P1 paths. The loader
+now derives Rolling acceptance from the 24 persisted steps; binds omitted
+initial-SOC/charger hashes; anchors gap/runtime to the sealed original solver
+result digests and fixed metrics; reconciles scenario/prepared-input/service
+identity across every carrying artifact; requires clean available optimization
+Git provenance; and requires the exact producer-defined 15-check confirmation
+set in both gate copies. The expanded combined suite passes 214 tests and exact
+package verification still passes; the complete repository suite passes 1,703
+tests. No canonical evidence or package byte was changed.
+
 This changes only reporting reproducibility metadata and instructions. The
 canonical `bb0c005` evidence bytes, numerical tables, figures, certified gaps,
 Phase-3 scope, and release/claim blockers below are unchanged.

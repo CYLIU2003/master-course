@@ -106,6 +106,12 @@ fixed-weekday counterfactual. Both use 264 trips, the exact 60-vehicle active
 fleet (35 BEV / 25 ICE), 10 90-kW chargers, a 200-kW grid limit, 1-MW PV, and
 a 6-MWh / 900-kW BESS. These parameters are provenance facts, not permission
 to replace or regenerate either scenario.
+The thesis-package loader recomputes Rolling acceptance from all 24 persisted
+steps, binds every identity-bearing artifact to the audited scenario/prepared
+input/service date, verifies all physical input hashes and clean optimization
+provenance, requires the exact 15-check confirmation gate, and anchors reported
+gap/runtime to the sealed original solver-result digests. These checks are
+read-only and do not alter the frozen evidence or generated package bytes.
 New numerical claims require a fresh clean-commit run.
 
 The thesis package builder also fails closed on the underlying parameter and

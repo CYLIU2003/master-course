@@ -261,7 +261,25 @@ def test_rolling_acceptance_requires_all_audited_checks(tmp_path: Path) -> None:
 
     with pytest.raises(
         builder.EvidenceValidationError,
-        match="RAIN: Rolling acceptance audit failed",
+        match="RAIN: persisted Rolling checks differ from step evidence",
+    ):
+        builder.load_and_validate_bundle(evidence, PARAMETER_SOURCE_ROOT)
+
+
+def test_rolling_acceptance_is_recomputed_from_persisted_steps(
+    tmp_path: Path,
+) -> None:
+    evidence = tmp_path / "evidence"
+    shutil.copytree(EVIDENCE_ROOT, evidence)
+    path = evidence / "RAIN" / "rolling_chain_summary.json"
+    rolling = json.loads(path.read_text(encoding="utf-8"))
+    rolling["steps"][0]["feasible"] = False
+    _write_json(path, rolling)
+    _refresh_evidence_hash_index(evidence)
+
+    with pytest.raises(
+        builder.EvidenceValidationError,
+        match="RAIN: persisted Rolling checks differ from step evidence",
     ):
         builder.load_and_validate_bundle(evidence, PARAMETER_SOURCE_ROOT)
 
@@ -282,6 +300,97 @@ def test_physical_validation_is_bound_to_rolling_fleet_and_sha(
     with pytest.raises(
         builder.EvidenceValidationError,
         match="RAIN: physical evidence assignment_hash differs from rolling chain",
+    ):
+        builder.load_and_validate_bundle(evidence, PARAMETER_SOURCE_ROOT)
+
+
+@pytest.mark.parametrize(
+    "hash_name",
+    ("initial_soc_input_hash", "charger_configuration_hash"),
+)
+def test_physical_validation_binds_all_input_hashes(
+    tmp_path: Path,
+    hash_name: str,
+) -> None:
+    evidence = tmp_path / "evidence"
+    shutil.copytree(EVIDENCE_ROOT, evidence)
+    path = evidence / "RAIN" / "physical_schedule_validation.json"
+    physical = json.loads(path.read_text(encoding="utf-8"))
+    physical["evidence"][hash_name] = "tampered-input-hash"
+    _write_json(path, physical)
+    _refresh_evidence_hash_index(evidence)
+
+    with pytest.raises(
+        builder.EvidenceValidationError,
+        match=rf"RAIN: physical evidence {hash_name} differs from rolling chain",
+    ):
+        builder.load_and_validate_bundle(evidence, PARAMETER_SOURCE_ROOT)
+
+
+@pytest.mark.parametrize(
+    ("relative_path", "field", "expected_message"),
+    (
+        ("RAIN/rolling_chain_summary.json", "scenario_id", "rolling summary scenario identity"),
+        ("RAIN/optimization_parameters.json", "prepared_input_id", "optimization provenance prepared-input identity"),
+        ("RAIN/confirmation_gate.json", "service_date", "confirmation gate service-date identity"),
+        ("RAIN/summary.json", "scenario_id", "direct solver summary scenario identity"),
+        ("result_summary.json", "prepared_input_id", "RAIN: parameter Prepared ID"),
+    ),
+)
+def test_all_identity_bearing_artifacts_match_the_audited_scenario(
+    tmp_path: Path,
+    relative_path: str,
+    field: str,
+    expected_message: str,
+) -> None:
+    evidence = tmp_path / "evidence"
+    shutil.copytree(EVIDENCE_ROOT, evidence)
+    path = evidence / relative_path
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    target = payload["scenarios"]["RAIN"] if relative_path == "result_summary.json" else payload
+    target[field] = "tampered-identity"
+    _write_json(path, payload)
+    _refresh_evidence_hash_index(evidence)
+
+    with pytest.raises(builder.EvidenceValidationError, match=expected_message):
+        builder.load_and_validate_bundle(evidence, PARAMETER_SOURCE_ROOT)
+
+
+def test_optimization_control_provenance_is_clean_and_available(
+    tmp_path: Path,
+) -> None:
+    evidence = tmp_path / "evidence"
+    shutil.copytree(EVIDENCE_ROOT, evidence)
+    path = evidence / "RAIN" / "optimization_parameters.json"
+    optimization = json.loads(path.read_text(encoding="utf-8"))
+    optimization["code_provenance"]["git_sha"] = "other"
+    optimization["code_provenance"]["git_dirty"] = True
+    optimization["code_provenance"]["git_state_available"] = False
+    optimization["code_provenance"]["git_state_error"] = "unavailable"
+    _write_json(path, optimization)
+    _refresh_evidence_hash_index(evidence)
+
+    with pytest.raises(
+        builder.EvidenceValidationError,
+        match="RAIN: optimization Git state unavailable",
+    ):
+        builder.load_and_validate_bundle(evidence, PARAMETER_SOURCE_ROOT)
+
+
+def test_confirmation_gate_requires_exact_producer_check_set(
+    tmp_path: Path,
+) -> None:
+    evidence = tmp_path / "evidence"
+    shutil.copytree(EVIDENCE_ROOT, evidence)
+    path = evidence / "RAIN" / "confirmation_gate.json"
+    gate = json.loads(path.read_text(encoding="utf-8"))
+    del gate["checks"]["fallback_and_repair_absent"]
+    _write_json(path, gate)
+    _refresh_evidence_hash_index(evidence)
+
+    with pytest.raises(
+        builder.EvidenceValidationError,
+        match="RAIN: confirmation gate check set is incomplete",
     ):
         builder.load_and_validate_bundle(evidence, PARAMETER_SOURCE_ROOT)
 
@@ -358,7 +467,39 @@ def test_rendered_gap_and_runtime_match_direct_solver_artifacts(
 
     with pytest.raises(
         builder.EvidenceValidationError,
-        match="RAIN: summary.json gap",
+        match="RAIN: sealed solver-result gap",
+    ):
+        builder.load_and_validate_bundle(evidence, PARAMETER_SOURCE_ROOT)
+
+
+def test_gap_and_runtime_are_anchored_to_the_sealed_solver_result(
+    tmp_path: Path,
+) -> None:
+    evidence = tmp_path / "evidence"
+    shutil.copytree(EVIDENCE_ROOT, evidence)
+    result_summary_path = evidence / "result_summary.json"
+    result_summary = json.loads(result_summary_path.read_text(encoding="utf-8"))
+    result_summary["scenarios"]["RAIN"]["stage1_certified_gap_ratio"] = 0.0
+    result_summary["scenarios"]["RAIN"]["solve_time_seconds"] = 1.0
+    _write_json(result_summary_path, result_summary)
+
+    direct_summary_path = evidence / "RAIN" / "summary.json"
+    direct_summary = json.loads(direct_summary_path.read_text(encoding="utf-8"))
+    direct_summary["stage1_certified_mip_gap_ratio"] = 0.0
+    direct_summary["solve_time_seconds"] = 1.0
+    _write_json(direct_summary_path, direct_summary)
+
+    metrics_path = evidence / "RAIN" / "solver_metrics.json"
+    metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
+    metrics["achieved_mip_gap"] = 0.0
+    metrics["solve_time_seconds"] = 1.0
+    metrics["solver_metadata"]["stage1_certified_mip_gap_ratio"] = 0.0
+    _write_json(metrics_path, metrics)
+    _refresh_evidence_hash_index(evidence)
+
+    with pytest.raises(
+        builder.EvidenceValidationError,
+        match="RAIN: sealed solver-result gap",
     ):
         builder.load_and_validate_bundle(evidence, PARAMETER_SOURCE_ROOT)
 

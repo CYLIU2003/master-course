@@ -66,6 +66,37 @@ EXPECTED_SOLVER_CONTROLS = {
     "stage1_bev_frontier_max_count": 35,
     "stage1_bev_frontier_target_time_limit_sec": 120.0,
 }
+EXPECTED_CONFIRMATION_CHECKS = frozenset(
+    {
+        "served_264",
+        "unserved_zero",
+        "physical_validation_passed",
+        "rolling_24_of_24",
+        "accounting_reconciliation_passed",
+        "git_sha_matches",
+        "fallback_and_repair_absent",
+        "day_ahead_research_acceptance_passed",
+        "candidate_coverage_applied",
+        "frozen_runtime_controls_preserved",
+        "frozen_solver_limits_preserved",
+        "effective_frontier_controls_preserved",
+        "bev_utilization_policy_preserved",
+        "executed_day_accounting_is_authoritative",
+        "stage1_weather_recourse_used_in_objective",
+    }
+)
+EXPECTED_SOLVER_RESULT_EVIDENCE = {
+    "SUNNY": {
+        "sha256": "38be8f7434a26084a88ebe63491e22d26f49d27064b5d5dc7d5497af31c93e17",
+        "stage1_certified_gap_ratio": 0.09521347575597812,
+        "solve_time_seconds": 380.98232229676796,
+    },
+    "RAIN": {
+        "sha256": "81b550624c53c7860985dea8d13f1f637ae462345a0df9b422915863c4b0cf00",
+        "stage1_certified_gap_ratio": 0.01656358088352197,
+        "solve_time_seconds": 380.0187980730552,
+    },
+}
 
 # These values are acceptance assertions only.  Rendered values are always
 # extracted from the evidence JSON loaded into ScenarioEvidence.
@@ -586,6 +617,22 @@ def _validate_bundle(bundle: EvidenceBundle) -> None:
     for code, scenario in bundle.scenarios.items():
         expected = EXPECTED_RESULTS[code]
         row = scenario.summary
+        manifest_scenario = _required_field(
+            _required_field(manifest, "scenarios", "confirmation manifest"),
+            code,
+            "confirmation manifest scenarios",
+        )
+        contract_scenario = _required_field(
+            _required_field(contract, "scenarios", "input contract"),
+            code,
+            "input contract scenarios",
+        )
+        _validate_scenario_identity(
+            scenario,
+            manifest_scenario=manifest_scenario,
+            contract_scenario=contract_scenario,
+        )
+        _validate_optimization_provenance(scenario)
         _require(row["scenario_id"] == SCENARIO_IDS[code], f"{code}: scenario ID")
         for key in ("used_bev", "used_ice", "bev_trips", "ice_trips"):
             _require(row[key] == expected[key], f"{code}: unexpected {key}")
@@ -598,16 +645,13 @@ def _validate_bundle(bundle: EvidenceBundle) -> None:
         _require(row["unserved_trips"] == 0, f"{code}: unserved trip count")
         _require(row["used_bev"] + row["used_ice"] == 32, f"{code}: used fleet")
         _require(row["bev_trips"] + row["ice_trips"] == 264, f"{code}: trips")
-        rolling_audit = rolling_chain_acceptance_audit(scenario.rolling)
-        _require(
-            rolling_audit["accepted"] is True,
-            f"{code}: Rolling acceptance audit failed: "
-            f"missing={rolling_audit['missing_required_checks']}, "
-            f"failing={rolling_audit['failing_checks']}",
-        )
+        _validate_rolling_chain(scenario)
         _require(scenario.rolling["step_count"] == 24, f"{code}: Rolling steps")
         _require(scenario.rolling["expected_step_count"] == 24, f"{code}: expected steps")
-        _require(all(scenario.confirmation_gate["checks"].values()), f"{code}: gate")
+        _validate_confirmation_checks(
+            scenario,
+            manifest_scenario=manifest_scenario,
+        )
         _require(scenario.accounting["eligible"] is True, f"{code}: accounting")
         _require(scenario.accounting["terminal_energy_balanced"] is True, f"{code}: energy")
         _require(scenario.accounting["bess_terminal_energy_balanced"] is True, f"{code}: BESS")
@@ -616,18 +660,21 @@ def _validate_bundle(bundle: EvidenceBundle) -> None:
         _validate_fleet_contract(scenario)
         _validate_solver_controls(
             scenario,
-            manifest_scenario=_required_field(
-                _required_field(manifest, "scenarios", "confirmation manifest"),
-                code,
-                "confirmation manifest scenarios",
-            ),
-            contract_scenario=_required_field(
-                _required_field(contract, "scenarios", "input contract"),
-                code,
-                "input contract scenarios",
+            manifest_scenario=manifest_scenario,
+            contract_scenario=contract_scenario,
+        )
+        _validate_solver_result_metrics(
+            scenario,
+            finalization_artifacts=_required_field(
+                _required_field(
+                    manifest,
+                    "finalization_input_artifacts",
+                    "confirmation manifest",
+                ),
+                "artifacts",
+                "confirmation manifest finalization artifacts",
             ),
         )
-        _validate_solver_result_metrics(scenario)
         _validate_selected_candidate_evidence(scenario)
         _assert_close(
             float(scenario.costs["total_cost"]),
@@ -653,6 +700,241 @@ def _validate_bundle(bundle: EvidenceBundle) -> None:
         "SUNNY and RAIN selected the same physical assignment hash",
     )
     _validate_shared_inputs(sunny, rain, bundle.input_contract)
+
+
+def _validate_scenario_identity(
+    scenario: ScenarioEvidence,
+    *,
+    manifest_scenario: Mapping[str, Any],
+    contract_scenario: Mapping[str, Any],
+) -> None:
+    """Bind every identity-bearing artifact to the audited scenario contract."""
+
+    code = scenario.code
+    expected_scenario_id = SCENARIO_IDS[code]
+    expected_prepared_input_id = _required_field(
+        contract_scenario,
+        "prepared_input_id",
+        f"{code} input contract",
+    )
+    expected_service_date = _required_field(
+        contract_scenario,
+        "service_date",
+        f"{code} input contract",
+    )
+    scenario_id_sources = {
+        "result summary": scenario.summary,
+        "rolling summary": scenario.rolling,
+        "optimization provenance": scenario.optimization,
+        "confirmation gate": scenario.confirmation_gate,
+        "direct solver summary": scenario.solver_summary,
+        "input contract": contract_scenario,
+    }
+    for source_name, source in scenario_id_sources.items():
+        _require(
+            _required_field(source, "scenario_id", f"{code} {source_name}")
+            == expected_scenario_id,
+            f"{code}: {source_name} scenario identity mismatch",
+        )
+    prepared_input_sources = {
+        "result summary": scenario.summary,
+        "rolling summary": scenario.rolling,
+        "optimization provenance": scenario.optimization,
+        "confirmation gate": scenario.confirmation_gate,
+        "confirmation manifest": manifest_scenario,
+        "input contract": contract_scenario,
+    }
+    for source_name, source in prepared_input_sources.items():
+        _require(
+            _required_field(source, "prepared_input_id", f"{code} {source_name}")
+            == expected_prepared_input_id,
+            f"{code}: {source_name} prepared-input identity mismatch",
+        )
+    for source_name, source in {
+        "rolling summary": scenario.rolling,
+        "confirmation gate": scenario.confirmation_gate,
+        "confirmation manifest": manifest_scenario,
+        "input contract": contract_scenario,
+    }.items():
+        _require(
+            _required_field(source, "service_date", f"{code} {source_name}")
+            == expected_service_date,
+            f"{code}: {source_name} service-date identity mismatch",
+        )
+    for index, step in enumerate(
+        _required_field(scenario.rolling, "steps", f"{code} rolling summary")
+    ):
+        context = f"{code} rolling step {index}"
+        _require(
+            _required_field(step, "scenario_id", context) == expected_scenario_id,
+            f"{context}: scenario identity mismatch",
+        )
+        _require(
+            _required_field(step, "prepared_input_id", context)
+            == expected_prepared_input_id,
+            f"{context}: prepared-input identity mismatch",
+        )
+        _require(
+            _required_field(step, "service_date", context) == expected_service_date,
+            f"{context}: service-date identity mismatch",
+        )
+
+
+def _validate_optimization_provenance(scenario: ScenarioEvidence) -> None:
+    """Require usable clean Git provenance before consuming model controls."""
+
+    code = scenario.code
+    provenance = _required_field(
+        scenario.optimization,
+        "code_provenance",
+        f"{code} optimization parameters",
+    )
+    _require(
+        provenance.get("schema_version") == "git_provenance_v1",
+        f"{code}: optimization provenance schema",
+    )
+    _require(
+        provenance.get("git_state_available") is True,
+        f"{code}: optimization Git state unavailable",
+    )
+    _require(
+        provenance.get("git_state_error") is None,
+        f"{code}: optimization Git state error",
+    )
+    _require(
+        provenance.get("git_sha") == EXECUTION_SHA,
+        f"{code}: optimization provenance SHA mismatch",
+    )
+    _require(
+        provenance.get("git_dirty") is False,
+        f"{code}: optimization provenance is dirty",
+    )
+    _require(
+        list(provenance.get("status_porcelain") or ()) == [],
+        f"{code}: optimization provenance status is not clean",
+    )
+
+
+def _validate_rolling_chain(scenario: ScenarioEvidence) -> None:
+    """Recompute the Rolling acceptance checks from persisted step evidence."""
+
+    code = scenario.code
+    rolling = scenario.rolling
+    steps = _required_field(rolling, "steps", f"{code} rolling summary")
+    _require(isinstance(steps, list) and bool(steps), f"{code}: missing Rolling steps")
+    expected_step_count = int(
+        _required_field(rolling, "expected_step_count", f"{code} rolling summary")
+    )
+    day_ahead_assignment_hash = _required_field(
+        rolling,
+        "day_ahead_assignment_hash",
+        f"{code} rolling summary",
+    )
+    all_steps_feasible = all(
+        step.get("feasible") is True
+        and str(step.get("solver_status") or "").lower() in {"feasible", "optimal"}
+        and not list(step.get("infeasibility_reasons") or ())
+        for step in steps
+    )
+    expected_steps_observed = bool(
+        len(steps) == expected_step_count
+        == int(_required_field(rolling, "step_count", f"{code} rolling summary"))
+        and [step.get("step_index") for step in steps]
+        == list(range(expected_step_count))
+    )
+    assignment_hash_constant = all(
+        step.get("day_ahead_assignment_hash") == day_ahead_assignment_hash
+        and isinstance(step.get("assignment_audit"), Mapping)
+        and step["assignment_audit"].get("matched") is True
+        and step["assignment_audit"].get("day_ahead_assignment_hash")
+        == day_ahead_assignment_hash
+        and step["assignment_audit"].get("step_assignment_hash")
+        == day_ahead_assignment_hash
+        for step in steps
+    )
+    rejection_reasons = list(
+        _required_field(rolling, "rejection_reasons", f"{code} rolling summary")
+        or ()
+    )
+    recomputed_checks = {
+        "full_energy_horizon_requested": bool(
+            rolling.get("energy_horizon_slot_count") == 96
+            and rolling.get("timestep_min") == 15
+            and rolling.get("energy_horizon_start_time") == "00:00"
+            and rolling.get("energy_horizon_end_time") == "00:00"
+        ),
+        "all_steps_feasible": all_steps_feasible,
+        "expected_step_count_observed": expected_steps_observed,
+        "executed_day_accounting_eligible": scenario.accounting.get("eligible") is True,
+        "day_ahead_git_clean": rolling.get("day_ahead_git_sha") == EXECUTION_SHA,
+        "rolling_runner_git_clean": rolling.get("rolling_runner_git_dirty") is False,
+        "day_ahead_and_rolling_git_sha_match": bool(
+            rolling.get("day_ahead_git_sha") == EXECUTION_SHA
+            and rolling.get("rolling_runner_git_sha") == EXECUTION_SHA
+        ),
+        "day_ahead_assignment_hash_constant": assignment_hash_constant,
+        "gurobi_available": bool(
+            rolling.get("gurobi_available") is True
+            and all(step.get("solver_backend") == "gurobi" for step in steps)
+        ),
+        "no_chain_runtime_error": bool(
+            not rejection_reasons
+            and all(not list(step.get("infeasibility_reasons") or ()) for step in steps)
+        ),
+    }
+    persisted_checks = _required_field(
+        rolling,
+        "acceptance_checks",
+        f"{code} rolling summary",
+    )
+    _require(
+        persisted_checks == recomputed_checks,
+        f"{code}: persisted Rolling checks differ from step evidence",
+    )
+    _require(
+        rolling.get("all_steps_feasible") is all_steps_feasible,
+        f"{code}: top-level Rolling feasibility differs from steps",
+    )
+    _require(not rejection_reasons, f"{code}: Rolling rejection reasons present")
+    audit = rolling_chain_acceptance_audit(rolling)
+    _require(
+        audit["accepted"] is True,
+        f"{code}: Rolling acceptance audit failed: "
+        f"missing={audit['missing_required_checks']}, "
+        f"failing={audit['failing_checks']}",
+    )
+
+
+def _validate_confirmation_checks(
+    scenario: ScenarioEvidence,
+    *,
+    manifest_scenario: Mapping[str, Any],
+) -> None:
+    """Require the exact producer gate set in both persisted attestations."""
+
+    code = scenario.code
+    gate_checks = _required_field(
+        scenario.confirmation_gate,
+        "checks",
+        f"{code} confirmation gate",
+    )
+    manifest_checks = _required_field(
+        manifest_scenario,
+        "checks",
+        f"{code} confirmation manifest",
+    )
+    _require(
+        set(gate_checks) == EXPECTED_CONFIRMATION_CHECKS,
+        f"{code}: confirmation gate check set is incomplete",
+    )
+    _require(
+        gate_checks == manifest_checks,
+        f"{code}: confirmation gate checks differ from manifest",
+    )
+    _require(
+        all(value is True for value in gate_checks.values()),
+        f"{code}: confirmation gate check failed",
+    )
 
 
 def _validate_cost_reconciliation(scenario: ScenarioEvidence) -> None:
@@ -771,6 +1053,8 @@ def _validate_physical_schedule(scenario: ScenarioEvidence) -> None:
         ("active_vehicle_id_hash", "active_vehicle_id_hash"),
         ("vehicle_parameter_hash", "vehicle_parameter_hash"),
         ("initial_state_hash", "initial_state_hash"),
+        ("initial_soc_input_hash", "initial_soc_input_hash"),
+        ("charger_configuration_hash", "charger_configuration_hash"),
     ):
         _require(
             _required_field(evidence, evidence_key, f"{code} physical evidence")
@@ -829,7 +1113,11 @@ def _validate_solver_controls(
             _require(actual == expected, f"{code}: solver control {key}")
 
 
-def _validate_solver_result_metrics(scenario: ScenarioEvidence) -> None:
+def _validate_solver_result_metrics(
+    scenario: ScenarioEvidence,
+    *,
+    finalization_artifacts: Mapping[str, Any],
+) -> None:
     """Bind rendered Stage-1 gap and runtime to direct solver artifacts."""
 
     code = scenario.code
@@ -837,6 +1125,38 @@ def _validate_solver_result_metrics(scenario: ScenarioEvidence) -> None:
     published_runtime = float(scenario.summary["solve_time_seconds"])
     direct_summary = scenario.solver_summary
     metrics = scenario.solver_metrics
+    expected = EXPECTED_SOLVER_RESULT_EVIDENCE[code]
+    solver_result_seal = _required_field(
+        finalization_artifacts,
+        f"confirmation_run/{code}/solver_result.json",
+        "confirmation manifest finalization artifacts",
+    )
+    _require(
+        _required_field(metrics, "source_sha256", f"{code} solver metrics")
+        == expected["sha256"],
+        f"{code}: solver metrics source digest mismatch",
+    )
+    _require(
+        _required_field(solver_result_seal, "sha256", f"{code} solver result seal")
+        == expected["sha256"],
+        f"{code}: sealed solver-result digest mismatch",
+    )
+    _require(
+        str(_required_field(solver_result_seal, "path", f"{code} solver result seal"))
+        .replace("\\", "/")
+        .endswith("/solver_result.json"),
+        f"{code}: sealed solver-result path mismatch",
+    )
+    _assert_close(
+        published_gap,
+        float(expected["stage1_certified_gap_ratio"]),
+        f"{code}: sealed solver-result gap",
+    )
+    _assert_close(
+        published_runtime,
+        float(expected["solve_time_seconds"]),
+        f"{code}: sealed solver-result solve time",
+    )
     metadata = _required_field(metrics, "solver_metadata", f"{code} solver metrics")
     for observed, label in (
         (direct_summary.get("stage1_certified_mip_gap_ratio"), "summary.json gap"),

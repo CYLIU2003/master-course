@@ -226,6 +226,19 @@
   passed `1688 passed in 184.09s`. The package remains 24 files and 1,084,538
   bytes with unchanged source-tree, parameter-source-tree, and package-manifest
   hashes. No solver was rerun and no canonical evidence byte changed.
+- The next exact-HEAD reporting review closed six additional P1 paths without
+  changing source evidence or generated package bytes. Rolling acceptance is
+  recomputed from all 24 persisted step records and reconciled with the
+  top-level flags/checks/rejection reasons. Physical validation now binds the
+  initial-SOC and charger-configuration hashes. Reported certified gap/runtime
+  are anchored to the original solver-result SHA-256 seals and immutable
+  expected metrics. Scenario, prepared-input, and service-date identities are
+  reconciled across every artifact that carries them. Optimization controls
+  require available, clean `git_provenance_v1` at the execution SHA. Finally,
+  both gate copies must contain exactly the producer-defined 15 checks, all
+  true. The expanded combined suite passed `214 passed in 20.47s`; exact
+  verification returned `PASS_EXACT_THESIS_WEATHER_RESULT_PACKAGE`; and the
+  complete repository suite passed `1703 passed in 130.95s`.
 
 ## 2026-08-29 (Asia/Tokyo): formal Phase-3 provenance review hardening
 
