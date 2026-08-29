@@ -32,7 +32,9 @@ intentional regeneration, then run again after regeneration. Hash maps use
 casefold-sorted relative POSIX paths. Rendering is fail-closed on the complete
 locked Matplotlib/Pillow dependency set and the pinned Noto Sans JP face
 actually selected by Matplotlib. Local integrated checks passed 147 focused
-tests and the full 1,659-test suite; exact package regeneration also passed.
+tests and the full 1,659-test suite before the final PR #7 integration. On the
+integrated branch, 154 focused tests and the full 1,666-test suite passed, and
+exact package regeneration passed again.
 The final manual GitHub run remains the last merge gate.
 
 ## Claim boundary

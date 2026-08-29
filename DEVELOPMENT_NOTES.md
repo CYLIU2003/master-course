@@ -173,9 +173,10 @@
   counts, indices, and internal/physical assignment identifiers must reconcile
   with `result_summary.json` and `confirmation_gate.json`. The current handoff
   now records the integrated validation evidence.
-  The combined focused reporting/evidence/contract suite passed `147 passed in
-  12.17s`, exact package verification passed, and the combined complete suite
-  passed `1659 passed in 180.39s`. The package remains 24 files and 1,084,538
+  After merging the final PR #7 provenance fixes, the combined focused
+  reporting/evidence/contract suite passed `154 passed in 15.00s`, exact
+  package verification passed, and the combined complete suite passed `1666
+  passed in 181.21s`. The package remains 24 files and 1,084,538
   bytes with unchanged source, parameter-source, and package-manifest hashes.
 
 ## 2026-08-29 (Asia/Tokyo): formal Phase-3 provenance review hardening
