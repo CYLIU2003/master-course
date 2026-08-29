@@ -44,6 +44,15 @@
     "SUNNY/summary.json": "b4ed321e5d0ce7c218893c08db235675b1a3df6ca5371bd9f161a2beccbb8456",
     "SUNNY/vehicle_soc_event_timeline.csv": "c5957ceb2f250f29ac9a494b9a6f317a1fa96cd7c05db13d03de6057140c6188"
   },
+  "parameter_source_tree_sha256": "841440f329539fbf204f284678911393ef14c05887b3ce69aee0997835f566ed",
+  "parameter_source_artifacts": {
+    "artifact_hashes.json": "b9b61c1484e1fcbdc6b1de45ce6fc2f4995a07bcbf28844e74fef3a3417de697",
+    "parameter_source_manifest.json": "9109578269c8979d4d4b5b54c56f8f00acc95c42859a2f1eb9737aa53dbffb63",
+    "RAIN/run_input_manifest.json": "661d9af047bd5c4190433736edfe49c7cce314d0042ac11cc814751096022c79",
+    "RAIN/scenario_input_snapshot.json": "d7ed5ad5d8b13524f414d565f472ba0c6110ed6213963145208de096d8a37ad8",
+    "SUNNY/run_input_manifest.json": "65dca53ff9a70a92cbfd861b685fe7ce1d1f80fedc55faf713fc04cbf562c01e",
+    "SUNNY/scenario_input_snapshot.json": "b70d13986ff3dbd85f9b3793bbdce3926e4881e62c7a4651852bbe44fc281348"
+  },
   "font_family": "Noto Sans JP",
   "png_dpi": 300,
   "timeseries_figure_created": false,
@@ -61,8 +70,8 @@
     },
     {
       "stem": "03_executed_day_cost_breakdown",
-      "family": "stacked cost composition bar",
-      "question": "実行日費用の差は何で構成されるか"
+      "family": "stacked evaluation plus component-delta bars",
+      "question": "モデル評価額の差は何で構成されるか"
     },
     {
       "stem": "04_pv_bess_grid_energy_balance",
@@ -77,12 +86,12 @@
   ],
   "artifacts": {
     "01_used_vehicle_comparison.png": {
-      "sha256": "d0e76060f419547bfe9f42ce805a3f516ddba47b971627d32e149bb89e0a0e72",
-      "size_bytes": 88752
+      "sha256": "615549a1a7882c60ffb8ba84efeebdf71eb431ccebb5d71570724d146582d53f",
+      "size_bytes": 87252
     },
     "01_used_vehicle_comparison.svg": {
-      "sha256": "6afc7b42702144e7893c1f53ca41d5c8ae7db6ee739f5da77484a416adfc0bdc",
-      "size_bytes": 15483
+      "sha256": "bcd5a1e872842f28ed35d48acffeb730f454c3471ca4efa7c2139ef2561f47ba",
+      "size_bytes": 15482
     },
     "02_assigned_trip_comparison.png": {
       "sha256": "6703ab0fbc18795db5a063470058edeeaf16d032be2109d2e91accd6a5d080b9",
@@ -93,20 +102,20 @@
       "size_bytes": 14256
     },
     "03_executed_day_cost_breakdown.png": {
-      "sha256": "a54731eda22bae60b7f655d0a4f5f7acd900a8e61dd5895efdaf6334eac3d918",
-      "size_bytes": 143022
+      "sha256": "0d97612cf4bc4f906c6b9070cfc32a6ea4d2b059641efbe675c0d041bea06834",
+      "size_bytes": 213799
     },
     "03_executed_day_cost_breakdown.svg": {
-      "sha256": "d199c212a0fbe798bfb48993f37e6eb1aad3fa2aad4ddafbad8c15be755299ec",
-      "size_bytes": 16909
+      "sha256": "3f2988ffa4cddcbf57c72c4da6de3905d24430fdba5656716816b12b8c6eb5d3",
+      "size_bytes": 26784
     },
     "04_pv_bess_grid_energy_balance.png": {
-      "sha256": "b57af2d1a8254931fff291d5afa9e84d286e77c9c6edf6154b00b9aa6b4667be",
-      "size_bytes": 129989
+      "sha256": "99a008a0e8b8359962a655b3161ab10f45b305ef18ce9644211dbfdbe12d035c",
+      "size_bytes": 134805
     },
     "04_pv_bess_grid_energy_balance.svg": {
-      "sha256": "1261de75ec0f531aa691ce086e6635528193c729e04d8610be5ead8d8d299dd3",
-      "size_bytes": 17294
+      "sha256": "7a891b155b619236572a01bf33d504f405898fc5366f88ee16ff0c5502312b9b",
+      "size_bytes": 17314
     },
     "05_pv_utilization_and_curtailment.png": {
       "sha256": "5fef4f8460f04586745832e44d43e1c3d1b15964053ceb730882b1d67229f8cf",
@@ -117,8 +126,8 @@
       "size_bytes": 14845
     },
     "claim_boundary.md": {
-      "sha256": "14d37c46ea6eb619427c0c28666b2da54cba9148040df0273ad64d6bbaa718fe",
-      "size_bytes": 1060
+      "sha256": "d57502bbf73877f07766039c3446245b6d14da4e7e55468473e56e4cb62f327e",
+      "size_bytes": 1306
     },
     "cost_breakdown.csv": {
       "sha256": "44730c6f010c8b3877fbfeae79c040a311890ef9bce278513c9fcd577cb3f3db",
@@ -137,28 +146,28 @@
       "size_bytes": 673
     },
     "experiment_parameters.csv": {
-      "sha256": "e0fce66a510701e4f772338560fffcbdb79e7c7243b109642498e4a1f2f7c802",
-      "size_bytes": 2672
+      "sha256": "cddd2a40bf6fb087312f7158023665dc5029b501b8ecf3ca79f65c46dd8fe5cb",
+      "size_bytes": 3575
     },
     "experiment_parameters.md": {
-      "sha256": "b65975c2675799fdcea13f65abf4eedf0757649145912c7addabff8ec6e32a65",
-      "size_bytes": 3381
+      "sha256": "f70e315897454b50975eb1c59873743b72e3e29f59db7ffc90d83857e0cf60e7",
+      "size_bytes": 4428
     },
     "README.md": {
-      "sha256": "4df8bce85826308225d183707b813932c349ad9b737c6578977bb6ecca4a66b1",
-      "size_bytes": 2435
+      "sha256": "e203313eada8cb19c269005d54f75d04f34d54f0fe71217165b13025e39eff71",
+      "size_bytes": 2991
     },
     "results_section_ja.md": {
-      "sha256": "5bf581cda25fe4a2ebdffe0f2c34c0253d85dda719375652238d028d98dad512",
-      "size_bytes": 3287
+      "sha256": "0402f9640b272cd1fddbc5300bc04ee7917fe3bb985070271c0e8c805e41b79c",
+      "size_bytes": 3878
     },
     "scenario_results.csv": {
-      "sha256": "c63a1dd058aa19435be40f2b82a907a29d4756ae6a5c6a99addf0215d3a8f4e5",
-      "size_bytes": 895
+      "sha256": "9b6c584ccd73705aecd368cee9bf16c2bf306353005ac03083311539e75d5f40",
+      "size_bytes": 1268
     },
     "scenario_results.md": {
-      "sha256": "cf801ecbfa899f7121db6775e20962616f344f46e65a330aecf2d4084559fda5",
-      "size_bytes": 1199
+      "sha256": "8c77e2d47a64f2801153dff3e54fc03e57e03ea7a90f931be0cdfa49f5ab3a58",
+      "size_bytes": 1608
     }
   }
 }

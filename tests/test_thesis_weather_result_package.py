@@ -13,6 +13,9 @@ from scripts import build_thesis_weather_result_package as builder
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EVIDENCE_ROOT = REPO_ROOT / "docs" / "evidence" / "weather_dispatch_rerun_bb0c005"
+PARAMETER_SOURCE_ROOT = (
+    REPO_ROOT / "docs" / "evidence" / "weather_dispatch_rerun_bb0c005_parameter_sources"
+)
 EXPECTED_TREE_SHA256 = "c706da7e10bc4e99a06a441f91e1722baa971b41ab936d29db36e650accede5f"
 EXPECTED_FIGURE_STEMS = (
     "01_used_vehicle_comparison",
@@ -43,9 +46,11 @@ def generated_packages(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, 
     first = root / "first"
     second = root / "second"
     source_before = _hash_inventory(EVIDENCE_ROOT)
+    parameter_source_before = _hash_inventory(PARAMETER_SOURCE_ROOT)
     builder.build_package(EVIDENCE_ROOT, first)
     builder.build_package(EVIDENCE_ROOT, second)
     assert _hash_inventory(EVIDENCE_ROOT) == source_before
+    assert _hash_inventory(PARAMETER_SOURCE_ROOT) == parameter_source_before
     return first, second
 
 
@@ -56,6 +61,19 @@ def test_builder_loads_and_validates_both_canonical_scenarios() -> None:
     assert set(bundle.scenarios) == {"SUNNY", "RAIN"}
     assert bundle.summary["execution_git_sha"] == builder.EXECUTION_SHA
     assert bundle.input_contract["fixed_nonweather_inputs_equal"] is True
+    assert bundle.shared_parameters == {
+        "grid_import_limit_kw": 200.0,
+        "pv_capacity_kw": 1000.0,
+        "bess_enabled": True,
+        "bess_energy_kwh": 6000.0,
+        "bess_power_kw": 900.0,
+        "bess_initial_soc_kwh": 3000.0,
+        "bess_soc_min_kwh": 1200.0,
+        "bess_soc_max_kwh": 4800.0,
+        "bess_charge_efficiency": 0.95,
+        "bess_discharge_efficiency": 0.95,
+        "bess_terminal_soc_target_kwh": 3000.0,
+    }
 
     sunny = bundle.scenarios["SUNNY"]
     rain = bundle.scenarios["RAIN"]
@@ -116,20 +134,29 @@ def test_generated_tables_preserve_scenario_parameters_and_results(
     assert parameters[("車両", "有効車両数")]["共通値"] == "60"
     assert parameters[("車両", "BEV／ICE在庫")]["共通値"] == "35／25"
     assert parameters[("充電", "充電器数")]["共通値"] == "10"
-    assert parameters[("BESS", "初期／終端SOC")]["共通値"] == "3000／3000"
+    assert parameters[("充電", "受電上限")]["共通値"] == "200"
+    assert parameters[("PV", "PV定格容量")]["共通値"] == "1000"
+    assert parameters[("BESS", "定格容量／出力")]["共通値"] == "6000／900"
+    assert parameters[("BESS", "SOC許容範囲")]["共通値"] == "1200～4800"
+    assert parameters[("BESS", "実行日初期／終端SOC")]["共通値"] == "3000／3000"
     assert parameters[("Solver", "Gurobi threads")]["共通値"] == "1"
     assert parameters[("Solver", "powertrain selector strengthening")]["共通値"] == "OFF"
-    assert parameters[("充電", "受電上限")]["共通値"] == "正本bundleに明示値なし"
-    assert parameters[("PV", "PV定格容量")]["共通値"] == "正本bundleに明示値なし"
-    assert parameters[("BESS", "定格容量／出力")]["共通値"] == "正本bundleに明示値なし"
+    assert parameters[("Solver", "候補構成探索radius（実効）")]["共通値"] == "4"
+    assert parameters[("Solver", "BEV frontier範囲（実効）")]["共通値"] == "15～35"
+    assert "objective_is_actual_cost=false" in parameters[("料金", "評価額の性格")]["共通値"]
 
     scenarios = {row["scenario"]: row for row in _read_csv(output / "scenario_results.csv")}
     assert scenarios["SUNNY"]["scenario_id"] == builder.SCENARIO_IDS["SUNNY"]
     assert scenarios["RAIN"]["scenario_id"] == builder.SCENARIO_IDS["RAIN"]
     assert scenarios["SUNNY"]["rolling_steps"] == scenarios["RAIN"]["rolling_steps"] == "24/24"
     assert scenarios["SUNNY"]["physical_validation"] == scenarios["RAIN"]["physical_validation"] == "VALID"
-    assert float(scenarios["SUNNY"]["executed_day_cost_jpy"]) == pytest.approx(660_983.7838045002)
-    assert float(scenarios["RAIN"]["executed_day_cost_jpy"]) == pytest.approx(698_598.6286431606)
+    assert float(scenarios["SUNNY"]["rolling_model_evaluation_jpy"]) == pytest.approx(660_983.7838045002)
+    assert float(scenarios["RAIN"]["rolling_model_evaluation_jpy"]) == pytest.approx(698_598.6286431606)
+    assert float(scenarios["RAIN"]["day_ahead_selected_candidate_cost_jpy"]) == pytest.approx(698_296.4652840658)
+    assert float(scenarios["RAIN"]["rolling_minus_day_ahead_jpy"]) == pytest.approx(302.1633590948768)
+    assert scenarios["SUNNY"]["minimum_recorded_bev_soc_scope"] == (
+        "全BEVの初期状態を含む正本集計値。使用BEVの運行中安全余裕ではない"
+    )
 
     energy = {row["scenario"]: row for row in _read_csv(output / "energy_balance.csv")}
     assert float(energy["SUNNY"]["bess_output_per_pv_input"]) == pytest.approx(0.95**2)
@@ -151,6 +178,9 @@ def test_generated_claims_and_figure_metadata_are_bounded(
     assert "Stage 1の近似目的関数に対するcertified MIP gap" in textual
     assert "評価した有限候補集合から選択された、物理的・会計的に妥当なPhase 3二段階実行可能解" in textual
     assert "2025-08-05の平日運行へ2025-08-10由来の低PV曲線を与えた反実仮想" in textual
+    assert "本モデルの費用定義に基づく24時間Rolling実行日評価額" in textual
+    assert "objective_is_actual_cost=false" in textual
+    assert "使用BEVの運行中安全余裕ではない" in textual
 
     results = (output / "results_section_ja.md").read_text(encoding="utf-8")
     compact_length = len("".join(results.split()))
@@ -160,6 +190,9 @@ def test_generated_claims_and_figure_metadata_are_bounded(
     assert manifest["status"] == "PASS"
     assert manifest["execution_git_sha"] == builder.EXECUTION_SHA
     assert manifest["source_bundle_tree_sha256"] == EXPECTED_TREE_SHA256
+    assert manifest["parameter_source_tree_sha256"] == builder.load_and_validate_bundle(
+        EVIDENCE_ROOT
+    ).parameter_source_tree_sha256
     assert manifest["png_dpi"] == 300
     assert manifest["timeseries_figure_created"] is False
     assert "No complete 96-slot" in manifest["timeseries_figure_omission_reason"]

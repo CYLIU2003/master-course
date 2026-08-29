@@ -1,0 +1,65 @@
+{
+  "schema_version": "thesis_weather_parameter_sources_v1",
+  "status": "PASS_EXACT_PARAMETER_SOURCE_CAPTURE",
+  "execution_git_sha": "bb0c0050883a91dd86a9e8813ae88d4b6d8c361d",
+  "source_semantics": "Exact byte copies of scenario_input_snapshot.json and run_input_manifest.json from the two published fresh runs",
+  "scenarios": {
+    "SUNNY": {
+      "scenario_id": "771d115b-75b0-49f7-a7f0-25f259a2cd21",
+      "published_run_directory": "output/2026-08-29/run_20260829_1445",
+      "prepared_input_id": "prepared-1f1b85053b8c9ea1-453c50ff177c277b-8acc7b3a",
+      "prepared_source_sha256": "99e49dd72e73d6e2e8c546d71573d3b00a7f00d23ab748da7171e1dd4b6bf05d",
+      "scenario_input_snapshot_sha256": "b70d13986ff3dbd85f9b3793bbdce3926e4881e62c7a4651852bbe44fc281348",
+      "scenario_input_snapshot_size_bytes": 453795,
+      "run_input_manifest_sha256": "65dca53ff9a70a92cbfd861b685fe7ce1d1f80fedc55faf713fc04cbf562c01e",
+      "parameters": {
+        "grid_import_limit_kw": 200.0,
+        "pv_capacity_kw": 1000.0,
+        "bess_enabled": true,
+        "bess_energy_kwh": 6000.0,
+        "bess_power_kw": 900.0,
+        "bess_initial_soc_kwh": 3000.0,
+        "bess_soc_min_kwh": 1200.0,
+        "bess_soc_max_kwh": 4800.0,
+        "bess_charge_efficiency": 0.95,
+        "bess_discharge_efficiency": 0.95,
+        "bess_terminal_soc_target_kwh": 3000.0
+      }
+    },
+    "RAIN": {
+      "scenario_id": "b23fd26c-1233-4c73-bb9e-bdb8b1584760",
+      "published_run_directory": "output/2026-08-29/run_20260829_1455",
+      "prepared_input_id": "prepared-a6c5e0a8cdd9b32b-f1e18f252e336f1f-8acc7b3a",
+      "prepared_source_sha256": "8220f7208b7add87beeb3a30c5d8f727480423427fff5e2f5eca1ed4a8e0ed3f",
+      "scenario_input_snapshot_sha256": "d7ed5ad5d8b13524f414d565f472ba0c6110ed6213963145208de096d8a37ad8",
+      "scenario_input_snapshot_size_bytes": 453929,
+      "run_input_manifest_sha256": "661d9af047bd5c4190433736edfe49c7cce314d0042ac11cc814751096022c79",
+      "parameters": {
+        "grid_import_limit_kw": 200.0,
+        "pv_capacity_kw": 1000.0,
+        "bess_enabled": true,
+        "bess_energy_kwh": 6000.0,
+        "bess_power_kw": 900.0,
+        "bess_initial_soc_kwh": 3000.0,
+        "bess_soc_min_kwh": 1200.0,
+        "bess_soc_max_kwh": 4800.0,
+        "bess_charge_efficiency": 0.95,
+        "bess_discharge_efficiency": 0.95,
+        "bess_terminal_soc_target_kwh": 3000.0
+      }
+    }
+  },
+  "shared_parameters": {
+    "grid_import_limit_kw": 200.0,
+    "pv_capacity_kw": 1000.0,
+    "bess_enabled": true,
+    "bess_energy_kwh": 6000.0,
+    "bess_power_kw": 900.0,
+    "bess_initial_soc_kwh": 3000.0,
+    "bess_soc_min_kwh": 1200.0,
+    "bess_soc_max_kwh": 4800.0,
+    "bess_charge_efficiency": 0.95,
+    "bess_discharge_efficiency": 0.95,
+    "bess_terminal_soc_target_kwh": 3000.0
+  }
+}

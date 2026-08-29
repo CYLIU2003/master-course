@@ -46,6 +46,7 @@ EXPECTED_RESULTS = {
 EXPECTED_COST_DIFFERENCE_JPY = 37_614.844839
 EXPECTED_BESS_ONE_WAY_EFFICIENCY = 0.95
 EXPECTED_BESS_TERMINAL_SOC_KWH = 3000.0
+PARAMETER_SOURCE_SCHEMA_VERSION = "thesis_weather_parameter_sources_v1"
 
 BLUE = "#2F6B9A"
 ORANGE = "#D9822B"
@@ -115,6 +116,10 @@ class EvidenceBundle:
     scenarios: Mapping[str, ScenarioEvidence]
     source_hashes: Mapping[str, str]
     tree_sha256: str
+    parameter_source_root: Path
+    parameter_source_hashes: Mapping[str, str]
+    parameter_source_tree_sha256: str
+    shared_parameters: Mapping[str, Any]
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -170,7 +175,115 @@ def _load_scenario(
     )
 
 
-def load_and_validate_bundle(evidence_dir: Path) -> EvidenceBundle:
+def _default_parameter_source_root(evidence_root: Path) -> Path:
+    return evidence_root.parent / f"{evidence_root.name}_parameter_sources"
+
+
+def _load_parameter_sources(
+    root: Path,
+    summary: Mapping[str, Any],
+) -> tuple[dict[str, str], str, Mapping[str, Any]]:
+    _require(root.is_dir(), f"Missing parameter-source supplement: {root}")
+    source_hashes = _bundle_hashes(root)
+    hash_index = _read_json(root / "artifact_hashes.json")["sha256"]
+    indexed_actual = {
+        name: digest
+        for name, digest in source_hashes.items()
+        if name != "artifact_hashes.json"
+    }
+    _require(hash_index == indexed_actual, "Parameter-source hash index does not match bytes")
+
+    source_manifest = _read_json(root / "parameter_source_manifest.json")
+    _require(
+        source_manifest["schema_version"] == PARAMETER_SOURCE_SCHEMA_VERSION,
+        "Unexpected parameter-source schema",
+    )
+    _require(
+        source_manifest["status"] == "PASS_EXACT_PARAMETER_SOURCE_CAPTURE",
+        "Parameter-source capture did not pass",
+    )
+    _require(source_manifest["execution_git_sha"] == EXECUTION_SHA, "Parameter-source SHA")
+
+    observed_parameters: dict[str, Mapping[str, Any]] = {}
+    for code in ("SUNNY", "RAIN"):
+        scenario_root = root / code
+        snapshot_path = scenario_root / "scenario_input_snapshot.json"
+        run_manifest_path = scenario_root / "run_input_manifest.json"
+        snapshot = _read_json(snapshot_path)
+        run_manifest = _read_json(run_manifest_path)
+        published = summary["scenarios"][code]
+        captured = source_manifest["scenarios"][code]
+        _require(snapshot["scenario_id"] == SCENARIO_IDS[code], f"{code}: parameter scenario")
+        _require(run_manifest["scenario_id"] == SCENARIO_IDS[code], f"{code}: run manifest")
+        _require(run_manifest["git_sha"] == EXECUTION_SHA, f"{code}: parameter execution SHA")
+        _require(run_manifest["git_dirty"] is False, f"{code}: parameter source dirty")
+        _require(
+            run_manifest["prepared_input_id"] == published["prepared_input_id"],
+            f"{code}: parameter Prepared ID",
+        )
+        _require(
+            run_manifest["prepared_source_sha256"] == published["prepared_input_sha256"],
+            f"{code}: parameter Prepared SHA",
+        )
+        _require(
+            _sha256(snapshot_path) == captured["scenario_input_snapshot_sha256"],
+            f"{code}: captured snapshot SHA",
+        )
+        _require(
+            _sha256(run_manifest_path) == captured["run_input_manifest_sha256"],
+            f"{code}: captured run manifest SHA",
+        )
+        observed_parameters[code] = _extract_parameter_values(snapshot)
+        _require(
+            observed_parameters[code] == captured["parameters"],
+            f"{code}: captured parameter values differ from raw snapshot",
+        )
+
+    _require(
+        observed_parameters["SUNNY"] == observed_parameters["RAIN"],
+        "SUNNY/RAIN fixed parameter sources differ",
+    )
+    _require(
+        observed_parameters["SUNNY"] == source_manifest["shared_parameters"],
+        "Shared parameter manifest differs from raw snapshots",
+    )
+    return source_hashes, _tree_sha256(source_hashes), observed_parameters["SUNNY"]
+
+
+def _extract_parameter_values(snapshot: Mapping[str, Any]) -> dict[str, Any]:
+    persisted = snapshot["persisted_scenario"]
+    charger_sites = persisted["charger_sites"]
+    _require(len(charger_sites) == 1, "Expected one parameter-source charger site")
+    charger_site = charger_sites[0]
+    _require(charger_site["id"] == "tsurumaki", "Unexpected parameter-source depot")
+    overlay = persisted["scenario_overlay"]["depot_energy_assets"]["tsurumaki"]
+    simulation_assets = persisted["simulation_config"]["depot_energy_assets"]
+    _require(len(simulation_assets) == 1, "Expected one parameter-source energy asset")
+    simulation = simulation_assets[0]
+    fields = (
+        "pv_capacity_kw",
+        "bess_enabled",
+        "bess_energy_kwh",
+        "bess_power_kw",
+        "bess_initial_soc_kwh",
+        "bess_soc_min_kwh",
+        "bess_soc_max_kwh",
+        "bess_charge_efficiency",
+        "bess_discharge_efficiency",
+        "bess_terminal_soc_target_kwh",
+    )
+    for field in fields:
+        _require(overlay[field] == simulation[field], f"Parameter-source mismatch: {field}")
+    return {
+        "grid_import_limit_kw": charger_site["grid_import_limit_kw"],
+        **{field: overlay[field] for field in fields},
+    }
+
+
+def load_and_validate_bundle(
+    evidence_dir: Path,
+    parameter_evidence_dir: Path | None = None,
+) -> EvidenceBundle:
     """Load canonical evidence and enforce every declared result invariant."""
 
     root = evidence_dir.resolve()
@@ -192,6 +305,15 @@ def load_and_validate_bundle(evidence_dir: Path) -> EvidenceBundle:
     scenarios = {
         code: _load_scenario(root, code, summary) for code in ("SUNNY", "RAIN")
     }
+    parameter_source_root = (
+        parameter_evidence_dir.resolve()
+        if parameter_evidence_dir is not None
+        else _default_parameter_source_root(root)
+    )
+    parameter_hashes, parameter_tree, shared_parameters = _load_parameter_sources(
+        parameter_source_root,
+        summary,
+    )
     bundle = EvidenceBundle(
         root=root,
         summary=summary,
@@ -200,6 +322,10 @@ def load_and_validate_bundle(evidence_dir: Path) -> EvidenceBundle:
         scenarios=scenarios,
         source_hashes=source_hashes,
         tree_sha256=_tree_sha256(source_hashes),
+        parameter_source_root=parameter_source_root,
+        parameter_source_hashes=parameter_hashes,
+        parameter_source_tree_sha256=parameter_tree,
+        shared_parameters=shared_parameters,
     )
     _validate_bundle(bundle)
     return bundle
@@ -360,6 +486,10 @@ def _parameter_rows(bundle: EvidenceBundle) -> list[dict[str, str]]:
     problem = sunny.optimization["effective_problem_scenario"]
     solver = sunny.solver
     frontend = sunny.optimization["frontend_request"]
+    energy_assets = bundle.shared_parameters
+    sunny_terminal = sunny.accounting["bess_terminal_soc_by_depot"]["tsurumaki"]
+    rain_terminal = rain.accounting["bess_terminal_soc_by_depot"]["tsurumaki"]
+    _require(sunny_terminal == rain_terminal, "SUNNY/RAIN BESS terminal summaries differ")
     _require(solver == rain.solver, "Effective solver configuration differs")
     rain_grid_price = float(rain.costs["electricity_cost"]) / float(rain.costs["grid_import_kwh"])
     _assert_close(rain_grid_price, 30.0, "Grid energy unit price")
@@ -399,17 +529,22 @@ def _parameter_rows(bundle: EvidenceBundle) -> list[dict[str, str]]:
     add("車両", "ICE初期燃料", fleet["ice_initial_fuel_l"], unit="L/台", source="scenario_fleet_contract_v2")
     add("充電", "充電器数", protocol["charger_count"], unit="基", source="result_summary.json")
     add("充電", "BEVごとの互換充電器数", fleet["compatible_charger_count"], unit="基", source="scenario_fleet_contract_v2")
-    add("充電", "受電上限", "正本bundleに明示値なし", unit="-", source="欠落を明示")
+    add("充電", "受電上限", energy_assets["grid_import_limit_kw"], unit="kW", source="parameter_sources/*/scenario_input_snapshot.json")
     add("PV", "実行日PV発電量", "", sunny.costs["pv_generated_kwh"], rain.costs["pv_generated_kwh"], "kWh", "executed_day_accounting.json")
-    add("PV", "PV定格容量", "正本bundleに明示値なし", unit="-", source="欠落を明示")
-    add("BESS", "初期／終端SOC", f"{EXPECTED_BESS_TERMINAL_SOC_KWH:.0f}／{EXPECTED_BESS_TERMINAL_SOC_KWH:.0f}", unit="kWh", source="executed_day_accounting.json")
-    add("BESS", "観測された充放電比", EXPECTED_BESS_ONE_WAY_EFFICIENCY**2 * 100.0, unit="%", source="executed_day_accounting.jsonから算出")
-    add("BESS", "定格容量／出力", "正本bundleに明示値なし", unit="-", source="欠落を明示")
+    add("PV", "PV定格容量", energy_assets["pv_capacity_kw"], unit="kW", source="parameter_sources/*/scenario_input_snapshot.json")
+    add("BESS", "定格容量／出力", f"{energy_assets['bess_energy_kwh']:.0f}／{energy_assets['bess_power_kw']:.0f}", unit="kWh／kW", source="parameter_sources/*/scenario_input_snapshot.json")
+    add("BESS", "SOC許容範囲", f"{energy_assets['bess_soc_min_kwh']:.0f}～{energy_assets['bess_soc_max_kwh']:.0f}", unit="kWh", source="parameter_sources/*/scenario_input_snapshot.json")
+    add("BESS", "初期／終端目標SOC", f"{energy_assets['bess_initial_soc_kwh']:.0f}／{energy_assets['bess_terminal_soc_target_kwh']:.0f}", unit="kWh", source="parameter_sources/*/scenario_input_snapshot.json")
+    add("BESS", "充電／放電効率", f"{energy_assets['bess_charge_efficiency'] * 100:.0f}／{energy_assets['bess_discharge_efficiency'] * 100:.0f}", unit="%", source="parameter_sources/*/scenario_input_snapshot.json")
+    add("BESS", "実行日初期／終端SOC", f"{sunny_terminal['initial_soc_kwh']:.0f}／{sunny_terminal['terminal_soc_kwh']:.0f}", unit="kWh", source="executed_day_accounting.json")
+    add("BESS", "観測された充放電比", float(sunny.costs["bess_to_bus_kwh"]) / float(sunny.costs["pv_to_bess_kwh"]) * 100.0, unit="%", source="executed_day_accounting.jsonから算出")
     add("料金", "系統購入単価", rain_grid_price, unit="円/kWh", source="executed_day_accounting.jsonから算出")
     add("料金", "軽油単価", problem["diesel_price_yen_per_l"], unit="円/L", source="optimization_parameters.json")
     add("料金", "車両使用費", sunny.model_metadata["vehicle_usage_cost_jpy_per_used_bus"], unit="円/台日", source="optimization_parameters.json")
     add("料金", "CO₂価格", problem["co2_price_per_kg"], unit="円/kg", source="optimization_parameters.json")
     add("料金", "需要料金（on/off peak）", f"{problem['demand_charge_on_peak_yen_per_kw']:.0f}／{problem['demand_charge_off_peak_yen_per_kw']:.0f}", unit="円/kW", source="optimization_parameters.json")
+    add("料金", "評価額の性格", f"モデル定義による評価額（objective_is_actual_cost={str(sunny.costs['objective_is_actual_cost']).lower()}）", unit="-", source="executed_day_accounting.json")
+    add("料金", "ゼロ計上項目", "需要料金・運転士費・電池劣化費・PV設備費・BESS設備費", unit="-", source="executed_day_accounting.json")
     add("Solver", "方式", solver["phase"], unit="-", source="optimization_parameters.json")
     add("Solver", "総／Stage 1／Stage 2上限", f"{solver['time_limit_sec']}／{solver['stage1_time_limit_sec']}／{solver['stage2_time_limit_sec']}", unit="秒", source="optimization_parameters.json")
     add("Solver", "要求MIP gap", solver["mip_gap"] * 100.0, unit="%", source="optimization_parameters.json")
@@ -418,6 +553,10 @@ def _parameter_rows(bundle: EvidenceBundle) -> list[dict[str, str]]:
     add("Solver", "BestObjStop", solver["stage1_best_obj_stop_enabled"], unit="-", source="optimization_parameters.json")
     add("Solver", "powertrain selector strengthening", sunny.model_metadata["stage1_powertrain_selector_strengthening"], unit="-", source="optimization_parameters.json")
     add("Solver", "Stage 1→2候補上限（実効）", frontend["stage1_stage2_candidate_limit"], unit="候補", source="optimization_parameters.json")
+    add("Solver", "候補構成探索radius（実効）", frontend["stage1_composition_search_radius"], unit="台", source="optimization_parameters.json")
+    add("Solver", "BEV frontier（実効）", frontend["stage1_bev_frontier_enabled"], unit="-", source="optimization_parameters.json")
+    add("Solver", "BEV frontier範囲（実効）", f"{frontend['stage1_bev_frontier_min_count']}～{frontend['stage1_bev_frontier_max_count']}", unit="台", source="optimization_parameters.json")
+    add("Solver", "BEV frontier時間上限（実効）", frontend["stage1_bev_frontier_target_time_limit_seconds"], unit="秒", source="optimization_parameters.json")
     return rows
 
 
@@ -446,7 +585,12 @@ def _scenario_result_rows(bundle: EvidenceBundle) -> list[dict[str, Any]]:
                 "ice_trips": summary["ice_trips"],
                 "served_trips": summary["served_trips"],
                 "unserved_trips": summary["unserved_trips"],
-                "executed_day_cost_jpy": costs["total_cost"],
+                "day_ahead_selected_candidate_cost_jpy": summary["day_ahead_selected_cost_jpy"],
+                "rolling_model_evaluation_jpy": costs["total_cost"],
+                "rolling_minus_day_ahead_jpy": (
+                    float(costs["total_cost"])
+                    - float(summary["day_ahead_selected_cost_jpy"])
+                ),
                 "fuel_liters": costs["ice_fuel_consumed_l"],
                 "grid_import_kwh": costs["grid_import_kwh"],
                 "pv_generated_kwh": costs["pv_generated_kwh"],
@@ -455,7 +599,12 @@ def _scenario_result_rows(bundle: EvidenceBundle) -> list[dict[str, Any]]:
                 "bess_to_bus_kwh": costs["bess_to_bus_kwh"],
                 "pv_curtailed_kwh": costs["pv_curtailed_kwh"],
                 "peak_grid_kw": costs["peak_grid_kw"],
-                "minimum_executed_bev_soc_kwh": summary["minimum_executed_bev_soc_kwh"],
+                "minimum_recorded_bev_soc_kwh_including_initial_state": summary[
+                    "minimum_executed_bev_soc_kwh"
+                ],
+                "minimum_recorded_bev_soc_scope": (
+                    "全BEVの初期状態を含む正本集計値。使用BEVの運行中安全余裕ではない"
+                ),
                 "stage1_certified_gap_percent": summary["stage1_certified_gap_ratio"] * 100.0,
                 "solve_time_seconds": summary["solve_time_seconds"],
                 "rolling_steps": summary["rolling_steps"],
@@ -635,7 +784,12 @@ def _plot_used_vehicles(plt: Any, rows: Sequence[Mapping[str, Any]], output_dir:
     ax.set_ylim(0, 36)
     ax.legend(frameon=False, loc="upper center", ncol=2)
     _style_axis(ax)
-    _add_header(fig, "使用車両構成の比較", "2025-08-05平日・264便、評価された有限候補集合から選択")
+    served_trip_count = int(rows[0]["served_trips"])
+    _add_header(
+        fig,
+        "使用車両構成の比較",
+        f"共通運行日・{served_trip_count}便、評価された有限候補集合から選択",
+    )
     fig.tight_layout(rect=(0.04, 0.03, 0.98, 0.88))
     return _save_figure(plt, fig, output_dir / "01_used_vehicle_comparison")
 
@@ -649,13 +803,21 @@ def _plot_assigned_trips(plt: Any, rows: Sequence[Mapping[str, Any]], output_dir
     second = ax.bar(labels, ice, bottom=bev, label="ICE担当", color=ORANGE, edgecolor=INK, linewidth=0.7)
     ax.bar_label(first, labels=[f"{int(v)}便" for v in bev], label_type="center", color="white", fontsize=10)
     ax.bar_label(second, labels=[f"{int(v)}便" for v in ice], label_type="center", color=INK, fontsize=10)
-    for index in range(len(labels)):
-        ax.text(index, 272, "264/264便", ha="center", fontsize=10)
+    for index, row in enumerate(rows):
+        served = int(row["served_trips"])
+        total = served + int(row["unserved_trips"])
+        ax.text(index, total + 8, f"{served}/{total}便", ha="center", fontsize=10)
     ax.set_ylabel("担当便数（便）")
     ax.set_ylim(0, 290)
     ax.legend(frameon=False, loc="upper center", ncol=2)
     _style_axis(ax)
-    _add_header(fig, "動力源別担当便数の比較", "両ケースとも未担当便0、物理検算VALID")
+    unserved_trip_count = int(rows[0]["unserved_trips"])
+    validation_status = str(rows[0]["physical_validation"])
+    _add_header(
+        fig,
+        "動力源別担当便数の比較",
+        f"両ケースとも未担当便{unserved_trip_count}、物理検算{validation_status}",
+    )
     fig.tight_layout(rect=(0.04, 0.03, 0.98, 0.88))
     return _save_figure(plt, fig, output_dir / "02_assigned_trip_comparison")
 
@@ -668,19 +830,75 @@ def _plot_cost_breakdown(plt: Any, bundle: EvidenceBundle, output_dir: Path) -> 
         ("electricity_cost", "系統電力費", BLUE),
         ("co2_cost", "CO2費用", OLIVE),
     )
-    fig, ax = plt.subplots(figsize=(8.2, 5.4))
+    fig, (ax_total, ax_delta) = plt.subplots(
+        1,
+        2,
+        figsize=(11.4, 5.4),
+        gridspec_kw={"width_ratios": (1.15, 1.0)},
+    )
     bottoms = [0.0, 0.0]
     for key, label, color in keys:
         values = [float(bundle.scenarios[code].costs[key]) for code in labels]
-        ax.bar(labels, values, bottom=bottoms, label=label, color=color, edgecolor=INK, linewidth=0.6)
+        ax_total.bar(
+            labels,
+            values,
+            bottom=bottoms,
+            label=label,
+            color=color,
+            edgecolor=INK,
+            linewidth=0.6,
+        )
         bottoms = [bottoms[i] + values[i] for i in range(2)]
     for index, total in enumerate(bottoms):
-        ax.text(index, total + 10_000, f"{total:,.0f}円", ha="center", fontsize=10, fontweight="bold")
-    ax.set_ylabel("24時間Rolling後の実行日会計費用（円）")
-    ax.set_ylim(0, max(bottoms) * 1.12)
-    ax.legend(frameon=False, loc="upper center", ncol=4, fontsize=8)
-    _style_axis(ax)
-    _add_header(fig, "実行日会計費用の内訳", "差額37,614.844839円は燃料費・系統電力費・CO2費用で構成")
+        ax_total.text(
+            index,
+            total + 10_000,
+            f"{total:,.0f}円",
+            ha="center",
+            fontsize=10,
+            fontweight="bold",
+        )
+    ax_total.set_ylabel("本モデルの24時間Rolling実行日評価額（円）")
+    ax_total.set_ylim(0, max(bottoms) * 1.13)
+    ax_total.legend(frameon=False, loc="upper center", ncol=2, fontsize=8)
+    ax_total.set_title("評価額の全体構成", fontsize=11)
+    _style_axis(ax_total)
+
+    difference_keys = keys[1:]
+    difference_values = [
+        float(bundle.scenarios["RAIN"].costs[key])
+        - float(bundle.scenarios["SUNNY"].costs[key])
+        for key, _, _ in difference_keys
+    ]
+    difference_labels = [label for _, label, _ in difference_keys]
+    difference_colors = [color for _, _, color in difference_keys]
+    delta_bars = ax_delta.barh(
+        difference_labels,
+        difference_values,
+        color=difference_colors,
+        edgecolor=INK,
+        linewidth=0.6,
+    )
+    ax_delta.bar_label(
+        delta_bars,
+        labels=[f"+{value:,.0f}円" for value in difference_values],
+        padding=4,
+        fontsize=9,
+    )
+    ax_delta.set_xlabel("RAIN－SUNNY（円）")
+    ax_delta.set_title("差額の構成", fontsize=11)
+    ax_delta.set_xlim(0, max(difference_values) * 1.28)
+    ax_delta.grid(axis="x", color=LIGHT_GRAY, linewidth=0.7)
+    ax_delta.set_axisbelow(True)
+    ax_delta.spines["top"].set_visible(False)
+    ax_delta.spines["right"].set_visible(False)
+
+    total_difference = bottoms[1] - bottoms[0]
+    _add_header(
+        fig,
+        "本モデルの実行日評価額と差額内訳",
+        f"差額{total_difference:,.6f}円。objective_is_actual_cost=false",
+    )
     fig.tight_layout(rect=(0.04, 0.03, 0.98, 0.88))
     return _save_figure(plt, fig, output_dir / "03_executed_day_cost_breakdown")
 
@@ -706,7 +924,16 @@ def _plot_energy_balance(plt: Any, bundle: EvidenceBundle, output_dir: Path) -> 
     ax.set_ylim(0, 3000)
     ax.legend(frameon=False, loc="upper center", ncol=4, fontsize=8)
     _style_axis(ax)
-    _add_header(fig, "PV・BESS・系統電力のエネルギー収支", "BESS→busはPV→BESS×0.95²、両ケースともBESS終端SOC 3,000 kWh")
+    efficiency = float(bundle.shared_parameters["bess_charge_efficiency"])
+    terminal_soc = float(
+        bundle.scenarios["SUNNY"]
+        .accounting["bess_terminal_soc_by_depot"]["tsurumaki"]["terminal_soc_kwh"]
+    )
+    _add_header(
+        fig,
+        "PV・BESS・系統電力のエネルギー収支",
+        f"充電入力と放電出力は別系列。BESS→bus＝PV→BESS×{efficiency:.2f}²、終端SOC {terminal_soc:,.0f} kWh",
+    )
     fig.tight_layout(rect=(0.04, 0.03, 0.98, 0.88))
     return _save_figure(plt, fig, output_dir / "04_pv_bess_grid_energy_balance")
 
@@ -745,14 +972,18 @@ def _plot_pv_utilization(plt: Any, bundle: EvidenceBundle, output_dir: Path) -> 
 
 
 def _claim_boundary_text(bundle: EvidenceBundle) -> str:
-    return """# 主張範囲
+    minimum_recorded_soc = float(
+        bundle.scenarios["SUNNY"].summary["minimum_executed_bev_soc_kwh"]
+    )
+    sunny = bundle.scenarios["SUNNY"]
+    return f"""# 主張範囲
 
 ## 使用できる表現
 
 - 本結果は、**評価した有限候補集合から選択された、物理的・会計的に妥当なPhase 3二段階実行可能解**である。
-- SUNNYとRAINはいずれも264/264便を担当し、物理検算、24/24 Rolling、会計検算を通過した。
+- SUNNYとRAINはいずれも{sunny.summary['served_trips']}/{sunny.summary['served_trips'] + sunny.summary['unserved_trips']}便を担当し、物理検算、{sunny.summary['rolling_steps']} Rolling、会計検算を通過した。
 - 固定した2シナリオでは、異なる物理配車が選択された。
-- 費用は**24時間Rolling後の実行日会計費用**として報告する。
+- 費用は**本モデルの費用定義に基づく24時間Rolling実行日評価額**として報告する。
 - gapは**Stage 1の近似目的関数に対するcertified MIP gap**として報告する。
 
 ## 使用しない解釈
@@ -760,6 +991,8 @@ def _claim_boundary_text(bundle: EvidenceBundle) -> str:
 - 統合問題全体に対する保証へ読み替えない。
 - Rolling費用が全配車の中で最小であるとは述べない。
 - この2ケースの差を一般的な天候効果へ拡張しない。
+- 評価額を実支出、ライフサイクルコスト、導入経済性へ読み替えない。
+- 最小記録SOC {minimum_recorded_soc:.2f} kWhは全BEVの初期状態を含み、使用BEVの運行中安全余裕を示さない。
 - RAINを観測日の運行ダイヤとして扱わない。
 - RAINは**2025-08-05の平日運行へ2025-08-10由来の低PV曲線を与えた反実仮想**である。
 - 修論提出可否は本パッケージだけでは判定しない。
@@ -769,6 +1002,10 @@ def _claim_boundary_text(bundle: EvidenceBundle) -> str:
 def _results_section_text(bundle: EvidenceBundle) -> str:
     sunny = bundle.scenarios["SUNNY"]
     rain = bundle.scenarios["RAIN"]
+    fleet = _fleet_parameters(sunny)
+    solver = sunny.solver
+    energy_assets = bundle.shared_parameters
+    protocol = bundle.summary["protocol"]
     cost_difference = float(rain.costs["total_cost"]) - float(sunny.costs["total_cost"])
     fuel_difference = float(rain.costs["fuel_cost"]) - float(sunny.costs["fuel_cost"])
     grid_difference = float(rain.costs["electricity_cost"]) - float(sunny.costs["electricity_cost"])
@@ -777,23 +1014,23 @@ def _results_section_text(bundle: EvidenceBundle) -> str:
 
 ## 実験条件
 
-本実験は弦巻営業所のWEEKDAY時刻表を対象とし、2025年8月5日の264便を15分刻みで扱った。SUNNYは同日由来のPV曲線を用いる基準ケースである。RAINは**2025-08-05の平日運行へ2025-08-10由来の低PV曲線を与えた反実仮想**であり、運行日や時刻表を変更した比較ではない。両ケースでは車両、便、充電器、料金、目的関数、fleet contractおよびsolver controlのhashが一致する。実効車両在庫はBEV 35台、ICE 25台であり、BEV初期SOCは車両別に21.9452～77.4330%である。計算はPhase 3二段階方式、総時間上限585秒、Stage 1上限435秒、Stage 2上限30秒、要求gap 10%、seed 42、Gurobi 1 threadで実施された。
+本実験は{protocol['depot_id']}営業所の{protocol['service_id']}時刻表を対象とし、{protocol['service_date']}の{protocol['trip_count']}便を{protocol['time_step_minutes']}分刻みで扱った。SUNNYは同日由来のPV曲線を用いる基準ケースである。RAINは**2025-08-05の平日運行へ2025-08-10由来の低PV曲線を与えた反実仮想**であり、運行日や時刻表を変更した比較ではない。両ケースでは車両、便、充電器、料金、目的関数、fleet contractおよびsolver controlのhashが一致する。実効車両在庫はBEV {fleet['bev_count']}台、ICE {fleet['ice_count']}台であり、BEV初期SOCは車両別に{fleet['initial_soc_min_percent']:.4f}～{fleet['initial_soc_max_percent']:.4f}%である。受電上限は{float(energy_assets['grid_import_limit_kw']):,.0f} kW、PV定格容量は{float(energy_assets['pv_capacity_kw']):,.0f} kW、BESSは{float(energy_assets['bess_energy_kwh']):,.0f} kWh／{float(energy_assets['bess_power_kw']):,.0f} kW、SOC許容範囲は{float(energy_assets['bess_soc_min_kwh']):,.0f}～{float(energy_assets['bess_soc_max_kwh']):,.0f} kWhである。計算はPhase 3二段階方式、総時間上限{solver['time_limit_sec']}秒、Stage 1上限{solver['stage1_time_limit_sec']}秒、Stage 2上限{solver['stage2_time_limit_sec']}秒、要求gap {solver['mip_gap'] * 100:.0f}%、seed {solver['random_seed']}、Gurobi {solver['gurobi_threads']} threadで実施された。
 
 ## 配車結果
 
-SUNNYではBEV 28台とICE 4台を使用し、BEVが199便、ICEが65便を担当した。RAINではBEV 21台とICE 11台を使用し、BEVが91便、ICEが173便を担当した。使用車両総数はいずれも32台である一方、動力源構成と担当便構成は大きく異なる。選択された物理配車hashも異なり、固定された2つのPV条件に対して有限候補集合内の費用順位が変化したことが確認された。ただし、この結果は候補生成方針で評価した22候補からの選択であり、探索可能な配車全体を列挙したものではない。
+SUNNYではBEV {sunny.summary['used_bev']}台とICE {sunny.summary['used_ice']}台を使用し、BEVが{sunny.summary['bev_trips']}便、ICEが{sunny.summary['ice_trips']}便を担当した。RAINではBEV {rain.summary['used_bev']}台とICE {rain.summary['used_ice']}台を使用し、BEVが{rain.summary['bev_trips']}便、ICEが{rain.summary['ice_trips']}便を担当した。使用車両総数はいずれも{sunny.summary['used_bev'] + sunny.summary['used_ice']}台である一方、動力源構成と担当便構成は大きく異なる。選択された物理配車hashも異なり、固定された2つのPV条件に対して有限候補集合内の評価額順位が変化したことが確認された。ただし、実効探索は候補上限{solver['stage1_stage2_candidate_limit']}、構成radius {solver['stage1_composition_search_radius']}、BEV frontier {solver['stage1_bev_frontier_min_count']}～{solver['stage1_bev_frontier_max_count']}台、frontier時間上限{solver['stage1_bev_frontier_target_time_limit_sec']:.0f}秒である。この有限候補集合からの選択であり、探索可能な配車全体を列挙したものではない。
 
 ## 費用差
 
-24時間Rolling後の実行日会計費用は、SUNNYが{float(sunny.costs['total_cost']):,.6f}円、RAINが{float(rain.costs['total_cost']):,.6f}円であった。RAINはSUNNYより{cost_difference:,.6f}円、{cost_difference / float(sunny.costs['total_cost']) * 100:.2f}%高い。差額は燃料費{fuel_difference:+,.6f}円、系統電力費{grid_difference:+,.6f}円、CO₂費用{co2_difference:+,.6f}円の合計と1e-6円以内で一致した。両ケースの車両使用費は32台×20,000円＝640,000円で共通であり、需要料金、劣化費用、恣意的な天候項は差額へ混入していない。
+本モデルの費用定義に基づく24時間Rolling実行日評価額は、SUNNYが{float(sunny.costs['total_cost']):,.6f}円、RAINが{float(rain.costs['total_cost']):,.6f}円であった。RAINはSUNNYより{cost_difference:,.6f}円、{cost_difference / float(sunny.costs['total_cost']) * 100:.2f}%高い。差額は燃料費{fuel_difference:+,.6f}円、系統電力費{grid_difference:+,.6f}円、CO₂費用{co2_difference:+,.6f}円の合計と1e-6円以内で一致した。両ケースの車両使用費は{sunny.summary['used_bev'] + sunny.summary['used_ice']}台×{float(sunny.costs['vehicle_usage_cost_jpy_per_used_bus']):,.0f}円＝{float(sunny.costs['vehicle_usage_cost']):,.0f}円で共通である。正本のobjective_is_actual_costはfalseで、需要料金、運転士費、電池劣化費、PV設備費、BESS設備費はいずれもゼロ計上であるため、この評価額を実支出、ライフサイクルコストまたは導入経済性として解釈しない。
 
 ## PV・BESS・系統電力
 
-SUNNYのPV発電量は{float(sunny.costs['pv_generated_kwh']):,.2f} kWhで、PV→busが{float(sunny.costs['pv_to_bus_kwh']):,.3f} kWh、PV→BESSが{float(sunny.costs['pv_to_bess_kwh']):,.3f} kWh、抑制が{float(sunny.costs['pv_curtailed_kwh']):,.3f} kWhであった。系統購入は0 kWhである。RAINのPV発電量は{float(rain.costs['pv_generated_kwh']):,.1f} kWhで、PV→busが{float(rain.costs['pv_to_bus_kwh']):,.3f} kWh、PV→BESSが{float(rain.costs['pv_to_bess_kwh']):,.3f} kWh、系統購入が{float(rain.costs['grid_import_kwh']):,.3f} kWhとなった。各ケースでPV発電量はPV→bus、PV→BESS、抑制の和と一致する。BESS→busはSUNNYで{float(sunny.costs['bess_to_bus_kwh']):,.3f} kWh、RAINで{float(rain.costs['bess_to_bus_kwh']):,.3f} kWhであり、いずれもPV→BESS×0.95²と一致した。BESSは両ケースとも3,000 kWhから開始し、3,000 kWhで終了した。
+SUNNYのPV発電量は{float(sunny.costs['pv_generated_kwh']):,.2f} kWhで、PV→busが{float(sunny.costs['pv_to_bus_kwh']):,.3f} kWh、PV→BESSが{float(sunny.costs['pv_to_bess_kwh']):,.3f} kWh、抑制が{float(sunny.costs['pv_curtailed_kwh']):,.3f} kWh、系統購入が{float(sunny.costs['grid_import_kwh']):,.3f} kWhであった。RAINのPV発電量は{float(rain.costs['pv_generated_kwh']):,.1f} kWhで、PV→busが{float(rain.costs['pv_to_bus_kwh']):,.3f} kWh、PV→BESSが{float(rain.costs['pv_to_bess_kwh']):,.3f} kWh、系統購入が{float(rain.costs['grid_import_kwh']):,.3f} kWhとなった。各ケースでPV発電量はPV→bus、PV→BESS、抑制の和と一致する。BESS→busはSUNNYで{float(sunny.costs['bess_to_bus_kwh']):,.3f} kWh、RAINで{float(rain.costs['bess_to_bus_kwh']):,.3f} kWhであり、いずれもPV→BESS×{float(energy_assets['bess_charge_efficiency']):.2f}²と一致した。BESSは両ケースとも{float(sunny.accounting['bess_terminal_soc_by_depot']['tsurumaki']['initial_soc_kwh']):,.0f} kWhから開始し、{float(sunny.accounting['bess_terminal_soc_by_depot']['tsurumaki']['terminal_soc_kwh']):,.0f} kWhで終了した。
 
 ## 妥当性と限定事項
 
-両ケースとも264/264便を担当し、未担当便は0であった。独立物理検算はVALID、Rollingは24/24、実行日会計はeligibleであり、終端エネルギー収支も成立した。Stage 1の近似目的関数に対するcertified MIP gapはSUNNYが{float(sunny.summary['stage1_certified_gap_ratio']) * 100:.4f}%、RAINが{float(rain.summary['stage1_certified_gap_ratio']) * 100:.4f}%である。このgapを最終費用の保証へ読み替えない。本結果は、**評価した有限候補集合から選択された、物理的・会計的に妥当なPhase 3二段階実行可能解**として位置付ける。また、2つの固定ケースで観測された差を他の日付、営業所、時刻表へ一般化せず、Rolling費用が全配車中で最小であるとも解釈しない。
+両ケースとも{sunny.summary['served_trips']}/{sunny.summary['served_trips'] + sunny.summary['unserved_trips']}便を担当し、未担当便は{sunny.summary['unserved_trips']}であった。独立物理検算は{sunny.summary['physical_validation']}、Rollingは{sunny.summary['rolling_steps']}、実行日会計はeligibleであり、終端エネルギー収支も成立した。正本集計の最小記録BEV SOCは{float(sunny.summary['minimum_executed_bev_soc_kwh']):.2f} kWhだが、これは全BEVの初期状態を含み、使用BEVの運行中安全余裕を示す指標ではない。Stage 1の近似目的関数に対するcertified MIP gapはSUNNYが{float(sunny.summary['stage1_certified_gap_ratio']) * 100:.4f}%、RAINが{float(rain.summary['stage1_certified_gap_ratio']) * 100:.4f}%である。このgapを最終評価額の保証へ読み替えない。本結果は、**評価した有限候補集合から選択された、物理的・会計的に妥当なPhase 3二段階実行可能解**として位置付ける。また、2つの固定ケースで観測された差を他の日付、営業所、時刻表へ一般化せず、Rolling評価額が全配車中で最小であるとも解釈しない。
 """
     character_count = len("".join(text.split()))
     _require(1200 <= character_count <= 2000, f"results_section_ja length is {character_count}, expected 1200..2000")
@@ -822,7 +1059,7 @@ def _readme_text(bundle: EvidenceBundle, font_name: str, timeseries_created: boo
     )
     return f"""# 修論用SUNNY／RAIN結果パッケージ
 
-実験SHA `{EXECUTION_SHA}` のGit管理済み証拠だけから生成した。数値の手入力は行わず、期待値は生成前のfail-closed assertionにのみ使用する。
+実験SHA `{EXECUTION_SHA}` のGit管理済み証拠だけから生成した。数値の手入力は行わず、期待値は生成前のfail-closed assertionにのみ使用する。設備定格値は、各fresh runの`scenario_input_snapshot.json`と`run_input_manifest.json`をexact byte copyしたparameter-source supplementから読む。
 
 ## 再生成
 
@@ -849,15 +1086,19 @@ python scripts/build_thesis_weather_result_package.py `
 
 {omission}
 
-## 正本にない入力値
+## 設備パラメータの補助証拠
 
-列挙された正本JSONには受電上限、PV定格容量、BESS定格容量・出力が値として保存されていない。`experiment_parameters`では欠落を明記し、旧資料やローカルoutputから値を補っていない。充電器数、車両側最大充電電力、PV実行日発電量、BESS初終端SOCおよび観測された充放電比は正本から抽出した。
+`docs/evidence/weather_dispatch_rerun_bb0c005_parameter_sources/`にはSUNNY/RAINのfresh runから取得した完全な`scenario_input_snapshot.json`と、それをSHA-256で封印する`run_input_manifest.json`を保存した。Prepared ID・Prepared source SHA・実験SHAを公開済みsummaryと照合し、両ケースで受電上限、PV定格容量、BESS定格容量・出力・SOC範囲・効率が一致することをfail-closedで検証する。
 
 ## 主張範囲
 
-結果は、評価した有限候補集合から選択されたPhase 3二段階実行可能解である。費用は24時間Rolling後の実行日会計費用、gapはStage 1の近似目的関数に対するcertified MIP gapとして扱う。2ケースの差を一般化しない。
+結果は、評価した有限候補集合から選択されたPhase 3二段階実行可能解である。費用は本モデルの費用定義に基づく24時間Rolling実行日評価額、gapはStage 1の近似目的関数に対するcertified MIP gapとして扱う。2ケースの差を一般化しない。
 
 Source bundle tree SHA-256: `{bundle.tree_sha256}`
+Parameter-source supplement tree SHA-256: `{bundle.parameter_source_tree_sha256}`
+
+両tree SHA-256は、各directoryについてファイルを相対path順に並べ、
+`relative_path + NUL + file_sha256 + LF`を連結したUTF-8 bytesのSHA-256である。
 """
 
 
@@ -882,6 +1123,8 @@ def _write_manifest(
         "execution_git_sha": EXECUTION_SHA,
         "source_bundle_tree_sha256": bundle.tree_sha256,
         "source_artifacts": dict(bundle.source_hashes),
+        "parameter_source_tree_sha256": bundle.parameter_source_tree_sha256,
+        "parameter_source_artifacts": dict(bundle.parameter_source_hashes),
         "font_family": font_name,
         "png_dpi": 300,
         "timeseries_figure_created": timeseries_created,
@@ -889,7 +1132,7 @@ def _write_manifest(
         "chart_map": [
             {"stem": "01_used_vehicle_comparison", "family": "stacked comparison bar", "question": "使用車両の動力源構成はどう異なるか"},
             {"stem": "02_assigned_trip_comparison", "family": "stacked comparison bar", "question": "担当便の動力源構成はどう異なるか"},
-            {"stem": "03_executed_day_cost_breakdown", "family": "stacked cost composition bar", "question": "実行日費用の差は何で構成されるか"},
+            {"stem": "03_executed_day_cost_breakdown", "family": "stacked evaluation plus component-delta bars", "question": "モデル評価額の差は何で構成されるか"},
             {"stem": "04_pv_bess_grid_energy_balance", "family": "grouped comparison bar", "question": "PV・BESS・系統フローはどう異なるか"},
             {"stem": "05_pv_utilization_and_curtailment", "family": "stacked composition bar", "question": "PV発電を利用・抑制へどう配分したか"},
         ],
@@ -899,11 +1142,16 @@ def _write_manifest(
     return manifest_path
 
 
-def build_package(evidence_dir: Path, output_dir: Path) -> Path:
+def build_package(
+    evidence_dir: Path,
+    output_dir: Path,
+    parameter_evidence_dir: Path | None = None,
+) -> Path:
     """Validate source evidence and build the complete deterministic package."""
 
-    bundle = load_and_validate_bundle(evidence_dir)
+    bundle = load_and_validate_bundle(evidence_dir, parameter_evidence_dir)
     before_hashes = dict(bundle.source_hashes)
+    before_parameter_hashes = dict(bundle.parameter_source_hashes)
     target = output_dir.resolve()
     target.mkdir(parents=True, exist_ok=True)
     for suffix in (".png", ".svg"):
@@ -943,16 +1191,26 @@ def build_package(evidence_dir: Path, output_dir: Path) -> Path:
     manifest_path = _write_manifest(bundle, target, artifacts, font_name, timeseries_created)
 
     after_hashes = _bundle_hashes(bundle.root)
+    after_parameter_hashes = _bundle_hashes(bundle.parameter_source_root)
     _require(before_hashes == after_hashes, "Evidence bundle changed during generation")
+    _require(
+        before_parameter_hashes == after_parameter_hashes,
+        "Parameter-source supplement changed during generation",
+    )
     return manifest_path
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--evidence-dir", type=Path, required=True)
+    parser.add_argument("--parameter-evidence-dir", type=Path)
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
-    manifest_path = build_package(args.evidence_dir, args.output_dir)
+    manifest_path = build_package(
+        args.evidence_dir,
+        args.output_dir,
+        args.parameter_evidence_dir,
+    )
     print(manifest_path)
     print("PASS_THESIS_WEATHER_RESULT_PACKAGE")
     return 0

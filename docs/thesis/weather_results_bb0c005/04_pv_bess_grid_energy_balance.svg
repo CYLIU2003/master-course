@@ -405,7 +405,7 @@ z
    <text style="font-weight: 700; font-size: 15px; font-family: 'Noto Sans JP'; text-anchor: start; fill: #252a34" x="8.167813" y="20.277337" transform="rotate(-0 8.167813 20.277337)">PV・BESS・系統電力のエネルギー収支</text>
   </g>
   <g id="text_24">
-   <text style="font-size: 9px; font-family: 'Noto Sans JP'; text-anchor: start; fill: #59636e" x="8.167813" y="29.7504" transform="rotate(-0 8.167813 29.7504)">BESS→busはPV→BESS×0.95²、両ケースともBESS終端SOC 3,000 kWh</text>
+   <text style="font-size: 9px; font-family: 'Noto Sans JP'; text-anchor: start; fill: #59636e" x="8.167813" y="29.7504" transform="rotate(-0 8.167813 29.7504)">充電入力と放電出力は別系列。BESS→bus＝PV→BESS×0.95²、終端SOC 3,000 kWh</text>
   </g>
  </g>
  <defs>

@@ -24,6 +24,17 @@ an integrated global optimum; and the advisor's 1% submission-threshold and
 human review decisions remain open. The rerun supports only a bounded
 two-scenario feasible comparison, not a general weather-benefit claim.
 
+The thesis-facing package at
+[`docs/thesis/weather_results_bb0c005/`](../thesis/weather_results_bb0c005/README.md)
+now separates day-ahead candidate cost from the model-defined Rolling
+evaluation, labels the all-BEV/initial-state scope of the minimum recorded SOC,
+and records the effective 22-candidate/radius-4/15--35-BEV-frontier search.
+Exact fresh-run input snapshots in the
+[`parameter-source supplement`](../evidence/weather_dispatch_rerun_bb0c005_parameter_sources/parameter_source_manifest.json)
+fill the formerly missing grid/PV/BESS ratings without changing any byte of the
+39-file rerun bundle. This improves reporting completeness but does not change
+the numerical certification or release blockers above.
+
 ## 2026-08-29 (Asia/Tokyo): remote validation scheduling policy
 
 The expensive Python 3.11 research-validation workflow is now manual-only via

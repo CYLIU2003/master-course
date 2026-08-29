@@ -25,11 +25,25 @@
   were visually inspected for glyphs, overlap, zero baselines, units, and
   legibility. Repeated clean-directory generation is byte-for-byte
   deterministic.
-- The optional 96-slot time-series figure is intentionally omitted: the
-  Git-tracked canonical artifacts do not persist a complete 96-slot executed
-  energy-flow series. The same fail-closed rule marks grid-import limit, PV
-  rated capacity, and BESS rated capacity/power as absent from the canonical
-  bundle instead of borrowing values from untracked or older files.
+- A pre-main review found that the compact 39-file bundle did not carry the
+  numeric grid/PV/BESS ratings. Added
+  `scripts/capture_thesis_weather_parameter_sources.py` and the exact-byte
+  supplement `docs/evidence/weather_dispatch_rerun_bb0c005_parameter_sources/`.
+  It preserves both fresh runs' complete `scenario_input_snapshot.json` and
+  sealing `run_input_manifest.json`, including Prepared IDs/source hashes.
+  The builder now verifies both raw snapshots and reports the shared 200-kW
+  grid limit, 1,000-kW PV rating, 6,000-kWh/900-kW BESS, 1,200--4,800-kWh
+  BESS SOC range, and 95%/95% efficiencies. The original 39 files remain
+  byte-identical. The optional 96-slot time-series figure remains omitted
+  because neither canonical source contains the complete executed flow rows.
+- The same review removed the only rendered result number that had been
+  embedded in a chart subtitle; all displayed scenario results now come from
+  loaded JSON. Day-ahead candidate cost and Rolling evaluation are separate
+  columns, the minimum recorded BEV SOC is labelled as including all initial
+  states rather than a used-BEV safety margin, and the effective
+  22-candidate/radius-4/15--35-BEV-frontier policy is explicit. The cost figure
+  now separates the full model evaluation from its component deltas, and all
+  prose states `objective_is_actual_cost=false` and the zero-cost exclusions.
 - Claim boundary: the package reports an evaluated finite-candidate Phase 3
   two-stage feasible result that passed physical, 24/24 Rolling, and accounting
   gates. Its gap label is explicitly tied to the Stage-1 surrogate objective;
@@ -43,18 +57,29 @@
     --output-dir docs\thesis\weather_results_bb0c005
   .\.venv\Scripts\python.exe -m compileall -q scripts tests
   .\.venv\Scripts\python.exe -m pytest -q `
+    tests\test_thesis_weather_parameter_sources.py `
     tests\test_thesis_weather_result_package.py `
     tests\test_published_weather_rerun_evidence.py -p no:cacheprovider
-  # 7 passed
+  # 10 passed
   .\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider
-  # 1621 passed in 91.29s
+  # 1624 passed in 92.11s
   git diff --check
   ```
 
+- The apparent earlier `7 focused` versus `+4 full-suite` discrepancy is now
+  explicit: the earlier focused command combined four new package tests with
+  three pre-existing published-evidence tests. The current change adds seven
+  tests total (four package tests plus three parameter-source tests), deletes
+  none, and moves collection from the recorded 1,617-test base to 1,624.
+- Python 3.11 is not installed locally. The manual-only
+  `research-validation.yml` remains the required remote Python 3.11 gate after
+  the review branch is pushed; no workflow definition was changed.
 - The unchanged evidence tree SHA-256 is
   `c706da7e10bc4e99a06a441f91e1722baa971b41ab936d29db36e650accede5f`.
-  The 22-file, 700,432-byte result package manifest SHA-256 is
-  `f10be5401a89d24ca9cef5eda62dd4fe6951110d394f01d325ae201662c099fc`.
+  The six-file parameter supplement tree SHA-256 is
+  `841440f329539fbf204f284678911393ef14c05887b3ce69aee0997835f566ed`.
+  The 22-file, 789,343-byte result package manifest SHA-256 is
+  `fb778e0b17be7358fc60a83a73a4b486c2493375b6c4f35a1a9331d906db839c`.
 
 ## 2026-08-29 (Asia/Tokyo): fresh public-path SUNNY/RAIN rerun at `bb0c005`
 

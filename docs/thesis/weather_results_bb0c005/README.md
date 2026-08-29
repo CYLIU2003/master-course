@@ -1,6 +1,6 @@
 # 修論用SUNNY／RAIN結果パッケージ
 
-実験SHA `bb0c0050883a91dd86a9e8813ae88d4b6d8c361d` のGit管理済み証拠だけから生成した。数値の手入力は行わず、期待値は生成前のfail-closed assertionにのみ使用する。
+実験SHA `bb0c0050883a91dd86a9e8813ae88d4b6d8c361d` のGit管理済み証拠だけから生成した。数値の手入力は行わず、期待値は生成前のfail-closed assertionにのみ使用する。設備定格値は、各fresh runの`scenario_input_snapshot.json`と`run_input_manifest.json`をexact byte copyしたparameter-source supplementから読む。
 
 ## 再生成
 
@@ -27,12 +27,16 @@ python scripts/build_thesis_weather_result_package.py `
 
 06_daily_energy_flow_timeseriesは作成していない。正本bundleには96スロットの実行済みPV・BESS・系統フロー列がなく、rolling_chain_summary.jsonには24個の残余ホライズン集計とGit管理外stateファイルへの参照だけがあるため、差分推定を行わなかった。
 
-## 正本にない入力値
+## 設備パラメータの補助証拠
 
-列挙された正本JSONには受電上限、PV定格容量、BESS定格容量・出力が値として保存されていない。`experiment_parameters`では欠落を明記し、旧資料やローカルoutputから値を補っていない。充電器数、車両側最大充電電力、PV実行日発電量、BESS初終端SOCおよび観測された充放電比は正本から抽出した。
+`docs/evidence/weather_dispatch_rerun_bb0c005_parameter_sources/`にはSUNNY/RAINのfresh runから取得した完全な`scenario_input_snapshot.json`と、それをSHA-256で封印する`run_input_manifest.json`を保存した。Prepared ID・Prepared source SHA・実験SHAを公開済みsummaryと照合し、両ケースで受電上限、PV定格容量、BESS定格容量・出力・SOC範囲・効率が一致することをfail-closedで検証する。
 
 ## 主張範囲
 
-結果は、評価した有限候補集合から選択されたPhase 3二段階実行可能解である。費用は24時間Rolling後の実行日会計費用、gapはStage 1の近似目的関数に対するcertified MIP gapとして扱う。2ケースの差を一般化しない。
+結果は、評価した有限候補集合から選択されたPhase 3二段階実行可能解である。費用は本モデルの費用定義に基づく24時間Rolling実行日評価額、gapはStage 1の近似目的関数に対するcertified MIP gapとして扱う。2ケースの差を一般化しない。
 
 Source bundle tree SHA-256: `c706da7e10bc4e99a06a441f91e1722baa971b41ab936d29db36e650accede5f`
+Parameter-source supplement tree SHA-256: `841440f329539fbf204f284678911393ef14c05887b3ce69aee0997835f566ed`
+
+両tree SHA-256は、各directoryについてファイルを相対path順に並べ、
+`relative_path + NUL + file_sha256 + LF`を連結したUTF-8 bytesのSHA-256である。

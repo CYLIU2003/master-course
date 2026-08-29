@@ -22,17 +22,22 @@
 | 車両 | ICE初期燃料 | 144 |  |  | L/台 | scenario_fleet_contract_v2 |
 | 充電 | 充電器数 | 10 |  |  | 基 | result_summary.json |
 | 充電 | BEVごとの互換充電器数 | 10 |  |  | 基 | scenario_fleet_contract_v2 |
-| 充電 | 受電上限 | 正本bundleに明示値なし |  |  | - | 欠落を明示 |
+| 充電 | 受電上限 | 200 |  |  | kW | parameter_sources/*/scenario_input_snapshot.json |
 | PV | 実行日PV発電量 |  | 6056.25 | 996.2 | kWh | executed_day_accounting.json |
-| PV | PV定格容量 | 正本bundleに明示値なし |  |  | - | 欠落を明示 |
-| BESS | 初期／終端SOC | 3000／3000 |  |  | kWh | executed_day_accounting.json |
+| PV | PV定格容量 | 1000 |  |  | kW | parameter_sources/*/scenario_input_snapshot.json |
+| BESS | 定格容量／出力 | 6000／900 |  |  | kWh／kW | parameter_sources/*/scenario_input_snapshot.json |
+| BESS | SOC許容範囲 | 1200～4800 |  |  | kWh | parameter_sources/*/scenario_input_snapshot.json |
+| BESS | 初期／終端目標SOC | 3000／3000 |  |  | kWh | parameter_sources/*/scenario_input_snapshot.json |
+| BESS | 充電／放電効率 | 95／95 |  |  | % | parameter_sources/*/scenario_input_snapshot.json |
+| BESS | 実行日初期／終端SOC | 3000／3000 |  |  | kWh | executed_day_accounting.json |
 | BESS | 観測された充放電比 | 90.25 |  |  | % | executed_day_accounting.jsonから算出 |
-| BESS | 定格容量／出力 | 正本bundleに明示値なし |  |  | - | 欠落を明示 |
 | 料金 | 系統購入単価 | 30 |  |  | 円/kWh | executed_day_accounting.jsonから算出 |
 | 料金 | 軽油単価 | 150 |  |  | 円/L | optimization_parameters.json |
 | 料金 | 車両使用費 | 20000 |  |  | 円/台日 | optimization_parameters.json |
 | 料金 | CO₂価格 | 1 |  |  | 円/kg | optimization_parameters.json |
 | 料金 | 需要料金（on/off peak） | 0／0 |  |  | 円/kW | optimization_parameters.json |
+| 料金 | 評価額の性格 | モデル定義による評価額（objective_is_actual_cost=false） |  |  | - | executed_day_accounting.json |
+| 料金 | ゼロ計上項目 | 需要料金・運転士費・電池劣化費・PV設備費・BESS設備費 |  |  | - | executed_day_accounting.json |
 | Solver | 方式 | phase3_two_stage |  |  | - | optimization_parameters.json |
 | Solver | 総／Stage 1／Stage 2上限 | 585／435／30 |  |  | 秒 | optimization_parameters.json |
 | Solver | 要求MIP gap | 10 |  |  | % | optimization_parameters.json |
@@ -41,3 +46,7 @@
 | Solver | BestObjStop | OFF |  |  | - | optimization_parameters.json |
 | Solver | powertrain selector strengthening | OFF |  |  | - | optimization_parameters.json |
 | Solver | Stage 1→2候補上限（実効） | 22 |  |  | 候補 | optimization_parameters.json |
+| Solver | 候補構成探索radius（実効） | 4 |  |  | 台 | optimization_parameters.json |
+| Solver | BEV frontier（実効） | ON |  |  | - | optimization_parameters.json |
+| Solver | BEV frontier範囲（実効） | 15～35 |  |  | 台 | optimization_parameters.json |
+| Solver | BEV frontier時間上限（実効） | 120 |  |  | 秒 | optimization_parameters.json |

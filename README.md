@@ -27,6 +27,18 @@ SUNNY used 28 BEV / 4 ICE buses for 199 / 65 trips and reconciled to
 day-ahead candidate cost was 698,296.465284 JPY and its authoritative Rolling
 cost was 698,598.628643 JPY. The compact, Git-tracked review bundle is
 [here](docs/evidence/weather_dispatch_rerun_bb0c005/README.md).
+The reproducible thesis-facing tables, Japanese result text, and five
+PNG/SVG comparison figures are in
+[docs/thesis/weather_results_bb0c005/](docs/thesis/weather_results_bb0c005/README.md).
+The exact fresh-run parameter snapshots and sealing manifests are published in
+[the parameter-source supplement](docs/evidence/weather_dispatch_rerun_bb0c005_parameter_sources/parameter_source_manifest.json).
+They verify a 200-kW grid limit, 1,000-kW PV rating, 6,000-kWh/900-kW BESS,
+1,200--4,800-kWh BESS SOC range, and 95%/95% efficiencies in both scenarios.
+The reported monetary total is the model-defined Rolling evaluation with
+`objective_is_actual_cost=false`; it is not a cash-expenditure or lifecycle
+cost result. Day-ahead candidate and Rolling values remain separate, and the
+minimum recorded BEV SOC is labelled as including initial states rather than a
+used-BEV operating safety margin.
 
 The rerun passes the requested 10% Stage-1 certificate target, but the
 certified gaps remain 9.5213% for SUNNY and 1.6564% for RAIN. The result is a
