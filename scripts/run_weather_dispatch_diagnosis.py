@@ -64,6 +64,9 @@ from src.optimization.common.problem import (  # noqa: E402
     OptimizationMode,
 )
 from src.optimization.engine import OptimizationEngine  # noqa: E402
+from src.optimization.milp.solver_adapter import (  # noqa: E402
+    _stage2_result_accounting_reconciliation,
+)
 from src.optimization.rolling.reoptimizer import (  # noqa: E402
     assignment_plan_from_serialized_result,
 )
@@ -1220,6 +1223,17 @@ def _fixed_dispatch_evaluation(
     metadata = dict(solved.solver_metadata or {})
     result_total = float(dict(solved.cost_breakdown or {}).get("total_cost", math.inf))
     accounting_delta = abs(float(evaluated.total_cost) - result_total)
+    stage2_objective = metadata.get("stage2_objective")
+    if stage2_objective is None:
+        stage2_objective = metadata.get("stage2_objective_value")
+    (
+        stage2_accounting_total,
+        stage2_accounting_delta,
+        stage2_accounting_passed,
+    ) = _stage2_result_accounting_reconciliation(
+        evaluated,
+        stage2_objective_jpy=stage2_objective,
+    )
     used_vehicle_count = len(solved.plan.duties_by_vehicle())
     accepted = bool(
         solved.feasible
@@ -1231,6 +1245,7 @@ def _fixed_dispatch_evaluation(
         and str(metadata.get("stage2_solver_status") or "").lower() == "optimal"
         and not metadata.get("postsolve_repair_applied", False)
         and accounting_delta <= 1.0e-6
+        and stage2_accounting_passed
     )
     costs = dict(solved.cost_breakdown or {})
     return {
@@ -1241,8 +1256,15 @@ def _fixed_dispatch_evaluation(
         "stage2_feasible": bool(solved.feasible),
         "physical_validation_feasible": bool(physical.feasible),
         "physical_validation_errors": list(physical.errors),
-        "accounting_reconciliation_passed": accounting_delta <= 1.0e-6,
+        "accounting_reconciliation_passed": bool(
+            accounting_delta <= 1.0e-6 and stage2_accounting_passed
+        ),
         "accounting_reconciliation_delta_jpy": accounting_delta,
+        "stage2_result_accounting_total_jpy": stage2_accounting_total,
+        "stage2_result_accounting_delta_jpy": stage2_accounting_delta,
+        "stage2_result_accounting_reconciliation_passed": (
+            stage2_accounting_passed
+        ),
         "fallback_used": bool(metadata.get("fallback_used", False)),
         "repair_used": bool(metadata.get("postsolve_repair_applied", False)),
         "selectable": accepted,

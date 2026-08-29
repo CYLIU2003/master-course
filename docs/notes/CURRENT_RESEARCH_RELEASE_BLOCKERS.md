@@ -134,6 +134,13 @@ The expanded related suite passes 164 tests and the complete repository suite
 passes 1,659 tests. These are next-run guards only. Frozen `bb0c005` evidence and all published
 numerical results remain unchanged, and no solver was rerun.
 
+Two remaining exact-HEAD P1 paths are also closed for the next run. The
+cross-weather fixed-dispatch matrix reconciles canonical cost against the
+independent Stage-2 objective, and post-validation dispatch-scope persistence
+uses the exact already-resolved service/depot values rather than rereading
+concurrent mutable state. The direct related suite passes 84 tests. No frozen
+evidence or result was changed.
+
 The scenario audit retained the exact intended counterfactual: SUNNY
 `771d115b-75b0-49f7-a7f0-25f259a2cd21` uses 2025-08-05 service/weather/PV;
 RAIN `b23fd26c-1233-4c73-bb9e-bdb8b1584760` keeps the same 2025-08-05 WEEKDAY
