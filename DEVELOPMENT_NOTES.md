@@ -338,6 +338,18 @@
   The complete repository suite passed `1655 passed in 168.20s`.
   Formal scenario/result evidence remains unchanged and no experiment was
   rerun.
+- The following exact-HEAD review closed three further P1 findings and three
+  P2 findings. Finalization captures the current clean checkout before reading
+  evidence and requires it to equal the execution SHA. The candidate union
+  records its producer SHA, and confirmation validates the matrix seal/SHA
+  before Fresh Prepare or any public solver job. Independent Stage-2
+  accounting now includes the evaluator's terminal unreplenished-BEV-energy
+  valuation. Runtime overhead subtracts model build plus both Stage 1 and
+  Stage 2. Dispatch scope is resolved without persistence for validation and
+  is persisted only after every pre-queue gate succeeds. Direct regressions
+  for these paths pass; the expanded related suite passed `164` tests and the
+  complete repository suite passed `1659 passed in 168.91s`. No formal
+  experiment or frozen artifact was changed.
 
 ## 2026-08-29 (Asia/Tokyo): fresh public-path SUNNY/RAIN rerun at `bb0c005`
 

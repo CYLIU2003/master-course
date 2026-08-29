@@ -614,6 +614,7 @@ def _runtime_row(metrics_path: Path) -> dict[str, Any]:
         for value in (
             timing.get("complete_model_build_time_sec"),
             total_solver_runtime,
+            stage2_runtime,
         )
     )
     residual = max(float(wall) - measured, 0.0) if wall is not None else None
@@ -990,7 +991,14 @@ def build_candidate_union(
             "existing bundle hash verification failed before candidate-union "
             f"audit: {source_bundle_verification}"
         )
+    producer_git_sha = _assert_clean_sha()
     manifest = _read_json(output_dir / "candidate_discovery_manifest.json")
+    _require_stage_git_sha(
+        manifest,
+        expected_sha=producer_git_sha,
+        fields=("git_sha",),
+        stage="candidate discovery",
+    )
     _verify_candidate_discovery_artifacts(manifest)
     existing_candidates = _load_existing_a_candidates(existing_bundle)
     expanded_candidates: list[dict[str, Any]] = []
@@ -1032,6 +1040,7 @@ def build_candidate_union(
     )
     payload = {
         "schema_version": SCHEMA_VERSION,
+        "producer_git_sha": producer_git_sha,
         "existing_A_candidates_collected_first": False,
         "existing_A_indexed_metrics_audited": True,
         "existing_A_run_count": 10,
@@ -1277,7 +1286,14 @@ def cross_evaluate(output_dir: Path) -> dict[str, Any]:
         output_dir / "weather_candidate_union.json",
         output_dir / "weather_candidate_union.seal.json",
     )
-    unique = list(_read_json(output_dir / "weather_candidate_union.json").get("candidates") or ())
+    union_payload = _read_json(output_dir / "weather_candidate_union.json")
+    _require_stage_git_sha(
+        union_payload,
+        expected_sha=evaluation_git_sha,
+        fields=("producer_git_sha",),
+        stage="candidate union",
+    )
+    unique = list(union_payload.get("candidates") or ())
     discovery = _read_json(output_dir / "candidate_discovery_manifest.json")
     _require_stage_git_sha(
         discovery,
@@ -1711,6 +1727,17 @@ def confirm_normal_runs(
     """Fresh Prepare and validate one public normal-path run per weather case."""
 
     frozen_sha = _assert_clean_sha()
+    _verify_artifact_seal(
+        output_dir / "cross_weather_fixed_dispatch_matrix.json",
+        output_dir / "cross_weather_fixed_dispatch_matrix.seal.json",
+    )
+    matrix = _read_json(output_dir / "cross_weather_fixed_dispatch_matrix.json")
+    _require_stage_git_sha(
+        matrix,
+        expected_sha=frozen_sha,
+        fields=("evaluation_git_sha", "candidate_discovery_git_sha"),
+        stage="cross-weather matrix",
+    )
     started = datetime.now(timezone.utc)
     confirmation_dir = output_dir / confirmation_dir_name
     confirmation_dir.mkdir(parents=True, exist_ok=False)
@@ -1769,17 +1796,6 @@ def confirm_normal_runs(
             **_confirmation_gate(run_dir, frozen_sha),
         }
         _write_json(case_dir / "confirmation_gate.json", results[code])
-    _verify_artifact_seal(
-        output_dir / "cross_weather_fixed_dispatch_matrix.json",
-        output_dir / "cross_weather_fixed_dispatch_matrix.seal.json",
-    )
-    matrix = _read_json(output_dir / "cross_weather_fixed_dispatch_matrix.json")
-    _require_stage_git_sha(
-        matrix,
-        expected_sha=frozen_sha,
-        fields=("evaluation_git_sha", "candidate_discovery_git_sha"),
-        stage="cross-weather matrix",
-    )
     expected = dict(matrix.get("selected") or {})
     fixed_dispatch_selectable_counts = require_selectable_assignment_coverage(
         matrix.get("rows") or ()
@@ -2311,6 +2327,7 @@ def finalize_normal_confirmation(
 ) -> dict[str, Any]:
     """Consolidate already completed public-path runs without solving again."""
 
+    current_sha = _assert_clean_sha()
     source_bundle_verification = _verify_existing_bundle(existing_bundle)
     if not source_bundle_verification["accepted"]:
         raise RuntimeError(
@@ -2340,6 +2357,11 @@ def finalize_normal_confirmation(
     if len(set(execution_shas.values())) != 1 or not next(iter(execution_shas.values())):
         raise RuntimeError(f"confirmation run SHA mismatch: {execution_shas}")
     execution_sha = next(iter(execution_shas.values()))
+    if execution_sha != current_sha:
+        raise RuntimeError(
+            "finalization checkout Git SHA mismatch: "
+            f"expected={execution_sha}, observed={current_sha}"
+        )
     _require_stage_git_sha(
         discovery_manifest,
         expected_sha=execution_sha,

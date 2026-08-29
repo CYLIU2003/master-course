@@ -14243,7 +14243,7 @@ def run_optimization(
         scenario_id,
         service_id=request.service_id,
         depot_id=request.depot_id,
-        persist=True,
+        persist=False,
     )
     active_bev_count = None
     if request.research_run and normalized_requested_mode == "phase3_two_stage":
@@ -14284,6 +14284,12 @@ def run_optimization(
                 currentPreparedInputId=prep.prepared_input_id,
             ),
         )
+    scope = _resolve_dispatch_scope(
+        scenario_id,
+        service_id=request.service_id,
+        depot_id=request.depot_id,
+        persist=True,
+    )
     job = job_store.create_job(execution_model=_executor_mode())
     job_store.update_job(
         job.job_id,

@@ -598,6 +598,7 @@ def test_direct_finalization_rejects_unverified_frozen_bundle(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(diagnosis, "_assert_clean_sha", lambda *_args: "clean-sha")
     monkeypatch.setattr(
         diagnosis,
         "_verify_existing_bundle",
@@ -619,6 +620,59 @@ def test_direct_finalization_rejects_unverified_frozen_bundle(
             rain_run_dir=tmp_path / "rain",
             existing_bundle=tmp_path / "bundle",
         )
+
+
+def test_direct_finalization_rejects_dirty_checkout_before_evidence_reads(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    verify_bundle = mock.Mock()
+    monkeypatch.setattr(diagnosis, "_verify_existing_bundle", verify_bundle)
+    monkeypatch.setattr(
+        diagnosis,
+        "_assert_clean_sha",
+        mock.Mock(side_effect=RuntimeError("formal diagnosis requires a clean worktree")),
+    )
+
+    with pytest.raises(RuntimeError, match="requires a clean worktree"):
+        diagnosis.finalize_normal_confirmation(
+            output_dir=tmp_path / "output",
+            sunny_run_dir=tmp_path / "sunny",
+            rain_run_dir=tmp_path / "rain",
+            existing_bundle=tmp_path / "bundle",
+        )
+
+    verify_bundle.assert_not_called()
+
+
+def test_confirmation_rejects_matrix_sha_before_prepare_or_solve(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    matrix_path = tmp_path / "cross_weather_fixed_dispatch_matrix.json"
+    _write_json(
+        matrix_path,
+        {
+            "evaluation_git_sha": "producer-sha",
+            "candidate_discovery_git_sha": "producer-sha",
+        },
+    )
+    diagnosis._write_artifact_seal(
+        matrix_path,
+        tmp_path / "cross_weather_fixed_dispatch_matrix.seal.json",
+    )
+    prepare = mock.Mock()
+    monkeypatch.setattr(diagnosis, "prepare_fresh_weather_inputs", prepare)
+    monkeypatch.setattr(diagnosis, "_assert_clean_sha", lambda *_args: "consumer-sha")
+
+    with pytest.raises(RuntimeError, match="cross-weather matrix Git SHA mismatch"):
+        diagnosis.confirm_normal_runs(
+            output_dir=tmp_path,
+            base_url="http://127.0.0.1:1",
+            existing_bundle=tmp_path / "bundle",
+        )
+
+    prepare.assert_not_called()
 
 
 def test_tie_break_is_used_fleet_then_assignment_hash() -> None:
@@ -991,7 +1045,7 @@ def test_runtime_row_never_follows_recorded_external_run_dir(tmp_path: Path) -> 
     assert row["candidate_pool_generated"] == 22
     assert row["rolling_runtime_sec"] is None
     assert row["stage1_energy_recourse_enabled"] is None
-    assert row["reporting_accounting_artifact_residual_sec"] == pytest.approx(20.0)
+    assert row["reporting_accounting_artifact_residual_sec"] == pytest.approx(15.0)
 
 
 @pytest.mark.parametrize(
@@ -1025,7 +1079,10 @@ def test_cross_evaluation_rejects_tampered_candidate_union(
 ) -> None:
     union_path = tmp_path / "weather_candidate_union.json"
     seal_path = tmp_path / "weather_candidate_union.seal.json"
-    _write_json(union_path, {"candidates": []})
+    _write_json(
+        union_path,
+        {"producer_git_sha": "consumer-sha", "candidates": []},
+    )
     diagnosis._write_artifact_seal(union_path, seal_path)
     _write_json(union_path, {"candidates": [{"tampered": True}]})
     monkeypatch.setattr(diagnosis, "_assert_clean_sha", lambda *_args: "sha")
@@ -1039,7 +1096,10 @@ def test_cross_evaluation_rejects_discovery_from_another_git_sha(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     union_path = tmp_path / "weather_candidate_union.json"
-    _write_json(union_path, {"candidates": []})
+    _write_json(
+        union_path,
+        {"producer_git_sha": "consumer-sha", "candidates": []},
+    )
     diagnosis._write_artifact_seal(
         union_path,
         tmp_path / "weather_candidate_union.seal.json",
@@ -1055,6 +1115,29 @@ def test_cross_evaluation_rejects_discovery_from_another_git_sha(
     )
 
     with pytest.raises(RuntimeError, match="candidate discovery Git SHA mismatch"):
+        diagnosis.cross_evaluate(tmp_path)
+
+
+def test_cross_evaluation_rejects_union_from_another_git_sha(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    union_path = tmp_path / "weather_candidate_union.json"
+    _write_json(
+        union_path,
+        {"producer_git_sha": "producer-sha", "candidates": []},
+    )
+    diagnosis._write_artifact_seal(
+        union_path,
+        tmp_path / "weather_candidate_union.seal.json",
+    )
+    monkeypatch.setattr(
+        diagnosis,
+        "_assert_clean_sha",
+        lambda *_args: "consumer-sha",
+    )
+
+    with pytest.raises(RuntimeError, match="candidate union Git SHA mismatch"):
         diagnosis.cross_evaluate(tmp_path)
 
 
@@ -1232,6 +1315,24 @@ def test_candidate_accounting_reconciles_independent_stage2_result() -> None:
     assert delta == pytest.approx(1.0)
     assert passed is False
 
+    with_leftover = CostBreakdown(
+        electricity_cost=35.0,
+        electricity_cost_provisional_leftover=5.0,
+        fuel_cost=20.0,
+        vehicle_usage_cost=100.0,
+        co2_cost=10.0,
+        total_co2_kg=10.0,
+        grid_electricity_co2_kg=4.0,
+        total_cost=165.0,
+    )
+    total, delta, passed = _stage2_result_accounting_reconciliation(
+        with_leftover,
+        stage2_objective_jpy=34.0,
+    )
+    assert total == pytest.approx(165.0)
+    assert delta == pytest.approx(0.0)
+    assert passed is True
+
 
 def test_prepared_active_bev_count_rejects_missing_powertrain(tmp_path: Path) -> None:
     solver_input = tmp_path / "solver_input.json"
@@ -1360,7 +1461,7 @@ def test_formal_endpoint_uses_resolved_depot_for_prepared_bev_count(
             optimization,
             "_resolve_dispatch_scope",
             return_value={"serviceId": "WEEKDAY", "depotId": "dep-1"},
-        ),
+        ) as resolve_scope,
         mock.patch.object(
             optimization,
             "_prepared_active_bev_count_or_http_error",
@@ -1394,7 +1495,76 @@ def test_formal_endpoint_uses_resolved_depot_for_prepared_bev_count(
         )
 
     count_bevs.assert_called_once_with(solver_input, depot_id="dep-1")
+    assert resolve_scope.call_args_list == [
+        mock.call(
+            "scenario-1",
+            service_id=None,
+            depot_id=None,
+            persist=False,
+        ),
+        mock.call(
+            "scenario-1",
+            service_id=None,
+            depot_id=None,
+            persist=True,
+        ),
+    ]
     assert submit_job.call_args.kwargs["args"][9] == "dep-1"
+
+
+def test_stale_prepared_input_does_not_persist_rejected_scope(
+    tmp_path: Path,
+) -> None:
+    solver_input = tmp_path / "solver_input.json"
+    _write_json(solver_input, {"vehicles": []})
+    prep = SimpleNamespace(
+        is_valid=True,
+        prepared_input_id="prepared-current",
+        solver_input_path=str(solver_input),
+        scope_summary={"trip_count": 264},
+        error=None,
+        error_code=None,
+    )
+    with (
+        mock.patch.object(optimization, "_require_scenario"),
+        mock.patch.object(
+            optimization.store,
+            "get_scenario_document_shallow",
+            return_value={},
+        ),
+        mock.patch.object(
+            optimization,
+            "get_or_build_run_preparation",
+            return_value=prep,
+        ),
+        mock.patch.object(
+            optimization,
+            "_resolve_dispatch_scope",
+            return_value={"serviceId": "WEEKDAY", "depotId": "dep-1"},
+        ) as resolve_scope,
+        mock.patch.object(optimization.job_store, "create_job") as create_job,
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            optimization.run_optimization(
+                "scenario-1",
+                RunOptimizationBody(
+                    mode="phase3_two_stage",
+                    prepared_input_id="prepared-stale",
+                    depot_id="dep-1",
+                ),
+                {"built_ready": True, "built_dir": str(tmp_path), "routes_df": None},
+            )
+
+    assert exc_info.value.status_code == 409
+    assert resolve_scope.call_args_list == [
+        mock.call(
+            "scenario-1",
+            service_id=None,
+            depot_id="dep-1",
+            persist=False,
+        )
+    ]
+    create_job.assert_not_called()
 
 
 def test_stage_handoff_requires_one_clean_git_sha() -> None:
