@@ -156,10 +156,11 @@
   The reporting-focused suite passed `24 passed in 7.99s`; exact regeneration,
   compilation, README navigation (`3 passed`), and diff hygiene passed. The
   complete repository suite passed `1643 passed in 182.63s`.
-  After integrating the final PR #7 research hardening, the combined focused
-  reporting/evidence/contract suite passed `109 passed in 15.42s`, exact
-  package verification passed, and the combined complete suite passed `1651
-  passed in 176.73s`.
+  After integrating the final PR #7 research hardening at `8721cba`, the
+  combined focused reporting/evidence/contract suite passed `145 passed in
+  12.21s`, exact package verification passed, and the combined complete suite
+  passed `1657 passed in 177.11s`. The package remains 24 files and 1,084,538
+  bytes with unchanged source, parameter-source, and package-manifest hashes.
 
 ## 2026-08-29 (Asia/Tokyo): formal Phase-3 provenance review hardening
 
