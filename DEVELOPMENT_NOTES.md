@@ -71,9 +71,12 @@
   three pre-existing published-evidence tests. The current change adds seven
   tests total (four package tests plus three parameter-source tests), deletes
   none, and moves collection from the recorded 1,617-test base to 1,624.
-- Python 3.11 is not installed locally. The manual-only
-  `research-validation.yml` remains the required remote Python 3.11 gate after
-  the review branch is pushed; no workflow definition was changed.
+- Python 3.11 is not installed locally. The first manual remote validation
+  correctly failed because Git for Windows normalized the new parameter-source
+  manifest from LF to CRLF, invalidating its exact-byte SHA-256. The supplement
+  is now marked `binary` in `.gitattributes`, matching the other frozen
+  evidence directories, so a clean checkout preserves the sealed bytes. No
+  workflow definition was changed.
 - The unchanged evidence tree SHA-256 is
   `c706da7e10bc4e99a06a441f91e1722baa971b41ab936d29db36e650accede5f`.
   The six-file parameter supplement tree SHA-256 is
