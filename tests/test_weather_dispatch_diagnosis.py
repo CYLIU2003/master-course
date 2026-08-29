@@ -19,6 +19,7 @@ from scripts.run_weather_dispatch_diagnosis import (
     build_confirmation_input_contract,
     candidate_is_selectable,
     classify_weather_winners,
+    confirmation_request_control_payload,
     confirmation_request_matches_worker,
     deduplicate_candidates,
     require_selectable_assignment_coverage,
@@ -467,11 +468,7 @@ def test_finalization_inventory_hashes_submitted_confirmation_requests(
     for code in ("SUNNY", "RAIN"):
         discovery_run = tmp_path / f"discovery-{code}"
         discovery_scenarios[code] = {"run_dir": str(discovery_run)}
-        for name in (
-            "stage1_stage2_candidate_evaluation.json",
-            "solver_result.json",
-            "optimization_parameters.json",
-        ):
+        for name in diagnosis.DISCOVERY_RUN_INPUT_FILES:
             _write_json(discovery_run / name, {"scenario": code})
 
         run_dir = tmp_path / f"run-{code}"
@@ -704,19 +701,118 @@ def test_public_formal_phase3_returns_422_for_inverted_requested_frontier() -> N
     assert exc_info.value.detail["field"] == "stage1_bev_frontier_min_count"
 
 
-def test_confirmation_compares_dispatch_construction_controls() -> None:
-    assert {"rebuild_dispatch", "use_existing_duties"}.issubset(
-        diagnosis.FIXED_CONFIRMATION_REQUEST_CONTROL_KEYS
-    )
+def test_confirmation_compares_every_normalized_request_control() -> None:
+    controls = confirmation_request_control_payload({})
+    assert {
+        "rebuild_dispatch",
+        "use_existing_duties",
+        "stage1_activation_start_strengthening",
+        "stage1_activation_start_strengthening_vehicle_ids",
+        "enableWeatherOperationPolicy",
+        "weatherProxyForecastPath",
+    }.issubset(controls)
+    assert "prepared_input_id" not in controls
 
 
 def test_confirmation_request_parity_uses_worker_raw_body() -> None:
     copied = {"rebuild_dispatch": True, "use_existing_duties": False}
-    assert confirmation_request_matches_worker(copied, dict(copied))
+    worker = RunOptimizationBody.model_validate(copied).model_dump()
+    assert confirmation_request_matches_worker(copied, worker)
     assert not confirmation_request_matches_worker(
         copied,
-        {"rebuild_dispatch": False, "use_existing_duties": False},
+        {**worker, "rebuild_dispatch": False},
     )
+
+
+@pytest.mark.parametrize(
+    ("key", "sunny_value", "rain_value"),
+    [
+        ("stage1_activation_start_strengthening", False, True),
+        ("stage1_activation_start_strengthening_vehicle_ids", None, ["ice-1"]),
+        ("enableWeatherOperationPolicy", None, True),
+        ("weatherProxyForecastPath", None, "rain.json"),
+    ],
+)
+def test_confirmation_detects_every_previously_omitted_model_control(
+    key: str,
+    sunny_value: object,
+    rain_value: object,
+) -> None:
+    sunny = {"prepared_input_id": "sunny", key: sunny_value}
+    rain = {"prepared_input_id": "rain", key: rain_value}
+    assert confirmation_request_control_payload(sunny) != (
+        confirmation_request_control_payload(rain)
+    )
+
+
+def test_confirmation_allows_only_prepared_input_id_to_differ() -> None:
+    sunny = {"prepared_input_id": "sunny"}
+    rain = {"prepared_input_id": "rain"}
+    assert confirmation_request_control_payload(sunny) == (
+        confirmation_request_control_payload(rain)
+    )
+
+
+def _worker_candidate(index: int, *, selectable: bool = True) -> dict:
+    assignments = [
+        {
+            "duty_id": f"duty-{index}-{trip_index}",
+            "trip_id": f"trip-{trip_index}",
+            "vehicle_id": f"vehicle-{index}-{trip_index}",
+            "powertrain": "ICE",
+        }
+        for trip_index in range(264)
+    ]
+    return {
+        "stage2_actual_canonical_cost_jpy": 100.0 + index,
+        "stage2_feasible": True,
+        "canonical_evaluation_feasible": True,
+        "accounting_reconciliation_passed": True,
+        "physical_validation_feasible": True,
+        "served_trip_count": 264,
+        "unserved_trip_count": 0,
+        "fallback_used": False,
+        "repair_used": False,
+        "selectable": selectable,
+        "vehicle_trip_assignments": assignments,
+    }
+
+
+def test_worker_coverage_counts_only_its_fully_selectable_candidates() -> None:
+    payload = {
+        "candidates": [
+            _worker_candidate(index, selectable=index != 11)
+            for index in range(12)
+        ]
+    }
+    assert len(diagnosis._worker_selectable_candidate_hashes(payload)) == 11
+
+
+def test_discovery_artifact_seal_rejects_interstage_tampering(
+    tmp_path: Path,
+) -> None:
+    scenarios = {}
+    for code in ("SUNNY", "RAIN"):
+        run_dir = tmp_path / code
+        for relative_path in diagnosis.DISCOVERY_RUN_INPUT_FILES:
+            _write_json(run_dir / relative_path, {"scenario": code})
+        scenarios[code] = {
+            "run_dir": str(run_dir),
+            "sealed_run_artifacts": diagnosis._sealed_discovery_run_artifacts(
+                run_dir
+            ),
+        }
+    manifest = {"scenarios": scenarios}
+    assert diagnosis._verify_candidate_discovery_artifacts(manifest)[
+        "artifact_count"
+    ] == 8
+
+    _write_json(
+        tmp_path / "SUNNY" / "solver_result.json",
+        {"scenario": "SUNNY", "tampered": True},
+    )
+    with pytest.raises(RuntimeError, match="changed after sealing"):
+        diagnosis._verify_candidate_discovery_artifacts(manifest)
 
 
 def test_selectable_coverage_counts_only_distinct_fully_valid_assignments() -> None:

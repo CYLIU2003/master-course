@@ -51,6 +51,7 @@ from scripts.run_frontend_controlled_pv_pair import (  # noqa: E402
     HttpJsonClient,
     _poll_job,
 )
+from bff.routers.optimization import RunOptimizationBody  # noqa: E402
 from src.dispatch.feasibility import (  # noqa: E402
     FeasibilityEngine,
     evaluate_startup_feasibility,
@@ -107,30 +108,17 @@ CONFIRMATION_RUN_INPUT_FILES = (
     "canonical_solver_result.json",
 )
 
-FIXED_CONFIRMATION_REQUEST_CONTROL_KEYS = (
-    "mode",
-    "research_run",
-    "time_step_min",
-    "timestep_min",
-    "time_limit_seconds",
-    "stage1_time_limit_seconds",
-    "stage2_time_limit_seconds",
-    "stage1_best_obj_stop_enabled",
-    "stage1_powertrain_selector_strengthening",
-    "require_all_available_bevs",
-    "stage1_stage2_candidate_limit",
-    "stage1_composition_search_radius",
-    "gurobi_threads",
-    "mip_gap",
-    "random_seed",
-    "run_profile",
-    "run_hourly_rolling",
-    "rolling_execution_minutes",
-    "service_id",
-    "depot_id",
-    "rebuild_dispatch",
-    "use_existing_duties",
+DISCOVERY_RUN_INPUT_FILES = (
+    "stage1_stage2_candidate_evaluation.json",
+    "solver_result.json",
+    "optimization_parameters.json",
+    "effective_scenario.json",
 )
+
+# The prepared snapshot is intentionally scenario-specific. Every other
+# request field is a controlled input and must match after Pydantic defaults
+# have been materialized.
+CONFIRMATION_REQUEST_SCENARIO_SPECIFIC_KEYS = ("prepared_input_id",)
 
 REQUIRED_EFFECTIVE_FRONTIER_CONTROLS = {
     "stage1_stage2_candidate_limit": 22,
@@ -160,6 +148,57 @@ def _artifact_identity(path: Path) -> dict[str, Any]:
         "path": str(resolved),
         "size_bytes": resolved.stat().st_size,
         "sha256": _sha256_file(resolved),
+    }
+
+
+def _sealed_discovery_run_artifacts(run_dir: Path) -> dict[str, dict[str, Any]]:
+    """Seal every discovery artifact consumed by later diagnosis stages."""
+
+    return {
+        relative_path: _artifact_identity(run_dir / relative_path)
+        for relative_path in DISCOVERY_RUN_INPUT_FILES
+    }
+
+
+def _verify_candidate_discovery_artifacts(
+    manifest: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Fail if a discovery input changed after the child process completed."""
+
+    scenario_results = dict(manifest.get("scenarios") or {})
+    verified: dict[str, Any] = {}
+    for code in SCENARIOS:
+        scenario = dict(scenario_results.get(code) or {})
+        run_dir = Path(str(scenario.get("run_dir") or "")).resolve()
+        sealed = dict(scenario.get("sealed_run_artifacts") or {})
+        if set(sealed) != set(DISCOVERY_RUN_INPUT_FILES):
+            raise RuntimeError(
+                f"{code} discovery artifact seal is incomplete: "
+                f"expected={sorted(DISCOVERY_RUN_INPUT_FILES)}, "
+                f"observed={sorted(sealed)}"
+            )
+        verified[code] = {}
+        for relative_path in DISCOVERY_RUN_INPUT_FILES:
+            expected = dict(sealed[relative_path])
+            artifact_path = (run_dir / relative_path).resolve()
+            if str(expected.get("path") or "") != str(artifact_path):
+                raise RuntimeError(
+                    f"{code} discovery artifact path drifted: {relative_path}"
+                )
+            observed = _artifact_identity(artifact_path)
+            if (
+                observed["size_bytes"] != expected.get("size_bytes")
+                or observed["sha256"] != expected.get("sha256")
+            ):
+                raise RuntimeError(
+                    f"{code} discovery artifact changed after sealing: "
+                    f"{relative_path}"
+                )
+            verified[code][relative_path] = observed
+    return {
+        "accepted": True,
+        "artifact_count": sum(len(items) for items in verified.values()),
+        "scenarios": verified,
     }
 
 
@@ -202,11 +241,7 @@ def _finalization_input_artifacts(
         discovery_run_dir = Path(
             str(dict(discovery["scenarios"][code]).get("run_dir") or "")
         )
-        for name in (
-            "stage1_stage2_candidate_evaluation.json",
-            "solver_result.json",
-            "optimization_parameters.json",
-        ):
+        for name in DISCOVERY_RUN_INPUT_FILES:
             add(f"candidate_discovery_run/{code}/{name}", discovery_run_dir / name)
 
         baseline_path = next(
@@ -801,7 +836,13 @@ def discover_candidates(
             expected_git_sha=frozen_sha,
         )
         _write_json(scenario_dir / "candidate_discovery_result.json", result)
-        results[code] = result
+        run_dir = Path(str(result.get("run_dir") or ""))
+        if not run_dir.is_dir():
+            raise RuntimeError(f"{code} discovery run directory is missing: {run_dir}")
+        results[code] = {
+            **result,
+            "sealed_run_artifacts": _sealed_discovery_run_artifacts(run_dir),
+        }
     _assert_clean_sha(frozen_sha)
     manifest = {
         "schema_version": SCHEMA_VERSION,
@@ -906,6 +947,7 @@ def build_candidate_union(
             f"audit: {source_bundle_verification}"
         )
     manifest = _read_json(output_dir / "candidate_discovery_manifest.json")
+    _verify_candidate_discovery_artifacts(manifest)
     existing_candidates = _load_existing_a_candidates(existing_bundle)
     expanded_candidates: list[dict[str, Any]] = []
     for code in SCENARIOS:
@@ -1185,6 +1227,7 @@ def cross_evaluate(output_dir: Path) -> dict[str, Any]:
     evaluation_git_sha = _assert_clean_sha()
     unique = list(_read_json(output_dir / "weather_candidate_union.json").get("candidates") or ())
     discovery = _read_json(output_dir / "candidate_discovery_manifest.json")
+    _verify_candidate_discovery_artifacts(discovery)
     contexts = {}
     for code in SCENARIOS:
         source_run_dir = Path(str(dict(discovery["scenarios"][code]).get("run_dir") or ""))
@@ -1314,9 +1357,60 @@ def confirmation_request_matches_worker(
     copied_request: Mapping[str, Any],
     worker_request: Mapping[str, Any],
 ) -> bool:
-    """Compare the submitted copy with the worker-persisted raw request body."""
+    """Compare requests after the authoritative API model expands defaults."""
 
-    return _canonical_hash(dict(copied_request)) == _canonical_hash(dict(worker_request))
+    return _canonical_hash(normalize_confirmation_request(copied_request)) == (
+        _canonical_hash(normalize_confirmation_request(worker_request))
+    )
+
+
+def normalize_confirmation_request(request: Mapping[str, Any]) -> dict[str, Any]:
+    """Materialize the exact public request schema and all of its defaults."""
+
+    return RunOptimizationBody.model_validate(dict(request)).model_dump()
+
+
+def confirmation_request_control_payload(
+    request: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Return every normalized control except declared scenario identifiers."""
+
+    normalized = normalize_confirmation_request(request)
+    for key in CONFIRMATION_REQUEST_SCENARIO_SPECIFIC_KEYS:
+        normalized.pop(key, None)
+    return normalized
+
+
+def _worker_selectable_candidate_hashes(
+    candidates_payload: Mapping[str, Any],
+) -> list[str]:
+    """Count distinct worker candidates that pass every day-ahead gate."""
+
+    selectable_hashes: set[str] = set()
+    for raw in candidates_payload.get("candidates") or ():
+        candidate = dict(raw)
+        rows = list(candidate.get("vehicle_trip_assignments") or ())
+        cost = candidate.get("stage2_actual_canonical_cost_jpy")
+        try:
+            numeric_cost = float(cost)
+            physical_hash = assignment_hash_from_rows(rows)
+        except (TypeError, ValueError):
+            continue
+        if (
+            candidate.get("selectable") is True
+            and candidate.get("stage2_feasible") is True
+            and candidate.get("canonical_evaluation_feasible") is True
+            and candidate.get("accounting_reconciliation_passed") is True
+            and candidate.get("physical_validation_feasible") is True
+            and candidate.get("served_trip_count") == 264
+            and candidate.get("unserved_trip_count") == 0
+            and len(rows) == 264
+            and candidate.get("fallback_used") is False
+            and candidate.get("repair_used") is False
+            and math.isfinite(numeric_cost)
+        ):
+            selectable_hashes.add(physical_hash)
+    return sorted(selectable_hashes)
 
 
 def _powertrain_selector_is_disabled(
@@ -1413,6 +1507,9 @@ def _confirmation_gate(run_dir: Path, expected_sha: str) -> dict[str, Any]:
     if selected_index <= 0 or selected_index > len(candidate_rows):
         raise RuntimeError("normal confirmation lacks a valid selected candidate index")
     selected = dict(candidate_rows[selected_index - 1])
+    worker_selectable_candidate_hashes = _worker_selectable_candidate_hashes(
+        candidates
+    )
     selected_physical_hash = assignment_hash_from_rows(
         selected.get("vehicle_trip_assignments") or ()
     )
@@ -1450,6 +1547,9 @@ def _confirmation_gate(run_dir: Path, expected_sha: str) -> dict[str, Any]:
             int(candidates.get("requested_candidate_limit") or 0) >= 22
             and int(candidates.get("composition_search_radius_requested") or 0)
             >= 4
+        ),
+        "worker_selectable_candidate_coverage_passed": (
+            len(worker_selectable_candidate_hashes) >= 12
         ),
         "frozen_runtime_controls_preserved": (
             runtime_controls.get("scope") == "research_batch_run"
@@ -1513,6 +1613,10 @@ def _confirmation_gate(run_dir: Path, expected_sha: str) -> dict[str, Any]:
             "cost_breakdown.total_cost"
         ),
         "candidate_count_evaluated": candidates.get("candidate_count_evaluated"),
+        "worker_selectable_candidate_count": len(
+            worker_selectable_candidate_hashes
+        ),
+        "worker_selectable_candidate_hashes": worker_selectable_candidate_hashes,
         "worker_frontend_request": frontend_request,
         "worker_frontend_request_sha256": _canonical_hash(frontend_request),
         "prepared_input_id": rolling.get("prepared_input_id"),
@@ -1605,9 +1709,13 @@ def confirm_normal_runs(
         _write_json(case_dir / "confirmation_gate.json", results[code])
     matrix = _read_json(output_dir / "cross_weather_fixed_dispatch_matrix.json")
     expected = dict(matrix.get("selected") or {})
-    selectable_counts = require_selectable_assignment_coverage(
+    fixed_dispatch_selectable_counts = require_selectable_assignment_coverage(
         matrix.get("rows") or ()
     )
+    selectable_counts = {
+        code: int(results[code]["worker_selectable_candidate_count"])
+        for code in SCENARIOS
+    }
     copied_requests = {
         code: _read_json(
             confirmation_dir / code / "frontend_optimization_request.json"
@@ -1646,6 +1754,9 @@ def confirm_normal_runs(
         "pure_ice_aggregate_B_executed": False,
         "winner_matches_fixed_dispatch_diagnosis": winner_checks,
         "selectable_assignment_count_by_scenario": selectable_counts,
+        "fixed_dispatch_matrix_selectable_assignment_count_by_scenario": (
+            fixed_dispatch_selectable_counts
+        ),
         "submitted_request_matches_worker_raw_body": worker_request_checks,
         "scenarios": results,
         "progress_log": progress_log,
@@ -2126,6 +2237,12 @@ def finalize_normal_confirmation(
             "existing bundle hash verification failed before finalization: "
             f"{source_bundle_verification}"
         )
+    discovery_manifest = _read_json(
+        output_dir / "candidate_discovery_manifest.json"
+    )
+    discovery_artifact_verification = _verify_candidate_discovery_artifacts(
+        discovery_manifest
+    )
     run_dirs = {"SUNNY": sunny_run_dir.resolve(), "RAIN": rain_run_dir.resolve()}
     execution_shas = {
         code: str(
@@ -2151,9 +2268,13 @@ def finalize_normal_confirmation(
     }
     matrix = _read_json(output_dir / "cross_weather_fixed_dispatch_matrix.json")
     expected = dict(matrix.get("selected") or {})
-    selectable_counts = require_selectable_assignment_coverage(
+    fixed_dispatch_selectable_counts = require_selectable_assignment_coverage(
         matrix.get("rows") or ()
     )
+    selectable_counts = {
+        code: int(results[code]["worker_selectable_candidate_count"])
+        for code in SCENARIOS
+    }
     winner_checks = {
         code: results[code]["selected_physical_assignment_hash"]
         == str(dict(expected.get(code) or {}).get("assignment_hash") or "")
@@ -2181,10 +2302,22 @@ def finalize_normal_confirmation(
             "submitted confirmation request differs from worker raw body: "
             f"{worker_request_checks}"
         )
-    controls_equal = all(
-        worker_requests["SUNNY"].get(key) == worker_requests["RAIN"].get(key)
-        for key in FIXED_CONFIRMATION_REQUEST_CONTROL_KEYS
+    normalized_copied_requests = {
+        code: normalize_confirmation_request(copied_requests[code])
+        for code in SCENARIOS
+    }
+    normalized_worker_requests = {
+        code: normalize_confirmation_request(worker_requests[code])
+        for code in SCENARIOS
+    }
+    request_control_payloads = {
+        code: confirmation_request_control_payload(worker_requests[code])
+        for code in SCENARIOS
+    }
+    controls_equal = (
+        request_control_payloads["SUNNY"] == request_control_payloads["RAIN"]
     )
+    fixed_request_control_keys = sorted(request_control_payloads["SUNNY"])
     effective_control_keys = sorted(
         set(results["SUNNY"]["effective_solver_controls"])
         | set(results["RAIN"]["effective_solver_controls"])
@@ -2230,17 +2363,27 @@ def finalize_normal_confirmation(
         "finalization_git_dirty": finalization_dirty,
         "public_endpoint": "/api/scenarios/{scenario_id}/run-optimization",
         "source_bundle_verification": source_bundle_verification,
+        "candidate_discovery_artifact_verification": (
+            discovery_artifact_verification
+        ),
         "selectable_assignment_count_by_scenario": selectable_counts,
+        "fixed_dispatch_matrix_selectable_assignment_count_by_scenario": (
+            fixed_dispatch_selectable_counts
+        ),
         "submitted_request_matches_worker_raw_body": worker_request_checks,
         "submitted_request_sha256": {
-            code: _canonical_hash(copied_requests[code]) for code in SCENARIOS
+            code: _canonical_hash(normalized_copied_requests[code])
+            for code in SCENARIOS
         },
         "worker_raw_request_sha256": {
-            code: _canonical_hash(worker_requests[code]) for code in SCENARIOS
+            code: _canonical_hash(normalized_worker_requests[code])
+            for code in SCENARIOS
         },
+        "request_hash_semantics": "normalized_RunOptimizationBody_v1",
         "fixed_request_controls_equal": controls_equal,
-        "fixed_request_control_keys": list(
-            FIXED_CONFIRMATION_REQUEST_CONTROL_KEYS
+        "fixed_request_control_keys": fixed_request_control_keys,
+        "request_scenario_specific_keys": list(
+            CONFIRMATION_REQUEST_SCENARIO_SPECIFIC_KEYS
         ),
         "effective_solver_controls_equal": effective_controls_equal,
         "effective_solver_control_keys": effective_control_keys,
