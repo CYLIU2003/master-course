@@ -1,9 +1,7 @@
 name: Research code validation
 
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   validate-python-311:

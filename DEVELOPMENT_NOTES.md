@@ -1,5 +1,20 @@
 # Development Notes
 
+## 2026-08-29 (Asia/Tokyo): GitHub research validation made manual-only
+
+- Changed `.github/workflows/research-validation.yml` from automatic `push`
+  and `pull_request` triggers to `workflow_dispatch` only. This prevents the
+  full Python 3.11 compile/focused/full-suite job from consuming Actions time
+  on every update while retaining an explicit on-demand validation path.
+- This scheduling change does not weaken the repository's local validation or
+  research acceptance gates. Code/evidence changes are still compiled and
+  tested before publication, and a manually triggered GitHub run remains
+  available when an independent Python 3.11 result is required.
+- Added a regression that fails if automatic push or pull-request triggers are
+  reintroduced without an explicit policy change.
+- Pre-freeze validation passed: Python compilation, `26` focused tests,
+  `1614` full-suite tests, and `git diff --check`.
+
 ## 2026-08-29 (Asia/Tokyo): Case-A confirmation re-audit
 
 - Automated PR re-review found four fail-open evidence conditions after the

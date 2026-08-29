@@ -8,6 +8,14 @@ The reviewer-facing scope, checks, and open decisions are in
 [THESIS_EXTERNAL_REVIEW_BRIEF.md](docs/notes/THESIS_EXTERNAL_REVIEW_BRIEF.md);
 that brief is a request for independent review, not an approval record.
 
+## GitHub validation policy
+
+The expensive Python 3.11 research-validation workflow is manual-only. It no
+longer runs automatically on pushes or pull-request updates. When a remote
+validation run is needed, start **Research code validation** from the GitHub
+Actions page with **Run workflow**. Local focused and full-suite validation
+remain required before publishing research-code or evidence changes.
+
 ## Current 2026-08-28 weather-dispatch diagnosis
 
 The previously identical SUNNY/RAIN incumbent was caused by insufficient

@@ -1,5 +1,16 @@
 # Current research release blockers
 
+## 2026-08-29 (Asia/Tokyo): remote validation scheduling policy
+
+The expensive Python 3.11 research-validation workflow is now manual-only via
+`workflow_dispatch`; pushes and pull-request updates no longer start it
+automatically. This is a cost/noise control and does not make a local test pass,
+solver completion, or research acceptance optional. Each published research
+change must still record its local compile/focused/full-suite evidence, and a
+manual GitHub run can be requested when an independent Python 3.11 check is
+needed. This scheduling policy does not change the active numerical or release
+blockers below.
+
 ## 2026-08-29 (Asia/Tokyo): Case-A confirmation evidence re-audited
 
 Read-only finalization at clean SHA `3401ad8ece31b4459bd8ecf3e1d4e95212b0f630`
