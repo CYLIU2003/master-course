@@ -16,7 +16,10 @@ import json
 import math
 import os
 from pathlib import Path
+import shutil
+import tempfile
 from typing import Any, Iterable, Mapping, Sequence
+from uuid import uuid4
 
 
 SCHEMA_VERSION = "thesis_weather_result_package_v1"
@@ -519,6 +522,7 @@ def _validate_bundle(bundle: EvidenceBundle) -> None:
         _require(scenario.accounting["terminal_energy_balanced"] is True, f"{code}: energy")
         _require(scenario.accounting["bess_terminal_energy_balanced"] is True, f"{code}: BESS")
         _require(scenario.accounting["executed_slot_count"] == 96, f"{code}: slots")
+        _validate_selected_candidate_evidence(scenario)
         _assert_close(
             float(scenario.costs["total_cost"]),
             float(row["executed_day_cost_jpy"]),
@@ -542,6 +546,87 @@ def _validate_bundle(bundle: EvidenceBundle) -> None:
         "SUNNY and RAIN selected the same physical assignment hash",
     )
     _validate_shared_inputs(sunny, rain, bundle.input_contract)
+
+
+def _validate_selected_candidate_evidence(scenario: ScenarioEvidence) -> None:
+    """Reconcile every rendered day-ahead selection field to its source row."""
+
+    code = scenario.code
+    summary = scenario.summary
+    envelope = scenario.selected_candidate
+    candidate = _required_field(envelope, "selected_candidate", f"{code} candidate")
+    gate = scenario.confirmation_gate
+    selected_index = _required_field(
+        envelope,
+        "selected_candidate_index",
+        f"{code} candidate",
+    )
+    _require(
+        selected_index
+        == _required_field(candidate, "candidate_index", f"{code} selected candidate")
+        == _required_field(gate, "selected_candidate_index", f"{code} confirmation gate"),
+        f"{code}: selected candidate index differs across evidence",
+    )
+    for envelope_key, summary_key in (
+        ("candidate_count_evaluated", "candidate_count_evaluated"),
+        ("feasible_candidate_count", "feasible_candidate_count"),
+    ):
+        _require(
+            _required_field(envelope, envelope_key, f"{code} candidate")
+            == _required_field(summary, summary_key, f"{code} summary"),
+            f"{code}: {summary_key} differs from selected-candidate evidence",
+        )
+    _require(
+        envelope["candidate_count_evaluated"]
+        == _required_field(gate, "candidate_count_evaluated", f"{code} confirmation gate"),
+        f"{code}: evaluated candidate count differs from confirmation gate",
+    )
+    for key in ("used_bev", "used_ice", "bev_trips", "ice_trips"):
+        _require(
+            _required_field(candidate, key, f"{code} selected candidate")
+            == _required_field(summary, key, f"{code} summary"),
+            f"{code}: {key} differs from selected-candidate evidence",
+        )
+    _assert_close(
+        float(
+            _required_field(
+                candidate,
+                "stage2_actual_canonical_cost_jpy",
+                f"{code} selected candidate",
+            )
+        ),
+        float(_required_field(summary, "day_ahead_selected_cost_jpy", f"{code} summary")),
+        f"{code}: day-ahead selected candidate cost",
+    )
+    _assert_close(
+        float(
+            _required_field(
+                gate,
+                "day_ahead_selected_canonical_actual_cost_jpy",
+                f"{code} confirmation gate",
+            )
+        ),
+        float(summary["day_ahead_selected_cost_jpy"]),
+        f"{code}: confirmation-gate selected candidate cost",
+    )
+    _require(
+        _required_field(candidate, "assignment_hash", f"{code} selected candidate")
+        == _required_field(
+            gate,
+            "selected_internal_assignment_hash",
+            f"{code} confirmation gate",
+        ),
+        f"{code}: internal assignment identifier differs",
+    )
+    _require(
+        _required_field(summary, "selected_physical_assignment_sha256", f"{code} summary")
+        == _required_field(
+            gate,
+            "selected_physical_assignment_hash",
+            f"{code} confirmation gate",
+        ),
+        f"{code}: physical assignment identifier differs",
+    )
 
 
 def _validate_energy_balance(scenario: ScenarioEvidence) -> None:
@@ -1469,20 +1554,17 @@ def _validate_existing_output(output_dir: Path) -> None:
     _validate_package_inventory(output_dir)
 
 
-def build_package(
-    evidence_dir: Path,
-    output_dir: Path,
-    parameter_evidence_dir: Path | None = None,
+def _build_package_in_empty_target(
+    bundle: EvidenceBundle,
+    target: Path,
 ) -> Path:
-    """Validate source evidence and build the complete deterministic package."""
+    """Build and validate a package in a private empty staging directory."""
 
-    bundle = load_and_validate_bundle(evidence_dir, parameter_evidence_dir)
     _renderer_versions()
     before_hashes = dict(bundle.source_hashes)
     before_parameter_hashes = dict(bundle.parameter_source_hashes)
-    target = output_dir.resolve()
-    _validate_existing_output(target)
     target.mkdir(parents=True, exist_ok=True)
+    _require(not any(target.iterdir()), f"Staging directory is not empty: {target}")
 
     artifacts: list[Path] = []
     parameter_rows = _parameter_rows(bundle)
@@ -1527,6 +1609,43 @@ def build_package(
     )
     _validate_package_inventory(target)
     return manifest_path
+
+
+def build_package(
+    evidence_dir: Path,
+    output_dir: Path,
+    parameter_evidence_dir: Path | None = None,
+) -> Path:
+    """Build safely, replacing the target only after staged validation passes."""
+
+    bundle = load_and_validate_bundle(evidence_dir, parameter_evidence_dir)
+    target = output_dir.resolve()
+    _validate_existing_output(target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(
+        tempfile.mkdtemp(
+            prefix=f".{target.name}.staging-",
+            dir=target.parent,
+        )
+    )
+    backup = target.parent / f".{target.name}.backup-{uuid4().hex}"
+    target_was_present = target.exists()
+    try:
+        _build_package_in_empty_target(bundle, staging)
+        if target_was_present:
+            target.replace(backup)
+        try:
+            staging.replace(target)
+        except Exception:
+            if target_was_present and backup.exists() and not target.exists():
+                backup.replace(target)
+            raise
+        if backup.exists():
+            shutil.rmtree(backup)
+        return target / "package_manifest.json"
+    finally:
+        if staging.exists():
+            shutil.rmtree(staging, ignore_errors=True)
 
 
 def main() -> int:

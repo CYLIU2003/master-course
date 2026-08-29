@@ -66,6 +66,14 @@
 
   ```powershell
   .\.venv\Scripts\python.exe -m pip install -r requirements-reporting-lock.txt
+  $fontPath = Join-Path $env:TEMP "NotoSansJP-VF-Sans2.004.ttf"
+  Invoke-WebRequest `
+    -Uri "https://raw.githubusercontent.com/notofonts/noto-cjk/Sans2.004/Sans/Variable/TTF/Subset/NotoSansJP-VF.ttf" `
+    -OutFile $fontPath
+  $expectedFontHash = "f4b373b226668ee33a6e54b02823dcd2d1209f17159f777421ae8c2275160369"
+  $actualFontHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $fontPath).Hash.ToLowerInvariant()
+  if ($actualFontHash -ne $expectedFontHash) { throw "Noto Sans JP SHA-256 mismatch: $actualFontHash" }
+  $env:THESIS_JAPANESE_FONT_PATH = $fontPath
   .\.venv\Scripts\python.exe scripts\verify_thesis_weather_result_package.py `
     --evidence-dir docs\evidence\weather_dispatch_rerun_bb0c005 `
     --parameter-evidence-dir docs\evidence\weather_dispatch_rerun_bb0c005_parameter_sources `
@@ -156,10 +164,18 @@
   The reporting-focused suite passed `24 passed in 7.99s`; exact regeneration,
   compilation, README navigation (`3 passed`), and diff hygiene passed. The
   complete repository suite passed `1643 passed in 182.63s`.
-  After integrating the final PR #7 research hardening at `8721cba`, the
-  combined focused reporting/evidence/contract suite passed `145 passed in
-  12.21s`, exact package verification passed, and the combined complete suite
-  passed `1657 passed in 177.11s`. The package remains 24 files and 1,084,538
+  After integrating the final PR #7 research hardening at `8721cba`, a final
+  reporting review added four more fail-closed safeguards. The reproduction
+  block now acquires and verifies the pinned font. Intentional regeneration is
+  built and fully validated in a private sibling staging directory before the
+  existing package is replaced, so a late rendering failure leaves the prior
+  package byte-exact. Selected-candidate cost, candidate counts, fleet/trip
+  counts, indices, and internal/physical assignment identifiers must reconcile
+  with `result_summary.json` and `confirmation_gate.json`. The current handoff
+  now records the integrated validation evidence.
+  The combined focused reporting/evidence/contract suite passed `147 passed in
+  12.17s`, exact package verification passed, and the combined complete suite
+  passed `1659 passed in 180.39s`. The package remains 24 files and 1,084,538
   bytes with unchanged source, parameter-source, and package-manifest hashes.
 
 ## 2026-08-29 (Asia/Tokyo): formal Phase-3 provenance review hardening

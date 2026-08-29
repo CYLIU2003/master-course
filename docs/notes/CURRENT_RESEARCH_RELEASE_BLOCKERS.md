@@ -11,9 +11,13 @@ documents the pinned font acquisition plus exact verification before any
 intentional regeneration. The frozen numerical evidence is unchanged; fresh
 validation passed: 24 reporting-focused tests, exact regeneration, compilation,
 3 README-navigation tests, diff hygiene, and the complete 1,643-test suite.
-After final PR #7 integration at `8721cba`, the combined focused suite passes
-145 tests and the combined complete suite passes 1,657 tests; exact package
-verification still passes and all package bytes remain stable.
+After final PR #7 integration at `8721cba`, the builder also reconciles all
+selected-candidate counts, costs, fleet/trip counts, indices, and assignment
+identifiers to the summary and confirmation gate. Replacement packages are
+fully built and validated in a private sibling directory; a late failure leaves
+the previous package byte-exact. The combined focused suite passes 147 tests and
+the complete suite passes 1,659 tests; exact package verification still passes
+and all package bytes remain stable.
 
 This changes only reporting reproducibility metadata and instructions. The
 canonical `bb0c005` evidence bytes, numerical tables, figures, certified gaps,

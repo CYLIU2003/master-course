@@ -5,6 +5,7 @@ from hashlib import sha256
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 
@@ -106,6 +107,37 @@ def test_builder_loads_and_validates_both_canonical_scenarios() -> None:
     assert rain.costs["pv_generated_kwh"] == pytest.approx(996.2)
     assert sunny.rolling["step_count"] == rain.rolling["step_count"] == 24
     assert sunny.accounting["eligible"] is rain.accounting["eligible"] is True
+
+
+def test_selected_candidate_evidence_is_reconciled_with_summary(
+    tmp_path: Path,
+) -> None:
+    evidence = tmp_path / "weather_dispatch_rerun_bb0c005"
+    shutil.copytree(EVIDENCE_ROOT, evidence)
+    summary_path = evidence / "result_summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["scenarios"]["RAIN"]["day_ahead_selected_cost_jpy"] += 1.0
+    summary_path.write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    hash_index_path = evidence / "artifact_hashes.json"
+    hash_index = json.loads(hash_index_path.read_text(encoding="utf-8"))
+    hash_index["sha256"] = {
+        name: digest
+        for name, digest in _hash_inventory(evidence).items()
+        if name != "artifact_hashes.json"
+    }
+    hash_index_path.write_text(
+        json.dumps(hash_index, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        builder.EvidenceValidationError,
+        match="RAIN: day-ahead selected candidate cost",
+    ):
+        builder.load_and_validate_bundle(evidence, PARAMETER_SOURCE_ROOT)
 
 
 def test_configured_japanese_font_path_fails_closed_when_missing(
@@ -309,6 +341,25 @@ def test_builder_rejects_stale_preexisting_output(tmp_path: Path) -> None:
 
     with pytest.raises(builder.EvidenceValidationError, match="Output inventory differs"):
         builder.build_package(EVIDENCE_ROOT, output)
+
+
+def test_failed_rebuild_leaves_existing_package_byte_exact(
+    generated_packages: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output, _ = generated_packages
+    before = _hash_inventory(output)
+
+    def fail_after_tables_are_staged():
+        raise builder.EvidenceValidationError("intentional rendering failure")
+
+    monkeypatch.setattr(builder, "_configure_matplotlib", fail_after_tables_are_staged)
+    with pytest.raises(builder.EvidenceValidationError, match="rendering failure"):
+        builder.build_package(EVIDENCE_ROOT, output, PARAMETER_SOURCE_ROOT)
+
+    assert _hash_inventory(output) == before
+    assert not list(output.parent.glob(f".{output.name}.staging-*"))
+    assert not list(output.parent.glob(f".{output.name}.backup-*"))
 
 
 def test_parameter_snapshot_schema_errors_are_domain_specific(tmp_path: Path) -> None:
