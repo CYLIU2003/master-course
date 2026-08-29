@@ -44,7 +44,12 @@ The candidate union no longer follows the frozen aggregate metrics' unindexed
 `run_dir` pointers: because the sealed metrics contain no vehicle-trip rows,
 those ten historical A runs are inventory-only and contribute zero recovered
 candidates. Discovery outputs are sealed immediately and re-hashed before
-union, cross-evaluation, or finalization. Finalization normalizes both the
+union, cross-evaluation, or finalization; the derived candidate union and
+fixed-dispatch matrix are likewise sealed at their producer boundary and
+verified by every later stage. Runtime decomposition never dereferences the
+recorded external `run_dir`, candidate accounting independently recomputes all
+12 canonical cost components within `1e-6 JPY`, and formal BEV frontier bounds
+use only the requested depot. Finalization normalizes both the
 submitted copy and worker-persisted body through the public request model,
 compares every normalized SUNNY/RAIN control except the declared
 scenario-specific `prepared_input_id`, and requires each public worker run

@@ -36,8 +36,10 @@ from bff.routers.optimization import (
     _prepared_active_bev_count_or_http_error,
     _public_run_enforces_interactive_runtime_controls,
 )
+from src.optimization.common.evaluator import CostBreakdown
 from src.optimization.milp.solver_adapter import (
     _EXACT_ICE_CLONE_REPRESENTATION_OVERRIDE,
+    _cost_breakdown_accounting_reconciliation,
     _phase3_candidate_selection_key,
 )
 
@@ -465,6 +467,14 @@ def test_finalization_inventory_hashes_submitted_confirmation_requests(
         "cross_weather_fixed_dispatch_matrix.json",
     ):
         _write_json(output_dir / name, {})
+    diagnosis._write_artifact_seal(
+        output_dir / "weather_candidate_union.json",
+        output_dir / "weather_candidate_union.seal.json",
+    )
+    diagnosis._write_artifact_seal(
+        output_dir / "cross_weather_fixed_dispatch_matrix.json",
+        output_dir / "cross_weather_fixed_dispatch_matrix.seal.json",
+    )
     for code in ("SUNNY", "RAIN"):
         discovery_run = tmp_path / f"discovery-{code}"
         discovery_scenarios[code] = {"run_dir": str(discovery_run)}
@@ -513,6 +523,11 @@ def test_finalization_inventory_hashes_submitted_confirmation_requests(
         confirmation_dir_name=confirmation_dir_name,
     )
     sunny_request = inventory["artifacts"]["confirmation_request/SUNNY"]
+    assert "diagnosis/weather_candidate_union.seal.json" in inventory["artifacts"]
+    assert (
+        "diagnosis/cross_weather_fixed_dispatch_matrix.seal.json"
+        in inventory["artifacts"]
+    )
     assert sunny_request["path"] == str(
         (
             output_dir
@@ -931,6 +946,114 @@ def test_runtime_analysis_ignores_unindexed_case_metrics(tmp_path: Path) -> None
     assert diagnosis._indexed_case_metrics_paths(bundle) == [indexed.resolve()]
 
 
+def test_runtime_row_never_follows_recorded_external_run_dir(tmp_path: Path) -> None:
+    poison_run_dir = tmp_path / "must-not-be-read"
+    _write_json(
+        poison_run_dir / "solver_result.json",
+        {"solver_metadata": {"stage1_runtime_seconds": 999999.0}},
+    )
+    metrics_path = (
+        tmp_path / "scenarios" / "SUNNY" / "runs" / "01_A_discrete"
+        / "case_metrics.json"
+    )
+    _write_json(
+        metrics_path,
+        {
+            "run_dir": str(poison_run_dir),
+            "provenance": {"representation": "discrete"},
+            "timing": {
+                "complete_model_build_time_sec": 10.0,
+                "total_solver_time_sec": 50.0,
+                "cost_stage_solve_time_sec": 5.0,
+            },
+            "execution": {"parent_observed_wall_time_sec": 80.0},
+            "solve_outcome": {
+                "solver_status": "TIME_LIMIT",
+                "requested_gap_reached_time_sec": None,
+            },
+            "runtime_control_validation": {
+                "required": {"stage1_stage2_candidate_limit": 22}
+            },
+        },
+    )
+
+    row = diagnosis._runtime_row(metrics_path)
+
+    assert row["runtime_source"] == "indexed_case_metrics_only"
+    assert row["source_run_dir_recorded_not_followed"] == str(poison_run_dir)
+    assert row["stage1_runtime_sec"] == pytest.approx(45.0)
+    assert row["stage2_runtime_sec"] == pytest.approx(5.0)
+    assert row["candidate_pool_generated"] == 22
+    assert row["rolling_runtime_sec"] is None
+    assert row["stage1_energy_recourse_enabled"] is None
+    assert row["reporting_accounting_artifact_residual_sec"] == pytest.approx(20.0)
+
+
+@pytest.mark.parametrize(
+    ("artifact_name", "seal_name"),
+    (
+        ("weather_candidate_union.json", "weather_candidate_union.seal.json"),
+        (
+            "cross_weather_fixed_dispatch_matrix.json",
+            "cross_weather_fixed_dispatch_matrix.seal.json",
+        ),
+    ),
+)
+def test_derived_stage_handoff_rejects_tampering(
+    tmp_path: Path,
+    artifact_name: str,
+    seal_name: str,
+) -> None:
+    artifact_path = tmp_path / artifact_name
+    seal_path = tmp_path / seal_name
+    _write_json(artifact_path, {"accepted": True})
+    diagnosis._write_artifact_seal(artifact_path, seal_path)
+    _write_json(artifact_path, {"accepted": False})
+
+    with pytest.raises(RuntimeError, match="changed after sealing"):
+        diagnosis._verify_artifact_seal(artifact_path, seal_path)
+
+
+def test_cross_evaluation_rejects_tampered_candidate_union(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    union_path = tmp_path / "weather_candidate_union.json"
+    seal_path = tmp_path / "weather_candidate_union.seal.json"
+    _write_json(union_path, {"candidates": []})
+    diagnosis._write_artifact_seal(union_path, seal_path)
+    _write_json(union_path, {"candidates": [{"tampered": True}]})
+    monkeypatch.setattr(diagnosis, "_assert_clean_sha", lambda *_args: "sha")
+
+    with pytest.raises(RuntimeError, match="changed after sealing"):
+        diagnosis.cross_evaluate(tmp_path)
+
+
+def test_case_a_audit_rejects_tampered_fixed_dispatch_matrix(
+    tmp_path: Path,
+) -> None:
+    _write_json(tmp_path / "candidate_discovery_manifest.json", {})
+    union_path = tmp_path / "weather_candidate_union.json"
+    _write_json(union_path, {"candidates": []})
+    diagnosis._write_artifact_seal(
+        union_path,
+        tmp_path / "weather_candidate_union.seal.json",
+    )
+    matrix_path = tmp_path / "cross_weather_fixed_dispatch_matrix.json"
+    _write_json(matrix_path, {"rows": []})
+    diagnosis._write_artifact_seal(
+        matrix_path,
+        tmp_path / "cross_weather_fixed_dispatch_matrix.seal.json",
+    )
+    _write_json(matrix_path, {"rows": [{"tampered": True}]})
+
+    with pytest.raises(RuntimeError, match="changed after sealing"):
+        diagnosis.build_case_a_candidate_selection_audit(
+            output_dir=tmp_path,
+            confirmation_manifest={},
+        )
+
+
 def test_prepared_active_bev_count_uses_exact_materialized_vehicle_set(
     tmp_path: Path,
 ) -> None:
@@ -990,6 +1113,68 @@ def test_prepared_active_bev_count_uses_exact_materialized_vehicle_set(
         },
     )
     assert _prepared_active_bev_count(solver_input) == 2
+
+
+def test_prepared_active_bev_count_is_scoped_to_requested_depot(
+    tmp_path: Path,
+) -> None:
+    solver_input = tmp_path / "solver_input.json"
+    vehicles = []
+    for depot_id, count in (("dep-1", 2), ("dep-2", 1)):
+        for index in range(count):
+            vehicles.append(
+                {
+                    "id": f"{depot_id}-bev-{index}",
+                    "depotId": depot_id,
+                    "type": "BEV",
+                    "powertrain": "BEV",
+                    "available": True,
+                    "batteryKwh": 314.0,
+                    "energyConsumption": 1.316,
+                    "initialSoc": 0.5,
+                    "chargePowerKw": 90.0,
+                    "compatibleChargerIds": [f"{depot_id}-charger"],
+                }
+            )
+    _write_json(
+        solver_input,
+        {"depot_ids": ["dep-1", "dep-2"], "vehicles": vehicles},
+    )
+
+    assert _prepared_active_bev_count(solver_input, depot_id="dep-1") == 2
+    assert _prepared_active_bev_count(solver_input, depot_id="dep-2") == 1
+
+
+def test_candidate_accounting_reconciliation_recomputes_all_components() -> None:
+    breakdown = CostBreakdown(
+        electricity_cost=1.0,
+        fuel_cost=2.0,
+        demand_cost=3.0,
+        contract_overage_cost=4.0,
+        vehicle_cost=5.0,
+        vehicle_usage_cost=6.0,
+        driver_cost=7.0,
+        unserved_penalty=8.0,
+        switch_cost=9.0,
+        degradation_cost=10.0,
+        deviation_cost=11.0,
+        co2_cost=12.0,
+        total_cost=78.0,
+    )
+    recomputed, delta, passed = _cost_breakdown_accounting_reconciliation(
+        breakdown
+    )
+    assert recomputed == pytest.approx(78.0)
+    assert delta == pytest.approx(0.0)
+    assert passed is True
+
+    tampered = CostBreakdown(electricity_cost=1.0, total_cost=2.0)
+    recomputed, delta, passed = _cost_breakdown_accounting_reconciliation(
+        tampered
+    )
+    assert recomputed == pytest.approx(1.0)
+    assert delta == pytest.approx(-1.0)
+    assert passed is False
 
 
 def test_prepared_active_bev_count_rejects_missing_powertrain(tmp_path: Path) -> None:

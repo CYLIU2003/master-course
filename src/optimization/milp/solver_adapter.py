@@ -18,7 +18,7 @@ from src.dispatch.route_band import duty_route_band_ids, fragment_transition_dia
 from src.gurobi_runtime import ensure_gurobi, is_gurobi_available
 from src.objective_modes import normalize_objective_mode
 from src.optimization.common.cost_components import normalize_cost_component_flags
-from src.optimization.common.evaluator import CostEvaluator
+from src.optimization.common.evaluator import CostBreakdown, CostEvaluator
 from src.optimization.common.feasibility import FeasibilityChecker
 from src.optimization.common.seed_fingerprint import (
     phase4_seed_plan_fingerprint,
@@ -89,6 +89,40 @@ def _phase3_candidate_selection_key(
     """Return the deterministic canonical Phase-3 candidate ordering key."""
 
     return float(candidate[0]), int(candidate[1]), str(candidate[2])
+
+
+_CANDIDATE_ACCOUNTING_TOLERANCE_JPY = 1.0e-6
+
+
+def _cost_breakdown_accounting_reconciliation(
+    breakdown: CostBreakdown,
+) -> Tuple[float, float, bool]:
+    """Independently recompute the canonical accounting total."""
+
+    recomputed_total = sum(
+        float(value)
+        for value in (
+            breakdown.electricity_cost,
+            breakdown.fuel_cost,
+            breakdown.demand_cost,
+            breakdown.contract_overage_cost,
+            breakdown.vehicle_cost,
+            breakdown.vehicle_usage_cost,
+            breakdown.driver_cost,
+            breakdown.unserved_penalty,
+            breakdown.switch_cost,
+            breakdown.degradation_cost,
+            breakdown.deviation_cost,
+            breakdown.co2_cost,
+        )
+    )
+    delta = recomputed_total - float(breakdown.total_cost)
+    passed = bool(
+        math.isfinite(recomputed_total)
+        and math.isfinite(delta)
+        and abs(delta) <= _CANDIDATE_ACCOUNTING_TOLERANCE_JPY
+    )
+    return recomputed_total, delta, passed
 
 
 @contextmanager
@@ -20271,6 +20305,11 @@ class GurobiMILPAdapter:
                         "feasible": False,
                         "stage2_feasible": False,
                         "canonical_evaluation_feasible": False,
+                        "accounting_recomputed_total_jpy": None,
+                        "accounting_reconciliation_delta_jpy": None,
+                        "accounting_reconciliation_tolerance_jpy": (
+                            _CANDIDATE_ACCOUNTING_TOLERANCE_JPY
+                        ),
                         "accounting_reconciliation_passed": False,
                         "physical_validation_feasible": False,
                         "served_trip_count": 0,
@@ -20343,6 +20382,9 @@ class GurobiMILPAdapter:
             )
             canonical_cost: Optional[float] = None
             evaluation_feasible = False
+            accounting_recomputed_total: Optional[float] = None
+            accounting_reconciliation_delta: Optional[float] = None
+            accounting_components_reconcile = False
             physical_validation_feasible = False
             physical_validation_errors: Tuple[str, ...] = ()
             if candidate_feasible:
@@ -20358,6 +20400,11 @@ class GurobiMILPAdapter:
                     candidate_problem,
                     candidate_final_plan,
                 )
+                (
+                    accounting_recomputed_total,
+                    accounting_reconciliation_delta,
+                    accounting_components_reconcile,
+                ) = _cost_breakdown_accounting_reconciliation(breakdown)
                 evaluation_feasible = bool(breakdown.evaluation_feasible)
                 if evaluation_feasible:
                     canonical_cost = float(breakdown.total_cost)
@@ -20493,6 +20540,7 @@ class GurobiMILPAdapter:
                 evaluation_feasible
                 and canonical_cost is not None
                 and math.isfinite(canonical_cost)
+                and accounting_components_reconcile
             )
             selectable = bool(
                 candidate_feasible
@@ -20558,6 +20606,15 @@ class GurobiMILPAdapter:
                     "stage2_feasible": candidate_feasible,
                     "canonical_evaluation_feasible": (
                         evaluation_feasible
+                    ),
+                    "accounting_recomputed_total_jpy": (
+                        accounting_recomputed_total
+                    ),
+                    "accounting_reconciliation_delta_jpy": (
+                        accounting_reconciliation_delta
+                    ),
+                    "accounting_reconciliation_tolerance_jpy": (
+                        _CANDIDATE_ACCOUNTING_TOLERANCE_JPY
                     ),
                     "accounting_reconciliation_passed": (
                         accounting_reconciliation_passed

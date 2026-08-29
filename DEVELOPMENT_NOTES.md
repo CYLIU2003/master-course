@@ -81,6 +81,21 @@
   The related focused suite passed `128 passed in 1.85s`, the candidate-model
   regression passed `20 passed in 0.81s`, and the complete repository suite
   passed `1643 passed in 176.23s`.
+- The subsequent exact-HEAD review closed four additional P1 paths without a
+  solver rerun. The derived candidate union and fixed-dispatch matrix are
+  sealed immediately after production and verified before every consumer;
+  candidate accounting independently sums all 12 canonical cost components
+  within `1e-6 JPY`; Fresh Prepare BEV counts are restricted to the requested
+  execution depot; and runtime decomposition uses only indexed
+  `case_metrics.json` fields, never dereferencing the recorded external
+  `run_dir`. Missing Rolling, recourse, incumbent-update, and evaluated-pool
+  timing remains explicitly unindexed/null rather than inferred. The two
+  frozen scenario contracts and numerical evidence remain byte-unchanged.
+  The expanded focused regression passed `135` tests, including direct
+  consumer-level union/matrix tamper rejection. Read-only execution
+  reverified all `103` frozen bundle artifacts and analyzed exactly `20`
+  indexed runs; the complete repository suite passed `1650 passed in
+  172.19s`.
 
 ## 2026-08-29 (Asia/Tokyo): fresh public-path SUNNY/RAIN rerun at `bb0c005`
 

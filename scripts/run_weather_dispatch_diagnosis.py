@@ -151,6 +151,30 @@ def _artifact_identity(path: Path) -> dict[str, Any]:
     }
 
 
+def _write_artifact_seal(path: Path, seal_path: Path) -> dict[str, Any]:
+    """Seal one derived artifact immediately after its producer writes it."""
+
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "artifact": _artifact_identity(path),
+    }
+    _write_json(seal_path, payload)
+    return payload
+
+
+def _verify_artifact_seal(path: Path, seal_path: Path) -> dict[str, Any]:
+    """Fail closed when a derived stage handoff changed after production."""
+
+    expected = dict(_read_json(seal_path).get("artifact") or {})
+    observed = _artifact_identity(path)
+    if expected != observed:
+        raise RuntimeError(
+            "derived artifact changed after sealing: "
+            f"path={observed['path']}, expected={expected}, observed={observed}"
+        )
+    return observed
+
+
 def _sealed_discovery_run_artifacts(run_dir: Path) -> dict[str, dict[str, Any]]:
     """Seal every discovery artifact consumed by later diagnosis stages."""
 
@@ -221,7 +245,9 @@ def _finalization_input_artifacts(
     for name in (
         "candidate_discovery_manifest.json",
         "weather_candidate_union.json",
+        "weather_candidate_union.seal.json",
         "cross_weather_fixed_dispatch_matrix.json",
+        "cross_weather_fixed_dispatch_matrix.seal.json",
     ):
         add(f"diagnosis/{name}", output_dir / name)
 
@@ -545,37 +571,30 @@ def _verify_existing_bundle(bundle: Path) -> dict[str, Any]:
     }
 
 
-def _rolling_runtime(source_run_dir: Path) -> float | None:
-    path = source_run_dir / "rolling_hourly_chain" / "rolling_chain_summary.json"
-    if not path.is_file():
-        return None
-    steps = list(_read_json(path).get("steps") or ())
-    values = [float(step.get("elapsed_seconds") or 0.0) for step in steps]
-    return sum(values) if values else None
-
-
-def _source_solver_metadata(source_run_dir: Path) -> dict[str, Any]:
-    path = source_run_dir / "solver_result.json"
-    return dict(_read_json(path).get("solver_metadata") or {}) if path.is_file() else {}
-
-
 def _runtime_row(metrics_path: Path) -> dict[str, Any]:
+    """Build one runtime row exclusively from an indexed case_metrics artifact."""
+
     metrics = _read_json(metrics_path)
-    source_run_dir = Path(str(metrics.get("run_dir") or ""))
-    solver = _source_solver_metadata(source_run_dir)
     timing = dict(metrics.get("timing") or {})
     outcome = dict(metrics.get("solve_outcome") or {})
     model = dict(metrics.get("model_size") or {})
     execution = dict(metrics.get("execution") or {})
-    recourse = dict(solver.get("stage1_time_indexed_energy_recourse_result") or {})
-    rolling_runtime = _rolling_runtime(source_run_dir)
+    runtime_controls = dict(metrics.get("runtime_control_validation") or {})
+    required_controls = dict(runtime_controls.get("required") or {})
     wall = execution.get("parent_observed_wall_time_sec", timing.get("runner_wall_time_sec"))
+    total_solver_runtime = timing.get("total_solver_time_sec")
+    stage2_runtime = timing.get("cost_stage_solve_time_sec")
+    stage1_runtime = None
+    if total_solver_runtime is not None and stage2_runtime is not None:
+        stage1_runtime = max(
+            float(total_solver_runtime) - float(stage2_runtime),
+            0.0,
+        )
     measured = sum(
         float(value or 0.0)
         for value in (
             timing.get("complete_model_build_time_sec"),
-            timing.get("total_solver_time_sec"),
-            rolling_runtime,
+            total_solver_runtime,
         )
     )
     residual = max(float(wall) - measured, 0.0) if wall is not None else None
@@ -584,7 +603,8 @@ def _runtime_row(metrics_path: Path) -> dict[str, Any]:
         "scenario": scenario,
         "representation": dict(metrics.get("provenance") or {}).get("representation"),
         "run_label": metrics_path.parent.name,
-        "source_run_dir": str(source_run_dir),
+        "source_run_dir_recorded_not_followed": metrics.get("run_dir"),
+        "runtime_source": "indexed_case_metrics_only",
         "model_build_time_sec": timing.get("complete_model_build_time_sec"),
         "pre_presolve_variables": model.get("total_variables"),
         "pre_presolve_binary_variables": model.get("binary_variables"),
@@ -597,34 +617,39 @@ def _runtime_row(metrics_path: Path) -> dict[str, Any]:
         "root_relaxation_time_sec": timing.get("root_relaxation_time_sec"),
         "root_bound_jpy": outcome.get("root_relaxation_bound_jpy"),
         "first_incumbent_time_sec": timing.get("first_incumbent_time_sec"),
-        "incumbent_update_count": solver.get("incumbent_count"),
+        "incumbent_update_count": None,
         "node_count": outcome.get("explored_nodes"),
         "lp_iteration_count": outcome.get("root_lp_iterations"),
-        "stage1_termination_reason": solver.get("stage1_termination_reason"),
+        "stage1_termination_reason": outcome.get("solver_status") or "not_separately_instrumented",
         "requested_gap_reached": outcome.get("requested_gap_reached_time_sec") is not None,
-        "candidate_pool_generated": solver.get("stage1_distinct_candidate_count") or 1,
-        "stage2_candidate_count_evaluated": solver.get("stage1_stage2_candidate_count_evaluated") or 1,
-        "stage1_runtime_sec": solver.get("stage1_runtime_seconds"),
-        "stage2_runtime_sec": solver.get("stage2_runtime_seconds", timing.get("cost_stage_solve_time_sec")),
-        "rolling_runtime_sec": rolling_runtime,
+        "candidate_pool_generated": required_controls.get("stage1_stage2_candidate_limit"),
+        "stage2_candidate_count_evaluated": None,
+        "stage1_runtime_sec": stage1_runtime,
+        "stage2_runtime_sec": stage2_runtime,
+        "rolling_runtime_sec": None,
+        "rolling_runtime_availability": "not_indexed_in_frozen_bundle",
         "runner_wall_time_sec": wall,
         "reporting_accounting_artifact_residual_sec": residual,
-        "reporting_residual_semantics": "wall_minus_model_build_minus_solver_minus_rolling;not_separately_instrumented",
+        "reporting_residual_semantics": (
+            "wall_minus_model_build_minus_solver;includes_rolling_reporting_"
+            "accounting_and_other_uninstrumented_time"
+        ),
         "raw_best_bound_jpy": outcome.get("raw_gurobi_bound_jpy"),
         "analytical_lower_bound_jpy": outcome.get("independent_certified_lower_bound_jpy"),
         "certified_best_bound_jpy": outcome.get("certified_best_bound_jpy"),
         "incumbent_jpy": outcome.get("incumbent_objective_jpy"),
         "raw_gap_ratio": outcome.get("raw_gurobi_gap_ratio"),
         "certified_gap_ratio": outcome.get("certified_gap_ratio"),
-        "stage1_energy_recourse_enabled": recourse.get("enabled"),
-        "stage1_energy_recourse_objective_jpy": recourse.get("objective_jpy"),
-        "stage1_energy_recourse_input_hash": recourse.get("recourse_input_hash"),
-        "stage1_energy_recourse_charge_input_kwh": recourse.get("charge_input_kwh"),
-        "stage1_energy_recourse_grid_import_kwh": recourse.get("grid_import_kwh"),
-        "stage1_energy_recourse_pv_to_bus_kwh": recourse.get("pv_to_bus_kwh"),
-        "stage1_energy_recourse_pv_to_bess_kwh": recourse.get("pv_to_bess_kwh"),
-        "stage1_energy_recourse_bess_to_bus_kwh": recourse.get("bess_to_bus_kwh"),
-        "stage1_energy_recourse_pv_curtailment_kwh": recourse.get("pv_curtailment_kwh"),
+        "stage1_energy_recourse_availability": "not_indexed_in_frozen_bundle",
+        "stage1_energy_recourse_enabled": None,
+        "stage1_energy_recourse_objective_jpy": None,
+        "stage1_energy_recourse_input_hash": None,
+        "stage1_energy_recourse_charge_input_kwh": None,
+        "stage1_energy_recourse_grid_import_kwh": None,
+        "stage1_energy_recourse_pv_to_bus_kwh": None,
+        "stage1_energy_recourse_pv_to_bess_kwh": None,
+        "stage1_energy_recourse_bess_to_bus_kwh": None,
+        "stage1_energy_recourse_pv_curtailment_kwh": None,
     }
 
 
@@ -1002,6 +1027,10 @@ def build_candidate_union(
         "candidates": unique,
     }
     _write_json(output_dir / "weather_candidate_union.json", payload)
+    _write_artifact_seal(
+        output_dir / "weather_candidate_union.json",
+        output_dir / "weather_candidate_union.seal.json",
+    )
     _write_csv(
         output_dir / "weather_candidate_union.csv",
         [
@@ -1225,6 +1254,10 @@ def _fixed_dispatch_evaluation(
 
 def cross_evaluate(output_dir: Path) -> dict[str, Any]:
     evaluation_git_sha = _assert_clean_sha()
+    _verify_artifact_seal(
+        output_dir / "weather_candidate_union.json",
+        output_dir / "weather_candidate_union.seal.json",
+    )
     unique = list(_read_json(output_dir / "weather_candidate_union.json").get("candidates") or ())
     discovery = _read_json(output_dir / "candidate_discovery_manifest.json")
     _verify_candidate_discovery_artifacts(discovery)
@@ -1288,6 +1321,10 @@ def cross_evaluate(output_dir: Path) -> dict[str, Any]:
     }
     _assert_clean_sha(evaluation_git_sha)
     _write_json(output_dir / "cross_weather_fixed_dispatch_matrix.json", payload)
+    _write_artifact_seal(
+        output_dir / "cross_weather_fixed_dispatch_matrix.json",
+        output_dir / "cross_weather_fixed_dispatch_matrix.seal.json",
+    )
     _write_csv(output_dir / "cross_weather_fixed_dispatch_matrix.csv", matrix_rows)
     md = [
         "# Cross-weather fixed-dispatch matrix",
@@ -1707,6 +1744,10 @@ def confirm_normal_runs(
             **_confirmation_gate(run_dir, frozen_sha),
         }
         _write_json(case_dir / "confirmation_gate.json", results[code])
+    _verify_artifact_seal(
+        output_dir / "cross_weather_fixed_dispatch_matrix.json",
+        output_dir / "cross_weather_fixed_dispatch_matrix.seal.json",
+    )
     matrix = _read_json(output_dir / "cross_weather_fixed_dispatch_matrix.json")
     expected = dict(matrix.get("selected") or {})
     fixed_dispatch_selectable_counts = require_selectable_assignment_coverage(
@@ -1774,6 +1815,14 @@ def build_case_a_candidate_selection_audit(
     """Persist the six fail-closed Case-A candidate/selection checks."""
 
     discovery = _read_json(output_dir / "candidate_discovery_manifest.json")
+    _verify_artifact_seal(
+        output_dir / "weather_candidate_union.json",
+        output_dir / "weather_candidate_union.seal.json",
+    )
+    _verify_artifact_seal(
+        output_dir / "cross_weather_fixed_dispatch_matrix.json",
+        output_dir / "cross_weather_fixed_dispatch_matrix.seal.json",
+    )
     union = _read_json(output_dir / "weather_candidate_union.json")
     matrix = _read_json(output_dir / "cross_weather_fixed_dispatch_matrix.json")
     matrix_rows = list(matrix.get("rows") or ())
@@ -2242,6 +2291,10 @@ def finalize_normal_confirmation(
     )
     discovery_artifact_verification = _verify_candidate_discovery_artifacts(
         discovery_manifest
+    )
+    _verify_artifact_seal(
+        output_dir / "cross_weather_fixed_dispatch_matrix.json",
+        output_dir / "cross_weather_fixed_dispatch_matrix.seal.json",
     )
     run_dirs = {"SUNNY": sunny_run_dir.resolve(), "RAIN": rain_run_dir.resolve()}
     execution_shas = {

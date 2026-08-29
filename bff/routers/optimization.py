@@ -14001,7 +14001,11 @@ def _apply_research_phase3_candidate_coverage_policy_or_http_error(
         ) from exc
 
 
-def _prepared_active_bev_count(solver_input_path: Path) -> int:
+def _prepared_active_bev_count(
+    solver_input_path: Path,
+    *,
+    depot_id: str | None = None,
+) -> int:
     """Count BEVs in the exact vehicle set materialized by Prepare."""
 
     payload = json.loads(solver_input_path.read_text(encoding="utf-8"))
@@ -14013,7 +14017,12 @@ def _prepared_active_bev_count(solver_input_path: Path) -> int:
     scope_depot_ids = (
         list(scope.get("depot_ids") or []) if isinstance(scope, dict) else []
     )
-    selected_depot_ids = list(payload.get("depot_ids") or scope_depot_ids)
+    requested_depot_id = str(depot_id or "").strip()
+    selected_depot_ids = (
+        [requested_depot_id]
+        if requested_depot_id
+        else list(payload.get("depot_ids") or scope_depot_ids)
+    )
     try:
         contract = resolve_scenario_fleet_contract(
             payload,
@@ -14032,11 +14041,15 @@ def _prepared_active_bev_count(solver_input_path: Path) -> int:
     return int(contract.inventory_by_powertrain.get("BEV", 0))
 
 
-def _prepared_active_bev_count_or_http_error(solver_input_path: Path) -> int:
+def _prepared_active_bev_count_or_http_error(
+    solver_input_path: Path,
+    *,
+    depot_id: str | None = None,
+) -> int:
     """Translate formal prepared-fleet contract failures to public validation."""
 
     try:
-        return _prepared_active_bev_count(solver_input_path)
+        return _prepared_active_bev_count(solver_input_path, depot_id=depot_id)
     except ValueError as exc:
         raise HTTPException(
             status_code=422,
@@ -14212,7 +14225,8 @@ def run_optimization(
     active_bev_count = None
     if request.research_run and normalized_requested_mode == "phase3_two_stage":
         active_bev_count = _prepared_active_bev_count_or_http_error(
-            Path(prep.solver_input_path)
+            Path(prep.solver_input_path),
+            depot_id=request.depot_id,
         )
     request = _apply_research_phase3_candidate_coverage_policy_or_http_error(
         request,

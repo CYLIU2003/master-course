@@ -47,6 +47,20 @@ numerical result was changed or rerun. The related focused regression passed
 128 tests, the candidate-model regression passed 20 tests, and the complete
 repository suite passed 1,643 tests.
 
+The exact-HEAD follow-up closes four more next-run-only P1 findings. Derived
+candidate-union and fixed-dispatch-matrix JSON handoffs now have producer-time
+size/SHA-256 seals that every later stage verifies. Worker candidate
+accounting eligibility now requires an independent 12-component recomputation
+within `1e-6 JPY`, not merely a finite reported total. The formal BEV frontier
+uses only the requested depot's materialized fleet. Frozen runtime analysis
+uses only fields inside indexed `case_metrics.json`; recorded external
+`run_dir` paths are retained as non-followed provenance, and unavailable
+Rolling/recourse data remains null. The expanded focused regression passed 135
+tests, including direct consumer-level union/matrix tamper rejection, and a
+read-only 103-artifact/20-run bundle audit passed. The complete repository
+suite passed 1,650 tests. No scenario, frozen result, or canonical evidence
+was rewritten, and no formal solver experiment was run.
+
 The scenario audit retained the exact intended counterfactual: SUNNY
 `771d115b-75b0-49f7-a7f0-25f259a2cd21` uses 2025-08-05 service/weather/PV;
 RAIN `b23fd26c-1233-4c73-bb9e-bdb8b1584760` keeps the same 2025-08-05 WEEKDAY
