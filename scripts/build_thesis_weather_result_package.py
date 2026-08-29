@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from hashlib import sha256
 import json
 import math
+import os
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -698,6 +699,20 @@ def _configure_matplotlib() -> tuple[Any, str]:
     matplotlib.rcParams["svg.hashsalt"] = SCHEMA_VERSION
     matplotlib.rcParams["svg.fonttype"] = "none"
     from matplotlib import font_manager, pyplot as plt
+
+    configured_font = os.environ.get("THESIS_JAPANESE_FONT_PATH")
+    if configured_font:
+        configured_path = Path(configured_font).expanduser().resolve()
+        _require(
+            configured_path.is_file(),
+            f"THESIS_JAPANESE_FONT_PATH is not a file: {configured_path}",
+        )
+        configured_family = font_manager.FontProperties(fname=configured_path).get_name()
+        _require(
+            configured_family == "Noto Sans JP",
+            "THESIS_JAPANESE_FONT_PATH must identify Noto Sans JP",
+        )
+        font_manager.fontManager.addfont(configured_path)
 
     font_name = ""
     for candidate in ("Noto Sans JP", "Meiryo"):

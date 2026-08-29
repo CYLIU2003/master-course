@@ -70,7 +70,8 @@
   explicit: the earlier focused command combined four new package tests with
   three pre-existing published-evidence tests. The current change adds seven
   tests total (four package tests plus three parameter-source tests), deletes
-  none, and moves collection from the recorded 1,617-test base to 1,624.
+  none, and initially moved collection from the recorded 1,617-test base to
+  1,624. The CI-font regression below adds one more test, for 1,625 total.
 - Python 3.11 is not installed locally. The first manual remote validation
   correctly failed because Git for Windows normalized the new parameter-source
   manifest from LF to CRLF, invalidating its exact-byte SHA-256. The supplement
@@ -78,7 +79,16 @@
   evidence directories, and the four original CRLF run files were re-staged
   as exact binary blobs. Clean checkouts therefore preserve the mixed original
   byte contract: LF for the generated manifest and CRLF for the copied run
-  artifacts. No workflow definition was changed.
+  artifacts.
+- The second Python 3.11 run passed byte provenance and the focused contract
+  suite, then correctly refused to render Japanese figures because the hosted
+  runner had neither Noto Sans JP nor Meiryo. The manual workflow now downloads
+  the official Noto CJK `Sans2.004` Japanese variable font from its pinned tag,
+  verifies SHA-256
+  `f4b373b226668ee33a6e54b02823dcd2d1209f17159f777421ae8c2275160369`,
+  and exposes only that file through `THESIS_JAPANESE_FONT_PATH`. The builder
+  verifies the file exists and identifies as Noto Sans JP; it does not fall
+  back to a font that would corrupt Japanese glyphs.
 - The unchanged evidence tree SHA-256 is
   `c706da7e10bc4e99a06a441f91e1722baa971b41ab936d29db36e650accede5f`.
   The six-file parameter supplement tree SHA-256 is

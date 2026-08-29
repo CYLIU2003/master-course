@@ -14,7 +14,10 @@ The expensive Python 3.11 research-validation workflow is manual-only. It no
 longer runs automatically on pushes or pull-request updates. When a remote
 validation run is needed, start **Research code validation** from the GitHub
 Actions page with **Run workflow**. Local focused and full-suite validation
-remain required before publishing research-code or evidence changes.
+remain required before publishing research-code or evidence changes. The
+workflow downloads Noto Sans JP from the official pinned `Sans2.004` tag,
+verifies its SHA-256, and passes that exact file to the thesis figure builder;
+missing or substituted Japanese fonts remain a fail-closed error.
 
 ## Current 2026-08-29 fresh SUNNY/RAIN rerun
 

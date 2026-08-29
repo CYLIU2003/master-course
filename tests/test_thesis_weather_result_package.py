@@ -91,6 +91,20 @@ def test_builder_loads_and_validates_both_canonical_scenarios() -> None:
     assert sunny.accounting["eligible"] is rain.accounting["eligible"] is True
 
 
+def test_configured_japanese_font_path_fails_closed_when_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    missing_font = tmp_path / "missing-NotoSansJP.ttf"
+    monkeypatch.setenv("THESIS_JAPANESE_FONT_PATH", str(missing_font))
+
+    with pytest.raises(
+        builder.EvidenceValidationError,
+        match="THESIS_JAPANESE_FONT_PATH is not a file",
+    ):
+        builder._configure_matplotlib()
+
+
 def test_generated_package_is_byte_deterministic_and_complete(
     generated_packages: tuple[Path, Path],
 ) -> None:
