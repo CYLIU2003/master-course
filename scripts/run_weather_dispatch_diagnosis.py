@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import math
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import statistics
 import sys
 import time
@@ -128,6 +128,8 @@ FIXED_CONFIRMATION_REQUEST_CONTROL_KEYS = (
     "rolling_execution_minutes",
     "service_id",
     "depot_id",
+    "rebuild_dispatch",
+    "use_existing_duties",
 )
 
 REQUIRED_EFFECTIVE_FRONTIER_CONTROLS = {
@@ -208,13 +210,7 @@ def _finalization_input_artifacts(
             add(f"candidate_discovery_run/{code}/{name}", discovery_run_dir / name)
 
         baseline_path = next(
-            iter(
-                sorted(
-                    existing_bundle.glob(
-                        f"scenarios/{code}/runs/*_A_discrete/case_metrics.json"
-                    )
-                )
-            ),
+            iter(_indexed_a_case_metrics_paths(existing_bundle, scenario=code)),
             None,
         )
         if baseline_path is None:
@@ -257,18 +253,37 @@ def _canonical_hash(payload: Any) -> str:
 def assignment_hash_from_rows(rows: Iterable[Mapping[str, Any]]) -> str:
     """Hash the physical vehicle-trip assignment, independent of row order."""
 
-    normalized = sorted(
-        (
-            str(row.get("trip_id") or ""),
-            str(row.get("vehicle_id") or ""),
-            str(row.get("duty_id") or ""),
-            str(row.get("powertrain") or "").upper(),
-        )
-        for row in rows
-    )
-    if not normalized or any(not trip_id or not vehicle_id for trip_id, vehicle_id, _, _ in normalized):
+    normalized: list[tuple[str, str]] = []
+    duty_vehicles: dict[str, str] = {}
+    vehicle_powertrains: dict[str, str] = {}
+    for row in rows:
+        trip_id = str(row.get("trip_id") or "")
+        vehicle_id = str(row.get("vehicle_id") or "")
+        duty_id = str(row.get("duty_id") or "")
+        powertrain = str(row.get("powertrain") or "").upper()
+        normalized.append((trip_id, vehicle_id))
+        if duty_id:
+            existing_vehicle = duty_vehicles.setdefault(duty_id, vehicle_id)
+            if existing_vehicle != vehicle_id:
+                raise ValueError(
+                    f"assignment duty {duty_id!r} maps to multiple vehicles"
+                )
+        if powertrain:
+            existing_powertrain = vehicle_powertrains.setdefault(
+                vehicle_id,
+                powertrain,
+            )
+            if existing_powertrain != powertrain:
+                raise ValueError(
+                    f"assignment vehicle {vehicle_id!r} has inconsistent powertrain"
+                )
+    normalized.sort()
+    if not normalized or any(
+        not trip_id or not vehicle_id
+        for trip_id, vehicle_id in normalized
+    ):
         raise ValueError("assignment rows require non-empty trip_id and vehicle_id")
-    if len({trip_id for trip_id, *_ in normalized}) != len(normalized):
+    if len({trip_id for trip_id, _ in normalized}) != len(normalized):
         raise ValueError("assignment rows contain duplicate trip IDs")
     return _canonical_hash(normalized)
 
@@ -390,22 +405,71 @@ def validate_fixed_dispatch_evidence(
     }
 
 
-def _verify_existing_bundle(bundle: Path) -> dict[str, Any]:
+def _indexed_bundle_artifacts(bundle: Path) -> dict[str, tuple[Path, str]]:
+    """Resolve only hash-indexed artifacts inside the frozen bundle root."""
+
     index = _read_json(bundle / "artifact_hashes.json")
     expected = dict(index.get("sha256") or {})
+    root = bundle.resolve()
+    artifacts: dict[str, tuple[Path, str]] = {}
+    for relative, expected_hash in expected.items():
+        relative_path = PurePosixPath(str(relative))
+        if relative_path.is_absolute() or ".." in relative_path.parts:
+            raise RuntimeError(f"invalid frozen artifact path: {relative!r}")
+        path = (root / Path(*relative_path.parts)).resolve()
+        if path != root and root not in path.parents:
+            raise RuntimeError(f"frozen artifact escapes bundle: {relative!r}")
+        artifacts[str(relative_path)] = (path, str(expected_hash))
+    return artifacts
+
+
+def _indexed_case_metrics_paths(bundle: Path) -> list[Path]:
+    """Return case metrics explicitly sealed by the frozen hash index."""
+
+    artifacts = _indexed_bundle_artifacts(bundle)
+    return [
+        artifacts[relative][0]
+        for relative in sorted(artifacts)
+        if PurePosixPath(relative).match(
+            "scenarios/*/runs/*/case_metrics.json"
+        )
+    ]
+
+
+def _indexed_a_case_metrics_paths(
+    bundle: Path,
+    *,
+    scenario: str | None = None,
+) -> list[Path]:
+    """Return only indexed discrete-A case metrics, optionally by scenario."""
+
+    root = bundle.resolve()
+    pattern = (
+        f"scenarios/{scenario}/runs/*_A_discrete/case_metrics.json"
+        if scenario is not None
+        else "scenarios/*/runs/*_A_discrete/case_metrics.json"
+    )
+    return [
+        path
+        for path in _indexed_case_metrics_paths(bundle)
+        if PurePosixPath(path.relative_to(root).as_posix()).match(pattern)
+    ]
+
+
+def _verify_existing_bundle(bundle: Path) -> dict[str, Any]:
+    artifacts = _indexed_bundle_artifacts(bundle)
     mismatches = []
-    for relative, expected_hash in sorted(expected.items()):
-        path = bundle / relative
+    for relative, (path, expected_hash) in sorted(artifacts.items()):
         observed = _sha256_file(path) if path.is_file() else None
         if observed != expected_hash:
             mismatches.append(
                 {"path": relative, "expected": expected_hash, "observed": observed}
             )
     return {
-        "indexed_artifact_count": len(expected),
+        "indexed_artifact_count": len(artifacts),
         "hash_mismatch_count": len(mismatches),
         "hash_mismatches": mismatches,
-        "accepted": len(expected) == 103 and not mismatches,
+        "accepted": len(artifacts) == 103 and not mismatches,
     }
 
 
@@ -517,7 +581,7 @@ def analyze_existing_bundle(bundle: Path, output_dir: Path) -> dict[str, Any]:
     verification = _verify_existing_bundle(bundle)
     if not verification["accepted"]:
         raise RuntimeError(f"existing bundle hash verification failed: {verification}")
-    metrics_paths = sorted(bundle.glob("scenarios/*/runs/*/case_metrics.json"))
+    metrics_paths = _indexed_case_metrics_paths(bundle)
     rows = [_runtime_row(path) for path in metrics_paths]
     runtime_payload = {
         "schema_version": SCHEMA_VERSION,
@@ -768,9 +832,7 @@ def _load_existing_a_candidates(existing_bundle: Path) -> list[dict[str, Any]]:
 
     candidates: list[dict[str, Any]] = []
     counts = {code: 0 for code in SCENARIOS}
-    for case_metrics_path in sorted(
-        existing_bundle.glob("scenarios/*/runs/*_A_discrete/case_metrics.json")
-    ):
+    for case_metrics_path in _indexed_a_case_metrics_paths(existing_bundle):
         metrics = _read_json(case_metrics_path)
         source_scenario = case_metrics_path.parents[2].name.upper()
         if source_scenario not in counts:
@@ -1835,13 +1897,7 @@ def build_confirmation_input_contract(
     final_hashes_by_scenario: dict[str, dict[str, Any]] = {}
     for code in SCENARIOS:
         baseline_path = next(
-            iter(
-                sorted(
-                    existing_bundle.glob(
-                        f"scenarios/{code}/runs/*_A_discrete/case_metrics.json"
-                    )
-                )
-            ),
+            iter(_indexed_a_case_metrics_paths(existing_bundle, scenario=code)),
             None,
         )
         if baseline_path is None:

@@ -2,13 +2,16 @@
 
 ## 2026-08-29 (Asia/Tokyo): post-run provenance review findings closed in code
 
-Three fail-closed gaps found during review are corrected for the next formal
-run: the Stage-1 BEV frontier is bounded by the Fresh Prepare vehicle set; the
+Seven fail-closed gaps found during review are corrected for the next formal
+run: the Stage-1 BEV frontier is scaled and bounded by the Fresh Prepare
+vehicle set; the
 strict finalizer inventories the request actually submitted for each weather
-scenario; and selected-candidate fleet/hash tie-break evidence reaches public
-solver metadata. Focused regression passed 50 tests.
-The complete repository suite passed 1,622 tests; Python compilation and diff
-hygiene also passed.
+scenario and compares its dispatch-construction switches; physical assignment
+hashes ignore incidental duty labels while validating label consistency;
+runtime analysis reads only hash-indexed frozen artifacts; and selected-candidate
+fleet/hash tie-break evidence reaches public solver metadata. Fresh validation
+passed: 84 focused contract/evidence tests and the complete 1,626-test suite.
+Python compilation, README navigation, and diff hygiene also pass.
 
 This is code-hardening evidence only. It does not mutate the frozen `bb0c005`
 SUNNY/RAIN artifacts, rerun a solver, reduce their certified gaps, or clear the

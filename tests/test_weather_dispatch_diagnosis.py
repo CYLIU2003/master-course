@@ -169,6 +169,36 @@ def test_assignment_hash_deduplication_uses_physical_assignment() -> None:
     }
 
 
+def test_physical_assignment_hash_ignores_duty_labels() -> None:
+    first = _assignment("bev-1")
+    relabelled = [{**first[0], "duty_id": "reconstructed-duty"}]
+
+    assert assignment_hash_from_rows(first) == assignment_hash_from_rows(relabelled)
+
+
+def test_physical_assignment_hash_rejects_inconsistent_labels() -> None:
+    with pytest.raises(ValueError, match="maps to multiple vehicles"):
+        assignment_hash_from_rows(
+            [
+                *_assignment("bev-1", "trip-1"),
+                {
+                    **_assignment("bev-2", "trip-2")[0],
+                    "duty_id": "duty-bev-1",
+                },
+            ]
+        )
+    with pytest.raises(ValueError, match="inconsistent powertrain"):
+        assignment_hash_from_rows(
+            [
+                *_assignment("bev-1", "trip-1"),
+                {
+                    **_assignment("bev-1", "trip-2")[0],
+                    "powertrain": "ICE",
+                },
+            ]
+        )
+
+
 def test_fallback_repair_and_accounting_mismatch_are_not_selectable() -> None:
     assert not candidate_is_selectable(_candidate("fallback", 1.0, fallback_used=True))
     assert not candidate_is_selectable(_candidate("repair", 1.0, repair_used=True))
@@ -240,6 +270,15 @@ def _fleet_validation(fleet_hash: str) -> dict:
     }
 
 
+def _seal_existing_bundle(bundle: Path) -> None:
+    artifacts = {
+        path.relative_to(bundle).as_posix(): diagnosis._sha256_file(path)
+        for path in bundle.rglob("*")
+        if path.is_file() and path.name != "artifact_hashes.json"
+    }
+    _write_json(bundle / "artifact_hashes.json", {"sha256": artifacts})
+
+
 def test_confirmation_input_contract_fails_when_mandatory_baseline_hash_is_missing(
     tmp_path: Path,
 ) -> None:
@@ -270,6 +309,7 @@ def test_confirmation_input_contract_fails_when_mandatory_baseline_hash_is_missi
             "canonical_input_hashes": {},
         }
 
+    _seal_existing_bundle(existing_bundle)
     with pytest.raises(RuntimeError, match="baseline lacks mandatory input hashes"):
         build_confirmation_input_contract(
             output_dir=tmp_path / "out",
@@ -310,6 +350,7 @@ def test_confirmation_input_contract_fails_when_mandatory_final_hash_is_missing(
             "canonical_input_hashes": {},
         }
 
+    _seal_existing_bundle(existing_bundle)
     with pytest.raises(RuntimeError, match="lacks frozen-A input hashes"):
         build_confirmation_input_contract(
             output_dir=tmp_path / "out",
@@ -372,6 +413,7 @@ def test_confirmation_input_contract_rejects_changed_fleet_contract(
             "vehicle_input_hash": hashes["vehicle_hash"],
         }
 
+    _seal_existing_bundle(existing_bundle)
     with pytest.raises(RuntimeError, match="fleet_contract_hash"):
         build_confirmation_input_contract(
             output_dir=tmp_path / "out",
@@ -445,6 +487,7 @@ def test_finalization_inventory_hashes_submitted_confirmation_requests(
             {"source": "submitted", "scenario": code},
         )
 
+    _seal_existing_bundle(existing_bundle)
     _write_json(
         output_dir / "candidate_discovery_manifest.json",
         {"scenarios": discovery_scenarios},
@@ -579,8 +622,46 @@ def test_formal_phase3_frontier_is_bounded_by_prepared_active_bev_count() -> Non
         requested,
         available_bev_count=8,
     )
-    assert effective.stage1_bev_frontier_min_count == 8
+    assert effective.stage1_bev_frontier_min_count == 4
     assert effective.stage1_bev_frontier_max_count == 8
+
+
+def test_confirmation_compares_dispatch_construction_controls() -> None:
+    assert {"rebuild_dispatch", "use_existing_duties"}.issubset(
+        diagnosis.FIXED_CONFIRMATION_REQUEST_CONTROL_KEYS
+    )
+
+
+def test_runtime_analysis_ignores_unindexed_case_metrics(tmp_path: Path) -> None:
+    bundle = tmp_path / "bundle"
+    indexed = (
+        bundle
+        / "scenarios"
+        / "SUNNY"
+        / "runs"
+        / "01_A_discrete"
+        / "case_metrics.json"
+    )
+    extra = (
+        bundle
+        / "scenarios"
+        / "SUNNY"
+        / "runs"
+        / "stale_A_discrete"
+        / "case_metrics.json"
+    )
+    _write_json(indexed, {"indexed": True})
+    _write_json(extra, {"indexed": False})
+    _write_json(
+        bundle / "artifact_hashes.json",
+        {
+            "sha256": {
+                indexed.relative_to(bundle).as_posix(): diagnosis._sha256_file(indexed)
+            }
+        },
+    )
+
+    assert diagnosis._indexed_case_metrics_paths(bundle) == [indexed.resolve()]
 
 
 def test_prepared_active_bev_count_uses_exact_materialized_vehicle_set(

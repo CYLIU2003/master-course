@@ -3,9 +3,10 @@
 ## 2026-08-29 (Asia/Tokyo): formal Phase-3 provenance review hardening
 
 - Formal public-path Phase-3 candidate coverage now derives its BEV frontier
-  bounds from the exact vehicle array materialized by Fresh Prepare. A fleet
-  with fewer BEVs than the default 15--35 range is therefore bounded to its
-  actual active BEV count instead of evaluating impossible composition counts.
+  bounds from the exact vehicle array materialized by Fresh Prepare. The
+  default 15--35 interval is proportionally scaled when the exact fleet has
+  fewer than 35 active BEVs (for example, 4--8 for an eight-BEV fleet), so the
+  policy covers lower compositions instead of collapsing to an all-BEV target.
 - Read-only SUNNY/RAIN finalization now hashes and compares the actual
   per-scenario `frontend_optimization_request.json` submitted to the public
   endpoint. The earlier Fresh Prepare request template remains provenance, but
@@ -18,6 +19,18 @@
 - These changes do not alter or relabel the frozen `bb0c005` numerical
   evidence. A future formal run must start from a new clean frozen commit and
   produce new artifacts before the new code can support a research claim.
+- Final review further aligned the diagnostic with physical semantics: the
+  assignment hash now contains only `(trip_id, vehicle_id)` while separately
+  rejecting duty-to-multiple-vehicle and vehicle-to-multiple-powertrain
+  inconsistencies. Runtime decomposition reads only `case_metrics.json` paths
+  sealed by the frozen bundle hash index, so stale unindexed runs cannot alter
+  medians. Normal confirmation now compares `rebuild_dispatch` and
+  `use_existing_duties` from the actual submitted requests. These are next-run
+  fail-closed changes only and do not relabel the frozen `bb0c005` results.
+  The combined diagnosis, public-path, published-evidence, and fleet-contract
+  regression passed `84 passed in 3.31s`; the complete repository suite passed
+  `1626 passed in 170.96s`. Python compilation, README navigation, and diff
+  hygiene are checked before publication.
 
 ## 2026-08-29 (Asia/Tokyo): fresh public-path SUNNY/RAIN rerun at `bb0c005`
 
