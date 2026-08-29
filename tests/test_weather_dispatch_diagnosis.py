@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import sys
 
+from fastapi import HTTPException
 import pytest
 
 import scripts.run_weather_dispatch_diagnosis as diagnosis
@@ -27,6 +28,7 @@ from bff.routers.optimization import (
     RunOptimizationBody,
     _apply_research_phase3_candidate_coverage_policy,
     _prepared_active_bev_count,
+    _prepared_active_bev_count_or_http_error,
     _public_run_enforces_interactive_runtime_controls,
 )
 from src.optimization.milp.solver_adapter import (
@@ -174,6 +176,17 @@ def test_physical_assignment_hash_ignores_duty_labels() -> None:
     relabelled = [{**first[0], "duty_id": "reconstructed-duty"}]
 
     assert assignment_hash_from_rows(first) == assignment_hash_from_rows(relabelled)
+
+
+def test_physical_assignment_hash_matches_production_tuple_order() -> None:
+    rows = [
+        *_assignment("bev-b", "trip-a"),
+        *_assignment("bev-a", "trip-b"),
+    ]
+
+    assert assignment_hash_from_rows(rows) == diagnosis._canonical_hash(
+        [("bev-a", "trip-b"), ("bev-b", "trip-a")]
+    )
 
 
 def test_physical_assignment_hash_rejects_inconsistent_labels() -> None:
@@ -560,6 +573,33 @@ def test_all_stage_runs_strict_finalizer(
     assert finalized["rain_run_dir"] == tmp_path / "rain-run"
 
 
+def test_direct_finalization_rejects_unverified_frozen_bundle(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        diagnosis,
+        "_verify_existing_bundle",
+        lambda _bundle: {
+            "indexed_artifact_count": 103,
+            "hash_mismatch_count": 1,
+            "hash_mismatches": [{"path": "corrupt.json"}],
+            "accepted": False,
+        },
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="hash verification failed before finalization",
+    ):
+        diagnosis.finalize_normal_confirmation(
+            output_dir=tmp_path / "output",
+            sunny_run_dir=tmp_path / "sunny",
+            rain_run_dir=tmp_path / "rain",
+            existing_bundle=tmp_path / "bundle",
+        )
+
+
 def test_tie_break_is_used_fleet_then_assignment_hash() -> None:
     selected = select_canonical_candidate(
         [
@@ -624,6 +664,22 @@ def test_formal_phase3_frontier_is_bounded_by_prepared_active_bev_count() -> Non
     )
     assert effective.stage1_bev_frontier_min_count == 4
     assert effective.stage1_bev_frontier_max_count == 8
+
+
+def test_formal_phase3_rejects_inverted_requested_frontier() -> None:
+    requested = RunOptimizationBody(
+        mode="phase3_two_stage",
+        research_run=True,
+        stage1_bev_frontier_enabled=False,
+        stage1_bev_frontier_min_count=50,
+        stage1_bev_frontier_max_count=20,
+    )
+
+    with pytest.raises(ValueError, match="min_count must be <="):
+        _apply_research_phase3_candidate_coverage_policy(
+            requested,
+            available_bev_count=20,
+        )
 
 
 def test_confirmation_compares_dispatch_construction_controls() -> None:
@@ -765,6 +821,26 @@ def test_prepared_active_bev_count_rejects_implicit_availability(
     )
     with pytest.raises(ValueError, match="vehicle availability is required"):
         _prepared_active_bev_count(solver_input)
+
+
+def test_prepared_fleet_contract_failure_is_public_validation_error(
+    tmp_path: Path,
+) -> None:
+    solver_input = tmp_path / "solver_input.json"
+    _write_json(
+        solver_input,
+        {
+            "depot_ids": ["dep-1"],
+            "vehicles": [
+                {"id": "unknown", "depotId": "dep-1", "available": True}
+            ],
+        },
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        _prepared_active_bev_count_or_http_error(solver_input)
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.detail["field"] == "vehicles"
 
 
 def test_public_formal_run_preserves_predeclared_runtime_controls() -> None:

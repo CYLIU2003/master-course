@@ -13939,10 +13939,15 @@ def _apply_research_phase3_candidate_coverage_policy(
         int(request.stage1_bev_frontier_max_count),
         0,
     )
-    requested_frontier_min = min(
-        max(int(request.stage1_bev_frontier_min_count), 0),
-        requested_frontier_max,
+    requested_frontier_min = max(
+        int(request.stage1_bev_frontier_min_count),
+        0,
     )
+    if requested_frontier_min > requested_frontier_max:
+        raise ValueError(
+            "formal Phase-3 stage1_bev_frontier_min_count must be <= "
+            "stage1_bev_frontier_max_count"
+        )
     frontier_max = min(requested_frontier_max, int(available_bev_count))
     frontier_min = (
         min(
@@ -14002,6 +14007,22 @@ def _prepared_active_bev_count(solver_input_path: Path) -> int:
             + "; ".join(contract.errors)
         )
     return int(contract.inventory_by_powertrain.get("BEV", 0))
+
+
+def _prepared_active_bev_count_or_http_error(solver_input_path: Path) -> int:
+    """Translate formal prepared-fleet contract failures to public validation."""
+
+    try:
+        return _prepared_active_bev_count(solver_input_path)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=make_error(
+                AppErrorCode.SCHEMA_VALIDATION_ERROR,
+                str(exc),
+                field="vehicles",
+            ),
+        ) from exc
 
 
 def _public_run_enforces_interactive_runtime_controls(
@@ -14167,7 +14188,9 @@ def run_optimization(
     _require_nonempty_prepared_scope(prep, action="Optimization preflight")
     active_bev_count = None
     if request.research_run and normalized_requested_mode == "phase3_two_stage":
-        active_bev_count = _prepared_active_bev_count(Path(prep.solver_input_path))
+        active_bev_count = _prepared_active_bev_count_or_http_error(
+            Path(prep.solver_input_path)
+        )
     request = _apply_research_phase3_candidate_coverage_policy(
         request,
         available_bev_count=active_bev_count,

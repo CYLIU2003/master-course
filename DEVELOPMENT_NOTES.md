@@ -192,6 +192,14 @@
   regression passed `84 passed in 3.31s`; the complete repository suite passed
   `1626 passed in 170.96s`. Python compilation, README navigation, and diff
   hygiene are checked before publication.
+- The following review closed four remaining fail-open edges: direct
+  `--stage finalize` verifies all 103 frozen index entries before reading a
+  baseline; inverted requested frontier bounds are rejected before scaling;
+  prepared-fleet contract failures return the public structured 422 validation
+  response; and the diagnostic assignment hash uses the production
+  `(vehicle_id, trip_id)` tuple order. No solver or evidence artifact was
+  rerun or rewritten. The expanded focused suite passed `88 passed in 3.26s`;
+  the complete repository suite passed `1630 passed in 168.24s`.
 
 ## 2026-08-29 (Asia/Tokyo): fresh public-path SUNNY/RAIN rerun at `bb0c005`
 

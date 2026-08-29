@@ -31,6 +31,13 @@ fleet/hash tie-break evidence reaches public solver metadata. Fresh validation
 passed: 84 focused contract/evidence tests and the complete 1,626-test suite.
 Python compilation, README navigation, and diff hygiene also pass.
 
+Direct finalization now verifies the frozen index before reading any baseline;
+inverted requested frontier ranges fail instead of being rewritten; prepared
+fleet-contract failures return a structured 422; and diagnostic assignment
+hashes use production `(vehicle_id, trip_id)` ordering. These are additional
+next-run code guards only. The refreshed focused suite passes 88 tests and the
+complete repository suite passes 1,630 tests.
+
 This is code-hardening evidence only. It does not mutate the frozen `bb0c005`
 SUNNY/RAIN artifacts, rerun a solver, reduce their certified gaps, or clear the
 advisor/release blockers below. Any numerical claim under this newer code still

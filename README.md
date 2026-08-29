@@ -63,7 +63,7 @@ Subsequent review hardened the next-run contract without changing these frozen
 results: formal BEV frontier bounds scale to Fresh Prepare's exact active BEV
 set, physical assignment identity excludes incidental duty labels, runtime
 analysis consumes only hash-indexed frozen artifacts, strict finalization
-hashes the actually submitted request and compares dispatch-construction
+verifies the frozen index, hashes the actually submitted request, and compares dispatch-construction
 switches, and final candidate tie-break metadata reaches the public result.
 New numerical claims require a fresh clean-commit run.
 
