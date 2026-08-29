@@ -70,6 +70,14 @@ numerical result was changed or rerun. The related focused regression passed
 128 tests, the candidate-model regression passed 20 tests, and the complete
 repository suite passed 1,643 tests.
 
+The thesis reporting loader now independently re-verifies four additional
+evidence contracts: original run-manifest seals for parameter snapshots,
+fleet-contract hashes recomputed from the complete embedded fleet payload,
+per-scenario canonical cost-component reconciliation, and the authoritative
+physical-schedule validation artifact itself. These are reporting fail-closed
+guards; they do not modify the `bb0c005` evidence, numerical results, solver
+controls, or release claim boundary.
+
 The scenario audit retained the exact intended counterfactual: SUNNY
 `771d115b-75b0-49f7-a7f0-25f259a2cd21` uses 2025-08-05 service/weather/PV;
 RAIN `b23fd26c-1233-4c73-bb9e-bdb8b1584760` keeps the same 2025-08-05 WEEKDAY

@@ -29,6 +29,20 @@ SCENARIO_IDS = {
     "RAIN": "b23fd26c-1233-4c73-bb9e-bdb8b1584760",
 }
 TOLERANCE = 1.0e-6
+ACCOUNTING_TOTAL_COMPONENT_KEYS = (
+    "electricity_cost",
+    "fuel_cost",
+    "demand_cost",
+    "contract_overage_cost",
+    "vehicle_cost",
+    "vehicle_usage_cost",
+    "driver_cost",
+    "unserved_penalty",
+    "switch_cost",
+    "degradation_cost",
+    "deviation_cost",
+    "co2_cost",
+)
 
 # These values are acceptance assertions only.  Rendered values are always
 # extracted from the evidence JSON loaded into ScenarioEvidence.
@@ -86,11 +100,13 @@ REQUIRED_SOURCE_FILES = (
     "SUNNY/selected_candidate.json",
     "SUNNY/rolling_chain_summary.json",
     "SUNNY/confirmation_gate.json",
+    "SUNNY/physical_schedule_validation.json",
     "RAIN/optimization_parameters.json",
     "RAIN/executed_day_accounting.json",
     "RAIN/selected_candidate.json",
     "RAIN/rolling_chain_summary.json",
     "RAIN/confirmation_gate.json",
+    "RAIN/physical_schedule_validation.json",
 )
 
 
@@ -109,6 +125,7 @@ class ScenarioEvidence:
     selected_candidate: Mapping[str, Any]
     rolling: Mapping[str, Any]
     confirmation_gate: Mapping[str, Any]
+    physical_validation: Mapping[str, Any]
 
     @property
     def costs(self) -> Mapping[str, Any]:
@@ -189,6 +206,19 @@ def _tree_sha256(hashes: Mapping[str, str]) -> str:
     return sha256(payload.encode("utf-8")).hexdigest()
 
 
+def _canonical_json_sha256(value: Any) -> str:
+    """Use the scenario-fleet contract's canonical JSON hash semantics."""
+
+    payload = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return sha256(payload).hexdigest()
+
+
 def _assert_close(actual: float, expected: float, label: str) -> None:
     if not math.isclose(actual, expected, rel_tol=0.0, abs_tol=TOLERANCE):
         raise EvidenceValidationError(
@@ -228,6 +258,9 @@ def _load_scenario(
         selected_candidate=_read_json(scenario_root / "selected_candidate.json"),
         rolling=_read_json(scenario_root / "rolling_chain_summary.json"),
         confirmation_gate=_read_json(scenario_root / "confirmation_gate.json"),
+        physical_validation=_read_json(
+            scenario_root / "physical_schedule_validation.json"
+        ),
     )
 
 
@@ -302,6 +335,26 @@ def _load_parameter_sources(
             _sha256(snapshot_path)
             == _required_field(captured, "scenario_input_snapshot_sha256", str(manifest_path)),
             f"{code}: captured snapshot SHA",
+        )
+        run_artifacts = _required_field(
+            run_manifest,
+            "artifacts",
+            str(run_manifest_path),
+        )
+        sealed_snapshot = _required_field(
+            run_artifacts,
+            "scenario_input_snapshot.json",
+            str(run_manifest_path),
+        )
+        _require(
+            _required_field(sealed_snapshot, "sha256", str(run_manifest_path))
+            == _sha256(snapshot_path),
+            f"{code}: snapshot hash not sealed by run manifest",
+        )
+        _require(
+            _required_field(sealed_snapshot, "size_bytes", str(run_manifest_path))
+            == snapshot_path.stat().st_size,
+            f"{code}: snapshot size not sealed by run manifest",
         )
         _require(
             _sha256(run_manifest_path)
@@ -522,6 +575,8 @@ def _validate_bundle(bundle: EvidenceBundle) -> None:
         _require(scenario.accounting["terminal_energy_balanced"] is True, f"{code}: energy")
         _require(scenario.accounting["bess_terminal_energy_balanced"] is True, f"{code}: BESS")
         _require(scenario.accounting["executed_slot_count"] == 96, f"{code}: slots")
+        _validate_physical_schedule(scenario)
+        _validate_fleet_contract(scenario)
         _validate_selected_candidate_evidence(scenario)
         _assert_close(
             float(scenario.costs["total_cost"]),
@@ -529,6 +584,7 @@ def _validate_bundle(bundle: EvidenceBundle) -> None:
             f"{code}: authoritative final cost",
         )
         _require(scenario.costs["objective_is_actual_cost"] is False, f"{code}: cost scope")
+        _validate_cost_reconciliation(scenario)
         _validate_energy_balance(scenario)
 
     sunny = bundle.scenarios["SUNNY"]
@@ -546,6 +602,223 @@ def _validate_bundle(bundle: EvidenceBundle) -> None:
         "SUNNY and RAIN selected the same physical assignment hash",
     )
     _validate_shared_inputs(sunny, rain, bundle.input_contract)
+
+
+def _validate_cost_reconciliation(scenario: ScenarioEvidence) -> None:
+    """Recompute the canonical evaluator totals from every cost component."""
+
+    costs = scenario.costs
+    component_total = sum(
+        float(_required_field(costs, key, f"{scenario.code} cost breakdown"))
+        for key in ACCOUNTING_TOTAL_COMPONENT_KEYS
+    )
+    total_cost = float(
+        _required_field(costs, "total_cost", f"{scenario.code} cost breakdown")
+    )
+    _assert_close(
+        total_cost,
+        component_total,
+        f"{scenario.code}: total cost component reconciliation",
+    )
+    total_with_assets = component_total + float(
+        _required_field(costs, "pv_asset_cost", f"{scenario.code} cost breakdown")
+    ) + float(
+        _required_field(costs, "bess_asset_cost", f"{scenario.code} cost breakdown")
+    )
+    _assert_close(
+        float(
+            _required_field(
+                costs,
+                "total_cost_with_assets",
+                f"{scenario.code} cost breakdown",
+            )
+        ),
+        total_with_assets,
+        f"{scenario.code}: total cost with assets reconciliation",
+    )
+    _assert_close(
+        float(_required_field(costs, "objective_value", f"{scenario.code} cost breakdown")),
+        total_cost,
+        f"{scenario.code}: accounting objective total",
+    )
+
+
+def _validate_zero_metrics(metrics: Any, context: str) -> None:
+    _require(isinstance(metrics, Mapping) and bool(metrics), f"{context}: missing metrics")
+    for name, value in metrics.items():
+        _require(
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and math.isfinite(float(value))
+            and float(value) == 0.0,
+            f"{context}: nonzero or invalid metric {name}",
+        )
+
+
+def _validate_physical_schedule(scenario: ScenarioEvidence) -> None:
+    """Validate the authoritative physical artifact, not a copied summary flag."""
+
+    code = scenario.code
+    physical = scenario.physical_validation
+    _require(
+        _required_field(physical, "schema_version", f"{code} physical validation")
+        == "physical_schedule_validation_v2",
+        f"{code}: physical validation schema",
+    )
+    _require(physical.get("accepted") is True, f"{code}: physical validation not accepted")
+    _require(physical.get("status") == "VALID", f"{code}: physical validation status")
+    checks = _required_field(physical, "checks", f"{code} physical validation")
+    _require(
+        isinstance(checks, Mapping) and bool(checks) and all(value is True for value in checks.values()),
+        f"{code}: physical validation checks failed",
+    )
+    _require(not list(physical.get("failed_checks") or ()), f"{code}: physical failed checks")
+    _validate_zero_metrics(
+        _required_field(physical, "validation_metrics", f"{code} physical validation"),
+        f"{code} physical validation",
+    )
+    solver_metrics = _required_field(
+        physical,
+        "solver_validation_metrics",
+        f"{code} physical validation",
+    )
+    _require(
+        solver_metrics.get("all_required_validation_checks_passed") is True,
+        f"{code}: solver physical checks failed",
+    )
+    for name, value in solver_metrics.items():
+        if name.endswith("_count"):
+            _require(value == 0, f"{code}: nonzero solver metric {name}")
+    _require(
+        abs(float(solver_metrics["bess_terminal_soc_deviation_kwh"]))
+        <= float(solver_metrics["bess_terminal_soc_tolerance_kwh"]),
+        f"{code}: BESS terminal physical deviation",
+    )
+    independent = _required_field(
+        physical,
+        "independent_event_validation",
+        f"{code} physical validation",
+    )
+    _require(independent.get("accepted") is True, f"{code}: independent physical validation")
+    _require(independent.get("status") == "VALID", f"{code}: independent physical status")
+    _validate_zero_metrics(
+        _required_field(independent, "metrics", f"{code} independent validation"),
+        f"{code} independent physical validation",
+    )
+
+
+def _validate_fleet_contract(scenario: ScenarioEvidence) -> None:
+    """Recompute every scenario_fleet_contract_v2 digest from its payload."""
+
+    code = scenario.code
+    contract = _required_field(
+        scenario.model_metadata,
+        "scenario_fleet_contract",
+        f"{code} model metadata",
+    )
+    _require(
+        contract.get("schema_version") == "scenario_fleet_contract_v2",
+        f"{code}: fleet contract schema",
+    )
+    _require(contract.get("validation_status") == "OK", f"{code}: fleet contract status")
+    _require(not list(contract.get("errors") or ()), f"{code}: fleet contract errors")
+    active_ids = list(
+        _required_field(contract, "active_vehicle_ids", f"{code} fleet contract")
+    )
+    parameters = list(
+        _required_field(
+            contract,
+            "active_vehicle_parameters",
+            f"{code} fleet contract",
+        )
+    )
+    parameter_ids = [
+        str(_required_field(row, "vehicle_id", f"{code} fleet parameter"))
+        for row in parameters
+    ]
+    _require(
+        active_ids == sorted(active_ids) and len(active_ids) == len(set(active_ids)),
+        f"{code}: active vehicle IDs are not unique and sorted",
+    )
+    _require(
+        parameter_ids == active_ids,
+        f"{code}: active vehicle IDs do not match parameter rows",
+    )
+    for row in parameters:
+        vehicle_id = str(row["vehicle_id"])
+        source_record = _required_field(
+            row,
+            "source_record",
+            f"{code} fleet parameter {vehicle_id}",
+        )
+        _require(
+            source_record.get("id") == vehicle_id,
+            f"{code}: source-record vehicle ID differs for {vehicle_id}",
+        )
+        _require(
+            source_record.get("depotId") == row.get("depot_id"),
+            f"{code}: source-record depot differs for {vehicle_id}",
+        )
+        _require(
+            source_record.get("type") == row.get("vehicle_type"),
+            f"{code}: source-record vehicle type differs for {vehicle_id}",
+        )
+    inventory_by_powertrain = {
+        powertrain: sum(row.get("powertrain") == powertrain for row in parameters)
+        for powertrain in sorted({str(row.get("powertrain")) for row in parameters})
+    }
+    inventory_by_vehicle_type = {
+        vehicle_type: sum(row.get("vehicle_type") == vehicle_type for row in parameters)
+        for vehicle_type in sorted({str(row.get("vehicle_type")) for row in parameters})
+    }
+    _require(
+        contract.get("active_inventory_by_powertrain") == inventory_by_powertrain,
+        f"{code}: active powertrain inventory differs from parameter rows",
+    )
+    _require(
+        contract.get("active_inventory_by_vehicle_type")
+        == inventory_by_vehicle_type,
+        f"{code}: active vehicle-type inventory differs from parameter rows",
+    )
+    active_vehicle_id_hash = _canonical_json_sha256(active_ids)
+    initial_state_hash = _canonical_json_sha256(
+        [
+            {
+                "vehicle_id": row["vehicle_id"],
+                "initial_soc": row["initial_soc"],
+                "initial_fuel_l": row["initial_fuel_l"],
+            }
+            for row in parameters
+        ]
+    )
+    vehicle_parameter_hash = _canonical_json_sha256(parameters)
+    contract_core = {
+        "schema_version": "scenario_fleet_contract_v2",
+        "selected_depot_ids": contract["selected_depot_ids"],
+        "active_vehicle_ids": active_ids,
+        "excluded_vehicle_records": contract["excluded_vehicle_records"],
+        "inventory_by_powertrain": inventory_by_powertrain,
+        "inventory_by_vehicle_type": inventory_by_vehicle_type,
+        "active_vehicle_id_hash": active_vehicle_id_hash,
+        "initial_state_hash": initial_state_hash,
+        "vehicle_parameter_hash": vehicle_parameter_hash,
+    }
+    observed_hashes = {
+        "active_vehicle_id_hash": active_vehicle_id_hash,
+        "initial_state_hash": initial_state_hash,
+        "vehicle_parameter_hash": vehicle_parameter_hash,
+        "fleet_contract_hash": _canonical_json_sha256(contract_core),
+    }
+    for key, observed in observed_hashes.items():
+        _require(
+            contract.get(key) == observed,
+            f"{code}: recomputed {key} differs",
+        )
+    _require(
+        scenario.model_metadata.get("scenario_fleet_contract_hash")
+        == observed_hashes["fleet_contract_hash"],
+        f"{code}: model metadata fleet contract hash differs",
+    )
 
 
 def _validate_selected_candidate_evidence(scenario: ScenarioEvidence) -> None:

@@ -34,7 +34,9 @@ locked Matplotlib/Pillow dependency set and the pinned Noto Sans JP face
 actually selected by Matplotlib. Local integrated checks passed 147 focused
 tests and the full 1,659-test suite before the final PR #7 integration. On the
 integrated branch, 154 focused tests and the full 1,666-test suite passed, and
-exact package regeneration passed again.
+exact package regeneration passed again. After the final evidence-loader
+review, the expanded focused/navigation suite passed 161 tests, the full suite
+passed 1,670 tests, and exact package regeneration remained byte-identical.
 The final manual GitHub run remains the last merge gate.
 
 ## Claim boundary

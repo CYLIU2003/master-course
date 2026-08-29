@@ -88,6 +88,15 @@ a 6-MWh / 900-kW BESS. These parameters are provenance facts, not permission
 to replace or regenerate either scenario.
 New numerical claims require a fresh clean-commit run.
 
+The thesis package builder also fails closed on the underlying parameter and
+result evidence. Each copied scenario snapshot must still match the size and
+SHA-256 sealed by its original run manifest; every fleet-contract digest is
+recomputed from the embedded vehicle IDs, initial states, parameters, and
+inventory; each Rolling total is recomputed from all canonical cost
+components; and the physical-schedule artifact itself must report a complete
+zero-error validation. Refreshing only a review-bundle hash index cannot bypass
+these checks.
+
 ## Current 2026-08-28 weather-dispatch diagnosis
 
 The previously identical SUNNY/RAIN incumbent was caused by insufficient

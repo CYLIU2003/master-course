@@ -178,6 +178,21 @@
   package verification passed, and the combined complete suite passed `1666
   passed in 181.21s`. The package remains 24 files and 1,084,538
   bytes with unchanged source, parameter-source, and package-manifest hashes.
+- The next fresh reporting review closed four additional P1 evidence-loading
+  gaps. Parameter-source snapshots are now checked against the original
+  `run_input_manifest.json` size/SHA seal, not only the supplement manifest.
+  The embedded `scenario_fleet_contract_v2` is semantically checked for
+  active-ID/parameter/source-record/inventory correspondence and all four
+  contract hashes are recomputed with the production canonical-JSON formula.
+  Each executed-day total is independently recomputed from the complete 12
+  canonical accounting components, with asset and objective totals reconciled
+  separately. Finally, `physical_schedule_validation.json` is a required
+  source and its schema, accepted/status fields, complete checks, independent
+  validation, and zero-error metrics are validated directly. Tamper
+  regressions cover all four paths. No source artifact or generated package
+  byte was altered. The combined reporting/evidence/contract/navigation suite
+  passed `161 passed in 13.62s`, exact package verification passed, and the
+  complete repository suite passed `1670 passed in 178.17s`.
 
 ## 2026-08-29 (Asia/Tokyo): formal Phase-3 provenance review hardening
 

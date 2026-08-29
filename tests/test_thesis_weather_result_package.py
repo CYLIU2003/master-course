@@ -51,6 +51,35 @@ def _read_csv(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
+def _write_json(path: Path, payload: dict) -> None:
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _refresh_evidence_hash_index(evidence: Path) -> None:
+    index_path = evidence / "artifact_hashes.json"
+    index = json.loads(index_path.read_text(encoding="utf-8"))
+    index["sha256"] = {
+        name: digest
+        for name, digest in _hash_inventory(evidence).items()
+        if name != "artifact_hashes.json"
+    }
+    _write_json(index_path, index)
+
+
+def _refresh_parameter_hash_index(parameter_sources: Path) -> None:
+    index_path = parameter_sources / "artifact_hashes.json"
+    index = json.loads(index_path.read_text(encoding="utf-8"))
+    index["sha256"] = {
+        name: digest
+        for name, digest in _hash_inventory(parameter_sources).items()
+        if name != "artifact_hashes.json"
+    }
+    _write_json(index_path, index)
+
+
 @pytest.fixture(scope="module")
 def generated_packages(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Path]:
     root = tmp_path_factory.mktemp("thesis-weather-package")
@@ -121,21 +150,100 @@ def test_selected_candidate_evidence_is_reconciled_with_summary(
         json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
-    hash_index_path = evidence / "artifact_hashes.json"
-    hash_index = json.loads(hash_index_path.read_text(encoding="utf-8"))
-    hash_index["sha256"] = {
-        name: digest
-        for name, digest in _hash_inventory(evidence).items()
-        if name != "artifact_hashes.json"
-    }
-    hash_index_path.write_text(
-        json.dumps(hash_index, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    _refresh_evidence_hash_index(evidence)
 
     with pytest.raises(
         builder.EvidenceValidationError,
         match="RAIN: day-ahead selected candidate cost",
+    ):
+        builder.load_and_validate_bundle(evidence, PARAMETER_SOURCE_ROOT)
+
+
+def test_parameter_snapshot_must_match_its_run_manifest_seal(
+    tmp_path: Path,
+) -> None:
+    parameter_sources = tmp_path / "parameter-sources"
+    shutil.copytree(PARAMETER_SOURCE_ROOT, parameter_sources)
+    snapshot_path = parameter_sources / "RAIN" / "scenario_input_snapshot.json"
+    snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    snapshot["review_tamper"] = True
+    _write_json(snapshot_path, snapshot)
+
+    manifest_path = parameter_sources / "parameter_source_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["scenarios"]["RAIN"]["scenario_input_snapshot_sha256"] = sha256(
+        snapshot_path.read_bytes()
+    ).hexdigest()
+    _write_json(manifest_path, manifest)
+    _refresh_parameter_hash_index(parameter_sources)
+
+    with pytest.raises(
+        builder.EvidenceValidationError,
+        match="RAIN: snapshot hash not sealed by run manifest",
+    ):
+        builder.load_and_validate_bundle(EVIDENCE_ROOT, parameter_sources)
+
+
+def test_fleet_contract_hashes_are_recomputed_from_embedded_payload(
+    tmp_path: Path,
+) -> None:
+    evidence = tmp_path / "evidence"
+    shutil.copytree(EVIDENCE_ROOT, evidence)
+    path = evidence / "RAIN" / "optimization_parameters.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    contract = payload["effective_model_metadata"]["scenario_fleet_contract"]
+    contract["active_vehicle_parameters"][0]["vehicle_id"] = "tampered-vehicle"
+    _write_json(path, payload)
+    _refresh_evidence_hash_index(evidence)
+
+    with pytest.raises(
+        builder.EvidenceValidationError,
+        match="RAIN: active vehicle IDs do not match parameter rows",
+    ):
+        builder.load_and_validate_bundle(evidence, PARAMETER_SOURCE_ROOT)
+
+
+def test_each_accounting_total_reconciles_to_all_canonical_components(
+    tmp_path: Path,
+) -> None:
+    evidence = tmp_path / "evidence"
+    shutil.copytree(EVIDENCE_ROOT, evidence)
+    summary_path = evidence / "result_summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    for code in ("SUNNY", "RAIN"):
+        path = evidence / code / "executed_day_accounting.json"
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        for key in ("total_cost", "total_cost_with_assets", "objective_value"):
+            payload["cost_breakdown"][key] += 100.0
+        _write_json(path, payload)
+        summary["scenarios"][code]["executed_day_cost_jpy"] += 100.0
+    _write_json(summary_path, summary)
+    _refresh_evidence_hash_index(evidence)
+
+    with pytest.raises(
+        builder.EvidenceValidationError,
+        match="SUNNY: total cost component reconciliation",
+    ):
+        builder.load_and_validate_bundle(evidence, PARAMETER_SOURCE_ROOT)
+
+
+def test_physical_schedule_artifact_is_validated_directly(
+    tmp_path: Path,
+) -> None:
+    evidence = tmp_path / "evidence"
+    shutil.copytree(EVIDENCE_ROOT, evidence)
+    path = evidence / "RAIN" / "physical_schedule_validation.json"
+    physical = json.loads(path.read_text(encoding="utf-8"))
+    physical["accepted"] = False
+    physical["status"] = "INVALID"
+    physical["failed_checks"] = ["independent_event_schedule_accepted"]
+    physical["validation_metrics"]["infeasible_transition_count"] = 1
+    _write_json(path, physical)
+    _refresh_evidence_hash_index(evidence)
+
+    with pytest.raises(
+        builder.EvidenceValidationError,
+        match="RAIN: physical validation not accepted",
     ):
         builder.load_and_validate_bundle(evidence, PARAMETER_SOURCE_ROOT)
 
