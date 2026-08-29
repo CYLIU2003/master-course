@@ -15,9 +15,18 @@ After final PR #7 integration at `68b9133`, the builder also reconciles all
 selected-candidate counts, costs, fleet/trip counts, indices, and assignment
 identifiers to the summary and confirmation gate. Replacement packages are
 fully built and validated in a private sibling directory; a late failure leaves
-the previous package byte-exact. The final integrated focused suite passes 168
-tests and the complete suite passes 1,677 tests; exact package verification
+the previous package byte-exact. The final integrated focused suite passes 174
+tests and the complete suite passes 1,683 tests; exact package verification
 still passes and all package bytes remain stable.
+
+The final reporting review also binds every published claim to independent
+evidence: Rolling is re-audited through the production acceptance contract;
+physical validation must match the exact assignment, fleet hashes, and Git
+SHAs; canonical input hashes must match the audited input contract; grid import
+must reconcile to its destination flows; solver controls must match all three
+confirmation attestations and the frozen protocol; and certified gap/runtime
+must match direct solver artifacts. Six refreshed-index tamper regressions
+cover these paths. This hardening changes no canonical result or package byte.
 
 This changes only reporting reproducibility metadata and instructions. The
 canonical `bb0c005` evidence bytes, numerical tables, figures, certified gaps,

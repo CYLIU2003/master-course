@@ -17,9 +17,16 @@ import math
 import os
 from pathlib import Path
 import shutil
+import sys
 import tempfile
 from typing import Any, Iterable, Mapping, Sequence
 from uuid import uuid4
+
+try:
+    from src.optimization.rolling.acceptance import rolling_chain_acceptance_audit
+except ModuleNotFoundError:  # Direct ``python scripts/...`` execution.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from src.optimization.rolling.acceptance import rolling_chain_acceptance_audit
 
 
 SCHEMA_VERSION = "thesis_weather_result_package_v1"
@@ -43,6 +50,22 @@ ACCOUNTING_TOTAL_COMPONENT_KEYS = (
     "deviation_cost",
     "co2_cost",
 )
+EXPECTED_SOLVER_CONTROLS = {
+    "phase": "phase3_two_stage",
+    "time_limit_sec": 585,
+    "stage1_time_limit_sec": 435,
+    "stage2_time_limit_sec": 30,
+    "stage1_best_obj_stop_enabled": False,
+    "gurobi_threads": 1,
+    "mip_gap": 0.1,
+    "random_seed": 42,
+    "stage1_stage2_candidate_limit": 22,
+    "stage1_composition_search_radius": 4,
+    "stage1_bev_frontier_enabled": True,
+    "stage1_bev_frontier_min_count": 15,
+    "stage1_bev_frontier_max_count": 35,
+    "stage1_bev_frontier_target_time_limit_sec": 120.0,
+}
 
 # These values are acceptance assertions only.  Rendered values are always
 # extracted from the evidence JSON loaded into ScenarioEvidence.
@@ -101,12 +124,16 @@ REQUIRED_SOURCE_FILES = (
     "SUNNY/rolling_chain_summary.json",
     "SUNNY/confirmation_gate.json",
     "SUNNY/physical_schedule_validation.json",
+    "SUNNY/summary.json",
+    "SUNNY/solver_metrics.json",
     "RAIN/optimization_parameters.json",
     "RAIN/executed_day_accounting.json",
     "RAIN/selected_candidate.json",
     "RAIN/rolling_chain_summary.json",
     "RAIN/confirmation_gate.json",
     "RAIN/physical_schedule_validation.json",
+    "RAIN/summary.json",
+    "RAIN/solver_metrics.json",
 )
 
 
@@ -126,6 +153,8 @@ class ScenarioEvidence:
     rolling: Mapping[str, Any]
     confirmation_gate: Mapping[str, Any]
     physical_validation: Mapping[str, Any]
+    solver_summary: Mapping[str, Any]
+    solver_metrics: Mapping[str, Any]
 
     @property
     def costs(self) -> Mapping[str, Any]:
@@ -261,6 +290,8 @@ def _load_scenario(
         physical_validation=_read_json(
             scenario_root / "physical_schedule_validation.json"
         ),
+        solver_summary=_read_json(scenario_root / "summary.json"),
+        solver_metrics=_read_json(scenario_root / "solver_metrics.json"),
     )
 
 
@@ -567,7 +598,13 @@ def _validate_bundle(bundle: EvidenceBundle) -> None:
         _require(row["unserved_trips"] == 0, f"{code}: unserved trip count")
         _require(row["used_bev"] + row["used_ice"] == 32, f"{code}: used fleet")
         _require(row["bev_trips"] + row["ice_trips"] == 264, f"{code}: trips")
-        _require(scenario.rolling["chain_accepted"] is True, f"{code}: Rolling")
+        rolling_audit = rolling_chain_acceptance_audit(scenario.rolling)
+        _require(
+            rolling_audit["accepted"] is True,
+            f"{code}: Rolling acceptance audit failed: "
+            f"missing={rolling_audit['missing_required_checks']}, "
+            f"failing={rolling_audit['failing_checks']}",
+        )
         _require(scenario.rolling["step_count"] == 24, f"{code}: Rolling steps")
         _require(scenario.rolling["expected_step_count"] == 24, f"{code}: expected steps")
         _require(all(scenario.confirmation_gate["checks"].values()), f"{code}: gate")
@@ -577,6 +614,20 @@ def _validate_bundle(bundle: EvidenceBundle) -> None:
         _require(scenario.accounting["executed_slot_count"] == 96, f"{code}: slots")
         _validate_physical_schedule(scenario)
         _validate_fleet_contract(scenario)
+        _validate_solver_controls(
+            scenario,
+            manifest_scenario=_required_field(
+                _required_field(manifest, "scenarios", "confirmation manifest"),
+                code,
+                "confirmation manifest scenarios",
+            ),
+            contract_scenario=_required_field(
+                _required_field(contract, "scenarios", "input contract"),
+                code,
+                "input contract scenarios",
+            ),
+        )
+        _validate_solver_result_metrics(scenario)
         _validate_selected_candidate_evidence(scenario)
         _assert_close(
             float(scenario.costs["total_cost"]),
@@ -704,6 +755,104 @@ def _validate_physical_schedule(scenario: ScenarioEvidence) -> None:
     _validate_zero_metrics(
         _required_field(independent, "metrics", f"{code} independent validation"),
         f"{code} independent physical validation",
+    )
+    evidence = _required_field(
+        physical,
+        "evidence",
+        f"{code} physical validation",
+    )
+    rolling = scenario.rolling
+    fleet_contract = scenario.model_metadata["scenario_fleet_contract"]
+    for evidence_key, rolling_key in (
+        ("assignment_hash", "day_ahead_assignment_hash"),
+        ("trip_input_hash", "trip_input_hash"),
+        ("vehicle_input_hash", "vehicle_input_hash"),
+        ("scenario_fleet_contract_hash", "scenario_fleet_contract_hash"),
+        ("active_vehicle_id_hash", "active_vehicle_id_hash"),
+        ("vehicle_parameter_hash", "vehicle_parameter_hash"),
+        ("initial_state_hash", "initial_state_hash"),
+    ):
+        _require(
+            _required_field(evidence, evidence_key, f"{code} physical evidence")
+            == _required_field(rolling, rolling_key, f"{code} rolling chain"),
+            f"{code}: physical evidence {evidence_key} differs from rolling chain",
+        )
+    for key in (
+        "scenario_fleet_contract_hash",
+        "active_vehicle_id_hash",
+        "vehicle_parameter_hash",
+        "initial_state_hash",
+    ):
+        expected = (
+            scenario.model_metadata[key]
+            if key == "scenario_fleet_contract_hash"
+            else fleet_contract[key]
+        )
+        _require(
+            evidence[key] == expected,
+            f"{code}: physical evidence {key} differs from fleet contract",
+        )
+    for key in ("day_ahead_git_sha", "rolling_runner_git_sha"):
+        _require(evidence.get(key) == EXECUTION_SHA, f"{code}: physical evidence {key}")
+        _require(evidence[key] == rolling[key], f"{code}: physical/rolling {key} differs")
+
+
+def _validate_solver_controls(
+    scenario: ScenarioEvidence,
+    *,
+    manifest_scenario: Mapping[str, Any],
+    contract_scenario: Mapping[str, Any],
+) -> None:
+    """Bind rendered solver controls to both confirmation attestations."""
+
+    code = scenario.code
+    controls = scenario.solver
+    for source_name, source in (
+        ("confirmation manifest", manifest_scenario),
+        ("confirmation gate", scenario.confirmation_gate),
+        ("input contract", contract_scenario),
+    ):
+        _require(
+            controls
+            == _required_field(
+                source,
+                "effective_solver_controls",
+                f"{code} {source_name}",
+            ),
+            f"{code}: effective solver controls differ from {source_name}",
+        )
+    for key, expected in EXPECTED_SOLVER_CONTROLS.items():
+        actual = _required_field(controls, key, f"{code} effective solver controls")
+        if isinstance(expected, float):
+            _assert_close(float(actual), expected, f"{code}: solver control {key}")
+        else:
+            _require(actual == expected, f"{code}: solver control {key}")
+
+
+def _validate_solver_result_metrics(scenario: ScenarioEvidence) -> None:
+    """Bind rendered Stage-1 gap and runtime to direct solver artifacts."""
+
+    code = scenario.code
+    published_gap = float(scenario.summary["stage1_certified_gap_ratio"])
+    published_runtime = float(scenario.summary["solve_time_seconds"])
+    direct_summary = scenario.solver_summary
+    metrics = scenario.solver_metrics
+    metadata = _required_field(metrics, "solver_metadata", f"{code} solver metrics")
+    for observed, label in (
+        (direct_summary.get("stage1_certified_mip_gap_ratio"), "summary.json gap"),
+        (metrics.get("achieved_mip_gap"), "solver_metrics achieved gap"),
+        (metadata.get("stage1_certified_mip_gap_ratio"), "solver metadata gap"),
+    ):
+        _assert_close(float(observed), published_gap, f"{code}: {label}")
+    for observed, label in (
+        (direct_summary.get("solve_time_seconds"), "summary.json solve time"),
+        (metrics.get("solve_time_seconds"), "solver_metrics solve time"),
+    ):
+        _assert_close(float(observed), published_runtime, f"{code}: {label}")
+    _assert_close(
+        float(metrics.get("requested_mip_gap")),
+        float(scenario.solver["mip_gap"]),
+        f"{code}: requested solver gap",
     )
 
 
@@ -904,6 +1053,11 @@ def _validate_selected_candidate_evidence(scenario: ScenarioEvidence) -> None:
 
 def _validate_energy_balance(scenario: ScenarioEvidence) -> None:
     costs = scenario.costs
+    _assert_close(
+        float(costs["grid_to_bus_kwh"]) + float(costs["grid_to_bess_kwh"]),
+        float(costs["grid_import_kwh"]),
+        f"{scenario.code}: grid import balance",
+    )
     pv_balance = (
         float(costs["pv_to_bus_kwh"])
         + float(costs["pv_to_bess_kwh"])
@@ -935,6 +1089,18 @@ def _validate_shared_inputs(
     )
     sunny_dimensions = sunny.optimization["canonical_input_dimensions"]
     rain_dimensions = rain.optimization["canonical_input_dimensions"]
+    contract_scenarios = _required_field(contract, "scenarios", "input contract")
+    for code, dimensions in (("SUNNY", sunny_dimensions), ("RAIN", rain_dimensions)):
+        contract_dimensions = _required_field(
+            _required_field(contract_scenarios, code, "input contract scenarios"),
+            "canonical_input_hashes",
+            f"{code} input contract",
+        )
+        for key, value in dimensions.items():
+            _require(
+                value == _required_field(contract_dimensions, key, f"{code} input contract hashes"),
+                f"{code}: canonical input hash differs from audited contract: {key}",
+            )
     for key in common_keys:
         _require(sunny_dimensions[key] == rain_dimensions[key], f"Shared hash differs: {key}")
     _require(

@@ -248,6 +248,121 @@ def test_physical_schedule_artifact_is_validated_directly(
         builder.load_and_validate_bundle(evidence, PARAMETER_SOURCE_ROOT)
 
 
+def test_rolling_acceptance_requires_all_audited_checks(tmp_path: Path) -> None:
+    evidence = tmp_path / "evidence"
+    shutil.copytree(EVIDENCE_ROOT, evidence)
+    path = evidence / "RAIN" / "rolling_chain_summary.json"
+    rolling = json.loads(path.read_text(encoding="utf-8"))
+    rolling["all_steps_feasible"] = False
+    rolling["acceptance_checks"]["all_steps_feasible"] = False
+    rolling["acceptance_rejection_reasons"] = ["all_steps_feasible"]
+    _write_json(path, rolling)
+    _refresh_evidence_hash_index(evidence)
+
+    with pytest.raises(
+        builder.EvidenceValidationError,
+        match="RAIN: Rolling acceptance audit failed",
+    ):
+        builder.load_and_validate_bundle(evidence, PARAMETER_SOURCE_ROOT)
+
+
+def test_physical_validation_is_bound_to_rolling_fleet_and_sha(
+    tmp_path: Path,
+) -> None:
+    evidence = tmp_path / "evidence"
+    shutil.copytree(EVIDENCE_ROOT, evidence)
+    path = evidence / "RAIN" / "physical_schedule_validation.json"
+    physical = json.loads(path.read_text(encoding="utf-8"))
+    physical["evidence"]["assignment_hash"] = "tampered-assignment"
+    physical["evidence"]["scenario_fleet_contract_hash"] = "tampered-fleet"
+    physical["evidence"]["day_ahead_git_sha"] = "tampered-sha"
+    _write_json(path, physical)
+    _refresh_evidence_hash_index(evidence)
+
+    with pytest.raises(
+        builder.EvidenceValidationError,
+        match="RAIN: physical evidence assignment_hash differs from rolling chain",
+    ):
+        builder.load_and_validate_bundle(evidence, PARAMETER_SOURCE_ROOT)
+
+
+def test_canonical_input_hashes_match_audited_input_contract(
+    tmp_path: Path,
+) -> None:
+    evidence = tmp_path / "evidence"
+    shutil.copytree(EVIDENCE_ROOT, evidence)
+    for code in ("SUNNY", "RAIN"):
+        path = evidence / code / "optimization_parameters.json"
+        optimization = json.loads(path.read_text(encoding="utf-8"))
+        optimization["canonical_input_dimensions"][
+            "trip_structure_input_sha256"
+        ] = "same-fabricated-digest"
+        _write_json(path, optimization)
+    _refresh_evidence_hash_index(evidence)
+
+    with pytest.raises(
+        builder.EvidenceValidationError,
+        match="SUNNY: canonical input hash differs from audited contract",
+    ):
+        builder.load_and_validate_bundle(evidence, PARAMETER_SOURCE_ROOT)
+
+
+def test_grid_import_reconciles_to_grid_destination_flows(tmp_path: Path) -> None:
+    evidence = tmp_path / "evidence"
+    shutil.copytree(EVIDENCE_ROOT, evidence)
+    path = evidence / "RAIN" / "executed_day_accounting.json"
+    accounting = json.loads(path.read_text(encoding="utf-8"))
+    accounting["cost_breakdown"]["grid_import_kwh"] = 999.0
+    _write_json(path, accounting)
+    _refresh_evidence_hash_index(evidence)
+
+    with pytest.raises(
+        builder.EvidenceValidationError,
+        match="RAIN: grid import balance",
+    ):
+        builder.load_and_validate_bundle(evidence, PARAMETER_SOURCE_ROOT)
+
+
+def test_rendered_solver_controls_match_confirmation_evidence(
+    tmp_path: Path,
+) -> None:
+    evidence = tmp_path / "evidence"
+    shutil.copytree(EVIDENCE_ROOT, evidence)
+    for code in ("SUNNY", "RAIN"):
+        path = evidence / code / "optimization_parameters.json"
+        optimization = json.loads(path.read_text(encoding="utf-8"))
+        controls = optimization["effective_optimization_config"]
+        controls["random_seed"] = 999
+        controls["gurobi_threads"] = 8
+        _write_json(path, optimization)
+    _refresh_evidence_hash_index(evidence)
+
+    with pytest.raises(
+        builder.EvidenceValidationError,
+        match="SUNNY: effective solver controls differ from confirmation manifest",
+    ):
+        builder.load_and_validate_bundle(evidence, PARAMETER_SOURCE_ROOT)
+
+
+def test_rendered_gap_and_runtime_match_direct_solver_artifacts(
+    tmp_path: Path,
+) -> None:
+    evidence = tmp_path / "evidence"
+    shutil.copytree(EVIDENCE_ROOT, evidence)
+    path = evidence / "result_summary.json"
+    summary = json.loads(path.read_text(encoding="utf-8"))
+    summary["scenarios"]["RAIN"]["stage1_certified_gap_ratio"] = 0.0
+    summary["scenarios"]["RAIN"]["solve_time_seconds"] = 1.0
+    _write_json(path, summary)
+    _refresh_evidence_hash_index(evidence)
+
+    with pytest.raises(
+        builder.EvidenceValidationError,
+        match="RAIN: summary.json gap",
+    ):
+        builder.load_and_validate_bundle(evidence, PARAMETER_SOURCE_ROOT)
+
+
 def test_configured_japanese_font_path_fails_closed_when_missing(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

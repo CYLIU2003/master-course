@@ -23,6 +23,11 @@ Matplotlib/Pillow renderer dependency set is pinned in
 use platform-independent relative POSIX path ordering with an explicit
 Unicode-casefold sort key. The package README includes the pinned Noto Sans JP
 download, SHA-256 check, and environment binding required before reproduction.
+Before rendering, the loader also re-audits every Rolling acceptance check,
+binds physical validation to the exact assignment/fleet/execution hashes,
+reconciles canonical input hashes and solver controls to the confirmation
+contract, checks grid-import flow balance, and verifies reported gap/runtime
+against direct solver artifacts.
 
 ## Current 2026-08-29 fresh SUNNY/RAIN rerun
 

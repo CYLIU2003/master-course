@@ -202,6 +202,19 @@
   passed `1677 passed in 182.26s`. The package remains 24 files and 1,084,538
   bytes; its source-tree, parameter-source-tree, and package-manifest hashes
   remain unchanged.
+- A fresh exact-HEAD PR #8 review then closed six additional reporting-loader
+  P1 gaps. Rolling acceptance now uses the production acceptance audit rather
+  than trusting `chain_accepted`; physical validation evidence is bound to the
+  Rolling assignment, recomputed fleet hashes, and both execution SHAs; every
+  canonical input dimension is reconciled to the audited input contract;
+  grid import equals grid-to-bus plus grid-to-BESS; effective solver controls
+  match the manifest, gate, input contract, and frozen protocol; and rendered
+  certified gap/runtime values match direct `summary.json` and
+  `solver_metrics.json`. Six independent tamper regressions refresh the normal
+  artifact index and still fail on the semantic mismatch. The combined focused
+  suite passed `174 passed in 16.43s`, exact package verification passed, and
+  the complete repository suite passed `1683 passed in 183.48s`. Canonical
+  evidence and all 24 generated package files remain unchanged.
 
 ## 2026-08-29 (Asia/Tokyo): formal Phase-3 provenance review hardening
 
