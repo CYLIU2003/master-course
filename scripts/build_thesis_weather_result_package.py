@@ -610,6 +610,12 @@ def _save_figure(plt: Any, fig: Any, stem: Path) -> list[Path]:
         facecolor="white",
         metadata={"Creator": SCHEMA_VERSION, "Date": None},
     )
+    svg_lines = svg_path.read_text(encoding="utf-8").splitlines()
+    svg_path.write_text(
+        "\n".join(line.rstrip() for line in svg_lines) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
     plt.close(fig)
     return [png_path, svg_path]
 

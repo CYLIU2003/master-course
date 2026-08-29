@@ -47,14 +47,14 @@
     tests\test_published_weather_rerun_evidence.py -p no:cacheprovider
   # 7 passed
   .\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider
-  # 1621 passed in 95.42s
+  # 1621 passed in 91.29s
   git diff --check
   ```
 
 - The unchanged evidence tree SHA-256 is
   `c706da7e10bc4e99a06a441f91e1722baa971b41ab936d29db36e650accede5f`.
-  The 22-file, 702,918-byte result package manifest SHA-256 is
-  `f306cef3989070452e698870133804f41f5c0b1f6a89764021d11866291b105b`.
+  The 22-file, 700,432-byte result package manifest SHA-256 is
+  `f10be5401a89d24ca9cef5eda62dd4fe6951110d394f01d325ae201662c099fc`.
 
 ## 2026-08-29 (Asia/Tokyo): fresh public-path SUNNY/RAIN rerun at `bb0c005`
 

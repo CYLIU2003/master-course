@@ -81,40 +81,40 @@
       "size_bytes": 88752
     },
     "01_used_vehicle_comparison.svg": {
-      "sha256": "25fe7df809d4abdba88f692486edc08d01928dd3520b610cc035436075c7fdc5",
-      "size_bytes": 15964
+      "sha256": "6afc7b42702144e7893c1f53ca41d5c8ae7db6ee739f5da77484a416adfc0bdc",
+      "size_bytes": 15483
     },
     "02_assigned_trip_comparison.png": {
       "sha256": "6703ab0fbc18795db5a063470058edeeaf16d032be2109d2e91accd6a5d080b9",
       "size_bytes": 101394
     },
     "02_assigned_trip_comparison.svg": {
-      "sha256": "94fb35d127a27ce7b553d8774d2b6249ffe49df7e1f0840182eea58b80bf01b0",
-      "size_bytes": 14703
+      "sha256": "c9652c93cf925ede2d61288c09ff51d119fef41b6d085be32118183a0c20eca6",
+      "size_bytes": 14256
     },
     "03_executed_day_cost_breakdown.png": {
       "sha256": "a54731eda22bae60b7f655d0a4f5f7acd900a8e61dd5895efdaf6334eac3d918",
       "size_bytes": 143022
     },
     "03_executed_day_cost_breakdown.svg": {
-      "sha256": "caac7abea73b92f4a966100c753c98898020474534547edad9b57f192ab6aaaf",
-      "size_bytes": 17456
+      "sha256": "d199c212a0fbe798bfb48993f37e6eb1aad3fa2aad4ddafbad8c15be755299ec",
+      "size_bytes": 16909
     },
     "04_pv_bess_grid_energy_balance.png": {
       "sha256": "b57af2d1a8254931fff291d5afa9e84d286e77c9c6edf6154b00b9aa6b4667be",
       "size_bytes": 129989
     },
     "04_pv_bess_grid_energy_balance.svg": {
-      "sha256": "d5c510ce439d956ec77e7ea8d5d0f527121a86fbf6852195e61a7c8f7d5c54d0",
-      "size_bytes": 17842
+      "sha256": "1261de75ec0f531aa691ce086e6635528193c729e04d8610be5ead8d8d299dd3",
+      "size_bytes": 17294
     },
     "05_pv_utilization_and_curtailment.png": {
       "sha256": "5fef4f8460f04586745832e44d43e1c3d1b15964053ceb730882b1d67229f8cf",
       "size_bytes": 132209
     },
     "05_pv_utilization_and_curtailment.svg": {
-      "sha256": "784589dd214bdae6900c64551efb3ff1f2e10c1956f3dbf2923b428ea6636b44",
-      "size_bytes": 15308
+      "sha256": "048869fdebed44e040391aebb5b866836e256e90e31d498b90e706c20ef80d69",
+      "size_bytes": 14845
     },
     "claim_boundary.md": {
       "sha256": "14d37c46ea6eb619427c0c28666b2da54cba9148040df0273ad64d6bbaa718fe",
