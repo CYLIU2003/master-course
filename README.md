@@ -79,7 +79,12 @@ fixed-dispatch matrix are likewise sealed at their producer boundary and
 verified by every later stage. Runtime decomposition never dereferences the
 recorded external `run_dir`, candidate accounting independently recomputes all
 12 canonical cost components within `1e-6 JPY`, and formal BEV frontier bounds
-use only the requested depot. Finalization normalizes both the
+use the effective dispatch depot even when the request omits it. Candidate
+discovery, cross-evaluation, confirmation, and finalization must share one
+clean Git SHA. Runtime decomposition preserves the indexed Stage-1 runtime
+directly, while candidate accounting also reconciles canonical cost against
+the independently solved Stage-2 variable-cost objective. Null formal thread
+controls fail as a structured 422 before queueing. Finalization normalizes both the
 submitted copy and worker-persisted body through the public request model,
 compares every normalized SUNNY/RAIN control except the declared
 scenario-specific `prepared_input_id`, and requires each public worker run

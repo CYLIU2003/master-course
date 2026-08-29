@@ -14069,6 +14069,22 @@ def _public_run_enforces_interactive_runtime_controls(
     return not bool(request.research_run)
 
 
+def _validate_formal_runtime_controls_or_http_error(
+    request: RunOptimizationBody,
+) -> None:
+    """Reject missing formal controls before an asynchronous job is queued."""
+
+    if request.research_run and request.gurobi_threads is None:
+        raise HTTPException(
+            status_code=422,
+            detail=make_error(
+                AppErrorCode.SCHEMA_VALIDATION_ERROR,
+                "research batch runs require an explicit gurobi_threads",
+                field="gurobi_threads",
+            ),
+        )
+
+
 @router.post("/scenarios/{scenario_id}/run-optimization")
 def run_optimization(
     scenario_id: str,
@@ -14099,6 +14115,7 @@ def run_optimization(
             ),
         )
     normalized_requested_mode = _normalize_solver_mode(request.mode)
+    _validate_formal_runtime_controls_or_http_error(request)
     if request.stage1_bev_frontier_enabled and normalized_requested_mode != (
         "phase3_two_stage"
     ):
@@ -14222,11 +14239,17 @@ def run_optimization(
             ),
         )
     _require_nonempty_prepared_scope(prep, action="Optimization preflight")
+    scope = _resolve_dispatch_scope(
+        scenario_id,
+        service_id=request.service_id,
+        depot_id=request.depot_id,
+        persist=True,
+    )
     active_bev_count = None
     if request.research_run and normalized_requested_mode == "phase3_two_stage":
         active_bev_count = _prepared_active_bev_count_or_http_error(
             Path(prep.solver_input_path),
-            depot_id=request.depot_id,
+            depot_id=scope.get("depotId"),
         )
     request = _apply_research_phase3_candidate_coverage_policy_or_http_error(
         request,
@@ -14261,12 +14284,6 @@ def run_optimization(
                 currentPreparedInputId=prep.prepared_input_id,
             ),
         )
-    scope = _resolve_dispatch_scope(
-        scenario_id,
-        service_id=request.service_id,
-        depot_id=request.depot_id,
-        persist=True,
-    )
     job = job_store.create_job(execution_model=_executor_mode())
     job_store.update_job(
         job.job_id,

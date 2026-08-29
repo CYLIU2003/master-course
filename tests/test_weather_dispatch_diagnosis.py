@@ -3,10 +3,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import sys
+from types import SimpleNamespace
+from unittest import mock
 
 from fastapi import HTTPException
 import pytest
 
+import bff.routers.optimization as optimization
 import scripts.run_weather_dispatch_diagnosis as diagnosis
 from scripts.run_weather_dispatch_diagnosis import (
     REQUIRED_CONFIRMATION_INPUT_HASHES,
@@ -35,12 +38,14 @@ from bff.routers.optimization import (
     _prepared_active_bev_count,
     _prepared_active_bev_count_or_http_error,
     _public_run_enforces_interactive_runtime_controls,
+    _validate_formal_runtime_controls_or_http_error,
 )
 from src.optimization.common.evaluator import CostBreakdown
 from src.optimization.milp.solver_adapter import (
     _EXACT_ICE_CLONE_REPRESENTATION_OVERRIDE,
     _cost_breakdown_accounting_reconciliation,
     _phase3_candidate_selection_key,
+    _stage2_result_accounting_reconciliation,
 )
 
 
@@ -981,7 +986,7 @@ def test_runtime_row_never_follows_recorded_external_run_dir(tmp_path: Path) -> 
 
     assert row["runtime_source"] == "indexed_case_metrics_only"
     assert row["source_run_dir_recorded_not_followed"] == str(poison_run_dir)
-    assert row["stage1_runtime_sec"] == pytest.approx(45.0)
+    assert row["stage1_runtime_sec"] == pytest.approx(50.0)
     assert row["stage2_runtime_sec"] == pytest.approx(5.0)
     assert row["candidate_pool_generated"] == 22
     assert row["rolling_runtime_sec"] is None
@@ -1026,6 +1031,30 @@ def test_cross_evaluation_rejects_tampered_candidate_union(
     monkeypatch.setattr(diagnosis, "_assert_clean_sha", lambda *_args: "sha")
 
     with pytest.raises(RuntimeError, match="changed after sealing"):
+        diagnosis.cross_evaluate(tmp_path)
+
+
+def test_cross_evaluation_rejects_discovery_from_another_git_sha(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    union_path = tmp_path / "weather_candidate_union.json"
+    _write_json(union_path, {"candidates": []})
+    diagnosis._write_artifact_seal(
+        union_path,
+        tmp_path / "weather_candidate_union.seal.json",
+    )
+    _write_json(
+        tmp_path / "candidate_discovery_manifest.json",
+        {"git_sha": "producer-sha"},
+    )
+    monkeypatch.setattr(
+        diagnosis,
+        "_assert_clean_sha",
+        lambda *_args: "consumer-sha",
+    )
+
+    with pytest.raises(RuntimeError, match="candidate discovery Git SHA mismatch"):
         diagnosis.cross_evaluate(tmp_path)
 
 
@@ -1177,6 +1206,33 @@ def test_candidate_accounting_reconciliation_recomputes_all_components() -> None
     assert passed is False
 
 
+def test_candidate_accounting_reconciles_independent_stage2_result() -> None:
+    breakdown = CostBreakdown(
+        electricity_cost=30.0,
+        fuel_cost=20.0,
+        vehicle_usage_cost=100.0,
+        co2_cost=10.0,
+        total_co2_kg=10.0,
+        grid_electricity_co2_kg=4.0,
+        total_cost=160.0,
+    )
+    total, delta, passed = _stage2_result_accounting_reconciliation(
+        breakdown,
+        stage2_objective_jpy=34.0,
+    )
+    assert total == pytest.approx(160.0)
+    assert delta == pytest.approx(0.0)
+    assert passed is True
+
+    total, delta, passed = _stage2_result_accounting_reconciliation(
+        breakdown,
+        stage2_objective_jpy=35.0,
+    )
+    assert total == pytest.approx(161.0)
+    assert delta == pytest.approx(1.0)
+    assert passed is False
+
+
 def test_prepared_active_bev_count_rejects_missing_powertrain(tmp_path: Path) -> None:
     solver_input = tmp_path / "solver_input.json"
     _write_json(
@@ -1244,6 +1300,117 @@ def test_public_formal_run_preserves_predeclared_runtime_controls() -> None:
     ordinary = RunOptimizationBody(research_run=False, gurobi_threads=1)
     assert _public_run_enforces_interactive_runtime_controls(formal) is False
     assert _public_run_enforces_interactive_runtime_controls(ordinary) is True
+
+
+def test_null_formal_thread_control_is_rejected_before_queueing() -> None:
+    request = RunOptimizationBody(research_run=True, gurobi_threads=None)
+
+    with pytest.raises(HTTPException) as exc_info:
+        _validate_formal_runtime_controls_or_http_error(request)
+
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.detail["field"] == "gurobi_threads"
+
+
+def test_formal_endpoint_uses_resolved_depot_for_prepared_bev_count(
+    tmp_path: Path,
+) -> None:
+    fake_job = SimpleNamespace(job_id="job-1")
+    solver_input = tmp_path / "solver_input.json"
+    _write_json(solver_input, {"vehicles": []})
+    prep = SimpleNamespace(
+        is_valid=True,
+        prepared_input_id="prepared-current",
+        solver_input_path=str(solver_input),
+        scope_summary={"trip_count": 264},
+        error=None,
+        error_code=None,
+    )
+    clean_git_state = {
+        "git_state_available": True,
+        "git_sha": "clean-sha",
+        "git_dirty": False,
+        "git_state_error": None,
+        "status_porcelain": [],
+        "repository_root": str(tmp_path),
+    }
+    with (
+        mock.patch.object(optimization, "_require_scenario"),
+        mock.patch.object(
+            optimization,
+            "collect_git_state",
+            return_value=clean_git_state,
+        ),
+        mock.patch.object(
+            optimization,
+            "_BFF_RUNTIME_GIT_STATE",
+            clean_git_state,
+        ),
+        mock.patch.object(
+            optimization.store,
+            "get_scenario_document_shallow",
+            return_value={},
+        ),
+        mock.patch.object(
+            optimization,
+            "get_or_build_run_preparation",
+            return_value=prep,
+        ),
+        mock.patch.object(
+            optimization,
+            "_resolve_dispatch_scope",
+            return_value={"serviceId": "WEEKDAY", "depotId": "dep-1"},
+        ),
+        mock.patch.object(
+            optimization,
+            "_prepared_active_bev_count_or_http_error",
+            return_value=8,
+        ) as count_bevs,
+        mock.patch.object(
+            optimization.job_store,
+            "create_job",
+            return_value=fake_job,
+        ),
+        mock.patch.object(optimization.job_store, "update_job"),
+        mock.patch.object(
+            optimization.job_store,
+            "job_to_dict",
+            return_value={"job_id": "job-1", "status": "pending"},
+        ),
+        mock.patch.object(
+            optimization,
+            "_submit_optimization_job",
+            return_value=True,
+        ) as submit_job,
+    ):
+        optimization.run_optimization(
+            "scenario-1",
+            RunOptimizationBody(
+                mode="phase3_two_stage",
+                research_run=True,
+                gurobi_threads=1,
+            ),
+            {"built_ready": True, "built_dir": str(tmp_path), "routes_df": None},
+        )
+
+    count_bevs.assert_called_once_with(solver_input, depot_id="dep-1")
+    assert submit_job.call_args.kwargs["args"][9] == "dep-1"
+
+
+def test_stage_handoff_requires_one_clean_git_sha() -> None:
+    diagnosis._require_stage_git_sha(
+        {"git_sha": "expected"},
+        expected_sha="expected",
+        fields=("git_sha",),
+        stage="discovery",
+    )
+    with pytest.raises(RuntimeError, match="discovery Git SHA mismatch"):
+        diagnosis._require_stage_git_sha(
+            {"git_sha": "producer"},
+            expected_sha="consumer",
+            fields=("git_sha",),
+            stage="discovery",
+        )
 
 
 def test_selector_off_gate_uses_request_and_model_build_evidence() -> None:

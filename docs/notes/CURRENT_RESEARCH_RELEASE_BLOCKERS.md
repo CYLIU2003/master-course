@@ -101,6 +101,18 @@ read-only 103-artifact/20-run bundle audit passed. The complete repository
 suite passed 1,650 tests. No scenario, frozen result, or canonical evidence
 was rewritten, and no formal solver experiment was run.
 
+The next exact-HEAD review closes four more P1 paths and one P2. Every separate
+diagnosis stage must share one clean Git SHA; a formal null thread request is
+rejected before queueing; omitted depot requests use the resolved execution
+scope for fleet counting; worker candidate accounting is tied to the
+independently solved Stage-2 variable-cost objective; and the indexed Stage-1
+runtime is used directly rather than subtracting Stage 2 twice. A read-only
+103-artifact audit preserves the original medians: SUNNY A/B
+30.754/435.106 seconds and RAIN A/B 31.887/435.103 seconds. The expanded
+related suite passes 140 tests and the candidate-model suite passes 20 tests.
+The complete repository suite passes 1,655 tests.
+No frozen evidence or numerical result was changed.
+
 The scenario audit retained the exact intended counterfactual: SUNNY
 `771d115b-75b0-49f7-a7f0-25f259a2cd21` uses 2025-08-05 service/weather/PV;
 RAIN `b23fd26c-1233-4c73-bb9e-bdb8b1584760` keeps the same 2025-08-05 WEEKDAY
