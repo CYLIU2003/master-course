@@ -1,0 +1,6 @@
+# scenario_results
+
+| scenario | scenario_id | used_bev | used_ice | bev_trips | ice_trips | served_trips | unserved_trips | executed_day_cost_jpy | fuel_liters | grid_import_kwh | pv_generated_kwh | pv_to_bus_kwh | pv_to_bess_kwh | bess_to_bus_kwh | pv_curtailed_kwh | peak_grid_kw | minimum_executed_bev_soc_kwh | stage1_certified_gap_percent | solve_time_seconds | rolling_steps | physical_validation | accounting_reconciliation |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| SUNNY | 771d115b-75b0-49f7-a7f0-25f259a2cd21 | 28 | 4 | 199 | 65 | 264 | 0 | 660983.7838045002 | 137.52112411504424 | 0.0 | 6056.25 | 110.05179920633815 | 2572.9774313619487 | 2322.11213180417 | 3373.2207694317135 | 0.0 | 68.91 | 9.521347575597812 | 380.98232229676796 | 24/24 | VALID | OK |
+| RAIN | b23fd26c-1233-4c73-bb9e-bdb8b1584760 | 21 | 11 | 91 | 173 | 264 | 0 | 698598.6286431606 | 357.8813387168142 | 130.85194331991343 | 996.2 | 230.56772562524523 | 765.6322743747547 | 690.9831276232146 | 1.1368683772161603e-13 | 122.30166569271763 | 68.91 | 1.6563580883521969 | 380.0187980730552 | 24/24 | VALID | OK |

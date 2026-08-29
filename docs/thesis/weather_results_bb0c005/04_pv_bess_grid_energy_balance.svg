@@ -1,0 +1,416 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="612.823812pt" height="372.976713pt" viewBox="0 0 612.823812 372.976713" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ <metadata>
+  <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+   <cc:Work>
+    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+    <dc:format>image/svg+xml</dc:format>
+    <dc:creator>
+     <cc:Agent>
+      <dc:title>thesis_weather_result_package_v1</dc:title>
+     </cc:Agent>
+    </dc:creator>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M 0 372.976713 
+L 612.823812 372.976713 
+L 612.823812 0 
+L 0 0 
+z
+" style="fill: #ffffff"/>
+  </g>
+  <g id="axes_1">
+   <g id="patch_2">
+    <path d="M 49.407813 348.4064 
+L 593.527812 348.4064 
+L 593.527812 88.6464 
+L 49.407813 88.6464 
+z
+" style="fill: #ffffff"/>
+   </g>
+   <g id="matplotlib.axis_1">
+    <g id="xtick_1">
+     <g id="line2d_1">
+      <defs>
+       <path id="mc86bd6feed" d="M 0 0 
+L 0 3.5 
+" style="stroke: #252a34; stroke-width: 0.8"/>
+      </defs>
+      <g>
+       <use xlink:href="#mc86bd6feed" x="177.672886" y="348.4064" style="fill: #252a34; stroke: #252a34; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_1">
+      <text style="font-size: 10px; font-family: 'Noto Sans JP'; text-anchor: middle; fill: #252a34" x="177.672886" y="363.347025" transform="rotate(-0 177.672886 363.347025)">SUNNY</text>
+     </g>
+    </g>
+    <g id="xtick_2">
+     <g id="line2d_2">
+      <g>
+       <use xlink:href="#mc86bd6feed" x="465.262739" y="348.4064" style="fill: #252a34; stroke: #252a34; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_2">
+      <text style="font-size: 10px; font-family: 'Noto Sans JP'; text-anchor: middle; fill: #252a34" x="465.262739" y="363.347025" transform="rotate(-0 465.262739 363.347025)">RAIN</text>
+     </g>
+    </g>
+   </g>
+   <g id="matplotlib.axis_2">
+    <g id="ytick_1">
+     <g id="line2d_3">
+      <path d="M 49.407813 348.4064 
+L 593.527812 348.4064 
+" clip-path="url(#pf5c0bb4eff)" style="fill: none; stroke: #e5e7eb; stroke-width: 0.7; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_4">
+      <defs>
+       <path id="m7bf2f1e23b" d="M 0 0 
+L -3.5 0 
+" style="stroke: #252a34; stroke-width: 0.8"/>
+      </defs>
+      <g>
+       <use xlink:href="#m7bf2f1e23b" x="49.407813" y="348.4064" style="fill: #252a34; stroke: #252a34; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_3">
+      <text style="font-size: 10px; font-family: 'Noto Sans JP'; text-anchor: end; fill: #252a34" x="42.407813" y="352.376712" transform="rotate(-0 42.407813 352.376712)">0</text>
+     </g>
+    </g>
+    <g id="ytick_2">
+     <g id="line2d_5">
+      <path d="M 49.407813 305.113067 
+L 593.527812 305.113067 
+" clip-path="url(#pf5c0bb4eff)" style="fill: none; stroke: #e5e7eb; stroke-width: 0.7; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_6">
+      <g>
+       <use xlink:href="#m7bf2f1e23b" x="49.407813" y="305.113067" style="fill: #252a34; stroke: #252a34; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_4">
+      <text style="font-size: 10px; font-family: 'Noto Sans JP'; text-anchor: end; fill: #252a34" x="42.407813" y="309.083379" transform="rotate(-0 42.407813 309.083379)">500</text>
+     </g>
+    </g>
+    <g id="ytick_3">
+     <g id="line2d_7">
+      <path d="M 49.407813 261.819733 
+L 593.527812 261.819733 
+" clip-path="url(#pf5c0bb4eff)" style="fill: none; stroke: #e5e7eb; stroke-width: 0.7; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_8">
+      <g>
+       <use xlink:href="#m7bf2f1e23b" x="49.407813" y="261.819733" style="fill: #252a34; stroke: #252a34; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_5">
+      <text style="font-size: 10px; font-family: 'Noto Sans JP'; text-anchor: end; fill: #252a34" x="42.407813" y="265.790046" transform="rotate(-0 42.407813 265.790046)">1000</text>
+     </g>
+    </g>
+    <g id="ytick_4">
+     <g id="line2d_9">
+      <path d="M 49.407813 218.5264 
+L 593.527812 218.5264 
+" clip-path="url(#pf5c0bb4eff)" style="fill: none; stroke: #e5e7eb; stroke-width: 0.7; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_10">
+      <g>
+       <use xlink:href="#m7bf2f1e23b" x="49.407813" y="218.5264" style="fill: #252a34; stroke: #252a34; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_6">
+      <text style="font-size: 10px; font-family: 'Noto Sans JP'; text-anchor: end; fill: #252a34" x="42.407813" y="222.496713" transform="rotate(-0 42.407813 222.496713)">1500</text>
+     </g>
+    </g>
+    <g id="ytick_5">
+     <g id="line2d_11">
+      <path d="M 49.407813 175.233067 
+L 593.527812 175.233067 
+" clip-path="url(#pf5c0bb4eff)" style="fill: none; stroke: #e5e7eb; stroke-width: 0.7; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_12">
+      <g>
+       <use xlink:href="#m7bf2f1e23b" x="49.407813" y="175.233067" style="fill: #252a34; stroke: #252a34; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_7">
+      <text style="font-size: 10px; font-family: 'Noto Sans JP'; text-anchor: end; fill: #252a34" x="42.407813" y="179.203379" transform="rotate(-0 42.407813 179.203379)">2000</text>
+     </g>
+    </g>
+    <g id="ytick_6">
+     <g id="line2d_13">
+      <path d="M 49.407813 131.939733 
+L 593.527812 131.939733 
+" clip-path="url(#pf5c0bb4eff)" style="fill: none; stroke: #e5e7eb; stroke-width: 0.7; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_14">
+      <g>
+       <use xlink:href="#m7bf2f1e23b" x="49.407813" y="131.939733" style="fill: #252a34; stroke: #252a34; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_8">
+      <text style="font-size: 10px; font-family: 'Noto Sans JP'; text-anchor: end; fill: #252a34" x="42.407813" y="135.910046" transform="rotate(-0 42.407813 135.910046)">2500</text>
+     </g>
+    </g>
+    <g id="ytick_7">
+     <g id="line2d_15">
+      <path d="M 49.407813 88.6464 
+L 593.527812 88.6464 
+" clip-path="url(#pf5c0bb4eff)" style="fill: none; stroke: #e5e7eb; stroke-width: 0.7; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_16">
+      <g>
+       <use xlink:href="#m7bf2f1e23b" x="49.407813" y="88.6464" style="fill: #252a34; stroke: #252a34; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_9">
+      <text style="font-size: 10px; font-family: 'Noto Sans JP'; text-anchor: end; fill: #252a34" x="42.407813" y="92.616713" transform="rotate(-0 42.407813 92.616713)">3000</text>
+     </g>
+    </g>
+    <g id="text_10">
+     <text style="font-size: 10px; font-family: 'Noto Sans JP'; text-anchor: middle; fill: #252a34" x="15.140625" y="218.5264" transform="rotate(-90 15.140625 218.5264)">24時間合計エネルギー（kWh）</text>
+    </g>
+   </g>
+   <g id="patch_3">
+    <path d="M 74.14054 348.4064 
+L 125.906713 348.4064 
+L 125.906713 338.877382 
+L 74.14054 338.877382 
+z
+" clip-path="url(#pf5c0bb4eff)" style="fill: #d6a72c; stroke: #252a34; stroke-width: 0.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_4">
+    <path d="M 361.730392 348.4064 
+L 413.496565 348.4064 
+L 413.496565 328.442309 
+L 361.730392 328.442309 
+z
+" clip-path="url(#pf5c0bb4eff)" style="fill: #d6a72c; stroke: #252a34; stroke-width: 0.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_5">
+    <path d="M 125.906713 348.4064 
+L 177.672886 348.4064 
+L 177.672886 125.620861 
+L 125.906713 125.620861 
+z
+" clip-path="url(#pf5c0bb4eff)" style="fill: #7a8b3a; stroke: #252a34; stroke-width: 0.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_6">
+    <path d="M 413.496565 348.4064 
+L 465.262739 348.4064 
+L 465.262739 282.112853 
+L 413.496565 282.112853 
+z
+" clip-path="url(#pf5c0bb4eff)" style="fill: #7a8b3a; stroke: #252a34; stroke-width: 0.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_7">
+    <path d="M 177.672886 348.4064 
+L 229.43906 348.4064 
+L 229.43906 147.342451 
+L 177.672886 147.342451 
+z
+" clip-path="url(#pf5c0bb4eff)" style="fill: #2f6b9a; stroke: #252a34; stroke-width: 0.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_8">
+    <path d="M 465.262739 348.4064 
+L 517.028912 348.4064 
+L 517.028912 288.576474 
+L 465.262739 288.576474 
+z
+" clip-path="url(#pf5c0bb4eff)" style="fill: #2f6b9a; stroke: #252a34; stroke-width: 0.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_9">
+    <path d="M 229.43906 348.4064 
+L 281.205233 348.4064 
+L 281.205233 348.4064 
+L 229.43906 348.4064 
+z
+" clip-path="url(#pf5c0bb4eff)" style="fill: #d9822b; stroke: #252a34; stroke-width: 0.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_10">
+    <path d="M 517.028912 348.4064 
+L 568.795085 348.4064 
+L 568.795085 337.076366 
+L 517.028912 337.076366 
+z
+" clip-path="url(#pf5c0bb4eff)" style="fill: #d9822b; stroke: #252a34; stroke-width: 0.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_11">
+    <path d="M 49.407813 348.4064 
+L 49.407813 88.6464 
+" style="fill: none; stroke: #252a34; stroke-width: 0.8; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="patch_12">
+    <path d="M 49.407813 348.4064 
+L 593.527812 348.4064 
+" style="fill: none; stroke: #252a34; stroke-width: 0.8; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="text_11">
+    <text style="font-size: 8px; font-family: 'Noto Sans JP'; text-anchor: middle; fill: #252a34" x="100.023626" y="333.933632" transform="rotate(-0 100.023626 333.933632)">110</text>
+   </g>
+   <g id="text_12">
+    <text style="font-size: 8px; font-family: 'Noto Sans JP'; text-anchor: middle; fill: #252a34" x="387.613478" y="323.498559" transform="rotate(-0 387.613478 323.498559)">231</text>
+   </g>
+   <g id="text_13">
+    <text style="font-size: 8px; font-family: 'Noto Sans JP'; fill: #252a34" transform="translate(153.994175 122.620861) rotate(-90)">2,573</text>
+   </g>
+   <g id="text_14">
+    <text style="font-size: 8px; font-family: 'Noto Sans JP'; fill: #252a34" transform="translate(441.584027 279.112853) rotate(-90)">766</text>
+   </g>
+   <g id="text_15">
+    <text style="font-size: 8px; font-family: 'Noto Sans JP'; fill: #252a34" transform="translate(205.760348 144.342451) rotate(-90)">2,322</text>
+   </g>
+   <g id="text_16">
+    <text style="font-size: 8px; font-family: 'Noto Sans JP'; fill: #252a34" transform="translate(493.3502 285.576474) rotate(-90)">691</text>
+   </g>
+   <g id="text_17">
+    <text style="font-size: 8px; font-family: 'Noto Sans JP'; text-anchor: middle; fill: #252a34" x="255.322147" y="343.46265" transform="rotate(-0 255.322147 343.46265)">0</text>
+   </g>
+   <g id="text_18">
+    <text style="font-size: 8px; font-family: 'Noto Sans JP'; text-anchor: middle; fill: #252a34" x="542.911999" y="332.132616" transform="rotate(-0 542.911999 332.132616)">131</text>
+   </g>
+   <g id="legend_1">
+    <g id="patch_13">
+     <path d="M 181.639062 102.1989 
+L 197.639062 102.1989 
+L 197.639062 96.5989 
+L 181.639062 96.5989 
+z
+" style="fill: #d6a72c; stroke: #252a34; stroke-width: 0.6; stroke-linejoin: miter"/>
+    </g>
+    <g id="text_19">
+     <text style="font-size: 8px; font-family: 'Noto Sans JP'; text-anchor: start; fill: #252a34" x="204.039062" y="102.1989" transform="rotate(-0 204.039062 102.1989)">PV→bus</text>
+    </g>
+    <g id="patch_14">
+     <path d="M 249.966563 102.1989 
+L 265.966563 102.1989 
+L 265.966563 96.5989 
+L 249.966563 96.5989 
+z
+" style="fill: #7a8b3a; stroke: #252a34; stroke-width: 0.6; stroke-linejoin: miter"/>
+    </g>
+    <g id="text_20">
+     <text style="font-size: 8px; font-family: 'Noto Sans JP'; text-anchor: start; fill: #252a34" x="272.366562" y="102.1989" transform="rotate(-0 272.366562 102.1989)">PV→BESS</text>
+    </g>
+    <g id="patch_15">
+     <path d="M 324.064062 102.1989 
+L 340.064062 102.1989 
+L 340.064062 96.5989 
+L 324.064062 96.5989 
+z
+" style="fill: #2f6b9a; stroke: #252a34; stroke-width: 0.6; stroke-linejoin: miter"/>
+    </g>
+    <g id="text_21">
+     <text style="font-size: 8px; font-family: 'Noto Sans JP'; text-anchor: start; fill: #252a34" x="346.464062" y="102.1989" transform="rotate(-0 346.464062 102.1989)">BESS→bus</text>
+    </g>
+    <g id="patch_16">
+     <path d="M 402.009063 102.1989 
+L 418.009063 102.1989 
+L 418.009063 96.5989 
+L 402.009063 96.5989 
+z
+" style="fill: #d9822b; stroke: #252a34; stroke-width: 0.6; stroke-linejoin: miter"/>
+    </g>
+    <g id="text_22">
+     <text style="font-size: 8px; font-family: 'Noto Sans JP'; text-anchor: start; fill: #252a34" x="424.409063" y="102.1989" transform="rotate(-0 424.409063 102.1989)">系統→bus</text>
+    </g>
+   </g>
+  </g>
+  <g id="patch_17">
+   <path d="M 594.607812 11.8656 
+C 595.638922 11.8656 596.627939 11.619801 597.357044 11.182339 
+C 598.086148 10.744876 598.495812 10.151466 598.495812 9.5328 
+C 598.495812 8.914134 598.086148 8.320724 597.357044 7.883261 
+C 596.627939 7.445799 595.638922 7.2 594.607812 7.2 
+C 593.576703 7.2 592.587686 7.445799 591.858581 7.883261 
+C 591.129477 8.320724 590.719812 8.914134 590.719812 9.5328 
+C 590.719812 10.151466 591.129477 10.744876 591.858581 11.182339 
+C 592.587686 11.619801 593.576703 11.8656 594.607812 11.8656 
+z
+" style="fill: #afcbe0; stroke: #2f6b9a; stroke-width: 0.5; stroke-linejoin: miter"/>
+  </g>
+  <g id="patch_18">
+   <path d="M 601.735812 14.976 
+C 602.766922 14.976 603.755939 14.730201 604.485044 14.292739 
+C 605.214148 13.855276 605.623812 13.261866 605.623812 12.6432 
+C 605.623812 12.024534 605.214148 11.431124 604.485044 10.993661 
+C 603.755939 10.556199 602.766922 10.3104 601.735812 10.3104 
+C 600.704703 10.3104 599.715686 10.556199 598.986581 10.993661 
+C 598.257477 11.431124 597.847812 12.024534 597.847812 12.6432 
+C 597.847812 13.261866 598.257477 13.855276 598.986581 14.292739 
+C 599.715686 14.730201 600.704703 14.976 601.735812 14.976 
+z
+" style="fill: #afcbe0; stroke: #2f6b9a; stroke-width: 0.5; stroke-linejoin: miter"/>
+  </g>
+  <g id="patch_19">
+   <path d="M 599.143812 20.4192 
+C 600.174922 20.4192 601.163939 20.173401 601.893044 19.735939 
+C 602.622148 19.298476 603.031813 18.705066 603.031813 18.0864 
+C 603.031813 17.467734 602.622148 16.874324 601.893044 16.436861 
+C 601.163939 15.999399 600.174922 15.7536 599.143812 15.7536 
+C 598.112703 15.7536 597.123686 15.999399 596.394581 16.436861 
+C 595.665477 16.874324 595.255812 17.467734 595.255812 18.0864 
+C 595.255812 18.705066 595.665477 19.298476 596.394581 19.735939 
+C 597.123686 20.173401 598.112703 20.4192 599.143812 20.4192 
+z
+" style="fill: #afcbe0; stroke: #2f6b9a; stroke-width: 0.5; stroke-linejoin: miter"/>
+  </g>
+  <g id="patch_20">
+   <path d="M 590.071812 20.4192 
+C 591.102922 20.4192 592.091939 20.173401 592.821044 19.735939 
+C 593.550148 19.298476 593.959812 18.705066 593.959812 18.0864 
+C 593.959812 17.467734 593.550148 16.874324 592.821044 16.436861 
+C 592.091939 15.999399 591.102922 15.7536 590.071812 15.7536 
+C 589.040703 15.7536 588.051686 15.999399 587.322581 16.436861 
+C 586.593477 16.874324 586.183812 17.467734 586.183812 18.0864 
+C 586.183812 18.705066 586.593477 19.298476 587.322581 19.735939 
+C 588.051686 20.173401 589.040703 20.4192 590.071812 20.4192 
+z
+" style="fill: #afcbe0; stroke: #2f6b9a; stroke-width: 0.5; stroke-linejoin: miter"/>
+  </g>
+  <g id="patch_21">
+   <path d="M 587.479812 14.976 
+C 588.510922 14.976 589.499939 14.730201 590.229044 14.292739 
+C 590.958148 13.855276 591.367813 13.261866 591.367813 12.6432 
+C 591.367813 12.024534 590.958148 11.431124 590.229044 10.993661 
+C 589.499939 10.556199 588.510922 10.3104 587.479812 10.3104 
+C 586.448703 10.3104 585.459686 10.556199 584.730581 10.993661 
+C 584.001477 11.431124 583.591812 12.024534 583.591812 12.6432 
+C 583.591812 13.261866 584.001477 13.855276 584.730581 14.292739 
+C 585.459686 14.730201 586.448703 14.976 587.479812 14.976 
+z
+" style="fill: #afcbe0; stroke: #2f6b9a; stroke-width: 0.5; stroke-linejoin: miter"/>
+  </g>
+  <g id="patch_22">
+   <path d="M 594.607812 15.7536 
+C 595.295219 15.7536 595.954564 15.589734 596.440633 15.298092 
+C 596.926703 15.006451 597.199812 14.610844 597.199812 14.1984 
+C 597.199812 13.785956 596.926703 13.390349 596.440633 13.098708 
+C 595.954564 12.807066 595.295219 12.6432 594.607812 12.6432 
+C 593.920406 12.6432 593.261061 12.807066 592.774992 13.098708 
+C 592.288922 13.390349 592.015812 13.785956 592.015812 14.1984 
+C 592.015812 14.610844 592.288922 15.006451 592.774992 15.298092 
+C 593.261061 15.589734 593.920406 15.7536 594.607812 15.7536 
+z
+" style="fill: #d6a72c; stroke: #252a34; stroke-width: 0.4; stroke-linejoin: miter"/>
+  </g>
+  <g id="text_23">
+   <text style="font-weight: 700; font-size: 15px; font-family: 'Noto Sans JP'; text-anchor: start; fill: #252a34" x="8.167813" y="20.277337" transform="rotate(-0 8.167813 20.277337)">PV・BESS・系統電力のエネルギー収支</text>
+  </g>
+  <g id="text_24">
+   <text style="font-size: 9px; font-family: 'Noto Sans JP'; text-anchor: start; fill: #59636e" x="8.167813" y="29.7504" transform="rotate(-0 8.167813 29.7504)">BESS→busはPV→BESS×0.95²、両ケースともBESS終端SOC 3,000 kWh</text>
+  </g>
+ </g>
+ <defs>
+  <clipPath id="pf5c0bb4eff">
+   <rect x="49.407813" y="88.6464" width="544.12" height="259.76"/>
+  </clipPath>
+ </defs>
+</svg>

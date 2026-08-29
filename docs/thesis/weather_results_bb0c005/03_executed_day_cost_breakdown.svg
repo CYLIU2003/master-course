@@ -1,0 +1,413 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="559.252737pt" height="372.976713pt" viewBox="0 0 559.252737 372.976713" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ <metadata>
+  <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+   <cc:Work>
+    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+    <dc:format>image/svg+xml</dc:format>
+    <dc:creator>
+     <cc:Agent>
+      <dc:title>thesis_weather_result_package_v1</dc:title>
+     </cc:Agent>
+    </dc:creator>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M 0 372.976713 
+L 559.252737 372.976713 
+L 559.252737 0 
+L 0 0 
+z
+" style="fill: #ffffff"/>
+  </g>
+  <g id="axes_1">
+   <g id="patch_2">
+    <path d="M 60.535938 348.4064 
+L 540.071937 348.4064 
+L 540.071937 84.3264 
+L 60.535938 84.3264 
+z
+" style="fill: #ffffff"/>
+   </g>
+   <g id="matplotlib.axis_1">
+    <g id="xtick_1">
+     <g id="line2d_1">
+      <defs>
+       <path id="mc86bd6feed" d="M 0 0 
+L 0 3.5 
+" style="stroke: #252a34; stroke-width: 0.8"/>
+      </defs>
+      <g>
+       <use xlink:href="#mc86bd6feed" x="179.208988" y="348.4064" style="fill: #252a34; stroke: #252a34; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_1">
+      <text style="font-size: 10px; font-family: 'Noto Sans JP'; text-anchor: middle; fill: #252a34" x="179.208988" y="363.347025" transform="rotate(-0 179.208988 363.347025)">SUNNY</text>
+     </g>
+    </g>
+    <g id="xtick_2">
+     <g id="line2d_2">
+      <g>
+       <use xlink:href="#mc86bd6feed" x="421.398887" y="348.4064" style="fill: #252a34; stroke: #252a34; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_2">
+      <text style="font-size: 10px; font-family: 'Noto Sans JP'; text-anchor: middle; fill: #252a34" x="421.398887" y="363.347025" transform="rotate(-0 421.398887 363.347025)">RAIN</text>
+     </g>
+    </g>
+   </g>
+   <g id="matplotlib.axis_2">
+    <g id="ytick_1">
+     <g id="line2d_3">
+      <path d="M 60.535938 348.4064 
+L 540.071937 348.4064 
+" clip-path="url(#p131f20a74c)" style="fill: none; stroke: #e5e7eb; stroke-width: 0.7; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_4">
+      <defs>
+       <path id="m7bf2f1e23b" d="M 0 0 
+L -3.5 0 
+" style="stroke: #252a34; stroke-width: 0.8"/>
+      </defs>
+      <g>
+       <use xlink:href="#m7bf2f1e23b" x="60.535938" y="348.4064" style="fill: #252a34; stroke: #252a34; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_3">
+      <text style="font-size: 10px; font-family: 'Noto Sans JP'; text-anchor: end; fill: #252a34" x="53.535938" y="352.376712" transform="rotate(-0 53.535938 352.376712)">0</text>
+     </g>
+    </g>
+    <g id="ytick_2">
+     <g id="line2d_5">
+      <path d="M 60.535938 314.655158 
+L 540.071937 314.655158 
+" clip-path="url(#p131f20a74c)" style="fill: none; stroke: #e5e7eb; stroke-width: 0.7; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_6">
+      <g>
+       <use xlink:href="#m7bf2f1e23b" x="60.535938" y="314.655158" style="fill: #252a34; stroke: #252a34; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_4">
+      <text style="font-size: 10px; font-family: 'Noto Sans JP'; text-anchor: end; fill: #252a34" x="53.535938" y="318.62547" transform="rotate(-0 53.535938 318.62547)">100000</text>
+     </g>
+    </g>
+    <g id="ytick_3">
+     <g id="line2d_7">
+      <path d="M 60.535938 280.903916 
+L 540.071937 280.903916 
+" clip-path="url(#p131f20a74c)" style="fill: none; stroke: #e5e7eb; stroke-width: 0.7; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_8">
+      <g>
+       <use xlink:href="#m7bf2f1e23b" x="60.535938" y="280.903916" style="fill: #252a34; stroke: #252a34; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_5">
+      <text style="font-size: 10px; font-family: 'Noto Sans JP'; text-anchor: end; fill: #252a34" x="53.535938" y="284.874228" transform="rotate(-0 53.535938 284.874228)">200000</text>
+     </g>
+    </g>
+    <g id="ytick_4">
+     <g id="line2d_9">
+      <path d="M 60.535938 247.152674 
+L 540.071937 247.152674 
+" clip-path="url(#p131f20a74c)" style="fill: none; stroke: #e5e7eb; stroke-width: 0.7; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_10">
+      <g>
+       <use xlink:href="#m7bf2f1e23b" x="60.535938" y="247.152674" style="fill: #252a34; stroke: #252a34; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_6">
+      <text style="font-size: 10px; font-family: 'Noto Sans JP'; text-anchor: end; fill: #252a34" x="53.535938" y="251.122986" transform="rotate(-0 53.535938 251.122986)">300000</text>
+     </g>
+    </g>
+    <g id="ytick_5">
+     <g id="line2d_11">
+      <path d="M 60.535938 213.401432 
+L 540.071937 213.401432 
+" clip-path="url(#p131f20a74c)" style="fill: none; stroke: #e5e7eb; stroke-width: 0.7; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_12">
+      <g>
+       <use xlink:href="#m7bf2f1e23b" x="60.535938" y="213.401432" style="fill: #252a34; stroke: #252a34; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_7">
+      <text style="font-size: 10px; font-family: 'Noto Sans JP'; text-anchor: end; fill: #252a34" x="53.535938" y="217.371744" transform="rotate(-0 53.535938 217.371744)">400000</text>
+     </g>
+    </g>
+    <g id="ytick_6">
+     <g id="line2d_13">
+      <path d="M 60.535938 179.65019 
+L 540.071937 179.65019 
+" clip-path="url(#p131f20a74c)" style="fill: none; stroke: #e5e7eb; stroke-width: 0.7; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_14">
+      <g>
+       <use xlink:href="#m7bf2f1e23b" x="60.535938" y="179.65019" style="fill: #252a34; stroke: #252a34; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_8">
+      <text style="font-size: 10px; font-family: 'Noto Sans JP'; text-anchor: end; fill: #252a34" x="53.535938" y="183.620502" transform="rotate(-0 53.535938 183.620502)">500000</text>
+     </g>
+    </g>
+    <g id="ytick_7">
+     <g id="line2d_15">
+      <path d="M 60.535938 145.898948 
+L 540.071937 145.898948 
+" clip-path="url(#p131f20a74c)" style="fill: none; stroke: #e5e7eb; stroke-width: 0.7; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_16">
+      <g>
+       <use xlink:href="#m7bf2f1e23b" x="60.535938" y="145.898948" style="fill: #252a34; stroke: #252a34; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_9">
+      <text style="font-size: 10px; font-family: 'Noto Sans JP'; text-anchor: end; fill: #252a34" x="53.535938" y="149.86926" transform="rotate(-0 53.535938 149.86926)">600000</text>
+     </g>
+    </g>
+    <g id="ytick_8">
+     <g id="line2d_17">
+      <path d="M 60.535938 112.147705 
+L 540.071937 112.147705 
+" clip-path="url(#p131f20a74c)" style="fill: none; stroke: #e5e7eb; stroke-width: 0.7; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_18">
+      <g>
+       <use xlink:href="#m7bf2f1e23b" x="60.535938" y="112.147705" style="fill: #252a34; stroke: #252a34; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_10">
+      <text style="font-size: 10px; font-family: 'Noto Sans JP'; text-anchor: end; fill: #252a34" x="53.535938" y="116.118018" transform="rotate(-0 53.535938 116.118018)">700000</text>
+     </g>
+    </g>
+    <g id="text_11">
+     <text style="font-size: 10px; font-family: 'Noto Sans JP'; text-anchor: middle; fill: #252a34" x="15.709375" y="216.3664" transform="rotate(-90 15.709375 216.3664)">24時間Rolling後の実行日会計費用（円）</text>
+    </g>
+   </g>
+   <g id="patch_3">
+    <path d="M 82.333028 348.4064 
+L 276.084948 348.4064 
+L 276.084948 132.398451 
+L 82.333028 132.398451 
+z
+" clip-path="url(#p131f20a74c)" style="fill: #8b949e; stroke: #252a34; stroke-width: 0.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_4">
+    <path d="M 324.522927 348.4064 
+L 518.274847 348.4064 
+L 518.274847 132.398451 
+L 324.522927 132.398451 
+z
+" clip-path="url(#p131f20a74c)" style="fill: #8b949e; stroke: #252a34; stroke-width: 0.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_5">
+    <path d="M 82.333028 132.398451 
+L 276.084948 132.398451 
+L 276.084948 125.436188 
+L 82.333028 125.436188 
+z
+" clip-path="url(#p131f20a74c)" style="fill: #d9822b; stroke: #252a34; stroke-width: 0.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_6">
+    <path d="M 324.522927 132.398451 
+L 518.274847 132.398451 
+L 518.274847 114.280041 
+L 324.522927 114.280041 
+z
+" clip-path="url(#p131f20a74c)" style="fill: #d9822b; stroke: #252a34; stroke-width: 0.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_7">
+    <path d="M 82.333028 125.436188 
+L 276.084948 125.436188 
+L 276.084948 125.436188 
+L 82.333028 125.436188 
+z
+" clip-path="url(#p131f20a74c)" style="fill: #2f6b9a; stroke: #252a34; stroke-width: 0.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_8">
+    <path d="M 324.522927 114.280041 
+L 518.274847 114.280041 
+L 518.274847 112.955116 
+L 324.522927 112.955116 
+z
+" clip-path="url(#p131f20a74c)" style="fill: #2f6b9a; stroke: #252a34; stroke-width: 0.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_9">
+    <path d="M 82.333028 125.436188 
+L 276.084948 125.436188 
+L 276.084948 125.316163 
+L 82.333028 125.316163 
+z
+" clip-path="url(#p131f20a74c)" style="fill: #7a8b3a; stroke: #252a34; stroke-width: 0.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_10">
+    <path d="M 324.522927 112.955116 
+L 518.274847 112.955116 
+L 518.274847 112.620686 
+L 324.522927 112.620686 
+z
+" clip-path="url(#p131f20a74c)" style="fill: #7a8b3a; stroke: #252a34; stroke-width: 0.6; stroke-linejoin: miter"/>
+   </g>
+   <g id="patch_11">
+    <path d="M 60.535938 348.4064 
+L 60.535938 84.3264 
+" style="fill: none; stroke: #252a34; stroke-width: 0.8; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="patch_12">
+    <path d="M 60.535938 348.4064 
+L 540.071937 348.4064 
+" style="fill: none; stroke: #252a34; stroke-width: 0.8; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="text_12">
+    <text style="font-weight: 700; font-size: 10px; font-family: 'Noto Sans JP'; text-anchor: middle; fill: #252a34" x="179.208988" y="121.941039" transform="rotate(-0 179.208988 121.941039)">660,984円</text>
+   </g>
+   <g id="text_13">
+    <text style="font-weight: 700; font-size: 10px; font-family: 'Noto Sans JP'; text-anchor: middle; fill: #252a34" x="421.398887" y="109.245562" transform="rotate(-0 421.398887 109.245562)">698,599円</text>
+   </g>
+   <g id="legend_1">
+    <g id="patch_13">
+     <path d="M 164.087687 97.8789 
+L 180.087687 97.8789 
+L 180.087687 92.2789 
+L 164.087687 92.2789 
+z
+" style="fill: #8b949e; stroke: #252a34; stroke-width: 0.6; stroke-linejoin: miter"/>
+    </g>
+    <g id="text_14">
+     <text style="font-size: 8px; font-family: 'Noto Sans JP'; text-anchor: start; fill: #252a34" x="186.487687" y="97.8789" transform="rotate(-0 186.487687 97.8789)">車両使用費</text>
+    </g>
+    <g id="patch_14">
+     <path d="M 242.487687 97.8789 
+L 258.487687 97.8789 
+L 258.487687 92.2789 
+L 242.487687 92.2789 
+z
+" style="fill: #d9822b; stroke: #252a34; stroke-width: 0.6; stroke-linejoin: miter"/>
+    </g>
+    <g id="text_15">
+     <text style="font-size: 8px; font-family: 'Noto Sans JP'; text-anchor: start; fill: #252a34" x="264.887687" y="97.8789" transform="rotate(-0 264.887687 97.8789)">燃料費</text>
+    </g>
+    <g id="patch_15">
+     <path d="M 304.887687 97.8789 
+L 320.887687 97.8789 
+L 320.887687 92.2789 
+L 304.887687 92.2789 
+z
+" style="fill: #2f6b9a; stroke: #252a34; stroke-width: 0.6; stroke-linejoin: miter"/>
+    </g>
+    <g id="text_16">
+     <text style="font-size: 8px; font-family: 'Noto Sans JP'; text-anchor: start; fill: #252a34" x="327.287687" y="97.8789" transform="rotate(-0 327.287687 97.8789)">系統電力費</text>
+    </g>
+    <g id="patch_16">
+     <path d="M 383.287687 97.8789 
+L 399.287687 97.8789 
+L 399.287687 92.2789 
+L 383.287687 92.2789 
+z
+" style="fill: #7a8b3a; stroke: #252a34; stroke-width: 0.6; stroke-linejoin: miter"/>
+    </g>
+    <g id="text_17">
+     <text style="font-size: 8px; font-family: 'Noto Sans JP'; text-anchor: start; fill: #252a34" x="405.687687" y="97.8789" transform="rotate(-0 405.687687 97.8789)">CO2費用</text>
+    </g>
+   </g>
+  </g>
+  <g id="patch_17">
+   <path d="M 542.015937 11.8656 
+C 542.955393 11.8656 543.856497 11.619801 544.520793 11.182339 
+C 545.185088 10.744876 545.558337 10.151466 545.558337 9.5328 
+C 545.558337 8.914134 545.185088 8.320724 544.520793 7.883261 
+C 543.856497 7.445799 542.955393 7.2 542.015937 7.2 
+C 541.076482 7.2 540.175378 7.445799 539.511082 7.883261 
+C 538.846787 8.320724 538.473537 8.914134 538.473537 9.5328 
+C 538.473537 10.151466 538.846787 10.744876 539.511082 11.182339 
+C 540.175378 11.619801 541.076482 11.8656 542.015937 11.8656 
+z
+" style="fill: #afcbe0; stroke: #2f6b9a; stroke-width: 0.5; stroke-linejoin: miter"/>
+  </g>
+  <g id="patch_18">
+   <path d="M 548.510337 14.976 
+C 549.449793 14.976 550.350897 14.730201 551.015193 14.292739 
+C 551.679488 13.855276 552.052737 13.261866 552.052737 12.6432 
+C 552.052737 12.024534 551.679488 11.431124 551.015193 10.993661 
+C 550.350897 10.556199 549.449793 10.3104 548.510337 10.3104 
+C 547.570882 10.3104 546.669778 10.556199 546.005482 10.993661 
+C 545.341187 11.431124 544.967937 12.024534 544.967937 12.6432 
+C 544.967937 13.261866 545.341187 13.855276 546.005482 14.292739 
+C 546.669778 14.730201 547.570882 14.976 548.510337 14.976 
+z
+" style="fill: #afcbe0; stroke: #2f6b9a; stroke-width: 0.5; stroke-linejoin: miter"/>
+  </g>
+  <g id="patch_19">
+   <path d="M 546.148737 20.4192 
+C 547.088193 20.4192 547.989297 20.173401 548.653593 19.735939 
+C 549.317888 19.298476 549.691137 18.705066 549.691137 18.0864 
+C 549.691137 17.467734 549.317888 16.874324 548.653593 16.436861 
+C 547.989297 15.999399 547.088193 15.7536 546.148737 15.7536 
+C 545.209282 15.7536 544.308178 15.999399 543.643882 16.436861 
+C 542.979587 16.874324 542.606337 17.467734 542.606337 18.0864 
+C 542.606337 18.705066 542.979587 19.298476 543.643882 19.735939 
+C 544.308178 20.173401 545.209282 20.4192 546.148737 20.4192 
+z
+" style="fill: #afcbe0; stroke: #2f6b9a; stroke-width: 0.5; stroke-linejoin: miter"/>
+  </g>
+  <g id="patch_20">
+   <path d="M 537.883137 20.4192 
+C 538.822593 20.4192 539.723697 20.173401 540.387993 19.735939 
+C 541.052288 19.298476 541.425537 18.705066 541.425537 18.0864 
+C 541.425537 17.467734 541.052288 16.874324 540.387993 16.436861 
+C 539.723697 15.999399 538.822593 15.7536 537.883137 15.7536 
+C 536.943682 15.7536 536.042578 15.999399 535.378282 16.436861 
+C 534.713987 16.874324 534.340737 17.467734 534.340737 18.0864 
+C 534.340737 18.705066 534.713987 19.298476 535.378282 19.735939 
+C 536.042578 20.173401 536.943682 20.4192 537.883137 20.4192 
+z
+" style="fill: #afcbe0; stroke: #2f6b9a; stroke-width: 0.5; stroke-linejoin: miter"/>
+  </g>
+  <g id="patch_21">
+   <path d="M 535.521537 14.976 
+C 536.460993 14.976 537.362097 14.730201 538.026393 14.292739 
+C 538.690688 13.855276 539.063937 13.261866 539.063937 12.6432 
+C 539.063937 12.024534 538.690688 11.431124 538.026393 10.993661 
+C 537.362097 10.556199 536.460993 10.3104 535.521537 10.3104 
+C 534.582082 10.3104 533.680978 10.556199 533.016682 10.993661 
+C 532.352387 11.431124 531.979137 12.024534 531.979137 12.6432 
+C 531.979137 13.261866 532.352387 13.855276 533.016682 14.292739 
+C 533.680978 14.730201 534.582082 14.976 535.521537 14.976 
+z
+" style="fill: #afcbe0; stroke: #2f6b9a; stroke-width: 0.5; stroke-linejoin: miter"/>
+  </g>
+  <g id="patch_22">
+   <path d="M 542.015937 15.7536 
+C 542.642241 15.7536 543.242977 15.589734 543.685841 15.298092 
+C 544.128704 15.006451 544.377537 14.610844 544.377537 14.1984 
+C 544.377537 13.785956 544.128704 13.390349 543.685841 13.098708 
+C 543.242977 12.807066 542.642241 12.6432 542.015937 12.6432 
+C 541.389634 12.6432 540.788898 12.807066 540.346034 13.098708 
+C 539.903171 13.390349 539.654337 13.785956 539.654337 14.1984 
+C 539.654337 14.610844 539.903171 15.006451 540.346034 15.298092 
+C 540.788898 15.589734 541.389634 15.7536 542.015937 15.7536 
+z
+" style="fill: #d6a72c; stroke: #252a34; stroke-width: 0.4; stroke-linejoin: miter"/>
+  </g>
+  <g id="text_18">
+   <text style="font-weight: 700; font-size: 15px; font-family: 'Noto Sans JP'; text-anchor: start; fill: #252a34" x="7.703937" y="20.277337" transform="rotate(-0 7.703937 20.277337)">実行日会計費用の内訳</text>
+  </g>
+  <g id="text_19">
+   <text style="font-size: 9px; font-family: 'Noto Sans JP'; text-anchor: start; fill: #59636e" x="7.703937" y="29.7504" transform="rotate(-0 7.703937 29.7504)">差額37,614.844839円は燃料費・系統電力費・CO2費用で構成</text>
+  </g>
+ </g>
+ <defs>
+  <clipPath id="p131f20a74c">
+   <rect x="60.535938" y="84.3264" width="479.536" height="264.08"/>
+  </clipPath>
+ </defs>
+</svg>

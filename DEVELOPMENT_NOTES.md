@@ -1,5 +1,61 @@
 # Development Notes
 
+## 2026-08-29 (Asia/Tokyo): thesis SUNNY/RAIN result package from canonical `bb0c005` evidence
+
+- On branch `research/thesis-weather-results-bb0c005` at base
+  `6bb8f80273bfea23e1f434a150be60008fda8dd4`, added
+  `scripts/build_thesis_weather_result_package.py`. The builder consumes only
+  the 39 Git-tracked files in
+  `docs/evidence/weather_dispatch_rerun_bb0c005/`, validates their published
+  hash index and all research gates fail-closed, and verifies that the source
+  bytes remain unchanged after generation. No Prepare, solver, Rolling,
+  workflow, or PR-merge operation was run.
+- The package reads both scenario IDs and their effective controls before
+  rendering: SUNNY `771d115b-75b0-49f7-a7f0-25f259a2cd21` and RAIN
+  `b23fd26c-1233-4c73-bb9e-bdb8b1584760`. It records the shared
+  `tsurumaki` / `WEEKDAY` / 2025-08-05 / 264-trip contract, the 60-vehicle
+  active fleet (35 BEV / 25 ICE), ten chargers, vehicle and BESS parameters,
+  tariffs, and the fixed Stage-1/2 controls. RAIN is described precisely as a
+  counterfactual that applies the low-PV curve derived from 2025-08-10 to the
+  weekday operation of 2025-08-05.
+- Generated `docs/thesis/weather_results_bb0c005/` with four CSV/Markdown
+  table pairs, five Japanese comparison figures in 300-dpi PNG and SVG, a
+  1,200--2,000-character Japanese results section, a claim-boundary note,
+  README, and a self-hashing package manifest. Figures use Noto Sans JP and
+  were visually inspected for glyphs, overlap, zero baselines, units, and
+  legibility. Repeated clean-directory generation is byte-for-byte
+  deterministic.
+- The optional 96-slot time-series figure is intentionally omitted: the
+  Git-tracked canonical artifacts do not persist a complete 96-slot executed
+  energy-flow series. The same fail-closed rule marks grid-import limit, PV
+  rated capacity, and BESS rated capacity/power as absent from the canonical
+  bundle instead of borrowing values from untracked or older files.
+- Claim boundary: the package reports an evaluated finite-candidate Phase 3
+  two-stage feasible result that passed physical, 24/24 Rolling, and accounting
+  gates. Its gap label is explicitly tied to the Stage-1 surrogate objective;
+  it does not establish integrated-network optimality, teacher release
+  readiness, or a general causal weather effect.
+- Reproduction and validation:
+
+  ```powershell
+  .\.venv\Scripts\python.exe scripts\build_thesis_weather_result_package.py `
+    --evidence-dir docs\evidence\weather_dispatch_rerun_bb0c005 `
+    --output-dir docs\thesis\weather_results_bb0c005
+  .\.venv\Scripts\python.exe -m compileall -q scripts tests
+  .\.venv\Scripts\python.exe -m pytest -q `
+    tests\test_thesis_weather_result_package.py `
+    tests\test_published_weather_rerun_evidence.py -p no:cacheprovider
+  # 7 passed
+  .\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider
+  # 1621 passed in 95.42s
+  git diff --check
+  ```
+
+- The unchanged evidence tree SHA-256 is
+  `c706da7e10bc4e99a06a441f91e1722baa971b41ab936d29db36e650accede5f`.
+  The 22-file, 702,918-byte result package manifest SHA-256 is
+  `f306cef3989070452e698870133804f41f5c0b1f6a89764021d11866291b105b`.
+
 ## 2026-08-29 (Asia/Tokyo): fresh public-path SUNNY/RAIN rerun at `bb0c005`
 
 - Tagged and froze `bb0c0050883a91dd86a9e8813ae88d4b6d8c361d` as
