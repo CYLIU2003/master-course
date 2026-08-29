@@ -127,9 +127,9 @@
   `c706da7e10bc4e99a06a441f91e1722baa971b41ab936d29db36e650accede5f`.
   The six-file parameter supplement tree SHA-256 is
   `3a0c955cc9b1fc6a3cba6a3a84fff48bbc505f6180969ca7377e68601df8eae8`.
-  After final renderer/path-order hardening, the 24-file, 1,083,969-byte
+  After the final reproduction-path review, the 24-file, 1,084,538-byte
   result package manifest SHA-256 is
-  `ccf13722880f2ddebdc5bf58231853e6d7306f52729050e12e98428742e005bb`.
+  `a67ef888077cb643927f997897e72dac78db266dacf5ccd9ea95d27973ae7f64`.
 - Final reporting review additionally makes every artifact/hash map sort
   relative POSIX paths with a casefold key, pins Matplotlib 3.10.8, Pillow
   12.1.1, and their complete renderer dependency set through
@@ -142,6 +142,20 @@
   manifest/README update. The complete repository suite passed `1641 passed
   in 180.98s`; compilation and diff hygiene also passed. No numerical result,
   evidence source byte, table, or figure byte changed.
+- A subsequent final-HEAD review found five remaining reproduction-path gaps.
+  The parameter-source capture index now sorts normalized relative POSIX names
+  with the same casefold key as the package and refuses every non-empty target,
+  preventing stale files from entering its sealed inventory. The clean-runner
+  font regression reads `THESIS_JAPANESE_FONT_PATH` before consulting the host
+  font inventory. Generated reproduction instructions now download the pinned
+  Noto Sans JP `Sans2.004` file, verify its SHA-256, bind it through that
+  environment variable, and describe the tree-hash ordering as Unicode-
+  casefolded relative POSIX names. These are reporting/capture reproducibility
+  changes only; scenario inputs, solver outputs, canonical evidence bytes, and
+  numerical claims remain unchanged.
+  The reporting-focused suite passed `24 passed in 7.99s`; exact regeneration,
+  compilation, README navigation (`3 passed`), and diff hygiene passed. The
+  complete repository suite passed `1643 passed in 182.63s`.
 
 ## 2026-08-29 (Asia/Tokyo): formal Phase-3 provenance review hardening
 

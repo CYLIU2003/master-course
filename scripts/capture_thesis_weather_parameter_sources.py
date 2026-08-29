@@ -69,11 +69,28 @@ def _sha256(path: Path) -> str:
 
 
 def _artifact_hashes(root: Path) -> dict[str, str]:
-    return {
-        path.relative_to(root).as_posix(): _sha256(path)
-        for path in sorted(root.rglob("*"))
+    artifacts = [
+        (path.relative_to(root).as_posix(), path)
+        for path in root.rglob("*")
         if path.is_file() and path.name != "artifact_hashes.json"
+    ]
+    return {
+        relative_path: _sha256(path)
+        for relative_path, path in sorted(
+            artifacts,
+            key=lambda item: item[0].casefold(),
+        )
     }
+
+
+def _require_empty_output_directory(output_dir: Path) -> None:
+    """Create an empty capture target or reject filesystem-dependent output."""
+
+    if output_dir.exists() and any(output_dir.iterdir()):
+        raise ParameterSourceError(
+            f"Parameter-source output directory must be empty: {output_dir}"
+        )
+    output_dir.mkdir(parents=True, exist_ok=True)
 
 
 def extract_parameter_values(
@@ -293,7 +310,7 @@ def capture_parameter_sources(
         "Published result summary execution SHA differs from the capture contract",
     )
     target = output_dir.resolve()
-    target.mkdir(parents=True, exist_ok=True)
+    _require_empty_output_directory(target)
     scenarios = {
         "SUNNY": _capture_one("SUNNY", sunny_run_dir.resolve(), target, published_summary),
         "RAIN": _capture_one("RAIN", rain_run_dir.resolve(), target, published_summary),

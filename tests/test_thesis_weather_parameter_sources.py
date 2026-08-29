@@ -39,6 +39,37 @@ def test_parameter_source_hash_inventory_matches_exact_bytes() -> None:
     assert index == actual
 
 
+def test_artifact_hash_inventory_uses_relative_posix_casefold_order(
+    tmp_path: Path,
+) -> None:
+    for relative_path in (
+        "parameter_source_manifest.json",
+        "RAIN/run_input_manifest.json",
+        "SUNNY/scenario_input_snapshot.json",
+    ):
+        path = tmp_path / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(relative_path, encoding="utf-8")
+
+    assert list(capture._artifact_hashes(tmp_path)) == [
+        "parameter_source_manifest.json",
+        "RAIN/run_input_manifest.json",
+        "SUNNY/scenario_input_snapshot.json",
+    ]
+
+
+def test_capture_rejects_nonempty_output_directory(tmp_path: Path) -> None:
+    output_dir = tmp_path / "parameter-sources"
+    output_dir.mkdir()
+    (output_dir / "obsolete_result.csv").write_text("stale\n", encoding="utf-8")
+
+    with pytest.raises(
+        capture.ParameterSourceError,
+        match="Parameter-source output directory must be empty",
+    ):
+        capture._require_empty_output_directory(output_dir)
+
+
 def test_parameter_sources_match_published_fresh_run_provenance() -> None:
     published = _read_json(PUBLISHED_EVIDENCE / "result_summary.json")
     captured = _read_json(PARAMETER_SOURCES / "parameter_source_manifest.json")

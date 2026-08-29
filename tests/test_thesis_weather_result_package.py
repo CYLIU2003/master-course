@@ -127,9 +127,15 @@ def test_configured_japanese_font_path_is_the_selected_face(
 ) -> None:
     from matplotlib import font_manager
 
-    configured_path = Path(
-        font_manager.findfont("Noto Sans JP", fallback_to_default=False)
-    ).resolve()
+    configured_font = os.environ.get("THESIS_JAPANESE_FONT_PATH")
+    if configured_font:
+        configured_path = Path(configured_font).resolve()
+    else:
+        configured_path = next(
+            Path(entry.fname).resolve()
+            for entry in font_manager.fontManager.ttflist
+            if entry.name == "Noto Sans JP"
+        )
     monkeypatch.setenv("THESIS_JAPANESE_FONT_PATH", str(configured_path))
 
     _plt, font_name = builder._configure_matplotlib()

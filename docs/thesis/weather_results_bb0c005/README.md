@@ -6,6 +6,14 @@
 
 ```powershell
 python -m pip install -r requirements-reporting-lock.txt
+$fontPath = Join-Path $env:TEMP "NotoSansJP-VF-Sans2.004.ttf"
+Invoke-WebRequest `
+  -Uri "https://raw.githubusercontent.com/notofonts/noto-cjk/Sans2.004/Sans/Variable/TTF/Subset/NotoSansJP-VF.ttf" `
+  -OutFile $fontPath
+$expectedFontHash = "f4b373b226668ee33a6e54b02823dcd2d1209f17159f777421ae8c2275160369"
+$actualFontHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $fontPath).Hash.ToLowerInvariant()
+if ($actualFontHash -ne $expectedFontHash) { throw "Noto Sans JP SHA-256 mismatch: $actualFontHash" }
+$env:THESIS_JAPANESE_FONT_PATH = $fontPath
 python scripts/verify_thesis_weather_result_package.py `
   --evidence-dir docs/evidence/weather_dispatch_rerun_bb0c005 `
   --parameter-evidence-dir docs/evidence/weather_dispatch_rerun_bb0c005_parameter_sources `
@@ -50,5 +58,5 @@ python scripts/verify_thesis_weather_result_package.py `
 Source bundle tree SHA-256: `c706da7e10bc4e99a06a441f91e1722baa971b41ab936d29db36e650accede5f`
 Parameter-source supplement tree SHA-256: `3a0c955cc9b1fc6a3cba6a3a84fff48bbc505f6180969ca7377e68601df8eae8`
 
-両tree SHA-256は、各directoryについてファイルを相対path順に並べ、
+両tree SHA-256は、各directoryについて相対POSIX pathをUnicode casefoldしたkey順に並べ、
 `relative_path + NUL + file_sha256 + LF`を連結したUTF-8 bytesのSHA-256である。

@@ -20,7 +20,9 @@ verifies its SHA-256, and passes that exact file to the thesis figure builder;
 missing or substituted Japanese fonts remain a fail-closed error. The complete
 Matplotlib/Pillow renderer dependency set is pinned in
 `requirements-reporting-lock.txt` on both operating systems, and artifact maps
-use platform-independent relative POSIX path ordering.
+use platform-independent relative POSIX path ordering with an explicit
+Unicode-casefold sort key. The package README includes the pinned Noto Sans JP
+download, SHA-256 check, and environment binding required before reproduction.
 
 ## Current 2026-08-29 fresh SUNNY/RAIN rerun
 

@@ -2,12 +2,15 @@
 
 ## 2026-08-29 (Asia/Tokyo): thesis-report reproducibility review closed
 
-The SUNNY/RAIN thesis package now sorts every hash/artifact map by relative
+The SUNNY/RAIN thesis package now sorts every hash/artifact map, including the
+raw parameter-source capture index, by relative
 POSIX path with a casefold key, pins the complete Matplotlib/Pillow renderer
 dependency set on Windows and Ubuntu, verifies the configured Noto Sans JP file
-is the face actually selected, and documents exact verification before any
-intentional regeneration. Exact regeneration and 70 focused tests pass.
-The complete repository suite passes 1,641 tests.
+is the face actually selected, rejects non-empty parameter-capture targets, and
+documents the pinned font acquisition plus exact verification before any
+intentional regeneration. The frozen numerical evidence is unchanged; fresh
+validation passed: 24 reporting-focused tests, exact regeneration, compilation,
+3 README-navigation tests, diff hygiene, and the complete 1,643-test suite.
 
 This changes only reporting reproducibility metadata and instructions. The
 canonical `bb0c005` evidence bytes, numerical tables, figures, certified gaps,
