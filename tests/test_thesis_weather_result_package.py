@@ -143,10 +143,7 @@ def test_configured_japanese_font_path_is_the_selected_face(
 
 
 def test_reporting_renderer_versions_are_exactly_pinned() -> None:
-    assert builder._renderer_versions() == {
-        "matplotlib": builder.EXPECTED_MATPLOTLIB_VERSION,
-        "Pillow": builder.EXPECTED_PILLOW_VERSION,
-    }
+    assert builder._renderer_versions() == builder.EXPECTED_RENDERER_VERSIONS
 
 
 def test_generated_package_is_byte_deterministic_and_complete(
@@ -257,10 +254,7 @@ def test_generated_claims_and_figure_metadata_are_bounded(
     assert manifest["parameter_source_tree_sha256"] == builder.load_and_validate_bundle(
         EVIDENCE_ROOT
     ).parameter_source_tree_sha256
-    assert manifest["renderer_versions"] == {
-        "matplotlib": builder.EXPECTED_MATPLOTLIB_VERSION,
-        "Pillow": builder.EXPECTED_PILLOW_VERSION,
-    }
+    assert manifest["renderer_versions"] == builder.EXPECTED_RENDERER_VERSIONS
     assert manifest["png_dpi"] == 300
     assert manifest["timeseries_figure_created"] is False
     assert "No complete 96-slot" in manifest["timeseries_figure_omission_reason"]

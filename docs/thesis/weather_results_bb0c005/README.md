@@ -5,6 +5,7 @@
 ## 検証と再生成
 
 ```powershell
+python -m pip install -r requirements-reporting-lock.txt
 python scripts/verify_thesis_weather_result_package.py `
   --evidence-dir docs/evidence/weather_dispatch_rerun_bb0c005 `
   --parameter-evidence-dir docs/evidence/weather_dispatch_rerun_bb0c005_parameter_sources `

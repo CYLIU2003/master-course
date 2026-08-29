@@ -17,9 +17,10 @@ Actions page with **Run workflow**. Local focused and full-suite validation
 remain required before publishing research-code or evidence changes. The
 workflow downloads Noto Sans JP from the official pinned `Sans2.004` tag,
 verifies its SHA-256, and passes that exact file to the thesis figure builder;
-missing or substituted Japanese fonts remain a fail-closed error. Matplotlib
-3.10.8 and Pillow 12.1.1 are pinned on both operating systems, and artifact
-maps use platform-independent relative POSIX path ordering.
+missing or substituted Japanese fonts remain a fail-closed error. The complete
+Matplotlib/Pillow renderer dependency set is pinned in
+`requirements-reporting-lock.txt` on both operating systems, and artifact maps
+use platform-independent relative POSIX path ordering.
 
 ## Current 2026-08-29 fresh SUNNY/RAIN rerun
 

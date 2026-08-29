@@ -29,10 +29,11 @@ bytes are preserved in
 
 The verifier must be run against the untouched committed package before any
 intentional regeneration, then run again after regeneration. Hash maps use
-casefold-sorted relative POSIX paths. Rendering is fail-closed on Matplotlib
-3.10.8, Pillow 12.1.1, and the pinned Noto Sans JP face actually selected by
-Matplotlib. Local final-candidate checks passed 70 focused tests and the full
-1,641-test suite; the final manual GitHub run remains the last merge gate.
+casefold-sorted relative POSIX paths. Rendering is fail-closed on the complete
+locked Matplotlib/Pillow dependency set and the pinned Noto Sans JP face
+actually selected by Matplotlib. Local final-candidate checks passed 70
+focused tests and the full 1,641-test suite; the final manual GitHub run
+remains the last merge gate.
 
 ## Claim boundary
 

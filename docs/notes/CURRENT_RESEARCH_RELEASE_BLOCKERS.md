@@ -3,10 +3,10 @@
 ## 2026-08-29 (Asia/Tokyo): thesis-report reproducibility review closed
 
 The SUNNY/RAIN thesis package now sorts every hash/artifact map by relative
-POSIX path with a casefold key, pins Matplotlib 3.10.8 and Pillow 12.1.1 on
-Windows and Ubuntu, verifies the configured Noto Sans JP file is the face
-actually selected, and documents exact verification before any intentional
-regeneration. Exact regeneration and 70 focused tests pass.
+POSIX path with a casefold key, pins the complete Matplotlib/Pillow renderer
+dependency set on Windows and Ubuntu, verifies the configured Noto Sans JP file
+is the face actually selected, and documents exact verification before any
+intentional regeneration. Exact regeneration and 70 focused tests pass.
 The complete repository suite passes 1,641 tests.
 
 This changes only reporting reproducibility metadata and instructions. The

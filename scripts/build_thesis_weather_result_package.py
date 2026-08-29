@@ -49,8 +49,19 @@ EXPECTED_COST_DIFFERENCE_JPY = 37_614.844839
 EXPECTED_BESS_ONE_WAY_EFFICIENCY = 0.95
 EXPECTED_BESS_TERMINAL_SOC_KWH = 3000.0
 PARAMETER_SOURCE_SCHEMA_VERSION = "thesis_weather_parameter_sources_v1"
-EXPECTED_MATPLOTLIB_VERSION = "3.10.8"
-EXPECTED_PILLOW_VERSION = "12.1.1"
+EXPECTED_RENDERER_VERSIONS = {
+    "matplotlib": "3.10.8",
+    "Pillow": "12.1.1",
+    "contourpy": "1.3.3",
+    "cycler": "0.12.1",
+    "fonttools": "4.62.1",
+    "kiwisolver": "1.5.0",
+    "numpy": "2.4.3",
+    "packaging": "26.0",
+    "pyparsing": "3.3.2",
+    "python-dateutil": "2.9.0.post0",
+    "six": "1.17.0",
+}
 
 BLUE = "#2F6B9A"
 ORANGE = "#D9822B"
@@ -156,16 +167,13 @@ def _renderer_versions() -> dict[str, str]:
     """Require the renderer versions that produced the committed image bytes."""
 
     observed = {
-        "matplotlib": importlib_metadata.version("matplotlib"),
-        "Pillow": importlib_metadata.version("Pillow"),
-    }
-    expected = {
-        "matplotlib": EXPECTED_MATPLOTLIB_VERSION,
-        "Pillow": EXPECTED_PILLOW_VERSION,
+        distribution: importlib_metadata.version(distribution)
+        for distribution in EXPECTED_RENDERER_VERSIONS
     }
     _require(
-        observed == expected,
-        f"Reporting renderer versions differ: expected={expected}, observed={observed}",
+        observed == EXPECTED_RENDERER_VERSIONS,
+        "Reporting renderer versions differ: "
+        f"expected={EXPECTED_RENDERER_VERSIONS}, observed={observed}",
     )
     return observed
 
@@ -1310,6 +1318,7 @@ def _readme_text(bundle: EvidenceBundle, font_name: str, timeseries_created: boo
 ## 検証と再生成
 
 ```powershell
+python -m pip install -r requirements-reporting-lock.txt
 python scripts/verify_thesis_weather_result_package.py `
   --evidence-dir docs/evidence/weather_dispatch_rerun_bb0c005 `
   --parameter-evidence-dir docs/evidence/weather_dispatch_rerun_bb0c005_parameter_sources `
