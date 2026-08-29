@@ -143,7 +143,10 @@ def _bundle_hashes(root: Path) -> dict[str, str]:
 
 
 def _tree_sha256(hashes: Mapping[str, str]) -> str:
-    payload = "".join(f"{name}\0{digest}\n" for name, digest in hashes.items())
+    payload = "".join(
+        f"{name}\0{hashes[name]}\n"
+        for name in sorted(hashes, key=str.casefold)
+    )
     return sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -157,6 +160,19 @@ def _assert_close(actual: float, expected: float, label: str) -> None:
 def _require(condition: bool, message: str) -> None:
     if not condition:
         raise EvidenceValidationError(message)
+
+
+def _required_field(container: Any, key: str, context: str) -> Any:
+    """Read one required mapping field with a fail-closed diagnostic."""
+
+    if not isinstance(container, Mapping):
+        raise EvidenceValidationError(
+            f"{context}: expected object before field {key!r}, got "
+            f"{type(container).__name__}"
+        )
+    if key not in container:
+        raise EvidenceValidationError(f"{context}: missing required field {key!r}")
+    return container[key]
 
 
 def _load_scenario(
@@ -186,7 +202,10 @@ def _load_parameter_sources(
 ) -> tuple[dict[str, str], str, Mapping[str, Any]]:
     _require(root.is_dir(), f"Missing parameter-source supplement: {root}")
     source_hashes = _bundle_hashes(root)
-    hash_index = _read_json(root / "artifact_hashes.json")["sha256"]
+    hash_index_path = root / "artifact_hashes.json"
+    hash_index = _required_field(
+        _read_json(hash_index_path), "sha256", str(hash_index_path)
+    )
     indexed_actual = {
         name: digest
         for name, digest in source_hashes.items()
@@ -195,15 +214,27 @@ def _load_parameter_sources(
     _require(hash_index == indexed_actual, "Parameter-source hash index does not match bytes")
 
     source_manifest = _read_json(root / "parameter_source_manifest.json")
+    manifest_path = root / "parameter_source_manifest.json"
     _require(
-        source_manifest["schema_version"] == PARAMETER_SOURCE_SCHEMA_VERSION,
+        _required_field(source_manifest, "schema_version", str(manifest_path))
+        == PARAMETER_SOURCE_SCHEMA_VERSION,
         "Unexpected parameter-source schema",
     )
     _require(
-        source_manifest["status"] == "PASS_EXACT_PARAMETER_SOURCE_CAPTURE",
+        _required_field(source_manifest, "status", str(manifest_path))
+        == "PASS_EXACT_PARAMETER_SOURCE_CAPTURE",
         "Parameter-source capture did not pass",
     )
-    _require(source_manifest["execution_git_sha"] == EXECUTION_SHA, "Parameter-source SHA")
+    _require(
+        _required_field(source_manifest, "execution_git_sha", str(manifest_path))
+        == EXECUTION_SHA,
+        "Parameter-source SHA",
+    )
+
+    summary_scenarios = _required_field(summary, "scenarios", "result_summary.json")
+    captured_scenarios = _required_field(
+        source_manifest, "scenarios", str(manifest_path)
+    )
 
     observed_parameters: dict[str, Mapping[str, Any]] = {}
     for code in ("SUNNY", "RAIN"):
@@ -212,31 +243,38 @@ def _load_parameter_sources(
         run_manifest_path = scenario_root / "run_input_manifest.json"
         snapshot = _read_json(snapshot_path)
         run_manifest = _read_json(run_manifest_path)
-        published = summary["scenarios"][code]
-        captured = source_manifest["scenarios"][code]
-        _require(snapshot["scenario_id"] == SCENARIO_IDS[code], f"{code}: parameter scenario")
-        _require(run_manifest["scenario_id"] == SCENARIO_IDS[code], f"{code}: run manifest")
-        _require(run_manifest["git_sha"] == EXECUTION_SHA, f"{code}: parameter execution SHA")
-        _require(run_manifest["git_dirty"] is False, f"{code}: parameter source dirty")
+        published = _required_field(summary_scenarios, code, "result_summary.json")
+        captured = _required_field(captured_scenarios, code, str(manifest_path))
+        _require(_required_field(snapshot, "scenario_id", str(snapshot_path)) == SCENARIO_IDS[code], f"{code}: parameter scenario")
+        _require(_required_field(run_manifest, "scenario_id", str(run_manifest_path)) == SCENARIO_IDS[code], f"{code}: run manifest")
+        _require(_required_field(run_manifest, "git_sha", str(run_manifest_path)) == EXECUTION_SHA, f"{code}: parameter execution SHA")
+        _require(_required_field(run_manifest, "git_dirty", str(run_manifest_path)) is False, f"{code}: parameter source dirty")
         _require(
-            run_manifest["prepared_input_id"] == published["prepared_input_id"],
+            _required_field(run_manifest, "prepared_input_id", str(run_manifest_path))
+            == _required_field(published, "prepared_input_id", "result_summary.json"),
             f"{code}: parameter Prepared ID",
         )
         _require(
-            run_manifest["prepared_source_sha256"] == published["prepared_input_sha256"],
+            _required_field(run_manifest, "prepared_source_sha256", str(run_manifest_path))
+            == _required_field(published, "prepared_input_sha256", "result_summary.json"),
             f"{code}: parameter Prepared SHA",
         )
         _require(
-            _sha256(snapshot_path) == captured["scenario_input_snapshot_sha256"],
+            _sha256(snapshot_path)
+            == _required_field(captured, "scenario_input_snapshot_sha256", str(manifest_path)),
             f"{code}: captured snapshot SHA",
         )
         _require(
-            _sha256(run_manifest_path) == captured["run_input_manifest_sha256"],
+            _sha256(run_manifest_path)
+            == _required_field(captured, "run_input_manifest_sha256", str(manifest_path)),
             f"{code}: captured run manifest SHA",
         )
-        observed_parameters[code] = _extract_parameter_values(snapshot)
+        observed_parameters[code] = _extract_parameter_values(
+            snapshot, scenario=code, source_path=snapshot_path
+        )
         _require(
-            observed_parameters[code] == captured["parameters"],
+            observed_parameters[code]
+            == _required_field(captured, "parameters", str(manifest_path)),
             f"{code}: captured parameter values differ from raw snapshot",
         )
 
@@ -245,21 +283,86 @@ def _load_parameter_sources(
         "SUNNY/RAIN fixed parameter sources differ",
     )
     _require(
-        observed_parameters["SUNNY"] == source_manifest["shared_parameters"],
+        observed_parameters["SUNNY"]
+        == _required_field(source_manifest, "shared_parameters", str(manifest_path)),
         "Shared parameter manifest differs from raw snapshots",
     )
     return source_hashes, _tree_sha256(source_hashes), observed_parameters["SUNNY"]
 
 
-def _extract_parameter_values(snapshot: Mapping[str, Any]) -> dict[str, Any]:
-    persisted = snapshot["persisted_scenario"]
-    charger_sites = persisted["charger_sites"]
-    _require(len(charger_sites) == 1, "Expected one parameter-source charger site")
+def _extract_parameter_values(
+    snapshot: Mapping[str, Any],
+    *,
+    scenario: str = "UNKNOWN",
+    source_path: Path | None = None,
+) -> dict[str, Any]:
+    context = f"{scenario}: {source_path or 'scenario_input_snapshot.json'}"
+    persisted = _required_field(snapshot, "persisted_scenario", context)
+    charger_sites = _required_field(persisted, "charger_sites", context)
+    _require(isinstance(charger_sites, list), f"{context}: charger_sites must be a list")
+    _require(len(charger_sites) == 1, f"{context}: expected one parameter-source charger site")
     charger_site = charger_sites[0]
-    _require(charger_site["id"] == "tsurumaki", "Unexpected parameter-source depot")
-    overlay = persisted["scenario_overlay"]["depot_energy_assets"]["tsurumaki"]
-    simulation_assets = persisted["simulation_config"]["depot_energy_assets"]
-    _require(len(simulation_assets) == 1, "Expected one parameter-source energy asset")
+    charger_site_id = _required_field(charger_site, "id", context)
+    _require(charger_site_id == "tsurumaki", f"{context}: unexpected parameter-source depot")
+    chargers = _required_field(persisted, "chargers", context)
+    _require(isinstance(chargers, list), f"{context}: chargers must be a list")
+    _require(bool(chargers), f"{context}: chargers must not be empty")
+    charger_ids = [_required_field(row, "id", context) for row in chargers]
+    _require(
+        all(isinstance(value, str) and value for value in charger_ids),
+        f"{context}: charger IDs must be non-empty strings",
+    )
+    _require(len(charger_ids) == len(set(charger_ids)), f"{context}: duplicate charger IDs")
+    site_id_values = [_required_field(row, "siteId", context) for row in chargers]
+    _require(
+        all(isinstance(value, str) and value for value in site_id_values),
+        f"{context}: charger site IDs must be non-empty strings",
+    )
+    site_ids = set(site_id_values)
+    power_value_list = [_required_field(row, "powerKw", context) for row in chargers]
+    _require(
+        all(
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and math.isfinite(float(value))
+            and float(value) > 0.0
+            for value in power_value_list
+        ),
+        f"{context}: charger ratings must be positive finite numbers",
+    )
+    power_values = set(power_value_list)
+    port_value_list = [
+        _required_field(row, "simultaneous_ports", context) for row in chargers
+    ]
+    _require(
+        all(
+            isinstance(value, int)
+            and not isinstance(value, bool)
+            and value > 0
+            for value in port_value_list
+        ),
+        f"{context}: charger port counts must be positive integers",
+    )
+    port_values = set(port_value_list)
+    bidirectional_value_list = [
+        _required_field(row, "bidirectional", context) for row in chargers
+    ]
+    _require(
+        all(isinstance(value, bool) for value in bidirectional_value_list),
+        f"{context}: charger bidirectional settings must be booleans",
+    )
+    bidirectional_values = set(bidirectional_value_list)
+    _require(site_ids == {charger_site_id}, f"{context}: charger depot mismatch")
+    _require(len(power_values) == 1, f"{context}: charger ratings differ")
+    _require(len(port_values) == 1, f"{context}: charger port counts differ")
+    _require(len(bidirectional_values) == 1, f"{context}: charger bidirectional settings differ")
+    overlay_root = _required_field(persisted, "scenario_overlay", context)
+    overlay_assets = _required_field(overlay_root, "depot_energy_assets", context)
+    overlay = _required_field(overlay_assets, charger_site_id, context)
+    simulation_config = _required_field(persisted, "simulation_config", context)
+    simulation_assets = _required_field(simulation_config, "depot_energy_assets", context)
+    _require(isinstance(simulation_assets, list), f"{context}: energy assets must be a list")
+    _require(len(simulation_assets) == 1, f"{context}: expected one parameter-source energy asset")
     simulation = simulation_assets[0]
     fields = (
         "pv_capacity_kw",
@@ -274,10 +377,21 @@ def _extract_parameter_values(snapshot: Mapping[str, Any]) -> dict[str, Any]:
         "bess_terminal_soc_target_kwh",
     )
     for field in fields:
-        _require(overlay[field] == simulation[field], f"Parameter-source mismatch: {field}")
+        _require(
+            _required_field(overlay, field, context)
+            == _required_field(simulation, field, context),
+            f"{context}: parameter-source mismatch: {field}",
+        )
     return {
-        "grid_import_limit_kw": charger_site["grid_import_limit_kw"],
-        **{field: overlay[field] for field in fields},
+        "charger_count": len(chargers),
+        "charger_ids": sorted(charger_ids),
+        "charger_site_id": charger_site_id,
+        "charger_power_kw": next(iter(power_values)),
+        "charger_simultaneous_ports": next(iter(port_values)),
+        "charger_bidirectional": next(iter(bidirectional_values)),
+        "grid_import_limit_kw": _required_field(charger_site, "grid_import_limit_kw", context),
+        "contract_demand_limit_kw": _required_field(charger_site, "contract_demand_limit_kw", context),
+        **{field: _required_field(overlay, field, context) for field in fields},
     }
 
 
@@ -488,6 +602,10 @@ def _parameter_rows(bundle: EvidenceBundle) -> list[dict[str, str]]:
     solver = sunny.solver
     frontend = sunny.optimization["frontend_request"]
     energy_assets = bundle.shared_parameters
+    _require(
+        energy_assets["charger_count"] == protocol["charger_count"],
+        "Raw charger count differs from result_summary.json",
+    )
     sunny_terminal = sunny.accounting["bess_terminal_soc_by_depot"]["tsurumaki"]
     rain_terminal = rain.accounting["bess_terminal_soc_by_depot"]["tsurumaki"]
     _require(sunny_terminal == rain_terminal, "SUNNY/RAIN BESS terminal summaries differ")
@@ -528,9 +646,14 @@ def _parameter_rows(bundle: EvidenceBundle) -> list[dict[str, str]]:
     add("車両", "ICE燃料タンク", fleet["ice_tank_l"], unit="L/台", source="scenario_fleet_contract_v2")
     add("車両", "ICE燃費", fleet["ice_efficiency_km_per_l"], unit="km/L", source="scenario_fleet_contract_v2")
     add("車両", "ICE初期燃料", fleet["ice_initial_fuel_l"], unit="L/台", source="scenario_fleet_contract_v2")
-    add("充電", "充電器数", protocol["charger_count"], unit="基", source="result_summary.json")
+    add("充電", "充電器数", energy_assets["charger_count"], unit="基", source="parameter_sources/*/scenario_input_snapshot.json")
+    add("充電", "設置営業所", energy_assets["charger_site_id"], unit="-", source="parameter_sources/*/scenario_input_snapshot.json")
+    add("充電", "1基あたり定格出力", energy_assets["charger_power_kw"], unit="kW/基", source="parameter_sources/*/scenario_input_snapshot.json")
+    add("充電", "1基あたり同時充電ポート数", energy_assets["charger_simultaneous_ports"], unit="ポート/基", source="parameter_sources/*/scenario_input_snapshot.json")
+    add("充電", "双方向充放電", energy_assets["charger_bidirectional"], unit="-", source="parameter_sources/*/scenario_input_snapshot.json")
     add("充電", "BEVごとの互換充電器数", fleet["compatible_charger_count"], unit="基", source="scenario_fleet_contract_v2")
     add("充電", "受電上限", energy_assets["grid_import_limit_kw"], unit="kW", source="parameter_sources/*/scenario_input_snapshot.json")
+    add("充電", "契約電力上限", energy_assets["contract_demand_limit_kw"], unit="kW", source="parameter_sources/*/scenario_input_snapshot.json")
     add("PV", "実行日PV発電量", "", sunny.costs["pv_generated_kwh"], rain.costs["pv_generated_kwh"], "kWh", "executed_day_accounting.json")
     add("PV", "PV定格容量", energy_assets["pv_capacity_kw"], unit="kW", source="parameter_sources/*/scenario_input_snapshot.json")
     add("BESS", "定格容量／出力", f"{energy_assets['bess_energy_kwh']:.0f}／{energy_assets['bess_power_kw']:.0f}", unit="kWh／kW", source="parameter_sources/*/scenario_input_snapshot.json")
@@ -567,8 +690,51 @@ def _format_cell(value: Any) -> str:
     if value is False:
         return "OFF"
     if isinstance(value, float):
-        return f"{value:.10f}".rstrip("0").rstrip(".")
+        _require(math.isfinite(value), f"Non-finite table value: {value!r}")
+        if abs(value) < 1.0e-9:
+            return "0"
+        return f"{value:.12f}".rstrip("0").rstrip(".")
     return str(value)
+
+
+def _thesis_summary_rows(bundle: EvidenceBundle) -> list[dict[str, str]]:
+    """Return a concise Japanese table suitable for direct thesis insertion."""
+
+    sunny = bundle.scenarios["SUNNY"]
+    rain = bundle.scenarios["RAIN"]
+    metrics = (
+        ("使用BEV", sunny.summary["used_bev"], rain.summary["used_bev"], "台"),
+        ("使用ICE", sunny.summary["used_ice"], rain.summary["used_ice"], "台"),
+        ("BEV担当便", sunny.summary["bev_trips"], rain.summary["bev_trips"], "便"),
+        ("ICE担当便", sunny.summary["ice_trips"], rain.summary["ice_trips"], "便"),
+        ("24時間Rolling評価額", sunny.costs["total_cost"], rain.costs["total_cost"], "円"),
+        ("燃料使用量", sunny.costs["ice_fuel_consumed_l"], rain.costs["ice_fuel_consumed_l"], "L"),
+        ("PV発電量", sunny.costs["pv_generated_kwh"], rain.costs["pv_generated_kwh"], "kWh"),
+        ("系統購入量", sunny.costs["grid_import_kwh"], rain.costs["grid_import_kwh"], "kWh"),
+        ("Stage 1 certified gap", sunny.summary["stage1_certified_gap_ratio"] * 100.0, rain.summary["stage1_certified_gap_ratio"] * 100.0, "%"),
+        ("最適化計算時間", sunny.summary["solve_time_seconds"], rain.summary["solve_time_seconds"], "秒"),
+    )
+    rows = []
+    for label, sunny_value, rain_value, unit in metrics:
+        rows.append(
+            {
+                "指標": label,
+                "SUNNY": _format_cell(sunny_value),
+                "RAIN": _format_cell(rain_value),
+                "RAIN－SUNNY": _format_cell(float(rain_value) - float(sunny_value)),
+                "単位": unit,
+            }
+        )
+    rows.append(
+        {
+            "指標": "正当性確認",
+            "SUNNY": "264/264便・物理検算・24/24 Rolling・会計検算 PASS",
+            "RAIN": "264/264便・物理検算・24/24 Rolling・会計検算 PASS",
+            "RAIN－SUNNY": "両ケースPASS",
+            "単位": "-",
+        }
+    )
+    return rows
 
 
 def _scenario_result_rows(bundle: EvidenceBundle) -> list[dict[str, Any]]:
@@ -667,9 +833,16 @@ def _energy_rows(bundle: EvidenceBundle) -> list[dict[str, Any]]:
 def _write_csv(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
     _require(bool(rows), f"No rows for {path.name}")
     with path.open("w", encoding="utf-8-sig", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=list(rows[0]),
+            lineterminator="\n",
+        )
         writer.writeheader()
-        writer.writerows(rows)
+        writer.writerows(
+            {key: _format_cell(value) for key, value in row.items()}
+            for row in rows
+        )
 
 
 def _markdown_table(rows: Sequence[Mapping[str, Any]]) -> str:
@@ -679,7 +852,10 @@ def _markdown_table(rows: Sequence[Mapping[str, Any]]) -> str:
         "| " + " | ".join("---" for _ in headers) + " |",
     ]
     for row in rows:
-        values = [str(row[key]).replace("|", "\\|").replace("\n", " ") for key in headers]
+        values = [
+            _format_cell(row[key]).replace("|", "\\|").replace("\n", " ")
+            for key in headers
+        ]
         lines.append("| " + " | ".join(values) + " |")
     return "\n".join(lines) + "\n"
 
@@ -688,8 +864,13 @@ def _write_table_pair(output_dir: Path, stem: str, rows: Sequence[Mapping[str, A
     csv_path = output_dir / f"{stem}.csv"
     md_path = output_dir / f"{stem}.md"
     _write_csv(csv_path, rows)
-    md_path.write_text(f"# {stem}\n\n{_markdown_table(rows)}", encoding="utf-8")
+    _write_text_lf(md_path, f"# {stem}\n\n{_markdown_table(rows)}")
     return [csv_path, md_path]
+
+
+def _write_text_lf(path: Path, text: str) -> None:
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n").rstrip("\n") + "\n"
+    path.write_text(normalized, encoding="utf-8", newline="\n")
 
 
 def _configure_matplotlib() -> tuple[Any, str]:
@@ -697,7 +878,7 @@ def _configure_matplotlib() -> tuple[Any, str]:
 
     matplotlib.use("Agg")
     matplotlib.rcParams["svg.hashsalt"] = SCHEMA_VERSION
-    matplotlib.rcParams["svg.fonttype"] = "none"
+    matplotlib.rcParams["svg.fonttype"] = "path"
     from matplotlib import font_manager, pyplot as plt
 
     configured_font = os.environ.get("THESIS_JAPANESE_FONT_PATH")
@@ -780,6 +961,7 @@ def _save_figure(plt: Any, fig: Any, stem: Path) -> list[Path]:
         encoding="utf-8",
         newline="\n",
     )
+    _require("<text" not in svg_path.read_text(encoding="utf-8"), f"SVG contains live text: {svg_path.name}")
     plt.close(fig)
     return [png_path, svg_path]
 
@@ -1029,11 +1211,11 @@ def _results_section_text(bundle: EvidenceBundle) -> str:
 
 ## 実験条件
 
-本実験は{protocol['depot_id']}営業所の{protocol['service_id']}時刻表を対象とし、{protocol['service_date']}の{protocol['trip_count']}便を{protocol['time_step_minutes']}分刻みで扱った。SUNNYは同日由来のPV曲線を用いる基準ケースである。RAINは**2025-08-05の平日運行へ2025-08-10由来の低PV曲線を与えた反実仮想**であり、運行日や時刻表を変更した比較ではない。両ケースでは車両、便、充電器、料金、目的関数、fleet contractおよびsolver controlのhashが一致する。実効車両在庫はBEV {fleet['bev_count']}台、ICE {fleet['ice_count']}台であり、BEV初期SOCは車両別に{fleet['initial_soc_min_percent']:.4f}～{fleet['initial_soc_max_percent']:.4f}%である。受電上限は{float(energy_assets['grid_import_limit_kw']):,.0f} kW、PV定格容量は{float(energy_assets['pv_capacity_kw']):,.0f} kW、BESSは{float(energy_assets['bess_energy_kwh']):,.0f} kWh／{float(energy_assets['bess_power_kw']):,.0f} kW、SOC許容範囲は{float(energy_assets['bess_soc_min_kwh']):,.0f}～{float(energy_assets['bess_soc_max_kwh']):,.0f} kWhである。計算はPhase 3二段階方式、総時間上限{solver['time_limit_sec']}秒、Stage 1上限{solver['stage1_time_limit_sec']}秒、Stage 2上限{solver['stage2_time_limit_sec']}秒、要求gap {solver['mip_gap'] * 100:.0f}%、seed {solver['random_seed']}、Gurobi {solver['gurobi_threads']} threadで実施された。
+本実験は弦巻営業所の平日ダイヤを対象とし、{protocol['service_date']}の{protocol['trip_count']}便を{protocol['time_step_minutes']}分刻みで扱った。SUNNYは同日由来のPV曲線を用いる基準ケースである。RAINは**2025-08-05の平日運行へ2025-08-10由来の低PV曲線を与えた反実仮想**であり、運行日や時刻表を変更した比較ではない。両ケースでは車両、便、充電器、料金、目的関数、車両構成条件および最適化計算条件の入力データ識別値が一致する。実効車両在庫はBEV {fleet['bev_count']}台、ICE {fleet['ice_count']}台であり、BEV初期SOCは車両別に{fleet['initial_soc_min_percent']:.4f}～{fleet['initial_soc_max_percent']:.4f}%である。充電器は90 kW・1ポート・非双方向を{energy_assets['charger_count']}基、受電上限は{float(energy_assets['grid_import_limit_kw']):,.0f} kW、PV定格容量は{float(energy_assets['pv_capacity_kw']):,.0f} kW、BESSは{float(energy_assets['bess_energy_kwh']):,.0f} kWh／{float(energy_assets['bess_power_kw']):,.0f} kW、SOC許容範囲は{float(energy_assets['bess_soc_min_kwh']):,.0f}～{float(energy_assets['bess_soc_max_kwh']):,.0f} kWhである。計算はPhase 3二段階方式、総時間上限{solver['time_limit_sec']}秒、Stage 1上限{solver['stage1_time_limit_sec']}秒、Stage 2上限{solver['stage2_time_limit_sec']}秒、要求gap {solver['mip_gap'] * 100:.0f}%、seed {solver['random_seed']}、Gurobi {solver['gurobi_threads']} threadで実施された。
 
 ## 配車結果
 
-SUNNYではBEV {sunny.summary['used_bev']}台とICE {sunny.summary['used_ice']}台を使用し、BEVが{sunny.summary['bev_trips']}便、ICEが{sunny.summary['ice_trips']}便を担当した。RAINではBEV {rain.summary['used_bev']}台とICE {rain.summary['used_ice']}台を使用し、BEVが{rain.summary['bev_trips']}便、ICEが{rain.summary['ice_trips']}便を担当した。使用車両総数はいずれも{sunny.summary['used_bev'] + sunny.summary['used_ice']}台である一方、動力源構成と担当便構成は大きく異なる。選択された物理配車hashも異なり、固定された2つのPV条件に対して有限候補集合内の評価額順位が変化したことが確認された。ただし、実効探索は候補上限{solver['stage1_stage2_candidate_limit']}、構成radius {solver['stage1_composition_search_radius']}、BEV frontier {solver['stage1_bev_frontier_min_count']}～{solver['stage1_bev_frontier_max_count']}台、frontier時間上限{solver['stage1_bev_frontier_target_time_limit_sec']:.0f}秒である。この有限候補集合からの選択であり、探索可能な配車全体を列挙したものではない。
+SUNNYではBEV {sunny.summary['used_bev']}台とICE {sunny.summary['used_ice']}台を使用し、BEVが{sunny.summary['bev_trips']}便、ICEが{sunny.summary['ice_trips']}便を担当した。RAINではBEV {rain.summary['used_bev']}台とICE {rain.summary['used_ice']}台を使用し、BEVが{rain.summary['bev_trips']}便、ICEが{rain.summary['ice_trips']}便を担当した。使用車両総数はいずれも{sunny.summary['used_bev'] + sunny.summary['used_ice']}台である一方、動力源構成と担当便構成は大きく異なる。選択された物理配車のハッシュ値も異なり、固定された2つのPV条件に対して有限候補集合内の評価額順位が変化したことが確認された。ただし、実効探索は候補上限{solver['stage1_stage2_candidate_limit']}、車両構成探索範囲{solver['stage1_composition_search_radius']}台、BEV使用台数候補範囲{solver['stage1_bev_frontier_min_count']}～{solver['stage1_bev_frontier_max_count']}台、候補探索時間上限{solver['stage1_bev_frontier_target_time_limit_sec']:.0f}秒である。この有限候補集合からの選択であり、探索可能な配車全体を列挙したものではない。
 
 ## 費用差
 
@@ -1081,7 +1263,12 @@ def _readme_text(bundle: EvidenceBundle, font_name: str, timeseries_created: boo
 ```powershell
 python scripts/build_thesis_weather_result_package.py `
   --evidence-dir docs/evidence/weather_dispatch_rerun_bb0c005 `
+  --parameter-evidence-dir docs/evidence/weather_dispatch_rerun_bb0c005_parameter_sources `
   --output-dir docs/thesis/weather_results_bb0c005
+python scripts/verify_thesis_weather_result_package.py `
+  --evidence-dir docs/evidence/weather_dispatch_rerun_bb0c005 `
+  --parameter-evidence-dir docs/evidence/weather_dispatch_rerun_bb0c005_parameter_sources `
+  --committed-dir docs/thesis/weather_results_bb0c005
 ```
 
 ## 成果物
@@ -1090,6 +1277,7 @@ python scripts/build_thesis_weather_result_package.py `
 - `scenario_results.csv/.md`: 配車、費用、エネルギー、gap、計算時間
 - `cost_breakdown.csv/.md`: 費用項目とRAIN－SUNNY差
 - `energy_balance.csv/.md`: PV・BESS・系統収支
+- `thesis_summary_table.csv/.md`: 修論本文へ転用できる主要指標の簡潔な比較表
 - `claim_boundary.md`: 使用可能な主張と限定事項
 - `results_section_ja.md`: 修論結果章へ転用できる日本語本文
 - `01`～`05`のPNG（300 dpi）・SVG図
@@ -1103,7 +1291,7 @@ python scripts/build_thesis_weather_result_package.py `
 
 ## 設備パラメータの補助証拠
 
-`docs/evidence/weather_dispatch_rerun_bb0c005_parameter_sources/`にはSUNNY/RAINのfresh runから取得した完全な`scenario_input_snapshot.json`と、それをSHA-256で封印する`run_input_manifest.json`を保存した。Prepared ID・Prepared source SHA・実験SHAを公開済みsummaryと照合し、両ケースで受電上限、PV定格容量、BESS定格容量・出力・SOC範囲・効率が一致することをfail-closedで検証する。
+`docs/evidence/weather_dispatch_rerun_bb0c005_parameter_sources/`にはSUNNY/RAINのfresh runから取得した完全な`scenario_input_snapshot.json`と、それをSHA-256で封印する`run_input_manifest.json`を保存した。Prepared ID・Prepared source SHA・実験SHAを公開済みsummaryと照合し、両ケースで充電器ID・営業所・基数・定格出力・同時充電ポート数・双方向設定、受電／契約上限、PV定格容量、BESS定格容量・出力・SOC範囲・効率が一致することをfail-closedで検証する。
 
 ## 主張範囲
 
@@ -1153,8 +1341,54 @@ def _write_manifest(
         ],
         "artifacts": artifact_index,
     }
-    manifest_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    _write_text_lf(
+        manifest_path,
+        json.dumps(payload, ensure_ascii=False, indent=2),
+    )
     return manifest_path
+
+
+def _validate_package_inventory(output_dir: Path) -> None:
+    """Require the output inventory and bytes to match its manifest exactly."""
+
+    manifest_path = output_dir / "package_manifest.json"
+    _require(manifest_path.is_file(), f"Missing output manifest: {manifest_path}")
+    manifest = _read_json(manifest_path)
+    artifacts = _required_field(manifest, "artifacts", str(manifest_path))
+    _require(isinstance(artifacts, Mapping), f"{manifest_path}: artifacts must be an object")
+    expected = set(artifacts) | {"package_manifest.json"}
+    actual = {
+        path.relative_to(output_dir).as_posix()
+        for path in output_dir.rglob("*")
+        if path.is_file()
+    }
+    _require(
+        actual == expected,
+        "Output inventory differs from package_manifest.json: "
+        f"unexpected={sorted(actual - expected)}, missing={sorted(expected - actual)}",
+    )
+    for relative_path, sealed in artifacts.items():
+        artifact_path = output_dir / relative_path
+        _require(isinstance(sealed, Mapping), f"{manifest_path}: invalid entry {relative_path}")
+        _require(
+            _sha256(artifact_path) == _required_field(sealed, "sha256", str(manifest_path)),
+            f"Output artifact SHA-256 mismatch: {relative_path}",
+        )
+        _require(
+            artifact_path.stat().st_size
+            == _required_field(sealed, "size_bytes", str(manifest_path)),
+            f"Output artifact size mismatch: {relative_path}",
+        )
+
+
+def _validate_existing_output(output_dir: Path) -> None:
+    """Reject stale or unsealed pre-existing output before overwriting files."""
+
+    if not output_dir.exists():
+        return
+    if not any(output_dir.iterdir()):
+        return
+    _validate_package_inventory(output_dir)
 
 
 def build_package(
@@ -1168,11 +1402,8 @@ def build_package(
     before_hashes = dict(bundle.source_hashes)
     before_parameter_hashes = dict(bundle.parameter_source_hashes)
     target = output_dir.resolve()
+    _validate_existing_output(target)
     target.mkdir(parents=True, exist_ok=True)
-    for suffix in (".png", ".svg"):
-        stale = target / f"06_daily_energy_flow_timeseries{suffix}"
-        if stale.exists():
-            stale.unlink()
 
     artifacts: list[Path] = []
     parameter_rows = _parameter_rows(bundle)
@@ -1183,12 +1414,15 @@ def build_package(
     artifacts.extend(_write_table_pair(target, "scenario_results", scenario_rows))
     artifacts.extend(_write_table_pair(target, "cost_breakdown", cost_rows))
     artifacts.extend(_write_table_pair(target, "energy_balance", energy_rows))
+    artifacts.extend(
+        _write_table_pair(target, "thesis_summary_table", _thesis_summary_rows(bundle))
+    )
 
     claim_path = target / "claim_boundary.md"
-    claim_path.write_text(_claim_boundary_text(bundle), encoding="utf-8")
+    _write_text_lf(claim_path, _claim_boundary_text(bundle))
     artifacts.append(claim_path)
     results_path = target / "results_section_ja.md"
-    results_path.write_text(_results_section_text(bundle), encoding="utf-8")
+    _write_text_lf(results_path, _results_section_text(bundle))
     artifacts.append(results_path)
 
     plt, font_name = _configure_matplotlib()
@@ -1201,7 +1435,7 @@ def build_package(
     _require(not timeseries_created, "96-slot series was detected but figure 06 is not implemented")
 
     readme_path = target / "README.md"
-    readme_path.write_text(_readme_text(bundle, font_name, timeseries_created), encoding="utf-8")
+    _write_text_lf(readme_path, _readme_text(bundle, font_name, timeseries_created))
     artifacts.append(readme_path)
     manifest_path = _write_manifest(bundle, target, artifacts, font_name, timeseries_created)
 
@@ -1212,6 +1446,7 @@ def build_package(
         before_parameter_hashes == after_parameter_hashes,
         "Parameter-source supplement changed during generation",
     )
+    _validate_package_inventory(target)
     return manifest_path
 
 

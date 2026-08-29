@@ -35,8 +35,13 @@ PNG/SVG comparison figures are in
 [docs/thesis/weather_results_bb0c005/](docs/thesis/weather_results_bb0c005/README.md).
 The exact fresh-run parameter snapshots and sealing manifests are published in
 [the parameter-source supplement](docs/evidence/weather_dispatch_rerun_bb0c005_parameter_sources/parameter_source_manifest.json).
-They verify a 200-kW grid limit, 1,000-kW PV rating, 6,000-kWh/900-kW BESS,
+They verify ten unique 90-kW, one-port, non-bidirectional chargers at the
+Tsurumaki depot, a 200-kW grid/contract limit, 1,000-kW PV rating,
+6,000-kWh/900-kW BESS,
 1,200--4,800-kWh BESS SOC range, and 95%/95% efficiencies in both scenarios.
+The reporting workflow regenerates the package and requires exact file-set and
+SHA-256 equality on both Windows and Ubuntu; stale output and live SVG text are
+fail-closed errors.
 The reported monetary total is the model-defined Rolling evaluation with
 `objective_is_actual_cost=false`; it is not a cash-expenditure or lifecycle
 cost result. Day-ahead candidate and Rolling values remain separate, and the

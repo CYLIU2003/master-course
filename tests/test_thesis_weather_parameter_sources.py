@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from scripts import capture_thesis_weather_parameter_sources as capture
 
 
@@ -69,7 +71,14 @@ def test_parameter_sources_match_published_fresh_run_provenance() -> None:
 def test_parameter_sources_preserve_complete_shared_energy_assets() -> None:
     captured = _read_json(PARAMETER_SOURCES / "parameter_source_manifest.json")
     expected = {
+        "charger_count": 10,
+        "charger_ids": [f"depot-fast-tsurumaki-{index:03d}" for index in range(1, 11)],
+        "charger_site_id": "tsurumaki",
+        "charger_power_kw": 90.0,
+        "charger_simultaneous_ports": 1,
+        "charger_bidirectional": False,
         "grid_import_limit_kw": 200.0,
+        "contract_demand_limit_kw": 200.0,
         "pv_capacity_kw": 1000.0,
         "bess_enabled": True,
         "bess_energy_kwh": 6000.0,
@@ -84,3 +93,40 @@ def test_parameter_sources_preserve_complete_shared_energy_assets() -> None:
     assert captured["shared_parameters"] == expected
     assert captured["scenarios"]["SUNNY"]["parameters"] == expected
     assert captured["scenarios"]["RAIN"]["parameters"] == expected
+
+
+def test_parameter_extraction_rejects_duplicate_charger_ids() -> None:
+    snapshot = _read_json(
+        PARAMETER_SOURCES / "SUNNY" / "scenario_input_snapshot.json"
+    )
+    chargers = snapshot["persisted_scenario"]["chargers"]
+    chargers[1]["id"] = chargers[0]["id"]
+
+    with pytest.raises(capture.ParameterSourceError, match="duplicate charger IDs"):
+        capture.extract_parameter_values(snapshot, scenario="SUNNY")
+
+
+def test_parameter_extraction_reports_missing_fields_with_context() -> None:
+    snapshot = _read_json(
+        PARAMETER_SOURCES / "SUNNY" / "scenario_input_snapshot.json"
+    )
+    del snapshot["persisted_scenario"]["chargers"][0]["powerKw"]
+
+    with pytest.raises(
+        capture.ParameterSourceError,
+        match=r"SUNNY: .*missing required field 'powerKw'",
+    ):
+        capture.extract_parameter_values(snapshot, scenario="SUNNY")
+
+
+def test_parameter_extraction_converts_malformed_types_to_domain_error() -> None:
+    snapshot = _read_json(
+        PARAMETER_SOURCES / "SUNNY" / "scenario_input_snapshot.json"
+    )
+    snapshot["persisted_scenario"]["chargers"][0]["powerKw"] = [90.0]
+
+    with pytest.raises(
+        capture.ParameterSourceError,
+        match="charger ratings must be positive finite numbers",
+    ):
+        capture.extract_parameter_values(snapshot, scenario="SUNNY")

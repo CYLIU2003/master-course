@@ -3,7 +3,10 @@ from __future__ import annotations
 import csv
 from hashlib import sha256
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 
 from PIL import Image
 import pytest
@@ -62,7 +65,14 @@ def test_builder_loads_and_validates_both_canonical_scenarios() -> None:
     assert bundle.summary["execution_git_sha"] == builder.EXECUTION_SHA
     assert bundle.input_contract["fixed_nonweather_inputs_equal"] is True
     assert bundle.shared_parameters == {
+        "charger_count": 10,
+        "charger_ids": [f"depot-fast-tsurumaki-{index:03d}" for index in range(1, 11)],
+        "charger_site_id": "tsurumaki",
+        "charger_power_kw": 90.0,
+        "charger_simultaneous_ports": 1,
+        "charger_bidirectional": False,
         "grid_import_limit_kw": 200.0,
+        "contract_demand_limit_kw": 200.0,
         "pv_capacity_kw": 1000.0,
         "bess_enabled": True,
         "bess_energy_kwh": 6000.0,
@@ -125,6 +135,8 @@ def test_generated_package_is_byte_deterministic_and_complete(
         "cost_breakdown.md",
         "energy_balance.csv",
         "energy_balance.md",
+        "thesis_summary_table.csv",
+        "thesis_summary_table.md",
         "claim_boundary.md",
         "results_section_ja.md",
         "README.md",
@@ -148,6 +160,10 @@ def test_generated_tables_preserve_scenario_parameters_and_results(
     assert parameters[("車両", "有効車両数")]["共通値"] == "60"
     assert parameters[("車両", "BEV／ICE在庫")]["共通値"] == "35／25"
     assert parameters[("充電", "充電器数")]["共通値"] == "10"
+    assert parameters[("充電", "設置営業所")]["共通値"] == "tsurumaki"
+    assert parameters[("充電", "1基あたり定格出力")]["共通値"] == "90"
+    assert parameters[("充電", "1基あたり同時充電ポート数")]["共通値"] == "1"
+    assert parameters[("充電", "双方向充放電")]["共通値"] == "OFF"
     assert parameters[("充電", "受電上限")]["共通値"] == "200"
     assert parameters[("PV", "PV定格容量")]["共通値"] == "1000"
     assert parameters[("BESS", "定格容量／出力")]["共通値"] == "6000／900"
@@ -175,7 +191,7 @@ def test_generated_tables_preserve_scenario_parameters_and_results(
     energy = {row["scenario"]: row for row in _read_csv(output / "energy_balance.csv")}
     assert float(energy["SUNNY"]["bess_output_per_pv_input"]) == pytest.approx(0.95**2)
     assert float(energy["RAIN"]["bess_output_per_pv_input"]) == pytest.approx(0.95**2)
-    assert energy["SUNNY"]["terminal_energy_balanced"] == energy["RAIN"]["terminal_energy_balanced"] == "True"
+    assert energy["SUNNY"]["terminal_energy_balanced"] == energy["RAIN"]["terminal_energy_balanced"] == "ON"
 
 
 def test_generated_claims_and_figure_metadata_are_bounded(
@@ -212,6 +228,7 @@ def test_generated_claims_and_figure_metadata_are_bounded(
     assert "No complete 96-slot" in manifest["timeseries_figure_omission_reason"]
 
     for stem in EXPECTED_FIGURE_STEMS:
+        assert "<text" not in (output / f"{stem}.svg").read_text(encoding="utf-8")
         with Image.open(output / f"{stem}.png") as image:
             dpi = image.info.get("dpi")
             assert dpi is not None
@@ -219,3 +236,63 @@ def test_generated_claims_and_figure_metadata_are_bounded(
             assert dpi[1] == pytest.approx(300, abs=0.1)
             assert image.width > 1000
             assert image.height > 900
+
+
+def test_format_cell_is_finite_plain_decimal_and_normalizes_tiny_values() -> None:
+    assert builder._format_cell(1.2345678901234) == "1.234567890123"
+    assert builder._format_cell(1.0e-10) == "0"
+    assert builder._format_cell(1.0e20) == "100000000000000000000"
+    with pytest.raises(builder.EvidenceValidationError, match="Non-finite"):
+        builder._format_cell(float("nan"))
+    with pytest.raises(builder.EvidenceValidationError, match="Non-finite"):
+        builder._format_cell(float("inf"))
+
+
+def test_tree_hash_is_independent_of_mapping_insertion_order() -> None:
+    first = {"z.json": "2", "A.json": "1", "b.json": "3"}
+    second = {"b.json": "3", "z.json": "2", "A.json": "1"}
+    assert builder._tree_sha256(first) == builder._tree_sha256(second)
+
+
+def test_builder_rejects_stale_preexisting_output(tmp_path: Path) -> None:
+    output = tmp_path / "stale"
+    builder.build_package(EVIDENCE_ROOT, output)
+    (output / "obsolete_result.csv").write_text("stale\n", encoding="utf-8")
+
+    with pytest.raises(builder.EvidenceValidationError, match="Output inventory differs"):
+        builder.build_package(EVIDENCE_ROOT, output)
+
+
+def test_parameter_snapshot_schema_errors_are_domain_specific(tmp_path: Path) -> None:
+    snapshot = {"persisted_scenario": {"charger_sites": []}}
+    with pytest.raises(
+        builder.EvidenceValidationError,
+        match=r"SUNNY: .*expected one parameter-source charger site",
+    ):
+        builder._extract_parameter_values(
+            snapshot,
+            scenario="SUNNY",
+            source_path=tmp_path / "scenario_input_snapshot.json",
+        )
+
+
+def test_committed_package_is_exactly_regenerable() -> None:
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(REPO_ROOT / "scripts" / "verify_thesis_weather_result_package.py"),
+            "--evidence-dir",
+            str(EVIDENCE_ROOT),
+            "--parameter-evidence-dir",
+            str(PARAMETER_SOURCE_ROOT),
+            "--committed-dir",
+            str(REPO_ROOT / "docs" / "thesis" / "weather_results_bb0c005"),
+        ],
+        cwd=REPO_ROOT,
+        env=os.environ.copy(),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert "PASS_EXACT_THESIS_WEATHER_RESULT_PACKAGE" in completed.stdout

@@ -31,9 +31,15 @@ evaluation, labels the all-BEV/initial-state scope of the minimum recorded SOC,
 and records the effective 22-candidate/radius-4/15--35-BEV-frontier search.
 Exact fresh-run input snapshots in the
 [`parameter-source supplement`](../evidence/weather_dispatch_rerun_bb0c005_parameter_sources/parameter_source_manifest.json)
-fill the formerly missing grid/PV/BESS ratings without changing any byte of the
-39-file rerun bundle. This improves reporting completeness but does not change
-the numerical certification or release blockers above.
+fill the formerly missing charger/grid/PV/BESS ratings without changing any
+byte of the 39-file rerun bundle. Both raw snapshots contain the same ten
+unique 90-kW, one-port, non-bidirectional chargers at Tsurumaki; charger IDs,
+site, count, rating, port count, bidirectional setting, and the published
+ten-charger summary are now checked fail-closed. Exact package regeneration is
+also required on Windows and Ubuntu, including complete manifest inventory,
+LF text bytes, path-only SVG labels, and every artifact SHA-256. This improves
+reporting completeness and reviewability but does not change the numerical
+certification or release blockers above.
 
 ## 2026-08-29 (Asia/Tokyo): remote validation scheduling policy
 

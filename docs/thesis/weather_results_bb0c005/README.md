@@ -7,7 +7,12 @@
 ```powershell
 python scripts/build_thesis_weather_result_package.py `
   --evidence-dir docs/evidence/weather_dispatch_rerun_bb0c005 `
+  --parameter-evidence-dir docs/evidence/weather_dispatch_rerun_bb0c005_parameter_sources `
   --output-dir docs/thesis/weather_results_bb0c005
+python scripts/verify_thesis_weather_result_package.py `
+  --evidence-dir docs/evidence/weather_dispatch_rerun_bb0c005 `
+  --parameter-evidence-dir docs/evidence/weather_dispatch_rerun_bb0c005_parameter_sources `
+  --committed-dir docs/thesis/weather_results_bb0c005
 ```
 
 ## 成果物
@@ -16,6 +21,7 @@ python scripts/build_thesis_weather_result_package.py `
 - `scenario_results.csv/.md`: 配車、費用、エネルギー、gap、計算時間
 - `cost_breakdown.csv/.md`: 費用項目とRAIN－SUNNY差
 - `energy_balance.csv/.md`: PV・BESS・系統収支
+- `thesis_summary_table.csv/.md`: 修論本文へ転用できる主要指標の簡潔な比較表
 - `claim_boundary.md`: 使用可能な主張と限定事項
 - `results_section_ja.md`: 修論結果章へ転用できる日本語本文
 - `01`～`05`のPNG（300 dpi）・SVG図
@@ -29,14 +35,14 @@ python scripts/build_thesis_weather_result_package.py `
 
 ## 設備パラメータの補助証拠
 
-`docs/evidence/weather_dispatch_rerun_bb0c005_parameter_sources/`にはSUNNY/RAINのfresh runから取得した完全な`scenario_input_snapshot.json`と、それをSHA-256で封印する`run_input_manifest.json`を保存した。Prepared ID・Prepared source SHA・実験SHAを公開済みsummaryと照合し、両ケースで受電上限、PV定格容量、BESS定格容量・出力・SOC範囲・効率が一致することをfail-closedで検証する。
+`docs/evidence/weather_dispatch_rerun_bb0c005_parameter_sources/`にはSUNNY/RAINのfresh runから取得した完全な`scenario_input_snapshot.json`と、それをSHA-256で封印する`run_input_manifest.json`を保存した。Prepared ID・Prepared source SHA・実験SHAを公開済みsummaryと照合し、両ケースで充電器ID・営業所・基数・定格出力・同時充電ポート数・双方向設定、受電／契約上限、PV定格容量、BESS定格容量・出力・SOC範囲・効率が一致することをfail-closedで検証する。
 
 ## 主張範囲
 
 結果は、評価した有限候補集合から選択されたPhase 3二段階実行可能解である。費用は本モデルの費用定義に基づく24時間Rolling実行日評価額、gapはStage 1の近似目的関数に対するcertified MIP gapとして扱う。2ケースの差を一般化しない。
 
 Source bundle tree SHA-256: `c706da7e10bc4e99a06a441f91e1722baa971b41ab936d29db36e650accede5f`
-Parameter-source supplement tree SHA-256: `841440f329539fbf204f284678911393ef14c05887b3ce69aee0997835f566ed`
+Parameter-source supplement tree SHA-256: `3a0c955cc9b1fc6a3cba6a3a84fff48bbc505f6180969ca7377e68601df8eae8`
 
 両tree SHA-256は、各directoryについてファイルを相対path順に並べ、
 `relative_path + NUL + file_sha256 + LF`を連結したUTF-8 bytesのSHA-256である。

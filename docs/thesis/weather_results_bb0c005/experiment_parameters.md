@@ -20,9 +20,14 @@
 | 車両 | ICE燃料タンク | 160 |  |  | L/台 | scenario_fleet_contract_v2 |
 | 車両 | ICE燃費 | 4.52 |  |  | km/L | scenario_fleet_contract_v2 |
 | 車両 | ICE初期燃料 | 144 |  |  | L/台 | scenario_fleet_contract_v2 |
-| 充電 | 充電器数 | 10 |  |  | 基 | result_summary.json |
+| 充電 | 充電器数 | 10 |  |  | 基 | parameter_sources/*/scenario_input_snapshot.json |
+| 充電 | 設置営業所 | tsurumaki |  |  | - | parameter_sources/*/scenario_input_snapshot.json |
+| 充電 | 1基あたり定格出力 | 90 |  |  | kW/基 | parameter_sources/*/scenario_input_snapshot.json |
+| 充電 | 1基あたり同時充電ポート数 | 1 |  |  | ポート/基 | parameter_sources/*/scenario_input_snapshot.json |
+| 充電 | 双方向充放電 | OFF |  |  | - | parameter_sources/*/scenario_input_snapshot.json |
 | 充電 | BEVごとの互換充電器数 | 10 |  |  | 基 | scenario_fleet_contract_v2 |
 | 充電 | 受電上限 | 200 |  |  | kW | parameter_sources/*/scenario_input_snapshot.json |
+| 充電 | 契約電力上限 | 200 |  |  | kW | parameter_sources/*/scenario_input_snapshot.json |
 | PV | 実行日PV発電量 |  | 6056.25 | 996.2 | kWh | executed_day_accounting.json |
 | PV | PV定格容量 | 1000 |  |  | kW | parameter_sources/*/scenario_input_snapshot.json |
 | BESS | 定格容量／出力 | 6000／900 |  |  | kWh／kW | parameter_sources/*/scenario_input_snapshot.json |

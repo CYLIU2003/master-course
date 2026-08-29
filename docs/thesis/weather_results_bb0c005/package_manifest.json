@@ -44,10 +44,10 @@
     "SUNNY/summary.json": "b4ed321e5d0ce7c218893c08db235675b1a3df6ca5371bd9f161a2beccbb8456",
     "SUNNY/vehicle_soc_event_timeline.csv": "c5957ceb2f250f29ac9a494b9a6f317a1fa96cd7c05db13d03de6057140c6188"
   },
-  "parameter_source_tree_sha256": "841440f329539fbf204f284678911393ef14c05887b3ce69aee0997835f566ed",
+  "parameter_source_tree_sha256": "3a0c955cc9b1fc6a3cba6a3a84fff48bbc505f6180969ca7377e68601df8eae8",
   "parameter_source_artifacts": {
-    "artifact_hashes.json": "b9b61c1484e1fcbdc6b1de45ce6fc2f4995a07bcbf28844e74fef3a3417de697",
-    "parameter_source_manifest.json": "9109578269c8979d4d4b5b54c56f8f00acc95c42859a2f1eb9737aa53dbffb63",
+    "artifact_hashes.json": "42102803487da10e737921c3be66ee36849623815788f549a97f5ac0955759c5",
+    "parameter_source_manifest.json": "7ab54cbca0b6085ae7179de06ec0cfceb9e88b4825d94666eb10b1c21725de76",
     "RAIN/run_input_manifest.json": "661d9af047bd5c4190433736edfe49c7cce314d0042ac11cc814751096022c79",
     "RAIN/scenario_input_snapshot.json": "d7ed5ad5d8b13524f414d565f472ba0c6110ed6213963145208de096d8a37ad8",
     "SUNNY/run_input_manifest.json": "65dca53ff9a70a92cbfd861b685fe7ce1d1f80fedc55faf713fc04cbf562c01e",
@@ -90,84 +90,92 @@
       "size_bytes": 87252
     },
     "01_used_vehicle_comparison.svg": {
-      "sha256": "bcd5a1e872842f28ed35d48acffeb730f454c3471ca4efa7c2139ef2561f47ba",
-      "size_bytes": 15482
+      "sha256": "99b52e4b68deab3c94a54afc200c09c3de8a387848a752a2d1994055a9c21532",
+      "size_bytes": 70609
     },
     "02_assigned_trip_comparison.png": {
       "sha256": "6703ab0fbc18795db5a063470058edeeaf16d032be2109d2e91accd6a5d080b9",
       "size_bytes": 101394
     },
     "02_assigned_trip_comparison.svg": {
-      "sha256": "c9652c93cf925ede2d61288c09ff51d119fef41b6d085be32118183a0c20eca6",
-      "size_bytes": 14256
+      "sha256": "6fcaf01bb27bff83fd2ef9e528d257881feb156ad1262435585fa597b01cce63",
+      "size_bytes": 58121
     },
     "03_executed_day_cost_breakdown.png": {
       "sha256": "0d97612cf4bc4f906c6b9070cfc32a6ea4d2b059641efbe675c0d041bea06834",
       "size_bytes": 213799
     },
     "03_executed_day_cost_breakdown.svg": {
-      "sha256": "3f2988ffa4cddcbf57c72c4da6de3905d24430fdba5656716816b12b8c6eb5d3",
-      "size_bytes": 26784
+      "sha256": "b3f845199c02c4b89ba48a2b60d5d02d1353c2fbe36c8419968d5055d7988920",
+      "size_bytes": 105255
     },
     "04_pv_bess_grid_energy_balance.png": {
       "sha256": "99a008a0e8b8359962a655b3161ab10f45b305ef18ce9644211dbfdbe12d035c",
       "size_bytes": 134805
     },
     "04_pv_bess_grid_energy_balance.svg": {
-      "sha256": "7a891b155b619236572a01bf33d504f405898fc5366f88ee16ff0c5502312b9b",
-      "size_bytes": 17314
+      "sha256": "17451b7be07a99fba04c468e9eada66e8543e825ff83eb1db3b20d77d3dadcc8",
+      "size_bytes": 77858
     },
     "05_pv_utilization_and_curtailment.png": {
       "sha256": "5fef4f8460f04586745832e44d43e1c3d1b15964053ceb730882b1d67229f8cf",
       "size_bytes": 132209
     },
     "05_pv_utilization_and_curtailment.svg": {
-      "sha256": "048869fdebed44e040391aebb5b866836e256e90e31d498b90e706c20ef80d69",
-      "size_bytes": 14845
+      "sha256": "5461b84ba518d35077d4ceb4554a0491e13447acb11ee7a610ef27149a4306ea",
+      "size_bytes": 67777
     },
     "claim_boundary.md": {
-      "sha256": "d57502bbf73877f07766039c3446245b6d14da4e7e55468473e56e4cb62f327e",
-      "size_bytes": 1306
+      "sha256": "95b3c237d9d3f09a3039098d9d60b1fd0bb4da294c0b75cfe4baa3c5cca73f26",
+      "size_bytes": 1286
     },
     "cost_breakdown.csv": {
-      "sha256": "44730c6f010c8b3877fbfeae79c040a311890ef9bce278513c9fcd577cb3f3db",
-      "size_bytes": 527
+      "sha256": "323f92d6a57bbdf5d13a789a99e60ebb569d1d09a123b6f45a91b6a9c013680b",
+      "size_bytes": 482
     },
     "cost_breakdown.md": {
-      "sha256": "fad345ef2328ab85498bb072256bb9d3cd61b6986544f2e163cdf5fb53e9bf34",
-      "size_bytes": 673
+      "sha256": "5760359b65e5f7c6dbd73e153d878d401165c16fe00e2e65c94461c20e365386",
+      "size_bytes": 625
     },
     "energy_balance.csv": {
-      "sha256": "00a961918f90aa034e40ae129cc238a310af865822dac544e323dd83afaecc00",
-      "size_bytes": 503
+      "sha256": "7b702225de94638b1b06fa384554a77c0c6bb4c448ae1c155e3e92b93e1f0033",
+      "size_bytes": 428
     },
     "energy_balance.md": {
-      "sha256": "2f5447fd0a1b61e3f815b0823edbca193dace0378907bd36027dc9cb9d0ebd67",
-      "size_bytes": 673
+      "sha256": "dfaf81ae9f989ae301aad5d174e192fdf87db24737acb10db5d88e41c09549f1",
+      "size_bytes": 595
     },
     "experiment_parameters.csv": {
-      "sha256": "cddd2a40bf6fb087312f7158023665dc5029b501b8ecf3ca79f65c46dd8fe5cb",
-      "size_bytes": 3575
+      "sha256": "d07ad19fd629516bd000d5243c77d09e3bcb298f74f9f50575f6338c0325b3f9",
+      "size_bytes": 4014
     },
     "experiment_parameters.md": {
-      "sha256": "f70e315897454b50975eb1c59873743b72e3e29f59db7ffc90d83857e0cf60e7",
-      "size_bytes": 4428
+      "sha256": "2e9bec219d98be9ac2ec55be84d8f54321ff2a2e59bf94d9ff2534b1df8a5e87",
+      "size_bytes": 4944
     },
     "README.md": {
-      "sha256": "e203313eada8cb19c269005d54f75d04f34d54f0fe71217165b13025e39eff71",
-      "size_bytes": 2991
+      "sha256": "8842bf54185c840d50c12b3dafc9346d65878d11e51c36e1977f12c1c9785252",
+      "size_bytes": 3510
     },
     "results_section_ja.md": {
-      "sha256": "0402f9640b272cd1fddbc5300bc04ee7917fe3bb985070271c0e8c805e41b79c",
-      "size_bytes": 3878
+      "sha256": "129c186bbdcbc5fb5d67e3c1cb6b4885bcf774017e8e6b2f47774841416b6a80",
+      "size_bytes": 3986
     },
     "scenario_results.csv": {
-      "sha256": "9b6c584ccd73705aecd368cee9bf16c2bf306353005ac03083311539e75d5f40",
-      "size_bytes": 1268
+      "sha256": "53f58d8f7557f99157a2cbdd30576703056ca29c1c191f34a2c6deec4cb67a0c",
+      "size_bytes": 1220
     },
     "scenario_results.md": {
-      "sha256": "8c77e2d47a64f2801153dff3e54fc03e57e03ea7a90f931be0cdfa49f5ab3a58",
-      "size_bytes": 1608
+      "sha256": "d83a928470339b96e4d9c9fc1180b838ae4115b8ddcb803496ca4b4288bf07a7",
+      "size_bytes": 1557
+    },
+    "thesis_summary_table.csv": {
+      "sha256": "0725619065226338778209c9af8256a51d307bdb13e7824fdee7d5bb97a6da62",
+      "size_bytes": 698
+    },
+    "thesis_summary_table.md": {
+      "sha256": "c2139bd56365ad085778a275f100482da5fc9de9a1044b0c4a1651502834a613",
+      "size_bytes": 895
     }
   }
 }

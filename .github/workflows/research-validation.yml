@@ -67,6 +67,51 @@ jobs:
         shell: pwsh
         run: python -m pytest -q -p no:cacheprovider
 
+      - name: Verify exact thesis weather reporting package
+        shell: pwsh
+        run: >-
+          python scripts/verify_thesis_weather_result_package.py
+          --evidence-dir docs/evidence/weather_dispatch_rerun_bb0c005
+          --parameter-evidence-dir docs/evidence/weather_dispatch_rerun_bb0c005_parameter_sources
+          --committed-dir docs/thesis/weather_results_bb0c005
+
       - name: Check committed patch whitespace
         shell: pwsh
         run: git diff --check HEAD^ HEAD
+
+  verify-thesis-report-ubuntu-python-311:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install lightweight reporting dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install matplotlib pillow
+
+      - name: Fetch pinned Japanese reporting font
+        shell: bash
+        run: |
+          font_path="$RUNNER_TEMP/NotoSansJP-VF-Sans2.004.ttf"
+          curl --fail --location --silent --show-error \
+            "https://raw.githubusercontent.com/notofonts/noto-cjk/Sans2.004/Sans/Variable/TTF/Subset/NotoSansJP-VF.ttf" \
+            --output "$font_path"
+          expected_hash="f4b373b226668ee33a6e54b02823dcd2d1209f17159f777421ae8c2275160369"
+          actual_hash="$(sha256sum "$font_path" | cut -d' ' -f1)"
+          test "$actual_hash" = "$expected_hash"
+          echo "THESIS_JAPANESE_FONT_PATH=$font_path" >> "$GITHUB_ENV"
+
+      - name: Verify exact thesis weather reporting package
+        run: >-
+          python scripts/verify_thesis_weather_result_package.py
+          --evidence-dir docs/evidence/weather_dispatch_rerun_bb0c005
+          --parameter-evidence-dir docs/evidence/weather_dispatch_rerun_bb0c005_parameter_sources
+          --committed-dir docs/thesis/weather_results_bb0c005

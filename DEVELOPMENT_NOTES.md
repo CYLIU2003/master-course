@@ -18,7 +18,7 @@
   tariffs, and the fixed Stage-1/2 controls. RAIN is described precisely as a
   counterfactual that applies the low-PV curve derived from 2025-08-10 to the
   weekday operation of 2025-08-05.
-- Generated `docs/thesis/weather_results_bb0c005/` with four CSV/Markdown
+- Generated `docs/thesis/weather_results_bb0c005/` with five CSV/Markdown
   table pairs, five Japanese comparison figures in 300-dpi PNG and SVG, a
   1,200--2,000-character Japanese results section, a claim-boundary note,
   README, and a self-hashing package manifest. Figures use Noto Sans JP and
@@ -31,9 +31,13 @@
   supplement `docs/evidence/weather_dispatch_rerun_bb0c005_parameter_sources/`.
   It preserves both fresh runs' complete `scenario_input_snapshot.json` and
   sealing `run_input_manifest.json`, including Prepared IDs/source hashes.
-  The builder now verifies both raw snapshots and reports the shared 200-kW
-  grid limit, 1,000-kW PV rating, 6,000-kWh/900-kW BESS, 1,200--4,800-kWh
-  BESS SOC range, and 95%/95% efficiencies. The original 39 files remain
+  The builder now verifies both raw snapshots and reports ten unique
+  90-kW/one-port/non-bidirectional chargers at Tsurumaki, the shared 200-kW
+  grid and contract limits, 1,000-kW PV rating, 6,000-kWh/900-kW BESS,
+  1,200--4,800-kWh BESS SOC range, and 95%/95% efficiencies. Duplicate charger
+  IDs, mixed charger specifications, depot mismatches, missing nested fields,
+  and disagreement with the published ten-charger summary fail closed. The
+  original 39 files remain
   byte-identical. The optional 96-slot time-series figure remains omitted
   because neither canonical source contains the complete executed flow rows.
 - The same review removed the only rendered result number that had been
@@ -49,20 +53,34 @@
   gates. Its gap label is explicitly tied to the Stage-1 surrogate objective;
   it does not establish integrated-network optimality, teacher release
   readiness, or a general causal weather effect.
+- Reporting hardening rejects a non-empty output directory unless its complete
+  file inventory and every artifact byte match its existing manifest. Numeric
+  cells reject NaN/Infinity, normalize values below `1e-9` to zero, and use a
+  plain fixed 12-decimal representation shared by CSV and Markdown. All report
+  text uses LF; SVG labels are converted to paths and verified to contain no
+  live `<text>` nodes. `scripts/verify_thesis_weather_result_package.py`
+  regenerates into an isolated directory and compares every committed path and
+  SHA-256. The manual workflow runs this check on Windows and a lightweight
+  Ubuntu Python 3.11 job.
 - Reproduction and validation:
 
   ```powershell
   .\.venv\Scripts\python.exe scripts\build_thesis_weather_result_package.py `
     --evidence-dir docs\evidence\weather_dispatch_rerun_bb0c005 `
+    --parameter-evidence-dir docs\evidence\weather_dispatch_rerun_bb0c005_parameter_sources `
     --output-dir docs\thesis\weather_results_bb0c005
+  .\.venv\Scripts\python.exe scripts\verify_thesis_weather_result_package.py `
+    --evidence-dir docs\evidence\weather_dispatch_rerun_bb0c005 `
+    --parameter-evidence-dir docs\evidence\weather_dispatch_rerun_bb0c005_parameter_sources `
+    --committed-dir docs\thesis\weather_results_bb0c005
   .\.venv\Scripts\python.exe -m compileall -q scripts tests
   .\.venv\Scripts\python.exe -m pytest -q `
     tests\test_thesis_weather_parameter_sources.py `
     tests\test_thesis_weather_result_package.py `
     tests\test_published_weather_rerun_evidence.py -p no:cacheprovider
-  # 10 passed
+  # 16 passed (reporting and parameter-source focused tests)
   .\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider
-  # 1624 passed in 92.11s
+  # 1633 passed in 178.95s
   git diff --check
   ```
 
@@ -94,12 +112,17 @@
   check, compilation, `94` focused research-contract tests, the complete
   `1608 passed, 17 skipped` suite (`1,625` collected), and the committed-patch
   whitespace check.
+- After deterministic-inventory, charger-schema, LF/SVG-path, concise-table,
+  and exact-regeneration hardening, the local focused command passed `19`
+  tests and the full local suite passed `1633` tests in 178.95 seconds. The
+  exact regeneration test runs in a child Python process so unrelated tests
+  cannot leak matplotlib global state into the byte comparison.
 - The unchanged evidence tree SHA-256 is
   `c706da7e10bc4e99a06a441f91e1722baa971b41ab936d29db36e650accede5f`.
   The six-file parameter supplement tree SHA-256 is
-  `841440f329539fbf204f284678911393ef14c05887b3ce69aee0997835f566ed`.
-  The 22-file, 789,343-byte result package manifest SHA-256 is
-  `fb778e0b17be7358fc60a83a73a4b486c2493375b6c4f35a1a9331d906db839c`.
+  `3a0c955cc9b1fc6a3cba6a3a84fff48bbc505f6180969ca7377e68601df8eae8`.
+  The 24-file, 1,083,217-byte result package manifest SHA-256 is
+  `40e0560f3c487de61963c378dcc1d62eea8fd551183e640d92e35ad681ac1663`.
 
 ## 2026-08-29 (Asia/Tokyo): fresh public-path SUNNY/RAIN rerun at `bb0c005`
 
