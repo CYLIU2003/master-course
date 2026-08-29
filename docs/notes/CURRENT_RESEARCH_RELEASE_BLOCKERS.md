@@ -1,5 +1,20 @@
 # Current research release blockers
 
+## 2026-08-29 (Asia/Tokyo): post-run provenance review findings closed in code
+
+Three fail-closed gaps found during review are corrected for the next formal
+run: the Stage-1 BEV frontier is bounded by the Fresh Prepare vehicle set; the
+strict finalizer inventories the request actually submitted for each weather
+scenario; and selected-candidate fleet/hash tie-break evidence reaches public
+solver metadata. Focused regression passed 50 tests.
+The complete repository suite passed 1,622 tests; Python compilation and diff
+hygiene also passed.
+
+This is code-hardening evidence only. It does not mutate the frozen `bb0c005`
+SUNNY/RAIN artifacts, rerun a solver, reduce their certified gaps, or clear the
+advisor/release blockers below. Any numerical claim under this newer code still
+requires a fresh clean-commit formal execution.
+
 ## 2026-08-29 (Asia/Tokyo): clean-SHA formal rerun completed
 
 Frozen tag `thesis-weather-rerun-bb0c005` / SHA

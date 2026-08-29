@@ -185,13 +185,11 @@ def _finalization_input_artifacts(
         add(f"diagnosis/{name}", output_dir / name)
 
     discovery = _read_json(output_dir / "candidate_discovery_manifest.json")
-    preparation_dir = (
-        output_dir / confirmation_dir_name / "fresh_prepare" / "preparation"
-    )
+    confirmation_dir = output_dir / confirmation_dir_name
     for code in SCENARIOS:
         add(
             f"confirmation_request/{code}",
-            preparation_dir / code / "frontend_optimization_request.json",
+            confirmation_dir / code / "frontend_optimization_request.json",
         )
         for relative_path in CONFIRMATION_RUN_INPUT_FILES:
             add(
@@ -2089,14 +2087,9 @@ def finalize_normal_confirmation(
     }
     if not all(winner_checks.values()):
         raise RuntimeError(f"confirmed winners differ from diagnosis: {winner_checks}")
-    preparation_dir = (
-        output_dir
-        / confirmation_dir_name
-        / "fresh_prepare"
-        / "preparation"
-    )
+    confirmation_dir = output_dir / confirmation_dir_name
     requests = {
-        code: _read_json(preparation_dir / code / "frontend_optimization_request.json")
+        code: _read_json(confirmation_dir / code / "frontend_optimization_request.json")
         for code in SCENARIOS
     }
     controls_equal = all(

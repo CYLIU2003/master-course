@@ -54,6 +54,12 @@ validated Phase-3 two-stage feasible comparison, not an integrated global
 optimum, a 1%-optimal result, or a general weather-benefit claim. Teacher/thesis
 release remains BLOCKED.
 
+Subsequent review hardened the next-run contract without changing these frozen
+results: formal BEV frontier bounds come from Fresh Prepare's exact vehicle
+set, strict finalization hashes the actually submitted request, and the final
+candidate tie-break metadata is carried through the public result. New
+numerical claims require a fresh clean-commit run.
+
 ## Current 2026-08-28 weather-dispatch diagnosis
 
 The previously identical SUNNY/RAIN incumbent was caused by insufficient

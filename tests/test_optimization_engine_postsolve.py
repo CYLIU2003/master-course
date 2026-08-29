@@ -160,6 +160,8 @@ def test_fragment_separator_audit_metadata_reaches_public_solver_metadata() -> N
                 ),
                 "integrated_fragment_occupancy_constraint_count": 24_600,
                 "integrated_overlap_clique_constraint_count": 17,
+                "stage1_stage2_selected_used_vehicle_count": 6,
+                "stage1_stage2_selected_assignment_hash": "assignment-def",
             }
         ),
         feasible=True,
@@ -201,6 +203,10 @@ def test_fragment_separator_audit_metadata_reaches_public_solver_metadata() -> N
     assert result.solver_metadata[
         "integrated_overlap_clique_constraint_count"
     ] == 17
+    assert result.solver_metadata["stage1_stage2_selected_used_vehicle_count"] == 6
+    assert result.solver_metadata["stage1_stage2_selected_assignment_hash"] == (
+        "assignment-def"
+    )
 
 
 def test_two_stage_accounting_total_is_not_labelled_as_solver_cost_optimal() -> None:

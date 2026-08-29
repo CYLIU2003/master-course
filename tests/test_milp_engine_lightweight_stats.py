@@ -142,6 +142,8 @@ def test_milp_optimizer_propagates_phase_metadata(monkeypatch) -> None:
                         "stage1_vehicle_count_lower_bound_semantics": (
                             "relaxed_dispatch_feasible_minimum_path_cover_vehicle_day_lb"
                         ),
+                        "stage1_stage2_selected_used_vehicle_count": 7,
+                        "stage1_stage2_selected_assignment_hash": "assignment-abc",
                     },
                 ),
             )
@@ -215,6 +217,10 @@ def test_milp_optimizer_propagates_phase_metadata(monkeypatch) -> None:
     assert result.solver_metadata["solver_objective_matches_accounting_total"] is False
     assert result.solver_metadata["stage1_vehicle_count_lower_bound"] == 1
     assert result.solver_metadata["stage1_vehicle_count_lower_bound_constraint_count"] == 1
+    assert result.solver_metadata["stage1_stage2_selected_used_vehicle_count"] == 7
+    assert result.solver_metadata["stage1_stage2_selected_assignment_hash"] == (
+        "assignment-abc"
+    )
     assert result.solver_metadata["strict_coverage_precheck"][
         "relaxed_vehicle_lower_bound"
     ] == 1
