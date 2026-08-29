@@ -60,10 +60,12 @@ optimum, a 1%-optimal result, or a general weather-benefit claim. Teacher/thesis
 release remains BLOCKED.
 
 Subsequent review hardened the next-run contract without changing these frozen
-results: formal BEV frontier bounds come from Fresh Prepare's exact vehicle
-set, strict finalization hashes the actually submitted request, and the final
-candidate tie-break metadata is carried through the public result. New
-numerical claims require a fresh clean-commit run.
+results: formal BEV frontier bounds scale to Fresh Prepare's exact active BEV
+set, physical assignment identity excludes incidental duty labels, runtime
+analysis consumes only hash-indexed frozen artifacts, strict finalization
+hashes the actually submitted request and compares dispatch-construction
+switches, and final candidate tie-break metadata reaches the public result.
+New numerical claims require a fresh clean-commit run.
 
 ## Current 2026-08-28 weather-dispatch diagnosis
 

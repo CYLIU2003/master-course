@@ -13935,13 +13935,26 @@ def _apply_research_phase3_candidate_coverage_policy(
         raise ValueError(
             "formal Phase-3 candidate coverage requires the prepared active BEV count"
         )
-    frontier_max = min(
+    requested_frontier_max = max(
         int(request.stage1_bev_frontier_max_count),
-        int(available_bev_count),
+        0,
     )
-    frontier_min = min(
-        int(request.stage1_bev_frontier_min_count),
-        frontier_max,
+    requested_frontier_min = min(
+        max(int(request.stage1_bev_frontier_min_count), 0),
+        requested_frontier_max,
+    )
+    frontier_max = min(requested_frontier_max, int(available_bev_count))
+    frontier_min = (
+        min(
+            frontier_max,
+            math.ceil(
+                requested_frontier_min
+                * frontier_max
+                / requested_frontier_max
+            ),
+        )
+        if requested_frontier_max > 0
+        else 0
     )
     return request.model_copy(
         update={
