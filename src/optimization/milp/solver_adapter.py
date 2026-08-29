@@ -97,7 +97,7 @@ _CANDIDATE_ACCOUNTING_TOLERANCE_JPY = 1.0e-6
 def _cost_breakdown_accounting_reconciliation(
     breakdown: CostBreakdown,
 ) -> Tuple[float, float, bool]:
-    """Independently recompute the canonical accounting total."""
+    """Recompute the canonical total from its serialized components."""
 
     recomputed_total = sum(
         float(value)
@@ -123,6 +123,46 @@ def _cost_breakdown_accounting_reconciliation(
         and abs(delta) <= _CANDIDATE_ACCOUNTING_TOLERANCE_JPY
     )
     return recomputed_total, delta, passed
+
+
+def _stage2_result_accounting_reconciliation(
+    breakdown: CostBreakdown,
+    *,
+    stage2_objective_jpy: Optional[float],
+) -> Tuple[Optional[float], Optional[float], bool]:
+    """Reconcile canonical accounting with the independently solved Stage 2."""
+
+    if stage2_objective_jpy is None or not math.isfinite(stage2_objective_jpy):
+        return None, None, False
+    total_co2_kg = float(breakdown.total_co2_kg)
+    grid_co2_cost = (
+        float(breakdown.co2_cost)
+        * float(breakdown.grid_electricity_co2_kg)
+        / total_co2_kg
+        if total_co2_kg > 0.0
+        else 0.0
+    )
+    independently_produced_total = float(stage2_objective_jpy) + sum(
+        float(value)
+        for value in (
+            breakdown.fuel_cost,
+            breakdown.vehicle_cost,
+            breakdown.vehicle_usage_cost,
+            breakdown.driver_cost,
+            breakdown.unserved_penalty,
+            breakdown.switch_cost,
+            breakdown.degradation_cost,
+            breakdown.deviation_cost,
+            float(breakdown.co2_cost) - grid_co2_cost,
+        )
+    )
+    delta = independently_produced_total - float(breakdown.total_cost)
+    passed = bool(
+        math.isfinite(independently_produced_total)
+        and math.isfinite(delta)
+        and abs(delta) <= _CANDIDATE_ACCOUNTING_TOLERANCE_JPY
+    )
+    return independently_produced_total, delta, passed
 
 
 @contextmanager
@@ -20310,6 +20350,9 @@ class GurobiMILPAdapter:
                         "accounting_reconciliation_tolerance_jpy": (
                             _CANDIDATE_ACCOUNTING_TOLERANCE_JPY
                         ),
+                        "stage2_result_accounting_total_jpy": None,
+                        "stage2_result_accounting_delta_jpy": None,
+                        "stage2_result_accounting_reconciliation_passed": False,
                         "accounting_reconciliation_passed": False,
                         "physical_validation_feasible": False,
                         "served_trip_count": 0,
@@ -20385,6 +20428,9 @@ class GurobiMILPAdapter:
             accounting_recomputed_total: Optional[float] = None
             accounting_reconciliation_delta: Optional[float] = None
             accounting_components_reconcile = False
+            stage2_result_accounting_total: Optional[float] = None
+            stage2_result_accounting_delta: Optional[float] = None
+            stage2_result_accounting_reconciles = False
             physical_validation_feasible = False
             physical_validation_errors: Tuple[str, ...] = ()
             if candidate_feasible:
@@ -20405,6 +20451,16 @@ class GurobiMILPAdapter:
                     accounting_reconciliation_delta,
                     accounting_components_reconcile,
                 ) = _cost_breakdown_accounting_reconciliation(breakdown)
+                (
+                    stage2_result_accounting_total,
+                    stage2_result_accounting_delta,
+                    stage2_result_accounting_reconciles,
+                ) = _stage2_result_accounting_reconciliation(
+                    breakdown,
+                    stage2_objective_jpy=candidate_plan_metadata.get(
+                        "stage2_objective"
+                    ),
+                )
                 evaluation_feasible = bool(breakdown.evaluation_feasible)
                 if evaluation_feasible:
                     canonical_cost = float(breakdown.total_cost)
@@ -20541,6 +20597,7 @@ class GurobiMILPAdapter:
                 and canonical_cost is not None
                 and math.isfinite(canonical_cost)
                 and accounting_components_reconcile
+                and stage2_result_accounting_reconciles
             )
             selectable = bool(
                 candidate_feasible
@@ -20615,6 +20672,15 @@ class GurobiMILPAdapter:
                     ),
                     "accounting_reconciliation_tolerance_jpy": (
                         _CANDIDATE_ACCOUNTING_TOLERANCE_JPY
+                    ),
+                    "stage2_result_accounting_total_jpy": (
+                        stage2_result_accounting_total
+                    ),
+                    "stage2_result_accounting_delta_jpy": (
+                        stage2_result_accounting_delta
+                    ),
+                    "stage2_result_accounting_reconciliation_passed": (
+                        stage2_result_accounting_reconciles
                     ),
                     "accounting_reconciliation_passed": (
                         accounting_reconciliation_passed

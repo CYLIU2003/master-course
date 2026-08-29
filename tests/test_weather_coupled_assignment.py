@@ -593,6 +593,11 @@ def test_phase3_selects_lowest_canonical_cost_from_exact_stage2_candidates() -> 
     assert metadata["stage1_distinct_candidate_count"] == 2
     assert len(candidates) == 2
     assert len(feasible_costs) == 2
+    assert all(candidate["accounting_reconciliation_passed"] for candidate in candidates)
+    assert all(
+        candidate["stage2_result_accounting_reconciliation_passed"]
+        for candidate in candidates
+    )
     assert [
         float(item["stage1_relaxed_objective_jpy"])
         for item in candidates

@@ -96,6 +96,21 @@
   reverified all `103` frozen bundle artifacts and analyzed exactly `20`
   indexed runs; the complete repository suite passed `1650 passed in
   172.19s`.
+- Fresh exact-HEAD review then closed four P1 findings and one P2. Separate
+  diagnosis stages now require discovery, cross-evaluation, confirmation, and
+  execution to share one clean Git SHA. Formal requests with null
+  `gurobi_threads` fail as a structured 422 before job creation. The effective
+  dispatch scope is resolved before fleet counting, so an omitted request
+  depot cannot make a single-depot run count a multi-depot fleet. Candidate
+  accounting must reconcile both its 12 serialized components and the
+  independently solved Stage-2 variable-cost objective. Finally, the frozen
+  indexed `total_solver_time_sec` is preserved as Stage-1 runtime rather than
+  subtracting Stage 2 twice; the re-audited medians are 30.754/435.106 seconds
+  for SUNNY A/B and 31.887/435.103 seconds for RAIN A/B. The expanded related
+  suite passed `140` tests and the 20 candidate-model regressions passed.
+  The complete repository suite passed `1655 passed in 168.20s`.
+  Formal scenario/result evidence remains unchanged and no experiment was
+  rerun.
 
 ## 2026-08-29 (Asia/Tokyo): fresh public-path SUNNY/RAIN rerun at `bb0c005`
 

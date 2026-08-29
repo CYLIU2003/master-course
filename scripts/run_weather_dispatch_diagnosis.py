@@ -226,6 +226,24 @@ def _verify_candidate_discovery_artifacts(
     }
 
 
+def _require_stage_git_sha(
+    payload: Mapping[str, Any],
+    *,
+    expected_sha: str,
+    fields: Sequence[str],
+    stage: str,
+) -> None:
+    """Reject derived artifacts produced by a different clean commit."""
+
+    for field in fields:
+        observed = str(payload.get(field) or "")
+        if observed != expected_sha:
+            raise RuntimeError(
+                f"{stage} Git SHA mismatch: field={field}, "
+                f"expected={expected_sha}, observed={observed}"
+            )
+
+
 def _finalization_input_artifacts(
     *,
     output_dir: Path,
@@ -584,12 +602,13 @@ def _runtime_row(metrics_path: Path) -> dict[str, Any]:
     wall = execution.get("parent_observed_wall_time_sec", timing.get("runner_wall_time_sec"))
     total_solver_runtime = timing.get("total_solver_time_sec")
     stage2_runtime = timing.get("cost_stage_solve_time_sec")
-    stage1_runtime = None
-    if total_solver_runtime is not None and stage2_runtime is not None:
-        stage1_runtime = max(
-            float(total_solver_runtime) - float(stage2_runtime),
-            0.0,
-        )
+    # collect_pure_ice_case_metrics records Stage-1 runtime directly in this
+    # indexed field and records Stage 2 separately. Do not subtract Stage 2.
+    stage1_runtime = (
+        float(total_solver_runtime)
+        if total_solver_runtime is not None
+        else None
+    )
     measured = sum(
         float(value or 0.0)
         for value in (
@@ -1260,6 +1279,12 @@ def cross_evaluate(output_dir: Path) -> dict[str, Any]:
     )
     unique = list(_read_json(output_dir / "weather_candidate_union.json").get("candidates") or ())
     discovery = _read_json(output_dir / "candidate_discovery_manifest.json")
+    _require_stage_git_sha(
+        discovery,
+        expected_sha=evaluation_git_sha,
+        fields=("git_sha",),
+        stage="candidate discovery",
+    )
     _verify_candidate_discovery_artifacts(discovery)
     contexts = {}
     for code in SCENARIOS:
@@ -1749,6 +1774,12 @@ def confirm_normal_runs(
         output_dir / "cross_weather_fixed_dispatch_matrix.seal.json",
     )
     matrix = _read_json(output_dir / "cross_weather_fixed_dispatch_matrix.json")
+    _require_stage_git_sha(
+        matrix,
+        expected_sha=frozen_sha,
+        fields=("evaluation_git_sha", "candidate_discovery_git_sha"),
+        stage="cross-weather matrix",
+    )
     expected = dict(matrix.get("selected") or {})
     fixed_dispatch_selectable_counts = require_selectable_assignment_coverage(
         matrix.get("rows") or ()
@@ -2309,6 +2340,19 @@ def finalize_normal_confirmation(
     if len(set(execution_shas.values())) != 1 or not next(iter(execution_shas.values())):
         raise RuntimeError(f"confirmation run SHA mismatch: {execution_shas}")
     execution_sha = next(iter(execution_shas.values()))
+    _require_stage_git_sha(
+        discovery_manifest,
+        expected_sha=execution_sha,
+        fields=("git_sha",),
+        stage="candidate discovery",
+    )
+    matrix = _read_json(output_dir / "cross_weather_fixed_dispatch_matrix.json")
+    _require_stage_git_sha(
+        matrix,
+        expected_sha=execution_sha,
+        fields=("evaluation_git_sha", "candidate_discovery_git_sha"),
+        stage="cross-weather matrix",
+    )
     input_artifacts_before = _finalization_input_artifacts(
         output_dir=output_dir,
         existing_bundle=existing_bundle,
@@ -2319,7 +2363,6 @@ def finalize_normal_confirmation(
         code: _confirmation_gate(run_dir, execution_sha)
         for code, run_dir in run_dirs.items()
     }
-    matrix = _read_json(output_dir / "cross_weather_fixed_dispatch_matrix.json")
     expected = dict(matrix.get("selected") or {})
     fixed_dispatch_selectable_counts = require_selectable_assignment_coverage(
         matrix.get("rows") or ()
