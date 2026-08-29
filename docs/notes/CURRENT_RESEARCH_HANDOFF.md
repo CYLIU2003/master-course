@@ -31,13 +31,14 @@ The verifier must be run against the untouched committed package before any
 intentional regeneration, then run again after regeneration. Hash maps use
 casefold-sorted relative POSIX paths. Rendering is fail-closed on the complete
 locked Matplotlib/Pillow dependency set and the pinned Noto Sans JP face
-actually selected by Matplotlib. Local integrated checks passed 147 focused
-tests and the full 1,659-test suite before the final PR #7 integration. On the
-integrated branch, 154 focused tests and the full 1,666-test suite passed, and
-exact package regeneration passed again. After the final evidence-loader
-review, the expanded focused/navigation suite passed 161 tests, the full suite
-passed 1,670 tests, and exact package regeneration remained byte-identical.
-The final manual GitHub run remains the last merge gate.
+actually selected by Matplotlib. After the final evidence-loader and Rolling
+attestation reviews, the reporting suites passed 55 tests, the reporting plus
+research-contract focused suite passed 225 tests, and the complete repository
+suite passed 1,714 tests in 105.09 seconds. Exact package regeneration,
+compilation, three README-navigation tests, and diff hygiene also passed.
+These final local fixes are commits `8169803` and `151fff4`; neither commit has
+been pushed while account-level GitHub Actions and automatic Copilot review
+remain enabled.
 
 ## Claim boundary
 
@@ -49,8 +50,12 @@ The Stage 1 certified gaps remain 9.5213476% for SUNNY and 1.6563581% for RAIN.
 
 ## Merge boundary
 
-`ALLOW_MAIN_MERGE=false`. A human may merge the reporting PR only after all
-review threads are resolved, fresh Codex and Copilot review is recorded, and
-the final manual **Research code validation** run succeeds on the final HEAD.
-No commit may be added after that final validation run. This handoff does not
-authorize an automated merge to `main`.
+`ALLOW_MAIN_MERGE=false`. The account owner currently forbids GitHub Actions
+and paid/AI review features, so they must not be invoked as merge evidence.
+Consequently, the original fresh-remote-CI and fresh-Codex/Copilot-review gates
+remain explicitly unsatisfied rather than being replaced by local evidence.
+After the owner confirms the prepared account-setting changes, disable those
+features first, verify them read-only, and only then push the two local commits
+and resolve review threads with their local test evidence. This handoff does
+not authorize a merge to `main` or an unsupported `READY_FOR_HUMAN_MERGE`
+claim.
