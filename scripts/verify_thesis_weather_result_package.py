@@ -14,10 +14,17 @@ except ModuleNotFoundError:  # Direct execution via ``python scripts/...``.
 
 
 def _inventory(root: Path) -> dict[str, str]:
-    return {
-        path.relative_to(root).as_posix(): sha256(path.read_bytes()).hexdigest()
-        for path in sorted(root.rglob("*"))
+    files = [
+        (path.relative_to(root).as_posix(), path)
+        for path in root.rglob("*")
         if path.is_file()
+    ]
+    return {
+        relative_path: sha256(path.read_bytes()).hexdigest()
+        for relative_path, path in sorted(
+            files,
+            key=lambda item: item[0].casefold(),
+        )
     }
 
 

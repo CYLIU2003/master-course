@@ -31,10 +31,17 @@ PROHIBITED_PHRASES = ("最適解", "大域最適", "1%以内", "雨天時の実�
 
 
 def _hash_inventory(root: Path) -> dict[str, str]:
-    return {
-        path.relative_to(root).as_posix(): sha256(path.read_bytes()).hexdigest()
-        for path in sorted(root.rglob("*"))
+    files = [
+        (path.relative_to(root).as_posix(), path)
+        for path in root.rglob("*")
         if path.is_file()
+    ]
+    return {
+        relative_path: sha256(path.read_bytes()).hexdigest()
+        for relative_path, path in sorted(
+            files,
+            key=lambda item: item[0].casefold(),
+        )
     }
 
 
@@ -113,6 +120,33 @@ def test_configured_japanese_font_path_fails_closed_when_missing(
         match="THESIS_JAPANESE_FONT_PATH is not a file",
     ):
         builder._configure_matplotlib()
+
+
+def test_configured_japanese_font_path_is_the_selected_face(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from matplotlib import font_manager
+
+    configured_path = Path(
+        font_manager.findfont("Noto Sans JP", fallback_to_default=False)
+    ).resolve()
+    monkeypatch.setenv("THESIS_JAPANESE_FONT_PATH", str(configured_path))
+
+    _plt, font_name = builder._configure_matplotlib()
+    selected_path = Path(
+        font_manager.findfont(
+            font_manager.FontProperties(family=font_name),
+            fallback_to_default=False,
+        )
+    ).resolve()
+    assert selected_path == configured_path
+
+
+def test_reporting_renderer_versions_are_exactly_pinned() -> None:
+    assert builder._renderer_versions() == {
+        "matplotlib": builder.EXPECTED_MATPLOTLIB_VERSION,
+        "Pillow": builder.EXPECTED_PILLOW_VERSION,
+    }
 
 
 def test_generated_package_is_byte_deterministic_and_complete(
@@ -223,6 +257,10 @@ def test_generated_claims_and_figure_metadata_are_bounded(
     assert manifest["parameter_source_tree_sha256"] == builder.load_and_validate_bundle(
         EVIDENCE_ROOT
     ).parameter_source_tree_sha256
+    assert manifest["renderer_versions"] == {
+        "matplotlib": builder.EXPECTED_MATPLOTLIB_VERSION,
+        "Pillow": builder.EXPECTED_PILLOW_VERSION,
+    }
     assert manifest["png_dpi"] == 300
     assert manifest["timeseries_figure_created"] is False
     assert "No complete 96-slot" in manifest["timeseries_figure_omission_reason"]
@@ -252,6 +290,16 @@ def test_tree_hash_is_independent_of_mapping_insertion_order() -> None:
     first = {"z.json": "2", "A.json": "1", "b.json": "3"}
     second = {"b.json": "3", "z.json": "2", "A.json": "1"}
     assert builder._tree_sha256(first) == builder._tree_sha256(second)
+
+
+def test_bundle_hash_map_uses_relative_posix_casefold_order(tmp_path: Path) -> None:
+    for name in ("z.json", "A.json", "b.json"):
+        (tmp_path / name).write_text(name, encoding="utf-8")
+    assert list(builder._bundle_hashes(tmp_path)) == [
+        "A.json",
+        "b.json",
+        "z.json",
+    ]
 
 
 def test_builder_rejects_stale_preexisting_output(tmp_path: Path) -> None:

@@ -11,6 +11,7 @@ import argparse
 import csv
 from dataclasses import dataclass
 from hashlib import sha256
+from importlib import metadata as importlib_metadata
 import json
 import math
 import os
@@ -48,6 +49,8 @@ EXPECTED_COST_DIFFERENCE_JPY = 37_614.844839
 EXPECTED_BESS_ONE_WAY_EFFICIENCY = 0.95
 EXPECTED_BESS_TERMINAL_SOC_KWH = 3000.0
 PARAMETER_SOURCE_SCHEMA_VERSION = "thesis_weather_parameter_sources_v1"
+EXPECTED_MATPLOTLIB_VERSION = "3.10.8"
+EXPECTED_PILLOW_VERSION = "12.1.1"
 
 BLUE = "#2F6B9A"
 ORANGE = "#D9822B"
@@ -135,11 +138,36 @@ def _sha256(path: Path) -> str:
 
 
 def _bundle_hashes(root: Path) -> dict[str, str]:
-    return {
-        path.relative_to(root).as_posix(): _sha256(path)
-        for path in sorted(root.rglob("*"))
+    files = [
+        (path.relative_to(root).as_posix(), path)
+        for path in root.rglob("*")
         if path.is_file()
+    ]
+    return {
+        relative_path: _sha256(path)
+        for relative_path, path in sorted(
+            files,
+            key=lambda item: item[0].casefold(),
+        )
     }
+
+
+def _renderer_versions() -> dict[str, str]:
+    """Require the renderer versions that produced the committed image bytes."""
+
+    observed = {
+        "matplotlib": importlib_metadata.version("matplotlib"),
+        "Pillow": importlib_metadata.version("Pillow"),
+    }
+    expected = {
+        "matplotlib": EXPECTED_MATPLOTLIB_VERSION,
+        "Pillow": EXPECTED_PILLOW_VERSION,
+    }
+    _require(
+        observed == expected,
+        f"Reporting renderer versions differ: expected={expected}, observed={observed}",
+    )
+    return observed
 
 
 def _tree_sha256(hashes: Mapping[str, str]) -> str:
@@ -893,7 +921,28 @@ def _configure_matplotlib() -> tuple[Any, str]:
             configured_family == "Noto Sans JP",
             "THESIS_JAPANESE_FONT_PATH must identify Noto Sans JP",
         )
-        font_manager.fontManager.addfont(configured_path)
+        font_manager.fontManager.ttflist[:] = [
+            entry
+            for entry in font_manager.fontManager.ttflist
+            if entry.name != configured_family
+            or Path(entry.fname).expanduser().resolve() == configured_path
+        ]
+        if not any(
+            Path(entry.fname).expanduser().resolve() == configured_path
+            for entry in font_manager.fontManager.ttflist
+        ):
+            font_manager.fontManager.addfont(configured_path)
+        resolved_path = Path(
+            font_manager.findfont(
+                font_manager.FontProperties(family=configured_family),
+                fallback_to_default=False,
+            )
+        ).expanduser().resolve()
+        _require(
+            resolved_path == configured_path,
+            "Configured Japanese font did not become the selected face: "
+            f"configured={configured_path}, selected={resolved_path}",
+        )
 
     font_name = ""
     for candidate in ("Noto Sans JP", "Meiryo"):
@@ -1258,9 +1307,14 @@ def _readme_text(bundle: EvidenceBundle, font_name: str, timeseries_created: boo
 
 実験SHA `{EXECUTION_SHA}` のGit管理済み証拠だけから生成した。数値の手入力は行わず、期待値は生成前のfail-closed assertionにのみ使用する。設備定格値は、各fresh runの`scenario_input_snapshot.json`と`run_input_manifest.json`をexact byte copyしたparameter-source supplementから読む。
 
-## 再生成
+## 検証と再生成
 
 ```powershell
+python scripts/verify_thesis_weather_result_package.py `
+  --evidence-dir docs/evidence/weather_dispatch_rerun_bb0c005 `
+  --parameter-evidence-dir docs/evidence/weather_dispatch_rerun_bb0c005_parameter_sources `
+  --committed-dir docs/thesis/weather_results_bb0c005
+# 意図的に更新する場合のみ、未変更の正本検証に通った後で再生成する。
 python scripts/build_thesis_weather_result_package.py `
   --evidence-dir docs/evidence/weather_dispatch_rerun_bb0c005 `
   --parameter-evidence-dir docs/evidence/weather_dispatch_rerun_bb0c005_parameter_sources `
@@ -1313,12 +1367,18 @@ def _write_manifest(
     timeseries_created: bool,
 ) -> Path:
     manifest_path = output_dir / "package_manifest.json"
+    artifact_entries = [
+        (path.relative_to(output_dir).as_posix(), path) for path in artifacts
+    ]
     artifact_index = {
-        path.relative_to(output_dir).as_posix(): {
+        relative_path: {
             "sha256": _sha256(path),
             "size_bytes": path.stat().st_size,
         }
-        for path in sorted(artifacts)
+        for relative_path, path in sorted(
+            artifact_entries,
+            key=lambda item: item[0].casefold(),
+        )
     }
     payload = {
         "schema_version": SCHEMA_VERSION,
@@ -1328,6 +1388,7 @@ def _write_manifest(
         "source_artifacts": dict(bundle.source_hashes),
         "parameter_source_tree_sha256": bundle.parameter_source_tree_sha256,
         "parameter_source_artifacts": dict(bundle.parameter_source_hashes),
+        "renderer_versions": _renderer_versions(),
         "font_family": font_name,
         "png_dpi": 300,
         "timeseries_figure_created": timeseries_created,
@@ -1399,6 +1460,7 @@ def build_package(
     """Validate source evidence and build the complete deterministic package."""
 
     bundle = load_and_validate_bundle(evidence_dir, parameter_evidence_dir)
+    _renderer_versions()
     before_hashes = dict(bundle.source_hashes)
     before_parameter_hashes = dict(bundle.parameter_source_hashes)
     target = output_dir.resolve()

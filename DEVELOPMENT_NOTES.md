@@ -65,6 +65,11 @@
 - Reproduction and validation:
 
   ```powershell
+  .\.venv\Scripts\python.exe scripts\verify_thesis_weather_result_package.py `
+    --evidence-dir docs\evidence\weather_dispatch_rerun_bb0c005 `
+    --parameter-evidence-dir docs\evidence\weather_dispatch_rerun_bb0c005_parameter_sources `
+    --committed-dir docs\thesis\weather_results_bb0c005
+  # Only after the untouched committed package passes exact verification:
   .\.venv\Scripts\python.exe scripts\build_thesis_weather_result_package.py `
     --evidence-dir docs\evidence\weather_dispatch_rerun_bb0c005 `
     --parameter-evidence-dir docs\evidence\weather_dispatch_rerun_bb0c005_parameter_sources `
@@ -121,8 +126,20 @@
   `c706da7e10bc4e99a06a441f91e1722baa971b41ab936d29db36e650accede5f`.
   The six-file parameter supplement tree SHA-256 is
   `3a0c955cc9b1fc6a3cba6a3a84fff48bbc505f6180969ca7377e68601df8eae8`.
-  The 24-file, 1,083,217-byte result package manifest SHA-256 is
-  `40e0560f3c487de61963c378dcc1d62eea8fd551183e640d92e35ad681ac1663`.
+  After final renderer/path-order hardening, the 24-file, 1,083,676-byte
+  result package manifest SHA-256 is
+  `ef7a04e36ddff86ced8b0746db1a18f8d9a72c41e327b0cfe12c06fb008c3d8a`.
+- Final reporting review additionally makes every artifact/hash map sort
+  relative POSIX paths with a casefold key, pins Matplotlib 3.10.8 and Pillow
+  12.1.1 in both CI operating systems and in the builder's fail-closed runtime
+  check, and verifies that a configured Noto Sans JP file is the actual face
+  selected by Matplotlib even when another same-family font is installed.
+  The focused reporting, published-evidence, frontier, and metadata regression
+  passed `70 passed`; exact package regeneration passed after the intentional
+  manifest/README update. The complete repository suite passed `1641 passed
+  in 180.98s`; compilation and diff hygiene also passed. No numerical result,
+  evidence source byte, table, or figure byte changed.
+
 ## 2026-08-29 (Asia/Tokyo): formal Phase-3 provenance review hardening
 
 - Formal public-path Phase-3 candidate coverage now derives its BEV frontier

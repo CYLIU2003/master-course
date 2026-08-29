@@ -53,6 +53,10 @@
     "SUNNY/run_input_manifest.json": "65dca53ff9a70a92cbfd861b685fe7ce1d1f80fedc55faf713fc04cbf562c01e",
     "SUNNY/scenario_input_snapshot.json": "b70d13986ff3dbd85f9b3793bbdce3926e4881e62c7a4651852bbe44fc281348"
   },
+  "renderer_versions": {
+    "matplotlib": "3.10.8",
+    "Pillow": "12.1.1"
+  },
   "font_family": "Noto Sans JP",
   "png_dpi": 300,
   "timeseries_figure_created": false,
@@ -154,8 +158,8 @@
       "size_bytes": 4944
     },
     "README.md": {
-      "sha256": "8842bf54185c840d50c12b3dafc9346d65878d11e51c36e1977f12c1c9785252",
-      "size_bytes": 3510
+      "sha256": "313fc9ffc2e60d96ca3156129da4b07c62c726094707eeb6319fbcb9b5ea50f5",
+      "size_bytes": 3888
     },
     "results_section_ja.md": {
       "sha256": "129c186bbdcbc5fb5d67e3c1cb6b4885bcf774017e8e6b2f47774841416b6a80",

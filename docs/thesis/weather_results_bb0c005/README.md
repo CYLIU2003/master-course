@@ -2,9 +2,14 @@
 
 実験SHA `bb0c0050883a91dd86a9e8813ae88d4b6d8c361d` のGit管理済み証拠だけから生成した。数値の手入力は行わず、期待値は生成前のfail-closed assertionにのみ使用する。設備定格値は、各fresh runの`scenario_input_snapshot.json`と`run_input_manifest.json`をexact byte copyしたparameter-source supplementから読む。
 
-## 再生成
+## 検証と再生成
 
 ```powershell
+python scripts/verify_thesis_weather_result_package.py `
+  --evidence-dir docs/evidence/weather_dispatch_rerun_bb0c005 `
+  --parameter-evidence-dir docs/evidence/weather_dispatch_rerun_bb0c005_parameter_sources `
+  --committed-dir docs/thesis/weather_results_bb0c005
+# 意図的に更新する場合のみ、未変更の正本検証に通った後で再生成する。
 python scripts/build_thesis_weather_result_package.py `
   --evidence-dir docs/evidence/weather_dispatch_rerun_bb0c005 `
   --parameter-evidence-dir docs/evidence/weather_dispatch_rerun_bb0c005_parameter_sources `
