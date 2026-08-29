@@ -15,8 +15,9 @@ After final PR #7 integration at `68b9133`, the builder also reconciles all
 selected-candidate counts, costs, fleet/trip counts, indices, and assignment
 identifiers to the summary and confirmation gate. Replacement packages are
 fully built and validated in a private sibling directory; a late failure leaves
-the previous package byte-exact. The final integrated focused suite passes 174
-tests and the complete suite passes 1,683 tests; exact package verification
+the previous package byte-exact. After integrating the exact-head PR #7
+follow-up at `67519df`, the final integrated focused suite passes 199 tests and
+the complete suite passes 1,688 tests; exact package verification
 still passes and all package bytes remain stable.
 
 The final reporting review also binds every published claim to independent

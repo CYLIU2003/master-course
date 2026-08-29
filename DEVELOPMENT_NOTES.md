@@ -215,6 +215,17 @@
   suite passed `174 passed in 16.43s`, exact package verification passed, and
   the complete repository suite passed `1683 passed in 183.48s`. Canonical
   evidence and all 24 generated package files remain unchanged.
+- Final integration of the exact-head PR #7 follow-up at `67519df` binds all
+  diagnosis stages to one clean Git SHA, resolves the effective depot before
+  fleet counting, rejects null formal thread controls before queueing,
+  reconciles candidate accounting against the independent Stage-2 objective,
+  and preserves the producer-recorded Stage-1 runtime. On the integrated PR #8
+  tree, the combined reporting/evidence/contract/navigation suite passed `199
+  passed in 17.19s`; exact package verification returned
+  `PASS_EXACT_THESIS_WEATHER_RESULT_PACKAGE`; and the complete repository suite
+  passed `1688 passed in 184.09s`. The package remains 24 files and 1,084,538
+  bytes with unchanged source-tree, parameter-source-tree, and package-manifest
+  hashes. No solver was rerun and no canonical evidence byte changed.
 
 ## 2026-08-29 (Asia/Tokyo): formal Phase-3 provenance review hardening
 
