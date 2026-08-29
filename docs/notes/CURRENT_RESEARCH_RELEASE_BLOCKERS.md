@@ -11,8 +11,9 @@ documents the pinned font acquisition plus exact verification before any
 intentional regeneration. The frozen numerical evidence is unchanged; fresh
 validation passed: 24 reporting-focused tests, exact regeneration, compilation,
 3 README-navigation tests, diff hygiene, and the complete 1,643-test suite.
-After PR #7 integration, the combined focused suite passes 105 tests and the
-combined complete suite passes 1,647 tests; exact package bytes remain stable.
+After final PR #7 integration, the combined focused suite passes 109 tests and
+the combined complete suite passes 1,651 tests; exact package bytes remain
+stable.
 
 This changes only reporting reproducibility metadata and instructions. The
 canonical `bb0c005` evidence bytes, numerical tables, figures, certified gaps,

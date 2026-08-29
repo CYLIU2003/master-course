@@ -157,9 +157,9 @@
   compilation, README navigation (`3 passed`), and diff hygiene passed. The
   complete repository suite passed `1643 passed in 182.63s`.
   After integrating the final PR #7 research hardening, the combined focused
-  reporting/evidence/contract suite passed `105 passed in 15.90s`, exact
-  package verification passed, and the combined complete suite passed `1647
-  passed in 180.23s`.
+  reporting/evidence/contract suite passed `109 passed in 15.42s`, exact
+  package verification passed, and the combined complete suite passed `1651
+  passed in 176.73s`.
 
 ## 2026-08-29 (Asia/Tokyo): formal Phase-3 provenance review hardening
 
