@@ -20269,6 +20269,15 @@ class GurobiMILPAdapter:
                         "stage2_exact_objective_jpy": None,
                         "stage2_actual_canonical_cost_jpy": None,
                         "feasible": False,
+                        "stage2_feasible": False,
+                        "canonical_evaluation_feasible": False,
+                        "accounting_reconciliation_passed": False,
+                        "physical_validation_feasible": False,
+                        "served_trip_count": 0,
+                        "unserved_trip_count": len(problem.trips),
+                        "fallback_used": False,
+                        "repair_used": False,
+                        "selectable": False,
                         "runtime_sec": 0.0,
                         "iis_hash": "",
                     }
@@ -20455,6 +20464,45 @@ class GurobiMILPAdapter:
                 if iis_names
                 else ""
             )
+            assignment_rows = _candidate_assignment_details(
+                candidate_final_plan
+            )
+            served_trip_count = len(
+                {str(row.get("trip_id") or "") for row in assignment_rows}
+            )
+            unserved_trip_count = max(
+                len(problem.trips) - served_trip_count,
+                0,
+            )
+            stage2_status = str(
+                candidate_plan_metadata.get(
+                    "stage2_solver_status",
+                    candidate_outcome.solver_status,
+                )
+            )
+            fallback_used = bool(
+                candidate_plan_metadata.get("fallback_applied", False)
+                or "fallback" in stage2_status.lower()
+            )
+            repair_used = bool(
+                candidate_plan_metadata.get("postsolve_repair_applied", False)
+                or candidate_plan_metadata.get("postsolve_modified_solution", False)
+                or "repaired" in stage2_status.lower()
+            )
+            accounting_reconciliation_passed = bool(
+                evaluation_feasible
+                and canonical_cost is not None
+                and math.isfinite(canonical_cost)
+            )
+            selectable = bool(
+                candidate_feasible
+                and accounting_reconciliation_passed
+                and physical_validation_feasible
+                and served_trip_count == len(problem.trips)
+                and unserved_trip_count == 0
+                and not fallback_used
+                and not repair_used
+            )
             candidate_evaluations.append(
                 {
                     "candidate_index": evaluation_index,
@@ -20497,12 +20545,7 @@ class GurobiMILPAdapter:
                         )
                         or {}
                     ),
-                    "stage2_solver_status": str(
-                        candidate_plan_metadata.get(
-                            "stage2_solver_status",
-                            candidate_outcome.solver_status,
-                        )
-                    ),
+                    "stage2_solver_status": stage2_status,
                     "stage2_exact_objective_jpy": (
                         candidate_plan_metadata.get("stage2_objective")
                     ),
@@ -20516,9 +20559,17 @@ class GurobiMILPAdapter:
                     "canonical_evaluation_feasible": (
                         evaluation_feasible
                     ),
+                    "accounting_reconciliation_passed": (
+                        accounting_reconciliation_passed
+                    ),
                     "physical_validation_feasible": (
                         physical_validation_feasible
                     ),
+                    "served_trip_count": served_trip_count,
+                    "unserved_trip_count": unserved_trip_count,
+                    "fallback_used": fallback_used,
+                    "repair_used": repair_used,
+                    "selectable": selectable,
                     "physical_validation_error_count": len(
                         physical_validation_errors
                     ),
@@ -20576,11 +20627,7 @@ class GurobiMILPAdapter:
                     "stage2_time_limit_sec_effective": (
                         allocated_stage2_seconds
                     ),
-                    "vehicle_trip_assignments": (
-                        _candidate_assignment_details(
-                            candidate_final_plan
-                        )
-                    ),
+                    "vehicle_trip_assignments": assignment_rows,
                     "relaxed_pv_overlap_by_bev_duty": (
                         _candidate_relaxed_pv_overlap(candidate_plan)
                     ),
@@ -20603,10 +20650,7 @@ class GurobiMILPAdapter:
                 }
             )
             if (
-                candidate_feasible
-                and evaluation_feasible
-                and physical_validation_feasible
-                and canonical_cost is not None
+                selectable
             ):
                 feasible_candidate_results.append(
                     (

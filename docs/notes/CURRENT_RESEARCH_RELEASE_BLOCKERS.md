@@ -55,6 +55,21 @@ Standalone candidate-union execution also verifies all 103 frozen index entries
 before reading the inventory. The related contract/evidence regression passes
 124 tests and the complete repository regression passes 1,636 tests.
 
+The newest review also closes four next-run-only fail-open paths. Discovery
+artifacts are sealed at child completion and re-hashed before every later
+consumer. Request-copy parity uses the authoritative `RunOptimizationBody`
+normalization, so API defaults are compared semantically rather than by raw
+JSON shape. Cross-weather request parity covers every normalized model control
+except the declared scenario-specific `prepared_input_id`, including the
+previously omitted activation-strengthening and weather-policy fields. Finally,
+the public confirmation worker itself must export at least 12 distinct
+264/264 candidates with Stage-2, canonical evaluation/accounting, physical,
+and no-fallback/no-repair gates all true; the earlier fixed-dispatch matrix can
+no longer substitute for worker-run candidate coverage. No frozen artifact or
+numerical result was changed or rerun. The related focused regression passed
+128 tests, the candidate-model regression passed 20 tests, and the complete
+repository suite passed 1,643 tests.
+
 The scenario audit retained the exact intended counterfactual: SUNNY
 `771d115b-75b0-49f7-a7f0-25f259a2cd21` uses 2025-08-05 service/weather/PV;
 RAIN `b23fd26c-1233-4c73-bb9e-bdb8b1584760` keeps the same 2025-08-05 WEEKDAY

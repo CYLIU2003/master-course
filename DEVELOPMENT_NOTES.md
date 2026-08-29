@@ -240,6 +240,25 @@
   2025-08-10. Shared materialized controls include 264 trips, 60 active buses
   (35 BEV / 25 ICE), 10 x 90-kW chargers, 200-kW grid capacity, 1-MW PV, and a
   6-MWh / 900-kW BESS.
+- The newest review closed four more next-run provenance gaps. Candidate
+  discovery now seals the candidate table, solver result, optimization
+  parameters, and effective scenario at child completion; union,
+  cross-evaluation, and direct finalization re-hash those exact paths before
+  consuming them. Public confirmation request parity is evaluated only after
+  `RunOptimizationBody` has materialized all defaults, so an omitted default
+  and the worker's expanded equivalent compare equal. SUNNY/RAIN request
+  controls are no longer a hand-maintained allowlist: every normalized field
+  except the declared scenario-specific `prepared_input_id` must match,
+  including activation-strengthening and weather-policy controls. Finally,
+  each public worker candidate row now records Stage-2 feasibility, canonical
+  evaluation/accounting eligibility, physical validation, 264/264 coverage,
+  fallback/repair flags, and a fail-closed `selectable` flag; confirmation
+  requires at least 12 distinct selectable hashes from that worker run itself.
+  The earlier fixed-dispatch-matrix coverage remains a separate gate. These
+  guards neither rerun the solver nor alter the frozen `bb0c005` evidence.
+  The related focused suite passed `128 passed in 1.85s`, the candidate-model
+  regression passed `20 passed in 0.81s`, and the complete repository suite
+  passed `1643 passed in 176.23s`.
 
 ## 2026-08-29 (Asia/Tokyo): fresh public-path SUNNY/RAIN rerun at `bb0c005`
 

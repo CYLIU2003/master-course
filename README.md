@@ -68,9 +68,13 @@ switches, and final candidate tie-break metadata reaches the public result.
 The candidate union no longer follows the frozen aggregate metrics' unindexed
 `run_dir` pointers: because the sealed metrics contain no vehicle-trip rows,
 those ten historical A runs are inventory-only and contribute zero recovered
-candidates. Finalization also requires the submitted request copy to equal the
-worker-persisted raw body, and requires at least 12 distinct candidates per
-scenario that each pass Stage 2, physical validation, accounting, and the
+candidates. Discovery outputs are sealed immediately and re-hashed before
+union, cross-evaluation, or finalization. Finalization normalizes both the
+submitted copy and worker-persisted body through the public request model,
+compares every normalized SUNNY/RAIN control except the declared
+scenario-specific `prepared_input_id`, and requires each public worker run
+itself to contain at least 12 distinct candidates that pass Stage 2, canonical
+cost evaluation, physical validation, 264/264 coverage, and the
 no-fallback/no-repair gate. Invalid formal frontier ranges now return a
 structured HTTP 422 before job creation.
 
