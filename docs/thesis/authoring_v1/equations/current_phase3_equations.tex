@@ -1,0 +1,16 @@
+% Thesis authoring fragment. The Markdown formulation and traceability CSV are authoritative.
+\begin{align}
+  \sum_{v\in\mathcal V} y_{vi} &= 1 && \forall i\in\mathcal I \tag{EQ-COVER-S1-02}\\
+  \sum_{j:(j,i)\in\mathcal A}x_{vji}+s_{vi} &= y_{vi}
+  = \sum_{j:(i,j)\in\mathcal A}x_{vij}+e_{vi}
+  && \forall v,i \tag{EQ-FLOW-S1-03}\\
+  q^{\mathrm{bev}}_{v,t+1} &= q^{\mathrm{bev}}_{v,t}+c_{v,t}-d_{v,t}
+  && \forall v\in\mathcal V^{\mathrm{BEV}},t \tag{EQ-SOC-BEV-09}\\
+  q^{\mathrm{bess}}_{t+1} &= q^{\mathrm{bess}}_{t}
+  +\eta_c p^{\mathrm{bess,in}}_t\Delta t
+  -\frac{p^{\mathrm{bess,out}}_t\Delta t}{\eta_d}
+  && \forall t \tag{EQ-BESS-SOC-15}\\
+  p^{\mathrm{pv}}_t &= p^{\mathrm{pv\to bus}}_t
+  +p^{\mathrm{pv\to bess}}_t+p^{\mathrm{curtail}}_t
+  && \forall t \tag{EQ-PV-BAL-16}.
+\end{align}

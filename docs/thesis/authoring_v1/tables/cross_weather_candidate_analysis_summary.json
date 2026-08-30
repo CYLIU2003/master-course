@@ -1,0 +1,65 @@
+{
+  "schema_version": "thesis_candidate_analysis_v1",
+  "scope": "finite_set_of_22_cross_weather_fixed_dispatch_candidates",
+  "candidate_count": 22,
+  "all_candidates_feasible_and_selectable": true,
+  "spearman_sunny_rain_cost_rank": 0.7843026538678712,
+  "pearson_used_bev_vs_sunny_cost": 0.7818511754395485,
+  "pearson_used_bev_vs_rain_cost": 0.8219116765299456,
+  "pearson_bev_trips_vs_sunny_cost": -0.561909963961851,
+  "pearson_bev_trips_vs_rain_cost": -0.5009463269637365,
+  "used_bev_range": [
+    14,
+    35
+  ],
+  "bev_trip_range": [
+    46,
+    199
+  ],
+  "source_files": {
+    "SUNNY": {
+      "path": "output/2026-08-29/run_20260829_1445/stage1_stage2_candidate_evaluation.json",
+      "sha256": "7635f907cde243f2bbb9a33a9de5eb19538cf04a3f8620bf7694b54f2eb744bb"
+    },
+    "RAIN": {
+      "path": "output/2026-08-29/run_20260829_1455/stage1_stage2_candidate_evaluation.json",
+      "sha256": "e88edd94c9607041b10f154a7ace9ffe6ad471da908cb060d435742024b8ee64"
+    }
+  },
+  "published_matrix": {
+    "path": "docs/evidence/weather_dispatch_rerun_bb0c005/cross_weather_fixed_dispatch_matrix.csv",
+    "sha256": "695785048b925f4dfc6a15bd19d75303ecc9653ebf21d00412f84411356abed3"
+  },
+  "scenarios": {
+    "SUNNY": {
+      "selected_physical_assignment_sha256": "76fb6a9b635bce41ae73db10f08facc7862a1f55a4465004457e79838c9a516c",
+      "selected_cost_jpy": 660983.7838045002,
+      "second_physical_assignment_sha256": "f932b55a1d8f4bdd80c24466353e6db3669e2b168729bd99769a7d1b9f057493",
+      "second_cost_jpy": 666164.0823664974,
+      "selected_to_second_cost_margin_jpy": 5180.29856199713,
+      "selected_used_bev": 28,
+      "selected_used_ice": 4,
+      "selected_bev_trips": 199,
+      "selected_ice_trips": 65,
+      "selected_at_used_bev_range_edge": false,
+      "minimum_cost_jpy": 660983.7838045002,
+      "median_cost_jpy": 704957.3343050403,
+      "maximum_cost_jpy": 1126803.0609234155
+    },
+    "RAIN": {
+      "selected_physical_assignment_sha256": "213b2ccd409559807467d9726bdf7eb4958f9c1d5d68c3363e95db5299d65316",
+      "selected_cost_jpy": 698296.465283954,
+      "second_physical_assignment_sha256": "e511bd6940ac14fa39148178676a79bb32dc20e3cc4f821a54a36bbd8e3dcf1f",
+      "second_cost_jpy": 698863.087754261,
+      "selected_to_second_cost_margin_jpy": 566.6224703069311,
+      "selected_used_bev": 21,
+      "selected_used_ice": 11,
+      "selected_bev_trips": 91,
+      "selected_ice_trips": 173,
+      "selected_at_used_bev_range_edge": false,
+      "minimum_cost_jpy": 698296.465283954,
+      "median_cost_jpy": 706013.657744996,
+      "maximum_cost_jpy": 1126803.0609234155
+    }
+  }
+}

@@ -1,0 +1,287 @@
+{
+  "schema_version": "thesis_authoring_bundle_manifest_v1",
+  "status": "THESIS_AUTHORING_BASELINE_COMPLETE_WITH_OPEN_EXPERIMENTS",
+  "base_tag": "thesis-pause-20260830",
+  "canonical_execution_sha": "bb0c0050883a91dd86a9e8813ae88d4b6d8c361d",
+  "question_count": 40,
+  "claim_count": 24,
+  "equation_count": 28,
+  "literature_count": 9,
+  "files": [
+    {
+      "path": "docs/thesis/authoring_v1/00_README.md",
+      "size_bytes": 3331,
+      "sha256": "35e88fd12a7ff1851f94031c0dc454298a8767e9ce7a9401de6f146f1da52565"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/01_research_questions_and_contributions.md",
+      "size_bytes": 3338,
+      "sha256": "ed855c4e90fe563abef578a07b9a9cd96a342e40f514daede9a4c69428dfcb33"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/02_system_overview.md",
+      "size_bytes": 3700,
+      "sha256": "3814640244e5f494ce15d958ae4183d5afb8ae31371c4f9bfc9f87e13394d76b"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/03_mathematical_formulation.md",
+      "size_bytes": 6513,
+      "sha256": "9c1ee590ee1fa7b0930a9c2e22cccee501a479220c471017aa511049389f38f3"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/04_code_equation_traceability.csv",
+      "size_bytes": 6635,
+      "sha256": "d3a7f892d313390d91408bdf9dff0720875a22c65fd73258878f09057fbc497e"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/05_assumptions_parameters_units.md",
+      "size_bytes": 4276,
+      "sha256": "6aeef6d557516849e247638c5850602daec65fcacb82f9dcc35e0194fb6b7045"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/06_experiment_protocol.md",
+      "size_bytes": 2841,
+      "sha256": "988624586326b77634e2aee7e2a673bac319aebf912a53b3983accc9374280eb"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/07_results_analysis.md",
+      "size_bytes": 4555,
+      "sha256": "436ac498bf9694da8704fb89305cbe1dfe889ea36cccdfbe1ebccedfeb6233b6"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/08_discussion_and_limitations.md",
+      "size_bytes": 3795,
+      "sha256": "f1d907f4f007fabef344357d8a20ddf8ab1055abaff31651236282745347ffe1"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/09_claim_evidence_matrix.csv",
+      "size_bytes": 6466,
+      "sha256": "d1cf5443bbd551c303daa5e307fbde9927c86cbeed8970afa5b2468d051ac876"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/09_claim_evidence_matrix.md",
+      "size_bytes": 1499,
+      "sha256": "4e2345c0d1e4e34a34cdf32f9af781ae67c61e0b903c53f39d3d4336df857a36"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/10_literature_evidence_matrix.csv",
+      "size_bytes": 6744,
+      "sha256": "027facc1c02839525e87108a274ed508f143a0c7e12b2cf9690b0490cce05331"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/10_literature_evidence_matrix.md",
+      "size_bytes": 1451,
+      "sha256": "aa4f3f92a97d48fe90bfa7506f719c380286e84ed2ea2185de61c71c6fbfe273"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/11_missing_evidence_register.md",
+      "size_bytes": 2946,
+      "sha256": "c5db83917ee8923c8afec365e5451a6ab5dfab3d158b063e89eafc6e482bb801"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/12_advisor_decision_memo.md",
+      "size_bytes": 3523,
+      "sha256": "e3317a10085d41f813f7de43bad886bc4ffa32ac7a46a872314cc52d9eae5ff3"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/13_expected_questions_and_answers.md",
+      "size_bytes": 13767,
+      "sha256": "ea74a165e1ecf32881571f572f1d6ff2005a95c47fb6df76fb699750067af829"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/14_thesis_writing_checklist.md",
+      "size_bytes": 2476,
+      "sha256": "4f733e6b89f566e3c4dd8871d88708c53682d8730548132a1fae493c7d6dc62c"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/chapter_drafts/chapter1_introduction.md",
+      "size_bytes": 7760,
+      "sha256": "7658a65e9e5d179d4700c4ea52b104d5b79eb200e7785da6aacfb94628e0e5e1"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/chapter_drafts/chapter2_related_work.md",
+      "size_bytes": 10255,
+      "sha256": "b286713e5fa8eb369842d16f2aaea8ea35f3bb8ad34bbd5c72a5ce1f489e2444"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/chapter_drafts/chapter3_problem_and_method.md",
+      "size_bytes": 8724,
+      "sha256": "deb1c72e66b333a1742711659740031b660672d4e01cc8d2fa355bf21cfdaf3c"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/chapter_drafts/chapter4_experimental_setup.md",
+      "size_bytes": 13084,
+      "sha256": "99e50a08bd8c85b76ec2cbff8883afc7875a49bcfa786c5f4856571831dac070"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/chapter_drafts/chapter5_results.md",
+      "size_bytes": 6532,
+      "sha256": "84953bc0b5eecede34efab1dae0e1e02ac4c4e7e10e812d45d2a769dd4cfcfb5"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/chapter_drafts/chapter6_discussion.md",
+      "size_bytes": 11147,
+      "sha256": "99db863f91f665a834099e9dba173233493d4f567f93f1a0b9d6e4bc16736b43"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/chapter_drafts/chapter7_conclusion.md",
+      "size_bytes": 12541,
+      "sha256": "f94d07e83cd16e8fa10b54705d833abe49ef6ee28bcf7c8a80d8574d468738c2"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/chapter_drafts/chapter8_conclusion.md",
+      "size_bytes": 4730,
+      "sha256": "8db736e2c5401e1c4a0357622324ea3833a7cd529dab84509c98fa5f1ea33fed"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/equations/current_phase3_equations.tex",
+      "size_bytes": 795,
+      "sha256": "ccc037beeb6147e68144006a68508dbd3f9c1bdedad9552c04ec18c45bab8d6d"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/equations/README.md",
+      "size_bytes": 313,
+      "sha256": "0bb927fa6c0cb9fead14770ef61effa8c89a3a2a1d79f9e8ef514ff19968889b"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/evidence_supplements/derived_evidence_manifest.json",
+      "size_bytes": 31948,
+      "sha256": "567fc6796d1e5f135bb26dbb1c97981fd61ef73515385cf909de7a0209ca59dc"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/evidence_supplements/literature_source_hashes.csv",
+      "size_bytes": 1153,
+      "sha256": "09509aed72d323f149eebacdae77dbf8016c4b06c50c3d667af4644fd49c61f6"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/evidence_supplements/rain_canonical_96_slot_power_series.csv",
+      "size_bytes": 18181,
+      "sha256": "caf1515c2cb06e05005da47facf28531020ddd3290fee404529d7c5e191fc6a4"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/evidence_supplements/sunny_canonical_96_slot_power_series.csv",
+      "size_bytes": 17798,
+      "sha256": "444cdec1ad7adc06d4959834e1f9d3d6b9c717c80e86825291c8e93cc45a6008"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/figures/candidate_composition_distribution.png",
+      "size_bytes": 45277,
+      "sha256": "1997610e1f689c91822e95449f6b22bd8682a5781dded37e9e1e95934cb15ef8"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/figures/candidate_composition_distribution.svg",
+      "size_bytes": 36780,
+      "sha256": "4160854a6dd33dbdb5f92454359466c23797438d6deab5ca6cf566ae3514cd53"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/figures/candidate_cost_rank_comparison.png",
+      "size_bytes": 71864,
+      "sha256": "d87c3badf1395096ebde9e7b740f8a821ad183fd26b93ef83167c63203747a02"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/figures/candidate_cost_rank_comparison.svg",
+      "size_bytes": 38952,
+      "sha256": "594f08d7f4f3764530ac433b5efee31867058262c4e3a7c2695528a7015b0922"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/figures/candidate_cost_vs_used_bev.png",
+      "size_bytes": 70434,
+      "sha256": "9d6066c6e4163b4773e5c794cb79ed93bacd7680b353acfbd792e87854f30b27"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/figures/candidate_cost_vs_used_bev.svg",
+      "size_bytes": 41809,
+      "sha256": "d4e32cf96e09d37caa3f541fc6a09c96a8feca7f5e7e983966907e365ac63e3e"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/figures/rain_executed_power_flows.png",
+      "size_bytes": 163576,
+      "sha256": "ff88176789b8fa42087b4cfb0331741838eb5876f16c1be07efeb63b96b6c427"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/figures/rain_executed_power_flows.svg",
+      "size_bytes": 53825,
+      "sha256": "2e317662b0ee838e26b366c210148e219e60b419e929907a3dc5bf55b34f9ada"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/figures/README.md",
+      "size_bytes": 1122,
+      "sha256": "838d7a10c335f70abbbf528653efb23efda5e0d0a4bbba2fdfa333aeaf070879"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/figures/selected_and_second_best_comparison.png",
+      "size_bytes": 60919,
+      "sha256": "634a87bf968c14cf49b96102bb25a56007bcbf7734ed8d49a5be140764dad0b1"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/figures/selected_and_second_best_comparison.svg",
+      "size_bytes": 40798,
+      "sha256": "e006ddbe472d198233640dc3ffcf42e80286763c6de44bb9c7bc7983e822a9d8"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/figures/sunny_executed_power_flows.png",
+      "size_bytes": 180439,
+      "sha256": "15d00cb62e36d7c845f481ba91baff30008c8beb0ef75f0efe439e8e57ee9c59"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/figures/sunny_executed_power_flows.svg",
+      "size_bytes": 58645,
+      "sha256": "cdfa6df97afc5697f2870ddaba32c5b25f3914ce868c6061009f638fc7a7f837"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/figures/sunny_rain_bess_soc_comparison.png",
+      "size_bytes": 103827,
+      "sha256": "9515a9586ecc2792690403e4ba3dbd747786d9298e6c2de7258ef8dd2014c52c"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/figures/sunny_rain_bess_soc_comparison.svg",
+      "size_bytes": 40978,
+      "sha256": "5a6e690b009d8932e728e77e0f95a5bed9b296a74a86d116be5234bc294d8b0f"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/figures/sunny_rain_candidate_cost_scatter.png",
+      "size_bytes": 76871,
+      "sha256": "af2efc5e50a83110a30f16e79b9e169654c74b68e8b2b1befc2d0a16f6b918ef"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/figures/sunny_rain_candidate_cost_scatter.svg",
+      "size_bytes": 37473,
+      "sha256": "d0b1278f0f00fbce68a8e31009f99cca394624aa558a7da97e3e905e660b12a1"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/figures/sunny_rain_grid_import_comparison.png",
+      "size_bytes": 79467,
+      "sha256": "cdb56f580f15474bcb51f99b9c92e88781185fd376eb32a50dc380c6913035d6"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/figures/sunny_rain_grid_import_comparison.svg",
+      "size_bytes": 39868,
+      "sha256": "a8bdd686774e1c25e6141fbb7ca217b7b7d699a2dff26c277eef383953716edb"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/figures/sunny_rain_pv_use_curtailment.png",
+      "size_bytes": 159595,
+      "sha256": "9c7974b5c20ebe64bc8d2fd043bb5d7d70445ea72b9d4fa3f013308dbb648c8b"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/figures/sunny_rain_pv_use_curtailment.svg",
+      "size_bytes": 55227,
+      "sha256": "c80d9d861914511a1d2e842b8f310c588a59f653869b9f54d1c2f8b4512b7554"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/tables/cross_weather_candidate_analysis.csv",
+      "size_bytes": 4565,
+      "sha256": "dd819a66bde1ae89d61ea3ed48dce743aea3e50fbec3b40353c975afc98db2d6"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/tables/cross_weather_candidate_analysis_summary.json",
+      "size_bytes": 2690,
+      "sha256": "78889278ec8ff383946befa02bcfe75c753d6f022137309c9e88ef4ca3e506a5"
+    },
+    {
+      "path": "docs/thesis/authoring_v1/tables/README.md",
+      "size_bytes": 306,
+      "sha256": "51df048d735e1f45785e4ce6d4b01e8a19ec982af8efc5e57f7ef5f95581a298"
+    }
+  ]
+}

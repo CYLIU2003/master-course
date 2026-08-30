@@ -1,0 +1,25 @@
+claim_id,chapter,claim_text,claim_strength,primary_evidence,secondary_evidence,equation_or_metric,supported_scope,limitation,status,advisor_decision_needed
+CLM-01,6,両ケースで264便すべてを割り当てた,direct,docs/evidence/weather_dispatch_rerun_bb0c005/result_summary.json,physical_schedule_validation.json,assigned_trips=264;unassigned=0,当該2ケース,一般の任意日へ外挿不可,SUPPORTED,no
+CLM-02,6,両ケースの独立物理検算がVALIDである,direct,docs/evidence/weather_dispatch_rerun_bb0c005/result_summary.json,physical_schedule_validation.json,physical_validation_status,当該固定入力,実運用可能性の証明ではない,SUPPORTED,no
+CLM-03,6,両ケースで24時間Rollingの24ステップを受理した,direct,docs/evidence/weather_dispatch_rerun_bb0c005/result_summary.json,rolling_hourly_chain/rolling_summary.json,accepted_hours=24,当該保存run,予測誤差下の頑健性ではない,SUPPORTED,no
+CLM-04,6,実行日会計が正本ledgerと1e-6 JPY以内で一致した,direct,docs/evidence/weather_dispatch_rerun_bb0c005/result_summary.json,rolling_hourly_chain/executed_day_accounting.json,accounting difference JPY,当該runのモデル内評価額,実支出またはLCCではない,SUPPORTED,no
+CLM-05,6,SUNNYの実行日評価額は660983.7838045002 JPYである,direct,docs/evidence/weather_dispatch_rerun_bb0c005/result_summary.json,thesis_summary_table.md,executed_day_total_cost_jpy,保存されたモデル定義,統計的期待費用ではない,SUPPORTED,no
+CLM-06,6,RAINの実行日評価額は698598.6286431606 JPYである,direct,docs/evidence/weather_dispatch_rerun_bb0c005/result_summary.json,thesis_summary_table.md,executed_day_total_cost_jpy,保存されたモデル定義,統計的期待費用ではない,SUPPORTED,no
+CLM-07,6,RAINはSUNNYより37614.8448386603 JPY高い,derived_exact,docs/evidence/weather_dispatch_rerun_bb0c005/result_summary.json,cost_breakdown.md,RAIN minus SUNNY,固定反実仮想対,一般的雨天効果ではない,SUPPORTED,no
+CLM-08,6,差額の主要因は燃料33054.0321902655 JPYである,derived_exact,docs/evidence/weather_dispatch_rerun_bb0c005/result_summary.json,cost_breakdown.md,cost component difference,当該費用分解,因果効果を同定しない,SUPPORTED,no
+CLM-09,6,SUNNYはBEV199便 ICE65便を担当した,direct,docs/evidence/weather_dispatch_rerun_bb0c005/result_summary.json,selected_candidate.json,bev_trips;ice_trips,選択された候補,最適な車種配分ではない,SUPPORTED,no
+CLM-10,6,RAINはBEV91便 ICE173便を担当した,direct,docs/evidence/weather_dispatch_rerun_bb0c005/result_summary.json,selected_candidate.json,bev_trips;ice_trips,選択された候補,最適な車種配分ではない,SUPPORTED,no
+CLM-11,6,SUNNYは28 BEVと4 ICEを使用した,direct,docs/evidence/weather_dispatch_rerun_bb0c005/result_summary.json,selected_candidate.json,used_bev;used_ice,選択された候補,設備必要台数の一般結論ではない,SUPPORTED,no
+CLM-12,6,RAINは21 BEVと11 ICEを使用した,direct,docs/evidence/weather_dispatch_rerun_bb0c005/result_summary.json,selected_candidate.json,used_bev;used_ice,選択された候補,設備必要台数の一般結論ではない,SUPPORTED,no
+CLM-13,6,SUNNYのPV発電量は6056.25 kWhである,direct,docs/evidence/weather_dispatch_rerun_bb0c005/result_summary.json,executed_day_accounting.json,pv_available_kwh,固定PV曲線,気象モデル妥当性は対象外,SUPPORTED,no
+CLM-14,6,RAINのPV発電量は996.2 kWhである,direct,docs/evidence/weather_dispatch_rerun_bb0c005/result_summary.json,executed_day_accounting.json,pv_available_kwh,固定PV曲線,気象モデル妥当性は対象外,SUPPORTED,no
+CLM-15,6,SUNNYでは系統購入が0 kWhである,direct,docs/evidence/weather_dispatch_rerun_bb0c005/result_summary.json,executed_day_accounting.json,grid_import_kwh,当該設備と入力,系統非依存の一般証明ではない,SUPPORTED,no
+CLM-16,6,RAINでは系統購入130.851943 kWhかつ最大122.301666 kWである,direct,docs/evidence/weather_dispatch_rerun_bb0c005/result_summary.json,executed_day_accounting.json,grid_import_kwh;peak_grid_power_kw,当該実行日,契約電力設計値ではない,SUPPORTED,no
+CLM-17,6,両ケースでBESS終端SOCは初期3000 kWhへ戻る,direct,docs/evidence/weather_dispatch_rerun_bb0c005/result_summary.json,executed_day_accounting.json,EQ-BESS-TERM,当該24時間境界,多日運用保証ではない,SUPPORTED,no
+CLM-18,6,96スロット系列は24個のRolling結果から復元され正本hashと一致する,recomputed_hash,docs/thesis/authoring_v1/evidence_supplements/derived_evidence_manifest.json,96-slot CSV,executed_energy_flow_sha256,保存されたローカルrun,Git bundle単独では再生成不可,CONDITIONAL,yes
+CLM-19,6,22候補のSUNNYとRAIN費用順位のSpearman相関は0.7843026539である,derived_exact,docs/thesis/authoring_v1/tables/cross_weather_candidate_analysis_summary.json,cross_weather_candidate_analysis.csv,Spearman rho,公開された有限22候補,母集団の順位安定性ではない,SUPPORTED,no
+CLM-20,6,SUNNY選択候補の次点差は5180.298562 JPYである,derived_exact,docs/thesis/authoring_v1/tables/cross_weather_candidate_analysis_summary.json,cross_weather_candidate_analysis.csv,selected-second margin,評価済み候補集合,未評価候補への優越ではない,SUPPORTED,no
+CLM-21,6,RAIN選択候補の次点差は566.6224703 JPYである,derived_exact,docs/thesis/authoring_v1/tables/cross_weather_candidate_analysis_summary.json,cross_weather_candidate_analysis.csv,selected-second margin,評価済み候補集合,候補範囲頑健性は未確認,CONDITIONAL,yes
+CLM-22,6,Stage 1認証gapはSUNNY 9.5213476% RAIN 1.6563581%である,direct,docs/evidence/weather_dispatch_rerun_bb0c005/result_summary.json,solver_metrics.json,stage1_certified_gap_percent,Stage 1近似目的,Stage 2総費用gapではない,CONDITIONAL,yes
+CLM-23,1,本結果は有限候補から選んだPhase 3二段階実行可能解である,direct,docs/evidence/weather_dispatch_rerun_bb0c005/README.md,03_mathematical_formulation.md,EQ-SELECT-08,当該システムと実験,統合MILP大域最適解ではない,SUPPORTED,no
+CLM-24,7,純ICE集約は構造縮小のみ支持され通常設定ではOFFである,direct,docs/notes/CURRENT_RESEARCH_RELEASE_BLOCKERS.md,DEVELOPMENT_NOTES.md,PASS_STRUCTURAL_ONLY,既存A/B範囲,runtimeまたはgap改善なし,CONDITIONAL,no
