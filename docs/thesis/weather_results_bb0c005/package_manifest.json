@@ -1,0 +1,194 @@
+{
+  "schema_version": "thesis_weather_result_package_v1",
+  "status": "PASS",
+  "execution_git_sha": "bb0c0050883a91dd86a9e8813ae88d4b6d8c361d",
+  "source_bundle_tree_sha256": "c706da7e10bc4e99a06a441f91e1722baa971b41ab936d29db36e650accede5f",
+  "source_artifacts": {
+    "artifact_hashes.json": "7e0440e2325e98d3f2570d38f1982329f3f1d36758ceee5cde440482ab2832ef",
+    "case_a_candidate_selection_audit.csv": "2dda4469fb10c6f07b39e4c6618589b2e647ba4ed0684adc54e9db181c0bc42e",
+    "case_a_candidate_selection_audit.json": "eba1a07835a5d955c225037eecb67add44a4479c671b0e6535b0e51a6907d4ed",
+    "case_a_candidate_selection_audit.md": "134f2aaa8caadcb864259e4644d1a10c610916ab7c5ccd4afedc32b184dd3053",
+    "confirmation_manifest.json": "4c79dc750ea8bfa2382202cfb5105b86c7719bbb1e0ac03c05d545359f81acd4",
+    "cross_weather_fixed_dispatch_matrix.csv": "695785048b925f4dfc6a15bd19d75303ecc9653ebf21d00412f84411356abed3",
+    "cross_weather_fixed_dispatch_matrix.json": "4c0c73663b08429aa2f48ed93d4a57b8538588e82228a7b90456e27ce6b1e51c",
+    "cross_weather_fixed_dispatch_matrix.md": "5c8a592b743029a8dbf490c63d996bbf7c0fc1aef0c9ebae8f65e1b06a81d966",
+    "finalization_input_artifacts.json": "f1840b0798795c28d029ae3c5698e2337e9c62510145fe4b0f732f8b11ab75c8",
+    "fresh_prepare_manifest.json": "017b51102041d8256af24fb670c6239dcce9343ee67235baec84a576a94ef1f0",
+    "normal_confirmation_input_contract.csv": "fc9df9ea839c4f3fbf0930b25e8819b2bcf08ef19039a65f940af7f120c2639c",
+    "normal_confirmation_input_contract.json": "f512b7f2be705cf6633502bfbabf83f9a4a8c3ffa9daa9e17f30481df27f55d4",
+    "normal_confirmation_input_contract.md": "069084f0e9a72eb76f74a1358e28590136a72067e4fbae04cef8d6693cf393c7",
+    "RAIN/confirmation_gate.json": "35b181eac99d089abe03e5bb4833c46f5145bc12cf91768892e4a6356ddf54c1",
+    "RAIN/executed_day_accounting.json": "ff8648a51795b04f381a7b2404ebca6628e67ed684369c1f482cf3cce8dc84bd",
+    "RAIN/final_cost_reconciliation.json": "c2732e01056ba6defc6d9e66a0471ac190a5fec27f7f8b0feb27f601e46a76b0",
+    "RAIN/frontend_job_terminal_response.json": "c31536d7255b584dbba91b154ef713b008d1a208f5a9a8072e7751c59ab1f3fa",
+    "RAIN/frontend_optimization_request.json": "0de46cfdd2dfa8f04e012bc6040a9e18474f98db2ee30123c7b4db4feb160cd1",
+    "RAIN/optimization_parameters.json": "6d86252b1411619ac0e68de09afba74a8b004e6e65ab0471f851b4c8fe7e7abb",
+    "RAIN/physical_schedule_validation.json": "7c29a0260ae57fdc1138bdddea1508ab628293d021c9aeea50ef57883a55625e",
+    "RAIN/rolling_chain_summary.json": "8211e9dde181b059eefad0462f63595d2071638229aa3a338ef984e738e260a0",
+    "RAIN/selected_candidate.json": "9585d7cc9470831784874038b05152f05f0646bd9998ffb7ba41bc508a189de1",
+    "RAIN/solver_metrics.json": "6cb7f94bbbaaf0f304a33802c0616bc537be16b3cfb2fe538cb400baaf1b5875",
+    "RAIN/summary.json": "2049a6f016883bc03d87d44b96dcb657551c4d187e84d622c2e02ddd14b43352",
+    "RAIN/vehicle_soc_event_timeline.csv": "30c34ec0d3cfdc91c5dec68d16699e0268682b29fb6a80641c1b6d6e389c489d",
+    "README.md": "37dc0b00e27f2e6aab1107a9be322aba913637267607e824892d7c8a5c7529a3",
+    "result_summary.json": "3c8772afba5e3dc6f259bc1c29087abde14e86dd6bf4592b3c454e20cd624f4a",
+    "SUNNY/confirmation_gate.json": "a93cbfb98caa1d5878cb5eb80420bce310d61b163d7a37a61fc21eb8308fba59",
+    "SUNNY/executed_day_accounting.json": "9487f2d9cc1084ea260da812ab50ccbcb8399b023d627d7ca5754d193c5b95ef",
+    "SUNNY/final_cost_reconciliation.json": "d9fc7e4858082ec0591b22e9eddc6f1b8200b39caf4c0f8401141daaaf8ec1a7",
+    "SUNNY/frontend_job_terminal_response.json": "9b5c3962b887549c10f9fc5a6e756e7e271291b3a14001577f1cee3600e98dd9",
+    "SUNNY/frontend_optimization_request.json": "9fe0e551ce4509cfc45e3d53f2e1b054aeb1830158916bd702be203caa833f32",
+    "SUNNY/optimization_parameters.json": "d6cb6453235aa72a05212674ff62dcd56de57700509ebb3f9c9ce3d1d9fb4c47",
+    "SUNNY/physical_schedule_validation.json": "aae4364b9cb7ecea8e73bd03daabcb69406970da7e9a536dd79e6e7f0205413e",
+    "SUNNY/rolling_chain_summary.json": "cf6b8dbcdf6ef9c0aa27de568c2499d9d6234d85e712a5f15b3797c3343e86dc",
+    "SUNNY/selected_candidate.json": "0e30ec5a6125aac4b6e6bd6aa64511d16fb10d5c1ce90085b5df1d43c741b0ff",
+    "SUNNY/solver_metrics.json": "0095e28f057f2c3e3a1c028eca486099e481489f8c89677f463293cce79302da",
+    "SUNNY/summary.json": "b4ed321e5d0ce7c218893c08db235675b1a3df6ca5371bd9f161a2beccbb8456",
+    "SUNNY/vehicle_soc_event_timeline.csv": "c5957ceb2f250f29ac9a494b9a6f317a1fa96cd7c05db13d03de6057140c6188"
+  },
+  "parameter_source_tree_sha256": "3a0c955cc9b1fc6a3cba6a3a84fff48bbc505f6180969ca7377e68601df8eae8",
+  "parameter_source_artifacts": {
+    "artifact_hashes.json": "42102803487da10e737921c3be66ee36849623815788f549a97f5ac0955759c5",
+    "parameter_source_manifest.json": "7ab54cbca0b6085ae7179de06ec0cfceb9e88b4825d94666eb10b1c21725de76",
+    "RAIN/run_input_manifest.json": "661d9af047bd5c4190433736edfe49c7cce314d0042ac11cc814751096022c79",
+    "RAIN/scenario_input_snapshot.json": "d7ed5ad5d8b13524f414d565f472ba0c6110ed6213963145208de096d8a37ad8",
+    "SUNNY/run_input_manifest.json": "65dca53ff9a70a92cbfd861b685fe7ce1d1f80fedc55faf713fc04cbf562c01e",
+    "SUNNY/scenario_input_snapshot.json": "b70d13986ff3dbd85f9b3793bbdce3926e4881e62c7a4651852bbe44fc281348"
+  },
+  "renderer_versions": {
+    "matplotlib": "3.10.8",
+    "Pillow": "12.1.1",
+    "contourpy": "1.3.3",
+    "cycler": "0.12.1",
+    "fonttools": "4.62.1",
+    "kiwisolver": "1.5.0",
+    "numpy": "2.4.3",
+    "packaging": "26.0",
+    "pyparsing": "3.3.2",
+    "python-dateutil": "2.9.0.post0",
+    "six": "1.17.0"
+  },
+  "font_family": "Noto Sans JP",
+  "png_dpi": 300,
+  "timeseries_figure_created": false,
+  "timeseries_figure_omission_reason": "No complete 96-slot executed energy-flow series exists in the Git-tracked canonical artifacts.",
+  "chart_map": [
+    {
+      "stem": "01_used_vehicle_comparison",
+      "family": "stacked comparison bar",
+      "question": "使用車両の動力源構成はどう異なるか"
+    },
+    {
+      "stem": "02_assigned_trip_comparison",
+      "family": "stacked comparison bar",
+      "question": "担当便の動力源構成はどう異なるか"
+    },
+    {
+      "stem": "03_executed_day_cost_breakdown",
+      "family": "stacked evaluation plus component-delta bars",
+      "question": "モデル評価額の差は何で構成されるか"
+    },
+    {
+      "stem": "04_pv_bess_grid_energy_balance",
+      "family": "grouped comparison bar",
+      "question": "PV・BESS・系統フローはどう異なるか"
+    },
+    {
+      "stem": "05_pv_utilization_and_curtailment",
+      "family": "stacked composition bar",
+      "question": "PV発電を利用・抑制へどう配分したか"
+    }
+  ],
+  "artifacts": {
+    "01_used_vehicle_comparison.png": {
+      "sha256": "615549a1a7882c60ffb8ba84efeebdf71eb431ccebb5d71570724d146582d53f",
+      "size_bytes": 87252
+    },
+    "01_used_vehicle_comparison.svg": {
+      "sha256": "99b52e4b68deab3c94a54afc200c09c3de8a387848a752a2d1994055a9c21532",
+      "size_bytes": 70609
+    },
+    "02_assigned_trip_comparison.png": {
+      "sha256": "6703ab0fbc18795db5a063470058edeeaf16d032be2109d2e91accd6a5d080b9",
+      "size_bytes": 101394
+    },
+    "02_assigned_trip_comparison.svg": {
+      "sha256": "6fcaf01bb27bff83fd2ef9e528d257881feb156ad1262435585fa597b01cce63",
+      "size_bytes": 58121
+    },
+    "03_executed_day_cost_breakdown.png": {
+      "sha256": "0d97612cf4bc4f906c6b9070cfc32a6ea4d2b059641efbe675c0d041bea06834",
+      "size_bytes": 213799
+    },
+    "03_executed_day_cost_breakdown.svg": {
+      "sha256": "b3f845199c02c4b89ba48a2b60d5d02d1353c2fbe36c8419968d5055d7988920",
+      "size_bytes": 105255
+    },
+    "04_pv_bess_grid_energy_balance.png": {
+      "sha256": "99a008a0e8b8359962a655b3161ab10f45b305ef18ce9644211dbfdbe12d035c",
+      "size_bytes": 134805
+    },
+    "04_pv_bess_grid_energy_balance.svg": {
+      "sha256": "17451b7be07a99fba04c468e9eada66e8543e825ff83eb1db3b20d77d3dadcc8",
+      "size_bytes": 77858
+    },
+    "05_pv_utilization_and_curtailment.png": {
+      "sha256": "5fef4f8460f04586745832e44d43e1c3d1b15964053ceb730882b1d67229f8cf",
+      "size_bytes": 132209
+    },
+    "05_pv_utilization_and_curtailment.svg": {
+      "sha256": "5461b84ba518d35077d4ceb4554a0491e13447acb11ee7a610ef27149a4306ea",
+      "size_bytes": 67777
+    },
+    "claim_boundary.md": {
+      "sha256": "95b3c237d9d3f09a3039098d9d60b1fd0bb4da294c0b75cfe4baa3c5cca73f26",
+      "size_bytes": 1286
+    },
+    "cost_breakdown.csv": {
+      "sha256": "323f92d6a57bbdf5d13a789a99e60ebb569d1d09a123b6f45a91b6a9c013680b",
+      "size_bytes": 482
+    },
+    "cost_breakdown.md": {
+      "sha256": "5760359b65e5f7c6dbd73e153d878d401165c16fe00e2e65c94461c20e365386",
+      "size_bytes": 625
+    },
+    "energy_balance.csv": {
+      "sha256": "7b702225de94638b1b06fa384554a77c0c6bb4c448ae1c155e3e92b93e1f0033",
+      "size_bytes": 428
+    },
+    "energy_balance.md": {
+      "sha256": "dfaf81ae9f989ae301aad5d174e192fdf87db24737acb10db5d88e41c09549f1",
+      "size_bytes": 595
+    },
+    "experiment_parameters.csv": {
+      "sha256": "ca659ecc92d6c23373ca90687b650fa4c5e59d320297480e3fc688a13c4c29f7",
+      "size_bytes": 4102
+    },
+    "experiment_parameters.md": {
+      "sha256": "146a41ffd5b24ab78f1380ac7389f5b819797798afad27b60fde2575983b336c",
+      "size_bytes": 5032
+    },
+    "README.md": {
+      "sha256": "f73185c86c62d3998d2e0c2f8dd37183238300bc8fdc7dceb5d5592c653af0fd",
+      "size_bytes": 4514
+    },
+    "results_section_ja.md": {
+      "sha256": "129c186bbdcbc5fb5d67e3c1cb6b4885bcf774017e8e6b2f47774841416b6a80",
+      "size_bytes": 3986
+    },
+    "scenario_results.csv": {
+      "sha256": "53f58d8f7557f99157a2cbdd30576703056ca29c1c191f34a2c6deec4cb67a0c",
+      "size_bytes": 1220
+    },
+    "scenario_results.md": {
+      "sha256": "d83a928470339b96e4d9c9fc1180b838ae4115b8ddcb803496ca4b4288bf07a7",
+      "size_bytes": 1557
+    },
+    "thesis_summary_table.csv": {
+      "sha256": "0725619065226338778209c9af8256a51d307bdb13e7824fdee7d5bb97a6da62",
+      "size_bytes": 698
+    },
+    "thesis_summary_table.md": {
+      "sha256": "c2139bd56365ad085778a275f100482da5fc9de9a1044b0c4a1651502834a613",
+      "size_bytes": 895
+    }
+  }
+}

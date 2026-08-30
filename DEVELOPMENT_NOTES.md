@@ -1,5 +1,281 @@
 # Development Notes
 
+## 2026-08-29 (Asia/Tokyo): final thesis-package evidence cross-links hardened
+
+- On `research/thesis-weather-results-bb0c005`, the report loader now requires
+  `confirmation_manifest.json` to record
+  `PASS_NORMAL_PATH_CONFIRMATION`, clean execution/finalization states, and
+  the same frozen solver-run SHA `bb0c0050883a91dd86a9e8813ae88d4b6d8c361d`.
+  The standalone `executed_day_accounting.json` must equal the ledger embedded
+  in `rolling_chain_summary.json`, and its total must also reconcile to
+  `result_summary.json` and the per-scenario confirmation gate.
+- Executed ICE liters now reconcile both to the published scenario summary and
+  to `fuel_cost / diesel_price`. The published two-decimal minimum BEV SOC is
+  recomputed from every before/after value in the persisted vehicle SOC event
+  timeline, with finite capacity/reserve bounds enforced. No source evidence
+  byte or solver result was changed.
+- The common grid, diesel, vehicle-day, CO2, and demand-charge coefficients are
+  read directly from each sealed raw `scenario_input_snapshot.json`; SUNNY and
+  RAIN must agree, both effective optimization problems must agree with the raw
+  values, and the nonzero RAIN grid ledger must reproduce the raw 30 JPY/kWh
+  price. The experiment-parameter table now cites those raw snapshots as the
+  tariff source.
+- Local verification after these changes: `52 passed` for the two thesis
+  reporting suites and `222 passed` for the reporting plus research-contract
+  focused suite; compile, exact package regeneration, and `git diff --check`
+  passed; the full repository suite completed with `1711 passed in 106.25s`.
+  Per the account owner's current instruction, GitHub Actions and Copilot
+  review are not invoked; remote validation remains dormant.
+- A subsequent PR audit found three additional Rolling-attestation gaps. The
+  loader now rejects an infeasible/unknown per-step Stage-2 status, derives all
+  24 expected `HH:MM` timestamps and 15-minute slot indices from the frozen
+  60-minute execution interval, and checks chain-level plus per-step timestep,
+  time limit, gap, seed, thread, and backend fields against the frozen
+  protocol. Three tamper regressions cover the exact review reproductions;
+  the reporting suites now pass `55` tests and the wider focused suite passes
+  `225` tests. Compile, exact package verification, and `git diff --check`
+  passed; the complete repository suite passed `1714 tests in 105.09s`.
+
+## 2026-08-29 (Asia/Tokyo): thesis SUNNY/RAIN result package from canonical `bb0c005` evidence
+
+- On branch `research/thesis-weather-results-bb0c005` at base
+  `6bb8f80273bfea23e1f434a150be60008fda8dd4`, added
+  `scripts/build_thesis_weather_result_package.py`. The builder consumes only
+  the 39 Git-tracked files in
+  `docs/evidence/weather_dispatch_rerun_bb0c005/`, validates their published
+  hash index and all research gates fail-closed, and verifies that the source
+  bytes remain unchanged after generation. No Prepare, solver, Rolling,
+  workflow, or PR-merge operation was run.
+- The package reads both scenario IDs and their effective controls before
+  rendering: SUNNY `771d115b-75b0-49f7-a7f0-25f259a2cd21` and RAIN
+  `b23fd26c-1233-4c73-bb9e-bdb8b1584760`. It records the shared
+  `tsurumaki` / `WEEKDAY` / 2025-08-05 / 264-trip contract, the 60-vehicle
+  active fleet (35 BEV / 25 ICE), ten chargers, vehicle and BESS parameters,
+  tariffs, and the fixed Stage-1/2 controls. RAIN is described precisely as a
+  counterfactual that applies the low-PV curve derived from 2025-08-10 to the
+  weekday operation of 2025-08-05.
+- Generated `docs/thesis/weather_results_bb0c005/` with five CSV/Markdown
+  table pairs, five Japanese comparison figures in 300-dpi PNG and SVG, a
+  1,200--2,000-character Japanese results section, a claim-boundary note,
+  README, and a self-hashing package manifest. Figures use Noto Sans JP and
+  were visually inspected for glyphs, overlap, zero baselines, units, and
+  legibility. Repeated clean-directory generation is byte-for-byte
+  deterministic.
+- A pre-main review found that the compact 39-file bundle did not carry the
+  numeric grid/PV/BESS ratings. Added
+  `scripts/capture_thesis_weather_parameter_sources.py` and the exact-byte
+  supplement `docs/evidence/weather_dispatch_rerun_bb0c005_parameter_sources/`.
+  It preserves both fresh runs' complete `scenario_input_snapshot.json` and
+  sealing `run_input_manifest.json`, including Prepared IDs/source hashes.
+  The builder now verifies both raw snapshots and reports ten unique
+  90-kW/one-port/non-bidirectional chargers at Tsurumaki, the shared 200-kW
+  grid and contract limits, 1,000-kW PV rating, 6,000-kWh/900-kW BESS,
+  1,200--4,800-kWh BESS SOC range, and 95%/95% efficiencies. Duplicate charger
+  IDs, mixed charger specifications, depot mismatches, missing nested fields,
+  and disagreement with the published ten-charger summary fail closed. The
+  original 39 files remain
+  byte-identical. The optional 96-slot time-series figure remains omitted
+  because neither canonical source contains the complete executed flow rows.
+- The same review removed the only rendered result number that had been
+  embedded in a chart subtitle; all displayed scenario results now come from
+  loaded JSON. Day-ahead candidate cost and Rolling evaluation are separate
+  columns, the minimum recorded BEV SOC is labelled as including all initial
+  states rather than a used-BEV safety margin, and the effective
+  22-candidate/radius-4/15--35-BEV-frontier policy is explicit. The cost figure
+  now separates the full model evaluation from its component deltas, and all
+  prose states `objective_is_actual_cost=false` and the zero-cost exclusions.
+- Claim boundary: the package reports an evaluated finite-candidate Phase 3
+  two-stage feasible result that passed physical, 24/24 Rolling, and accounting
+  gates. Its gap label is explicitly tied to the Stage-1 surrogate objective;
+  it does not establish integrated-network optimality, teacher release
+  readiness, or a general causal weather effect.
+- Reporting hardening rejects a non-empty output directory unless its complete
+  file inventory and every artifact byte match its existing manifest. Numeric
+  cells reject NaN/Infinity, normalize values below `1e-9` to zero, and use a
+  plain fixed 12-decimal representation shared by CSV and Markdown. All report
+  text uses LF; SVG labels are converted to paths and verified to contain no
+  live `<text>` nodes. `scripts/verify_thesis_weather_result_package.py`
+  regenerates into an isolated directory and compares every committed path and
+  SHA-256. The manual workflow runs this check on Windows and a lightweight
+  Ubuntu Python 3.11 job.
+- Reproduction and validation:
+
+  ```powershell
+  .\.venv\Scripts\python.exe -m pip install -r requirements-reporting-lock.txt
+  $fontPath = Join-Path $env:TEMP "NotoSansJP-VF-Sans2.004.ttf"
+  Invoke-WebRequest `
+    -Uri "https://raw.githubusercontent.com/notofonts/noto-cjk/Sans2.004/Sans/Variable/TTF/Subset/NotoSansJP-VF.ttf" `
+    -OutFile $fontPath
+  $expectedFontHash = "f4b373b226668ee33a6e54b02823dcd2d1209f17159f777421ae8c2275160369"
+  $actualFontHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $fontPath).Hash.ToLowerInvariant()
+  if ($actualFontHash -ne $expectedFontHash) { throw "Noto Sans JP SHA-256 mismatch: $actualFontHash" }
+  $env:THESIS_JAPANESE_FONT_PATH = $fontPath
+  .\.venv\Scripts\python.exe scripts\verify_thesis_weather_result_package.py `
+    --evidence-dir docs\evidence\weather_dispatch_rerun_bb0c005 `
+    --parameter-evidence-dir docs\evidence\weather_dispatch_rerun_bb0c005_parameter_sources `
+    --committed-dir docs\thesis\weather_results_bb0c005
+  # Only after the untouched committed package passes exact verification:
+  .\.venv\Scripts\python.exe scripts\build_thesis_weather_result_package.py `
+    --evidence-dir docs\evidence\weather_dispatch_rerun_bb0c005 `
+    --parameter-evidence-dir docs\evidence\weather_dispatch_rerun_bb0c005_parameter_sources `
+    --output-dir docs\thesis\weather_results_bb0c005
+  .\.venv\Scripts\python.exe scripts\verify_thesis_weather_result_package.py `
+    --evidence-dir docs\evidence\weather_dispatch_rerun_bb0c005 `
+    --parameter-evidence-dir docs\evidence\weather_dispatch_rerun_bb0c005_parameter_sources `
+    --committed-dir docs\thesis\weather_results_bb0c005
+  .\.venv\Scripts\python.exe -m compileall -q scripts tests
+  .\.venv\Scripts\python.exe -m pytest -q `
+    tests\test_thesis_weather_parameter_sources.py `
+    tests\test_thesis_weather_result_package.py `
+    tests\test_published_weather_rerun_evidence.py -p no:cacheprovider
+  # 16 passed (reporting and parameter-source focused tests)
+  .\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider
+  # 1633 passed in 178.95s
+  git diff --check
+  ```
+
+- The apparent earlier `7 focused` versus `+4 full-suite` discrepancy is now
+  explicit: the earlier focused command combined four new package tests with
+  three pre-existing published-evidence tests. The current change adds seven
+  tests total (four package tests plus three parameter-source tests), deletes
+  none, and initially moved collection from the recorded 1,617-test base to
+  1,624. The CI-font regression below adds one more test, for 1,625 total.
+- Python 3.11 is not installed locally. The first manual remote validation
+  correctly failed because Git for Windows normalized the new parameter-source
+  manifest from LF to CRLF, invalidating its exact-byte SHA-256. The supplement
+  is now marked `binary` in `.gitattributes`, matching the other frozen
+  evidence directories, and the four original CRLF run files were re-staged
+  as exact binary blobs. Clean checkouts therefore preserve the mixed original
+  byte contract: LF for the generated manifest and CRLF for the copied run
+  artifacts.
+- The second Python 3.11 run passed byte provenance and the focused contract
+  suite, then correctly refused to render Japanese figures because the hosted
+  runner had neither Noto Sans JP nor Meiryo. The manual workflow now downloads
+  the official Noto CJK `Sans2.004` Japanese variable font from its pinned tag,
+  verifies SHA-256
+  `f4b373b226668ee33a6e54b02823dcd2d1209f17159f777421ae8c2275160369`,
+  and exposes only that file through `THESIS_JAPANESE_FONT_PATH`. The builder
+  verifies the file exists and identifies as Noto Sans JP; it does not fall
+  back to a font that would corrupt Japanese glyphs.
+- Manual Python 3.11 run `33243590026` on
+  `be06de12c9233117d10a9cf98fdf9b2c2796afaf` then passed the pinned-font
+  check, compilation, `94` focused research-contract tests, the complete
+  `1608 passed, 17 skipped` suite (`1,625` collected), and the committed-patch
+  whitespace check.
+- After deterministic-inventory, charger-schema, LF/SVG-path, concise-table,
+  and exact-regeneration hardening, the local focused command passed `19`
+  tests and the full local suite passed `1633` tests in 178.95 seconds. The
+  exact regeneration test runs in a child Python process so unrelated tests
+  cannot leak matplotlib global state into the byte comparison.
+- The unchanged evidence tree SHA-256 is
+  `c706da7e10bc4e99a06a441f91e1722baa971b41ab936d29db36e650accede5f`.
+  The six-file parameter supplement tree SHA-256 is
+  `3a0c955cc9b1fc6a3cba6a3a84fff48bbc505f6180969ca7377e68601df8eae8`.
+  After the final reproduction-path review, the 24-file, 1,084,538-byte
+  result package manifest SHA-256 is
+  `a67ef888077cb643927f997897e72dac78db266dacf5ccd9ea95d27973ae7f64`.
+- Final reporting review additionally makes every artifact/hash map sort
+  relative POSIX paths with a casefold key, pins Matplotlib 3.10.8, Pillow
+  12.1.1, and their complete renderer dependency set through
+  `requirements-reporting-lock.txt` in both CI operating systems and the
+  builder's fail-closed runtime check, and verifies that a configured Noto Sans
+  JP file is the actual face selected by Matplotlib even when another
+  same-family font is installed.
+  The focused reporting, published-evidence, frontier, and metadata regression
+  passed `70 passed`; exact package regeneration passed after the intentional
+  manifest/README update. The complete repository suite passed `1641 passed
+  in 180.98s`; compilation and diff hygiene also passed. No numerical result,
+  evidence source byte, table, or figure byte changed.
+- A subsequent final-HEAD review found five remaining reproduction-path gaps.
+  The parameter-source capture index now sorts normalized relative POSIX names
+  with the same casefold key as the package and refuses every non-empty target,
+  preventing stale files from entering its sealed inventory. The clean-runner
+  font regression reads `THESIS_JAPANESE_FONT_PATH` before consulting the host
+  font inventory. Generated reproduction instructions now download the pinned
+  Noto Sans JP `Sans2.004` file, verify its SHA-256, bind it through that
+  environment variable, and describe the tree-hash ordering as Unicode-
+  casefolded relative POSIX names. These are reporting/capture reproducibility
+  changes only; scenario inputs, solver outputs, canonical evidence bytes, and
+  numerical claims remain unchanged.
+  The reporting-focused suite passed `24 passed in 7.99s`; exact regeneration,
+  compilation, README navigation (`3 passed`), and diff hygiene passed. The
+  complete repository suite passed `1643 passed in 182.63s`.
+  After integrating the final PR #7 research hardening at `8721cba`, a final
+  reporting review added four more fail-closed safeguards. The reproduction
+  block now acquires and verifies the pinned font. Intentional regeneration is
+  built and fully validated in a private sibling staging directory before the
+  existing package is replaced, so a late rendering failure leaves the prior
+  package byte-exact. Selected-candidate cost, candidate counts, fleet/trip
+  counts, indices, and internal/physical assignment identifiers must reconcile
+  with `result_summary.json` and `confirmation_gate.json`. The current handoff
+  now records the integrated validation evidence.
+  After merging the final PR #7 provenance fixes, the combined focused
+  reporting/evidence/contract suite passed `154 passed in 15.00s`, exact
+  package verification passed, and the combined complete suite passed `1666
+  passed in 181.21s`. The package remains 24 files and 1,084,538
+  bytes with unchanged source, parameter-source, and package-manifest hashes.
+- The next fresh reporting review closed four additional P1 evidence-loading
+  gaps. Parameter-source snapshots are now checked against the original
+  `run_input_manifest.json` size/SHA seal, not only the supplement manifest.
+  The embedded `scenario_fleet_contract_v2` is semantically checked for
+  active-ID/parameter/source-record/inventory correspondence and all four
+  contract hashes are recomputed with the production canonical-JSON formula.
+  Each executed-day total is independently recomputed from the complete 12
+  canonical accounting components, with asset and objective totals reconciled
+  separately. Finally, `physical_schedule_validation.json` is a required
+  source and its schema, accepted/status fields, complete checks, independent
+  validation, and zero-error metrics are validated directly. Tamper
+  regressions cover all four paths. No source artifact or generated package
+  byte was altered. The combined reporting/evidence/contract/navigation suite
+  passed `161 passed in 13.62s`, exact package verification passed, and the
+  complete repository suite passed `1670 passed in 178.17s`.
+- Final integration of PR #7 at `68b9133` added producer-time seals for the
+  derived union/matrix handoffs, independent candidate cost reconciliation,
+  requested-depot BEV scoping, and indexed-only runtime analysis. On the
+  integrated PR #8 tree, the combined reporting/evidence/contract/navigation
+  suite passed `168 passed in 14.77s`, exact package verification returned
+  `PASS_EXACT_THESIS_WEATHER_RESULT_PACKAGE`, and the complete repository suite
+  passed `1677 passed in 182.26s`. The package remains 24 files and 1,084,538
+  bytes; its source-tree, parameter-source-tree, and package-manifest hashes
+  remain unchanged.
+- A fresh exact-HEAD PR #8 review then closed six additional reporting-loader
+  P1 gaps. Rolling acceptance now uses the production acceptance audit rather
+  than trusting `chain_accepted`; physical validation evidence is bound to the
+  Rolling assignment, recomputed fleet hashes, and both execution SHAs; every
+  canonical input dimension is reconciled to the audited input contract;
+  grid import equals grid-to-bus plus grid-to-BESS; effective solver controls
+  match the manifest, gate, input contract, and frozen protocol; and rendered
+  certified gap/runtime values match direct `summary.json` and
+  `solver_metrics.json`. Six independent tamper regressions refresh the normal
+  artifact index and still fail on the semantic mismatch. The combined focused
+  suite passed `174 passed in 16.43s`, exact package verification passed, and
+  the complete repository suite passed `1683 passed in 183.48s`. Canonical
+  evidence and all 24 generated package files remain unchanged.
+- Final integration of the exact-head PR #7 follow-up at `67519df` binds all
+  diagnosis stages to one clean Git SHA, resolves the effective depot before
+  fleet counting, rejects null formal thread controls before queueing,
+  reconciles candidate accounting against the independent Stage-2 objective,
+  and preserves the producer-recorded Stage-1 runtime. On the integrated PR #8
+  tree, the combined reporting/evidence/contract/navigation suite passed `199
+  passed in 17.19s`; exact package verification returned
+  `PASS_EXACT_THESIS_WEATHER_RESULT_PACKAGE`; and the complete repository suite
+  passed `1688 passed in 184.09s`. The package remains 24 files and 1,084,538
+  bytes with unchanged source-tree, parameter-source-tree, and package-manifest
+  hashes. No solver was rerun and no canonical evidence byte changed.
+- The next exact-HEAD reporting review closed six additional P1 paths without
+  changing source evidence or generated package bytes. Rolling acceptance is
+  recomputed from all 24 persisted step records and reconciled with the
+  top-level flags/checks/rejection reasons. Physical validation now binds the
+  initial-SOC and charger-configuration hashes. Reported certified gap/runtime
+  are anchored to the original solver-result SHA-256 seals and immutable
+  expected metrics. Scenario, prepared-input, and service-date identities are
+  reconciled across every artifact that carries them. Optimization controls
+  require available, clean `git_provenance_v1` at the execution SHA. Finally,
+  both gate copies must contain exactly the producer-defined 15 checks, all
+  true. The expanded combined suite passed `214 passed in 20.47s`; exact
+  verification returned `PASS_EXACT_THESIS_WEATHER_RESULT_PACKAGE`; and the
+  complete repository suite passed `1703 passed in 130.95s`.
+
 ## 2026-08-29 (Asia/Tokyo): formal Phase-3 provenance review hardening
 
 - Formal public-path Phase-3 candidate coverage now derives its BEV frontier

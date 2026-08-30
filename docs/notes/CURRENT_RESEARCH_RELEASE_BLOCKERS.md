@@ -1,5 +1,48 @@
 # Current research release blockers
 
+## 2026-08-29 (Asia/Tokyo): thesis-report reproducibility review closed
+
+The SUNNY/RAIN thesis package now sorts every hash/artifact map, including the
+raw parameter-source capture index, by relative
+POSIX path with a casefold key, pins the complete Matplotlib/Pillow renderer
+dependency set on Windows and Ubuntu, verifies the configured Noto Sans JP file
+is the face actually selected, rejects non-empty parameter-capture targets, and
+documents the pinned font acquisition plus exact verification before any
+intentional regeneration. The frozen numerical evidence is unchanged; fresh
+validation passed: 24 reporting-focused tests, exact regeneration, compilation,
+3 README-navigation tests, diff hygiene, and the complete 1,643-test suite.
+After final PR #7 integration at `68b9133`, the builder also reconciles all
+selected-candidate counts, costs, fleet/trip counts, indices, and assignment
+identifiers to the summary and confirmation gate. Replacement packages are
+fully built and validated in a private sibling directory; a late failure leaves
+the previous package byte-exact. After integrating the exact-head PR #7
+follow-up at `67519df`, the final integrated focused suite passes 199 tests and
+the complete suite passes 1,688 tests; exact package verification
+still passes and all package bytes remain stable.
+
+The final reporting review also binds every published claim to independent
+evidence: Rolling is re-audited through the production acceptance contract;
+physical validation must match the exact assignment, fleet hashes, and Git
+SHAs; canonical input hashes must match the audited input contract; grid import
+must reconcile to its destination flows; solver controls must match all three
+confirmation attestations and the frozen protocol; and certified gap/runtime
+must match direct solver artifacts. Six refreshed-index tamper regressions
+cover these paths. This hardening changes no canonical result or package byte.
+
+The following exact-HEAD review closes six more reporting P1 paths. The loader
+now derives Rolling acceptance from the 24 persisted steps; binds omitted
+initial-SOC/charger hashes; anchors gap/runtime to the sealed original solver
+result digests and fixed metrics; reconciles scenario/prepared-input/service
+identity across every carrying artifact; requires clean available optimization
+Git provenance; and requires the exact producer-defined 15-check confirmation
+set in both gate copies. The expanded combined suite passes 214 tests and exact
+package verification still passes; the complete repository suite passes 1,703
+tests. No canonical evidence or package byte was changed.
+
+This changes only reporting reproducibility metadata and instructions. The
+canonical `bb0c005` evidence bytes, numerical tables, figures, certified gaps,
+Phase-3 scope, and release/claim blockers below are unchanged.
+
 ## 2026-08-29 (Asia/Tokyo): post-run provenance review findings closed in code
 
 Seven fail-closed gaps found during review are corrected for the next formal
@@ -46,6 +89,14 @@ no longer substitute for worker-run candidate coverage. No frozen artifact or
 numerical result was changed or rerun. The related focused regression passed
 128 tests, the candidate-model regression passed 20 tests, and the complete
 repository suite passed 1,643 tests.
+
+The thesis reporting loader now independently re-verifies four additional
+evidence contracts: original run-manifest seals for parameter snapshots,
+fleet-contract hashes recomputed from the complete embedded fleet payload,
+per-scenario canonical cost-component reconciliation, and the authoritative
+physical-schedule validation artifact itself. These are reporting fail-closed
+guards; they do not modify the `bb0c005` evidence, numerical results, solver
+controls, or release claim boundary.
 
 The exact-HEAD follow-up closes four more next-run-only P1 findings. Derived
 candidate-union and fixed-dispatch-matrix JSON handoffs now have producer-time
@@ -126,16 +177,50 @@ an integrated global optimum; and the advisor's 1% submission-threshold and
 human review decisions remain open. The rerun supports only a bounded
 two-scenario feasible comparison, not a general weather-benefit claim.
 
+The thesis-facing package at
+[`docs/thesis/weather_results_bb0c005/`](../thesis/weather_results_bb0c005/README.md)
+now separates day-ahead candidate cost from the model-defined Rolling
+evaluation, labels the all-BEV/initial-state scope of the minimum recorded SOC,
+and records the effective 22-candidate/radius-4/15--35-BEV-frontier search.
+Exact fresh-run input snapshots in the
+[`parameter-source supplement`](../evidence/weather_dispatch_rerun_bb0c005_parameter_sources/parameter_source_manifest.json)
+fill the formerly missing charger/grid/PV/BESS ratings without changing any
+byte of the 39-file rerun bundle. Both raw snapshots contain the same ten
+unique 90-kW, one-port, non-bidirectional chargers at Tsurumaki; charger IDs,
+site, count, rating, port count, bidirectional setting, and the published
+ten-charger summary are now checked fail-closed. Exact package regeneration is
+also required on Windows and Ubuntu, including complete manifest inventory,
+LF text bytes, path-only SVG labels, and every artifact SHA-256. This improves
+reporting completeness and reviewability but does not change the numerical
+certification or release blockers above.
+
+The report loader additionally cross-checks the final cost against the ledger
+embedded in the accepted Rolling chain and the confirmation gate, recomputes
+fuel cost from executed liters and the sealed diesel price, and validates the
+published minimum BEV SOC from the persisted event timeline. Grid, diesel,
+vehicle-day, CO2, and demand-charge coefficients must be identical between
+SUNNY and RAIN and equal the sealed raw scenario snapshots. These are
+reporting-integrity gates only: they do not improve the Stage-1 certificates or
+upgrade the bounded Phase-3 result to an integrated optimum.
+
+The same loader now proves that the 24 persisted Rolling records form the
+ordered 00:00--23:00 hourly chain, that their internal slot indices follow the
+15-minute grid, and that every step retains the frozen Stage-2 time limit,
+requested gap, seed, thread count, backend, and execution interval. An
+infeasible or unknown Stage-2 status fails closed even if an outer feasibility
+flag was left true. This closes a reporting acceptance gap; it is not a new
+solver run or a stronger optimality certificate.
+
 ## 2026-08-29 (Asia/Tokyo): remote validation scheduling policy
 
-The expensive Python 3.11 research-validation workflow is now manual-only via
-`workflow_dispatch`; pushes and pull-request updates no longer start it
-automatically. This is a cost/noise control and does not make a local test pass,
-solver completion, or research acceptance optional. Each published research
-change must still record its local compile/focused/full-suite evidence, and a
-manual GitHub run can be requested when an independent Python 3.11 check is
-needed. This scheduling policy does not change the active numerical or release
-blockers below.
+The Python 3.11 research-validation workflow remains manual-only via
+`workflow_dispatch`; pushes and pull-request updates do not start it. The
+account owner has additionally required that GitHub Actions and paid/AI review
+features not be invoked at all. Until that instruction is explicitly reversed,
+validation is local-only and a fresh remote-CI gate cannot be claimed. This
+cost-control policy does not make local compile/focused/full-suite evidence,
+solver completion, or research acceptance optional, and it does not change the
+active numerical or release blockers below.
 
 ## 2026-08-29 (Asia/Tokyo): Case-A confirmation evidence re-audited
 

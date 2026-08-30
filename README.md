@@ -10,11 +10,31 @@ that brief is a request for independent review, not an approval record.
 
 ## GitHub validation policy
 
-The expensive Python 3.11 research-validation workflow is manual-only. It no
-longer runs automatically on pushes or pull-request updates. When a remote
-validation run is needed, start **Research code validation** from the GitHub
-Actions page with **Run workflow**. Local focused and full-suite validation
-remain required before publishing research-code or evidence changes.
+The Python 3.11 research-validation workflow is retained as a manual-only
+reference and does not run on pushes or pull-request updates. Under the current
+account-owner policy it must not be triggered; validation is local-only unless
+the owner explicitly reverses that policy. Local focused and full-suite
+validation remain required before publishing research-code or evidence
+changes. The dormant workflow definition downloads Noto Sans JP from the
+official pinned `Sans2.004` tag,
+verifies its SHA-256, and passes that exact file to the thesis figure builder;
+missing or substituted Japanese fonts remain a fail-closed error. The complete
+Matplotlib/Pillow renderer dependency set is pinned in
+`requirements-reporting-lock.txt` on both operating systems, and artifact maps
+use platform-independent relative POSIX path ordering with an explicit
+Unicode-casefold sort key. The package README includes the pinned Noto Sans JP
+download, SHA-256 check, and environment binding required before reproduction.
+Before rendering, the loader also re-audits every Rolling acceptance check,
+binds physical validation to the exact assignment/fleet/execution hashes,
+reconciles canonical input hashes and solver controls to the confirmation
+contract, requires the standalone executed-day ledger to equal the ledger
+embedded in the accepted Rolling chain, and verifies reported gap/runtime
+against direct solver artifacts. Fuel volume and cost, the event-timeline
+minimum BEV SOC, and every fixed tariff are independently reconciled to the
+sealed scenario inputs before any thesis table is rendered. Each of the 24
+Rolling steps must also preserve the frozen seed, thread count, gap, time
+limit, timestep, and execution interval, cover the ordered hourly timestamps,
+and report an acceptable Stage-2 status.
 
 ## Current 2026-08-29 fresh SUNNY/RAIN rerun
 
@@ -27,6 +47,23 @@ SUNNY used 28 BEV / 4 ICE buses for 199 / 65 trips and reconciled to
 day-ahead candidate cost was 698,296.465284 JPY and its authoritative Rolling
 cost was 698,598.628643 JPY. The compact, Git-tracked review bundle is
 [here](docs/evidence/weather_dispatch_rerun_bb0c005/README.md).
+The reproducible thesis-facing tables, Japanese result text, and five
+PNG/SVG comparison figures are in
+[docs/thesis/weather_results_bb0c005/](docs/thesis/weather_results_bb0c005/README.md).
+The exact fresh-run parameter snapshots and sealing manifests are published in
+[the parameter-source supplement](docs/evidence/weather_dispatch_rerun_bb0c005_parameter_sources/parameter_source_manifest.json).
+They verify ten unique 90-kW, one-port, non-bidirectional chargers at the
+Tsurumaki depot, a 200-kW grid/contract limit, 1,000-kW PV rating,
+6,000-kWh/900-kW BESS,
+1,200--4,800-kWh BESS SOC range, and 95%/95% efficiencies in both scenarios.
+The reporting workflow regenerates the package and requires exact file-set and
+SHA-256 equality on both Windows and Ubuntu; stale output and live SVG text are
+fail-closed errors.
+The reported monetary total is the model-defined Rolling evaluation with
+`objective_is_actual_cost=false`; it is not a cash-expenditure or lifecycle
+cost result. Day-ahead candidate and Rolling values remain separate, and the
+minimum recorded BEV SOC is labelled as including initial states rather than a
+used-BEV operating safety margin.
 
 The rerun passes the requested 10% Stage-1 certificate target, but the
 certified gaps remain 9.5213% for SUNNY and 1.6564% for RAIN. The result is a
@@ -79,7 +116,22 @@ fixed-weekday counterfactual. Both use 264 trips, the exact 60-vehicle active
 fleet (35 BEV / 25 ICE), 10 90-kW chargers, a 200-kW grid limit, 1-MW PV, and
 a 6-MWh / 900-kW BESS. These parameters are provenance facts, not permission
 to replace or regenerate either scenario.
+The thesis-package loader recomputes Rolling acceptance from all 24 persisted
+steps, binds every identity-bearing artifact to the audited scenario/prepared
+input/service date, verifies all physical input hashes and clean optimization
+provenance, requires the exact 15-check confirmation gate, and anchors reported
+gap/runtime to the sealed original solver-result digests. These checks are
+read-only and do not alter the frozen evidence or generated package bytes.
 New numerical claims require a fresh clean-commit run.
+
+The thesis package builder also fails closed on the underlying parameter and
+result evidence. Each copied scenario snapshot must still match the size and
+SHA-256 sealed by its original run manifest; every fleet-contract digest is
+recomputed from the embedded vehicle IDs, initial states, parameters, and
+inventory; each Rolling total is recomputed from all canonical cost
+components; and the physical-schedule artifact itself must report a complete
+zero-error validation. Refreshing only a review-bundle hash index cannot bypass
+these checks.
 
 ## Current 2026-08-28 weather-dispatch diagnosis
 
