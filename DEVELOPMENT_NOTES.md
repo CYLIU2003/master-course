@@ -9153,3 +9153,41 @@ locks this distinction in place.
 - Focused Phase 4 seed, formal-runner and research-contract regression passed
   126 tests. The complete repository suite passed 1,474 tests in 153.79
   seconds; changed entrypoints passed `py_compile` and `git diff --check`.
+
+# 2026-08-30 - Thesis authoring baseline from frozen `bb0c005` evidence
+
+- Created the isolated branch `research/thesis-authoring-readiness-v1` from
+  tag `thesis-pause-20260830` (`a26ff26f4dd64a3dc8bace138d7d171dea0969f2`).
+  No file under `src/`, `bff/`, `.github/`, the frozen `bb0c005` evidence,
+  or the validated `weather_results_bb0c005` package was changed. No Prepare,
+  Gurobi, fallback, repair, GitHub Actions, Copilot, or Codex review was run.
+- Added `docs/thesis/authoring_v1/` as a thesis-facing, read-only derivation:
+  RQ/contribution boundaries, system diagrams, code-traceable equations,
+  complete parameter/protocol tables, candidate and executed-energy analysis,
+  claim/evidence and literature matrices, missing-evidence register, advisor
+  memo, eight chapter drafts, and 40 two-level defense answers.
+- Reanalysed the 22 published cross-weather candidates. The SUNNY/RAIN cost
+  rank Spearman correlation is `0.7843026538678712`; the selected-to-second
+  margins are `5,180.29856199713 JPY` and `566.6224703069311 JPY`,
+  respectively. These are finite-candidate diagnostics, not integrated
+  optimality or candidate-range stability claims.
+- Reconstructed 96 canonical 15-minute executed slots per scenario from the
+  24 preserved hourly Rolling solver results. The reconstructed hashes match
+  the frozen executed-energy hashes (`162f3ab...` SUNNY and `8de0222f...`
+  RAIN), with no missing/duplicate slots; daily PV, grid, BESS flow, peak and
+  terminal SOC reconcile to canonical executed-day accounting.
+- Added read-only derivation and fail-closed QA tools under
+  `tools/thesis_authoring/`. They verify run identity, source hashes,
+  candidate winners, Rolling prefixes, literature PDF hashes, required files,
+  equation implementation paths, primary claim evidence, forbidden claim
+  wording and deterministic generated manifests. SVG hash salt and metadata
+  are fixed; two complete regeneration cycles produced identical manifest
+  SHA-256 values (`567fc679...` derived evidence and `900ca694...` authoring
+  bundle).
+- Focused authoring verification passed: `8 passed in 0.26s`; 64 existing
+  frozen weather/package tests passed in 27.10s; the complete local suite
+  passed `1,722 tests in 124.85s`. The status is
+  `THESIS_AUTHORING_BASELINE_COMPLETE_WITH_OPEN_EXPERIMENTS`: a small
+  integrated oracle, RAIN candidate-range sensitivity, multi-day weather,
+  degradation and LCC evidence remain open and are not inferred from the
+  frozen results.
