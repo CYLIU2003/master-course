@@ -4183,3 +4183,11 @@ master-course/
 
 - `docs/notes/AI_AGENT_FRONTEND_ROLLING_RELEASE_BLOCKER_20260727.md` を追加した。対象は通常フロントの `POST /run-optimization` 実経路を、日次最適化だけで終わらせず、60分rolling、chain受理監査、提出可否、最終帳票まで一つのジョブとして完結させることである。
 - 2026-07-27の最新成果物にはrolling chainがなく、CLIのopt-in実装だけでは通常フロントの要件を満たさないことを記録した。車両在庫契約の未宣言は今回の修正対象外であり、既存ゲートを緩めない。
+# [2026-08-30] 11月中間発表・全国大会向け追加実験を事前登録（PLANNING_ONLY）
+
+- 基準HEAD `5a6fd2cb36e5c2495ef98606924f7f1c69c1f550` から `research/november-2026-experiment-plan-v1` を作成し、`docs/research/november_2026/` に13点の事前登録資料を追加した。
+- Prepare、solver、Rollingは実行せず、core model、正本artifact、`docs/thesis/authoring_v1/`、main、PR #7、PR #8を変更していない。
+- 既存 `audit_small_integrated_weather_milp.py` は8/12/24便の決定論的day-spanning subset、Phase 3/Phase 4 actual-cost比較、exact oracle gateを再利用できると確認した。一方、今回必須の費用内訳と明示的minimum SOC出力が不足するため `REQUIRES_SMALL_ADAPTER` とした。
+- RAIN候補制御はpublic BFF schemaで設定可能だが、formal research policyが22候補/radius 4/frontier ONを下限として強制する。Fresh Prepareから3 profileを封印する既存RAIN専用CLIがないため、既存diagnosis runnerの狭い非core adapterをPhase 2前のblockerとした。
+- PV LOW/MEDIUM/HIGHはP1とし、MEDIUMのsynthetic interpolation、hash、同一非PV controlをfail-closedで保存するadapterがないため実行を保留した。
+- 判定は `PARTIAL_WITH_EXACT_BLOCKERS`。指導教員の閾値決定、adapterの別Goalでの実装・review、Phase 2の明示承認なしにsolverを開始しない。
