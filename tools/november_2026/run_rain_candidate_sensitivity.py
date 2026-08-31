@@ -19,7 +19,9 @@ from tools.november_2026.normalize_rain_profile_result import (
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_PROFILE_PATH = REPO_ROOT / "config/research/november_2026/rain_candidate_profiles_v2.json"
+PLANNING_SHA = "f183c85d3287dc11026448bd6f26ade6c0155197"
+CANONICAL_REFERENCE_SHA = "bb0c0050883a91dd86a9e8813ae88d4b6d8c361d"
+DEFAULT_PROFILE_PATH = REPO_ROOT / "config/research/november_2026/rain_candidate_profiles_v3.json"
 EXPECTED_PROFILES = {"BASE", "RANGE_ONLY", "BUDGET_ONLY", "FULL_EXPANDED"}
 PROFILE_ORDER = ("BASE", "RANGE_ONLY", "BUDGET_ONLY", "FULL_EXPANDED")
 _SHA40_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -29,7 +31,8 @@ _RANGE_VECTOR = {
     "stage1_bev_frontier_min_count", "stage1_bev_frontier_max_count",
 }
 _BUDGET_VECTOR = {
-    "stage1_time_limit_seconds", "stage1_bev_frontier_target_time_limit_seconds",
+    "time_limit_seconds", "stage1_time_limit_seconds",
+    "stage1_bev_frontier_target_time_limit_seconds",
 }
 _REQUEST_TO_EFFECTIVE = {
     "time_limit_seconds": "time_limit_sec",
@@ -63,18 +66,9 @@ def load_profiles(path: Path) -> dict[str, Any]:
         unexpected = set(profile) - allowlist
         if unexpected:
             raise ValueError(f"{name} contains non-allowlisted fields: {sorted(unexpected)}")
-        expected_total = (
-            int(profile["stage1_time_limit_seconds"])
-            + int(profile["stage1_stage2_candidate_limit"])
-            * int(profile["stage2_time_limit_seconds"])
-            + 24 * int(profile["stage2_time_limit_seconds"])
-            + 300
-        )
-        if int(profile["time_limit_seconds"]) != expected_total:
-            raise ValueError(f"{name} total time limit violates the preregistered formula")
         if int(profile["stage2_time_limit_seconds"]) != 30:
             raise ValueError(f"{name} must keep Stage 2 at 30 seconds")
-    comparison_fields = allowlist - {"time_limit_seconds"}
+    comparison_fields = allowlist
     base = profiles["BASE"]
     range_only = profiles["RANGE_ONLY"]
     budget_only = profiles["BUDGET_ONLY"]
@@ -115,45 +109,46 @@ def require_execution_approval(
     profile_sha: str | None = None, complete_request_sha: str | None = None,
 ) -> None:
     required = (
-        "schema_version", "experiment_family", "planning_commit_sha",
-        "adapter_commit_sha", "canonical_reference_execution_sha",
-        "complete_request_sha", "profile_definition_sha", "advisor_decision_date",
-        "advisor_approved_threshold", "advisor_approved_threshold_unit",
-        "approved_profiles", "solver_time_budget", "wall_budget", "disk_budget",
-        "claim_boundary", "scenario_ids", "allowed_differences", "fixed_fields",
-        "planned_run_count", "success_conditions", "stop_conditions",
+        "schema_version", "experiment_id", "experiment_family", "planning_sha",
+        "adapter_sha", "canonical_reference_sha", "scenario_ids", "request_sha",
+        "profile_definition_sha", "approved_run_list", "advisor_name",
+        "advisor_decision_date", "approval_statement", "approved_threshold",
+        "threshold_unit", "solver_budget", "wall_budget", "disk_budget",
+        "stop_rules", "claim_boundary", "forbidden_claims",
     )
     missing = [key for key in required if manifest.get(key) in (None, "", [])]
     if missing:
         raise RuntimeError(f"execute blocked by advisor fields: {missing}")
-    if set(manifest.get("approved_profiles") or ()) != EXPECTED_PROFILES:
+    if set(manifest.get("approved_run_list") or ()) != EXPECTED_PROFILES:
         raise RuntimeError("execute requires approval for the exact four-profile matrix")
     if manifest.get("scenario_ids") != ["b23fd26c-1233-4c73-bb9e-bdb8b1584760"]:
         raise RuntimeError("execute requires the exact preregistered RAIN scenario")
-    if manifest.get("planned_run_count") != 4:
-        raise RuntimeError("execute requires exactly four planned profile runs")
-    if manifest.get("schema_version") != "experiment_preregistration_manifest_v1":
+    if manifest.get("schema_version") != "rain_2x2_approval_v1":
         raise RuntimeError("invalid preregistration schema_version")
-    if not str(manifest.get("experiment_family") or "").strip():
+    if manifest.get("experiment_family") != "rain_2x2":
         raise RuntimeError("invalid experiment_family")
-    for key in ("planning_commit_sha", "adapter_commit_sha", "canonical_reference_execution_sha"):
+    for key in ("planning_sha", "adapter_sha", "canonical_reference_sha"):
         if not _SHA40_RE.fullmatch(str(manifest.get(key) or "")):
             raise RuntimeError(f"invalid 40-hex SHA: {key}")
-    for key in ("profile_definition_sha", "complete_request_sha"):
+    if manifest.get("planning_sha") != PLANNING_SHA:
+        raise RuntimeError("planning SHA does not match the audited base")
+    if manifest.get("canonical_reference_sha") != CANONICAL_REFERENCE_SHA:
+        raise RuntimeError("canonical reference SHA does not match bb0c005")
+    for key in ("profile_definition_sha", "request_sha"):
         if not _SHA256_RE.fullmatch(str(manifest.get(key) or "")):
             raise RuntimeError(f"invalid SHA-256: {key}")
     try:
         date.fromisoformat(str(manifest["advisor_decision_date"]))
     except (TypeError, ValueError):
         raise RuntimeError("advisor_decision_date must be ISO YYYY-MM-DD") from None
-    threshold = manifest.get("advisor_approved_threshold")
+    threshold = manifest.get("approved_threshold")
     if isinstance(threshold, bool) or not isinstance(threshold, (int, float)):
         raise RuntimeError("advisor threshold must be numeric")
     if not math.isfinite(float(threshold)) or float(threshold) < 0.0:
         raise RuntimeError("advisor threshold must be finite and nonnegative")
-    if manifest.get("advisor_approved_threshold_unit") != "percent":
+    if manifest.get("threshold_unit") != "percent":
         raise RuntimeError("advisor threshold unit must be percent")
-    for key in ("solver_time_budget", "wall_budget", "disk_budget"):
+    for key in ("solver_budget", "wall_budget", "disk_budget"):
         if not isinstance(manifest.get(key), Mapping) or not manifest[key]:
             raise RuntimeError(f"{key} must be a non-empty object")
         numeric_values = [
@@ -165,9 +160,9 @@ def require_execution_approval(
         ):
             raise RuntimeError(f"{key} must contain finite positive numeric limits")
     expected_values = {
-        "adapter_commit_sha": adapter_sha,
+        "adapter_sha": adapter_sha,
         "profile_definition_sha": profile_sha,
-        "complete_request_sha": complete_request_sha,
+        "request_sha": complete_request_sha,
     }
     mismatches = {
         key: {"manifest": manifest.get(key), "expected": expected}
@@ -217,6 +212,30 @@ def _write_progress(
         "artifact_hashes": _artifact_hashes(output_dir),
     }
     _write_json(output_dir / "progress_manifest.json", payload)
+
+
+def _write_interrupted_profile_result(
+    case_dir: Path, *, profile_name: str, plan: Mapping[str, Any], reason: str,
+) -> None:
+    path = case_dir / "profile_result_v1.json"
+    if path.exists():
+        return
+    _write_json(path, {
+        "schema_version": "rain_profile_result_v1",
+        "status": "INTERRUPTED",
+        "profile_name": profile_name,
+        "scenario_id": plan.get("scenario_id"),
+        "prepared_input_id": None,
+        "code_sha": plan.get("adapter_commit_sha"),
+        "requested_controls": dict(plan.get("requested_requests") or {}).get(
+            profile_name
+        ),
+        "termination_reason": reason,
+        "candidate_counts": None,
+        "candidates": [],
+        "selected_candidate": None,
+        "source_artifact_hashes": _artifact_hashes(case_dir),
+    })
 
 
 def _validate_effective_controls(case_dir: Path, requested: Mapping[str, Any]) -> dict[str, Any]:
@@ -369,9 +388,17 @@ def execute_approved_plan(
         )
         _write_json(output_dir / "artifact_hashes.json", _artifact_hashes(output_dir))
     except BaseException as exc:
+        failure_reason = f"{type(exc).__name__}: {exc}"
+        if active_profile is not None:
+            case_dir = output_dir / active_profile
+            if case_dir.is_dir():
+                _write_interrupted_profile_result(
+                    case_dir, profile_name=active_profile, plan=plan,
+                    reason=failure_reason,
+                )
         _write_progress(
             output_dir, status="INTERRUPTED", completed_profiles=completed_profiles,
-            failed_profile=active_profile, failure_reason=f"{type(exc).__name__}: {exc}",
+            failed_profile=active_profile, failure_reason=failure_reason,
             code_sha=expected_sha,
         )
         _write_json(output_dir / "artifact_hashes.json", _artifact_hashes(output_dir))
@@ -471,6 +498,14 @@ def main(argv: list[str] | None = None) -> int:
                       profile_payload=profiles, adapter_sha=sha)
     if args.validate_inputs_only:
         plan["mode"] = "VALIDATE_INPUTS_ONLY"
+        if args.preregistration_manifest is None:
+            raise RuntimeError("validate-inputs-only requires --preregistration-manifest")
+        manifest = json.loads(args.preregistration_manifest.read_text(encoding="utf-8"))
+        require_execution_approval(
+            manifest, adapter_sha=sha,
+            profile_sha=plan["profile_definition_sha"],
+            complete_request_sha=plan["complete_request_sha"],
+        )
     if args.execute:
         if args.preregistration_manifest is None:
             raise RuntimeError("execute requires --preregistration-manifest")

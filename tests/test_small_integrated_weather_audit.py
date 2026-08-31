@@ -236,7 +236,7 @@ def test_primary_oracle_comparison_does_not_normalize_zero_cost_noise() -> None:
         "not_identifiable_zero_reference_cost"
     )
     assert comparison["comparison_name"] == (
-        "deployed_phase3_to_scalar_integrated_reference_distance"
+        "phase3_aligned_subset_to_scalar_integrated_reference_distance"
     )
 
 

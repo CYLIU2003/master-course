@@ -1,0 +1,78 @@
+{
+  "schema_version": "rain_candidate_profiles_v3",
+  "scenario_code": "RAIN",
+  "scenario_id": "b23fd26c-1233-4c73-bb9e-bdb8b1584760",
+  "time_limit_semantics": "shared_phase3_day_ahead_wall_clock_solver_budget_not_rolling_or_http_timeout",
+  "external_wall_budget_semantics": "declared_only_in_family_signoff_and_runner_timeout_not_request_overlay",
+  "allowed_overlay_fields": [
+    "time_limit_seconds",
+    "stage1_time_limit_seconds",
+    "stage2_time_limit_seconds",
+    "stage1_stage2_candidate_limit",
+    "stage1_composition_search_radius",
+    "stage1_bev_frontier_enabled",
+    "stage1_bev_frontier_min_count",
+    "stage1_bev_frontier_max_count",
+    "stage1_bev_frontier_target_time_limit_seconds"
+  ],
+  "factor_vectors": {
+    "range": [
+      "stage1_stage2_candidate_limit",
+      "stage1_composition_search_radius",
+      "stage1_bev_frontier_min_count",
+      "stage1_bev_frontier_max_count"
+    ],
+    "budget": [
+      "time_limit_seconds",
+      "stage1_time_limit_seconds",
+      "stage1_bev_frontier_target_time_limit_seconds"
+    ],
+    "fixed": ["stage1_bev_frontier_enabled", "stage2_time_limit_seconds"]
+  },
+  "profiles": {
+    "BASE": {
+      "time_limit_seconds": 585,
+      "stage1_time_limit_seconds": 435,
+      "stage2_time_limit_seconds": 30,
+      "stage1_stage2_candidate_limit": 22,
+      "stage1_composition_search_radius": 4,
+      "stage1_bev_frontier_enabled": true,
+      "stage1_bev_frontier_min_count": 15,
+      "stage1_bev_frontier_max_count": 35,
+      "stage1_bev_frontier_target_time_limit_seconds": 120
+    },
+    "RANGE_ONLY": {
+      "time_limit_seconds": 585,
+      "stage1_time_limit_seconds": 435,
+      "stage2_time_limit_seconds": 30,
+      "stage1_stage2_candidate_limit": 44,
+      "stage1_composition_search_radius": 8,
+      "stage1_bev_frontier_enabled": true,
+      "stage1_bev_frontier_min_count": 5,
+      "stage1_bev_frontier_max_count": 35,
+      "stage1_bev_frontier_target_time_limit_seconds": 120
+    },
+    "BUDGET_ONLY": {
+      "time_limit_seconds": 1650,
+      "stage1_time_limit_seconds": 1500,
+      "stage2_time_limit_seconds": 30,
+      "stage1_stage2_candidate_limit": 22,
+      "stage1_composition_search_radius": 4,
+      "stage1_bev_frontier_enabled": true,
+      "stage1_bev_frontier_min_count": 15,
+      "stage1_bev_frontier_max_count": 35,
+      "stage1_bev_frontier_target_time_limit_seconds": 480
+    },
+    "FULL_EXPANDED": {
+      "time_limit_seconds": 1650,
+      "stage1_time_limit_seconds": 1500,
+      "stage2_time_limit_seconds": 30,
+      "stage1_stage2_candidate_limit": 44,
+      "stage1_composition_search_radius": 8,
+      "stage1_bev_frontier_enabled": true,
+      "stage1_bev_frontier_min_count": 5,
+      "stage1_bev_frontier_max_count": 35,
+      "stage1_bev_frontier_target_time_limit_seconds": 480
+    }
+  }
+}

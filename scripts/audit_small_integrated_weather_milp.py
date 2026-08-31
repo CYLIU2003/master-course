@@ -283,7 +283,12 @@ def _phase3_contract_comparison(
         "actual_contract": actual,
         "matched": not mismatches,
         "mismatches": mismatches,
-        "formulation_id": "P3_DEPLOYED" if not mismatches else "P3_ALIGNED_REFERENCE",
+        "formulation_id": (
+            "P3_SUBSET_DEPLOYED_POLICY"
+            if len(problem.trips) < _PHASE3_REFERENCE_CONTRACT["trip_count"]
+            and set(mismatches) == {"trip_count"}
+            else "P3_ALIGNED_REFERENCE"
+        ),
     }
 
 
@@ -911,7 +916,9 @@ def _run_case(
     ).hexdigest()
     phase3_contract = _phase3_contract_comparison(problem, config) if is_two_stage else None
     formulation_id = (
-        phase3_contract["formulation_id"] if phase3_contract else "P4_SCALAR"
+        phase3_contract["formulation_id"]
+        if phase3_contract
+        else "P4_SCALAR_EXACT_REFERENCE"
     )
     exact_oracle_gate = None
     case = {
@@ -1116,7 +1123,7 @@ def _primary_oracle_comparison(cases: list[dict[str, Any]]) -> dict[str, Any]:
     comparison: dict[str, Any] = {
         "comparison_schema_version": "small_oracle_comparison_v2",
         "comparison_name": (
-            "deployed_phase3_to_scalar_integrated_reference_distance"
+            "phase3_aligned_subset_to_scalar_integrated_reference_distance"
         ),
         "p3_scalar_support": _p3_scalar_support(),
         "integrated_exact_oracle_eligible": exact_oracle,
@@ -1492,7 +1499,7 @@ def _small_oracle_plan(
         "service_id": args.service_id,
         "trip_ids": [str(trip.trip_id) for trip in problem.trips],
         "selected_vehicles": vehicle_rows,
-        "formulations": ["P3_ALIGNED_REFERENCE", "P4_SCALAR"],
+        "formulations": ["P3_ALIGNED_REFERENCE", "P4_SCALAR_EXACT_REFERENCE"],
         "p3_scalar_support": _p3_scalar_support(),
         "solver_controls": controls,
         "expected_output_paths": [str(Path(args.output))],

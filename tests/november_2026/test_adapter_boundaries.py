@@ -8,12 +8,20 @@ from types import SimpleNamespace
 import pytest
 
 import scripts.audit_small_integrated_weather_milp as oracle
-from tools.november_2026.analyze_candidate_profile_results import analyze_profiles
+from tools.november_2026 import run_small_oracle_matrix as oracle_runner
+from tools.november_2026.analyze_candidate_profile_results import (
+    analyze_profiles,
+    validate_profile_results,
+    write_outputs,
+)
 from tools.november_2026 import run_rain_candidate_sensitivity as rain
-from tools.november_2026.normalize_rain_profile_result import normalize_profile_result
+from tools.november_2026.normalize_rain_profile_result import (
+    normalize_profile_result,
+    write_profile_result,
+)
 
 
-PROFILE_PATH = Path("config/research/november_2026/rain_candidate_profiles_v2.json")
+PROFILE_PATH = Path("config/research/november_2026/rain_candidate_profiles_v3.json")
 
 
 def test_oracle_plan_only_never_calls_solve(monkeypatch, tmp_path: Path) -> None:
@@ -39,7 +47,9 @@ def test_oracle_plan_only_never_calls_solve(monkeypatch, tmp_path: Path) -> None
     assert oracle.run(args) == 0
     payload = json.loads((tmp_path / "plan.json").read_text(encoding="utf-8"))
     assert payload["mode"] == "PLAN_ONLY_NO_SOLVE"
-    assert payload["formulations"] == ["P3_ALIGNED_REFERENCE", "P4_SCALAR"]
+    assert payload["formulations"] == [
+        "P3_ALIGNED_REFERENCE", "P4_SCALAR_EXACT_REFERENCE"
+    ]
 
 
 def test_rain_profiles_load_exact_2x2_and_stage2_is_fixed() -> None:
@@ -47,6 +57,10 @@ def test_rain_profiles_load_exact_2x2_and_stage2_is_fixed() -> None:
 
     assert set(payload["profiles"]) == rain.EXPECTED_PROFILES
     assert {row["stage2_time_limit_seconds"] for row in payload["profiles"].values()} == {30}
+    assert payload["profiles"]["BASE"]["time_limit_seconds"] == 585
+    assert payload["profiles"]["RANGE_ONLY"]["time_limit_seconds"] == 585
+    assert payload["profiles"]["BUDGET_ONLY"]["time_limit_seconds"] == 1650
+    assert payload["profiles"]["FULL_EXPANDED"]["time_limit_seconds"] == 1650
 
 
 def test_rain_profile_rejects_nonallowlisted_field(tmp_path: Path) -> None:
@@ -140,6 +154,10 @@ def _candidate(candidate_hash: str, cost: float, assignment: str | None = None) 
         "trip_count_unserved": 0,
         "fallback_used": False,
         "repair_used": False,
+        "proxy_used": False,
+        "assignment_hash_verified": True,
+        "covers_264_unique_trips": True,
+        "unique_vehicle_count": 3,
         "stage2_actual_canonical_cost_jpy": cost,
         "used_vehicle_count": 3,
         "used_bev": 2, "used_ice": 1, "bev_trips": 5, "ice_trips": 3,
@@ -202,7 +220,10 @@ def test_candidate_winner_matches_production_tiebreak() -> None:
     [
         ("accounting_reconciliation_passed", False),
         ("fallback_used", True),
+        ("repair_used", True),
+        ("proxy_used", True),
         ("trip_count_served", 263),
+        ("stage2_actual_canonical_cost_jpy", float("nan")),
     ],
 )
 def test_candidate_formal_gate_excludes_invalid_rows(field: str, value: object) -> None:
@@ -228,37 +249,37 @@ def test_rain_rejects_broken_2x2_vector(tmp_path: Path) -> None:
 
 def _approval_manifest() -> dict:
     return {
-        "schema_version": "experiment_preregistration_manifest_v1",
-        "experiment_family": "november_2026_rain_candidate_sensitivity_2x2",
-        "planning_commit_sha": "1" * 40,
-        "adapter_commit_sha": "2" * 40,
-        "canonical_reference_execution_sha": "3" * 40,
+        "schema_version": "rain_2x2_approval_v1",
+        "experiment_id": "november-2026-rain-2x2",
+        "experiment_family": "rain_2x2",
+        "planning_sha": rain.PLANNING_SHA,
+        "adapter_sha": "2" * 40,
+        "canonical_reference_sha": rain.CANONICAL_REFERENCE_SHA,
         "profile_definition_sha": "4" * 64,
-        "complete_request_sha": "5" * 64,
+        "request_sha": "5" * 64,
+        "advisor_name": "Advisor",
         "advisor_decision_date": "2026-08-31",
-        "advisor_approved_threshold": 1.0,
-        "advisor_approved_threshold_unit": "percent",
-        "approved_profiles": list(rain.PROFILE_ORDER),
+        "approval_statement": "Approved for the exact listed runs",
+        "approved_threshold": 1.0,
+        "threshold_unit": "percent",
+        "approved_run_list": list(rain.PROFILE_ORDER),
         "scenario_ids": ["b23fd26c-1233-4c73-bb9e-bdb8b1584760"],
-        "allowed_differences": ["candidate search profile"],
-        "fixed_fields": {"gurobi_threads": 1},
-        "planned_run_count": 4,
-        "success_conditions": ["all formal gates"],
-        "stop_conditions": ["any formal gate failure"],
-        "solver_time_budget": {"seconds": 12000},
+        "stop_rules": ["any formal gate failure"],
+        "solver_budget": {"seconds": 12000},
         "wall_budget": {"seconds": 14400},
         "disk_budget": {"bytes": 1000000},
         "claim_boundary": "finite preregistered profile matrix only",
+        "forbidden_claims": ["global optimality"],
     }
 
 
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     [
-        ("planning_commit_sha", "bad", "40-hex"),
+        ("planning_sha", "bad", "40-hex"),
         ("advisor_decision_date", "31/08/2026", "ISO"),
-        ("advisor_approved_threshold", float("inf"), "finite"),
-        ("advisor_approved_threshold_unit", "ratio", "percent"),
+        ("approved_threshold", float("inf"), "finite"),
+        ("threshold_unit", "ratio", "percent"),
     ],
 )
 def test_execution_manifest_rejects_bad_types(
@@ -335,8 +356,13 @@ def _write_profile_artifacts(root: Path, *, accounting_ok: bool = True) -> None:
     candidate = _candidate("candidate-source", 100, "b" * 64)
     candidate.update(
         candidate_index=1,
+        proxy_used=False,
         vehicle_trip_assignments=[
-            {"trip_id": f"trip-{index}", "powertrain": "BEV", "vehicle_id": "bev-1"}
+            {
+                "trip_id": f"trip-{index}",
+                "powertrain": "BEV" if index % 3 < 2 else "ICE",
+                "vehicle_id": f"vehicle-{index % 3}",
+            }
             for index in range(264)
         ],
     )
@@ -349,7 +375,13 @@ def _write_profile_artifacts(root: Path, *, accounting_ok: bool = True) -> None:
     ).hexdigest()
     payloads = {
         "stage1_stage2_candidate_evaluation.json": {
-            "selected_candidate_index": 1, "candidates": [candidate],
+            "selected_candidate_index": 1,
+            "candidate_count_evaluated": 1,
+            "selected_candidate_hash": candidate["candidate_hash"],
+            "selected_canonical_actual_cost_jpy": candidate[
+                "stage2_actual_canonical_cost_jpy"
+            ],
+            "candidates": [candidate],
         },
         "physical_schedule_validation.json": {"accepted": True, "failed_checks": []},
         "rolling_hourly_chain/rolling_chain_summary.json": {
@@ -416,6 +448,63 @@ def test_profile_result_accepts_only_all_formal_gates(tmp_path: Path) -> None:
     assert len(result["selected_candidate"]["assignment_powertrain_hash"]) == 64
 
 
+def test_profile_result_preserves_formal_nonselected_candidates(tmp_path: Path) -> None:
+    """Candidate gates must not collapse to the one run-level selected row."""
+
+    _write_profile_artifacts(tmp_path)
+    path = tmp_path / "stage1_stage2_candidate_evaluation.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    rows = []
+    for candidate_index in range(1, 4):
+        row = dict(payload["candidates"][0])
+        row.update(
+            candidate_index=candidate_index,
+            candidate_hash=f"{candidate_index}" * 64,
+            selectable=True,
+            accounting_reconciliation_passed=True,
+            fallback_used=False,
+            repair_used=False,
+            proxy_used=False,
+            trip_count_served=264,
+            trip_count_unserved=0,
+            stage2_actual_canonical_cost_jpy=100.0 + candidate_index,
+            vehicle_trip_assignments=[
+                {
+                    "trip_id": f"trip-{trip_index}",
+                    "powertrain": "BEV" if trip_index % 3 < 2 else "ICE",
+                    "vehicle_id": f"vehicle-{candidate_index}-{trip_index % 3}",
+                }
+                for trip_index in range(264)
+            ],
+        )
+        pairs = sorted(
+            (assignment["vehicle_id"], assignment["trip_id"])
+            for assignment in row["vehicle_trip_assignments"]
+        )
+        row["assignment_hash"] = hashlib.sha256(
+            json.dumps(pairs, separators=(",", ":")).encode()
+        ).hexdigest()
+        rows.append(row)
+    payload["candidates"] = rows
+    payload["selected_candidate_index"] = 1
+    payload["selected_candidate_hash"] = rows[0]["candidate_hash"]
+    payload["selected_canonical_actual_cost_jpy"] = rows[0][
+        "stage2_actual_canonical_cost_jpy"
+    ]
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = normalize_profile_result(
+        tmp_path, profile_name="BASE", requested_controls={}, expected_code_sha="a" * 40,
+    )
+
+    assert result["candidate_counts"] == {
+        "generated": 3,
+        "evaluated": 3,
+        "fully_selectable": 3,
+    }
+    assert result["selected_candidate"]["candidate_index"] == 1
+
+
 def test_profile_result_rejects_accounting_failure(tmp_path: Path) -> None:
     _write_profile_artifacts(tmp_path, accounting_ok=False)
 
@@ -425,3 +514,177 @@ def test_profile_result_rejects_accounting_failure(tmp_path: Path) -> None:
 
     assert result["status"] == "REJECTED"
     assert result["formal_gates"]["accounting_reconciliation_passed"] is False
+
+
+def test_candidate_duplicate_trip_is_not_formally_selectable(tmp_path: Path) -> None:
+    _write_profile_artifacts(tmp_path)
+    path = tmp_path / "stage1_stage2_candidate_evaluation.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    row = payload["candidates"][0]
+    row["vehicle_trip_assignments"][1]["trip_id"] = row["vehicle_trip_assignments"][0]["trip_id"]
+    pairs = sorted(
+        (item["vehicle_id"], item["trip_id"])
+        for item in row["vehicle_trip_assignments"]
+    )
+    row["assignment_hash"] = hashlib.sha256(
+        json.dumps(pairs, separators=(",", ":")).encode()
+    ).hexdigest()
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = normalize_profile_result(
+        tmp_path, profile_name="BASE", requested_controls={}, expected_code_sha="a" * 40,
+    )
+
+    assert result["candidate_counts"]["fully_selectable"] == 0
+    assert "covers_264_unique_trips" in result["selected_candidate"]["candidate_gate_blockers"]
+
+
+def test_candidate_missing_candidate_level_field_is_not_promoted(tmp_path: Path) -> None:
+    _write_profile_artifacts(tmp_path)
+    path = tmp_path / "stage1_stage2_candidate_evaluation.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    del payload["candidates"][0]["accounting_reconciliation_passed"]
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = normalize_profile_result(
+        tmp_path, profile_name="BASE", requested_controls={}, expected_code_sha="a" * 40,
+    )
+
+    assert result["candidate_counts"]["fully_selectable"] == 0
+    assert result["selected_run_formally_accepted"] is True
+    assert result["candidate_stability_evidence_status"] == "INSUFFICIENT"
+
+
+def test_selected_candidate_identity_drift_rejects_profile(tmp_path: Path) -> None:
+    _write_profile_artifacts(tmp_path)
+    path = tmp_path / "stage1_stage2_candidate_evaluation.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["selected_candidate_hash"] = "f" * 64
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = normalize_profile_result(
+        tmp_path, profile_name="BASE", requested_controls={}, expected_code_sha="a" * 40,
+    )
+
+    assert result["status"] == "REJECTED"
+    assert result["formal_gates"]["selected_candidate_hash_matches"] is False
+
+
+def test_missing_profile_artifact_fails_closed(tmp_path: Path) -> None:
+    _write_profile_artifacts(tmp_path)
+    (tmp_path / "physical_schedule_validation.json").unlink()
+
+    with pytest.raises(FileNotFoundError, match="missing required profile artifact"):
+        normalize_profile_result(
+            tmp_path, profile_name="BASE", requested_controls={},
+            expected_code_sha="a" * 40,
+        )
+
+
+def test_interrupted_profile_result_is_retained(tmp_path: Path) -> None:
+    case = tmp_path / "BASE"
+    case.mkdir()
+    rain._write_interrupted_profile_result(
+        case, profile_name="BASE",
+        plan={
+            "scenario_id": "scenario", "adapter_commit_sha": "a" * 40,
+            "requested_requests": {"BASE": {"time_limit_seconds": 585}},
+        },
+        reason="RuntimeError: injected",
+    )
+
+    payload = json.loads((case / "profile_result_v1.json").read_text(encoding="utf-8"))
+    assert payload["status"] == "INTERRUPTED"
+    assert payload["termination_reason"] == "RuntimeError: injected"
+
+
+def test_small_oracle_plan_shares_one_fresh_prepared_input(tmp_path: Path) -> None:
+    prepare = tmp_path / "prepare.json"
+    optimization = tmp_path / "optimization.json"
+    prepare.write_text('{"day_type":"WEEKDAY"}', encoding="utf-8")
+    optimization.write_text('{"mip_gap":0.0}', encoding="utf-8")
+    args = SimpleNamespace(
+        prepare_request=prepare, optimization_template=optimization,
+        scenario_code="RAIN", trip_counts=[8, 12, 24], output_dir=tmp_path / "out",
+        depot_id="tsurumaki", service_id="WEEKDAY", time_limit_sec=300,
+        random_seed=42, gurobi_threads=1, vehicles_per_type=5,
+    )
+
+    plan = oracle_runner.build_plan(args, adapter_sha="a" * 40)
+
+    assert plan["fresh_prepare_count"] == 1
+    assert plan["trip_counts"] == [8, 12, 24]
+    assert plan["formulations"] == [
+        "P3_ALIGNED_REFERENCE", "P4_SCALAR_EXACT_REFERENCE"
+    ]
+    assert len(plan["expected_case_outputs"]) == 3
+
+
+def test_small_oracle_execute_requires_complete_family_signoff(tmp_path: Path) -> None:
+    plan = {
+        "scenario_id": oracle_runner.SCENARIOS["RAIN"], "scenario_code": "RAIN",
+        "trip_counts": [8, 12, 24], "adapter_commit_sha": "a" * 40,
+        "complete_request_sha256": "b" * 64,
+        "case_definition_sha256": "c" * 64,
+    }
+
+    with pytest.raises(RuntimeError, match="incomplete small-oracle signoff"):
+        oracle_runner.require_execution_approval({}, plan=plan)
+
+    approval = {
+        "schema_version": "small_oracle_approval_v1",
+        "experiment_id": "november-2026-small-oracle",
+        "experiment_family": "small_oracle",
+        "planning_sha": oracle_runner.PLANNING_SHA,
+        "adapter_sha": "a" * 40,
+        "canonical_reference_sha": oracle_runner.CANONICAL_REFERENCE_SHA,
+        "scenario_ids": [oracle_runner.SCENARIOS["RAIN"]],
+        "request_sha": "b" * 64,
+        "case_definition_sha": "c" * 64,
+        "approved_run_list": ["RAIN:8", "RAIN:12", "RAIN:24"],
+        "advisor_name": "Advisor",
+        "advisor_decision_date": "2026-08-31",
+        "approval_statement": "Approved for exact listed runs",
+        "approved_threshold": 0.1,
+        "threshold_unit": "percent",
+        "solver_budget": {"seconds": 1800},
+        "wall_budget": {"seconds": 43200},
+        "disk_budget": {"bytes": 1000000},
+        "stop_rules": ["exact gate failure"],
+        "claim_boundary": "deterministic subsets only",
+        "forbidden_claims": ["264-trip approximation guarantee"],
+    }
+    oracle_runner.require_execution_approval(approval, plan=plan)
+    approval["threshold_unit"] = "ratio"
+    with pytest.raises(RuntimeError, match="unit must be percent"):
+        oracle_runner.require_execution_approval(approval, plan=plan)
+
+
+def test_offline_four_profile_e2e_is_deterministic_twice(tmp_path: Path) -> None:
+    manifests = []
+    for repetition in (1, 2):
+        root = tmp_path / f"rehearsal-{repetition}"
+        profiles = {}
+        for profile_name in rain.PROFILE_ORDER:
+            case = root / profile_name
+            case.mkdir(parents=True)
+            _write_profile_artifacts(case)
+            result = normalize_profile_result(
+                case, profile_name=profile_name, requested_controls={"seed": 42},
+                expected_code_sha="a" * 40,
+            )
+            write_profile_result(case / "profile_result_v1.json", result)
+            profiles[profile_name] = result
+        validate_profile_results(profiles)
+        comparison = analyze_profiles(profiles, advisor_threshold_percent=0.1)
+        write_outputs(comparison, root / "analysis")
+        hashes = {
+            path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in sorted(root.rglob("*")) if path.is_file()
+        }
+        manifest = hashlib.sha256(
+            json.dumps(hashes, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        manifests.append(manifest)
+
+    assert manifests[0] == manifests[1]

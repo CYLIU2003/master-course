@@ -32,6 +32,9 @@ def _selectable(row: Mapping[str, Any]) -> bool:
         and row.get("trip_count_unserved") == 0
         and row.get("fallback_used") is False
         and row.get("repair_used") is False
+        and row.get("proxy_used") is False
+        and row.get("assignment_hash_verified", True) is True
+        and row.get("covers_264_unique_trips", True) is True
         and math.isfinite(cost)
         and _SHA256_RE.fullmatch(str(row.get("assignment_hash") or ""))
     )
@@ -130,14 +133,16 @@ def analyze_profiles(
         for name in PROFILE_ORDER
     }
     generated_hashes = {
-        name: {str(row.get("assignment_hash")) for row in rows if row.get("assignment_hash")}
+        name: set(profiles[name].get("generated_assignment_hashes") or (
+            str(row.get("assignment_hash")) for row in rows if row.get("assignment_hash")
+        ))
         for name, rows in candidates.items()
     }
     evaluated_hashes = {
-        name: {
+        name: set(profiles[name].get("evaluated_assignment_hashes") or (
             str(row.get("assignment_hash")) for row in rows
             if row.get("assignment_hash") and row.get("canonical_evaluation_feasible") is not None
-        }
+        ))
         for name, rows in candidates.items()
     }
     normalized = {
@@ -232,9 +237,21 @@ def analyze_profiles(
         for index, left in enumerate(PROFILE_ORDER)
         for right in PROFILE_ORDER[index + 1:]
     ]
+    formal_profile_inputs = all(
+        profiles[name].get("schema_version") == "rain_profile_result_v1"
+        for name in PROFILE_ORDER
+    )
+    evidence_complete = not formal_profile_inputs or all(
+        profiles[name].get("candidate_stability_evidence_status") == "COMPLETE"
+        for name in PROFILE_ORDER
+    )
     stability_verdict = None
-    status = "AWAITING_ADVISOR_THRESHOLD"
-    if advisor_threshold_percent is not None:
+    status = (
+        "AWAITING_ADVISOR_THRESHOLD"
+        if evidence_complete
+        else "BLOCKED_CANDIDATE_LEVEL_EVIDENCE_INSUFFICIENT"
+    )
+    if advisor_threshold_percent is not None and evidence_complete:
         if advisor_threshold_percent < 0.0:
             raise ValueError("advisor threshold must be nonnegative")
         winner_hashes = {
@@ -269,6 +286,7 @@ def analyze_profiles(
         "schema_version": "candidate_profile_comparison_v1",
         "status": status,
         "advisor_approved_threshold_percent": advisor_threshold_percent,
+        "candidate_stability_evidence_complete": evidence_complete,
         "profile_summaries": summaries,
         "pairwise_overlaps": overlaps,
         "union_winner": union_winner,
