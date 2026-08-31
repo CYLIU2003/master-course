@@ -13,6 +13,7 @@ from dataclasses import asdict, replace
 from datetime import datetime, timezone
 import hashlib
 import json
+import math
 from pathlib import Path
 import sys
 import time
@@ -47,6 +48,12 @@ from src.optimization.common.problem import CanonicalOptimizationProblem  # noqa
 from src.optimization.common.research_phase3_policy import (  # noqa: E402
     enforce_research_phase3_single_continuous_duty,
 )
+from src.optimization.common.soc_helpers import (  # noqa: E402
+    slot_absolute_min,
+    vehicle_capacity_kwh,
+    vehicle_initial_soc_kwh,
+    vehicle_reserve_soc_kwh,
+)
 from src.preprocess.weather.operation_policy import (  # noqa: E402
     apply_weather_policy_to_problem,
 )
@@ -62,6 +69,29 @@ _PREPARED_WEATHER_COMPARISON_KEYS = (
     "allow_fixed_weekday_timetable_pv_counterfactual",
 )
 
+SMALL_ORACLE_SCHEMA_VERSION = "small_oracle_result_v2"
+P3_SCALAR_SUPPORT = "P3_SCALAR_UNSUPPORTED"
+P3_SCALAR_BLOCKER = (
+    "Phase 3 minimizes an assignment-energy proxy and then a fixed-assignment "
+    "charging objective; the scalar canonical actual-cost contract is only "
+    "reachable through phase4_integrated. Metadata alone cannot align them."
+)
+_ACCOUNTING_COST_COMPONENT_KEYS = (
+    "electricity_cost",
+    "fuel_cost",
+    "demand_cost",
+    "contract_overage_cost",
+    "vehicle_cost",
+    "vehicle_usage_cost",
+    "driver_cost",
+    "unserved_penalty",
+    "switch_cost",
+    "degradation_cost",
+    "deviation_cost",
+    "co2_cost",
+)
+_SOC_SCOPE = "used BEV solver trace: all saved slots, including initial slot"
+
 
 def _canonical_sha256(payload: Any) -> str:
     return hashlib.sha256(
@@ -73,6 +103,111 @@ def _canonical_sha256(payload: Any) -> str:
             default=str,
         ).encode("utf-8")
     ).hexdigest()
+
+
+def _p3_scalar_support() -> dict[str, Any]:
+    """Declare the audited Phase-3 scalar-objective capability."""
+
+    return {
+        "status": P3_SCALAR_SUPPORT,
+        "pure_decomposition_gap_available": False,
+        "blocker": P3_SCALAR_BLOCKER,
+    }
+
+
+def _cost_accounting_adapter(cost_breakdown: dict[str, Any]) -> dict[str, Any]:
+    """Serialize all raw fields and independently reconcile canonical costs."""
+
+    components = {
+        key: float(cost_breakdown.get(key, 0.0) or 0.0)
+        for key in _ACCOUNTING_COST_COMPONENT_KEYS
+    }
+    component_sum = sum(components.values())
+    total = float(cost_breakdown.get("total_cost", 0.0) or 0.0)
+    residual = component_sum - total
+    return {
+        "cost_breakdown": dict(cost_breakdown),
+        "accounting_cost_components_jpy": components,
+        "cost_component_sum_jpy": component_sum,
+        "accounted_total_cost_jpy": total,
+        "cost_reconciliation_residual_jpy": residual,
+        "cost_reconciliation_passed": bool(
+            math.isfinite(residual) and abs(residual) <= 1.0e-6
+        ),
+    }
+
+
+def _format_slot_time(problem: CanonicalOptimizationProblem, slot_index: int) -> str:
+    absolute_min = slot_absolute_min(problem, slot_index)
+    day_offset, minute_of_day = divmod(absolute_min, 24 * 60)
+    hour, minute = divmod(minute_of_day, 60)
+    prefix = f"D+{day_offset} " if day_offset else ""
+    return f"{prefix}{hour:02d}:{minute:02d}"
+
+
+def _minimum_used_bev_soc(
+    problem: CanonicalOptimizationProblem,
+    result: Any,
+) -> dict[str, Any]:
+    """Find the minimum over every saved used-BEV SOC point and initial state."""
+
+    used_ids = set(result.plan.vehicle_paths())
+    candidates: list[dict[str, Any]] = []
+    for vehicle in problem.vehicles:
+        vehicle_id = str(vehicle.vehicle_id)
+        if vehicle_id not in used_ids or str(vehicle.vehicle_type).upper() != "BEV":
+            continue
+        capacity = vehicle_capacity_kwh(problem, vehicle)
+        if capacity <= 0.0:
+            continue
+        reserve = vehicle_reserve_soc_kwh(problem, vehicle, cap_kwh=capacity)
+        points: list[tuple[int, float, str]] = [
+            (0, vehicle_initial_soc_kwh(problem, vehicle, cap_kwh=capacity), "initial")
+        ]
+        points.extend(
+            (int(slot), float(soc), "solver_trace")
+            for slot, soc in dict(
+                result.plan.vehicle_soc_kwh_by_vehicle_slot.get(vehicle_id, {})
+            ).items()
+        )
+        for slot, soc, source in points:
+            candidates.append(
+                {
+                    "soc_kwh": soc,
+                    "soc_percent": 100.0 * soc / capacity,
+                    "margin_kwh": soc - reserve,
+                    "margin_percent": 100.0 * (soc - reserve) / capacity,
+                    "vehicle_id": vehicle_id,
+                    "slot_index": slot,
+                    "time": _format_slot_time(problem, slot),
+                    "source": source,
+                }
+            )
+    if not candidates:
+        return {
+            "minimum_recorded_bev_soc_kwh": None,
+            "minimum_recorded_bev_soc_percent": None,
+            "minimum_recorded_bev_soc_margin_kwh": None,
+            "minimum_recorded_bev_soc_margin_percent": None,
+            "minimum_soc_vehicle_id": None,
+            "minimum_soc_slot_index": None,
+            "minimum_soc_time": None,
+            "minimum_soc_scope": None,
+        }
+    minimum = min(
+        candidates,
+        key=lambda row: (row["soc_kwh"], row["vehicle_id"], row["slot_index"], row["source"]),
+    )
+    return {
+        "minimum_recorded_bev_soc_kwh": minimum["soc_kwh"],
+        "minimum_recorded_bev_soc_percent": minimum["soc_percent"],
+        "minimum_recorded_bev_soc_margin_kwh": minimum["margin_kwh"],
+        "minimum_recorded_bev_soc_margin_percent": minimum["margin_percent"],
+        "minimum_soc_vehicle_id": minimum["vehicle_id"],
+        "minimum_soc_slot_index": minimum["slot_index"],
+        "minimum_soc_time": minimum["time"],
+        "minimum_soc_scope": _SOC_SCOPE,
+    }
 
 
 def _small_oracle_solver_controls(args: argparse.Namespace) -> dict[str, Any]:
@@ -621,9 +756,8 @@ def _run_case(
     elapsed = time.perf_counter() - started
     metadata = dict(result.solver_metadata or {})
     cost_breakdown = dict(result.cost_breakdown or {})
-    accounted_total_cost_jpy = float(
-        cost_breakdown.get("total_cost", 0.0) or 0.0
-    )
+    cost_adapter = _cost_accounting_adapter(cost_breakdown)
+    accounted_total_cost_jpy = cost_adapter["accounted_total_cost_jpy"]
     plan_metadata = dict(result.plan.metadata or {})
     milp_objective_value = plan_metadata.get("objective_value")
     objective_accounting_residual_jpy = (
@@ -698,7 +832,18 @@ def _run_case(
             separators=(",", ":"),
         ).encode("utf-8")
     ).hexdigest()
-    return {
+    formulation_id = (
+        "P3_DEPLOYED" if is_two_stage else "P4_SCALAR"
+    )
+    exact_oracle_gate = None
+    case = {
+        "schema_version": SMALL_ORACLE_SCHEMA_VERSION,
+        "formulation_id": formulation_id,
+        "objective_semantics": (
+            "deployed_phase3_assignment_proxy_then_fixed_charging"
+            if is_two_stage
+            else "scalar_canonical_actual_cost"
+        ),
         "analysis_label": str(
             problem.metadata.get("sensitivity_analysis_label") or "primary"
         ),
@@ -736,12 +881,13 @@ def _run_case(
         "warnings": list(result.warnings),
         "infeasibility_reasons": list(result.infeasibility_reasons),
         "elapsed_seconds": elapsed,
+        "runtime_seconds": elapsed,
         "trip_count_served": len(result.plan.served_trip_ids),
         "trip_count_unserved": len(result.plan.unserved_trip_ids),
         "used_vehicle_count": len(result.plan.vehicle_paths()),
         **_assignment_mix(problem, result),
         "objective_value": float(result.objective_value),
-        "accounted_total_cost_jpy": accounted_total_cost_jpy,
+        **cost_adapter,
         "best_bound": metadata.get("best_bound"),
         "final_gap_ratio": metadata.get("final_gap"),
         "stage1_best_bound": metadata.get("stage1_best_bound"),
@@ -807,7 +953,12 @@ def _run_case(
         "assignment_rows": assignment_rows,
         "assignment_hash": assignment_hash,
         "assignment_powertrain_hash": assignment_powertrain_hash,
+        **_minimum_used_bev_soc(problem, result),
     }
+    if not is_two_stage:
+        exact_oracle_gate = _is_integrated_exact_oracle_case(case)
+    case["exact_oracle_gate"] = exact_oracle_gate
+    return case
 
 
 def _is_integrated_exact_oracle_case(case: dict[str, Any]) -> bool:
@@ -882,6 +1033,11 @@ def _primary_oracle_comparison(cases: list[dict[str, Any]]) -> dict[str, Any]:
         integrated is not None and _is_integrated_exact_oracle_case(integrated)
     )
     comparison: dict[str, Any] = {
+        "comparison_schema_version": "small_oracle_comparison_v2",
+        "comparison_name": (
+            "deployed_phase3_to_scalar_integrated_reference_distance"
+        ),
+        "p3_scalar_support": _p3_scalar_support(),
         "integrated_exact_oracle_eligible": exact_oracle,
         "terminal_soc_boundary": "return_to_initial",
         "objective_semantics": "validated_accounting_cost_components_only",
@@ -899,17 +1055,15 @@ def _primary_oracle_comparison(cases: list[dict[str, Any]]) -> dict[str, Any]:
     # zero.  Dividing by an arbitrary JPY floor would turn solver noise into a
     # misleading signed performance claim, so retain the raw delta and mark
     # the relative metric as not identifiable instead.
-    approximate_gap_identifiable = (
-        abs(integrated_cost) > cost_comparison_tolerance_jpy
+    relative_identifiable = abs(integrated_cost) > 1.0e-9
+    relative_cost_difference_percent = (
+        100.0 * cost_delta / abs(integrated_cost)
+        if relative_identifiable
+        else None
     )
-    approximate_gap_ratio = (
-        0.0
-        if cost_delta_within_tolerance and approximate_gap_identifiable
-        else (
-            cost_delta / abs(integrated_cost)
-            if approximate_gap_identifiable
-            else None
-        )
+    component_keys = sorted(
+        set(dict(two_stage.get("accounting_cost_components_jpy") or {}))
+        | set(dict(integrated.get("accounting_cost_components_jpy") or {}))
     )
     comparison.update(
         {
@@ -919,16 +1073,12 @@ def _primary_oracle_comparison(cases: list[dict[str, Any]]) -> dict[str, Any]:
             "two_stage_minus_integrated_cost_jpy": cost_delta,
             "cost_comparison_tolerance_jpy": cost_comparison_tolerance_jpy,
             "two_stage_cost_delta_within_tolerance": cost_delta_within_tolerance,
-            "two_stage_approx_gap_identifiable": approximate_gap_identifiable,
-            "two_stage_approx_gap_ratio": approximate_gap_ratio,
-            "two_stage_approx_gap_status": (
-                "within_numerical_tolerance"
-                if cost_delta_within_tolerance and approximate_gap_identifiable
-                else (
-                    "not_identifiable_zero_reference_cost"
-                    if not approximate_gap_identifiable
-                    else "computed"
-                )
+            "absolute_cost_difference_jpy": abs(cost_delta),
+            "relative_cost_difference_percent": relative_cost_difference_percent,
+            "relative_cost_difference_status": (
+                "computed"
+                if relative_identifiable
+                else "not_identifiable_zero_reference_cost"
             ),
             "two_stage_matches_integrated_cost": cost_delta_within_tolerance,
             "used_vehicle_count_delta": int(two_stage["used_vehicle_count"])
@@ -949,12 +1099,18 @@ def _primary_oracle_comparison(cases: list[dict[str, Any]]) -> dict[str, Any]:
             "integrated_assignment_hash": integrated.get(
                 "assignment_hash"
             ),
+            "assignment_equal": str(two_stage.get("assignment_hash") or "")
+            == str(integrated.get("assignment_hash") or ""),
             "assignment_powertrain_hash_matches": str(
                 two_stage.get("assignment_powertrain_hash") or ""
             )
             == str(
                 integrated.get("assignment_powertrain_hash") or ""
             ),
+            "powertrain_assignment_equal": str(
+                two_stage.get("assignment_powertrain_hash") or ""
+            )
+            == str(integrated.get("assignment_powertrain_hash") or ""),
             "two_stage_assignment_powertrain_hash": two_stage.get(
                 "assignment_powertrain_hash"
             ),
@@ -964,6 +1120,17 @@ def _primary_oracle_comparison(cases: list[dict[str, Any]]) -> dict[str, Any]:
             "comparison_lower_bound_consistent": (
                 cost_delta >= -cost_comparison_tolerance_jpy
             ),
+            "used_vehicle_difference": int(two_stage["used_vehicle_count"])
+            - int(integrated["used_vehicle_count"]),
+            "cost_component_differences": {
+                key: float(
+                    dict(two_stage.get("accounting_cost_components_jpy") or {}).get(key, 0.0)
+                )
+                - float(
+                    dict(integrated.get("accounting_cost_components_jpy") or {}).get(key, 0.0)
+                )
+                for key in component_keys
+            },
         }
     )
     stage1_objective = two_stage.get("stage1_objective")
@@ -1186,6 +1353,45 @@ def _sensitivity_summary(
     }
 
 
+def _small_oracle_plan(
+    *,
+    args: argparse.Namespace,
+    problem: CanonicalOptimizationProblem,
+    prepared_payload: dict[str, Any],
+    code_provenance: dict[str, Any],
+) -> dict[str, Any]:
+    """Return a complete immutable plan without invoking the solver."""
+
+    vehicle_rows = [
+        {
+            "vehicle_id": str(vehicle.vehicle_id),
+            "vehicle_type": str(vehicle.vehicle_type).upper(),
+        }
+        for vehicle in problem.vehicles
+    ]
+    controls = _small_oracle_solver_controls(args)
+    plan_core = {
+        "scenario_id": args.scenario_id,
+        "prepared_input_id": args.prepared_input_id,
+        "prepared_input_sha256": _canonical_sha256(prepared_payload),
+        "depot_id": args.depot_id,
+        "service_id": args.service_id,
+        "trip_ids": [str(trip.trip_id) for trip in problem.trips],
+        "selected_vehicles": vehicle_rows,
+        "formulations": ["P3_DEPLOYED", "P4_SCALAR"],
+        "p3_scalar_support": _p3_scalar_support(),
+        "solver_controls": controls,
+        "expected_output_paths": [str(Path(args.output))],
+    }
+    return {
+        "schema_version": "small_oracle_plan_v1",
+        "mode": "PLAN_ONLY_NO_SOLVE",
+        "adapter_git_sha": code_provenance.get("git_sha"),
+        **plan_core,
+        "input_hash": _canonical_sha256(plan_core),
+    }
+
+
 def run(args: argparse.Namespace) -> int:
     output_path = Path(args.output)
     if int(args.gurobi_threads) < 1:
@@ -1205,6 +1411,19 @@ def run(args: argparse.Namespace) -> int:
         scenarios_dir=_prepared_inputs_root(),
     )
     problem_15 = _build_problem(args, 15)
+    if args.plan_only:
+        payload = _small_oracle_plan(
+            args=args,
+            problem=problem_15,
+            prepared_payload=prepared_payload,
+            code_provenance=code_provenance_before,
+        )
+        output_path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2, default=str),
+            encoding="utf-8",
+        )
+        print(json.dumps(payload, ensure_ascii=False, indent=2), flush=True)
+        return 0
     if args.run_small_m0_m3 and args.allowed_vehicle_type != "ALL":
         raise ValueError("--run-small-m0-m3 requires --allowed-vehicle-type ALL")
     problem_5 = (
@@ -1328,6 +1547,8 @@ def run(args: argparse.Namespace) -> int:
     )
     code_provenance_after = collect_git_state(repo_root=REPO_ROOT)
     payload = {
+        "schema_version": SMALL_ORACLE_SCHEMA_VERSION,
+        "p3_scalar_support": _p3_scalar_support(),
         "purpose": (
             "small_m0_m3_method_comparison"
             if args.run_small_m0_m3
@@ -1402,6 +1623,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Explicit Gurobi thread count; never rely on the solver default.",
     )
     parser.add_argument("--integrated-only", action="store_true")
+    parser.add_argument(
+        "--plan-only",
+        action="store_true",
+        help="Materialize and hash the small input plan, but never call solve.",
+    )
     parser.add_argument("--skip-five-minute", action="store_true")
     parser.add_argument("--run-seed-time-sensitivity", action="store_true")
     parser.add_argument("--run-uncertainty-sensitivity", action="store_true")
