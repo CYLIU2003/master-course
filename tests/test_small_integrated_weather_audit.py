@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from scripts.audit_small_integrated_weather_milp import (
+    _cost_accounting_adapter,
     _all_ice_case_args,
     _available_vehicle_subset,
     _align_objective_with_accounting,
@@ -13,6 +14,8 @@ from scripts.audit_small_integrated_weather_milp import (
     _five_minute_sensitivity_comparison,
     _is_integrated_exact_oracle_case,
     _integrated_actual_cost_oracle_problem,
+    _minimum_used_bev_soc,
+    _p3_scalar_support,
     _restore_prepared_weather_comparison_contract,
     _primary_oracle_comparison,
     _small_m0_m3_comparison,
@@ -210,11 +213,84 @@ def test_primary_oracle_comparison_does_not_normalize_zero_cost_noise() -> None:
     comparison = _primary_oracle_comparison([two_stage, integrated])
 
     assert comparison["two_stage_matches_integrated_cost"] is True
-    assert comparison["two_stage_approx_gap_identifiable"] is False
-    assert comparison["two_stage_approx_gap_ratio"] is None
-    assert comparison["two_stage_approx_gap_status"] == (
+    assert comparison["relative_cost_difference_percent"] is None
+    assert comparison["relative_cost_difference_status"] == (
         "not_identifiable_zero_reference_cost"
     )
+    assert comparison["comparison_name"] == (
+        "deployed_phase3_to_scalar_integrated_reference_distance"
+    )
+
+
+def test_cost_adapter_preserves_full_breakdown_and_reconciles_total() -> None:
+    breakdown = {
+        "electricity_cost": 10.0,
+        "fuel_cost": 20.0,
+        "vehicle_usage_cost": 30.0,
+        "total_cost": 60.0,
+        "pv_generated_kwh": 12.5,
+    }
+
+    adapted = _cost_accounting_adapter(breakdown)
+
+    assert adapted["cost_breakdown"] == breakdown
+    assert adapted["cost_component_sum_jpy"] == 60.0
+    assert adapted["cost_reconciliation_residual_jpy"] == 0.0
+    assert adapted["cost_reconciliation_passed"] is True
+
+
+def test_minimum_soc_is_null_without_used_bev() -> None:
+    problem = SimpleNamespace(
+        vehicles=(SimpleNamespace(vehicle_id="ice", vehicle_type="ICE"),),
+        vehicle_types=(),
+        scenario=SimpleNamespace(horizon_start="00:00", timestep_min=15),
+    )
+    result = SimpleNamespace(
+        plan=SimpleNamespace(
+            vehicle_paths=lambda: {"ice": ("t1",)},
+            vehicle_soc_kwh_by_vehicle_slot={},
+        )
+    )
+
+    summary = _minimum_used_bev_soc(problem, result)
+
+    assert summary["minimum_recorded_bev_soc_kwh"] is None
+    assert summary["minimum_soc_vehicle_id"] is None
+    assert summary["minimum_soc_scope"] is None
+
+
+def test_minimum_soc_extracts_used_bev_vehicle_and_slot() -> None:
+    vehicle = SimpleNamespace(
+        vehicle_id="bev-1", vehicle_type="BEV", battery_capacity_kwh=100.0,
+        initial_soc=0.8, reserve_soc=0.2,
+    )
+    problem = SimpleNamespace(
+        vehicles=(vehicle,), vehicle_types=(),
+        scenario=SimpleNamespace(horizon_start="05:00", timestep_min=15),
+    )
+    result = SimpleNamespace(
+        plan=SimpleNamespace(
+            vehicle_paths=lambda: {"bev-1": ("t1",)},
+            vehicle_soc_kwh_by_vehicle_slot={"bev-1": {2: 35.0, 4: 25.0}},
+        )
+    )
+
+    summary = _minimum_used_bev_soc(problem, result)
+
+    assert summary["minimum_recorded_bev_soc_kwh"] == 25.0
+    assert summary["minimum_recorded_bev_soc_margin_kwh"] == 5.0
+    assert summary["minimum_soc_vehicle_id"] == "bev-1"
+    assert summary["minimum_soc_slot_index"] == 4
+    assert summary["minimum_soc_time"] == "06:00"
+    assert "initial slot" in summary["minimum_soc_scope"]
+
+
+def test_p3_scalar_is_explicitly_unsupported_without_core_change() -> None:
+    support = _p3_scalar_support()
+
+    assert support["status"] == "P3_SCALAR_UNSUPPORTED"
+    assert support["pure_decomposition_gap_available"] is False
+    assert "phase4_integrated" in support["blocker"]
 
 
 def test_small_m0_m3_comparison_is_bounded_and_requires_exact_m0_m3() -> None:
