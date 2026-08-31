@@ -1,0 +1,62 @@
+{
+  "schema_version": "november_frozen_offline_replay_v1",
+  "mode": "OFFLINE_NO_SOLVER_NO_PREPARE_NO_ROLLING_NO_HTTP",
+  "source_run": "C:/master-course/output/2026-08-28/run_20260828_0119",
+  "source_artifact_sha256": {
+    "stage1_stage2_candidate_evaluation.json": "4d033d19583f97394c0d59bbda57eaf452031c46a3b8fa69f967d6d692614f26",
+    "physical_schedule_validation.json": "03a197e6641912516cf8204ad05625cf09de6f04f274623e1f18dd661b46ee81",
+    "rolling_hourly_chain/rolling_chain_summary.json": "c3c3ac68ee48f9f64f32a7ed7d71ea921bde5bc5b7ff2a1bf87d5df22b1381a9",
+    "rolling_hourly_chain/executed_day_accounting.json": "ff8648a51795b04f381a7b2404ebca6628e67ed684369c1f482cf3cce8dc84bd",
+    "final_cost_reconciliation.json": "c2732e01056ba6defc6d9e66a0471ac190a5fec27f7f8b0feb27f601e46a76b0",
+    "summary.json": "7cd4e4c9fd831b2341622f4127f8a6f7588406d77d14a27f3e0efaf0562abcd1",
+    "optimization_parameters.json": "183dc4f754a65e57575d561c9d56d9952ee6fb41b58da49b6daa2772f07f00d7",
+    "code_provenance.json": "d8116fda8a91786fecf75409cf161557b95c701909de5c30d607550997d78e5d",
+    "input_audit.json": "ae60fb78e0681a0455b368c27121b231eed28656db892a238d7acc6906d711ed"
+  },
+  "code_sha": "ba5ac4abac490caccca006260670dfbc2c411fa9",
+  "generated": 22,
+  "evaluated": 22,
+  "fully_selectable": 0,
+  "selected_candidate_index": 1,
+  "selected_candidate_hash": "c6cb0cc9574f1964d3761001ec64bdd7287cb252e56a3509f2627e2623a03034",
+  "selected_assignment_hash": "c6cb0cc9574f1964d3761001ec64bdd7287cb252e56a3509f2627e2623a03034",
+  "selected_candidate_cost_jpy": 698296.465283954,
+  "selected_assignment_hash_verified": true,
+  "selected_run_formally_accepted": true,
+  "production_selected_candidate_match": true,
+  "candidate_gate_distribution": {
+    "EVALUATED_BUT_NOT_FORMALLY_SELECTABLE": 22
+  },
+  "candidate_indices_with_incomplete_formal_evidence": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22
+  ],
+  "candidate_stability_evidence_status": "INSUFFICIENT",
+  "verdict": "BLOCKED_CANDIDATE_LEVEL_EVIDENCE_INSUFFICIENT",
+  "external_call_counts": {
+    "solver": 0,
+    "prepare": 0,
+    "rolling": 0,
+    "http": 0
+  }
+}

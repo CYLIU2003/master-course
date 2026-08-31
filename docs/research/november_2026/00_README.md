@@ -2,13 +2,17 @@
 
 ## 判定
 
-`P0_ADAPTERS_READY_FOR_HUMAN_APPROVAL`
+`BLOCKED_CANDIDATE_LEVEL_EVIDENCE_INSUFFICIENT`
 
-本ディレクトリは、計画commit `132302a736f72e04aa1fbe07b8d4945fe56c5531` から作成した **ADAPTER_ONLY_NO_EXECUTION** の成果である。Prepare、Gurobi、Phase 3、Phase 4、Rolling、実HTTPは一度も実行していない。正本artifact、`docs/thesis/authoring_v1/`、main、PR #7、PR #8は変更していない。
+最終実行前監査は基準commit `f183c85d3287dc11026448bd6f26ade6c0155197` から開始した **DEEP_PREEXECUTION_AUDIT_NO_SOLVER** の成果である。Prepare、Gurobi、Phase 3、Phase 4、Rolling、実HTTPは一度も実行していない。正本artifact、`docs/thesis/authoring_v1/`、main、PR #7、PR #8は変更していない。
+
+`signoff/`、v3 profile、`14_time_limit_semantics_audit.md`が最終実行契約である。02/06/07/09/13および旧schemaに残るv2名称・時間式・placeholder commandはhistorical proposalであり、実行には使用しない。
 
 ## 結論
 
-- P3-SCALARは既存config/metadataでは実現不能で、`P3_SCALAR_UNSUPPORTED`である。P3-DEPLOYEDとP4-SCALARの差は純粋な分解gapではなく、`deployed_phase3_to_scalar_integrated_reference_distance`と呼ぶ。
+- frozen RAIN replayは22候補の生成・評価とproduction winner一致を確認したが、非選択候補の会計、fallback、repair、proxyを候補別に証明できず、fully selectableは0件である。二値候補安定性は実行前からfail-closedで禁止する。
+- `time_limit_seconds`はPhase 3内の共有budgetであり、RollingやHTTP timeoutではない。v3 BASEは正本の585/435/30秒を再現し、rangeとbudgetを直交させる。
+- P3-SCALARは既存config/metadataでは実現不能で、`P3_SCALAR_UNSUPPORTED`である。subset比較は`phase3_aligned_subset_to_scalar_integrated_reference_distance`と呼ぶ。
 - 小規模oracleへplan-only、全費用内訳、1e-6円会計再計算、使用BEV全保存slot（初期slot含む）の最低SOC、配車hash、exact gateを追加した。
 - RAINは候補範囲×計算予算の2×2（BASE/RANGE_ONLY/BUDGET_ONLY/FULL_EXPANDED）へ修正し、plan-only runner、allowlist、requested/effective分離、候補集合分析器、事前登録schemaを追加した。
 - PV LOW/MEDIUM/HIGHのうちLOW/HIGHの正本曲線は存在する。MEDIUMの合成、provenance、hash、同一非PV制御をfail-closedで扱う既存runnerはないため、P1のまま保留する。
@@ -16,8 +20,8 @@
 ## 実験を開始できる条件
 
 1. 指導教員がRAIN安定性の許容値（候補内費用改善率）とStage 1 gapの採用線を事前決定する。
-2. `03_small_oracle_feasibility.md` と `04_rain_candidate_sensitivity_plan.md` に記した非core adapterを別Goalで実装・レビューし、solverなしのfocused testsを通す。
-3. adapter実装後にexact command、出力schema、run-count定義を再確認し、人間がPhase 2を明示承認する。
+2. `signoff/` のfamily別JSONを完成させ、validate-inputs-onlyを通す。
+3. 別の実行専用Goalで、人間が署名したfamilyだけをexact commandで実行する。
 
 ## 実験family別の必須報告
 
@@ -42,6 +46,8 @@
 11. `11_ieej_two_page_storyboard.md`
 12. `12_advisor_questions.md`
 13. `13_adapter_acceptance_report.md`
+14. `14_time_limit_semantics_audit.md`
+15. `signoff/00_executive_summary.md`
 
 ## 研究境界
 

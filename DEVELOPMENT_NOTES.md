@@ -9200,3 +9200,13 @@ locks this distinction in place.
 - Small-oracle output now labels Phase 3 as deployed only when its contract exactly matches reference SHA `bb0c0050883a91dd86a9e8813ae88d4b6d8c361d`; missing/non-finite cost components, failed accounting, infeasible/unserved Phase 3, or missing used-BEV SOC traces block distance claims.
 - Focused tests: `48 passed`; complete regression: `1,754 passed`; compile and diff hygiene: PASS.
 - Implementation verdict: `P0_EXECUTION_PACKAGE_READY_FOR_ADVISOR_SIGNOFF`. This is not authorization to run the experiment.
+
+# 2026-08-31 November 2026 independent final pre-execution audit
+
+- Started from `f183c85d3287dc11026448bd6f26ade6c0155197` on `research/november-2026-final-preexecution-audit-v1`; no solver, Prepare, Rolling, real HTTP, GitHub Actions, AI review, PR, or account setting was used.
+- Reproduced the selected-only normalization defect: a three-candidate fixture produced generated/evaluated/selectable counts `3/3/1`; after separating candidate and run gates it produces `3/3/3`. Candidate gates now require persisted evidence, verified assignment hash, 264 unique trips, vehicle-count consistency, and explicit absence of fallback, repair, and proxy.
+- Offline replay of frozen RAIN `run_20260828_0119` produced `22/22/0`, confirmed selected index 1, assignment hash `c6cb0cc...03034`, cost 698296.465283954 JPY, production selection parity, and selected run formal acceptance. All 22 rows lack complete candidate-level formal evidence, so the honest verdict is `BLOCKED_CANDIDATE_LEVEL_EVIDENCE_INSUFFICIENT`.
+- Traced `time_limit_seconds` to the shared Phase 3 day-ahead deadline. v3 restores BASE to 585/435/30 seconds, keeps Rolling and external HTTP/wall timeouts separate, and defines an orthogonal range-by-budget matrix.
+- Added strict subset oracle naming/gates, a signed plan/validate/execute runner with one Fresh Prepared ID and independent trip-count processes, family-specific approval templates, exact commands, interruption inventories, and NOT_RUN publication materials. Execute remains fail-closed until every signed field and hash matches.
+- Two frozen offline replay passes had identical SHA-256 `853b9e67495deceded3eab8c6c13cf77999e0f5c1ff7e728eda54487d6ad2262`; recorded external calls were solver 0, Prepare 0, Rolling 0, HTTP 0.
+- Two complete fixture paths (Prepared response/run directories -> normalization -> four-profile validation/analysis -> CSV/JSON/Markdown -> manifest) also matched at SHA-256 `53c58a4e3652c867fb362b9738bcde62ea33e98a3272f18774b0277f7a4b0985`.

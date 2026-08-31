@@ -1,0 +1,23 @@
+{
+  "schema_version": "small_oracle_approval_v1",
+  "experiment_id": null,
+  "experiment_family": "small_oracle",
+  "planning_sha": null,
+  "adapter_sha": null,
+  "canonical_reference_sha": "bb0c0050883a91dd86a9e8813ae88d4b6d8c361d",
+  "scenario_ids": null,
+  "request_sha": null,
+  "case_definition_sha": null,
+  "approved_run_list": null,
+  "advisor_name": null,
+  "advisor_decision_date": null,
+  "approval_statement": null,
+  "approved_threshold": null,
+  "threshold_unit": null,
+  "solver_budget": null,
+  "wall_budget": null,
+  "disk_budget": null,
+  "stop_rules": null,
+  "claim_boundary": null,
+  "forbidden_claims": null
+}
