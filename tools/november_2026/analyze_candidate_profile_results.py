@@ -5,35 +5,118 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 from pathlib import Path
+import re
 from typing import Any, Mapping
 
 
 PROFILE_ORDER = ("BASE", "RANGE_ONLY", "BUDGET_ONLY", "FULL_EXPANDED")
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 def _selectable(row: Mapping[str, Any]) -> bool:
-    return all(
-        row.get(key) is True
-        for key in ("stage2_feasible", "canonical_evaluation_feasible", "physical_validation_feasible")
-    ) and row.get("stage2_actual_canonical_cost_jpy") is not None
+    """Apply the persisted, formal candidate-selection gate fail closed."""
+
+    try:
+        cost = float(row["stage2_actual_canonical_cost_jpy"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    return bool(
+        row.get("selectable") is True
+        and row.get("stage2_feasible") is True
+        and row.get("canonical_evaluation_feasible") is True
+        and row.get("accounting_reconciliation_passed") is True
+        and row.get("physical_validation_feasible") is True
+        and row.get("trip_count_served") == 264
+        and row.get("trip_count_unserved") == 0
+        and row.get("fallback_used") is False
+        and row.get("repair_used") is False
+        and math.isfinite(cost)
+        and _SHA256_RE.fullmatch(str(row.get("assignment_hash") or ""))
+    )
+
+
+def _used_vehicle_count(row: Mapping[str, Any]) -> int:
+    """Return production's secondary tiebreak and reject inconsistent rows."""
+
+    declared = row.get("used_vehicle_count")
+    bev = row.get("used_bev")
+    ice = row.get("used_ice")
+    derived = None if bev is None or ice is None else int(bev) + int(ice)
+    if declared is None:
+        if derived is None:
+            raise ValueError("candidate has neither used_vehicle_count nor used_bev+used_ice")
+        return derived
+    count = int(declared)
+    if derived is not None and count != derived:
+        raise ValueError("used_vehicle_count differs from used_bev + used_ice")
+    return count
+
+
+def _selection_key(row: Mapping[str, Any]) -> tuple[float, int, str]:
+    """Mirror the production Phase 3 candidate tiebreak exactly."""
+
+    return (
+        float(row["stage2_actual_canonical_cost_jpy"]),
+        _used_vehicle_count(row),
+        str(row["assignment_hash"]),
+    )
 
 
 def _winner(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
     selectable = [row for row in rows if _selectable(row)]
-    return min(
-        selectable,
-        key=lambda row: (
-            float(row["stage2_actual_canonical_cost_jpy"]),
-            str(row.get("candidate_hash") or ""),
-        ),
-        default=None,
-    )
+    return min(selectable, key=_selection_key, default=None)
+
+
+def _normalized_selectable_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Deduplicate physical assignments, retaining production's winning row."""
+
+    by_assignment: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        if not _selectable(row):
+            continue
+        assignment_hash = str(row["assignment_hash"])
+        prior = by_assignment.get(assignment_hash)
+        if prior is None or _selection_key(row) < _selection_key(prior):
+            by_assignment[assignment_hash] = row
+    return sorted(by_assignment.values(), key=_selection_key)
 
 
 def _jaccard(left: set[str], right: set[str]) -> float | None:
     union = left | right
     return len(left & right) / len(union) if union else None
+
+
+def validate_profile_results(profiles: Mapping[str, Mapping[str, Any]]) -> None:
+    """Reject hand-written or formally rejected analyzer inputs."""
+
+    if set(profiles) != set(PROFILE_ORDER):
+        raise ValueError("all four preregistered profiles are required")
+    baseline_identity: dict[str, Any] | None = None
+    for name in PROFILE_ORDER:
+        payload = profiles[name]
+        if payload.get("schema_version") != "rain_profile_result_v1":
+            raise ValueError(f"{name} is not a rain_profile_result_v1 artifact")
+        if payload.get("profile_name") != name:
+            raise ValueError(f"{name} profile_result identity mismatch")
+        if payload.get("status") != "ACCEPTED":
+            raise ValueError(f"{name} profile_result did not pass formal gates")
+        source_hashes = payload.get("source_artifact_hashes")
+        if not isinstance(source_hashes, Mapping) or not source_hashes:
+            raise ValueError(f"{name} profile_result has no source artifact hashes")
+        if any(not _SHA256_RE.fullmatch(str(value)) for value in source_hashes.values()):
+            raise ValueError(f"{name} profile_result has invalid source artifact hashes")
+        identity = {
+            "scenario_id": payload.get("scenario_id"),
+            "prepared_input_id": payload.get("prepared_input_id"),
+            "code_sha": payload.get("code_sha"),
+            "canonical_fixed_input_hashes": payload.get("canonical_fixed_input_hashes"),
+        }
+        if baseline_identity is None:
+            baseline_identity = identity
+        elif identity != baseline_identity:
+            raise ValueError(f"{name} profile_result fixed identity drift")
 
 
 def analyze_profiles(
@@ -46,31 +129,44 @@ def analyze_profiles(
         name: [dict(row) for row in profiles[name].get("candidates") or ()]
         for name in PROFILE_ORDER
     }
-    hashes = {
-        name: {str(row.get("candidate_hash")) for row in rows if row.get("candidate_hash")}
+    generated_hashes = {
+        name: {str(row.get("assignment_hash")) for row in rows if row.get("assignment_hash")}
         for name, rows in candidates.items()
     }
-    winners = {name: _winner(rows) for name, rows in candidates.items()}
+    evaluated_hashes = {
+        name: {
+            str(row.get("assignment_hash")) for row in rows
+            if row.get("assignment_hash") and row.get("canonical_evaluation_feasible") is not None
+        }
+        for name, rows in candidates.items()
+    }
+    normalized = {
+        name: _normalized_selectable_rows(rows) for name, rows in candidates.items()
+    }
+    selectable_hashes = {
+        name: {str(row["assignment_hash"]) for row in rows}
+        for name, rows in normalized.items()
+    }
+    winners = {name: _winner(normalized[name]) for name in PROFILE_ORDER}
+    hashes = selectable_hashes
     base_hashes = hashes["BASE"]
     base_winner_hash = (
-        str(winners["BASE"].get("candidate_hash")) if winners["BASE"] else None
+        str(winners["BASE"].get("assignment_hash")) if winners["BASE"] else None
     )
     all_rows_by_hash: dict[str, dict[str, Any]] = {}
     for rows in candidates.values():
         for row in rows:
-            candidate_hash = str(row.get("candidate_hash") or "")
-            if not candidate_hash or not _selectable(row):
+            assignment_hash = str(row.get("assignment_hash") or "")
+            if not assignment_hash or not _selectable(row):
                 continue
-            prior = all_rows_by_hash.get(candidate_hash)
-            if prior is None or float(row["stage2_actual_canonical_cost_jpy"]) < float(
-                prior["stage2_actual_canonical_cost_jpy"]
-            ):
-                all_rows_by_hash[candidate_hash] = row
+            prior = all_rows_by_hash.get(assignment_hash)
+            if prior is None or _selection_key(row) < _selection_key(prior):
+                all_rows_by_hash[assignment_hash] = row
     union_winner = _winner(list(all_rows_by_hash.values()))
     summaries: dict[str, Any] = {}
     for name in PROFILE_ORDER:
         rows = candidates[name]
-        selectable = [row for row in rows if _selectable(row)]
+        selectable = normalized[name]
         winner = winners[name]
         ordered_costs = sorted(float(row["stage2_actual_canonical_cost_jpy"]) for row in selectable)
         base_cost = (
@@ -81,17 +177,21 @@ def analyze_profiles(
         delta = winner_cost - base_cost if winner_cost is not None and base_cost is not None else None
         summaries[name] = {
             "candidate_count": len(rows),
+            "generated_assignment_count": len(generated_hashes[name]),
+            "evaluated_assignment_count": len(evaluated_hashes[name]),
             "selectable_candidate_count": len(selectable),
-            "distinct_physical_assignment_count": len(
-                {str(row.get("assignment_hash")) for row in rows if row.get("assignment_hash")}
-            ),
-            "candidate_hashes": sorted(hashes[name]),
+            "distinct_physical_assignment_count": len(generated_hashes[name]),
+            "selectable_assignment_hashes": sorted(hashes[name]),
             "base_candidate_retained_count": len(base_hashes & hashes[name]),
             "base_candidate_retention_rate": (
                 len(base_hashes & hashes[name]) / len(base_hashes) if base_hashes else None
             ),
             "base_winner_present": base_winner_hash in hashes[name] if base_winner_hash else None,
             "winner_candidate_hash": winner.get("candidate_hash") if winner else None,
+            "winner_assignment_hash": winner.get("assignment_hash") if winner else None,
+            "winner_assignment_powertrain_hash": (
+                winner.get("assignment_powertrain_hash") if winner else None
+            ),
             "winner_cost_jpy": winner_cost,
             "selected_to_second_margin_jpy": (
                 ordered_costs[1] - ordered_costs[0] if len(ordered_costs) >= 2 else None
@@ -138,7 +238,7 @@ def analyze_profiles(
         if advisor_threshold_percent < 0.0:
             raise ValueError("advisor threshold must be nonnegative")
         winner_hashes = {
-            str(winner.get("candidate_hash")) for winner in winners.values() if winner
+            str(winner.get("assignment_hash")) for winner in winners.values() if winner
         }
         complete_winners = all(winner is not None for winner in winners.values())
         improvements = [
@@ -205,9 +305,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args(argv)
     profiles = {name: json.loads(Path(path).read_text(encoding="utf-8")) for name, path in args.profile_result}
+    validate_profile_results(profiles)
     threshold = None
     if args.preregistration_manifest:
-        threshold = json.loads(args.preregistration_manifest.read_text(encoding="utf-8")).get("advisor_approved_threshold")
+        manifest = json.loads(args.preregistration_manifest.read_text(encoding="utf-8"))
+        if manifest.get("advisor_approved_threshold_unit") != "percent":
+            raise ValueError("advisor threshold unit must be percent")
+        threshold = manifest.get("advisor_approved_threshold")
     result = analyze_profiles(profiles, advisor_threshold_percent=threshold)
     write_outputs(result, args.output_dir)
     return 0

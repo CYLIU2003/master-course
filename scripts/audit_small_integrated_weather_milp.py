@@ -91,6 +91,27 @@ _ACCOUNTING_COST_COMPONENT_KEYS = (
     "co2_cost",
 )
 _SOC_SCOPE = "used BEV solver trace: all saved slots, including initial slot"
+_PHASE3_REFERENCE_SHA = "bb0c0050883a91dd86a9e8813ae88d4b6d8c361d"
+_PHASE3_REFERENCE_CONTRACT = {
+    "phase": "phase3_two_stage",
+    "time_limit_sec": 585,
+    "stage1_time_limit_sec": 435,
+    "stage2_time_limit_sec": 30,
+    "mip_gap": 0.1,
+    "random_seed": 42,
+    "gurobi_threads": 1,
+    "warm_start": True,
+    "thesis_mode": True,
+    "research_run": True,
+    "allow_postsolve_repair": False,
+    "integrated_actual_cost_objective": False,
+    "objective_preset": "scalar_total_cost_v1",
+    "bev_terminal_soc_policy": "return_to_initial",
+    "milp_max_successors_per_trip": 0,
+    "allow_partial_service": False,
+    "fixed_route_band_mode": True,
+    "trip_count": 264,
+}
 
 
 def _canonical_sha256(payload: Any) -> str:
@@ -118,12 +139,18 @@ def _p3_scalar_support() -> dict[str, Any]:
 def _cost_accounting_adapter(cost_breakdown: dict[str, Any]) -> dict[str, Any]:
     """Serialize all raw fields and independently reconcile canonical costs."""
 
-    components = {
-        key: float(cost_breakdown.get(key, 0.0) or 0.0)
-        for key in _ACCOUNTING_COST_COMPONENT_KEYS
-    }
+    missing = [key for key in _ACCOUNTING_COST_COMPONENT_KEYS if key not in cost_breakdown]
+    if missing:
+        raise ValueError(f"missing canonical accounting cost components: {missing}")
+    if "total_cost" not in cost_breakdown:
+        raise ValueError("missing canonical accounting total_cost")
+    components = {key: float(cost_breakdown[key]) for key in _ACCOUNTING_COST_COMPONENT_KEYS}
+    if not all(math.isfinite(value) for value in components.values()):
+        raise ValueError("canonical accounting cost components must be finite")
     component_sum = sum(components.values())
-    total = float(cost_breakdown.get("total_cost", 0.0) or 0.0)
+    total = float(cost_breakdown["total_cost"])
+    if not math.isfinite(total):
+        raise ValueError("canonical accounting total_cost must be finite")
     residual = component_sum - total
     return {
         "cost_breakdown": dict(cost_breakdown),
@@ -153,22 +180,27 @@ def _minimum_used_bev_soc(
 
     used_ids = set(result.plan.vehicle_paths())
     candidates: list[dict[str, Any]] = []
+    trace_errors: list[str] = []
     for vehicle in problem.vehicles:
         vehicle_id = str(vehicle.vehicle_id)
         if vehicle_id not in used_ids or str(vehicle.vehicle_type).upper() != "BEV":
             continue
         capacity = vehicle_capacity_kwh(problem, vehicle)
         if capacity <= 0.0:
+            trace_errors.append(f"{vehicle_id}:missing_positive_capacity")
             continue
         reserve = vehicle_reserve_soc_kwh(problem, vehicle, cap_kwh=capacity)
         points: list[tuple[int, float, str]] = [
             (0, vehicle_initial_soc_kwh(problem, vehicle, cap_kwh=capacity), "initial")
         ]
+        solver_trace = dict(
+            result.plan.vehicle_soc_kwh_by_vehicle_slot.get(vehicle_id, {})
+        )
+        if not solver_trace:
+            trace_errors.append(f"{vehicle_id}:missing_solver_soc_trace")
         points.extend(
             (int(slot), float(soc), "solver_trace")
-            for slot, soc in dict(
-                result.plan.vehicle_soc_kwh_by_vehicle_slot.get(vehicle_id, {})
-            ).items()
+            for slot, soc in solver_trace.items()
         )
         for slot, soc, source in points:
             candidates.append(
@@ -193,6 +225,8 @@ def _minimum_used_bev_soc(
             "minimum_soc_slot_index": None,
             "minimum_soc_time": None,
             "minimum_soc_scope": None,
+            "used_bev_soc_trace_complete": not trace_errors,
+            "used_bev_soc_trace_errors": trace_errors,
         }
     minimum = min(
         candidates,
@@ -207,6 +241,49 @@ def _minimum_used_bev_soc(
         "minimum_soc_slot_index": minimum["slot_index"],
         "minimum_soc_time": minimum["time"],
         "minimum_soc_scope": _SOC_SCOPE,
+        "used_bev_soc_trace_complete": not trace_errors,
+        "used_bev_soc_trace_errors": trace_errors,
+    }
+
+
+def _phase3_contract_comparison(
+    problem: CanonicalOptimizationProblem,
+    config: OptimizationConfig,
+) -> dict[str, Any]:
+    """Label Phase 3 as deployed only on an exact bb0c005 contract match."""
+
+    actual = {
+        "phase": config.phase,
+        "time_limit_sec": config.time_limit_sec,
+        "stage1_time_limit_sec": config.stage1_time_limit_sec,
+        "stage2_time_limit_sec": config.stage2_time_limit_sec,
+        "mip_gap": config.mip_gap,
+        "random_seed": config.random_seed,
+        "gurobi_threads": config.gurobi_threads,
+        "warm_start": config.warm_start,
+        "thesis_mode": config.thesis_mode,
+        "research_run": config.research_run,
+        "allow_postsolve_repair": config.allow_postsolve_repair,
+        "integrated_actual_cost_objective": config.integrated_actual_cost_objective,
+        "objective_preset": problem.metadata.get("objective_preset"),
+        "bev_terminal_soc_policy": problem.metadata.get("bev_terminal_soc_policy"),
+        "milp_max_successors_per_trip": problem.metadata.get("milp_max_successors_per_trip"),
+        "allow_partial_service": problem.metadata.get("allow_partial_service"),
+        "fixed_route_band_mode": problem.metadata.get("fixed_route_band_mode"),
+        "trip_count": len(problem.trips),
+    }
+    mismatches = {
+        key: {"reference": expected, "actual": actual.get(key)}
+        for key, expected in _PHASE3_REFERENCE_CONTRACT.items()
+        if actual.get(key) != expected
+    }
+    return {
+        "reference_execution_sha": _PHASE3_REFERENCE_SHA,
+        "reference_contract": dict(_PHASE3_REFERENCE_CONTRACT),
+        "actual_contract": actual,
+        "matched": not mismatches,
+        "mismatches": mismatches,
+        "formulation_id": "P3_DEPLOYED" if not mismatches else "P3_ALIGNED_REFERENCE",
     }
 
 
@@ -832,13 +909,15 @@ def _run_case(
             separators=(",", ":"),
         ).encode("utf-8")
     ).hexdigest()
+    phase3_contract = _phase3_contract_comparison(problem, config) if is_two_stage else None
     formulation_id = (
-        "P3_DEPLOYED" if is_two_stage else "P4_SCALAR"
+        phase3_contract["formulation_id"] if phase3_contract else "P4_SCALAR"
     )
     exact_oracle_gate = None
     case = {
         "schema_version": SMALL_ORACLE_SCHEMA_VERSION,
         "formulation_id": formulation_id,
+        "phase3_contract_comparison": phase3_contract,
         "objective_semantics": (
             "deployed_phase3_assignment_proxy_then_fixed_charging"
             if is_two_stage
@@ -1009,7 +1088,9 @@ def _is_integrated_exact_oracle_case(case: dict[str, Any]) -> bool:
         and case.get("integrated_actual_cost_contract_applied")
         and case.get("objective_is_actual_cost")
         and case.get("objective_matches_accounting")
+        and case.get("cost_reconciliation_passed")
         and case.get("ev_energy_inventory_balanced")
+        and case.get("used_bev_soc_trace_complete")
         and validation.get("all_required_validation_checks_passed")
     )
 
@@ -1046,6 +1127,45 @@ def _primary_oracle_comparison(cases: list[dict[str, Any]]) -> dict[str, Any]:
         comparison["two_stage_comparison_available"] = False
         return comparison
 
+    phase3_blockers: list[str] = []
+    if two_stage.get("feasible") is not True:
+        phase3_blockers.append("phase3_infeasible")
+    if int(two_stage.get("trip_count_unserved") or 0) != 0:
+        phase3_blockers.append("phase3_unserved_trips")
+    if two_stage.get("cost_reconciliation_passed") is not True:
+        phase3_blockers.append("phase3_accounting_reconciliation_failed")
+    if two_stage.get("used_bev_soc_trace_complete") is not True:
+        phase3_blockers.append("phase3_used_bev_soc_trace_incomplete")
+    if phase3_blockers:
+        comparison.update(
+            {
+                "status": "BLOCKED",
+                "two_stage_comparison_available": False,
+                "blocking_reasons": phase3_blockers,
+            }
+        )
+        return comparison
+
+    component_maps = {
+        "phase3": dict(two_stage.get("accounting_cost_components_jpy") or {}),
+        "integrated": dict(integrated.get("accounting_cost_components_jpy") or {}),
+    }
+    missing_components = {
+        name: sorted(set(_ACCOUNTING_COST_COMPONENT_KEYS) - set(values))
+        for name, values in component_maps.items()
+        if set(_ACCOUNTING_COST_COMPONENT_KEYS) - set(values)
+    }
+    if missing_components:
+        comparison.update(
+            {
+                "status": "BLOCKED",
+                "two_stage_comparison_available": False,
+                "blocking_reasons": ["missing_canonical_cost_components"],
+                "missing_cost_components": missing_components,
+            }
+        )
+        return comparison
+
     integrated_cost = float(integrated["accounted_total_cost_jpy"])
     two_stage_cost = float(two_stage["accounted_total_cost_jpy"])
     cost_delta = two_stage_cost - integrated_cost
@@ -1061,12 +1181,10 @@ def _primary_oracle_comparison(cases: list[dict[str, Any]]) -> dict[str, Any]:
         if relative_identifiable
         else None
     )
-    component_keys = sorted(
-        set(dict(two_stage.get("accounting_cost_components_jpy") or {}))
-        | set(dict(integrated.get("accounting_cost_components_jpy") or {}))
-    )
+    component_keys = sorted(_ACCOUNTING_COST_COMPONENT_KEYS)
     comparison.update(
         {
+            "status": "COMPUTED",
             "two_stage_comparison_available": True,
             "integrated_accounted_total_cost_jpy": integrated_cost,
             "two_stage_accounted_total_cost_jpy": two_stage_cost,
@@ -1123,12 +1241,8 @@ def _primary_oracle_comparison(cases: list[dict[str, Any]]) -> dict[str, Any]:
             "used_vehicle_difference": int(two_stage["used_vehicle_count"])
             - int(integrated["used_vehicle_count"]),
             "cost_component_differences": {
-                key: float(
-                    dict(two_stage.get("accounting_cost_components_jpy") or {}).get(key, 0.0)
-                )
-                - float(
-                    dict(integrated.get("accounting_cost_components_jpy") or {}).get(key, 0.0)
-                )
+                key: float(component_maps["phase3"][key])
+                - float(component_maps["integrated"][key])
                 for key in component_keys
             },
         }
@@ -1378,7 +1492,7 @@ def _small_oracle_plan(
         "service_id": args.service_id,
         "trip_ids": [str(trip.trip_id) for trip in problem.trips],
         "selected_vehicles": vehicle_rows,
-        "formulations": ["P3_DEPLOYED", "P4_SCALAR"],
+        "formulations": ["P3_ALIGNED_REFERENCE", "P4_SCALAR"],
         "p3_scalar_support": _p3_scalar_support(),
         "solver_controls": controls,
         "expected_output_paths": [str(Path(args.output))],

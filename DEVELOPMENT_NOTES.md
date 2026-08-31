@@ -9191,3 +9191,12 @@ locks this distinction in place.
   integrated oracle, RAIN candidate-range sensitivity, multi-day weather,
   degradation and LCC evidence remain open and are not inferred from the
   frozen results.
+# 2026-08-31 November 2026 execution-gate hardening (no execution)
+
+- Base SHA: `87c837b83228502622cf0f39cdb67e51ef533842`; branch: `research/november-2026-execution-gate-v1`.
+- No solver, Prepare, Rolling, or real HTTP call was made. No GitHub Actions, AI review, PR creation, or chargeable GitHub feature was used.
+- Candidate research identity now uses verified physical `assignment_hash`; `candidate_hash` remains provenance and `assignment_powertrain_hash` is reported separately. Selection mirrors production `(canonical cost, used vehicle count, assignment hash)`.
+- Added fail-closed `rain_profile_result_v1` normalization, exact 2×2 validation, typed preregistration approval, same-Prepared/fixed-input hash checks, clean-SHA checks around every profile, interruption checkpoints, and artifact inventory.
+- Small-oracle output now labels Phase 3 as deployed only when its contract exactly matches reference SHA `bb0c0050883a91dd86a9e8813ae88d4b6d8c361d`; missing/non-finite cost components, failed accounting, infeasible/unserved Phase 3, or missing used-BEV SOC traces block distance claims.
+- Focused tests: `48 passed`; complete regression: `1,754 passed`; compile and diff hygiene: PASS.
+- Implementation verdict: `P0_EXECUTION_PACKAGE_READY_FOR_ADVISOR_SIGNOFF`. This is not authorization to run the experiment.

@@ -16,6 +16,7 @@ from scripts.audit_small_integrated_weather_milp import (
     _integrated_actual_cost_oracle_problem,
     _minimum_used_bev_soc,
     _p3_scalar_support,
+    _phase3_contract_comparison,
     _restore_prepared_weather_comparison_contract,
     _primary_oracle_comparison,
     _small_m0_m3_comparison,
@@ -23,6 +24,16 @@ from scripts.audit_small_integrated_weather_milp import (
     _sensitivity_summary,
 )
 from src.optimization.common.cost_components import normalize_cost_component_flags
+
+
+def _zero_components() -> dict[str, float]:
+    return {
+        key: 0.0 for key in (
+            "electricity_cost", "fuel_cost", "demand_cost", "contract_overage_cost",
+            "vehicle_cost", "vehicle_usage_cost", "driver_cost", "unserved_penalty",
+            "switch_cost", "degradation_cost", "deviation_cost", "co2_cost",
+        )
+    }
 
 
 def test_day_spanning_trip_subset_includes_both_service_edges() -> None:
@@ -180,7 +191,9 @@ def test_integrated_oracle_gate_fails_closed_on_accounting_residual() -> None:
         "integrated_actual_cost_contract_applied": True,
         "objective_is_actual_cost": True,
         "objective_matches_accounting": True,
+        "cost_reconciliation_passed": True,
         "ev_energy_inventory_balanced": True,
+        "used_bev_soc_trace_complete": True,
         "validation_metrics": {"all_required_validation_checks_passed": True},
     }
 
@@ -198,6 +211,11 @@ def test_primary_oracle_comparison_does_not_normalize_zero_cost_noise() -> None:
         "served_trip_count_by_vehicle_type": {"ICE": 8},
         "assignment_hash": "assignment",
         "assignment_powertrain_hash": "powertrain",
+        "feasible": True,
+        "trip_count_unserved": 0,
+        "cost_reconciliation_passed": True,
+        "used_bev_soc_trace_complete": True,
+        "accounting_cost_components_jpy": _zero_components(),
     }
     two_stage = {
         **common,
@@ -224,9 +242,8 @@ def test_primary_oracle_comparison_does_not_normalize_zero_cost_noise() -> None:
 
 def test_cost_adapter_preserves_full_breakdown_and_reconciles_total() -> None:
     breakdown = {
-        "electricity_cost": 10.0,
-        "fuel_cost": 20.0,
-        "vehicle_usage_cost": 30.0,
+        **_zero_components(),
+        "electricity_cost": 10.0, "fuel_cost": 20.0, "vehicle_usage_cost": 30.0,
         "total_cost": 60.0,
         "pv_generated_kwh": 12.5,
     }
@@ -237,6 +254,34 @@ def test_cost_adapter_preserves_full_breakdown_and_reconciles_total() -> None:
     assert adapted["cost_component_sum_jpy"] == 60.0
     assert adapted["cost_reconciliation_residual_jpy"] == 0.0
     assert adapted["cost_reconciliation_passed"] is True
+
+
+def test_cost_adapter_rejects_missing_component_instead_of_defaulting_zero() -> None:
+    breakdown = {**_zero_components(), "total_cost": 0.0}
+    del breakdown["co2_cost"]
+
+    with pytest.raises(ValueError, match="missing canonical"):
+        _cost_accounting_adapter(breakdown)
+
+
+def test_phase3_infeasible_blocks_distance_metrics() -> None:
+    common = {
+        "analysis_label": "primary", "timestep_min": 15,
+        "used_vehicle_count": 1, "used_vehicle_count_by_type": {},
+        "served_trip_count_by_vehicle_type": {}, "assignment_hash": "a",
+        "assignment_powertrain_hash": "b", "accounted_total_cost_jpy": 0.0,
+        "trip_count_unserved": 0, "cost_reconciliation_passed": True,
+        "used_bev_soc_trace_complete": True,
+        "accounting_cost_components_jpy": _zero_components(),
+    }
+    phase3 = {**common, "phase": "phase3_two_stage", "feasible": False}
+    phase4 = {**common, "phase": "phase4_integrated", "feasible": True}
+
+    comparison = _primary_oracle_comparison([phase3, phase4])
+
+    assert comparison["status"] == "BLOCKED"
+    assert comparison["two_stage_comparison_available"] is False
+    assert "two_stage_minus_integrated_cost_jpy" not in comparison
 
 
 def test_minimum_soc_is_null_without_used_bev() -> None:
@@ -283,6 +328,26 @@ def test_minimum_soc_extracts_used_bev_vehicle_and_slot() -> None:
     assert summary["minimum_soc_slot_index"] == 4
     assert summary["minimum_soc_time"] == "06:00"
     assert "initial slot" in summary["minimum_soc_scope"]
+    assert summary["used_bev_soc_trace_complete"] is True
+
+
+def test_minimum_soc_fails_closed_when_used_bev_trace_is_missing() -> None:
+    vehicle = SimpleNamespace(
+        vehicle_id="bev-1", vehicle_type="BEV", battery_capacity_kwh=100.0,
+        initial_soc=0.8, reserve_soc=0.2,
+    )
+    problem = SimpleNamespace(
+        vehicles=(vehicle,), vehicle_types=(),
+        scenario=SimpleNamespace(horizon_start="05:00", timestep_min=15),
+    )
+    result = SimpleNamespace(plan=SimpleNamespace(
+        vehicle_paths=lambda: {"bev-1": ("t1",)}, vehicle_soc_kwh_by_vehicle_slot={},
+    ))
+
+    summary = _minimum_used_bev_soc(problem, result)
+
+    assert summary["used_bev_soc_trace_complete"] is False
+    assert summary["used_bev_soc_trace_errors"] == ["bev-1:missing_solver_soc_trace"]
 
 
 def test_p3_scalar_is_explicitly_unsupported_without_core_change() -> None:
@@ -291,6 +356,29 @@ def test_p3_scalar_is_explicitly_unsupported_without_core_change() -> None:
     assert support["status"] == "P3_SCALAR_UNSUPPORTED"
     assert support["pure_decomposition_gap_available"] is False
     assert "phase4_integrated" in support["blocker"]
+
+
+def test_phase3_contract_label_is_fail_closed_against_bb0c005() -> None:
+    problem = SimpleNamespace(
+        trips=(SimpleNamespace(),) * 8,
+        metadata={
+            "objective_preset": "scalar_total_cost_v1",
+            "bev_terminal_soc_policy": "return_to_initial",
+        },
+    )
+    config = SimpleNamespace(
+        phase="phase3_two_stage", time_limit_sec=300,
+        stage1_time_limit_sec=300, stage2_time_limit_sec=300,
+        mip_gap=0.0, random_seed=42, gurobi_threads=1, warm_start=False,
+        thesis_mode=True, research_run=True, allow_postsolve_repair=False,
+        integrated_actual_cost_objective=False,
+    )
+
+    comparison = _phase3_contract_comparison(problem, config)
+
+    assert comparison["matched"] is False
+    assert comparison["formulation_id"] == "P3_ALIGNED_REFERENCE"
+    assert comparison["reference_execution_sha"].startswith("bb0c005")
 
 
 def test_small_m0_m3_comparison_is_bounded_and_requires_exact_m0_m3() -> None:
@@ -306,7 +394,9 @@ def test_small_m0_m3_comparison_is_bounded_and_requires_exact_m0_m3() -> None:
         "integrated_actual_cost_contract_applied": True,
         "objective_is_actual_cost": True,
         "objective_matches_accounting": True,
+        "cost_reconciliation_passed": True,
         "ev_energy_inventory_balanced": True,
+        "used_bev_soc_trace_complete": True,
         "validation_metrics": {"all_required_validation_checks_passed": True},
     }
     common = {
@@ -371,7 +461,9 @@ def test_integrated_oracle_gate_requires_actual_cost_contract() -> None:
         "integrated_actual_cost_contract_applied": True,
         "objective_is_actual_cost": True,
         "objective_matches_accounting": True,
+        "cost_reconciliation_passed": True,
         "ev_energy_inventory_balanced": True,
+        "used_bev_soc_trace_complete": True,
         "validation_metrics": {"all_required_validation_checks_passed": True},
     }
 
@@ -399,7 +491,9 @@ def test_integrated_oracle_accepts_optimal_multiobjective_without_scalar_gap() -
         "integrated_actual_cost_contract_applied": True,
         "objective_is_actual_cost": True,
         "objective_matches_accounting": True,
+        "cost_reconciliation_passed": True,
         "ev_energy_inventory_balanced": True,
+        "used_bev_soc_trace_complete": True,
         "validation_metrics": {"all_required_validation_checks_passed": True},
     }
 
@@ -422,7 +516,9 @@ def test_integrated_oracle_verifies_declared_lexicographic_primary() -> None:
         "integrated_actual_cost_contract_applied": True,
         "objective_is_actual_cost": True,
         "objective_matches_accounting": True,
+        "cost_reconciliation_passed": True,
         "ev_energy_inventory_balanced": True,
+        "used_bev_soc_trace_complete": True,
         "validation_metrics": {"all_required_validation_checks_passed": True},
         "objective_preset": "research_lexicographic_v1",
         "objective_hierarchy": [
@@ -455,9 +551,11 @@ def test_five_minute_comparison_requires_both_exact_integrated_cases() -> None:
             "final_gap_ratio": 0.0,
             "integrated_actual_cost_objective_requested": True,
             "integrated_actual_cost_contract_applied": True,
-            "objective_is_actual_cost": True,
-            "objective_matches_accounting": True,
-            "ev_energy_inventory_balanced": True,
+                "objective_is_actual_cost": True,
+                "objective_matches_accounting": True,
+                "cost_reconciliation_passed": True,
+                "ev_energy_inventory_balanced": True,
+                "used_bev_soc_trace_complete": True,
             "validation_metrics": {"all_required_validation_checks_passed": True},
             "accounted_total_cost_jpy": cost,
             "used_vehicle_count": 2,

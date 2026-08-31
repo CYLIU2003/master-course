@@ -9,17 +9,18 @@
     "complete_request_sha", "allowed_differences", "fixed_fields", "planned_run_count",
     "solver_time_budget", "wall_budget", "disk_budget", "success_conditions",
     "stop_conditions", "advisor_decision_date", "advisor_approved_threshold",
+    "advisor_approved_threshold_unit",
     "approved_profiles", "claim_boundary"
   ],
   "properties": {
     "schema_version": {"const": "experiment_preregistration_manifest_v1"},
     "experiment_family": {"type": "string"},
-    "planning_commit_sha": {"type": "string"},
-    "adapter_commit_sha": {"type": ["string", "null"]},
-    "canonical_reference_execution_sha": {"type": "string"},
+    "planning_commit_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "adapter_commit_sha": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40}$"},
+    "canonical_reference_execution_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
     "scenario_ids": {"type": "array", "items": {"type": "string"}, "minItems": 1},
-    "profile_definition_sha": {"type": "string"},
-    "complete_request_sha": {"type": ["string", "null"]},
+    "profile_definition_sha": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "complete_request_sha": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
     "allowed_differences": {"type": "array"},
     "fixed_fields": {"type": "object"},
     "planned_run_count": {"type": "integer", "minimum": 1},
@@ -28,9 +29,14 @@
     "disk_budget": {"type": "object"},
     "success_conditions": {"type": "array"},
     "stop_conditions": {"type": "array"},
-    "advisor_decision_date": {"type": ["string", "null"]},
-    "advisor_approved_threshold": {"type": ["number", "null"]},
-    "approved_profiles": {"type": ["array", "null"]},
+    "advisor_decision_date": {"type": ["string", "null"], "format": "date"},
+    "advisor_approved_threshold": {"type": ["number", "null"], "minimum": 0},
+    "advisor_approved_threshold_unit": {"const": "percent"},
+    "approved_profiles": {
+      "type": ["array", "null"],
+      "items": {"enum": ["BASE", "RANGE_ONLY", "BUDGET_ONLY", "FULL_EXPANDED"]},
+      "minItems": 4, "maxItems": 4, "uniqueItems": true
+    },
     "claim_boundary": {"type": "string"}
   }
 }

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "rain_profile_result_v1.schema.json",
+  "title": "Normalized RAIN profile result",
+  "type": "object",
+  "required": [
+    "schema_version", "status", "profile_name", "scenario_id", "prepared_input_id",
+    "code_sha", "requested_controls", "effective_controls", "candidate_counts",
+    "candidates", "selected_candidate", "formal_gates", "source_artifact_hashes",
+    "canonical_fixed_input_hashes"
+  ],
+  "properties": {
+    "schema_version": {"const": "rain_profile_result_v1"},
+    "status": {"enum": ["ACCEPTED", "REJECTED"]},
+    "profile_name": {"enum": ["BASE", "RANGE_ONLY", "BUDGET_ONLY", "FULL_EXPANDED"]},
+    "scenario_id": {"const": "b23fd26c-1233-4c73-bb9e-bdb8b1584760"},
+    "prepared_input_id": {"type": "string", "minLength": 1},
+    "code_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "candidate_counts": {
+      "type": "object",
+      "required": ["generated", "evaluated", "fully_selectable"]
+    },
+    "candidates": {"type": "array"},
+    "selected_candidate": {"type": ["object", "null"]},
+    "formal_gates": {"type": "object"},
+    "source_artifact_hashes": {"type": "object"},
+    "canonical_fixed_input_hashes": {"type": "object"}
+  }
+}

@@ -5019,3 +5019,9 @@ certified gap was 1.094658% against the 1% declaration. The Phase-0 audit is
 therefore `BLOCKED` only on `declared_mip_gap_target_met`. This result is a
 formal physically feasible candidate, not an optimality result; no threshold
 or validation rule will be relaxed to promote it.
+# 2026-08-31 November execution-gate status
+
+- The execution adapter is implemented but no November sensitivity experiment has been run.
+- Advisor approval remains mandatory and must name the exact four profiles, adapter/planning/reference SHAs, request/profile hashes, percent threshold, date, budgets, and claim boundary.
+- Release remains blocked until full regression, independent review, a clean committed adapter SHA, and a separately approved execution window are complete.
+- Any profile lacking 264/264 service, physical validation, 24/24 Rolling, accounting reconciliation, no-fallback/no-repair evidence, fixed-input hash parity, or clean-SHA continuity is `REJECTED`/`INTERRUPTED`, not research evidence.

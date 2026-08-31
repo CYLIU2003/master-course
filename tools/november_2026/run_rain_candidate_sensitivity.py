@@ -3,16 +3,34 @@
 from __future__ import annotations
 
 import argparse
+from datetime import date
 import hashlib
 import json
+import math
 from pathlib import Path
+import re
 import subprocess
 from typing import Any, Mapping
+
+from tools.november_2026.normalize_rain_profile_result import (
+    normalize_profile_result,
+    write_profile_result,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PROFILE_PATH = REPO_ROOT / "config/research/november_2026/rain_candidate_profiles_v2.json"
 EXPECTED_PROFILES = {"BASE", "RANGE_ONLY", "BUDGET_ONLY", "FULL_EXPANDED"}
+PROFILE_ORDER = ("BASE", "RANGE_ONLY", "BUDGET_ONLY", "FULL_EXPANDED")
+_SHA40_RE = re.compile(r"^[0-9a-f]{40}$")
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+_RANGE_VECTOR = {
+    "stage1_stage2_candidate_limit", "stage1_composition_search_radius",
+    "stage1_bev_frontier_min_count", "stage1_bev_frontier_max_count",
+}
+_BUDGET_VECTOR = {
+    "stage1_time_limit_seconds", "stage1_bev_frontier_target_time_limit_seconds",
+}
 _REQUEST_TO_EFFECTIVE = {
     "time_limit_seconds": "time_limit_sec",
     "stage1_time_limit_seconds": "stage1_time_limit_sec",
@@ -39,6 +57,9 @@ def load_profiles(path: Path) -> dict[str, Any]:
     if set(profiles) != EXPECTED_PROFILES:
         raise ValueError("profile file must contain exactly the preregistered 2x2 matrix")
     for name, profile in profiles.items():
+        missing = allowlist - set(profile)
+        if missing:
+            raise ValueError(f"{name} omits allowlisted fields: {sorted(missing)}")
         unexpected = set(profile) - allowlist
         if unexpected:
             raise ValueError(f"{name} contains non-allowlisted fields: {sorted(unexpected)}")
@@ -53,6 +74,20 @@ def load_profiles(path: Path) -> dict[str, Any]:
             raise ValueError(f"{name} total time limit violates the preregistered formula")
         if int(profile["stage2_time_limit_seconds"]) != 30:
             raise ValueError(f"{name} must keep Stage 2 at 30 seconds")
+    comparison_fields = allowlist - {"time_limit_seconds"}
+    base = profiles["BASE"]
+    range_only = profiles["RANGE_ONLY"]
+    budget_only = profiles["BUDGET_ONLY"]
+    full = profiles["FULL_EXPANDED"]
+    for field in comparison_fields:
+        if field in _RANGE_VECTOR:
+            if budget_only[field] != base[field] or full[field] != range_only[field]:
+                raise ValueError(f"broken 2x2 range vector at {field}")
+        elif field in _BUDGET_VECTOR:
+            if range_only[field] != base[field] or full[field] != budget_only[field]:
+                raise ValueError(f"broken 2x2 budget vector at {field}")
+        elif not (base[field] == range_only[field] == budget_only[field] == full[field]):
+            raise ValueError(f"non-factor profile field drift at {field}")
     return payload
 
 
@@ -80,14 +115,55 @@ def require_execution_approval(
     profile_sha: str | None = None, complete_request_sha: str | None = None,
 ) -> None:
     required = (
-        "adapter_commit_sha", "complete_request_sha", "profile_definition_sha",
-        "advisor_decision_date", "advisor_approved_threshold", "approved_profiles",
+        "schema_version", "experiment_family", "planning_commit_sha",
+        "adapter_commit_sha", "canonical_reference_execution_sha",
+        "complete_request_sha", "profile_definition_sha", "advisor_decision_date",
+        "advisor_approved_threshold", "advisor_approved_threshold_unit",
+        "approved_profiles", "solver_time_budget", "wall_budget", "disk_budget",
+        "claim_boundary", "scenario_ids", "allowed_differences", "fixed_fields",
+        "planned_run_count", "success_conditions", "stop_conditions",
     )
     missing = [key for key in required if manifest.get(key) in (None, "", [])]
     if missing:
         raise RuntimeError(f"execute blocked by advisor fields: {missing}")
     if set(manifest.get("approved_profiles") or ()) != EXPECTED_PROFILES:
         raise RuntimeError("execute requires approval for the exact four-profile matrix")
+    if manifest.get("scenario_ids") != ["b23fd26c-1233-4c73-bb9e-bdb8b1584760"]:
+        raise RuntimeError("execute requires the exact preregistered RAIN scenario")
+    if manifest.get("planned_run_count") != 4:
+        raise RuntimeError("execute requires exactly four planned profile runs")
+    if manifest.get("schema_version") != "experiment_preregistration_manifest_v1":
+        raise RuntimeError("invalid preregistration schema_version")
+    if not str(manifest.get("experiment_family") or "").strip():
+        raise RuntimeError("invalid experiment_family")
+    for key in ("planning_commit_sha", "adapter_commit_sha", "canonical_reference_execution_sha"):
+        if not _SHA40_RE.fullmatch(str(manifest.get(key) or "")):
+            raise RuntimeError(f"invalid 40-hex SHA: {key}")
+    for key in ("profile_definition_sha", "complete_request_sha"):
+        if not _SHA256_RE.fullmatch(str(manifest.get(key) or "")):
+            raise RuntimeError(f"invalid SHA-256: {key}")
+    try:
+        date.fromisoformat(str(manifest["advisor_decision_date"]))
+    except (TypeError, ValueError):
+        raise RuntimeError("advisor_decision_date must be ISO YYYY-MM-DD") from None
+    threshold = manifest.get("advisor_approved_threshold")
+    if isinstance(threshold, bool) or not isinstance(threshold, (int, float)):
+        raise RuntimeError("advisor threshold must be numeric")
+    if not math.isfinite(float(threshold)) or float(threshold) < 0.0:
+        raise RuntimeError("advisor threshold must be finite and nonnegative")
+    if manifest.get("advisor_approved_threshold_unit") != "percent":
+        raise RuntimeError("advisor threshold unit must be percent")
+    for key in ("solver_time_budget", "wall_budget", "disk_budget"):
+        if not isinstance(manifest.get(key), Mapping) or not manifest[key]:
+            raise RuntimeError(f"{key} must be a non-empty object")
+        numeric_values = [
+            float(value) for value in manifest[key].values()
+            if isinstance(value, (int, float)) and not isinstance(value, bool)
+        ]
+        if not numeric_values or any(
+            not math.isfinite(value) or value <= 0.0 for value in numeric_values
+        ):
+            raise RuntimeError(f"{key} must contain finite positive numeric limits")
     expected_values = {
         "adapter_commit_sha": adapter_sha,
         "profile_definition_sha": profile_sha,
@@ -112,6 +188,35 @@ def _artifact_hashes(root: Path) -> dict[str, str]:
         path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
         for path in sorted(root.rglob("*")) if path.is_file()
     }
+
+
+def _require_clean_expected_sha(expected_sha: str) -> None:
+    sha, dirty = _git_state()
+    if dirty:
+        raise RuntimeError("execution worktree became dirty")
+    if sha != expected_sha:
+        raise RuntimeError(f"execution Git SHA drifted: expected={expected_sha}, actual={sha}")
+
+
+def _write_progress(
+    output_dir: Path,
+    *,
+    status: str,
+    completed_profiles: list[str],
+    code_sha: str,
+    failed_profile: str | None = None,
+    failure_reason: str | None = None,
+) -> None:
+    payload = {
+        "schema_version": "rain_candidate_progress_v1",
+        "status": status,
+        "completed_profiles": list(completed_profiles),
+        "failed_profile": failed_profile,
+        "failure_reason": failure_reason,
+        "code_sha": code_sha,
+        "artifact_hashes": _artifact_hashes(output_dir),
+    }
+    _write_json(output_dir / "progress_manifest.json", payload)
 
 
 def _validate_effective_controls(case_dir: Path, requested: Mapping[str, Any]) -> dict[str, Any]:
@@ -154,54 +259,123 @@ def execute_approved_plan(
 
     client = HttpJsonClient(base_url)
     scenario_id = str(plan["scenario_id"])
-    output_dir.mkdir(parents=True, exist_ok=False)
+    expected_sha = str(plan["adapter_commit_sha"])
+    _require_clean_expected_sha(expected_sha)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    if any(output_dir.iterdir()):
+        raise FileExistsError("output directory must be absent or empty")
     _write_json(output_dir / "run_plan.json", plan)
+    _write_json(output_dir / "profile_definition.json", plan["profile_definition"])
     prepare_request = dict(plan["common_prepare_request"])
     _write_json(output_dir / "common_prepare_request.json", prepare_request)
-    prepare_response, prepare_raw = client.request_json(
-        "POST", f"/api/scenarios/{scenario_id}/simulation/prepare",
-        prepare_request, timeout_seconds=timeout_seconds,
+    _write_json(
+        output_dir / "common_optimization_request.json",
+        plan["common_optimization_request"],
     )
-    _write_json(output_dir / "prepare_response.json", prepare_response)
-    if prepare_response.get("ready") is not True:
-        raise RuntimeError("Fresh Prepare did not return ready=true")
-    prepared_id = str(prepare_response.get("preparedInputId") or "").strip()
-    if not prepared_id:
-        raise RuntimeError("Fresh Prepare returned no Prepared ID")
-    _write_json(output_dir / "prepared_manifest.json", {
-        "scenario_id": scenario_id, "prepared_input_id": prepared_id,
-        "prepare_response_sha256": hashlib.sha256(prepare_raw.encode()).hexdigest(),
-    })
-    for profile_name, raw_request in dict(plan["requested_requests"]).items():
-        case_dir = output_dir / profile_name
-        case_dir.mkdir(parents=False, exist_ok=False)
-        request = {**dict(raw_request), "prepared_input_id": prepared_id}
-        _write_json(case_dir / "requested_request.json", request)
-        submitted, _ = client.request_json(
-            "POST", f"/api/scenarios/{scenario_id}/run-optimization",
-            request, timeout_seconds=timeout_seconds,
+    completed_profiles: list[str] = []
+    active_profile: str | None = None
+    fixed_hashes_reference: dict[str, Any] | None = None
+    _write_progress(
+        output_dir, status="IN_PROGRESS", completed_profiles=completed_profiles,
+        code_sha=expected_sha,
+    )
+    try:
+        prepare_response, prepare_raw = client.request_json(
+            "POST", f"/api/scenarios/{scenario_id}/simulation/prepare",
+            prepare_request, timeout_seconds=timeout_seconds,
         )
-        job_id = str(submitted.get("job_id") or submitted.get("jobId") or "").strip()
-        if not job_id:
-            raise RuntimeError(f"{profile_name} submission returned no job ID")
-        terminal, _ = _poll_job(
-            client=client, job_id=job_id, timeout_seconds=timeout_seconds,
-            poll_interval_seconds=poll_interval_seconds, log=[],
+        _write_json(output_dir / "prepare_response.json", prepare_response)
+        if prepare_response.get("ready") is not True:
+            raise RuntimeError("Fresh Prepare did not return ready=true")
+        prepared_id = str(prepare_response.get("preparedInputId") or "").strip()
+        if not prepared_id:
+            raise RuntimeError("Fresh Prepare returned no Prepared ID")
+        _write_json(output_dir / "prepared_manifest.json", {
+            "scenario_id": scenario_id,
+            "prepared_input_id": prepared_id,
+            "prepare_response_sha256": hashlib.sha256(prepare_raw.encode()).hexdigest(),
+        })
+        for profile_name in PROFILE_ORDER:
+            active_profile = profile_name
+            _require_clean_expected_sha(expected_sha)
+            raw_request = dict(plan["requested_requests"])[profile_name]
+            case_dir = output_dir / profile_name
+            case_dir.mkdir(parents=False, exist_ok=False)
+            request = {**dict(raw_request), "prepared_input_id": prepared_id}
+            _write_json(case_dir / "requested_request.json", request)
+            submitted, _ = client.request_json(
+                "POST", f"/api/scenarios/{scenario_id}/run-optimization",
+                request, timeout_seconds=timeout_seconds,
+            )
+            job_id = str(submitted.get("job_id") or submitted.get("jobId") or "").strip()
+            if not job_id:
+                raise RuntimeError(f"{profile_name} submission returned no job ID")
+            terminal, _ = _poll_job(
+                client=client, job_id=job_id, timeout_seconds=timeout_seconds,
+                poll_interval_seconds=poll_interval_seconds, log=[],
+            )
+            _write_json(case_dir / "frontend_job_terminal_response.json", terminal)
+            if str(terminal.get("status") or "") != "completed":
+                raise RuntimeError(f"{profile_name} ended with status={terminal.get('status')}")
+            run_dir_text = str(dict(terminal.get("metadata") or {}).get("run_dir") or "").strip()
+            if not run_dir_text:
+                raise RuntimeError(f"{profile_name} terminal response has no run_dir")
+            _copy_run_contents(Path(run_dir_text), case_dir)
+            _validate_effective_controls(case_dir, request)
+            result = normalize_profile_result(
+                case_dir,
+                profile_name=profile_name,
+                requested_controls=request,
+                expected_code_sha=expected_sha,
+            )
+            write_profile_result(case_dir / "profile_result_v1.json", result)
+            if result["status"] != "ACCEPTED":
+                raise RuntimeError(f"{profile_name} failed formal profile_result gates")
+            fixed_hashes = dict(result["canonical_fixed_input_hashes"])
+            if fixed_hashes_reference is None:
+                fixed_hashes_reference = fixed_hashes
+            elif fixed_hashes != fixed_hashes_reference:
+                raise RuntimeError(f"{profile_name} canonical fixed-input hashes drifted")
+            if result["prepared_input_id"] != prepared_id:
+                raise RuntimeError(f"{profile_name} did not use the shared Prepared ID")
+            _write_json(case_dir / "source_artifact_hashes.json", _artifact_hashes(case_dir))
+            completed_profiles.append(profile_name)
+            _require_clean_expected_sha(expected_sha)
+            _write_progress(
+                output_dir, status="IN_PROGRESS", completed_profiles=completed_profiles,
+                code_sha=expected_sha,
+            )
+        _require_clean_expected_sha(expected_sha)
+        prepared_source_sha = (fixed_hashes_reference or {}).get("prepared_input_sha256")
+        if not _SHA256_RE.fullmatch(str(prepared_source_sha or "")):
+            raise RuntimeError("completed profiles did not expose a valid prepared source SHA-256")
+        _write_json(output_dir / "prepared_manifest.json", {
+            "scenario_id": scenario_id,
+            "prepared_input_id": prepared_id,
+            "prepare_response_sha256": hashlib.sha256(prepare_raw.encode()).hexdigest(),
+            "prepared_payload_sha256": canonical_sha256(prepare_response),
+            "prepared_source_sha256": prepared_source_sha,
+            "canonical_fixed_input_hashes": fixed_hashes_reference,
+        })
+        _write_json(output_dir / "run_manifest.json", {
+            "schema_version": "rain_candidate_run_manifest_v1",
+            "prepared_input_id": prepared_id,
+            "code_sha": expected_sha,
+            "completed_profiles": completed_profiles,
+        })
+        _write_progress(
+            output_dir, status="COMPLETED", completed_profiles=completed_profiles,
+            code_sha=expected_sha,
         )
-        _write_json(case_dir / "frontend_job_terminal_response.json", terminal)
-        if str(terminal.get("status") or "") != "completed":
-            raise RuntimeError(f"{profile_name} ended with status={terminal.get('status')}")
-        run_dir_text = str(dict(terminal.get("metadata") or {}).get("run_dir") or "").strip()
-        if not run_dir_text:
-            raise RuntimeError(f"{profile_name} terminal response has no run_dir")
-        run_dir = Path(run_dir_text)
-        _copy_run_contents(run_dir, case_dir)
-        _validate_effective_controls(case_dir, request)
-        _write_json(case_dir / "source_artifact_hashes.json", _artifact_hashes(case_dir))
-    _write_json(output_dir / "run_manifest.json", {
-        "schema_version": "rain_candidate_run_manifest_v1",
-        "prepared_input_id": prepared_id, "artifact_hashes": _artifact_hashes(output_dir),
-    })
+        _write_json(output_dir / "artifact_hashes.json", _artifact_hashes(output_dir))
+    except BaseException as exc:
+        _write_progress(
+            output_dir, status="INTERRUPTED", completed_profiles=completed_profiles,
+            failed_profile=active_profile, failure_reason=f"{type(exc).__name__}: {exc}",
+            code_sha=expected_sha,
+        )
+        _write_json(output_dir / "artifact_hashes.json", _artifact_hashes(output_dir))
+        raise
 
 
 def build_plan(
@@ -219,6 +393,26 @@ def build_plan(
         "prepare": common_prepare,
         "requested_requests": requests,
     })
+    planned_artifacts = [
+        "run_plan.json", "profile_definition.json", "common_prepare_request.json",
+        "common_optimization_request.json", "prepare_response.json",
+        "prepared_manifest.json", "run_manifest.json", "progress_manifest.json",
+        "artifact_hashes.json",
+    ]
+    profile_artifacts = (
+        "requested_request.json", "frontend_job_terminal_response.json",
+        "effective_controls.json", "profile_result_v1.json", "source_artifact_hashes.json",
+        "stage1_stage2_candidate_evaluation.json", "physical_schedule_validation.json",
+        "rolling_hourly_chain/rolling_chain_summary.json",
+        "rolling_hourly_chain/executed_day_accounting.json",
+        "final_cost_reconciliation.json", "summary.json", "optimization_parameters.json",
+        "code_provenance.json", "input_audit.json",
+    )
+    planned_artifacts.extend(
+        f"{profile}/{artifact}"
+        for profile in PROFILE_ORDER
+        for artifact in profile_artifacts
+    )
     return {
         "schema_version": "rain_candidate_run_v1",
         "mode": "PLAN_ONLY_NO_HTTP_NO_PREPARE_NO_SOLVE",
@@ -231,20 +425,14 @@ def build_plan(
         "common_prepare_request": dict(common_prepare),
         "common_prepare_request_sha256": canonical_sha256(common_prepare),
         "common_optimization_request": dict(common_optimization),
+        "profile_definition": dict(profile_payload),
         "allowed_overlay_fields": sorted(allowlist),
         "requested_requests": requests,
         "effective_controls": {
             name: {key: request[key] for key in sorted(allowlist)}
             for name, request in requests.items()
         },
-        "planned_artifacts": [
-            "run_plan.json", "profile_definition.json", "common_prepare_request.json",
-            "common_optimization_request.json", "requested_request.json",
-            "effective_controls.json", "prepared_manifest.json", "run_manifest.json",
-            "candidate_inventory.json", "selected_candidate.json",
-            "physical_schedule_validation.json", "rolling_chain_summary.json",
-            "executed_day_accounting.json", "source_artifact_hashes.json",
-        ],
+        "planned_artifacts": planned_artifacts,
     }
 
 
