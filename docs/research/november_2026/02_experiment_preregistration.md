@@ -8,14 +8,14 @@
 - 小規模oracleは同一Prepared inputから決定論的にサービス日の両端を含む等間隔便を選ぶ。便を結果を見て選び直さない。
 - top-level experiment jobを「run」と数え、各job内部のGurobi `optimize` 回数と累積solver秒も別に保存する。
 
-## P0-A: RAIN候補範囲感度
+## P0-A: RAIN候補範囲×計算予算の2×2感度
 
 仮説:
 
 - H0: 探索範囲拡張によりwinnerまたは主要なBEV/ICE構成が実質的に変わる。
 - H1: 2段階の拡張でもwinnerが不変、または変更による改善が事前許容値以下で主要結論が不変である。
 
-profileはBASE、EXPANDED_1、EXPANDED_2の3つ。評価指標はwinner physical assignment hash、selected day-ahead canonical cost、selected-to-second margin、使用BEV/ICE、BEV/ICE便数、evaluated/selectable候補数である。Rolling費用をcandidate winner選択費と混ぜない。
+profileはBASE、RANGE_ONLY、BUDGET_ONLY、FULL_EXPANDEDの4つ。候補範囲と探索時間を直交させ、Stage 2は全profileで30秒に固定する。旧3-profile案は複合search-profile感度のhistorical proposalに降格する。二値安定判定は指導教員が閾値を事前承認した場合だけ行う。
 
 成功条件:
 
@@ -30,15 +30,11 @@ profileはBASE、EXPANDED_1、EXPANDED_2の3つ。評価指標はwinner physical
 - EXPANDEDが要求値どおり実効化されない。
 - winnerが変わり改善率が許容値を超える、または主要なBEV/ICE解釈が反転する。この場合は負の結果として「選択不安定」と報告する。
 
-## P0-B: 小規模統合oracle
+## P0-B: 小規模統合reference距離
 
 caseは8、12、24便の3つ。各caseでPhase 3とPhase 4を1回ずつ解くため、3 top-level jobs、6 phase solvesである。
 
-主指標:
-
-`ApproxGap = (J_Phase3 - J_Integrated*) / abs(J_Integrated*) * 100`
-
-ただし `abs(J_Integrated*) <= 1e-5 JPY` では相対gapを定義せず、JPY差、配車一致、使用台数、runtimeだけを報告する。
+調査判定は`P3_SCALAR_UNSUPPORTED`。Phase 3は配車energy proxyと固定配車Stage 2の二目的であり、scalar canonical actual-cost契約はPhase 4だけに適用される。したがって主指標名は`deployed_phase3_to_scalar_integrated_reference_distance`とする。`ApproxGap`およびpure decomposition gapは禁止する。reference費用が`1e-9 JPY`以下なら相対差をnullとする。
 
 成功条件:
 
@@ -53,6 +49,10 @@ caseは8、12、24便の3つ。各caseでPhase 3とPhase 4を1回ずつ解くた
 - Phase 3費用がoracle費用より `1e-5 JPY`を超えて低い。
 
 3caseは母集団からの無作為標本ではないため、信頼区間やp値を出さない。平均・最大は記述統計としてのみ報告する。
+
+## generic sensitivity runnerの禁止
+
+`scripts/build_thesis_experiment_matrix.py`のdefaultは60分、軽油145円/L、車両日費0円で、正本15分、150円/L、20,000円/台日と一致しない。P0/P1では`run_thesis_sensitivity_matrix.py`と共に使用禁止とし、adapter freeze commitで作るFresh Prepare requestへallowlist fieldだけをoverlayする。
 
 ## P1: PV利用可能量三水準
 

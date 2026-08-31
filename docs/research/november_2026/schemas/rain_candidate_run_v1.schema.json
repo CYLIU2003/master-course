@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "rain_candidate_run_v1.schema.json",
+  "title": "RAIN candidate run plan",
+  "type": "object",
+  "required": ["schema_version", "mode", "adapter_commit_sha", "scenario_id", "requested_requests", "effective_controls"],
+  "properties": {
+    "schema_version": {"const": "rain_candidate_run_v1"},
+    "mode": {"enum": ["PLAN_ONLY_NO_HTTP_NO_PREPARE_NO_SOLVE", "VALIDATE_INPUTS_ONLY", "EXECUTE"]},
+    "adapter_commit_sha": {"type": "string", "minLength": 40},
+    "scenario_id": {"const": "b23fd26c-1233-4c73-bb9e-bdb8b1584760"},
+    "requested_requests": {"type": "object"},
+    "effective_controls": {"type": "object"}
+  }
+}

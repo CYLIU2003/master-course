@@ -1,10 +1,11 @@
 experiment_id,priority,scenario,trip_count,profile,top_level_runs,phase_solves,max_solver_seconds,status,research_objective,success_condition,failure_condition,allowed_claim,forbidden_claim
-ORACLE_08,P0,RAIN,8,phase3_vs_integrated,1,2,600,REQUIRES_SMALL_ADAPTER,小規模二段階誤差,exact oracle gateと全便物理会計PASS,exact gateまたは同一入力失敗,8便subset内の差,264便誤差上限
-ORACLE_12,P0,RAIN,12,phase3_vs_integrated,1,2,600,REQUIRES_SMALL_ADAPTER,小規模二段階誤差,exact oracle gateと全便物理会計PASS,exact gateまたは同一入力失敗,12便subset内の差,統計的一般化
-ORACLE_24,P0,RAIN,24,phase3_vs_integrated,1,2,600,REQUIRES_SMALL_ADAPTER,小規模二段階誤差,exact oracle gateと全便物理会計PASS,exact gateまたは同一入力失敗,24便subset内の差,264便統合最適性
-RAIN_BASE,P0,RAIN,264,BASE,1,variable,1815,REQUIRES_SMALL_ADAPTER,正式条件の再現,全gateと実効制御一致,非PV driftまたはgate失敗,BASE候補集合のwinner,未生成候補への優越
-RAIN_EXP1,P0,RAIN,264,EXPANDED_1,1,variable,3060,REQUIRES_SMALL_ADAPTER,中程度拡張の安定性,全gateと事前安定条件,制御不一致または不安定,EXP1範囲内の安定性,大域安定性
-RAIN_EXP2,P0,RAIN,264,EXPANDED_2,1,variable,4860,REQUIRES_SMALL_ADAPTER,広い拡張の安定性,全gateと事前安定条件,制御不一致または不安定,EXP2範囲内の安定性,低PV一般則
+ORACLE_08,P0,RAIN,8,P3_DEPLOYED_vs_P4_SCALAR,1,2,600,ADAPTER_READY_NOT_RUN,deployed Phase3からscalar referenceまでの距離,exact oracle gateと全便物理会計PASS,exact gateまたは同一入力失敗,8便subset内の距離,pure decomposition gap
+ORACLE_12,P0,RAIN,12,P3_DEPLOYED_vs_P4_SCALAR,1,2,600,ADAPTER_READY_NOT_RUN,deployed Phase3からscalar referenceまでの距離,exact oracle gateと全便物理会計PASS,exact gateまたは同一入力失敗,12便subset内の距離,統計的一般化
+ORACLE_24,P0,RAIN,24,P3_DEPLOYED_vs_P4_SCALAR,1,2,600,ADAPTER_READY_NOT_RUN,deployed Phase3からscalar referenceまでの距離,exact oracle gateと全便物理会計PASS,exact gateまたは同一入力失敗,24便subset内の距離,264便統合最適性
+RAIN_BASE,P0,RAIN,264,BASE,1,variable,2115,AWAITING_ADVISOR_APPROVAL,正式2x2基準,全gateと実効制御一致,非profile driftまたはgate失敗,BASE候補集合,過去BASE流用
+RAIN_RANGE,P0,RAIN,264,RANGE_ONLY,1,variable,2775,AWAITING_ADVISOR_APPROVAL,候補範囲効果,全gateと事前条件,制御不一致,テスト範囲の連続指標,閾値なし二値判定
+RAIN_BUDGET,P0,RAIN,264,BUDGET_ONLY,1,variable,3180,AWAITING_ADVISOR_APPROVAL,探索時間効果,全gateと事前条件,制御不一致,テスト予算の連続指標,大域安定性
+RAIN_FULL,P0,RAIN,264,FULL_EXPANDED,1,variable,3840,AWAITING_ADVISOR_APPROVAL,範囲と予算の交互作用,全gateと事前条件,制御不一致,テスト2x2内の結果,低PV一般則
 PV_LOW,P1,RAIN,264,LOW,1,variable,1815,BLOCKED_UNTIL_P0,PV量感度,固定hashと全gate,非PV driftまたはgate失敗,固定LOW曲線結果,雨天一般効果
-PV_MEDIUM,P1,SYNTHETIC,264,MEDIUM,1,variable,1815,REQUIRES_SMALL_ADAPTER,PV量感度,合成hashと全gate,provenanceまたはgate失敗,固定合成曲線結果,観測曇天結果
+PV_MEDIUM,P1,SYNTHETIC,264,MEDIUM,1,variable,1815,BLOCKED_INTERFACE_NOT_IMPLEMENTED,PV量感度,provenanceと全gate,interfaceまたはgate失敗,なし,観測曇天結果
 PV_HIGH,P1,SUNNY,264,HIGH,1,variable,1815,BLOCKED_UNTIL_P0,PV量感度,固定hashと全gate,非PV driftまたはgate失敗,固定HIGH曲線結果,晴天一般効果

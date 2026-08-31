@@ -1,56 +1,44 @@
 # Exact commands
 
-## このGoalで実行したコマンドではない
+## 現Goalで許可する確認
 
-以下はPhase 2承認後の予定コマンドである。現時点ではadapter未実装のため、そのままsolverを開始してはならない。
-
-## 共通preflight
+以下はPrepare、HTTP、solverを呼ばない。
 
 ```powershell
-git status --short
-git rev-parse HEAD
-git branch --show-current
+python tools/november_2026/run_small_oracle_matrix.py --plan-only `
+  --scenario-code RAIN --prepare-request <fresh-rain-prepare-request.json> `
+  --optimization-template <canonical-optimization-template.json> `
+  --trip-counts 8 12 24 --output-dir <new-empty-plan-dir>
+
+python tools/november_2026/run_rain_candidate_sensitivity.py --plan-only `
+  --prepare-request <fresh-rain-prepare-request.json> `
+  --optimization-request <canonical-common-request.json> `
+  --profiles config/research/november_2026/rain_candidate_profiles_v2.json `
+  --output-dir <new-empty-plan-dir>
 ```
 
-1行でもdirtyなら停止する。実験commitをfreezeし、`python -m uvicorn bff.main:app --host 127.0.0.1 --port 8000` は別terminalで起動する。GitHub Actions等は使わない。
+placeholderを埋める正本requestは、adapter freeze commit後にFrontendと同じFresh Prepare経路から保存する。過去Prepared ID `prepared-a6c5...` は構造確認専用で、defaultにもformal commandにも使用しない。
 
-## 小規模oracle
+## 指導教員承認後の順序
 
-adapter受入後、clean commitから次をそれぞれ別processで実行する。現在の正本RAIN Prepared inputは存在確認用であり、Phase 2でFresh Prepareを要求された場合は承認済みIDへ置換する。
+1. adapter commitをfreezeし、clean SHAをmanifestへ記録する。
+2. そのSHAでFresh Prepareを1回だけ実施し、scenario ID、Prepared ID、source SHA、complete request SHAを封印する。
+3. oracle plan-onlyで8/12/24便、`P3_DEPLOYED`と`P4_SCALAR`の6 case commandを生成する。各caseは別process。
+4. RAIN 2×2は同じPrepared IDを共有する。共有不能ならFresh Prepareごとの非profile canonical hash完全一致を検証し、不一致なら停止する。
+
+oracle実行時のcase CLIは次の形に固定する（現在は実行禁止）。
 
 ```powershell
-$scenario = 'b23fd26c-1233-4c73-bb9e-bdb8b1584760'
-$prepared = 'prepared-a6c5e0a8cdd9b32b-f1e18f252e336f1f-8acc7b3a'
-foreach ($trips in 8,12,24) {
-  .\.venv\Scripts\python.exe scripts\audit_small_integrated_weather_milp.py `
-    --scenario-id $scenario `
-    --prepared-input-id $prepared `
-    --output "output\november_2026\small_oracle\trips_$('{0:d2}' -f $trips)\audit.json" `
-    --depot-id tsurumaki --service-id WEEKDAY `
-    --trip-count $trips --vehicles-per-type 5 `
-    --time-limit-sec 300 --random-seed 42 --gurobi-threads 1 `
-    --skip-five-minute
-  if ($LASTEXITCODE -ne 0) { throw "oracle failed at $trips trips" }
-}
+python scripts/audit_small_integrated_weather_milp.py `
+  --scenario-id b23fd26c-1233-4c73-bb9e-bdb8b1584760 `
+  --prepared-input-id <fresh-prepared-id> --trip-count <8|12|24> `
+  --vehicles-per-type 5 --depot-id tsurumaki --service-id WEEKDAY `
+  --time-limit-sec 300 --random-seed 42 --gurobi-threads 1 `
+  --skip-five-minute --output <new-immutable-output.json>
 ```
 
-run数は3 top-level、6 phase solves、最大solver累積1,800秒。現行scriptでは費用内訳とminimum SOCが不足するため、adapter前の実行は禁止する。
+P3-SCALAR commandは存在しない。既存configでは`P3_SCALAR_UNSUPPORTED`である。generic `build_thesis_experiment_matrix.py` / `run_thesis_sensitivity_matrix.py`は60分・145円/L・車両日費0円のdefaultが正本と異なるため使用禁止。
 
-## RAIN候補感度
+## PV
 
-既存public endpointとrequest fieldは確定しているが、完全なFresh Prepare/profile/artifact runnerのexact CLIは未実装である。承認済みadapterは既存 `scripts/run_weather_dispatch_diagnosis.py` を拡張し、最低限次のinterfaceに固定する。
-
-```text
-python scripts/run_weather_dispatch_diagnosis.py --stage rain-sensitivity \
-  --existing-bundle output/diagnostics/pure_ice_weather_ab_453b1d3_20260827 \
-  --output-dir <new-empty-dir> --base-url http://127.0.0.1:8000 \
-  --rain-profile BASE|EXPANDED_1|EXPANDED_2
-```
-
-これは **予定interfaceであり、現時点では存在しない**。実装後に `--help` とfocused testで確定するまでexact commandとして承認しない。APIを推測して手動POSTする代替も許可しない。
-
-各profileの完全requestは、正本requestの共通fieldを保持し、`04_rain_candidate_sensitivity_plan.md` のoverlayを適用する。共通fieldは `mode=phase3_two_stage`、`research_run=true`、15分、1 thread、seed 42、MIP gap 0.1、BestObjStop OFF、selector OFF、full Rolling、WEEKDAY、tsurumaki、rebuild/repair/fallbackなしである。
-
-## PV三水準
-
-MEDIUM生成・hash・添付interfaceが未実装なのでexact solver commandは `NOT AVAILABLE`。P0完了後の別Goalでのみinterfaceを確定する。既存 `run_frontend_controlled_pv_pair.py` をLOW/HIGHだけ先行実行して三水準結果に見せることは禁止する。
+LOW/MEDIUM/HIGH adapterは未実装。必要interfaceはslot-wise curve、source/provenance、curve SHA、非PV canonical hash、Fresh Prepare responseである。MEDIUM生成と実行commandは`BLOCKED_PV_MEDIUM_INTERFACE_NOT_IMPLEMENTED`。

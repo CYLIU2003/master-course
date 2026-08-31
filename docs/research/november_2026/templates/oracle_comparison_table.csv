@@ -1,0 +1,2 @@
+scenario,trip_count,p3_deployed_cost_jpy,p4_scalar_cost_jpy,absolute_cost_difference_jpy,relative_cost_difference_percent,assignment_equal,powertrain_assignment_equal,p3_exact_gate,p4_exact_gate,status
+NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN

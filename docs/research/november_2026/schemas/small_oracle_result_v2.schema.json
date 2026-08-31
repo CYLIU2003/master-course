@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "small_oracle_result_v2.schema.json",
+  "title": "Small oracle result v2",
+  "type": "object",
+  "required": ["schema_version", "p3_scalar_support", "cases", "primary_comparison"],
+  "properties": {
+    "schema_version": {"const": "small_oracle_result_v2"},
+    "p3_scalar_support": {
+      "type": "object",
+      "required": ["status", "pure_decomposition_gap_available"],
+      "properties": {
+        "status": {"const": "P3_SCALAR_UNSUPPORTED"},
+        "pure_decomposition_gap_available": {"const": false}
+      }
+    },
+    "cases": {"type": "array", "items": {"$ref": "#/$defs/case"}},
+    "primary_comparison": {"type": "object"}
+  },
+  "$defs": {
+    "nullableNumber": {"type": ["number", "null"]},
+    "case": {
+      "type": "object",
+      "required": [
+        "schema_version", "formulation_id", "objective_semantics", "cost_breakdown",
+        "cost_component_sum_jpy", "accounted_total_cost_jpy",
+        "cost_reconciliation_residual_jpy", "cost_reconciliation_passed",
+        "assignment_hash", "assignment_powertrain_hash", "runtime_seconds",
+        "minimum_recorded_bev_soc_kwh", "minimum_soc_scope", "exact_oracle_gate"
+      ],
+      "properties": {
+        "schema_version": {"const": "small_oracle_result_v2"},
+        "formulation_id": {"enum": ["P3_DEPLOYED", "P4_SCALAR"]},
+        "objective_semantics": {"type": "string"},
+        "cost_breakdown": {"type": "object"},
+        "cost_component_sum_jpy": {"type": "number"},
+        "accounted_total_cost_jpy": {"type": "number"},
+        "cost_reconciliation_residual_jpy": {"type": "number"},
+        "cost_reconciliation_passed": {"type": "boolean"},
+        "minimum_recorded_bev_soc_kwh": {"$ref": "#/$defs/nullableNumber"},
+        "minimum_soc_scope": {"type": ["string", "null"]},
+        "exact_oracle_gate": {"type": ["boolean", "null"]}
+      }
+    }
+  }
+}

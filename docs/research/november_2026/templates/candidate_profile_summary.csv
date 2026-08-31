@@ -1,0 +1,5 @@
+profile,candidate_count,selectable_candidate_count,distinct_physical_assignment_count,base_candidate_retention_rate,base_winner_present,winner_candidate_hash,winner_cost_jpy,selected_to_second_margin_jpy,base_cost_improvement_percent,status
+BASE,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN
+RANGE_ONLY,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN
+BUDGET_ONLY,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN
+FULL_EXPANDED,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN,NOT_RUN

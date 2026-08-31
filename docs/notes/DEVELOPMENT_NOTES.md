@@ -5,6 +5,14 @@
 
 ---
 
+## 2026-08-31: November P0 adapter-only preparation
+
+- 計画commit `132302a736f72e04aa1fbe07b8d4945fe56c5531`から`research/november-2026-adapter-prep-v1`を作成した。
+- solver経路を追跡し、Phase 3はassignment-energy proxyとfixed-assignment chargingを分離して解き、scalar canonical actual-cost契約がPhase 4限定であるため`P3_SCALAR_UNSUPPORTED`と確定した。coreは変更していない。
+- small oracleへ全費用内訳・1e-6円再計算・使用BEV全保存slotの最低SOC・比較field・exact gate・plan-onlyを追加した。
+- RAIN感度を候補範囲×探索予算の2×2へ修正し、versioned profile、plan-only runner、候補集合分析器、schema/templateを追加した。Prepare、Gurobi、Rolling、実HTTPは0件。
+- adapter-only focused test 29件と全回帰1,735件がPASSし、変更24 files、`git diff --check` PASSを確認した。
+
 ## 2026-07-27 AI Agent rolling-first remediation instruction
 
 - 日次 Phase 3 後の1時間刻みrollingを最優先で実行可能・監査可能にするための実装指示書を `docs/notes/AI_AGENT_ROLLING_FIRST_REMEDIATION_20260727.md` に追加した。固定平日時刻表のPV反実仮想は明示waiverとして扱い、実際の日曜運行とは表示しない。実装・実験結果そのものはまだ未完了であり、この記録は修正仕様である。

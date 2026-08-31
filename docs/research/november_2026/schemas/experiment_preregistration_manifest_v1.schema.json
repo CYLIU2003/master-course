@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "experiment_preregistration_manifest_v1.schema.json",
+  "title": "Experiment preregistration manifest v1",
+  "type": "object",
+  "required": [
+    "schema_version", "experiment_family", "planning_commit_sha", "adapter_commit_sha",
+    "canonical_reference_execution_sha", "scenario_ids", "profile_definition_sha",
+    "complete_request_sha", "allowed_differences", "fixed_fields", "planned_run_count",
+    "solver_time_budget", "wall_budget", "disk_budget", "success_conditions",
+    "stop_conditions", "advisor_decision_date", "advisor_approved_threshold",
+    "approved_profiles", "claim_boundary"
+  ],
+  "properties": {
+    "schema_version": {"const": "experiment_preregistration_manifest_v1"},
+    "experiment_family": {"type": "string"},
+    "planning_commit_sha": {"type": "string"},
+    "adapter_commit_sha": {"type": ["string", "null"]},
+    "canonical_reference_execution_sha": {"type": "string"},
+    "scenario_ids": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "profile_definition_sha": {"type": "string"},
+    "complete_request_sha": {"type": ["string", "null"]},
+    "allowed_differences": {"type": "array"},
+    "fixed_fields": {"type": "object"},
+    "planned_run_count": {"type": "integer", "minimum": 1},
+    "solver_time_budget": {"type": "object"},
+    "wall_budget": {"type": "object"},
+    "disk_budget": {"type": "object"},
+    "success_conditions": {"type": "array"},
+    "stop_conditions": {"type": "array"},
+    "advisor_decision_date": {"type": ["string", "null"]},
+    "advisor_approved_threshold": {"type": ["number", "null"]},
+    "approved_profiles": {"type": ["array", "null"]},
+    "claim_boundary": {"type": "string"}
+  }
+}
