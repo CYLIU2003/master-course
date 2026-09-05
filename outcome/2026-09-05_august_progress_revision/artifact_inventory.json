@@ -1,0 +1,52 @@
+{
+  "schema_version": "outcome_artifact_inventory_v1",
+  "created_date": "2026-09-05",
+  "scope": "August PPTX refinement; no solver run; original preserved",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 5191,
+      "sha256": "03adc7e35982a6dd36c3264c51685d573d8db6d9ed420fbe26aa9ea42c9c08af"
+    },
+    {
+      "path": "august_progress_revised_20260905.pptx",
+      "bytes": 148892,
+      "sha256": "377ba861be7872e96dbd5f0197bd8ee03e23dfc7a934ef2863d1bd05cd1339ae"
+    },
+    {
+      "path": "revision_log.md",
+      "bytes": 6669,
+      "sha256": "7223d1d7fbe914a04c5132a0a672ed46e9d5513c44f1d5a9083e7acd519606cc"
+    },
+    {
+      "path": "source_manifest.json",
+      "bytes": 21378,
+      "sha256": "82428f99832b8953db8629154168bfd65602400afad284d809e7a7367a58f24d"
+    },
+    {
+      "path": "speaker_notes.md",
+      "bytes": 16296,
+      "sha256": "17516959172fd273c4ba262f2bff6e19350b341823ea616502989cb8b36752ec"
+    },
+    {
+      "path": "understanding_and_next_step.md",
+      "bytes": 4900,
+      "sha256": "02b42351b93b7305879ee671af8d829d7fc7d0f76912c1ffd14263e8d9d9bd67"
+    },
+    {
+      "path": "validation_receipt.json",
+      "bytes": 14011,
+      "sha256": "f7fd675c4006fa559d1ca377005a7a726d8cacb01fd2af541745d6521680d9bd"
+    }
+  ],
+  "implementation": [
+    {
+      "path": "tools/thesis_authoring/build_august_progress_revision.mjs",
+      "sha256": "1b26ae4ca89f91f9cd89e687d40fd283b6f7effec4364c90c9007f038d688cc3"
+    },
+    {
+      "path": "tests/test_august_progress_revision.py",
+      "sha256": "0eadc3ba9f7217723aebaed0128d0a38cca1ebad1bcb43780e9ae2cce46ef2fb"
+    }
+  ]
+}

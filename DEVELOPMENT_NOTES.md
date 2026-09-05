@@ -1,5 +1,56 @@
 # Development Notes
 
+## 2026-09-05: follow-up script organization
+
+- Grouped the three API/BFF/catalog benchmark implementations under `tools/benchmarks/`; preserved the old CLI and module-import paths with aliases.
+- Corrected repository-root discovery for the deeper directory and updated newly generated API report commands. Existing reports and historical references remain untouched.
+- Added `scripts/README.md` as a purpose-based entry map; frozen research scripts remain at their original paths.
+- No benchmark, solver, remote feature, or deletion was run in this follow-up. Previously rejected temporary deletion remains pending.
+- Validation: the six focused test files recorded below now pass 32 tests. Both old/new catalog CLI `--help` paths succeeded without ingest. Strict frozen weather-bundle validation passed again; `git diff --check` passed. Full suite and real benchmark execution were not run.
+
+## 2026-09-05: file organization without research evidence mutation
+
+- See [layout and cleanup record](docs/REPOSITORY_LAYOUT.md) for exact moves and retention rules.
+- Moved the manual multi-day BFF script into `tools/manual_experiments/`, retaining a non-collectable root compatibility entrypoint.
+- Archived two historical implementation notes with root redirects; moved the one-off August packaging helper out of its temporary build folder.
+- Added purpose-based tool navigation. Frozen CLI paths, imported logger, Outcome packages and raw evidence remain untouched.
+- Temporary-file deletion was rejected by execution policy; no files were deleted. No solver, remote CI, commit or push was performed.
+- Validation: `python -m pytest -q tests/test_repository_layout.py tests/test_readme_navigation.py tests/test_august_progress_revision.py tests/test_progress_explanation.py tests/test_experiment_logger_gap_reporting.py tests/test_experiment_logger_zero_cost_preservation.py` → 26 passed. Strict `load_and_validate_bundle` for `docs/evidence/weather_dispatch_rerun_bb0c005` passed; `git diff --check` passed (line-ending warnings only). Full suite was not run for this scoped file organization.
+
+## 2026-09-05 (Asia/Tokyo): original August presentation refined for research explanation
+
+- Based on the original 18-slide August PPTX in `outcome/`, produced the
+  [22-slide revision and owner guide](outcome/2026-09-05_august_progress_revision/README.md).
+  Original slide dimensions, Japanese font, cover/background/scenario/energy
+  graphics were retained. Added explicit research questions, method/selection
+  semantics, literature comparisons, editable data charts, mathematical notes,
+  input-origin qualifications and a slide-by-slide correction log.
+- Frozen evidence remains `bb0c0050883a91dd86a9e8813ae88d4b6d8c361d`;
+  authoring HEAD is `c0b82ae30e874f65fabcfec94599982023bc3ca6` on an already
+  dirty documentation worktree. No formal run, scenario/model/acceptance change,
+  commit, push, GitHub Action, Copilot run or chargeable feature was invoked.
+- Corrected frontier control 15–35 versus observed candidate range 14–35,
+  day-ahead versus executed-day cost, raw versus certified Stage-1 gap, and
+  coincident charging/curtailment states versus causal explanation. The 22-row
+  candidate plot is hash-paired recourse diagnostic evidence, not 24/24 Rolling
+  acceptance of all candidates. Parameters remain input assumptions until
+  independent empirical/specification support is established.
+- Reused the literature section-level review and verified close-reference
+  primary abstracts (Cui; Soltanpour). Mixed fleet, distributed energy and
+  weather inclusion alone are not established novelty. E0, existing stability
+  P0, charging baseline E1 and stress E2 remain distinct and unexecuted.
+- Local validation: original hash unchanged; 129 bound sources verified;
+  strict `load_and_validate_bundle` PASS without solve; 14 tests PASS using
+  `python -m pytest -q tests/test_august_progress_revision.py tests/test_progress_explanation.py`.
+  The presentation has 11 native tables, 7 native charts with verified workbook
+  data, 22 notes pages, and zero final structure/layout findings or warnings.
+  Chart snapshots round display-only values to 6 decimals; evidence bytes are
+  unchanged. Native Office operation and independent human review remain open.
+- Builder: `tools/thesis_authoring/build_august_progress_revision.mjs`.
+  Exact local regeneration commands and fresh-directory options are in the
+  package README. Final PPTX SHA-256:
+  `377ba861be7872e96dbd5f0197bd8ee03e23dfc7a934ef2863d1bd05cd1339ae`.
+
 ## 2026-08-29 (Asia/Tokyo): final thesis-package evidence cross-links hardened
 
 - On `research/thesis-weather-results-bb0c005`, the report loader now requires
@@ -9210,3 +9261,89 @@ locks this distinction in place.
 - Added strict subset oracle naming/gates, a signed plan/validate/execute runner with one Fresh Prepared ID and independent trip-count processes, family-specific approval templates, exact commands, interruption inventories, and NOT_RUN publication materials. Execute remains fail-closed until every signed field and hash matches.
 - Two frozen offline replay passes had identical SHA-256 `853b9e67495deceded3eab8c6c13cf77999e0f5c1ff7e728eda54487d6ad2262`; recorded external calls were solver 0, Prepare 0, Rolling 0, HTTP 0.
 - Two complete fixture paths (Prepared response/run directories -> normalization -> four-profile validation/analysis -> CSV/JSON/Markdown -> manifest) also matched at SHA-256 `53c58a4e3652c867fb362b9738bcde62ea33e98a3272f18774b0277f7a4b0985`.
+
+# 2026-09-05 - Owner-facing research explanation in Outcome
+
+- Working HEAD `c0b82ae30e874f65fabcfec94599982023bc3ca6`; the user's existing
+  `outcome/` folder and August PPTX were preserved. Added a Japanese ten-minute
+  understanding guide, findings, next-experiment definitions, parameter-origin
+  register, progress log, and a nine-slide editable presentation with speaker notes.
+- Added `tools/thesis_authoring/build_progress_explanation.py`. It reuses the
+  sealed thesis-bundle loader and canonical 96-slot reconstruction, verifies the
+  frozen Prepared/canonical result identities, joins 264 unique assignments per
+  scenario, and reconciles source-split charging rows with executed solver rows.
+  No solver/model/acceptance formula changed. This is a derivation of `bb0c005`
+  evidence, not evidence from a new current-HEAD optimization run.
+- New selected-plan findings: BEV service-distance share 72.7765% SUNNY and
+  29.7282% RAIN; service-time share 72.4304% and 29.2250%. Of 264 identical
+  trips, 108 switch from ICE in RAIN to BEV in SUNNY (78 Shibu22, 30 Shibu23);
+  zero switch in the opposite direction. Distances are stop-polyline input
+  estimates; all new distance statistics exclude deadhead.
+- 75.0616% of SUNNY curtailed energy coincides with no charging power. No
+  curtailed energy coincides with all ten ports power-active or end-slot BESS
+  SOC at the upper limit. These overlapping state indicators do not prove
+  causal curtailment shares, charger wait time, or minimum required equipment.
+  Very small positive solver powers are disclosed using both >1e-6 kW and
+  >=1 kW descriptive counts. Physical tolerances are unchanged.
+- Kept common 640,000 JPY vehicle usage cost separate for presentation only.
+  Canonical totals and RAIN day-ahead versus executed-day costs remain separate.
+  Clarified that existing M0--M3 are not the memo's fixed-dispatch/sequential-
+  charging baseline. Proposed baseline definitions are still a design draft.
+- Reproduction: `.venv/Scripts/python.exe tools/thesis_authoring/build_progress_explanation.py
+  --output-dir outcome/2026-09-05_research_progress/reproduction_01` (new empty
+  directory required). Analysis source/output digests are in its `manifest.json`.
+  The presentation builder is `tools/thesis_authoring/build_progress_presentation.mjs`
+  and uses the bundled local artifact runtime, with ratios/JPY rounded for chart
+  workbook display only; raw analytical values are retained in JSON/CSV.
+- Validation: six new descriptive-statistics regressions plus existing focused
+  authoring and README checks, 12 passed. PowerPoint package, geometry, fonts,
+  editable tables/charts and chart workbooks passed local checks; all nine rendered
+  slides and both analytical figures were visually inspected. No native PowerPoint
+  application check was performed. Full solver regression is not rerun for this
+  reporting-only addition.
+- New optimization, Prepare, Rolling, HTTP, GitHub Actions, AI review and push:
+  zero. Human signoff for the small oracle and candidate stability experiments
+  remains outstanding; no new optimality, method superiority or release claim.
+
+## 2026-09-05: critical literature re-review and explicit adoption protocol
+
+- At HEAD `c0b82ae30e874f65fabcfec94599982023bc3ca6`, added
+  `outcome/2026-09-05_literature_review/`: Japanese strengths/limits/adoption
+  notes, an accessible reading guide, 23-source inventory, correction log,
+  related-work draft, experimental comparison protocol, and review log.
+  Existing progress-package changes and the user's August presentation remain
+  intact. The sealed `docs/thesis/authoring_v1` package was not overwritten.
+- Re-read relevant assumptions, methods, experimental results and limitations
+  for 14 papers; screened nine additional PDFs without claiming full-text
+  validation. Three close additional references were checked only through
+  primary publisher abstracts/search results; unavailable full text remains
+  an explicit next step, not a completed literature audit.
+- Corrected new reporting scope relative to the historical nine-paper matrix:
+  Zhong 2024 includes PV and office-load uncertainty experiments; Xiao 2026
+  takes per-bus operational schedules as given; Xiuyu Hu's first name and the
+  Japanese macro-demand paper's title are transcribed from the original PDFs.
+  Nakano 2025 is two-day planning with daily updates. No47's heterogeneous
+  BEVs are distinguished from BEV/diesel fleets. No63's solution-cost difference
+  is not a certified MIP gap, and No06's approximately 0.7% comparison remains
+  limited to 50 trips, not its 418-trip instance.
+- Identified a visible min/max inconsistency between equation (1) and the
+  prose in the Japanese macro-demand paper. Both PDF pages were rendered and
+  inspected; the authors' actual implementation is unknown. Do not copy the
+  equation or infer that all reported results are invalid.
+- Adopted evaluation design, not unapproved model changes: hold dispatch and
+  equipment fixed for a simple charging comparison; explicitly control BESS
+  policy; separate open-loop stress from recourse; separate infrastructure
+  value from operational value; disclose information sets and terminal SOC.
+  Charging contention metrics and observation limits remain explicit.
+- Primary publisher information for Cui 2023 and Li 2019 establishes that
+  mixed BEV/diesel dispatch is already studied. The related-work draft narrows
+  the contribution to questions and evidence instead of claiming novelty from
+  including mixed fleets or PV/BESS alone.
+- Validation: all 23 source hashes matched; inventory counts 14 focused / nine
+  preliminary; No06 Table 5 and three Japanese paper pages visually checked.
+  `.venv/Scripts/python.exe -m pytest -q tests/test_readme_navigation.py`:
+  3 passed. `git diff --check` and local-link checks used. No solver regression
+  was necessary for this literature/documentation-only addition.
+- No solver, Prepare, Rolling, scenario/parameter mutation, mathematical-model
+  change, relaxed acceptance, experiment signoff, GitHub Actions/AI feature,
+  commit or push. Source and artifact SHA-256 lists are stored in the new package.

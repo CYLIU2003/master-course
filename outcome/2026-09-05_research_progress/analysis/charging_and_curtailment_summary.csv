@@ -1,0 +1,3 @@
+scenario,peak_power_active_sessions,peak_sessions_ge_1_kw,active_port_hours,active_port_share_24h,charge_energy_kwh,energy_utilization_rated_24h,curtailment_slots,curtailment_kwh,curtailed_kwh_when_all_ports_active,curtailed_kwh_when_bess_at_upper_bound,curtailed_kwh_when_no_charging_power,charging_wait_minutes,minimum_required_chargers,causal_curtailment_attribution
+SUNNY,10,9,60.0,0.25,2432.1639310105083,0.11260018199122723,26,3373.220769431707,0,0,2531.995123185199,,,NOT_IDENTIFIED_FROM_SELECTED_PLAN
+RAIN,8,5,36.0,0.15,1052.4027965683733,0.04872235169298025,0,0,0,0,0,,,NOT_IDENTIFIED_FROM_SELECTED_PLAN

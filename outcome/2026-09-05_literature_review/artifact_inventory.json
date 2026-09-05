@@ -1,0 +1,39 @@
+{
+  "schema": "literature_review_artifact_inventory_v1",
+  "created_date": "2026-09-05",
+  "workspace_head": "c0b82ae30e874f65fabcfec94599982023bc3ca6",
+  "files": [
+    {
+      "file": "01_critical_review.md",
+      "sha256": "935eecde6e91cd37e679ebd117962ee053bf3df7dfa44430cfb3da2d037288c4"
+    },
+    {
+      "file": "02_adoption_protocol.md",
+      "sha256": "ad92df8bc46417abae494fdf6d75b46e3336c91a5629dc35fa52942432a372a8"
+    },
+    {
+      "file": "03_corrections.md",
+      "sha256": "39f559acc3c7f514fc57281b11147aa77ba31c44bf1fccc1a29eb67ab9739051"
+    },
+    {
+      "file": "04_related_work_draft.md",
+      "sha256": "4900277c072d918c4af52ed37d12273ffc0e47e18ea06ce7c709ba902c8c1522"
+    },
+    {
+      "file": "05_review_log.md",
+      "sha256": "3b6b6188aeea80736f0ce3a86563a30b091b5d98a0d1c8bf36842ac78ee9a3e4"
+    },
+    {
+      "file": "literature_inventory.md",
+      "sha256": "3712baeabd70da6fcf55a2d9fdfa9df22aabb06755277a95187392ba4a4775a3"
+    },
+    {
+      "file": "README.md",
+      "sha256": "cad8eee2372c1a6832c1aeba02c9c4fdc445f1880a488acb32c3938c370da818"
+    },
+    {
+      "file": "source_inventory.json",
+      "sha256": "28b82712ebd1890b66289a91480f98430e1aa8972d931342aaa49c5d4e02530d"
+    }
+  ]
+}

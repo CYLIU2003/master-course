@@ -1,5 +1,75 @@
 # Current research release blockers
 
+## 2026-09-05: repository organization; research gates unchanged
+
+Follow-up: API/BFF/catalog benchmark bodies now live in `tools/benchmarks/`,
+with compatible old entrypoints. Research CLI paths and frozen hashes are unchanged.
+No benchmark or solver was started by this organization work.
+
+The [file-layout record](../REPOSITORY_LAYOUT.md) documents manual-script and
+historical-note relocation, compatible old entrypoints, and retained evidence paths.
+This is file organization only, not a new solve, approval, or research claim.
+Frozen experiment artifacts and published Outcome packages were not modified.
+
+## 2026-09-05: August presentation strengthened; research gates unchanged
+
+The [August revision](../../outcome/2026-09-05_august_progress_revision/README.md)
+turns the original 18-slide report into 18 core slides plus four appendices.
+It separates the Stage-1 relaxation objective, day-ahead finite-pool selection,
+fixed-dispatch Rolling and executed-day accounting; adds source-backed 96-slot
+power and BESS charts; and avoids causal claims from coincident PV curtailment.
+All frozen result bytes and the original PPTX remain unchanged.
+
+This is presentation/explanation progress, not new algorithmic performance.
+The selected-plan gates remain valid while integrated-reference quality,
+stability, simple-policy advantage, empirical parameter justification and
+external review/approval remain unresolved. Primary-source abstracts also
+confirm prior mixed-fleet/charging (Cui) and mixed-fleet/distributed-energy/weather
+planning (Soltanpour); their inclusion alone does not establish novelty.
+No solver, GitHub automation or paid feature was invoked. Existing signed
+approval, preflight, frozen clean-commit and stop-budget requirements remain.
+
+## 2026-09-05: literature scope corrected; comparison evidence still pending
+
+The [literature re-review](../../outcome/2026-09-05_literature_review/README.md)
+records 23 currently available PDFs: 14 focused section-level readings and nine
+preliminary screenings. It corrects the older nine-paper matrix: Zhong 2024
+includes PV/office-load uncertainty evaluation; Xiao 2026 takes per-bus
+operational schedules as input; Hu's first name is Xiuyu. Nakano 2025 uses a
+two-day horizon with daily updates, not this repository's hourly Rolling.
+The sealed earlier authoring package is preserved; corrections apply to new drafts.
+
+Mixed BEV/diesel scheduling is also established in primary-source abstracts
+(Cui 2023; Li 2019), so mixed-fleet inclusion or PV/BESS integration alone is
+not a supported novelty claim. Full-text comparison with these close references,
+controlled simple-policy baselines, and out-of-sample/stress evidence remain open.
+The new adoption protocol separates charging control, BESS policy, infrastructure,
+information sets and terminal conditions. It changes no model, acceptance gate,
+scenario input, frozen result, execution authorization, or GitHub restriction.
+
+## 2026-09-05: selected-plan explanation and owner understanding
+
+The new [Outcome progress package](../../outcome/README.md) derives service-distance,
+service-time, trip-level powertrain changes, and executed charging measures from
+the preserved `bb0c005` SUNNY/RAIN runs. It does not rerun or change optimization.
+BEV service-distance shares are 72.7765% / 29.7282%; 108 trips change from ICE
+in low PV to BEV in high PV. Charging-source allocation rows are merged before
+counting physical sessions. These are descriptive measures of selected plans.
+
+75.0616% of SUNNY curtailed energy coincides with no charging power. No curtailed
+energy coincides with all ten ports power-active or with end-slot BESS SOC at its
+upper limit. These observations do not identify causal curtailment categories,
+charging wait time, or the minimum required charger count. Those remain open.
+Distances are prepared stop-polyline estimates and exclude deadhead. The common
+640,000 JPY vehicle-use component is separated for display only, not removed
+from the optimization objective.
+
+Existing small M0--M3 definitions differ from a fixed-dispatch/sequential-charge
+baseline. The progress package records this distinction before any new baseline
+experiment. The signed small-oracle execution, simple-method comparison,
+candidate-set stability, parameter justification, and release gates remain open.
+The documentation and explanation package confer no additional research approval.
+
 ## 2026-08-29 (Asia/Tokyo): thesis-report reproducibility review closed
 
 The SUNNY/RAIN thesis package now sorts every hash/artifact map, including the

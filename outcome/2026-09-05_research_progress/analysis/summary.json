@@ -1,0 +1,124 @@
+{
+  "status": "DESCRIPTIVE_REANALYSIS_COMPLETE",
+  "execution_git_sha": "bb0c0050883a91dd86a9e8813ae88d4b6d8c361d",
+  "derivation_head": "c0b82ae30e874f65fabcfec94599982023bc3ca6",
+  "dispatch": [
+    {
+      "scenario": "SUNNY",
+      "powertrain": "BEV",
+      "trips": 199,
+      "used_vehicles": 28,
+      "service_distance_km": 1555.041435,
+      "service_minutes": 7963,
+      "trip_share": 0.7537878787878788,
+      "service_distance_share": 0.7277645756741352,
+      "service_time_share": 0.7243041659086774,
+      "trips_per_used_vehicle": 7.107142857142857,
+      "service_km_per_used_vehicle": 55.53719410714286
+    },
+    {
+      "scenario": "SUNNY",
+      "powertrain": "ICE",
+      "trips": 65,
+      "used_vehicles": 4,
+      "service_distance_km": 581.6954810000001,
+      "service_minutes": 3031,
+      "trip_share": 0.24621212121212122,
+      "service_distance_share": 0.272235424325865,
+      "service_time_share": 0.27569583409132253,
+      "trips_per_used_vehicle": 16.25,
+      "service_km_per_used_vehicle": 145.42387025000002
+    },
+    {
+      "scenario": "RAIN",
+      "powertrain": "BEV",
+      "trips": 91,
+      "used_vehicles": 21,
+      "service_distance_km": 635.213265,
+      "service_minutes": 3213,
+      "trip_share": 0.3446969696969697,
+      "service_distance_share": 0.2972819256519084,
+      "service_time_share": 0.2922503183554666,
+      "trips_per_used_vehicle": 4.333333333333333,
+      "service_km_per_used_vehicle": 30.248250714285714
+    },
+    {
+      "scenario": "RAIN",
+      "powertrain": "ICE",
+      "trips": 173,
+      "used_vehicles": 11,
+      "service_distance_km": 1501.523651,
+      "service_minutes": 7781,
+      "trip_share": 0.6553030303030303,
+      "service_distance_share": 0.7027180743480916,
+      "service_time_share": 0.7077496816445333,
+      "trips_per_used_vehicle": 15.727272727272727,
+      "service_km_per_used_vehicle": 136.50215009090908
+    }
+  ],
+  "charging": [
+    {
+      "scenario": "SUNNY",
+      "peak_power_active_sessions": 10,
+      "peak_sessions_ge_1_kw": 9,
+      "active_port_hours": 60.0,
+      "active_port_share_24h": 0.25,
+      "charge_energy_kwh": 2432.1639310105083,
+      "energy_utilization_rated_24h": 0.11260018199122723,
+      "curtailment_slots": 26,
+      "curtailment_kwh": 3373.220769431707,
+      "curtailed_kwh_when_all_ports_active": 0,
+      "curtailed_kwh_when_bess_at_upper_bound": 0,
+      "curtailed_kwh_when_no_charging_power": 2531.995123185199,
+      "charging_wait_minutes": null,
+      "minimum_required_chargers": null,
+      "causal_curtailment_attribution": "NOT_IDENTIFIED_FROM_SELECTED_PLAN"
+    },
+    {
+      "scenario": "RAIN",
+      "peak_power_active_sessions": 8,
+      "peak_sessions_ge_1_kw": 5,
+      "active_port_hours": 36.0,
+      "active_port_share_24h": 0.15,
+      "charge_energy_kwh": 1052.4027965683733,
+      "energy_utilization_rated_24h": 0.04872235169298025,
+      "curtailment_slots": 0,
+      "curtailment_kwh": 0,
+      "curtailed_kwh_when_all_ports_active": 0,
+      "curtailed_kwh_when_bess_at_upper_bound": 0,
+      "curtailed_kwh_when_no_charging_power": 0,
+      "charging_wait_minutes": null,
+      "minimum_required_chargers": null,
+      "causal_curtailment_attribution": "NOT_IDENTIFIED_FROM_SELECTED_PLAN"
+    }
+  ],
+  "costs": [
+    {
+      "scenario": "SUNNY",
+      "total_jpy": 660983.7838045002,
+      "vehicle_usage_jpy": 640000.0,
+      "excluding_vehicle_usage_jpy": 20983.783804500243,
+      "vehicle_share": 0.9682537086103361,
+      "fuel_jpy": 20628.168617256633,
+      "electricity_jpy": 1.7462298274040222e-10,
+      "co2_jpy": 355.61518724347223
+    },
+    {
+      "scenario": "RAIN",
+      "total_jpy": 698598.6286431606,
+      "vehicle_usage_jpy": 640000.0,
+      "excluding_vehicle_usage_jpy": 58598.62864316057,
+      "vehicle_share": 0.9161197485357614,
+      "fuel_jpy": 53682.200807522095,
+      "electricity_jpy": 3925.5582995974178,
+      "co2_jpy": 990.869536041073
+    }
+  ],
+  "transitions": {
+    "SUNNY_BEV_RAIN_BEV": 91,
+    "SUNNY_BEV_RAIN_ICE": 108,
+    "SUNNY_ICE_RAIN_BEV": 0,
+    "SUNNY_ICE_RAIN_ICE": 65
+  },
+  "scope": "Frozen selected plans only; service distances exclude deadhead; observed port use is not minimum required capacity; PV indicators overlap and are not causal attribution."
+}

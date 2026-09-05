@@ -1,5 +1,17 @@
 # master-course
 
+ファイルを探すときは [配置・保管ルール](docs/REPOSITORY_LAYOUT.md) と
+[補助スクリプトの用途別案内](tools/README.md) を参照してください。
+正式実験・監査CLIの入口は [scripts案内](scripts/README.md) に分けています。
+
+本人向けの研究理解ガイド、追加の営業距離・配車・充電分析、発表進捗資料は
+[outcome/README.md](outcome/README.md) にまとめています。2026-09-05の追加分は
+凍結 `bb0c005` 結果の説明分析であり、新しいsolver実験や研究主張の格上げではありません。
+先行研究の強み・限界・採用方針と旧文献表の訂正は
+[9月の文献再レビュー](outcome/2026-09-05_literature_review/README.md) を参照してください。
+元の8月進捗資料を改善した [改訂版22枚と理解ガイド](outcome/2026-09-05_august_progress_revision/README.md)
+も追加しました。元資料・凍結結果を保持し、研究課題、方法、文献比較、時間別の結果を補強しています。
+
 The current, requirement-by-requirement thesis-evidence audit is
 [THESIS_SUBMISSION_EVIDENCE_AUDIT.md](docs/notes/THESIS_SUBMISSION_EVIDENCE_AUDIT.md).
 It distinguishes verified bounded evidence from the active full-network

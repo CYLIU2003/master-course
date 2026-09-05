@@ -1,0 +1,109 @@
+{
+  "schema_version": "research_progress_package_inventory_v1",
+  "date": "2026-09-05",
+  "execution_git_sha": "bb0c0050883a91dd86a9e8813ae88d4b6d8c361d",
+  "analysis_head": "c0b82ae30e874f65fabcfec94599982023bc3ca6",
+  "scope": "Descriptive analysis and owner learning materials. No new optimization experiment or claim approval.",
+  "files": [
+    {
+      "path": "01_understanding_guide.md",
+      "bytes": 5409,
+      "sha256": "3a8d346d567a655077e1ef61be8ec8d17d35b97e492cf0af1fb185292a2c1023"
+    },
+    {
+      "path": "02_findings.md",
+      "bytes": 5933,
+      "sha256": "9a71cd92225c50847b196dbdb4a04802d3a2f0ef6ecad723bc7fc594a3952396"
+    },
+    {
+      "path": "03_next_experiments.md",
+      "bytes": 5639,
+      "sha256": "0acf2ffdae77c0d961cdca2784f917149be0d6ac8c2217e5719b007aa40abbc1"
+    },
+    {
+      "path": "04_parameter_sources.csv",
+      "bytes": 3647,
+      "sha256": "b89ef7d18511df34a3b8720bf98c92f31d8175f4446affa3f55a160c78ac9087"
+    },
+    {
+      "path": "05_progress_log.md",
+      "bytes": 3925,
+      "sha256": "f236ab58b27d0299559a2be1529dabff72db084b50bf1ebcaed8cab9af6e64ed"
+    },
+    {
+      "path": "research_progress_20260905.pptx",
+      "bytes": 46438,
+      "sha256": "17684ba0da37f357eb95a30ca0a170788786506e9959c9ee692f87e1ef859386"
+    },
+    {
+      "path": "analysis/charging_and_curtailment_summary.csv",
+      "bytes": 613,
+      "sha256": "77d458faaf2502df6c0f55086e922a9fc2006b426ff79c30545dd81a64cf9fb7"
+    },
+    {
+      "path": "analysis/cost_comparison.csv",
+      "bytes": 368,
+      "sha256": "59a76732ad27082f9a2169c60186222d2015ee3ecbff19abd2c8cfa092700352"
+    },
+    {
+      "path": "analysis/dispatch_assignments.csv",
+      "bytes": 125745,
+      "sha256": "c0b8d8b71c5072badd1ad88fcdd3eea8439b54a0da9307004d91e242cfab5e28"
+    },
+    {
+      "path": "analysis/dispatch_statistics.csv",
+      "bytes": 681,
+      "sha256": "a9fdb3630f379bc43dbaa2338c5b122f097bf7ebd2e2d575c3588135d197273c"
+    },
+    {
+      "path": "analysis/executed_slots.csv",
+      "bytes": 40594,
+      "sha256": "9a6e796dfc00bb4200dde6f515193515670f88e7b4b42d12b51a282a719ccdc5"
+    },
+    {
+      "path": "analysis/manifest.json",
+      "bytes": 19237,
+      "sha256": "31cf3ce9300185ac1b9f1128996f5e6ad8bae6a793a16fb2a5946e2289ad8843"
+    },
+    {
+      "path": "analysis/summary.json",
+      "bytes": 4414,
+      "sha256": "e971e5e2361973a073e3892b0a269a21e380553180e760accf535754f0b2dca6"
+    },
+    {
+      "path": "analysis/trip_powertrain_changes.csv",
+      "bytes": 29536,
+      "sha256": "40c19bcd8eff30ecb22973d89ccf304c7d90ef2b34e8118eb93ffe007b8bb84e"
+    },
+    {
+      "path": "analysis/evidence_supplements/rain_canonical_96_slot_power_series.csv",
+      "bytes": 18181,
+      "sha256": "caf1515c2cb06e05005da47facf28531020ddd3290fee404529d7c5e191fc6a4"
+    },
+    {
+      "path": "analysis/evidence_supplements/sunny_canonical_96_slot_power_series.csv",
+      "bytes": 17798,
+      "sha256": "444cdec1ad7adc06d4959834e1f9d3d6b9c717c80e86825291c8e93cc45a6008"
+    },
+    {
+      "path": "analysis/figures/01_dispatch_by_route.png",
+      "bytes": 77321,
+      "sha256": "13ee4a7a84e2156f061311534fc6932cd5af0364bdb3fa5d9feb90a399823559"
+    },
+    {
+      "path": "analysis/figures/01_dispatch_by_route.svg",
+      "bytes": 169012,
+      "sha256": "bf5e77f9a184957f5c5ae46a1b5c35403daf8e625e1898f3500297b995970232"
+    },
+    {
+      "path": "analysis/figures/02_charging_and_curtailment.png",
+      "bytes": 114196,
+      "sha256": "b9fa0418585a1d0d47bd75e3dfc25566f541f8235aed53a57e4f89f14838486d"
+    },
+    {
+      "path": "analysis/figures/02_charging_and_curtailment.svg",
+      "bytes": 78491,
+      "sha256": "1c7f9c5237f11a7e8e7053f3855c21cf09badfc1237595642b0aa1d9c13b018a"
+    }
+  ]
+}
