@@ -59,6 +59,6 @@
 ## 1) GitHub同期前の最終確認
 
 - README.md に docs/constant/formulation.md の C1-C21 対応表を記載済み
-- docs/core_parameter_preservation_manifest.md は追加済み
-- docs/tkinter_feature_parity_backlog.md は追加済み
+- docs/reviews/core_parameter_preservation_manifest.md は追加済み
+- docs/frontend/tkinter_feature_parity_backlog.md は追加済み
 - 本レポートを添付し、レビュー時の検証証跡として利用可能

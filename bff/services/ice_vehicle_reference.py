@@ -17,7 +17,7 @@ ICE_VEHICLE_REFERENCE: Dict[str, Dict[str, Any]] = {
         "engineDisplacementL": 8.86,
         "maxTorqueNm": 1275,
         "maxPowerKw": 177,
-        "source": "constant/bus_hino_jh25.xlsx:3-1",
+        "source": "docs/constant/bus_hino_jh25.xlsx:3-1",
     },
     "2KG-LV290N4": {
         "modelCode": "2KG-LV290N4",
@@ -30,7 +30,7 @@ ICE_VEHICLE_REFERENCE: Dict[str, Dict[str, Any]] = {
         "engineDisplacementL": 8.86,
         "maxTorqueNm": 1275,
         "maxPowerKw": 177,
-        "source": "constant/bus_isuzu_jh25.xlsx:3-1",
+        "source": "docs/constant/bus_isuzu_jh25.xlsx:3-1",
     },
     "2KG-MP38FK": {
         "modelCode": "2KG-MP38FK",
@@ -43,7 +43,7 @@ ICE_VEHICLE_REFERENCE: Dict[str, Dict[str, Any]] = {
         "engineDisplacementL": 10.67,
         "maxTorqueNm": 1422,
         "maxPowerKw": 199,
-        "source": "constant/mitsubishifuso_bus_jh25.xlsx:3-1",
+        "source": "docs/constant/mitsubishifuso_bus_jh25.xlsx:3-1",
     },
 }
 

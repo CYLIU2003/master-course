@@ -89,7 +89,7 @@ hashes.
 ## Release rule
 
 Every row in
-[`CURRENT_RESEARCH_RELEASE_BLOCKERS.md`](./CURRENT_RESEARCH_RELEASE_BLOCKERS.md)
+[`CURRENT_RESEARCH_RELEASE_BLOCKERS.md`](CURRENT_RESEARCH_RELEASE_BLOCKERS.md)
 must be filled from fresh artifacts. A failed row retains diagnostic numbers
 but requires:
 

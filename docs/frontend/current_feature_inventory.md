@@ -17,7 +17,7 @@ React target
   -> src optimization and dispatch code
 ```
 
-The current worktree has no `frontend/` directory. References to prior React files in `docs/tkinter_feature_parity_backlog.md` and development history are not treated as reachable code.
+The current worktree has no `frontend/` directory. References to prior React files in `docs/frontend/tkinter_feature_parity_backlog.md` and development history are not treated as reachable code.
 
 ## Current Tkinter capabilities to preserve
 

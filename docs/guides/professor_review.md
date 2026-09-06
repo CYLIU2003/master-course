@@ -2,7 +2,7 @@
 
 > [!NOTE]
 > このファイルは **指導教員（中島先生）向けのレビューガイド** です。
-> システムの完全な技術仕様は [README.md](README.md) を参照してください。
+> システムの完全な技術仕様は [README.md](../../README.md) を参照してください。
 
 ---
 
@@ -212,8 +212,8 @@ CO₂費・劣化費は `co2_price_per_kg = 0`（無効）がデフォルトで�
 
 | 層 | 内容 | 参照先 |
 |----|------|--------|
-| **① 目標定式化** | 研究として最終的に目指す C1〜C21 / O1〜O4 の完全モデル | [`docs/constant/formulation.md`](docs/constant/formulation.md) |
-| **② 実装済み範囲** | 2026-03-18 時点で実際に実装されている範囲 | [`docs/constant/implementation_status.md`](docs/constant/implementation_status.md) |
+| **① 目標定式化** | 研究として最終的に目指す C1〜C21 / O1〜O4 の完全モデル | [`docs/constant/formulation.md`](../constant/formulation.md) |
+| **② 実装済み範囲** | 2026-03-18 時点で実際に実装されている範囲 | [`docs/constant/implementation_status.md`](../constant/implementation_status.md) |
 | **③ 今後の計画** | 修論フェーズで追加予定の機能 | 下表参照 |
 
 ### 制約の実装状況（要約）
@@ -270,14 +270,14 @@ CO₂費・劣化費は `co2_price_per_kg = 0`（無効）がデフォルトで�
 
 | ファイル | 内容 |
 |---------|------|
-| [`README.md`](README.md) | システム全体の説明（セットアップ・実行・モデル詳細） |
-| [`docs/constant/formulation.md`](docs/constant/formulation.md) | 目標定式化の正本（C1〜C21 / O1〜O4） |
-| [`docs/constant/implementation_status.md`](docs/constant/implementation_status.md) | 実装状況の詳細対応表（✅/🔶/❌） |
-| [`src/optimization/milp/solver_adapter.py`](src/optimization/milp/solver_adapter.py) | MILP 実装本体（Gurobi） |
-| [`src/optimization/common/evaluator.py`](src/optimization/common/evaluator.py) | ALNS/GA/ABC 共通評価器 |
-| [`src/optimization/common/builder.py`](src/optimization/common/builder.py) | シナリオ → 最適化問題の変換 |
-| [`docs/core_parameter_preservation_manifest.md`](docs/core_parameter_preservation_manifest.md) | 削除禁止パラメータの定義 |
-| [`docs/reproduction/timetable_alignment_audit_20260318.md`](docs/reproduction/timetable_alignment_audit_20260318.md) | 実測監査レポート |
+| [`README.md`](../../README.md) | システム全体の説明（セットアップ・実行・モデル詳細） |
+| [`docs/constant/formulation.md`](../constant/formulation.md) | 目標定式化の正本（C1〜C21 / O1〜O4） |
+| [`docs/constant/implementation_status.md`](../constant/implementation_status.md) | 実装状況の詳細対応表（✅/🔶/❌） |
+| [`src/optimization/milp/solver_adapter.py`](../../src/optimization/milp/solver_adapter.py) | MILP 実装本体（Gurobi） |
+| [`src/optimization/common/evaluator.py`](../../src/optimization/common/evaluator.py) | ALNS/GA/ABC 共通評価器 |
+| [`src/optimization/common/builder.py`](../../src/optimization/common/builder.py) | シナリオ → 最適化問題の変換 |
+| [`docs/core_parameter_preservation_manifest.md`](../reviews/core_parameter_preservation_manifest.md) | 削除禁止パラメータの定義 |
+| [`docs/reproduction/timetable_alignment_audit_20260318.md`](../reproduction/timetable_alignment_audit_20260318.md) | 実測監査レポート |
 
 ---
 

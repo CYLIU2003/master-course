@@ -238,4 +238,4 @@ It is not a current execution procedure. Its fixed BEV/ICE counts and
 `--expected-*-count` commands must not be used for a new formal run.
 
 Current procedure:
-[`FORMAL_RUNBOOK_CURRENT.md`](./FORMAL_RUNBOOK_CURRENT.md)
+[`FORMAL_RUNBOOK_CURRENT.md`](FORMAL_RUNBOOK_CURRENT.md)

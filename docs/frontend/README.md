@@ -22,7 +22,7 @@ The current Tkinter application is not deprecated. It remains the operational fa
 9. [Issues and decisions](issues_and_decisions.md)
 10. [Baseline request capture](baseline_requests/README.md)
 
-`DESIGN.md` remains the repository-wide source for colors, typography, spacing, and evidence-first presentation rules. This directory adds React-specific interaction and information architecture requirements without replacing that file.
+`docs/frontend/DESIGN.md` remains the repository-wide source for colors, typography, spacing, and evidence-first presentation rules. This directory adds React-specific interaction and information architecture requirements without replacing that file.
 
 ## Delivery phases
 

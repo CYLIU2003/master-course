@@ -5,7 +5,7 @@ Phase 1: Extract, normalize, and compute derived indicators from JH25-mode
 diesel bus Excel files (bus_isuzu_jh25.xlsx, bus_hino_jh25.xlsx,
 mitsubishifuso_bus_jh25.xlsx).
 
-All source files live in constant/; outputs go to data/engine_bus/output/.
+All source files live in docs/constant/; outputs go to data/engine_bus/output/.
 
 Usage:
     from src.engine_bus_extractor import run_extraction
@@ -112,7 +112,7 @@ def _project_root() -> Path:
     for p in [here, *here.parents]:
         if (p / "src").is_dir() and (p / ".git").is_dir():
             return p
-        if (p / "src").is_dir() and (p / "constant").is_dir():
+        if (p / "src").is_dir() and (p / "docs" / "constant").is_dir():
             return p
     return here.parent
 
@@ -718,7 +718,7 @@ def run_extraction(
     """
     root = _project_root()
     if constant_dir is None:
-        constant_dir = root / "constant"
+        constant_dir = root / "docs" / "constant"
     if output_dir is None:
         output_dir = root / "data" / "engine_bus" / "output"
 

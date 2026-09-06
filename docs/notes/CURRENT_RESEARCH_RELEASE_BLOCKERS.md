@@ -1,6 +1,57 @@
 # Current research release blockers
 
+The 2026-09-06 visible-slide progress revision explains existing evidence and
+remaining questions. It does not resolve the existing source-manifest mismatch,
+external review, or formal research acceptance gates; no new experiment was run.
+
+## 2026-09-06: explanatory speaker notes, no research gate changes
+
+The separate 18-slide notes edition in outcome/2026-09-06_speaker_notes explains
+before/work/result/remaining issues and distinguishes frozen experiments from
+descriptive reanalysis. Unsupported PV-curtailment causal wording was corrected.
+No solver was run and no acceptance status changed. The existing August revision
+source-manifest mismatch and external review/approval gates remain unresolved.
+
+## 2026-09-05: simplified documentation and utility layout
+
+Documentation now enters through docs/README.md; guides, reviews, frontend design
+and archives are separated by use. Catalog and fleet utilities are consolidated
+in scripts/catalog, while original public entrypoints remain compatible. Internal
+imports and document links were updated. Frozen evidence and model semantics were
+not changed; the known August source-manifest blocker remains unchanged.
+
+## 2026-09-05: constant merged into docs
+
+Seven root constant assets moved byte-for-byte into docs/constant; runtime template
+and Excel discovery, source labels and EXE data paths updated. No numerical input,
+formula or acceptance change. Existing artifact manifests retain their historical
+paths; no earlier run is relabeled as current evidence. The prior source-hash
+blocker below remains unresolved.
+
+## 2026-09-05: organization audit; one source-provenance blocker remains
+
+Legacy catalog CLI import/help and dependency preflight were repaired. Optional
+`data-prep/lib/catalog_builder` remains required for actual ingestion; missing
+dependencies stop before output/scenario creation. No external ingestion was run.
+
+The full regression suite exposed August presentation source-manifest drift.
+Sixteen LF source files were restored to their exact recorded SHA-256 bytes and
+pinned with Git attributes. The recorded hash for
+`scripts/build_thesis_weather_result_package.py` still differs from the current
+file and LF/CRLF versions of its available Git history. The original matching
+source was not found. Keep `test_original_and_all_bound_sources_unchanged` failing;
+do not rewrite its expected hash or treat that presentation provenance as verified.
+This does not invalidate the separately checked frozen weather raw bundle.
+See [audit record](../FILE_ORGANIZATION.md).
+
 ## 2026-09-05: repository organization; research gates unchanged
+
+Additional organization at base HEAD `d50d3ea3`: 20 catalog/fleet/GUI/validation
+implementations relocated into purpose-specific packages with compatible old entrypoints.
+Frozen research CLI and evidence bytes remain in place. No formal run was performed.
+The pre-existing legacy fast-ingest import failure was repaired in the subsequent
+audit; optional ETL requirements remain documented in
+[catalog notes](../../scripts/catalog/README.md). This is not a new research result or signoff.
 
 Follow-up: API/BFF/catalog benchmark bodies now live in `tools/benchmarks/`,
 with compatible old entrypoints. Research CLI paths and frozen hashes are unchanged.

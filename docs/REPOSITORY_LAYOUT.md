@@ -1,59 +1,46 @@
 # ファイル配置と保管ルール
 
-2026-09-05整理。作業前HEAD: `c0b82ae30e874f65fabcfec94599982023bc3ca6`。
-既存の未コミット変更を保持し、solver・GitHub機能は実行していません。
+全体の入口は [文書案内](README.md)、実行方法は [ルートREADME](../README.md) です。
 
-## 探す場所
+## 正規配置
 
-| 内容 | 場所 | 取扱い |
-|---|---|---|
-| 起動・利用案内 | [ルートREADME](../README.md)、`run_app.py` | 利用者向け入口はルートに維持 |
-| 最適化モデル | `src/` | この整理で数式・制約を変更しない |
-| UI・API | `app/`、`bff/` | モデルと分離 |
-| 正式実験・監査CLI | [scripts案内](../scripts/README.md) | ハッシュ・コマンド参照を保つため現位置を維持 |
-| 補助ツール | [tools案内](../tools/README.md) | 目的別のサブフォルダへ配置 |
-| 通常の回帰テスト | `tests/` | 手動solver実行とは分離 |
-| 研究状況・正式手順 | [blocker](notes/CURRENT_RESEARCH_RELEASE_BLOCKERS.md)、[runbook](notes/FORMAL_RUNBOOK_CURRENT.md) | 現行の判断基準 |
-| 進捗・発表資料 | [outcome](../outcome/README.md) | 元資料と日付別成果物を保管 |
-| 過去の設計メモ | [archive](archive/implementation_notes/README.md) | 過去の提案を現行仕様と混同しない |
-| 凍結根拠・執筆資料 | `docs/evidence/`、`docs/thesis/` | manifest対象のパスと内容を固定 |
-| 実行結果・Prepare | `output/` | ignoredでも削除可能とは限らない |
-| 旧実行結果 | `outputs/`、`results/` | 既存参照があるため保全。新しい出力先とは区別 |
-| 原入力・文献 | `data/`、`scenarios/`、`先行文献/` | 一時ファイル扱いで削除しない |
+| 用途 | 場所 |
+|---|---|
+| アプリ起動 | `run_app.py` |
+| 最適化モデル | `src/` |
+| UI・API | `tools/gui/`、`bff/` |
+| カタログ・車両データ整備 | [scripts/catalog](../scripts/catalog/README.md) |
+| 天候データ整備 | [scripts/weather](../scripts/weather/README.md) |
+| 実験・監査CLI | [scripts](../scripts/README.md) |
+| 性能計測・資料作成などの補助 | [tools](../tools/README.md) |
+| 回帰テスト | `tests/` |
+| 利用・開発ガイド | [運用](guides/operations.md)、[教員レビュー](guides/professor_review.md)など `docs/guides/` |
+| 画面設計 | [frontend](frontend/README.md) |
+| 監査・レビュー記録 | `docs/reviews/` |
+| 進行記録・正式手順 | [blocker](notes/CURRENT_RESEARCH_RELEASE_BLOCKERS.md)、[runbook](notes/FORMAL_RUNBOOK_CURRENT.md)など `docs/notes/` |
+| 原資料・仕様・テンプレート | [constant](constant/README.md) |
+| 過去の実装メモ | [archive](archive/implementation_notes/README.md) |
+| 再現条件 | [reproduction](reproduction/reproduction_spec.md) |
+| 凍結根拠・修論執筆資料 | `docs/evidence/`、`docs/thesis/` |
+| 発表・提出物 | [outcome](../outcome/README.md) |
 
-## 今回移動したもの
+## 配置を増やさないためのルール
 
-- `tools/benchmark_api.py`、`benchmark_bff.py`、`benchmark_catalog_ingest.py` の本体 →
-  `tools/benchmarks/`。旧パスはmodule alias兼CLI入口として保持。
-  移動に伴うリポジトリルート計算を修正し、APIの新規生成レポートには新パスを記載する。
-  既存の性能レポート・過去の開発記録の旧パスは互換入口へ解決するため変更しない。
+新しいファイルは上表の既存の置き場を優先します。
+1〜2本のためだけに別フォルダを作らず、同じ用途は一か所へまとめます。
+文書は `docs/`、日付付きの提出物は `outcome/` へ置き、ルートへ追加しません。
+ルートのREADMEと、この文書・文書案内を入口として維持します。
 
-- `test_multiday_phase1.py` の本体 → `tools/manual_experiments/test_multiday_phase1.py`。
-  ルートには直接実行時のみ委譲する互換入口を残した。
-- `analysis_multiday_plan.md`、`experiment_logger_integration.md` の本文 →
-  `docs/archive/implementation_notes/`。旧パスはリンク案内として維持。
-- 作業領域の `package_manifest.mjs` →
-  `tools/thesis_authoring/maintenance/package_august_20260905.mjs`。
-  固定日付の梱包処理として隔離し、汎用CLIとは扱わない。
+元から公開されているPython/CLIの旧入口は互換性のため残しています。
+修正するのは用途別フォルダの実体です。今回の中間配置だった `tools/catalog/`、
+`scripts/fleet/`、`tools/validation/` は統合済みで、今後は使いません。
+古いMarkdownの移動案内だけのファイルは削除し、リンクを正本へ付け替えています。
 
-## 削除と保全
+## 実行データと凍結成果
 
-8月スライドの `pre_copy_fit*`、`pre_layout*`、`.chart-data-*` は中間生成物として
-削除候補にしたが、削除コマンドが実行環境のポリシーで拒否されたため残している。
-今回、ファイル削除は実施していない。`nul` も未削除である。
-その他の `tmp/` にも過去の診断・監査記録があり、フォルダ名だけでは削除しない。
+`output/` は現行の生成先です。`outputs/`、`results/`、`scenarios/`、
+`data/`、`tmp/`、`先行文献/` の既存内容は名前だけで削除・移動しません。
+保存済みの実行結果や凍結manifestにはパス・ハッシュの契約があります。
+原データの移動には個別の参照確認が必要です。正式実験CLIの固定パスも維持します。
 
-公開済みPPTX、文献PDF、Outcomeのmanifest/inventory、凍結raw結果、prepared input、
-ハッシュ対象の既存作成スクリプトを変更しない。
-`experiment_logger.py` はBFFとテストから直接importされているためルートに保持する。
-
-今後の一時描画は `output/<用途>_<日付>/`、再利用する作成処理は `tools/<用途>/`、
-配布物は `outcome/<日付>_<用途>/` に置く。正本のreceiptとハッシュを確認してから
-中間生成物を整理する。過去の実験記録中のパスは履歴として書き換えない。
-
-## 検証結果
-
-追加整理後は関連テスト32件PASS（移動した入口のimport安全性・委譲、案内リンク、README、
-両進捗資料、logger）。凍結 `weather_dispatch_rerun_bb0c005` の厳格なbundle検証もPASS。
-`git diff --check` はPASS。全テスト・solver再実行は実施していない。
-カタログ計測の旧・新CLIは両方 `--help` を確認済み。API/BFF計測本体は実行していない。
+移動履歴・退避先・検証結果・未解決事項は [整理記録](FILE_ORGANIZATION.md) を参照してください。

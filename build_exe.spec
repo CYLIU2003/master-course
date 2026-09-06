@@ -24,7 +24,7 @@ a = Analysis(
         *([(_gurobipy_dir, 'gurobipy')] if _gurobipy_dir else []),
         # Include configuration files
         ('config', 'config'),
-        ('constant', 'constant'),
+        ('docs/constant', 'docs/constant'),
         ('data/built', 'data/built'), # Needed for catalog runtime datasets
         ('data/catalog-fast', 'data/catalog-fast'), # Needed for route inventory and normalized catalog fallbacks
         ('data/external', 'data/external'),
@@ -56,6 +56,7 @@ a = Analysis(
         # Tools and UI
         'tools',
         'tools.scenario_backup_tk',
+        'tools.gui.scenario_backup_tk',
         # FastAPI and uvicorn dependencies
         'fastapi',
         'uvicorn',

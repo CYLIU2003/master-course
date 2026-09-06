@@ -1,7 +1,7 @@
 # 弦巻 `WEEKDAY` route24 近傍縮小問題の切り分けと 4 ソルバー再実行報告
 
 > Update 2026-04-05 17:26
-> actual BFF fixed-scope rerun の最終結果は `docs/fixed_scope_unserved_fix_report_20260405.md` と `output/reports/20260405_fixed_scope_237d5623_unserved_fix/` を参照。こちらは route24 近傍切り分け時点の報告であり、最終 rerun bundle は別管理にした。
+> actual BFF fixed-scope rerun の最終結果は `docs/reviews/fixed_scope_unserved_fix_report_20260405.md` と `output/reports/20260405_fixed_scope_237d5623_unserved_fix/` を参照。こちらは route24 近傍切り分け時点の報告であり、最終 rerun bundle は別管理にした。
 
 ## 1. 対象と結論
 
@@ -173,7 +173,7 @@ python scripts/benchmark_fixed_prepared_scope.py `
 
 以下は MILP 代表解の便数分布を、路線帯ごとに見やすく並べた図である。棒の上に便数を表示してある。対応する local 画像は `output/reports/route24_teacher_report_20260405/assets/route_band_trip_counts.svg` に保存した。
 
-![route band chart](../output/reports/route24_teacher_report_20260405/assets/route_band_trip_counts.svg)
+![route band chart](../../output/reports/route24_teacher_report_20260405/assets/route_band_trip_counts.svg)
 
 BEV が入った帯だけを抜き出すと、混在は次の 5 帯に集中していた。
 
@@ -190,7 +190,7 @@ BEV が入った帯だけを抜き出すと、混在は次の 5 帯に集中し�
 
 run summary では `pv_generated_kwh=360.0`、`pv_used_direct_kwh=0.0`、`pv_curtailed_kwh=360.0` であり、PV はこの比較では直接は使われていない。ここでは capacity factor ではなく出力値を縦軸にした。凡例には弦巻営業所 PV の定格 `675.9 kW` を入れてある。local 画像は `output/reports/route24_teacher_report_20260405/assets/pv_output_profile.svg` に保存した。
 
-![pv output profile](../output/reports/route24_teacher_report_20260405/assets/pv_output_profile.svg)
+![pv output profile](../../output/reports/route24_teacher_report_20260405/assets/pv_output_profile.svg)
 
 表示単位は `kWh/slot`（60分スロット）で、日中に立ち上がり、12 時前後でピークを迎える。
 

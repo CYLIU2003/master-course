@@ -9,7 +9,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-_DEFAULT_INPUT_TEMPLATE_PATH = Path(__file__).resolve().parents[1] / "constant" / "input_template.json"
+_DEFAULT_INPUT_TEMPLATE_PATH = Path(__file__).resolve().parents[1] / "docs" / "constant" / "input_template.json"
 
 
 class TimeOfUseBand(BaseModel):

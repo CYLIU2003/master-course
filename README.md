@@ -1,7 +1,16 @@
 # master-course
 
-ファイルを探すときは [配置・保管ルール](docs/REPOSITORY_LAYOUT.md) と
-[補助スクリプトの用途別案内](tools/README.md) を参照してください。
+[進捗差分をスライド本体に反映した発表資料](outcome/2026-09-06_speaker_notes/progress_differences_integrated_20260906.pptx)
+では、以前の問題・作業・結果・次の検証を平易な言葉で整理しています。
+
+[進捗報告のカンペと研究差分](outcome/2026-09-06_speaker_notes/README.md) を追加しました。
+8月18枚版の各ノートで、実施した作業と確認できた結果を説明できます。
+
+ファイルを探すときは [文書案内](docs/README.md) と [配置・保管ルール](docs/REPOSITORY_LAYOUT.md) を参照してください。
+入力・車両データ整備は [catalog](scripts/catalog/README.md)、画面・可視化は
+[gui](tools/gui/README.md)、実験・検査は [scripts](scripts/README.md)、補助処理は [tools](tools/README.md) にまとめています。
+整理後の[欠陥監査・未解決事項](docs/FILE_ORGANIZATION.md)も参照してください。
+旧 `constant/` の原資料・テンプレートは [docs/constant](docs/constant/README.md) に統合しました。
 正式実験・監査CLIの入口は [scripts案内](scripts/README.md) に分けています。
 
 本人向けの研究理解ガイド、追加の営業距離・配車・充電分析、発表進捗資料は
@@ -2921,8 +2930,8 @@ fresh runが完了するまで未認証です。
 | --- | --- |
 | 画面から通常の最適化を動かす | [最短で起動する](#最短で起動する) → [最初の最適化](#最初の最適化) |
 | 研究用の正式実行をする | [正式研究実行の手順](docs/notes/FORMAL_RUNBOOK_CURRENT.md) と [ブロッカー一覧](docs/notes/CURRENT_RESEARCH_RELEASE_BLOCKERS.md) |
-| モデルを教員・共同研究者に説明する | [教員レビューガイド](README_core_professor.md) |
-| 日常運用、比較、障害対応を確認する | [運用ガイド](readme_operation.md) |
+| モデルを教員・共同研究者に説明する | [教員レビューガイド](docs/guides/professor_review.md) |
+| 日常運用、比較、障害対応を確認する | [運用ガイド](docs/guides/operations.md) |
 | 実装・検証・変更履歴を確認する | [開発ノート](DEVELOPMENT_NOTES.md) |
 
 ## このシステムでできること
@@ -3045,11 +3054,11 @@ PV設備は、画面で保存した `pv_capacity_kw`（PV定格出力）を最�
 
 ### データが利用できない
 
-まず画面または `GET /api/app/data-status` でデータ状態を確認してください。`BUILT_DATASET_REQUIRED` が出た場合は、データを推測で補わず、[運用ガイドのデータ復旧手順](readme_operation.md#no-module-named-tokyubus_gtfs)に従ってください。
+まず画面または `GET /api/app/data-status` でデータ状態を確認してください。`BUILT_DATASET_REQUIRED` が出た場合は、データを推測で補わず、[運用ガイドのデータ復旧手順](docs/guides/operations.md#no-module-named-tokyubus_gtfs)に従ってください。
 
 ### 503 またはジョブ待ちになる
 
-BFF は同時に一つの実行しか受け付けません。前のジョブの終了を待つか、比較実行には [運用ガイド](readme_operation.md#1-ソルバーモード比較benchmark) の順次実行スクリプトを使ってください。
+BFF は同時に一つの実行しか受け付けません。前のジョブの終了を待つか、比較実行には [運用ガイド](docs/guides/operations.md#1-ソルバーモード比較benchmark) の順次実行スクリプトを使ってください。
 
 ### `INFEASIBLE` になる
 
@@ -3059,8 +3068,8 @@ SOC、初期状態、車両台数、充電器・契約電力、回送接続、`a
 
 | 読者・用途 | 資料 |
 | --- | --- |
-| 日常操作・比較・トラブルシューティング | [運用ガイド](readme_operation.md) |
-| 指導教員・共同研究者向けのモデル説明 | [教員レビューガイド](README_core_professor.md) |
+| 日常操作・比較・トラブルシューティング | [運用ガイド](docs/guides/operations.md) |
+| 指導教員・共同研究者向けのモデル説明 | [教員レビューガイド](docs/guides/professor_review.md) |
 | 定式化と実装状況 | [制約・目的関数の定式化](docs/constant/formulation.md) / [実装状況](docs/constant/implementation_status.md) |
 | 車両セットを固定する研究契約 | [Scenario Fleet Contract](docs/model/SCENARIO_FLEET_CONTRACT.md) |
 | 図表・生データの対応 | [Literature Figure Mapping](docs/model/LITERATURE_FIGURE_MAPPING.md) |

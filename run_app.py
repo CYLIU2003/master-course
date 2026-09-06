@@ -186,7 +186,7 @@ def main():
         # Import and start Tkinter UI
         # We put imports here to prevent them slowing down the server startup
         import tkinter as tk
-        from tools.scenario_backup_tk import App
+        from tools.gui.scenario_backup_tk import App
         
         print("Starting frontend application (Tkinter)...")
         root = tk.Tk()

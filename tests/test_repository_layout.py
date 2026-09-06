@@ -40,8 +40,12 @@ def test_organization_document_links_resolve() -> None:
         "docs/REPOSITORY_LAYOUT.md", "tools/README.md",
         "tools/manual_experiments/README.md", "tools/thesis_authoring/README.md",
         "docs/archive/implementation_notes/README.md",
-        "analysis_multiday_plan.md", "experiment_logger_integration.md",
+        "docs/archive/implementation_notes/analysis_multiday_plan.md",
+        "docs/archive/implementation_notes/experiment_logger_integration.md",
         "tools/benchmarks/README.md", "scripts/README.md",
+        "docs/FILE_ORGANIZATION.md", "scripts/catalog/README.md",
+        "scripts/weather/README.md", "tools/gui/README.md",
+        "docs/constant/README.md",
     ]
     for name in documents:
         document = ROOT / name

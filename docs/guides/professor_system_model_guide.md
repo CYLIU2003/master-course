@@ -66,7 +66,7 @@
 
 ### 4.2 パラメータ保全文書
 
-- docs/core_parameter_preservation_manifest.md
+- docs/reviews/core_parameter_preservation_manifest.md
 
 ## 5. バス運行ルール（dispatch 側ハード制約）
 

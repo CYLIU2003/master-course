@@ -19,7 +19,7 @@
 - External research gates: 3 open
 
 This is not the independent Claude Code or executive review required by
-`docs/AI_AGENT_REMEDIATION_20260726.md`.
+`docs/reviews/AI_AGENT_REMEDIATION_20260726.md`.
 
 ## 1. Verified call chain
 

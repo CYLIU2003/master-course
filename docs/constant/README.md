@@ -1,5 +1,17 @@
 # docs/constant/ 文書インデックス
 
+## 2026-09-05: 原資料・テンプレートの統合
+
+旧ルート `constant/` の7ファイルをここへ統合しました。原資料のSHA-256は移動前後で一致しています。
+
+- JH25原資料: [日野](bus_hino_jh25.xlsx)、[いすゞ](bus_isuzu_jh25.xlsx)、[三菱ふそう](mitsubishifuso_bus_jh25.xlsx)
+- 設定・スキーマ: [試作設定](ebus_prototype_config.json)、[スキーマ](ev_route_cost.schema.json)、[入力テンプレート](input_template.json)
+- 過去の試作コード: [prototype.py](prototype.py)（現行の正式solver入口ではありません）
+
+車両抽出CLIの既定入力先もこのフォルダです。明示指定する場合は
+`python scripts/catalog/extract_engine_bus.py --constant-dir docs/constant` を使います。
+`--constant-dir` というオプション名は引き続き使用できます。
+
 ## ステータス
 - 分類: 現行インデックス
 - 用途: `docs/constant/` 配下の markdown 文書の位置づけを日本語中心で整理する
@@ -22,7 +34,7 @@
 > 以下の「正本候補」は研究計画・構想段階の文書が中心です。
 > 2026-06 時点の実コード実行経路と完全に一致するとは限りません。
 > 現在の実装正確性を確認したい場合は、
-> `README.md`、`docs/accounting_output_contract.md`、schema ファイル、およびテストコードを優先参照してください。
+> `README.md`、`docs/guides/accounting_output_contract.md`、schema ファイル、およびテストコードを優先参照してください。
 > `agent.md` はプロジェクトスケルトン構想時の指示書であり、Gurobi-only 前提など
 > 現コードと異なる前提が含まれます。`masters_thesis_simulation_spec_v2.md` は
 > PV/BESS を将来拡張と扱っており、現実装の PV/BESS 有効とは表現が異なります。

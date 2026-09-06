@@ -11,3 +11,15 @@ docs/thesis/weather_results_bb0c005/*.csv text eol=lf
 docs/thesis/weather_results_bb0c005/*.json text eol=lf
 docs/thesis/weather_results_bb0c005/*.svg text eol=lf
 docs/thesis/weather_results_bb0c005/*.png binary
+
+# Preserve the LF bytes bound by the August presentation source manifest.
+tools/thesis_authoring/build_progress_explanation.py text eol=lf
+tools/thesis_authoring/build_authoring_evidence.py text eol=lf
+outcome/2026-09-05_research_progress/analysis/*.csv text eol=lf
+outcome/2026-09-05_research_progress/analysis/evidence_supplements/*_canonical_96_slot_power_series.csv text eol=lf
+outcome/2026-09-05_research_progress/04_parameter_sources.csv text eol=lf
+docs/thesis/authoring_v1/tables/cross_weather_candidate_analysis.csv text eol=lf
+docs/thesis/authoring_v1/03_mathematical_formulation.md text eol=lf
+docs/thesis/authoring_v1/05_assumptions_parameters_units.md text eol=lf
+outcome/2026-09-05_literature_review/01_critical_review.md text eol=lf
+outcome/2026-09-05_literature_review/02_adoption_protocol.md text eol=lf

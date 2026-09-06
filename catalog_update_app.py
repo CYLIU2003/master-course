@@ -56,7 +56,7 @@ def _format_counts(counts: Dict[str, Any]) -> str:
 
 
 def _fast_ingest():
-    from tools import fast_catalog_ingest
+    from scripts.catalog import fast_catalog_ingest
 
     return fast_catalog_ingest
 
@@ -81,13 +81,9 @@ def _data_prep_build_all():
 
 
 def _build_tokyu_gtfs_db_module():
-    source_path = Path(__file__).resolve().parent / "scripts" / "build_tokyu_gtfs_db.py"
-    spec = importlib.util.spec_from_file_location("build_tokyu_gtfs_db_source", source_path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"Unable to load build_tokyu_gtfs_db.py from {source_path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    from scripts.catalog import build_tokyu_gtfs_db
+
+    return build_tokyu_gtfs_db
 
 
 def _parse_dataset_ids(value: Optional[str]) -> List[str]:
@@ -487,9 +483,12 @@ def _build_gtfs_import_meta(
 
 
 def _transit_catalog():
-    from bff.services import transit_catalog
+    return _fast_ingest()._catalog_builder_module("transit_catalog")
 
-    return transit_catalog
+
+def _require_sync_dependencies() -> None:
+    for name in ("gtfs_import", "odpt_routes", "odpt_stops", "odpt_stop_timetables", "odpt_timetable"):
+        _fast_ingest()._catalog_builder_module(name)
 
 
 def _scenario_store():
@@ -605,16 +604,16 @@ def _sync_bundle_to_scenario(
     reset_existing: bool,
 ) -> None:
     store = _scenario_store()
-    from bff.services.gtfs_import import (
+    from catalog_builder.gtfs_import import (
         summarize_gtfs_routes_import,
         summarize_gtfs_stop_import,
         summarize_gtfs_stop_timetable_import,
         summarize_gtfs_timetable_import,
     )
-    from bff.services.odpt_routes import summarize_routes_import
-    from bff.services.odpt_stops import summarize_stop_import
-    from bff.services.odpt_stop_timetables import summarize_stop_timetable_import
-    from bff.services.odpt_timetable import (
+    from catalog_builder.odpt_routes import summarize_routes_import
+    from catalog_builder.odpt_stops import summarize_stop_import
+    from catalog_builder.odpt_stop_timetables import summarize_stop_timetable_import
+    from catalog_builder.odpt_timetable import (
         normalize_timetable_row_indexes,
         summarize_timetable_import,
     )

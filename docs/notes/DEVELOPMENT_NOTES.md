@@ -189,7 +189,7 @@
 
 - 定置型BESSの終端方針を`minimum_only` / `return_to_initial` / `fixed_target`としてdomain modelへ追加した。SOC上下限と終端下限は全方針でhard constraintである。目標なしの場合に終端SOCを初期SOCへ戻す意味は持たせない。正のlegacy目標は`fixed_target`へ移行して既存実験の意味を保存する。
 - `ProblemBuilder`、Gurobi Stage 2、独立feasibility、rolling override、BFF scenario normalization、研究出力・監査が共通resolverを使う。`minimum_only`では目標偏差を計算せず、終端下限不足だけを違反とする。Phase 3 Stage 2の目標hard制約は維持し、偏差penaltyだけだった統合MILPにも目標±許容幅のhard制約を追加した。従って旧統合Phase 4成果物は数学的に同条件ではないが、旧300kWh固定Phase 3成果物を自動的に運用範囲のみケースへ読み替えることもしない。
-- Tkフロントでは営業所設備・充電インフラ画面に3方針と任意目標%を追加し、詳細設備画面では設備容量・PV、SOC・終端方針、電力経路・費用、データ確認へ分割した。設定入口を上部ハブへ集約し、画面規則は`DESIGN.md`へ保存した。
+- Tkフロントでは営業所設備・充電インフラ画面に3方針と任意目標%を追加し、詳細設備画面では設備容量・PV、SOC・終端方針、電力経路・費用、データ確認へ分割した。設定入口を上部ハブへ集約し、画面規則は`docs/frontend/DESIGN.md`へ保存した。
 - `build_next_execution_state()`は、solver resultの`vehicle_soc=slot start`と`bess_soc=slot end`の違いを保持し、実行済み受電から需要ピークを更新する。欠損SOCをscenario初期値で補完しない。毎時CLIは`--end-time`による連鎖と`--pv-forecast-updates-json`による時刻別予測更新に対応した。
 - 1500秒晴雨再計算、24時間連鎖、PV予測誤差、終端3方針、2日連続評価、seed感度は手動計算待ちであり、完了扱いにしない。scenario/prepared ID、コマンド、成果物、受理gateは`phase3_manual_validation_runbook_20260716.md`を正本とする。
 
@@ -310,7 +310,7 @@
 
 ### Documentation, presentation, and validation
 
-- `README_core_professor.md`はStage 1費用代理の含有/除外項、PV 0円の入力、Stage 2との責任分離、global optimum非主張へ更新した。
+- `docs/guides/professor_review.md`はStage 1費用代理の含有/除外項、PV 0円の入力、Stage 2との責任分離、global optimum非主張へ更新した。
 - `scripts/build_phase3_progress_presentation.py`を追加し、旧受理済みbaselineと今回のimmutable summaryから13枚の教員向けPPTを生成する。成果物は`docs/presentations/phase3_weather_model_progress_20260716.pptx`。PowerPoint自身で13枚をPNGへrenderし、比較契約、数式、IIS修正、割当、会計、研究限界、結論スライドを目視確認した。
 - focused metadata/comparator regressionは`21 passed`。`GRB_LICENSE_FILE=C:\Users\RTDS_admin\gurobi.lic python -m pytest -q --ignore=test_multiday_phase1.py`は`683 passed, 8 skipped`。除外した`test_multiday_phase1.py`はlocalhost:8000のBFFを要求する手動E2Eである。compileall、PPTのPowerPoint render 13/13枚、`git diff --check`もpassした。
 - MIT-style self reviewはCorrectness / Security / Performance / Maintainability / Testabilityと研究妥当性を確認し、P0=0、P1=0、P2=2とした。P2は、(1) dirty成果物をclean commitから再実行してstrict comparisonへ昇格すること、(2) 集約下界がPV/BESS時刻整合・需要料金を含まないためPhase 4同時最適化又はablationで代理精度を検証すること、である。外部`claude` CLIはこの環境に存在せず、Claude Codeレビューは実行できなかった。
@@ -3341,7 +3341,7 @@ tests/       回帰テスト
   - `src/data_loader.py` の `build_inputs` 経路レポートを
     `edge_count` / `generated_connections` 形式に揃え、
     `src/pipeline/solve.py` で dict / dataclass の双方を安全にログ表示できるよう改善。
-  - `docs/dispatch_preprocess_config.md` を追加し、
+  - `docs/guides/dispatch_preprocess_config.md` を追加し、
     `dispatch_preprocess` キーの意味・推奨プリセット・ログ形式を明文化。
   - `tests/test_pipeline_solve_dispatch_report.py` を追加し、
     `connection_source=build_inputs` 相当の dict レポートが
@@ -3670,7 +3670,7 @@ master-course/
   - `tools/scenario_backup_tk.py` に以下を追加した。
     - 結果詳細ビュー: Simulation/Optimization結果を Summary/Details/Raw JSON で表示。
     - シナリオ比較ビュー: Scenario A/B の Optimization比較・Simulation比較を表示し、主要指標の `delta(B-A)` を確認可能にした。
-  - 運用手順書として `readme_operation.md` を追加し、比較実行コマンドと確認項目を明文化した。
+  - 運用手順書として `docs/guides/operations.md` を追加し、比較実行コマンドと確認項目を明文化した。
 
 - 2026-03-17 (MILP only ERROR pinpoint fix)
   - `mode_milp_only` 実行時の `solver_result.infeasibility_info = "Name too long (maximum name length is 255 characters)"` を確認。
@@ -3777,7 +3777,7 @@ master-course/
     - `ga`: `solver_status=feasible`, `objective_value=2979501.013850968`, `trip_count_served=974`, `trip_count_unserved=0`, `vehicle_count_used=91`
     - `abc`: `solver_status=feasible`, `objective_value=2976786.2860787963`, `trip_count_served=974`, `trip_count_unserved=0`, `vehicle_count_used=91`
   - comparison row には `supports_exact_milp`, `termination_reason`, `warnings`, `incumbent_history_count`, `plan_source`, `plan_status`, `milp_status`, `route24/23` の未担当件数、shared trip の BEV/ICE 割当内訳を持たせた。`consistency_check.json` では comparison と per-solver JSON の `solver_status/objective/served/unserved/vehicle_count_used` が 4 モードすべて一致することを確認した。
-  - 追記所見: 欠便抑止の観点では 4 モードとも route24 / route23 の未担当を 0 まで戻せた。一方で MILP は exact incumbent を 300 秒以内に得ておらず、現時点の改善は「全欠便へ落ちない安全化」である。先生向けの説明資料は `docs/route24_solver_report_20260405.md` にまとめた。
+  - 追記所見: 欠便抑止の観点では 4 モードとも route24 / route23 の未担当を 0 まで戻せた。一方で MILP は exact incumbent を 300 秒以内に得ておらず、現時点の改善は「全欠便へ落ちない安全化」である。先生向けの説明資料は `docs/reviews/route24_solver_report_20260405.md` にまとめた。
   - 回帰テスト:
     - `tests/test_milp_baseline_fallbacks.py`
     - `tests/test_baseline_vehicle_type_priority.py`
@@ -3985,7 +3985,7 @@ master-course/
   - `src/dispatch/models.py` に `DispatchContext.locations_equivalent()` を追加し、alias 展開後の location 集合が交差していれば同地点とみなせるようにした。`src/dispatch/feasibility.py` の location continuity もこの helper を使うよう変更し、alias 同値の 0 分 deadhead を missing 扱いしないよう揃えた。
   - `src/optimization/common/builder.py` は fully shared scope 判定を追加し、その場合は per-type greedy duty ではなく pooled shared path-cover baseline を使って actual fleet 全体で duty cover を構築するようにした。scope が fully shared でない場合は既存 per-type fallback を残しているため、数学的意味を広く変えずに current bug を潰している。
   - これにより scoped baseline は `dispatch_pooled_shared_path_cover_baseline`, `served=974`, `unserved=0`, `vehicle_count_used=87` へ改善した。actual BFF rerun でも `mode_milp_only=time_limit_baseline`, `mode_alns_only=feasible`, `mode_ga_only=feasible`, `mode_abc_only=feasible` の全てで `974/974 served` を確認した。objective は `ALNS=3453137.5192`, `GA=3490088.7734`, `ABC=3508589.5957`, `MILP fallback=3536498.7170` だった。
-  - 出力 parity も合わせて確認し、旧 `output/run_20260324_2210` に対する generic artifact missing は 4 モードとも 0 件だった。比較 bundle は `output/reports/20260405_fixed_scope_237d5623_unserved_fix/`、報告書は `docs/fixed_scope_unserved_fix_report_20260405.md` に保存した。
+  - 出力 parity も合わせて確認し、旧 `output/run_20260324_2210` に対する generic artifact missing は 4 モードとも 0 件だった。比較 bundle は `output/reports/20260405_fixed_scope_237d5623_unserved_fix/`、報告書は `docs/reviews/fixed_scope_unserved_fix_report_20260405.md` に保存した。
   - 回帰テスト:
     - `tests/test_dispatch_context_location_aliases.py`
     - `tests/test_pooled_shared_baseline.py`
@@ -4022,7 +4022,7 @@ master-course/
   - `src/optimization/common/builder.py` の pooled shared baseline から「初便への startup deadhead が departure より長いと候補から除外する」条件を外し、simulation horizon 前からの回送開始を許容した。これは feasibility の本体 `arrival + turnaround + deadhead <= next departure` は変えず、初便前の horizon 外 deadhead を禁止しないだけなので dispatch 数学条件自体は維持している。
   - `src/dispatch/models.py`, `src/optimization/common/vehicle_assignment.py`, `src/optimization/common/feasibility.py`, `src/optimization/milp/solver_adapter.py` を通して、depot alias 等価を使った startup path existence 判定を追加した。既知 missing path の vehicle/start trip 組は baseline assignment でも MILP `start_arc` でも禁止し、逆に path が存在する限りは「05:00 より前からの回送」「23:00 後の帰庫」を horizon 外として許容する。
   - `bff/routers/optimization.py` は canonical export 条件を見直し、`fixedRouteBandMode=true` なら route-band SVG を標準出力するようにした。同時に canonical run path の MILP `warm_start=True` も回復させた。`src/optimization/alns/acceptance.py`, `src/optimization/alns/selection.py`, `src/optimization/alns/engine.py`, `src/optimization/ga/engine.py`, `src/optimization/abc/engine.py` では acceptance / operator-selection factory を追加し、GA=`genetic_like`, ABC=`bee_colony_like` が実 metadata に出るよう修正した。
-  - fixed scope rerun は actual canonical BFF path で再実行し、run directory は `output/2025-08-04/scenario/237d5623-aa94-4f72-9da1-17b9070264be/mode_milp_only/tsurumaki/WEEKDAY/run_20260406_0110/`, `.../mode_alns_only/.../run_20260406_0114/`, `.../mode_ga_only/.../run_20260406_0119/`, `.../mode_abc_only/.../run_20260406_0125/` に保存した。comparison bundle は `output/reports/20260406_fixed_scope_237d5623_model_fix/`、教授向けレポートは `docs/fixed_scope_model_fix_report_20260406.md` に保存している。
+  - fixed scope rerun は actual canonical BFF path で再実行し、run directory は `output/2025-08-04/scenario/237d5623-aa94-4f72-9da1-17b9070264be/mode_milp_only/tsurumaki/WEEKDAY/run_20260406_0110/`, `.../mode_alns_only/.../run_20260406_0114/`, `.../mode_ga_only/.../run_20260406_0119/`, `.../mode_abc_only/.../run_20260406_0125/` に保存した。comparison bundle は `output/reports/20260406_fixed_scope_237d5623_model_fix/`、教授向けレポートは `docs/reviews/fixed_scope_model_fix_report_20260406.md` に保存している。
   - rerun 結果は `MILP=time_limit_baseline, objective=3548573.795919167, served=974, unserved=0, vehicles=87`, `ALNS=feasible, objective=3534994.692990817, served=974, unserved=0, vehicles=88`, `GA=feasible, objective=3542971.744454992, served=974, unserved=0, vehicles=88`, `ABC=feasible, objective=3542971.744454992, served=974, unserved=0, vehicles=88` だった。4 solver とも欠便は 0 だが、MILP は `supports_exact_milp=false`, `termination_reason=time_limit`, `incumbent_history_count=0` の fallback であり、exact MILP とは言えない。
   - 出力 parity は `output/reports/20260406_fixed_scope_237d5623_model_fix/artifact_parity_vs_run_20260324_2210.json` で確認し、旧 `output/run_20260324_2210` に対する generic artifact missing は 0 件だった。新 run は `canonical_solver_result.json`, `optimization_result.json`, `optimization_audit.json`, `solver_result.json`, `run_manifest.json`, `kpi_summary.json` を追加で持つ。
   - 回帰テスト:

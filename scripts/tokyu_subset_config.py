@@ -1,13 +1,19 @@
-"""Editable defaults for Tokyu subset recovery builds."""
+"""Compatibility entrypoint; implementation: scripts.catalog.tokyu_subset_config."""
 
-from __future__ import annotations
+from pathlib import Path
+import sys
+
+# Support direct execution and importlib loaders from outside the repository.
+_ROOT = str(Path(__file__).resolve().parents[1])
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
+
+from scripts.catalog import tokyu_subset_config as _implementation
 
 
-SELECTED_DEPOTS: list[str] = [
-    "meguro",
-    "seta",
-    "awashima",
-    "tsurumaki",
-]
+def __getattr__(name):
+    """Expose attributes to callers retaining an importlib loader's module."""
+    return getattr(_implementation, name)
 
-SELECTED_ROUTE_CODES: list[str] = []
+
+sys.modules[__name__] = _implementation

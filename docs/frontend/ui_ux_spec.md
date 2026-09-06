@@ -4,7 +4,7 @@
 
 The application is a research operations console, not a decorative dashboard. It should make scope, model conditions, validity and evidence easier to inspect than raw JSON while retaining a path to the raw artifacts.
 
-Use the repository tokens in `DESIGN.md`: navy structure, teal primary action/ready state, restrained borders, small radii, Yu Gothic UI, explicit units and no color-only meaning.
+Use the repository tokens in `docs/frontend/DESIGN.md`: navy structure, teal primary action/ready state, restrained borders, small radii, Yu Gothic UI, explicit units and no color-only meaning.
 
 ## 2. Responsive target
 

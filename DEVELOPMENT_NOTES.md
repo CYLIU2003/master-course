@@ -1,5 +1,78 @@
 # Development Notes
 
+## 2026-09-06: integrate research differences into visible slides
+
+- Revised slides 8, 9, 14, 16, and 17 in a separate 18-slide edition, with
+  editable before/work/result tables and matching speaker notes. Remaining
+  package parts and prior deck are preserved.
+- Explained the August experiment versus September 5 reanalysis, 108 changed
+  trips, curtailment observations and cost components in plain Japanese.
+  No solver execution, numerical model change, or acceptance upgrade.
+
+## 2026-09-06: presentation speaker notes and research progress differences
+
+- Added a separate 18-slide August deck with conversational Japanese speaker
+  notes and a before/work/result/remaining-issues companion in
+  `outcome/2026-09-06_speaker_notes/`. Original presentations remain untouched.
+- Distinguished frozen August experiments from September 5 descriptive
+  reanalysis. Corrected causal overstatements about dispatch and PV curtailment,
+  and clarified requested time limits versus actual whole-workflow duration.
+- Used presentation and research-methodology guidance to preserve the visual
+  structure, explain terms, and keep feasibility, accounting, and optimality
+  separate. No solver runs or research claim upgrades are part of this change.
+- Retained the existing August revision source-manifest mismatch as an explicit
+  limitation. This notes revision does not certify that older package.
+- Verified all 18 embedded note bodies against the script, unchanged package
+  parts byte-for-byte, and README navigation: 5 tests passed. Rendered and
+  inspected all 18 slides. PowerPoint desktop inspection was not performed.
+
+## 2026-09-05: simplify layout after consolidation
+
+- Moved 20 documents into existing frontend/reviews/reproduction/archive groups and
+  one guides directory. Removed two root redirect-only notes; root has six fewer
+  documents and docs has only three top-level Markdown entry documents.
+- Consolidated four catalog/fleet implementations in scripts/catalog and placed
+  output consistency validation in scripts. Retired three intermediate packages;
+  original public CLI/import wrappers remain compatible.
+- Rebased Markdown links and updated active module references. Removed eight
+  redundant index/package/redirect files; preserved all historical document bodies.
+- Frozen evidence/artifacts, model semantics and persisted runtime data unchanged
+  by this follow-up. No formal experiment or external ingestion executed.
+- Full regression: 1,859 passed / 1 failed in 129.30s; only the previously recorded
+  August source-manifest hash mismatch remains. Relocated-document links, legacy
+  entrypoint tests, CLI help, frozen weather strict validation and diff check passed.
+
+## 2026-09-05: constant consolidated into docs
+
+- Moved all seven root constant files into docs/constant with SHA-256 equality.
+  The empty old directory was moved to OS temp after deletion was rejected by policy.
+  Existing docs/constant files were preserved.
+- Updated scenario input-template defaults, engine Excel discovery, ICE source
+  labels, CLI help, EXE data mapping and README/navigation.
+- Numerical inputs and source file content unchanged; no solver execution.
+- Validation: 373 related tests passed (including real three-manufacturer Excel
+  extraction to a pytest temporary directory, default template and navigation).
+  git diff --check passed. EXE packaging paths were updated but no EXE build was run.
+
+## 2026-09-05: organization defect audit
+
+- Fixed catalog help/import failure by lazily loading the separated catalog_builder
+  ETL distribution. Missing optional dependencies now produce an actionable error
+  before output creation. Actual ingestion still requires data-prep.
+- GTFS sync now checks dependencies and loads its bundle before creating a scenario.
+  The update app loads the canonical GTFS builder module rather than a compatibility alias.
+- Added six focused regression checks; all 60 compatibility cases now pass without xfail.
+- Restored 16 August-manifest-bound files to exactly matching LF bytes, with eol=lf
+  attributes. No numeric/text content or expected digest was changed.
+- One P1 source-provenance blocker remains: the recorded builder source hash
+  48e7d5419f7dfb466036cace4eb78be901fa37578903aa3c9abd8c37ff9ff4b5 is unavailable
+  in the checked current source, Git history, or local same-name copies. Keep the
+  strict source-manifest test failing; do not relabel or weaken it.
+- No actual catalog fetch, scenario sync, formal experiment, commit or push performed.
+- Final full regression: 1,855 passed / 1 failed in 81.02s; failure is the retained
+  August source-manifest hash check above. Frozen weather strict bundle validation
+  and git diff --check passed. No xfails remain in the suite.
+
 ## 2026-09-05: follow-up script organization
 
 - Grouped the three API/BFF/catalog benchmark implementations under `tools/benchmarks/`; preserved the old CLI and module-import paths with aliases.
@@ -7041,7 +7114,7 @@
   terminal balances, ≤10% predeclared gap gate, and weather-comparison
   acceptance are not yet empirically closed.
 - Independent Claude Code and executive reviews required by
-  `docs/AI_AGENT_REMEDIATION_20260726.md` have not yet been performed. P0/P1
+  `docs/reviews/AI_AGENT_REMEDIATION_20260726.md` have not yet been performed. P0/P1
   closure and teacher-facing completion must not be claimed until those
   reviews and the clean rerun are complete. The current Codex self-review is
   recorded separately in
@@ -7049,7 +7122,7 @@
 
 ## 2026-07-26 AI agent remediation specification for the reviewed runs
 
-- Added docs/AI_AGENT_REMEDIATION_20260726.md. It turns the strict review of
+- Added docs/reviews/AI_AGENT_REMEDIATION_20260726.md. It turns the strict review of
   the 2026-07-26 high-PV and low-PV outputs into an implementation order,
   non-negotiable research guardrails, regression requirements, clean-rerun
   acceptance gates, and independent-review checklist.
@@ -7879,7 +7952,7 @@ integrated total cost was optimized globally.
 
 - BESS終端条件を明示的な3方針へ分離した。`minimum_only`は通常SOC上下限と終端SOC下限だけをhard constraintとして守り、`return_to_initial`は終端を初期SOCへ一致、`fixed_target`は指定値へ一致させる。旧scenarioは、正の終端目標があれば`fixed_target`、なければ`minimum_only`として再現する。方針解決はcore共通関数へ集約し、builder、MILP、独立feasibility、会計・BFF出力が同じ意味を使う。Phase 3 Stage 2は従来から目標をhard制約としていたが、統合MILP側は偏差penaltyだけだったため、選択方針どおり目標±許容幅のhard制約へ修正した。この点は統合MILPの数学的意味を変えるため、旧Phase 4成果物との費用比較を無効にする一方、現行Phase 3成果物の比較条件は変えない。
 - Tkフロントの営業所設備・充電インフラ画面と詳細設備画面の双方に終端方針を追加した。`minimum_only`選択時は古い目標値を0へクリアし、初期SOCへ戻す場合は初期SOCを監査可能な目標値として保存し、任意目標は終端下限〜SOC上限内だけを許可する。SOCの%入力を画面上の正本とし、kWh換算値は読取表示にした。
-- 点在していた主要入口を画面上部の設定ハブ（営業所設備・BESS、車両・テンプレート、ソルバー・実験条件）へ集約し、営業所設備タブを主パラメータ群へ追加した。`DESIGN.md`に色、文字、余白、部品、導線、アクセシビリティ、研究入力の表示規則をdesign.md形式で記録し、`@google/design.md lint DESIGN.md`を通過した。
+- 点在していた主要入口を画面上部の設定ハブ（営業所設備・BESS、車両・テンプレート、ソルバー・実験条件）へ集約し、営業所設備タブを主パラメータ群へ追加した。`docs/frontend/DESIGN.md`に色、文字、余白、部品、導線、アクセシビリティ、研究入力の表示規則をdesign.md形式で記録し、`@google/design.md lint docs/frontend/DESIGN.md`を通過した。
 - 毎時再最適化結果から、次slot開始EV SOC、最終実行slot終了BESS SOC、実行済みslotのon/off-peak最大受電kWを抽出する状態引継ぎを追加した。欠損時に初期値へ戻さず停止する。CLIは`--end-time`で1時間ずつ連鎖し、各stepの状態と全体summaryを保存する。残り時間目的値は重複区間を含むため加算しない。
 - 予測誤差実験用に、毎時のfull-horizon PV予測を`--pv-forecast-updates-json`で差し替える経路を追加した。営業所ID、slot数、非負kWhを検証し、profile hashと日量を各stepへ保存する。長時間solveはユーザーが手動実行する方針のため、この変更では1500秒run、24時間連鎖、予測誤差、複数日、seed感度を実行していない。実行コマンドと受理条件は`docs/notes/phase3_manual_validation_runbook_20260716.md`に固定した。
 - 文献上、定置型蓄電池の終端SOCは一律に初期SOCへ戻す物理条件ではない。代表日を繰り返す研究では初期・終端を一致させる一方、終端を初期値の近傍に置く方法、終端SOCを翌日の初期SOCへ引き継ぐ逐次計画も確認した。現行晴雨比較の`300 kWh → 300 kWh`は、日間在庫を同条件にして費用比較するための**シナリオ境界条件**として説明する。
@@ -9347,3 +9420,19 @@ locks this distinction in place.
 - No solver, Prepare, Rolling, scenario/parameter mutation, mathematical-model
   change, relaxed acceptance, experiment signoff, GitHub Actions/AI feature,
   commit or push. Source and artifact SHA-256 lists are stored in the new package.
+- 2026-09-05: ルート直下の未追跡生成物 `nul` と `output_multiday_test.log` を退避後に削除し、`.pytest_cache/`・ルートの `__pycache__/`・空の `tmp_pv_profile_test/` も削除した。`output/`、`outputs/`、`results/`、`scenarios/`、`tmp/` 内の既存研究・実行データ、互換入口、仮想環境は変更していない。配置方針は `docs/FILE_ORGANIZATION.md` に記録した。
+
+### 2026-09-05: script implementation organization follow-up
+
+- Base HEAD `d50d3ea3`. Preserved existing README/notes edits and local Codex configuration.
+- Relocated 20 implementations into scripts/catalog, scripts/fleet, tools/catalog,
+  tools/gui, tools/benchmarks, and tools/validation. Retained old module/CLI aliases;
+  corrected repository roots, sibling imports, launcher/packaging references and loader tests.
+- Related regression: 189 passed, 3 xfailed for one pre-existing missing legacy ingest
+  dependency; 30 old/new/module CLI help checks passed. Frozen weather evidence strict
+  bundle validation passed without a solve. See docs/FILE_ORGANIZATION.md for scope.
+- Four intermediate slide files and six chart scratch directories moved out of the
+  repository to a recoverable OS-temp directory after deletion was rejected by policy.
+  Published packages, final slides, prepared inputs and research outputs retained.
+- No formulas, constraints, acceptance gates, timetable/operator/fleet contracts changed.
+  No commit, push, formal run, external review or research-readiness claim.

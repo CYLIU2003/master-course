@@ -21,7 +21,7 @@ from src.tokyu_bus_data import (
 )
 
 
-_BUILD_SCRIPT_PATH = _REPO_ROOT / "scripts" / "build_tokyu_bus_data.py"
+_BUILD_SCRIPT_PATH = _REPO_ROOT / "scripts" / "catalog" / "build_tokyu_bus_data.py"
 _BUILD_SCRIPT_SPEC = importlib.util.spec_from_file_location("build_tokyu_bus_data", _BUILD_SCRIPT_PATH)
 assert _BUILD_SCRIPT_SPEC is not None
 assert _BUILD_SCRIPT_SPEC.loader is not None
