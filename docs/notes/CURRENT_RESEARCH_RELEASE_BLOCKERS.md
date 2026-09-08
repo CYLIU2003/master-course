@@ -1,5 +1,37 @@
 # Current research release blockers
 
+2026-09-08: Slide 11 distinguishes candidate total-fleet changes (32 versus 47–53 buses). This explanatory chart edit does not establish a BEV-count causal effect or resolve any research gate.
+
+2026-09-08: Slides 8/9 now distinguish within-PV plan cost differences from repair gains. The diagnostic values do not resolve the SOC upper-bound mismatch or upgrade any release gate.
+
+The user-designated original August PPTX now contains the 37-slide edition; previous editions are archived.
+Its source and corrections are recorded in [the package README](../../outcome/2026-09-07_urabe_progress_review/README.md).
+SOC maximum, provenance, baseline comparison, full legacy citation checking and independent review remain unresolved.
+The 2026-09-08 personal explanation guide documents these gates and the next acceptance criteria. This is a documentation update only; no release gate is upgraded.
+
+## 2026-09-07: P1 Prepared maximum SOC is not enforced in frozen Stage 2
+
+The advisor-slide reanalysis found a new blocker in `bb0c005` results: Prepared
+BEV `maxSoc=0.90` versus Stage 2 variable/terminal bounds at the full battery
+capacity. SUNNY exceeds 90% in 12 vehicle-slot boundary observations across
+3 vehicles, peaking at 293.19656152 / 314 = 93.37470112101911%. RAIN has zero
+such observations. Prior `VALID` / accepted Rolling logs do not prove this
+specific Prepared upper-bound contract. The comparison pair is **DIAGNOSTIC,
+NOT USED FOR RESEARCH CONCLUSIONS** until remediation and a fresh frozen run.
+
+The 35-slide review edition discloses the mismatch, preserves the original
+results, and correctly distinguishes BEV slot-start states from BESS slot-end
+states. No optimizer fix, clipping, input relabeling, or new solve was performed.
+Required next work: propagate maximum SOC through the actual canonical/Stage 2/
+Rolling and independent validation paths, add regressions, obtain independent
+review, and rerun from a new clean commit. Existing manifest and release/approval
+blockers remain. See [evidence and reproduction](../../outcome/2026-09-07_urabe_progress_review/README.md).
+
+Targeted reanalysis/layout tests: 29 passed. Including the old 22-slide package:
+36 passed, 1 failed at its original-PPTX hash assertion. The old manifest currently
+differs for that original PPTX and `scripts/build_thesis_weather_result_package.py`;
+neither was modified in this task. Expected hashes were not rewritten.
+
 The 2026-09-06 visible-slide progress revision explains existing evidence and
 remaining questions. It does not resolve the existing source-manifest mismatch,
 external review, or formal research acceptance gates; no new experiment was run.

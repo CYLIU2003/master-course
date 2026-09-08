@@ -1,0 +1,30 @@
+{
+  "source_sha256": "5525c8d2bb20f0f2e2acbfd543b355a7032d5ecd889e45281ad47a38174b5e9d",
+  "final_sha256": "02eaa6c7ea86bafeaa4c5766ebc11d53698316271f2133d771995b9f74458c1e",
+  "changed": [
+    "ppt/slides/slide11.xml",
+    "ppt/slides/_rels/slide11.xml.rels",
+    "ppt/notesSlides/notesSlide11.xml",
+    "[Content_Types].xml",
+    "ppt/charts/chart12.xml",
+    "ppt/charts/chart1.xml",
+    "ppt/charts/chart2.xml",
+    "ppt/charts/chart3.xml",
+    "ppt/charts/chart4.xml",
+    "ppt/charts/chart5.xml",
+    "ppt/charts/chart6.xml",
+    "ppt/charts/chart7.xml",
+    "ppt/charts/chart9.xml",
+    "ppt/charts/chart10.xml",
+    "ppt/charts/chart13.xml",
+    "ppt/charts/chart11.xml"
+  ],
+  "added": [
+    "ppt/charts/chart14.xml",
+    "ppt/charts/chart15.xml",
+    "ppt/embeddings/chart-data-snapshot-001.xlsx",
+    "ppt/charts/_rels/chart14.xml.rels",
+    "ppt/embeddings/chart-data-snapshot-002.xlsx",
+    "ppt/charts/_rels/chart15.xml.rels"
+  ]
+}

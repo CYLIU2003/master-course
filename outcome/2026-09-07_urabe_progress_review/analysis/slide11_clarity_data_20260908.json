@@ -1,0 +1,316 @@
+{
+  "rows": [
+    {
+      "scenario": "RAIN",
+      "assignment_hash": "223933f431651836b4bb41056c1b77880abdd30d38e746e4b0f7db831eed1fde",
+      "bev": 14,
+      "ice": 18,
+      "cost_jpy": 707349.1733696415
+    },
+    {
+      "scenario": "RAIN",
+      "assignment_hash": "e5a0b6aa409d52be836449063e720054d442693dbfdaaf3d11f8fb928b1c7f1a",
+      "bev": 15,
+      "ice": 17,
+      "cost_jpy": 706897.3427014399
+    },
+    {
+      "scenario": "RAIN",
+      "assignment_hash": "0de9a6ab9fa8277f26dbcb6c3e5424ec22f59d789a1c3f9dd9e829bbe81d0361",
+      "bev": 16,
+      "ice": 16,
+      "cost_jpy": 706431.2805291044
+    },
+    {
+      "scenario": "RAIN",
+      "assignment_hash": "cff27e8a768bf48f0a0dd830ebd62643b99dec066325d5cc5d7a536b1dd1ba79",
+      "bev": 17,
+      "ice": 15,
+      "cost_jpy": 705596.0349608877
+    },
+    {
+      "scenario": "RAIN",
+      "assignment_hash": "5ba26c68511b0a63e4ef14c60935b382a57aafac375d5bcc857b1e485834db0f",
+      "bev": 18,
+      "ice": 14,
+      "cost_jpy": 704318.6336491928
+    },
+    {
+      "scenario": "RAIN",
+      "assignment_hash": "65478159445a0c00501945675704c0178f0b2dc8ca02faa7003057a6b9b8f037",
+      "bev": 19,
+      "ice": 13,
+      "cost_jpy": 703024.5297858134
+    },
+    {
+      "scenario": "RAIN",
+      "assignment_hash": "e511bd6940ac14fa39148178676a79bb32dc20e3cc4f821a54a36bbd8e3dcf1f",
+      "bev": 20,
+      "ice": 12,
+      "cost_jpy": 698863.087754261
+    },
+    {
+      "scenario": "RAIN",
+      "assignment_hash": "213b2ccd409559807467d9726bdf7eb4958f9c1d5d68c3363e95db5299d65316",
+      "bev": 21,
+      "ice": 11,
+      "cost_jpy": 698296.465283954
+    },
+    {
+      "scenario": "RAIN",
+      "assignment_hash": "662702cc3fb2681a377ebe541a921cb54978cbf77125128b687e685be555b109",
+      "bev": 22,
+      "ice": 10,
+      "cost_jpy": 699427.2582176796
+    },
+    {
+      "scenario": "RAIN",
+      "assignment_hash": "0890d2b05c4ef5f8f106b40ad1548696e10d7c060fcf32bb62cd3dded42229a1",
+      "bev": 23,
+      "ice": 9,
+      "cost_jpy": 700546.5672147735
+    },
+    {
+      "scenario": "RAIN",
+      "assignment_hash": "baf28cee74e6cb3a7d38811e4e78df3a2b5a1b96a4be9ea4f84703aaea555798",
+      "bev": 24,
+      "ice": 8,
+      "cost_jpy": 701822.2634098906
+    },
+    {
+      "scenario": "RAIN",
+      "assignment_hash": "ab0f9d80e7a5df0fe3b7d92ccffd930a4373349a14720c411524efe6e747f08b",
+      "bev": 25,
+      "ice": 7,
+      "cost_jpy": 703026.9901469456
+    },
+    {
+      "scenario": "RAIN",
+      "assignment_hash": "ddeb4211cfc03b47cc7403c0d1babc939b410f94f0c300491792a794616ebe80",
+      "bev": 26,
+      "ice": 6,
+      "cost_jpy": 704231.71707933
+    },
+    {
+      "scenario": "RAIN",
+      "assignment_hash": "f932b55a1d8f4bdd80c24466353e6db3669e2b168729bd99769a7d1b9f057493",
+      "bev": 27,
+      "ice": 5,
+      "cost_jpy": 705452.0961260219
+    },
+    {
+      "scenario": "RAIN",
+      "assignment_hash": "76fb6a9b635bce41ae73db10f08facc7862a1f55a4465004457e79838c9a516c",
+      "bev": 28,
+      "ice": 4,
+      "cost_jpy": 706714.2442025288
+    },
+    {
+      "scenario": "RAIN",
+      "assignment_hash": "23efc4a2ab99e6a039ba8aaa172e7865d0806fa51242438bb4daaa7d2d974eca",
+      "bev": 29,
+      "ice": 18,
+      "cost_jpy": 1007361.2748827065
+    },
+    {
+      "scenario": "RAIN",
+      "assignment_hash": "e7d6d5694209a960cccd6c2f20729c92bcab88089cc2abdf6474ef82a5822db1",
+      "bev": 30,
+      "ice": 18,
+      "cost_jpy": 1027299.0571063138
+    },
+    {
+      "scenario": "RAIN",
+      "assignment_hash": "dd3c7bbc38bbbb3cc7f9237b7d696b935c3c0264272ac27930a1b769c0f0393d",
+      "bev": 31,
+      "ice": 18,
+      "cost_jpy": 1047311.1586193787
+    },
+    {
+      "scenario": "RAIN",
+      "assignment_hash": "b73e8c639f783d7df9f87fff0f79aecc4d8b543ee4a08916c7ad3edea9da61b5",
+      "bev": 32,
+      "ice": 18,
+      "cost_jpy": 1067331.312481715
+    },
+    {
+      "scenario": "RAIN",
+      "assignment_hash": "20cee42a2373bd06c6221787f06df2504544b0dd048e48e0de4658fa532d4e77",
+      "bev": 33,
+      "ice": 18,
+      "cost_jpy": 1087269.0947053223
+    },
+    {
+      "scenario": "RAIN",
+      "assignment_hash": "f84e87d75edf3de1f9f1d64b225811bc7f27fd2b3e552c6b6e926b507afe1a5b",
+      "bev": 34,
+      "ice": 18,
+      "cost_jpy": 1106790.9594103505
+    },
+    {
+      "scenario": "RAIN",
+      "assignment_hash": "f1c7f3cd925b59fc21c91a086f18ae067e28aab7f8ece26dcb8ab9a535378f93",
+      "bev": 35,
+      "ice": 18,
+      "cost_jpy": 1126803.0609234155
+    },
+    {
+      "scenario": "SUNNY",
+      "assignment_hash": "223933f431651836b4bb41056c1b77880abdd30d38e746e4b0f7db831eed1fde",
+      "bev": 14,
+      "ice": 18,
+      "cost_jpy": 707349.1733696415
+    },
+    {
+      "scenario": "SUNNY",
+      "assignment_hash": "e5a0b6aa409d52be836449063e720054d442693dbfdaaf3d11f8fb928b1c7f1a",
+      "bev": 15,
+      "ice": 17,
+      "cost_jpy": 706897.3427014399
+    },
+    {
+      "scenario": "SUNNY",
+      "assignment_hash": "0de9a6ab9fa8277f26dbcb6c3e5424ec22f59d789a1c3f9dd9e829bbe81d0361",
+      "bev": 16,
+      "ice": 16,
+      "cost_jpy": 706431.2805291044
+    },
+    {
+      "scenario": "SUNNY",
+      "assignment_hash": "cff27e8a768bf48f0a0dd830ebd62643b99dec066325d5cc5d7a536b1dd1ba79",
+      "bev": 17,
+      "ice": 15,
+      "cost_jpy": 705596.0349608877
+    },
+    {
+      "scenario": "SUNNY",
+      "assignment_hash": "5ba26c68511b0a63e4ef14c60935b382a57aafac375d5bcc857b1e485834db0f",
+      "bev": 18,
+      "ice": 14,
+      "cost_jpy": 704318.6336491928
+    },
+    {
+      "scenario": "SUNNY",
+      "assignment_hash": "65478159445a0c00501945675704c0178f0b2dc8ca02faa7003057a6b9b8f037",
+      "bev": 19,
+      "ice": 13,
+      "cost_jpy": 703024.5297858134
+    },
+    {
+      "scenario": "SUNNY",
+      "assignment_hash": "e511bd6940ac14fa39148178676a79bb32dc20e3cc4f821a54a36bbd8e3dcf1f",
+      "bev": 20,
+      "ice": 12,
+      "cost_jpy": 698863.087754261
+    },
+    {
+      "scenario": "SUNNY",
+      "assignment_hash": "213b2ccd409559807467d9726bdf7eb4958f9c1d5d68c3363e95db5299d65316",
+      "bev": 21,
+      "ice": 11,
+      "cost_jpy": 694607.6443719033
+    },
+    {
+      "scenario": "SUNNY",
+      "assignment_hash": "662702cc3fb2681a377ebe541a921cb54978cbf77125128b687e685be555b109",
+      "bev": 22,
+      "ice": 10,
+      "cost_jpy": 690112.753615856
+    },
+    {
+      "scenario": "SUNNY",
+      "assignment_hash": "0890d2b05c4ef5f8f106b40ad1548696e10d7c060fcf32bb62cd3dded42229a1",
+      "bev": 23,
+      "ice": 9,
+      "cost_jpy": 685663.511394628
+    },
+    {
+      "scenario": "SUNNY",
+      "assignment_hash": "baf28cee74e6cb3a7d38811e4e78df3a2b5a1b96a4be9ea4f84703aaea555798",
+      "bev": 24,
+      "ice": 8,
+      "cost_jpy": 680592.6316040504
+    },
+    {
+      "scenario": "SUNNY",
+      "assignment_hash": "ab0f9d80e7a5df0fe3b7d92ccffd930a4373349a14720c411524efe6e747f08b",
+      "bev": 25,
+      "ice": 7,
+      "cost_jpy": 675803.8547091411
+    },
+    {
+      "scenario": "SUNNY",
+      "assignment_hash": "ddeb4211cfc03b47cc7403c0d1babc939b410f94f0c300491792a794616ebe80",
+      "bev": 26,
+      "ice": 6,
+      "cost_jpy": 671015.0770377993
+    },
+    {
+      "scenario": "SUNNY",
+      "assignment_hash": "f932b55a1d8f4bdd80c24466353e6db3669e2b168729bd99769a7d1b9f057493",
+      "bev": 27,
+      "ice": 5,
+      "cost_jpy": 666164.0823664974
+    },
+    {
+      "scenario": "SUNNY",
+      "assignment_hash": "76fb6a9b635bce41ae73db10f08facc7862a1f55a4465004457e79838c9a516c",
+      "bev": 28,
+      "ice": 4,
+      "cost_jpy": 660983.7838045002
+    },
+    {
+      "scenario": "SUNNY",
+      "assignment_hash": "23efc4a2ab99e6a039ba8aaa172e7865d0806fa51242438bb4daaa7d2d974eca",
+      "bev": 29,
+      "ice": 18,
+      "cost_jpy": 1007361.2748827065
+    },
+    {
+      "scenario": "SUNNY",
+      "assignment_hash": "e7d6d5694209a960cccd6c2f20729c92bcab88089cc2abdf6474ef82a5822db1",
+      "bev": 30,
+      "ice": 18,
+      "cost_jpy": 1027299.0571063138
+    },
+    {
+      "scenario": "SUNNY",
+      "assignment_hash": "dd3c7bbc38bbbb3cc7f9237b7d696b935c3c0264272ac27930a1b769c0f0393d",
+      "bev": 31,
+      "ice": 18,
+      "cost_jpy": 1047311.1586193787
+    },
+    {
+      "scenario": "SUNNY",
+      "assignment_hash": "b73e8c639f783d7df9f87fff0f79aecc4d8b543ee4a08916c7ad3edea9da61b5",
+      "bev": 32,
+      "ice": 18,
+      "cost_jpy": 1067331.312481715
+    },
+    {
+      "scenario": "SUNNY",
+      "assignment_hash": "20cee42a2373bd06c6221787f06df2504544b0dd048e48e0de4658fa532d4e77",
+      "bev": 33,
+      "ice": 18,
+      "cost_jpy": 1087269.0947053223
+    },
+    {
+      "scenario": "SUNNY",
+      "assignment_hash": "f84e87d75edf3de1f9f1d64b225811bc7f27fd2b3e552c6b6e926b507afe1a5b",
+      "bev": 34,
+      "ice": 18,
+      "cost_jpy": 1106790.9594103505
+    },
+    {
+      "scenario": "SUNNY",
+      "assignment_hash": "f1c7f3cd925b59fc21c91a086f18ae067e28aab7f8ece26dcb8ab9a535378f93",
+      "bev": 35,
+      "ice": 18,
+      "cost_jpy": 1126803.0609234155
+    }
+  ],
+  "sources": {
+    "docs/evidence/weather_dispatch_rerun_bb0c005/cross_weather_fixed_dispatch_matrix.json": "4c0c73663b08429aa2f48ed93d4a57b8538588e82228a7b90456e27ce6b1e51c",
+    "output/2026-08-29/run_20260829_1445/stage1_stage2_candidate_evaluation.json": "7635f907cde243f2bbb9a33a9de5eb19538cf04a3f8620bf7694b54f2eb744bb"
+  }
+}

@@ -1,5 +1,10 @@
 # 修論・進捗資料の作成ツール
 
+9月7日のSlack指摘対応資料は `build_urabe_review_data.py` で凍結結果を再集計し、
+`build_urabe_progress_supplement.mjs` で35枚のPPTXを生成します。solverは呼び出しません。
+SOC上限不一致は検出・記載のみで、モデル修正は行いません。
+[資料・監査結果](../../outcome/2026-09-07_urabe_progress_review/README.md) を参照してください。
+
 リポジトリルートから実行します。既存の入力ハッシュに含まれるスクリプトは移動しません。
 出力の正本は [Outcome](../../outcome/README.md)、描画の作業領域は `output/` です。
 

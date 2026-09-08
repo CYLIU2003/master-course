@@ -1,5 +1,89 @@
 # Development Notes
 
+## 2026-09-08: explain slide 11 candidate scatter plot
+
+Rebuilt slide 11 with two editable charts: all 22 dispatches and a disclosed
+65–72 ten-thousand-JPY zoom of the 15 dispatches using 32 buses (14–28 BEVs).
+Mapped source_candidate_hash from the fixed-PV matrix to frozen raw candidate
+composition: the 29–35 BEV candidates retain 18 ICE buses, totaling 47–53 buses.
+The chart therefore does not isolate a causal BEV-count effect. Added native
+labels for 28 BEVs / 66.10 ten-thousand JPY (high PV) and 21 / 69.83 (low PV).
+Preserved the latest user-saved slides 8–10, all other slides and embedded workbooks byte-for-byte. Synchronized existing chart-cache decimal tails to their unchanged workbooks after the application save. No model edits
+or new experiment; SOC inconsistency and release blockers remain unresolved.
+
+
+## 2026-09-08: clarify slides 8 and 9 with explicit quantities
+
+Rewrote the original deck in place: one versus 22 evaluated dispatches (+21),
+and the fixed 22 dispatches across two PV conditions (44 diagnostic evaluations).
+Slide 9 states within-condition A/B differences: 33,624 JPY for high PV and
+8,418 JPY for low PV. The 7-BEV and 108-BEV-trip differences compare selected
+high/low-PV plans, not before/after repair. Both plans use 32 buses for 264 trips.
+These remain old-model diagnostics with unresolved SOC bounds; no new solve.
+The existing embedded chart caches were synchronized to their workbook decimal
+values after the presentation validator exposed floating-point tail differences;
+workbook data and model evidence were not edited. See the canonical revision manifest.
+
+
+## 2026-09-08: explain why EV/ICE composition diverged
+
+Updated canonical progress slides 8 and 9 with the historical candidate-coverage repair
+(edcbe703, public BFF policy: 1 candidate to effective 22, radius 4, neutral BEV frontier ON)
+and the fixed-dispatch cross-PV cost reversal. Selection ordering was already correct
+for received candidates; do not describe this as a sorting fix or a missing-PV fix.
+Corrected slide 32 and the personal guide: frozen bb0c005 Stage 1 metadata confirms
+15-minute energy recourse in its objective, with continuous charger/BESS-mode relaxation.
+Cross-evaluation SHA 3ec8714 is distinct from normal rerun bb0c005 and from final Rolling costs.
+SOC upper-bound defect remains unresolved; no solver or model edits in this documentation task.
+
+
+## 2026-09-08: detailed personal research explanation
+
+Added one canonical Markdown guide at `outcome/研究の現在地と進捗資料の詳しい解説.md`.
+Explains current gates, experiment versus documentation dates, the two distinct stages,
+parameters, dispatch, energy/SOC, accounting, runtime/gap, literature limits, all 37 slides,
+next acceptance criteria and advisor Q&A. Verified 108 bound sources and installed PPTX hashes.
+This is documentation only: no solver run, optimizer edit or research acceptance upgrade.
+Updated README navigation to the canonical original PPTX and the one personal guide.
+Validated 37-slide coverage and local source links.
+
+## 2026-09-07: consolidate into the user-designated original
+
+The user requested an in-place update. Installed the validated 37-slide edition at the original Japanese PPTX path; archived the previous original and derived editions in the review package archive/. Historical manifests are unchanged; canonical_install.json records current and prior hashes. Frozen research data and release gates are unchanged.
+
+## 2026-09-07: user-designated August deck recheck
+
+- The user explicitly selected `outcome/修士研究_2026年8月_進捗報告_先行研究図表パラメータ追加版.pptx`.
+  Created a separate 37-slide `outcome/2026-09-07_urabe_progress_review/august_progress_urabe_supplement_20260907.pptx` from that exact 18-slide source.
+- Corrected unsupported SOC/physical-pass and curtailment-cause wording in the copy.
+  Added editable evidence supplements, including fleet denominators (28/35 vs 21/35 BEVs)
+  and the RAIN 06:15 grid peak balance (177.55 = 55.25 + 0 + 122.30 kW).
+- Re-read Slack DM. Preserved source files, frozen results and existing source manifests.
+  No solve or Slack posting. The SOC blocker, old provenance mismatch and independent review remain open.
+- Recheck command: `.venv/Scripts/python.exe -X utf8 -m pytest -q tests/thesis_authoring/test_urabe_progress_review.py tests/test_august_progress_revision.py`.
+  Result: 14 passed, 1 known original-PPTX hash failure. New deck finalizer passed;
+  PowerPoint application editing was not tested. Full legacy literature-to-figure verification remains open.
+
+
+## 2026-09-07: advisor-facing supplement and new SOC contract finding
+
+- Read relevant professor Slack messages and inspected the latest 18-slide deck.
+  Added a separate 35-slide edition with editable paired power/SOC charts,
+  cost/runtime tables and verified primary-paper examples. Original artifacts remain intact.
+- Reconstructed accepted executed prefixes without a solve. BEV traces are slot-start
+  states plus terminal metadata; BESS traces are slot-end states. New derivation binds current source hashes.
+- **New P1:** frozen Stage 2 uses battery capacity as its SOC upper bound despite Prepared
+  `maxSoc=0.90`. SUNNY has 3 affected vehicles and 12 sampled boundary exceedances,
+  maximum 93.374701%; RAIN has none. Both members of the comparison are now presented as
+  DIAGNOSTIC, NOT USED FOR RESEARCH CONCLUSIONS. Historical acceptance files are preserved.
+- No optimizer edits, repair, new experiment, Slack post, push, CI enablement or release upgrade.
+  Model contract repair, independent validation and a fresh frozen run remain required.
+  Details: `outcome/2026-09-07_urabe_progress_review/README.md`.
+- Relevant new/existing reanalysis and layout tests: 29 passed. With the old
+  22-slide provenance suite: 36 passed, 1 failed (old original-PPTX hash).
+  Its original PPTX and result-package builder remain mismatched to the old manifest.
+  `git diff --check` passed; original sources and expected hashes were not changed.
+
 ## 2026-09-06: integrate research differences into visible slides
 
 - Revised slides 8, 9, 14, 16, and 17 in a separate 18-slide edition, with

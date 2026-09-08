@@ -1,0 +1,78 @@
+{
+  "canonical_file": "C:\\master-course\\outcome\\修士研究_2026年8月_進捗報告_先行研究図表パラメータ追加版.pptx",
+  "canonical_sha256": "02eaa6c7ea86bafeaa4c5766ebc11d53698316271f2133d771995b9f74458c1e",
+  "original_backup": "archive/original_before_20260907.pptx",
+  "original_sha256": "5ed9b50726a9c7b327011b91820ca33b418db635e369960cac61ad45cb95d6cc",
+  "note": "User explicitly requested in-place update. Earlier manifests are historical and unchanged.",
+  "revisions": [
+    {
+      "date": "2026-09-08",
+      "reason": "Explain EV/ICE candidate coverage and cross-PV ranking; correct Stage 1 time-indexed recourse description",
+      "previous_sha256": "68e8fe5011679844795ad9f6c574e9840d036c9dce03d37039bc63e7bd874e5d",
+      "backup": "archive/before_dispatch_explanation_20260908.pptx",
+      "changed_slides": [
+        8,
+        9,
+        32
+      ]
+    },
+    {
+      "date": "2026-09-08",
+      "reason": "Plain-language explanation of dispatch comparison and explicit cost/count differences on slides 8/9",
+      "previous_sha256": "3186d21ed196e719701b92b611809b76f4172367d5cb0c6a3323106398d335df",
+      "prior_manifest_sha256": "e55bc0e6487ae9f20b7bdc1505b69efd961e747245edb7c3d396667012ebcbae",
+      "backup": "archive/before_plain_explanation_20260908.pptx",
+      "changed_slides": [
+        8,
+        9
+      ],
+      "chart_cache_sync": {
+        "changed": [
+          "ppt/charts/chart12.xml",
+          "ppt/charts/chart1.xml",
+          "ppt/charts/chart2.xml",
+          "ppt/charts/chart3.xml",
+          "ppt/charts/chart4.xml",
+          "ppt/charts/chart5.xml",
+          "ppt/charts/chart6.xml",
+          "ppt/charts/chart7.xml",
+          "ppt/charts/chart9.xml",
+          "ppt/charts/chart10.xml",
+          "ppt/charts/chart13.xml",
+          "ppt/charts/chart11.xml"
+        ],
+        "differing_decimal_points": 668,
+        "max_absolute_difference": "2E-13"
+      },
+      "notes": "Actual source SHA was verified before copying; the prior manifest SHA was stale. All other OOXML entries, including embedded workbooks, are byte-preserved."
+    },
+    {
+      "date": "2026-09-08",
+      "reason": "Clarify slide 11 with full and zoom editable scatter plots; preserve latest user-saved slides 8-10",
+      "changed_slides": [
+        11
+      ],
+      "previous_sha256": "5525c8d2bb20f0f2e2acbfd543b355a7032d5ecd889e45281ad47a38174b5e9d",
+      "backup": "archive/before_slide11_clarity_after_user_save_20260908.pptx",
+      "evidence": "analysis/slide11_clarity_data_20260908.json",
+      "chart_cache_sync": {
+        "changed": [
+          "ppt/charts/chart12.xml",
+          "ppt/charts/chart1.xml",
+          "ppt/charts/chart2.xml",
+          "ppt/charts/chart3.xml",
+          "ppt/charts/chart4.xml",
+          "ppt/charts/chart5.xml",
+          "ppt/charts/chart6.xml",
+          "ppt/charts/chart7.xml",
+          "ppt/charts/chart9.xml",
+          "ppt/charts/chart10.xml",
+          "ppt/charts/chart13.xml",
+          "ppt/charts/chart11.xml"
+        ],
+        "differing_decimal_points": 668,
+        "max_absolute_difference": "2E-13"
+      }
+    }
+  ]
+}

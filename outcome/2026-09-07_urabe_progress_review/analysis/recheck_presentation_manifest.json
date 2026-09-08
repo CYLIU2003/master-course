@@ -1,0 +1,35 @@
+{
+  "source": "outcome\\修士研究_2026年8月_進捗報告_先行研究図表パラメータ追加版.pptx",
+  "source_sha256": "5ed9b50726a9c7b327011b91820ca33b418db635e369960cac61ad45cb95d6cc",
+  "final_sha256": "68e8fe5011679844795ad9f6c574e9840d036c9dce03d37039bc63e7bd874e5d",
+  "total_slides": 37,
+  "supplement_slides": 19,
+  "native_table_slides": [
+    19,
+    20,
+    23,
+    28,
+    29,
+    30,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37
+  ],
+  "native_chart_slides": [
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    31
+  ],
+  "execution_sha": "bb0c0050883a91dd86a9e8813ae88d4b6d8c361d",
+  "solver_runs": 0,
+  "builder_sha256": "6b96eb4cb76ddb0aa56dd82597345a9f268e3273a58f9b68879f1aed2238c694",
+  "data_sha256": "8348c3f2acad5794a1c4b1ff36672b8e8640a096a239029e78b701dd7fb12174"
+}

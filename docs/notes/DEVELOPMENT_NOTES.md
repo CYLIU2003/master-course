@@ -1,5 +1,79 @@
 # E-Bus Scheduling Optimization — Research Experiment Log
 
+## 2026-09-08: explain slide 11 candidate scatter plot
+
+Rebuilt slide 11 with two editable charts: all 22 dispatches and a disclosed
+65–72 ten-thousand-JPY zoom of the 15 dispatches using 32 buses (14–28 BEVs).
+Mapped source_candidate_hash from the fixed-PV matrix to frozen raw candidate
+composition: the 29–35 BEV candidates retain 18 ICE buses, totaling 47–53 buses.
+The chart therefore does not isolate a causal BEV-count effect. Added native
+labels for 28 BEVs / 66.10 ten-thousand JPY (high PV) and 21 / 69.83 (low PV).
+Preserved the latest user-saved slides 8–10, all other slides and embedded workbooks byte-for-byte. Synchronized existing chart-cache decimal tails to their unchanged workbooks after the application save. No model edits
+or new experiment; SOC inconsistency and release blockers remain unresolved.
+
+
+## 2026-09-08: clarify slides 8 and 9 with explicit quantities
+
+Rewrote the original deck in place: one versus 22 evaluated dispatches (+21),
+and the fixed 22 dispatches across two PV conditions (44 diagnostic evaluations).
+Slide 9 states within-condition A/B differences: 33,624 JPY for high PV and
+8,418 JPY for low PV. The 7-BEV and 108-BEV-trip differences compare selected
+high/low-PV plans, not before/after repair. Both plans use 32 buses for 264 trips.
+These remain old-model diagnostics with unresolved SOC bounds; no new solve.
+The existing embedded chart caches were synchronized to their workbook decimal
+values after the presentation validator exposed floating-point tail differences;
+workbook data and model evidence were not edited. See the canonical revision manifest.
+
+
+## 2026-09-08: explain why EV/ICE composition diverged
+
+Updated canonical progress slides 8 and 9 with the historical candidate-coverage repair
+(edcbe703, public BFF policy: 1 candidate to effective 22, radius 4, neutral BEV frontier ON)
+and the fixed-dispatch cross-PV cost reversal. Selection ordering was already correct
+for received candidates; do not describe this as a sorting fix or a missing-PV fix.
+Corrected slide 32 and the personal guide: frozen bb0c005 Stage 1 metadata confirms
+15-minute energy recourse in its objective, with continuous charger/BESS-mode relaxation.
+Cross-evaluation SHA 3ec8714 is distinct from normal rerun bb0c005 and from final Rolling costs.
+SOC upper-bound defect remains unresolved; no solver or model edits in this documentation task.
+
+
+## 2026-09-08: detailed personal research explanation
+
+Added one canonical Markdown guide at `outcome/研究の現在地と進捗資料の詳しい解説.md`.
+Explains current gates, experiment versus documentation dates, the two distinct stages,
+parameters, dispatch, energy/SOC, accounting, runtime/gap, literature limits, all 37 slides,
+next acceptance criteria and advisor Q&A. Verified 108 bound sources and installed PPTX hashes.
+This is documentation only: no solver run, optimizer edit or research acceptance upgrade.
+Updated README navigation to the canonical original PPTX and the one personal guide.
+Validated 37-slide coverage and local source links.
+
+## 2026-09-07: consolidate into the user-designated original
+
+The user requested an in-place update. Installed the validated 37-slide edition at the original Japanese PPTX path; archived the previous original and derived editions in the review package archive/. Historical manifests are unchanged; canonical_install.json records current and prior hashes. Frozen research data and release gates are unchanged.
+
+## 2026-09-07: user-designated August deck recheck
+
+- The user explicitly selected `outcome/修士研究_2026年8月_進捗報告_先行研究図表パラメータ追加版.pptx`.
+  Created a separate 37-slide `outcome/2026-09-07_urabe_progress_review/august_progress_urabe_supplement_20260907.pptx` from that exact 18-slide source.
+- Corrected unsupported SOC/physical-pass and curtailment-cause wording in the copy.
+  Added editable evidence supplements, including fleet denominators (28/35 vs 21/35 BEVs)
+  and the RAIN 06:15 grid peak balance (177.55 = 55.25 + 0 + 122.30 kW).
+- Re-read Slack DM. Preserved source files, frozen results and existing source manifests.
+  No solve or Slack posting. The SOC blocker, old provenance mismatch and independent review remain open.
+- Recheck command: `.venv/Scripts/python.exe -X utf8 -m pytest -q tests/thesis_authoring/test_urabe_progress_review.py tests/test_august_progress_revision.py`.
+  Result: 14 passed, 1 known original-PPTX hash failure. New deck finalizer passed;
+  PowerPoint application editing was not tested. Full legacy literature-to-figure verification remains open.
+
+
+## 2026-09-07 資料補足中に見つかったSOC上限の不一致
+
+Slack指摘への回答として、凍結bb0c005結果の電力・BESS・BEV SOC・費用・計算時間を再集計した。
+新規solveは0回。BEVの枠開始値とBESSの枠終端値を区別した。
+PreparedのmaxSoc=0.90に対しStage 2は容量100%を上限としており、高PVで3台・12境界点が90%を超えた。
+最大93.374701%。旧検証のPASSはこの入力契約への適合を保証しないため、比較ペアを診断用に限定する。
+コード修正・独立検証・新しいクリーンSHAでの再実験は未実施。
+詳細と35枚資料は [9月7日の追加監査](../../outcome/2026-09-07_urabe_progress_review/README.md) を参照。
+
 > **目的**: 電気バス運行・充電スケジューリング最適化の修士論文研究実験ログ。
 > GUI変更履歴は `app/CHANGELOG.md` へ移動済み。本ファイルは実験・結果・設計判断のみ記録する。
 

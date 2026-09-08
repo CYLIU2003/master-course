@@ -1,0 +1,33 @@
+{
+  "source": "outcome\\2026-09-06_speaker_notes\\progress_differences_integrated_20260906.pptx",
+  "source_sha256": "eabceaef42ef83e664c8593992297b27862645c94f25dd72228410ed712221a0",
+  "final_sha256": "a350f1d20c529f8de3afc725f027eaf347df83de136a832da5776a8662290681",
+  "total_slides": 35,
+  "supplement_slides": 17,
+  "native_table_slides": [
+    19,
+    20,
+    23,
+    28,
+    29,
+    30,
+    32,
+    33,
+    34,
+    35
+  ],
+  "native_chart_slides": [
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    31
+  ],
+  "execution_sha": "bb0c0050883a91dd86a9e8813ae88d4b6d8c361d",
+  "solver_runs": 0,
+  "builder_sha256": "1177e06cccef06f133e709247f161eb9e84c2bbf5692ca322ba5d88e1a290d08",
+  "data_sha256": "8348c3f2acad5794a1c4b1ff36672b8e8640a096a239029e78b701dd7fb12174"
+}
