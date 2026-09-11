@@ -4015,6 +4015,9 @@ class ProblemBuilder:
             pair_left, pair_right = self._maximum_bipartite_matching(graph)
             return pair_left, pair_right, 0.0
 
+        from src.dispatch.lookup_snapshot import snapshot_location_lookups
+
+        context = snapshot_location_lookups(context)
         dummy_cost = 1.0e9
         invalid_cost = 1.0e12
         right_index = {trip_id: idx for idx, trip_id in enumerate(right_nodes)}

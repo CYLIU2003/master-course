@@ -1,5 +1,7 @@
 # master-course
 
+2026-09-11: 大量の便を扱うPrepare・接続監査でも、停留所別名と回送・折返し照合の重複計算を減らしました。計算ごとにルールを複製し、キャッシュを各4,096件に制限します。候補弧の削除や接続条件の緩和はありません。実入力由来17地点の反復照合は約13.9倍速くなりましたが、solver全体の速度を示す値ではありません。[同等性検証と測定範囲](docs/notes/LOCATION_LOOKUP_SCALABILITY_20260911.md)。
+
 2026-09-11: [渋21〜24をまとめた四季1週間診断](docs/notes/SHIBU21_24_SEASONAL_DIAGNOSTIC_20260911.md)の入力・監査・実行スクリプトを追加しました。開始日は2025-02-03、05-12、08-04、11-03です。2026年9月版の固定時刻表に2025年の気象を適用する診断で、実運行再現ではありません。候補生成と完全Prepareを分け、検証未実施の候補をsolverへ渡さない構成です。
 
 2026-09-11: フロントアプリに **TypeScript + React + Electron** を追加しました。[起動・操作・検証の案内](frontend/README.md)。初回は `frontend` で `npm.cmd ci`、`npm.cmd run build`、`npm.cmd start` を実行します。ビルド後は `python run_desktop.py` からも起動できます。Windows portable版は `frontend/release/EV Bus Research 0.1.0.exe` です（Python・Gurobi・入力データは既存環境を使用）。旧 `run_app.py` は保持しています。

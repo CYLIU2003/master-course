@@ -1,5 +1,13 @@
 # Development Notes
 
+## 2026-09-11 完全Prepareの地点照合を計算単位で再利用
+
+凍結SHA `737e07be` の冬週Prepareを実行中、処理スタックが `resolve_location_ids` → `get_deadhead_min` → `can_connect` → 全組合せのgraph buildにあることを観測した。停止を失敗とみなしたり監査を省略したりせず、旧作業フォルダーを保持してMAIN側で独立した性能改善を検証した。
+
+`src/dispatch/lookup_snapshot.py` は標準DispatchContextのルールとaliasのコピーにだけ、各4,096件を上限とするキャッシュを持つ。graph build、strict precheck、path-cover matchingのバッチ終了後に破棄する。元のcontextは変更しないため、次回のルール変更や折返し感度条件を引き継げる。カスタムcontextの実装も保持する。候補弧数、判定式、回送時間、料金、SOC、車両集合は変更しない。
+
+実入力由来17地点・289組の全照合値とaliasの順序が一致した。289,000組の反復は従来4.8137秒、キャッシュ0.3466秒（約13.89倍、lookup部分のみ）。関連41テスト、全体 **2,034 passed / 2 failed、90.09秒**。残る2件は既存のPowerPoint証拠不整合のみ。GPT-5.6 Lunaの独立した読み取りレビューでP0/P1なし、追加6テスト成功。旧SHAのPrepare/solver結果を新SHAの証拠へ転用せず、別のclean worktreeで完全Prepareから実行する。[詳細](docs/notes/LOCATION_LOOKUP_SCALABILITY_20260911.md)。
+
 ## 2026-09-11 渋21〜24 四季診断の入力と実行契約
 
 GPT-5.6 Lunaのサブエージェントが渋24の公式ODPTソース監査、4系統の入力候補、完全Prepareモードと診断runnerを実装した。渋24は6パターン・582便、全4系統では冬春夏が各3,182便、秋が3,045便である。時刻表は2026年9月版、PV評価は2025年、学習は2024年のみ、座標距離はproxyという出典の限界を保持する。親フリート60台の確認値を新規車両生成に転用しない。

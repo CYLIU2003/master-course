@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Iterable, Mapping, Sequence, Tuple
 
 from src.dispatch.models import DutyLeg, VehicleDuty
+from src.dispatch.lookup_snapshot import snapshot_location_lookups
 from src.dispatch.route_band import (
     FragmentTransitionDiagnostic,
     fragment_transition_diagnostic,
@@ -254,6 +255,7 @@ def _build_relaxed_transition_graph(
     *,
     type_to_home_depots: Mapping[str, Tuple[str, ...]],
 ) -> tuple[dict[str, Tuple[str, ...]], dict[str, object]]:
+    dispatch_context = snapshot_location_lookups(problem.dispatch_context)
     ordered = tuple(
         sorted(
             trips,
@@ -308,7 +310,7 @@ def _build_relaxed_transition_graph(
                 to_duty,
                 common_types=common_types,
                 type_to_home_depots=type_to_home_depots,
-                dispatch_context=problem.dispatch_context,
+                dispatch_context=dispatch_context,
                 fixed_route_band_mode=fixed_route_band_mode,
                 allow_same_day_depot_cycles=allow_same_day_depot_cycles,
             )

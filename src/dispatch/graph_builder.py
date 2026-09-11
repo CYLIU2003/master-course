@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Dict, List
 
 from .feasibility import FeasibilityEngine
+from .lookup_snapshot import snapshot_location_lookups
 from .models import ConnectionArc, DispatchContext
 
 
@@ -32,6 +33,7 @@ class ConnectionGraphBuilder:
         All trips that are *allowed* for *vehicle_type* appear as nodes
         (even if they have no outgoing edges).
         """
+        context = snapshot_location_lookups(context)
         trips = [trip for trip in context.trips if vehicle_type in trip.allowed_vehicle_types]
         graph: Dict[str, List[str]] = {trip.trip_id: [] for trip in trips}
         # Multi-day inputs create millions of rejected pairs. The adjacency
