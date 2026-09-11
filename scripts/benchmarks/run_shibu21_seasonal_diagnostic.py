@@ -96,6 +96,9 @@ def solve_week(
             'Solver blocked: prepared input is a lightweight candidate with deferred strict transition audit'
         )
     scenario = materialize_scenario_from_prepared_input(scenario, prepared)
+    ice_refueling_policy = str(design.get('ice_refueling_policy', 'no_refueling'))
+    if ice_refueling_policy != 'no_refueling':
+        raise ValueError('This diagnostic requires an implemented explicit ICE refueling policy')
     config = OptimizationConfig(mode=OptimizationMode.MILP, phase=design['phase'],
         time_limit_sec=design['day_ahead_wall_time_limit_sec'],
         stage1_time_limit_sec=design['stage1_time_limit_sec'], stage2_time_limit_sec=design['stage2_time_limit_sec'],
@@ -106,7 +109,7 @@ def solve_week(
         'phase3_diagnostics_dir':str(output/'day_ahead_failure_diagnostics'),
         'stage1_exact_depot_connection_factors': bool(
             design.get('stage1_exact_depot_connection_factors', False)
-        )})
+        ), 'phase3_ice_refueling_policy': ice_refueling_policy})
     validator = contract_validator or verify_evaluation_contract
     write_json(output/'evaluation_contract.json', validator(problem, design))
     if len(problem.trips) != case['timetable_row_count'] or len(problem.vehicles) != case['vehicle_count']:

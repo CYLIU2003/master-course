@@ -748,6 +748,15 @@ class MILPOptimizer:
                 "depot_connection_factor_audit": dict(
                     (plan.metadata or {}).get("depot_connection_factor_audit") or {}
                 ),
+                "stage1_ice_fuel_inventory_audit": dict(
+                    (plan.metadata or {}).get("stage1_ice_fuel_inventory_audit") or {}
+                ),
+                "stage2_ice_fuel_inventory_audit": dict(
+                    (plan.metadata or {}).get("stage2_ice_fuel_inventory_audit") or {}
+                ),
+                "pre_solve_finite_fuel_seed": dict(
+                    (plan.metadata or {}).get("pre_solve_finite_fuel_seed") or {}
+                ),
                 "successor_pruning_enabled": bool(
                     ((plan.metadata or {}).get("arc_pruning_summary") or model_stats.get("arc_pruning_summary") or {}).get(
                         "successor_pruning_enabled",

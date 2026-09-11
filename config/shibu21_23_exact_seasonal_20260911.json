@@ -52,6 +52,7 @@
   "seed": 42,
   "successor_pruning": 0,
   "postsolve_repair": false,
+  "ice_refueling_policy": "no_refueling",
   "research_status": "DIAGNOSTIC_NOT_USED_FOR_RESEARCH_CONCLUSIONS",
   "input_manifests_directory": "output/shibu21_23_exact_campaign_20260911/inputs",
   "prepared_inputs_directory": "output/prepared_inputs",

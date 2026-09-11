@@ -1,5 +1,11 @@
 # Development Notes
 
+## 2026-09-11 Phase 3の有限ICE燃料制約
+
+最終全体回帰は2,167 passed / 既存PowerPoint証拠2 failed（95.62秒）。対象の独立レビューでavailabilityのP1を解消し、残るP0/P1は0件。JUnitは `output/exact_depot_factor_validation/pytest-finite-fuel-release.xml`。新しいclean commitでの実データ再実行は未完了。
+
+凍結 `8a8b3272` の3路線冬週は完全Prepare、Stage 1 incumbent、Stage 2充電計画まで到達した。全78,647,760候補を維持し、day-ahead処理は421.75秒。独立在庫検証でICE燃料違反505件が出たため、rollingと後続季節は停止した。到達するPhase 3に燃料費項しかなく、週間燃料予算が欠落していたことを修正する。materialized初期144 L・reserve16 Lを使用し、営業・接続・出帰庫の全消費を制約、Stage 2/rollingは窓内の物理event消費を検査する。探索前seedのみ燃料不足経路を互換未使用BEVへ移し、全MILPで資源制約を再検証する。給油仮定・初期値増量・候補削除・解後修復は追加していない。旧SHAの費用と解を新モデルの証拠にせず、fresh Prepareから再実行する。[数式・根拠・検証範囲](docs/notes/PHASE3_FINITE_ICE_FUEL_20260911.md)。
+
 ## 2026-09-11 許可済み3路線への変更とfresh週間キャンペーン
 
 凍結 `3cfda00d` の4路線規模監査は、候補271,864,980本・除外0本、明示接続12,651,780個とfactor変数2,851,800個を確認した。これは列挙・縮約の計測であり、Gurobiモデル構築や週間求解の完了ではない。ユーザーの許可に基づき `config/shibu21_23_exact_seasonal_20260911.json` で渋21/22/23を選び、既存3路線原本の便・停留所列と来歴を保持する。NFKC完全一致と参照IDを検査し、4路線原本は保持する。60台のexact active fleet、7日間、四季の日付、SOC・BESS、12 threads、successor pruning=0は維持する。

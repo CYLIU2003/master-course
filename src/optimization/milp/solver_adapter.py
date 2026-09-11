@@ -15,7 +15,7 @@ from typing import Any, Callable, Collection, Dict, Iterable, Iterator, List, Li
 from src.dispatch.feasibility import FeasibilityEngine, evaluate_startup_feasibility
 from src.dispatch.models import DutyLeg, VehicleDuty
 from src.dispatch.daily_return import checked_deadhead_minutes, connection_deadhead_minutes, requires_daily_return
-from src.optimization.common.vehicle_timeline import fixed_path_slot_loads
+from src.optimization.common.vehicle_timeline import build_vehicle_timeline, fixed_path_slot_loads
 from src.dispatch.route_band import duty_route_band_ids, fragment_transition_diagnostic
 from src.gurobi_runtime import ensure_gurobi, is_gurobi_available
 from src.objective_modes import normalize_objective_mode
@@ -13519,6 +13519,8 @@ class GurobiMILPAdapter:
             }
         )
         problem = replace(problem, metadata=budget_metadata)
+        if bool(getattr(config, "warm_start", True)) and config.fixed_assignment is None:
+            problem = self._problem_with_finite_fuel_warm_start(problem)
         if _remaining_stage_budget_sec(
             deadline_monotonic=feedback_global_deadline,
             requested_sec=feedback_global_limit_sec,
@@ -15096,83 +15098,17 @@ class GurobiMILPAdapter:
                 + co2_price * co2_kg_per_l
             )
 
+        ice_fuel_by_vehicle = self._stage1_ice_fuel_expressions(
+            problem, y, x, start_arc, end_arc,
+            startup_energy_precheck_by_assignment,
+        )
+        stage1_ice_fuel_inventory_audit = self._add_stage1_ice_fuel_inventory_constraints(
+            problem, stage1, ice_fuel_by_vehicle,
+            aggregate_vehicle_ids=stage1_exact_clone_vehicle_ids,
+        )
         if diesel_price > 0.0 or co2_price > 0.0:
-            for (vehicle_id, trip_id), var in y.items():
-                vehicle = vehicle_by_id.get(str(vehicle_id))
-                if vehicle is None or str(vehicle.vehicle_type).upper() in {"BEV", "PHEV", "FCEV"}:
-                    continue
-                objective1 += _ice_fuel_unit_cost(vehicle) * self._trip_fuel_l(problem, vehicle, trip_id) * var
-            for (vehicle_id, from_trip_id, to_trip_id), var in x.items():
-                vehicle = vehicle_by_id.get(str(vehicle_id))
-                if vehicle is None or str(vehicle.vehicle_type).upper() in {"BEV", "PHEV", "FCEV"}:
-                    continue
-                objective1 += _ice_fuel_unit_cost(vehicle) * self._deadhead_fuel_l(problem, vehicle, from_trip_id, to_trip_id) * var
-            if isinstance(x, FactoredConnectionVariables):
-                for variables in x.factors:
-                    vehicle = vehicle_by_id[variables.factor.vehicle_id]
-                    if str(vehicle.vehicle_type).upper() not in {"BEV", "PHEV", "FCEV"}:
-                        objective1 += _ice_fuel_unit_cost(vehicle) * gp.quicksum(
-                            fuel * var for fuel, var in zip(variables.factor.target_fuel_l, variables.targets)
-                        )
-            for assignment_key, var in start_arc.items():
-                vehicle_id, _trip_id = assignment_key
-                vehicle = vehicle_by_id.get(str(vehicle_id))
-                if vehicle is None or str(vehicle.vehicle_type).upper() in {"BEV", "PHEV", "FCEV"}:
-                    continue
-                fuel_rate = max(
-                    float(vehicle.fuel_consumption_l_per_km or 0.0),
-                    0.0,
-                )
-                startup_precheck = startup_energy_precheck_by_assignment.get(
-                    assignment_key
-                )
-                startup_deadhead_min = int(
-                    getattr(startup_precheck, "startup_deadhead_min", 0) or 0
-                )
-                startup_fuel_l = (
-                    self._deadhead_distance_km(
-                        problem,
-                        startup_deadhead_min,
-                    )
-                    * fuel_rate
-                )
-                if startup_fuel_l > 0.0:
-                    objective1 += (
-                        _ice_fuel_unit_cost(vehicle) * startup_fuel_l * var
-                    )
-            for assignment_key, var in end_arc.items():
-                vehicle_id, trip_id = assignment_key
-                vehicle = vehicle_by_id.get(str(vehicle_id))
-                trip = trip_by_id.get(str(trip_id))
-                if (
-                    vehicle is None
-                    or trip is None
-                    or str(vehicle.vehicle_type).upper()
-                    in {"BEV", "PHEV", "FCEV"}
-                ):
-                    continue
-                return_exists, return_deadhead_min = return_deadhead_min_to_home(
-                    problem,
-                    vehicle,
-                    trip,
-                )
-                if not return_exists or return_deadhead_min <= 0:
-                    continue
-                fuel_rate = max(
-                    float(vehicle.fuel_consumption_l_per_km or 0.0),
-                    0.0,
-                )
-                return_fuel_l = (
-                    self._deadhead_distance_km(
-                        problem,
-                        int(return_deadhead_min),
-                    )
-                    * fuel_rate
-                )
-                if return_fuel_l > 0.0:
-                    objective1 += (
-                        _ice_fuel_unit_cost(vehicle) * return_fuel_l * var
-                    )
+            for vehicle_id, fuel_expression in ice_fuel_by_vehicle.items():
+                objective1 += _ice_fuel_unit_cost(vehicle_by_id[vehicle_id]) * fuel_expression
             if stage1_selected_clone_group is not None:
                 representative_vehicle_id = str(
                     stage1_selected_clone_group.get(
@@ -16112,6 +16048,8 @@ class GurobiMILPAdapter:
                     ),
                     "arc_pruning_summary": arc_pruning_summary,
                 "depot_connection_factor_audit": depot_factor_audit,
+                "stage1_ice_fuel_inventory_audit": stage1_ice_fuel_inventory_audit,
+                "pre_solve_finite_fuel_seed": dict(problem.metadata.get("pre_solve_finite_fuel_seed") or {}),
                     "stage1_redundant_arc_link_constraints_omitted": (
                         stage1_redundant_arc_link_constraints_omitted
                     ),
@@ -16492,6 +16430,8 @@ class GurobiMILPAdapter:
                 ),
                 "arc_pruning_summary": arc_pruning_summary,
                 "depot_connection_factor_audit": depot_factor_audit,
+                "stage1_ice_fuel_inventory_audit": stage1_ice_fuel_inventory_audit,
+                "pre_solve_finite_fuel_seed": dict(problem.metadata.get("pre_solve_finite_fuel_seed") or {}),
                 "stage1_redundant_arc_link_constraints_omitted": (
                     stage1_redundant_arc_link_constraints_omitted
                 ),
@@ -21617,6 +21557,265 @@ class GurobiMILPAdapter:
             warm_start_source=warm_start_source,
         )
 
+    def _problem_with_finite_fuel_warm_start(
+        self, problem: CanonicalOptimizationProblem,
+    ) -> CanonicalOptimizationProblem:
+        """Construct a pre-solve seed when an ICE path exceeds its finite stock.
+
+        Only whole baseline paths move to compatible unused BEVs. The full MILP
+        still chooses every assignment and validates all charging decisions.
+        """
+        baseline = problem.baseline_plan
+        if baseline is None or not str(getattr(problem.dispatch_context, "daily_return_depot_id", "") or ""):
+            return problem
+        unavailable_baseline_ids = sorted(
+            str(vehicle.vehicle_id) for vehicle in problem.vehicles
+            if not vehicle.available and vehicle.vehicle_id in baseline.vehicle_paths()
+        )
+        if unavailable_baseline_ids:
+            return replace(problem, metadata={
+                **dict(problem.metadata), "pre_solve_finite_fuel_seed": {
+                    "applied": False, "reason": "baseline_uses_unavailable_vehicle",
+                    "vehicle_ids": unavailable_baseline_ids,
+                },
+            })
+        try:
+            timelines = build_vehicle_timeline(problem, baseline)
+        except (KeyError, ValueError) as exc:
+            return replace(problem, metadata={
+                **dict(problem.metadata), "pre_solve_finite_fuel_seed": {
+                    "applied": False, "reason": f"baseline_timeline_invalid:{exc}",
+                },
+            })
+        vehicles = {str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles}
+        paths = baseline.vehicle_paths()
+        over_budget: List[str] = []
+        for vehicle_id, events in timelines.items():
+            vehicle = vehicles[vehicle_id]
+            if str(vehicle.vehicle_type).upper() in {"BEV", "PHEV", "FCEV"}:
+                continue
+            budget = self._materialized_ice_fuel_budget(vehicle)
+            if budget is not None and sum(event.fuel_l for event in events) > budget + 1e-6:
+                over_budget.append(vehicle_id)
+        if not over_budget:
+            return problem
+        candidates = sorted(
+            (vehicle for vehicle in problem.vehicles
+             if vehicle.available and vehicle.vehicle_id not in paths
+             and str(vehicle.vehicle_type).upper() in {"BEV", "PHEV", "FCEV"}),
+            key=lambda vehicle: (-float(vehicle.initial_soc or 0.0), str(vehicle.vehicle_id)),
+        )
+        trips = problem.trip_by_id()
+        dispatch_trips = problem.dispatch_context.trips_by_id()
+        by_vehicle = baseline.duties_by_vehicle()
+        replacements: Dict[str, str] = {}
+        checker = FeasibilityEngine()
+        for source in sorted(over_budget, key=lambda vehicle_id: (-len(paths[vehicle_id]), vehicle_id)):
+            for candidate in list(candidates):
+                if not problem.dispatch_context.locations_equivalent(
+                    vehicles[source].home_depot_id, candidate.home_depot_id
+                ):
+                    continue
+                if any(trips[trip_id].allowed_vehicle_types
+                       and candidate.vehicle_type not in trips[trip_id].allowed_vehicle_types
+                       for trip_id in paths[source]):
+                    continue
+                compatible = True
+                for duty in by_vehicle[source]:
+                    ids = duty.trip_ids
+                    precheck = self._startup_energy_precheck(
+                        problem, candidate, trips[ids[0]], dispatch_trip_by_id=dispatch_trips
+                    )
+                    if not precheck.path_feasible or not precheck.energy_feasible:
+                        compatible = False
+                        break
+                    if any(not checker.can_connect(dispatch_trips[left], dispatch_trips[right],
+                                                    problem.dispatch_context, candidate.vehicle_type).feasible
+                           for left, right in zip(ids, ids[1:])):
+                        compatible = False
+                        break
+                if compatible:
+                    replacements[source] = str(candidate.vehicle_id)
+                    candidates.remove(candidate)
+                    break
+        if not replacements:
+            return replace(problem, metadata={
+                **dict(problem.metadata), "pre_solve_finite_fuel_seed": {
+                    "applied": False, "reason": "no_compatible_unused_bev",
+                    "unresolved_vehicle_ids": sorted(over_budget),
+                },
+            })
+        seed = _remap_plan_vehicle_ids(
+            baseline, replacement_by_source_vehicle=replacements,
+            vehicle_type_by_id={vehicle_id: str(vehicle.vehicle_type) for vehicle_id, vehicle in vehicles.items()},
+            candidate_source="pre_solve_finite_ice_fuel_seed",
+        )
+        seed_metadata = dict(seed.metadata)
+        seed_metadata.pop("phase4_seed_unused_bev_candidate_replacements", None)
+        seed_metadata["pre_solve_finite_fuel_vehicle_replacements"] = replacements
+        seed = replace(seed, metadata=seed_metadata)
+        return replace(problem, baseline_plan=seed, metadata={
+            **dict(problem.metadata), "pre_solve_finite_fuel_seed": {
+                "applied": True, "replacement_by_source_vehicle": replacements,
+                "unresolved_vehicle_ids": sorted(set(over_budget) - set(replacements)),
+                "semantics": "whole_path_pre_solve_mip_start_only;not_fixed_assignments_or_postsolve_repair",
+            },
+        })
+
+    def _stage1_ice_fuel_expressions(
+        self,
+        problem: CanonicalOptimizationProblem,
+        y: Mapping[Tuple[str, str], Any],
+        x: Mapping[Tuple[str, str, str], Any],
+        start_arc: Mapping[Tuple[str, str], Any],
+        end_arc: Mapping[Tuple[str, str], Any],
+        startup_prechecks: Mapping[Tuple[str, str], Any],
+    ) -> Dict[str, Any]:
+        """Share exact liters between the Stage 1 objective and inventory rows."""
+        gp, _ = ensure_gurobi()
+        vehicles = {
+            str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles
+            if vehicle.available and str(vehicle.vehicle_type).upper() not in {"BEV", "PHEV", "FCEV"}
+        }
+        fuel = {vehicle_id: gp.LinExpr() for vehicle_id in vehicles}
+        for (vehicle_id, trip_id), var in y.items():
+            if vehicle_id in fuel:
+                fuel[vehicle_id].addTerms(self._trip_fuel_l(problem, vehicles[vehicle_id], trip_id), var)
+        for (vehicle_id, origin, target), var in x.items():
+            if vehicle_id in fuel:
+                fuel[vehicle_id].addTerms(
+                    self._deadhead_fuel_l(problem, vehicles[vehicle_id], origin, target), var
+                )
+        if isinstance(x, FactoredConnectionVariables):
+            for variables in x.factors:
+                vehicle_id = variables.factor.vehicle_id
+                if vehicle_id in fuel:
+                    for liters, var in zip(variables.factor.target_fuel_l, variables.targets):
+                        fuel[vehicle_id].addTerms(liters, var)
+        for key, var in start_arc.items():
+            vehicle_id, _trip_id = key
+            if vehicle_id not in fuel:
+                continue
+            minutes = int(getattr(startup_prechecks.get(key), "startup_deadhead_min", 0) or 0)
+            rate = max(float(vehicles[vehicle_id].fuel_consumption_l_per_km or 0.0), 0.0)
+            fuel[vehicle_id].addTerms(self._deadhead_distance_km(problem, minutes) * rate, var)
+        trips = problem.trip_by_id()
+        for (vehicle_id, trip_id), var in end_arc.items():
+            if vehicle_id not in fuel:
+                continue
+            vehicle = vehicles[vehicle_id]
+            exists, minutes = return_deadhead_min_to_home(problem, vehicle, trips[trip_id])
+            if exists and minutes > 0:
+                rate = max(float(vehicle.fuel_consumption_l_per_km or 0.0), 0.0)
+                fuel[vehicle_id].addTerms(self._deadhead_distance_km(problem, minutes) * rate, var)
+        return fuel
+
+    @staticmethod
+    def _materialized_ice_fuel_budget(vehicle: Any) -> Optional[float]:
+        """Use prepared liters without reapplying percentage settings or resets."""
+        initial = vehicle.initial_fuel_l
+        capacity = vehicle.fuel_tank_capacity_l
+        if initial is None or capacity is None or float(capacity) <= 0.0:
+            return None
+        initial = float(initial)
+        reserve = float(vehicle.fuel_reserve_l or 0.0)
+        capacity = float(capacity)
+        if (not all(math.isfinite(value) for value in (initial, reserve, capacity))
+                or not 0.0 <= reserve <= capacity
+                or not reserve - 1e-6 <= initial <= capacity + 1e-6):
+            raise ValueError(f"Invalid materialized ICE fuel inventory: {vehicle.vehicle_id}")
+        return initial - reserve
+
+    def _add_stage1_ice_fuel_inventory_constraints(
+        self,
+        problem: CanonicalOptimizationProblem,
+        model: Any,
+        fuel_by_vehicle: Mapping[str, Any],
+        *,
+        aggregate_vehicle_ids: Collection[str] = (),
+    ) -> Dict[str, Any]:
+        """No-refuel nonnegative consumption makes the terminal budget sufficient."""
+        aggregate_ids = set(aggregate_vehicle_ids)
+        budgets: Dict[str, float] = {}
+        unmodeled: List[str] = []
+        for vehicle in problem.vehicles:
+            vehicle_id = str(vehicle.vehicle_id)
+            if vehicle_id not in fuel_by_vehicle or vehicle_id in aggregate_ids:
+                continue
+            budget = self._materialized_ice_fuel_budget(vehicle)
+            if budget is None:
+                unmodeled.append(vehicle_id)
+                continue
+            model.addConstr(fuel_by_vehicle[vehicle_id] <= budget,
+                            name=f"stage1_ice_fuel_inventory_{vehicle_id}")
+            budgets[vehicle_id] = budget
+        return {
+            "schema_version": "phase3_ice_fuel_inventory_v1",
+            "refueling_policy": "no_refueling",
+            "constraint_count": len(budgets),
+            "usable_initial_fuel_l_by_vehicle": budgets,
+            "unmodeled_legacy_vehicle_ids": unmodeled,
+            "excluded_unavailable_vehicles": [
+                {"vehicle_id": str(vehicle.vehicle_id), "reason": "vehicle.available=false"}
+                for vehicle in problem.vehicles if not vehicle.available
+                and str(vehicle.vehicle_type).upper() not in {"BEV", "PHEV", "FCEV"}
+            ],
+            "aggregate_vehicle_ids_with_separate_capacity_certificate": sorted(aggregate_ids),
+            "semantics": "materialized_initial_liters_minus_reserve;service_connection_startup_return_consumption;no_daily_reset",
+        }
+
+    def _fixed_ice_fuel_inventory_audit(
+        self,
+        problem: CanonicalOptimizationProblem,
+        plan: AssignmentPlan,
+        slot_indices: Sequence[int],
+    ) -> Dict[str, Any]:
+        """Replay the fixed daily-return ICE paths over the actual solve window."""
+        audit: Dict[str, Any] = {
+            "schema_version": "fixed_ice_fuel_inventory_v1",
+            "refueling_policy": "no_refueling", "checked": False,
+            "accepted": True, "vehicles": {}, "violations": [],
+        }
+        if not slot_indices or not str(getattr(problem.dispatch_context, "daily_return_depot_id", "") or ""):
+            audit["reason"] = "not_a_daily_return_window"
+            return audit
+        vehicles = {
+            str(vehicle.vehicle_id): vehicle for vehicle in problem.vehicles
+            if vehicle.available and str(vehicle.vehicle_type).upper() not in {"BEV", "PHEV", "FCEV"}
+            and vehicle.initial_fuel_l is not None and vehicle.fuel_tank_capacity_l is not None
+        }
+        if not vehicles:
+            audit["reason"] = "no_finite_ice_inventory"
+            return audit
+        first, stop = min(slot_indices), max(slot_indices) + 1
+        lower, upper = slot_absolute_min(problem, first), slot_absolute_min(problem, stop)
+        timelines = build_vehicle_timeline(problem, plan)
+        for vehicle_id, vehicle in vehicles.items():
+            events = timelines.get(vehicle_id, ())
+            if not events:
+                continue
+            budget = self._materialized_ice_fuel_budget(vehicle)
+            if budget is None:
+                continue
+            consumed = sum(
+                event.fuel_l * max(0, min(event.end_min, upper) - max(event.start_min, lower))
+                / (event.end_min - event.start_min)
+                for event in events if event.fuel_l > 0.0 and event.end_min > event.start_min
+            )
+            audit["vehicles"][vehicle_id] = {
+                "initial_fuel_l": float(vehicle.initial_fuel_l),
+                "reserve_fuel_l": float(vehicle.fuel_reserve_l or 0.0),
+                "consumed_fuel_l": consumed,
+                "terminal_fuel_l": float(vehicle.initial_fuel_l) - consumed,
+            }
+            if consumed > budget + 1e-6:
+                audit["violations"].append(f"{vehicle_id}:fuel_required={consumed}:usable_initial={budget}")
+        if any(first <= slot.slot_index < stop and slot.refuel_liters > 1e-9 for slot in plan.refuel_slots):
+            audit["violations"].append("fixed_refueling_decisions_require_an_explicit_supported_refueling_policy")
+        audit.update(checked=True, accepted=not audit["violations"],
+                     start_slot_index=first, stop_slot_index=stop)
+        return audit
+
     def _solve_thesis_stage2_charging_dispatch(
         self,
         problem: CanonicalOptimizationProblem,
@@ -21690,6 +21889,27 @@ class GurobiMILPAdapter:
         }
         assigned_paths = stage1_plan.vehicle_paths()
         assigned_bev_ids = sorted(set(assigned_paths).intersection(bev_vehicle_ids))
+        fuel_audit = self._fixed_ice_fuel_inventory_audit(problem, stage1_plan, slot_indices)
+        stage1_plan = replace(stage1_plan, metadata={
+            **dict(stage1_plan.metadata or {}), "stage2_ice_fuel_inventory_audit": fuel_audit,
+        })
+        if not fuel_audit["accepted"]:
+            metadata = {
+                **dict(stage1_plan.metadata or {}),
+                "stage1_solver_status": stage1_status, "stage1_has_feasible_incumbent": True,
+                "stage1_objective": stage1_objective_value, "stage1_best_bound": stage1_bound,
+                "stage1_mip_gap_ratio": stage1_gap, "stage1_runtime_seconds": stage1_runtime_sec,
+                "stage2_solver_status": "fixed_ice_fuel_inventory_infeasible",
+                "stage2_has_feasible_incumbent": False, "stage2_feasible": False,
+                "stage2_reason": "fixed_ice_paths_exceed_materialized_fuel_inventory_without_refueling",
+                "stage2_runtime_seconds": time.perf_counter() - started,
+                "research_kpi_eligible": False, "postsolve_repair_allowed": False,
+            }
+            return MILPSolverOutcome(
+                solver_status="infeasible", used_backend="gurobi_two_stage",
+                supports_exact_milp=_supports_full_candidate_network_exact_milp(arc_pruning_summary),
+                has_feasible_incumbent=False, runtime_sec=stage1_runtime_sec + time.perf_counter() - started,
+            ), replace(stage1_plan, metadata=metadata)
         if not slot_indices or not assigned_bev_ids:
             metadata = {
                 **dict(stage1_plan.metadata or {}),
