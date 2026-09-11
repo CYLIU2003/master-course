@@ -1,5 +1,9 @@
 # Current research release blockers
 
+## 2026-09-11 渋21〜24 四季診断の採用範囲
+
+4系統を合算した候補は生成済み。完全Prepareと、遷移・折返し・車種互換性・coverageの各監査を通過した週だけを診断solverへ渡す。4週それぞれの検査・solver・毎時168prefix・物理検証・最終会計は別の判定である。時刻表は2026年9月版、距離は座標proxy、学習は2024年のみなので、成功しても2025年の実運行再現や研究採用には使わない。完全Prepareと診断結果は凍結後に記録する。[対象と実行手順](SHIBU21_24_SEASONAL_DIAGNOSTIC_20260911.md)。
+
 ## 2026-09-11 Electron画面の実装は研究採用とは別判定
 
 TypeScript + React + Electron の起動・Prepare/実行経路と大量データ表示を実装し、100万行の合成読取りを検査した。Reactは費用・SOC・検証結果を再計算せず、保存済みBFF値を表示する。既存のPowerPoint証拠ハッシュ・部品同一性に関する2件、独立レビュー、旧2ケースの正式再実行、正式7日検証は未解消であり、研究リリースはBLOCKED。Tkinter全編集機能の移植と配布用Python/Gurobi環境の同梱も完了宣言の対象外である。詳細は[デスクトップ案内](../../frontend/README.md)。

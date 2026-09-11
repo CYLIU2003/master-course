@@ -1,5 +1,13 @@
 # Development Notes
 
+## 2026-09-11 渋21〜24 四季診断の入力と実行契約
+
+GPT-5.6 Lunaのサブエージェントが渋24の公式ODPTソース監査、4系統の入力候補、完全Prepareモードと診断runnerを実装した。渋24は6パターン・582便、全4系統では冬春夏が各3,182便、秋が3,045便である。時刻表は2026年9月版、PV評価は2025年、学習は2024年のみ、座標距離はproxyという出典の限界を保持する。親フリート60台の確認値を新規車両生成に転用しない。
+
+自己点検で、監査を省略した候補のis_validがtrueになり得ること、正式prepared namespaceへの混在、最初の週の例外による後続週停止、実行後SHA未確認、Prepare返却成功だけで監査済みとする判定、集約結果で例外理由を落とす問題を発見し修正した。入力候補はis_valid=false、別namespaceへ保存する。完全Prepare後も各監査のchecked/ready/infeasibleを検査する。週単位で阻害・例外を保存し、検証済みの他の週を続行する。Git状態が変化した後は新しいsolveを開始しない。数式・運行接続・SOC・料金・距離量の変更はない。
+
+全Python検証は `python -X utf8 -m pytest -q` で **2,026 passed / 2 failed、92.69秒**（最後のrunner検査追加前）。失敗は既存のPowerPointハッシュ・部品同一性の2件のみ。最終変更後のrunner/source監査focused suiteは **11 passed、7.57秒**。実験コードはコミット後、分離したclean worktreeで実行し、結果にそのSHAを記録する。[実行手順と制限](docs/notes/SHIBU21_24_SEASONAL_DIAGNOSTIC_20260911.md)。
+
 ## 2026-09-11 TypeScript / React / Electron と大量データ読取り
 
 Windows portable版 `frontend/release/EV Bus Research 0.1.0.exe` の実起動・一覧・概要・時刻表・仮想行数・正常終了を確認した（packaged smoke exit code 0、2026-09-11 15:14 JST）。配布版はローカル生成のみで、公開・GitHub pushはしていない。

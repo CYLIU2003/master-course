@@ -71,9 +71,24 @@ def verify_evaluation_contract(problem, design: dict) -> dict:
 def solve_week(week: str, output: Path, design: dict) -> dict:
     manifest = json.loads((ROOT/design['input_manifests_directory']/week/'derived_scenarios.json').read_text(encoding='utf-8'))
     case = manifest['cases'][0]
+    if case.get('prepared_input_namespace') == 'candidate_prepared_inputs':
+        raise RuntimeError(
+            'Solver blocked: candidate prepared input is outside the formal prepared_inputs namespace'
+        )
     scenario = scenario_store._load(case['scenario_id'], skip_graph_arcs=True)
-    prepared = load_prepared_input(scenario_id=case['scenario_id'], prepared_input_id=case['prepared_input_id'],
-                                  scenarios_dir=ROOT/'output/prepared_inputs')
+    prepared = load_prepared_input(
+        scenario_id=case['scenario_id'],
+        prepared_input_id=case['prepared_input_id'],
+        scenarios_dir=ROOT / design.get('prepared_inputs_directory', 'output/prepared_inputs'),
+    )
+    prepared_scope_audit = dict(prepared.get('prepared_scope_audit') or {})
+    if (
+        prepared_scope_audit.get('status') == 'CANONICAL_INPUT_PREPARED_STRICT_TRANSITION_AUDIT_DEFERRED'
+        or prepared_scope_audit.get('strict_transition_audit_executed') is False
+    ):
+        raise RuntimeError(
+            'Solver blocked: prepared input is a lightweight candidate with deferred strict transition audit'
+        )
     scenario = materialize_scenario_from_prepared_input(scenario, prepared)
     config = OptimizationConfig(mode=OptimizationMode.MILP, phase=design['phase'],
         time_limit_sec=design['day_ahead_wall_time_limit_sec'],
@@ -106,13 +121,16 @@ def solve_week(week: str, output: Path, design: dict) -> dict:
     write_json(output/'canonical_solver_result.json',ResultSerializer.serialize_result(result))
     summary.update(day_ahead_feasible=result.feasible,day_ahead_status=result.solver_status,
                    day_ahead_seconds=time.perf_counter()-started,day_ahead_cost=dict(result.cost_breakdown),
-                   day_ahead_reasons=list(result.infeasibility_reasons))
+                   day_ahead_reasons=list(result.infeasibility_reasons),
+                   stage1_certified_gap=result.solver_metadata.get('stage1_certified_mip_gap_ratio'),
+                   stage1_mip_gap=result.solver_metadata.get('stage1_mip_gap_ratio'))
     write_json(output/'progress.json', summary)
     if not result.feasible:
         summary['status']='DAY_AHEAD_FAILED'
         return summary
     physical = validate_physical_event_schedule(problem=problem,serialized_result=ResultSerializer.serialize_plan(result.plan))
     write_json(output/'day_ahead_physical_validation.json',physical)
+    summary['day_ahead_physical_accepted'] = physical['accepted']
     if not physical['accepted']:
         summary.update(status='DAY_AHEAD_PHYSICAL_FAILED',physical_violations=physical['violations'])
         return summary

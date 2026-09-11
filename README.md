@@ -1,5 +1,7 @@
 # master-course
 
+2026-09-11: [渋21〜24をまとめた四季1週間診断](docs/notes/SHIBU21_24_SEASONAL_DIAGNOSTIC_20260911.md)の入力・監査・実行スクリプトを追加しました。開始日は2025-02-03、05-12、08-04、11-03です。2026年9月版の固定時刻表に2025年の気象を適用する診断で、実運行再現ではありません。候補生成と完全Prepareを分け、検証未実施の候補をsolverへ渡さない構成です。
+
 2026-09-11: フロントアプリに **TypeScript + React + Electron** を追加しました。[起動・操作・検証の案内](frontend/README.md)。初回は `frontend` で `npm.cmd ci`、`npm.cmd run build`、`npm.cmd start` を実行します。ビルド後は `python run_desktop.py` からも起動できます。Windows portable版は `frontend/release/EV Bus Research 0.1.0.exe` です（Python・Gurobi・入力データは既存環境を使用）。旧 `run_app.py` は保持しています。
 
 時刻表の全件ロードを避けたページ取得、Parquet row group の読み飛ばし、結果のストリーム投影、画面の仮想スクロールを実装しました。100万行の合成データで末尾250件を検証し、SQLite取得1.27秒、Parquet取得0.013秒でした。これは画面と読取り経路の検証であり、solverの大規模最適性や研究採用を示すものではありません。
